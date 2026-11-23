@@ -245,18 +245,19 @@ def setting(act: dict) -> bool:
 # document is said by its number. The agent decides what comes next (AGENT.md): another way, later, or the one question. Status and timing
 # are the browser's facts, not a reading of the page's words.
 SETTLE_WAIT = 12.0
-STATUS_JS = "(() => { const n = performance.getEntriesByType('navigation')[0]; return {status: n ? n.responseStatus || 0 : 0, url: location.href}; })()"
+STATUS_JS = ("(() => { const n = performance.getEntriesByType('navigation')[0]; return {status: n ? n.responseStatus || 0 : 0, url: location.href, "
+             "title: document.title}; })()")
 
 
-def outcome(sid: str, store=None) -> str:
+def outcome(sid: str, store=None, seen: dict = None) -> str:
     """One plain line when the page an act or open left is not a working page - a load that did not finish, an error status - else ''. A
-    password the act sent is kept or put back first (signin.settled), and said."""
+    password the act sent is kept or put back first (signin.settled), and said. `seen`: filled with the page it found ({url, title})."""
     from . import signin
     kept = signin.settled(store, sid) if store is not None else ''
-    return '\n'.join(x for x in (kept, _outcome(sid)) if x)
+    return '\n'.join(x for x in (kept, _outcome(sid, seen if seen is not None else {})) if x)
 
 
-def _outcome(sid: str) -> str:
+def _outcome(sid: str, seen: dict) -> str:
     from . import browserview, signin
     try: rc, said = _run(sid, ['get', 'url'], SETTLE_WAIT, 'settle')
     except RuntimeError as e:
@@ -269,6 +270,7 @@ def _outcome(sid: str) -> str:
         try: f = c.js(STATUS_JS) or {}
         finally: c.close()
     except Exception: return ''
+    seen.update({k: str(f.get(k) or '') for k in ('url', 'title')})
     n = int(f.get('status') or 0) if str(f.get('status') or '0').isdigit() else 0
     if n < 400: return ''
     what = ('a server error' if n >= 500 else 'a refusal - it turns this visit away' if n in (401, 403, 429) else 'an error')
@@ -334,8 +336,9 @@ def page(sid: str) -> dict:
     from . import signin
     url = address(sid, st)
     # ...and what the site is called for him (signin.site_name): a page reached by a bare address by its own title, never "127.0.0.5"
-    return {'url': url, 'open': bool(st.get('open')), 'elements': snap[:SNAP_MAX] if rc == 0 else '',
-            'fields': signin.form_fields(sid) if rc == 0 else [], 'name': signin.site_name(url, sid) if url else ''}
+    pg = _PAGES[str(sid)] = {'url': url, 'open': bool(st.get('open')), 'elements': snap[:SNAP_MAX] if rc == 0 else '',
+                             'fields': signin.form_fields(sid) if rc == 0 else [], 'name': signin.site_name(url, sid) if url else ''}
+    return pg
 
 
 # WHEN THE PAGE CANNOT BE NAMED, the agent is told what that means and what to say - never "could not verify the current page address"
@@ -599,6 +602,7 @@ def _check(store, tid: int, sid: str, cmd: str, brain=None, cwd: str = '') -> di
     if not todo or all(typing(a) for a in todo): return {}
     pg, said, vs = page(sid), asked(store, tid), None
     if pg.get('url'): left_page(store, tid, sid, pg['url'])
+    _saw(sid, todo, pg)
     for i, a in enumerate(todo):
         if a['verb'] == 'batch':
             return _deny(f"{HELD}: a batch that reads its steps from its input shows none of them. Pass each step as its own quoted argument "
@@ -657,6 +661,94 @@ def _check(store, tid: int, sid: str, cmd: str, brain=None, cwd: str = '') -> di
         signin.acting(store, tid, sid, (here := signin.site_of(pg.get('url'))))
         signin.pressing(store, tid, sid, here)
     return {}
+
+
+# ── WHAT A BROWSER STEP DID, IN HIS WORDS (the owner, 2026-11-23: "it has to say what is actually going on" - his chat read "Looked at the page",
+# "Clicked on the page, and 1 more", "Pressed a key on the page, and 2 more - failed": the verb alone, read off the command text) ─────────────────
+# The gate is where the page is known: the snapshot it reads before an act names the control (control - the accessibility tree's role and name),
+# and the page an open landed on has its title. So the words are written HERE, once, as the command's own last line (DID): every road that keeps
+# a call's output - a CLI's log, ACP, the chat agent's trace, an AI card's browser - carries them to the step (did_of), and every surface reads them
+DID = 'TASKUARY-DID: '
+_DID_LINE = re.compile(r'^TASKUARY-DID: (.+?)\s*$', re.M)
+_PAGES: dict = {}           # sid -> the page this session's gate last read (page): a box typed into is named off it, with no snapshot of its own
+_SAW: dict = {}             # (sid, args) -> what an act is, read off the page before it ran (_check) - taken once it has run (did)
+_PAST = {'click': 'clicked', 'double-click': 'double-clicked', 'press': 'pressed', 'type': 'typed', 'tick': 'ticked', 'untick': 'unticked',
+         'choose': 'chose', 'upload': 'uploaded', 'drag': 'dragged', 'focus': 'focused', 'use': 'used', 'open': 'opened', 'look': 'looked',
+         'take': 'took', 'read': 'read', 'wait': 'waited', 'scroll': 'scrolled', 'go': 'went', 'reload': 'reloaded', 'switch': 'switched',
+         'point': 'pointed', 'check': 'checked', 'close': 'closed', 'run': 'ran', 'count': 'counted'}
+# ...an act the page does not name, by agent-browser's own verb; a look by its verb (and `get`'s word)
+_ACT = {'click': 'click on the page', 'dblclick': 'double-click on the page', 'press': 'press a key', 'fill': 'type into a box', 'type': 'type into a box',
+        'check': 'tick a box', 'uncheck': 'untick a box', 'select': 'choose an option', 'upload': 'upload a file', 'drag': 'drag something on the page',
+        'focus': 'focus a box', 'keyboard': 'type on the page', 'eval': 'run a script on the page', 'mouse': 'use the mouse on the page'}
+_LOOK = {'snapshot': 'look at the page', 'screenshot': 'take a picture of the page', 'wait': 'wait for the page', 'scroll': 'scroll the page',
+         'scrollintoview': 'scroll the page', 'back': 'go back a page', 'forward': 'go forward a page', 'reload': 'reload the page',
+         'tabs': 'look at the open tabs', 'tab': 'switch tabs', 'hover': 'point at something on the page', 'highlight': 'point at something on the page',
+         'is': 'check something on the page', 'console': "read the page's console", 'errors': "read the page's errors", 'read': 'read the page',
+         'close': 'close the browser'}
+_GET = {'text': "read the page's text", 'title': "read the page's title", 'url': "read the page's address", 'html': "read the page's code",
+        'value': 'read what a box holds', 'count': 'count things on the page'}
+
+
+def _past(p: str) -> str:
+    w, _, rest = p.partition(' ')
+    t = f'{_PAST.get(w, w)} {rest}'.strip()
+    return t[:1].upper() + t[1:]
+
+
+def _act_said(a: dict, pg: dict) -> str:
+    "An act as what it pressed or typed into, by the control the page names (target), else by its verb - 'click the \"Post\" button on x.example'."
+    from . import signin
+    c = control(a, pg)
+    if c.get('role') or (not c and found(a)): return target(a, pg)
+    host = pg.get('name') or signin.site_name(pg.get('url'))
+    on, rest = (f' on {host}' if host else ''), [x for x in _own_args(a.get('args') or [])[1:] if not x.startswith('-')]
+    if a.get('verb') == 'press' and rest: return f'press {rest[0]}{on}'
+    return f"{_ACT.get(a.get('verb') or '', 'use the browser')}{on}"
+
+
+def _saw(sid, todo: list, pg: dict) -> None:
+    if len(_SAW) > 500: _SAW.clear()
+    for a in todo: _SAW[(str(sid), tuple(_own_args(a.get('args') or [])))] = _act_said(a, pg)
+
+
+def did(sid, cmd: str, seen: dict = None, rc: int = 0) -> str:
+    """The line a browser command's output ends with: what it did, in his words - the control it pressed by the page's own name for it, the page
+    an open landed on by its title, a look by what it looked at - and, where it failed, what it tried ('' for a line that is no browser call)."""
+    from . import browserview, signin
+    a = next((h for argv in _segments(cmd) or [] if (h := _head(argv)) is not None), None)
+    args, seen = _own_args(a or []), seen or {}
+    if not args: return ''
+    v, act = args[0].lower(), next(iter(acts(cmd)), None)
+    to = args[2] if v == 'tab' and len(args) > 2 and args[1].lower() == 'new' else args[1] if v in NAVS and len(args) > 1 else ''
+    url = seen.get('url') or to or str(browserview.state(sid).get('url') or '')
+    site = signin.site_name(url) if url else ''
+    on = f' on {site}' if site else ''
+    if act and act['verb'] not in ('navigate', 'get value'):
+        p = _SAW.pop((str(sid), tuple(args)), '') or _act_said(act, _PAGES.get(str(sid)) or {'url': url})
+    elif to or v in NAVS:
+        t = ' '.join(str(seen.get('title') or '').split())
+        p = f'open "{t[:80]}"{on}' if t and t.lower() != site.lower() else f'open {site}' if site else 'open a page'
+    else:
+        p = _GET.get(args[1].lower() if len(args) > 1 else '', 'read the page') if v == 'get' else _LOOK.get(v, '')
+        if not p: return ''
+        if 'page' in p: p += on
+    return DID + (_past(p) if not rc else f'Tried to {p}')
+
+
+def after(store, tid, sid, cmd: str, rc: int = 0) -> str:
+    """WHAT THE COMMAND DID AND WHAT THE SITE DID, as its own last lines - one road for a CLI's agent-browser (gatecmd) and an AI card's browser
+    (apiagent): after an act or an open, the site's trouble where its page is no working page (outcome); after every call, what it did (did)."""
+    seen = {}
+    out = outcome(sid, store, seen) if acts(cmd) or opens(cmd) else ''
+    return '\n'.join(x for x in (out, did(sid, cmd, seen, rc)) if x)
+
+
+def did_of(output) -> str:
+    "What a step's own output says it did (its DID lines, one a browser call), as one line: the first two, then how many more."
+    ws = _DID_LINE.findall(str(output or ''))
+    if not ws: return ''
+    head = ', then '.join([ws[0], *(w[:1].lower() + w[1:] for w in ws[1:2])])
+    return head + (f', and {len(ws) - 2} more' if len(ws) > 2 else '')
 
 
 def stands(store, tid) -> str:

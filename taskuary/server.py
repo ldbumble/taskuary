@@ -6468,7 +6468,9 @@ async def agent_gate(body: dict, request: Request):
     if not body.get('after') and (own := gatecmd.own(cmd)):
         ok, said = await asyncio.get_running_loop().run_in_executor(_PERMIT_POOL, lambda: gatecmd.run_own(store, tid, sid, own))
         return {'why': '', 'own': True, 'ok': ok, 'said': said}
-    go = ((lambda: browsergate.outcome(sid, store)) if body.get('after') else lambda: gatecmd.judge(store, tid, sid, cmd, str(body.get('cwd') or '')))
+    try: rc = int(body.get('rc') or 0)
+    except (TypeError, ValueError): rc = 1
+    go = ((lambda: browsergate.after(store, tid, sid, cmd, rc)) if body.get('after') else lambda: gatecmd.judge(store, tid, sid, cmd, str(body.get('cwd') or '')))
     return {'why': await asyncio.get_running_loop().run_in_executor(_PERMIT_POOL, go)}
 
 

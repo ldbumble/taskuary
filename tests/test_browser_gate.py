@@ -594,8 +594,12 @@ class AtTheCommand(unittest.TestCase):
             def __enter__(self): return self
             def __exit__(self, *a): return False
             def read(self, *a): return json.dumps({'why': self.why}).encode()
+        self.told = []
         def urlopen(req, timeout=None):
-            b = json.loads(req.data); asked.append(b['cmd'])
+            b = json.loads(req.data)
+            # ...after it ran, every browser call says what it did (browsergate.after): asked of nothing, told
+            if b.get('after'): self.told.append(b['cmd']); return Reply(bg.after(self.s, self.tid, 'run1', b['cmd'], b.get('rc', 0)))
+            asked.append(b['cmd'])
             return Reply(gatecmd.judge(self.s, self.tid, 'run1', b['cmd'], b['cwd']))
         with on(snap='- button "Post" [ref=e7]'), verdict(said or {'irreversible': True, 'sure': True, 'what': 'posts the announcement on x.example'}), \
                 mock.patch.object(gatecmd, 'real', return_value='real-agent-browser'), mock.patch('urllib.request.urlopen', urlopen), \
@@ -618,7 +622,11 @@ class AtTheCommand(unittest.TestCase):
         self.assertEqual(json.loads(rv['DraftText'])['args'], ['click', '@e7'])
 
     def test_a_look_runs_at_once_and_a_reversible_act_after_asking(self):
-        self.assertEqual(self.run_shim('snapshot', '-i'), (0, [['real-agent-browser', 'snapshot', '-i']], []))
+        with mock.patch.object(browserview, 'state', return_value={'url': 'https://x.example/home'}), mock.patch('sys.stderr') as err:
+            self.assertEqual(self.run_shim('snapshot', '-i'), (0, [['real-agent-browser', 'snapshot', '-i']], []))
+        # ...and once it ran, says what it looked at - the line every road carries to its step (browsergate.did_of)
+        self.assertEqual(self.told, ['agent-browser snapshot -i'])
+        self.assertIn('TASKUARY-DID: Looked at the page on x.example', ''.join(str(c.args[0]) for c in err.write.call_args_list))
         rc, ran, asked = self.run_shim('fill', '@e1', 'Q&A day', said={'irreversible': False, 'sure': True, 'what': 'types the post'})
         self.assertEqual((rc, ran), (0, [['real-agent-browser', 'fill', '@e1', 'Q&A day']]))
 
@@ -707,6 +715,51 @@ def test_taskuarys_own_browser_calls_run_the_real_program_never_the_agents_hold_
 
 
 
+class WhatItDidInHisWords(unittest.TestCase):
+    """THE OWNER, 2026-11-23: "it has to say what is actually going on" - his chat read "Looked at the page", "Clicked on the page, and 1 more",
+    "Pressed a key on the page, and 2 more - failed", "Opened x.example in the browser, and 1 more": the verb alone, read off the command text.
+    The gate reads the page; what a call did is said there, as the command's own last line, and every road carries it to the step."""
+    PAGE = 'https://x.example/compose'
+    SNAP = '- textbox "What is happening?" [ref=e2]\n- button "Post" [ref=e7]\n- button "Account menu" [ref=e9]'
+
+    def setUp(self):
+        self.s = MemoryStore(); self.tid = Factory(self.s).task('Post the portal launch'); bg._PAGES.clear(); bg._SAW.clear()
+        self.state = mock.patch.object(browserview, 'state', return_value={'url': self.PAGE}); self.state.start(); self.addCleanup(self.state.stop)
+
+    def after(self, cmd, rc=0, title=''):
+        def outcome(sid, store=None, seen=None): seen.update({'url': self.PAGE if 'open' not in cmd else cmd.split()[-1], 'title': title}); return ''
+        with mock.patch.object(bg, 'outcome', outcome): return bg.after(self.s, self.tid, 'run1', cmd, rc)
+
+    def test_a_press_says_the_control_the_page_names_and_a_typed_box_too(self):
+        with on(self.PAGE, self.SNAP), verdict({'irreversible': False, 'sure': True, 'big': False, 'what': 'opens the account menu'}):
+            self.assertEqual(bg.check(self.s, self.tid, 'run1', 'agent-browser click @e9', Brain({})), {})
+        self.assertEqual(self.after('agent-browser click @e9'), 'TASKUARY-DID: Clicked the "Account menu" button on x.example')
+        # ...a box typed into runs with no snapshot of its own (plain typing): named off the page the gate last read
+        bg._PAGES['run1'] = {'url': self.PAGE, 'elements': self.SNAP}
+        self.assertEqual(bg.check(self.s, self.tid, 'run1', 'agent-browser fill @e2 "Q&A day is Friday"', Brain({})), {})
+        self.assertEqual(self.after('agent-browser fill @e2 "Q&A day is Friday"'), 'TASKUARY-DID: Typed into the "What is happening?" textbox on x.example')
+
+    def test_an_open_says_the_page_it_landed_on_and_a_look_what_it_looked_at(self):
+        self.assertEqual(self.after('agent-browser open https://x.example/alexdoyle', title='Alex Doyle (@alexdoyle) / X'),
+                         'TASKUARY-DID: Opened "Alex Doyle (@alexdoyle) / X" on x.example')
+        self.assertEqual(self.after('agent-browser open https://x.example/home'), 'TASKUARY-DID: Opened x.example')
+        self.assertEqual(self.after('agent-browser snapshot -i -c'), 'TASKUARY-DID: Looked at the page on x.example')
+        self.assertEqual(self.after('agent-browser get title'), "TASKUARY-DID: Read the page's title on x.example")
+
+    def test_a_failure_says_what_it_tried(self):
+        self.assertEqual(self.after('agent-browser press Enter', rc=1), 'TASKUARY-DID: Tried to press Enter on x.example')
+
+    def test_every_road_carries_the_words_to_the_step_and_the_rows_read_them(self):
+        from taskuary import chatlog, sessionrecord
+        out = 'done\nTASKUARY-DID: Clicked the "Account menu" button on x.example\ndone\nTASKUARY-DID: Pressed Enter on x.example'
+        tr = [{'type': 'tool_call', 'name': 'Bash', 'detail': {'tool_call_id': 'c1', 'args': {'command': 'agent-browser click @e9 && agent-browser press Enter'}}},
+              {'type': 'tool_result', 'name': 'c1', 'detail': {'tool_call_id': 'c1', 'result': out}}]
+        [st] = sessionrecord.trace_steps(tr)
+        self.assertEqual(st['did'], 'Clicked the "Account menu" button on x.example, then pressed Enter on x.example')
+        self.assertEqual(chatlog.tool_rows([chatlog.one_step(st)])[0]['line'], st['did'])
+        self.assertEqual(bg.did_of('\n'.join(['TASKUARY-DID: Looked at the page'] * 4)), 'Looked at the page, then looked at the page, and 2 more')
+
+
 class WhatTheSiteDid(unittest.TestCase):
     """THE VENDOR WALKS, 2026-11-18 (the owner: "stuck sites should not happen. It should be able to figure out next steps or try another
     way or ask the user for help"): a form posted to a site that never answers left the click "Done" and every command after it failing 30 s
@@ -733,7 +786,7 @@ class WhatTheSiteDid(unittest.TestCase):
     def test_the_command_prints_what_the_site_did_after_it_ran(self):
         from taskuary import gatecmd
         asked = []
-        def ask(name, args, after=False): asked.append(after); return 'TASKUARY: the page did not finish loading in 12 s' if after else ''
+        def ask(name, args, after=False, rc=0): asked.append(after); return 'TASKUARY: the page did not finish loading in 12 s' if after else ''
         with mock.patch.object(gatecmd, 'real', return_value='agent-browser'), mock.patch.object(gatecmd, 'ask', ask), \
              mock.patch('taskuary.spawn.run', return_value=SimpleNamespace(returncode=0)), mock.patch('sys.stderr') as err:
             self.assertEqual(gatecmd.main(['gate', 'agent-browser', 'click', '@e7']), 0)

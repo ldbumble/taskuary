@@ -579,7 +579,7 @@ def one_step(s: dict) -> dict:
     if desc and cmd: out['detail'] = _cut(cmd, 4000)
     elif s.get('detail'): out['detail'] = s['detail']
     if (kept := _args(a)): out['args'] = kept
-    for x in ('file', 'edit', 'status', 'output', 'out', 'id', 'parent'):
+    for x in ('file', 'edit', 'status', 'output', 'out', 'id', 'parent', 'did', 'why'):
         if s.get(x) not in (None, '', {}): out[x] = s[x]
     return out
 
@@ -703,7 +703,7 @@ def tool_rows(steps: list) -> list:
     for s in steps:
         if s.get('k') != 'tool': out.append(s); continue
         verb = _verb(s.get('name')); on = _on(s, verb)
-        r = {**{k: v for k, v in s.items() if k not in ('output', 'out')}, 'line': f'{verb} {on}'.strip() if on else verb, 'verb': verb,
+        r = {**{k: v for k, v in s.items() if k not in ('output', 'out')}, 'line': s.get('did') or (f'{verb} {on}'.strip() if on else verb), 'verb': verb,
              **({'outcome': o} if (o := outcome(s)) else {}), **_capped(s.get('output') or s.get('out'))}
         if out and out[-1].get('k') == 'tool' and out[-1]['line'] == r['line']: out[-1]['times'] = out[-1].get('times', 1) + 1; out[-1].update({k: r[k] for k in ('outcome', 'status') if k in r}); continue
         out.append(r)

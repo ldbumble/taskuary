@@ -408,6 +408,8 @@ def acp_steps(updates: list) -> list:
             if u.get('status'): s['status'] = u['status']
             if (d := _meta(u, 'terminal_output_delta', 'data')): s['out'] = s.get('out', '') + d
             elif not s.get('out') and u.get('status') in ('completed', 'failed') and (o := _out(u)): s['output'] = o
+            from .sessionrecord import did
+            did(s, s.get('output') or s.get('out'))
             # ...a step that failed says why in his words (say.step_why) - its output stays for the agent and the open row
             if s.get('status') == 'failed':
                 from . import say

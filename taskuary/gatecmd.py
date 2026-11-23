@@ -98,26 +98,27 @@ def run_own(store, tid: int, sid: str, verb: str) -> tuple:
     return False, f'agent-browser {verb} is not a command'
 
 
-def ask(name: str, args: list, after: bool = False) -> str:
+def ask(name: str, args: list, after: bool = False, rc: int = 0) -> str:
     """'' runs the command; else why it was not run. Asked of the server this session belongs to, as `taskuary --note` asks it: its token
     from the session (TASKUARY_TOKEN - or the app's own config where a CLI strips token-named variables from its shell, as Codex does).
-    `after`: the browser command has run - what the site did, in one line when it is not a working page (browsergate.outcome), else ''."""
+    `after`: the browser command has run (exit code `rc`) - what the site did where it is no working page, and what the command did in his
+    words, every browser call, a look too (browsergate.after)."""
     cmd = shlex.join([name, *args])
     act, call = asks(name, cmd)
-    if not call or after and name != 'agent-browser': return ''
-    try: return str(post(cmd, after).get('why') or '')
+    if not (name == 'agent-browser' if after else call): return ''
+    try: return str(post(cmd, after, rc=rc).get('why') or '')
     except Exception as e:
         if not act or after: return ''
         return (f'Taskuary held this for the owner: it could not be asked whether this press may run ({str(e)[:120]}), so nothing was '
                 'done. Run it again; if it is refused like this again, tell the owner in one line what you were about to do and go on with the rest of the job.')
 
 
-def post(cmd: str, after: bool = False, wait: float = WAIT) -> dict:
+def post(cmd: str, after: bool = False, wait: float = WAIT, rc: int = 0) -> dict:
     "The server's answer on one line of this session's (/api/agent/gate)."
     from . import config, hooks
     from .guard import TASK_ENV, TASK_HDR
     env, srv = os.environ, config.load()['server']
-    body = json.dumps({'task': env.get('TASKUARY_TASK') or '', 'sid': env.get('TASKUARY_SID') or '', 'cmd': cmd, 'cwd': os.getcwd(), **({'after': True} if after else {})}).encode()
+    body = json.dumps({'task': env.get('TASKUARY_TASK') or '', 'sid': env.get('TASKUARY_SID') or '', 'cmd': cmd, 'cwd': os.getcwd(), **({'after': True, 'rc': rc} if after else {})}).encode()
     hdr = {'Content-Type': 'application/json', **({'X-Taskuary-Token': srv['token']} if srv.get('token') else {}),
            **({TASK_HDR: env[TASK_ENV]} if env.get(TASK_ENV) else {})}
     import urllib.request
@@ -152,7 +153,7 @@ def main(argv: list = None) -> int:
     # ...ITS OUTPUT HANDED ON BY NAME (round 4, 2026-11-19): started with no console, a real program behind a .cmd wrote nothing to the handles it
     # only inherited - every snapshot, url and read came back empty, and the agent worked the sites with curl instead
     rc = spawn.run([exe, *args], stdin=sys.stdin, stdout=sys.stdout, stderr=sys.stderr).returncode
-    if (said := ask(name, args, after=True)): print(said, file=sys.stderr)
+    if (said := ask(name, args, after=True, rc=rc)): print(said, file=sys.stderr)
     return rc
 
 

@@ -521,7 +521,9 @@ export function stepsOf(trace, { answer = "", keepStart = true } = {}) {
       called.add(e.name);
       if (MACHINERY.has(key(String(e.name || "").split("__").pop())) || TICK.test([parsed(args).command || parsed(args).cmd || ""].flat().join(" "))) continue;
       const id = e.detail?.tool_call_id || `${e.name}-${steps.length}`;
-      const d = describeCall(e.name, args);
+      // ...A BROWSER CALL SAYS WHAT IT ACTED ON (the owner, 2026-11-23: "Clicked on the page, and 1 more"): the words the gate wrote where it read the
+      // page (browsergate.did - "Clicked the "Post" button on x.example"), carried on the step (`did`), over any reading of the command here
+      const d = { ...describeCall(e.name, args), ...(e.detail?.did ? { summary: e.detail.did } : {}) };
       // ...its outcome in a few words and the same call made again, as the server's one reading of the turn says (chatlog.tool_rows)
       const step = { id, ...d, tool: e.name, raw: rawOf(e.name || "tool", args), output: String(e.detail?.output || ""), status: "running", own: ownTool(e.name),
         ...(e.detail?.outcome ? { outcome: e.detail.outcome } : {}), ...(e.detail?.why ? { why: e.detail.why } : {}), ...(e.detail?.times > 1 ? { times: e.detail.times } : {}),

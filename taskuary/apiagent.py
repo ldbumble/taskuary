@@ -165,10 +165,11 @@ def _act(store, tid, sid, args: list) -> str:
     "One agent-browser command in this task's browser - held for the owner first where it can't be undone (gatecmd.judge, as a CLI's is)."
     from . import browsergate as bg, gatecmd
     if (held := gatecmd.judge(store, tid, sid, shlex.join([bg.EXE, *args]))): return held
+    cmd = shlex.join([bg.EXE, *args])
     rc, said = bg._run(sid, args, WAIT, 'api')
-    if rc != 0: raise ValueError(said.strip()[-400:] or f'agent-browser {args[0]} failed')
-    after = bg.outcome(sid, store) if args[0] not in bg.LOOKS or args[0] in bg.NAVS else ''
-    return '\n'.join(x for x in (said.strip() or 'Done.', after) if x)
+    # ...what it did, in his words, and what the site did - the one road a CLI's command takes after it ran (browsergate.after)
+    if rc != 0: raise ValueError('\n'.join(x for x in (said.strip()[-400:] or f'agent-browser {args[0]} failed', bg.did(sid, cmd, rc=rc)) if x))
+    return '\n'.join(x for x in (said.strip() or 'Done.', bg.after(store, tid, sid, cmd)) if x)
 
 
 def _look(sid, a: dict) -> str:

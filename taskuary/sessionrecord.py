@@ -105,6 +105,12 @@ def _parsed(args):
     return j if isinstance(j, dict) else args
 
 
+def did(s: dict, out) -> None:
+    "What a browser call's own output says it did (browsergate.DID, written where the page was read), kept on its step for every surface."
+    from .browsergate import did_of
+    if (w := did_of(out)): s['did'] = w
+
+
 def _tool(name, args, at=None) -> dict:
     # ...read as the object they are (2026-11-17): kept as a string, a call had no args, file or edit, so the chat drew a write by its own
     # text and an email draft as "Running a command" (agentSteps.describeCall)
@@ -207,6 +213,7 @@ def _claude_line(st: dict, j) -> None:
     for b in _blocks(msg.get('content')):
         t = b.get('type')
         if t == 'tool_result' and (s := uses.get(b.get('tool_use_id'))) and (h := _hunks(res.get('structuredPatch'))): s['edit'] = {'hunks': h}
+        if t == 'tool_result' and (s := uses.get(b.get('tool_use_id'))): did(s, ' '.join(_texts(b.get('content'))) if isinstance(b.get('content'), list) else b.get('content'))
         # ...A CALL THAT FAILED READS AS FAILED, with what it said (a held step's "Taskuary held this" too - the chat draws that held, not red)
         if t == 'tool_result' and b.get('is_error') and (s := uses.get(b.get('tool_use_id'))):
             s['status'], s['output'] = 'failed', _cut(' '.join(_texts(b.get('content'))) if isinstance(b.get('content'), list) else b.get('content'), 400)
@@ -566,6 +573,7 @@ def trace_steps(trace: list) -> list:
         if k == 'tool_result' and isinstance(d, dict) and (s := calls.get(d.get('tool_call_id') or name)):
             s['status'] = 'failed' if d.get('is_error') else 'completed'
             if d.get('is_error') and not s.get('output'): s['output'] = _cut_said(d.get('result'))
+            did(s, d.get('result'))
         if k == 'tool_call':
             steps.append(s := _tool(name, (d or {}).get('args') if isinstance(d, dict) else d))
             if isinstance(d, dict): calls[d.get('tool_call_id')] = s

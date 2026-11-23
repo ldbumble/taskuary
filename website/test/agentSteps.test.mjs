@@ -356,6 +356,20 @@ test("a model's reasoning is never a step row, finished or still being written -
   assert.deepEqual(eventsOf([{ k: "thought", text: "Locating account menu" }], false), []);
 });
 
+// ...AND A BROWSER STEP SAYS WHAT IT ACTED ON (the owner, 2026-11-23: "Clicked on the page, and 1 more", "Looked at the page"): the words the gate
+// wrote where it read the page ride on the step (`did`, browsergate.did) and are its row, whatever the command's text reads as here
+test("a browser step's row is what the gate saw it do - the control by the page's name, the page an open landed on", () => {
+  const step = (id, command, did, status = "completed") => ({ k: "tool", id, name: "Bash", args: { command }, status, did });
+  const rows = stepsOf(eventsOf([step("a", "agent-browser open https://x.example/alexdoyle", 'Opened "Alex Doyle (@alexdoyle) / X" on x.example'),
+    step("b", "agent-browser snapshot -i", "Looked at the page on x.example"),
+    step("c", "agent-browser click @e9 && agent-browser press Enter", 'Clicked the "Account menu" button on x.example, then pressed Enter on x.example'),
+    step("d", "agent-browser press Enter", "Tried to press Enter on x.example", "failed")], false), { keepStart: false });
+  assert.deepEqual(rows.map((s) => [s.summary, s.status]), [['Opened "Alex Doyle (@alexdoyle) / X" on x.example', "done"], ["Looked at the page on x.example", "done"],
+    ['Clicked the "Account menu" button on x.example, then pressed Enter on x.example', "done"], ["Tried to press Enter on x.example", "error"]]);
+  // ...and one the gate said nothing of (a log kept before it did) still reads off its command
+  assert.equal(stepsOf(eventsOf([step("e", "agent-browser snapshot -i")], false))[0].summary, "Looked at the page");
+});
+
 // WHAT HE SEES (design round 4, 2026-11-19, three walks): a failed command's PATH dump stood as a red note under its step; Taskuary's own tool
 // list read "Used find tools (taskuary) on 'propose_reply'"; a code search read "Searched files for 'import.*spawn|def run\(|...'"
 test("a failed call is its own step, failed, its output folded - never a note with the output whole", () => {

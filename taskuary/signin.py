@@ -508,10 +508,12 @@ def brand_of(title: str, href: str = '') -> str:
 
 
 HANDED_ON = 6
-def needs(store, tid: int, sid: str, claimed: str = '', fill=None, watch=..., what: str = '') -> dict:
+def needs(store, tid: int, sid: str, claimed: str = '', fill=None, watch=..., what: str = '', ended: bool = True) -> dict:
     """The agent ended its turn asking to be signed in. Record the ask on the existing road and, when the owner keeps a sign-in for
     the site the browser is actually on, fill it at once on its own thread. `fill`: the filler (tests stand one in). `what`: the step in the
-    agent's own words, where it handed the page over as its turn (browserview.your_turn) - the ask says that, never "sign in"."""
+    agent's own words, where it handed the page over as its turn (browserview.your_turn) - the ask says that, never "sign in". `ended`: the turn
+    ended on the ask, so its answer only handed the sign-in over and is taken back as a step (conversation.take_back) - never a turn that goes on
+    (walk 10: hand_over mid-turn, and that turn's closing words, all it had done and why it stopped, never reached the chat)."""
     from . import browserview, workerstate as ws
     if watch is ...: watch = globals()['watch']
     st = browserview.state(sid, fresh=True)
@@ -547,7 +549,7 @@ def needs(store, tid: int, sid: str, claimed: str = '', fill=None, watch=..., wh
     # not a sign-in "asked again within minutes"
     if row and last and _now() - last < AGAIN and not _code_of(row.get('Totp')) and asks_code(sid) and not on_password_page(sid):
         # ...and the turn that made it ready is a step, not an answer ("I need the site signed in to go on" stood in the chat, 2026-11-15)
-        if _chat(sid):
+        if ended and _chat(sid):
             from . import conversation
             conversation.take_back(store, tid, why=f'Made the code page of {site} ready for you.', since=_now(), ahead=True)
         return ask(CODE_ASK.format(site=site)) or {'site': site, 'auto': False}
@@ -577,7 +579,7 @@ def needs(store, tid: int, sid: str, claimed: str = '', fill=None, watch=..., wh
                 while time.time() < end and callable(getattr(general._live_of(tid), 'phase', None)) and told(): time.sleep(.1)
                 general.hand(tid, -1)
         general.hand(tid)
-        threading.Thread(target=typed, args=(store, tid, sid, site, rid, fill or type_in, ask), daemon=True, name=f'signin-{tid}').start()
+        threading.Thread(target=typed, args=(store, tid, sid, site, rid, fill or type_in, ask, ended), daemon=True, name=f'signin-{tid}').start()
         return {'site': site, 'auto': True}
     ask()
     if row:
@@ -586,13 +588,13 @@ def needs(store, tid: int, sid: str, claimed: str = '', fill=None, watch=..., wh
     return {'site': site, 'auto': False}
 
 
-def _auto(store, tid, sid, site, rid, fill, ask=None):
+def _auto(store, tid, sid, site, rid, fill, ask=None, ended=True):
     """Type the saved sign-in. `ask`: raises the owner's ask - called only when the fill did not go in."""
     from . import conversation, vault
     row = saved(store, site) or {}
     # THE ANSWER THAT ONLY HANDED THE SIGN-IN OVER IS A STEP FROM NOW, not once the typing is done: for those seconds it stood in the chat as
     # the agent's answer - "I have no saved sign-in for it ... once the sign-in is done" - untrue, and gone a beat later (recorded 2026-11-14)
-    back = lambda why: _chat(sid) and conversation.take_back(store, tid, why=why, since=_TRIED.get((tid, site), 0), ahead=True)
+    back = lambda why: ended and _chat(sid) and conversation.take_back(store, tid, why=why, since=_TRIED.get((tid, site), 0), ahead=True)
     back(f'Signing in to {site} with the saved sign-in.')
     try:
         user, pw = vault.unseal(row.get('User') or '') or '', vault.unseal(row.get('Secret') or '')

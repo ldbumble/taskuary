@@ -189,6 +189,25 @@ class DoneIsAPress(unittest.TestCase):
             got = browserview.hand_over(self.s, self.tid, 'sign in', 'vendor.example', 'run1', watch=None)
         self.assertTrue(got['ok'] and not got.get('auto')); self.assertEqual([ws.ask_of(r)['ask'] for r in self.open()], ['signin'])
 
+    def test_a_saved_sign_in_typed_mid_turn_never_takes_back_the_turn_s_own_answer(self):
+        """Walk 10 (2026-11-23): the agent called hand_over mid-turn, a saved sign-in was typed, and the road written for a turn that ENDED on
+        a sign-in marker took back "the next answer" as a step - the turn's closing words (what it did, why it stopped) never reached the chat.
+        Mid-turn the answer is the turn's own; a marker's turn ended on the hand-over, and only that answer is a step."""
+        import threading
+        from taskuary import conversation, signin, vault
+        self.addCleanup(signin._TRIED.clear)
+        for ended, back in ((False, False), (True, True)):
+            signin._TRIED.clear()
+            with mock.patch.object(signin, 'saved', return_value={'User': 'u', 'Secret': 's'}), mock.patch.object(vault, 'unseal', return_value='pw'), \
+                    mock.patch.object(signin, 'shows_signin', return_value=True), mock.patch.object(signin, 'asks_code', return_value=False), \
+                    mock.patch.object(signin, 'type_in', return_value={}), mock.patch.object(signin, '_continue'), \
+                    mock.patch.object(signin, '_chat', return_value=True), mock.patch.object(signin, 'typing'), mock.patch.object(signin, '_used'), \
+                    mock.patch.object(signin, '_audit'), mock.patch.object(conversation, 'take_back') as took:
+                got = browserview.hand_over(self.s, self.tid, 'sign in', 'vendor.example', 'run1', watch=None, ended=ended)
+                for th in [t for t in threading.enumerate() if t.name == f'signin-{self.tid}']: th.join(5)
+            self.assertTrue(got.get('auto'), got)
+            self.assertEqual(took.called, back, f'ended={ended}')
+
     def test_a_step_named_with_its_site_on_a_page_that_asks_no_sign_in_is_his_turn_and_says_so(self):
         """Walk 10 (2026-11-23): "Enter your date of birth" on a sign-up page, handed over with its site, took the saved sign-in's road and
         answered "Taskuary is signing in ... with what it keeps" - while the step went to him as a card ten seconds later."""

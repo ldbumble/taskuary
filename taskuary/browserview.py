@@ -690,7 +690,7 @@ TURN_PREFIX = 'yourturn:'
 # "I'm done" left "You pressed Done")
 TURN_DONE = "I'm done"
 
-def your_turn(store, tid: int, sid: str, what: str = '', watch=...) -> str:
+def your_turn(store, tid: int, sid: str, what: str = '', watch=..., ended: bool = True) -> str:
     "Record the agent's hand-over as an open request on the task, watched on its page. The request id - `yourturn:<hash>`. `watch`: tests."
     from . import terminal as term, workerstate as ws
     st = state(sid, fresh=True)
@@ -709,7 +709,7 @@ def your_turn(store, tid: int, sid: str, what: str = '', watch=...) -> str:
     try: signing = signin.on_signin_page(sid)
     except Exception as e: signing = False; logger.debug(f'task {tid}: the page handed over could not be read for a sign-in - {e}')
     # ...asked as the step the agent named (a human check on a sign-up page is not "sign in" - design round 5), the vault's road all the same
-    if signing and (site := signin.needs(store, tid, sid, '', what=what).get('site')): return f'{signin.PREFIX}{site}'
+    if signing and (site := signin.needs(store, tid, sid, '', what=what, ended=ended).get('site')): return f'{signin.PREFIX}{site}'
     host = signin.site_name(st.get('url'), sid)                  # the one name of a site (signin.site_name): a bare address by its page's title
     text = f"Your turn in the browser{f' on {host}' if host else ''}: {what or 'the agent needs you to do a step on the page'}"
     rid = ws.fresh_id(store, tid, f'{TURN_PREFIX}{ws.request_id_for(text)}')
@@ -752,10 +752,11 @@ def front_tab(sid: str, site: str) -> bool:
     return bool(hit) and switch_tab(sid, str(hit['id']))
 
 
-def hand_over(store, tid: int, what: str = '', site: str = '', sid: str = None, watch=..., sign_in: bool = False) -> dict:
+def hand_over(store, tid: int, what: str = '', site: str = '', sid: str = None, watch=..., sign_in: bool = False, ended: bool = False) -> dict:
     """Hand task `tid`'s owner the step `what` on its browser's page - done by Taskuary itself where it can (a saved sign-in), else one card.
     `site`: the domain the agent names for a sign-in ('new:<site>' a sign-up, as the old marker claimed it). `sign_in`: a sign-in that names no
-    site - a bare marker, or a turn that ended on a login form - read off the page (signin.needs). -> {ok, says} or {ok: False, why}."""
+    site - a bare marker, or a turn that ended on a login form - read off the page (signin.needs). `ended`: the agent's turn ended on it (a marker),
+    so its answer only handed the step over; called mid-turn (the tool), the turn goes on and its answer is its own. -> {ok, says} or {ok: False, why}."""
     from . import signin, workerstate as ws
     what, site = ' '.join(str(what or '').split())[:300], ' '.join(str(site or '').split())[:200]
     sid = sid or getattr(ws._live(int(tid)), 'sid', None)
@@ -772,8 +773,8 @@ def hand_over(store, tid: int, what: str = '', site: str = '', sid: str = None, 
     # ...A SITE NAMED IS A SIGN-IN ONLY ON A PAGE THAT ASKS ONE (walk 10: "Enter your date of birth" on signup.live.com, named with its site,
     # took the saved sign-in's road and answered "Taskuary is signing in" while the step went to him): a page read with no box a sign-in
     # fills is his turn - one the page cannot say keeps the agent's word
-    if sign_in or signin.signing_up(site) or (site and signin.shows_signin(sid) is not False): signin.needs(store, tid, sid, site, what=what, watch=watch)
-    else: your_turn(store, tid, sid, what, watch=watch)
+    if sign_in or signin.signing_up(site) or (site and signin.shows_signin(sid) is not False): signin.needs(store, tid, sid, site, what=what, watch=watch, ended=ended)
+    else: your_turn(store, tid, sid, what, watch=watch, ended=ended)
     # ...nothing raised for him: the saved sign-in is going in (signin._auto), and its end tells the agent
     if not (h := handing(store, tid)): return {'ok': True, 'auto': True, 'says': SIGNING.format(site=signin.clean_claim(site) or 'the site')}
     return {'ok': True, 'says': HANDED.format(what=h.get('Text') or what or 'the step on the page')}

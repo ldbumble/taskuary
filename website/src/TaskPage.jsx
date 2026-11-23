@@ -106,7 +106,7 @@ import { chatOf, taskStatus } from "./railStatus.js";
 import { StatusPill } from "./StatusMark.jsx";
 import { ASK_TAG, BROWSER_TAG } from "./newTask.js";
 import { completionFact, completionLine, waitingEmails, wentOut,
-  AGENT, agentPhase, focusStage, generalAnswered, stillWorking, hasCorrespondent, ownerControlsCompletion, pageState, pendingProposals, pendingReplyReview, reopenedDetail, replyPhase, replySource, sentElsewhere, sentReplyReview, sessionWord, taskPhase, unsentReplyReview,
+  AGENT, agentPhase, focusStage, generalAnswered, stillWorking, hasCorrespondent, ownerControlsCompletion, pageState, pendingProposals, pendingReplyReview, reopenedDetail, replyPhase, replySource, sentElsewhere, sentReplyReview, sessionWord, taskPhase, isUnsentReply, unsentReplyReview,
 } from "./taskLifecycle.js";
 import { askNote, closeoutOf, decidedAsk, heldGroups, splitHeld } from "./reviewProposal.js";
 import PassedCard, { isPassed, isReplaced } from "./PassedCard.jsx";
@@ -1522,7 +1522,6 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const closeoutRv = allProposals.find((p) => closeoutOf(p)) || null;
   const proposals = allProposals.filter((p) => !(pendingReview && p === closeoutRv));
   const sentReview = sentReplyReview(reviews);
-  const unsentReview = sentReview ? null : unsentReplyReview(reviews);
   // the agent's record, drawn once, on the Agent work step - the draft its run wrote, whichever round it went in
   const recordProps = { taskId: selected, pages: isGeneral ? [] : (detail?.artifacts || []).filter((a) => isPublished(a) || a.kind === "shown"),
     draft: (() => { const s = sentReplyReview(allReviews), r = pendingReview || (s ? null : unsentReplyReview(allReviews)) || s; return r ? r.FinalText || r.DraftText || "" : ""; })(),
@@ -1915,7 +1914,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // ...and a reply owed with nothing drafted shows its empty box in the chat, Draft with AI under it - only where nothing else waits there: a
   // GitHub finish to approve, a proposal, emails owed or a write-up under way have their own box
   // ...never on an INVITE (the owner, 2026-11-08): its answer is the calendar's card - Accept, Decline, Propose a new time - not an email
-  const replyEmpty = !!replyMessage && !detail?.calendar?.invite && !pendingReview && !sentReview && !unsentReview && !ended && !liveSession && !closeoutRv && !allProposals.length
+  const replyEmpty = !!replyMessage && !detail?.calendar?.invite && !pendingReview && !sentReview && !reviews.some(isUnsentReply) && !ended && !liveSession && !closeoutRv && !allProposals.length
     && !owesEmails && !emailsWaiting && !writeup && !outside
     && !!t && !["done", "dropped"].includes(t.Status);
   // the one line From folds to while an agent works (sessionView)
@@ -2822,6 +2821,10 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const letters = new Set(letterItems(detail?.checklist, allReviews).map((x) => x.rv.ReviewId));
   const replacedCards = allReviews.filter(isReplaced).map((r) => ({ key: `replaced:${r.ReviewId}`, at: r.CreatedAt || "", rid: r.ReviewId, byRow: true, record: true,
     node: <ReviewDecision review={r} past /> }));
+  // ...AND EVERY OTHER REPLY THAT DID NOT GO, the same: greyed in the turn that wrote it (walk 6, 2026-11-23: a second block drew the newest one
+  // after the chat, under everything, with a live "Bring it back to send" - over a letter whose words had already gone out as an email)
+  const unsentCards = allReviews.filter((r) => isUnsentReply(r) && !isPassed(r) && !isReplaced(r)).map((r) => ({ key: `unsent:${r.ReviewId}`,
+    at: r.CreatedAt || "", rid: r.ReviewId, byRow: true, record: true, node: <ReviewDecision review={r} past /> }));
   // ...AND THE REPLY THAT WAITS IS A CARD OF ITS TURN like every other (the one log, stage 8: the log places it - chatlog.advance - and the
   // page's own placing of it, under a turn it guessed or loose at the foot, is gone): drawn where its row stands, by its review
   const replyNode = inTurns && pendingReview && replyCardShown(pendingReview) ? [{ key: `reply:${pendingReview.ReviewId}`, at: pendingReview.CreatedAt || "",
@@ -2830,7 +2833,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       onEmailInstead={() => setEmailOpen(true)} why={rec?.state === "draft_ready" ? rec.why || "" : ""}
       onChanged={() => { loadDetail(selected); loadTasks(); onChanged?.(); }} /></Box> }] : [];
   const turnCards = [...replyNode, ...passedCards, ...batches.map((rs) => ({ key: `batch:${rs[0].Batch}`, at: rs[0].CreatedAt || "", rid: rs[0].ReviewId, waits: true,
-      node: <BulkCard rows={rs} tid={t?.TaskId} onChanged={decided} /> })), ...replacedCards, ...pressedCards.map((g) => ({ key: g.key, at: g.at, rid: g.reviews[0].ReviewId,
+      node: <BulkCard rows={rs} tid={t?.TaskId} onChanged={decided} /> })), ...replacedCards, ...unsentCards, ...pressedCards.map((g) => ({ key: g.key, at: g.at, rid: g.reviews[0].ReviewId,
       node: g.held ? <HeldSteps reviews={g.reviews} onChanged={decided} /> : <PassedCard reviews={g.reviews} /> })),
     ...(inTurns ? askCards : []).map((g) => ({ key: g.key, at: g.reviews[0].CreatedAt || "", rid: g.reviews[0].ReviewId, waits: true, also: asksBelow, note: g.held ? "" : askNote(g.reviews[0]),
       node: g.held ? <HeldSteps reviews={g.reviews} toRow={inRow && !pendingReview && liveAsks === 1} onChanged={decided} />
@@ -2944,7 +2947,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                   once the item has ended, where it named a sender nothing is going to
                   ...and beside an email the task owes it is the REPLY's To, said so (the owner, 2026-11-02): under the owed
                   address it read as that email's To. The email wears its own (SlotList) */}
-              {(replyMessage || sentReview) && (!ended || sentReview || unsentReview) && !(sentCarded && !pendingReview) && chatReplyShown({ replyMessage, pendingReview, sentReview, unsentReview }) && (
+              {(replyMessage || sentReview) && (!ended || sentReview) && !(sentCarded && !pendingReview) && chatReplyShown({ replyMessage, pendingReview, sentReview }) && (
               <Box sx={{ display: "flex", alignItems: "baseline", gap: 0.8, mt: 1.1, minWidth: 0 }}>
                 <Typography sx={{ ...label, flexShrink: 0 }} data-tq-reply-to="">{owesEmails ? "Reply to" : "To"}</Typography>
                 <Typography variant="body2" noWrap sx={{ color: INK, fontWeight: 600 }}>
@@ -3006,25 +3009,6 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                     {sentReview.FinalText || sentReview.DraftText}</Typography>
                 </Box>
               )}
-              {/* the draft closed without sending stays readable here, the task done or not */}
-              {unsentReview && (
-                <Box sx={{ bgcolor: PANEL2, border: `1px dashed ${BORDER}`, borderRadius: 1.25,
-                  px: 1.1, py: 0.85, mt: 0.9 }}>
-                  {/* ...why, as the chat says it (proposals.passed_why, 2026-11-17): a draft the chat moved past was never "closed" */}
-                  <Typography sx={{ ...label, display: "block" }}>{unsentReview.Why || "Not sent - closed without sending"}</Typography>
-                  <Typography variant="body2" sx={{ color: DIM, whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>
-                    {unsentReview.DraftText}</Typography>
-                  {/* ...and it can still go: the draft comes back to send, the task done or not (T11) */}
-                  {hasCorrespondent(replyMessage) && (
-                    <Button size="small" sx={{ mt: 0.75, fontSize: 11 }} onClick={() => {
-                      const id = selected;
-                      api.post(`/api/reviews/${unsentReview.ReviewId}/reopen`)
-                        .then(() => { if (!stale(id)) { loadDetail(id); setOpenStage("reply"); } })
-                        .catch((e) => { if (!stale(id)) setErr(e?.response?.data?.detail || "Could not bring the draft back"); });
-                    }}>Bring it back to send</Button>
-                  )}
-                </Box>
-              )}
             </>
           )}
           {/* A PROPOSAL IS THE SAME KIND OF ASK, so it shares this section rather than
@@ -3055,7 +3039,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // ...ONLY WHAT CAN STILL BE DONE (the owner, 2026-11-05: "it's a chat nothing else"): a draft waiting on Send, an invite to answer, emails owed -
   // never a closed task's "Mark done 11m ago", a reply sent outside or a draft closed without sending; the chat says those
   const chatCards = sentBox ? <SentCard {...sentBox} /> : !["done", "dropped"].includes(t?.Status) && (waits || (!inTurns && kept.length) || upFailed
-    || chatReplyShown({ replyMessage, pendingReview: chatReview, sentReview: null, unsentReview: null }) || calAsk?.invite) ? <Box ref={cardsRef} data-tq-chat-cards="" data-tq-waits={waits ? "" : undefined}
+    || chatReplyShown({ replyMessage, pendingReview: chatReview, sentReview: null }) || calAsk?.invite) ? <Box ref={cardsRef} data-tq-chat-cards="" data-tq-waits={waits ? "" : undefined}
       sx={{ minWidth: 0, "& textarea": { fontSize: "13.5px !important", lineHeight: "1.5 !important", color: INK } }}>{chatBody()}</Box> : null;
   return (
     <>

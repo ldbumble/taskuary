@@ -97,9 +97,10 @@ export const slotReviews = (reviews = []) => (reviews || []).filter((review) => 
 // included (the owner, 2026-09-24: "draft should always stay on task even on done task"). Newest wins.
 // `superseded` included: closing the task sweeps a pending draft away under that word, and the merged pull request's
 // thank-you vanished from Close out with it (2026-10-12)
-export const unsentReplyReview = (reviews = []) =>
-  [...reviews].sort((a, b) => (b.ReviewId || 0) - (a.ReviewId || 0)).find((review) => isReply(review) &&
-    ["no_reply", "closed_unsent", "rejected", "superseded"].includes(review.Status) && String(review.DraftText || "").trim());
+// ...ONE TEST of a reply that did not go: the chat draws each greyed in the turn that wrote it (TaskPage turnCards), the record reads the newest
+export const isUnsentReply = (review) => !!review && isReply(review) && ["no_reply", "closed_unsent", "rejected", "superseded"].includes(review.Status)
+  && !!String(review.DraftText || "").trim();
+export const unsentReplyReview = (reviews = []) => [...reviews].sort((a, b) => (b.ReviewId || 0) - (a.ReviewId || 0)).find(isUnsentReply);
 
 // what went out on this task from OUTSIDE a draft here - your reply in the mail client, your comment on the pull request,
 // and an agent's under your login, which come back as your own messages (channels.ingest_own_message). Oldest first.

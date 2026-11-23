@@ -7652,19 +7652,6 @@ def waitroom_drop(tid: int, wid: int):
     store.drop_waiting(wid, tid)
     return {'ok': True}
 
-@app.post('/api/reviews/{rid}/reopen')
-def reopen_review(rid: int):
-    """A draft closed without sending, back in front of you to send after all (T11, the owner, 2026-09-25: "keep draft
-    reply even if closed so you can send later if you want"). Mark done kept it on the task; nothing could send it."""
-    rv = store.get_review(rid)
-    if not rv: raise HTTPException(404, 'review not found')
-    if rv.get('Kind') == 'action': raise HTTPException(422, 'a proposal is proposed again, not reopened')
-    if rv['Status'] not in ('closed_unsent', 'no_reply', 'rejected'): raise HTTPException(422, f"this one is {rv['Status']}, not closed")
-    if not str(rv.get('DraftText') or '').strip(): raise HTTPException(422, 'there is no draft to send')
-    store.unhold_review(rid, 'brought back by you to send after all')
-    store.audit('review', rid, 'reopen', ACTOR)
-    return {'ok': True}
-
 @app.post('/api/reviews/{rid}/release')
 def release_review(rid: int):
     """Answer now without waiting for the session. A held draft is one the agent's findings are

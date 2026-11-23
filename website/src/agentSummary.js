@@ -39,9 +39,9 @@ export const nextSteps = ({ summary, reviews = [], checklist = [], acts = [], ca
 
 // A REPLY OWED IS NOT A SUGGESTED REPLY (the owner's stress run, 2026-11-05): while the agent worked, the chat drew "Suggested reply" over a
 // bare "To Ray Colton" with nothing under it - the envelope of a reply nobody had written yet. In the chat the reply's place stands once there
-// is a reply in it: a draft waiting, or one that was sent or closed unsent
-export const chatReplyShown = ({ replyMessage, pendingReview, sentReview, unsentReview } = {}) =>
-  !!replyMessage && !!(pendingReview || sentReview || unsentReview);
+// is a reply in it: a draft waiting, or one that was sent - one that did not go is greyed in its own turn
+export const chatReplyShown = ({ replyMessage, pendingReview, sentReview } = {}) =>
+  !!replyMessage && !!(pendingReview || sentReview);
 
 // ...and "Suggested reply" heads Close out's body in the chat only over a reply - a draft, or one sent or closed unsent. Over a closed task's
 // "✓ Mark done just now" it named a reply there never was (the stress run's browser task, 2026-11-05)

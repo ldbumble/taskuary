@@ -13,7 +13,7 @@
   "demo": true,
   "owner": "Dana Whitfield",
   "opens": {
-   "tid": 30
+   "report": 3
   }
  },
  "/api/owner": {

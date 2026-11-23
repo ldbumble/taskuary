@@ -3353,6 +3353,12 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true, r
     }
     else if (request.kind === "task") { if (request.fromUrl) byUrl.current = true; openTaskRef.current?.(request); }
     else if (request.kind === "msg") openMsgRef.current?.(request.mid);   // #msg=N: that message's card (canvasLinks)
+    // ...A REPORT'S OWN ROW, drawn as its rail press draws it (the demo opens on its dashboard - the owner, 2026-11-22): the rail row of that
+    // report's latest run; none on the rail, its page
+    else if (request.kind === "report") {
+      const row = (pileRef.current?.items || []).find((i) => Number(i.source_id) === Number(request.sid) && !i.settling);
+      if (row) pullRef.current?.(row.key); else browseRef.current?.("reports", { section: "reports", open: Number(request.sid), at: request.n });
+    }
     else if (request.kind === "new") browseRef.current?.("new", request.state || {});     // #new-task: the New card in the conversation (addressed: Message them)
     // Back to the address with no place: the walk's own table, the page over it put down (appLinks.onPlace)
     // ...and on a chat that held nothing but pages, the empty chat comes back as it was - its greeting, day card and Walk button: the folded

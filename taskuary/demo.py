@@ -1327,8 +1327,12 @@ OPENS_ENV = 'TASKUARY_DEMO_OPENS_TOUR'
 SHOWCASE = 'Fairhaven safety milestone - LinkedIn post?'
 
 def opens(store) -> dict | None:
-    """What a visitor's first view opens on: the agent's finished post while it is open, else the first open task."""
+    """What a visitor's first view opens on: THE DASHBOARD OF REPORTS (the owner, 2026-11-22: "it should open on the dashboard of reports") -
+    Taskuary at a glance, the one every install comes with - else the agent's finished post while it is open, else the first open task."""
     if not enabled() or os.environ.get(OPENS_ENV, '1') == '0' or store is None: return None
+    from .dashboards import GLANCE
+    if (d := next((s for s in store.list_sources() if s.get('Channel') == 'report' and s.get('Name') == GLANCE['title']), None)):
+        return {'report': d['SourceId']}
     live = [t for t in store.list_tasks() if t.get('Status') not in ('done', 'dropped')]
     t = next((t for t in live if t.get('Title') == SHOWCASE), None) or next(iter(live), None)
     return {'tid': t['TaskId']} if t else None

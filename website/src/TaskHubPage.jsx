@@ -382,12 +382,13 @@ export default function TaskHubPage() {
   // do"): a visitor who came with no address of their own gets the tour task on the canvas, once per tab - a #task= or #report= link is
   // honoured as it always was, and a reload goes back to wherever they had got to (demo.opens)
   const cameTo = useRef(window.location.hash || "");
+  // ...NOW ON THE DASHBOARD OF REPORTS (the owner, 2026-11-22): `opens` names a report, opened as its #report= link opens it
   useEffect(() => {
-    const tid = demo?.opens?.tid;
-    if (!tid || cameTo.current) return;
+    const tid = demo?.opens?.tid, report = demo?.opens?.report;
+    if ((!tid && !report) || cameTo.current) return;
     try { if (sessionStorage.getItem("tq-demo-opened")) return; sessionStorage.setItem("tq-demo-opened", "1"); } catch { /* no storage: open it */ }
-    ask({ kind: "task", tid });
-  }, [demo?.opens?.tid, ask]);
+    ask(report ? { kind: "report", sid: report } : { kind: "task", tid });
+  }, [demo?.opens?.tid, demo?.opens?.report, ask]);
   useEffect(() => holdLive(), []);
   const [selectedTask, setSelectedTask] = useState(null);
   // the one "Report this bug" popup: any screen asks for it through REPORT_EVENT (bugReportOpen.js)

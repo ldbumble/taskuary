@@ -68,7 +68,8 @@ test("every scripted card is bound to the row it names in the shipped recording"
   const census = demo.pile.items.find((i) => i.lane === "blocked");
   assert.match(tasks.get(census.tid), /census sync fails/);
   assert.equal(demo.pile.alerts[0].item, census.key);
-  // ...the tour leads the rail, and the demo opens on an agent's finished work - the LinkedIn post - never the greeting
+  // ...the tour leads the rail, and the demo opens on the dashboard of reports (the owner, 2026-11-22) - a dashboard the recording holds
   assert.equal(demo.pile.items[0].title, "Start here - what Taskuary can do");
-  assert.equal(tasks.get(fx["/api/demo"].opens.tid), "Fairhaven safety milestone - LinkedIn post?");
+  const opens = fx["/api/demo"].opens.report, src = (fx["/api/sources"].data || fx["/api/sources"]).find((x) => x.SourceId === opens);
+  assert.ok(src && /dashboard/.test(String(src.ConfigJson)), "the demo opens on a dashboard of its reports");
 });

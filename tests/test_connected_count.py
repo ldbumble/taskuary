@@ -42,34 +42,35 @@ def _api(s):
 
 def test_a_card_switched_on_and_never_signed_in_is_not_connected_on_any_surface():
     """The live shape: LinkedIn switched on, no sign-in. The page (State) said not connected; triage's connected_systems and the agent's
-    roads said it could be posted to; the phone and search had their own rules. One answer now."""
-    from taskuary import doorway_browse, general, ingest, search
+    brief said it could be posted to; the phone and search had their own rules. One answer now."""
+    from taskuary import doorway_browse, docsync, ingest, search
     s = MemoryStore()
     cid = _card(s, 'linkedin', Active=1)
     page = _api(s)[cid]['State']
     assert page['state'] == 'not_signed_in' and page['fix'] == '#connector=linkedin'
     assert not any('(linkedin)' in n for n in ingest.connected_systems(s)), 'triage is told what the page says'
-    assert 'LinkedIn' not in general.roads(s) and f'connector_id {cid}' not in general.roads(s), "the agent's brief is told the same"
+    assert f'connector_id {cid}' not in docsync.agent_systems(s), "the agent's brief is told the same"
     assert doorway_browse._connected(s)['linkedin'] == page['line'].lower(), 'the phone says the card\'s own line'
     hit = next(h for h in search._connectors(s, ['linkedin']) if h['id'] == 'con:linkedin')
     assert hit['sub'] == 'not connected'
     s.save_connector({'ConnectorId': cid, 'Secret': 'tok'}, 't')                    # ...and signed in, every surface turns together
     assert _api(s)[cid]['State']['state'] == 'connected'
-    assert any('(linkedin)' in n for n in ingest.connected_systems(s)) and f'connector_id {cid}' in general.roads(s)
+    assert any('(linkedin)' in n for n in ingest.connected_systems(s)) and f'connector_id {cid}' in docsync.agent_systems(s)
     assert doorway_browse._connected(s)['linkedin'] == 'connected'
 
 
 def test_a_card_failing_for_a_moment_is_still_known_to_triage_and_the_agent_as_failing():
     """A signed-in card whose last read failed is his system still: triage and the agent's brief name it with its state instead of
     dropping it (it vanished from both on the first cut of the one answer); the page and the phone count it as not connected."""
-    from taskuary import general, ingest
+    from taskuary import docsync, ingest
     s = MemoryStore()
     cid = _card(s, 'linkedin', Active=1, Secret='tok')
     n = cc.connected_count(s, None)
     s.touch_connector(cid, 'timed out')
     assert _api(s)[cid]['State']['state'] == 'failing' and cc.connected_count(s, None) == n - 1
     assert any(n.startswith('LinkedIn') and n.endswith('(linkedin) - not answering right now') for n in ingest.connected_systems(s))
-    assert f'connector_id {cid}' in general.roads(s) and 'not answering right now' in general.roads(s)
+    brief = docsync.agent_systems(s)
+    assert f'connector_id {cid}' in brief and 'not answering right now' in brief
 
 
 def test_a_card_with_no_sign_in_of_its_own_is_connected_once_on():

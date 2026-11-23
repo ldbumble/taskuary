@@ -117,7 +117,7 @@ def agent_systems(store, tooled: bool = True) -> str:
     from . import signin
     try: kept = signin.accounts(store)
     except Exception: kept = ''
-    mail = '\n'.join(x for x in (mail, kept) if x)
+    mail = '\n'.join(x for x in (mail, kept, act_cards(store)) if x)
     if not tools: return mail
     lines = [f"- {c['Name'] or c['Type']} (connector_id {c['ConnectorId']}, authority {scopes.scope_of(c)}) - tools: {', '.join(k)}"
              for c, k in tools]
@@ -134,6 +134,27 @@ def agent_systems(store, tooled: bool = True) -> str:
             # write a TASKUARY-PROPOSE line for what its own call already files
             "A call that would send, post, pay or order, an MCP tool not marked read-only, and a change above a system's AUTHORITY (the "
             "owner's ceiling on it) waits on the task as his card; at write, a change goes through.")
+
+
+# WHAT GOES OUT ON HIS CONNECTED CARDS, AS FACTS (the prompt rebuild, 2026-11-23, took the list of them out with the rules round it, and an
+# agent asked for a post had no card's type or connector_id to set it up with). Each signed-in card (connectorcatalog.connected - the page's own
+# answer; one failing right now named with its state) that posts, sends or orders (scopes.REACHES), with what the agent fills on it and what
+# the owner's defaults on the card fill (connectorcatalog `actions`). The generic ones (an MCP tool, a GraphQL call) are no act of their own.
+def act_cards(store) -> str:
+    from . import scopes
+    from .connectorcatalog import action_for, as_now, connected
+    from .proposals import MEDIA
+    from .reports import REGISTRY, card_of
+    try: cards = connected(store, failing=True)
+    except Exception: return ''
+    def takes(t):
+        act = action_for(t) or {'fields': []}
+        mine = [f"`{f['key']}`" for f in act['fields'] if f.get('agent')]
+        theirs = [f"`{f['key']}` ({' or '.join(str(c['value']) for c in f['choices'])})" for f in act['fields'] if f.get('setting')]
+        return (f"; it takes {', '.join(mine)}" if mine else '') + (f"; {' and '.join(theirs)} come from the owner's defaults on the card" if theirs else '')
+    rows = [f"- {c.get('Name') or c['Type']} (connector_id {c['ConnectorId']}): {t} - {scopes.REACHES[t]}" + (', with a picture' if t in MEDIA else '')
+            + takes(t) + as_now(c) for c in cards for t in sorted(REGISTRY) if t in scopes.REACHES and t not in ('mcp', 'graphql') and card_of(t) == c['Type']]
+    return ('WHAT GOES OUT ON HIS CONNECTED CARDS - each a run_tool proposal by its type and connector_id, waiting for his press:\n' + '\n'.join(rows)) if rows else ''
 
 
 def not_a_tool(store, t) -> str:

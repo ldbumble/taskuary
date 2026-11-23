@@ -5,7 +5,7 @@ since a new issue tells everyone watching it. Filed through the GitHub card's ow
 import json, unittest
 from unittest import mock
 from fastapi.testclient import TestClient
-from taskuary import config, connectorcatalog as cat, general, github, guard, proposals, scopes, server
+from taskuary import config, connectorcatalog as cat, docsync, github, guard, proposals, scopes, server
 from taskuary.reports import REGISTRY, card_of, resolve_cfg
 
 c = TestClient(server.app)
@@ -88,7 +88,7 @@ class OnePress(unittest.TestCase):
         self.assertEqual(cfg['token'], 'ghtok'); self.assertEqual(cfg['repo'], 'northwind/portal')
 
     def test_the_agent_is_told_the_road_and_what_it_takes(self):
-        r = general.roads(server.store)
+        r = docsync.agent_systems(server.store)
         self.assertIn('github_issue - opens an issue on GitHub', r)
         self.assertIn('it takes `repo`, `title`, `labels`, `body`', r)
 

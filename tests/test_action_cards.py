@@ -6,7 +6,7 @@ change on the card is what goes, and "Save as draft" saves it in LinkedIn's draf
 import json, unittest
 from unittest import mock
 from fastapi.testclient import TestClient
-from taskuary import config, connectorcatalog as cat, general, guard, linkedin, proposals, scopes, server, verdicts
+from taskuary import config, connectorcatalog as cat, docsync, guard, linkedin, proposals, scopes, server, verdicts
 from taskuary.reports import REGISTRY, card_of
 
 c = TestClient(server.app)
@@ -191,9 +191,9 @@ class OnePress(unittest.TestCase):
         self.assertEqual(r.status_code, 422, r.text)
 
     def test_the_prompt_says_which_fields_the_agent_may_name(self):
-        r = general.roads(server.store)
+        r = docsync.agent_systems(server.store)          # the facts every agent with hands is told of his systems
         self.assertIn("linkedin_post - posts on LinkedIn under your name, with a picture; it takes `text`, `image`", r)
-        self.assertIn("`publish` (now or draft) come from the owner's defaults", r)
+        self.assertIn("`publish` (now or draft) come from the owner's defaults on the card", r)
 
 
 if __name__ == '__main__':

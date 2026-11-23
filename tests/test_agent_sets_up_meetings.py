@@ -134,3 +134,23 @@ def test_a_meeting_ask_hands_the_agent_its_free_times_read_in_plain_code():
         assert 'no calendar is connected' in general.meeting_times(s, tid) and '](#connector' in general.meeting_times(s, tid)
     other = s.create_task({'Title': 'Q3 numbers', 'Status': 'open'}, 'owner')
     assert general.meeting_times(s, other) == ''                                    # ...nothing asked for a time: nothing read
+
+
+def test_with_no_calendar_a_meeting_is_an_email_proposing_the_time_and_a_person_he_named_on_another_task_is_known():
+    """WALK 9 (2026-11-23): a 30-minute meeting with Ray, his address given and a slot chosen, ended twice on "No calendar is connected -
+    connect one", the job not done; and Paula, whose address he had typed answering another task, was "nobody in the owner's mail". With no
+    calendar the meeting's other road is the email card proposing the time; a person he named anywhere is found by that name."""
+    from taskuary import general
+    s = MemoryStore()
+    asked = s.create_task({'Title': 'Find a time with Paula', 'Kind': 'general', 'Status': 'open'}, 'owner')
+    s.add_comment(asked, 'owner', general.USER_TYPE, 'paula@northwind.example - Wednesday or Thursday afternoon works.')
+    tid = s.create_task({'Title': 'Meet Paula about printing', 'Kind': 'general', 'Status': 'open'}, 'owner')
+    with mock.patch.object(server, 'store', s):
+        said, bad = call(tid, 'set_up_meeting', **{'with': ['Paula'], 'title': 'Printing', 'start': '2030-12-04 10:00', 'end': '2030-12-04 10:30'})
+        assert bad and 'note' in said and not s._rows("SELECT * FROM review WHERE TaskId=?", (tid,))
+        got, bad = call(tid, 'set_up_meeting', **{'with': ['Paula'], 'title': 'Printing', 'start': '2030-12-04 10:00', 'end': '2030-12-04 10:30',
+                                                  'note': 'Could we meet about the printing contract?'})
+    assert not bad and got['ok'] and got['by'] == 'email' and got['to'] == ['paula@northwind.example'], got
+    rv = s.get_review(got['review'])
+    assert rv['TaskId'] == tid and json.loads(rv['Deliver'])['to'] == ['paula@northwind.example']
+    assert rv['DraftText'].startswith('Could we meet about the printing contract?') and 'Wed Dec 4' in rv['DraftText']

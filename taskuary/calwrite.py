@@ -519,15 +519,15 @@ def connect_fix(store) -> dict:
 
 
 def people_of(store, who) -> tuple:
-    """(addresses, names nobody could place) for the people a meeting is with - an address as given, a name through the people search
-    the pickers use (peoplesearch.search), its best hit taken. A name with no hit is said back, never guessed into an address."""
-    from . import peoplesearch
+    """(addresses, names nobody could place) for the people a meeting is with - an address as given, a name by the one answer to who someone
+    is (people.resolve: his mail in and out, his own words on any task, the directory). A name with no one hit is said back, never guessed."""
+    from . import people
     names = [w.strip() for w in (who if isinstance(who, (list, tuple)) else re.split(r'[,;]|\band\b', str(who or ''))) if str(w or '').strip()]
     got, miss = [], []
     for n in names[:20]:
         if '@' in n: got.append(n.lower()); continue
-        hit = next(iter(peoplesearch.search(store, n[:120], 'email').get('data') or []), None)
-        (got.append(hit['to'].lower()) if hit and '@' in str(hit.get('to')) else miss.append(n))
+        hit = people.resolve(store, n[:120]).get('address')
+        (got.append(hit.lower()) if hit else miss.append(n))
     return list(dict.fromkeys(got)), miss
 
 
@@ -709,6 +709,7 @@ def meeting(store, tid: int, who, subject: str, minutes: int = 30, within: str =
     to, miss = people_of(store, who)
     if miss: raise ValueError(f"no address for {_and(miss)} in the owner's mail or directory - give the address, or your best guess "
                               "(their first name at the company's domain) named in `guessed`")
+    if not can_book(store): return by_email(store, tid, to, subject, minutes, within, start, end, note, actor, guessed)
     if not (start and end):
         free = suggest(store, to, minutes, within)['slots']
         if not free: raise ValueError('no free time in those days - name other days (within) or a start and end')
@@ -721,6 +722,31 @@ def meeting(store, tid: int, who, subject: str, minutes: int = 30, within: str =
     env = env_of(store.get_review(got['reviewId']))
     return {'ok': True, 'review': got['reviewId'], 'to': to, 'when': env['when'], 'link': env.get('link') or '',
             'says': _told(got['head'] + (f" ({got['clash']})" if got['clash'] else ''))}
+
+
+# EVERY ACT HAS A ROAD TO A CARD (walk 9, 2026-11-23: a 30-minute meeting with a known address and a chosen slot ended twice on "No calendar
+# is connected - connect one", the job not done). With no calendar to put it on, the same meeting is an email to them proposing the time -
+# the email road's one card (slots.draft), the owner's Send. Connecting a calendar turns the next one into an invite.
+def by_email(store, tid: int, to: list, subject: str, minutes: int = 30, within: str = '', start: str = None, end: str = None, note: str = '',
+             actor: str = 'agent', guessed=()) -> dict:
+    "The meeting as an email proposing `start`-`end` (else the first free working-hours times in `within`). {ok, review, to, when, says}."
+    from . import slots
+    if not str(note or '').strip(): raise ValueError(f"no calendar is connected, so this meeting goes as an email to {', '.join(to)} proposing the "
+                                                     "time - call again with `note`: the email's words (the times are added under them)")
+    subject = ' '.join(str(subject or '').split())[:200]
+    if not subject: raise ValueError('say what the meeting is about')
+    if start and end: times = [{'start': start, 'end': end}]
+    else:
+        a, b = within_days(within, today=datetime.now(cal.tz_of(store)).date())
+        times = free_slots(store, minutes, a, b, n=3, events=[])
+    if not times: raise ValueError('no time in those days - name other days (within) or a start and end')
+    say = [when(t['start'], t['end']) for t in times]
+    out = slots.draft(store, int(tid), f"{str(note).strip()}\n\n" + '\n'.join(f'- {x}' for x in say), to[0], subject, 'new', actor,
+                      cc=to[1:], guessed=[g for g in guessed or () if g])
+    if not out.get('ok'): return out
+    return {'ok': True, 'review': out.get('review_id'), 'to': to, 'when': '; '.join(say), 'by': 'email',
+            'says': f"No calendar is connected, so it is set up as an email to {', '.join(to)} proposing {' or '.join(say)} - it waits on the "
+                    "owner's Send; their calendar was not read, so no clash was checked. A calendar connected makes the next one an invite."}
 
 
 def env_of(r) -> dict:

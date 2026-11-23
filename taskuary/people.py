@@ -73,6 +73,13 @@ def owner_lines(store, tid=None) -> list:
         if t.get('OriginBase') == 'owner': texts.append(str(t.get('Summary') or ''))
         texts += [str(c.get('Body') or '') for c in store.list_comments(int(tid), internal=True)
                   if c.get('ActorType') in (USER_TYPE, WAITING_TYPE) and not is_brief(c)]
+    # ...AND WHAT HE TYPED ON ANY TASK (walk 9, 2026-11-23: he gave Paula's address answering one task, an email went to her, and the next
+    # task's agent found "nobody matches 'Paula'" and asked him again): his own lines only, the newest first
+    else:
+        from .general import USER_TYPE, WAITING_TYPE
+        texts += [str(r['Body']) for r in store._rows(
+            "SELECT Body FROM comment WHERE Actor='owner' AND ActorType IN (?,?) AND Body LIKE '%@%' ORDER BY CommentId DESC LIMIT 400",
+            (USER_TYPE, WAITING_TYPE))]
     return [(m.group(0).lower(), line) for x in texts for line in x.splitlines() for m in _ADDR.finditer(line)]
 def said_by_owner(store, tid=None) -> set: return {a for a, _ in owner_lines(store, tid)}
 
@@ -108,6 +115,12 @@ def resolve(store, name: str) -> dict:
             for a_, (n, last) in written_to(store).items():
                 if _whole([w], a_): add(some, a_, n, last)
         found = rank(some)
+    # ...AND THE ORG CHART AND DIRECTORY, the same answer the meeting's invitees were found by (calwrite.people_of - one road for who a person is)
+    if not found:
+        from . import peoplesearch
+        try: hit = next(iter(peoplesearch.search(store, name[:120], 'email').get('data') or []), None)
+        except Exception: hit = None
+        if hit and '@' in str(hit.get('to')): return {'address': str(hit['to']).lower()}
     return {'candidates': found[:5]} if found else {}
 
 

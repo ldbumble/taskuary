@@ -227,6 +227,43 @@ class RelayTests(unittest.TestCase):
         self.assertEqual((bv._frame(bv.LAST['r1']['frame']), bv.LAST['r1']['url']), (JPEG, 'https://example.test/login'))
         self.assertEqual(bv.state('r1', fresh=True)['url'], 'https://example.test/login')
 
+    def test_the_tab_handed_to_him_is_the_view_while_the_agent_works_another(self):
+        """The owner, 2026-11-23: a sign-in was handed to him on one site's tab, the agent opened LinkedIn in a new tab, and the view - the
+        browser's active tab - showed LinkedIn under "Sign in to X". While his step waits on its tab, that tab is cast to the view and his
+        keys go to it; the agent's own tab sends the view nothing."""
+        cast, mine = [], base64.b64encode(b'his sign-in page').decode()
+        async def fake_cast(ws, sid, tab, inbox):
+            cast.append(tab)
+            await ws.send_text(json.dumps({'type': 'frame', 'seq': 1, 'data': mine, 'metadata': {}}))
+            while True: cast.append(json.loads(await inbox.get()))
+        with mock.patch.object(bv, 'his_tab', return_value='H1'), mock.patch.object(bv, 'active_tab', return_value='A2'), \
+             mock.patch.object(bv, 'front', return_value=True), mock.patch.object(bv, '_cast', fake_cast), mock.patch.object(bv, 'tab_url', return_value=''), \
+             c.websocket_connect('/api/terminals/r1/browser/ws') as ws:
+            frames, end = [], time.time() + 5
+            while time.time() < end and not frames:
+                m = ws.receive_json()
+                if m['type'] == 'frame': frames.append(m['data'])
+            ws.send_json({'type': 'input_keyboard', 'eventType': 'keyDown', 'key': 'a', 'text': 'a'})
+            end = time.time() + 5
+            while time.time() < end and len(cast) < 2: time.sleep(.05)
+        self.assertEqual(frames, [mine], "the agent's own tab was drawn over his step")
+        self.assertEqual(cast[:2], ['H1', {'type': 'input_keyboard', 'eventType': 'keyDown', 'key': 'a', 'text': 'a'}])
+        self.assertEqual(self.fake.got, [{'type': 'ack', 'seq': 7}], "the agent's frame is acked and dropped; his keys never reach its tab")
+
+    def test_his_tab_is_the_open_tab_a_step_waits_on_him_in(self):
+        from taskuary import browsergate
+        ts = [{'id': 'A2', 'url': 'https://www.linkedin.example/feed'}, {'id': 'H1', 'url': 'https://x.example/login'}]
+        with mock.patch.object(terminal, 'get', return_value=SimpleNamespace(task_id=7)), mock.patch.object(bv, 'pages', return_value=ts):
+            with mock.patch.object(browsergate, 'owner_tabs', return_value={'H1': 'x.example'}): self.assertEqual(bv.his_tab('r1'), 'H1')
+            with mock.patch.object(browsergate, 'owner_tabs', return_value={'gone': 'x.example', '': 'a card naming no tab'}): self.assertEqual(bv.his_tab('r1'), '')
+        # ...the strip marks the tab shown, by its address; and his input is DevTools' own call on that tab
+        tabs = json.dumps({'type': 'tabs', 'tabs': [{'tabId': 't1', 'url': 'https://x.example/login', 'active': False},
+                                                    {'tabId': 't2', 'url': 'https://www.linkedin.example/feed', 'active': True}]})
+        self.assertEqual([t['active'] for t in json.loads(bv.shown_tabs(tabs, 'H1', ts))['tabs']], [True, False])
+        self.assertEqual(bv.to_cdp({'type': 'input_mouse', 'eventType': 'mousePressed', 'x': 4, 'y': 5, 'button': 'left', 'clickCount': 1}),
+                         ('Input.dispatchMouseEvent', {'x': 4, 'y': 5, 'button': 'left', 'clickCount': 1, 'type': 'mousePressed'}))
+        self.assertIsNone(bv.to_cdp({'type': 'ack', 'seq': 3}))
+
     def test_a_press_on_a_tab_switches_the_browser_to_it_and_is_never_sent_to_the_page(self):
         """The owner, 2026-11-15: several sites in one task are tabs of its one browser, and the view lists them. A press on one reaches
         agent-browser as `tab <id>` - an argv list, its own id form only - and never the stream, which has no such message; while a sign-in

@@ -243,13 +243,37 @@ async def relay(ws, sid: str):
 
 async def _relay(ws, sid: str, url: str):
     import asyncio, websockets
+    # ...WHILE A STEP ON A TAB WAITS ON HIM, THE VIEW IS THAT TAB (his_tab): agent-browser's stream is its own tab's, so its frames are dropped
+    # and the tab handed to him is cast straight from its Chrome (_cast), his input going there; the agent's new tabs never take it
+    his = {'tab': '', 'task': None, 'inbox': None}
     try:
         # agent-browser only admits browser Origins from localhost; a client with none is a tool
         async with websockets.connect(url, origin='http://localhost', max_size=MAX_FRAME) as up:
+            async def steer():
+                was = None
+                while True:
+                    h, a = await asyncio.to_thread(his_tab, sid), await asyncio.to_thread(active_tab, sid)
+                    want = h if h and h != a else ''
+                    # ...a tab the agent opened or went to since hides his: his is brought to the front again, and the cast goes on
+                    if want and want == his['tab'] and was is not None and a != was: await asyncio.to_thread(front, sid, want)
+                    was = a
+                    if want != his['tab']:
+                        if his['task']: his['task'].cancel()
+                        if not want and his['tab'] and a: await asyncio.to_thread(front, sid, a)      # ...his step done: the agent's tab again
+                        his.update(tab=want, task=None, inbox=asyncio.Queue() if want else None)
+                        if want: his['task'] = asyncio.create_task(_cast(ws, sid, want, his['inbox']))
+                    await asyncio.sleep(FOLLOW_EVERY)
             async def down():
                 since, fresh, idle = time.time(), False, False
                 async for m in up:
                     m = m if isinstance(m, str) else m.decode('utf-8', 'replace')
+                    # ...his tab is cast instead: the agent's frames are acked and dropped, its tab strip says which tab is shown
+                    if his['tab'] and (k := _KIND.search(m)):
+                        if k.group(1) == 'frame':
+                            if q := _SEQ.search(m): await up.send(json.dumps({'type': 'ack', 'seq': int(q.group(1))}))
+                            continue
+                        if k.group(1) == 'tabs': m = shown_tabs(m, his['tab'], await asyncio.to_thread(pages, sid))
+                        elif k.group(1) == 'url': continue
                     # the greeting's old picture is not the page (STALE): dropped, and acked as a frame held for a sign-in is. Only where
                     # the browser says it was sending nobody frames - it then takes a new one for this viewer; a still page another viewer
                     # is already on sends no more, and its last picture IS the page
@@ -276,6 +300,8 @@ async def _relay(ws, sid: str, url: str):
                 # focus or spoiled the typed password (2026-10-25)
                 while True:
                     m = await ws.receive_text()
+                    # ...his input, and his acks, go to the tab handed to him while it is the one shown
+                    if his['inbox'] is not None and not _TAB_ANY.search(m): his['inbox'].put_nowait(m); continue
                     # ...a press on one of its tabs switches the browser to it (switch_tab) - agent-browser's stream has no such message
                     if _TAB_ANY.search(m):
                         if sid not in FILLING and (t := _TAB.fullmatch(m.strip())): await asyncio.to_thread(switch_tab, sid, t.group(1))
@@ -285,15 +311,101 @@ async def _relay(ws, sid: str, url: str):
             # ...the window follower rides beside the view and never ends it: it returns at once where another view follows the session,
             # or where its Chrome does not answer - and taken as one of the view's own ends, that closed the stream as it opened (CI, 2026-11-19)
             watch_windows(sid)                  # ...its windows followed while the browser is open (one watcher a session, never this view's)
-            tasks = [asyncio.create_task(down()), asyncio.create_task(back())]
+            # ...the first look before any frame is passed on: a view opened onto a step already handed over draws his tab from its first frame
+            h, a = await asyncio.to_thread(his_tab, sid), await asyncio.to_thread(active_tab, sid)
+            if h and h != a: his.update(tab=h, inbox=asyncio.Queue()); his['task'] = asyncio.create_task(_cast(ws, sid, h, his['inbox']))
+            tasks = [asyncio.create_task(down()), asyncio.create_task(back()), asyncio.create_task(steer())]
             done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
-            for t in pending: t.cancel()
+            for t in [*pending, *([his['task']] if his['task'] else [])]: t.cancel()
             for t in done:
                 exc = t.exception()
                 if exc and not isinstance(exc, (websockets.ConnectionClosed, RuntimeError)):
                     logger.debug(f'browser relay {sid} ended: {exc!r}')
     except (OSError, websockets.WebSocketException) as e:
         logger.debug(f'browser relay {sid} could not attach to {url}: {e}')
+
+
+# THE VIEW FOLLOWS THE TAB HANDED TO HIM (the owner, 2026-11-23): the view showed the browser's one active tab, and each tab the agent opened
+# became it, so the bar said "Sign in to X" over a LinkedIn page. While a step on a tab waits on him - a hand-over, a held step - that tab is
+# the one thing in front of him (his_tab): the view shows it and his clicks and keys reach it; the agent goes on in its own tab, unseen,
+# until his step is done and the view is the agent's page again.
+def his_tab(sid: str) -> str:
+    "The DevTools target id of the open tab a step of session `sid`'s task waits on the owner in (browsergate.owner_tabs) - '' when none."
+    try:
+        from . import browsergate, server, terminal as hub_term
+        tid = getattr(hub_term.get(sid), 'task_id', None)
+        tabs = {x for x in browsergate.owner_tabs(server.store, int(tid), sid) if x} if tid else set()
+    except Exception as e:
+        logger.debug(f'browser {sid}: whose tab it is was not read - {e}'); return ''
+    return next((t['id'] for t in pages(sid) if t.get('id') in tabs), '') if tabs else ''
+
+
+def front(sid: str, tab: str) -> bool:
+    "Bring tab `tab` to the front of session `sid`'s Chrome - shown and painted - without moving the tab agent-browser works. True when it did."
+    from . import signin
+    try:
+        c = signin.Cdp(devtools_url(sid), tab, exact=True)
+        try: c.call('Page.bringToFront'); return True
+        finally: c.close()
+    except Exception as e: logger.debug(f'browser {sid}: tab {tab} was not brought to the front - {e}'); return False
+
+
+def shown_tabs(raw: str, tab: str, ts: list) -> str:
+    "agent-browser's `tabs` message with the tab shown marked active - `tab` (a DevTools id) found by its address among `ts` (pages)."
+    try: m = json.loads(raw)
+    except ValueError: return raw
+    url = next((str(t.get('url') or '') for t in ts if t.get('id') == tab), '')
+    if not isinstance(m, dict) or not url or not isinstance(m.get('tabs'), list): return raw
+    hit = next((i for i, t in enumerate(m['tabs']) if isinstance(t, dict) and t.get('url') == url), None)
+    if hit is None: return raw
+    m['tabs'] = [{**t, 'active': i == hit} if isinstance(t, dict) else t for i, t in enumerate(m['tabs'])]
+    return json.dumps(m)
+
+
+INPUT = {'input_mouse': 'Input.dispatchMouseEvent', 'input_keyboard': 'Input.dispatchKeyEvent', 'input_touch': 'Input.dispatchTouchEvent'}
+def to_cdp(m: dict) -> tuple | None:
+    "A view message as the DevTools call that does it on the tab - agent-browser's stream input is DevTools' own fields, `eventType` its `type`."
+    if not isinstance(m, dict) or m.get('type') not in INPUT: return None
+    return INPUT[m['type']], {**{k: v for k, v in m.items() if k not in ('type', 'eventType')}, 'type': m.get('eventType')}
+
+
+async def _cast(ws, sid: str, tab: str, inbox):
+    "Tab `tab`'s own screencast to the view, as agent-browser's frames read, and the view's input and acks to that tab - until cancelled."
+    import asyncio, websockets
+    url = next((str(t.get('webSocketDebuggerUrl') or '') for t in await asyncio.to_thread(pages, sid) if t.get('id') == tab), '')
+    if not url: return
+    n, seq, owed = 0, 0, None
+    try:
+        async with websockets.connect(url, max_size=MAX_FRAME) as cd:            # no Origin: Chrome refuses a browser-looking client
+            async def call(method, params=None):
+                nonlocal n
+                n += 1; await cd.send(json.dumps({'id': n, 'method': method, 'params': params or {}}))
+            await call('Page.bringToFront')
+            await call('Page.startScreencast', {'format': 'jpeg', 'quality': 80, 'everyNthFrame': 1})
+            async def frames():
+                nonlocal seq, owed
+                async for raw in cd:
+                    r = json.loads(raw)
+                    if r.get('method') != 'Page.screencastFrame': continue
+                    p, seq = r.get('params') or {}, seq + 1
+                    md = dict(p.get('metadata') or {}); md['timestamp'] = float(md.get('timestamp') or time.time()) * 1000   # agent-browser's ms
+                    out = json.dumps({'type': 'frame', 'seq': seq, 'data': p.get('data') or '', 'metadata': md})
+                    remember(sid, out); owed = p.get('sessionId')
+                    await ws.send_text(out)
+            async def taps():
+                nonlocal owed
+                while True:
+                    raw = await inbox.get()
+                    try: m = json.loads(raw)
+                    except ValueError: continue
+                    if isinstance(m, dict) and m.get('type') == 'ack':                 # ...the view drew it: the next frame may come (ack pacing)
+                        if owed is not None: await call('Page.screencastFrameAck', {'sessionId': owed}); owed = None
+                    elif sid not in FILLING and (c := to_cdp(m)): await call(*c)
+            tasks = [asyncio.create_task(frames()), asyncio.create_task(taps())]
+            try: await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+            finally:
+                for t in tasks: t.cancel()
+    except (OSError, websockets.WebSocketException, ValueError) as e: logger.debug(f'browser {sid}: tab {tab} could not be cast - {e}')
 
 
 # A WINDOW THE PAGE OPENS IS FOLLOWED (the owner, live 2026-11-19: "Continue with Google" on a site's sign-in did nothing he could see). A
@@ -347,7 +459,7 @@ def _follow(sid, stop, every, switch) -> None:
         if not ts: continue
         ids = {t['id'] for t in ts}
         new = [t for t in ts if t['id'] not in known]
-        if new and sid not in FILLING:
+        if new and sid not in FILLING and not his_tab(sid):                 # ...never off the tab handed to him
             came_from = came_from or active_tab(sid)
             if switch(sid, new[-1]['id']): logger.info(f'browser {sid}: the page opened a window - the view follows it')
             refused(sid, new[-1].get('url'))

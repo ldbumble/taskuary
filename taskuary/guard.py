@@ -177,6 +177,7 @@ OWNER_ONLY = (
     # his presses on a turn and a post card (2026-11-22): Try again under a turn that stopped, and a post put up through the agent's browser
     (r'POST', r'^/api/tasks/\d+/again$', "Try again under a turn - his press, never an agent's"),
     (r'POST', r'^/api/reviews/\d+/via-browser$', "Post via the browser on a post card - his press, never an agent's"),
+    (r'POST', r'^/api/reviews/\d+/by-email$', "Reply by email with the file - re-addresses a reply to his mail, his press"),
     # a clock the routine editor holds, said in words (reports.schedule_words) - it writes nothing, but it is the page's, not an agent's
     (r'POST', r'^/api/schedule-words$', "the routine editor's own wording of an unsaved clock - the page's"),
     # New's box, the one start from the owner's words (F1): an agent starts new work by its own new_task, which checks the owner asked

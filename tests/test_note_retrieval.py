@@ -27,7 +27,7 @@ LEDGER = ('sender', DANA, 'Mail like "Quarterly ledger reconciliation" from Dana
                           "people's work - file it, do not open a task.", 'verdict')
 INVOICE = ('sender', DANA, 'Dana asking about invoices always needs a reply, never an agent.', 'verdict')
 SHIPPING = ('sender_domain', 'vendor.com', 'Vendor mail about shipping schedules is not ours.', 'learned')
-GLOBAL = ('global', None, 'Never open tasks from newsletters or digests.', 'verdict')
+GLOBAL = ('global', None, 'Never open tasks from newsletters or digests.', 'owner')      # a general line he said: one he only confirmed rides memory.whole
 STRANGER = ('sender', 'someone@else.com', 'Unrelated note about somebody else entirely.', 'verdict')
 # what the stand-in embedder reads as one subject: the texts below about the ledger, the invoices, shipping
 JOBS = {'ledger': ['ledger'], 'invoices': ['invoice'], 'shipping': ['shipping']}

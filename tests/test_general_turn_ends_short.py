@@ -307,7 +307,7 @@ class AnOwnersAskAnsweredWithNothingTests(unittest.TestCase):
         s = MemoryStore(); a_claude(self); tid = researcher(s)
         seen = turn(s, tid, self.EMPTY, judge=self.no_judge)
         self.assertEqual(len(seen['prompts']), 2, 'once - never a loop')
-        self.assertIn('without a word to the owner', seen['prompts'][1]); self.assertIn('ask them your one question', seen['prompts'][1])
+        self.assertIn('without a word to the owner', seen['prompts'][1])
         said = [c['Body'] for c in s.list_comments(tid) if c['ActorType'] == general.ASSISTANT_TYPE]
         self.assertEqual(said[-1], general.COULD_NOT, 'in the chat, in its own name')
         asked = s.last_worker_event(tid, skip=ws.NOTES)

@@ -232,6 +232,7 @@ class AllowListTests(unittest.TestCase):
             # its own task's to-dos kept as the issue list, and the owner's Remind me set on their word (2026-11-09) - nothing leaves
             'POST /api/agent/todos', 'POST /api/agent/remind', 'POST /api/agent/remember',
             'POST /api/agent/note-peers', 'POST /api/agent/propose-land',   # a note to a peer, and its pick for how its branch lands (2026-11-06)
+            'POST /api/agent/note-lead',                    # a lead for the Advisor's next run, from its own task (lookout.note_lead) - nothing leaves
             'POST /api/board/notes',
             'POST /api/handbook', 'POST /api/handbook/{lid}/comment', 'POST /api/handbook/{lid}/restore',
             'POST /api/handbook/{lid}/retire', 'POST /api/handbook/{lid}/vote',

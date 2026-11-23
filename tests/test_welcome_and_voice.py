@@ -321,11 +321,11 @@ class RepeatsTests(unittest.TestCase):
         for n in range(5):
             mid = mail(s, 'Payworth Billing', 'billing@payworth.example', 'Invoice 114', ago(days=5 - n), f'Reminder {n}', conv=f'p{n}', tid=tid)
             if n: s.add_route(mid, tid, 'attach', 1.0, f'triage: asked - the same as {ref}, joined to it', [], 'triage',
-                              verdict={'intent': 'asked', 'summary': 'All they need is the signed W-9. Nothing else is missing.'})
+                              verdict={'intent': 'asked'})
         got = concierge.repeats(s, tid)
         self.assertEqual(got['n'], 5)
         self.assertEqual(got['line'], 'Payworth Billing wrote five times about the same thing - every one is kept here. '
-                                      'All they need now: All they need is the signed W-9.')
+                                      'All they need now: Payworth needs a W-9 before paying invoice 114.')     # the task's ask
 
     def test_a_single_message_or_a_plain_conversation_is_not_a_repeat(self):
         s = store()

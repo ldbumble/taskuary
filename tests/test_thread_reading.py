@@ -6,7 +6,7 @@ from taskuary import triage
 def test_the_schema_asks_for_the_reading_on_every_verdict():
     t = triage.verdict_schema()['schema']['properties']['thread']
     assert t['type'] == ['object','null'] and t['additionalProperties'] is False
-    assert set(t['required']) == {'asking','your_part','others','asks','aside','on_you'}
+    assert set(t['required']) == {'asking','your_part','others','asks','aside'}      # thread on_you went with triage's readings (2026-11-23)
 
 
 def test_a_reading_keeps_only_mids_it_was_shown():

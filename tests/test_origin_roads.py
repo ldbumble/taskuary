@@ -159,7 +159,9 @@ def test_an_owner_s_headless_run_is_unchanged():
     a = mine['args']
     from taskuary.clis import preset_args
     assert [x for i, x in enumerate(a) if x not in TOOLBOX and not (i and a[i - 1] in TOOLBOX)] == (base.get('args') or preset_args('claude'))
-    assert {k: v for k, v in mine.items() if k != 'args'} == {k: v for k, v in base.items() if k != 'args'}
+    assert {k: v for k, v in mine.items() if k not in ('args', 'cwd')} == {k: v for k, v in base.items() if k not in ('args', 'cwd')}
+    from taskuary import outputs
+    assert mine['cwd'] == str(outputs.work_folder(t))     # ...and it works in its task's own folder, never the shared scratch
 
 def test_a_stranger_s_headless_run_on_a_cli_with_neither_mode_is_refused():
     s = _store('copilot'); t = _stranger(s)

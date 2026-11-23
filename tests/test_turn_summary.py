@@ -106,22 +106,6 @@ def test_the_drafted_reply_is_never_kept_in_the_summary():
     assert STEP in [i['text'] for i in on_you(s, tid)]
 
 
-def _ingest(s, live=''):
-    v = {'intent': 'reply_only', 'why': 'asks the pay date', 'title': 'Pay date', 'summary': 's',
-         'thread': {'asking': 'Gail wants the pay date', 'your_part': 'say when', 'others': [], 'asks': [], 'aside': [], 'on_you': [STEP]}}
-    msg = {'external_id': 'p1', 'channel': 'email', 'subject': 'Pay date', 'body': 'When is the pay run?',
-           'from_name': 'Gail Moreno', 'from_email': 'gail@northwind.example'}
-    with mock.patch('taskuary.ingest._spawn'), mock.patch.object(ingest, 'live_agent', return_value=live):
-        return ingest.ingest_message(s, msg, llm=lambda *a, **k: json.dumps(v))['task_id']
-
-
-def test_triage_on_you_only_where_no_agent_runs():
-    s = MemoryStore(); tid = _ingest(s)
-    assert s.get_task(tid)['Kind'] == 'reply' and [i['text'] for i in on_you(s, tid)] == [STEP]
-    s2 = MemoryStore(); tid2 = _ingest(s2, live='general')
-    assert on_you(s2, tid2) == []
-
-
 # ── fix round 1 ──────────────────────────────────────────────────────────────────────────
 def test_a_block_cut_short_never_reaches_the_screen():
     # a live line is cut to 300 or 400 characters before it is drawn (agents.py), so the tag can arrive with half its JSON - or half itself
@@ -176,7 +160,7 @@ def test_a_summary_with_no_on_you_list_leaves_the_steps():
 
 def test_a_restated_step_keeps_its_place_and_note():
     s = MemoryStore(); tid = task(s)
-    s.set_on_you(tid, [STEP], 'assistant'); s.merge_task_checklist(tid, ['find the pay date'], 'triage', src=4)
+    s.set_on_you(tid, [STEP], 'assistant'); s.merge_task_checklist(tid, ['find the pay date'], 'owner')
     s.note_checklist_item(tid, on_you(s, tid)[0]['id'], 'AP said Thursday', 'owner')
     s.set_on_you(tid, [STEP, 'reply to Gail'], 'assistant')
     items = s.task_checklist(tid)

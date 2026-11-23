@@ -47,12 +47,11 @@ class PromptMapTests(unittest.TestCase):
     def test_the_real_document_text_is_in_it_attributed_to_the_right_document(self):
         s, _tid = _loaded()
         out = promptmap.render(s)
-        for mark, doc in (('SOULMARK', 'SOUL.md'), ('STYLEMARK', 'STYLE.md'), ('CODINGMARK', 'CODING.md')):
+        for mark, doc in (('SOULMARK', 'SOUL.md'), ('STYLEMARK', 'STYLE.md')):        # CODING.md no longer rides the seed (2026-11-23)
             self.assertIn(mark, out, f'{doc} text never appears')
         # the block header naming the doc must come BEFORE its text, or the map attributes wrongly
         self.assertLess(out.index('SOUL.md'), out.index('SOULMARK'))
-        self.assertIn('NOTEMARK', out)                       # standing notes are shown too
-        self.assertIn('LEARNED.md lines about it', out)
+        self.assertIn('NOTEMARK', out)                       # standing notes are shown too - a general one in the memory in use
 
     def test_it_says_which_prompt_the_message_is_the_user_turn_of(self):
         """The system/user split is the part people get wrong when reading a prompt dump."""

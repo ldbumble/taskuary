@@ -82,8 +82,9 @@ class MemoryTests(unittest.TestCase):
         with teaching('The quarterly close checklist is your own work'):
             out = c.post(f'/api/messages/{mid}/reclassify', json={'road': 'task'}).json()
         said = next(l for l in memory.lessons(S) if l['ev'] == out['learned'])
-        self.assertIn('(about: the topic "', said['text'])
-        self.assertNotIn('tess@corp.example', said['text'])
+        line = memory.get(S, said['key'])
+        self.assertEqual(line['Scope'], 'subject')                       # about the topic...
+        self.assertNotIn('tess@corp.example', said['text'] + ','.join(line['people']))     # ...never about the person
 
     def test_the_correction_shows_on_the_panel_as_the_new_road(self):
         """The pill reads the newest route row, so the correction has to be written there too."""

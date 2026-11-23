@@ -49,7 +49,7 @@ class SameTopicTests(unittest.TestCase):
         b = arrive(s, 'p', brain(seen, same_as=tid), **PAULA)
         self.assertIn(f'"tid": {tid}', seen[-1])
         self.assertIn('about the same thing (', seen[-1])
-        self.assertIn('"about": "Gail needs the Payworth Q3 invoice', seen[-1])
+        self.assertIn('"about": "' + s.get_task(tid)['Summary'][:30], seen[-1])      # the task's ask - the sender's own words
         self.assertEqual((b['status'], b['task_id']), ('routed', tid))
         self.assertEqual(len(s.list_tasks()), 1)
 
@@ -115,7 +115,7 @@ class SameTopicTests(unittest.TestCase):
         self.assertEqual(sum(map(len, self.embed.calls)), n, 'the task and the arrival are not embedded twice')
         s.update_task(tid, {'Title': 'Reconcile the Payworth Q3 invoice and file it'}, 't')
         context.recent_open(s, msg)
-        self.assertEqual(self.embed.calls[-1], ['Reconcile the Payworth Q3 invoice and file it ' + SUMMARY], 'only the changed task')
+        self.assertEqual(self.embed.calls[-1], ['Reconcile the Payworth Q3 invoice and file it ' + s.get_task(tid)['Summary']], 'only the changed task')
 
 
 if __name__ == '__main__': unittest.main()

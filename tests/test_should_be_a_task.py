@@ -48,8 +48,8 @@ class ShouldBeATaskTests(unittest.TestCase):
         self.assertIn('Made a task - triage had filed it as nothing to do', seen[0])
         self.assertIn('a vendor event notice', seen[0], "what triage had said rides with it")
         self.assertIn(LINE, self.s.get_doc('learned'))
-        said = self.s._one("SELECT * FROM learned_history WHERE Action='said' AND Ev=?", (f'msg{self.mid}',))
-        self.assertEqual(said['Actor'], 'verdict:made_task')
+        from taskuary import memory
+        self.assertEqual([l['kind'] for l in memory.lessons(self.s) if l['ev'] == f'msg{self.mid}'], ['made_task'])
         # ...and the next mail of the same shape is triaged with that line in its prompt (the model's answer is the model's)
         prompts = []
         def brain(system, user, **k): prompts.append(system); return FYI()

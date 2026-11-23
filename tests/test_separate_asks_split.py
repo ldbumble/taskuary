@@ -85,7 +85,7 @@ class OneSenderManyAsks(unittest.TestCase):
         t = self.s.get_task(self.tid)
         self.assertEqual(t['Title'], 'Set up onboarding for two new hires')
         self.assertFalse(any('Now about' in c['Body'] for c in self.s.list_comments(self.tid)))
-        self.assertIn('Laptops ready by Monday', [i['text'] for i in self.s.task_checklist(self.tid)])
+        self.assertEqual(self.s.task_checklist(self.tid), [])                 # a join writes no to-dos: the agent hears the line
 
     def test_triage_is_shown_the_room_tasks_by_their_own_ask(self):
         self.line('w2', 'The weekly analytics report is missing last Friday', '2026-10-28 09:00:00')

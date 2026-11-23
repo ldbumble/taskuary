@@ -166,7 +166,7 @@ class ChatReopensTests(unittest.TestCase):
                                                                               'Erin also needs the September statement.'))
         self.assertEqual((back['status'], back['task_id']), ('attached', self.tid))
         t = self.s.get_task(self.tid)
-        self.assertEqual((t['Status'], t['Title'], t['Summary']), ('open', 'Send Erin the September statement', 'Erin also needs the September statement.'))
+        self.assertEqual((t['Status'], t['Title'], t['Summary']), ('open', 'Send Erin the September statement', 'and the September one too please'))   # his line's own words
         self.assertEqual(len(self.s.list_tasks()), 1)
 
     def test_a_same_as_reply_on_a_closed_task_stays_closed_too(self):
@@ -310,7 +310,8 @@ class QuestionReopensTests(unittest.TestCase):
                           'Can you explain the difference between the 4100 accounts? Is the text after the comma a class?')
         self.assertEqual((back['status'], back['task_id']), ('attached', self.tid))
         t = self.s.get_task(self.tid)
-        self.assertEqual((t['Status'], t['Title'], t['Summary']), ('open', 'Erin asks what separates the 4100 accounts', 'Erin Blake wants the difference explained.'))
+        self.assertEqual((t['Status'], t['Title'], t['Summary']), ('open', 'Erin asks what separates the 4100 accounts',
+                                                                   'Can you explain the difference between the 4100 accounts? Is the text after the comma a class?'))
         self.assertEqual(self.s.pending_review(self.tid, kind='draft')['MessageId'], back['message_id'])
         self.assertTrue(any(c['Body'].startswith('Reopened - Erin Blake has a question for you') for c in self.s.list_comments(self.tid)))
 

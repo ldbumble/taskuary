@@ -53,7 +53,7 @@ class SharedVerdictTests(unittest.TestCase):
         t = s.get_task(tid)
         self.assertEqual(t['Kind'], 'general'); self.assertEqual(t['Title'], 'Chase the vendor about the unpaid invoice')
         self.assertEqual(s.get_task(tid)['Source'], 'assistant')
-        self.assertEqual([i['text'] for i in s.task_checklist(tid)], ['Call the vendor'])
+        self.assertEqual(s.task_checklist(tid), [])                          # triage writes no to-dos: the task's agent does
 
     def test_an_informational_idea_is_fyi_and_makes_no_task(self):
         s = MemoryStore()

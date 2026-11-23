@@ -75,8 +75,8 @@ class VoiceTests(unittest.TestCase):
         self.assertIn('He runs finance systems', sys_)        # the document itself still arrives
 
     def test_standing_notes_are_the_writers_own_notes(self):
-        """...and since PW-060 only WRITING instructions ride into a reply: a triage verdict about the
-        sender is routing, not voice, and stays out."""
+        """...a WRITING instruction rides with the style (PW-060), and what the owner confirmed about the sender rides as his memory -
+        one road, memory.for_task - never as a block of standing notes."""
         s, tid = self._store()
         put_note(s, {'Scope': 'global', 'ScopeKey': None, 'Active': 1, 'Source': 'writing',
                       'Note': 'Keep it to two sentences for Meyy.', 'CreatedBy': 'o'})
@@ -85,7 +85,7 @@ class VoiceTests(unittest.TestCase):
         sys_ = _capture(s, tid)['system']
         self.assertIn('two sentences for Meyy', sys_)     # a writing note is STYLE.md's Owner notes now (2026-10-27), read with the style
         self.assertNotIn('Standing notes from the owner', sys_)
-        self.assertNotIn('schedules for the whole vendor team', sys_)
+        self.assertIn('schedules for the whole vendor team', sys_)        # what he confirmed about the person rides as memory (memory.for_task)
 
     def test_work_that_needs_doing_is_answered_in_the_first_person(self):
         """The old line told the model "the owner will turn it into a task" - so it wrote a

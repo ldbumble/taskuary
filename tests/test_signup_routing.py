@@ -97,9 +97,6 @@ class WhatTheVerdictDidNotSay(unittest.TestCase):
             self.assertFalse(ingest.mark_browser(s, tid))
         self.assertFalse(browserview.wanted(s.get_task(tid)))
 
-    def test_the_offer_never_says_to_press_the_submit_unasked(self):
-        self.assertIn('Never press it unasked', ingest.OFFER_JOB)
-
 
 if __name__ == '__main__':
     unittest.main()

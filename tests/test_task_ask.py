@@ -167,7 +167,7 @@ class PromoteTests(unittest.TestCase):
                              'Status': 'filed'})
         s.add_route(mid, None, 'file', None, 'triage: nothing to do - an unknown sender asks for a sign-in through a link', [], 'triage',
                     verdict={'intent': 'fyi', 'why': 'an unknown sender asks for a sign-in through a link',
-                             'danger': 'tries to get an assistant to sign in and approve on the owner's behalf'})
+                             'danger': 'tries to get an assistant to sign in and approve on the owner\'s behalf'})
         brain = mock.Mock(side_effect=AssertionError('a model was asked'))
         with mock.patch('taskuary.llm.build_llm', return_value=brain):
             tid = ingest.task_from_message(s, mid, 'owner')
@@ -209,12 +209,12 @@ class ContractTests(unittest.TestCase):
     def test_a_document_that_forgets_the_shape_gets_it_back(self):
         sys = self._system_for(self.DOC)
         self.assertIn(triage.TASK_FIELDS, sys)
-        self.assertIn('checklist', sys)
+        self.assertIn('"title"', sys)
         self.assertIn(self.DOC[:60], sys)              # ...without displacing the owner's judgement
 
     def test_a_document_that_states_the_shape_is_left_alone(self):
         """No nagging: a doc already asking for these must not get a second copy."""
-        doc = self.DOC + '\nAlso answer "summary" and a "checklist" of outcomes.'
+        doc = self.DOC + '\nAlso answer a "title" for the row.'
         sys = self._system_for(doc)
         self.assertNotIn('WHATEVER ELSE YOU ANSWER', sys)
 
@@ -245,7 +245,7 @@ class ContractTests(unittest.TestCase):
             return json.dumps({'intent': 'fyi', 'why': 'a newsletter'})
         triage.classify_intent({'subject': 'x', 'body': 'check back in'}, llm=fake, system=self.DOC)
         self.assertEqual(list(seen['user'])[-1], 'answer')                     # the last thing under the body
-        self.assertIn('"summary"', seen['user']['answer'])
+        self.assertIn('"title"', seen['user']['answer'])
 
     def test_a_document_that_states_the_shape_is_asked_nothing_twice(self):
         seen = {}
@@ -253,14 +253,14 @@ class ContractTests(unittest.TestCase):
             seen['user'] = json.loads(user)
             return json.dumps({'intent': 'fyi', 'why': 'a newsletter'})
         triage.classify_intent({'subject': 'x', 'body': 'check back in'}, llm=fake,
-                               system=self.DOC + '\nAlso answer "summary" and a "checklist" of outcomes.')
+                               system=self.DOC + '\nAlso answer a "title" for the row.')
         self.assertNotIn('answer', seen['user'])
 
     def test_the_shipped_prompt_carries_it_once(self):
         # the shape IS the guide's sections 5 and 7, so the shipped prompt carries it without a second copy
         self.assertIn(triage.shipped_section('## 5.'), triage.INTENT_SYSTEM)
         self.assertIn(triage.shipped_section('## 7.'), triage.INTENT_SYSTEM)
-        self.assertEqual(self._system_for(None).count('one distinct requested outcome each'), 1)
+        self.assertEqual(self._system_for(None).count(triage.shipped_section('## 7.')), 1)
 
 
 if __name__ == '__main__': unittest.main()

@@ -33,7 +33,9 @@ def make(s, kind='coding', checklist=('Fix the nightly export', 'Send Dana the A
     # a coding task runs under the profile whose KIND is coding (agents.coding_role) - the one a real install ships
     if kind == 'coding': s.upsert_agent('coding', 'coding', 'cli', json.dumps({'cmd': 'claude'}))
     with mock.patch.object(ingest, '_spawn'):
-        return ingest.ingest_message(s, dict(MSG), llm=llm)['task_id']
+        tid = ingest.ingest_message(s, dict(MSG), llm=llm)['task_id']
+    s.set_task_checklist(tid, list(checklist), 'agent')          # triage writes no to-dos: the task's agent does
+    return tid
 
 
 class OneBriefTests(unittest.TestCase):
@@ -43,7 +45,7 @@ class OneBriefTests(unittest.TestCase):
         b = brief.build(s, tid, instruction='start with the failing step', repo='org/exports')
         for key in ('task', 'objective', 'checklist', 'instruction', 'repository', 'context', 'attachments', 'revision', 'message_ids'):
             self.assertIn(key, b, key)
-        self.assertIn('TQ-', b['task']); self.assertIn('export job fails nightly', b['objective'])
+        self.assertIn('TQ-', b['task']); self.assertIn('fix the nightly export', b['objective'])     # the sender's own words
         self.assertIn('- [ ] Fix the nightly export', b['checklist']); self.assertEqual(b['instruction'], 'start with the failing step')
         self.assertEqual(b['repository'], 'org/exports'); self.assertIn('quokka', b['context'])
         before = b['revision']

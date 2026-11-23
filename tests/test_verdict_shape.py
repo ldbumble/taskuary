@@ -61,20 +61,6 @@ class DocumentSaysTheShapeTests(unittest.TestCase):
         s.cx.commit()
         self.assertIn(store_mod._SHAPE_WAS, SQLiteStore(str(self.path)).doc('triage'))
 
-    def test_the_summary_leads_with_who_wants_what_on_a_document_the_old_fix_already_reached(self):
-        """Installs the shape fix already ran on hold the old summary wording; the walk's cards lead with
-        that sentence, so it asks who wants what now (2026-09-23) - swapped once, the rest untouched."""
-        self.assertIn('The first says who wants what from the owner, the asker first', TEMPLATE)   # the guide, in its own words
-        self.assertNotIn(store_mod._SUMMARY_WAS, TEMPLATE)
-        old = store_mod._SHAPE_NOW.replace(store_mod._SUMMARY_NOW, store_mod._SUMMARY_WAS)
-        s = SQLiteStore(str(self.path))
-        s.save_doc('triage', 'MY OWN RULE.\n\n' + old, 'owner')
-        s.cx.execute("DELETE FROM setting WHERE Name='triage_summary_who_wants_what'"); s.cx.commit()
-        after = SQLiteStore(str(self.path)).doc('triage')
-        self.assertNotIn(store_mod._SUMMARY_WAS, after)
-        self.assertIn('who wants what', after)
-        self.assertIn('MY OWN RULE.', after)
-
 
 class SchemaOnTheWireTests(unittest.TestCase):
     """What the provider can enforce, the provider enforces."""
@@ -177,7 +163,7 @@ class TriageUsesItTests(unittest.TestCase):
         plain = triage.verdict_schema()
         self.assertEqual(set(plain['schema']['required']), set(plain['schema']['properties']))   # strict mode's rule
         self.assertFalse(plain['schema']['additionalProperties'])
-        for asked in ('intent', 'why', 'title', 'summary', 'kind', 'checklist'):
+        for asked in ('intent', 'why', 'title', 'kind'):          # triage routes: no summary, no to-dos (2026-11-23)
             self.assertIn(asked, plain['schema']['properties'], asked)
         for unasked in ('repository', 'relationship', 'playbook', 'profile'):
             self.assertNotIn(unasked, plain['schema']['properties'], unasked)
@@ -218,7 +204,7 @@ class TriageUsesItTests(unittest.TestCase):
         brain.takes_want = False
         out = triage.classify_intent(MSG, llm=brain, system='My own rules. Answer JSON only.')
         self.assertEqual(len(asks), 2)
-        self.assertIn('title', asks[1]); self.assertIn('summary', asks[1])
+        self.assertIn('title', asks[1])
         self.assertEqual(out['title'], 'Send Ray the budgets link')
 
     def test_the_wrapper_ingest_puts_round_the_brain_still_carries_a_schema(self):
@@ -362,16 +348,15 @@ class ThreadReadingTests(unittest.TestCase):
 # A verdict spent a third of its tokens saying "nothing here". A key whose answer is nothing may be left out; under a schema the
 # rare keys ride in one group, `more`. What every reader is handed must be the same as when each "nothing" was spelled out.
 BASE = {'intent': 'task', 'why': 'Erin asks for the numbers', 'title': 'Send Erin the Q3 accrual numbers',
-        'summary': 'Erin Blake wants the Q3 accrual numbers.', 'sender_class': 'person', 'asks_owner': True, 'difficulty': 'quick', 'sure': True}
+        'sender_class': 'person', 'asks_owner': True}
 # every "nothing" spelled out, as the shape before it asked - one dict per field group
 NOTHING = {
-    'the rare group': {'goal': False, 'done_when': None, 'danger': None, 'offer': None, 'offer_is_reply': False,
-                       'needs_browser': False, 'needs_desktop': False, 'meet': None},
-    'the work': {'kind': None, 'checklist': None, 'priority': 'regular', 'priority_why': '', 'due': None, 'data_class': 'ordinary', 'wrapper': []},
+    'the rare group': {'danger': None, 'needs_browser': False, 'needs_desktop': False, 'meet': None},
+    'the work': {'kind': None, 'priority': 'regular', 'priority_why': '', 'due': None, 'data_class': 'ordinary', 'wrapper': []},
     'the menus': {'playbook': None, 'workflow': None, 'workstream': None},
     'joining': {'same_as': None, 'new_job': None, 'refines': None, 'task_title': None, 'reword': None, 'rests_on': None, 'serves': None},
     'a chat line': {'relationship': None, 'related_message_ids': None, 'existing_task_id': None},
-    'the thread': {'thread': {'asking': '', 'your_part': '', 'others': [], 'asks': [], 'aside': [], 'on_you': []}},
+    'the thread': {'thread': {'asking': '', 'your_part': '', 'others': [], 'asks': [], 'aside': []}},
 }
 SHOWN = dict(thread={'thread_task': {'tid': 9, 'status': 'open', 'watching': True}, 'open_work': [{'tid': 7, 'title': 'Close the Q3 books'}],
                      'exchange': ['[#3] Erin Blake: can you send the numbers?'], 'open_goals': [{'tid': 5, 'steps': [{'id': 's1'}]}]},
@@ -393,7 +378,7 @@ class LeanAnswerTests(unittest.TestCase):
                 rest = {k: v for g, ks in NOTHING.items() if g != group for k, v in ks.items()}
                 self.assertEqual(_answers({**BASE, **rest}), whole)
         self.assertEqual(_answers(BASE), whole)                           # ...and all of them left out at once
-        for k in ('title', 'summary', 'asks_owner', 'difficulty', 'sure', 'sender_class'): self.assertIn(k, whole, k)
+        for k in ('title', 'asks_owner', 'sender_class'): self.assertIn(k, whole, k)
         self.assertEqual(whole['data_class'], 'ordinary')                 # the one "nothing" a reader recorded (store.judge_task)
 
     def test_the_old_shape_reads_its_own_answer_as_it_always_did(self):
@@ -402,8 +387,7 @@ class LeanAnswerTests(unittest.TestCase):
         self.assertNotIn('data_class', _answers(BASE, lean=False))        # a judgement the old answer did not give stays not given
 
     def test_the_rare_keys_answered_in_their_group_land_where_they_always_did(self):
-        said = {'goal': True, 'done_when': 'The books are closed.', 'danger': {'kind': 'scam', 'says': 'asks for a wire to a new account'},
-                'offer': 'I can pull the Q3 totals.', 'offer_is_reply': True, 'needs_browser': True, 'needs_desktop': True,
+        said = {'danger': {'kind': 'scam', 'says': 'asks for a wire to a new account'}, 'needs_browser': True, 'needs_desktop': True,
                 'meet': {'minutes': 30, 'from': None, 'to': None}}
         flat, folded = _answers({**BASE, **said}), _answers({**BASE, 'more': said}, carries=True)
         self.assertEqual(folded, flat)
@@ -431,7 +415,7 @@ class LeanAnswerTests(unittest.TestCase):
         self.assertEqual(tuple(s['properties']['more']['properties']), triage.MORE)
         self.assertIn('null', s['properties']['more']['type'])
         for k in (*triage.MORE, 'notes_applied'): self.assertNotIn(k, s['properties'], k)
-        for k in ('title', 'summary', *triage.ALWAYS): self.assertIn(k, s['required'], k)
+        for k in ('title', *triage.ALWAYS): self.assertIn(k, s['required'], k)
         self.assertEqual(s['properties']['wrapper']['items']['required'], ['from', 'to'])
 
     def test_one_argument_asks_the_old_shape_for_the_evaluation(self):
@@ -453,7 +437,7 @@ class LeanAnswerTests(unittest.TestCase):
             self.assertIn(triage.WRAPPER_COPIED, seen['sys']); self.assertNotIn(triage.WRAPPER_NAMED, seen['sys'])
             self.assertIn('notes_applied', seen['sys']); self.assertEqual(v['notes_applied'], [])
             self.assertNotIn(triage.LEAN_MORE, seen['sys']); self.assertNotIn(triage.lean_out(), seen['sys'])
-            if carries: self.assertIn('goal', seen['want']['schema']['properties'])
+            if carries: self.assertIn('danger', seen['want']['schema']['properties'])
 
     def test_a_guide_worded_the_old_way_asks_the_new_way(self):
         "An install's own TRIAGE.md may still say `copied`: the call's shape words it, either way round."
@@ -469,8 +453,8 @@ class LeanAnswerTests(unittest.TestCase):
         "The readers past triage (the stored verdict, the task) are handed the same thing by a lean answer."
         from taskuary import ingest
         from taskuary.store import MemoryStore
-        full = {**BASE, **{k: v for g in NOTHING.values() for k, v in g.items()}, 'kind': 'task', 'checklist': ['Pull the numbers']}
-        lean = {**BASE, 'kind': 'task', 'checklist': ['Pull the numbers']}
+        full = {**BASE, **{k: v for g in NOTHING.values() for k, v in g.items()}, 'kind': 'task'}
+        lean = {**BASE, 'kind': 'task'}
         got = []
         for j in (full, lean):
             s = MemoryStore()

@@ -72,7 +72,7 @@ corrected on the job:
   the browser while you watch.
 - **Your jobs.** The first time an agent does a kind of job, Taskuary drafts a playbook — the
   steps, what it may do alone, what to ask first, what counts as done. Approve it and the next job
-  like it follows it. See [Profiles and playbooks](tasks-and-agents#profiles-and-playbooks).
+  like it follows it. See [Brains and playbooks](tasks-and-agents#brains-and-playbooks).
 - **Your judgment.** Each verdict you correct becomes a lesson for the next message like it. See
   [How it works](how-it-works).
 

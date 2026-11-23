@@ -227,9 +227,7 @@ Not every job is code. A `coding` task goes to a coding agent, in a terminal in 
 spreadsheet or a dashboard, a form filled in a browser. Whatever it sets up waits for your press.
 
 Both run on a **brain** - a CLI such as Claude Code or Codex, or an API connection, with the model
-chosen on it - and follow a **profile** of instructions laid on that brain: `CODING.md` for code,
-`ASSISTANT.md` for general work by default (see [Profiles and playbooks](#profiles-and-playbooks)).
-You start one with **Send to agent** on a task, or from **+ New → Give an agent a job**, which asks
+chosen on it (see [Brains and playbooks](#brains-and-playbooks)). You start one with **Send to agent** on a task, or from **+ New → Give an agent a job**, which asks
 whether the job is general or coding - coding only with [Developer mode](#developer-mode) on.
 
 ### Developer mode
@@ -255,7 +253,7 @@ otherwise the agent continues from Taskuary's own saved history and says so.
 Most general asks are short - read the message, recommend, draft the reply, or ask you what to do.
 When triage reads a general task as quick, it is answered in a single call instead of an agent
 session. The call reads what the agent would - the message, the task, `LEARNED.md`, today's calendar,
-`AGENT.md` and the profile - may use only read-only look-ups, and leaves the same things a finished
+`AGENT.md` - may use only read-only look-ups, and leaves the same things a finished
 run does: what it found, a draft when a reply is owed, or a question to you. Nothing on the task page
 changes: it is the same chat, and what you type in its box opens a full session.
 
@@ -324,14 +322,12 @@ task to waiting, because an external answer is now required. An ordinary reply f
 owner-controlled task is just an update: it leaves both the task status and any useful session
 alone.
 
-## Profiles and playbooks
+## Brains and playbooks
 
 Two levels, and the difference is worth holding onto:
 
 - A **brain** is what does the thinking — a CLI tool (Claude Code, Codex, …) or an API connector, with
   the model chosen on that connection.
-- A **profile** is instructions — a role's rules, laid on whichever brain runs it. It names no CLI
-  and no model. Install one from a skill or write one on **About you → Docs**.
 - A **playbook** is a job — when it starts, which connections it uses, the steps, what an agent
   may do alone, what to ask first, and what counts as done.
 

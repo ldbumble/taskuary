@@ -103,9 +103,7 @@ message of the batch, each folded to who, where, and its line, and **All read, n
 A **coding agent** works in a terminal in your repository. A **general agent** works in a chat - research, a
 recommendation, a post, a drafted reply, a form filled in a browser - and nothing it prepares goes out until you
 press it. Both run on a **brain**: a CLI such as
-Claude Code or Codex, or an AI connection, with the model you chose on it. What they are told is a
-**profile**: instructions such as `ASSISTANT.md` for general work and `CODING.md` for code, laid on
-whichever brain runs it.
+Claude Code or Codex, or an AI connection, with the model you chose on it.
 
 Most general asks are short. When triage reads one as quick, it is answered in a single call that leaves
 the same answer, draft, or question in the chat an agent would. Hard work, work that needs a browser, and
@@ -124,7 +122,7 @@ Work fans out at three levels:
 ## Use your coding CLI
 
 Connect Claude Code, Codex, Qwen Code, OpenCode, Kimi Code, Gemini, Cursor, Copilot, Muse Code, or another CLI.
-Set up the connection once, then give your agents profiles with their own instructions.
+Set up the connection once, and every agent can run on it.
 Follow their sessions, answer questions, and review the result from Taskuary.
 
 For Qwen Code, see the [setup and compatibility guide](https://github.com/ldbumble/taskuary/blob/master/docs/qwen-code.md).

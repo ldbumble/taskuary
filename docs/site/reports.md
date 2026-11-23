@@ -240,8 +240,7 @@ portal - rather than a check that reads. **Every run of a routine is a task**, w
 it: its schedule, **Run now**, the assistant, or you from your phone. The run never becomes a row
 under Reports and never goes through triage; its agent works it like any other task.
 
-- A routine that names a profile (`ap`, say) runs as that profile, with its rules; one that names
-  none runs on the assistant, or on the coding profile when it has a folder to work in.
+- A routine runs on the assistant, or on the coding agent when it has a folder to work in.
 - A routine with a **folder** (`cwd`) runs in that folder. If the folder is gone, the task says so
   and nothing starts.
 - A routine runs on the **same brain as your general agents** (Settings → How mail is sorted →

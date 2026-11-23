@@ -11,8 +11,7 @@ playbooks whose `uses:` line names it.
 Three consumers, none of which re-reads the mail to second-guess triage:
 - triage is handed menu() - each playbook's title and `when` - and names the one a message is an
   instance of. The task is tagged playbook:<slug>; the tag routes it, like repo: does.
-- the seed carries seed_block(): the playbook flattened, riding beside CODING.md and outranking its
-  repository rules. context.build writes the whole text into the context file.
+- the agent reads one when it wants it, through its `playbooks` tool (lookup) - never handed to a task.
 - on close, draft() asks one more question of the transcript: was this a kind of job that will
   recur, and does no playbook cover it? The answer is a PROPOSAL (proposals.py write_playbook) -
   approving it files the playbook, and the second such job matches it. Nothing is ever filed
@@ -26,7 +25,6 @@ FIELDS = ('when', 'uses', 'steps', 'alone', 'ask first', 'done when')
 _FIELD = re.compile(r'^(' + '|'.join(FIELDS) + r'):\s*(.*)$', re.I)
 _ITEM = re.compile(r'^(?:\d+[.)]|[-*•])\s')     # a markdown list item: "1. ", "- ", "* "
 _TAG = re.compile(r'playbook:([\w-]+)')
-SEED_CHARS = 2200            # the whole playbook usually fits; the seed line is the operative rules
 MIN_SESSION = 600            # a session shorter than this did no job worth a playbook - no AI call for it
 # connections whose presence on `uses:` makes a playbook about code: CODING.md's repository rules apply. ONLY these - the
 # words of its steps decide nothing (2026-10-11, "everything should be ai"): "visit the branch office" and "commit the
@@ -230,16 +228,18 @@ MENU_MAX, MENU_WHEN = 30, 160
 def path_of(slug: str) -> Path: return folder() / f'{slugify(slug)}.md'
 
 
-def agent_menu(task: dict = None, store=None) -> str:
-    "Every playbook switched on, one line each - its slug, its `when` and its file. '' when there are none, or playbooks are off."
-    if store is not None and store.get_setting('playbooks_enabled', '1') != '1': return ''
+def lookup(store=None, task: dict = None, name: str = '') -> str:
+    """The `playbooks` tool's answer (agenttools): with no `name`, every playbook switched on - its slug and `when`, triage's match said on its
+    line; with one, that playbook whole. Asked for by the agent when it wants one - never handed to every task (the owner, 2026-11-23)."""
+    if store is not None and store.get_setting('playbooks_enabled', '1') != '1': return 'Playbooks are switched off.'
     books, mine = [b for b in list_all() if b['when'] and b.get('enabled', True)], of_task(task)
-    if not books: return ''
+    if name:
+        b = next((b for b in books if b['slug'] == slugify(name)), None)
+        return b['text'] if b else f"No playbook is called {name!r} - ask with no name for the list."
+    if not books: return 'There are no playbooks yet.'
     cut = lambda s: s if len(s) <= MENU_WHEN else s[:MENU_WHEN - 1] + '…'
-    lines = [f"- {b['slug']}: when {cut(' '.join(b['when'].split()))} -> {path_of(b['slug'])}" + (' (triage read this task as one)' if b['slug'] == mine else '')
-             for b in books[:MENU_MAX]]
-    return ("PLAYBOOKS - how this company does each kind of job. When one applies - now, or as the work turns into it - read its file whole "
-            "and follow it; it outranks your own way, and its `ask first` means ask the owner and wait:\n" + '\n'.join(lines))
+    return '\n'.join(f"- {b['slug']}: when {cut(' '.join(b['when'].split()))}" + (' (triage read this task as one)' if b['slug'] == mine else '')
+                     for b in books[:MENU_MAX])
 
 
 def tag(slug: str) -> str: return f'playbook:{slugify(slug)}'
@@ -251,27 +251,6 @@ def for_task(task: dict) -> dict | None:
     if not slug: return None
     text = read(slug)
     return {**parse(text), 'slug': slug, 'text': text} if text else None
-
-
-# ── the seed and the context file ───────────────────────────────────────────────────────
-def seed_block(task: dict) -> str:
-    """The playbook, flattened onto the command line. It is the operative rules for this job, so it
-    rides where CODING.md rides; the repository rules there yield to it, the closing-out and wall
-    rules do not (an agent posting a bill still says --done)."""
-    pb = for_task(task)
-    if not pb: return ''
-    lines = [f"{f.upper()}: {pb[f]}" for f in FIELDS if pb.get(f)] + ([pb['body']] if pb.get('body') else [])
-    flat = ' '.join(' '.join(lines).split())[:SEED_CHARS]
-    head = (f'PLAYBOOK "{pb["title"]}" - how this company does this kind of job; it outranks the repository rules in '
-            'RULES below, and "ask first" means ask the owner here in the session and wait: ')
-    tail = ('' if about_code(pb) else ' THIS IS NOT A CODE CHANGE: the systems named in USES are the ground, reached through '
-                                      'Taskuary\'s tools and proposals - do not go looking for a codebase to edit.')
-    return head + flat + tail
-
-
-def context_section(task: dict) -> str:
-    pb = for_task(task)
-    return f"## The playbook for this kind of job ({pb['slug']}.md - the rules in your prompt come from here)\n{pb['text'].strip()}" if pb else ''
 
 
 # ── the ending: was this a kind of job that will recur? ─────────────────────────────────

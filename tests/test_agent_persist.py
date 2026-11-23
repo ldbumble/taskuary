@@ -26,16 +26,6 @@ def answered(s, tid, did, on_you=()):
 
 
 # ── the brief ───────────────────────────────────────────────────────────────────────────────
-def test_the_brief_carries_the_ladder_the_work_line_and_the_override():
-    s = MemoryStore(); system = general._prompt(s, task(s))[0]
-    # the override rides only for an AGENT.md copy that still tells a worker to run --done: the shipped one no longer does (2026-11-09)
-    assert general.GENERAL_OVER not in system
-    s.save_doc('agent', (s.doc('agent') or '') + '\n- When the work is over, run `taskuary --done "<one sentence>"`.', 'owner')
-    system = general._prompt(s, task(s))[0]
-    for want in (general.WORK_LINE, general.GENERAL_OVER, 'more than twice', 'three genuinely different ways', 'one line per way you tried',
-                 'A TURN THAT ASKS STILL DOES THE WORK', 'CHECK EACH STEP', 'DONE MEANS THE GOAL IS MET AND CHECKED'):
-        assert want in system, want
-    assert '"answer_is_result"' in selfclose.SUMMARY_LINE and 'true only when the goal is met and you checked it' in selfclose.SUMMARY_LINE
 
 
 def test_the_windows_are_large():
@@ -59,7 +49,7 @@ def test_a_long_task_is_compacted_and_still_names_its_earlier_decisions():
     assert 'EARLIER IN THIS CONVERSATION, COMPACTED' in user
     assert 'Go with the three-year term, not the two.' in user                                  # the owner's decision
     assert 'C:/tasks/renewal/terms.docx' in user and 'confirm the 6% uplift with Erin Blake' in user      # ...what was done, what was left
-    assert user.rstrip().endswith('Do not repeat the task context.') and 'Where did we land?' in user
+    assert user.rstrip().endswith('Where did we land?')
     assert len(user) <= 30_000 + 200
     # ...nothing new is stored, and nothing goes around LEARNED.md: the chat keeps every turn, compaction is only what the model reads
     assert len(s.list_comments(tid, internal=True)) == before and len(general.chat_rows(s, tid)) == 63

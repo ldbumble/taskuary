@@ -62,43 +62,61 @@ class NoLessonTests(unittest.TestCase):
         reply = 'Posted the bill as Payworth (vendor 4471).\n' + summary(lesson={'playbook': 'bill', 'text': 'Payworth is vendor 4471'},
                                                                           check_back={'when': 'in 2 days', 'what': 'the bill shows paid'})
         with mock.patch('taskuary.learn.learn_from') as lf: seen = turn(s, tid, reply)
-        self.assertIn(general.CHECK_BACK_LINE, seen['prompt']); self.assertNotIn('A LESSON FOR NEXT TIME', seen['prompt'])
+        self.assertNotIn('A LESSON FOR NEXT TIME', seen['prompt'])
         self.assertFalse(any('Payworth is vendor 4471' in c[0][1] for c in lf.call_args_list), "the agent's takeaway is not learned")
         t = s.get_task(tid); self.assertEqual(t['CheckBackWhat'], 'the bill shows paid'); self.assertTrue(t['CheckBackAt'])
         kept = [json.loads(c['Body']) for c in s.list_comments(tid, internal=True) if c['ActorType'] == general.SUMMARY_TYPE]
         self.assertTrue(kept and not any('lesson' in k or 'check_back' in k for k in kept))     # taken off the summary, never drawn
 
 
-# ── 6. playbooks as a menu ──────────────────────────────────────────────────────────────────
-class PlaybookMenuTests(unittest.TestCase):
+# ── 6. playbooks are a tool, and a plain task is handed context and one sentence (the owner, 2026-11-23) ──────────────────────
+class PlaybookToolTests(unittest.TestCase):
     def setUp(self): fresh_books(('bill', BILL), ('w9', W9))
 
-    def test_every_playbook_is_one_line_with_its_file_and_no_text_is_handed_over(self):
+    def test_a_plain_task_carries_the_one_sentence_and_no_playbook_profile_or_routine_block(self):
+        s = MemoryStore(); s.upsert_agent('marketer', 'marketing', 'cli', '{}')
+        tid = owner_task(s, Tags='playbook:bill', Assignee='agent:marketer')
+        system, user = general._prompt(s, tid)
+        self.assertIn(selfclose.ONE_SENTENCE, system)
+        for block in ('PLAYBOOKS', 'PROCEDURE FOR THIS JOB', 'bills under $500', 'PROFILE RULES', 'MARKETER.md', 'RULES (AGENT.md',
+                      'OBJECTIVE', 'ALLOWED ACTIONS', 'DONE WHEN', 'ENDING EVERY TURN', 'YOUR ONE GOAL'):
+            self.assertNotIn(block, system + user)
+
+    def test_the_tool_lists_them_and_reads_one_whole(self):
         s = MemoryStore(); tid = owner_task(s, Tags='playbook:bill')
-        system = general._prompt(s, tid)[0]
-        self.assertIn(f"- bill: when a transaction line from the card feed -> {playbooks.path_of('bill')} (triage read this task as one)", system)
-        self.assertIn(f"- w9: when a new vendor needs a W-9 -> {playbooks.path_of('w9')}", system)
-        self.assertNotIn('PROCEDURE FOR THIS JOB', system); self.assertNotIn('bills under $500', system)        # read whole on its own say
-        self.assertIn('as the work turns into it', system)
+        call = lambda **a: agenttools.call(s, tid, 'playbooks', a, {})
+        listed = call()
+        self.assertIn('- bill: when a transaction line from the card feed (triage read this task as one)', listed)
+        self.assertIn('- w9: when a new vendor needs a W-9', listed); self.assertNotIn('bills under $500', listed)
+        self.assertIn('bills under $500', call(name='bill'))
+        playbooks.set_on('w9', False); self.assertNotIn('- w9:', call())
+        s.set_setting('playbooks_enabled', '0', 't'); self.assertEqual(call(), 'Playbooks are switched off.')
 
-    def test_a_menu_is_short_and_absent_when_off(self):
-        s = MemoryStore()
-        self.assertLess(len(playbooks.agent_menu(None, s)), 700)
-        playbooks.set_on('w9', False); self.assertNotIn('- w9:', playbooks.agent_menu(None, s))     # its line - the folder's own name is random letters
-        s.set_setting('playbooks_enabled', '0', 't'); self.assertNotIn('PLAYBOOKS - ', general._prompt(s, owner_task(s))[0])
+    def test_end_turn_and_ask_owner_reach_the_turns_end_as_its_summary_and_question(self):
+        s = MemoryStore(); tid = owner_task(s)
+        agenttools.call(s, tid, 'ask_owner', {'question': 'Which card should it go on?'}, {})
+        agenttools.call(s, tid, 'end_turn', {'name': 'Post the card charge', 'did': 'Matched the vendor', 'on_you': [], 'nothing_left': False}, {})
+        said = selfclose.take_marks(tid)
+        text, summ = selfclose.summary_marker('Matched it.\n\n' + said)
+        self.assertEqual(summ['did'], 'Matched the vendor'); self.assertEqual(summ['name'], 'Post the card charge')
+        self.assertEqual(selfclose.ask_markers(text)[1], [('Which card should it go on?', [])])
+        self.assertEqual(selfclose.take_marks(tid), '')                  # taken once
 
-    def test_a_brain_with_no_hands_is_handed_the_matched_one_whole(self):
-        s = MemoryStore(); a_claude(self); tid = owner_task(s, Tags='playbook:bill')
-        s.set_setting('general_agent_hands', 'look', 't')
-        seen = turn(s, tid, 'Done.')
-        self.assertIn('PLAYBOOKS - ', seen['prompt']); self.assertIn('PROCEDURE FOR THIS JOB', seen['prompt'])
-        self.assertIn('bills under $500', seen['prompt'])
 
-    def test_a_strangers_task_still_gets_only_triages_match(self):
-        s = MemoryStore(); tid = owner_task(s, Tags='playbook:bill')
-        with mock.patch('taskuary.origin.of_task', return_value=('stranger', 'unknown sender')):
-            system = general._prompt(s, tid)[0]
-        self.assertNotIn('PLAYBOOKS - ', system); self.assertIn('PROCEDURE FOR THIS JOB', system)
+# ── 6b. a turn that stopped before it answered leaves its ask owed (walk 8, 2026-11-23) ───────────────────────────────────────
+class StoppedTurnTests(unittest.TestCase):
+    def test_the_turn_after_a_failed_one_hears_the_ask_is_owed_and_what_it_did(self):
+        from taskuary import sessionrecord
+        s = MemoryStore(); tid = owner_task(s, 'Make a test account')
+        s.add_comment(tid, 'owner', general.USER_TYPE, 'Make a free mail account for a test person')
+        trace = [{'type': 'tool_call', 'name': 'Bash', 'detail': {'tool_call_id': 'c1', 'args': {'command': 'agent-browser signup', 'description': 'Sign up'}}},
+                 {'type': 'tool_result', 'name': 'Bash', 'detail': {'tool_call_id': 'c1', 'result': 'Signed up as erin.test@mail.example; its password is kept'}},
+                 {'type': 'progress', 'name': 'text', 'detail': 'Setting the birth date...'}]
+        general.file_turn(s, tid, trace, general.FAILED_MARK + 'it stopped')
+        facts = general.latest_block(s, tid, turn=True)
+        self.assertNotIn('WHICH YOU ANSWERED', facts); self.assertNotIn('NO NEW MESSAGE STARTED', facts)
+        self.assertIn('still owed', facts); self.assertIn('erin.test@mail.example', facts)
+        self.assertIn('agent-browser signup', sessionrecord.account(trace))
 
 
 # ── 7. search before asking ─────────────────────────────────────────────────────────────────
@@ -139,15 +157,11 @@ class SearchBeforeAskingTests(unittest.TestCase):
             self.assertIn('WHAT EARLIER TASKS SETTLED', r.json()['result']['content'][0]['text'])
             got = c.get('/api/agent/messages', params={'task_id': tid, 'words': 'spendly vendor'}, headers=hdr).json()
             self.assertIn('V-2231', got['says'])
-        self.assertIn('SEARCH BEFORE YOU ASK', general.HISTORY_LINE); self.assertIn('SEARCH BEFORE YOU ASK', general.SEARCHED_LINE)
-        said, prior = general.history_brief(s, tid, hands=False)                        # a brain with no search is handed them
-        self.assertIn('V-2231', prior); self.assertIn('WHAT EARLIER TASKS SETTLED', said)
+        self.assertIn('V-2231', general.history_brief(s, tid, hands=False))               # a brain with no search is handed them
         # ...AND QUICK WORK FINDS ITS SEARCH DONE, its own still there (the speed round, 2026-11-20: a quick reply's agent searched the sender's
         # mail itself first - one more model round and a shell call, 4-6 s of an 11 s turn)
-        self.assertEqual(general.history_brief(s, tid, hands=True), (general.HISTORY_LINE, ''))
-        said, prior = general.history_brief(s, tid, hands=True, quick=True)
-        self.assertIn('V-2231', prior); self.assertIn('ALREADY SEARCHED', said); self.assertIn('taskuary --search', said)
-        self.assertNotIn('NO SEARCH OF ITS OWN', said)
+        self.assertEqual(general.history_brief(s, tid, hands=True), '')
+        self.assertIn('V-2231', general.history_brief(s, tid, hands=True, quick=True))
 
 
 # ── 8. check-backs ──────────────────────────────────────────────────────────────────────────
@@ -283,7 +297,6 @@ class CheckBackTests(unittest.TestCase):
         self.assertEqual(s.get_task(tid)['CheckBackWhat'], 'the W-9 came back signed')
         from taskuary import cli
         self.assertIn('check_back', cli.AGENT_ACTS); self.assertNotIn('check_back', cli.STRANGER_ACTS)
-        self.assertIn('CHECK BACK LATER', general.FINISH_LINE)
 
 
 if __name__ == '__main__':
@@ -296,7 +309,7 @@ def test_the_general_agent_reads_the_learned_lines_nearest_its_task():
     s = MemoryStore(); tid = s.create_task({'Title': 'Pay the Payworth bill', 'Kind': 'general', 'Status': 'open'}, 'o')
     s.save_doc(learn.DOC, '# LEARNED.md\n\n## How you work\n- Payworth is vendor 4471 in QuickBooks\n- Vendor replies are short, signed Alex\n', 't')
     system = general._prompt(s, tid)[0]
-    assert 'WHAT TASKUARY HAS LEARNED ABOUT THE OWNER' in system and 'Payworth is vendor 4471' in system and '--memory' in system
+    assert 'WHAT TASKUARY HAS LEARNED ABOUT THE OWNER' in system and 'Payworth is vendor 4471' in system
     # ...counted in learned lines, not characters: the head now says how to lean on them too (2026-11-09)
     assert general.learned_block(s, tid, budget=45).count('\n- ') == 1, 'held to its budget: whole lines, never the whole doc'
     with mock.patch('taskuary.origin.of_task', return_value=('stranger', 'unknown sender')):

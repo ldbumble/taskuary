@@ -307,17 +307,6 @@ def learn_from_session(store, task_id: int, transcript: str, agent: str = 'agent
 # when the owner explicitly asks it to save a developed idea, or when a turn genuinely clears the
 # same hard-earned bar as closeout learning. general.py consumes and removes it before display.
 HUB_MARKER = re.compile(r'<TASKUARY-HUB>(.*?)</TASKUARY-HUB>', re.S | re.I)
-ASSISTANT_LINE = (
-    'You can publish to the company Hub. The Hub is not a transcript, task log, or scratchpad: it '
-    'is only for a reusable discovery reached through substantial investigation/testing/reasoning, '
-    'or a developed new company idea with a considered rationale. If the owner explicitly asks you '
-    'to save a qualifying idea there, or this conversation clearly earns one, append one private '
-    'envelope after your answer: <TASKUARY-HUB>{"earned":true,"why_earned":"specific effort or '
-    'reasoning","topic":"company-area","kind":"new_idea|technical_solve|howto|gotcha|decision|system|people",'
-    '"title":"one durable claim","body":"why it matters and what to do","same_as":<id of a FROM HUB entry that already '
-    'says this same fact, or null>}</TASKUARY-HUB>. '
-    'Never show or explain the envelope. Do not emit it for a raw brainstorm, routine answer, or '
-    'ordinary completed task. Existing relevant entries appear under FROM HUB.')
 
 
 def assistant_entries(reply: str) -> tuple[str, list]:

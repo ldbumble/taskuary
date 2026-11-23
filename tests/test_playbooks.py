@@ -186,29 +186,8 @@ class TheSessionRunsOnIt(unittest.TestCase):
                        'FromEmail': 'alerts@card.example', 'BodyText': 'a new transaction posted', 'Status': 'routed'})
         return tid
 
-    def test_the_seed_carries_the_playbook_and_says_it_is_not_code(self):
-        s = MemoryStore(); s.save_doc('coding', '# Coding rules\n- ZZMARKCODINGZZ', 'owner')
-        s.upsert_agent('coding', 'coding', 'cli', json.dumps({'cmd': 'claude'}))     # the profile a coding task runs under, by its kind
-        seed = terminal.seed_text(s, self._task(s))
-        self.assertIn('PLAYBOOK "Post a card transaction as an AP bill"', seed)
-        self.assertIn('ASK FIRST: a new vendor', seed)
-        self.assertIn('ZZMARKPLAYBOOKZZ', seed)
-        self.assertIn('NOT A CODE CHANGE', seed)
-        self.assertIn('ZZMARKCODINGZZ', seed)          # the closing-out and wall rules still ride
-        # a task without the tag gets none of it
-        self.assertNotIn('PLAYBOOK', terminal.seed_text(s, self._task(s, tags='')))
 
-    def test_a_code_playbook_keeps_the_repository_rules_unqualified(self):
-        playbooks.write('onboard', ONBOARD)
-        s = MemoryStore()
-        seed = terminal.seed_text(s, self._task(s, tags='playbook:onboard'))
-        self.assertIn('PLAYBOOK "Onboard a new hire', seed); self.assertNotIn('NOT A CODE CHANGE', seed)
 
-    def test_the_context_file_carries_the_whole_page(self):
-        s = MemoryStore()
-        text = context.build(s, self._task(s))
-        self.assertIn('## The playbook for this kind of job (bill.md', text)
-        self.assertIn('House rule: the memo is card last-4', text)
 
 
 # a real session's worth of screen: shorter than playbooks.MIN_SESSION is judged to have done no job
@@ -387,7 +366,6 @@ class DeletedIsRecoverable(unittest.TestCase):
         self.assertEqual(playbooks.for_connector('quickbooks'), [])
         self.assertIsNone(playbooks.read('bill')); self.assertIn('ZZMARKPLAYBOOKZZ', playbooks.read('bill', deleted=True))
         self.assertIsNone(playbooks.for_task({'Tags': 'playbook:bill'}))
-        self.assertEqual(playbooks.seed_block({'Tags': 'playbook:bill'}), '')
         self.assertEqual([d['slug'] for d in playbooks.recently_deleted()], ['bill'])
 
     def test_triage_never_matches_a_deleted_one(self):

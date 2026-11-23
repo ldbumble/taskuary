@@ -18,13 +18,6 @@ REP = {'determination': 'the link was dropped when the mail was read', 'actions'
 class OwnerSaysNoReply(unittest.TestCase):
     def tearDown(self): general.OPENING.clear()
 
-    def test_the_agent_is_told_the_owners_line_decides_and_how_to_put_the_draft_down(self):
-        line = general.action_line(store())
-        self.assertIn("THE OWNER'S OWN WORDS DECIDE WHETHER A REPLY IS OWED", line)
-        self.assertIn('reply_not_needed', line); self.assertIn('--reply-not-needed', line)
-        from pathlib import Path
-        coding = (Path(taskuary.__file__).parent / 'templates' / 'coding.md').read_text(encoding='utf-8')
-        self.assertIn("in any words, no reply is needed", coding); self.assertIn('--reply-not-needed', coding)
 
     def test_through_the_tool_the_waiting_draft_is_retired_and_the_sessions_end_drafts_none(self):
         s = store(); tid, rid = drafted_task(s)

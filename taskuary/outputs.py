@@ -655,10 +655,7 @@ def brief(tid: int) -> str:
     d = folder(tid)
     try: d.mkdir(parents=True, exist_ok=True)
     except OSError: pass
-    return (f'FILES YOU MAKE FOR THE OWNER: your outputs folder is {d} - each file there shows on this task with Preview and Download. '
-            'Point at one by its full path. Never write a URL or a link to it (Taskuary serves the folder; an address you make up leads nowhere); '
-            'asked to send it "here", it already is - name it. A file on a reply or an email rides on that card: name it there by its '
-            'name, never its path.')     # ...one final file per thing: AGENT.md's Files you make (with_fence_rule)
+    return f'YOUR OUTPUTS FOLDER: {d} - each file saved there shows on this task with Preview and Download.'     # ...one final file per thing: AGENT.md's Files you make (with_fence_rule)
 
 
 # ...and a TERMINAL session is told the same by its environment (terminal.session_env: TASKUARY_OUTPUTS) and its standing rules

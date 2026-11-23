@@ -47,7 +47,6 @@ class RegularAgentQuestionTests(unittest.TestCase):
         from pathlib import Path
         rules = (Path(general.__file__).parent / 'templates' / 'agent.md').read_text(encoding='utf-8')
         self.assertIn('one question a turn', rules); self.assertIn('with your recommended answer', rules)
-        self.assertIn('never end on only questions', general.WORK_LINE)
 
 
 if __name__ == '__main__': unittest.main()

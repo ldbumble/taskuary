@@ -50,14 +50,6 @@ def the_owners_day(s):
 
 # the facts ride in the TURN (general.turn_facts), not the system prompt: there they changed it every turn, and a CLI chat's system
 # prompt is its process's command line, so each turn started a new process
-def test_a_correction_after_a_pending_draft_names_the_newest_message_and_the_draft():
-    s = MemoryStore(); tid, _, _, rid = the_owners_day(s)
-    system, turn = general._prompt(s, tid)
-    # ...and each rule ONCE, in the startup context (selfclose.DRAFTS_ONCE): the turn carries the facts under a short head
-    assert selfclose.DRAFTS_ONCE in system and selfclose.LATEST_LINE not in turn and selfclose.LATEST_HEAD in turn and 'THE NEWEST MESSAGE' not in system
-    assert 'THE NEWEST MESSAGE - from the owner (in this chat)' in turn and FIX in turn
-    assert 'THE DRAFT WAITING NOW (to Gail Moreno, drafted at 2:48 PM' in turn and f'rv{rid}' not in turn and 'BEFORE the newest message' in turn
-    assert OLD in turn and selfclose.WITHDRAW_LINE in system and selfclose.WITHDRAW_LINE not in turn
 
 
 def test_already_sent_replies_are_in_the_turns_context():
@@ -82,28 +74,20 @@ def test_a_turn_no_message_started_is_not_handed_the_answered_one_as_newest():
     assert 'THE NEWEST MESSAGE - from the owner (in this chat)' in general.latest_block(s, tid)
     at(s, 'comment', 'CommentId', s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'Fixed - the November list is drafted.'), '2026-11-06 15:23:00')
     b = general.latest_block(s, tid)                    # ...the owner's Send wakes it: nobody said anything new
-    assert 'THE NEWEST MESSAGE' not in b and selfclose.LATEST_LINE not in b and 'BEFORE the newest message' not in b
-    assert selfclose.NO_NEW_LINE in b and f'THE LAST MESSAGE, WHICH YOU ANSWERED - from the owner (in this chat), at 3:22 PM' in b and FIX in b
+    assert 'THE NEWEST MESSAGE' not in b and 'BEFORE the newest message' not in b
+    assert selfclose.NO_NEW_HEAD in b and f'THE LAST MESSAGE, WHICH YOU ANSWERED - from the owner (in this chat), at 3:22 PM' in b and FIX in b
     # ...a mail that joins after that answer is new, until the turn Taskuary starts on it has answered
     m = s.add_message({'TaskId': tid, 'ExternalId': 'g-2', 'ConversationId': 'conv-g', 'Channel': 'email', 'FromName': 'Gail Moreno',
                        'FromEmail': 'gail@northwind.example', 'BodyText': 'Actually I need the December one.', 'Status': 'routed'})
     at(s, 'message', 'MessageId', m, '2026-11-06 15:40:00')
     b = general.latest_block(s, tid)
-    assert selfclose.LATEST_LINE in b and 'THE NEWEST MESSAGE - from Gail Moreno' in b
+    assert selfclose.LATEST_HEAD in b and 'THE NEWEST MESSAGE - from Gail Moreno' in b
     at(s, 'comment', 'CommentId', s.add_comment(tid, general.BRIEF_ACTOR, general.USER_TYPE, 'Gail Moreno wrote on the thread.'), '2026-11-06 15:41:00')
     assert 'THE NEWEST MESSAGE - from Gail Moreno' in general.latest_block(s, tid), 'the turn on it has not answered yet'
     at(s, 'comment', 'CommentId', s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'Drafted the December list.'), '2026-11-06 15:42:00')
     assert 'THE LAST MESSAGE, WHICH YOU ANSWERED - from Gail Moreno' in general.latest_block(s, tid)
 
 
-def test_a_new_mail_is_the_newest_message_and_the_replan_says_latest_wins():
-    from taskuary import ingest
-    s = MemoryStore(); tid, *_ = the_owners_day(s)
-    m = s.add_message({'TaskId': tid, 'ExternalId': 'g-2', 'ConversationId': 'conv-g', 'Channel': 'email', 'FromName': 'Gail Moreno',
-                       'FromEmail': 'gail@northwind.example', 'BodyText': 'Actually I need the December one.', 'Status': 'routed'})
-    at(s, 'message', 'MessageId', m, '2026-11-06 15:40:00')
-    assert general.newest_message(s, tid)['who'] == 'Gail Moreno'
-    assert 'TASKUARY-WITHDRAW' not in ingest.REPLAN and 'withdraw' in selfclose.DRAFTS_ONCE and 'newest message' in selfclose.DRAFTS_ONCE      # said once, at startup
 
 
 def test_the_agents_new_draft_supersedes_the_old_one():
@@ -213,16 +197,6 @@ def test_a_coding_turn_is_told_what_any_agent_s_turn_is():
     assert f'rv{rid}, the email' in general.turn_facts(s, tid, resumed=True).split(cardqueue.SCREEN_HEAD)[1].split('- Sent ')[1]
 
 
-def test_what_the_owner_did_is_told_as_lines_already_in_his_chat_never_to_say_again():
-    # the recorded walk, 2026-11-12: "You signed in to localhost - saved for next time (remove it under Settings ...)" stood in the chat as his
-    # press, and the agent's next answer said the same two sentences again under it
-    s = MemoryStore(); tid = s.create_task({'Title': 'Payroll date for Gail', 'Kind': 'general', 'Status': 'open'}, 'owner')
-    s.add_comment(tid, 'agent', general.ASSISTANT_TYPE, 'The sign-in page is open.')
-    s._exec("UPDATE comment SET CreatedAt='2000-01-01 00:00:00' WHERE TaskId=?", (tid,))
-    s.audit('task', tid, 'signin_fill', 'owner', detail={'site': 'payworth.example', 'ok': True, 'saved': True})
-    facts = general.turn_facts(s, tid)
-    assert 'signed in to payworth.example - saved for next time' in facts
-    assert 'each is a line in the chat already: take it as said, never undo it, never say it again' in facts
 
 
 def test_an_email_the_owner_dropped_is_told_to_its_agent_and_is_a_line_in_the_chat():
@@ -327,15 +301,6 @@ def test_the_owners_line_this_turn_carries_is_not_quoted_in_its_facts_as_well():
 
 
 
-def test_a_newer_message_never_retires_what_is_still_owed_to_its_sender():
-    """The walk, 2026-11-19: asked for three caterer options, then "did you hear back from any caterers?" before the reply went - the agent
-    called the options "no longer needed" and drafted only "Not yet". Where every chat agent is told how messages stand (LATEST_LINE), one
-    sentence: what is owed stays owed, answered first; the turn the thread change starts says the same once (ingest.REPLAN points at it).
-    The live shape runs through the real doors in the audit corpus (audit_scenarios.w_owed_answer)."""
-    from taskuary import ingest
-    assert 'never an earlier ask again' not in selfclose.LATEST_LINE
-    assert 'a newer message never retires what is still owed to its sender: answer that, then the new question' in selfclose.LATEST_LINE
-    assert 'it may need no reply any more' not in ingest.REPLAN and 'LATEST MESSAGE WINS' in ingest.REPLAN
 
 
 def test_a_withdraw_marker_never_takes_back_the_letter_its_own_turn_wrote():

@@ -45,7 +45,6 @@ def test_ask_stronger_with_nothing_stronger_says_so_and_the_tool_is_listed():
     with pytest.raises(ValueError, match='own judgement'):
         agenttools.call(s, tid, 'ask_stronger', {'question': 'q'}, {'ask_stronger': lambda t, q, c: {'ok': False, 'says': 'Mistral could not be started - go on with your own judgement'}})
     from taskuary import general
-    assert 'ask_stronger tool' in general._ACTION and 'Never for routine steps' in general._ACTION     # the agent is told it may
 
 
 def test_several_searches_in_one_call_run_together():

@@ -66,7 +66,6 @@ class TheCliFinishesInItsTurnTests(unittest.TestCase):
         # ...and the CLI's own memory folder is off: what a chat agent learns goes through Taskuary's tools, for one press
         self.assertEqual(seen['env'].get('CLAUDE_CODE_DISABLE_AUTO_MEMORY'), '1')
         self.assertEqual(clis.HEADLESS_ENV, {'CLAUDE_CODE_DISABLE_BACKGROUND_TASKS': '1', 'CLAUDE_CODE_DISABLE_AUTO_MEMORY': '1'})
-        self.assertIn(general.FINISH_LINE, seen['prompt'])
 
     def test_no_cli_taskuary_starts_keeps_a_memory_of_its_own(self):
         """It was off for a chat agent only (2026-11-11): a coding agent in a pane - whose start strips every inherited CLAUDE_CODE_* - an

@@ -29,10 +29,6 @@ def test_a_rewrite_with_the_address_known_clears_the_mark():
     assert 'guessed' not in s.get_review(rid)['Reason'] and 'wrote this email' in s.get_review(rid)['Reason']
 
 
-def test_the_agent_is_told_to_guess_and_mark_rather_than_hold_the_email():
-    told = general.action_line(MemoryStore(), tools=True)      # ...a session with the email tool: `guessed` is the tool's own word
-    assert '`guessed`' in told and 'never hold the email or the meeting invite back' in told
-    assert 'is a guess' in general.action_line(MemoryStore()) and '`guessed`' not in general.action_line(MemoryStore())
 
 
 # A GUESS WHERE HIS MAIL KNOWS THE COMPANY IS NO GUESS TO MAKE (the owner, 2026-11-17: an email to a made-up address at a bank went out and

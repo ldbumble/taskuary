@@ -259,12 +259,6 @@ def test_a_chats_checklist_names_the_slot_and_a_coding_sessions_the_command(s):
     assert f'slot {sid} - drafted' in s.checklist_markdown(tid, ids=True, shell=False)
 
 
-def test_an_email_owed_is_the_agents_to_write_or_ask_about():
-    # ...never a line it may leave standing with nobody on it (the owner, 2026-11-10: "if you have nothing to reply just ask what should i
-    # reply?"): both roads say it, the marker's and the tool's
-    for line in (selfclose.DRAFT_LINE, selfclose.DRAFT_TOOL_LINE):
-        assert 'only you write' in line or 'only you will write' in line
-        assert 'ask the owner what it needs' in line
 
 
 def test_the_chat_block_is_read_and_taken_out():

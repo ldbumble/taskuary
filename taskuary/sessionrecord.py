@@ -542,6 +542,34 @@ def said(trace: list) -> str:
                        if e.get('type') == 'progress' and e.get('name') in ('text', 'agent_message') and str(e.get('detail') or '').strip())
 
 
+ACCOUNT_N, RESULT_N = 4000, 300
+def account(trace: list) -> str:
+    "A turn's steps as plain lines - each call with what came back, cut short, and what it said: what the turn after a stopped one is told."
+    out, at = [], {}
+    for e in since_heard(trace):
+        k, name, d = e.get('type'), e.get('name'), e.get('detail')
+        if k == 'tool_call':
+            s = _tool(name, (d or {}).get('args') if isinstance(d, dict) else d)
+            out.append(f"- {s['name']}: {s.get('detail') or s.get('text') or ''}".rstrip(': '))
+            if isinstance(d, dict) and d.get('tool_call_id'): at[d['tool_call_id']] = len(out) - 1
+        elif k == 'tool_result' and isinstance(d, dict) and out:
+            i = at.get(d.get('tool_call_id'), len(out) - 1)
+            out[i] += f" -> {_cut(' '.join(str(d.get('result') or '').split()), RESULT_N)}"
+        elif k == 'progress' and name in ('text', 'agent_message') and str(d or '').strip(): out.append(f"- said: {_cut(' '.join(str(d).split()), RESULT_N)}")
+    text = '\n'.join(out)
+    return text if len(text) <= ACCOUNT_N else '…' + text[-ACCOUNT_N:]
+def _acc_path(tid: int) -> Path: return _gen_path(tid).with_name('general-accounts.jsonl')
+def keep_account(tid: int, reply_id, trace: list):
+    "A stopped turn's account (account), kept under the line it was filed as."
+    if (a := account(trace)):
+        with _acc_path(tid).open('a', encoding='utf-8') as f: f.write(json.dumps({'reply': reply_id, 'account': a}) + '\n')
+def account_of(tid: int, reply_id) -> str:
+    "The account kept for the stopped turn filed as `reply_id` - '' with none."
+    try: rows = [json.loads(l) for l in _acc_path(tid).read_text(encoding='utf-8').splitlines() if l.strip()]
+    except (OSError, ValueError): return ''
+    return next((r.get('account') or '' for r in reversed(rows) if r.get('reply') == reply_id), '')
+
+
 def keep_turn(tid: int, reply_id, trace: list):
     """A general turn's tool calls and thinking, filed under the reply they led to (general.send_prompt)."""
     if not (steps := trace_steps(since_heard(trace))): return

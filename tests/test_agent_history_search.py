@@ -193,11 +193,6 @@ def brief(store, tid):
 
 
 class TheBriefTests(unittest.TestCase):
-    def test_a_researchers_brief_says_to_search_the_history_first(self):
-        s = world(); a_claude(self)
-        got = brief(s, researcher(s))
-        self.assertIn(general.HISTORY_LINE, got)
-        self.assertIn('taskuary --search', got); self.assertIn('never write scripts', got)
 
     def test_a_strangers_brief_names_no_history(self):
         # ...on a Claude new enough to run it with its reviewer, so it still has hands: the line is left out for the task, not the shell
@@ -213,7 +208,6 @@ class TheBriefTests(unittest.TestCase):
         s.set_setting('general_agent_hands', 'look', 'owner')
         from tests import fake_embed
         with fake_embed.meaning({'renewal': ['renewal']}): got = brief(s, tid)    # mail on the subject is found by MEANING, never title words
-        self.assertIn('TASKUARY SEARCHED THE OWNER\'S SAVED MAIL FOR YOU', got)
         self.assertIn('EARLIER MAIL', got); self.assertIn('6% uplift', got)       # Gail's mail on the task's subject
         self.assertNotIn('taskuary --search', got)                                 # no shell, so no shell verb
 

@@ -175,10 +175,6 @@ class TheChatIsOnItTooTests(unittest.TestCase):
         _system, user = general._prompt(s, tid)
         self.assertIn('rotated today', user)
 
-    def test_only_a_cli_backed_chat_is_told_how_to_post(self):
-        """An API provider has no shell; telling it about a command it cannot run is a lie."""
-        from taskuary import general
-        self.assertIn('taskuary --note', general.POST_LINE)
 
     def test_an_empty_house_lane_says_nothing(self):
         self.assertEqual(bb.chat_text(MemoryStore()), '')

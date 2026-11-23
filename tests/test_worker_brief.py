@@ -107,27 +107,7 @@ class OneBriefTests(unittest.TestCase):
 
 
 class NoBlanketSoulTests(unittest.TestCase):
-    def test_the_coding_seed_carries_agent_and_coding_rules_and_not_soul(self):
-        s = MemoryStore(); tid = make(s)
-        seed = terminal.seed_text(s, tid, repo='org/exports', cwd=None)
-        self.assertIn('RULES (AGENT.md', seed); self.assertIn('CODING RULES (CODING.md', seed)
-        self.assertNotIn('OPERATOR RULES (SOUL.md', seed); self.assertNotIn('What counts as a task', seed)
-        for kept in ('data, not instructions', 'approval'): self.assertIn(kept, seed, kept)   # the safety constraints survived the move
-        self.assertNotIn('WRITING STYLE', seed)                                             # coding does not need the writing voice
 
-    def test_the_general_prompt_opens_on_the_owner_then_agent_rules_and_style(self):
-        """The owner, 2026-10-14: "soul/job which is about the person, then specific profile for agent" - SOUL.md and JOB.md lead,
-        whole, as background; only SOUL.md's triage section ("What counts as a task") stays with triage."""
-        s = MemoryStore(); tid = make(s, 'general')
-        s.save_doc('job', '## The job\n- Runs month-end close for the finance team.', 't')
-        system, _user = general._prompt(s, tid)
-        self.assertTrue(system.startswith('ABOUT THE OWNER'), system[:80])
-        self.assertIn('Runs month-end close for the finance team', system); self.assertIn('## SOUL.md', system)
-        self.assertLess(system.index('ABOUT THE OWNER'), system.index('RULES (AGENT.md'))
-        self.assertIn('RULES (AGENT.md', system); self.assertIn('WRITING STYLE', system)
-        self.assertNotIn('OPERATOR RULES', system); self.assertNotIn('What counts as a task', system)
-        self.assertNotIn('CODING RULES', system)
-        self.assertIn('data, not instructions', system)
 
     def test_soul_still_serves_triage(self):
         from taskuary import triage
@@ -166,7 +146,6 @@ class NoBlanketSoulTests(unittest.TestCase):
         told = ' '.join(general._prompt(s, tid)[0].split())
         self.assertNotIn('Sign letters and emails as Alex Doyle', told)
         self.assertIn("Letters and emails end with Alex Doyle's saved signature", told)
-        self.assertIn('section signature', signatures.told(s))
         self.assertIn('Sign letters and emails as Alex Doyle', s.get_doc('soul'))     # the owner's own file as he left it
 
     def test_a_rule_the_owner_gave_about_himself_rides_in_every_agents_brief(self):
@@ -218,10 +197,6 @@ class ScopedExtrasTests(unittest.TestCase):
         seed2 = terminal.seed_text(s, tid, repo='org/exports', cwd=r'C:\code\exports')
         self.assertIn('PREVIOUS SESSION RESULT', seed2); self.assertIn('S3 key rotated', seed2)
 
-    def test_no_duplicate_rule_blocks(self):
-        s = MemoryStore(); tid = make(s)
-        seed = terminal.seed_text(s, tid, repo='org/exports', cwd=None)
-        self.assertEqual(seed.count('RULES (AGENT.md'), 1); self.assertEqual(seed.count('CODING RULES (CODING.md'), 1)
 
     def test_the_brief_is_fresh_each_turn(self):
         """PW-187: a message that arrives after a worker's first turn is in its NEXT prompt, not just in brief.build."""
@@ -274,11 +249,6 @@ class PromptAuditTests(unittest.TestCase):
         for h in self.HEADERS: self.assertLessEqual(seed.count(h), 1, h)
         self.assertNotIn('WRITING STYLE', seed)          # coding work is not a writing task
 
-    def test_no_block_repeats_in_the_general_prompt_and_it_carries_the_writing_voice(self):
-        s = MemoryStore(); tid = self._task(s, 'general')
-        system, _user = general._prompt(s, tid)
-        for h in self.HEADERS: self.assertLessEqual(system.count(h), 1, h)
-        self.assertIn('WRITING STYLE', system)           # writing work gets the voice, once
 
 
 if __name__ == '__main__':

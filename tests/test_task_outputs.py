@@ -181,13 +181,8 @@ class TaskOutputsTests(unittest.TestCase):
         with mock.patch.object(general.llm_mod, 'build_llm', return_value=lambda system, user, **kw: seen.append(system) or 'Done.'):
             sess.send_prompt('make the comparison a spreadsheet')
         self.assertIn(str(outputs.folder(self.tid)), seen[0])
-        self.assertIn('Never write a URL', seen[0])
+        self.assertIn('YOUR OUTPUTS FOLDER', seen[0])
 
-    def test_the_brief_names_the_folder_and_forbids_made_up_addresses(self):
-        said = outputs.brief(self.tid)
-        self.assertIn(str(outputs.folder(self.tid)), said)
-        self.assertIn('Never write a URL', said)
-        self.assertTrue(outputs.folder(self.tid).is_dir())
 
 
 def _stamp(p: Path, n: int):

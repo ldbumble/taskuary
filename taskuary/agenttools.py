@@ -120,6 +120,24 @@ TOOLS = {
               _S({'add': {'type': 'array', 'items': _STR}, 'reword': {'type': 'object', 'additionalProperties': _STR},
                   'merge': {'type': 'array', 'items': {'type': 'object', 'properties': {'ids': {'type': 'array', 'items': _STR}, 'text': _STR},
                                                        'required': ['ids']}}}), ('POST', '/api/agent/todos')),
+    # WHAT WAS A PROTOCOL TAUGHT IN PROSE IS A TOOL (the owner, 2026-11-23: "everything else the agent can do is a tool"): how a turn ends, the
+    # one question only the owner can answer, and the company's playbooks - each said by its own description, never in every prompt
+    'end_turn': ('own', "Call once as your turn ends: where the task stands, shown on its page. name: the task in 3-6 words. about: 2-3 "
+                        "sentences - which conversation, who asked, for whom. did: the result first (path, link, figure), then what you did. "
+                        "on_you: steps only the owner can take that no card or question carries, each with why. nothing_left: the goal is met "
+                        "and checked. answer_is_result: your words are what was asked. after_press: send (a step of yours follows his press - "
+                        "it wakes you) or handoff. retry: another try may work (draws Try again). corrections: when he corrects you, [{kind: "
+                        "redraft|ask, review: draft id|null, said: his words}]. check_back: {when, what}.",
+                 _S({'name': _STR, 'about': _STR, 'did': _STR, 'on_you': {'type': 'array', 'items': _STR}, 'nothing_left': {'type': 'boolean'},
+                     'answer_is_result': {'type': 'boolean'}, 'after_press': {'type': 'string', 'enum': ['send', 'handoff']},
+                     'retry': {'type': 'boolean'}, 'corrections': {'type': 'array', 'items': {'type': 'object'}},
+                     'check_back': {'type': 'object', 'properties': {'when': _STR, 'what': _STR}}}, ('did',)), ('GET', '/api/tasks/1')),
+    'ask_owner': ('own', "Ask the owner the one thing only they can give - a fact or a decision - with your recommended answer. It stands "
+                         "on the task until they answer, and the answer comes to you. choices: short answers, when it is a pick.",
+                  _S({'question': _STR, 'choices': {'type': 'array', 'items': _STR}}, ('question',)), ('GET', '/api/tasks/1')),
+    'playbooks': ('read', "How this company does each kind of job, written by the owner: with no `name`, the list of playbooks and when each "
+                          "applies; with a `name`, that playbook whole. Read one when the work is that kind of job. Read-only.",
+                  _S({'name': _STR}), ('GET', '/api/tasks/1')),
     # ...and a wake of its own later on this task (checkback.py, the owner 2026-11-05) - for what only time settles
     'check_back': ('own', "Be woken on this task later: at `when` (\"tomorrow 9am\", \"in 2 days\", \"2026-11-12\") with `what` as your "
                           "next turn - a payment that should clear, a reply due by a date. One per task; a new one replaces it. "
@@ -287,7 +305,7 @@ CODING_TOOLS = ('note_peers', 'use_repo', 'find_repos', 'propose_land')
 # Claude Code defers an MCP server's tools - the model holds a bare name like `show` until it searches for it, and none of 8 sessions ever
 # did, so no view was drawn and every result came back as prose. These ride whole on every turn (Claude Code 2.1.285+, the per-tool
 # `anthropic/alwaysLoad`): the view, and the three that set an act up for the owner's press
-ALWAYS_LOAD = ('show', 'propose_reply', 'propose_email', 'propose', 'remember', 'tick')     # ...and the one that keeps what the owner tells it: said in passing, never searched for
+ALWAYS_LOAD = ('show', 'propose_reply', 'propose_email', 'propose', 'remember', 'tick', 'end_turn', 'ask_owner')     # ...and the one that keeps what the owner tells it: said in passing, never searched for
 # ONE LINE A TOOL, FOR EVERY BRAIN (the owner, 2026-11-15: "They should be MCP-style tools with simple JSON: what they do and descriptions.
 # All methods can be searched later"): the whole description of every tool rode on every call - ~15,000 characters, ~650 a tool. A tool is
 # listed by its name, this line and its parameters' names and types (lean); its full words, rules and examples are find_tools' answer
@@ -309,6 +327,8 @@ SHORT = {
     'show': 'Draw a view (table, chart, tiles) or show files in this chat.',
     'tick': "Tick or untick a to-do: `item` is its id.",
     'todos': "Add, reword or merge this task's to-dos.",
+    # end_turn and ask_owner are listed with their whole words: the fields ARE how they are used
+    'playbooks': "How this company does each kind of job: the list, or one by `name`.",
     'check_back': 'Be woken on this task later, at `when`, with `what` as your next turn.',
     'remind': "Take the task off the owner's list until `when`.",
     'ask_stronger': 'Ask a stronger model one hard question; `context` is all it sees.',
@@ -674,6 +694,19 @@ def _call(store, tid: int, name: str, args: dict, doors: dict, skip=()) -> str:
     if name == 'todos': return _j(doors['todos'](tid, a))
     if name == 'remind': return _j(doors['remind'](tid, str(a.get('when') or '')))
     if name == 'new_task': return _j(doors['new_task'](tid, a))
+    if name == 'end_turn':
+        from . import selfclose
+        keep = {k: a[k] for k in ('name', 'about', 'did', 'on_you', 'nothing_left', 'answer_is_result', 'after_press', 'retry', 'corrections', 'check_back') if k in a}
+        selfclose.keep_mark(tid, 'summary', selfclose.summary_mark(keep))
+        return 'Kept - it shows on the task when your answer is filed.'
+    if name == 'ask_owner':
+        from . import selfclose
+        if not str(a.get('question') or '').strip(): raise ValueError('`question` is empty - write the one thing you need from the owner')
+        selfclose.keep_mark(tid, 'ask', selfclose.ask_mark(a['question'], a.get('choices') if isinstance(a.get('choices'), list) else ()))
+        return 'Asked - it stands on the task as their question, and their answer comes to you. Go on with what does not hang on it.'
+    if name == 'playbooks':
+        from . import playbooks
+        return _out(playbooks.lookup(store, store.get_task(tid), str(a.get('name') or '')))
     if name == 'remember': return doors['remember'](tid, str(a.get('note') or ''), str(a.get('about') or ''), str(a.get('replaces') or ''), str(a.get('section') or ''))['says']
     if name == 'ask_stronger':
         out = doors['ask_stronger'](tid, str(a.get('question') or ''), str(a.get('context') or ''))

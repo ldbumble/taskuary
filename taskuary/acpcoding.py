@@ -112,7 +112,6 @@ class ACPCoding:
         self._owed = []                          # ...and what a SECOND stop left unanswered: it rides on his next prompt (_turn)
         self._began = None                       # when the turn now queued began: his press, else the moment it was queued (prompt)
         self.owned = self.woke = self.silent = self.stop_next = False   # his turn; woken once (wake); woken for saying nothing; stop the turn as it goes
-        self.duties = False                                              # told its duties about drafts (selfclose.DRAFTS_ONCE) - once, in _begins
         self.frozen = None                                               # the memory lines this session has been told (general.freeze), from its first turn on
 
     # ── the terminal a Wall cell and the Terminal toggle show ──────────────────────────────────────────────────────────────
@@ -518,12 +517,10 @@ class ACPCoding:
         if self.store and self.task_id:
             try:
                 proposals.move_on(self.store, self.task_id)
-                # ...EACH DUTY ONCE, as a chat's agent is told (selfclose.DRAFTS_ONCE in its startup): the rules ride the first turn that has
-                # facts for them, and every turn after carries the facts alone - told each turn, it said "the draft waits on your Send" each turn
+                # ...the turn's facts, as a chat's agent hears them (general.turn_facts) - facts alone, no rules
                 from .cardqueue import once
                 if (lb := once(general.turn_facts(self.store, self.task_id, resumed=True, rules=False, turn=True), text)):
-                    from . import selfclose
-                    text = f"{'' if getattr(self, 'duties', False) else selfclose.DRAFTS_ONCE + chr(10) * 2}{lb}\n\n{text}"; self.duties = True
+                    text = f'{lb}\n\n{text}'
             except Exception as e: logger.debug(f'task {self.task_id}: the turn was not told its facts - {e}')
             # ...AND WHAT THE OWNER'S MEMORY LEARNED SINCE THIS SESSION BEGAN, as a chat's kept conversation is told (general.freeze - the one
             # road): its opening brief read the memory once, and a fact told mid-conversation never reached it (the memory round, 2026-11-14)

@@ -279,15 +279,6 @@ class AProposalSaysWhatNeverWhere(unittest.TestCase):
         self.assertIn('tool', miss[0])
 
 
-def test_a_session_with_tools_is_never_told_the_marker_road_and_a_bracketed_marker_strips_clean():
-    """Round 4, 2026-11-22: told both roads, Codex (with Taskuary's tools) wrote "[[TASKUARY-PROPOSE {propose_email ...}]]" - an email the
-    marker road does not take - and the turn read "agent done" over "[[]]", the line that it was not put on a card hidden."""
-    from taskuary import general, proposals
-    from taskuary.store import MemoryStore
-    s = MemoryStore()
-    assert 'TASKUARY-PROPOSE' not in general.action_line(s, tools=True)
-    assert 'TASKUARY-PROPOSE' in general.action_line(s, tools=False)
-    assert proposals.strip('[[TASKUARY-PROPOSE {"action": "propose_email", "to": "gail@northwind.example"}]]') == ''
 
 
 def test_post_via_the_browser_hands_the_post_as_he_left_it_to_its_agent_once():

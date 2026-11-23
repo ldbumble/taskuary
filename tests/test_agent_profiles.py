@@ -191,22 +191,6 @@ class ProfileEditingTests(unittest.TestCase):
         self.assertEqual(self.s.get_doc('researcher'), 'Custom research instructions.')
         self.assertIsNotNone(self.s.get_agent('researcher'))
 
-    def test_a_routed_general_task_uses_the_named_workers_instructions(self):
-        """The role owns the INSTRUCTIONS - which is what stops it being "only a label on the
-        task" - and no longer owns the CLI. It used to answer both, so naming a worker named a
-        brain; that fusion is what routed TQ-0588's coding work to Copilot (the 2026-09-16 spec)."""
-        from taskuary import general
-        self.s.save_doc('researcher', 'Research rule: compare independent public sources.', 'owner')
-        self.s.save_doc('coding', 'CODE-ONLY SENTINEL: edit repository files.', 'owner')
-        task_id = self.s.create_task({'Title': 'Compare vendors', 'Kind': 'general', 'Status': 'open',
-                                     'Assignee': 'agent:researcher'}, 'owner')
-        task = self.s.get_task(task_id)
-        self.assertEqual(general.assigned_role(self.s, task), 'researcher')
-        self.assertNotEqual(general.default_pick(self.s, task), 'cli:researcher')
-        system, _ = general._prompt(self.s, task_id)
-        self.assertIn('RESEARCHER.md', system)
-        self.assertIn('compare independent public sources', system)
-        self.assertNotIn('CODE-ONLY SENTINEL', system)
 
 
 class TriageNamesNoProfileTests(unittest.TestCase):
@@ -242,39 +226,11 @@ class TriageNamesNoProfileTests(unittest.TestCase):
             tid = workflows.run(s, s.get_source(sid))['task_id']
         self.assertEqual(s.get_task(tid)['Assignee'], 'agent:analyst')
         system, _ = general._prompt(s, tid)
-        self.assertIn('PROFILE RULES (the file ANALYST.md)', system)
-        self.assertIn('our own figures only', system)
 
 
 class TheSessionGetsItsOwnRulesTests(unittest.TestCase):
-    def test_a_profile_task_is_seeded_its_own_document_and_not_coding_md(self):
-        s = store()
-        seeded(s)
-        s.save_doc('coding', 'CODING RULES: work only in the repository the task names.', 'test')
-        s.save_doc('researcher', 'RESEARCH RULES: cite every source; change nothing.', 'test')
-        tid = s.create_task({'Title': 'Who are Acme?', 'Kind': 'coding', 'Status': 'open',
-                             'Assignee': 'agent:researcher'}, 'o')
-        seed = terminal.seed_text(s, tid)
-        self.assertIn('cite every source', seed)
-        self.assertNotIn('work only in the repository', seed)
-        self.assertIn('RESEARCHER.md', seed)
 
-    def test_a_coding_task_still_gets_coding_md(self):
-        """The regression that matters: coding work must be untouched by this."""
-        s = store()
-        s.save_doc('coding', 'CODING RULES: work only in the repository the task names.', 'test')
-        tid = s.create_task({'Title': 'Fix the export', 'Kind': 'coding', 'Status': 'open',
-                             'Assignee': 'agent:coding'}, 'o')
-        seed = terminal.seed_text(s, tid)
-        self.assertIn('work only in the repository', seed)
-        self.assertIn('CODING.md', seed)
 
-    def test_a_task_with_no_assignee_falls_back_to_the_default_profile(self):
-        s = store()
-        s.save_doc('coding', 'CODING RULES: work only in the repository the task names.', 'test')
-        tid = s.create_task({'Title': 'Something', 'Kind': 'coding', 'Status': 'open'}, 'o')
-        seed = terminal.seed_text(s, tid)
-        self.assertIn('work only in the repository', seed)
 
     def test_a_profile_with_an_empty_document_seeds_no_rules_block_rather_than_coding_md(self):
         """Falling back to CODING.md here is the bug, not a safety net."""

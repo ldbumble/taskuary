@@ -226,15 +226,6 @@ def test_a_sender_cannot_close_the_fence_and_a_cut_closes_it():
     assert long.count('⟦') == long.count('⟧') == 1
 
 
-def test_the_rules_say_what_the_marks_mean_even_when_the_owners_copy_predates_them():
-    from taskuary import brief
-    s = MemoryStore(); s.set_setting('owner_email', 'alex@northwind.example', 't')
-    t = s.create_task({'Title': 'Fix login', 'Kind': 'coding', 'Source': 'email'}, 'router')
-    s.add_message({'TaskId': t, 'Channel': 'email', 'FromEmail': 'erin@northwind.example', 'FromName': 'Erin Blake', 'Subject': 'Login', 'BodyText': 'x', 'Status': 'routed'})
-    assert terminal.FENCE_LINE.split(':')[0] in brief.rules(s, 'agent', 99_999)          # the shipped AGENT.md says it
-    s.save_doc('agent', 'Be careful.', 't')                                                # an owner's copy from before the marks
-    rules = terminal.seed_text(s, t).split('RULES (AGENT.md - every worker): ')[1].split('\n\n')[0]
-    assert rules.startswith('Be careful.') and rules.count('⟦ and ⟧') == 1
 
 
 # ── fix round 2 ─────────────────────────────────────────────────────────────────────────────────────────────────

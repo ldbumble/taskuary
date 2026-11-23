@@ -120,8 +120,6 @@ class ExplicitFinishTests(Base):
                 mock.patch.object(cli, '_post', return_value=(None, out)), contextlib.redirect_stdout(printed):
             cli.main()
         self.assertEqual(printed.getvalue().strip(), out['says']); self.assertNotIn('task closed', printed.getvalue())
-        line = selfclose.owner_closes_line()
-        self.assertIn('never say you closed, marked done or reopened it', line)
 
     def test_a_second_finish_for_the_same_run_does_nothing_twice(self):
         term.SESSIONS['run1'] = live(self.tid)

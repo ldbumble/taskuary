@@ -10,12 +10,6 @@ from taskuary.store import MemoryStore
 ADDRS = [a.rstrip('.') for a in re.findall(r'#[\w=&%.:/-]+', words.LINK_LINE.replace('#settings=<page>', '').replace('#report=<id>', ''))]
 
 
-def test_the_dock_and_a_task_agent_read_the_same_line_once():
-    s = MemoryStore()
-    dock = s.create_task({'Title': 'Taskuary guide', 'Kind': 'general', 'Status': 'open', 'SourceRef': general.DOCK_TAG}, 'owner')
-    own = s.create_task({'Title': 'Month-end spend report', 'Kind': 'general', 'Status': 'open', 'OriginBase': 'owner'}, 'owner')
-    for tid in (dock, own): assert general._prompt(s, tid)[0].count(words.LINK_LINE) == 1
-    assert '#connector=quickbooks' in words.LINK_LINE                 # the form that opens ONE card (canvasLinks: #connector=<type>)
 
 
 def test_every_address_it_teaches_is_one_the_show_button_takes():

@@ -287,7 +287,7 @@ class OneRoundTripTests(unittest.TestCase):
         names = [t['function']['name'] for t in core]
         assert {'search_messages', 'read_message', 'propose_reply', 'propose_email', 'show', 'file_write'} <= set(names) and 'calendar' not in names
         assert names[-1] == 'find_tools' and len(json.dumps(core)) < whole * 0.5
-        TOOL_CHARS = 4_000                # what every call carries before a word of the job: was ~15,000 (23 tools at ~650 characters)
+        TOOL_CHARS = 6_000                # what every call carries before a word of the job: was ~15,000 (23 tools at ~650 characters); end_turn and ask_owner ride in it since the prompt's protocols became tools (2026-11-23)
         assert len(json.dumps(core, separators=(',', ':'))) < TOOL_CHARS
         said = apiagent.find(1, 'p', list(core), 'meeting calendar')
         assert 'set_up_meeting:' in said and 'calendar:' in said, 'found by words, each with its whole instructions'
@@ -446,12 +446,10 @@ class TheSessionTests(unittest.TestCase):
         seen = []
         class Brain:
             def chat(self, msgs, tools, max_tokens, **kw): seen.append(msgs[0]['content']); return {'content': 'Read them.'}
-        self._turn(Brain(), toolbox=('search_messages', 'tick'))
-        self.assertIn(general._SEARCHED[1], seen[0]); self.assertNotIn('NO SEARCH OF ITS OWN', seen[0])
-        self.assertEqual(general.for_toolbox(f'a\n\n{selfclose.TICK_CHAT_LINE}', ('tick',)), f'a\n\n{selfclose.TICK_TOOL_LINE}')
-        self.assertEqual(general.for_toolbox(general.SEARCHED_LINE, ('show',)), general.SEARCHED_LINE)      # ...and without them, as before
+        self._turn(Brain(), toolbox=('search_messages', 'tick', 'propose_reply', 'propose_email'))
+        self.assertNotIn("NONE OF TASKUARY'S TOOLS", seen[0]); self.assertNotIn(selfclose.SUMMARY_OPEN, seen[0])
         seen.clear(); self._turn(Brain())
-        self.assertIn('NO SEARCH OF ITS OWN', seen[0])
+        self.assertIn("NONE OF TASKUARY'S TOOLS", seen[0])         # ...a card without them writes its acts as marks
 
     def test_a_sign_in_the_looped_agent_asks_for_goes_to_the_vault_road(self):
         # the agent never types a password: its marker raises signin.needs, which fills a saved vault login or asks the owner to
@@ -475,7 +473,7 @@ class TheSessionTests(unittest.TestCase):
             session.send_prompt('and which is the oldest?', echo=False)
             self.assertEqual([m['role'] for m in heard[1]], ['system', 'user', 'assistant', 'user'])
             self.assertEqual(heard[1][1], heard[0][1], 'the task, said in full once')
-            self.assertIn('the August period', heard[1][1]['content']); self.assertNotIn('the August period', heard[1][3]['content'])
+            self.assertIn('scheduling portal', heard[1][1]['content']); self.assertNotIn('scheduling portal', heard[1][3]['content'])
             self.assertIn('and which is the oldest?', heard[1][3]['content'])
             # ...and turned down on a later first call (too long for the model now), it is said again whole - once, on a fresh one
             class Full(Brain):
@@ -484,7 +482,7 @@ class TheSessionTests(unittest.TestCase):
                     return super().chat(msgs, *a, **kw)
             with mock.patch.object(llm_mod, 'build_llm', return_value=Full()): session.send_prompt('go on', echo=False)
         self.assertEqual([m['role'] for m in heard[2]], ['system', 'user'])
-        self.assertIn('the August period', heard[2][1]['content']); self.assertIn('and which is the oldest?', heard[2][1]['content'])
+        self.assertIn('scheduling portal', heard[2][1]['content']); self.assertIn('and which is the oldest?', heard[2][1]['content'])
         self.assertEqual([m['role'] for m in session.card_msgs], ['user', 'assistant'])
         # ...and with nothing answering at all, what it had is still its own - with the line it was just told
         class Down(Brain):
@@ -568,7 +566,7 @@ class TheSessionTests(unittest.TestCase):
         class Brain:
             def chat(self, msgs, tools, max_tokens, **kw): seen.append(msgs[0]['content']); return {'content': 'ok'}
         self._turn(Brain(), toolbox=('search_messages', 'propose_email', 'show'))
-        self.assertIn('propose_reply / propose_email', seen[0]); self.assertNotIn(selfclose.DRAFT_OPEN, seen[0])
+        self.assertNotIn(selfclose.DRAFT_OPEN, seen[0])
 
     def test_no_browser_but_a_toolbox_still_loops_and_says_set_the_browser_up(self):
         seen = []
@@ -748,7 +746,7 @@ class TheSessionTests(unittest.TestCase):
         self.assertIn(f"TODAY: {datetime.now().strftime('%A %d %B %Y')}", seen[0])
         self.assertIn('Ray Colton <ray@northwind.example>', seen[0])
         self.assertIn('An AI CLI - a shell, files and a browser on this computer - can be installed from', seen[0])
-        self.assertIn('is a routine Taskuary runs', seen[0])
+        self.assertIn('can be a routine Taskuary runs', seen[0])
 
 
 class TheToolboxTests(unittest.TestCase):
@@ -930,12 +928,6 @@ class TheHandsTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, 'stopped'): self.run_('run_command', command='npm run build', why='build it')
         killed.assert_called_once()
 
-    def test_a_step_that_waits_for_approve_is_asked_for_by_calling_it(self):
-        "Told only that a push waits for the owner's Approve, a model wrote that it needed approval and never called: no button on the task."
-        from taskuary import apiagent
-        said = apiagent.FULL['run_command']                     # its whole words, as find_tools answers
-        for text in (said, apiagent.TOOLS_BRIEF):
-            self.assertIn("waits for the owner's Approve", text); self.assertIn(apiagent.ASK_BY_CALLING, text)
 
     def test_a_command_the_cli_would_hold_is_held_by_the_same_gate_and_never_run(self):
         with mock.patch('taskuary.spawn.popen') as ran:
@@ -1219,10 +1211,8 @@ class CodingOnACardTests(unittest.TestCase):
     def test_it_is_told_this_is_coding_and_where_it_works_as_its_cli_is(self):
         import tempfile
         self.s.add_comment(self.tid, 'owner', self.g.USER_TYPE, 'fix it')
-        self.assertIn(self.g.GENERAL_WHO, self.g._prompt(self.s, self.tid)[0])          # ...general work still is
         self.g.ON_CARD.add(self.tid)
         system, user = self.g._prompt(self.s, self.tid)
-        self.assertIn(self.g.CODING_WHO, system)
         self.assertNotIn('non-coding', system); self.assertNotIn('Do not turn this into a coding task', system)
         self.assertIn('REPOSITORIES - no checkout is chosen for this task yet', user)      # nothing placed it: the ones to pick from
         repo = tempfile.mkdtemp()

@@ -115,15 +115,9 @@ RUN_WAIT = 600                 # one command - a build, a test run
 SEARCHERS = ('brave_search', 'tavily', 'exa', 'serpapi', 'serper')
 
 
-TOOLS_BRIEF = ("YOUR TASKUARY TOOLS are functions you call, not commands to write out - the connected systems among them (list_systems, "
-               "run_system) - and, where offered, a Claude Code session's hands: files (files_list, file_read, file_write, file_edit) "
-               "anywhere you name, the web (web_search, web_fetch for one page) and run_command (git, scripts, builds), under its rules - a "
-               "step that leaves this computer, a delete outside your folder or an act that can't be undone waits for the owner's Approve. "
-               + ASK_BY_CALLING + " Each tool is listed by one line: find_tools with its name gives its whole instructions - read them "
-               "before a first use where the line is not enough - and finds the tools not listed. " + SHOW_WHAT)
-NO_BROWSER = ('THIS COMPUTER HAS NO BROWSER FOR AGENTS YET, so you cannot open a site this turn. Do not say '
-              '"cannot be done from here" and do not ask the owner to paste the page: say in one line that the browser is not set up, and '
-              'end with [[TASKUARY-ASK]] Set up the agent browser under {where} so I can do this myself?')
+TOOLS_BRIEF = ("YOUR TASKUARY TOOLS are functions you call, each listed by one line: find_tools with its name gives its whole instructions, "
+               "and finds the tools not listed.")
+NO_BROWSER = 'THIS COMPUTER HAS NO BROWSER FOR AGENTS YET - the owner sets one up under {where}.'
 # ...and A CARD THAT TAKES NO TOOLS is told so in the one fact of what it can do (capabilities.fact 'none'): its own line here ended every
 # answer "connect an AI that can use tools ... or switch this task to one?" - on a computer with no other AI, and on asks no browser served
 
@@ -527,7 +521,7 @@ def tools_for(tid: int, sid: str, browser: bool, stranger: bool = False, post=No
 # ...and THE BROWSER'S OTHER HANDS COME WITH ITS FIRST PAGE (browser_open loads BROWSER_MORE): a page is only ever looked at and clicked after one is open
 LATER = frozenset({'read_attachment', 'search_knowledge', 'owner_memory', 'calendar', 'list_systems', 'run_system', 'remind', 'ask_stronger',
                    'note_peers', 'use_repo', 'find_repos', 'propose_land', 'withdraw_draft', 'keep_card', 'hand_over', 'sign_form', 'answer_invite', 'set_up_meeting', 'share',
-                   'search_tasks', 'person', 'guide', 'todos', 'check_back', 'browser_look', 'browser_click', 'browser_fill', 'browser_press',
+                   'search_tasks', 'person', 'guide', 'todos', 'check_back', 'playbooks', 'browser_look', 'browser_click', 'browser_fill', 'browser_press',
                    'browser_signup', 'browser_screenshot', 'web_fetch', 'files_list', 'reply_not_needed', 'propose', 'my_task', 'new_task'})
 BROWSER_MORE = ('browser_look', 'browser_click', 'browser_fill', 'browser_press', 'browser_signup', 'browser_screenshot', 'hand_over')
 LOAD = 'find_tools'

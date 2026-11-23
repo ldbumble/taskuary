@@ -88,10 +88,3 @@ def test_every_road_carries_the_choice_tool_endpoint_cli_and_the_marker():
     assert selfclose.reply_who('[[TASKUARY-REPLY]]Hi[[/TASKUARY-REPLY]]') == {} and selfclose.reply_marker('[[TASKUARY-REPLY]]Hi[[/TASKUARY-REPLY]]')[1] == 'Hi'
 
 
-def test_the_prompt_tells_the_agent_to_choose_and_to_say_so():
-    line = general.action_line(MemoryStore())
-    assert 'WHO HEARS IT IS YOURS TO DECIDE' in line
-    assert 'goes to that one person only (`only`), and you say so' in line
-    assert 'reply to that one (`answers`), and say so' in line
-    assert 'tell the owner whom it goes to and why whenever it is not the plain reply to everyone on the newest mail' in line
-    assert 'only=yes' in selfclose.REPLY_LINE and 'answers=' in selfclose.REPLY_LINE

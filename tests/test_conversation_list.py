@@ -1418,15 +1418,6 @@ class TheList(unittest.TestCase):
         self.assertEqual(conversation.clean(f'Both are free in March.\n\n{block}'), 'Both are free in March.')       # an opening marker with no close
         self.assertEqual(conversation.clean(block), 'Looked at both.')                                               # only the block: its own sentence, once
 
-    def test_each_duty_is_said_once_at_startup_and_a_turn_carries_only_what_is_new(self):
-        self.say('Draft it.', 'l-one'); self.rest()
-        self.s.add_review({'TaskId': self.tid, 'MessageId': self.s.list_messages(self.tid)[0]['MessageId'], 'Kind': 'draft_reply', 'Status': 'pending',
-                           'Channel': 'email', 'DraftText': 'Hi Gail, which city? Alex'})
-        system, _late, _user = general.prompt_parts(self.s, self.tid)
-        turn = general.turn_facts(self.s, self.tid, resumed=True, rules=False)
-        self.assertEqual(system.count(selfclose.LATEST_LINE), 1); self.assertEqual(system.count(selfclose.WITHDRAW_LINE), 1)
-        self.assertNotIn(selfclose.LATEST_LINE, turn); self.assertNotIn(selfclose.WITHDRAW_LINE, turn)
-        self.assertIn('THE DRAFT WAITING NOW (to Gail Moreno', turn); self.assertNotIn('rv', turn.split('THE DRAFT WAITING NOW')[1][:40])    # no id for it to say back
 
 
 

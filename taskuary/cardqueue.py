@@ -288,9 +288,7 @@ def line(s: dict) -> str:
 
 
 SCREEN_HEAD = ("WHAT THE OWNER'S SCREEN SHOWS ON THIS TASK NOW, AND WHAT CAME OF EACH CARD (Taskuary's record - a card it does not name is not "
-               'on his screen; never say otherwise, and name a card by what it is, never by where it stands). Every input greys what waited: '
-               'one greyed that still stands, keep_card it - it comes back as it was under the newest line; one the input changes, raise its new '
-               'version; one turned down or failed is raised again only as a new card:')
+               'on his screen; every input greys what waited, and keep_card brings a greyed one back as it was):')
 NOTHING = 'Nothing waits for his press.'
 SETTLED = 6                     # the settled cards told, newest last: enough that a sent letter is never drafted again
 
@@ -310,8 +308,8 @@ def outcome(r) -> str:
     err, why = str(r.get('ActError') or ''), _flat(r.get('ActError') or r.get('Reason') or 'no reason was given')
     if err.startswith(ACT_CUT): return ' - Taskuary restarted while his press ran: it MAY have been done, so check before anything else'
     if err: return f' - his press failed ({why}) and nothing of it was done'
-    if r.get('DeliveryState') == 'unknown': return f' - his Send MAY have gone ({why}): never send it or set it up again unless he asks'
-    if r.get('DeliveryState') == 'failed': return f' - his Send did not go ({why}); never set it up again'
+    if r.get('DeliveryState') == 'unknown': return f' - his Send MAY have gone ({why})'
+    if r.get('DeliveryState') == 'failed': return f' - his Send did not go ({why})'
     return ''
 
 

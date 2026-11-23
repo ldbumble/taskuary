@@ -104,16 +104,14 @@ def capabilities(store) -> dict:
 # repository" - an agent with a shell, told only that it did "non-coding work", named buttons that do not exist and never the one switch that
 # does. One fact, read from the state the app itself goes by - its hands, the other AIs he could hand it to, Developer mode - and nothing else
 # says it: never a button, a setting or an AI that is not here.
-FACT_HEAD = "WHAT YOU CAN DO HERE (this computer as it is now - never name a button, setting or AI that is not in this list):"
+FACT_HEAD = "WHAT YOU CAN DO HERE (this computer as it is now):"
 HANDS = {
-    'all': ('A shell and files on this computer: a folder the owner names on this task is yours to read and change - for a fix in code there, '
-            'make the change, run its tests and commit it there. A push or anything else that leaves this computer becomes his card when you run it. '
-            'Say what a file holds from the file as it is now, never from memory - another task may have changed it.'),
+    'all': ('A shell and files on this computer: a folder the owner names on this task is yours to read and change. A push or anything else '
+            'that leaves this computer becomes his card when you run it.'),
     'look': ("Reading only: you read files and look things up, and change and run nothing - his setting "
              f"{settings_schema.link('general_agent_hands', 'General agents can')} is 'only look things up'."),
-    'none': ('Words only: this AI takes no tools, so you open no file, page or system and run nothing - you have what this conversation holds. '
-             'A file he asks for (a sheet, a document, code) you write whole in a fenced block whose first line names it - ```csv file=quotes.csv, '
-             '```xlsx file=quotes.xlsx with `a | b | c` rows - and Taskuary saves it to the task\'s files.'),
+    'none': ('Words only: this AI takes no tools - you have what this conversation holds. A file written whole in a fenced block whose first '
+             'line names it (```csv file=quotes.csv, ```xlsx file=quotes.xlsx with `a | b | c` rows) is saved to the task\'s files.'),
 }
 
 
@@ -144,12 +142,10 @@ def fact(store, hands: str, pick: str = '', tools=()) -> str:
     out = [FACT_HEAD, f'- {HANDS.get(hands, HANDS["none"])}',
            *([f"- Your own hands here, as tools: {'; '.join(mine)}."] if mine else []),
            f"- Another AI could do this task: {', '.join(others)} - he picks it in the Agent menu on this task." if others else
-           '- No other AI is connected here: never offer to switch this task to one.',
+           '- No other AI is connected here.',
            # ...the road for hands it LACKS: an agent with tools has them, and was told to send him off to install one as a to-do (2026-11-19)
-           *([] if cli or hands != 'none' else [f"- An AI CLI - a shell, files and a browser on this computer - can be installed from {words.link('ai_apps')}: "
-                             'where the work needs hands you lack, that is the road to name.']),
-           '- Work that should run again by itself is a routine Taskuary runs: set it up for his one press (save_routine), never "it cannot be '
-           'scheduled".',
+           *([] if cli or hands != 'none' else [f"- An AI CLI - a shell, files and a browser on this computer - can be installed from {words.link('ai_apps')}."]),
+           '- Work that should run again by itself can be a routine Taskuary runs (propose save_routine).',
            '- Developer mode is on: coding tasks also run in a terminal of their own.' if dev else
            f'- Developer mode is off ({settings_schema.link("developer_mode", "Settings")}): it adds coding tasks in a terminal '
            'of their own' + (' - a change in a folder he names needs none of it.' if hands == 'all' else '.')]

@@ -33,8 +33,7 @@ def login_kept_in_a_project(s) -> int:
 # (name, setup(store) -> tid, needs, never). A need may be a callable of the store, for what setup made (a temp folder's path).
 CASES = [
     ('login_kept_in_a_project', login_kept_in_a_project,
-     [lambda s: s._case_dir, 'PROFILE RULES (the file ASSISTANT.md)', 'Your part: give Gail the portal login',
-      'goes only in the reply you draft', 'their Send shares it', 'never in the conversation, your steps or your summary', '.env'],
-     ['PROFILE RULES (the file RESEARCHER', 'into the conversation or a draft', 'PORTAL_USER=placeholder']),
+     [lambda s: s._case_dir, 'goes only in the draft that needs it', 'never in your answer, steps or summary'],
+     ['PROFILE RULES', 'into the conversation or a draft', 'PORTAL_USER=placeholder']),
 ]
 LATER = {}   # a need a later task supplies: (case, need) -> the task

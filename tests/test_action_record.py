@@ -207,7 +207,6 @@ class APressThatFailed(Acts):
         with mock.patch.object(general, 'to_agent', return_value=''): self.fail(rv)
         did = general.turn_facts(self.s, self.tid).split('- Failed ')[1]
         self.assertIn(f"rv{rv['ReviewId']}", did); self.assertIn('nothing went', did); self.assertIn('the token may not comment', did)
-        self.assertIn('raised again only as a new card', general.turn_facts(self.s, self.tid))
 
     def test_a_held_step_that_failed_says_so_on_its_row(self):
         sg.check(self.s, self.tid, 'run1', 'git push origin fix-export', 'Bash', HELD)
@@ -401,19 +400,7 @@ class APartThatIsAnotherJob(Acts):
         self.assertIsNone(three)
         self.assertIn(f"rv{one['ReviewId']}", why[0])
 
-    def test_the_agent_is_told_it_can(self):
-        self.assertIn('break_out', agenttools.TOOLS['propose'][1])
-        self.assertIn('"action": "break_out"', general.action_line(self.s))
 
-    def test_a_proposes_fields_are_said_once_where_the_tool_carries_them(self):
-        """The instruction trim, 2026-11-16: with the propose tool in hand its own description holds break_out's and save_routine's fields;
-        NEXT STEPS names the act alone. The marked-block road, which has no tool, keeps them whole."""
-        tooled, desc = general.action_line(self.s, tools=True), agenttools.TOOLS['propose'][1]
-        for act, field in (('break_out', '"messages"'), ('save_routine', '"script"')):
-            self.assertIn(f'propose {act}', tooled); self.assertIn(field, general.action_line(self.s))
-        self.assertNotIn('"script"', tooled); self.assertNotIn('"messages"', tooled)
-        for shape in ('standard-library Python', 'rows on stdin', 'every_minutes', 'none: on demand'): self.assertIn(shape, desc)
-        self.assertIn('never for a one-off', tooled)
 
 
 class TheOwnersWordsInAnEmptyBox(Acts):

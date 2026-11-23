@@ -65,7 +65,7 @@ class TheServer(unittest.TestCase):
         said = rpc(self.tid, 'tools/call', {'name': 'find_tools', 'arguments': {'query': 'propose_reply'}}).json()['result']['content'][0]['text']
         self.assertIn('nothing is sent', said)
         # ...and the view and the acts load with the session, never a bare name it must search for (2026-11-13: no view in 8 sessions)
-        self.assertEqual({n for n, t in tools.items() if (t.get('_meta') or {}).get('anthropic/alwaysLoad')} - {'propose_email', 'propose'}, {'show', 'propose_reply', 'remember', 'tick'})
+        self.assertEqual({n for n, t in tools.items() if (t.get('_meta') or {}).get('anthropic/alwaysLoad')} - {'propose_email', 'propose'}, {'show', 'propose_reply', 'remember', 'tick', 'end_turn', 'ask_owner'})
         self.assertNotIn('_meta', tools['search_messages'])
 
     def test_the_invoice_an_agent_made_rides_on_its_email_card(self):

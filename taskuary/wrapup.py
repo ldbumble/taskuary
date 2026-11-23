@@ -143,11 +143,10 @@ def reply_target(store, task_id: int, heard: bool = False):
 
 # THE OWNER'S OWN ASK HAS NOBODY TO REPLY TO (the owner, 2026-11-06: "What is this? doesn't make any sense" - an agent saved a reply on a task
 # they made themselves, and narrated the refusal to them). Said in its first prompt, and the reply tools are not offered on it
-OWN_ASK = "This task is your owner's own ask - there is nobody to reply to; answer in the chat."
+OWN_ASK = "This task is the owner's own ask - nobody else wrote in, so there is nobody to reply to."
 # AN AUTOMATED SENDER IS NOBODY TO REPLY TO EITHER (the owner, 2026-11-10: "it's replying to a no reply email ... github emails are not supposed
 # to be respodned to"): a finished run on a code host's failure notice set its write-up up as a reply to the notifier, Send and all
-NOTICE = ('This task came from an automated notice - nobody reads a reply to it, so there is none to write. Your write-up is for your owner, '
-          'here on the task; if a person should hear of it, propose_email to that person.')
+NOTICE = 'This task came from an automated notice - nobody reads a reply to it.'
 def reads_replies(m: dict) -> bool:
     "Is somebody behind this message who reads a reply: it came on a channel someone writes on, from a person, not a machine (categories.automated)."
     from .categories import automated
@@ -379,9 +378,7 @@ def attach_files(store, rid: int, files, agent: str = 'agent') -> dict:
 # attached" turn after turn. Every save's answer carries each file the reply does not carry - this save's refusals and the ones still standing
 # on the review (verdicts.refused) - with what to do about it, and the next turn's brief says the same (general._prompt) while one stands.
 REFUSED_HEAD = 'THE REPLY YOU SAVED DOES NOT CARRY EVERY FILE YOU HANDED OVER'
-REFUSED_TELL = ("Its words must not say these are attached. Tell the owner plainly which file did not attach and why, and offer a way on: "
-                "a link to it in their cloud storage, or a smaller copy (zipped, split or trimmed) attached again. Then save the reply again "
-                "with words that match what it carries.")
+REFUSED_TELL = ''
 def refused_files(store, rid) -> list:
     """`name: why` of each file the review's envelope keeps as not attached."""
     from .verdicts import _envelope

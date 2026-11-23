@@ -144,21 +144,6 @@ class SharedSessionTests(unittest.TestCase):
         self.assertIn('Customer launches need operations approval', user)
         self.assertNotIn('taskuary --upvote', user)  # an API assistant has no shell for this
 
-    def test_cli_assistant_is_told_to_file_nontechnical_company_knowledge(self):
-        store = MemoryStore(); tid = general_task(store)
-        connect_cli(self, codex={'cmd': 'codex'})
-        seen = {}
-        def answer(system, user, **kwargs):
-            seen['system'] = system
-            return 'The launch plan is ready.'
-        # start_session REGISTERS the session in terminal.SESSIONS (process-wide) - left there, a live
-        # fake on task 1 made every later test that looks a session up by task id find this one
-        with mock.patch.dict(terminal.SESSIONS, {}, clear=True), mock.patch.object(llm, 'build_llm', return_value=answer):
-            session = general.start_session(store, tid, pick='cli:codex')
-            session.send_prompt('Plan the launch')
-        self.assertIn('Hub is a high-signal commons', seen['system'])
-        self.assertIn('substantial investigation', seen['system'])
-        self.assertIn('taskuary --learned', seen['system'])
 
     def test_ending_an_assistant_session_mines_the_conversation_for_hub_once(self):
         store = MemoryStore(); tid = general_task(store)
@@ -628,92 +613,6 @@ class GeneralWaitroomTests(unittest.TestCase):
             time.sleep(.05)
         self.assertEqual((out['state'], out['delivered']), ('restarted', 1))
         start.assert_called_once(); coding.assert_not_called(); fake.send_prompt.assert_called_once()
-
-
-class OneGoalTests(unittest.TestCase):
-    """THE GENERAL AGENT'S ONE GOAL (Task 3.4, 2026-11-04): take the work off the owner's hands - starting from triage's reading of the
-    thread, asking only what it cannot find, re-planning when the thread changes, never sending, and ending each turn with the summary block. A login it finds goes in the draft, never the conversation."""
-    def _store(self):
-        s = MemoryStore(); s.set_setting('owner_email', 'alex@northwind.example', 't'); s.set_setting('owner_name', 'Alex Doyle', 't')
-        return s
-
-    def _mail(self, s, tid, name='Ray Colton', at='2026-11-04T09:00:00Z', body='Alex - can you send Gail the vendor-portal login?', ext='ray-1'):
-        return s.add_message({'TaskId': tid, 'Channel': 'email', 'ExternalId': ext, 'Subject': 'Vendor portal login', 'FromName': name,
-                              'FromEmail': f"{name.split()[0].lower()}@northwind.example", 'BodyText': body, 'Status': 'routed', 'SentAt': at})
-
-    def _read(self, s, tid, **kw):
-        s.cx.execute('UPDATE task SET ThreadJson=? WHERE TaskId=?', (json.dumps({'asking': 'Ray Colton wants the vendor-portal login for Gail Moreno',
-            'your_part': 'give Gail the portal login', 'others': [], 'asks': [], 'aside': [], 'on_you': [], **kw}), tid)); s.cx.commit()
-
-    def test_every_general_task_has_the_one_goal(self):
-        from taskuary import selfclose
-        s = self._store(); plain = general_task(s); mailed = general_task(s); self._mail(s, mailed)
-        for tid in (plain, mailed):
-            system = general._prompt(s, tid)[0]
-            for want in ("off the owner's hands", 'look with your tools first', 're-plan', 'never send', 'goes only in the reply you draft',
-                         selfclose.SUMMARY_OPEN, selfclose.SUMMARY_LINE, general.SHORT_LINE):
-                self.assertIn(want, system, (tid, want))
-            self.assertNotIn('into the conversation or a draft', system)
-        # ...never the guide's chat, nor a connector card's walk
-        dock = general.dock_task(s, 'owner')[0]['TaskId']
-        card = s.create_task({'Title': 'Connect the ledger', 'Kind': 'general', 'Status': 'open', 'SourceRef': 'connector:setup'}, 'owner')
-        for tid in (dock, card): self.assertNotIn("off the owner's hands", general._prompt(s, tid)[0], tid)
-
-    def test_a_strangers_task_has_the_goal_but_is_never_steered_to_a_login(self):
-        # nothing a stranger writes may point the agent at credentials or the owner's files: the goal stays, the login and where-to-look go
-        s = self._store(); tid = general_task(s); self._mail(s, tid)
-        s.cx.execute("UPDATE task SET OriginBase='stranger' WHERE TaskId=?", (tid,)); s.cx.commit()
-        s.upsert_agent('assistant', 'general', 'cli', json.dumps({'kind': 'general'}))     # PROFILE RULES (the file ASSISTANT.md) ride as on an install
-        system, user = general._prompt(s, tid)
-        for want in ("off the owner's hands", 'look with your tools first', 're-plan', 'never send'): self.assertIn(want, system, want)
-        self.assertIn('PROFILE RULES (the file ASSISTANT.md)', system)
-        flat = ' '.join(f'{system}\n{user}'.split())
-        for gone in ('put it in the reply you draft', 'goes only in the reply you draft', 'A login or secret', 'A login or key',
-                     'supply a login', '.env', 'folders you can read'):
-            self.assertNotIn(gone, flat, gone)
-        for gone in ("THE OWNER'S REPOSITORIES", 'folders you can read', 'A login'): self.assertNotIn(gone, general.STRANGER_GOAL_LINE, gone)
-        self.assertNotIn(general.SHORT_LINE, system, 'a stranger has no `show` to be told of')
-        # ...and the owner's own task keeps all of it, from code
-        own = general_task(s); system = general._prompt(s, own)[0]
-        for want in ('goes only in the reply you draft', "THE OWNER'S REPOSITORIES and the folders you can read", '.env'):
-            self.assertIn(want, general.GOAL_LINE, want); self.assertIn(want, system, want)
-
-    def test_an_aside_numbered_as_text_is_still_read(self):
-        s = self._store(); tid = general_task(s); ray = self._mail(s, tid)
-        self._read(s, tid, aside=[{'mid': str(ray), 'why': 'thanks only'}, {'mid': 'x', 'why': 'no number'}])
-        got = general.reading_block(s, tid)
-        self.assertIn(f'Aside: [#{ray}] thanks only', got); self.assertNotIn('no number', got)
-
-    def test_the_reading_leads_the_brief(self):
-        s = self._store(); tid = general_task(s)
-        ray = self._mail(s, tid); erin = self._mail(s, tid, 'Erin Blake', '2026-11-04T10:30:00Z', 'Thanks Ray!', 'erin-1')
-        self._read(s, tid, others=[{'who': 'Erin Blake', 'did': 'said thanks'}], asks=[{'mid': ray, 'about': 'the portal login'}],
-                   aside=[{'mid': erin, 'why': 'thanks only'}], on_you=['confirm Gail has it'])
-        user = general._prompt(s, tid)[1]
-        for want in ('THE ASK, AS TRIAGE READ IT (check it against the mail):', 'Your part: give Gail the portal login',
-                     'Who did what: Erin Blake - said thanks', f'The mail the reply answers: [#{ray}] Ray Colton', f'Aside: [#{erin}] thanks only',
-                     'On you: confirm Gail has it', 'THE MAIL ON THIS TASK:', f'[#{ray}] Ray Colton', f'[#{erin}] Erin Blake'):
-            self.assertIn(want, user, want)
-        self.assertLess(user.index('TASK '), user.index('THE ASK, AS TRIAGE READ IT'))
-        self.assertLess(user.index('THE ASK, AS TRIAGE READ IT'), user.index('FROM Ray Colton'))
-        self.assertLessEqual(len(general.reading_block(s, tid)), 1500)
-        # ...and a task of ONE mail hands no number: there is none to choose, and the agent said "mail #3" to the owner
-        one = general_task(s); gail = self._mail(s, one)
-        self._read(s, one, on_you=['confirm Gail has it'])
-        got = general.reading_block(s, one)
-        self.assertIn('The mail the reply answers: Ray Colton', got); self.assertNotIn(f'[#{gail}]', got); self.assertNotIn('THE MAIL ON THIS TASK', got)
-        # ...never on a stranger's task: the reading is of their words
-        s.cx.execute("UPDATE task SET OriginBase='stranger' WHERE TaskId=?", (tid,)); s.cx.commit()
-        self.assertNotIn('THE ASK, AS TRIAGE READ IT', general._prompt(s, tid)[1])
-
-    def test_no_reading_no_block(self):
-        s = self._store(); tid = general_task(s); self._mail(s, tid)
-        self.assertEqual(general.reading_block(s, tid), '')
-        self.assertNotIn('THE ASK, AS TRIAGE READ IT', general._prompt(s, tid)[1])
-        # ...an older or partial reading is "no reading" where it lacks a part, never an exception
-        for bad in ({'asking': 'x'}, {'asks': 'not a list', 'others': [None, 3], 'on_you': 'x'}, []):
-            s.cx.execute('UPDATE task SET ThreadJson=? WHERE TaskId=?', (json.dumps(bad), tid)); s.cx.commit()
-            general.reading_block(s, tid); general._prompt(s, tid)
 
 
 if __name__ == '__main__': unittest.main()

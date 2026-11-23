@@ -648,12 +648,12 @@ def decide(store, rv: dict, verb_in: str, *a, closes: bool = False, **kw) -> dic
     """_decide, and a yes that went wakes the task's agent where its last turn said it waits on that Send (general.follow_up).
     `closes`: Send and close - the task's close, through its one gate, as the send went (out['shut'])."""
     out = _decide(store, rv, verb_in, *a, **kw)
-    # ...his answer on a proposed card is written down for the one rule (actrule): the same card raised again after his no is refused as his.
+    # ...his answer on a proposed card is written down for the one rule (gate): the same card raised again after his no is refused as his.
     # A held act's own gate writes its own (perform, declined)
     if out.get('ok') and rv.get('Kind') == 'action' and rv.get('TaskId') and verb_in in ('approve', 'edit', 'reject'):
-        from . import actrule, proposals
+        from . import gate, proposals
         if proposals._action(rv) not in proposals.HELD_ACTS:
-            actrule.remember(store, rv['TaskId'], [actrule.card_key(proposals._draft(rv))], 'dismissed' if verb_in == 'reject' else 'approved')
+            gate.remember(store, rv['TaskId'], [gate.card_key(proposals._draft(rv))], 'dismissed' if verb_in == 'reject' else 'approved')
     if QUIET.get(): return out
     if verb_in in ('approve', 'edit', 'merge_anyway') and out.get('ok') and not out.get('send_error') and rv.get('TaskId'):
         from . import cardqueue, general, proposals

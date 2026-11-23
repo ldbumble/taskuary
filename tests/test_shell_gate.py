@@ -102,11 +102,11 @@ class Holding(unittest.TestCase):
         """The north-star audit, 2026-11-10: a CLI's `curl -X POST` to an outside host went out unseen on the hook road - only the ACP road
         read HTTP writes, and refused them flat. One reading of the command (shellgate.acts) now, the same Approve card a push gets."""
         cmd = 'curl -X POST https://hooks.vendor.example/notify -d "{}"'
-        d = hooks.command_gate(self.s, self.tid, 'run1', cmd, 'Bash', r'C:\work\ledger')['hookSpecificOutput']
+        d = _check(self.s, self.tid, 'run1', cmd, 'Bash', r'C:\work\ledger')['hookSpecificOutput']
         self.assertEqual(d['permissionDecision'], 'deny'); self.assertIn('held this for the owner', d['permissionDecisionReason'])
         [rv] = self.pending(); p = json.loads(rv['DraftText'])
         self.assertEqual((p['action'], p['command']), ('shell_act', cmd)); self.assertIn('send data to hooks.vendor.example', p['what'])
-        self.assertEqual(hooks.command_gate(self.s, self.tid, 'run1', 'curl -s -X POST http://127.0.0.1:7787/api/agent/tick -d "{}"', 'Bash', ''), {})
+        self.assertEqual(_check(self.s, self.tid, 'run1', 'curl -s -X POST http://127.0.0.1:7787/api/agent/tick -d "{}"', 'Bash', ''), {})
 
     def test_a_push_is_refused_and_put_on_the_task_once(self):
         d = self.held()['hookSpecificOutput']
@@ -247,7 +247,7 @@ class Hook(unittest.TestCase):
         """Agent walk 2, 2026-11-10: "The agent asked to push ... - its terminal asks you to allow it" on a coding agent that talks ACP. It
         has no terminal: the ask goes back to Taskuary's own gate, which had answered the push with the landing card."""
         d = self.hook(self.push, acp=True)['hookSpecificOutput']
-        self.assertEqual(d['permissionDecision'], 'ask', "still the CLI's ask: acpgate answers it")
+        self.assertEqual(d['permissionDecision'], 'ask', "still the CLI's ask: gate answers it")
         self.assertEqual([c['Body'] for c in self.s.list_comments(self.tid) if 'terminal' in c['Body']], [])
         self.assertTrue(any(a['Action'] == 'shell_act_asked' for a in self.s._rows('SELECT * FROM audit')))
         self.assertEqual(self.held(), [])
@@ -419,25 +419,25 @@ class ReadingOutside(unittest.TestCase):
         self.assertEqual(rg.of_command(self.s, self.tid, 'ls ~/*', self.work), ([], ''), 'a plain * takes no dot-folder, as the shell')
 
     def test_work_in_its_own_folders_runs_and_a_read_outside_is_the_held_card(self):
-        from taskuary import acpgate, outputs
-        self.assertEqual(acpgate.decide(self.read(os.path.join(self.work, 'notes.md')), self.ctx)[0], acpgate.ALLOWED)
-        self.assertEqual(acpgate.decide(self.read(str(outputs.folder(self.tid) / 'total.xlsx')), self.ctx)[0], acpgate.ALLOWED)
-        got = acpgate.decide(self.read(os.path.join(self.docs, 'conftest.py')), self.ctx)
-        self.assertEqual(got[0], acpgate.HELD); self.assertIn('held this for the owner', got[1])
+        from taskuary import gate, outputs
+        self.assertEqual(gate.tool_call(self.read(os.path.join(self.work, 'notes.md')), self.ctx)[0], gate.ALLOWED)
+        self.assertEqual(gate.tool_call(self.read(str(outputs.folder(self.tid) / 'total.xlsx')), self.ctx)[0], gate.ALLOWED)
+        got = gate.tool_call(self.read(os.path.join(self.docs, 'conftest.py')), self.ctx)
+        self.assertEqual(got[0], gate.HELD); self.assertIn('held this for the owner', got[1])
         [rv] = self.pending(); p = json.loads(rv['DraftText'])
         self.assertEqual((p['action'], p['command'], p['why']), ('shell_act', '', "it is outside this task's own folders"))
         self.assertIn('conftest.py', p['what']); self.assertEqual(p['reads'], [os.path.realpath(self.docs)], 'the folder as he spells it, not case-folded')
         # ...the same read on the shell road, by the one gate a CLI's and the API's commands pass
-        d = hooks.command_gate(self.s, self.tid, 'run1', f'Get-Content "{os.path.join(self.docs, "conftest.py")}"', 'PowerShell', self.work)
+        d = _check(self.s, self.tid, 'run1', f'Get-Content "{os.path.join(self.docs, "conftest.py")}"', 'PowerShell', self.work)
         self.assertEqual(d['hookSpecificOutput']['permissionDecision'], 'deny')
-        self.assertEqual(hooks.command_gate(self.s, self.tid, 'run1', 'Get-Content notes.md', 'PowerShell', self.work), {})
+        self.assertEqual(_check(self.s, self.tid, 'run1', 'Get-Content notes.md', 'PowerShell', self.work), {})
 
     def test_codexs_powershell_call_is_read_run_and_approved_as_the_script_it_is(self):
         """The HIPAA walk, 2026-11-21: Codex reports each call as its argv joined by POSIX quoting, the script's quoting switching mid-word.
         Cut at the `;` inside its quotes, `$outDir = "<its outputs folder>"; New-Item $outDir` was held as "a path it builds from a variable"
         - the task's own folder - and Approve unquoted it by hand: PowerShell's parser failed on it. A PowerShell array of folders read as
         `", in Desktop`."""
-        from taskuary import acpgate, outputs, readgate as rg
+        from taskuary import gate, outputs, readgate as rg
         out = str(outputs.folder(self.tid))
         script = f'$outDir = "{out}"; New-Item -ItemType Directory -Force -Path $outDir | Out-Null; py make_deck.py $outDir'
         ps = r'C:\WINDOWS\System32\WindowsPowerShell\v1.0\powershell.exe'
@@ -445,10 +445,10 @@ class ReadingOutside(unittest.TestCase):
         shown = f'"{ps}" -Command \'$outDir = "{head}\'"\\{tail}"\'"; New-Item -ItemType Directory -Force -Path $outDir | Out-Null; py make_deck.py $outDir\''
         if not tail: shown = f'"{ps}" -Command \'{script}\''
         tc = {'toolCallId': 'c', 'kind': 'execute', 'title': 'Run command', 'rawInput': {'command': shown, 'cwd': self.work}}
-        t = acpgate.tool_of(tc)
+        t = gate.tool_of(tc)
         self.assertEqual((t['command'], t['shell'], t['argv'][1:]), (script, 'PowerShell', ['-Command', script]))
         self.assertNotIn(None, rg.command_paths(shown, self.work, rg.env_for(self.s, self.tid, self.work)))
-        self.assertEqual(acpgate.decide(tc, self.ctx)[0], acpgate.ALLOWED, "the task's own outputs folder needs no press")
+        self.assertEqual(gate.tool_call(tc, self.ctx)[0], gate.ALLOWED, "the task's own outputs folder needs no press")
         # ...and a script it writes through a here-string is that file's data, never paths read ("$60 / day" was held as one, the fix2 walk)
         here = f"$outDir = \"{out}\"\n@'\nlimits = ['meals $60 / day', 'hotels $220 / night']\nopen('/etc/x')\n'@ | Set-Content -Path make_deck.py\npy make_deck.py $outDir"
         self.assertNotIn(None, rg.command_paths(here, self.work, rg.env_for(self.s, self.tid, self.work)))
@@ -456,8 +456,8 @@ class ReadingOutside(unittest.TestCase):
         self.assertTrue(sg.acts("@'\ngit push origin main\n'@ | iex", self.work), 'fed to a shell, it is a command')
         # ...and a held one is approved as exactly that argv
         far = f'"{ps}" -Command \'Get-ChildItem -Path @("$env:USERPROFILE\\Desktop", "$env:USERPROFILE\\Documents") -Filter notes.txt\''
-        got = acpgate.decide({**tc, 'rawInput': {'command': far, 'cwd': self.work}}, self.ctx)
-        self.assertEqual(got[0], acpgate.HELD)
+        got = gate.tool_call({**tc, 'rawInput': {'command': far, 'cwd': self.work}}, self.ctx)
+        self.assertEqual(got[0], gate.HELD)
         [rv] = self.pending(); p = json.loads(rv['DraftText'])
         self.assertEqual(p['argv'][1:], ['-Command', 'Get-ChildItem -Path @("$env:USERPROFILE\\Desktop", "$env:USERPROFILE\\Documents") -Filter notes.txt'])
         self.assertEqual(sg.replay(p)[1:], p['argv'][1:])
@@ -470,8 +470,8 @@ class ReadingOutside(unittest.TestCase):
         if os.name != 'nt': pytest.skip('%LOCALAPPDATA% is Windows')
         local = os.path.join(self.docs, 'AppData-Local'); os.makedirs(os.path.join(local, 'Programs', 'Python', 'Python312'), exist_ok=True)
         with mock.patch.dict(os.environ, {'LOCALAPPDATA': local}):
-            self.assertEqual(hooks.command_gate(self.s, self.tid, 'run1', f'ls "{os.path.join(local, "Programs", "Python")}"', 'Bash', self.work), {})
-            d = hooks.command_gate(self.s, self.tid, 'run1', f'ls "{local}"', 'Bash', self.work)          # ...the rest of AppData still asks
+            self.assertEqual(_check(self.s, self.tid, 'run1', f'ls "{os.path.join(local, "Programs", "Python")}"', 'Bash', self.work), {})
+            d = _check(self.s, self.tid, 'run1', f'ls "{local}"', 'Bash', self.work)          # ...the rest of AppData still asks
             self.assertEqual(d['hookSpecificOutput']['permissionDecision'], 'deny')
 
     def test_a_clis_own_skills_are_read_without_asking_and_the_rest_of_its_home_still_asks(self):
@@ -479,8 +479,8 @@ class ReadingOutside(unittest.TestCase):
         stood as a card "Read craft-floor.md in reference". A CLI's skills, plugins, agents and commands are its own instructions."""
         claude = os.path.join(self.docs, 'claude-home'); os.makedirs(os.path.join(claude, 'skills', 'impeccable', 'reference'), exist_ok=True)
         with mock.patch.dict(os.environ, {'CLAUDE_CONFIG_DIR': claude}):
-            self.assertEqual(hooks.command_gate(self.s, self.tid, 'run1', f'cat "{os.path.join(claude, "skills", "impeccable", "reference", "craft-floor.md")}"', 'Bash', self.work), {})
-            d = hooks.command_gate(self.s, self.tid, 'run1', f'cat "{os.path.join(claude, "history.jsonl")}"', 'Bash', self.work)   # ...the rest still asks
+            self.assertEqual(_check(self.s, self.tid, 'run1', f'cat "{os.path.join(claude, "skills", "impeccable", "reference", "craft-floor.md")}"', 'Bash', self.work), {})
+            d = _check(self.s, self.tid, 'run1', f'cat "{os.path.join(claude, "history.jsonl")}"', 'Bash', self.work)   # ...the rest still asks
             self.assertEqual(d['hookSpecificOutput']['permissionDecision'], 'deny')
 
     def test_a_read_card_held_before_the_gate_opened_that_folder_leaves_the_chat(self):
@@ -514,15 +514,15 @@ class ReadingOutside(unittest.TestCase):
         answer - "files the agent's own CLI downloaded during the task count as its work area". The exact folders: Claude Code's tool-results
         for a session started in this task's folder, Codex's pictures for this task's own threads - never another session's, nor the rest of
         those homes."""
-        from taskuary import acpgate, climodels, readgate
+        from taskuary import gate, climodels, readgate
         claude = os.path.join(self.docs, 'claude-home'); codex = os.path.join(self.docs, 'codex-home')         # ...outside its work, as his own are
         with mock.patch.dict(os.environ, {'CLAUDE_CONFIG_DIR': claude, 'CODEX_HOME': codex}):
             mine = os.path.join(claude, 'projects', readgate._slug(self.work), '4efe24ce', 'tool-results', 'webfetch-17948.pdf')
             other = os.path.join(claude, 'projects', readgate._slug(self.docs), '4efe24ce', 'tool-results', 'webfetch-1.pdf')
             log = os.path.join(claude, 'projects', readgate._slug(self.work), '4efe24ce.jsonl')
-            self.assertEqual(acpgate.decide(self.read(mine), self.ctx)[0], acpgate.ALLOWED, 'its own download, read back')
-            self.assertEqual(acpgate.decide(self.read(other), self.ctx)[0], acpgate.HELD, "another folder's session is not its own")
-            self.assertNotEqual(acpgate.decide(self.read(log), self.ctx)[0], acpgate.ALLOWED, 'its session log is no download')
+            self.assertEqual(gate.tool_call(self.read(mine), self.ctx)[0], gate.ALLOWED, 'its own download, read back')
+            self.assertEqual(gate.tool_call(self.read(other), self.ctx)[0], gate.HELD, "another folder's session is not its own")
+            self.assertNotEqual(gate.tool_call(self.read(log), self.ctx)[0], gate.ALLOWED, 'its session log is no download')
             self.s.add_transcript(self.tid, 'thread-7', 'Drew the chart.', 'codex', self.work)
             self.assertTrue(readgate.fetched(readgate._n(os.path.join(codex, 'generated_images', 'thread-7', 'chart.png')), self.work, readgate._sids(self.s, self.tid)))
             self.assertFalse(readgate.fetched(readgate._n(os.path.join(codex, 'generated_images', 'thread-8', 'x.png')), self.work, readgate._sids(self.s, self.tid)))
@@ -531,20 +531,20 @@ class ReadingOutside(unittest.TestCase):
         """The owner's live task, 2026-11-16 ("we went through this 50 times"): a general agent on a question about one app asked to "read the
         folder FanApp" - his GitHub-connected repository, whose checkout the coding agents' map names. Every checkout Taskuary has - a
         profile's map, a folder a coding session ran in - is any agent's work; the folder above it still asks."""
-        from taskuary import acpgate, repochoice
+        from taskuary import gate, repochoice
         fan, ledger = os.path.join(self.docs, 'FanApp'), os.path.join(self.docs, 'ledger')
         self.s.upsert_agent('coding', 'coding', 'cli', json.dumps({'cmd': 'claude', 'cwd_map': {'northwind/fanapp': fan}}))
-        self.assertEqual(acpgate.decide(self.read(os.path.join(fan, 'src', 'App.tsx')), self.ctx)[0], acpgate.ALLOWED)
+        self.assertEqual(gate.tool_call(self.read(os.path.join(fan, 'src', 'App.tsx')), self.ctx)[0], gate.ALLOWED)
         other = Factory(self.s).task('Fix the ledger rounding', kind='coding'); self.s.add_transcript(other, 'run9', 'Fixed.', 'claude', ledger)
         with mock.patch.object(repochoice, 'is_checkout', lambda p: os.path.normcase(str(p)) == os.path.normcase(ledger)):
-            self.assertEqual(acpgate.decide(self.read(os.path.join(ledger, 'totals.py')), self.ctx)[0], acpgate.ALLOWED, 'a checkout a coding task ran in')
-        self.assertEqual(acpgate.decide(self.read(os.path.join(self.docs, 'conftest.py')), self.ctx)[0], acpgate.HELD, 'the folder above them still asks')
+            self.assertEqual(gate.tool_call(self.read(os.path.join(ledger, 'totals.py')), self.ctx)[0], gate.ALLOWED, 'a checkout a coding task ran in')
+        self.assertEqual(gate.tool_call(self.read(os.path.join(self.docs, 'conftest.py')), self.ctx)[0], gate.HELD, 'the folder above them still asks')
 
     def test_a_step_held_in_a_turn_that_finished_the_job_greys_with_the_true_line(self):
         """The same walk: the PDF read was held, the turn finished the report another way and said its goal was met (nothing_left) - and the
         Approve stood live under the complete answer. Steps held in a turn that finished are over: greyed in place, with what happened."""
-        from taskuary import acpgate, proposals
-        acpgate.decide(self.read(os.path.join(self.docs, 'conftest.py')), self.ctx); [rv] = self.pending()
+        from taskuary import gate, proposals
+        gate.tool_call(self.read(os.path.join(self.docs, 'conftest.py')), self.ctx); [rv] = self.pending()
         self.assertEqual(proposals.finished_without(self.s, self.tid), [rv['ReviewId']])
         r = self.s.get_review(rv['ReviewId'])
         self.assertTrue(proposals.passed(r), 'nothing presses it')
@@ -553,9 +553,9 @@ class ReadingOutside(unittest.TestCase):
         self.assertIn('(Not needed - the agent finished without it)', cardqueue.screen(self.s, self.tid), 'told as what it is, never as a card he moved past')
 
     def test_approve_lets_the_task_read_that_folder_from_then_on_and_tells_the_agent(self):
-        from taskuary import acpgate
+        from taskuary import gate
         call = self.read(os.path.join(self.docs, 'conftest.py'))
-        acpgate.decide(call, self.ctx); [rv] = self.pending()
+        gate.tool_call(call, self.ctx); [rv] = self.pending()
         with mock.patch('taskuary.workerstate._live', return_value=self.sess):
             self.assertTrue(verdicts.decide(self.s, rv, 'approve')['ok'])
         self.assertIn('The owner let you read', self.heard()[0])
@@ -563,13 +563,13 @@ class ReadingOutside(unittest.TestCase):
         from taskuary import general, readgate
         said = general.PRESSES['shell_act_done']({'what': 'read conftest.py in tests', 'reads': [self.docs]})
         self.assertIn(readgate.ALLOWED, said); self.assertNotIn('it ran', said)
-        self.assertEqual(acpgate.decide(call, self.ctx)[0], acpgate.ALLOWED)
-        self.assertEqual(acpgate.decide(self.read(os.path.join(self.docs, 'browser', 'x.mjs')), self.ctx)[0], acpgate.ALLOWED)
+        self.assertEqual(gate.tool_call(call, self.ctx)[0], gate.ALLOWED)
+        self.assertEqual(gate.tool_call(self.read(os.path.join(self.docs, 'browser', 'x.mjs')), self.ctx)[0], gate.ALLOWED)
         self.assertEqual(self.pending(), [])
 
     def test_dismiss_tells_the_agent_whose_no_it_was(self):
-        from taskuary import acpgate, browsergate
-        acpgate.decide(self.read(os.path.join(self.docs, 'conftest.py')), self.ctx); [rv] = self.pending()
+        from taskuary import gate, browsergate
+        gate.tool_call(self.read(os.path.join(self.docs, 'conftest.py')), self.ctx); [rv] = self.pending()
         with mock.patch('taskuary.workerstate._live', return_value=self.sess):
             self.assertTrue(verdicts.decide(self.s, rv, 'reject')['ok'])
         self.assertIn('did not approve it', self.heard()[0]); self.assertIn(browsergate.OWNER_NO, self.told[0])
@@ -578,32 +578,32 @@ class ReadingOutside(unittest.TestCase):
         """Recorded on the real CLI, 2026-11-16: the brief points the agent at its context file in Taskuary's home, and its Read was refused
         as Taskuary's own data - the agent told the owner "the task's context file was blocked from reading". It is the task's own; another
         task's is not."""
-        from taskuary import acpgate, context, readgate
+        from taskuary import gate, context, readgate
         own, batch = context.files(self.tid)
-        self.assertEqual(acpgate.decide(self.read(str(own)), self.ctx)[0], acpgate.ALLOWED)
-        self.assertEqual(acpgate.decide(self.read(str(batch)), self.ctx)[0], acpgate.ALLOWED)
+        self.assertEqual(gate.tool_call(self.read(str(own)), self.ctx)[0], gate.ALLOWED)
+        self.assertEqual(gate.tool_call(self.read(str(batch)), self.ctx)[0], gate.ALLOWED)
         other = context.files(self.tid + 1)[0]
-        self.assertEqual(acpgate.decide(self.read(str(other)), self.ctx), (acpgate.REFUSED, readgate.NEVER))
+        self.assertEqual(gate.tool_call(self.read(str(other)), self.ctx), (gate.REFUSED, readgate.NEVER))
 
     def test_a_search_over_the_tasks_own_mail_folders_is_its_own_work_and_no_other_messages(self):
         """Timed on a long task, 2026-11-16: a grep over the files that came on the task's mail was refused as Taskuary's own data, and the
         agent spent its turn working around it. Each of the task's messages' folders is its own; another message's is not."""
-        from taskuary import acpgate, config, readgate
+        from taskuary import gate, config, readgate
         mine = self.s.add_message({'TaskId': self.tid, 'ExternalId': 'g1', 'Channel': 'email', 'Subject': 'plan', 'Status': 'routed'})
         other = self.s.add_message({'ExternalId': 'g2', 'Channel': 'email', 'Subject': 'not ours', 'Status': 'routed'})
         there = (config.home() / 'attachments' / str(mine)).exists()      # ...the test home is shared: another test may have made it
         grep = lambda d: {'toolCallId': 'g', 'kind': 'search', '_meta': {'claudeCode': {'toolName': 'Grep'}}, 'rawInput': {'pattern': 'sign-off', 'path': d}}
-        self.assertEqual(acpgate.decide(grep(str(config.home() / 'attachments' / str(mine))), self.ctx)[0], acpgate.ALLOWED)
-        self.assertEqual(acpgate.decide(grep(str(config.home() / 'attachments' / str(other))), self.ctx), (acpgate.REFUSED, readgate.NEVER))
+        self.assertEqual(gate.tool_call(grep(str(config.home() / 'attachments' / str(mine))), self.ctx)[0], gate.ALLOWED)
+        self.assertEqual(gate.tool_call(grep(str(config.home() / 'attachments' / str(other))), self.ctx), (gate.REFUSED, readgate.NEVER))
         self.assertEqual((config.home() / 'attachments' / str(mine)).exists(), there, 'the gate names the folder, never makes it')
 
     def test_taskuarys_own_home_is_never_read_not_even_on_a_yes(self):
-        from taskuary import acpgate, apiagent, readgate
-        self.assertEqual(acpgate.decide(self.read(self.secret), self.ctx), (acpgate.REFUSED, readgate.NEVER))
-        d = hooks.command_gate(self.s, self.tid, 'run1', f'cat "{self.secret}"', 'Bash', self.work)
+        from taskuary import gate, apiagent, readgate
+        self.assertEqual(gate.tool_call(self.read(self.secret), self.ctx), (gate.REFUSED, readgate.NEVER))
+        d = _check(self.s, self.tid, 'run1', f'cat "{self.secret}"', 'Bash', self.work)
         self.assertEqual(d['hookSpecificOutput']['permissionDecisionReason'], readgate.NEVER)
         readgate.grant(self.s, self.tid, [os.path.dirname(self.secret)])
-        self.assertEqual(acpgate.decide(self.read(self.secret), self.ctx)[0], acpgate.REFUSED)
+        self.assertEqual(gate.tool_call(self.read(self.secret), self.ctx)[0], gate.REFUSED)
         self.assertEqual(self.pending(), [])
         # ...and the API road's own file tools, by the same rule
         with mock.patch.object(apiagent, 'workdir', return_value=self.work):
@@ -711,3 +711,9 @@ def test_an_inline_scripts_lines_and_words_are_its_text_and_a_path_in_it_is_read
     open(key, 'w').close()
     assert readgate.command_paths('python -c "print(open(r\'' + key + '\').read())"', '') == [key]
     assert readgate.command_paths('cat $NOT_SET_ANYWHERE_X/a.txt', '') == [None]
+
+
+def _check(s, tid, sid, cmd, tool='Bash', cwd='', **k):
+    "The one check point (gate.check), in the old hook's order of arguments."
+    from taskuary import gate
+    return gate.check(s, tid, sid, cmd, cwd, tool, **k)

@@ -14,7 +14,7 @@ does with the screen, this does with typed updates:
   - a prompt is a session/prompt; one that comes while a turn runs goes INTO that turn where the adapter steers (acp.steer), else it is
     queued and sent as one at the turn's end (the general road's batching); Stop is session/cancel;
   - idle past the general agent's period it closes QUIETLY (idle_out) and the next input brings it back on its own conversation (wake);
-  - a permission is acpgate's: Taskuary's rules first, what they hold put to the owner as buttons (permissions.ask);
+  - a permission is gate's: Taskuary's rules first, what they hold put to the owner as buttons (permissions.ask);
   - its "screen" (the Terminal toggle, a Wall cell) is the live output of its commands - Codex streams it, Claude's comes with the
     call's result - and the agent's own words between them; nothing to show is no toggle, never a blank terminal;
   - the files it touches (a call's locations, an edit's diff) are on its card and on the blackboard while it works.
@@ -409,7 +409,7 @@ class ACPCoding:
         chatlog.feed(self.store, self.task_id, self.sid, 'acp', u)
 
     def _turn(self, items: list):
-        from . import agents, acpgate
+        from . import agents, gate
         text = '\n\n'.join(t for t, *_ in items)
         self._show(items); self._drawn.difference_update(map(id, items))
         # ...ITS CLOCK IS SET ONCE, HERE (the 0.3.11.50 release run: it read the turn's start, then the CLI's own prompt hook's time, then the
@@ -433,7 +433,7 @@ class ACPCoding:
         # ...his by the lines it took, by the ones its opener carried onto it meanwhile (carries), or by the ones his stop left unanswered
         self.owned, self._again, self._steered = bool(took) or self._carried or self._again, False, []
         self.steps = agents.ACPSteps(self._trace, self.cli, self.held)
-        self.gate = acpgate.answerer({'store': self.store, 'task_id': self.task_id, 'cli': self.cli, 'cwd': self.cwd, 'sid': self.sid},
+        self.gate = gate.answerer({'store': self.store, 'task_id': self.task_id, 'cli': self.cli, 'cwd': self.cwd, 'sid': self.sid},
                                      self._trace, self.held)
         for *_x, d in items:
             if d:

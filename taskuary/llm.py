@@ -455,7 +455,7 @@ def make_cli_llm(store, agent_name: str, model: str = None, cwd: str = None, tra
     else: prof['acp_ok'] = False         # a run with every tool off has nothing to permit, whatever a saved profile says
     # AN AGENT'S CHAT ON A CLI WHOSE READS NO COMMAND LINE CAN KEEP (clis.confines - codex: even its read-only sandbox reads the whole disk,
     # and its only way to act alone is the bypass) works on the held road, its look and its hands alike (the owner, 2026-11-16: Codex quick
-    # work listed his Documents folder without asking): over ACP every read outside the task asks and every gated act holds (acpgate), and
+    # work listed his Documents folder without asking): over ACP every read outside the task asks and every gated act holds (gate), and
     # where that road cannot start nothing runs on the command line instead (agents.run_cli, `held_only`)
     from . import clis as clis_mod
     if task_id and keep and stranger_mode not in ('auto', 'look') and not clis_mod.confines(prof['cmd']) and clis_mod.acp_adapter(prof['cmd']):
@@ -539,7 +539,7 @@ def make_cli_llm(store, agent_name: str, model: str = None, cwd: str = None, tra
         # chat's second round (a look-up, the gate's retry) went out with no id, which clipool reads as New chat - so it
         # killed the live CLI and started another, 15 s against 2.6 s warm, and the round lost the turn it was answering.
         # A chat already under way did this all along: its rounds resume one session. One-shot brains keep their own id.
-        # ...and the store and task the ACP road's permission answers read (acpgate: the send filter, a step held on THIS task)
+        # ...and the store and task the ACP road's permission answers read (gate: the send filter, a step held on THIS task)
         with run_context(store, task_id if not no_hands else None):
             out, sid, _diff = run_cli(run_prof, prompt, trace or (lambda *a: None),
                                       resume=llm.session_id if keep else resume, **({'images': images} if images else {}), **kwargs)

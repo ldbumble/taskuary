@@ -36,15 +36,11 @@ somewhere else, a pipe into Remove-Item - is held, never let through for being h
 """
 import contextvars, json, ntpath, os, re, shlex, shutil, subprocess, tempfile, threading
 from loguru import logger
-from .browsergate import _segments, _deny, _tell, joined, launched, not_approved, NEXT, OWNER_NO, words
+from .gate import TABLE, deny as _deny
+from .browsergate import _segments, _tell, joined, launched, not_approved, NEXT, OWNER_NO, words
 
-HELD = 'Taskuary held this for the owner'
+from .gate import HELD_SAID as HELD          # ...one wording for every road's hold (gate.py)
 _FILING = threading.Lock()
-# ...said to the agent the hold covers, as the browser's hold is (browserview.HOLD_LINE): told nothing, a general agent asked "Should I delete
-# it?" in words, the owner said yes, and the delete was held for a second yes on the task (the overnight run, 2026-11-03)
-HOLD_LINE = ("A delete outside your working folder, a read outside this task's own folders, and a step that leaves the machine (a push, a merge, "
-             "a publish, a mail from a script, data sent to a web address) is HELD for the owner's press: run it - the refusal is Taskuary's "
-             "hold, never his no: it becomes his action card, his press runs it and you are told what happened. Go on with the rest of the job.")
 ASKS = {'claude'}       # the CLIs whose PreToolUse hook can answer `ask` with their own prompt (measured: Claude 2.1.312 honours it)
 # each tool's own words for a step that goes out, as (what it does, in the owner's words): its subcommand, or (subcommand, action)
 GIT = {'push': 'push the agent\'s commits out of this computer'}
@@ -157,8 +153,7 @@ def _api_writes(argv: list) -> bool:
 
 # ── deleting on this computer ───────────────────────────────────────────────────────────────────────────────────────────────────
 DELETERS = frozenset('rm rmdir rd del erase remove-item ri unlink shred srm'.split())
-UNDONE = "it can't be undone"
-OUT = 'it leaves this computer'
+UNDONE, OUT = TABLE['erase'].why, TABLE['out'].why          # said as the one table says them (gate.TABLE)
 # the calls that delete from a snippet or a PowerShell line, whatever runs them: .NET, Python, Node
 _API_DEL = re.compile(r'\[(?:system\.)?io\.(?:file|directory)\]::delete\b|shutil\.rmtree\b|\bos\.(?:remove|unlink|rmdir|removedirs)\b'
                       r'|\bfs\.(?:rm|rmdir|unlink)(?:sync)?\b|\.delete\(\s*(?:\$true)?\s*\)|\.unlink\(\s*(?:missing_ok\s*=\s*true)?\s*\)', re.I)
@@ -245,7 +240,7 @@ def deletes(cmd: str, cwd: str = '', env: dict = None) -> list:
     known = list(dict.fromkeys(found['named']))
     more = len(known) > 3 or (known and found['blind'])
     what = 'delete ' + (', '.join(known[:3]) + (' and more' if more else '') if known else 'files on this computer')
-    return [{'tool': found['tools'][0], 'what': what, 'why': UNDONE, 'where': (found['places'] or [''])[0], 'command': raw[:400]}]
+    return [{'tool': found['tools'][0], 'kind': 'erase', 'what': what, 'why': UNDONE, 'where': (found['places'] or [''])[0], 'command': raw[:400]}]
 
 
 def _deletes(raw: str, cwd: str, env: dict, here='') -> dict:
@@ -322,7 +317,7 @@ def _outward(cmd: str, own: bool = True) -> list:
     segs = _segments(raw)
     if segs is None:
         import re
-        return [{'tool': '?', 'what': 'run a command that may push, publish or send', 'why': OUT, 'command': raw[:400]}] if re.search(
+        return [{'tool': '?', 'kind': 'out', 'what': 'run a command that may push, publish or send', 'why': OUT, 'command': raw[:400]}] if re.search(
             r'\b(git\s+push|gh\s+(pr|issue|release|repo|api)|glab|publish|sendmail|send-mailmessage)\b', low) else []
     out, moved = [], False
     for argv in segs:
@@ -340,7 +335,7 @@ def _outward(cmd: str, own: bool = True) -> list:
         if not what and tool in ('gh', 'glab') and w[:1] == ['api'] and _api_writes(argv): what = 'change something on the code host through its API'
         if not what and tool == 'git' and w[:1] == ['push']: what = GIT['push']
         if not what and tool in HTTP: what = _http_write(argv, own)
-        if what: out.append({'tool': tool, 'what': what, 'why': OUT, 'command': ' '.join(argv)[:400], 'to': '?' if moved else _to(tool, whole, w),
+        if what: out.append({'tool': tool, 'kind': 'out', 'what': what, 'why': OUT, 'command': ' '.join(argv)[:400], 'to': '?' if moved else _to(tool, whole, w),
                              **({'refs': w[2:]} if tool == 'git' and w[:1] == ['push'] else {})})
     return out
 
@@ -405,7 +400,7 @@ def asks(store, t) -> str:
     headless chat), started 'full' (a stranger's task runs 'auto' and its permit door is the owner's), whose CLI's hook answers `ask`, on a
     task that is not a workflow's run (nobody sits at a scheduled run's pane). Everything else is held for the task's Approve.
     'terminal': the CLI's own prompt in its pane. 'chat': the same CLI over ACP has no terminal - its ask comes back to Taskuary's own
-    gate (acpgate.answerer), which draws the landing card, the owner's buttons or the Approve card itself."""
+    gate (gate.answerer), which draws the landing card, the owner's buttons or the Approve card itself."""
     if not getattr(t, 'argv', None) or getattr(t, 'mode', 'full') != 'full': return ''
     from . import clis, terminal
     if clis._base(getattr(t, 'cli', '') or t.argv[0]) not in ASKS or (store.get_task(t.task_id) or {}).get('Source') == 'workflow': return ''
@@ -503,9 +498,9 @@ def check(store, tid: int, sid: str, cmd: str, shell: str = 'Bash', cwd: str = '
     `argv`: the call as the brain's own tool made it, where it gave a list (Codex) - replayed as it is on Approve (replay)."""
     todo = (acts(cmd, cwd) if cmd else []) + list(reads or [])
     if not todo: return {}
-    from . import actrule
-    # ...THE ONE RULE FIRST (actrule.decide): a repo he trusts, or the same step he already approved on this task, runs; one he dismissed is his no
-    how, said = actrule.decide(store, tid, todo, cwd)
+    from . import gate
+    # ...THE ONE RULE FIRST (gate.decide): a repo he trusts, or the same step he already approved on this task, runs; one he dismissed is his no
+    how, said = gate.decide(store, tid, todo, cwd)
     if how in ('trusted', 'approved'):
         store.audit('task', tid, f'shell_act_{how}', 'taskuary', 'system', {'tools': [a['tool'] for a in todo], 'what': '; '.join(a['what'] for a in todo)})
         if said: store.add_comment_once(tid, 'taskuary', 'agent', said)
@@ -529,9 +524,9 @@ def check(store, tid: int, sid: str, cmd: str, shell: str = 'Bash', cwd: str = '
             from . import proposals
             proposals.queue(store, tid, {'action': 'shell_act', 'sid': str(sid), 'turn': turn_of(store, tid), 'command': str(cmd)[:4000], 'shell': shell, 'cwd': cwd or '',
                                          # the card's In: the folder a delete aims at, never the agent's own scratch folder it ran from
-                                         # ...a push named by its repo and branch, in his words (actrule.words), and what his answer is remembered by
-                                         'what': '; '.join(dict.fromkeys(actrule.words(a, cwd) for a in todo)), 'why': why,
-                                         'where': next((a['where'] for a in todo if a.get('where')), ''), 'keys': actrule.keys(todo, cwd),
+                                         # ...a push named by its repo and branch, in his words (gate.words), and what his answer is remembered by
+                                         'what': '; '.join(dict.fromkeys(gate.words(a, cwd) for a in todo)), 'why': why,
+                                         'where': next((a['where'] for a in todo if a.get('where')), ''), 'keys': gate.keys(todo, cwd),
                                          **({'argv': [str(x) for x in argv]} if argv else {}),
                                          **({'reads': folders} if folders else {}),
                                          **({'about': ' '.join(str(about).split())[:300]} if str(about or '').strip() else {})}, 'agent')
@@ -692,8 +687,8 @@ def perform(store, tid: int, p: dict, run=None) -> dict:
         return {'performed': p.get('what') or 'a read', 'said': ''}
     if not cmd: raise RuntimeError('this held step names no command')
     if cwd and not os.path.isdir(cwd): raise RuntimeError(f'the folder it was held in is gone ({cwd}) - nothing was done')
-    from . import actrule
-    actrule.remember(store, tid, p.get('keys'), 'approved')       # his yes to this kind of step on this target stands for the task
+    from . import gate
+    gate.remember(store, tid, p.get('keys'), 'approved')       # his yes to this kind of step on this target stands for the task
     rc, said = run_(p, cwd) if run is None else run(replay(p), cwd)
     # ...A STEP IS AS IT ENDED, NOT AS ITS LAST PIPE DID (the Claude walk, 2026-11-19: a push piped through `| tail` exited 0 and its card read
     # "Approved · it ran" with the refused push's address under it): a tool's own failure line - git's `error:` / `fatal:`, its "! [rejected]" -
@@ -762,7 +757,7 @@ def _printed(store, tid: int) -> str:
 
 
 def declined(store, tid: int, p: dict) -> None:
-    from . import actrule
-    actrule.remember(store, tid, p.get('keys'), 'dismissed')
+    from . import gate
+    gate.remember(store, tid, p.get('keys'), 'dismissed')
     if (told := _batch.get()) is not None: return told.append(f"{p.get('what') or 'the step'} (`{str(p.get('command') or '')[:200]}`)")
     _tell(store, tid, not_approved(f"{p.get('what') or 'the step'} (`{str(p.get('command') or '')[:200]}`)"))

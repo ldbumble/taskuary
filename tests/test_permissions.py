@@ -1,6 +1,6 @@
 """An agent's permission request put to the owner (permissions.py): Taskuary's rules first, then the owner's buttons; only the owner's
 answer counts; "always" is kept per task and tool pattern and never for a send or a push; no answer is a refusal, said plainly; and the
-ACP shape in and out, as step 1's acpgate hands it over."""
+ACP shape in and out, as step 1's gate hands it over."""
 import os, tempfile, threading, time
 from types import SimpleNamespace
 from unittest import mock
@@ -115,8 +115,8 @@ def test_no_answer_is_a_refusal_said_plainly(s):
 
 def test_a_request_the_chat_moved_past_is_nobodys_no_and_its_agent_is_told_it_was_still_waiting(s):
     """The owner's live task, 2026-11-16: a general agent's read was waiting on his Allow, he wrote again, and the agent told him "You declined
-    my search of the FanApp code". He never answered: set aside as the chat moved on is no one's no (acpgate.STILL_WAITING)."""
-    from taskuary import acpgate
+    my search of the FanApp code". He never answered: set aside as the chat moved on is no one's no (gate.STILL_WAITING)."""
+    from taskuary import gate
     tid, past = coding(s), []
     box = []
     t = threading.Thread(target=lambda: box.append(perm.ask(s, tid, perm.from_acp(ACP), wait=5, moved_on=lambda said: past.append(1))), daemon=True); t.start()
@@ -127,9 +127,9 @@ def test_a_request_the_chat_moved_past_is_nobodys_no_and_its_agent_is_told_it_wa
     assert box == ['reject_once'] and past == [1]
     told = []
     with mock.patch.object(perm, 'ask', lambda st, t_, r, **kw: kw['moved_on'](perm.SET_ASIDE_SAID) or 'reject_once'), mock.patch('taskuary.shellgate.declined', lambda *a, **k: told.append(a)):
-        got = acpgate.put_to_owner({'store': s, 'task_id': tid, 'sid': 'sess-1', 'cwd': REPO}, ACP, 'it reads outside')
-    assert got == (acpgate.REFUSED, acpgate.STILL_WAITING) and told == [], 'never "the owner did not approve it"'
-    assert 'nobody said no' in acpgate.STILL_WAITING
+        got = gate.put_to_owner({'store': s, 'task_id': tid, 'sid': 'sess-1', 'cwd': REPO}, ACP, 'it reads outside')
+    assert got == (gate.REFUSED, gate.STILL_WAITING) and told == [], 'never "the owner did not approve it"'
+    assert 'nobody said no' in gate.STILL_WAITING
 
 
 def test_the_generic_answer_road_takes_the_label_too(s):

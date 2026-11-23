@@ -80,7 +80,7 @@ KNOWN = [
 # CLAUDE AND CODEX SPEAK ACP THROUGH AN ADAPTER, not natively (docs/acp-transport.md): an npm package that drives the CLI the
 # owner already has - its binary, its login - and answers on stdio. Per CLI: the adapter (PINNED: an adapter is a protocol
 # translator, and a new release is a new set of update shapes to check), how it is told which binary to drive ({cli}: the
-# CLI's own resolved path), and the session mode that makes it ASK before it acts, so every tool call reaches acpgate.
+# CLI's own resolved path), and the session mode that makes it ASK before it acts, so every tool call reaches gate.
 #   claude  `default`: it asks for every tool the owner's own settings do not already allow (measured: Read, Glob, Bash, Edit,
 #           WebFetch and WebSearch each asked, 2026-11-06). Its other modes answer for us: auto, acceptEdits, bypassPermissions.
 #   codex   `workspace-write`: commands run in Codex's own sandbox without asking, and whatever needs the network or a folder

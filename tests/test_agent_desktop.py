@@ -201,7 +201,7 @@ class Holding(unittest.TestCase):
         self.assertIn('did not approve it', self.heard()[0])
 
     def test_his_yes_to_a_press_in_an_app_stands_for_the_task_and_his_no_is_told_not_asked_again(self):
-        # the roads audit, 2026-11-19 (#7): the desktop gate asks the one rule the browser's and the shell's do (actrule.decide)
+        # the roads audit, 2026-11-19 (#7): the desktop gate asks the one rule the browser's and the shell's do (gate.decide)
         self.check(); [rv] = self.pending()
         with installed(), mock.patch('taskuary.workerstate._live', return_value=self.sess),                 mock.patch.object(ad, '_run', return_value=(0, '{"ok":true,"command":"click","data":{}}')):
             self.assertTrue(verdicts.decide(self.s, rv, 'approve')['ok'])
@@ -218,11 +218,11 @@ class Holding(unittest.TestCase):
 
 class Hook(unittest.TestCase):
     def test_a_desktop_act_is_held_where_it_runs(self):
-        from taskuary import gatecmd
+        from taskuary import gate
         s = MemoryStore(); tid = Factory(s).task('Reply to Erin', Tags=ad.WANTS); turn_on(s)
         with installed(), names(), verdict({'irreversible': True, 'sure': True, 'what': 'sends'}):
-            self.assertEqual(gatecmd.judge(s, tid, 'run1', 'agent-desktop list-apps'), '')
-            self.assertIn(ad.HELD, gatecmd.judge(s, tid, 'run1', SEND))
+            self.assertEqual(gate.judge(s, tid, 'run1', 'agent-desktop list-apps'), '')
+            self.assertIn(ad.HELD, gate.judge(s, tid, 'run1', SEND))
 
 
 class Brief(unittest.TestCase):

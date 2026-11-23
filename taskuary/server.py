@@ -6396,21 +6396,21 @@ class AgentProposeBody(BaseModel):
 
 @app.post('/api/agent/gate')
 async def agent_gate(body: dict, request: Request):
-    """An agent's `agent-browser` or `agent-desktop` command asks before it runs (gatecmd, on every AI's road): {'why': ''} runs it,
+    """An agent's `agent-browser` or `agent-desktop` command asks before it runs (gate, on every AI's road): {'why': ''} runs it,
     else why it waits - a press that can't be undone is held on the session's OWN task for the owner. On the permits' threads, as the
     hooks are: a snapshot and a verdict take seconds."""
-    from . import gatecmd
+    from . import gate
     tid = int(body.get('task') or 0) if str(body.get('task') or '').isdigit() else 0
     _own_task_only(request, tid)
     from . import browsergate
     sid, cmd = str(body.get('sid') or ''), str(body.get('cmd') or '')
-    # ...TASKUARY'S OWN VERB (`agent-browser signup`): done here, its result the command's own output (gatecmd.own)
-    if not body.get('after') and (own := gatecmd.own(cmd)):
-        ok, said = await asyncio.get_running_loop().run_in_executor(_PERMIT_POOL, lambda: gatecmd.run_own(store, tid, sid, own))
+    # ...TASKUARY'S OWN VERB (`agent-browser signup`): done here, its result the command's own output (gate.own)
+    if not body.get('after') and (own := gate.own(cmd)):
+        ok, said = await asyncio.get_running_loop().run_in_executor(_PERMIT_POOL, lambda: gate.run_own(store, tid, sid, own))
         return {'why': '', 'own': True, 'ok': ok, 'said': said}
     try: rc = int(body.get('rc') or 0)
     except (TypeError, ValueError): rc = 1
-    go = ((lambda: browsergate.after(store, tid, sid, cmd, rc)) if body.get('after') else lambda: gatecmd.judge(store, tid, sid, cmd, str(body.get('cwd') or '')))
+    go = ((lambda: browsergate.after(store, tid, sid, cmd, rc)) if body.get('after') else lambda: gate.judge(store, tid, sid, cmd, str(body.get('cwd') or '')))
     return {'why': await asyncio.get_running_loop().run_in_executor(_PERMIT_POOL, go)}
 
 

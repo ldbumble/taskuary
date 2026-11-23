@@ -455,7 +455,7 @@ class LandingTests(unittest.TestCase):
         self.assertFalse(git(self.remote, 'branch', '--list', 'fix-rounding'))
 
     def test_both_gates_ask_the_card_first(self):
-        from taskuary import acpgate
+        from taskuary import gate
         self.on_master_with_origin(); self.dev()
         tc = lambda cmd: {'toolCallId': 'c', 'kind': 'execute', 'rawInput': {'command': cmd, 'description': 'Push the fix'}}
         ctx = {'store': self.s, 'task_id': self.tid, 'cwd': self.cwd, 'sid': 'run1', 'owner_asks': True}
@@ -463,11 +463,11 @@ class LandingTests(unittest.TestCase):
             asked = []
             with mock.patch('taskuary.permissions.ask', side_effect=lambda *a, **k: asked.append(a) or 'reject_once'):
                 held = {}
-                out = acpgate.answerer({k: v for k, v in ctx.items() if k != 'owner_asks'}, held=held)({'toolCall': tc('git push origin master'), 'options': [
+                out = gate.answerer({k: v for k, v in ctx.items() if k != 'owner_asks'}, held=held)({'toolCall': tc('git push origin master'), 'options': [
                     {'optionId': 'y', 'kind': 'allow_once'}, {'optionId': 'n', 'kind': 'reject_once'}]})
             self.assertEqual(asked, [], 'no Allow once / Reject card beside the Push button')
             self.assertEqual(out.get('optionId'), 'n'); self.assertTrue(held['c'].startswith(shellgate.HELD), held)
-            self.assertEqual(acpgate.decide(tc('git add -A && git commit -m x && git push'), ctx)[0], acpgate.REFUSED)
+            self.assertEqual(gate.tool_call(tc('git add -A && git commit -m x && git push'), ctx)[0], gate.REFUSED)
             # ...the hook's road and an API agent's run_command (shellgate.check): the same answer, and no Approve card filed beside it
             said = shellgate.check(self.s, self.tid, 'run1', 'git push origin master', cwd=self.cwd)['hookSpecificOutput']['permissionDecisionReason']
             self.assertIn('Push button', said)
@@ -475,7 +475,7 @@ class LandingTests(unittest.TestCase):
         # ...and a repo the owner trusts to act on its own still just pushes
         with mock.patch.object(shellgate, 'trusted', return_value='northwind/ledger'):
             self.assertEqual(shellgate.check(self.s, self.tid, 'run1', 'git push origin master', cwd=self.cwd), {})
-            self.assertEqual(acpgate.decide(tc('git push origin master'), ctx)[0], acpgate.ALLOWED)
+            self.assertEqual(gate.tool_call(tc('git push origin master'), ctx)[0], gate.ALLOWED)
 
 
 class LandingDoorTests(unittest.TestCase):

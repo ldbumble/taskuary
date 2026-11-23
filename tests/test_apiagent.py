@@ -912,7 +912,7 @@ class TheHandsTests(unittest.TestCase):
         class Done:
             pid, returncode = 4242, 0
             def communicate(self, timeout=None): return b'3 files', b''
-        with mock.patch('taskuary.hooks.command_gate', return_value={}) as gate, mock.patch('taskuary.spawn.popen', return_value=Done()) as ran:
+        with mock.patch('taskuary.gate.check', return_value={}) as gate, mock.patch('taskuary.spawn.popen', return_value=Done()) as ran:
             said = self.run_('run_command', command='git status', why='see what changed')
         self.assertIn('exit 0', said); self.assertIn('3 files', said)
         self.assertEqual(gate.call_args.args[3], 'git status')
@@ -924,7 +924,7 @@ class TheHandsTests(unittest.TestCase):
             pid, returncode = 4242, None
             def communicate(self, timeout=None): raise subprocess.TimeoutExpired('build', timeout)
         stop = threading.Event(); stop.set()
-        with mock.patch('taskuary.hooks.command_gate', return_value={}), mock.patch('taskuary.spawn.popen', return_value=Building()), \
+        with mock.patch('taskuary.gate.check', return_value={}), mock.patch('taskuary.spawn.popen', return_value=Building()), \
              mock.patch.dict(apiagent.STOPS, {(self.tid, 'sid-h'): stop}), mock.patch.object(apiagent, '_kill') as killed:
             with self.assertRaisesRegex(RuntimeError, 'stopped'): self.run_('run_command', command='npm run build', why='build it')
         killed.assert_called_once()
@@ -942,7 +942,7 @@ class TheHandsTests(unittest.TestCase):
         from taskuary import hooks
         payload = {'tool_name': 'Bash', 'tool_input': {'command': 'git push'}, 'cwd': ''}
         class T: store, task_id, sid, cwd = self.s, self.tid, 'sid-c', ''
-        with mock.patch.object(hooks, '_pane', return_value=T()), mock.patch.object(hooks, 'command_gate', return_value={'x': 1}) as gate:
+        with mock.patch.object(hooks, '_pane', return_value=T()), mock.patch('taskuary.gate.check', return_value={'x': 1}) as gate:
             self.assertEqual(hooks.browser(payload), {'x': 1})
         gate.assert_called_once()
 
@@ -1115,7 +1115,6 @@ class EveryCardTests(unittest.TestCase):
         "The tools a turn is offered and the gate its commands pass never ask which card runs it."
         import inspect
         self.assertNotIn('brain', inspect.signature(apiagent.tools_for).parameters)
-        self.assertIn('hooks.command_gate', inspect.getsource(apiagent._hands))
 
 
 class CodingOnACardTests(unittest.TestCase):

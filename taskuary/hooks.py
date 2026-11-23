@@ -370,7 +370,7 @@ def _questions(p: dict) -> list:
 
 
 def _asked_in_code(t) -> bool:
-    "A session whose permission asks are answered by Taskuary's gate, never by the owner at a prompt: one run over ACP (acpgate)."
+    "A session whose permission asks are answered by Taskuary's gate, never by the owner at a prompt: one run over ACP (gate)."
     from . import terminal as term
     return term.is_acp(t)
 
@@ -455,7 +455,7 @@ def _events(t, p: dict) -> None:
                     ws.record(st, tid, sid, 'input_needed', request_id=ws.question_id(g, i), text=text, choices=choices, source='hook')
             elif getattr(t, 'mode', 'full') == 'auto': pass     # a stranger's session: the permit door (permit) owns this card
             # OVER ACP NOTHING WAITS ON THE OWNER HERE (the owner, 2026-11-11: "Stop making popups for approvals"): the adapter asks for
-            # every tool and Taskuary's own gate answers in code at once (acpgate.answerer) - what it holds is the one card with its
+            # every tool and Taskuary's own gate answers in code at once (gate.answerer) - what it holds is the one card with its
             # buttons. Claude fires this hook for each of those asks all the same, so a five-minute test run stood in the chat as "the
             # agent needs your approval" over a tool at work, with nothing to press. Only a terminal's own prompt is a stop
             elif _asked_in_code(t): pass
@@ -886,52 +886,22 @@ def reason(payload: dict, wait: float = None) -> dict:
 
 
 def browser(payload: dict, sid: str = '', task: str = '') -> dict:
-    """Before one of OUR sessions runs a shell command (command_gate): a step that leaves the machine, or reads outside its folders,
-    is refused and held for the owner. Not our pane, not a shell tool, nothing to gate: {} at once - the command is Claude's. (A press
-    in the browser or on the desktop is held where it runs, gatecmd.)"""
-    from . import browsergate, readgate, shellgate
+    """Before one of OUR sessions runs a shell command or a file tool: the one check point (gate.check) - a step that leaves the machine,
+    deletes outside its folder or reads outside the task's folders is held for the owner. Not our pane, not a shell or file tool: {} at
+    once - the call is Claude's. (A press in the browser or on the desktop is held where it runs, gate.main.)"""
+    from . import gate, readgate, shellgate
     tool, inp = str(payload.get('tool_name') or ''), payload.get('tool_input') or {}
-    if tool in readgate.WRITE_TOOLS:              # ...what it writes is its own work: reading it back is never asked (readgate.wrote)
-        t = _pane(payload, 'claude') or _general(payload, sid, task)
-        if t: readgate.wrote(t.task_id, readgate.tool_paths(inp, cwd=str(payload.get('cwd') or getattr(t, 'cwd', '') or '')))
-        return {}
-    if tool in readgate.READ_TOOLS:
-        t = _pane(payload, 'claude') or _general(payload, sid, task)
-        st, cwd = getattr(t, 'store', None) if t else None, str(payload.get('cwd') or getattr(t, 'cwd', '') or '')
-        if not st: return {}
-        held, never = readgate.judge(st, t.task_id, readgate.tool_paths(inp, cwd=cwd), cwd)
-        if never: return browsergate._deny(never)
-        return shellgate.check(st, t.task_id, t.sid, '', tool, cwd, shellgate.asks(st, t), reads=held) if held else {}
-    if tool not in ('Bash', 'PowerShell'): return {}
-    cmd = str(inp.get('command') or '')
-    # the cheap tests first: this hook sees every shell command - A STEP THAT LEAVES THE MACHINE (a push, a merge, a public post, a
-    # publish, a mail) waits for the owner (shellgate.py, the Advisor's risky-step hold, the owner 2026-10-28)
-    # ...and a delete outside the agent's own folder, read against the folder it runs in (shellgate.deletes, 2026-11-03)
-    if not needs_gate(cmd, str(payload.get('cwd') or '')) and not readgate.command_paths(cmd, str(payload.get('cwd') or '')): return {}
+    if tool not in readgate.WRITE_TOOLS + readgate.READ_TOOLS + ('Bash', 'PowerShell'): return {}
+    cmd = str(inp.get('command') or '') if tool in ('Bash', 'PowerShell') else ''
     t = _pane(payload, 'claude') or _general(payload, sid, task)
-    st = getattr(t, 'store', None) if t else None
+    st, cwd = getattr(t, 'store', None) if t else None, str(payload.get('cwd') or getattr(t, 'cwd', '') or '')
+    if tool in readgate.WRITE_TOOLS:              # ...what it writes is its own work: reading it back is never asked (readgate.wrote)
+        if t: readgate.wrote(t.task_id, readgate.tool_paths(inp, cwd=cwd))
+        return {}
     if not t or not st: return {}
+    paths = readgate.tool_paths(inp, cwd=cwd) if tool in readgate.READ_TOOLS else None
     # ...asked in the CLI's own prompt where the owner can answer it there, held for the task's Approve where nobody can (shellgate.asks)
-    return command_gate(st, t.task_id, t.sid, cmd, tool, str(payload.get('cwd') or getattr(t, 'cwd', '') or ''), shellgate.asks(st, t),
-                        about=str((payload.get('tool_input') or {}).get('description') or ''))
-
-
-def needs_gate(cmd: str, cwd: str = '') -> bool:
-    "The cheap test first: does this shell line leave the machine or delete outside its folder? (A press in the browser or on the desktop is gatecmd's.)"
-    from . import shellgate
-    return bool(shellgate.acts(cmd, cwd))
-
-
-def command_gate(st, tid: int, sid: str, cmd: str, tool: str = 'Bash', cwd: str = '', ask: bool = False, about: str = '') -> dict:
-    """THE ONE DECISION for a shell command an agent of ours is about to run - a CLI's (its PreToolUse hook, browser above) and an API
-    agent's (apiagent.run_command) alike: {} runs it; anything else holds it, with the reason in permissionDecisionReason (or `ask`, the
-    CLI's own prompt). A step that leaves the machine or deletes outside its folder (shellgate), or a read outside its folders (readgate),
-    waits for the owner. A press in the browser or on the desktop is held where it runs, on every AI alike (gatecmd)."""
-    from . import browsergate, readgate, shellgate
-    out = shellgate.acts(cmd, cwd)
-    reads, never = readgate.of_command(st, tid, cmd, cwd)
-    if never: return browsergate._deny(never)
-    return shellgate.check(st, tid, sid, cmd, tool, cwd, ask, about=about, reads=reads) if out or reads else {}
+    return gate.check(st, t.task_id, t.sid, cmd, cwd, tool, shellgate.asks(st, t), about=str(inp.get('description') or ''), paths=paths)
 
 
 def run_sid(payload: dict, tid: int) -> str:

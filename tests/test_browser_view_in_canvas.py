@@ -40,7 +40,7 @@ class TheBrief(unittest.TestCase):
         self.assertIn('NEVER SOLVE, CLICK OR WORK AROUND A CAPTCHA', b)
         self.assertIn('call hand_over', b)
         self.assertNotIn('card number is for the owner to type in the pane: ask with the ask marker', b)
-        # the agent runs the press and the hold asks, on every AI (gatecmd) - one card in the chat
+        # the agent runs the press and the hold asks, on every AI (gate) - one card in the chat
         self.assertIn('never ask him in words to approve or click it', b)
 
 

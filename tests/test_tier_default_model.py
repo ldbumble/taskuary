@@ -23,7 +23,7 @@ def s():
 
 def _task(s, difficulty):
     tid = s.create_task({'Title': 'Find the venue address', 'Status': 'open'}, 'owner')
-    s.judge_task(tid, {'difficulty': difficulty}, 'triage')
+    s.judge_task(tid, {'difficulty': difficulty}, 'owner')
     return tid
 
 

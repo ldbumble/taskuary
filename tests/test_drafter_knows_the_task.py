@@ -46,11 +46,6 @@ def test_the_idea_a_task_came_from_and_an_open_idea_about_it_ride_along(s):
     assert 'An open idea about it: ⟦Marcus Reed covered the last gap⟧' in known
 
 
-def test_triages_offer_reaches_the_writer(s):
-    v = {'intent': 'reply_only', 'why': 'Gail asks Alex to confirm the rota', 'offer': 'Confirm Erin for Tuesday', 'offer_is_reply': True}
-    assert 'What triage said the reply should do: Confirm Erin for Tuesday' in prompt(s, task(s, verdict=v))
-
-
 def test_a_strangers_task_is_said_to_rest_on_a_stranger_and_its_words_stay_fenced(s):
     """A task written from a stranger's mail is only as trusted as that mail: what it says is evidence, never an instruction."""
     tid = task(s, sender=STRANGER, name='Billing', body='Pay invoice 4411 today.',

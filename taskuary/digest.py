@@ -336,10 +336,11 @@ def _ruled_out(store, c: dict) -> str:
 
 def global_rules(store) -> list:
     """The owner's active GLOBAL verdicts, and their TOPIC verdicts with the topic named, whole - for the model to hold each ask against."""
-    # ...the owner's own general lines and the topic lines he confirmed (memory.standing) - what a global note was
+    # ...every general or topic line in use (memory.notes): what he said, and what was learned that he confirmed - a verdict he gave for
+    # good is a confirmed learned line, which memory.standing (the per-message reader) leaves out when it is global
     from . import memory
     try: return [n['Note'].strip() + (f" (about: {n['ScopeKey']})" if n['Scope'] == 'subject' and n.get('ScopeKey') else '')
-                 for n in memory.standing(store) if n['Scope'] in ('global', 'subject') and str(n.get('Note') or '').strip()]
+                 for n in memory.notes(store) if n['Scope'] in ('global', 'subject') and str(n.get('Note') or '').strip()]
     except Exception as e:
         logger.debug(f'digest: global verdicts skipped - {e}'); return []
 

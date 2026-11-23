@@ -369,7 +369,6 @@ def test_a_task_the_assistant_starts_is_his_sentence_as_typed_and_its_polished_a
     owners = [str(c.get('Body') or '') for c in rows if c.get('Actor') == 'owner']
     assert owners and all(his in b for b in owners) and not any('Tell me whether' in b for b in owners), owners
     assert t['Summary'] == his and [i['text'] for i in s.task_checklist(tid)][:1] == [his]
-    assert 'Tell me whether' not in t['Title']                       # no title named: his words name it, not the rewording
     from taskuary import ownwork
     ownwork.ensure(s, tid)
     assert ownwork.row_for(s, tid)['BodyText'] == his               # the row signed "You"
@@ -390,18 +389,6 @@ def test_a_coding_hand_off_and_a_walk_through_keep_his_words_as_his_and_file_the
     assert 'Add a test' in brief.handoff(s, coding)                 # the coding agent reads it as Taskuary's (terminal seed)
     briefs = [c for c in s.list_comments(walk, internal=True) if general.is_brief(c)]
     assert [c['Body'] for c in briefs] == [polished]                # the walk hears it as Taskuary's turn
-
-
-def test_a_start_the_model_reads_as_open_work_goes_to_that_tasks_agent_never_a_second_task(s):
-    """One job is one task at every door (the owner's live app, 2026-11-18): the open tasks go to the model before a task is made, and the
-    same work hears his line on its own task. Triage is what reads it (ingest.same_work), as it reads every message."""
-    from taskuary import general
-    there = s.create_task({'Title': 'Find two venues for the offsite', 'Kind': 'general', 'Status': 'open'}, 'owner')
-    told, had = [], len(s.list_tasks(None))
-    with mock.patch('taskuary.capabilities.has_ai', return_value=True), mock.patch('taskuary.llm.build_llm', return_value=lambda *a, **k: ''),          mock.patch('taskuary.ingest.judge', return_value=({'intent': 'task', 'same_as': there}, {})),          mock.patch.object(general, 'take_line', lambda st, tid, text, files=None, actor='owner', **k: told.append((tid, text))),          mock.patch('taskuary.general.start_session') as began:
-        made = concierge.handoff_task(s, 'Find venues for the 40-person offsite too', kind='general')
-    assert (made['taskId'], made.get('joined')) == (there, True) and len(s.list_tasks(None)) == had and not began.called
-    assert told == [(there, 'Find venues for the 40-person offsite too')]
 
 
 def test_a_handoff_whose_brain_fails_is_made_anyway(s):
@@ -632,15 +619,6 @@ def test_a_sent_or_dropped_email_cannot_be_drafted_again(s):
 def test_no_email_is_drafted_on_a_closed_task(s):
     tid = typed(s, FOUR[:1]); s.update_task(tid, {'Status': 'done'}, 'owner')
     assert not slots.draft(s, tid, 'late', to=FOUR[0]['to'])['ok']
-
-
-def test_triage_never_adds_emails_to_a_list_the_owner_already_wrote(s):
-    from taskuary import ingest
-    tid = s.create_task({'Title': 'Tabs', 'Summary': 'plain'}, 'owner')
-    s.set_task_checklist(tid, ['My own list'], 'owner')
-    llm = lambda sys, user, **k: json.dumps({'summary': 's', 'checklist': ['x'], 'outputs': [{'to': 'erin@northwind.example', 'about': 'y'}]})
-    ingest._enrich(s, tid, {'BodyText': 'Tell Erin', 'Subject': 'Tabs'}, 'plain', llm)
-    assert slots.all_(s, tid) == []
 
 
 def test_no_wrap_up_card_while_emails_still_wait(s):

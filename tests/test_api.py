@@ -945,29 +945,30 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(c.post(f'/api/messages/{mid}/not-mine', json={'scope': 'weird'}).status_code, 422)
 
     def test_editing_a_draft_teaches_learned_md(self):
-        """The README's promise, made true: your edit to a draft leaves a lesson behind - a
-        hypothesis in LEARNED.md, written by the triage brain the moment you decide."""
+        """The README's promise, made true: your edit to a draft leaves a lesson behind - a learned line
+        citing the review, written the moment you decide (in use once he confirms it)."""
         tid = c.post('/api/tasks', json={'Title': 'a question'}).json()['taskId']
         server.store.add_review({'TaskId': tid, 'Kind': 'draft', 'Status': 'pending', 'Reason': 'r',
                                  'DraftText': 'Dear sir, I will most certainly look into it.'})
         rid = next(r['ReviewId'] for r in c.get('/api/reviews', params={'status': 'pending'}).json()['data']
                    if r['TaskId'] == tid)
-        bullet = f'- {{{{owner_first}}}} drops formal openers. [s:2 | ev: rv{rid} | seen: 2026-08-21]'
+        from taskuary import memory
         seen = {}
-        fake = lambda sys_, usr, **kw: seen.update(usr=usr) or bullet
+        fake = lambda sys_, usr, **kw: seen.update(usr=usr) or json.dumps({'line': 'You drop formal openers.', 'subject': 'formal openers'})
         with mock.patch('taskuary.llm.build_llm', return_value=fake):
             r = c.post(f'/api/reviews/{rid}/decide', json={'verb': 'approve', 'final_text': 'On it.'})
         self.assertEqual(r.json()['status'], 'edited')            # the diff, not the verb, says edited
         self.assertIn('DRAFT:', seen['usr']); self.assertIn('On it.', seen['usr'])   # the edit IS the lesson
-        self.assertIn(bullet[:-1] + ' | k: owner first drops formal openers]', server.store.get_doc('learned'))   # keyed on the way in
+        learned = lambda: [r for r in memory.rows(server.store, memory.INFERRED) if f'rv{rid}' in r['ev']]
+        self.assertEqual([r['Text'] for r in learned()], ['You drop formal openers.'])        # a learned line, citing the review
         # and a plain approve teaches nothing hot-path: it is aggregate confirmation, counted at reflection
+        before = memory.rows(server.store, memory.INFERRED)
         server.store.add_review({'TaskId': tid, 'Kind': 'draft', 'Status': 'pending', 'Reason': 'r', 'DraftText': 'ok'})
         rid2 = next(r2['ReviewId'] for r2 in c.get('/api/reviews', params={'status': 'pending'}).json()['data']
                     if r2['TaskId'] == tid)
-        before = server.store.get_doc('learned')
         with mock.patch('taskuary.llm.build_llm', return_value=fake):
             c.post(f'/api/reviews/{rid2}/decide', json={'verb': 'approve', 'final_text': None})
-        self.assertEqual(server.store.get_doc('learned'), before)
+        self.assertEqual(memory.rows(server.store, memory.INFERRED), before)
 
     def test_ingest_status_heals_ghost_running(self):
         # a poll that died with the app used to leave 'running' behind forever - the timeline
@@ -1284,8 +1285,8 @@ class ApiTests(unittest.TestCase):
         from taskuary import memory
         made = [l for l in memory.lessons(server.store) if l['ev'] == f'msg{mid}']
         self.assertEqual([l['kind'] for l in made], ['made_task'])
-        self.assertIn('(about: the topic "', made[0]['text'])
-        self.assertIn(made[0]['text'], server.store.get_doc('learned'))
+        self.assertEqual(made[0]['text'], 'Failed bank imports are real work for you, even from a machine')
+        self.assertIn(made[0]['text'], server.store.get_doc('learned'))     # Make a task says "like this, from now on": it is in use
         self.assertEqual(server.store.get_message(mid)['TaskId'], out['taskId'])
 
     def test_promoting_one_report_run_is_not_a_standing_order_for_the_report(self):
@@ -1493,14 +1494,15 @@ class ApiTests(unittest.TestCase):
     def test_not_a_task_without_learning_deletes_and_teaches_nothing(self):
         """Someone answered 'yes' - that is chatter, not a verdict about the sender. The lighter
         not-a-task deletes the task and leaves no policy and no memory behind."""
+        from taskuary import memory
         tid = c.post('/api/tasks', json={'Title': 'yes'}).json()['taskId']
         server.store.add_message({'TaskId': tid, 'ExternalId': 'graph:CHAT1', 'Channel': 'teams',
-                                  'FromEmail': 'priya@corp.com', 'BodyText': 'yes', 'Status': 'routed'})
-        before_p = len(c.get('/api/policies').json()['data'])
+                                  'FromEmail': 'omar@vendor.example', 'BodyText': 'yes', 'Status': 'routed'})
+        before_p, before_m = len(c.get('/api/policies').json()['data']), memory.rows(server.store, memory.INFERRED)
         r = c.post(f'/api/tasks/{tid}/not-a-task', json={'learn': False}).json()
         self.assertIsNone(r['learned'])
         self.assertEqual(len(c.get('/api/policies').json()['data']), before_p)
-        self.assertNotIn('priya@corp.com', server.store.get_doc('learned') or '')
+        self.assertEqual(memory.rows(server.store, memory.INFERRED), before_m)
         self.assertEqual(c.get(f'/api/tasks/{tid}').status_code, 404)   # the task is gone
 
 

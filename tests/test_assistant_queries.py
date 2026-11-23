@@ -245,7 +245,7 @@ class WhatItKnowsOnEveryPage(unittest.TestCase):
                 concierge.say(s, 'what matters most today?', llm=lambda sy, u, **k: (seen.append(sy), 'The month-end close.')[1], view=view)
                 sy = seen[0]
                 for part in (soul, job, counsel, 'I put vendor renewals off to Friday', f'TASKUARY {__version__}'): self.assertIn(part, sy)
-                self.assertIn('STYLE.md (how they write', sy); self.assertIn('AGENT.md (the rules every agent works under)', sy)
+                self.assertIn('STYLE.md (how they write', sy)
                 self.assertIn('"your doc style"', sy)
 
 

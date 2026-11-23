@@ -55,7 +55,7 @@ def test_a_rest_is_never_longer_than_a_week(s):
 
 def test_past_the_cap_hard_work_runs_standard_and_says_so(s):
     a = _card(s, 'anthropic', model='claude-sonnet-5', strong_model='claude-opus-5'); s.set_setting('triage_ai', a, 'owner')
-    tid = s.create_task({'Title': 'Board pack', 'Status': 'open'}, 'owner'); s.judge_task(tid, {'difficulty': 'hard'}, 'triage')
+    tid = s.create_task({'Title': 'Board pack', 'Status': 'open'}, 'owner'); s.judge_task(tid, {'difficulty': 'hard'}, 'owner')
     assert brainroute.cap(s) is None and brainroute.choose(s, 'draft', task=tid).tier == 'strong'   # blank: no cap
     s.set_setting('ai_route_strong_cap', '2', 'owner')
     for _ in range(2): brainroute.log(s, brainroute.choose(s, 'draft', task=tid), tid)

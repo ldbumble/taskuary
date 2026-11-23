@@ -217,7 +217,7 @@ class QuickWorkRoad(unittest.TestCase):
         from taskuary import general
         for model in (FLASH, SONNET):
             s = MemoryStore(); fx = Factory(s); jobs_on(s, card(s, model))
-            tid = fx.task(title='What is the PTO policy?', kind='general'); s.judge_task(tid, {'difficulty': 'quick'}, 'triage')
+            tid = fx.task(title='What is the PTO policy?', kind='general'); s.judge_task(tid, {'difficulty': 'quick'}, 'owner')
             with Gateway(lambda b: 'Fifteen days a year.') as g, mock.patch('taskuary.browserview.installed', return_value=False),                  mock.patch('taskuary.apiagent.can', return_value=False):
                 general.GeneralSession(s, tid).send_prompt('How many PTO days?', brief=True)
             self.assertEqual(general.history(s, tid)[-1]['content'][0]['text'], 'Fifteen days a year.', model)

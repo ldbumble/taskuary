@@ -31,7 +31,7 @@ def s():
 
 def _task(s, difficulty='hard', data_class=None):
     tid = s.create_task({'Title': 'Q3 numbers', 'Status': 'open'}, 'owner')
-    s.judge_task(tid, {'difficulty': difficulty, **({'data_class': data_class} if data_class else {})}, 'triage')
+    s.judge_task(tid, {'difficulty': difficulty, **({'data_class': data_class} if data_class else {})}, 'owner')
     return tid
 
 

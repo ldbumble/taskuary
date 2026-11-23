@@ -6,7 +6,7 @@ under that answer. These pin the marker, what may be shown, where it lands, and 
 import unittest
 from pathlib import Path
 
-from taskuary import config, general, selfclose, session_artifacts as sa
+from taskuary import config, general, outputs, selfclose, session_artifacts as sa
 from taskuary.store import MemoryStore
 from taskuary.testing import Factory
 
@@ -29,7 +29,7 @@ class ShowMarkerTests(unittest.TestCase):
 class ShowFilesTests(unittest.TestCase):
     def setUp(self):
         self.s = MemoryStore(); self.tid = Factory(self.s).task(title='August vendor spend')
-        self.scratch = config.home() / 'scratch'; self.scratch.mkdir(parents=True, exist_ok=True)
+        self.scratch = outputs.work_folder(self.tid)              # the task's own folder, never the shared scratch
 
     def shown(self):
         return [a for a in self.s.list_task_artifacts(self.tid) if a.get('Kind') == 'shown']
@@ -61,7 +61,7 @@ class ShownInTheChatTests(unittest.TestCase):
         from taskuary import server
         self.server, self.s = server, MemoryStore()
         self.tid = Factory(self.s).task(title='August vendor spend', kind='general')
-        scratch = config.home() / 'scratch'; scratch.mkdir(parents=True, exist_ok=True)
+        self.scratch = scratch = outputs.work_folder(self.tid)
         (scratch / 'spend.png').write_bytes(PNG)
         (scratch / 'spend.html').write_text('<script>alert(1)</script>', encoding='utf-8')
         self.old, server.store = server.store, self.s
@@ -74,7 +74,7 @@ class ShownInTheChatTests(unittest.TestCase):
 
     def test_what_a_turn_showed_sits_under_the_answer_that_turn_filed(self):
         self.s.add_comment(self.tid, 'owner', general.USER_TYPE, 'How did vendor spend move?')
-        general._show_files(self.s, self.tid, [str(config.home() / 'scratch' / 'spend.png')], [])
+        general._show_files(self.s, self.tid, [str(self.scratch / 'spend.png')], [])
         self.s.add_comment(self.tid, 'assistant', general.ASSISTANT_TYPE, 'Up 8% on July.')
         data = self.server._assistant_payload(self.tid)
         answer = [m for m in data['messages'] if m['role'] == 'assistant'][-1]
@@ -83,7 +83,7 @@ class ShownInTheChatTests(unittest.TestCase):
     def test_a_page_from_a_turn_that_never_answered_stays_on_that_turn(self):
         # stopped or failed: no answer of its own - it went to the NEXT turn's answer, under "back again" (the overnight walk, 2026-11-11)
         first = self.s.add_comment(self.tid, 'owner', general.USER_TYPE, 'Start the draft.')
-        general._show_files(self.s, self.tid, [str(config.home() / 'scratch' / 'spend.png')], [])
+        general._show_files(self.s, self.tid, [str(self.scratch / 'spend.png')], [])
         self.s._exec("UPDATE task_artifact SET CreatedAt='2000-01-01 00:00:01' WHERE TaskId=?", (self.tid,))
         self.s._exec("UPDATE comment SET CreatedAt='2000-01-01 00:00:00' WHERE CommentId=?", (first,))
         self.s.add_comment(self.tid, 'owner', general.USER_TYPE, 'Back again.')
@@ -95,14 +95,14 @@ class ShownInTheChatTests(unittest.TestCase):
     def test_a_coding_chat_places_its_pages_in_the_turn_that_showed_them(self):
         # ...the same list the general chat gets, named by the coding chat's steps: it had none, and a page drew only from a trace that carried it
         from taskuary import codingchat
-        general._show_files(self.s, self.tid, [str(config.home() / 'scratch' / 'spend.png')], [])
+        general._show_files(self.s, self.tid, [str(self.scratch / 'spend.png')], [])
         self.s._exec("UPDATE task_artifact SET CreatedAt='2000-01-01 00:00:03' WHERE TaskId=?", (self.tid,))
         ss = [{'sid': 's1', 'updates': [{'sessionUpdate': 'user_message_chunk', '_meta': {'taskuary': 'owner'}, '_at': '2000-01-01 00:00:00'},
                                         {'sessionUpdate': 'tool_call', '_at': '2000-01-01 00:00:02'}, {'sessionUpdate': 'agent_message_chunk', '_at': '2000-01-01 00:00:09'}]}]
         self.assertEqual([(p['name'], p['after']) for p in codingchat.cards(self.s, self.tid, ss)['published']], [('spend.png', 's1#1')])
 
     def test_a_picture_is_served_as_itself_and_a_page_only_as_text(self):
-        general._show_files(self.s, self.tid, [str(config.home() / 'scratch' / n) for n in ('spend.png', 'spend.html')], [])
+        general._show_files(self.s, self.tid, [str(self.scratch / n) for n in ('spend.png', 'spend.html')], [])
         rows = {a['Name']: a for a in self.s.list_task_artifacts(self.tid)}
         pic = self.get(f"/api/task-artifacts/{rows['spend.png']['ArtifactId']}")
         self.assertEqual((pic.status_code, pic.headers['content-type'], pic.content), (200, 'image/png', PNG))
@@ -111,8 +111,8 @@ class ShownInTheChatTests(unittest.TestCase):
         self.assertEqual(page.headers['x-content-type-options'], 'nosniff')
 
     def test_a_pdf_is_served_for_the_viewer_and_downloads_as_itself(self):
-        pdf = b'%PDF-1.4\n%%EOF'; (config.home() / 'scratch' / 'terms.pdf').write_bytes(pdf)
-        general._show_files(self.s, self.tid, [str(config.home() / 'scratch' / 'terms.pdf')], [])
+        pdf = b'%PDF-1.4\n%%EOF'; (self.scratch / 'terms.pdf').write_bytes(pdf)
+        general._show_files(self.s, self.tid, [str(self.scratch / 'terms.pdf')], [])
         [row] = [a for a in self.s.list_task_artifacts(self.tid) if a['Name'] == 'terms.pdf']
         got, dl = (self.get(f"/api/task-artifacts/{row['ArtifactId']}{q}") for q in ('', '?download=true'))
         self.assertEqual((got.headers['content-type'], got.content), ('application/pdf', pdf))

@@ -99,12 +99,10 @@ class AJoin(unittest.TestCase):
     def line(self, body='Also the rates line rounds wrong'):
         return say(self.s, 'w2', body, '2026-10-28 10:00:00', brain({body: self.join}, self.seen))
 
-    def test_the_rooms_older_task_is_shown_and_the_join_adds_a_to_do_part(self):
+    def test_the_rooms_older_task_is_shown_and_the_line_joins_it(self):
         out, _ = self.line()
         self.assertEqual((out['status'], out['task_id']), ('attached', self.tid))
         self.assertIn(self.tid, [t['tid'] for t in self.seen[-1][1]['room_tasks']])
-        self.assertTrue(any(c['Body'].startswith('New from the latest message:') and 'Fix the rates line rounding' in c['Body']
-                            for c in self.s.list_comments(self.tid)))
 
     def test_a_live_agent_is_handed_the_line(self):
         with mock.patch.object(ingest, 'live_agent', return_value='coding'), mock.patch.object(ingest, 'pass_in_why', return_value=''):

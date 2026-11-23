@@ -25,8 +25,9 @@ def seeded():
     s.save_doc('coding', f'# Coding rules\n- {MARK["coding"]}', 'owner')
     s.upsert_agent('coding', 'coding', 'cli', '{}')      # the coding profile is found by its kind (agents.coding_role), as config seeds it
     s.save_doc('triage', f'Classify one inbound work message. Answer JSON only. {MARK["triage"]}', 'owner')
-    # triage reads LEARNED.md's "What you care about" and nothing else (learned_cut), so the marker has to live there
-    s.save_doc('learned', f'## What you care about\n- {MARK["learned"]} [s:3 | ev: rv1 | seen: 2026-08-01]', 'owner')
+    # a learned line is read once he confirms it (memory.in_use) - triage reads the whole memory in use (memory.whole)
+    from taskuary import memory
+    memory.infer(s, f'{MARK["learned"]} answers payroll the same day', 'payroll answers', ['rv1'], confirmed=True)
     # style_doc holds an untouched template out of prompts, so the marker needs real content
     s.save_doc('style', f'### Tone & length\n- {MARK["style"]}: two sentences, answer first, no preamble.', 'owner')
     put_note(s, {'Scope': 'global', 'ScopeKey': None, 'Note': f'{NOTE} always defer to the finance team',
@@ -36,7 +37,6 @@ def seeded():
     put_note(s, {'Scope': 'global', 'ScopeKey': None, 'Note': f'{OFF} a switched-off note',
                   'Source': 'verdict', 'Active': 0, 'CreatedBy': 'owner'})
     # ...as an install that had them holds them after its first start: LEARNED.md lines (and STYLE.md for the writing note), 2026-10-27
-    from taskuary import memory
     memory.migrate(s)
     return s
 
@@ -62,21 +62,21 @@ class DocsReachThePromptTests(unittest.TestCase):
         self.assertFlows(seen['p'], [MARK['triage'], MARK['soul'], MARK['job'], MARK['learned'], NOTE],
                          forbid=[MARK['coding'], MARK['style']])
 
-    def test_both_reply_paths_get_soul_style_and_writing_notes_but_not_learned_or_verdicts(self):
-        """PW-058/060: a reply is written from SOUL (identity), STYLE (voice) and explicit writing instructions;
-        LEARNED.md and the owner's routing verdicts are triage's and stay out of the draft."""
+    def test_both_reply_paths_get_soul_style_and_writing_notes(self):
+        """PW-058/060: a reply is written from SOUL (identity), STYLE (voice) and explicit writing instructions - and the owner's
+        memory in use as a task reads it (memory.for_task, one road: what he said and what he confirmed)."""
         s = seeded()
         tid = _task(s, 'reply', 'Can you confirm the date?')
         seen = {}
         responder.draft_reply(s, tid, llm=lambda sysm, usr, **k: (seen.update(p=sysm + usr), 'ok')[1])
-        self.assertFlows(seen['p'], [MARK['soul'], MARK['style'], WNOTE], forbid=[MARK['coding'], MARK['learned'], MARK['job'], NOTE])
+        self.assertFlows(seen['p'], [MARK['soul'], MARK['style'], WNOTE], forbid=[MARK['coding'], MARK['job']])
         mid = s.add_message({'ExternalId': 'r2', 'Channel': 'email', 'Subject': 'quick question',
                              'FromEmail': 'a@b.com', 'BodyText': 'Can you confirm the date?', 'Status': 'filed'})
         rid = s.add_review({'MessageId': mid, 'Kind': 'draft', 'Status': 'pending'})
         seen2 = {}
         responder.draft_for_message(s, s.get_message(mid), rid,
                                     llm=lambda sysm, usr, **k: (seen2.update(p=sysm + usr), 'ok')[1])
-        self.assertFlows(seen2['p'], [MARK['soul'], MARK['style'], WNOTE], forbid=[MARK['coding'], MARK['learned'], NOTE])
+        self.assertFlows(seen2['p'], [MARK['soul'], MARK['style'], WNOTE], forbid=[MARK['coding']])
 
     def test_the_coding_agent_gets_the_notes_and_no_rule_document(self):
         """The notes are the part that was missing: an agent was handed the operator rules and
@@ -131,11 +131,13 @@ class EveryScopeIsHonouredTests(unittest.TestCase):
            'body': 'history attached', 'source_name': 'devteam-logs@corp.example'}
 
     def test_all_five_scopes_match_what_they_claim_to(self):
-        for scope, key in (('global', None), ('sender', 'dana@vendor.com'), ('sender_domain', 'vendor.com'),
+        from taskuary import memory
+        for scope, key in (('sender', 'dana@vendor.com'), ('sender_domain', 'vendor.com'),
                            ('subject', 'resident refund request'), ('source', 'devteam-logs@corp.example')):
             with self.subTest(scope=scope):
                 self.assertTrue(ingest.notes_for(self._note(scope, key), self.MSG),
                                 f'a {scope}-scoped note matched nothing')
+        self.assertIn(NOTE, memory.whole(self._note('global', None)))       # a general line rides the whole memory triage reads
 
     def test_and_none_of_them_matches_an_unrelated_message(self):
         other = {'from_email': 'someone@elsewhere.com', 'subject': 'Directors meeting',
@@ -173,25 +175,3 @@ class BlankDocsHeal(unittest.TestCase):
         r = c.put('/api/doc/style', json={'content': ''})
         self.assertTrue(r.json().get('restored'))
         self.assertIn('STYLE.md', server.store.get_doc('style'))
-
-
-class LearnedIsEditedWithTheName(unittest.TestCase):
-    """The setup sweep, 2026-10-28: LEARNED.md's editor showed {{owner_first}} raw - it is drawn with the name, saved with the token."""
-
-    def test_learned_is_edited_with_the_name_and_saved_with_the_token(self):
-        from unittest import mock
-        from fastapi.testclient import TestClient
-        from taskuary import server
-        s = MemoryStore()
-        with mock.patch.object(server, 'store', s):
-            c = TestClient(server.app)
-            s.set_setting('owner_name', 'Alex Doyle', 'owner')
-            s.save_doc('learned', '## Your people\n- {{owner_first}} answers Erin Blake the same day', 'owner')
-            got = c.get('/api/doc/learned').json()['content']
-            self.assertIn('- Alex answers Erin Blake', got); self.assertNotIn('{{', got)
-            c.put('/api/doc/learned', json={'content': got + '\n- Alex reads the digest first'})
-            self.assertEqual(s.get_doc('learned').count('{{owner_first}}'), 2, s.get_doc('learned'))
-            self.assertNotIn('Alex', s.get_doc('learned'))
-            # ...another document keeps its tokens as written
-            s.save_doc('style', 'Ask {{owner_first}} first.', 'owner')
-            self.assertEqual(c.get('/api/doc/style').json()['content'], 'Ask {{owner_first}} first.')

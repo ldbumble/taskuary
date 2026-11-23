@@ -51,7 +51,7 @@ def test_the_owner_corrects_the_difficulty_and_it_teaches_triage():
     s = _store(); tid = s.create_task({'Title': 'Board pack', 'Status': 'open'}, 'owner')
     s.add_message({'TaskId': tid, 'Channel': 'email', 'FromEmail': 'erin@northwind.example', 'Subject': 'Board pack for Thursday',
                    'BodyText': 'Can you pull the board pack together?', 'Status': 'routed'})
-    s.judge_task(tid, {'difficulty': 'quick'}, 'triage')
+    s.judge_task(tid, {'difficulty': 'quick'}, 'owner')
     with mock.patch.object(server, 'store', s):
         j = c.post(f'/api/tasks/{tid}/judged', json={'difficulty': 'hard'}).json()['judged']
         assert (j['difficulty'], j['by']) == ('hard', 'owner')
@@ -64,7 +64,7 @@ def test_the_owner_corrects_the_difficulty_and_it_teaches_triage():
 
 def test_run_again_on_the_strong_model_is_a_press_on_a_brain_that_has_one():
     s = _store(); tid = s.create_task({'Title': 'Research the vendor', 'Status': 'open', 'Kind': 'general'}, 'owner')
-    s.judge_task(tid, {'sure': False}, 'triage')                                       # the reader was unsure: the ▾ offers it
+    s.judge_task(tid, {'sure': False}, 'owner')                                       # the reader was unsure: the ▾ offers it
     sent, told = [], []
     class Session:
         def send_prompt(self, text, **kw): sent.append(kw); told.append(text)
@@ -101,7 +101,7 @@ def test_opening_a_task_asks_the_router_only_when_the_strong_rerun_can_be_offere
     plain = s.create_task({'Title': 'Research the vendor', 'Status': 'open', 'Kind': 'general'}, 'owner')
     unsure = s.create_task({'Title': 'Research the supplier', 'Status': 'open', 'Kind': 'general'}, 'owner')
     shut = s.create_task({'Title': 'Research the venue', 'Status': 'done', 'Kind': 'general'}, 'owner')
-    for t in (unsure, shut): s.judge_task(t, {'sure': False}, 'triage')
+    for t in (unsure, shut): s.judge_task(t, {'sure': False}, 'owner')
     with mock.patch.object(server, 'store', s), mock.patch.object(brainroute, 'strong_for', wraps=brainroute.strong_for) as asked:
         assert c.get(f'/api/tasks/{plain}').json()['strongAgain'] is None
         assert c.get(f'/api/tasks/{shut}').json()['strongAgain'] is None

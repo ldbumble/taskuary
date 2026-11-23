@@ -11,7 +11,7 @@ The automatic road kept the raw body a while longer: a verdict that names no sum
 characters of quoted thread landed on the task whose ask was one sentence (the owner, 2026-09-14:
 "why is the whole email showing up not the specific task?").
 """
-import json, threading, unittest
+import json, unittest
 from unittest import mock
 
 from taskuary import ingest, triage
@@ -84,20 +84,12 @@ class AutomaticRoadTests(unittest.TestCase):
         body = 'Morning - the payroll export failed again overnight. Same KeyError as last week.'
         self.assertEqual(draft_task_fields({'subject': 'Payroll export', 'body': body})['summary'], body)
 
-    def test_a_reply_only_verdict_carries_the_ask_too(self):
-        """reply_only lands as a row of its own, so it is asked for a title and a summary like any
-        other - it used to answer intent/why alone and fall through to the raw body.
-
-        The shape is asked for on EVERY verdict now (2026-09-16), which is strictly stronger: an fyi
-        and a report are rows the owner reads too, and a mail header is not a sentence."""
-        self.assertIn('- **summary** - two sentences, for every verdict', triage.TASK_FIELDS)
-        self.assertIn('"title"', triage.TASK_FIELDS)
-        self.assertIn('"summary"', triage.TASK_FIELDS)
+    def test_a_reply_only_verdict_names_the_row_and_the_ask_is_the_senders_own_words(self):
+        """reply_only lands as a row of its own under the verdict's title. Triage writes no summary (2026-11-23): the task's ask is
+        what the sender typed, never the quoted chain under it."""
         s = MemoryStore()
-        llm = mock.Mock(return_value=json.dumps({
-            'intent': 'reply_only', 'why': 'Paula asks which documentation you meant',
-            'title': 'Answer Paula on the EPR documentation',
-            'summary': 'Paula Vance asks which documentation you were referring to; she says the PAM and Review PDFs are all that is in use.'}))
+        llm = mock.Mock(return_value=json.dumps({'intent': 'reply_only', 'why': 'Paula asks which documentation you meant',
+                                                 'title': 'Answer Paula on the EPR documentation'}))
         with mock.patch.object(ingest, '_spawn'):
             r = ingest.ingest_message(s, {'external_id': 'd', 'channel': 'email', 'from_email': 'pvance@vendor.example',
                                           'conversation_id': 'c-epr', 'subject': 'RE: Erin Blake Annual EPR- AUG 2026',
@@ -105,9 +97,8 @@ class AutomaticRoadTests(unittest.TestCase):
         task = s.get_task(r['task_id'])
         self.assertEqual(task['Kind'], 'reply')
         self.assertEqual(task['Title'], 'Answer Paula on the EPR documentation')
-        self.assertIn('which documentation you were referring to', task['Summary'])
-        for gone in ('Harbor Way', 'confidential', 'From: Alex'):
-            self.assertNotIn(gone, task['Summary'], gone)
+        self.assertIn('check back in on this', task['Summary'])
+        self.assertNotIn('From: Alex', task['Summary'])
 
     def test_an_fyi_keeps_the_verdict_s_own_line_although_it_has_no_task(self):
         """The whole point of asking for a title on every verdict: an fyi never becomes a task, so
@@ -159,78 +150,16 @@ class AutomaticRoadTests(unittest.TestCase):
         self.assertEqual(funnel.says({'Title': 'Fix the census sync', 'TriageTitle': 'Marcus adds a detail',
                                       'Subject': 'RE: RE: sync'}), 'Fix the census sync')
 
-    def test_a_verdict_that_names_its_own_summary_still_wins(self):
-        """The fallback never overrides the brain - it is only what stands in for it."""
-        s = MemoryStore()
-        llm = mock.Mock(return_value=json.dumps({'intent': 'task', 'kind': 'task', 'why': 'an ask',
-                                                 'title': 'Roll out the screening tool',
-                                                 'summary': 'J.D. is chasing the rollout.'}))
-        with mock.patch.object(ingest, '_spawn'):
-            r = ingest.ingest_message(s, {'external_id': 'x', 'channel': 'email', 'from_email': 'jd@northwind.example',
-                                          'conversation_id': 'c1', 'subject': 'Re: Hosting', 'body': MAIL,
-                                          'sent_at': '2026-09-14 09:00:00'}, llm=llm)
-        self.assertEqual(s.get_task(r['task_id'])['Summary'], 'J.D. is chasing the rollout.')
-
-
-class ExtractTests(unittest.TestCase):
-    def test_without_a_brain_the_quoted_thread_is_still_gone(self):
-        """The fallback must never be worse than the raw body it replaces. The chain is a shape (a quote head) and
-        goes; the sign-off and footer stay, since no word list decides where the sender stopped (2026-10-11)."""
-        out = triage.extract_ask({'Subject': 'Re: Hosting', 'BodyText': MAIL}, llm=None)
-        self.assertIn('check back in on this', out['summary'])
-        self.assertNotIn('From: Alex', out['summary'])
-        self.assertEqual(out['checklist'], [])
-
-    def test_the_brain_supplies_the_summary_and_the_todos(self):
-        llm = mock.Mock(return_value=json.dumps({
-            'summary': 'J.D. Ellis is chasing the rollout of the interview screening tool.',
-            'checklist': ['Confirm the rollout date', 'Send HR a heads-up before the meeting']}))
-        out = triage.extract_ask({'Subject': 'Re: Hosting', 'BodyText': MAIL}, llm=llm)
-        self.assertEqual(out['checklist'], ['Confirm the rollout date', 'Send HR a heads-up before the meeting'])
-        self.assertIn('chasing the rollout', out['summary'])
-        # the quoted thread is a different message's words; the rest of the sender's mail is the model's to read
-        sent = llm.call_args[0][1]
-        self.assertIn('rolling it out', sent); self.assertNotIn('From: Alex', sent)
-
-    def test_a_fenced_answer_is_still_read(self):
-        llm = mock.Mock(return_value='```json\n{"summary": "s", "checklist": ["a"]}\n```')
-        self.assertEqual(triage.extract_ask({'BodyText': 'x'}, llm=llm)['checklist'], ['a'])
-
-    def test_a_broken_brain_never_breaks_the_promote(self):
-        """Turning a message into a task must not depend on a model answering."""
-        out = triage.extract_ask({'BodyText': MAIL}, llm=mock.Mock(side_effect=RuntimeError('502')))
-        self.assertIn('check back in', out['summary']); self.assertEqual(out['checklist'], [])
-
-    def test_a_model_that_answers_with_junk_falls_back_too(self):
-        out = triage.extract_ask({'BodyText': MAIL}, llm=mock.Mock(return_value='sure thing!'))
-        self.assertIn('check back in', out['summary'])
-
-
 class PromoteTests(unittest.TestCase):
     def _msg(self, s):
         return s.add_message({'Channel': 'email', 'FromEmail': 'jellis@northwind.example', 'FromName': 'J. D. Ellis',
                               'Subject': 'Re: Hosting for Interview Screening Tool', 'BodyText': MAIL,
                               'SentAt': '2026-09-10T09:00:00'})
 
-    def test_promoting_a_message_files_the_ask_and_the_checklist(self):
-        s = MemoryStore()
-        mid = self._msg(s)
-        brain = mock.Mock(return_value=json.dumps({'summary': 'Ellis is chasing the rollout.',
-                                                   'checklist': ['Confirm the rollout date']}))
-        with mock.patch('taskuary.llm.build_llm', return_value=brain):
-            tid = ingest.task_from_message(s, mid, 'owner')
-        # read after the press (test_press_never_waits), so wait for it
-        for th in [th for th in threading.enumerate() if th.name == ingest.ENRICH_THREAD]: th.join(5)
-        t = s.get_task(tid)
-        self.assertEqual(t['Summary'], 'Ellis is chasing the rollout.')
-        self.assertNotIn('confidential', t['Summary'])
-        self.assertEqual([i['text'] for i in s.task_checklist(tid)], ['Confirm the rollout date'])
-
-    def test_promoting_a_flagged_mail_reads_it_with_triage_s_verdict_and_keeps_its_reason(self):
+    def test_promoting_a_flagged_mail_keeps_triage_s_reason_and_asks_no_model(self):
         """B4 (the email walk, 2026-10-29): a credential phish triage had filed, promoted by hand, became a To do of the
-        phisher's own instructions - "sign in via the link", "reply confirming approval" - because the reading of the ask
-        saw only the sender's words, and the task's route said only "promoted by the owner". The reading is told what triage
-        found and the danger it read, and the route keeps triage's reason."""
+        phisher's own instructions. A promote now reads nothing into the mail: the task holds the sender's words, no to-do
+        is written for it, and its route keeps why triage had filed it."""
         s = MemoryStore()
         mid = s.add_message({'Channel': 'email', 'FromEmail': 'jordan@vendor.example', 'FromName': 'Jordan Pike',
                              'Subject': 'Shared document: Q4 vendor agreement', 'BodyText': 'Sign in at the link with your work '
@@ -238,51 +167,19 @@ class PromoteTests(unittest.TestCase):
                              'Status': 'filed'})
         s.add_route(mid, None, 'file', None, 'triage: nothing to do - an unknown sender asks for a sign-in through a link', [], 'triage',
                     verdict={'intent': 'fyi', 'why': 'an unknown sender asks for a sign-in through a link',
-                             'danger': 'tries to get an assistant to sign in and approve on the owner\'s behalf'})
-        brain = mock.Mock(return_value=json.dumps({'summary': 'Triage flagged this as a credential phish.',
-                                                   'checklist': ['Confirm with the vendor through a known contact']}))
+                             'danger': 'tries to get an assistant to sign in and approve on the owner's behalf'})
+        brain = mock.Mock(side_effect=AssertionError('a model was asked'))
         with mock.patch('taskuary.llm.build_llm', return_value=brain):
             tid = ingest.task_from_message(s, mid, 'owner')
-        for th in [th for th in threading.enumerate() if th.name == ingest.ENRICH_THREAD]: th.join(5)
-        system, user = brain.call_args[0]
-        self.assertIn('TRIAGE FLAGGED THIS MESSAGE', system)
-        self.assertIn('DANGER', user); self.assertIn('sign in and approve', user)
-        self.assertIn('TRIAGE READ IT EARLIER: an unknown sender asks for a sign-in', user)
-        self.assertEqual([i['text'] for i in s.task_checklist(tid)], ['Confirm with the vendor through a known contact'])
+        brain.assert_not_called()
+        self.assertEqual(s.task_checklist(tid), [])
         route = s.list_routes(tid)[-1]['Reason']
         self.assertTrue(route.startswith('promoted by the owner'))
         self.assertIn('triage had filed it: an unknown sender asks for a sign-in through a link', route)
 
-    def test_promoting_a_mail_triage_already_read_takes_its_reading_and_asks_no_model(self):
-        # the ask triage read when the mail came in is stored on its verdict: promoting it asked a model to read the same ask again
+    def test_promoting_stores_the_sender_words_only(self):
         s = MemoryStore()
-        mid = self._msg(s)
-        s.add_route(mid, None, 'file', None, 'triage: nothing to do - Ellis chases the rollout', [], 'triage',
-                    verdict={'intent': 'fyi', 'why': 'Ellis chases the rollout', 'summary': 'Ellis wants the rollout date confirmed.',
-                             'checklist': ['Confirm the rollout date']})
-        brain = mock.Mock(side_effect=AssertionError('a model was asked'))
-        with mock.patch('taskuary.llm.build_llm', return_value=brain):
-            tid = ingest.task_from_message(s, mid, 'owner')
-        for th in [th for th in threading.enumerate() if th.name == ingest.ENRICH_THREAD]: th.join(5)
-        brain.assert_not_called()
-        self.assertEqual(s.get_task(tid)['Summary'], 'Ellis wants the rollout date confirmed.')
-        self.assertEqual([i['text'] for i in s.task_checklist(tid)], ['Confirm the rollout date'])
-
-    def test_a_plain_promote_is_asked_with_no_danger_guidance(self):
-        s = MemoryStore()
-        mid = self._msg(s)
-        brain = mock.Mock(return_value=json.dumps({'summary': 'Ellis is chasing the rollout.', 'checklist': []}))
-        with mock.patch('taskuary.llm.build_llm', return_value=brain):
-            ingest.task_from_message(s, mid, 'owner')
-        for th in [th for th in threading.enumerate() if th.name == ingest.ENRICH_THREAD]: th.join(5)
-        system, user = brain.call_args[0]
-        self.assertNotIn('TRIAGE FLAGGED', system); self.assertNotIn('DANGER', user)
-
-    def test_promoting_with_no_brain_still_stores_the_sender_words_only(self):
-        s = MemoryStore()
-        mid = self._msg(s)
-        with mock.patch('taskuary.llm.build_llm', return_value=None):
-            tid = ingest.task_from_message(s, mid, 'owner')
+        tid = ingest.task_from_message(s, self._msg(s), 'owner')
         summary = s.get_task(tid)['Summary']
         self.assertIn('check back in on this', summary)
         self.assertNotIn('From: Alex', summary)           # the old code stored the whole chain
@@ -364,92 +261,6 @@ class ContractTests(unittest.TestCase):
         self.assertIn(triage.shipped_section('## 5.'), triage.INTENT_SYSTEM)
         self.assertIn(triage.shipped_section('## 7.'), triage.INTENT_SYSTEM)
         self.assertEqual(self._system_for(None).count('one distinct requested outcome each'), 1)
-
-
-class BackfillTests(unittest.TestCase):
-    """Re-deriving the ask for rows already on the board. It REWRITES the owner's tasks, so the
-    guards matter more than the rewrite: dry-run by default, only where the summary is literally
-    a copy of the message, and never over a checklist they may have ticked."""
-
-    def _task(self, s, summary, body=MAIL, closed=False):
-        mid = s.add_message({'Channel': 'email', 'FromEmail': 'jellis@northwind.example', 'Subject': 'Re: Hosting',
-                             'BodyText': body, 'SentAt': '2026-09-10T09:00:00'})
-        tid = s.create_task({'Title': 'Hosting', 'Summary': summary, 'Kind': 'coding',
-                             **({'Status': 'done'} if closed else {})}, 'owner')
-        s.attach_message(mid, tid)
-        return tid
-
-    def _brain(self):
-        return mock.Mock(return_value=json.dumps({'summary': 'Ellis is chasing the rollout.',
-                                                  'checklist': ['Confirm the rollout date']}))
-
-    def test_it_finds_the_raw_body_slice_and_rewrites_it(self):
-        s = MemoryStore()
-        tid = self._task(s, MAIL[:1000])                       # the exact fingerprint
-        rows = ingest.backfill_asks(s, self._brain(), dry_run=False)
-        me = next(r for r in rows if r['task_id'] == tid)
-        self.assertEqual(me['action'], 'rewrote')
-        self.assertEqual(s.get_task(tid)['Summary'], 'Ellis is chasing the rollout.')
-        self.assertEqual([i['text'] for i in s.task_checklist(tid)], ['Confirm the rollout date'])
-
-    def test_dry_run_is_the_default_and_writes_nothing(self):
-        s = MemoryStore()
-        tid = self._task(s, MAIL[:1000])
-        rows = ingest.backfill_asks(s, self._brain())
-        self.assertEqual(next(r for r in rows if r['task_id'] == tid)['action'], 'would rewrite')
-        self.assertEqual(s.get_task(tid)['Summary'], MAIL[:1000])      # untouched
-        self.assertEqual(s.task_checklist(tid), [])
-
-    def test_a_real_summary_is_left_alone(self):
-        """The one thing this must never do is overwrite a good ask."""
-        s = MemoryStore()
-        tid = self._task(s, 'Ellis is chasing the interview screening rollout before an HR meeting.')
-        r = next(x for x in ingest.backfill_asks(s, self._brain(), dry_run=False) if x['task_id'] == tid)
-        self.assertEqual(r['action'], 'skipped'); self.assertIn('not a copy', r['why'])
-
-    def test_an_existing_checklist_is_never_replaced(self):
-        """They may have ticked items off it."""
-        s = MemoryStore()
-        tid = self._task(s, MAIL[:1000])
-        s.set_task_checklist(tid, ['something the owner kept'], 'owner')
-        r = next(x for x in ingest.backfill_asks(s, self._brain(), dry_run=False) if x['task_id'] == tid)
-        self.assertEqual(r['action'], 'skipped'); self.assertIn('already has a checklist', r['why'])
-        self.assertEqual([i['text'] for i in s.task_checklist(tid)], ['something the owner kept'])
-
-    def test_closed_tasks_are_left_out_unless_asked_for(self):
-        s = MemoryStore()
-        tid = self._task(s, MAIL[:1000], closed=True)
-        self.assertNotIn(tid, [r['task_id'] for r in ingest.backfill_asks(s, self._brain())])
-        self.assertIn(tid, [r['task_id'] for r in ingest.backfill_asks(s, self._brain(), include_closed=True)])
-
-    def test_a_task_with_no_message_cannot_be_re_read(self):
-        s = MemoryStore()
-        tid = s.create_task({'Title': 'typed by hand', 'Summary': 'x', 'Kind': 'task'}, 'owner')
-        r = next(x for x in ingest.backfill_asks(s, self._brain()) if x['task_id'] == tid)
-        self.assertEqual(r['action'], 'skipped'); self.assertIn('no source message', r['why'])
-
-    def test_with_no_brain_it_still_strips_the_chain(self):
-        s = MemoryStore()
-        tid = self._task(s, MAIL[:1000])
-        ingest.backfill_asks(s, None, dry_run=False)
-        summary = s.get_task(tid)['Summary']
-        self.assertIn('check back in on this', summary)
-        self.assertNotIn('From: Alex', summary)
-
-    def test_the_prefix_test_is_what_identifies_a_copy(self):
-        self.assertTrue(ingest._is_raw_body(MAIL[:1000], MAIL))
-        self.assertTrue(ingest._is_raw_body(MAIL, MAIL))                     # short mail copied whole
-        self.assertFalse(ingest._is_raw_body('A two sentence summary of it.', MAIL))
-        self.assertFalse(ingest._is_raw_body('', MAIL))
-        self.assertFalse(ingest._is_raw_body(MAIL[:1000], ''))
-
-    def test_limit_counts_dry_run_hits_too(self):
-        """A limit that only counted real writes ran the whole board in a dry run - on a paid
-        brain that is a bill, not just a slow command."""
-        s = MemoryStore()
-        for _ in range(4): self._task(s, MAIL[:1000])
-        rows = ingest.backfill_asks(s, self._brain(), dry_run=True, limit=2)
-        self.assertEqual(len([r for r in rows if r['action'] == 'would rewrite']), 2)
 
 
 if __name__ == '__main__': unittest.main()

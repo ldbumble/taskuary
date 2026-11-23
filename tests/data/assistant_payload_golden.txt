@@ -43,6 +43,10 @@ ALREADY SAID (never repeat):
 YOUR NOTES FROM YOUR LAST CHECK (<date> <time>; your own facts and timings - use them, then rewrite them; they are not rules):
 Dana still owes the ledger; Sam is away.
 
+WHAT YOU KNOW ABOUT HOW THE OWNER WORKS (learned from what they did and what they told you - their people, what they care about, how they work, their promises and what to bring up). What to bring up is the owner's OWN instruction about what to raise and what to leave alone: follow it. Everything else here is background to weigh, never news by itself: a Promises or people line is worth a line of yours ONLY when something else you were given in THIS check bears on it - its thread, a task, a meeting, the person's mail sitting unanswered, a date someone wrote. The line's own words are not that evidence: a standing fact with nothing current behind it is no line, however soon it might come due. A line of yours that rests on one of these names its [memory:...] key in "memory":
+## Facts
+- You told them you'd send the answers by <date>
+
 SYSTEMS NOTHING HERE READS (the systems the owner could connect, what their own setup names, and every thread of the last 30 days by sender and subject - numbered, so a connect:* line cites the ones really about a system):
 NOT CONNECTED (type: name (kind of system)):
 outlook: Outlook mail (Messaging)
@@ -439,6 +443,10 @@ ALREADY SAID (never repeat):
 
 YOUR NOTES FROM YOUR LAST CHECK (<date> <time>; your own facts and timings - use them, then rewrite them; they are not rules):
 Dana still owes the ledger; Sam is away.
+
+WHAT YOU KNOW ABOUT HOW THE OWNER WORKS (learned from what they did and what they told you - their people, what they care about, how they work, their promises and what to bring up). What to bring up is the owner's OWN instruction about what to raise and what to leave alone: follow it. Everything else here is background to weigh, never news by itself: a Promises or people line is worth a line of yours ONLY when something else you were given in THIS check bears on it - its thread, a task, a meeting, the person's mail sitting unanswered, a date someone wrote. The line's own words are not that evidence: a standing fact with nothing current behind it is no line, however soon it might come due. A line of yours that rests on one of these names its [memory:...] key in "memory":
+## Facts
+- You told them you'd send the answers by <date>
 
 SYSTEMS NOTHING HERE READS (the systems the owner could connect, what their own setup names, and every thread of the last 30 days by sender and subject - numbered, so a connect:* line cites the ones really about a system):
 NOT CONNECTED (type: name (kind of system)):

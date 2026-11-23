@@ -27,7 +27,7 @@ def s():
 
 def _task(s, difficulty=None):
     tid = s.create_task({'Title': 'Q3 numbers', 'Status': 'open'}, 'owner')
-    if difficulty: s.judge_task(tid, {'difficulty': difficulty}, 'triage')
+    if difficulty: s.judge_task(tid, {'difficulty': difficulty}, 'owner')
     return tid
 
 

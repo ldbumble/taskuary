@@ -41,12 +41,12 @@ def prompt(s, tid, said='NO REPLY'):
     return got['system'], got['user']
 
 
-def test_a_copied_mail_tells_the_writer_who_it_is_to_by_name_and_how_triage_read_it(s):
+def test_a_copied_mail_tells_the_writer_who_it_is_to_by_name(s):
     v = {'intent': 'fyi', 'why': 'Gail asks Erin whether the list is final; Alex is only copied'}
     system, user = prompt(s, thread(s, 'Erin, is this the final list? Can you confirm before Friday?', verdict=v))
     assert 'To: Erin Blake\n' in user and 'Cc: you\n' in user and 'You are: only copied (Cc)' in user
     assert ERIN not in user.split('From:')[1].split('\n', 1)[1]          # names on the To/Cc lines, never the addresses
-    assert 'HOW TRIAGE READ THIS MESSAGE' in user and 'fyi - Gail asks Erin whether the list is final' in user
+    assert 'HOW TRIAGE READ THIS MESSAGE' not in user                    # the writer reads the mail, never triage's reading of it
     assert 'only copied, a question in it is for the person on the To line' in system and 'NO REPLY' in system
     assert "Never hand someone else's question back" in system
 
@@ -61,7 +61,7 @@ def test_named_on_the_cc_line_nothing_stops_the_reply(s):
     v = {'intent': 'reply_only', 'why': 'Gail asks Alex directly to confirm the room'}
     tid = thread(s, 'Alex, can you confirm the room is booked?', verdict=v)
     system, user = prompt(s, tid, said='Yes - the room is booked for Friday.')
-    assert 'Cc: you\n' in user and 'reply_only - Gail asks Alex directly' in user
+    assert 'Cc: you\n' in user
     assert 'unless it names you' in system and 'answer it like any other' in system
     assert responder.draft_reply(s, tid, llm=lambda *a, **k: 'Yes - the room is booked for Friday.') == 'Yes - the room is booked for Friday.'
 

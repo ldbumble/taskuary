@@ -68,7 +68,8 @@ _LOCK = threading.Lock()   # one check at a time: two clocks firing in the same 
 PROMPT = (
     'You are my assistant; twice a day, at the start and the end of my working day, you read the sources below and check in. Tell me only what a sharp human assistant who had READ everything '
     'would lean over and say - never a summary of my inbox, never a count I can see myself. A good line connects two things I '
-    'have not connected, or names the one thing I am about to miss. Read, in this order of worth:\n'
+    'have not connected, or names the one thing I am about to miss. What the systems and the loose ends say and your own ideas are two '
+    'lists with their own room: an alert never crowds out a good idea, and an idea never crowds out an alert. Read:\n'
     '0. CONFIGURED SYSTEM CHECKS - current views from finance, operations, CRM, infrastructure, or any other connected system (they follow '
     'this prompt, each under its own name). Look for threshold breaches, unusual totals, sharp changes, missing expected activity, and facts '
     'that conflict across systems.\n'
@@ -100,8 +101,8 @@ PROMPT = (
     'none when nothing repeats enough.\n'
     '6. WHAT I ALREADY KNOW - never repeat anything under ALREADY SAID, reworded or not; use my notes; draw on the knowledge base by name:\n[taskuary.memory]\n'
     'Be useful, not busy: a check with nothing NEW posts nothing, and most checks are that. When you do speak, prefer the '
-    'specific over the general: a name, a date, a quoted phrase, a cause. One idea about my own work a day is right; three is '
-    'noise. A fact that CHANGES an earlier line (they are out of office; the failure has a cause; they answered) is new and worth one line.\n'
+    'specific over the general: a name, a date, a quoted phrase, a cause. An idea about my own work earns its line only when it is good '
+    '- two or three good ones a day are welcome, none is right when none is, and never one made up to fill the space. A fact that CHANGES an earlier line (they are out of office; the failure has a cause; they answered) is new and worth one line.\n'
     'End every check with a note to your next one: what you looked at and found nothing in, when something becomes worth '
     'raising (a date, a length of silence), anything you would otherwise have to work out again - facts, never rules.')
 
@@ -138,7 +139,9 @@ OLD_PROMPT_SHA = ('06a4ec48fcec9d8bbc9fc6f423f52360aa1b0a2e7f5affe31582e7da56d1e
                   # 2026-10-25, before the automation line stopped recommending an auto-answer (policy.py removed it)
                   '1470c920581d783f70e98193ff6d6998fb7ec5f126b1ce4fb855979b8a21a138',
                   # 2026-11-12, while it still said "every 30 minutes" - the Advisor reads twice a day now (TWICE_A_DAY)
-                  '4d13664387d65994e3407d7ca5f0f8d599aebbd313e3362850d0941b88bdc908')
+                  '4d13664387d65994e3407d7ca5f0f8d599aebbd313e3362850d0941b88bdc908',
+                  # 2026-11-23, while it ranked the system checks first and said three ideas were noise - alerts and ideas have their own room now
+                  '0e1ed64ff18f89d7fd62c74fd7eb4c386602926562e2e7cf53eaa5a59aca4b52')
 # TWICE A DAY, BOTH WHOLE (the owner, 2026-11-12: "run the advisor twice a day in AM and PM ... make sure the full advisor run happens"): every
 # half hour cost ~50K a look on a live install, nearly all of them whole as the day's mail moved past the short check. 07:30 is half an hour
 # after the day's job-ideas pass may start (lookout.MORNING_H), so the morning look follows it; 16:30 is before the day ends and ahead of the
@@ -826,7 +829,8 @@ CONTRACT = ('\n\nYou are writing your POST on the owner\'s work rail - the short
             'the date or silence length at which something becomes worth raising, a fact you settled so it need not be worked out again. '
             'Never a standing rule about what to ignore or what is noise: the instruction decides that, and a note that says '
             '\'ignore X\' would silence you for good. Rewrite it whole each time; empty if nothing>"}.\n'
-            'At most {max_lines} entries. A line about ONE message must tell the owner something the message does not: the mail '
+            'At most {max_lines} of your own lines (idea:* and connect:*), and apart from them at most {max_lines} of the rest - the two '
+            'never share the room, so a good idea is never left out for an alert. A line about ONE message must tell the owner something the message does not: the mail '
             'is already on their work rail with triage\'s own verdict on it, so "X forwarded this with no message, I would ask '
             'what they want" is a second copy of the mail and not a line. Say the thing they could not see - who else is in it, '
             'what it answers, what it costs them on Monday - or say nothing (the owner, 2026-09-07: "Why did assistant triagger '
@@ -1213,8 +1217,16 @@ def parse(store, text: str, cands: list, max_lines: int = MAX_LINES, report_id=N
                         'why': why or 'the model gave no reason - treat it as a hunch' + (f' (about mid {mid})' if mid else '')})
         else: continue
         seen.add(key)
-        if len(out) >= max_lines: break
-    return out
+    return budget(out, max_lines)
+
+
+def own_line(s: dict) -> bool: return is_model_idea(s.get('key')) or str(s.get('key') or '').startswith('connect:')
+def budget(say: list, n: int) -> list:
+    """TWO BUDGETS (the design review, 2026-11-23): the Advisor's own ideas and what the hub found - health, a report failing, a chase, a
+    promise, work gone quiet - each keep up to `n`, in order. One list capped once let three alerts push every idea off the post."""
+    k, r = [x for x in say if own_line(x)][:n], [x for x in say if not own_line(x)][:n]
+    keep = {id(x) for x in k + r}
+    return [x for x in say if id(x) in keep]
 
 
 def sent_reply_for(store, line: dict) -> dict | None:
@@ -2071,10 +2083,10 @@ def _run(store, llm, instruction, watch_source_ids, watch_sources, systems_only=
             if on('rules'):
                 from . import promote
                 props += promote.ideas(store, state)
-            # ...and it is a line like any other: it counts toward "Lines per post", first because it is the app's own
-            # (health rode on top of the cap, and a post said to hold 3 lines held 5 - I9, 2026-09-27)
-            say = ([x | {'why': x['action'].get('why', '')} for x in props if x['key'] not in have and fresh(state, x, now)]
-                   + list(say))[:c['max']]
+            # ...and it counts toward "Lines per post" with the other things the hub found, first because it is the app's own (health rode
+            # on top of the cap, and a post said to hold 3 lines held 5 - I9, 2026-09-27) - never toward the ideas' own room (budget)
+            say = budget([x | {'why': x['action'].get('why', '')} for x in props if x['key'] not in have and fresh(state, x, now)]
+                         + list(say), c['max'])
         except Exception as e: logger.warning(f'assistant: the health check was skipped - {e}')
     # THE SECOND LOOK (ideacheck, the design's S7): a kind under 80% useful, an item the owner acted on today, and a line the model says
     # they would already know are held - said in the post's own record of what it read, never raised

@@ -99,6 +99,26 @@ class RunTests(unittest.TestCase):
         s.set_setting('assistant_max_lines', '1', 't')
         self.assertEqual(assistant.run(s, llm=None, force=True)['said'], 1)
 
+    def test_alerts_and_loose_ends_never_take_the_ideas_room(self):
+        """TWO BUDGETS (the design review, 2026-11-23): health lines rode first in one capped list, so on a day two reports broke the
+        Advisor's idea never reached the post. The hub's findings keep "Lines per post" between them; the ideas keep their own."""
+        s = A.store()
+        for at in ('06:00', '07:00', '08:00'):
+            s.add_report_run(A.AR['sid'], {'at': f'2026-09-18 {at}:00', 'title': 'Monthly AR Report', 'failed': True, 'error': 'x'})
+        s.set_setting('assistant_max_lines', '1', 't')
+        idea = {'key': 'idea:ar-and-close', 'kind': 'clash', 'text': 'The AR report fails on the day the close is due.', 'sig': 'x',
+                'action': {'type': 'note'}, 'why': 'both on the 18th'}
+        with mock.patch.object(assistant, 'think', return_value=([idea], '', '', {}, 'asked')), \
+             mock.patch('taskuary.ideacheck.check', side_effect=lambda store, say, **k: (say, [])):
+            out = assistant.run(s, llm=lambda *a, **k: '{}', force=True)
+        self.assertEqual(sorted(l['key'].split(':')[0] for l in out['lines']), ['health', 'idea'])
+        # ...and parse keeps each list to its own cap
+        cands = [{'key': f'followup:{n}', 'kind': 'followup', 'facts': f'chase {n}', 'action': {}} for n in range(3)]
+        said = json.dumps({'say': [{'key': c['key'], 'text': f'chase {n}'} for n, c in enumerate(cands)]
+                           + [{'key': f'idea:own-{n}', 'text': f'idea {n}', 'why': 'w'} for n in range(3)]})
+        got = [l['key'] for l in assistant.parse(MemoryStore(), said, cands, max_lines=2)]
+        self.assertEqual(got, ['followup:0', 'followup:1', 'idea:own-0', 'idea:own-1'])
+
 
 class DoneTests(unittest.TestCase):
     def test_done_on_the_ideas_row_puts_the_idea_down(self):

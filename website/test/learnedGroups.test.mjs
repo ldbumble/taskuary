@@ -1,6 +1,6 @@
 // WHAT TASKUARY KNOWS, BY SUBJECT (slice 6 of the memory redesign, 2026-10-25): Visualize groups the lines by the five sections with who
-// really reads each, the people lines under their person with a link to that person's page where one exists, and Keep / Wrong / Forget
-// on each line and on What changed - your own line only Forget, a line already put down none.
+// really reads each, the people lines under their person with a link to that person's page where one exists, and Wrong / Forget on each
+// line and on What changed - your own line only Forget, a line already put down none, and never a Keep (2026-11-23: his acts confirm a line).
 import test from "node:test";
 import assert from "node:assert/strict";
 
@@ -36,13 +36,15 @@ test("your people sit under the person they are about, with their page linked on
   assert.deepEqual(byPerson([{ subject: "" }, { subject: "a@x.example" }]).map((p) => p.subject), ["a@x.example", ""], "lines naming nobody last");
 });
 
-test("Keep / Wrong / Forget: all three on a learned line, only Forget on yours, none on a line already put down", () => {
-  assert.deepEqual(marksFor(g.lines[0]), ["keep", "wrong", "forget"]);
+test("Wrong / Forget on a learned line, only Forget on yours, none on a line already put down - and no Keep anywhere", () => {
+  assert.deepEqual(marksFor(g.lines[0]), ["wrong", "forget"]);
+  assert.deepEqual(marksFor(g.lines[4]), ["wrong", "forget"], "a line still being learned is never asked to be confirmed");
   assert.deepEqual(marksFor(g.lines[2]), ["forget"]);
   assert.deepEqual(marksFor({ ...g.lines[2], taught: "2026-11-14 22:41:00" }), ["wrong", "forget"], "a line a verdict taught is not yours: Wrong takes it out for good");
-  assert.deepEqual(marksFor({ ...g.lines[0], kept: true }), ["wrong", "forget"], "a line you Kept says so, and offers no Keep again");
-  assert.deepEqual(changeMarks({ key: "erin", newest: true, standing: "in_use" }), ["keep", "wrong", "forget"]);
+  assert.deepEqual(marksFor({ ...g.lines[0], kept: true }), ["wrong", "forget"]);
+  assert.deepEqual(changeMarks({ key: "erin", newest: true, standing: "in_use" }), ["wrong", "forget"]);
+  assert.deepEqual(changeMarks({ key: "fri", newest: true, standing: "watching" }), ["wrong", "forget"]);
   assert.deepEqual(changeMarks({ key: "erin", newest: false, standing: "in_use" }), [], "once per line, on its newest row");
-  for (const st of ["wrong", "forgotten", "closed", "retired", "gone"]) assert.deepEqual(changeMarks({ key: "x", newest: true, standing: st }), []);
+  for (const st of ["wrong", "forgotten", "closed", "retired", "dropped", "gone"]) assert.deepEqual(changeMarks({ key: "x", newest: true, standing: st }), []);
   assert.deepEqual(changeMarks({ key: "x", newest: true, standing: "own" }), ["forget"], "your own line: Forget alone");
 });

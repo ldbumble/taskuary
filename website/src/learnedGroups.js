@@ -8,16 +8,15 @@ export const MARK_HINT = {
   wrong: "This was never true - it leaves, and Taskuary never writes it back",
   forget: "Not now - it leaves, and comes back only if much more evidence says it again",
 };
-const PUT_DOWN = new Set(["wrong", "forgotten", "closed", "retired"]);
+const PUT_DOWN = new Set(["wrong", "forgotten", "closed", "retired", "dropped"]);
 
-// the moves a line takes: your own line only Forget (it is not something Taskuary learned wrong); a learned one all three - and one you
-// Kept no Keep again: Visualize was pixel-identical after Keep (the Advisor audit's judge, F6, 2026-10-26), so it says Kept instead
-// ...and a line one of your verdicts taught (`taught`) is the model's words for what you pressed, not yours: Wrong and Forget, as memoryedit.mark takes
-export const marksFor = (l) => (!l?.key ? [] : l.own ? (l.taught ? ["wrong", "forget"] : ["forget"]) : l.kept ? ["wrong", "forget"] : ["keep", "wrong", "forget"]);
+// the moves a line takes: your own line only Forget (it is not something Taskuary learned wrong); a learned one Wrong and Forget - never a
+// Keep: nothing asks you to confirm what was learned, your own actions do (the owner, 2026-11-23: "we don't want to have to confirm manually")
+export const marksFor = (l) => (!l?.key ? [] : l.own && !l.taught ? ["forget"] : ["wrong", "forget"]);
 // ...and a What changed row carries them once, on the newest row of a line that is not already put down
 // (an owner's own line - standing "own" - Forget alone; one no longer anywhere - "gone" - nothing)
 export const changeMarks = (r) => (!r?.key || !r.newest || PUT_DOWN.has(r.standing) || r.standing === "gone" ? []
-  : r.standing === "own" ? ["forget"] : ["keep", "wrong", "forget"]);
+  : r.standing === "own" ? ["forget"] : ["wrong", "forget"]);
 
 // people lines under each person (their address), in the order they first appear; lines naming nobody last
 export const byPerson = (ls) => {
@@ -43,7 +42,7 @@ export const groupLines = (g) => {
     return { ...s, lines, ...(s.slug === "people" ? { people: byPerson(lines) } : {}) };
   });
   return [...subj,
-    { slug: "watching", title: "Learned, waiting on your word", reads: "used by nobody until you Keep it", lines: ls.filter((l) => l.status === "hypothesis") },
+    { slug: "watching", title: "Still being learned", reads: "used once your own actions bear it out", lines: ls.filter((l) => l.status === "hypothesis") },
     { slug: "proposed", title: "Proposed", reads: "your call - each would hide mail", lines: ls.filter((l) => l.status === "proposed") }];
 };
 

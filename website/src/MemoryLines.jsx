@@ -1,5 +1,5 @@
 // MEMORY, AS SENTENCES (the owner, 2026-11-06): what Taskuary has learned about how you work, one plain sentence per LEARNED.md line,
-// each with Keep / Wrong / Forget (POST /api/learned/mark, memoryedit.mark) - the file stays the store underneath, its tags never shown.
+// each with Wrong / Forget (POST /api/learned/mark, memory.mark) - a learned line goes into use once your own actions bear it out.
 // Under each, faint, when it was learned and from what (memorySentences.provenance). Grouped by subject (learnedGroups.groupLines).
 import React, { useCallback, useEffect, useState } from "react";
 import { Box, Typography } from "@mui/material";
@@ -35,7 +35,7 @@ export default function MemoryLines() {
         </Box>
       )}
       <Typography variant="caption" sx={{ color: DIM, lineHeight: 1.5 }}>
-        What you said, the facts about your people, and what Taskuary learned from what you did. Keep confirms a learned line - it is used from then on; Wrong takes it out for good, Forget for now.
+        What you said, the facts about your people, and what Taskuary learned from what you did - a learned line is used once your own actions bear it out. Wrong takes one out for good, Forget for now.
       </Typography>
       {!groups.length && <Typography variant="body2" sx={{ color: FAINT, fontSize: 13 }}>Nothing learned yet.</Typography>}
       {groups.map((sec) => (
@@ -48,7 +48,7 @@ export default function MemoryLines() {
               <Box key={l.key} data-tq-memory-line={l.key} sx={{ display: "flex", alignItems: "flex-start", gap: 1, py: 0.9, borderTop: `1px solid ${BORDER}` }}>
                 <Box sx={{ flex: 1, minWidth: 0 }}>
                   <Typography sx={{ fontSize: 13.5, lineHeight: 1.45, color: INK }}>{words}</Typography>
-                  {(from || l.kept) && <Typography sx={{ fontSize: 11, color: FAINT, mt: 0.2 }}>{[from, l.kept && !l.own ? "kept" : ""].filter(Boolean).join(" · ")}</Typography>}
+                  {(from || l.kept) && <Typography sx={{ fontSize: 11, color: FAINT, mt: 0.2 }}>{[from, l.kept && !l.own ? "in use" : ""].filter(Boolean).join(" · ")}</Typography>}
                   {said?.key === l.key && <Typography variant="caption" role="alert" sx={{ color: ROLES.you.ink, display: "block", mt: 0.3 }}>{said.msg}</Typography>}
                 </Box>
                 <MarkRow marks={marksFor(l)} busy={busy === l.key} onMark={(how) => mark(l.key, how)} />

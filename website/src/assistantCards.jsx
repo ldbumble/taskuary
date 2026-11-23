@@ -1037,41 +1037,6 @@ export function DashboardCard({ card, onOpenTask, onDone, table = null }) {
   );
 }
 
-// THE HABITS ROW (habits.py; the owner, 2026-11-01: "how many advisor ideas do i have now? it's too many. what does keep it/remind me do
-// here?"): one row for every habit the Advisor learned, each a sentence to the owner - what was seen, what changes - with its own buttons:
-// Not right on one it adopted (taken back for good), Adopt / No on one it asks about (No: never asked again). Moving on from the row marks
-// the adopted ones seen; once nothing in it is open, it goes - folded with the last answer's word when that answer emptied it
-function HabitList({ card, onDone }) {
-  const [items, setItems] = useState(card.action?.habits || []), [busy, setBusy] = useState(""), [err, setErr] = useState("");
-  useEffect(() => { setItems(card.action?.habits || []); }, [card.action]);
-  const unseen = useRef(false);
-  useEffect(() => { unseen.current = items.some((h) => h.adopted); });
-  useEffect(() => () => { if (unseen.current) api.post(`/api/assistant/ideas/${card.idea}/seen`, {}).catch(() => {}); }, [card.idea]);
-  const answer = async (h, yes, word) => {
-    setBusy(h.line); setErr("");
-    try {
-      const { data } = await api.post(`/api/assistant/ideas/${card.idea}/habit`, { line: h.line, yes });
-      setItems((xs) => xs.filter((x) => x.line !== h.line));
-      if (!data.open) { unseen.current = false; onDone?.(word); }
-    } catch (e) { setErr(failOf(e)); }
-    setBusy("");
-  };
-  const b = { minHeight: 28, py: 0, px: 1.25, fontSize: 12.5, flexShrink: 0 };
-  return (
-    <div data-tq-habits="">
-      {items.map((h) => (
-        <div key={h.line} data-tq-habit={h.adopted ? "adopted" : "ask"} style={{ display: "flex", gap: 12, alignItems: "baseline", padding: "6px 0" }}>
-          <div style={{ flex: 1, minWidth: 0 }}>{h.say}</div>
-          {h.adopted
-            ? <Button size="small" sx={{ ...b, ...faint }} disabled={!!busy} onClick={() => answer(h, false, "Not right")}>Not right</Button>
-            : <><Button size="small" variant="contained" disableElevation sx={{ ...b, ...primary }} disabled={!!busy} onClick={() => answer(h, true, "Adopt")}>Adopt</Button>
-              <Button size="small" sx={{ ...b, ...faint }} disabled={!!busy} onClick={() => answer(h, false, "No")}>No</Button></>}
-        </div>))}
-      <CardErr err={err} />
-    </div>
-  );
-}
-
 // the ids a lookout idea rests on (lookout.land: [{ref: "msg12" | "task7", label}]) as links into the app: #msg=N puts that mail's card up,
 // #task=N opens the task (canvasLinks.canvasRequestFromHash); null with none
 export const citeHref = (ref) => { const m = /^(msg|task)(\d+)$/.exec(String(ref || "")); return m ? `#${m[1]}=${m[2]}` : null; };
@@ -1090,7 +1055,6 @@ export function IdeaCard({ card, onOpenTask, onTimeline, onNavigate, onDone, tab
   // A RULE QUESTION's yes makes the rule it proposed (promote.py); its no is the chips' Not ours, like a connect idea's
   const [busy, setBusy] = useState(false), [err, setErr] = useState("");
   const rule = card.idea_kind === "rule" && a.policy && card.idea;
-  const habits = card.idea_kind === "habit" && Array.isArray(a.habits) && card.idea;
   const makeRule = async () => {
     setBusy(true); setErr("");
     try { await api.post(`/api/assistant/ideas/${card.idea}/rule`, {}); onDone?.("Make it a rule"); }
@@ -1158,18 +1122,15 @@ export function IdeaCard({ card, onOpenTask, onTimeline, onNavigate, onDone, tab
       sections={[
         { key: "from", n: 1, name: STEPS[0].name, lines: [card.title, `${chip[0].toUpperCase()}${chip.slice(1)}`],
           body: <><ItemPart data-tq-idea-from="">
-            <div className="tq-card-lead">{card.title}{suggest && !habits && <> {suggest}</>}</div>
-            {/* ...what it is based on, the mail itself one press away, whenever there is one - with or without the Advisor's reason; the
-                habits row lists its habits instead, with no Whose move or Suggestion */}
-            {habits ? <HabitList card={card} onDone={onDone} />
-              : <Facts rows={rows} />}
+            <div className="tq-card-lead">{card.title}{suggest && <> {suggest}</>}</div>
+            {/* ...what it is based on, the mail itself one press away, whenever there is one - with or without the Advisor's reason */}
+            <Facts rows={rows} />
           </ItemPart><CardErr err={err} /></> }]}
         moves={<ItemPart data-tq-idea-close=""><RowMoves on="on its panes" />{foot}</ItemPart>} />);
   return (
     <CardShell card={card} kicker={<>{ideaWord(card.idea_kind)}<span className="tq-card-chip">{chip}</span></>} title={card.title}>
-      {habits && <HabitList card={card} onDone={onDone} />}
-      {!habits && suggest && <div className="tq-card-lead">{suggest}</div>}
-      {!habits && facts.length > 0 && <div className="tq-card-facts">{facts.map(([k, v]) => <React.Fragment key={k}><div>{k}</div><div>{v}</div></React.Fragment>)}</div>}
+      {suggest && <div className="tq-card-lead">{suggest}</div>}
+      {facts.length > 0 && <div className="tq-card-facts">{facts.map(([k, v]) => <React.Fragment key={k}><div>{k}</div><div>{v}</div></React.Fragment>)}</div>}
       {foot}
       <CardErr err={err} />
     </CardShell>

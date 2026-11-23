@@ -175,7 +175,7 @@ export default function LearnedView({ onChanged, onPerson, people = [] }) {
       )}
       <Typography variant="caption" sx={{ color: DIM, lineHeight: 1.5 }}>
         <b style={{ ...mono, fontSize: 10, letterSpacing: 1, color: FAINT }}>WHAT DRIVES WHAT · </b>
-        every learned line shows how many of your own acts fed it. Keep makes a line yours, Wrong takes it out for good, Forget takes it out for now. Point at one and they fan out underneath — red where one contradicted — with the line's ledger: every point it gained or lost, on one clock. Click to keep it open.
+        every learned line shows how many of your own acts fed it. A line goes into use once your own acts bear it out; Wrong takes it out for good, Forget for now. Point at one and they fan out underneath — red where one contradicted — with the line's ledger: every point it gained or lost, on one clock. Click to keep it open.
         {g.history_since ? "" : " History records from now; today's ledgers are reconstructed from the evidence dates."}
       </Typography>
       <Box sx={{ display: "grid", gridTemplateColumns: "200px minmax(0, 1fr)", gap: 3, alignItems: "start" }}>

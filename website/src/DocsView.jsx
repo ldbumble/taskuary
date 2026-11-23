@@ -39,7 +39,7 @@ const DOCS = {
     blurb: "Your morning brief — what's in flight, who waits on whom. Written by the Morning digest report: the same brief lands on your work rail daily, its prompt is edited under Reports (that decides what goes in here), and deleting that report turns it off." },
   learned: { label: "LEARNED.md", icon: <PsychologyIcon sx={{ fontSize: 19, color: "var(--tq-link, #55697a)" }} />,
     // WHAT IT HOLDS NOW (the memory redesign, 2026-10-25): how you work, learned from what you did - never which button you pressed
-    blurb: "How you work, learned from what you do: your people and how you deal with them, what you care about, your rhythm, the promises you keep, and what is worth bringing up. Each reader takes the parts that help it. A line waits in Watching until enough of your own acts say it; Keep, Wrong and Forget correct it, every line is yours to edit, and SOUL.md always outranks it." },
+    blurb: "How you work, learned from what you do: your people and how you deal with them, what you care about, your rhythm, the promises you keep, and what is worth bringing up. Each reader takes the parts that help it. A line goes into use by itself once enough of your own acts say it; Wrong and Forget correct it, and SOUL.md always outranks it." },
 };
 const NAMES = Object.keys(DOCS);
 // The rail in Settings draws these, so the list of operator documents lives in ONE place rather

@@ -130,8 +130,10 @@ def his_line(store, tid, body, files=None, at=None) -> None:
 
 def owner_line(store, tid, actor, actor_type, body, files=None, at=None) -> None:
     "store.add_comment's door: a comment that is a line of HIS (never a brief Taskuary handed the agent in his voice) is his_line."
-    from .general import BRIEF_ACTOR, USER_TYPE, WAITING_TYPE
-    if actor_type in (USER_TYPE, WAITING_TYPE) and not (actor_type == USER_TYPE and actor == BRIEF_ACTOR): his_line(store, tid, body, files, at)
+    from .general import BRIEF_ACTOR, USER_TYPE, WAITING_TYPE, line_said
+    # ...as he typed it (general.line_said): a line kept for a turn is its JSON, and its row read `{"text": ..., "after": 2}` (walk 10, 2026-11-23)
+    if actor_type in (USER_TYPE, WAITING_TYPE) and not (actor_type == USER_TYPE and actor == BRIEF_ACTOR):
+        his_line(store, tid, line_said({'ActorType': actor_type, 'Body': body})['text'], files, at)
 
 
 def promise(store, tid, mid, what, due=None) -> bool:
@@ -225,13 +227,16 @@ def sent_here(store, tid, limit=6) -> list:
 
 def of_task(store, tid) -> list:
     "What this task MADE and was given, as lines: mail it sent, acts that went live, accounts its agent made, files he attached, addresses he gave."
-    say = {'sent': lambda r: f"sent \"{r['Value'] or 'a mail'}\" to {r['Subject']} ({r['At']})",
-           'act': lambda r: f"went live: {r['detail'].get('what') or r['Subject']}" + (f" - {r['Value']}" if r['Value'] else '') + f" ({r['At']})",
-           'account': lambda r: f"an account on {r['Subject']}" + (f" as {r['Value']}" if r['Value'] else '') + f" ({r['Act'].replace('_', ' ')})",
-           'file': lambda r: f"file {r['Value'] or r['Subject']} ({r['Act']})",
-           'address': lambda r: f"address {r['Subject']} ({'he gave it' if r['Act'] == 'given' else 'mailed'})",
-           'promise': lambda r: f"he promised {r['Subject'] or 'them'}: {r['Value']}"}
-    return [say[r['Kind']](r) for r in rows(store, task=int(tid), limit=60)]
+    return [said(r) for r in rows(store, task=int(tid), limit=60)]
+# ONE ROW, SAID ONE WAY wherever it is read (the task's record, the owner's memory): an address row says the address and how it is known -
+# never the line or subject it was found under (walk 10, 2026-11-23: memory read `gail@... <Q3 board pack>` as a fact about her)
+SAY = {'sent': lambda r: f"sent \"{r['Value'] or 'a mail'}\" to {r['Subject']} ({r['At']})",
+       'act': lambda r: f"went live: {r['detail'].get('what') or r['Subject']}" + (f" - {r['Value']}" if r['Value'] else '') + f" ({r['At']})",
+       'account': lambda r: f"an account on {r['Subject']}" + (f" as {r['Value']}" if r['Value'] else '') + f" ({r['Act'].replace('_', ' ')})",
+       'file': lambda r: f"file {r['Value'] or r['Subject']} ({r['Act']})",
+       'address': lambda r: f"address {r['Subject']} ({'he gave it' if r['Act'] == 'given' else 'mailed'})",
+       'promise': lambda r: f"he promised {r['Subject'] or 'them'}: {r['Value']}"}
+def said(r) -> str: return SAY[r['Kind']](r)
 
 
 def person(store, address: str, limit=8) -> list:

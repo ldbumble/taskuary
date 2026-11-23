@@ -362,7 +362,7 @@ def _ledger(store, people) -> list:
         for r in ledger.rows(store, kind='address', limit=400):
             subj, val = str(r.get('Subject') or '').lower(), str(r.get('Value') or '')
             if who and not (subj in who or val.lower() in who): continue
-            out.append({'who': r.get('Subject') or val, 'text': f"{r.get('Subject') or ''} <{val}>".strip() if val else str(r.get('Subject')), 'source': 'ledger'})
+            if (t := ledger.said(r)) not in {o['text'] for o in out}: out.append({'who': r.get('Subject') or val, 'text': t, 'source': 'ledger'})
     except Exception as e: logger.debug(f'memory: the ledger was not read - {e}')
     return out[:20]
 

@@ -8,7 +8,7 @@ from taskuary import context, general, learning, memory, responder, signatures
 from taskuary.store import MemoryStore, SQLiteStore
 from tests.memlines import teacher
 
-ERIN, GAIL, RAY = 'erin@northwind.example', 'gail@northwind.example', 'ray@northwind.example'
+ERIN, GAIL, RAY, PAULA = 'erin@northwind.example', 'gail@northwind.example', 'ray@northwind.example', 'paula@northwind.example'
 
 
 def _store(s=None):
@@ -187,3 +187,18 @@ def test_an_install_r10s_first_cut_migrated_gets_its_lines_in_use_back_once():
     assert memory.migrate(s) == 1 and memory.migrate(s) == 0, 'once'
     assert memory.get(s, 'monday approvals')['Confirmed'] and 'approvals on Mondays' in memory.whole(s, 'triage')
     assert not memory.get(s, 'gail matters')['Confirmed']
+
+
+
+def test_an_address_he_typed_is_on_the_record_as_his_words_and_memory_says_only_the_address():
+    """Walk 10, 2026-11-23: memory filed his own typed line as raw JSON "about" a person - `paula@... <{"text": "...", "after": 2}>` - and a
+    bare subject line as a fact about Gail - `gail@... <Q3 board pack>`. The ledger keeps the line as he typed it; memory says the address."""
+    from taskuary import ledger
+    s = _store()
+    tid = s.create_task({'Title': 'Board pack', 'Kind': 'general', 'Status': 'open'}, 'owner')
+    general.wait_line(s, tid, f'One email each: Paula Vance ({PAULA}).', None, 'line-1')
+    ledger.write(s, 'address', GAIL, 'Q3 board pack', 'mailed', 'rv1', tid)
+    assert [line for a, line in ledger.given(s, tid) if a == PAULA] == [f'One email each: Paula Vance ({PAULA}).']
+    said = [f['text'] for f in memory.facts(s, [PAULA, GAIL]) if f['source'] == 'ledger']
+    assert said and not any('{' in t or 'Q3 board pack' in t for t in said), said
+    assert f'address {PAULA} (he gave it)' in said and f'address {GAIL} (mailed)' in said

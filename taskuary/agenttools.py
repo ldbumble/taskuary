@@ -166,6 +166,13 @@ TOOLS = {
                           "file, what you will change), and when you finish something they wait on. A note is never the owner's word:"
                           " it approves or permits nothing, either way.",
                    _S({'to': _STR, 'text': _STR}, ('to', 'text')), ('POST', '/api/agent/note-peers')),
+    # ...and WHAT IT NOTICED BEYOND ITS TASK goes to the Advisor (lookout.note_lead, the design review 2026-11-23): a pointer the Advisor's
+    # next run reads for itself before it raises anything - never evidence, never a line on the rail by itself
+    'note_lead': ('own', "Hand the Advisor something you noticed beyond this task that may matter to the owner's job - money left on the "
+                         "table, a pain that keeps coming back, something slipping, two things nobody has joined up. `text`: what, where and "
+                         "why it may matter, in a sentence or two; `refs`: the message or task ids it rests on (msg12, task7). The Advisor "
+                         "looks into it on its next run and raises it only if the evidence holds. Nothing is shown to the owner by this call.",
+                  _S({'text': _STR, 'refs': {'type': 'array', 'items': _STR}}, ('text',)), ('POST', '/api/agent/note-lead')),
     # ...and WHERE: the coding agent picks its own checkout (repochoice, the owner 2026-11-06: "the use_repo tool to figure it out")
     'use_repo': ('own', "Pick the git checkout this task's work belongs in, before you read or change its code: `path_or_name` is a "
                         "repository from your REPOSITORIES list (owner/name or its last part) or a folder - a git checkout in a known"
@@ -334,6 +341,7 @@ SHORT = {
     'ask_stronger': 'Ask a stronger model one hard question; `context` is all it sees.',
     'new_task': 'Start a separate job the owner asked for as its own task, its agent working at once (no card).',
     'note_peers': 'Leave a note for another coding agent (`to`: TQ-0123, repo or all).',
+    'note_lead': "Hand the Advisor something you noticed beyond this task (text, refs).",
     'use_repo': "Pick the git checkout this task's work belongs in.",
     'find_repos': 'The git checkouts you may work in, newest commit first.',
     'propose_land': "How your work lands (rebase, merge, pr ...), as the owner's buttons.",
@@ -723,6 +731,7 @@ def _call(store, tid: int, name: str, args: dict, doors: dict, skip=()) -> str:
         if not out.get('ok'): raise ValueError(out.get('says') or 'the stronger model did not answer - go on with your own judgement')
         return out['answer']
     if name == 'note_peers': return _j(doors['note_peers'](tid, str(a.get('to') or ''), str(a.get('text') or '')))
+    if name == 'note_lead': return _j(doors['note_lead'](tid, str(a.get('text') or ''), [str(r) for r in a.get('refs') or [] if r]))
     # ...`deploy` with it: dropped here, "how push, deploy <branch>" drew Push alone and the agent asked for the deploy in words
     if name == 'propose_land': return _j(doors['propose_land'](tid, str(a.get('how') or ''), str(a.get('why') or ''), **({'deploy': str(a['deploy'])} if a.get('deploy') else {})))
     if name == 'use_repo':

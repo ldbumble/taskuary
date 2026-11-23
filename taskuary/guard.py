@@ -140,6 +140,7 @@ AGENT_WRITES = (
     (r'POST', r'^/api/agent/browser$', "`taskuary --browser <url>`: the browser of the session's OWN task opened on a page by Taskuary (browserview.ask_open) - what its own `agent-browser open` does; nothing leaves"),
     (r'POST', r'^/api/agent/ask-stronger$', "the session's own question to a stronger model (askstronger), on its OWN task - an answer in words, nothing moves"),
     (r'POST', r'^/api/agent/note-peers$', "a note to another agent (peers.py), from the session's OWN task - framed as a peer's, it approves nothing"),
+    (r'POST', r'^/api/agent/note-lead$', "a lead for the Advisor's next run (lookout.note_lead), from the session's OWN task - a pointer it reads for itself; nothing is shown or sent"),
     (r'POST', r'^/api/agent/use-repo$', "the checkout the session's OWN task is worked in (repochoice.use) - inside the folders the owner allows, never over their pick"),
     (r'POST', r'^/api/agent/propose-land$', "how the session's OWN branch should land, marked on the owner's question (landing.propose) - it lands nothing"),
     (r'POST', r'^/api/agent/sign-form$', "`taskuary --sign-form`: a PDF on the session's OWN task filled and signed into its folder (handsign) - nothing leaves"),

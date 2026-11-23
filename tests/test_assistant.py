@@ -298,7 +298,7 @@ class PostTests(unittest.TestCase):
         s._exec('UPDATE source SET ConfigJson=? WHERE SourceId=?', (json.dumps(c), src['SourceId']))
         from taskuary.reports import run_report_source
         out = run_report_source(s, s.get_source(src['SourceId']), llm)
-        self.assertTrue(out['ran']); self.assertIn('Only chase vendors', seen[0]); self.assertIn('At most 5 entries', seen[0])
+        self.assertTrue(out['ran']); self.assertIn('Only chase vendors', seen[0]); self.assertIn('At most 5 of your own lines', seen[0])
         self.assertEqual([r for r in s.feed(limit=10) if r['Channel'] == 'report'], [])           # no report row - the assistant posts its own kind
         # switched off on the Reports tab: the scheduler's call does nothing, 'ask now' still answers
         s._exec('UPDATE source SET Active=0 WHERE SourceId=?', (src['SourceId'],))

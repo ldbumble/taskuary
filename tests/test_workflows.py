@@ -106,7 +106,9 @@ class DispatchTests(unittest.TestCase):
         calls = []
         def make(store_, name, model=None, cwd=None, **kw):
             calls.append(cwd); return lambda system, user, **k: 'ran it\n- ok'
-        with mock.patch('taskuary.llm.make_cli_llm', make), mock.patch.object(general, 'start_session') as start, \
+        # ...on the CLI the one resolver picks: its `agent` names the coding profile, which no road reads since profiles went
+        with mock.patch('taskuary.llm.make_cli_llm', make), mock.patch('taskuary.agents.resolve_brain', return_value='cli:claude'), \
+             mock.patch.object(general, 'start_session') as start, \
              mock.patch.object(ingest, '_auto_code') as auto_code, mock.patch.object(workflows, '_spawn', lambda fn: fn()):
             reports.run_report_source(s, s.get_source(report), None)
             out = reports.run_report_source(s, s.get_source(code), None)

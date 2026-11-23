@@ -394,3 +394,18 @@ def test_a_post_proposed_under_a_reordered_name_is_told_the_acts_there_are_and_t
         assert not ok and why.split('are: ')[1].startswith(f'{right} (Post to'), why
         assert 'propose again' in why and 'browser' in why, 'and the way on'
         assert proposals.queue(s, tid, {'action': 'run_tool', 'type': right, 'text': 'Q3 closed at 214.', 'why': 'the headline'}), right
+
+
+def test_a_step_handed_to_him_on_a_page_is_on_his_screen_never_nothing_waits():
+    """Walk 9, 2026-11-23: the agent handed him a robot check on a newsletter's page, his Approve on another card woke it, and its screen fact
+    said "Nothing waits for his press" - the step it had handed him was lost. The one record of what he was asked says it."""
+    from taskuary import cardqueue, workerstate as ws
+    from taskuary.browserview import TURN_PREFIX
+    from taskuary.store import MemoryStore
+    s = MemoryStore(); tid = s.create_task({'Title': 'Two newsletters', 'Kind': 'general', 'Status': 'open'}, 'owner')
+    s.add_review({'TaskId': tid, 'Kind': 'action', 'Status': 'approved', 'Reason': 'sign up', 'DecidedAt': '2026-11-23 12:21:50',
+                  'DraftText': json.dumps({'action': 'browser_act', 'what': 'Submit the sign-up on news.example'})})
+    ws.record(s, tid, 'run1', 'working')
+    ws.record(s, tid, 'run1', 'input_needed', request_id=f'{TURN_PREFIX}robot1', text="Your turn in the browser on news.example: tick the human check")
+    said = cardqueue.screen(s, tid)
+    assert 'tick the human check' in said and cardqueue.NOTHING not in said, said

@@ -376,9 +376,21 @@ def screen(store, tid: int, skip=()) -> str:
     q = landing.record(store, int(tid)).get('proposal') or {}
     if (gone := str(q.get('passed') or '')) and gone >= since:
         settled.append((gone, f"Greyed, will not go (the chat moved on past it): the {landing.HOW.get(q.get('how'), 'push').lower()} question you raised"))
+    # ...AND A STEP HANDED TO HIM ON A PAGE IS WAITING ON HIM TOO (walk 9, 2026-11-23: "Nothing waits for his press" while the robot check it had
+    # handed him was still owed - the agent lost it): read off the one record of what he was asked (workerstate's open requests), as the page is
+    waiting += [f"Handed to him on the page, NOT done yet: {_flat(q.get('text'))}" for q in on_page(store, tid)]
     if not (waiting or settled): return ''
     lines = [f'- {x}' for _, x in sorted(settled, key=lambda p: str(p[0]))][-SETTLED:] + ([f'- {x}' for x in waiting] or [NOTHING])
     return '\n'.join([SCREEN_HEAD, *lines])
+
+
+def on_page(store, tid: int) -> list:
+    "The steps handed to him on a page that still wait - a sign-in, his turn (workerstate.ask_of) - as their open requests."
+    from . import workerstate as ws
+    try: return [q for q in ws.status(store, int(tid))['requests'] if q.get('ask') in ('signin', 'turn')]
+    except Exception as e:
+        from loguru import logger
+        logger.debug(f'cardqueue: the steps handed over on task {tid} were not read - {e}'); return []
 
 
 def once(facts: str, said: str) -> str:

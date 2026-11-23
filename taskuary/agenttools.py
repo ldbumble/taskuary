@@ -188,6 +188,11 @@ TOOLS = {
                          "fact names it (a card of many: 'rv1 + rv2'). One the input changed: propose its new version instead. "
                          "One his press handed you that you cannot do (no account, the site refused): keep it with `why` - his card says it.",
                   _S({'which': _STR, 'why': _STR}, ('which',)), ('GET', '/api/tasks/1')),
+    'hand_over': ('own', "A step on your browser's page only the owner can do - a sign-in or code you cannot type, an \"I'm not a robot\" "
+                         "check, paying, a fact only he knows. Taskuary signs in by itself where it keeps what is needed, else hands him "
+                         "ONE card on that page; you go on with the rest of the job and are told when it is done. `what`: the step in a "
+                         "few words, as the page shows it; `site`: the site's domain, for a sign-in.",
+                  _S({'what': _STR, 'site': _STR}, ('what',)), ('POST', '/api/agent/hand-over')),
     # ...`slot` (the agent walk, 2026-11-10): triage had put "an email to Ray Colton" on the task, to draft; this tool took an address and
     # no slot, so the agent's email stood as a second card beside the empty one. The agent names the line it fills - no name is matched here
     'propose_email': ('propose', "Draft an email this task needs. `slot`: the id of the checklist line this email is (\"-> email to ..., "
@@ -316,6 +321,7 @@ SHORT = {
     'reply_not_needed': 'The reply waiting here is no longer needed; say why.',
     'withdraw_draft': 'Take back a reply, email or proposal you set up that has not gone out.',
     'keep_card': 'Bring back a card greyed by the newest input, as it was, under that input.',
+    'hand_over': 'Hand the owner a step on the page only he can do (a sign-in, a robot check, paying) - one card; go on with the job.',
     'propose_email': "Draft an email for the owner's Send - several at once in `items`.",
     'sign_form': "Fill and sign a PDF form with the owner's saved signature.",
     'answer_invite': "Answer this task's meeting invite: accept, decline or propose.",
@@ -685,6 +691,9 @@ def _call(store, tid: int, name: str, args: dict, doors: dict, skip=()) -> str:
         return _out(repochoice.says_found(repochoice.find(store, str(a.get('query') or '')), repochoice.folders(store)))
     if name == 'reply_not_needed': return _j(doors['not_needed'](tid, str(a.get('why') or '')))
     if name == 'withdraw_draft': return _j(doors['withdraw'](tid, str(a.get('why') or ''), str(a.get('which') or '')))
+    if name == 'hand_over':
+        from . import browserview
+        return _j(browserview.hand_over(store, tid, str(a.get('what') or ''), str(a.get('site') or '')))
     if name == 'keep_card':
         from . import cardqueue
         return _j(cardqueue.keep(store, tid, a.get('which'), 'agent', str(a.get('why') or '')))

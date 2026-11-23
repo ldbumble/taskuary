@@ -3,7 +3,7 @@ has - has a Done on the view (a held press is a card in the chat since 2026-11-1
 known to the server only by matching those words. It is their press now, by the road every other press takes: the hand-over closes, the
 agent is told by Taskuary that they SAY it is done (nothing saw the page move, so it looks first), and the page reads one quiet line.
 And the press the page itself saw read "You browser act pressed." under Taskuary's own line saying the same. Invented people."""
-import time, unittest
+import json, time, unittest
 from types import SimpleNamespace
 from unittest import mock
 
@@ -83,13 +83,14 @@ class DoneIsAPress(unittest.TestCase):
         while general.starting(self.tid) and time.time() < end: time.sleep(.01)
         self.assertFalse(general.starting(self.tid), 'and no longer once it has handed on')
 
-    def test_the_step_the_page_saw_done_is_one_line_in_plain_words(self):
+    def test_a_page_that_moved_on_without_his_press_is_never_said_as_his(self):
+        # walk 7, 2026-11-23: the page turned into a browser error and the chat read "You did the step on" it - he had pressed nothing
         rid = self.turn()
         self.assertTrue(bg.pressed(self.s, self.tid, rid, {'href': PAY + '/next', 'title': 'Next'}))
-        self.assertIn('the page moved on', self.heard()[0][0])
-        self.assertEqual(self.lines(), [f'You did the step on {SITE}.'])
-        self.assertEqual(self.said(), [], 'said once: no second line by Taskuary above it')
-        self.assertFalse(any('browser act' in x for x in self.lines()))
+        self.assertIn("moved on without their I'm done", self.heard()[0][0])
+        self.assertEqual(self.lines(), [], 'only his I\'m done is his')
+        self.assertEqual(self.said(), [])
+        self.assertNotIn(rid, self.open())
 
     def test_a_page_the_agent_moved_on_is_never_said_as_his(self):
         # the owner's rule, tell the truth (2026-11-19): the agent opened another page while a human check waited on him, and the chat read
@@ -166,6 +167,27 @@ class DoneIsAPress(unittest.TestCase):
         self.assertEqual(general.PRESSES['browser_act_pressed']({'site': SITE}), f'did the step on {SITE}')
         self.assertEqual(general.PRESSES['browser_act_pressed']({}), 'did the step on the page')
         self.assertIn('browser_act_not_pressed', general.QUIET)
+
+    def test_a_step_only_he_can_do_is_one_card_raised_mid_turn_and_his_im_done_wakes_the_agent_once(self):
+        """Walk 7, 2026-11-23, and the owner: "Anything for sign in etc should be handed to users with a card ... I need the agent to do its
+        job." Ten prompt places told the agent to END ITS TURN with a marker, and three robot checks stood at once with one shown. One call
+        mid-turn: a card for him, the turn goes on (nobody is woken), a second is refused while the first waits, and his I'm done wakes it once."""
+        from taskuary import agenttools, signin
+        out = json.loads(agenttools.call(self.s, self.tid, 'hand_over', {'what': 'tick the "I\'m not a robot" box'}, {}))
+        self.assertTrue(out['ok'] and 'go on with the rest' in out['says'].lower(), out)
+        rid = bv_open = self.open()
+        self.assertEqual(len(rid), 1); self.assertEqual(self.told, [], 'raised mid-turn: the agent is not woken, it goes on')
+        again = json.loads(agenttools.call(self.s, self.tid, 'hand_over', {'what': 'enter the card number'}, {}))
+        self.assertFalse(again['ok']); self.assertIn('one at a time', again['why']); self.assertEqual(self.open(), bv_open)
+        ws.answer(self.s, self.tid, rid[0], '', press=True)
+        self.assertEqual(len(self.heard()), 1); self.assertIn("I'm done", self.told[0][0])
+        # ...a sign-in Taskuary can do itself is done with no card; one it cannot is his card
+        with mock.patch.object(signin, 'saved', return_value={'Secret': 'x'}), mock.patch.object(signin, '_auto'):
+            got = browserview.hand_over(self.s, self.tid, 'sign in', 'vendor.example', 'run1', watch=None)
+        self.assertTrue(got['ok'] and got.get('auto')); self.assertEqual(self.open(), [], 'the saved sign-in goes in: nothing asked of him')
+        with mock.patch.object(signin, 'saved', return_value=None):
+            got = browserview.hand_over(self.s, self.tid, 'sign in', 'vendor.example', 'run1', watch=None)
+        self.assertTrue(got['ok'] and not got.get('auto')); self.assertEqual([ws.ask_of(r)['ask'] for r in self.open()], ['signin'])
 
 
 if __name__ == '__main__': unittest.main()

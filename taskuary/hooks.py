@@ -518,14 +518,10 @@ def _events(t, p: dict) -> None:
                 from . import general
                 general.answered(tid, 0)
             except Exception as e: logger.debug(f'task {tid}: the start in flight was not let go of - {e}')
-            if signing is not None:                     # a sign-in it needs: Taskuary's to do, never the agent's (signin.py)
-                from . import signin
-                try: signin.needs(st, tid, sid, signing)
-                except Exception as e: logger.warning(f'task {tid}: the sign-in the agent asked for was not raised - {e}')
-            if turn is not None:                        # a step only the owner can do on the page (browserview.your_turn)
+            if signing is not None or turn is not None:     # a marker a session still writes: the one road hand_over takes
                 from . import browserview
-                try: browserview.your_turn(st, tid, sid, turn)
-                except Exception as e: logger.warning(f'task {tid}: the page the agent handed over was not raised - {e}')
+                try: browserview.hand_over(st, tid, turn or '', signing or '', sid)
+                except Exception as e: logger.warning(f'task {tid}: the step the agent handed over was not raised - {e}')
             try:                                        # the ledger: what the owner does next after a stop (outcomes.py); never breaks a hook
                 from . import ci, outcomes
                 agent = getattr(t, 'agent', '') or 'agent'

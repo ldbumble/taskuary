@@ -4,8 +4,8 @@ use thing with vault if they want").
 Until now a browser agent at a sign-in page handed the owner the keyboard and stopped - which needs the owner AT the pane, so a
 sign-in from the phone was a dead end. Now:
 
-- THE AGENT SAYS SO. It opens the sign-in page in its own browser and ends its turn with `[[TASKUARY-SIGNIN: <domain>]]`
-  (selfclose.signin_marker). That is the whole of its part: it is never handed a command, a tool or a file that returns a secret.
+- THE AGENT SAYS SO. It opens the sign-in page in its own browser and calls hand_over with its site (browserview.hand_over), and goes on
+  with the job. That is the whole of its part: it is never handed a command, a tool or a file that returns a secret.
 - THE TASK PAUSES on the ask it already has - one `input_needed` request, "Sign in to bank.example to continue", answered "Signed in"
   (workerstate). No new state. Its request id is `signin:<site>`, which is how the task page knows to offer the fill page beside it.
 - THE SITE IS THE PAGE'S, never the agent's word or a mail's. What the request names, and what a fill may type into, is the
@@ -56,8 +56,7 @@ CODE_ASK = '{site} took the saved sign-in and asks for a code - type it on the p
 # opened beside it, does not stop for a code - and hands the code step over. What such a box is, is its judgement: nothing here reads words
 READY_CODE = ('TASKUARY: the saved sign-in for {site} went in, and the site now asks for a code only the owner has. Get that page ready for '
               'them: if it offers to remember this browser or device (so later sign-ins skip the code), tick that - type nothing in the code '
-              'box and press nothing else - then end your turn with the final line [[TASKUARY-SIGNIN: {site}]], and Taskuary hands them the code '
-              'step. Say nothing else to them.')
+              'box and press nothing else - then call hand_over with site {site}, and Taskuary hands them the code step. Say nothing else to them.')
 LOOPBACK = ('localhost', '127.0.0.1', '::1')
 # TWO-LABEL PUBLIC SUFFIXES - where the registrable domain is THREE labels. Without them "bank.co.uk" would pin "co.uk", and a
 # saved sign-in would fill on every site in the UK. Not the whole Public Suffix List (no dependency carries it here); the
@@ -576,7 +575,7 @@ def _auto(store, tid, sid, site, rid, fill, ask=None):
                   f"in: {why}. Find the way past it yourself first - the site's own password reset "
                   f'(on its new-password form run `agent-browser '
                   'signup`), a code it emails (Taskuary types it), or a sign-up that never finished. Only a step nobody but the owner can do is '
-                  'handed to them, with the your-turn marker.'))
+                  'handed to them, with hand_over.'))
     except Exception as e:
         why = str(e) if isinstance(e, SignInError) else 'the browser could not be reached'
         _audit(store, tid, site, 'vault', False, why)
@@ -586,7 +585,7 @@ def _auto(store, tid, sid, site, rid, fill, ask=None):
 
 
 def _ready_code(store, tid, sid, site) -> bool:
-    "The chat's agent makes the code page ready (READY_CODE) and hands it back with the marker - needs() then gives him the step. False: no chat to tell."
+    "The chat's agent makes the code page ready (READY_CODE) and hands it over (hand_over) - needs() then gives him the step. False: no chat to tell."
     from . import workerstate as ws
     sess = ws._live(tid)
     if not sess or not hasattr(sess, 'send_prompt') or getattr(sess, 'sid', sid) != sid: return False
@@ -672,7 +671,9 @@ def _continue(store, tid, rid, site, actor, code=False, words=None):
     try:
         # ...once: a turn that ends after this moment - his line's, begun while the sign-in went in - has worked the page signed in
         from .general import GeneralSession
-        if hasattr(sess, 'send_prompt'): sess.send_prompt(said, as_owner=False, **({'since': time.time()} if isinstance(sess, GeneralSession) else {}))
+        # ...and a turn still at work - it handed the sign-in over and went on with the job (browserview.hand_over) - hears it in that turn
+        if isinstance(sess, GeneralSession) and getattr(sess, 'busy', False) and sess.steer(said): pass
+        elif hasattr(sess, 'send_prompt'): sess.send_prompt(said, as_owner=False, **({'since': time.time()} if isinstance(sess, GeneralSession) else {}))
         else: term.type_into(sess, said, brief=True)      # Taskuary's, never the owner's line
     except Exception as e:
         logger.warning(f'signin: task {tid} signed in to {site}, but the agent was not told - {e}')
@@ -1555,10 +1556,10 @@ def _answered(store, tid, sid, site, c, user, kept) -> str:
     if f.get('top') and on_site(f.get('href'), site) and not f.get('password') and (status or 200) < 400:
         _audit(store, tid, site, 'vault', True, 'signed up', saved=not kept, signup=True)
         return (f"Signed up on {site}{who}, and signed in: the page shows {there}.{coded} Its password is kept with the owner's saved sign-ins - you "
-                f'never need it; to sign in again later, open its sign-in page and end a turn with [[TASKUARY-SIGNIN: {site}]].{kept}')
+                f'never need it; to sign in again later, open its sign-in page and hand_over with site {site}.{kept}')
     _audit(store, tid, site, 'vault', True, 'sent', saved=not kept)
-    return (f'Sent{who}; the page now shows {there}, not signed in. Not an account yet: open its sign-in page and end a turn with '
-            f'[[TASKUARY-SIGNIN: {site}]] - an account counts once that sign-in goes in.{coded}{kept}')
+    return (f'Sent{who}; the page now shows {there}, not signed in. Not an account yet: open its sign-in page and hand_over with site '
+            f'{site} - an account counts once that sign-in goes in.{coded}{kept}')
 
 
 # ── the marker, for an agent that still ends its turn with [[TASKUARY-SIGNUP]]: the same command, answered once that turn has ended ──

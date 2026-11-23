@@ -6077,6 +6077,17 @@ def agent_withdraw_draft(body: AgentWithdrawBody, request: Request):
     if not store.get_task(body.task_id): raise HTTPException(404, 'no such task')
     return verdicts.withdraw(store, body.task_id, body.why, body.agent, body.which, keep=body.keep)
 
+class AgentHandOverBody(BaseModel): task_id: int; what: str; site: str = ''
+
+@app.post('/api/agent/hand-over')
+def agent_hand_over(body: AgentHandOverBody, request: Request):
+    """`taskuary --hand-over "<what>" [--site <domain>]` (and the hand_over tool) from the session working the task: a step on its page only
+    the owner can do - done by Taskuary where it can, else one card for him (browserview.hand_over). The agent goes on with the job."""
+    from . import browserview
+    _own_task_only(request, body.task_id)
+    if not store.get_task(body.task_id): raise HTTPException(404, 'no such task')
+    return browserview.hand_over(store, body.task_id, body.what, body.site)
+
 class AgentCheckBackBody(BaseModel): task_id: int; when: str; what: str; agent: str = 'agent'
 
 @app.post('/api/agent/check-back')

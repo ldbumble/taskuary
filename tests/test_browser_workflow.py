@@ -130,10 +130,9 @@ class HandingOverTheKeyboardTests(unittest.TestCase):
 
     def test_the_brief_tells_it_to_stop_and_not_touch_the_tab(self):
         b = browserview.brief()
-        self.assertIn('WHEN YOU ASK FOR A SIGN-IN OR HAND THEM THE KEYBOARD, STOP', b)
-        self.assertIn('[[TASKUARY-SIGNIN: <the domain of the site>]]', b)   # a sign-in is asked for, never typed (signin.py)
-        self.assertIn('run no browser command at all until they answer', b)
-        for forbidden in ('re-open the page', 'reload it', 'navigate', 'poll'):
+        self.assertIn('A TAB YOU HANDED OVER IS THEIRS', b)                 # ...handed over mid-turn, never reloaded or polled under him
+        self.assertIn('hand_over with its `site`', b)                         # a sign-in is asked for, never typed (signin.py)
+        for forbidden in ('reload', 'navigate', 'poll'):
             self.assertIn(forbidden, b)
         self.assertIn('NEVER type a password', b)            # the rule it already had, still there
 

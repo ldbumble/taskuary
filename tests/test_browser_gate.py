@@ -339,7 +339,7 @@ class Holding(unittest.TestCase):
         page to hand him, and no card stands."""
         out = self.held(v={'big': True, 'kind': 'money', 'sure': True, 'irreversible': True, 'what': 'Pay $49.00 on DealFlow Pro'})
         d = out['hookSpecificOutput']
-        self.assertEqual(d['permissionDecision'], 'deny'); self.assertIn('TASKUARY-YOURTURN', d['permissionDecisionReason'])
+        self.assertEqual(d['permissionDecision'], 'deny'); self.assertIn('hand_over', d['permissionDecisionReason'])
         self.assertEqual(self.pending(), [])
 
     def test_an_irreversible_act_is_refused_and_put_on_the_task(self):
@@ -558,7 +558,7 @@ class HeldInTheChat(unittest.TestCase):
         here = {'href': PAY, 'title': 'Check', 'marks': ['f:https://challenge.example/box', 'i:card']}
         gone = {'href': PAY, 'title': 'Check', 'marks': ['i:notes']}                  # same address, the challenge and the box gone
         self.assertTrue(bg.watch(self.s, self.tid, 'run1', rid, conn=Page(here, gone), every=0))
-        self.assertIn('The owner did the step you handed them', self.heard()[0])
+        self.assertIn('moved on without their', self.heard()[0])
         self.assertIsNone(next((r for r in self.ws.open_requests(self.ws.events(self.s, self.tid)) if r['RequestId'] == rid), None))
 
     def test_a_captcha_whose_browser_closed_tells_the_agent_it_was_not_done(self):

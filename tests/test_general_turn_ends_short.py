@@ -107,7 +107,7 @@ class AShortTurnWakesTheAgentOnceTests(unittest.TestCase):
         seen = turn(s, tid, [asked + summ, 'There is no connection for Payworth, so I am using the browser.'],
                     judge=lambda *a, **k: json.dumps({'unfinished': False, 'why': '', 'asks_secret': True}))
         self.assertEqual(len(seen['prompts']), 2)                     # told once, by the one wake
-        for want in ('asked the owner for a password', 'you do not need the password', '[[TASKUARY-SIGNIN:'): self.assertIn(want, seen['prompts'][1])
+        for want in ('asked the owner for a password', 'you do not need the password', 'hand_over'): self.assertIn(want, seen['prompts'][1])
         self.assertIn(browserview.SIGNIN_LINE, browserview.offer())  # ...the same words its prompt offers the browser with
         # ...and never told one is saved (design round 6, D8: "Taskuary will sign it in with your saved details", with nothing saved): the vault's
         # answer is Taskuary's own line to say

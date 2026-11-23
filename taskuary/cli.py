@@ -117,6 +117,7 @@ AGENT_ACTS = ('reply', 'reply_file', 'draft', 'draft_file', 'attach', 'item', 't
               'check_back',                         # ...and a wake of its own later, which a stranger's words never schedule
               'use_repo',                           # ...and which of the owner's checkouts it works in (repochoice)
               'browser',                            # ...and its browser opened on a page, which a link in a stranger's mail never is
+              'hand_over',                          # ...and a step on that page handed to the owner
               'remember')                           # ...and a fact kept in the owner's memory, which a stranger's words never write
 STRANGER_ACTS = AGENT_ACTS[:13]                     # ...the Hub, and the wall's other sessions' words, are not a stranger's to read or write
 OWNER_ACTS = ('prompts', 'backfill_asks', 'evalset', 'demo', 'link')
@@ -355,6 +356,9 @@ def main():
                                                              "kept under Not sent; nothing is sent or deleted.")
     ap.add_argument('--withdraw-draft', metavar='WHY', help='the reply draft waiting on this task no longer answers the newest message - '
                                                            'take it off the table, why in one line. It is kept under Not sent; nothing is sent.')
+    ap.add_argument('--hand-over', metavar='WHAT', help="a step on your browser's page only the owner can do (a sign-in, a code, a robot check, "
+                                                      "paying): Taskuary does it itself where it can, else hands him one card; go on with the job")
+    ap.add_argument('--site', default='', help="with --hand-over: the site's domain, for a sign-in")
     ap.add_argument('--follow-up', action='store_true',
                     help='with --reply: the owner asked you for ANOTHER message after your reply already went - it is saved as a '
                          'follow-up to it. Without this, a second reply to a message already answered (nothing new from them) is refused.')
@@ -514,6 +518,15 @@ def main():
         r, out = got
         print("marked not needed - the draft is put down, kept under Not sent." if out.get('ok')
               else f"not marked: {out.get('why') or out.get('detail') or r.text[:200]}")
+        return
+    if args.hand_over:
+        import os
+        tid = os.environ.get('TASKUARY_TASK')
+        if not str(tid).isdigit(): print('not in a Taskuary session - TASKUARY_TASK is not set, so there is no page to hand over'); return
+        got = _post('/api/agent/hand-over', {'task_id': int(tid), 'what': args.hand_over, 'site': args.site}, stranger)
+        if not got: return
+        r, out = got
+        print(out.get('says') if out.get('ok') else f"not handed over: {out.get('why') or out.get('detail') or r.text[:200]}")
         return
     if args.withdraw_draft:
         import os, sys

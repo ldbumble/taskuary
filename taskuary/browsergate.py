@@ -380,7 +380,6 @@ ITEM = {'type': 'object', 'properties': {'big': {'type': 'boolean'}, 'kind': {'t
 # ...why a big step waits, in his words, by the kind the model named - plain code, the same every time
 WHY = {'money': 'it spends your money, so it waits for your press', 'private': 'it sends your own details, so it waits for your press',
        'speaks': 'it speaks for you to other people, so it waits for your press', 'deletes': 'it deletes or cancels something of yours, so it waits for your press'}
-PAY_TURN = '[[TASKUARY-YOURTURN: <what he enters and presses to pay, in a few words>]]'
 BIG_WHY = 'it spends money, sends your own details, speaks for you or deletes something of yours, so it waits for your press'
 def wants(item: dict) -> dict: return {'type': 'object', 'properties': {'acts': {'type': 'array', 'items': item}}, 'required': ['acts']}
 WANT = wants(ITEM)
@@ -630,8 +629,8 @@ def _check(store, tid: int, sid: str, cmd: str, brain=None, cwd: str = '') -> di
         # ...A PAYMENT IS HIS TO MAKE, ON THE PAGE - ONE ROAD (the owner, 2026-11-22: "you pay on the page"): the hand-over asked him to enter his
         # card and press Pay, and the gate then held the agent's own Pay on the empty form as an Approve card - two roads for one payment
         if v.get('kind') == 'money':
-            return _deny(f"{HELD}: {v['what']} spends the owner's money - a payment is his to make himself, on the page. Leave the page on it and "
-                         f"end your turn with {PAY_TURN}; once he says he is done, look at the page and go on from what it shows.")
+            return _deny(f"{HELD}: {v['what']} spends the owner's money - a payment is his to make himself, on the page. Leave the page on it, "
+                         "hand_over what he enters and presses to pay, and go on with the rest; you are told when he is done.")
         # ...THE ONE RULE (actrule.decide): the same press on the same site he already approved on this task runs; one he dismissed is his no
         from . import actrule
         step = {'what': v['what'], 'why': v['why'], 'key': f"browser|{site}|{target(a, pg) or ' '.join(args)}"}
@@ -1123,16 +1122,16 @@ def left_by_agent(store, tid: int, rid: str) -> bool:
 
 
 def pressed(store, tid: int, rid: str, now: dict) -> bool:
-    "The page moved past the step: the owner did it. The agent is told what the page shows now, and goes on."
-    h = _close(store, tid, rid, 'done on the page')
+    """The page moved past the step without his I'm done. Nobody saw who moved it - a site's error page moves it too (walk 7, 2026-11-23:
+    "You did the step on" a page that had turned into a browser error, he had pressed nothing) - so it is never said as his: the agent is told
+    what the page shows now, to look and go on, and the chat says the page moved. Only his I'm done (done) is his."""
+    h = _close(store, tid, rid, 'the page moved on', by='taskuary')
     if not h: return False
     title = ' '.join(str(now.get('title') or '').split())[:160]
     shows = f'"{title}" ({now.get("href")})' if title else str(now.get('href') or 'another page')
-    _tell(store, tid, f"The owner did the step you handed them ({h.get('what') or 'on the page'}) and the page moved on; it now shows {shows}. "
-                      "Look at it and continue.")
-    store.add_comment(tid, 'owner', 'agent', f"You did the step on {h['site']} - the agent goes on.")
-    # ...and the chat says it once, as their press (general.PRESSES)
-    store.audit('task', tid, 'browser_act_pressed', 'owner', 'human', {'site': h['site'], 'btn': '', 'by': 'page'})
+    _tell(store, tid, f"The page you handed the owner ({h.get('what') or 'a step on it'}) moved on without their I'm done; it now shows {shows}. "
+                      "Look at it: go on if the step is past, or hand it over again if it is not.")
+    store.add_comment(tid, 'taskuary', 'agent', f"The page on {h['site']} moved on - the agent looks at it.")
     return True
 
 

@@ -3946,7 +3946,8 @@ class GeneralSession:
         # ...AND ONE IT ONLY SAID IN WORDS (the owner, 2026-11-05, an agent that wrote "the sign-in page is open" and ended its turn: the browser
         # shows only for an open sign-in ask, so nothing showed): a turn that ends with its browser on a page asking for a password raises the
         # ask itself - the vault's sign-in first, else the page beside the chat
-        if signing is None and turn is None and not asks:
+        from .browserview import handing
+        if signing is None and turn is None and not asks and not handing(self.store, self.task_id):
             from . import signin
             try:
                 # ...but never over a step of its own held on that tab: that card is his one move there (the HIPAA walk, 2026-11-22: "Sign in to
@@ -3956,17 +3957,16 @@ class GeneralSession:
                 if (signin.on_signin_page(self.sid) and not signin.set_aside(self.store, self.task_id, self.sid)
                         and not holds_any(self.store, self.task_id, self.sid)): signing = ''
             except Exception as e: logger.debug(f'task {self.task_id}: the browser could not be read for a sign-in - {e}')
-        if signing is not None:
-            from . import signin
-            try: signin.needs(self.store, self.task_id, self.sid, signing)
-            except Exception as e: logger.warning(f'task {self.task_id}: the sign-in the agent asked for was not raised - {e}')
-        if turn is not None:
+        # ...a marker a session still writes (the road before hand_over) goes the one road hand_over takes
+        if signing is not None or turn is not None:
             from . import browserview
-            try: browserview.your_turn(self.store, self.task_id, self.sid, turn)
-            except Exception as e: logger.warning(f'task {self.task_id}: the page the agent handed over was not raised - {e}')
+            try: browserview.hand_over(self.store, self.task_id, turn or '', signing or '', self.sid)
+            except Exception as e: logger.warning(f'task {self.task_id}: the step the agent handed over was not raised - {e}')
         # A TURN THAT ENDED SHORT is not one waiting on the owner: read by the turn judge (hooks.judge_ended), it wakes the agent once to
         # do what it said it would - never a failure in the chat (the owner, 2026-11-05: "failure means nothing to the user")
-        if not asks and signing is None and turn is None and closing is None and not is_dock(self.store.get_task(self.task_id)):
+        # ...nor one that handed him a step mid-turn (hand_over): it waits on his I'm done, which wakes it
+        if (not asks and signing is None and turn is None and closing is None and not is_dock(self.store.get_task(self.task_id))
+                and not handing(self.store, self.task_id)):
             from . import background, hooks, sessionrecord
             try: path = sessionrecord.READERS['claude'][0](self.cli_sid) if self.cli_sid and self.pick.startswith('cli:') and _cli_of_pick(self.store, self.pick) == 'claude' else None
             except Exception as e: logger.debug(f'task {self.task_id}: its CLI log was not found - {e}'); path = None

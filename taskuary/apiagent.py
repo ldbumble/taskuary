@@ -13,8 +13,7 @@ ONCE, mid-call or mid-tool (_await). The tools are the CLI road's own, run by th
   named session (browserview), so the pane shows it. Every act goes through browsergate.check first, exactly as a CLI's shell
   command does through its hook: a press that can't be undone is held for the owner and the agent is told so.
 - show - agenttools.show_files: a screenshot, a file, drawn in the chat (the frontend draws a `show` step's FILES_MARK rows).
-- SIGNING IN is never a tool: the agent ends its turn with [[TASKUARY-SIGNIN: site]] (selfclose.signin_marker), and the turn's
-  filing raises it (general._file -> signin.needs). A saved vault sign-in is typed by the server and the agent is woken
+- SIGNING IN is hand_over with its site (browserview.hand_over -> signin.needs), mid-turn. A saved vault sign-in is typed by the server and the agent is woken
   "Signed in - continue"; with none, the owner's ask is the secure fill page, "Save to vault for next time" on it. The secret
   never reaches the model.
 HIPAA: what the page shows goes to the card that runs the turn and nowhere else - the client's own chosen gateway.
@@ -53,9 +52,7 @@ SHOW = _fn('show', f"Show the owner files in this chat - a screenshot, a file yo
 BRIEF = ('YOUR TOOLS: you drive Taskuary\'s browser for this task with browser_open, browser_look, browser_click, browser_fill, browser_press '
          'and browser_screenshot, and `show` puts a picture or file in this chat. DO the work - open the site, look, click, read - never tell '
          'the owner it "cannot be done from here" or ask them to paste what the page shows. A SIGN-IN PAGE: never type a password and never '
-         'ask for one - open the site\'s sign-in page, then end your turn with a final line [[TASKUARY-SIGNIN: <the site\'s domain>]]. '
-         'Taskuary signs in with the login saved in its vault and wakes you to continue; if none is saved, the owner fills it in securely '
-         '(and can save it to the vault for next time). ' + SIGNUP_LINE.replace('run `agent-browser signup`', 'call browser_signup') + 'An act that can\'t be undone (submit, pay, send, delete) may be HELD for the owner: '
+         'ask for one - open the site\'s sign-in page and call hand_over with its `site`. ' + SIGNUP_LINE.replace('run `agent-browser signup`', 'call browser_signup') + 'An act that can\'t be undone (submit, pay, send, delete) may be HELD for the owner: '
          'when a tool says so, stop and say what you will do once they approve. Say what you found from the page itself, and what you could not check.')
 # ── PHASE 2: the rest of what a CLI's hands do (the owner, 2026-11-09: "make sure hipaa thing matches capabilities of claude cli") ──────
 # Files in the task's own outputs folder (the one folder the task page serves), read with Taskuary's own readers (attachtext); a page fetched
@@ -529,10 +526,10 @@ def tools_for(tid: int, sid: str, browser: bool, stranger: bool = False, post=No
 # file_write / file_edit (an invoice to fill, 2026-11-15): a model shown only their names said it had no way to make the file, and stopped.
 # ...and THE BROWSER'S OTHER HANDS COME WITH ITS FIRST PAGE (browser_open loads BROWSER_MORE): a page is only ever looked at and clicked after one is open
 LATER = frozenset({'read_attachment', 'search_knowledge', 'owner_memory', 'calendar', 'list_systems', 'run_system', 'remind', 'ask_stronger',
-                   'note_peers', 'use_repo', 'find_repos', 'propose_land', 'withdraw_draft', 'keep_card', 'sign_form', 'answer_invite', 'set_up_meeting', 'share',
+                   'note_peers', 'use_repo', 'find_repos', 'propose_land', 'withdraw_draft', 'keep_card', 'hand_over', 'sign_form', 'answer_invite', 'set_up_meeting', 'share',
                    'search_tasks', 'person', 'guide', 'todos', 'check_back', 'browser_look', 'browser_click', 'browser_fill', 'browser_press',
                    'browser_signup', 'browser_screenshot', 'web_fetch', 'files_list', 'reply_not_needed', 'propose', 'my_task', 'new_task'})
-BROWSER_MORE = ('browser_look', 'browser_click', 'browser_fill', 'browser_press', 'browser_signup', 'browser_screenshot')
+BROWSER_MORE = ('browser_look', 'browser_click', 'browser_fill', 'browser_press', 'browser_signup', 'browser_screenshot', 'hand_over')
 LOAD = 'find_tools'
 DEFERRED = {}                  # (tid, sid) -> {name: schema} of the tools this turn named but has not loaded
 def loader(later: list) -> dict:

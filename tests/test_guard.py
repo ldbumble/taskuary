@@ -230,7 +230,7 @@ class AllowListTests(unittest.TestCase):
                          if guard.classify(m, self._fill(r.path))[0] == 'agent')
         self.assertEqual(allowed, sorted([
             'POST /api/agent/ask-stronger',          # one question to a stronger model on its own task (askstronger) - nothing moves
-            'POST /api/agent/done', 'POST /api/agent/draft', 'POST /api/agent/item', 'POST /api/agent/new-task', 'POST /api/agent/not-needed', 'POST /api/agent/withdraw-draft', 'POST /api/agent/reply', 'POST /api/agent/tick', 'POST /api/agent/waiting',
+            'POST /api/agent/done', 'POST /api/agent/draft', 'POST /api/agent/hand-over', 'POST /api/agent/item', 'POST /api/agent/new-task', 'POST /api/agent/not-needed', 'POST /api/agent/withdraw-draft', 'POST /api/agent/reply', 'POST /api/agent/tick', 'POST /api/agent/waiting',
             'POST /api/agent/gate',                         # its own browser or desktop command asking before it runs (gatecmd) - a press waits
             'POST /api/agent/propose', 'POST /api/mcp',     # the toolbox (2026-10-25): a proposal on its own task, and its tools' one door
             'POST /api/agent/sign-form',                    # a form on its own task signed into its own folder (handsign, 2026-11-04) - nothing leaves

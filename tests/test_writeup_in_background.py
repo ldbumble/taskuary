@@ -25,13 +25,13 @@ def brain(system, user, **kw):
 
 
 def rows(s):
-    """Every row of every table, without the clock, the session id or file names stamped with it."""
+    """Every row of every table, without the clock, the session id, file names stamped with it, or an event's clock-made key (press:<ns>)."""
     out = {}
     for (name,) in s.cx.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name"):
         if name in ('setting', 'operation'): continue          # the job's own record (emptied) and the proposal ids
         cur = s.cx.execute(f'SELECT * FROM "{name}"'); cols = [d[0] for d in cur.description]
         keep = [i for i, c in enumerate(cols) if not (c.endswith('At') or c.endswith('Time') or c in ('Detail', 'OperationId', 'Version'))]
-        out[name] = sorted(re.sub(r'[0-9a-f]{64}', 'H', re.sub(r'\d{8}-\d{6}-\d{6}|\d{4}-\d\d-\d\d \d\d:\d\d:\d\d', 'TS', json.dumps([r[i] for i in keep], default=str)))
+        out[name] = sorted(re.sub(r'[0-9a-f]{64}', 'H', re.sub(r'\d{8}-\d{6}-\d{6}|\d{4}-\d\d-\d\d \d\d:\d\d:\d\d|:\d{16,}', 'TS', json.dumps([r[i] for i in keep], default=str)))
                            for r in cur.fetchall())
     return out
 

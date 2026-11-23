@@ -9,7 +9,7 @@ import api from "./api";
 import { heldCard } from "./reviewProposal.js";
 import { useVerbs } from "./actionRow.js";
 import { label as btn } from "./buttons.js";
-import { failLine, pressSteps } from "./press.js";
+import { failLine, landed, pressSteps } from "./press.js";
 import { asLive, MovedPast, PressedButton } from "./PassedCard.jsx";
 import { FOCUS_RING, pressable } from "./pressable.js";
 import { ALERT_INK, BORDER, DIM, FAINT, INK } from "./theme.jsx";
@@ -25,7 +25,9 @@ export default function HeldSteps({ reviews, onChanged, toRow = false, past = fa
     if (data?.failed) setErr(`Step ${c.steps.findIndex((s) => s.id === data.failed.review) + 1} failed: ${data.failed.error}${data.left?.length ? ` - ${data.left.length === 1 ? "the step after it was" : "the steps after it were"} not run` : ""}`);
     else if (data?.busy) setErr(data.busy);             // the agent is mid-turn in that folder: nothing ran (shellgate.mid_turn)
     else if (!data) setErr(failLine(o, "run"));        // no answer in time is "it may still be going", never "nothing was run" (press.js)
-    setBusy(""); onChanged?.();
+    // ...A PRESS THAT LANDED STAYS PRESSED until the re-read has the steps decided (walk 9, 2026-11-23: "running…", Approve lit again 2-7 s, then ✓)
+    if (!(landed(o) && !data?.failed && !data?.busy)) setBusy("");
+    onChanged?.();
   };
   const id = (v) => `${c.steps[0]?.id}:${v}`, live = !c.pressed;
   useVerbs(`held:${c.steps[0]?.id}`, live && !past ? [

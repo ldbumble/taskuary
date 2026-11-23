@@ -31,4 +31,8 @@ const marks = new Map(), ears = new Set();
 export const markOf = (rid) => marks.get(rid) || null;
 export const pressMark = (rid, m) => { if (m) marks.set(rid, m); else marks.delete(rid); ears.forEach((f) => f()); };
 export const hearMarks = (f) => { ears.add(f); return () => { ears.delete(f); }; };
-export const cardLook = (r, m = markOf(r?.ReviewId)) => (WENT.includes(r?.Status) || m?.state === "sent" ? "sent" : m?.state === "going" ? "going" : "live");
+// ...AND AN ACT'S PRESS THAT LANDED STAYS PRESSED until the review reads decided (walk 9, 2026-11-23: "running…", then Approve lit again for
+// 2-7 s, then "✓ Approved"): `landed` reads as going; the press's own busy ending (endPress) takes back only a press still going
+export const cardLook = (r, m = markOf(r?.ReviewId)) => (WENT.includes(r?.Status) || m?.state === "sent" ? "sent"
+  : m?.state === "going" || (m?.state === "landed" && (r?.Status || "pending") === "pending") ? "going" : "live");
+export const endPress = (rid) => { if (markOf(rid)?.state === "going") pressMark(rid, null); };

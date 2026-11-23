@@ -19,7 +19,7 @@ import { PANEL2, BORDER, DIM, FAINT, INK, label } from "./theme.jsx";
 import { CcRow, DraftField, SubjectRow, ToRow, timeAgo, cleanText, splitQuoted } from "./ui.jsx";
 import { deliveryBcc, deliveryCc, deliveryFiles, deliveryMeta, deliverySubject, needsAddress, pressWords, replyContext, sentCardOf, sentTo } from "./replyDelivery.js";
 import SentCard from "./SentCard.jsx";
-import { cardLook, hearMarks, markOf, pressMark, WENT } from "./sentLine.js";
+import { cardLook, endPress, hearMarks, markOf, pressMark, WENT } from "./sentLine.js";
 import { acted, announce, repeatClick, useLit, useVerbs } from "./actionRow.js";
 import { useFoldBar } from "./foldBar.js";
 import { hint as btnHint, label as btn } from "./buttons.js";   // theme.jsx owns `label`
@@ -189,7 +189,7 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
   const rid = simulated ? `demo:${r.ReviewId}` : r.ReviewId, mark = useSyncExternalStore(hearMarks, () => (past ? null : markOf(rid))), look = cardLook(r, mark);
   const setMark = (m) => pressMark(rid, m);
   const [busyHere, setBusyHere] = useState(false);
-  const setBusy = (b) => { setBusyHere(b); if (!b && markOf(rid)?.state === "going") setMark(null); };
+  const setBusy = (b) => { setBusyHere(b); if (!b) endPress(rid); };
   const setSent = (s) => setMark(s ? { state: "sent" } : null);
   const sent = look === "sent", busyNow = busyHere || look === "going";
   const busy = busyNow || sent;
@@ -436,6 +436,8 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
       // ...and a send with no page behind it - one of the task's emails - is Sent from its answer on too: its Send and Don't send lit again
       // until the re-read came (the walk, 2026-11-17)
       else if (data.ok && verb === "approve" && !proposal) setSent(true);
+      // ...and an act's Approve that landed stays pressed until the re-read has it decided - never Approve lit again between (walk 9)
+      else if (data.ok && verb === "approve") setMark({ state: "landed", pressed: "approve" });
       onChanged?.();
     } catch (e) { setErr(e?.response?.data?.detail || "That didn't go through - nothing was sent. Try the button again."); }      // what the page did after the answer (onSent), not the press
     finally { acted(no(verb === "approve" && shut ? "send_close" : verb)); }

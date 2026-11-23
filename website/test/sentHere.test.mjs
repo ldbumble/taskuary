@@ -94,3 +94,18 @@ test("an email's card goes sending… then Sent in its one place, and a card dra
   assert.doesNotMatch(page, /r\.Kind !== "action" && WENT\.includes/, "no second sent card for an email");
   assert.match(page, /\{!inTurns && <SlotList /);
 });
+
+// WALK 9, 2026-11-23: an act's Approve read "running…", then Approve and Dismiss lit again for 2-7 s, then "✓ Approved" - its press answered
+// and the card stood unpressed until the re-read came. A press that landed stays pressed until the review reads decided: one state, press to result
+test("an act's Approve that landed stays pressed until the review reads it decided - never Approve again in between", async () => {
+  const { cardLook, endPress, pressMark } = await import("../src/sentLine.js");
+  const r = { ReviewId: 77, Kind: "proposal", Status: "pending" };
+  pressMark(77, { state: "going", pressed: "approve" });
+  pressMark(77, { state: "landed", pressed: "approve" });      // ...its decide answered ok
+  endPress(77);                                                 // ...and the press's own busy ends
+  assert.equal(cardLook(r), "going", "pressed, still - never the lit Approve");
+  assert.equal(cardLook({ ...r, Status: "approved" }), "sent", "the re-read: decided, from the review alone");
+  pressMark(78, { state: "going", pressed: "approve" }); endPress(78);
+  assert.equal(cardLook({ ReviewId: 78, Status: "pending" }), "live", "a press that did not land is the live card again");
+  pressMark(77, null);
+});

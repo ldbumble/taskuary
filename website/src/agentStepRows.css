@@ -50,4 +50,4 @@
 .tq-aui-step-ask { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 3px 0 6px 21px; font-size: 12px; }
 .tq-aui-step-ask-q { color: var(--tq-text, #3f423c); margin-right: 4px; }
 .tq-aui-step-ask .tq-chip { padding: 3px 11px; font-size: 12px; }
-.tq-aui-step-ask .tq-chip-on { border-color: var(--tq-accent, #4f6b5a); color: var(--tq-accent, #4f6b5a); font-weight: 600; }
+.tq-aui-step-ask .tq-chip-on { border-color: var(--tq-link, #55697a); color: var(--tq-link, #55697a); font-weight: 600; }

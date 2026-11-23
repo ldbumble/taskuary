@@ -306,8 +306,17 @@ def _forget_signature(store, how):
 # ── facts ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 def _ledger(store, people) -> list:
     """THE SEAM FOR THE LEDGER (redesign/r1-ledger): what it knows about these people - a role, an address, a vendor id - as
-    [{who, text, source: 'ledger'}]. Nothing until that branch lands; it plugs in here, and every reader of facts has it at once."""
-    return []
+    [{who, text, source: 'ledger'}]: the addresses he gave or mailed for them, read off the one record of what exists (ledger.rows)."""
+    from . import ledger
+    who = {str(p).lower() for p in people or [] if p}
+    out = []
+    try:
+        for r in ledger.rows(store, kind='address', limit=400):
+            subj, val = str(r.get('Subject') or '').lower(), str(r.get('Value') or '')
+            if who and not (subj in who or val.lower() in who): continue
+            out.append({'who': r.get('Subject') or val, 'text': f"{r.get('Subject') or ''} <{val}>".strip() if val else str(r.get('Subject')), 'source': 'ledger'})
+    except Exception as e: logger.debug(f'memory: the ledger was not read - {e}')
+    return out[:20]
 
 
 PROMISE_DAYS, PROMISE_GRACE = 30, 14

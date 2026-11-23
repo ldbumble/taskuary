@@ -558,7 +558,7 @@ def _judge(store, todo: list, pg: dict, brain=None, said: str = '') -> list:
             "THE FORM FILLED BOXES (what a press that sends the form sends; passwords and card boxes are never shown): "
             f"{fence(json.dumps(pg.get('fields') or [])[:2000])}\n"
             "THE COMMANDS THE AGENT IS ABOUT TO RUN, IN THIS ORDER:\n" + ''.join(f'ACT {i}: {fence(_cmd(a))}\n' for i, a in enumerate(todo, 1)) +
-            f"THE OWNER'S OWN WORDS TO THIS AGENT: {fence(said or '(none)')}")
+            f"THE OWNER'S OWN WORDS TO THIS AGENT: {fence(said or '(none)')}" + _his_details(store))
     try:
         vs = ask_acts(store, brain, SYSTEM, user, WANT, len(todo))
         # ...AN ANSWER IT COULD NOT READ IS ASKED ONCE MORE before anything waits on him (the owner's live app, 2026-11-19: a click to a file
@@ -578,6 +578,12 @@ def _judge(store, todo: list, pg: dict, brain=None, said: str = '') -> list:
 # form, so code reads it - the Codex walk, 2026-11-22: "Send your name and work email to DealFlow Pro" held as his own details, by a judge
 # told just that. Every box it fills holds his saved name, or an email address that is his or one he named himself; a phone number never is
 _EMAIL = re.compile(r'[^@\s]+@[^@\s]+\.[^@\s]+')
+# ...AND WHOSE DETAILS A FORM HOLDS IS A FACT THE JUDGE IS HANDED (walk 10, 2026-11-23): a sign-up filled with made-up "Morgan Reed" and
+# morgan.reed@example.com was held as "it sends your own details" - the judge was never told whose name and address are his
+def _his_details(store) -> str:
+    from .terminal import fence
+    got = [f'{w} {v}' for w, k in (('name', 'owner_name'), ('email', 'owner_email')) if store and (v := ' '.join(str(store.get_setting(k) or '').split()))]
+    return f"\nTHE OWNER'S OWN NAME AND EMAIL ON FILE (a box holding other ones holds no details of his): {fence('; '.join(got))}" if got else ''
 def his_name_and_email(store, fields, said: str) -> bool:
     if not store or not str(said or '').strip(): return False
     vals = [' '.join(str(f.get('v') or '').split()) for f in fields or [] if f.get('t') not in ('checkbox', 'radio', 'hidden', 'password')]

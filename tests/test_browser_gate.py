@@ -944,6 +944,17 @@ class HisAskCoversWhatItNames(unittest.TestCase):
             self.assertTrue(one(self.s, self.act, {'url': CHECKOUT, 'fields': [{'k': 'msg', 't': 'textarea', 'v': 'Big news'}]}, Brain(None), said='post it')['hold'])
             self.assertTrue(one(self.s, self.act, {'url': CHECKOUT, 'fields': made}, Brain(None), said='')['hold'], 'no password typed: as the judge said')
 
+    def test_the_judge_is_told_whose_name_and_email_are_his(self):
+        """Walk 10, 2026-11-23: a sign-up filled with a made-up name and address was held as "it sends your own details" - the judge was
+        handed the form's boxes and never whose details are his."""
+        self.s.set_setting('owner_name', 'Alex Doyle', 't'); self.s.set_setting('owner_email', 'alex@northwind.example', 't')
+        made = [{'k': 'name', 't': 'text', 'v': 'Morgan Reed'}, {'k': 'email', 't': 'email', 'v': 'morgan.reed@example.com'}]
+        b = Brain(None)
+        with verdict({'big': False, 'sure': True, 'irreversible': False, 'what': 'Submit the sign-up on RentScope'}):
+            one(self.s, self.act, {'url': CHECKOUT, 'fields': made}, b, said='get trials on the vendors')
+        self.assertIn("THE OWNER'S OWN NAME AND EMAIL ON FILE", b.seen[0])
+        self.assertIn('Alex Doyle', b.seen[0]); self.assertIn('alex@northwind.example', b.seen[0])
+
     def test_the_same_control_on_the_same_page_and_form_is_judged_once(self):
         calls, ok = [], {'big': False, 'sure': True, 'irreversible': False, 'what': 'Next'}
         tid = Factory(self.s).task('Make a test inbox')

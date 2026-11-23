@@ -162,21 +162,28 @@ def test_mark_done_on_a_chat_agents_task_answers_before_its_ending_asks_any_ai(w
     wrapup.forget(tid)
 
 
-@__import__('pytest').mark.skipif(__import__('sys').platform == 'darwin', reason='races a simulated restart against an ending that no longer waits on an AI (his close asks none, 2026-11-23) - to be stalled another way')
 def test_a_restart_mid_ending_of_a_chat_agents_task_runs_the_ending_again(world):
     """...and a restart in those seconds loses nothing: the conversation is still on the task, so the ending is run again and the task closes -
     it read "restarted before the session was read" and stayed open."""
     make, _ = world
     s, _coding = make(); c = TestClient(server.app); tid = chat_task(s)
-    gate = threading.Event()
-    def stuck(system, user, **kw): gate.wait(10); raise RuntimeError('the process went away')
-    with mock.patch('taskuary.llm.build_llm', return_value=stuck):
+    class Gone(BaseException): "the process went away: nothing after it runs, no failure is written"
+    gate, real = threading.Event(), wrapup.wrap
+    def cut(store, tid_, **k):            # ...the ending stalls once its harvest is saved, as a process a restart takes down mid-ending
+        def saved(h): k['on_harvest'](h); gate.wait(30); raise Gone()
+        return real(store, tid_, **{**k, 'on_harvest': saved})
+    with mock.patch.object(wrapup, 'wrap', cut):
         c.post(f'/api/tasks/{tid}/wrap', json={'close': False, 'no_reply': True, 'background': True, 'then_close': True})
         saved = s.get_setting(writeup.PREFIX + str(tid))
+        assert json.loads(saved).get('harvest'), 'what a restart finishes it from is saved'
         writeup._JOBS.clear(); wrapup.forget(tid)
     s.set_setting(writeup.PREFIX + str(tid), saved, 'test')
     assert writeup.resume(s) == 1 and writeup.wait_for(tid, 30)
-    gate.set()
+    old = [t for t in threading.enumerate() if t.name == f'writeup-{tid}']
+    assert old, 'the cut ending was still held when the restart ran it again'
+    with mock.patch.object(threading, 'excepthook', lambda a: None):
+        gate.set()
+        for t in old: t.join(30)
     assert (s.get_task(tid) or {}).get('Status') == 'done'
     assert [str(x.get('Body') or '') for x in s.list_comments(tid, internal=True) if writeup.FAILED in str(x.get('Body') or '')] == []
     assert sum(str(x.get('Body') or '').startswith(wrapup.REPORT) for x in s.list_comments(tid, internal=True)) == 1, 'the answer is filed once'

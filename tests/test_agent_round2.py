@@ -158,10 +158,7 @@ class SearchBeforeAskingTests(unittest.TestCase):
             got = c.get('/api/agent/messages', params={'task_id': tid, 'words': 'spendly vendor'}, headers=hdr).json()
             self.assertIn('V-2231', got['says'])
         self.assertIn('V-2231', general.history_brief(s, tid, hands=False))               # a brain with no search is handed them
-        # ...AND QUICK WORK FINDS ITS SEARCH DONE, its own still there (the speed round, 2026-11-20: a quick reply's agent searched the sender's
-        # mail itself first - one more model round and a shell call, 4-6 s of an 11 s turn)
         self.assertEqual(general.history_brief(s, tid, hands=True), '')
-        self.assertIn('V-2231', general.history_brief(s, tid, hands=True, quick=True))
 
 
 # ── 8. check-backs ──────────────────────────────────────────────────────────────────────────

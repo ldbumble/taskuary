@@ -279,13 +279,6 @@ def test_the_endpoint_files_the_draft_on_the_sessions_own_task(s):
 from taskuary import concierge, triage
 
 
-def test_triage_reads_outputs_only_on_a_task():
-    j = {'intent': 'task', 'why': 'w', 'title': 't', 'summary': 's', 'kind': 'task', 'checklist': ['a'], 'urgent': False,
-         'outputs': [{'to': 'erin@northwind.example', 'about': 'the numbers'}, {'to': '', 'about': 'x'}]}
-    assert triage.parse_outputs(j) == [{'to': 'erin@northwind.example', 'about': 'the numbers'}]
-    assert triage.parse_outputs({**j, 'intent': 'fyi'}) == [] and triage.parse_outputs({**j, 'outputs': None}) == []
-
-
 def test_triage_lists_no_recipients_for_a_message():
     # the owner, 2026-11-10: "it created reply with nothing in it" - triage's "email to <them>, to draft" stood under the agent's turn with no
     # words. Who else is written to is the agent's to judge; only the owner's own typed ask names its emails (a hand-made ask, below)

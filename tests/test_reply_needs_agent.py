@@ -7,7 +7,7 @@ starts that agent (work it out, then draft the reply for the owner's Send); why 
 And since 2026-11-10 (the owner: "no more triage creates draft. agent should be doing it" ... "as it arrives of course") every reply owed
 is the task's agent's from arrival (ingest.reply_to_agent): nothing drafts it in one tool-less call first - a quick fact included - and
 the writer's NEEDS is only ever the answer to the owner's own Draft with AI press.
-And a webinar invite whose thread fills with banter stays one task under its own title, with triage's offer one press away.
+And a webinar invite whose thread fills with banter stays one task under its own title.
 """
 import json
 from unittest import mock
@@ -75,12 +75,10 @@ def test_the_guide_sends_thinking_reviewing_and_opinions_to_the_general_agent():
     assert 'lean general' in g
 
 
-def test_the_guide_keeps_banter_off_the_title_and_asks_for_an_offer():
+def test_the_guide_keeps_banter_off_the_title():
     g = ' '.join(triage.SHIPPED.split())
     assert 'banter or small talk about it' in triage.REFINES and 'keeps its title' in triage.REFINES
     assert 'Banter about the ask' in g and 'adds nothing to do' in g
-    assert triage.OFFER.startswith('- **offer**') and 'never as done' in triage.OFFER
-    assert '"offer": null' in triage.SHIPPED and 'offer' in triage.verdict_schema()['schema']['properties']['more']['properties']
 
 
 # ── a long draft-for-feedback mail, judged general, goes to the assistant told its job ends in the reply ────────────────────
@@ -307,52 +305,28 @@ def test_a_second_line_while_the_first_start_is_on_its_way_starts_no_second_agen
     assert went == ['reply_to_agent'] and not any(x.startswith('No agent started:') for x in lines(s, tid))
 
 
-# ── the add-on: a webinar invite and its banter are one task under one title, with the offer one press away ────────────────
+# ── the add-on: a webinar invite and its banter are one task under one title ─────────────────────────────────────────────
 INVITE = dict(external_id='w1', subject='Webinar tomorrow', from_email='omar@vendor.example', from_name='Omar Keller', conversation_id='AAQk-web',
               body='Hi Alex, do you want to join our ledger automation webinar tomorrow at 11? Happy to save you a seat.',
               sent_at='2026-10-28 08:00')
-OFFER = 'I can register you for the webinar and put it on your calendar.'
 BANTER = [('w2', 'Ha - bring coffee, it runs a full hour.'), ('w3', 'Paula says the last one was the best they have done.'),
           ('w4', 'Looking forward to it either way!')]
 
 
 def webinar(s):
-    out, _ = ingested(s, mail(**INVITE), says(intent='reply_only', kind='task', title='Join the ledger automation webinar tomorrow?',
-                                              summary='Omar Keller invites you to a webinar tomorrow at 11.', offer=OFFER))
+    out, _ = ingested(s, mail(**INVITE), says(intent='reply_only', kind='task', title='Join the ledger automation webinar tomorrow?'))
     tid = out['task_id']
     for n, (eid, body) in enumerate(BANTER):
         o, _ = ingested(s, mail(**{**INVITE, 'external_id': eid, 'body': body, 'sent_at': f'2026-10-28 0{n + 8}:30'}),
-                        says(intent='fyi', kind='task', title=f'Banter {n}', refines=False, asks_owner=False, offer=None))
+                        says(intent='fyi', kind='task', title=f'Banter {n}', refines=False, asks_owner=False))
         assert o['task_id'] == tid
     return tid
 
 
-def test_banter_keeps_the_webinar_one_task_under_its_own_title_with_one_offer():
+def test_banter_keeps_the_webinar_one_task_under_its_own_title():
     s = store(); tid = webinar(s)
     assert len(s.list_tasks(active_only=False)) == 1
     assert s.get_task(tid)['Title'] == 'Join the ledger automation webinar tomorrow?'
-    assert ingest.offer_of(s, tid) == OFFER
-
-
-def test_accepting_the_offer_starts_the_assistant_with_that_job():
-    from fastapi.testclient import TestClient
-    from taskuary import server
-    s = store(); tid = webinar(s)
-    ses = mock.Mock(provider='claude', model=None); ses.info.return_value = {}
-    s._exec('UPDATE task SET TrustedThrough=? WHERE TaskId=?', (10 ** 9, tid))      # a thread he trusts: a stranger's is refused (the test below)
-    with mock.patch.object(server, 'store', s), mock.patch.object(general, 'start_session', return_value=ses), \
-         mock.patch.object(general, 'history', return_value=[]):
-        c = TestClient(server.app)
-        assert c.get(f'/api/tasks/{tid}').json()['offer'] == OFFER
-        r = c.post(f'/api/tasks/{tid}/offer')
-        assert r.status_code == 200, r.text
-        prompt = ses.send_prompt.call_args[0][0]
-        assert OFFER in prompt and "waits for the owner's yes" in prompt and 'Nothing is sent' in prompt
-        # ...the job is Taskuary's words about a press, never a line the owner typed (the agent walk, 2026-11-09: it stood in their bubble)
-        assert ses.send_prompt.call_args[1].get('brief') is True
-        assert [m for m in general.press_lines(s, tid) if 'accepted the offer' in m['content'][0]['text']], general.press_lines(s, tid)
-        assert s.get_task(tid)['Kind'] == 'general' and ingest.offer_of(s, tid) == ''
-        assert c.post(f'/api/tasks/{tid}/offer').status_code == 409                 # taken once
 
 
 # ── a reply owed on a GENERAL task no agent has run on goes to the assistant too (Task 3.2, 2026-11-04): only a reply task did, so a
@@ -413,26 +387,6 @@ def test_a_start_that_fails_before_it_opens_lets_the_hold_go():
     with mock.patch.object(ingest, 'has_room', side_effect=RuntimeError('the queue is unreadable')), pytest.raises(RuntimeError):
         ingest._auto_general(s, tid)
     assert tid not in general.OPENING
-
-
-def test_the_offer_on_a_strangers_held_task_starts_no_agent_and_says_why():
-    """The bug hunt, 2026-11-12: an outsider's payroll notice, never trusted, offered "I could open the approval page"; Yes, do it started
-    a session the hold refused at once, and the task read "agent done" with Mark done lit - no agent had worked it. The press is refused
-    with the hold's own line, nothing is said as accepted, and the offer stays for after Trust."""
-    from fastapi.testclient import TestClient
-    from taskuary import origin, server
-    s = store()
-    out, _ = ingested(s, mail(**INVITE), says(intent='reply_only', kind='task', title='Join the ledger automation webinar tomorrow?',
-                                              summary='Omar Keller invites you to a webinar tomorrow at 11.', offer=OFFER), wrote=False)
-    tid = out['task_id']; assert origin.hold(s, tid), 'the shape needs an untrusted sender'
-    ses = mock.Mock(provider='claude', model=None); ses.info.return_value = {}
-    with mock.patch.object(server, 'store', s), mock.patch.object(general, 'start_session', return_value=ses) as started, \
-         mock.patch.object(general, 'history', return_value=[]):
-        r = TestClient(server.app).post(f'/api/tasks/{tid}/offer')
-    assert r.status_code == 422 and 'not trusted Omar Keller' in r.json()['detail'], r.text
-    assert not started.called and not ses.send_prompt.called
-    assert not [m for m in general.press_lines(s, tid) if 'accepted the offer' in m['content'][0]['text']]
-    assert s.get_task(tid)['Kind'] != 'general' and ingest.offer_of(s, tid) == OFFER
 
 
 # ── a machine's line on a person's thread moves the draft's freshness pin, never whom it answers ─────────────────────────────

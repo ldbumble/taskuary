@@ -338,10 +338,9 @@ class TwoMattersOnOneTaskTests(unittest.TestCase):
         self.assertEqual([(r['mid'], r['title'], r['joined'], r['doubt']) for r in rows],
                          [(a['message_id'], 'Portal is down', False, False), (b['message_id'], 'Did payroll go out for Marcus', True, True)])
         text = context.build(self.s, a['task_id'], general=True)
-        self.assertIn('2 messages from 1 thread or chat, 1 of them joined with nothing sure it continues the task', text)
-        self.assertIn(f"[m{b['message_id']}] Erin Blake", text)
-        self.assertIn('triage called it "Did payroll go out for Marcus" · joined this task: unsure whether it continues', text)
-        self.assertIn('triage called it "Portal is down" · opened this task', text)
+        # ...each message is listed for the agent to tell apart by what it says - never triage's reading of it (the review, 2026-11-23)
+        self.assertIn(f"[m{a['message_id']}] Erin Blake", text); self.assertIn(f"[m{b['message_id']}] Erin Blake", text)
+        for said in ('triage', 'joined', 'unsure', 'Did payroll go out for Marcus', 'Portal is down'): self.assertNotIn(said, context.came_in(self.s, a['task_id']))
 
     def test_two_threads_on_one_task_are_told_apart(self):
         a, b = self.come([self.mailed(1, 'Please approve PO-5512.', 'PO-5512', 'c-po'),
@@ -349,9 +348,9 @@ class TwoMattersOnOneTaskTests(unittest.TestCase):
                          [{'title': 'Approve PO-5512'}, {'title': 'Trainly renewal quote', 'same_as': 1}])
         self.assertEqual((b['status'], b['task_id']), ('routed', a['task_id']))
         text = context.came_in(self.s, a['task_id'])
-        self.assertIn('2 messages from 2 threads or chats - each line ends', text)
+        self.assertIn('2 messages from 2 threads or chats.', text)
         self.assertIn(f"[m{b['message_id']}] Gail Moreno · 2026-11-09 12:00:00 · email · \"Trainly renewal\"", text)
-        self.assertRegex(text, r'triage called it "Trainly renewal quote" · joined this task: triage: .*the same as TQ-0001, joined to it')
+        self.assertNotIn('triage', text); self.assertNotIn('joined', text)
         # ...and the coding read's thread names each message by the same id
         self.assertIn(f"· email · m{b['message_id']}\n", context.build(self.s, a['task_id']))
 
@@ -362,4 +361,4 @@ class TwoMattersOnOneTaskTests(unittest.TestCase):
         self.assertEqual((b['status'], b['task_id']), ('attached', a['task_id']), 'its own thread: joined unless triage says new_job')
         text = context.came_in(self.s, a['task_id'])
         self.assertIn('2 messages from 2 threads or chats', text)
-        self.assertIn('triage called it "Set up a laptop for the new starter" · joined this task: attached: same conversation thread', text)
+        self.assertIn('"Laptop for the new starter"', text); self.assertNotIn('triage', text); self.assertNotIn('attached:', text)

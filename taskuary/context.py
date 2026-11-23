@@ -724,8 +724,8 @@ CAME_PEOPLE, CAME_LINKS, LINK_CHARS = 8, 6, 300
 def came_in(store, tid: int) -> str:
     """joins() as a section, '' when it would say nothing the messages' own text does not. A message is listed for what its text lost:
     whom it went to when that is more than the owner alone, the addresses behind its words, a subject with no body under it. And when
-    the task's messages did not all come as one thread read as one matter (two threads, or a join in doubt), EVERY message is listed,
-    with triage's own name for it and how it reached the task - facts for whoever works the task to tell its matters apart by."""
+    the task's messages did not all come as one thread read as one matter (two threads, or a join in doubt), EVERY message is listed
+    by who, when, where and under what subject - facts for whoever works the task to tell its matters apart by."""
     from .ingest import own_addresses
     from .timewords import plural
     rows, own = joins(store, tid), own_addresses(store)
@@ -739,21 +739,16 @@ def came_in(store, tid: int) -> str:
         if r['links']:
             out.append('behind its words: ' + '; '.join(f'"{_short(w, 60)}" -> ' + (h if len(h) <= LINK_CHARS else h[:LINK_CHARS] + '…') for w, h in r['links'][:CAME_LINKS])
                        + (f" (+{len(r['links']) - CAME_LINKS} more - read_message m{r['mid']} lists them all)" if len(r['links']) > CAME_LINKS else ''))
-        if mixed:
-            out.append(' · '.join(x for x in (f"triage called it \"{_short(r['title'], 140)}\"" if r['title'] else '',
-                                              ('joined this task' if r['joined'] else 'opened this task') + (f": {_short(r['road'], 220)}" if r['road'] else ''),
-                                              'nothing read it before it joined' if r['unread'] else '',
-                                              'triage read it as beside the ask' if r['aside'] else '') if x))
-        if not out and not (r['empty'] and r['subject']): return ''
+        # ...FACTS ABOUT THE MESSAGE, NEVER TRIAGE'S READING OF IT (the review, 2026-11-23: "joined at combine level 3", triage's title for it and
+        # whether it judged it beside the ask rode into every turn): where each came from is said, and the agent reads what it says
+        if not out and not mixed and not (r['empty'] and r['subject']): return ''
         return f"[m{r['mid']}] {_short(r['who'], 60)} · {r['when']} · {r['channel']}" + (f" · \"{_short(r['subject'], 120)}\"" if r['subject'] else '') \
                + ''.join(f'\n  {o}' for o in out)
     lines = [l for l in map(line, rows) if l]
     if not lines: return ''
     kept = lines[-CAME_ROWS:]
     while len(kept) > 1 and sum(map(len, kept)) > CAME_CHARS: kept = kept[1:]
-    lead = (f"{plural(len(rows), 'message')} from {plural(len(keys), 'thread or chat', 'threads or chats')}"
-            + (f', {doubt} of them joined with nothing sure it continues the task' if doubt else '')
-            + ' - each line ends with what triage called that message and how it reached this task.\n') if mixed else ''
+    lead = f"{plural(len(rows), 'message')} from {plural(len(keys), 'thread or chat', 'threads or chats')}.\n" if len(keys) > 1 else ''
     return (f'{CAME_HEAD} (on file; [mNN] is a message\'s id' + (f', {len(lines) - len(kept)} older not listed' if len(lines) > len(kept) else '')
             + ')\n' + lead + '\n'.join(kept))
 

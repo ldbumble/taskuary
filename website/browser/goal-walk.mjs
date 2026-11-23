@@ -127,6 +127,13 @@ const STEPS = {
     await sleep(s.settle ?? 3000); return { pushed: !!r, problem: r && r.ok === false ? `the push was refused: ${JSON.stringify(r).slice(0, 200)}` : "" };
   },
   async quiet(s) { const t0 = Date.now(), ok = await untilQuiet((s.max || 600) * 1000); return { took_ms: Date.now() - t0, problem: ok ? "" : `still working after ${s.max || 600} s` }; },
+  // HIS OWN MAIL, SENT OUTSIDE THE APP, read back as his mailbox's Sent folder is (channels.ingest_own_message) - never pushed as an inbound
+  // mail from his address, which the inbound road rightly does not take as his (a From line is anyone's to write)
+  async own(s) {
+    const r = await api("/api/fixture/own-reply", { id: `own-${Date.now()}`, channel: "email", conversation: s.conversation || `goal-${Date.now()}`,
+      subject: s.subject || "", body: s.body, to: s.to || [], sent: new Date().toISOString().slice(0, 19).replace("T", " ") });
+    await sleep(s.settle ?? 3000); return { problem: r && r.ok === false ? `the own reply was refused: ${JSON.stringify(r).slice(0, 200)}` : "" };
+  },
   async wait(s) { await sleep((s.s || 5) * 1000); return {}; },
   // THE APP RESTARTED MID-TASK (the owner's rule, part 5: a restart in the middle): real-run's `restart` file - the server down and up again on
   // the same home and port, the page left open - and the walk goes on once the server answers again

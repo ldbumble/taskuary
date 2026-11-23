@@ -403,3 +403,23 @@ class TheBallIsInTheirCourt(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+def test_his_own_mail_that_is_the_drafted_letter_joins_its_task_and_stands_the_draft_down():
+    """The Codex walk, 2026-11-22: the agent's new email to Gail, "Harbor signage budget", had no thread; he sent Gail that letter from his
+    own mailbox, on a thread of its own - it joined no task, the draft stood "ready to send", and Gail's reply went to an older task. The
+    same subject to someone the draft is to is that letter: it joins the draft's task and the draft is not sent. Another subject is not."""
+    import json
+    from taskuary import channels
+    s = MemoryStore()
+    tid = s.create_task({'Title': 'Ask Gail about the signage budget', 'Kind': 'general', 'Status': 'open'}, 'owner')
+    rid = s.add_review({'TaskId': tid, 'Kind': 'slot', 'Status': 'pending', 'DraftText': 'Gail - is the signage budget approved?',
+                        'Deliver': json.dumps({'channel': 'email', 'to': ['gail@northwind.example'], 'cc': [], 'subject': 'Harbor signage budget'})})
+    other = s.add_review({'TaskId': tid, 'Kind': 'slot', 'Status': 'pending', 'DraftText': 'Gail - lunch Friday?',
+                          'Deliver': json.dumps({'channel': 'email', 'to': ['gail@northwind.example'], 'cc': [], 'subject': 'Lunch'})})
+    channels.ingest_own_message(s, {'external_id': 'sent-1', 'channel': 'email', 'conversation_id': 'thread-new', 'subject': 'Harbor signage budget',
+                                    'body': 'Gail - is the Harbor signage budget approved yet? Alex', 'to': ['gail@northwind.example'],
+                                    'sent_at': '2026-11-22 21:00:00'}, 'your own mail')
+    sent = next(m for m in s.list_messages(tid) if m.get('ExternalId') == 'sent-1')
+    assert sent['TaskId'] == tid
+    assert s.get_review(rid)['Status'] != 'pending' and s.get_review(other)['Status'] == 'pending'

@@ -1079,6 +1079,25 @@ def answered_line(store, rv) -> str:
     return f"You answered {_answered_who(store, rv) or 'them'} yourself - no new response needed."
 
 
+# ...A NEW EMAIL HAS NO THREAD UNTIL IT GOES (the Codex walk, 2026-11-22): the agent's draft to Gail, "Harbor signage budget", had no conversation,
+# and his own mail to Gail with that subject, sent from his mailbox, started one of its own - it joined no task, the draft stood "ready to send",
+# and Gail's reply on his thread was filed on an older task. The same letter is a fact of the two: the same subject (a Re:/Fwd: aside) to
+# someone it reached
+_PREFIX = re.compile(r'^\s*((re|fwd?|aw|wg)\s*:\s*)+', re.I)
+def _subject(x) -> str: return ' '.join(_PREFIX.sub('', str(x or '')).split()).lower()
+def same_letter(store, rv: dict, sent: dict) -> bool:
+    "Is pending email draft `rv` the letter his own sent mail `sent` is - its subject, to someone the draft is to?"
+    try: d = json.loads(rv.get('Deliver') or '{}') or {}
+    except (TypeError, ValueError): return False
+    from .context import _recipients
+    to, went = {str(a).lower() for a in (d.get('to') or []) + (d.get('cc') or [])}, {a.lower() for a in _recipients(sent)}
+    return d.get('channel') == 'email' and bool(_subject(d.get('subject'))) and _subject(d.get('subject')) == _subject(sent.get('Subject')) and bool(to & went)
+def drafted_letter(store, sent: dict):
+    "The task whose pending email draft his own sent mail `sent` is (same_letter) - the newest such draft's, else None."
+    rv = next((r for r in reversed(store.list_reviews('pending')) if r.get('Kind') != 'action' and not r.get('ConversationId') and same_letter(store, r, sent)), None)
+    return rv.get('TaskId') if rv else None
+
+
 def answered_drafts(store, tid, sent: dict) -> list:
     """Task `tid`'s pending replies on the conversation the owner's own line `sent` is on, drafted before it: what that line may have answered.
     ...and, where his line keeps whom it went to, only a reply to someone it reached: a forward to Gail keeps Erin's conversation and is no
@@ -1090,7 +1109,8 @@ def answered_drafts(store, tid, sent: dict) -> list:
     went = {a.lower() for a in _recipients(sent)}
     reached = lambda rv: not went or not (to := addressees(store, rv)) or bool(to & went)
     return [rv for rv in store.list_reviews('pending') if rv.get('TaskId') == tid and rv.get('Kind') != 'action'
-            and rv.get('ConversationId') == conv and (not rv.get('SentAt') or rv['SentAt'] <= at) and reached(rv)]
+            and (rv.get('ConversationId') == conv or (not rv.get('ConversationId') and same_letter(store, rv, sent)))
+            and (not rv.get('SentAt') or rv['SentAt'] <= at) and reached(rv)]
 
 
 # THE OWNER'S LINE ON A CHAT IS THE AGENT'S TO RE-PLAN (the owner, 2026-11-09: "if we respond show on left side and then agent reevaluates if
@@ -1201,7 +1221,8 @@ def ingest_own_message(store, msg: dict, why: str, keep_unmatched: bool = True) 
     # TWO OPEN TASKS IN ONE ROOM: the first snapshot was arbitrary, and a group's answer to a new voice note was filed on the
     # older ask beside it. The owner answers what was last said to them - or what their line quotes, when it quotes one.
     tid = ((_answered_task(store, conv, msg.get('sent_at'), msg.get('quoted'), set(on)) if len(set(on)) > 1 else None)
-           or (on[0] if on else None) or store.task_for_conversation(conv, msg.get('subject')))
+           or (on[0] if on else None) or store.task_for_conversation(conv, msg.get('subject'))
+           or drafted_letter(store, {'Subject': msg.get('subject'), 'RecipientsJson': json.dumps({'to': list(msg.get('to') or []), 'cc': list(msg.get('cc') or [])})}))
     if not tid and not keep_unmatched: return 0
     mid = store.add_message({'TaskId': tid, 'ExternalId': msg['external_id'], 'ConversationId': conv,
                              'Channel': msg['channel'], 'SourceName': msg.get('source_name'),

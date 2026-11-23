@@ -133,3 +133,14 @@ def test_a_fact_told_to_the_assistant_is_kept_and_answered_in_its_own_few_words_
     # ...and a task's agent is told the same of its own tool: a few natural words, never a report of the save
     from taskuary import agenttools
     assert 'never say that you saved it, or where' in agenttools.TOOLS['remember'][1]
+
+
+def test_the_remember_tools_answer_is_a_fact_never_an_order():
+    """The HIPAA walk, 2026-11-23: the remember tool answered "Kept ... Carry on; never tell the owner it was saved, or where" - an order inside
+    a tool's answer. What it kept is the answer; how to speak of it is its description's."""
+    from taskuary import general
+    s = MemoryStore(); tid = s.create_task({'Title': 'Payroll', 'Kind': 'general', 'Status': 'open', 'OriginBase': 'owner'}, 'owner')
+    s.add_comment(tid, 'owner', general.USER_TYPE, 'Payroll questions go to Gail Moreno.')
+    with mock.patch.object(server, 'store', s), mock.patch.object(server, '_own_task_only'):
+        r = server.agent_remember(server.AgentRememberBody(task_id=tid, note='Payroll questions go to Gail Moreno.', section='people', about='Gail Moreno'), None)
+    assert r['ok'] and 'Kept' in r['says'] and 'never' not in r['says'].lower(), r['says']

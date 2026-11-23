@@ -153,7 +153,7 @@ def test_mark_done_on_a_chat_agents_task_answers_before_its_ending_asks_any_ai(w
         c.post(f'/api/tasks/{tid}/wrap', json={'close': False, 'no_reply': True, 'background': True, 'then_close': True})
         assert writeup.running(tid) and not gate.is_set(), 'the press answered while the ending was still at work'
         assert json.loads(s.get_setting(writeup.PREFIX + str(tid))).get('harvest'), 'what a restart finishes it from is saved'
-        assert asked.wait(10), 'the ending does ask its AI - behind the press'
+        # ...his own close drafts nothing new (wrapup.CLOSING, 2026-11-23): whether the ending asks an AI at all is its business - never in front of the press
         gate.set(); assert writeup.wait_for(tid, 30)
     assert (s.get_task(tid) or {}).get('Status') == 'done'
     assert any(str(x.get('Body') or '').startswith(wrapup.REPORT) for x in s.list_comments(tid, internal=True))

@@ -283,28 +283,23 @@ CHAT_LINE = (
 # ...ONE DUTY LINE (the owner's rule 8, 2026-11-11: the agent talks like a person helping - "no repeating what the card says"): it was told
 # to say what it set up and for whom, and said that over a card that says it - then "it waits for your Send", "nothing has been sent". What
 # the card shows is never said; the agent adds only what the card cannot
-CARD_SAID = ('A reply, an email or an act you set up is its card under your answer, with its own button - the result itself: it shows '
-             'what it is, to whom, its words, the file it carries, that it waits and that nothing went. Say none of that or what it replaced, and never '
-             'retell its content in other words. Add only what the card cannot say - what you will do after the press, an assumption in it (a '
-             'guessed address, a picked date), the one question - in one short line, or nothing. Raise your cards in the order they should '
-             'happen; what stands on his screen is told you at the head of every turn. Many of one act (25 emails, 40 issues to close) go as '
-             'ONE card, in one call with `items`.')
+CARD_SAID = ('It stands as its card under your answer, with its own button: the card shows what it is, to whom, its words, the file it '
+             'carries, what it replaced, that it waits and that nothing went. What stands on his screen is told you at the head of every turn; '
+             'many of one act (25 emails, 40 issues to close) are one card, in one call with `items`.')
 # ...AND A ROUTINE'S OWN EMAIL IS NO CARD (slots.routine_sends, the owner 2026-11-17: "routines should send on their own too"): it went at
 # once, and its agent was told the card "shows ... that it waits and that nothing went" - so it said nothing went (the tools stress round)
 def card_said(out: dict) -> str:
     "How a draft that stood is spoken of, on every road (the draft tools, `taskuary --draft`): sent at once, failed to go, or its card."
-    if out.get('sent'): return ("It went at once - a routine's email to what its owner saved into it is sent without a press, so there is no card: say in a few words that "
-                                "it was sent, and to whom.")
-    if out.get('send_error'): return (f"It did not go ({out['send_error']}), so it stands as its card for the owner's Send - say that in one "
-                                      f"line. {CARD_SAID}")
+    if out.get('sent'): return "It went at once - a routine's email to what its owner saved into it is sent without a press, so there is no card."
+    if out.get('send_error'): return f"It did not go ({out['send_error']}), so it stands for the owner's Send. {CARD_SAID}"
     return CARD_SAID
 # ...AND A STEP TASKUARY HELD IS A CARD TOO (the real-CLI walks, 2026-11-12: "The delete of old-export.csv is waiting for your approval",
 # over the card that says so; "still waiting for your Approve" the turn after): every hold's answer to its agent ends on this one tail
 # ...THE ONE WAY AN AGENT ASKS HIS YES (the owner, 2026-11-23: "Ask them to approve by using action cards. That's it." - 26 orders to stop, end
 # the turn or never ask had piled up, one per bug, and an agent he had told twice to post stopped on "Awaiting final approval"): the card is
 # the ask, and the job goes on - every gate's refusal ends with this, and nothing else tells an agent to stop
-CARD_TAIL = ('That is how you ask the owner: it is an action card on this task now, and when they press it Taskuary runs it and tells you what '
-             'happened. Keep doing the rest of the job; about the card, at most one short line of what you will do after the press.')
+CARD_TAIL = ('It is an action card on this task now, the owner\'s to press: when they press it Taskuary runs it and tells you what happened. '
+             'The rest of the job is not held by it.')
 # ...and WHAT A TURN IS HANDED IS CONTEXT, NOT NEWS (same walks): each turn is told what waits, what went and what he pressed, and said it
 # back to him - so the block says once, at its head, that it is his page's own news (general.latest_block)
 FACTS_HEAD = "WHAT STANDS ON THIS TASK NOW (each is on the owner's screen already):"
@@ -318,8 +313,8 @@ SECRET_LINE = "A login or secret you find in the owner's files goes only in the 
 # close the task from here", a failure over finished work (the desktop stress test, 2026-11-03). It is told whose press the close is
 # ...and ONE ANSWER TO "DID IT CLOSE": none of an agent's steps closes the task (the owner, 2026-11-16, "straight up lying": a coding agent ran
 # its finish and wrote "I've closed the task", then "I had just marked the task done, so I'm reopening it" over a task open all along)
-NEVER_CLOSES = ('Taskuary did not close the task - closing it is the owner\'s, with {close}, which is lit for them now. Your sentence is filed on '
-                'the task. Never say you closed, marked done or reopened it.')
+NEVER_CLOSES = ('Taskuary did not close the task - closing it is the owner\'s, with {close}, which is lit for them now; it stays open until '
+                'they press it. Your sentence is filed on the task.')
 
 
 # THE ONE ENDING THE AGENT SAYS (the owner, 2026-11-05: "it should trigger a new taskuary chat ... saying i saw you reply so i will close the

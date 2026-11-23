@@ -1369,6 +1369,14 @@ class PhoneReceiptTests(unittest.TestCase):
         self.assertEqual(self.line(op), f'Sent to Gail Moreno · TQ-{self.t:04d}.')
         self.assertTrue(self.line(op, concierge.DESK).startswith('Done - '), 'the desk keeps its receipt')
 
+    def test_a_send_names_whom_the_card_went_to_from_its_record(self):
+        "Walk 10, 2026-11-23: the phone said 'Sent to gail@...' for a reply whose card went to Paula - the receipt reads the card's record."
+        self.s.set_review_envelope(self.rid, {'to': ['paula@northwind.example'], 'cc': []})
+        op = {'kind': 'review.approve', 'targetKind': 'review', 'target': self.rid, 'status': 'done',
+              'outcome': {'sent': {'to': ['gail@northwind.example']}}}
+        said = self.line(op)
+        self.assertIn('paula', said.lower()); self.assertNotIn('gail', said.lower())
+
     def test_a_close_is_the_task_closed(self):
         op = {'kind': 'task.complete', 'targetKind': 'task', 'target': self.t, 'status': 'done', 'outcome': {}}
         self.assertEqual(self.line(op), f'TQ-{self.t:04d} closed.')

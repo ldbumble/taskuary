@@ -269,6 +269,15 @@ def what(store, u: dict, addr: bool = False) -> str:
     try: own = json.loads(r.get('Deliver') or '{}') or {}
     except (TypeError, ValueError): own = {}
     if isinstance(own, dict) and own.get('kind') == 'calendar': return 'the calendar answer'
+    to = to_whom(store, r, addr)
+    return f"the {'email' if r.get('Kind') == 'slot' else 'reply'}" + (f' to {to}' if to else '')
+
+
+def to_whom(store, r: dict, addr: bool = False) -> str:
+    """Whom card row `r` goes to - or went to - by name, as its card says it: every surface that names a card's recipient reads it here (the
+    card, the agent, the phone's receipt - walk 10, 2026-11-23: the phone said "Sent to gail@..." for a reply that went to Paula)."""
+    try: own = json.loads(r.get('Deliver') or '{}') or {}
+    except (TypeError, ValueError): own = {}
     # ...WHERE IT WENT IS THE ONE ANSWER THE CARD READS (outbound.review_envelope): what went out once sent, else where it would go - walk 2,
     # 2026-11-19: the card said "Sent to Erin Blake" and the agent was told the reply went to Gail, and drafted an apology to her
     from .outbound import review_envelope
@@ -281,7 +290,7 @@ def what(store, u: dict, addr: bool = False) -> str:
     def who(x, n): return f'{x} ({n})' if addr and x and n and n != x else n or x
     to = ', '.join(who(x, name_of(store, x)) if '@' in str(x) else str(x) for x in (to if isinstance(to, list) else [to] if to else []))
     if not to and r.get('MessageId'): m = store.get_message(r.get('AnswersMid') or r['MessageId']) or {}; to = who(m.get('FromEmail') or '', m.get('FromName') or '')
-    return f"the {'email' if r.get('Kind') == 'slot' else 'reply'}" + (f' to {to}' if to else '')
+    return to
 
 
 def _waits(u: dict) -> list:

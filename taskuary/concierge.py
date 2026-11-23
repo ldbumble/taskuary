@@ -5763,13 +5763,11 @@ def _past(store, op: dict, ref: str) -> str:
     kind, o = op.get('kind'), op.get('outcome') or {}
     on = f' · {ref}' if ref else ''
     if kind == 'review.approve' and (o.get('sent') or {}).get('to') and not o.get('reply_error'):
-        # the person, by name, where the reply went to the one who wrote
-        try:
-            rv = store.get_review(int(op.get('target') or 0)) or {}
-            m = store.get_message(int(rv['MessageId'])) if rv.get('MessageId') else {}
-        except Exception: m = {}
-        name = lambda a: (m or {}).get('FromName') if (m or {}).get('FromName') and str(a).strip().lower() == str((m or {}).get('FromEmail') or '').lower() else a
-        return f"Sent to {', '.join(name(a) for a in o['sent']['to'])}{on}."
+        # ...whom the CARD went to, read off its record (cardqueue.to_whom), as the card itself says it - never the handler's own echo
+        from .cardqueue import to_whom
+        try: to = to_whom(store, store.get_review(int(op.get('target') or 0)) or {})
+        except (TypeError, ValueError): to = ''
+        return f"Sent to {to or ', '.join(o['sent']['to'])}{on}."
     if kind == 'task.complete' and ref.startswith('TQ-'):
         note = str((op.get('params') or {}).get('note') or '').strip()
         tail = f" with a note: “{_title_cut(note, 120)}”" if note and not o.get('already') else ''

@@ -9,9 +9,9 @@ Each idea is graded by the owner's own acts - no new button:
   taken    the owner made a task or an agent run of it, adopted its rule, or sent a reply on the task it names within a day of it
   handled  the owner put it down with Done
   wrong    the owner dismissed it (or its whole kind)
-  walked   a day went by and the owner did none of these (it is still open, or something else put it down)
+  walked   a day went by and the owner did none of these (it is still open, or something else put it down) - shown, not graded
   pending  raised less than a day ago with nothing done yet - not graded
-Useful is taken + handled; precision is useful / (useful + wrong + walked).
+Useful is taken + handled; precision is useful / (useful + wrong) - walking past is no verdict (ideagrade, 2026-11-23).
 """
 import argparse, json, os, sqlite3, sys
 from collections import Counter, defaultdict

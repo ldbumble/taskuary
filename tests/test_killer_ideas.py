@@ -19,7 +19,8 @@ def _idea(s, n, kind, status='open', by=None, at=None):
 
 def test_a_kind_under_eighty_percent_useful_on_ten_graded_is_quiet_and_the_apps_own_kinds_never_are():
     s = MemoryStore()
-    for n in range(1, 11): _idea(s, n, 'idea', 'done', 'owner' if n <= 6 else 'sweep')          # 6 handled, 4 walked past: 60%
+    for n in range(1, 11): _idea(s, n, 'idea', 'done' if n <= 6 else 'dismissed', 'owner')       # 6 handled, 4 turned down: 60%
+    for n in range(41, 61): _idea(s, n, 'idea', 'done', 'sweep')                                  # ...and 20 walked past, which count for nothing
     for n in range(11, 21): _idea(s, n, 'pattern', 'done', 'owner')                               # 10 of 10
     for n in range(21, 31): _idea(s, n, 'health', 'done', 'sweep')                                # the app's own kind: counted, never quiet
     for n in range(31, 36): _idea(s, n, 'clash', 'dismissed', 'owner')                            # five: too few to say
@@ -35,7 +36,7 @@ def _say(key, kind='pattern', **act): return {'key': key, 'kind': kind, 'text': 
 def test_the_second_look_holds_a_quiet_kind_work_touched_today_and_what_the_owner_would_already_know():
     # (seconds, not hours: "today" is the calendar day, and an hour back from just after midnight is yesterday - CI, 00:10 UTC)
     s = MemoryStore()
-    for n in range(1, 11): _idea(s, n, 'idea', 'done', 'sweep')                                   # 'idea' is quiet: 0 of 10
+    for n in range(1, 11): _idea(s, n, 'idea', 'dismissed', 'owner')                              # 'idea' is quiet: 0 of 10
     _idea(s, 11, 'idea', at=ago(seconds=2))                                                     # ...and raised its one line today
     s.set_setting(ideagrade.SINCE_KEY, ago(days=40), 't')
     f = Factory(s)
@@ -61,7 +62,7 @@ def test_a_quiet_kind_still_raises_one_line_a_day_past_the_second_look_and_a_fin
     """The live shape (2026-11-12): the untyped idea graded 58% on 24 - so every line of it was held, for the whole 30-day window, and
     the owner had no ideas for days. The bar narrows: one line a day of a quiet kind goes on to the second look, the rest wait."""
     s = MemoryStore()
-    for n in range(1, 11): _idea(s, n, 'idea', 'done', 'sweep')                                   # 0 of 10: quiet
+    for n in range(1, 13): _idea(s, n, 'idea', *(('done', 'sweep') if n in (3, 4) else ('dismissed', 'owner')))   # 0 of 10: quiet
     s.set_setting(ideagrade.SINCE_KEY, ago(days=40), 't')
     assert ideagrade.quiet_kinds(s) == {'idea'}
     asked = []
@@ -81,7 +82,7 @@ def test_a_quiet_kind_still_raises_one_line_a_day_past_the_second_look_and_a_fin
 
 def test_an_idea_the_app_put_down_as_it_was_raised_is_not_graded_and_one_left_alone_is_walked_past():
     """Decided 2026-11-12: an idea the report's judge, the rail or a gate put down inside the run that raised it was never the owner's
-    to see - it says nothing about usefulness. One raised, left on the rail and let be is still walked past."""
+    to see - it says nothing about usefulness. One raised, left on the rail and let be is walked past - said, not graded."""
     s = MemoryStore()
     for n, by, after in ((1, 'report', timedelta(seconds=2)), (2, 'funnel', timedelta(minutes=1)), (3, 'sweep', timedelta(days=2))):
         _idea(s, n, 'idea', 'done', by)
@@ -89,7 +90,20 @@ def test_an_idea_the_app_put_down_as_it_was_raised_is_not_graded_and_one_left_al
     _idea(s, 4, 'idea')                                                                           # open, read and let be
     got = {n: ideagrade.grade(s._rows, s._one('SELECT * FROM idea WHERE IdeaId=?', (n,)), ago()) for n in range(1, 5)}
     assert got == {1: 'unseen', 2: 'unseen', 3: 'walked', 4: 'walked'}
-    assert ideagrade.record(s)['idea'] == {'taken': 0, 'handled': 0, 'wrong': 0, 'walked': 2, 'pending': 0, 'n': 2, 'pct': 0}
+    assert ideagrade.record(s)['idea'] == {'taken': 0, 'handled': 0, 'wrong': 0, 'walked': 2, 'pending': 0, 'n': 0, 'pct': None},         'walked past is said, never graded (2026-11-23)'
+
+
+def test_ideas_he_walked_past_never_quieten_a_kind_only_his_verdicts_and_finished_work_do():
+    """Reversed 2026-11-23 (the design review): 2026-11-12 counted an idea left a day without a press as not useful, so a week he did not
+    open the rail quietened kinds he never judged. Learning comes from explicit verdicts and task outcomes only."""
+    s = MemoryStore()
+    s.set_setting(ideagrade.SINCE_KEY, ago(days=40), 't')
+    for n in range(1, 21): _idea(s, n, 'pattern', 'done', 'sweep')                                # twenty walked past
+    assert ideagrade.record(s)['pattern']['n'] == 0 and ideagrade.quiet_kinds(s) == set(), 'nothing judged, nothing quiet'
+    for n in range(21, 31): _idea(s, n, 'pattern', 'dismissed', 'owner')                          # ten he turned down
+    assert ideagrade.quiet_kinds(s) == {'pattern'}
+    for n in range(31, 81): Factory(s).task(title=f'Done from idea {n}', status='done', SourceRef=f'assistant:idea:{n}'); _idea(s, n, 'pattern')
+    assert ideagrade.record(s)['pattern']['taken'] == 50 and ideagrade.quiet_kinds(s) == set(), 'work finished from them mends it'
 
 
 def test_a_line_held_on_the_clocks_look_is_not_asked_about_again_until_something_about_it_changes():

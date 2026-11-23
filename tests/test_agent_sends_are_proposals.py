@@ -361,3 +361,17 @@ def test_the_final_post_held_in_the_browser_stands_on_the_card_he_pressed_in_fro
     s.decide_review(held, 'approved', None, 'owner')
     assert cardqueue.done(s, tid, 'Posted on x.example') == [x]
     assert cardqueue.state(s, tid)['live'] == [rd]
+
+
+def test_a_post_proposed_under_a_reordered_name_is_told_the_acts_there_are_and_then_stands_unconnected():
+    """HIPAA walk 6, H6: run_tool items typed `post_linkedin`, `post_x`, `post_reddit` came back "there is no tool 'post_linkedin'" - the
+    "did you mean" matched only a prefix - and the agent told the owner three times the posts were impossible. The refusal names every act a
+    card sets up, by what it does, the nearest first, from the one table; the corrected one stands as its card with no network connected."""
+    from taskuary.store import MemoryStore
+    from taskuary.testing import Factory
+    s = MemoryStore(); tid = Factory(s).task('Post the Q3 headline')
+    for wrong, right in (('post_linkedin', 'linkedin_post'), ('post_x', 'x_post'), ('post_reddit', 'reddit_post')):
+        ok, why = proposals.validate(s, {'action': 'run_tool', 'type': wrong, 'text': 'Q3 closed at 214.', 'why': 'the headline'})
+        assert not ok and why.split('are: ')[1].startswith(f'{right} (Post to'), why
+        assert 'propose again' in why and 'browser' in why, 'and the way on'
+        assert proposals.queue(s, tid, {'action': 'run_tool', 'type': right, 'text': 'Q3 closed at 214.', 'why': 'the headline'}), right

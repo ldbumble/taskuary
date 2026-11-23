@@ -276,13 +276,25 @@ def setting_changes(p: dict) -> tuple:
     return out, '' if out else 'no change was named'
 
 
+# THE ACTS A CARD SETS UP FOR HIS PRESS - ONE TABLE, the catalogue's (connectorcatalog: each card's declared actions), read by the propose
+# tool's refusals (HIPAA walk 6, H6: `post_linkedin` was refused as "there is no tool 'post_linkedin'" with no way on - a "did you mean" that
+# matched only a prefix missed a reordered name - and the agent told him three times LinkedIn could not be posted to). Every refusal lists
+# them by what they do, the name nearest the one given first; a network not connected is still its card, posted through the browser
+def acts(near: str = '') -> str:
+    "'linkedin_post (Post to LinkedIn), x_post (Post to X), ...' - every act a run_tool card can be, the ones sharing words with `near` first."
+    from .connectorcatalog import cards
+    got = {a['tool']: a.get('press') or a['tool'] for c in cards() for a in c.get('actions') or [] if a.get('tool')}
+    bits = set(re.split(r'[^a-z0-9]+', str(near or '').lower())) - {''}
+    return ', '.join(f'{t} ({p})' for t, p in sorted(got.items(), key=lambda x: (-len(bits & set(x[0].split('_'))), x[0])))
+
+
 def unknown_tool(t) -> str:
-    "Why `t` is no tool a run_tool can run - '' when it is one; the names nearest it said so the agent can propose it again."
+    "Why `t` is no tool a run_tool can run - '' when it is one; the acts there are said, nearest first, so the agent can propose it again."
     from .reports import REGISTRY
     t = str(t or '').strip()
     if not t or t == 'mcp' or t in REGISTRY: return ''
-    near = sorted(k for k in REGISTRY if k.startswith(t) or t in k)[:6]
-    return f"there is no tool {t!r}" + (f" - did you mean {', '.join(near)}?" if near else '')
+    return (f"there is no tool {t!r}. The acts a card sets up are: {acts(t)} - propose again with one as `type` (a network that is not "
+            f"connected still stands as its card, posted through the browser at his press); a tool of one of his systems is list_systems'")
 
 
 def validate(store, p: dict) -> tuple:
@@ -290,8 +302,9 @@ def validate(store, p: dict) -> tuple:
     a = p.get('action')
     # ...AND SAYS WHAT WOULD BE ONE (the owner's rules, part 4: nothing an agent calls answers without what to do next): a Claude agent
     # proposed its LinkedIn post twice as 'post_linkedin', was told only "unknown action", and handed the post to the owner as prose
-    if a not in ACTIONS: return False, (f"unknown action {a!r} - the actions are {', '.join(ACTIONS)}; a post is run_tool with type "
-                                        f"{' | '.join(POSTS)} and its words in `text` (connector_id where that network is connected)")
+    if a not in ACTIONS: return False, (f"unknown action {a!r} - the actions are {', '.join(ACTIONS)}; a post, a send or a comment on one of "
+                                        f"his systems is run_tool with its `type` one of {acts(a)}, and its words in `text` (connector_id "
+                                        "where that system is connected)")
     words, need, switch = ACTIONS[a]
     if a == 'settings':
         changes, why = setting_changes(p)

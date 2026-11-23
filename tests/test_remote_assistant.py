@@ -814,3 +814,20 @@ class NoMachineTextTests(unittest.TestCase):
             messengers._unheard(store, 'whatsapp', JID, c, err, 'WAMID.2')
         self.assertTrue(got and 'voice note' in got[-1])
         for bit in ('{', '"error"', 'litellm', 'Vertex', '\\n'): self.assertNotIn(bit, got[-1])
+
+
+
+def test_a_turn_with_a_picture_that_says_nothing_says_so_and_logs_why():
+    """Walk 10, 2026-11-23: a photo and "What is this, and who is it for?" got a thumb, six model calls, then silence - no answer on the
+    phone, nothing in the log. A turn that ends with nothing said sends one line with the way on, and the log says it happened."""
+    from taskuary import messengers, remote_assistant
+    store, _c = armed_store()
+    with mock.patch.object(remote_assistant, 'respond', return_value=None), mock.patch.object(messengers, 'wa_send') as sent, \
+         mock.patch.object(remote_assistant.logger, 'warning') as warned:
+        remote_assistant._locked_respond(store, 'whatsapp', JID, 'What is this, and who is it for?', None, images=['badge.png'])
+    assert sent.call_count == 1 and "couldn't answer" in sent.call_args.args[2], sent.call_args_list
+    assert any('nothing said' in str(c.args[0]) for c in warned.call_args_list)
+    with mock.patch.object(remote_assistant, 'respond', lambda st, ch, chat, *a, **k: remote_assistant.send(st, ch, chat, 'It is a badge.')), \
+         mock.patch.object(messengers, 'wa_send') as sent:
+        remote_assistant._locked_respond(store, 'whatsapp', JID, 'What is this?', None, images=['badge.png'])
+    assert sent.call_count == 1, 'a turn that answered is not added to'

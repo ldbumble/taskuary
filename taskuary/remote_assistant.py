@@ -767,7 +767,15 @@ def _locked_respond(store, channel: str, chat: str, question: str, connector_id:
         with lock:
             ev = threading.Event()
             with _locks_guard: _turns[key] = ev
-            try: respond(store, channel, chat, question, connector_id, poll=poll, cancel=ev, heard=spoken, closed=closed, images=images, late=late)
+            said = getattr(_SAID, 'n', 0)
+            try:
+                respond(store, channel, chat, question, connector_id, poll=poll, cancel=ev, heard=spoken, closed=closed, images=images, late=late)
+                # ...A TURN THAT SAID NOTHING SAYS SO (walk 10, 2026-11-23: a photo and "what is this?" got a thumb, six model calls and then
+                # silence, with nothing in the log): one line with the way on, and why in the log - never a turn that just stops
+                if getattr(_SAID, 'n', 0) == said and not ev.is_set():
+                    logger.warning(f"{channel}: a turn ended with nothing said ({'a picture and ' if images else ''}{len(question)} chars asked)")
+                    send(store, channel, chat, stuck(store, f"I couldn't answer that{' or say what the picture shows' if images else ''} - nothing came "
+                                                           'back from the AI. Say it again, or go on to the next one.'), connector_id)
             finally:
                 with _locks_guard:
                     if _turns.get(key) is ev: _turns.pop(key, None)
@@ -781,6 +789,7 @@ def _locked_respond(store, channel: str, chat: str, question: str, connector_id:
 
 
 _ASKING = threading.local()                  # the chat a turn came from, for the thread that answers it
+_SAID = threading.local()                    # how many times this thread has spoken to a chat (send): a turn that never did is said so
 
 
 def asking() -> dict | None:
@@ -3331,6 +3340,7 @@ def send(store, channel: str, chat: str, text: str, connector_id: int = None, pa
 
     `resend`: the kept answer that did not arrive (flush_owed), sent again once - said as late, with no retry pauses."""
     from . import chatformat, messengers
+    _SAID.n = getattr(_SAID, 'n', 0) + 1
     if not asked and held_back(store, channel, chat, f'{len(str(text or ""))} chars', urgent): return
     text = bubble(text)
     out = messengers.tg_send if channel == 'telegram' else messengers.wa_send

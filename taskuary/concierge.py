@@ -916,6 +916,9 @@ def cannot(item: dict | None, verb: str, store=None) -> str:
         rv = (store.get_review(int(item['rid'])) or {}) if store is not None and item.get('rid') else {}
         if not item.get('tid') or item.get('kind') != 'review' or item.get('closeout') or rv.get('Kind') in ('slot', 'clarification', 'action'):
             return f"There is no reply on a task to send and close on {what}."
+        from .cardqueue import closes_with
+        if store is not None and (after := closes_with(store, item['tid'])):
+            return f"The reply on {what} is not the last card on it - {after} waits after it, so Send sends it and the task stays open."
         return cannot(item, 'approve', store)
     if verb == 'approve' and item.get('kind') in ('review', 'action') and not item.get('draft') and item.get('kind') == 'review':
         # approving an empty draft SENT NOTHING and closed the task anyway (2026-09-03); the card's button is Draft with AI (redraft needs a rid)
@@ -4273,11 +4276,13 @@ def save_live(store, tid: int, actor: str = 'owner') -> bool:
     try: s = terminal.session_for(tid)
     except Exception: s = None
     if not (s and getattr(s, 'alive', False)): return False
+    shut = wrapup.CLOSING.set(actor == 'owner')         # ...his close's own ending asks him nothing new (wrapup.CLOSING)
     try: wrapup.wrap(store, tid, close=False, actor=actor, sid=getattr(s, 'sid', None), no_reply=True)
     except ValueError as e:
         if not str(e).startswith('nothing to wrap up'): return _kept(store, tid, actor, e)
         return False                   # ...a session that wrote nothing has nothing to lose: the close stops it as before
     except Exception as e: return _kept(store, tid, actor, e)
+    finally: wrapup.CLOSING.reset(shut)
     return True
 
 

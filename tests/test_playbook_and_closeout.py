@@ -69,3 +69,47 @@ class PlaybookAndCloseOutTests(unittest.TestCase):
         s.update_task(tid, {'Status': 'waiting'}, 'owner')
         decide_book(s, book, 'reject')
         self.assertNotIn(s.get_task(tid)['Status'], ('done', 'dropped'), 'nothing was closed out, so the task stays open')
+
+
+class OneLine(unittest.TestCase):
+    """EVERY CARD THAT WAITS IS IN THE ONE LINE (his live app, 2026-11-23): the playbook stood outside it, so the reply in front offered Send and
+    close; the task closed, and its write-up drafted the playbook and opened the task again to ask for it."""
+    def test_the_playbook_waits_behind_the_reply_and_nothing_offers_a_close_over_it(self):
+        from taskuary import cardqueue, concierge
+        s, tid, reply, book = finished()
+        q = cardqueue.state(s, tid)
+        self.assertEqual((q['live'], q['held']), ([reply], [book]))
+        self.assertEqual(cardqueue.closes_with(s, tid), 'the playbook')
+        self.assertIn('not the last card', concierge.cannot({'tid': tid, 'kind': 'review', 'rid': reply, 'ref': 'TQ-1', 'draft': 'x'}, 'send_close', s))
+        send(s, reply)
+        self.assertEqual(cardqueue.state(s, tid)['live'], [book], 'the playbook stands next')
+        self.assertEqual(cardqueue.closes_with(s, tid), '')
+
+    def test_a_close_out_is_one_card_with_the_reply_it_closes(self):
+        from taskuary import cardqueue
+        s, tid, reply, book = finished()
+        s.decide_review(book, 'rejected', None, 'owner')
+        co = s.add_review({'TaskId': tid, 'Kind': 'action', 'Status': 'pending', 'Origin': 'agent',
+                           'DraftText': json.dumps({'action': 'close_issue', 'repo': 'northwind/ledger', 'number': 12})})
+        q = cardqueue.state(s, tid)
+        self.assertEqual((q['live'], q['held']), ([reply, co], []))
+
+    def test_his_close_asks_no_playbook_and_a_leftover_one_never_reopens_it(self):
+        from taskuary import concierge, general, wrapup
+        s = MemoryStore(); s.set_setting('playbooks_enabled', '1', 't')
+        tid = s.create_task({'Title': 'Weekly vendor check', 'Kind': 'general', 'Status': 'open'}, 't')
+        s.add_comment(tid, 'owner', general.USER_TYPE, 'Check every vendor billed this week for a W-9 and a matching remit-to. ' * 6)
+        s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'Checked Payworth, Spendly and Trainly: all on file, all matching. ' * 6)
+        llm = lambda *a, **k: json.dumps({'playbook': {'slug': 'vendor-check', 'text': BOOK}})
+        # ...the ending his close runs (writeup's, concierge.save_live's) - the same write-up that drafted it on his live app
+        shut = wrapup.CLOSING.set(True)
+        try:
+            with mock.patch('taskuary.llm.build_llm', return_value=llm), mock.patch('taskuary.handbook.enabled', return_value=False):
+                self.assertEqual(wrapup.wrap(s, tid, close=False, actor='owner')['proposed'], [])
+        finally: wrapup.CLOSING.reset(shut)
+        self.assertIsNone(proposals.playbook_pending(s, tid))
+        concierge.close_task(s, tid, 'owner')
+        proposals.queue(s, tid, {'action': 'write_playbook', 'slug': 'vendor-check', 'text': BOOK, 'why': 'it recurs'}, 'assistant')
+        proposals.hold_for_playbook(s, tid, 'assistant')
+        self.assertEqual(s.get_task(tid)['Status'], 'done', 'his close stands')
+        self.assertIsNone(proposals.playbook_pending(s, tid))

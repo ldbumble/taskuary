@@ -524,7 +524,10 @@ class AFailedPressIsHandedBack(unittest.TestCase):
         self.s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'GitHub was down - press it again later.')
         self.s._exec("UPDATE comment SET CreatedAt='2000-01-01 00:00:01' WHERE ActorType=?", (general.ASSISTANT_TYPE,))
         verdicts.decide(self.s, self.s.get_review(rv['ReviewId']), 'reject')
-        self.assertTrue(any('turned down' in x for x in general.owner_did(self.s, tid)), general.owner_did(self.s, tid))
+        # ...said in the one voice of a card of the line - the screen fact - never a second time as a press (a close-out is in the line)
+        from taskuary import cardqueue
+        said = cardqueue.screen(self.s, tid)
+        self.assertIn('Turned down by him', said); self.assertFalse(any('turned down' in x for x in general.owner_did(self.s, tid)))
 
     def test_a_resting_general_agent_is_woken_on_the_failure(self):
         tid = Factory(self.s).task('Copy the September rows'); self.s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'The insert is ready - press Approve.')

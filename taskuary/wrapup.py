@@ -2,7 +2,7 @@
 this closes the loop: the transcript becomes the report, the reply the sender gets is the agent's
 (written in the run, or asked of it at the end), and the task waits on you to send it.
 """
-import json, re, threading
+import contextvars, json, re, threading
 from loguru import logger
 from . import aiusage
 
@@ -923,6 +923,27 @@ def _ended(store, tid: int, close: bool, actor: str):
     if (store.get_task(tid) or {}).get('Status') == 'in_progress': store.update_task(tid, {'Status': 'open'}, actor)
 
 
+# THE OWNER'S CLOSE ASKS NOTHING NEW OF HIM (his live app, 2026-11-23: Send and close, the task closed, and its write-up drafted a playbook and
+# opened it again to ask for it): what will need his press is raised while the work is on his screen (general's turn end, the agent's own
+# ending), in the line with its other cards - never by the ending his close runs. Set by his close's roads (writeup, concierge.save_live);
+# a road's own close (a merged PR) is no press of his, and still asks
+CLOSING = contextvars.ContextVar('wrapup_closing', default=False)
+def asks_playbook(close: bool, actor: str) -> bool: return not ((close and actor == 'owner') or CLOSING.get())
+
+
+def chat_playbook(store, tid: int) -> dict | None:
+    """The playbook question of a chat task, asked by its turn that ended its job (general: nothing_left) and by its own ending: was this a
+    KIND of job, done here for the first time? Only the coding ending asked it once, so the jobs playbooks are for - a bill, a W-9, a month-end
+    reconciliation, all general work - never drafted one (walk 2026-10-21). It reads what ARRIVED beside what was said: a playbook's `when` is
+    the arriving message, which the conversation opens on only as triage's one-line title. A playbook-authoring conversation proposed its own
+    (playbooks.setup_task): never a second draft of it."""
+    from . import general, playbooks
+    if (store.get_task(tid) or {}).get('SourceRef') == 'assistant:playbook': return None
+    arrived = '\n\n'.join(f"ARRIVED from {m.get('FromName') or m.get('FromEmail') or 'someone'}: {m.get('Subject') or ''}\n"
+                          f"{str(m.get('BodyText') or '')[:3000]}" for m in ((store.task_detail(tid) or {}).get('messages') or [])[:3])
+    return playbooks.draft(store, tid, '\n\n'.join(x for x in (arrived, general.conversation_text(store, tid)) if x), 'assistant')
+
+
 def wrap(store, tid: int, close: bool = True, actor: str = 'owner', sid: str = None,
          final_message: str = '', no_reply: bool = False, harvested: dict = None, on_harvest=None) -> dict:
     """"We're done" - the whole ending, in one callable. The transcript becomes the report, the
@@ -1001,15 +1022,7 @@ def wrap(store, tid: int, close: bool = True, actor: str = 'owner', sid: str = N
         # ...and the playbook question, asked of THIS worker too. Only the coding ending asked it, so the jobs playbooks are for -
         # a bill, a W-9, a month-end reconciliation, all general work - never drafted one: "the first real one is drafted for you
         # when an agent finishes a kind of job for the first time" held for code alone (walk 2026-10-21). Last, as there.
-        from . import playbooks
-        # a playbook-authoring conversation already proposed its playbook, by hand (playbooks.setup_task): never a second draft of it
-        # ...and it reads what ARRIVED beside what was said: a playbook's `when` is the arriving message, which the conversation
-        # opens on only as triage's one-line title - and the chat alone of a crisp answer fell under playbooks.MIN_SESSION, so a
-        # month-end reconciliation was never even put to the model (walk 2026-10-21)
-        arrived = '\n\n'.join(f"ARRIVED from {m.get('FromName') or m.get('FromEmail') or 'someone'}: {m.get('Subject') or ''}\n"
-                              f"{str(m.get('BodyText') or '')[:3000]}" for m in ((store.task_detail(tid) or {}).get('messages') or [])[:3])
-        job = '\n\n'.join(x for x in (arrived, general.conversation_text(store, tid)) if x)
-        pbd = None if task.get('SourceRef') == 'assistant:playbook' else playbooks.draft(store, tid, job, 'assistant')
+        pbd = chat_playbook(store, tid) if asks_playbook(close, actor) else None
         if proposals.playbook_pending(store, tid): proposals.hold_for_playbook(store, tid, 'assistant')     # always in sight
         _ended(store, tid, close, actor)
         return {'wrap': 'done', 'taskId': tid, 'report': last, 'proposed': [pbd] if pbd else [],
@@ -1169,7 +1182,7 @@ def _wrap_session(store, tid, task, close, actor, sid, final_message, no_reply, 
     # the handbook's and the playbook's questions, asked now beside the report's - answered at their own places below (_AHEAD)
     ahead = _ask_ahead(store, [
         _question(handbook.learn_from_session, store, tid, text, agent, repo=term.repo_tag(task) or '') if handbook.enabled(store) else None,
-        _question(playbooks.draft, store, tid, text, agent)])
+        _question(playbooks.draft, store, tid, text, agent) if asks_playbook(close, actor) else None])
     _stage(tid, 'report')
     asked = unanswered(store, tid)                 # read while the session is still up: its questions lead the result
     # ...and whether the agent ended it itself: the run's Finished event is its `--done` (selfclose._finished), the only one there is
@@ -1226,7 +1239,7 @@ def _wrap_session(store, tid, task, close, actor, sid, final_message, no_reply, 
     # will recur, done here for the first time? The answer is a proposal on the task, never a file
     # (playbooks.py) - the second such job matches it. Last on purpose: the receipt and the sender's
     # answer are what a close is for, and this call must never be the one the drafter's AI budget goes to.
-    pbd = playbooks.draft(store, tid, text, agent, llm=_answered(store, ahead))
+    pbd = playbooks.draft(store, tid, text, agent, llm=_answered(store, ahead)) if asks_playbook(close, actor) else None
     # ...and one the agent proposed itself (TASKUARY-PROPOSE, collected above) is held in sight the same way (proposals.HELD)
     if proposals.playbook_pending(store, tid): proposals.hold_for_playbook(store, tid, agent)
     if pbd: proposed.append(pbd)

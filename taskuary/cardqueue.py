@@ -70,17 +70,21 @@ def obsolete_read(store, tid, review) -> bool:
 
 
 def in_line(r: dict) -> bool:
-    """A card of the line: one the owner presses, and the agent's or triage's to raise - never a close-out, a playbook or a workflow's own step
-    (Taskuary's, beside the reply - proposals._older's rule), an email he wrote himself, nor one nobody has written (a reply owed, a to-do's email)."""
+    """A card of the line: one the owner presses - the agent's, triage's, or Taskuary's own close-out and playbook alike (his live app,
+    2026-11-23: the playbook stood outside the line, so the email in front of it thought nothing waited behind and offered Send and close;
+    the task closed, then came back for the playbook). Never a workflow's own step, an email he wrote himself, nor one nobody has written
+    (a reply owed, a to-do's email)."""
     from .conversation import unwritten
-    from .proposals import CLOSEOUT, PLAYBOOKS, passed
+    from .proposals import passed
     if passed(r) or unwritten(r): return False
     if r['Kind'] == 'slot': return bool(str(r.get('DraftText') or '').strip()) and not str(r.get('Reason') or '').startswith('your email')
-    if r['Kind'] == 'action':
-        p = _p(r)
-        return not (p.get('closeout') or p.get('action') in CLOSEOUT or p.get('action') in PLAYBOOKS or p.get('block')
-                    or str(r.get('Reason') or '').startswith('the workflow'))
+    if r['Kind'] == 'action': return not (_p(r).get('block') or str(r.get('Reason') or '').startswith('the workflow'))
     return True
+
+
+def _closeout(r) -> bool:
+    from .proposals import CLOSEOUT
+    return r.get('Kind') == 'action' and (bool((p := _p(r)).get('closeout')) or p.get('action') in CLOSEOUT)
 
 
 def _turn(r) -> str:
@@ -113,6 +117,11 @@ def _units(store, tid: int, past: set) -> list:
         if (k := _turn(r)) in by: u = by[k]
         else: u = by[k] = {'rids': [], 'rows': [], 'at': ep(r['CreatedAt'])}; out.append(u)
         u['rids'].append(r['ReviewId']); u['rows'].append(r)
+    # ...A CLOSE-OUT IS PRESSED WITH THE REPLY IT CLOSES (ReviewDecision's `closeout`): one card with it, after it - alone only with no reply
+    reply = lambda u: any(r['Kind'] not in ('action', 'slot') and r['Status'] == 'pending' for r in u['rows'])
+    for co in [u for u in out if all(_closeout(r) and r['Status'] == 'pending' for r in u['rows'])]:
+        if (to := next((u for u in out if u is not co and reply(u)), None)):
+            to['rids'] += co['rids']; to['rows'] += co['rows']; out.remove(co)
     for u in out: u['done'] = None if any(r['Status'] == 'pending' or handed(r) for r in u['rows']) else max(ep(r.get('DecidedAt')) for r in u['rows'])
     rec = landing.record(store, int(tid)); q = rec.get('proposal') or {}
     if q.get('at') and not q.get('passed') and max(float(rec.get('moved') or 0), moved_on(store, int(tid))) <= ep(q['at']):
@@ -238,6 +247,15 @@ def mark(store, tid: int, s: dict) -> None:
         with store.lock: store.cx.executemany("INSERT OR IGNORE INTO shown (TaskId, Key, Seq, Host) VALUES (?,?,0,'held')", [(int(tid), f'q:r:{x}') for x in ids]); store.cx.commit()
 
 
+def closes_with(store, tid) -> str:
+    """May a press on the card in front close task `tid` with it (Send and close, Approve and close)? '' when nothing waits behind it in the
+    line - every kind, the playbook, the close-out and the landing question among them - else what comes next, in words. THE ONE ANSWER every
+    close-offering button reads: the card's own (queue.held on the page), the desk's and the phone's (concierge.cannot)."""
+    if not tid: return ''
+    s = state(store, int(tid))
+    return s['next'] or ('another card' if s['held'] else '')
+
+
 def held(store, tid: int) -> set:
     "The ids of task `tid`'s cards that wait their turn - drawn nowhere until it comes."
     return set(state(store, tid)['held']) if tid else set()
@@ -260,7 +278,9 @@ def what(store, u: dict, addr: bool = False) -> str:
         return plural(len(rows), press[1] if len(press) == 2 else 'step')
     if r.get('Kind') == 'action':
         if (p := _p(r)).get('repo') and p.get('number') is not None: return f"{p['repo']}#{p['number']}"       # ...an issue by its own name
-        why = ' '.join(str(r.get('Reason') or '').split())
+        from .proposals import PLAYBOOKS
+        if p.get('action') in PLAYBOOKS: return 'the playbook'
+        why =' '.join(str(r.get('Reason') or '').split())
         for lead in ('the agent proposes to ', 'the workflow asks to '): why = why[len(lead):] if why.lower().startswith(lead) else why
         why = why.split(': ', 1)[1] if why.startswith('held before it ran') and ': ' in why else why
         why = why.split(' - ')[0]

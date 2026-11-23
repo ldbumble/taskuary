@@ -585,9 +585,22 @@ def playbook_pending(store, tid: int):
 HELD = 'held:playbook'
 
 
+def owner_closed(store, tid: int) -> bool:
+    "Is task `tid` closed, and by him - the close the last write to it was - not by a road or its agent?"
+    from .processing_unread import OWNER_ACTORS
+    t = store.get_task(tid) or {}
+    return t.get('Status') in ('done', 'dropped') and str(t.get('UpdatedBy') or '') in OWNER_ACTORS
+
+
 def hold_for_playbook(store, tid: int, actor: str) -> None:
     t = store.get_task(tid) or {}
     if t.get('Status') != 'done': return
+    # ...BUT A TASK THE OWNER CLOSED STAYS CLOSED (his live app, 2026-11-23: Send and close, then the task came back asking for a playbook):
+    # only new work from outside reopens his close - a proposal raised after it is put down with the close, as the close puts down what waits
+    if owner_closed(store, tid):
+        from .concierge import CLOSED_TASK
+        while (r := playbook_pending(store, tid)): store.decide_review(r['ReviewId'], 'no_reply', None, actor, note=CLOSED_TASK)
+        return
     tags = [x for x in str(t.get('Tags') or '').split(',') if x.strip()]
     store.update_task(tid, {'Status': 'waiting', 'Tags': ','.join([*tags, HELD])}, actor)
     store.add_comment(tid, actor, 'agent', 'Kept open for its playbook proposal - approve or dismiss it, and the task closes again.')

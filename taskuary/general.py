@@ -1024,7 +1024,7 @@ def owner_did(store, tid: int) -> list:
     who = ','.join('?' * len(OWNER_ACTORS))
     out = [(at, what) for _, at, what, *_r in presses(store, tid, since)]
     # ...A CARD OF THE LINE IS SAID BY THE SCREEN FACT (cardqueue.screen - the design round, 2026-11-18), as it stands: sent, done, failed, turned
-    # down. Said here too it was one press in two voices. Only a card the line does not hold (a close-out, a playbook) is said by its press
+    # down. Said here too it was one press in two voices. Only a card the line does not hold (a workflow's own step) is said by its press
     from .cardqueue import in_line
     out += [(r['DecidedAt'], _decided(store, r))
             for r in store._rows(f"SELECT * FROM review WHERE TaskId=? AND DecidedBy IN ({who}) AND DecidedAt>?", (tid, *OWNER_ACTORS, since))
@@ -3564,6 +3564,14 @@ class GeneralSession:
                 from . import proposals as _props
                 try: _props.finished_without(self.store, self.task_id)
                 except Exception as e: logger.debug(f'task {self.task_id}: the steps it finished without stayed lit - {e}')
+                # ...and the playbook question is asked NOW, with the cards this turn raised, before its end is drawn: in the line behind them
+                # from the first frame, so the card in front never offers a close over it (his live app, 2026-11-23 - asked by the close, it
+                # closed the task and opened it again for the playbook). Once a task
+                if not self.store._one("SELECT 1 AS x FROM audit WHERE EntityType='task' AND EntityId=? AND Action='playbook_asked'", (self.task_id,)):
+                    self.store.audit('task', self.task_id, 'playbook_asked', 'assistant')
+                    from . import wrapup as _wrap
+                    try: _wrap.chat_playbook(self.store, self.task_id)
+                    except Exception as e: logger.debug(f'task {self.task_id}: no playbook asked at its end - {e}')
                 from .signin import PREFIX as _SIGNIN
                 from .browserview import TURN_PREFIX as _TURN
                 for r in ws.open_requests(ws.events(self.store, self.task_id, self.sid)):

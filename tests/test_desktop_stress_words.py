@@ -22,6 +22,9 @@ def test_the_agent_is_told_its_reply_is_a_card_under_next_steps():
     from taskuary import general, selfclose
     assert 'its card under your answer' in selfclose.CARD_SAID and 'Close out' not in selfclose.REPLY_LINE + selfclose.CARD_SAID      # said once (CARD_SAID)
     assert 'are never an on_you step' in selfclose.SUMMARY_LINE      # ...nor its own question again (email-04 of the run: said twice)
+    # ...and what only he can give is ONE question, what he must press ONE card (HIPAA walk 6, H10: "Provide a mobile phone number" and "Enter
+    # payment details" came back as two on_you to-dos under prose - no question, no held pay step, nothing the phone could offer him)
+    assert 'is your one question' in selfclose.SUMMARY_LINE and 'set up to its last press as a card' in selfclose.SUMMARY_LINE
     # ...nor its words again, nor a to-do under "nothing else is pending" (the walk, 2026-11-17): the page no longer dedupes against the prose
     assert 'said nowhere in your words above; [] when nothing_left' in selfclose.SUMMARY_LINE
     assert 'Close out' not in general.DRAFTED

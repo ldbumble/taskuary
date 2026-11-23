@@ -173,6 +173,9 @@ CLOSED_FEATURES = {'apps': False, 'plugins': False, 'remote_plugin': False, 'ima
                    # its own sub-agents, and its own browser and computer tools - Taskuary's browser is the one it drives, held where it runs
                    'multi_agent': False, 'multi_agent_v2': False, 'browser_use': False, 'browser_use_external': False, 'in_app_browser': False,
                    'computer_use': False}
+# ...AND CODEX'S OWN BUNDLED SKILLS (imagegen, openai-docs, skill-creator, skill-installer: ~2.2k of skill index on every turn of every task, the
+# review of 2026-11-23) - Codex's work in its own home, none of it a task's. For every Codex Taskuary starts, as OWNER_CLI_OFF; his own skills stay
+OFF_KEYS = {'skills.bundled.enabled': False}
 
 
 def codex_config(cid: int, name: str, base: str, header: str, extra: dict, model: str, window: int = 0, catalog: str = '') -> str:
@@ -196,6 +199,7 @@ def codex_config(cid: int, name: str, base: str, header: str, extra: dict, model
         'feedback': {'enabled': False},               # /feedback upload of logs
         'otel': {'exporter': 'none', 'trace_exporter': 'none', 'metrics_exporter': 'none', 'log_user_prompt': False},   # telemetry / OTEL
         'features': dict(CLOSED_FEATURES),
+        'skills.bundled': {k.split('.')[-1]: v for k, v in OFF_KEYS.items()},
         'shell_environment_policy': {'exclude': [KEY_ENV]},     # the key never reaches a command the agent runs
         f'model_providers.{prov}': p,
     }

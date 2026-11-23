@@ -76,7 +76,7 @@ class OneRoadTests(Harness):
         sa, sb = self.shape(a['TaskId']), self.shape(b['TaskId'])
         self.assertEqual(sa['Tags'], ['workflow-trigger:schedule']); self.assertEqual(sb['Tags'], ['workflow-trigger:manual'])
         self.assertEqual({k: v for k, v in sa.items() if k not in ('Tags', 'Status')}, {k: v for k, v in sb.items() if k not in ('Tags', 'Status')})
-        self.assertEqual((sb['Source'], sb['SourceRef'], sb['Kind'], sb['Assignee']), ('workflow', f'workflow:{sid}', 'general', 'agent:ap'))
+        self.assertEqual((sb['Source'], sb['SourceRef'], sb['Kind'], sb['Assignee']), ('workflow', f'workflow:{sid}', 'general', None))
         self.assertEqual(self.report_rows(), [])                                                      # nothing filed under Reports
         self.assertEqual(self.session.send_prompt.call_count, 2)
         self.assertIn('Vendor bill sweep - scheduled', self.session.send_prompt.call_args_list[0][0][0])
@@ -88,7 +88,7 @@ class OneRoadTests(Harness):
         sid = workflow(self.s, title='Dependency bumps', agent='coding', cwd=here, prompt='Bump what is outdated in northwind/ledger.')
         out = self.tick(sid)
         [t] = self.s.dock_tasks(f'workflow:{sid}')
-        self.assertEqual((t['Kind'], t['Source'], t['Assignee'], t['Status']), ('coding', 'workflow', 'agent:coding', 'in_progress'))
+        self.assertEqual((t['Kind'], t['Source'], t['Assignee'], t['Status']), ('coding', 'workflow', None, 'in_progress'))     # no worker named on a task
         self.assertEqual([(o['agent'], o['cwd'], o['repo']) for o in self.opened], [('coding', here, None)])   # its folder, no guessed repo
         self.assertEqual(self.report_rows(), [])
         self.assertIn(t['TaskId'], (out.get('task_id'),))
@@ -149,7 +149,8 @@ class OneRoadTests(Harness):
         cfg = {'type': 'agent', 'title': 'Nightly digest of northwind/ledger', 'agent': 'coding', 'prompt': 'Summarise the night.', 'daily_at': '06:00'}
         sid = self.s.save_source({'Channel': 'report', 'Address': cfg['title'], 'Owner': 'o', 'Active': 1, 'ConfigJson': json.dumps(cfg)}, 'o')
         self.oneshot.side_effect = None; self.oneshot.return_value = lambda system, user, **k: 'ran it\n- nothing broke'
-        self.tick(sid)
+        from taskuary import agents
+        with mock.patch.object(agents, 'resolve_brain', return_value='cli:claude'): self.tick(sid)    # a report runs on a connected CLI
         self.assertEqual(self.s.dock_tasks(f'workflow:{sid}'), [])
         self.assertEqual(len(self.report_rows()), 1)
 

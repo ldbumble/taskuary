@@ -30,6 +30,7 @@ SHIPPING = ('sender_domain', 'vendor.com', 'Vendor mail about shipping schedules
 GLOBAL = ('global', None, 'Never open tasks from newsletters or digests.', 'owner')      # a general line he said: one he only confirmed rides memory.whole
 STRANGER = ('sender', 'someone@else.com', 'Unrelated note about somebody else entirely.', 'verdict')
 # what the stand-in embedder reads as one subject: the texts below about the ledger, the invoices, shipping
+SAID25 = [('global', None, f'Standing rule number {i}: mail about project {i} is filed.', 'owner') for i in range(25)]
 JOBS = {'ledger': ['ledger'], 'invoices': ['invoice'], 'shipping': ['shipping']}
 
 
@@ -88,8 +89,9 @@ class RankingTests(unittest.TestCase):
 
     def test_past_the_twentieth_note_the_owner_is_told(self):
         """The reported gap: note twenty-one simply vanished. It still does not fit - but the
-        count comes back with it, so the funnel can say so instead of implying it applied."""
-        s = _store(*[('sender', DANA, f'Verdict number {i} about Dana.', 'verdict') for i in range(25)])
+        count comes back with it, so the funnel can say so instead of implying it applied. (Lines he said: the learned ones about one
+        sender stop at memory.PER_ABOUT before they reach a prompt.)"""
+        s = _store(*SAID25)
         notes, left = relevant_notes(s, [DANA], 'Dana')
         self.assertEqual((len(notes), left), (NOTE_CAP, 25 - NOTE_CAP))
 
@@ -106,8 +108,7 @@ class RankingTests(unittest.TestCase):
 
 class ItSaysSoTests(unittest.TestCase):
     def test_the_timeline_says_how_many_notes_were_applied(self):
-        s = _store(*[('sender', DANA, f'Verdict number {i} about Dana, at some length.', 'verdict')
-                     for i in range(25)])
+        s = _store(*SAID25)
         out = ingest_message(s, {'external_id': 'x1', 'channel': 'email', 'from_email': DANA,
                                  'subject': 'Ledger', 'body': 'Attaching the ledger.'},
                              llm=lambda *a, **k: '{"intent": "fyi", "why": "informational"}')

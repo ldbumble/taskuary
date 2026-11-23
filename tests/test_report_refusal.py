@@ -91,8 +91,8 @@ RATE_REPORT = """Vendor API usage, 2026-10-10
 
 
 def _run(answer):
-    cfg = {'type': 'agent', 'agent': 'coding', 'prompt': 'fetch the trending page', 'title': 'GitHub Trending', 'store': MemoryStore()}
-    with mock.patch('taskuary.llm.make_cli_llm', return_value=lambda *a, **k: answer): return reports.run_agent(cfg)
+    cfg = {'type': 'agent', 'agent': 'claude', 'prompt': 'fetch the trending page', 'title': 'GitHub Trending', 'store': MemoryStore()}
+    with mock.patch('taskuary.agents.connection_brains', return_value=[('claude', {'cmd': 'claude'})]),          mock.patch('taskuary.llm.make_cli_llm', return_value=lambda *a, **k: answer): return reports.run_agent(cfg)
 
 
 class AgentSaysItFailedTests(unittest.TestCase):
@@ -101,7 +101,7 @@ class AgentSaysItFailedTests(unittest.TestCase):
 
     def test_a_short_report_about_rate_limits_files_as_a_report(self):
         subject, body = _run(RATE_REPORT)
-        self.assertIn('coding ran a prompt', subject)
+        self.assertIn('claude ran a prompt', subject)
         self.assertIn('rate limit resets', body)
 
     def test_the_agents_failure_line_makes_run_agent_raise(self):

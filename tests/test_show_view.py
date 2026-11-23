@@ -352,3 +352,23 @@ def test_a_file_shown_comes_back_as_what_it_reads():
     (out / 'notes.txt').write_text('Professional - - ,000 ,800', encoding='utf-8')
     said = agenttools.show_files(s, tid, [str(out / 'crm-pricing.xlsx'), str(out / 'notes.txt')])
     assert 'Starter' in said and ',400' in said and 'Professional - - ,000 ,800' in said, said
+
+
+
+def deck(path, *slides):
+    "A .pptx of `slides`, each one line of text - the zip of XML a deck is."
+    import zipfile
+    with zipfile.ZipFile(path, 'w') as z:
+        for i, t in enumerate(slides, 1):
+            z.writestr(f'ppt/slides/slide{i}.xml', '<p:sld xmlns:p="p" xmlns:a="a"><a:p><a:r><a:t>' + t + '</a:t></a:r></a:p></p:sld>')
+
+
+def test_a_deck_that_cannot_be_drawn_is_still_read_back():
+    """Walk 10, 2026-11-23: after "update everything" the deck still said "212 headcount" on slide 2, and show answered only ".pptx cannot be
+    shown" - nothing read it back, and it went to the board. Every file show is handed is read back, drawn or not."""
+    from taskuary import outputs
+    s = MemoryStore(); tid = s.create_task({'Title': 'Q3 board pack', 'Kind': 'general'}, 'owner')
+    out = outputs.folder(tid); out.mkdir(parents=True, exist_ok=True)
+    deck(out / 'board-deck.pptx', 'Q3 board pack', 'Strong operating margin at 18.9% with 212 headcount')
+    said = agenttools.show_files(s, tid, [str(out / 'board-deck.pptx')])
+    assert agenttools.SHOWN_SAY in said and '212 headcount' in said, said

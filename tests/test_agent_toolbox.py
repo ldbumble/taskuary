@@ -85,6 +85,12 @@ class TheServer(unittest.TestCase):
         # went on a Send card unread)
         said = json.loads(text)['files_say']
         self.assertIn('2026-10-01', said); self.assertIn('60.00', said)
+        # ...and SEVERAL MAILS AT ONCE are read back too, the file once (walk 10, 2026-11-23: three board mails with one deck read back nothing)
+        text, err = tool(self.tid, 'propose_email', subject='Invoice INV-2026-10', text='Attached.', attach=['Invoice INV-2026-10.docx'],
+                         items=[{'to': 'erin@northwind.example'}, {'to': 'paula@northwind.example'}])
+        self.assertFalse(err, text)
+        said = json.loads(text)['files_say']
+        self.assertIn('60.00', said); self.assertEqual(said.count('Invoice INV-2026-10.docx'), 1)
 
     def test_an_email_whose_card_says_connect_is_told_so_never_send(self):
         """The walk, 2026-11-21: with no mailbox connected the agent told him "press Send" over a card that said "Connect email". What the

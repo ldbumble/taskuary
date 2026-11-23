@@ -518,7 +518,7 @@ def _many(store, tid: int, name: str, args: dict, doors: dict) -> str:
     if not items: raise ValueError('`items` holds no objects - give each item its own fields')
     if len(items) > 500: raise ValueError(f'{len(items)} items is past what one card holds (500) - split them, or narrow the list')
     key, top = bulkcard.new_key(), (store._one('SELECT MAX(ReviewId) AS m FROM review') or {}).get('m') or 0
-    refused, went, held, mine = [], [], [], []
+    refused, went, held, mine, says = [], [], [], [], []
     for i, it in enumerate(items):
         try: out = _call(store, tid, name, {**base, **it}, doors)
         except Exception as e: refused.append(f'item {i + 1}: {failed(name, e)}'); continue
@@ -535,6 +535,8 @@ def _many(store, tid: int, name: str, args: dict, doors: dict) -> str:
         # ...the card EACH item filed, by its own answer - never every card raised on the task meanwhile: a reply drafted for a mail that came
         # in as the items were filed, or the agent's own call beside this one, joined the card and went with its one press
         if isinstance(got, dict) and isinstance(rid := got.get('review_id', got.get('review')), int): mine.append(rid)
+        # ...and what the files on each say (read_back), once a block: several mails with the same deck answered with no read-back at all
+        if isinstance(got, dict) and got.get('files_say'): says.append(got['files_say'])
     # ...A FEW STAND ONE AT A TIME, MANY AS ONE CARD (design round 5, I4: three caterer emails came as one bulk card - one Send, a guessed address
     # sent unopened): under bulkcard.MANY each is its own card in the line ("1 of 3"), as the same three raised one call each would be
     mine = [r['ReviewId'] for r in store._rows(f"SELECT ReviewId FROM review WHERE TaskId=? AND ReviewId>? AND Status='pending' AND ReviewId IN ({','.join('?' * len(mine))})",
@@ -550,7 +552,7 @@ def _many(store, tid: int, name: str, args: dict, doors: dict) -> str:
               + (f" Not sent: {'; '.join(held)}." if held else '') + (f" The {n} unsent stand for the owner's Send{' as ONE card' if bulk else ', one at a time'}." if n else '')) if went
              else card if n else 'Nothing was filed, so no card stands - fix what each item was refused for and call it again.')
     return _j({'ok': n > 0 or bool(went), **({'on_the_card': n} if n else {}), **({'batch': key} if bulk else {}), **({'sent': len(went)} if went else {}),
-               **({'refused': refused} if refused else {}), 'shown': shown})
+               **({'refused': refused} if refused else {}), 'shown': shown, **({'files_say': '\n\n'.join(dict.fromkeys(says))} if says else {})})
 
 
 # THE ARGUMENTS AS THE SCHEMA HAS THEM (the tools stress round, 2026-11-18): a model writes `cc: "paula@..."` where a list is asked, `answers:
@@ -823,26 +825,29 @@ def show_files(store, tid: int, paths) -> str:
             why.append(f"{n}: only a file in your task's outputs folder ($TASKUARY_OUTPUTS) or your own temp scratch folder can be shown - "
                        'save it there and show it again'); continue
         if not p.is_file(): why.append(f'{n}: there is no such file'); continue
+        # ...AND EVERY FILE IS READ BACK, DRAWN OR NOT (walk 10, 2026-11-23: a deck's ".pptx cannot be shown" read nothing back, and a stale
+        # "212" in it went to the board after "update everything")
+        reads.append(p)
         # ...A WORKBOOK OR A DOCUMENT IN THE TASK'S OWN OUTPUTS FOLDER IS ALREADY IN FRONT OF HIM (the walks, 2026-11-21: show answered ".xlsx
         # cannot be shown" while the chat drew the sheet, and the agent told him it could not be previewed): the page previews what it makes there
         # under the turn that made it (outputs.preview_of) - said so, never refused
         try: a = session_artifacts.shown(store, tid, p, 'agent')
         except ValueError as e:
-            if p.is_relative_to(outputs.folder(tid).resolve()) and outputs.preview_of(p): drawn.append(p.name); reads.append(p)
+            if p.is_relative_to(outputs.folder(tid).resolve()) and outputs.preview_of(p): drawn.append(p.name)
             else: why.append(f'{n}: {e}')
             continue
         except OSError as e: why.append(f'{n}: {e}'); continue
-        reads.append(p)
         rows.append({'id': a['ArtifactId'], 'name': a.get('Name') or p.name, 'path': f"shown:{a['ArtifactId']}", 'kind': 'shown',
                      'content_type': a.get('ContentType') or '', 'size': a.get('Size') or 0, 'url': f"/api/task-artifacts/{a['ArtifactId']}"})
-    if not rows and not drawn: raise ValueError('nothing was shown - ' + '; '.join(why))
+    from . import attachtext
+    say = attachtext.block(attachtext.of_paths(reads), SHOWN_SAY, file_cap=SHOWN_CHARS)
+    if not rows and not drawn and not say: raise ValueError('nothing was shown - ' + '; '.join(why))
     # ...WHERE it stands is the chat's, not the agent's to say (the walk, 2026-11-22: told "under your answer", the agent wrote "the chart below"
     # over a picture drawn above its words): shown, at this step
     said = ' '.join(x for x in (f"Shown in the owner's chat at this step: {', '.join(r['name'] for r in rows)}." if rows else '',
                                 f"In the owner's chat already, previewed as a file of this task: {', '.join(drawn)}." if drawn else '',
                                 f"Not shown - {'; '.join(why)}." if why else '') if x)
-    from . import attachtext
-    if say := attachtext.block(attachtext.of_paths(reads), SHOWN_SAY, file_cap=SHOWN_CHARS): said = f'{said}\n{say}'
+    if say: said = f'{said}\n{say}'
     return f'{said} {FILES_MARK}{json.dumps(rows, ensure_ascii=False, separators=(",", ":"))}' if rows else said
 
 

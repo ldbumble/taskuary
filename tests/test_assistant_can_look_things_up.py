@@ -101,10 +101,10 @@ class AssistantToolsTests(unittest.TestCase):
             seen.update(profile=profile); return 'ok', None, None
         with mock.patch('taskuary.agents.run_cli', side_effect=run_cli), mock.patch('taskuary.agents.cli_has_flag', return_value=True):
             llm.make_cli_llm(store, 'claude')('SYS', 'USER')
-            self.assertEqual(agents._own_settings(seen['profile'], 'claude'), ['--setting-sources', 'project,local'])
+            got = agents._own_settings(seen['profile'], 'claude', []); self.assertEqual(got[:2], ['--setting-sources', 'project,local']); self.assertIn('--settings', got)
             # ...and a run with hands in the owner's own checkout keeps it all, as before
             llm.make_cli_llm(store, 'claude', cwd='.')('SYS', 'USER')
-            self.assertEqual(agents._own_settings(seen['profile'], 'claude'), [])
+            self.assertEqual(agents._own_settings(seen['profile'], 'claude', []), [])
 
 
 class AssistantProviderTests(unittest.TestCase):

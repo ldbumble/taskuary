@@ -79,7 +79,7 @@ class ChipVerbsTests(unittest.TestCase):
             try:
                 # a fact to keep goes into the memory at once, where every reader reads it (the owner, 2026-10-27: "anything I add to
                 # memory ... the system should save that and use it everywhere")
-                out = T.decide(s, f'{verb} it', verb, key=item['key'], text_arg=text_arg)
+                out = T.decide(s, f'{verb} it', verb, key=item['key'], text_arg=text_arg, section='work' if verb == 'remember' else None)   # the model names it
                 note = f"opens {out.get('open')}" if out.get('open') else f"say: {out['say'][:50]}"
                 ok = out.get('did') == 'memory.remember' and text_arg in (s.get_doc('learned') or '') and not out.get('proposal')
             except Exception as e:

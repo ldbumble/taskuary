@@ -39,7 +39,7 @@ export const viaBrowserSaid = (network) => `Handed to the agent - it puts this u
 export const stateOf = (row, live = true) => {
   const s = row?.Status, act = actionFor(row?.post?.type), w = wordsOf(act, row?.post || {});
   // ...a post handed to its agent for the site says so, never "Posted" before anything went up (the owner, 2026-11-22)
-  if ((s === "approved" || s === "edited") && row?.post?.result?.browser) return { done: true, said: viaBrowserSaid(row?.network), url: "" };
+  if ((s === "approved" || s === "edited") && row?.post?.result?.browser && !row?.post?.result?.done) return { done: true, said: viaBrowserSaid(row?.network), url: "" };
   if (s === "approved" || s === "edited") return { done: true, said: w.done, url: row?.post?.result?.url || "" };
   if (s === "pending" && live) return { live: true };
   // ...a press that failed is over: its error is the card's line (ActionCard), and its agent sets up what goes next (general.failed)

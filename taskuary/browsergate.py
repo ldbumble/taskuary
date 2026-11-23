@@ -864,6 +864,10 @@ def _perform(store, tid: int, p: dict, run=None) -> dict:
     store.audit('task', tid, 'browser_act_done', 'owner', 'human', {'site': p.get('site'), 'what': p.get('what'), 'command': str(p.get('command') or '')[:300],
                                                           'said': now or said[-300:]})
     overcome(store, tid, p.get('site'), f"Done on a later try: {p.get('what') or p.get('command')}", command=str(p.get('command') or ''))
+    # ...and the act his earlier press handed the agent (a post's Post via the browser) is done now its own final press has run (cardqueue.done)
+    if not p.get('signup'):
+        from . import cardqueue
+        cardqueue.done(store, tid, f"{p.get('what') or p.get('command')} on {p.get('name') or p.get('site') or 'the page'}")
     return {'performed': p.get('what') or p.get('command'), 'site': p.get('site'), 'page': now}
 
 

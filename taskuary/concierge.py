@@ -4399,6 +4399,15 @@ def owed_items(store, tid: int, asks: bool = True) -> list:
             says = f"{why} - still waiting for your {A}"
             line = f"a {proposals.POSTS[d['type']]} post waits for your {A}" if proposals.is_post(d) else f"{why} - {A} does it"
         out.append({'rid': r['ReviewId'], 'verb': 'approve', 'says': says, 'line': line})
+    # ...and what his press handed the agent to do is still owed - by the agent, not his press (cardqueue.handed)
+    from . import cardqueue
+    for r in [] if held else store._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action' AND Status IN ('approved','edited') ORDER BY ReviewId", (tid,)):
+        if not cardqueue.handed(r): continue
+        try: d = json.loads(r.get('FinalText') or '{}') or {}
+        except ValueError: d = {}
+        what = f"the {proposals.POSTS[d['type']]} post" if proposals.is_post(d) else ' '.join(str(r.get('Reason') or 'the act').split())[:120]
+        out.append({'rid': r['ReviewId'], 'verb': None, 'says': f'{what} is with the agent, not done yet',
+                    'line': f"{what} is handed to the agent - not done yet; its final press waits for your yes"})
     if asks:
         from . import general
         live = general.session_for(tid) or ws._live(tid)

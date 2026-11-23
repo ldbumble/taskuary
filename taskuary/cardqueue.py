@@ -33,6 +33,29 @@ def _p(r) -> dict:
     return d if isinstance(d, dict) else {}
 
 
+def handed(r: dict) -> bool:
+    """PRESSED IS NOT DONE (walk 6, 2026-11-23: Post via the browser on a LinkedIn card approved it, and its agent was told "Done 7:31 AM: post to
+    LinkedIn" in the very message asking it to go and post it; the X card came forward as if it had gone, and the Assistant's list of what
+    waits left it out). THE ONE STATE of a press that handed its act to the agent to do - pressed, not yet done - read by the line (the next
+    card waits behind it), the agent's screen fact and what the Assistant says a task holds (concierge.owed_items). Cleared by its real
+    result (done)."""
+    if r.get('Kind') != 'action' or r.get('Status') not in ('approved', 'edited'): return False
+    try: got = (json.loads(r.get('FinalText') or '{}') or {}).get('result') or {}
+    except (TypeError, ValueError, AttributeError): got = {}
+    return isinstance(got, dict) and bool(got.get('browser')) and not got.get('done')
+
+
+def done(store, tid: int, said: str) -> list:
+    """The act a press handed to the agent, done: its own final press ran (browsergate.perform) - the oldest handed card on task `tid` settles
+    with `said` as its result, and the line moves on. -> its review id, or []."""
+    r = next((r for r in store._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action' AND Status IN ('approved','edited') ORDER BY ReviewId",
+                                     (int(tid),)) if handed(r)), None)
+    if not r: return []
+    p = json.loads(r['FinalText'])
+    store.review_result(r['ReviewId'], json.dumps({**p, 'result': {**p['result'], 'done': str(said or 'done')[:300]}}))
+    return [r['ReviewId']]
+
+
 def obsolete_read(store, tid, review) -> bool:
     """Hide obsolete requests to read an already allowed folder. Keep successful approvals in the history."""
     from . import readgate
@@ -76,7 +99,7 @@ def _units(store, tid: int, past: set) -> list:
         if (k := _turn(r)) in by: u = by[k]
         else: u = by[k] = {'rids': [], 'rows': [], 'at': ep(r['CreatedAt'])}; out.append(u)
         u['rids'].append(r['ReviewId']); u['rows'].append(r)
-    for u in out: u['done'] = None if any(r['Status'] == 'pending' for r in u['rows']) else max(ep(r.get('DecidedAt')) for r in u['rows'])
+    for u in out: u['done'] = None if any(r['Status'] == 'pending' or handed(r) for r in u['rows']) else max(ep(r.get('DecidedAt')) for r in u['rows'])
     rec = landing.record(store, int(tid)); q = rec.get('proposal') or {}
     if q.get('at') and not q.get('passed') and max(float(rec.get('moved') or 0), moved_on(store, int(tid))) <= ep(q['at']):
         went = str((rec.get('landed') or {}).get('at') or '')
@@ -251,7 +274,10 @@ def screen(store, tid: int, skip=()) -> str:
         if set(u['rids']) & set(skip): continue
         r = (_waits(u) or u['rows'] or [{}])[0]; n, ids = name(u, r), set(u['rids'])
         if u['done'] is None:
-            if r and ids <= past: greyed(r, n)
+            if (h := next((x for x in u['rows'] if handed(x)), None)):
+                waiting.append(f"Handed to you by his press {clock(h.get('DecidedAt'))}, NOT done yet - do it; it is done once its own final press "
+                               f"has gone, and the next card waits until then: {name(u, h)}")
+            elif r and ids <= past: greyed(r, n)
             elif ids & live:
                 waiting.append(f'Waiting for his press now{outcome(r)}: {n}')
             elif u['rids'] == front: waiting.append(f'Comes forward once your turn ends (you are going on from his last press): {n}')

@@ -309,6 +309,27 @@ def test_post_via_the_browser_hands_the_post_as_he_left_it_to_its_agent_once():
     assert proposals.via_browser(s, mail, 'x')['ok'] is False
 
 
+def test_a_post_handed_to_the_browser_is_pressed_not_done_for_the_agent_the_line_and_the_assistant():
+    """Walk 6: three post cards in a line; Post via the browser on the LinkedIn one, and its agent was told "Done 7:31 AM: post to LinkedIn"
+    in the very message asking it to go and post it, the X card came forward as if it had gone, and "what is waiting on me" left LinkedIn out.
+    Pressed and done are two states: handed reads "not done" everywhere until its own final press has run on the site."""
+    from taskuary import cardqueue, concierge, general, proposals
+    from taskuary.store import MemoryStore
+    s = MemoryStore(); tid = s.create_task({'Title': 'Post the week', 'Kind': 'general', 'Status': 'open'}, 'owner')
+    post = lambda kind, words: s.add_review({'TaskId': tid, 'Kind': 'action', 'Status': 'pending', 'Reason': f'the agent proposes to post on {kind}',
+                                             'DraftText': json.dumps({'action': 'run_tool', 'type': kind, 'text': words})})
+    li, x = post('linkedin_post', 'A good week at Northwind.'), post('x_post', 'A good week.')
+    with mock.patch.object(general, 'to_agent', return_value='woke'): proposals.via_browser(s, li, '')
+    said = cardqueue.screen(s, tid)
+    assert any('NOT done yet' in l and f'rv{li}' in l for l in said.splitlines()) and not any(l.startswith('- Done') for l in said.splitlines()), said
+    assert cardqueue.state(s, tid)['live'] == [li] and x in cardqueue.held(s, tid), 'the next post waits until this one has gone'
+    assert any(i['rid'] == li and 'not done yet' in i['line'] for i in concierge.owed_items(s, tid))
+    # ...its own final press ran on the site: done, and the line moves on
+    assert cardqueue.done(s, tid, 'Post on linkedin.example') == [li]
+    assert not cardqueue.handed(s.get_review(li)) and cardqueue.state(s, tid)['live'] == [x]
+    assert any(l.startswith('- Done') and f'rv{li}' in l for l in cardqueue.screen(s, tid).splitlines())
+
+
 def test_an_action_that_is_none_is_refused_with_the_ones_that_are():
     """A Claude agent proposed its LinkedIn post as 'post_linkedin' twice, was told only "unknown action", and handed the post to the owner
     as prose (goal walk, 2026-11-22). The refusal names the actions and how a post is written - which then goes, with no connection."""

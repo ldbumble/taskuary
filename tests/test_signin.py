@@ -237,7 +237,7 @@ class Asking(unittest.TestCase):
         self.assertEqual(audit, [{'site': 'bank.example', 'how': 'vault', 'ok': True}])
         self.assertIsNotNone(signin.saved(self.s, 'bank.example')['LastUsed'])
         self.assertNotIn(PW, self.everything_written())
-        self.assertNotIn(USER, json.dumps(signin.listing(self.s)))
+        self.assertNotIn(PW, json.dumps(signin.listing(self.s)))
         # ...and a site that asks AGAIN minutes later is not tried twice
         with on_page('https://www.bank.example/signin'): self.assertFalse(signin.needs(self.s, t2, 'sess2', fill=lambda *a: typed.append(a))['auto'])
 
@@ -575,7 +575,7 @@ class TheOwnerSignsInOnThePage(Asking):
         said = ' '.join(c['Body'] for c in self.s.list_comments(self.tid))
         self.assertIn('Saved your bank.example sign-in to the vault - remove it under Settings → Agent permissions → Saved sign-ins.', said)
         # NOWHERE in the clear: not the comments, the events, the audit, the logs - the vault row is sealed
-        self.assertNotIn(PW, self.everything_written()); self.assertNotIn(USER, json.dumps(signin.listing(self.s)))
+        self.assertNotIn(PW, self.everything_written()); self.assertNotIn(PW, json.dumps(signin.listing(self.s)))
         # ...and the next ask on the site is filled from the vault by itself
         t2, typed = Factory(self.s).task('Pay the toll again'), []
         with on_page('https://login.bank.example/signin'):
@@ -750,7 +750,10 @@ class Routes(unittest.TestCase):
         self.assertEqual((r.status_code, r.json()), (200, {'ok': True, 'site': 'portal.example'}))
         row = signin.saved(self.s, 'portal.example')
         self.assertEqual((vault.unseal(row['User']), vault.unseal(row['Secret'])), (USER, PW))
-        self.assertNotIn(PW, c.get('/api/signins').text); self.assertNotIn(USER, c.get('/api/signins').text)
+        # ...listed with its user name, its password only on his own Show (one vault: an agent's account reads the same - 2026-11-23)
+        self.assertNotIn(PW, c.get('/api/signins').text); self.assertIn(USER, c.get('/api/signins').text)
+        self.assertEqual(c.get('/api/signins/portal.example/password').json()['password'], PW)
+        self.assertEqual(c.get('/api/signins/portal.example/password', headers=AGENT).status_code, 403)
         # ...with the other box its form asks for: sealed with it, listed by its label only, kept when the password is saved again
         r = c.post('/api/signins', json={'site': 'portal.example', 'user': USER, 'password': PW, 'fields': {'Account code': 'NW-0042'}})
         self.assertEqual(r.status_code, 200, r.text)
@@ -1008,7 +1011,7 @@ def test_the_sign_up_command_sends_the_form_he_asked_for_with_a_password_kept_be
         assert vault.unseal(signin.saved(s, site)['Secret']) == typed[0], 'kept before the form goes'
         c.go('data', 'https://www.rentscope.example/data'); return {'ok': True, 'user': USER}
     ok, said = signing_up(s, tid, page, send, typed)
-    assert ok and said.startswith(f'Signed up on rentscope.example as {USER}, and signed in: the page shows "Data"'), said
+    assert ok and said.startswith(f'rentscope.example took the sign-up as {USER}: the page shows "Data"'), said
     row = signin.saved(s, 'rentscope.example')
     assert (vault.unseal(row['Secret']), vault.unseal(row['User'])) == (typed[0], USER) and len(typed[0]) >= 16
     assert typed[0] not in json.dumps([s._rows('SELECT * FROM audit'), s._rows('SELECT * FROM comment'), said], default=str)
@@ -1057,7 +1060,7 @@ def test_a_wizards_last_step_is_kept_under_the_email_its_first_step_named():
     signin.pressing(s, tid, 'sess1', 'capratehub.example', conn=step1)                     # ...its Next, pressed by the agent
     step2 = UpPage('https://capratehub.example/step2', user='')
     ok, said = signing_up(s, tid, step2, lambda sid, site, c: c.go('data', 'https://capratehub.example/data') or {'ok': True, 'user': ''})
-    assert ok and said.startswith(f'Signed up on capratehub.example as {USER}'), said
+    assert ok and said.startswith(f'capratehub.example took the sign-up as {USER}'), said
     assert vault.unseal(signin.saved(s, 'capratehub.example')['User']) == USER
 
 
@@ -1071,7 +1074,7 @@ def test_a_code_the_site_emails_is_typed_inside_the_command():
         c.go('code', 'https://lienlens.example/verify'); return {'ok': True, 'user': USER}
     def code(c, site, make): codes.append(make()); c.go('data', 'https://lienlens.example/data')
     ok, said = signing_up(s, tid, UpPage('https://lienlens.example/signup'), send, code=code)
-    assert codes == ['383972'] and ok and said.startswith(f'Signed up on lienlens.example as {USER}, and signed in'), said
+    assert codes == ['383972'] and ok and said.startswith(f'lienlens.example took the sign-up as {USER}'), said
     assert 'The code it emailed was typed' in said and '383972' not in said
     # ...no mail within the wait: not an account yet, said so, and the code watch keeps that page
     watched = []
@@ -1120,7 +1123,7 @@ def test_a_held_sign_up_is_sent_on_its_own_tab_only_never_the_tab_shown():
     with mock.patch.object(browserview, 'pages', return_value=[{'id': 'T1', 'url': p['url']}, shown]), mock.patch.object(signin, 'Cdp', exact),          mock.patch.object(signin, '_cdp_url', return_value='ws://x'), mock.patch.object(signin, 'type_new', lambda *a: 1),          mock.patch.object(signin, 'send_new', lambda sid, site, c: c.go('data', 'https://www.rentscope.example/data') or {'ok': True}),          mock.patch.object(signin, 'SETTLE', 0), mock.patch.object(browsergate, '_tell', lambda s_, t, text, **k: told.append(text)),          mock.patch.object(browserview, 'state', return_value={'open': True, 'url': shown['url']}):
         browsergate.perform(s, tid, p)
     assert attached == [('T1', True)], 'on the tab it was held on, never the one shown'
-    assert told and told[0].startswith('The owner approved the sign-up on rentscope.example. Signed up on rentscope.example as'), told
+    assert told and told[0].startswith('The owner approved the sign-up on rentscope.example. rentscope.example took the sign-up as'), told
     # WALK 8 (2026-11-20): the agent took that tab on to the next vendor - as it was told it could - and the held card went off the chat. A held
     # sign-up stays lit wherever its tab goes; his press opens its form again in a tab of Taskuary's own, fills back the boxes kept with it, sends
     left = [{'id': 'T1', 'url': shown['url']}]
@@ -1136,7 +1139,7 @@ def test_a_held_sign_up_is_sent_on_its_own_tab_only_never_the_tab_shown():
          mock.patch.object(signin, 'SETTLE', 0), mock.patch.object(browsergate, '_tell', lambda s_, t, text, **k: told.append(text)):
         browsergate.perform(s, tid, p)
     assert any(x.startswith(signin.REFILL) and 'Alex Doyle' in x for x in again.ran), 'the boxes kept with the card filled back'
-    assert told[0].startswith('The owner approved the sign-up on rentscope.example. Signed up on rentscope.example as'), told
+    assert told[0].startswith('The owner approved the sign-up on rentscope.example. rentscope.example took the sign-up as'), told
 
 
 def test_an_agent_that_still_ends_its_turn_with_the_sign_up_marker_gets_the_commands_answer():
@@ -1258,3 +1261,26 @@ def test_a_new_password_is_in_every_box_or_the_sign_up_says_which_did_not_keep_i
         p = Page(sticky=False)
         assert signin.type_new('s1', 'vendor.example', 'Pw-1a!', p) == 2 and p.boxes == ['Pw-1a!', 'Pw-1a!']
         with pytest.raises(signin.SignInError, match='1 of its 2 password boxes'): signin.type_new('s1', 'vendor.example', 'Pw-1a!', Page(sticky=True))
+
+
+def test_an_account_the_agent_made_is_one_vault_row_he_can_read_and_the_next_task_is_told():
+    """WALK 9 (2026-11-23): a test inbox the agent made had no password anywhere - the site's next step stood on the same page, read as "kept
+    its form up", and the row went; and the next tasks, asked to use "that email", knew of no inbox. A password a site was sent stays in the
+    one vault unless the site said no: shown with its user name and the task that made it, "not signed in with yet" until a sign-in went in,
+    its password his to reveal, and named (never the password) to every agent."""
+    from taskuary import docsync
+    s = MemoryStore(); tid = Factory(s).task('A test inbox'); typed = []
+    ok, said = signing_up(s, tid, UpPage('https://mail.inbox.example/signup'), lambda *a: {'ok': False}, typed)
+    assert not ok and 'kept with the owner' in said, said
+    [row] = signin.listing(s)
+    assert (row['site'], row['user'], row['by'], row['task'], row['confirmed']) == ('inbox.example', USER, 'agent', tid, False), row
+    assert signin.reveal(s, 'inbox.example') == typed[0] and typed[0] not in json.dumps(row)
+    assert any('Kept the inbox.example account' in c['Body'] for c in s.list_comments(tid))
+    told = docsync.agent_systems(s)
+    assert f'inbox.example as {USER} (made by the agent on' in told and 'not signed in with yet' in told and typed[0] not in told
+    s._exec('UPDATE signin_vault SET LastUsed=1 WHERE Site=?', ('inbox.example',))
+    assert signin.listing(s)[0]['confirmed']
+    # ...and the saved sign-in typed again by Taskuary, then pressed by the agent, stays the owner's own row
+    signin.save(s, 'bank.example', USER, PW)
+    signin.pressing(s, tid, 'sess1', 'bank.example', conn=UpPage('https://www.bank.example/signin', pw=PW))
+    assert next(r for r in signin.listing(s) if r['site'] == 'bank.example')['by'] == 'owner'

@@ -113,6 +113,11 @@ def agent_systems(store, tooled: bool = True) -> str:
     how = 'propose_email with `from` set to one' if tooled else '`taskuary --draft "<text>" --to <address> --subject "<subject>" --from <one of them>`'
     mail = ('MAILBOXES you can send FROM (an email waits for the owner\'s Send): ' + ', '.join(f"{m['address']} ({m['kind']})" for m in boxes)
             + f' - {how}; they are not run_system tools.') if boxes else ''
+    # ...AND THE ACCOUNTS ITS BROWSER CAN SIGN IN TO (signin.accounts): one task's sign-up is the next task's inbox
+    from . import signin
+    try: kept = signin.accounts(store)
+    except Exception: kept = ''
+    mail = '\n'.join(x for x in (mail, kept) if x)
     if not tools: return mail
     lines = [f"- {c['Name'] or c['Type']} (connector_id {c['ConnectorId']}, authority {scopes.scope_of(c)}) - tools: {', '.join(k)}"
              for c, k in tools]

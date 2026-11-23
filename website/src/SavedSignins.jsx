@@ -1,6 +1,7 @@
 // THE SIGN-INS KEPT FOR THE BROWSER AGENT (Settings -> Agent permissions, signin.py): each site the owner ticked "Save to vault for next
 // time" for on a fill page, when it was saved and last used - and Remove, which forgets the sealed password AND that site's cookies in the
-// browser's kept state. Never the user name or the password: the page is not where they are read back.
+// browser's kept state. ONE VAULT (the owner, 2026-11-23): an account an agent made is a row here like one he typed - its user name, the task
+// that made it, "not signed in with yet" until a sign-in with it went in, and its password shown on his own press (Show password).
 // ...and its AUTHENTICATOR KEY (the owner, 2026-10-25: "Yes: TOTP codes in the sign-in vault"): kept here or on the fill page, sealed like
 // the password, so the server types the site's code after it. Write-only - the row says one is kept, never what it is.
 import React, { useEffect, useState } from "react";
@@ -65,6 +66,13 @@ export default function SavedSignins() {
   const load = () => api.get("/api/signins").then(({ data }) => { setRows(data?.data || []); setErr(""); })
     .catch((e) => setErr(e?.response?.data?.detail || "The saved sign-ins could not be read - Taskuary did not answer."));
   useEffect(() => { load(); }, []);
+  const [shown, setShown] = useState({});
+  const reveal = async (site) => {
+    if (shown[site]) return setShown({ ...shown, [site]: "" });
+    setRowErr({ site: "", text: "" });
+    try { const { data } = await api.get(`/api/signins/${encodeURIComponent(site)}/password`); setShown({ ...shown, [site]: data.password }); }
+    catch (e) { setRowErr({ site, text: e?.response?.data?.detail || "The password could not be shown - try again." }); }
+  };
   const remove = async (site) => {
     setBusy(site); setWhat("remove"); setRowErr({ site: "", text: "" });
     // ...ONE PRESS, AND AN UNDO LINE (the owner, 2026-11-15: no question - commit ad38e36bc took one back - but a way to take it back, as a
@@ -100,11 +108,16 @@ export default function SavedSignins() {
         <Box key={r.site} sx={{ py: 1, borderBottom: `1px solid ${BORDER}` }}>
           <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
             <Box sx={{ flex: 1, minWidth: 0 }}>
-              <Typography noWrap sx={{ fontSize: 13, color: INK }} title={r.site}>{r.site}</Typography>
+              <Typography noWrap sx={{ fontSize: 13, color: INK }} title={r.site}>{r.site}{r.user ? ` · ${r.user}` : ""}</Typography>
               <Typography variant="caption" sx={{ color: FAINT, display: "block" }}>
-                saved {ago(r.saved * 1000)} · {r.used ? `last used ${ago(r.used * 1000)}` : "not used yet"}
+                {r.ref ? `made by the agent on ${r.ref}` : r.by === "agent" ? "made by an agent" : "saved"} {ago(r.saved * 1000)} · {r.confirmed
+                  ? (r.used ? `last used ${ago(r.used * 1000)}` : "not used yet") : "not signed in with yet"}
                 {r.code ? " · authenticator code" : ""}</Typography>
+              {shown[r.site] && <Typography data-tq-signin-password="" sx={{ fontSize: 12.5, color: INK, fontFamily: "monospace", userSelect: "all" }}>
+                {shown[r.site]}</Typography>}
             </Box>
+            <Button size="small" disabled={busy === r.site} sx={{ color: DIM, textTransform: "none" }} onClick={() => reveal(r.site)}
+              title="Shows the saved password here until you hide it">{shown[r.site] ? "Hide password" : "Show password"}</Button>
             <Button size="small" disabled={busy === r.site} sx={{ color: DIM, textTransform: "none" }}
               onClick={() => r.code ? saveKey(r.site, "") : (setKeyFor(keyFor === r.site ? "" : r.site), setKey(""), setKeyErr(""))}
               title={r.code ? "Forgets the authenticator key - the site's code is then yours to type"

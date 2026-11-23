@@ -174,20 +174,59 @@ def _tables(store):
         # ...and the other boxes a site's form asks for (2026-11-04: a "Customer ID" beside the email and password), sealed as one JSON
         if 'Extra' not in {r[1] for r in store.cx.execute('PRAGMA table_info(signin_vault)')}:
             store.cx.execute('ALTER TABLE signin_vault ADD COLUMN Extra TEXT')
+        # ...and the task whose agent made the account (walk 9, 2026-11-23): an inbox one task signed up for, no later task knew of
+        if 'Task' not in {r[1] for r in store.cx.execute('PRAGMA table_info(signin_vault)')}:
+            store.cx.execute('ALTER TABLE signin_vault ADD COLUMN Task INTEGER')
         store.cx.commit()
 
 
 def saved(store, site) -> dict | None:
     _tables(store)
-    return store._one('SELECT Site, User, Secret, Totp, Extra, SavedAt, LastUsed FROM signin_vault WHERE Site=?', (str(site or '').lower(),))
+    return store._one('SELECT Site, User, Secret, Totp, Extra, SavedAt, SavedBy, LastUsed, Task FROM signin_vault WHERE Site=?', (str(site or '').lower(),))
+
+
+# ONE VAULT FOR EVERY LOGIN (the owner, 2026-11-23: "if the agent made a login it should save it in the agent vault same as login I give it"):
+# an account an agent made is a row like one he typed, by the same save, shown the same way - the site, the user name, which task made it -
+# and its password his to reveal. An account Taskuary has not yet signed in with is said so (confirmed): a sign-up the site seemed to take
+# is not proof it was made (walk 9: a row read "signed in" for an account stopped at its phone step).
+MADE_BY = ('taskuary', 'agent')
+def confirmed(row) -> bool: return bool(row.get('LastUsed')) or (row.get('SavedBy') or 'owner') not in MADE_BY
+
+
+def _user(row) -> str:
+    from . import vault
+    return vault.unseal(row['User']) if row.get('User') else ''
 
 
 def listing(store) -> list:
-    """Settings -> Saved sign-ins: the site, when it was saved, when it was last used, whether a code key is kept. Never the user
-    name, the secret or the key."""
+    """Settings -> Saved sign-ins: the site, its user name, when it was saved and last used, whether a code key is kept, the task whose agent
+    made it, and whether a sign-in with it has gone in yet. Never the secret or the key (reveal, on his press)."""
+    from .store import task_ref
     _tables(store)
-    return [{'site': r['Site'], 'saved': r['SavedAt'], 'used': r['LastUsed'], 'code': bool(r['Totp']), 'fields': sorted(extra_of(r))}
-            for r in store._rows('SELECT Site, SavedAt, LastUsed, Totp, Extra FROM signin_vault ORDER BY Site')]
+    return [{'site': r['Site'], 'user': _user(r), 'saved': r['SavedAt'], 'used': r['LastUsed'], 'code': bool(r['Totp']), 'fields': sorted(extra_of(r)),
+             'by': 'agent' if (r.get('SavedBy') or '') in MADE_BY else 'owner', 'confirmed': confirmed(r),
+             **({'task': int(r['Task']), 'ref': task_ref(int(r['Task']))} if r.get('Task') else {})}
+            for r in store._rows('SELECT Site, User, SavedAt, SavedBy, LastUsed, Totp, Extra, Task FROM signin_vault ORDER BY Site')]
+
+
+def reveal(store, site) -> str | None:
+    "The saved password for `site`, opened from its seal for the owner's own eyes (Settings -> Saved sign-ins, Show) - None when none is kept."
+    from . import vault
+    row = saved(store, site)
+    if not row: return None
+    store.audit('signin', 0, 'signin_revealed', 'owner', detail={'site': str(site).lower()})
+    return vault.unseal(row['Secret'])
+
+
+def accounts(store) -> str:
+    """The saved sign-ins as an agent is told them (docsync.agent_systems): site and user name, who made it and whether it has signed in yet -
+    so the next task knows the inbox an earlier one made. Never a password: the browser types it (hand_over with the site)."""
+    rows = listing(store)
+    if not rows: return ''
+    def say(r):
+        made = f"made by the agent on {r['ref']}" if r.get('ref') else 'made by an agent' if r['by'] == 'agent' else "the owner's own"
+        return f"{r['site']}" + (f" as {r['user']}" if r['user'] else '') + f" ({made}{'' if r['confirmed'] else ', not signed in with yet'})"
+    return 'SAVED SIGN-INS (Taskuary types the password - hand_over with the site signs in; you never see one): ' + '; '.join(map(say, rows[:30]))
 
 
 def extra_of(row) -> dict:
@@ -207,7 +246,7 @@ def _seal_key(key) -> str:
     return k
 
 
-def save(store, site, user, pw, by='owner', key=None, extra=None, keep_old=False):
+def save(store, site, user, pw, by='owner', key=None, extra=None, keep_old=False, task=None):
     """Keep a sign-in for `site`, sealed. The site is the one the owner saw on the fill page - pinned there, at save time. `key`: an
     authenticator key to keep with it; None keeps the one already saved (a changed password is not a new authenticator). `extra`: the
     other boxes its form asks for, {label: value} (a "Customer ID"); None keeps the ones already saved."""
@@ -224,8 +263,8 @@ def save(store, site, user, pw, by='owner', key=None, extra=None, keep_old=False
     if not vault.sealed(p): raise ValueError('this computer has no keychain to seal it in, so it was not saved')
     _tables(store)
     old = saved(store, site) or {}
-    store._exec('INSERT OR REPLACE INTO signin_vault (Site, User, Secret, Totp, Extra, SavedAt, SavedBy, LastUsed) VALUES (?,?,?,?,?,?,?,?)',
-                (site, u, p, k or old.get('Totp'), x if ex is not None else old.get('Extra'), _now(), by, None))
+    store._exec('INSERT OR REPLACE INTO signin_vault (Site, User, Secret, Totp, Extra, SavedAt, SavedBy, LastUsed, Task) VALUES (?,?,?,?,?,?,?,?,?)',
+                (site, u, p, k or old.get('Totp'), x if ex is not None else old.get('Extra'), _now(), by, None, int(task) if task else None))
     # ...`keep_old`: a row that may yet be put back (a sign-up the site has not answered) keeps the secrets it replaced until it is - on macOS
     # a sealed secret is a keychain entry, and forgetting it here left the put-back row pointing at nothing (CI, 2026-11-19)
     if not keep_old: forget_row(old, k, ex)
@@ -761,6 +800,11 @@ WATCH_EVERY = 1.0
 PAST_STEADY = 3
 _TYPED = {}                     # tid -> {'user', 'pw', 'site'}: what the owner sent on the page, until the sign-in is past - memory only
 SAVED_LINE = 'Saved your {site} sign-in to the vault - remove it under {where}.'
+MADE_LINE = 'Kept the {site} account{who} the agent made in {where} - its password is there for you.'
+def made_line(store, tid, site: str, user: str = '') -> None:
+    "The task says, once, that an account its agent made is kept and where he reads its password (one vault - listing)."
+    from . import words
+    store.add_comment_once(int(tid), 'taskuary', 'agent', MADE_LINE.format(site=site, who=f' ({user})' if user else '', where=words.name('signins')))
 
 
 def heard(tid, site: str, raw) -> bool:
@@ -1525,19 +1569,24 @@ def _make(store, tid, sid, site, c, fill=None, send=None, said: dict = None) -> 
         why = str(e) if isinstance(e, SignInError) else 'the browser could not be reached'
         _audit(store, tid, site, 'vault', False, why)
         return False, f'Nothing was sent: the password could not be typed - {why}. Look at the page and go on from what it shows.'
-    try: save(store, site, user, pw, by='taskuary', keep_old=True); kept = ''
+    try: save(store, site, user, pw, by='taskuary', keep_old=True, task=tid); kept = ''
     except ValueError as e: kept = f' The password could not be kept: {e}.'
     try: got = (send or send_new)(sid, site, c)
     except Exception as e: got = {'ok': False, 'why': str(e) if isinstance(e, SignInError) else 'the browser could not be reached'}
     if not got.get('ok'):
-        if not kept: _restore(store, site, prev)
+        # ...A PASSWORD THE SITE WAS SENT IS KEPT unless the site said no or a working sign-in comes back (walk 9, 2026-11-23: a site whose next
+        # step stood on the same page read as "kept its form up", the row went, and the account the agent then finished had no password anywhere)
+        drop = bool(got.get('why')) or bool(prev)
+        if not kept and drop: _restore(store, site, prev)
+        elif not kept: made_line(store, tid, site, user)
         _audit(store, tid, site, 'vault', False, got.get('why') or 'the form stayed up', signup=True)
         if said is not None: said['why'] = got.get('why') or ''
-        return False, (f'No account: {site} kept its sign-up form up' + (f' - it says "{got["why"]}"' if got.get('why') else
-                       ' and shows no error Taskuary could read - look at the page for what it asks') + '. Nothing was '
-                       'kept. Fix what it asks for and run `agent-browser signup` again; a box only the owner can fill is theirs.')
-    if (u := got.get('user')) and u != user and not kept: user = u; save(store, site, user, pw, by='taskuary', keep_old=True)
-    if not kept: _kept(prev, _raw(store, site))
+        return False, (f'No account yet: {site} kept its sign-up form up' + (f' - it says "{got["why"]}"' if got.get('why') else
+                       ' and shows no error Taskuary could read - look at the page for what it asks') + '. ' +
+                       ('Nothing was kept. ' if drop or kept else "The password it was sent is kept with the owner's saved sign-ins, marked "
+                        'not signed in with yet. ') + 'Fix what it asks for and run `agent-browser signup` again; a box only the owner can fill is theirs.')
+    if (u := got.get('user')) and u != user and not kept: user = u; save(store, site, user, pw, by='taskuary', keep_old=True, task=tid)
+    if not kept: _kept(prev, _raw(store, site)); made_line(store, tid, site, user)
     from .browsergate import overcome
     overcome(store, tid, site, f'Done on a later try: the account on {site} was made', signup=True)
     return True, _answered(store, tid, sid, site, c, user, kept)
@@ -1570,8 +1619,9 @@ def _answered(store, tid, sid, site, c, user, kept) -> str:
     there = f'"{look.get("title") or ""}" ({look.get("href") or f.get("href") or ""})'
     if f.get('top') and on_site(f.get('href'), site) and not f.get('password') and (status or 200) < 400:
         _audit(store, tid, site, 'vault', True, 'signed up', saved=not kept, signup=True)
-        return (f"Signed up on {site}{who}, and signed in: the page shows {there}.{coded} Its password is kept with the owner's saved sign-ins - you "
-                f'never need it; to sign in again later, open its sign-in page and hand_over with site {site}.{kept}')
+        return (f"{site} took the sign-up{who}: the page shows {there} - look at it for whether the account is made or asks for more.{coded} "
+                f"Its password is kept with the owner's saved sign-ins - you never need it; to sign in again later, open its sign-in page and "
+                f'hand_over with site {site}.{kept}')
     _audit(store, tid, site, 'vault', True, 'sent', saved=not kept)
     return (f'Sent{who}; the page now shows {there}, not signed in. Not an account yet: open its sign-in page and hand_over with site '
             f'{site} - an account counts once that sign-in goes in.{coded}{kept}')
@@ -1634,7 +1684,9 @@ def pressing(store, tid, sid, site, conn=None) -> None:
     if f.get('user'): _USERS[(int(tid), site)] = f['user']
     if not pw: return
     prev = _raw(store, site)
-    try: save(store, site, f.get('user') or _USERS.get((int(tid), site), ''), pw, by='agent', keep_old=True)
+    from . import vault
+    if prev and prev.get('Secret') and vault.unseal(prev['Secret']) == pw: return     # ...the saved sign-in itself, typed by Taskuary: his row stays his
+    try: save(store, site, f.get('user') or _USERS.get((int(tid), site), ''), pw, by='agent', keep_old=True, task=tid)
     except ValueError as e: return logger.info(f'signin: task {tid} pressed with a password on {site}, not kept - {e}')
     _PRESSED[str(sid)] = (int(tid), site, prev)
 
@@ -1659,8 +1711,8 @@ def settled(store, sid, conn=None) -> str:
         finally:
             if conn is None: c.close()
     except Exception: ok = True                          # ...unreadable: what the site was sent stays kept - a password lost is the worse
-    if not ok: _restore(store, site, prev); return ''
-    _kept(prev, _raw(store, site))
+    if not ok and prev: _restore(store, site, prev); return ''
+    _kept(prev, _raw(store, site)); made_line(store, tid, site, _user(_raw(store, site) or {}))
     _audit(store, tid, site, 'vault', True, 'kept from a press', saved=True)
     return (f"TASKUARY: the password that form sent to {site} is kept with the owner's saved sign-ins. Next time run `agent-browser signup` "
             'and type no password yourself.')

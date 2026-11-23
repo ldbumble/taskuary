@@ -807,6 +807,16 @@ def signin_add(body: SigninAddBody, request: Request):
     return {'ok': True, 'site': site}
 
 
+# A SAVED PASSWORD SHOWN TO HIM ON HIS PRESS (the owner, 2026-11-23: an inbox an agent made was his to open, and its password was nowhere he
+# could read it): the owner's token alone - the guard denies /api/signins to every session
+@app.get('/api/signins/{site}/password')
+def signin_password(site: str, request: Request):
+    from . import signin
+    _owner_only(request, "the saved sign-ins are the owner's")
+    if (pw := signin.reveal(store, site)) is None: raise HTTPException(404, 'nothing is saved for that site')
+    return {'site': site.lower(), 'password': pw}
+
+
 # A SAVED SIGN-IN'S AUTHENTICATOR KEY (2026-10-25): kept, or (empty) dropped. Write-only: no route ever reads a key back
 @app.post('/api/signins/{site}/code')
 def signin_code(site: str, body: SigninKeyBody, request: Request):

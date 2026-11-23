@@ -1444,6 +1444,16 @@ class SeedCompletenessTests(unittest.TestCase):
         return s, tid
 
     @_owner
+    def test_the_seed_carries_his_agents_md_as_he_wrote_it(self):
+        """AGENTS.md is every agent's instructions (the owner, 2026-11-23): a coding session's seed reads his edit, and the fence rides beside it."""
+        s, tid = self._task('Please fix the export.')
+        s.save_doc('agents', 'Work in small steps.\n\nShow a table when it helps.', 'owner')
+        seed = terminal.seed_text(s, tid)
+        self.assertIn('Work in small steps. Show a table when it helps.', seed); self.assertIn(terminal.FENCE_LINE, seed)
+        from taskuary import selfclose
+        self.assertNotIn(selfclose.ONE_SENTENCE, seed)
+
+    @_owner
     def test_a_long_message_is_not_quietly_quartered(self):
         body = 'x' * 11000
         s, tid = self._task(body)

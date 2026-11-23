@@ -12,10 +12,10 @@ CUT, WHOLE, SECTIONS = 'the end is cut off', 'still read whole, but long', 'whol
 
 def fixed():
     "name -> (chars, flat, reader, past) for the documents a reader cuts"
-    from . import counsel, memory, responder, triage
+    from . import counsel, memory, responder, selfclose, triage
     return {'soul': (triage.SOUL_CHARS, False, 'triage and drafts', CUT), 'job': (triage.JOB_CHARS, False, 'triage', CUT),
             'style': (responder.STYLE_CHARS, False, 'drafts', CUT), 'counsel': (counsel.BUDGET, False, 'the assistant', WHOLE),
-            'learned': (memory.WHOLE_CAP, False, 'its readers', SECTIONS)}
+            'learned': (memory.WHOLE_CAP, False, 'its readers', SECTIONS), selfclose.AGENTS_DOC: (selfclose.AGENTS_CHARS, True, 'every agent', CUT)}
 
 
 def limit(store, name: str):

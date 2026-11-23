@@ -2001,7 +2001,7 @@ def seed_text(store, tid: int, instruction: str = None, repo: str = None, cwd: s
     facts = [nobody_line(store, tid) if not stranger and no_correspondent(store, tid) else '',
              'The owner opened this session to work in: it is theirs to close.' if selfclose.stays_open(store, tid) else '',
              'GitHub is this team\'s issue tracker.' if store.github_permissions()[0] else '']
-    parts.append(' '.join(x for x in (*facts, TOOLS_HELP, selfclose.ONE_SENTENCE) if x))
+    parts.append(' '.join(x for x in (*facts, TOOLS_HELP, selfclose.guidance(store)) if x))
     # that earlier agents worked out what is still true here, and how to look it up and judge it (handbook.pointer). The
     # wall says what is happening in this checkout this hour; the Hub says what is still true next month. A pointer, not the
     # entries: the agent has a shell and searches for what its work turns on.

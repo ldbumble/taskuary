@@ -54,7 +54,7 @@ def test_a_long_task_is_compacted_and_still_names_its_earlier_decisions():
     # ...nothing new is stored, and nothing goes around LEARNED.md: the chat keeps every turn, compaction is only what the model reads
     assert len(s.list_comments(tid, internal=True)) == before and len(general.chat_rows(s, tid)) == 63
     lf.assert_not_called()
-    assert not [n for n in s.doc_names() if n not in ('soul', 'job', 'agent', 'coding', 'digest', 'learned', 'triage', 'style', 'counsel',
+    assert not [n for n in s.doc_names() if n not in ('soul', 'agents', 'job', 'agent', 'coding', 'digest', 'learned', 'triage', 'style', 'counsel',
                                                       'researcher', 'analyst', 'coordinator', 'marketer', 'trader', 'assistant')]
 
 

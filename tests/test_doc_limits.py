@@ -28,6 +28,14 @@ class BudgetTests(unittest.TestCase):
         self.assertEqual(doclimits.limit(s, 'counsel')['past'], doclimits.WHOLE)          # warned, never sliced (PW-258)
         for gone in ('agent', 'coding'): self.assertIsNone(doclimits.limit(s, gone))      # no agent reads them (2026-11-23)
 
+    def test_agents_md_is_kept_short_and_the_shipped_text_fits(self):
+        """AGENTS.md (the owner, 2026-11-23) is a few general sentences, never a rulebook: the meter caps it where the agents' reader cuts it."""
+        from taskuary import selfclose
+        s = MemoryStore(); lim = doclimits.limit(s, 'agents')
+        self.assertEqual((lim['chars'], lim['flat'], lim['past']), (selfclose.AGENTS_CHARS, True, doclimits.CUT))
+        self.assertLessEqual(lim['chars'], 1000)
+        self.assertLess(len(selfclose.ONE_SENTENCE), lim['chars'] * .9)
+
     def test_the_seed_ceiling_leaves_room_on_a_windows_command_line(self):
         # CreateProcessW takes 32,767 UTF-16 units, NUL included; the exe, the flags and list2cmdline's escapes share it with the seed
         self.assertLessEqual(terminal.SEED_CEILING + 4000, 32767)

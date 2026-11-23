@@ -1957,7 +1957,7 @@ def prompt_parts(store, tid: int, turn: bool = False, upto: int = None) -> tuple
     dock = is_dock(task)
     # WHAT AN AGENT GETS IS CONTEXT, TOOLS AND ONE SENTENCE (the owner, 2026-11-23: "code should never tell an agent what to do ... just build
     # it like a normal assistant"): who the owner is, how he writes, what is certified about his systems, his repositories, the task's own
-    # input - and selfclose.ONE_SENTENCE. What it can DO is its tools, each saying how it is used; AGENT.md's rules, the profile layer, the
+    # input - and his AGENTS.md (selfclose.guidance). What it can DO is its tools, each saying how it is used; AGENT.md's rules, the profile layer, the
     # playbook menu and the how-to sections that rode here are gone. Only security is said as code: the fence (terminal.FENCE_LINE)
     from . import brief as _brief, selfclose
     from .terminal import FENCE_LINE
@@ -1974,7 +1974,7 @@ def prompt_parts(store, tid: int, turn: bool = False, upto: int = None) -> tuple
     known = '' if outsider else learned_block(store, tid)
     late = [known, '' if outsider else voice_block(store, tid), today_line(), people_line(store, tid)]
     who = 'the Taskuary general-work assistant' if dock else "the owner's assistant on this task in Taskuary"
-    system = ((f'{owner_bg}\n\n' if owner_bg else '') + f'You are {who}. {selfclose.ONE_SENTENCE}\n{FENCE_LINE}'
+    system = ((f'{owner_bg}\n\n' if owner_bg else '') + f'You are {who}. {selfclose.guidance(store)}\n{FENCE_LINE}'
               + ('' if outsider else f' {selfclose.SECRET_LINE}')
               + (f'\n\n{layer}' if layer else '')
               + (f'\n\nHOW THE OWNER WRITES (STYLE.md)\n{counsel}' if counsel else ''))

@@ -301,13 +301,21 @@ def card_said(out: dict) -> str:
 CARD_TAIL = ('It is an action card on this task now, the owner\'s to press: when they press it Taskuary runs it and tells you what happened. '
              'The rest of the job is not held by it.')
 # THE ONE SENTENCE AN AGENT IS TOLD (the owner, 2026-11-23: "code should never tell an agent what to do ... don't bother users unless we need
-# them for approval to send email, login to something"): everything else it gets is context and tools, each tool saying how it is used
-ONE_SENTENCE = ("Do what is asked of you; when a step needs the owner's yes or something only they can give, it goes to them as an action card "
-                "(an act you set up or run that needs their press becomes one; a fact only they have is ask_owner) - otherwise do not bother them. "
-                # ...THE SECOND OF THE TWO SENTENCES THE REPO ALLOWS (the owner, 2026-11-23: "for everyone, in the agents' instructions"): what
-                # reads faster as a picture is shown as one, compact, in the flow of the chat
-                "Whenever numbers, a comparison, a list or a status would read faster as a view, show it in the chat with `show` - kept compact, "
-                "in the flow of your answer.")
+# them for approval to send email, login to something") - and the second beside it ("for everyone, in the agents' instructions"): what reads
+# faster as a picture is shown as one, compact, in the flow of the chat. Everything else an agent gets is context and tools.
+# ...AND THEY ARE HIS FILE (the owner, 2026-11-23): AGENTS.md under About you -> Docs, shipped as templates/agents.md, read by every agent on
+# every AI at its next turn (guidance). Kept short by the Docs meter (doclimits, AGENTS_CHARS) so it never grows back into a rulebook. Only
+# security stays in code, outside his text: the fence (terminal.FENCE_LINE), SECRET_LINE below, and the gates.
+from pathlib import Path as _Path
+AGENTS_DOC, AGENTS_CHARS = 'agents', 800
+def flat(t: str) -> str:
+    "The text as a session receives it, docMeter.flatten line for line: headings unmarked, blank lines dropped, one space between everything"
+    ls = [re.sub(r'^[ #*-]+|[ #*-]+$', '', l).strip() if re.match(r'\s*#', l) else l.strip() for l in str(t or '').splitlines() if l.strip()]
+    return ' '.join(' '.join(ls).split())
+ONE_SENTENCE = flat((_Path(__file__).parent / 'templates' / f'{AGENTS_DOC}.md').read_text(encoding='utf-8'))      # the shipped text
+def guidance(store) -> str:
+    "What every agent is told about how to work: AGENTS.md as the owner keeps it, cut at AGENTS_CHARS - the shipped text when it is empty, never none"
+    return flat(store.doc(AGENTS_DOC) or '')[:AGENTS_CHARS].strip() or ONE_SENTENCE
 # ...and the one rule beside it, which is security: a secret found in his files goes out only on his press (the walk, 2026-11-04)
 SECRET_LINE = "A login or secret you find in the owner's files goes only in the draft that needs it - never in your answer, steps or summary."
 # ...and WHERE THE OWNER CLOSES IT (no CHAT_LINE: nobody wrote in, or the owner keeps the task to finish): the agent said "I couldn't

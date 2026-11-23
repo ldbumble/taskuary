@@ -183,6 +183,10 @@ TOOLS = {
                               "correct a reply, just propose the new one; an email IN PLACE of another is the new one's `replaces` - "
                               "one call, one Send left.",
                        _S({'why': _STR, 'which': _STR}, ('why',)), ('POST', '/api/agent/withdraw-draft')),
+    'keep_card': ('own', "A card the owner's newest line or a new message greyed, that still stands as it is: it comes back under the "
+                         "newest line, the same words and envelope, for his press - no new proposal. `which`: its review id as the screen "
+                         "fact names it (a card of many: 'rv1 + rv2'). One the input changed: propose its new version instead.",
+                  _S({'which': _STR}, ('which',)), ('GET', '/api/tasks/1')),
     # ...`slot` (the agent walk, 2026-11-10): triage had put "an email to Ray Colton" on the task, to draft; this tool took an address and
     # no slot, so the agent's email stood as a second card beside the empty one. The agent names the line it fills - no name is matched here
     'propose_email': ('propose', "Draft an email this task needs. `slot`: the id of the checklist line this email is (\"-> email to ..., "
@@ -310,6 +314,7 @@ SHORT = {
     'propose_reply': "Set up this task's reply for the owner's Send.",
     'reply_not_needed': 'The reply waiting here is no longer needed; say why.',
     'withdraw_draft': 'Take back a reply, email or proposal you set up that has not gone out.',
+    'keep_card': 'Bring back a card greyed by the newest input, as it was, under that input.',
     'propose_email': "Draft an email for the owner's Send - several at once in `items`.",
     'sign_form': "Fill and sign a PDF form with the owner's saved signature.",
     'answer_invite': "Answer this task's meeting invite: accept, decline or propose.",
@@ -648,6 +653,9 @@ def _call(store, tid: int, name: str, args: dict, doors: dict, skip=()) -> str:
         return _out(repochoice.says_found(repochoice.find(store, str(a.get('query') or '')), repochoice.folders(store)))
     if name == 'reply_not_needed': return _j(doors['not_needed'](tid, str(a.get('why') or '')))
     if name == 'withdraw_draft': return _j(doors['withdraw'](tid, str(a.get('why') or ''), str(a.get('which') or '')))
+    if name == 'keep_card':
+        from . import cardqueue
+        return _j(cardqueue.keep(store, tid, a.get('which'), 'agent'))
     if name == 'propose_reply':
         who = {k: a[k] for k in ('answers', 'only', 'cc', 'why_to') if a.get(k) not in (None, '')}
         was, files = verdicts.unsent(store, tid), attached(store, tid, a.get('attach'))

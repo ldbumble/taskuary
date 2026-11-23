@@ -136,6 +136,44 @@ def unheard(store, tid: int) -> bool:
         "SELECT * FROM review WHERE TaskId=? AND Status IN ('approved','edited') AND DecidedAt>?", (int(tid), _last_answer(store, int(tid)) or '')))
 
 
+# A CARD HIS INPUT GREYED THAT STILL STANDS COMES BACK UNDER IT AS IT WAS (the owner, 2026-11-23 - walk 6: the same three posts proposed four
+# times, each a model call and one more grey copy, and a reply to Paula greyed by Gail's unrelated message). Every input greys what waits
+# (proposals.set_aside_drafts) and the agent's next turn raises again, under the newest line, each card that still stands - the same card,
+# by this one verb for every kind, so nothing live ever sits above his newest line
+KEEP = ('Kept: {ids} stand{s} again under the newest line, as {it} was - nothing was rewritten.')
+LIKE, MORE = ('MessageId', 'RunId', 'Kind', 'DraftText', 'Reason', 'Deliver', 'Origin'), ('AnswersMid', 'Instructions', 'FilesPromised', 'DraftBy', 'DraftWhy')
+def keep(store, tid: int, which, by: str = 'agent') -> dict:
+    """Raise again each greyed card `which` names ('rv12 + rv13') on task `tid` as a new card, the same words and envelope, drawn under the
+    newest line. Never one that went, was turned down or is live; a held step is run again instead (its gate holds it anew)."""
+    import re
+    from . import bulkcard
+    from .proposals import HELD_ACTS, SET_ASIDE, _action
+    ids = list(dict.fromkeys(int(x) for x in re.findall(r'\d+', str(which or ''))))
+    if not ids: return {'ok': False, 'why': 'name the greyed card: `which` is its review id as the screen fact names it (rv12; a card of many: rv12 + rv13)'}
+    kept, bad, batch = {}, [], {}
+    for i in ids:
+        r = store.get_review(i)
+        if not r or r.get('TaskId') != int(tid): bad.append(f'rv{i}: no card of this task has that id'); continue
+        if not (r['Status'] == 'superseded' and r.get('DecideNote') == SET_ASIDE):
+            bad.append(f"rv{i}: not greyed by an input ({_card_status(r)}) - only a greyed card is kept; raise a new one where it is still needed"); continue
+        if r['Kind'] == 'action' and _action(r) in HELD_ACTS: bad.append(f'rv{i}: a step held for his press - run it again and Taskuary holds it anew'); continue
+        new = store.add_review({**{k: r.get(k) for k in LIKE}, 'TaskId': int(tid), 'Status': 'pending'})
+        rest = {k: r.get(k) for k in MORE}
+        if r.get('Batch'): rest['Batch'] = batch.setdefault(r['Batch'], bulkcard.new_key())
+        # ...written now: a card is older than an input by when its words were written (proposals._older), so the kept one stands after it
+        store._exec(f"UPDATE review SET DraftAt=CreatedAt, {', '.join(f'{k}=?' for k in rest)} WHERE ReviewId=?", (*rest.values(), new))
+        store._review_changed(new); kept[i] = new
+    if kept: store.audit('task', int(tid), 'cards_kept', by, 'agent', {'kept': {str(k): v for k, v in kept.items()}})
+    one = len(kept) == 1
+    says = KEEP.format(ids=' + '.join(f'rv{v}' for v in kept.values()), s='s' if one else '', it='it' if one else 'they')
+    return {'ok': bool(kept), **({'kept': {f'rv{k}': f'rv{v}' for k, v in kept.items()}, 'says': says} if kept else {}), **({'why': '; '.join(bad)} if bad else {})}
+
+
+def _card_status(r) -> str:
+    from .conversation import _card
+    return {'pending': 'it still waits for his press', 'superseded': 'taken back or replaced'}.get(s := _card(r)['status'], s.replace('_', ' '))
+
+
 def state(store, tid: int) -> dict: return fresh(store, ('state', int(tid)), lambda: _state(store, tid))
 
 
@@ -238,8 +276,9 @@ def line(s: dict) -> str:
 
 
 SCREEN_HEAD = ("WHAT THE OWNER'S SCREEN SHOWS ON THIS TASK NOW, AND WHAT CAME OF EACH CARD (Taskuary's record - a card it does not name is not "
-               'on his screen; never say otherwise, and name a card by what it is, never by where it stands). Take back or replace one the newest '
-               'message changes; one greyed or turned down is raised again only as a new card:')
+               'on his screen; never say otherwise, and name a card by what it is, never by where it stands). Every input greys what waited: '
+               'one greyed that still stands, keep_card it - it comes back as it was under the newest line; one the input changes, raise its new '
+               'version; one turned down or failed is raised again only as a new card:')
 NOTHING = 'Nothing waits for his press.'
 SETTLED = 6                     # the settled cards told, newest last: enough that a sent letter is never drafted again
 

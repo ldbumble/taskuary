@@ -603,12 +603,10 @@ def held_pending(store, tid) -> dict | None:
 # old news once you move on to next one"). ONE RULE, every card kind and every agent: a card waiting for the owner's press is live from the turn
 # that raised it until the conversation moves on - the owner's next line on the task, or the agent's next turn begun for anything but that
 # card's own press. Then it is settled as passed: kept where it stood as its record, never pressable again, and its agent told once
-# (passed_since) that it is old news and to raise it again if the step is still wanted. Each kind had its own road or none: a held step
-# went past only on a pty's prompt hook, a page hand-over on the owner's words, and a proposal, a post or an agent's routine stayed
-# pressable for ever under turns that had moved on.
-# A REPLY OR EMAIL DRAFT IS THE AGENT'S TO RE-DECIDE (496eefb72 wakes it on the owner's line): it keeps, replaces or withdraws it in that
-# turn (general.latest_block's WITHDRAW_LINE), and the page greys it while that turn runs - only actions are passed by the line itself.
-# Nor the task's own finish (its close-out, its playbook): Taskuary raises those when the work ends, no turn of the agent's does
+# (cardqueue.screen) that it was greyed; its next turn brings back under the newest line each card that still stands (cardqueue.keep: the
+# same card, no new proposal) and raises a new version of one the input changed - so nothing live ever sits above his newest line
+# (the owner, 2026-11-23). Each kind had its own road or none: a held step went past only on a pty's prompt hook, a page hand-over on the
+# owner's words, and a proposal, a post or an agent's routine stayed pressable for ever under turns that had moved on.
 SET_ASIDE = 'set aside when you moved on'
 LAND = 'land'                  # move_on's mark for the landing question (landing.pass_over) among the review ids
 
@@ -639,26 +637,21 @@ def finished_without(store, tid: int) -> list:
 
 
 def move_on(store, tid, before: str = None) -> list:
-    """THE CONVERSATION ON TASK `tid` MOVED ON: a permission the agent waits on is passed (permissions.set_aside), and the landing question.
-    AN ACTION CARD IS NOT (the owner, 2026-11-11, of a held step with a long query he asked a question about: "the question has 2 approve
-    buttons? i thought we got rid of those??" - his line set the card aside, greyed, and the agent raised the step again beside it): a card
-    that waits for his press stays lit until he presses it, a newer one takes its place or its agent withdraws it - as a reply does. A row an
-    earlier build set aside keeps its record (passed). The marks passed."""
+    """THE CONVERSATION ON TASK `tid` MOVED ON: a permission the agent waits on is passed (permissions.set_aside). The cards are greyed by the
+    input itself, one rule for every kind (set_aside_drafts). -> [] (the cards it passed: none)."""
     if not tid: return []
-    out = []
     try:
         from . import permissions
         permissions.set_aside(store, int(tid))
     except Exception as e: logger.debug(f'task {tid}: a permission waiting was not set aside - {e}')
-    if out: store.audit('task', tid, 'cards_passed', 'taskuary', 'system', {'rids': out})
-    return out
+    return []
 
 
 def set_aside_drafts(store, tid: int, before: float, actions: float = 0) -> list:
     """A CARD THE CHAT MOVED PAST IS SET ASIDE FOR GOOD AS ITS AGENT HEARS THE INPUT (the owner, 2026-11-16, said ~20 times: "The second a new
     prompt comes in, from manual or email, it should gray out the action card but never move"): every card older than the input at `before`
     (`_older` - one rule, every kind), and the landing question, stays where it stood, greyed, and its agent is told it was set aside because
-    the chat moved on (cardqueue.screen - never that he declined), to raise it again under the newest line if it is still wanted.
+    the chat moved on (cardqueue.screen - never that he declined), to bring it back under the newest line if it still stands (cardqueue.keep).
     From the moment the input came in until then every surface already reads it greyed (written_past). Every road hears an input through
     conversation.hear, which calls this. `actions`: the old split by kind, read as the same input. -> the review ids (and LAND)."""
     from . import landing
@@ -739,9 +732,6 @@ def _written_past(store, tid: int) -> set:
     return set(_older(store, tid, moved_on(store, tid, ep(first['a']))))      # ...an input in a card's own second moves nothing (_older)
 
 
-# what an agent is told to do about a step that is no longer on his screen - one sentence, every road
-AGAIN = ('If a step is still needed, raise it again as a new card (a step held for their press: run it again - Taskuary holds it anew) and '
-         'go on with the job.')
 def passed_why(store, r: dict) -> str:
     """WHY A CARD STANDS GREYED, IN WHAT HAPPENED (the owner's live task, 2026-11-16: "there was no earlier draft. This is broken?" - he typed a
     line while the agent worked, the turn that never read it finished its draft after it, and the draft stood greyed reading "set aside when

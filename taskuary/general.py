@@ -3607,7 +3607,7 @@ class GeneralSession:
         # ...a marker a session still writes (the road before hand_over) goes the one road hand_over takes
         if signing is not None or turn is not None:
             from . import browserview
-            try: browserview.hand_over(self.store, self.task_id, turn or '', signing or '', self.sid)
+            try: browserview.hand_over(self.store, self.task_id, turn or '', signing or '', self.sid, sign_in=signing is not None)
             except Exception as e: logger.warning(f'task {self.task_id}: the step the agent handed over was not raised - {e}')
         # A TURN THAT ENDED SHORT is not one waiting on the owner: read by the turn judge (hooks.judge_ended), it wakes the agent once to
         # do what it said it would - never a failure in the chat (the owner, 2026-11-05: "failure means nothing to the user")

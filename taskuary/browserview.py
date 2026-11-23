@@ -740,9 +740,10 @@ def handing(store, tid: int) -> dict | None:
     return next((r for r in ws.open_requests(ws.events(store, int(tid))) if ws.ask_of(r['RequestId'])['ask'] in ('signin', 'turn')), None)
 
 
-def hand_over(store, tid: int, what: str = '', site: str = '', sid: str = None, watch=...) -> dict:
+def hand_over(store, tid: int, what: str = '', site: str = '', sid: str = None, watch=..., sign_in: bool = False) -> dict:
     """Hand task `tid`'s owner the step `what` on its browser's page - done by Taskuary itself where it can (a saved sign-in), else one card.
-    `site`: the domain the agent names for a sign-in ('new:<site>' a sign-up, as the old marker claimed it). -> {ok, says} or {ok: False, why}."""
+    `site`: the domain the agent names for a sign-in ('new:<site>' a sign-up, as the old marker claimed it). `sign_in`: a sign-in that names no
+    site - a bare marker, or a turn that ended on a login form - read off the page (signin.needs). -> {ok, says} or {ok: False, why}."""
     from . import signin, workerstate as ws
     what, site = ' '.join(str(what or '').split())[:300], ' '.join(str(site or '').split())[:200]
     sid = sid or getattr(ws._live(int(tid)), 'sid', None)
@@ -750,7 +751,7 @@ def hand_over(store, tid: int, what: str = '', site: str = '', sid: str = None, 
     if (h := handing(store, tid)):
         return {'ok': False, 'why': f'one step is with him already ("{h.get("Text")}") - one at a time: go on with the rest, '
                                     'and hand this one over once he is done'}
-    if site: signin.needs(store, tid, sid, site, what=what, watch=watch)
+    if site or sign_in: signin.needs(store, tid, sid, site, what=what, watch=watch)
     else: your_turn(store, tid, sid, what, watch=watch)
     # ...nothing raised for him: the saved sign-in is going in (signin._auto), and its end tells the agent
     if not (h := handing(store, tid)): return {'ok': True, 'auto': True, 'says': SIGNING.format(site=signin.clean_claim(site) or 'the site')}

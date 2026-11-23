@@ -131,7 +131,7 @@ const STEPS = {
   // mail from his address, which the inbound road rightly does not take as his (a From line is anyone's to write)
   async own(s) {
     const r = await api("/api/fixture/own-reply", { id: `own-${Date.now()}`, channel: "email", conversation: s.conversation || `goal-${Date.now()}`,
-      subject: s.subject || "", body: s.body, to: s.to || [], sent: new Date().toISOString().slice(0, 19).replace("T", " ") });
+      subject: s.subject || "", body: s.body, to: s.to || [], sent: new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 19).replace("T", " ") });   // ...his local time, as his mailbox stamps it
     await sleep(s.settle ?? 3000); return { problem: r && r.ok === false ? `the own reply was refused: ${JSON.stringify(r).slice(0, 200)}` : "" };
   },
   async wait(s) { await sleep((s.s || 5) * 1000); return {}; },

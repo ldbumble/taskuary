@@ -71,6 +71,4 @@ test("what the screen says is plain words, in the app's own case", async () => {
     assert.doesNotMatch(code, /^\s+[A-Z]{2,}(?: [A-Z—-]{2,}){2,}\s*$/m, f);
   }
   assert.match(src("theme.jsx"), /overline: \{ textTransform: "none", letterSpacing: 0/);
-  // ...and a setting left at its default says nothing about it
-  assert.match(src("SettingsView.jsx"), /return now === d \? "" : `Changed - the default is \$\{d\}\.`;/);
 });

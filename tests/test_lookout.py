@@ -552,3 +552,21 @@ def test_every_run_leaves_a_line_and_three_with_nothing_say_so_once_on_the_rail(
     assert any(x.get('idea') == quiet[0]['IdeaId'] for x in funnel.pile(s, force=True, quiet=True)['items']), 'on the rail'
     assert lookout.tick(s, brain({'ideas': [idea('money', 'Invoice 4471 billed twice', [f'msg{a}'])]}), force=True)['raised']
     assert not s.get_setting(lookout.QUIET_KEY), 'something raised: the next quiet spell may be said again'
+    # ...and the run lines open from the app, newest first
+    from fastapi.testclient import TestClient
+    from taskuary import server
+    with pytest.MonkeyPatch.context() as m:
+        m.setattr(server, 'store', s)
+        got = TestClient(server.app).get('/api/advisor/lookout').json()
+    assert len(got['runs']) == 5 and 'raised 1' in got['runs'][0] and 'the number 99 is not in what it cites' in got['runs'][1]
+
+
+def test_a_task_agent_has_a_note_lead_tool_whose_door_is_its_own_and_it_reaches_the_advisor():
+    from taskuary import agenttools, guard
+    assert 'note_lead' in {t['name'] for t in agenttools.listing()} and agenttools.TOOLS['note_lead'][0] == 'own'
+    assert guard.classify(*agenttools.TOOLS['note_lead'][3])[0] == 'agent', 'an agent may call it'
+    s, ids = world()
+    t = Factory(s).task(title='Pay the Vendor billing invoice')
+    doors = {'note_lead': lambda tid, text, refs: lookout.note_lead(s, tid, text, refs)}
+    agenttools.call(s, t, 'note_lead', {'text': 'Vendor billing sent invoice 4471 twice this month', 'refs': [f"msg{ids['dup'][0]}"]}, doors)
+    assert [l['text'] for l in lookout.leads(s)] == ['Vendor billing sent invoice 4471 twice this month']

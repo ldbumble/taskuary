@@ -6308,6 +6308,32 @@ def agent_note_peers(body: AgentNoteBody, request: Request):
     except PermissionError as e: raise HTTPException(403, str(e))
     except ValueError as e: raise HTTPException(422, str(e))
 
+class AgentLeadBody(BaseModel): task_id: int; text: str; refs: list[str] = []
+
+@app.post('/api/agent/note-lead')
+def agent_note_lead(body: AgentLeadBody, request: Request):
+    """The note_lead tool: something the session noticed beyond its OWN task, kept for the Advisor's next run (lookout.note_lead) - a
+    pointer it reads for itself, never evidence. Never from a stranger's task: what a stranger wrote does not steer what the owner is told."""
+    from . import lookout, origin
+    _own_task_only(request, body.task_id)
+    if not store.get_task(body.task_id): raise HTTPException(404, 'no such task')
+    if origin.of_task(store, body.task_id)[0] == 'stranger':
+        raise HTTPException(403, "not kept: this task carries a message from someone the owner has not vouched for. Carry on with the task.")
+    try: out = lookout.note_lead(store, body.task_id, body.text, body.refs)
+    except ValueError as e: raise HTTPException(422, str(e))
+    store.audit('task', body.task_id, 'agent_noted_lead', 'agent', 'agent', {'text': body.text[:400]})
+    return out | {'next': 'carry on with the task - the Advisor looks into it on its next run'}
+
+@app.get('/api/advisor/lookout')
+def advisor_lookout_runs():
+    """The Advisor's runs for ideas about the owner's job, newest first, each in one line: what it looked at closely and read, what it
+    raised, and what it held and why (lookout.run_line) - and the last skip, with its reason."""
+    from . import lookout
+    try: skip = json.loads(store.get_setting(lookout.SKIP_KEY) or '{}') or {}
+    except ValueError: skip = {}
+    return {'runs': [lookout.run_line(r) for r in lookout.runs(store)], 'skipped': skip,
+            'leads': len(lookout.leads(store))}
+
 class AgentUseRepoBody(BaseModel): task_id: int; path_or_name: str; why: str = ''
 
 @app.post('/api/agent/use-repo')
@@ -6605,6 +6631,7 @@ async def mcp_rpc(request: Request, task: int = 0):
              'meeting': lambda tid, a: agent_meeting(AgentMeetingBody(**{**a, 'task_id': tid}), request),
              'share': lambda tid, a: agent_share(AgentShareBody(**{**a, 'task_id': tid}), request),
              'note_peers': lambda tid, to, text: agent_note_peers(AgentNoteBody(task_id=tid, to=to, text=text), request),
+             'note_lead': lambda tid, text, refs: agent_note_lead(AgentLeadBody(task_id=tid, text=text, refs=refs), request),
              'propose_land': lambda tid, how, why, deploy='': agent_propose_land(AgentLandBody(task_id=tid, how=how, why=why, deploy=deploy), request),
              'use_repo': lambda tid, target, why: agent_use_repo(AgentUseRepoBody(task_id=tid, path_or_name=target, why=why), request)}
     def run(name, args):

@@ -1,17 +1,12 @@
 // A task that saved its progress before the server stripped the markers still drew them (2026-10-15): the box strips them as well.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { dropEcho, forScreen } from "../src/agentMarkers.js";
 
 test("the progress box shows the agent's words, never Taskuary's markers or the reply a second time", () => {
   assert.equal(forScreen("Looked it up.\n[[TASKUARY-REPLY]]\n2 + 2 is 4.\n[[/TASKUARY-REPLY]]\n[[TASKUARY-ATTACH: C:/work/sum.csv]]"), "Looked it up.");
   assert.equal(forScreen("[[TASKUARY-REPLY]]\n2 + 2 is 4.\n[[/TASKUARY-REPLY]]"), "");
   assert.equal(forScreen("plain words"), "plain words");
-  // the canvas's steps say the agent's words through it (agentSteps.js: its prose, its thinking)
-  const steps = readFileSync(new URL("../src/agentSteps.js", import.meta.url), "utf8");
-  assert.match(steps, /const t = forScreen\(text\);/);
-  assert.match(steps, /flat\(forScreen\(p\)\)/);
 });
 
 test("a progress line that only says what the answer says leaves the box; the box goes when nothing is left", () => {

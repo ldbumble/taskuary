@@ -24,9 +24,9 @@ def test_each_idea_is_graded_by_the_owners_own_act(tmp_path):
     xs = I.ideas(I.connect(tmp_path), DAY)
     assert {i['IdeaId']: i['grade'] for i in xs} == {1: 'taken', 2: 'handled', 3: 'wrong', 4: 'walked', 5: 'taken', 6: 'pending'}
     t = I.tally(xs)
-    assert (t['taken'], t['handled'], t['wrong'], t['walked'], t['pending'], t['pct']) == (2, 1, 1, 1, 1, 60)
+    assert (t['taken'], t['handled'], t['wrong'], t['walked'], t['pending'], t['pct']) == (2, 1, 1, 1, 1, 75)   # walked past is shown, not graded (2026-11-23)
     out = I.report(xs, DAY)
-    assert out.startswith('Advisor ideas: 60% useful') and 'promise' in out
+    assert out.startswith('Advisor ideas: 75% useful') and 'promise' in out
 
 
 def test_the_tool_never_writes_to_the_home_it_measures(tmp_path):

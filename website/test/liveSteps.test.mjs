@@ -52,6 +52,20 @@ test("the turn's stamp: working m:ss while it runs, ran once it answered, nothin
   assert.equal(clockText(3_725_000), "1:02:05");
 });
 
+// THE OWNER, 2026-11-23: a head read "ran 1m 15s" while its steps went on for five minutes - the work went on in turns drawn under that head
+// (a second turn of the session, a wake, its answer filed after), and the head counted its own first part only
+test("a head's clock is every turn drawn under it, each to its last step - never the first part, never the gap before a wake", async () => {
+  const { folds, ranUnder } = await import("../src/chatStream.js");
+  const turn = (id, state, ran) => ({ kind: "turn", id, state, ...(ran != null ? { ran } : {}) });
+  const items = [{ kind: "line", id: "l1" }, turn("t1", "done", 75), turn("t2", "done", 180), turn("t3", "done", 45), { kind: "line", id: "l2" },
+    turn("t4", "failed", 10), turn("t5", "done", 20), turn("t6", "working")];
+  assert.deepEqual(items.map((x, i) => folds(items[i - 1], x)), [false, false, true, true, false, false, false, false]);
+  assert.equal(ranUnder(items, 1), 300, "75 + 180 + 45: all of it under the one head");
+  assert.equal(turnStamp({ start: 1, end: 1 + ranUnder(items, 1) * 1000 }), "ran 5m 0s");
+  assert.equal(ranUnder(items, 5), 10, "a failed turn's head is its own - Try again's turn stands under it with its own");
+  assert.equal(ranUnder(items, 6), 20);
+});
+
 
 // THE CLOCK COUNTS FROM THE PRESS AND NEVER RESTARTS (the owner, 2026-11-10; the recorded coding walk: "ran 9s" under his line while the adapter
 // started, then "ran 2s" once the turn's own row came - its clock from the turn's first step): a running turn counts from the earlier of its own

@@ -18,7 +18,7 @@ import { holdUnsent } from "./unsent.js";
 import { howToOpen } from "./bugReportOpen.js";
 import { baseName } from "./agentSteps.js";
 import { AgentSteps } from "./AgentStepRows.jsx";
-import { chatSource, checkBackDue, waitingShown, eventsOf, hasParts, isPastCard, standing, heldAtEnd, turnParts, workCount, foldLine, paintable, withMine, waitingChips, workingLine, waitingOn, askTurn, onYouTurn, askedFirst } from "./chatStream.js";
+import { chatSource, checkBackDue, waitingShown, eventsOf, hasParts, isPastCard, standing, heldAtEnd, turnParts, workCount, folds, ranUnder, foldLine, paintable, withMine, waitingChips, workingLine, waitingOn, askTurn, onYouTurn, askedFirst } from "./chatStream.js";
 import { stepLabel } from "./agentSteps.js";
 export { checkBackDue };
 import { detailFor, ownDetail, useOwnDetail } from "./chatDetail.js";
@@ -394,14 +394,15 @@ export function useConversation(tid, on) {
 // showed no time - its `at` was 1795135... and read as no date), else when it began
 const stampOf = (v) => { const d = typeof v === "number" ? new Date(v * 1000) : v ? new Date(String(v).replace(" ", "T")) : null; return d && !Number.isNaN(+d) ? d : null; };
 export const turnAt = (t) => stampOf(t?.at) || stampOf(t?.started);
-const TurnTime = ({ t }) => {
-  const at = turnAt(t), end = t.ended ? new Date(t.ended * 1000) : null;
+// ...and how long it ran: all of it, every turn drawn under this head (chatStream.ranUnder)
+const TurnTime = ({ t, secs }) => {
+  const at = turnAt(t);
   if (!at) return null;
-  const ran = t.started && end ? turnStamp({ start: t.started * 1000, end }) : "";
+  const ran = secs > 0 ? turnStamp({ start: at, end: +at + secs * 1000 }) : "";
   return <span data-tq-ran="" style={{ textTransform: "none", letterSpacing: 0, fontWeight: 500, marginLeft: 8 }}>· {when(at)}{ran ? ` · ${ran}` : ""}</span>;
 };
 // `later`: a turn after the chat's first - its agent starting again is the work going on, never "waiting for the agent" (workingLine)
-const ConvTurn = ({ t, more, cards, name, ask = null, later = false, owes = false, newest = false }) => {
+const ConvTurn = ({ t, more, ran = 0, cards, name, ask = null, later = false, owes = false, newest = false }) => {
   const live = t.state === "working" || t.state === "starting";
   const parts = useMemo(() => turnParts(eventsOf(t.steps || [], live), { answer: t.text || "", live }), [t.steps, t.text, live]);
   const key = t.answer || t.id, at = useTurnOutputs(key), shown = React.useContext(ShownCtx)[key];
@@ -425,7 +426,7 @@ const ConvTurn = ({ t, more, cards, name, ask = null, later = false, owes = fals
   if (quiet) return null;
   return <div className={`tq-aui-message tq-aui-agent${words && !live ? " tq-copy-host" : ""}${more ? " tq-aui-agent-more" : ""}`} data-tq-item={t.id} data-tq-chat-line={key} data-tq-turn={t.state}>
     {!!words && !live && <CopyCorner text={words} label="Copy this answer" />}
-    {!more && <div className="tq-aui-role">{name}{live ? <RunClock start={turnStart(t)} at={turnAt(t)} /> : <TurnTime t={t} />}</div>}
+    {!more && <div className="tq-aui-role">{name}{live ? <RunClock start={turnStart(t)} at={turnAt(t)} /> : <TurnTime t={t} secs={ran} />}</div>}
     <div className="tq-aui-agent-body">
       <TurnWorkView data={{ parts, level: t.level }} now={live} k={t.id} />
       {/* ...WHAT IT MADE, WHERE IT STOOD WHILE IT WORKED (the API walk, 2026-11-20): under its work, above its words - an answer that comes at the
@@ -528,7 +529,7 @@ function Conversation({ items, nodes = [], posts = [], reviews = [], next = null
     // clock, no Stop x, and the head over it read that turn's "ran 27s"): only a finished turn after a turn folds into it
     // ...AND NEVER INTO ONE THAT FAILED (the Continue round, 2026-11-18): Try again's turn stands under the failure it is past, and folded, its head
     // went the moment it answered - its words left under the failure's head, with no time of their own
-    if (x.kind === "turn") return <ConvTurn key={x.id} t={x} more={prev?.kind === "turn" && prev.state !== "failed" && x.state !== "working" && x.state !== "starting"} name={name} ask={x.id === askAt ? ask : null}
+    if (x.kind === "turn") return <ConvTurn key={x.id} t={x} more={folds(prev, x)} ran={ranUnder(items, i)} name={name} ask={x.id === askAt ? ask : null}
       cards={cardsOf(x)} owes={x.id === owes} later={items.slice(0, i).some((y) => y.kind === "turn")} newest={!items.slice(i + 1).some((y) => y.kind === "turn")} />;
     if (x.kind === "line") return <ConvLine key={x.id} x={x} more={prev?.kind === "line"} />;
     if (x.kind === "arrival") return <div key={x.id} className="tq-aui-message tq-aui-brief" data-tq-item={x.id}><Arrived mail={[x]} prev={prev?.kind === "arrival" ? prev : null} /></div>;

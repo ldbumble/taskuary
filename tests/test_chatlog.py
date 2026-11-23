@@ -59,6 +59,20 @@ def test_a_turn_at_work_draws_its_steps_and_holds_its_card_back():
     assert [c['id'] for c in chatlog.read(s, tid, 'everything')['items'][0]['cards']] == ['r:7']
 
 
+def test_a_turns_run_is_to_the_last_thing_it_did_never_only_to_its_answer():
+    """The owner, 2026-11-23: a head read "ran 1m 15s" while its steps went on for five minutes. The answer filed at 1m 15s ended the turn, and
+    its session went on writing steps under it; a wake after it was a turn of its own, drawn under the same head. Each turn says how long it
+    ran, to its last step (chatlog.run_of) - the page adds up the turns under one head (chatStream.ranUnder)."""
+    s, tid = world()
+    chatlog.put(s, tid, 'turn', 't:1', {'started': 100.0, 'ended': 175.0, 'text': 'Posted it; checking it went up.'}, state='done')
+    for i, at in enumerate((150.0, 260.0, 400.0)): chatlog.put(s, tid, 'step', f's:1:{i}', {'k': 'tool', 'name': 'Bash', 'text': 'look'}, parent='t:1', at=at)
+    chatlog.put(s, tid, 'turn', 't:2', {'started': 400.0, 'ended': 430.0, 'text': 'It is up.'}, state='done')
+    chatlog.put(s, tid, 'turn', 't:3', {'started': 500.0}, state='working')
+    got = {x['id']: x for x in chatlog.read(s, tid, 'everything')['items']}
+    assert (got['t:1']['ran'], got['t:2']['ran']) == (300.0, 30.0), 'to its last step, never to the answer alone'
+    assert 'ran' not in got['t:3'], 'one at work has its running clock'
+
+
 def test_a_summary_block_streamed_across_steps_is_never_drawn():
     """Walk 2, 2026-11-21 (Codex): the reply streamed as said steps, its summary block opening in one and closing three later - each cleaned
     alone, the chat drew '"about": ...' and '_left": false}' as the agent's words."""

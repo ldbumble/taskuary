@@ -269,12 +269,22 @@ def read(store, tid: int, level: str = None, ending: bool = False) -> dict:
             # ...and one taken back (took_back) says so as its step: its words and their summary are no answer
             if any(s.get('took') for s in x['steps']): x['text'] = ''; x.pop('summary', None)
             x['cards'] = [] if r['State'] in LIVE else [_item(k) for k in ks if k['Kind'] in ('card', 'fail') and _drawn(k, lit)]
+            if r['State'] not in LIVE: x['ran'] = run_of(x, ks)
             # ...a turn that ended having said, done and left nothing is no item (a part a line cut off before it did anything)
             if r['State'] not in LIVE and not (x.get('text') or x['steps'] or x['cards'] or x.get('summary') or x.get('fail')): continue
         out.append(x)
     moved_past(store, out, tid)
     lvl = level_of(store, store.get_task(int(tid)) or {}, level)
     return {'rev': n, 'items': [detailed(x, lvl) for x in out], 'level': lvl}
+
+
+def run_of(turn: dict, kids: list) -> float:
+    """HOW LONG A FINISHED TURN RAN, TO THE LAST THING IT DID - the one number its head says (the owner, 2026-11-23: "ran 1m 15s" over steps that
+    went on for five minutes). Its answer ends it (`ended`), but its session can go on writing steps under it after (a second turn of the same
+    session, the work it went on with): those are its run too. Seconds; 0 where it never said when it began."""
+    if not turn.get('started'): return 0.
+    till = max([_when(turn['ended']) if turn.get('ended') else 0., *(float(k['At']) for k in kids if k['Kind'] == 'step' and k.get('At'))])
+    return round(max(0., till - _when(turn['started'])), 1) if till else 0.
 
 
 DRAFTS = ('draft_reply', 'draft')

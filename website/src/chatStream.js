@@ -124,6 +124,16 @@ export function turnParts(events, { answer = "", keepStart = false, live = false
 }
 // what a turn did, counted for its fold's line: "6 steps" - its edits each one
 export const workCount = (parts) => workRows(parts).length;
+// A FINISHED TURN RIGHT AFTER A TURN IS DRAWN UNDER ITS HEAD - the work going on (a second turn of its session, a wake, its answer filed after) - never
+// one after a failure (Try again's turn stands under the failure it is past), never one at work (its own head, its clock and Stop)
+export const folds = (prev, x) => prev?.kind === "turn" && prev.state !== "failed" && x?.kind === "turn" && x.state !== "working" && x.state !== "starting";
+// ...AND THAT HEAD'S CLOCK IS ALL OF IT (the owner, 2026-11-23: "ran 1m 15s" over steps that went on for five minutes): every turn drawn under it,
+// run for run - each to its last step (chatlog.run_of) - so a wake hours later adds its own minutes, never the hours between. Seconds
+export const ranUnder = (items, i) => {
+  let s = 0;
+  for (let j = i; j < (items || []).length && (j === i || folds(items[j - 1], items[j])); j += 1) s += Number(items[j].ran) || 0;
+  return s;
+};
 // ...a helper's own steps among them (walk 5: "4 steps" stood five minutes while the helper under one of them did all the work)
 const withKids = (ss) => ss.filter(isWork).flatMap((s) => [s, ...withKids(s.kids || [])]);
 const workRows = (parts) => (parts || []).flatMap((p) => (p.type === "edit" ? [p] : p.type === "work" ? withKids(p.steps) : []));

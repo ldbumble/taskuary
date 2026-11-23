@@ -396,6 +396,9 @@ def acp_steps(updates: list) -> list:
                 # ...A SERVER'S TOOL AS ITSELF (the owner's live app, 2026-11-19: codex-acp sends one as kind `execute`, its input {server, tool,
                 # arguments} - read as a shell with no command, the row said "Ran a command it did not show" over a reply it drafted)
                 mcp = raw if isinstance(raw := u.get('rawInput'), dict) and raw.get('server') and raw.get('tool') else None
+                if mcp and isinstance(mcp.get('arguments'), dict):        # ...use_tool's as the tool it ran (agenttools.as_called)
+                    from .agenttools import as_called
+                    tool, a = as_called(mcp['server'], mcp['tool'], mcp['arguments']); mcp = {**mcp, 'tool': tool, 'arguments': a}
                 s = by[u.get('toolCallId')] = {'k': 'tool', 'id': str(u.get('toolCallId') or ''), 'at': at,
                                                'args': dict(mcp['arguments']) if mcp and isinstance(mcp.get('arguments'), dict) else {},
                                                'name': f"mcp__{mcp['server']}__{mcp['tool']}" if mcp else

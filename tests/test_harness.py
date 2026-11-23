@@ -154,10 +154,31 @@ def test_the_card_agents_web_search_is_its_models_own_through_the_tool_server(he
 
 def test_a_card_session_is_served_tool_schemas_its_model_takes():
     "Gemini behind the gateway refused the whole turn: propose's parameters were a top-level anyOf, not an OBJECT (the gateway walk, 2026-11-20)."
-    from taskuary import agenttools
+    from taskuary import agenttools, apiagent
     raw = {t['name']: t['inputSchema'] for t in agenttools.listing()}
     fit = {t['name']: t['inputSchema'] for t in agenttools.listing(portable=True)}
-    assert 'anyOf' in raw['propose'] and fit['propose']['type'] == 'object' and 'anyOf' not in fit['propose']
+    assert 'anyOf' in raw['propose'] and apiagent.portable(raw['propose'])['type'] == 'object' and 'anyOf' not in apiagent.portable(raw['propose'])
+    assert all(s['type'] == 'object' and 'anyOf' not in s for s in fit.values())
+
+
+def test_a_card_session_is_listed_the_core_and_runs_the_rest_by_use_tool():
+    """The review, 2026-11-23: an AI card's Codex was sent all ~40 Taskuary schemas (~14k) on every call - no tool search through a gateway.
+    It is listed what apiagent offers up front, and any other tool find_tools named runs through use_tool, read back as that tool."""
+    import json
+    from taskuary import agents, agenttools, apiagent
+    whole, card = agenttools.listing(), agenttools.listing(portable=True)
+    names = {t['name'] for t in card}
+    assert {'find_tools', 'use_tool', 'propose_reply', 'end_turn', 'ask_owner'} <= names and not names & apiagent.LATER
+    assert len(json.dumps(card)) < len(json.dumps(whole)) / 2
+    assert 'use_tool' not in {t['name'] for t in whole}                           # ...a CLI that defers tools itself gets them all, as before
+    ran = []
+    call = {'id': 7, 'method': 'tools/call', 'params': {'name': 'use_tool', 'arguments': {'name': 'remind', 'arguments': '{"when": "tomorrow 9am"}'}}}
+    got = agenttools.rpc(call, lambda n, a: ran.append((n, a)) or 'set', portable=True)
+    assert ran == [('remind', {'when': 'tomorrow 9am'})] and got['result']['isError'] is False
+    assert 'error' in agenttools.rpc({**call, 'params': {'name': 'use_tool', 'arguments': {'name': 'remind'}}}, lambda n, a: 'x', skip=('remind',), portable=True)
+    # ...and the step reads as the tool it ran, never the wrapper
+    c = {'raw': {'server': 'taskuary', 'tool': 'use_tool', 'arguments': {'name': 'propose', 'arguments': {'action': 'pay', 'why': 'due'}}}}
+    assert agents.ACPSteps._call(c) == ('mcp__taskuary__propose', {'action': 'pay', 'why': 'due'})
 
 
 def test_the_cards_models_are_in_codexs_own_catalogue_so_no_metadata_warning_fires(here, monkeypatch):

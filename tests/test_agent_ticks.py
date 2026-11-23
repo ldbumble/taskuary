@@ -139,5 +139,27 @@ class AChatWithNoShellTicksByAMarkTests(unittest.TestCase):
         self.assertEqual(selfclose.tick_markers('Plain [[link]] text'), ('Plain [[link]] text', []))
 
 
+class NeverDoneOverAFailedAct(unittest.TestCase):
+    """HIPAA walk 6: "Summarise the lease, then set up a meeting with Ray next week" was ticked in the same second set_up_meeting answered
+    "No calendar is connected" - the two calls ran side by side - and the phone read "To do - 1 of 1 done". An act that failed in the turn
+    undoes the tick made beside it, and refuses one after it."""
+    def test_a_tick_beside_a_failed_act_is_undone_and_one_after_it_refused(self):
+        import json, time
+        from taskuary import agenttools, conversation
+        s = MemoryStore(); tid, ids = _task(s); item = ids['Check the seat count']
+        conversation.hear(s, tid, turn=True)                                            # ...the turn begins
+        doors = {'tick': lambda t, i, done: {'ok': bool(agent_tick(s, t, i, done)[0]), 'item': i, 'done': done},
+                 'meeting': lambda t, a: {'ok': False, 'says': 'No calendar is connected - connect one.'}}
+        agenttools.call(s, tid, 'tick', {'item': item}, doors)
+        self.assertTrue(next(i for i in s.task_checklist(tid) if i['id'] == item)['done'])
+        agenttools.call(s, tid, 'set_up_meeting', {'with': ['ray@northwind.example'], 'title': 'Lease review'}, doors)
+        self.assertFalse(next(i for i in s.task_checklist(tid) if i['id'] == item)['done'], 'the tick beside the failed act is undone')
+        with self.assertRaises(ValueError) as no: agenttools.call(s, tid, 'tick', {'item': item}, doors)
+        self.assertIn('set_up_meeting failed in this turn', str(no.exception))
+        time.sleep(0.01); conversation.hear(s, tid, turn=True)                         # ...a new turn: the failure is its past
+        agenttools.call(s, tid, 'tick', {'item': item}, doors)
+        self.assertTrue(next(i for i in s.task_checklist(tid) if i['id'] == item)['done'])
+
+
 if __name__ == '__main__':
     unittest.main()

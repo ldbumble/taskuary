@@ -13,7 +13,7 @@ codex_args). The CLI verbs in cli.py stay for a CLI with no MCP.
 
 Results that carry other people's words are fenced (terminal.fence), scrubbed (redact.scrub) and capped, with the cut said in words.
 """
-import json, re
+import json, re, time
 from loguru import logger
 
 from . import words
@@ -407,14 +407,45 @@ def call(store, tid: int, name: str, args: dict, doors: dict, skip=()) -> str:
     with door('tool'): return _card_call(store, tid, name, args, doors, skip)
 
 
+# A TO-DO IS NEVER TICKED DONE OVER ITS FAILED ACT (HIPAA walk 6: "summarise the lease, then set up a meeting with Ray" was ticked in the
+# same second set_up_meeting answered "No calendar is connected", and the phone then read "1 of 1 done"): an act that failed in this turn
+# refuses the tick after it, and undoes the one made beside it
+_FAILED, _TICKED = {}, {}            # (store, task) -> (when, the tool) of its turn's last failed act; -> [(when, to-do id)] it ticked lately
+def _turn_began(store, tid: int) -> float:
+    "When task `tid`'s turn now running began (conversation.hear's mark) - never more than ten minutes ago, whatever road kept none."
+    at = (store._one("SELECT MAX(At) AS a FROM heard WHERE TaskId=? AND Kind='turn'", (int(tid),)) or {}).get('a')
+    return max(float(at or 0), time.time() - 600)
+def _failed(store, tid: int, name: str) -> None:
+    began = _turn_began(store, tid); _FAILED[(id(store), int(tid))] = (time.time(), name)
+    for at, item in _TICKED.pop((id(store), int(tid)), []):
+        if at >= began:
+            try: store.tick_checklist_item(int(tid), item, False, 'taskuary')
+            except Exception as e: logger.debug(f'task {tid}: to-do {item} was not opened again - {e}')
+def _failed_now(store, tid: int) -> str:
+    "The act that failed in task `tid`'s turn now running, by its tool's name - '' for none."
+    got = _FAILED.get((id(store), int(tid)))
+    return got[1] if got and got[0] >= _turn_began(store, tid) else ''
+
+
 def _card_call(store, tid: int, name: str, args: dict, doors: dict, skip=()) -> str:
     args = _arguments(args)
     # ...ONE item is one card, as if given whole (2026-11-17: a lone break_out stood as "1 step - review a few, then do them all", "Approve all 1")
     if TOOLS[name][0] == 'propose' and isinstance((args or {}).get('items'), list) and len(args['items']) == 1 and isinstance(args['items'][0], dict):
         args = {**{k: v for k, v in args.items() if k != 'items'}, **args['items'][0]}
-    if TOOLS[name][0] == 'propose' and isinstance((args or {}).get('items'), list): out = _many(store, tid, name, args, doors)
-    else: out = _call(store, tid, name, args, doors, skip)
+    if name == 'tick' and (args or {}).get('done', True) is not False and (bad := _failed_now(store, tid)):
+        raise ValueError(refusal(f'not ticked: {bad} failed in this turn', 'tick it once that is done; say in your answer what is still left'))
+    try:
+        if TOOLS[name][0] == 'propose' and isinstance((args or {}).get('items'), list): out = _many(store, tid, name, args, doors)
+        else: out = _call(store, tid, name, args, doors, skip)
+    except ValueError:
+        if TOOLS[name][0] == 'propose': _failed(store, tid, name)
+        raise
+    if name == 'tick' and (args or {}).get('done', True) is not False:
+        k, now = (id(store), int(tid)), time.time(); _TICKED[k] = [x for x in _TICKED.get(k, []) if x[0] > now - 600] + [(now, str(args.get('item')))]
     if TOOLS[name][0] != 'propose' or not isinstance(out, str): return out
+    try: got = json.loads(out)
+    except ValueError: got = None
+    if isinstance(got, dict) and got.get('ok') is False: _failed(store, tid, name)
     from . import cardqueue
     if not (line := cardqueue.screen(store, tid)): return out
     try: got = json.loads(out)

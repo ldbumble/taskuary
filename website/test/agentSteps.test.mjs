@@ -549,3 +549,16 @@ test("an answer that names a made file is drawn once, whether its words named th
   const steps = stepsOf(trace, { answer: "Created the one-page flyer at `Wellness_Flyer.pdf` and showed it in the chat." });
   assert.equal(steps.filter((s) => s.kind === "said").length, 0);
 });
+
+test("a step's line is written from what it gave back: a refused show never reads 'Showed you' (HIPAA walk 6)", () => {
+  const steps = stepsOf([
+    { type: "tool_call", name: "mcp__taskuary__show", detail: { tool_call_id: "v", args: { title: "Print Run Cost Comparison", root: "t", elements: { t: { type: "table" } } } } },
+    { type: "tool_result", name: "v", detail: { result: "elements.type must be an object", is_error: true } },
+    { type: "tool_call", name: "mcp__taskuary__reply_not_needed", detail: { tool_call_id: "n", args: { why: "answered" } } },
+    { type: "tool_result", name: "n", detail: { result: '{"ok": false, "why": "not marked: no reply is waiting"}' } },
+    { type: "tool_call", name: "mcp__taskuary__show", detail: { tool_call_id: "w", args: { title: "Run sheet", root: "t", elements: { t: { type: "table" } } } } },
+    { type: "tool_result", name: "w", detail: { result: "shown" } },
+  ]);
+  assert.deepEqual(steps.map((s) => [s.status, s.summary]), [["error", "Could not show you 'Print Run Cost Comparison'"],
+    ["error", "Could not mark the reply as not needed"], ["done", "Showed you 'Run sheet'"]]);
+});

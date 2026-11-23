@@ -329,14 +329,14 @@ const OWN = {
   calendar: () => ({ kind: "data", summary: "Looked at your calendar" }),
   listsystems: () => ({ kind: "data", summary: "Looked at your connected systems" }),
   runsystem: (a) => ({ kind: "data", summary: a.type ? `Looked up data in ${clip(a.type, 30)}` : "Looked up data in a connected system" }),
-  proposereply: () => ({ kind: "edit", summary: "Drafted a reply" }),
-  proposeemail: () => ({ kind: "edit", summary: "Drafted an email" }),
-  replynotneeded: () => ({ kind: "plan", summary: "Marked the reply as not needed" }),
-  signform: () => ({ kind: "edit", summary: "Filled in and signed a form" }),
-  propose: () => ({ kind: "plan", summary: "Asked for your yes" }),
+  proposereply: () => ({ kind: "edit", summary: "Drafted a reply", tried: "Could not set up the reply" }),
+  proposeemail: () => ({ kind: "edit", summary: "Drafted an email", tried: "Could not set up the email" }),
+  replynotneeded: () => ({ kind: "plan", summary: "Marked the reply as not needed", tried: "Could not mark the reply as not needed" }),
+  signform: () => ({ kind: "edit", summary: "Filled in and signed a form", tried: "Could not fill in the form" }),
+  propose: () => ({ kind: "plan", summary: "Asked for your yes", tried: "Could not set up the step for your yes" }),
   // ...a view by what it shows - its own title, the file it put up, its kind - never "a view" (the walk, 2026-11-17: "Showing you a view")
   show: (a) => { const el = a.elements?.[a.root] || {}, t = a.title || el.props?.title, fs = [a.files || []].flat().filter(Boolean);
-    return { kind: "plan", summary: t ? `Showed you ${quoted(t)}` : fs.length ? `Showed you ${baseName(fs[0])}${fs.length > 1 ? `, and ${fs.length - 1} more` : ""}`
+    return { kind: "plan", tried: t ? `Could not show you ${quoted(t)}` : "Could not show it", summary: t ? `Showed you ${quoted(t)}` : fs.length ? `Showed you ${baseName(fs[0])}${fs.length > 1 ? `, and ${fs.length - 1} more` : ""}`
       : SHOWN[el.type] ? `Showed you ${SHOWN[el.type]}` : "Laid it out for you" }; },
   // ...and where it works (repochoice.py): the one line the chat shows for the agent's pick - "Working in northwind/ledger - <why>"
   userepo: (a) => { const w = String(a.path_or_name || "").trim(), at = /[\\/]/.test(w) && !/^[\w.-]+\/[\w.-]+$/.test(w) ? baseName(w) : w;
@@ -353,9 +353,11 @@ const OWN = {
   notepeers: () => ({ kind: "plan", summary: "Left a note for another agent" }),
   proposeland: () => ({ kind: "plan", summary: "Set up how the work lands" }),
   withdrawdraft: () => ({ kind: "plan", summary: "Took back something it had set up" }),
-  answerinvite: (a) => ({ kind: "edit", summary: a.answer ? `Set up the answer to the invite (${clip(a.answer, 20)})` : "Set up the answer to the invite" }),
-  setupmeeting: () => ({ kind: "edit", summary: "Set up a meeting" }),
-  share: () => ({ kind: "edit", summary: "Set up a share" }),
+  keepcard: () => ({ kind: "plan", summary: "Brought back a card as it was", tried: "Could not bring the card back" }),
+  answerinvite: (a) => ({ kind: "edit", summary: a.answer ? `Set up the answer to the invite (${clip(a.answer, 20)})` : "Set up the answer to the invite",
+    tried: "Could not set up the answer to the invite" }),
+  setupmeeting: () => ({ kind: "edit", summary: "Set up a meeting", tried: "Could not set up the meeting" }),
+  share: () => ({ kind: "edit", summary: "Set up a share", tried: "Could not set up the share" }),
 };
 // ...AND AN AI CARD'S OWN HANDS (apiagent.py) in the words the CLI's take (design round 5, 2026-11-19: the API walk read "Used browser open on ..."):
 // its browser through the browser's own grammar, the sign-up and its tool finder by what they did
@@ -365,6 +367,9 @@ const API_HANDS = {
   browsersignup: () => ({ kind: "page", summary: "Sent the sign-up form", browser: true }),
   findtools: () => ({ kind: "plan", summary: "Looked for the right tool" }),
 };
+// A STEP'S LINE IS WRITTEN FROM WHAT IT GAVE BACK (HIPAA walk 6: a `show` refused for its spec read "showed you 'Print Run Cost Comparison'"):
+// one of Taskuary's own tools that answered {ok: false} did not do it, and a failed step says what it could not do (`tried`), never what it did
+const refusedOwn = (out) => { try { const j = JSON.parse(String(out || "")); return !!j && typeof j === "object" && j.ok === false; } catch { return false; } };
 const KIND = Object.fromEntries(Object.entries(TOOLS).flatMap(([k, names]) => names.map((n) => [n, k])));
 
 // ...and every label is built from PARSED arguments: a call whose arguments came as a JSON string (Codex's function_call, an OpenAI-style
@@ -540,7 +545,8 @@ export function stepsOf(trace, { answer = "", keepStart = true } = {}) {
       if (step.erred) continue;
       // a step Taskuary HELD for the owner's yes (shellgate, browsergate) did not fail: it waits - red "failed" over a held delete read
       // as something gone wrong (the desktop stress test, 2026-11-03); a call the server marked as put to the owner says how it stands (`state`)
-      step.status = e.detail?.state || (!e.detail?.is_error ? "done" : /Taskuary held this for the owner/.test(step.output) ? "held" : foundNone(step) ? "none" : "error");
+      step.status = e.detail?.state || (!e.detail?.is_error && !(step.own && refusedOwn(step.output)) ? "done" : /Taskuary held this for the owner/.test(step.output) ? "held" : foundNone(step) ? "none" : "error");
+      if (step.status === "error" && step.tried) [step.did, step.summary] = [step.summary, step.tried];
       if (step.kind === "mail" && step.q !== undefined) { const n = countOf(step.output); if (n !== null) step.count = n; }
     } else if (e.type === "progress" && e.detail) {
       const name = String(e.name || "");
@@ -565,7 +571,7 @@ export function stepsOf(trace, { answer = "", keepStart = true } = {}) {
       // failure as a note of its own, "⚠ Exit code 127 ⏎ which: no python3 in (...a PATH 600 characters long)", red under "Ran which python3")
       const call = e.name && [...byId.values()].reverse().find((s) => s.tool === e.name && s.status !== "error");
       // ...whichever comes first: the chat hands a turn's results in after its calls (chatStream.turnParts), so the result never undoes it
-      if (call) { call.status = "error"; call.erred = String(e.detail?.result || e.error || ""); call.output = call.erred || call.output; continue; }
+      if (call) { call.status = "error"; call.erred = String(e.detail?.result || e.error || ""); call.output = call.erred || call.output; if (call.tried && !call.did) [call.did, call.summary] = [call.summary, call.tried]; continue; }
       // ...A TOOL'S REFUSAL IS THE AGENT'S (design round 5, 2026-11-19: a tick refused for a missing argument stood in the chat as "⚠ ``` `item`
       // was not given Next: call tick again ... The input schema is: {...}"): one a call of this turn names - a plumbing call no row stands
       // for, or one already failed - reaches the agent only; he sees at most its row, retried
@@ -580,7 +586,7 @@ export function stepsOf(trace, { answer = "", keepStart = true } = {}) {
   // A RETRY THAT WORKED IS NO FAILURE (the stress test, 2026-11-02): the agent's own retried steps wore red "failed" though it recovered.
   // A failed call the same step later did without error is `recovered` - a quiet word; red stays for a failure nothing made good
   steps.forEach((s, i) => { if (s.status === "error" && "raw" in s
-    && steps.slice(i + 1).some((x) => "raw" in x && x.kind === s.kind && x.summary === s.summary && x.status === "done")) s.status = "recovered"; });
+    && steps.slice(i + 1).some((x) => "raw" in x && x.kind === s.kind && (x.did || x.summary) === (s.did || s.summary) && x.status === "done")) { s.status = "recovered"; s.summary = s.did || s.summary; } });
   // ...and a call STILL AT WORK while a later one already finished runs ALONGSIDE them - in parallel, said so; steps stay in the order they began
   steps.forEach((s, i) => { if (s.status === "running" && "raw" in s && steps.slice(i + 1).some((x) => "raw" in x && x.status !== "running")) s.alongside = true; });
   // ...and A FILE IS ITS NAME ON BOTH SIDES (the HIPAA walk, 2026-11-21): the filed answer names a made file by its name, the words it streamed

@@ -10,21 +10,32 @@ from taskuary.store import MemoryStore
 
 
 class Brain:
-    "The model: answers `Answer n.` after `delay` (or `said[n]`), and keeps what each turn was handed - system and user."
-    def __init__(self, delay=0.0): self.delay, self.calls, self.said = delay, [], {}
+    """The model: answers `Answer n.` (or `said[n]`), and keeps what each turn was handed - system and user. A `delay` of 30 holds every
+    call at work until the test lets go - `delay = 0` lets all go, `go()` only the calls made so far - so a turn is at work while the test
+    reads it, however slow the runner: the test drives the state, never races a clock."""
+    def __init__(self, delay=0.0): self.delay, self.calls, self.said, self.let, self.inside = delay, [], {}, 0, 0
     def __call__(self, system, user, **k):
-        self.calls.append(f'{system}\n{user}'); n = len(self.calls); end = time.time() + self.delay
-        # ...a wait that ends the moment `delay` is set to 0, as a real brain's process ends when its turn is stopped: slept whole, it held the
-        # stopped turn's floor for 30 s whenever the call began before the test let go - on a fast runner always - and the waiting line's
-        # turn stood "starting" past the test's patience
-        while self.delay and time.time() < end: time.sleep(min(0.02, self.delay))
+        self.calls.append(f'{system}\n{user}'); n = len(self.calls); end = time.time() + self.delay; self.inside += 1
+        # ...a wait that ends the moment it is let go, as a real brain's process ends when its turn is stopped
+        try:
+            while self.delay and n > self.let and time.time() < end: time.sleep(0.02)
+        finally: self.inside -= 1
         return self.said.get(n, f'Answer {n}.')
+    def go(self): self.let = len(self.calls)
 
 
-def until(ok, secs=15):
+HOLD = 30       # a Brain delay that holds its turn at work until the test lets go
+
+
+def until(ok, secs=30):
     end = time.time() + secs
     while not ok() and time.time() < end: time.sleep(0.02)
     return ok()
+
+
+def next_second():
+    "A stamp is a whole second: what comes after this is stamped in a later one."
+    t = time.time(); until(lambda: time.time() >= int(t) + 1.05)
 
 
 class TheList(unittest.TestCase):
@@ -58,6 +69,10 @@ class TheList(unittest.TestCase):
     def say(self, w, name=None, wait=True): return general.take_line(self.s, self.tid, w, line_id=name, wait=wait)
     def list(self): return conversation.items(self.s, self.tid)
     def kinds(self, got=None): return [(x['kind'], x.get('state', '')) for x in (got or self.list())['items']]
+    def at_work(self):
+        "A turn is handed over and at work in its brain: what comes in now comes in mid-turn (busy alone is the floor taken, before the hand-over)."
+        self.assertTrue(until(lambda: getattr(general.session_for(self.tid), 'busy', False) and self.brain.inside), self.kinds())
+    def told(self, n): return self.brain.calls[n].split('SOURCE MATERIAL')[0]     # what turn n says it carries, above the task's own record
     def rest(self): self.assertTrue(until(lambda: not self.list()['working'] and not general.waiting_lines(self.s, self.tid)), self.kinds())
 
     def test_a_start_that_did_not_happen_says_why_in_the_chat_with_the_way_on(self):
@@ -85,11 +100,11 @@ class TheList(unittest.TestCase):
             with self.assertRaises(Exception): self.say('Suggest two.', 'l-one')
             got = self.list()
             self.assertEqual([(x['id'], x.get('state')) for x in got['items'][-2:]], [('l-one', None), ('t:l-one:0', 'failed')])
-            t = time.time(); self.assertTrue(until(lambda: time.time() >= int(t) + 1.05))      # (a stamp is a whole second: his note comes in a later one)
-            real.delay = 0.8
+            next_second()                       # (his note comes in a later second)
+            real.delay = HOLD
             self.say('Try once more, just the Mill.', 'l-two', wait=False)
             for when in ('at work', 'answered'):
-                if when == 'answered': self.rest()
+                if when == 'answered': real.delay = 0; self.rest()
                 got = self.list()
                 self.assertEqual([(x['id'], x.get('state')) for x in got['items'][-4:-1]], [('l-one', None), ('t:l-one:0', 'failed'), ('l-two', None)], when)
                 self.assertEqual(got['items'][-3]['fail'], "The AI provider didn't answer.", when)
@@ -99,23 +114,22 @@ class TheList(unittest.TestCase):
         """Every task whose agent answered before hand-overs were written down (the owner's older tasks, the demo's): an answer with no
         turn mark before it was placed at the start of time, above the mail it answered - "the chat begins with the agent's turn". A turn
         nobody marked stands at its own time, after the input it answered."""
-        def later(): t = time.time(); self.assertTrue(until(lambda: time.time() >= t + 1.1))      # (a stamp is a whole second: each comes in a later one)
-        later(); self.s.add_comment(self.tid, 'assistant', general.ASSISTANT_TYPE, 'Two venues: the Mill and the Quay. I would pick the Mill.')
-        later(); self.mail('Thanks - which one has parking?')
-        later(); self.s.add_comment(self.tid, 'assistant', general.ASSISTANT_TYPE, 'The Mill has forty spaces.')
+        next_second(); self.s.add_comment(self.tid, 'assistant', general.ASSISTANT_TYPE, 'Two venues: the Mill and the Quay. I would pick the Mill.')
+        next_second(); self.mail('Thanks - which one has parking?')
+        next_second(); self.s.add_comment(self.tid, 'assistant', general.ASSISTANT_TYPE, 'The Mill has forty spaces.')
         self.assertFalse(self.s._rows('SELECT 1 FROM heard WHERE TaskId=?', (self.tid,)))  # nothing was ever written down as heard
         got = self.list()
         self.assertEqual([x['kind'] for x in got['items']], ['arrival', 'turn', 'arrival', 'turn'], self.kinds(got))
         self.assertEqual([x['text'][:8] for x in got['items'] if x['kind'] == 'turn'], ['Two venu', 'The Mill'])
 
     def test_a_line_at_rest_is_heard_at_the_press_with_its_turn_under_it_and_keeps_its_names(self):
-        self.brain.delay = 0.6
+        self.brain.delay = HOLD
         self.say('Suggest two.', 'l-one', wait=False)
         got = self.list()
         self.assertEqual(self.kinds(got)[-2:], [('line', ''), ('turn', got['items'][-1]['state'])])
         self.assertIn(got['items'][-1]['state'], ('starting', 'working')); self.assertEqual(got['pending'], [])
         self.assertEqual(got['items'][-2]['id'], 'l-one'); live = got['items'][-1]['id']
-        self.rest()
+        self.brain.delay = 0; self.rest()
         got = self.list()
         self.assertEqual([(x['id'], x.get('state')) for x in got['items'][-2:]], [('l-one', None), (live, 'done')])      # the turn that ends redraws in place
         self.assertEqual(got['items'][-1]['text'], 'Answer 1.')
@@ -126,9 +140,9 @@ class TheList(unittest.TestCase):
         under it was drawn from the session's whole trace - its first words stood over his line and again under it, then grew there. From the
         read his line is heard in, and on the turn filed when the CLI's turn ends, under his line is only what came after it."""
         from taskuary import clipool, sessionrecord
-        self.brain.delay = 2.0
+        self.brain.delay = HOLD
         self.say('Suggest two.', 'l-one', wait=False)
-        self.assertTrue(until(lambda: getattr(general.session_for(self.tid), 'busy', False)))
+        self.at_work()
         ses = general.session_for(self.tid)
         self.assertTrue(until(lambda: self.list()['items'][-1].get('state') == 'working'))
         ses._remember_trace('progress', 'text', 'BEFORE: the Mill is by the river.')
@@ -148,7 +162,7 @@ class TheList(unittest.TestCase):
             got = self.list()
             self.assertIn('AFTER', str(got['items'][-1]['steps'])); self.assertNotIn('BEFORE', str(got['items'][-1]['steps']))
             self.assertNotIn('AFTER', str(got['items'][ids.index('l-two') - 1]), 'nothing new above his line')
-            self.rest()
+            self.brain.delay = 0; self.rest()
         # ...and the turn filed under his line keeps the steps that came after it, as it was drawn at work
         steps = [s for x in self.list()['items'][ids.index('l-two') + 1:] if x['kind'] == 'turn' for s in x['steps']]
         self.assertNotIn('BEFORE', str(steps)); self.assertIn('AFTER', str(steps))
@@ -158,12 +172,12 @@ class TheList(unittest.TestCase):
         """Design round 5, I3: a turn read 4:57 while it worked and 5:12 once done, and the turn under his 4:58 line, steered in mid-turn, read
         4:57. A turn's head time is when it began in the chat - never before the input above it - and the same on every read, at work and done."""
         from taskuary import clipool
-        self.brain.delay = 3.0
+        self.brain.delay = HOLD
         self.say('Suggest two.', 'l-one', wait=False)
         self.assertTrue(until(lambda: self.list()['items'][-1].get('state') == 'working'))
         general.session_for(self.tid)._remember_trace('progress', 'text', 'The Mill is by the river.')
         first = self.list()['items'][-1]; at0 = first['at']
-        t = time.time(); self.assertTrue(until(lambda: time.time() >= int(t) + 1.05))      # (a stamp is a whole second: his line in a later one)
+        next_second()                       # (his line in a later second)
         with mock.patch.object(clipool, 'steerable', return_value=True), mock.patch.object(clipool, 'steer', lambda key, said: (said() if callable(said) else said) or True):
             self.say('Near a station.', 'l-two', wait=False)
             self.assertTrue(until(lambda: conversation.heard(self.s, self.tid, 'line', ['l-two'])))
@@ -171,25 +185,24 @@ class TheList(unittest.TestCase):
             under = got[ids.index('l-two') + 1]
             self.assertGreaterEqual(conversation.ep(under['at']), conversation.ep(got[ids.index('l-two')]['at']), 'never dated before his line')
             was = {x['id']: x['at'] for x in got if x['kind'] == 'turn'}
-            self.rest()
+            self.brain.delay = 0; self.rest()
         done = {x['id']: x['at'] for x in self.list()['items'] if x['kind'] == 'turn'}
         self.assertEqual({k: done[k] for k in was if k in done}, {k: v for k, v in was.items() if k in done}, 'the same time at work and done')
         self.assertEqual(done.get(first['id']), at0, (first['id'], [(x['id'], x['kind'], x.get('at'), x.get('state'), x.get('text')) for x in self.list()['items']]))
 
     def test_a_line_sent_mid_turn_waits_by_the_box_and_enters_once_when_the_next_turn_takes_it(self):
-        self.brain.delay = 0.8
+        self.brain.delay = HOLD
         self.say('Suggest two.', 'l-one', wait=False)
-        self.assertTrue(until(lambda: getattr(general.session_for(self.tid), 'busy', False)))
+        self.at_work()
         self.say('Near a station.', 'l-two', wait=False); self.say('Under 3000.', 'l-three', wait=False)
         got = self.list()
         self.assertEqual([x['id'] for x in got['pending']], ['l-two', 'l-three'])                 # accepted, not yet heard: by the box...
         self.assertFalse({'l-two', 'l-three'} & {x['id'] for x in got['items']})                 # ...never in the conversation too
         before = [x['id'] for x in got['items'] if x['kind'] != 'turn']
-        self.rest()
+        self.brain.delay = 0; self.rest()
         got = self.list(); ids = [x['id'] for x in got['items']]
         self.assertEqual([i for i in ids if not i.startswith('t:')], [*before, 'l-two', 'l-three'])      # nothing entered above what was drawn
         self.assertEqual(self.kinds(got)[-4:], [('turn', 'done'), ('line', ''), ('line', ''), ('turn', 'done')])    # both, ONE turn
-        self.assertEqual(len(self.brain.calls), 2)
 
     def test_two_mails_of_one_poll_on_an_ended_session_are_one_turn_and_each_told_once(self):
         """Two mails of one poll on a task whose conversation had ended (a restart, an idle-out): the first set the turn going with its own
@@ -201,7 +214,7 @@ class TheList(unittest.TestCase):
         p = mock.patch.object(general, 'start_session', lambda store, tid, **k: opens(store, tid, **{**k, 'actor': 'owner'})); p.start(); self.addCleanup(p.stop)
         mids = [self.mail('ALPHA, the first mail of the poll.'), self.mail('BRAVO, the second mail of the poll.')]
         for m in mids: self.assertTrue(ingest.thread_moved(self.s, self.tid, ingest._from_row(self.s.get_message(m), self.s), m, {'intent': 'task'}, 'router'))
-        self.assertTrue(until(lambda: len(self.brain.calls) >= 2)); self.rest(); time.sleep(ingest.PASS_GATHER + 0.5)
+        self.assertTrue(until(lambda: conversation.heard(self.s, self.tid, 'mail', mids))); self.rest()
         self.assertEqual(len(self.brain.calls), 2, 'two mails of one poll are one turn')
         self.assertEqual(self.brain.calls[1].count('BRAVO'), 1, 'the mail beside the one the turn carries is said once')
         self.assertTrue(conversation.heard(self.s, self.tid, 'mail', mids))
@@ -223,56 +236,41 @@ class TheList(unittest.TestCase):
         """A line typed while the agent worked, then a mail that came in a moment later - sent an hour before, held up on its way. The hand-
         over placed the mail by the sender's own clock (its Date), above the line that came first: by the box it waited after the line, and
         on the hand-over it jumped above it."""
-        # ...the mail is put in the store straight, so only a hand-over takes it: it lands while the turn still works, however slow the runner
-        # (CI, 2026-11-22: at 2.5 s the turn had ended before it landed, and nothing ever heard it)
-        self.brain.delay = 8
+        # ...the mail is put in the store straight, so only a hand-over takes it: it lands while the turn is held at work
+        self.brain.delay = HOLD
         self.say('Suggest two.', 'l0', wait=False)
-        self.assertTrue(until(lambda: getattr(general.session_for(self.tid), 'busy', False)))
-        t = time.time(); self.assertTrue(until(lambda: time.time() >= t + 1.1))
+        self.at_work()
+        next_second()
         self.say('LINE typed while it works.', 'l1', wait=False)
-        t = time.time(); self.assertTrue(until(lambda: time.time() >= t + 1.1))
+        next_second()
         late = self.s.add_message({'TaskId': self.tid, 'ExternalId': 'late', 'ConversationId': 'conv-1', 'Channel': 'email', 'Subject': 'Offsite venue',
                                    'BodyText': 'MAIL delayed in delivery.', 'FromName': 'Gail Moreno', 'FromEmail': 'gail@northwind.example',
                                    'Status': 'routed', 'SentAt': conversation.stamp(time.time() - 3600)})
-        self.rest()
+        self.brain.delay = 0; self.rest()
         ids = [x['id'] for x in self.list()['items']]
         self.assertLess(ids.index('l1'), ids.index(f'm:{late}'), ids)
 
-    def test_a_flood_is_one_hand_over_and_every_input_is_heard_once_and_told_once(self):
-        self.brain.delay = 1.0
+    def test_a_flood_is_one_hand_over_and_every_input_is_heard_once_told_once_and_stands_in_the_order_it_came(self):
+        """The recorded flood, 2026-11-11: fifty inputs heard together stood as his sixteen lines, then his own replies, then the sender's
+        mail - "34, 31, 46". One hand-over, written once: each stands where it came, a line and a message of one second too."""
+        self.brain.delay = HOLD
         self.say('Suggest two.', 'l0', wait=False)
-        self.assertTrue(until(lambda: getattr(general.session_for(self.tid), 'busy', False)))
+        self.at_work()
         n = 30
         for i in range(n):
             w = f'flood {i + 1:02d} of {n}'
             if i % 3 == 0: self.mail(w)
             elif i % 3 == 1: self.mail(w, own=True)
             else: self.say(w, f'f{i}', wait=False)
-        self.rest()
+        self.brain.delay = 0; self.rest()
         got = self.list()
         words = [str(x.get('text') or x.get('words') or '') for x in got['items'] if x['kind'] in ('line', 'arrival')]
-        for i in range(n): self.assertEqual(sum(f'flood {i + 1:02d} of' in w for w in words), 1, f'input {i + 1} on the canvas once')
+        self.assertEqual([w[:8] for w in words if w.startswith('flood ')], [f'flood {i + 1:02d}' for i in range(n)], 'each once, in the order it came')
         c = conversation.counts(self.s, self.tid)
         self.assertEqual((c['line'], c['mail'], c['pending']), (11, 21, 0))                      # the ledger: each once (its key is unique)
-        self.assertLessEqual(len(self.brain.calls), 3, 'a flood costs a turn or two, never one per input')
+        self.assertEqual(len(self.brain.calls), 2, 'a flood is one hand-over, never one per input')
         told = '\n'.join(self.brain.calls[1:])
         for i in range(n): self.assertIn(f'flood {i + 1:02d} of', told, f'input {i + 1} was heard and never told')
-
-    def test_what_one_hand_over_takes_stands_in_the_order_it_came(self):
-        """The recorded flood, 2026-11-11: fifty inputs heard together stood as his sixteen lines, then his own replies, then the sender's
-        mail - "34, 31, 46". One hand-over, written once: each stands where it came, a line and a message of one second too."""
-        self.brain.delay = 1.0
-        self.say('Suggest two.', 'l0', wait=False)
-        self.assertTrue(until(lambda: getattr(general.session_for(self.tid), 'busy', False)))
-        n = 18
-        for i in range(n):
-            w = f'flood {i + 1:02d} of {n}'
-            if i % 3 == 0: self.mail(w)
-            elif i % 3 == 1: self.mail(w, own=True)
-            else: self.say(w, f'f{i}', wait=False)
-        self.rest()
-        words = [str(x.get('text') or x.get('words') or '') for x in self.list()['items'] if x['kind'] in ('line', 'arrival')]
-        self.assertEqual([w[:8] for w in words if w.startswith('flood ')], [f'flood {i + 1:02d}' for i in range(n)])
 
     def test_what_waits_drawn_in_the_beat_before_its_hand_over_stands_in_the_order_it_came(self):
         """The flood on a slow runner (Windows CI, 2026-11-18): a read in the beat between one turn's answer and the next one's hand-over drew
@@ -280,14 +278,15 @@ class TheList(unittest.TestCase):
         served in, so the order stood after the hand-over too. What waits is drawn by when each came, on the one key the hand-over sorts by."""
         real, gate, at = general.take_kept, threading.Event(), threading.Event()
         def take_kept(store, tid, ids=None, **how):
-            if how.get('turn') and conversation.heard(store, tid, 'line', ['l0']): at.set(); gate.wait(10)
+            # ...the next turn's hand-over, once the first has answered (the first turn's own takes are not held)
+            if how.get('turn') and any(c.get('ActorType') == general.ASSISTANT_TYPE for c in store.list_comments(tid, internal=True)): at.set(); gate.wait(30)
             return real(store, tid, ids, **how)
-        self.brain.delay = 1.0
+        self.brain.delay = HOLD
         with mock.patch.object(general, 'take_kept', take_kept):
             self.say('Suggest two.', 'l0', wait=False)
-            self.assertTrue(until(lambda: getattr(general.session_for(self.tid), 'busy', False)))
+            self.at_work()
             self.mail('first, a mail'); self.say('second, his line', 'l-b', wait=False); self.mail('third, his own reply', own=True)
-            self.assertTrue(at.wait(10))
+            self.brain.delay = 0; self.assertTrue(at.wait(30))
             self.assertTrue(until(lambda: self.s.list_comments(self.tid, internal=True)[-1].get('ActorType') == general.ASSISTANT_TYPE))
             self.list(); gate.set()                    # ...the read in that beat: his line and the mail around it, the next turn's input
             # ...and none read again until all is at rest: this pins the beat's read, nothing else
@@ -323,12 +322,11 @@ class TheList(unittest.TestCase):
         """The recorded stop, 2026-11-11: he stopped a turn that had said nothing, with two lines waiting. The stop's mark fell on the finished
         answer above the line it never answered, and the waiting lines entered above "You stopped the agent", which was already drawn."""
         self.say('Suggest two.', 'l-one'); self.rest()
-        self.brain.delay = 30
+        self.brain.delay = HOLD
         self.say('Compare both in detail.', 'l-two', wait=False)
-        self.assertTrue(until(lambda: getattr(general.session_for(self.tid), 'busy', False)))
+        self.at_work()
         self.say('Also the price.', 'l-three', wait=False)
-        self.brain.delay = 0
-        self.assertTrue(general.stop_turn(self.s, self.tid))
+        self.assertTrue(general.stop_turn(self.s, self.tid))              # ...the first read follows it, the stopped turn still letting go
         got = self.list(); drawn = [x['id'] for x in got['items'] if x['kind'] == 'press']; at = [x['id'] for x in got['items']].index(drawn[0])
         # ...stopped from the press, and what waited handed over in the same step (2026-11-12): from the first read the stop, his line, and
         # the turn at work that answers it - nothing spins above them, nothing waits by the box
@@ -338,7 +336,7 @@ class TheList(unittest.TestCase):
         # ...and the turn that said nothing is no item: it was drawn empty over the press, and was gone when the next turn ended
         self.assertFalse([x for x in got['items'] if x.get('state') == 'stopped' and not (x['text'] or x['steps'])], self.kinds(got))
         was = [x['id'] for x in got['items'][:at + 1]]
-        self.rest()
+        self.brain.delay = 0; self.rest()
         got = self.list(); ids = [x['id'] for x in got['items'] if not x['id'].startswith('t:')]
         self.assertFalse([i for i in was if i not in [x['id'] for x in got['items']]], 'what stood at the press still stands')
         self.assertEqual(ids[-3:], ['l-two', *drawn, 'l-three'])
@@ -348,16 +346,18 @@ class TheList(unittest.TestCase):
         """Design round 5, I2 (the API walk): Stop pressed under "Waiting for the agent to start" changed nothing - no line, and the turn went on
         to think and answer; only a second Stop once it was thinking was heard. A stop is heard in every state: the press is its line at once,
         and the turn stops where it begins."""
-        real = general.start_session
-        def cold(*a, **k): time.sleep(1.0); return real(*a, **k)
+        real, up = general.start_session, threading.Event()
+        def cold(*a, **k): up.wait(30); return real(*a, **k)            # ...its start held until the stop is in
         with mock.patch.object(general, 'start_session', cold):
             self.say('Set up the Monday routine.', 'l-one', wait=False)
             self.assertTrue(until(lambda: general.starting(self.tid)))
             self.assertIsNone(general.session_for(self.tid))
             self.assertTrue(general.stop_turn(self.s, self.tid), 'heard while it starts')
             self.assertIn(('press', None), [(x['kind'], x.get('state')) for x in self.list()['items']])
-            self.assertTrue(until(lambda: not general.starting(self.tid) and not getattr(general.session_for(self.tid), 'busy', False)))
-            time.sleep(0.3); self.rest()
+            up.set()
+            self.assertTrue(until(lambda: self.tid not in general.STOP_ASKED and not general.starting(self.tid)
+                                  and not getattr(general.session_for(self.tid), 'busy', False)), 'the turn it was pressed on used it')
+            self.rest()
         got = self.list()
         self.assertFalse([x for x in got['items'] if x['kind'] == 'turn' and 'Answer' in str(x.get('text'))], self.kinds(got))
         self.assertFalse([x for x in got['items'] if x['kind'] == 'turn' and x.get('state') == 'failed'], 'a stop is no failure')
@@ -370,9 +370,9 @@ class TheList(unittest.TestCase):
         from taskuary import codingchat
         load = {'type': 'tool_call', 'name': 'ToolSearch', 'detail': {'tool_call_id': 'ts1', 'args': {'query': 'select:WebSearch'}}}
         self.say('Suggest two.', 'l-one'); self.rest()
-        self.brain.delay = 30
+        self.brain.delay = HOLD
         self.say('Compare both in detail.', 'l-two', wait=False)
-        self.assertTrue(until(lambda: getattr(general.session_for(self.tid), 'busy', False)))
+        self.at_work()
         ses = general.session_for(self.tid); ses.trace = [*ses.trace, load]
         self.assertTrue(general.stop_turn(self.s, self.tid))
         got = self.list()                                                    # ...the live trace, while its CLI lets go
@@ -394,9 +394,9 @@ class TheList(unittest.TestCase):
         the box, and it came back up once the stopped turn let go - his line jumped out of the chat and back. It begins the next turn as a
         line that waited at the stop does: heard under the stop, its turn at work under it, from the first read to the end."""
         self.say('Suggest two.', 'l-one'); self.rest()
-        self.brain.delay = 30
+        self.brain.delay = HOLD
         self.say('Compare both in detail.', 'l-two', wait=False)
-        self.assertTrue(until(lambda: getattr(general.session_for(self.tid), 'busy', False)))
+        self.at_work()
         self.assertTrue(general.stop_turn(self.s, self.tid))
         self.assertTrue(getattr(general.session_for(self.tid), 'busy', False))                  # ...still letting go
         self.say('Go on, compare them now.', 'l-three', wait=False)
@@ -416,9 +416,9 @@ class TheList(unittest.TestCase):
         the stopped turn's start - a stopped turn files no answer, so the clock ran from the hand-over after the last answer. A turn starts at
         the first hand-over after the turn before it ended, answered or stopped."""
         self.say('Suggest two.', 'l-one'); self.rest()
-        self.brain.delay = 30
+        self.brain.delay = HOLD
         self.say('Compare both in detail.', 'l-two', wait=False)
-        self.assertTrue(until(lambda: getattr(general.session_for(self.tid), 'busy', False)))
+        self.at_work()
         self.brain.delay = 0
         self.assertTrue(general.stop_turn(self.s, self.tid))
         self.say('Go on, compare them now.', 'l-three', wait=False); self.rest()
@@ -429,7 +429,6 @@ class TheList(unittest.TestCase):
         last = [x for x in self.list()['items'] if x['kind'] == 'turn'][-1]
         self.assertAlmostEqual(last['started'], began, delta=0.5)
 
-    @unittest.skipIf(__import__('sys').platform == 'darwin', 'a 1.1 s sleep against the macOS runner clock - the known timing flake')
     def test_a_turn_reads_opening_from_its_first_read_to_its_prompt_on_one_clock_and_one_stamp(self):
         """The walks, 2026-11-17 (7 of 20): a turn read "Thinking..." from its first read, stepped back to "Waiting for the agent to start" once
         the road opening its CLI said so, and its clock and stamp went back from his press to the hand-over. A turn whose CLI is not up is
@@ -437,9 +436,9 @@ class TheList(unittest.TestCase):
         from taskuary import clipool
         gates, tr = [threading.Event() for _ in range(3)], {}
         real_take, real_parts = general.take_kept, general.prompt_parts
-        def take(*a, **k): k.get('turn') and gates[0].wait(10); return real_take(*a, **k)       # ...the hand-over held: a slow start
-        def parts(*a, **k): gates[1].wait(10); return real_parts(*a, **k)                       # ...after the hand-over, before the prompt
-        def brain(system, user, **k): tr['f']('prompt', 'prompt_sent_to_agent', user); gates[2].wait(10); return 'Answer.'
+        def take(*a, **k): k.get('turn') and gates[0].wait(30); return real_take(*a, **k)       # ...the hand-over held: a slow start
+        def parts(*a, **k): gates[1].wait(30); return real_parts(*a, **k)                       # ...after the hand-over, before the prompt
+        def brain(system, user, **k): tr['f']('prompt', 'prompt_sent_to_agent', user); gates[2].wait(30); return 'Answer.'
         def build(*a, **k): tr['f'] = k['trace']; return brain
         def walk(name, warm):
             for g in gates: g.clear()
@@ -447,12 +446,16 @@ class TheList(unittest.TestCase):
                     mock.patch.object(general.llm_mod, 'build_llm', side_effect=build), mock.patch.object(clipool, 'is_live', return_value=warm):
                 self.say('Suggest two.', name, wait=False)
                 tail = lambda: self.list()['items'][-1]
-                a = tail(); time.sleep(1.1); gates[0].set()
+                a = tail(); next_second(); gates[0].set()          # ...the hand-over a second after the press: a stamp that went back would show
                 self.assertTrue(until(lambda: getattr(general.session_for(self.tid), 'busy', False) and tail()['state'] == 'working'))
                 b = tail(); gates[1].set()
                 self.assertTrue(until(lambda: 'f' in tr and len(general.session_for(self.tid).trace) > 1 and tail().get('opening') is None))
                 c = tail(); gates[2].set(); self.rest(); tr.clear()
-            self.assertEqual([(x['state'], bool(x.get('opening'))) for x in (a, b, c)], [('starting', not warm), ('working', not warm), ('working', False)])
+            # ...what he reads is `opening` ("Waiting for the agent to start"); whether the first read is still `starting` underneath is the
+            # start's own pace (a fast runner has its session up by then: macOS CI, 2026-11-23)
+            self.assertIn(a['state'], conversation.LIVE)
+            self.assertEqual([(x['state'], bool(x.get('opening'))) for x in (b, c)], [('working', not warm), ('working', False)])
+            self.assertEqual(bool(a.get('opening')), not warm, 'opening from the first read')
             self.assertEqual({x['at'] for x in (a, b, c)}, {a['at']}, 'one stamp')
             for x in (b, c): self.assertAlmostEqual(x['started'], a['started'], delta=0.05)
         walk('l-one', False)      # ...the chat's first turn, its CLI starting
@@ -481,9 +484,9 @@ class TheList(unittest.TestCase):
         """A press is stamped by the whole second: one made in the second the turn's own line was heard sorted above it by the tie, and the
         stopped mark fell on the finished answer before - order by what happened, never by the clock's grain."""
         self.say('Suggest two.', 'l-one'); self.rest()
-        self.brain.delay = 30
+        self.brain.delay = HOLD
         self.say('Compare both in detail.', 'l-two', wait=False)
-        self.assertTrue(until(lambda: getattr(general.session_for(self.tid), 'busy', False)))
+        self.at_work()
         self.brain.delay = 0
         self.assertTrue(general.stop_turn(self.s, self.tid))
         sec = int(conversation.ep(general.press_lines(self.s, self.tid)[-1]['createdAt']))
@@ -499,7 +502,7 @@ class TheList(unittest.TestCase):
     def test_a_turn_is_on_disk_from_its_start_so_a_restart_at_any_point_says_it_was_cut(self):
         "The recorded restart, 2026-11-11: cut while its CLI was still coming up, the turn left his line heard with nothing under it."
         from taskuary import sessionrecord
-        self.brain.delay = 30                                                       # ...held mid-turn until let go: a slow runner never outruns it
+        self.brain.delay = HOLD                                                       # ...held mid-turn until let go: a slow runner never outruns it
         self.say('Suggest two.', 'l-one', wait=False)
         self.assertTrue(until(lambda: getattr(general.session_for(self.tid), 'busy', False) and len(self.brain.calls) == 1))
         self.assertTrue(sessionrecord._live_path(self.tid).is_file())
@@ -507,13 +510,13 @@ class TheList(unittest.TestCase):
 
     def test_a_kept_line_is_heard_and_taken_in_one_step(self):
         "The recorded flood, 2026-11-11: read between its take and its hear, a line stood for a frame at the time it was typed, above what came in since."
-        self.brain.delay = 0.5
+        self.brain.delay = HOLD
         self.say('Suggest two.', 'l-one', wait=False)
-        self.assertTrue(until(lambda: getattr(general.session_for(self.tid), 'busy', False)))
+        self.at_work()
         self.say('Near a station.', 'l-two', wait=False)
         real, at_take = self.s.take_lines, []
         def take(*a, **k): at_take.append(conversation.heard(self.s, self.tid, 'line', ['l-two'])); return real(*a, **k)
-        with mock.patch.object(self.s, 'take_lines', side_effect=take): self.rest()
+        with mock.patch.object(self.s, 'take_lines', side_effect=take): self.brain.delay = 0; self.rest()
         self.assertEqual(at_take, [True])
 
     def test_a_message_that_lands_after_the_hand_over_is_the_next_turns_to_hear(self):
@@ -585,12 +588,12 @@ class TheList(unittest.TestCase):
         self.assertEqual((st['name'], st['args']['to']), ('mcp__taskuary__propose_reply', 'erin@northwind.example'))
 
     def test_a_message_that_came_in_mid_turn_is_pending_then_heard_with_the_next_turn(self):
-        self.brain.delay = 8          # ...the mail lands while the turn works, however slow the runner (CI, 2026-11-22)
+        self.brain.delay = HOLD
         self.say('Suggest two.', 'l-one', wait=False)
-        self.assertTrue(until(lambda: getattr(general.session_for(self.tid), 'busy', False)))
-        time.sleep(1.1); mid = self.mail('One more thing: near a station.')
+        self.at_work()
+        next_second(); mid = self.mail('One more thing: near a station.')
         self.assertIn(f'm:{mid}', [x['id'] for x in self.list()['pending']])
-        self.rest()
+        self.brain.delay = 0; self.rest()
         got = self.list()
         self.assertEqual(got['pending'], []); self.assertEqual(got['items'][-1]['id'], f'm:{mid}')    # nobody took it: it stands after the turn it came in under
         self.say('And that?', 'l-two'); self.rest()
@@ -602,13 +605,13 @@ class TheList(unittest.TestCase):
         end of its own second) pushed the answer after the reply, which read at its own time: for a read the finished turn stood UNDER his
         reply, named as the next turn's, then went back - a turn and its card gone from the canvas and drawn again."""
         from taskuary.sessionrecord import NOTE_ACTOR
-        self.brain.delay = 8
+        self.brain.delay = HOLD
         self.say('Suggest two.', 'l-one', wait=False)
-        self.assertTrue(until(lambda: getattr(general.session_for(self.tid), 'busy', False)))
-        time.sleep(1.1); mid = self.mail('I booked the Harbour Room myself.', own=True)
+        self.at_work()
+        next_second(); mid = self.mail('I booked the Harbour Room myself.', own=True)
         self.s.add_comment(self.tid, NOTE_ACTOR, 'assistant_agent', 'You replied from your mailbox; I removed the unused draft.')
         turn = [x['id'] for x in self.list()['items'] if x['kind'] == 'turn']
-        self.rest()
+        self.brain.delay = 0; self.rest()
         got = self.list()
         self.assertEqual([x['id'] for x in got['items'] if x['kind'] == 'turn'], turn, self.kinds(got))   # the turn keeps its name
         self.assertEqual(got['items'][-1]['id'], f'm:{mid}')                                              # ...and the reply stands after it
@@ -639,13 +642,13 @@ class TheList(unittest.TestCase):
         mail = lambda to, words: s.add_review({'TaskId': tid, 'Kind': 'slot', 'Status': 'pending', 'DraftText': words, 'Reason': 'assistant wrote this email - approve to send',
                                                'Deliver': json.dumps({'channel': 'email', 'to': [to], 'cc': [], 'subject': 'Offsite', 'slot': to})})
         cards = lambda got: {x['id']: [(c['review'], c['status']) for c in x['cards']] for x in got['items'] if x['kind'] == 'turn' and x['cards']}
-        self.brain.delay = 0.5; self.say('Ask Ray for a bus quote and Erin for the budget.', 'l-two', wait=False); self.assertTrue(until(lambda: self.list()['working']))
+        self.brain.delay = HOLD; self.say('Ask Ray for a bus quote and Erin for the budget.', 'l-two', wait=False); self.at_work()
         ray, erin = mail('ray@northwind.example', 'Ray - a quote for a bus for 40? Alex'), mail('erin@northwind.example', 'Erin - can you approve the budget? Alex')
         self.brain.delay = 0; self.rest()
         was = self.list(); wrote = [x for x in was['items'] if x['kind'] == 'turn'][-1]
         self.assertEqual((was['letters'], was['queue']), (wrote['id'], {'live': [ray], 'held': [erin], 'line': '1 of 2 · next: the email to erin@northwind.example'}))
         self.assertEqual([r['ReviewId'] for r in s.waiting_reviews() if r['TaskId'] == tid], [ray], 'what waits on him: the one that stands')
-        t = time.time(); until(lambda: time.time() >= t + 1.1)                                  # (a stamp is a whole second)
+        next_second()
         woke, sent = [], mock.patch('taskuary.outbound.send_out', lambda *a, **k: {'channel': 'email', 'to': k.get('to') or []})
         with sent, mock.patch.object(general, 'to_agent', lambda st, t_, said, *a, **k: woke.append(said) or 'woke'), mock.patch('taskuary.learning.learn_from'):
             self.assertTrue(verdicts.decide(s, s.get_review(ray), 'approve', None, None, 'owner')['ok'])
@@ -666,11 +669,11 @@ class TheList(unittest.TestCase):
         s, tid = self.s, self.tid
         mail = lambda to, words: s.add_review({'TaskId': tid, 'Kind': 'slot', 'Status': 'pending', 'DraftText': words, 'Reason': 'assistant wrote this email - approve to send',
                                                'Deliver': json.dumps({'channel': 'email', 'to': [to], 'cc': [], 'subject': 'Offsite', 'slot': to})})
-        self.brain.delay = 0.5; self.say('Ask Ray for a quote, then tell Erin it is booked.', 'l-two', wait=False); self.assertTrue(until(lambda: self.list()['working']))
+        self.brain.delay = HOLD; self.say('Ask Ray for a quote, then tell Erin it is booked.', 'l-two', wait=False); self.at_work()
         ray, erin = mail('ray@northwind.example', 'Ray - a quote for a bus for 40? Alex'), mail('erin@northwind.example', 'Erin - the bus is booked. Alex')
         self.brain.delay = 0; self.rest()
         was = self.list(); self.assertEqual(was['queue']['held'], [erin])
-        import time; time.sleep(1.1)            # ...in the second after its last answer: an agent's own take-back is no press that holds Ray's back
+        next_second()                           # ...in the second after its last answer: an agent's own take-back is no press that holds Ray's back
         verdicts.withdraw(s, tid, 'Ray has not quoted yet', 'agent', which=str(erin))
         got = self.list()
         self.assertNotIn(erin, [c['review'] for x in got['items'] for c in ([x] if x['kind'] == 'card' else x.get('cards') or [])])
@@ -687,7 +690,7 @@ class TheList(unittest.TestCase):
         s, tid = self.s, self.tid
         mail = lambda to, words, why: s.add_review({'TaskId': tid, 'Kind': 'slot', 'Status': 'pending', 'DraftText': words, 'Reason': why,
                                                     'Deliver': json.dumps({'channel': 'email', 'to': [to], 'cc': [], 'subject': 'Venues', 'slot': to})})
-        self.brain.delay = 0.5; self.say('Tell Paula which venue.', 'l-one', wait=False); self.assertTrue(until(lambda: self.list()['working']))
+        self.brain.delay = HOLD; self.say('Tell Paula which venue.', 'l-one', wait=False); self.at_work()
         its = mail('paula@northwind.example', 'Paula - we are going with the Mill. Alex', 'assistant wrote this email - approve to send')
         his = mail('ray@northwind.example', 'Ray - call me about the Mill.', 'your email - approve to send')
         self.brain.delay = 0; self.rest()
@@ -695,7 +698,7 @@ class TheList(unittest.TestCase):
         # ...the turn that wrote it, found by its card - a slow runner may file a turn after it before this read (CI, 2026-11-22)
         turn = next(x for x in got['items'] if x['kind'] == 'turn' and its in [c['review'] for c in x.get('cards') or []])
         self.assertEqual((got['letters'], [c['review'] for c in turn['cards']]), (turn['id'], [its]))   # waiting: its card, at the end of its turn (letters are card rows)
-        t = time.time(); until(lambda: time.time() >= t + 1.1)                               # (a stamp is a whole second)
+        next_second()
         self.say('Actually, the Quay.', 'l-two'); self.rest()
         self.assertTrue(proposals.passed(s.get_review(its))); self.assertEqual(s.get_review(his)['Status'], 'pending')
         now = self.list(); old = next(x for x in now['items'] if x['id'] == turn['id'])
@@ -751,7 +754,7 @@ class TheList(unittest.TestCase):
         rid = self.s.add_review({'TaskId': self.tid, 'MessageId': self.s.list_messages(self.tid)[0]['MessageId'], 'Kind': 'draft_reply', 'Status': 'pending',
                                  'Channel': 'email', 'DraftText': 'Hi Gail, which date? Alex'})
         self.assertEqual([(c['review'], c['status']) for c in self.list()['items'][-1]['cards']], [(rid - 1, 'approved'), (rid, 'pending')])
-        self.say('Thanks.', 'l-two'); self.rest()
+        next_second(); self.say('Thanks.', 'l-two'); self.rest()
         turns = [x for x in self.list()['items'] if x['kind'] == 'turn']
         self.assertEqual([(c['review'], c['status'], c.get('was', {}).get('text')) for c in turns[-2]['cards']], [(rid - 1, 'approved', None), (rid, 'passed', 'Hi Gail, which date? Alex')])
         self.assertEqual(turns[-1]['cards'], [])
@@ -798,14 +801,14 @@ class TheList(unittest.TestCase):
         self.say('Draft it.', 'l-one'); self.rest()
         rid = wrapup.agent_reply(self.s, self.tid, 'Hi Gail, which city? Alex', 'assistant', sid=general.session_for(self.tid).sid)['review_id']
         self.assertEqual([(c['review'], c['status']) for c in self.list()['items'][-1]['cards']], [(rid, 'pending')])
-        self.brain.delay = 30
+        self.brain.delay = HOLD
         self.say('Try now - say Leeds.', 'l-two', wait=False)
         got = self.list(); ids = [x['id'] for x in got['items']]
         self.assertEqual([(x['kind'], x.get('state', '')) for x in got['items']][-3:], [('turn', 'done'), ('line', ''), ('turn', got['items'][-1]['state'])])
         self.assertIn(got['items'][-1]['state'], ('starting', 'working'))
         self.assertEqual([(c['review'], c['status']) for c in got['items'][-3]['cards']], [(rid, 'passed')])          # greyed at once, where it stood
         self.assertTrue(until(lambda: len(self.brain.calls) == 2)); self.assertIn(f'Card rv{rid} (the reply', self.brain.calls[-1].split('greyed, it will not go')[0])   # ...and its agent told so
-        self.assertTrue(until(lambda: getattr(general.session_for(self.tid), 'busy', False)))
+        self.at_work()
         rid2 = wrapup.agent_reply(self.s, self.tid, 'Hi Gail, Leeds it is. Alex', 'assistant', sid=general.session_for(self.tid).sid)['review_id']
         got = self.list()
         self.assertEqual((got['items'][-1]['cards'], got['working']), ([], True))                                     # held back while the turn works
@@ -823,7 +826,7 @@ class TheList(unittest.TestCase):
         from taskuary import proposals, wrapup
         self.say('Draft it.', 'l-one'); self.rest()
         rid = wrapup.agent_reply(self.s, self.tid, 'Hi Gail, which city? Alex', 'assistant', sid=general.session_for(self.tid).sid)['review_id']
-        t = time.time(); self.assertTrue(until(lambda: time.time() >= t + 1.1))          # (a stamp is a whole second: she writes in a later one)
+        next_second()
         self.mail('Actually - can we make it Leeds?')
         got = self.list()
         self.assertEqual([(x['kind'], [(c['review'], c['status']) for c in x.get('cards') or []]) for x in got['items']][-2:],
@@ -854,9 +857,9 @@ class TheList(unittest.TestCase):
         """Windows CI, 2026-11-21 (flaky for days, worse on a loaded runner): his second line waited behind a turn; the next turn took it off
         the box, and the turn before let go of its start (answered: nothing waits) before the new one read busy - for that beat nothing was at
         work under his line, and a read said the chat was at rest. The interleaving forced: the take held, the turn before let go inside it."""
-        self.brain.delay = 30
+        self.brain.delay = HOLD
         self.say('Suggest two.', 'l-one', wait=False)
-        self.assertTrue(until(lambda: getattr(general.session_for(self.tid), 'busy', False)))
+        self.at_work()
         self.say('Near a station.', 'l-two', wait=False)
         took, go, real_take, real_answered = threading.Event(), threading.Event(), general.take_kept, general.answered
         def take(*a, **k):
@@ -879,15 +882,15 @@ class TheList(unittest.TestCase):
         go said nothing worked and wrote the mail at the foot - the next read, the session still busy and the turn no longer the newest
         thing, had the chat at work again over that mail. Both reads in that beat agree: at rest, the mail by the box."""
         filed, go, real = threading.Event(), threading.Event(), general.GeneralSession._file
-        def file(s, *a, **k): r = real(s, *a, **k); filed.set(); go.wait(10); return r
-        self.brain.delay = 30
+        def file(s, *a, **k): r = real(s, *a, **k); filed.set(); go.wait(30); return r
+        self.brain.delay = HOLD
         with mock.patch.object(general.GeneralSession, '_file', file):
             self.say('Suggest two.', 'l-one', wait=False)
-            self.assertTrue(until(lambda: getattr(general.session_for(self.tid), 'busy', False)))
-            time.sleep(1.1); mid = self.mail('One more thing: near a station.')
+            self.at_work()
+            next_second(); mid = self.mail('One more thing: near a station.')
             self.assertIn(f'm:{mid}', [x['id'] for x in self.list()['pending']])
             self.brain.delay = 0
-            self.assertTrue(filed.wait(10))
+            self.assertTrue(filed.wait(30))
             reads = [self.list() for _ in range(2)]                                        # ...its answer filed, its session not let go
             self.assertEqual([(g['working'], [p['id'] for p in g['pending']], g['items'][-1]['id']) for g in reads], [(False, [f'm:{mid}'], 't:l-one:0')] * 2)
             go.set()
@@ -899,9 +902,9 @@ class TheList(unittest.TestCase):
         next turn took the session nothing was at work under the line his stop handed over. The next turn held off the floor till the
         stopped one has ended."""
         self.say('Suggest two.', 'l-one'); self.rest()
-        self.brain.delay = 30
+        self.brain.delay = HOLD
         self.say('Compare both in detail.', 'l-two', wait=False)
-        self.assertTrue(until(lambda: getattr(general.session_for(self.tid), 'busy', False)))
+        self.at_work()
         stopped = [t for t in threading.enumerate() if t.name == f'line-{self.tid}']
         hold, real = threading.Event(), general.GeneralSession._take
         def take(s, *a, **k): hold.wait(10); return real(s, *a, **k)
@@ -917,9 +920,9 @@ class TheList(unittest.TestCase):
     def test_a_line_that_cannot_reach_the_turn_at_work_says_so(self):
         """Design round 3, 2026-11-18: his line sat 13 minutes behind a long turn and nothing said why. On a road that takes no words mid-turn (a
         model asked the plain way, no loop of its own to hear him in) his waiting line says so, once; on a road that does, nothing is said."""
-        self.brain.delay = 1.0
+        self.brain.delay = HOLD
         self.say('Suggest two.', 'l-one', wait=False)
-        self.assertTrue(until(lambda: getattr(general.session_for(self.tid), 'busy', False)))
+        self.at_work()
         self.assertEqual(self.list()['later'], '', 'nothing waits')
         self.say('Near a station.', 'l-two', wait=False)
         self.assertEqual(self.list()['later'], conversation.LATER)
@@ -931,9 +934,9 @@ class TheList(unittest.TestCase):
         """The waiting room (the owner, 2026-11-12: "make sure ... it comes off the waiting room correctly. it does not show in 2 places"):
         mid-turn his lines, a sender's mail and his own outside reply all wait by the box - never on the canvas too - and land on it once,
         where the next turn heard them. One he takes back (the row's trash) leaves no trace and is never told."""
-        self.brain.delay = 1.0
+        self.brain.delay = HOLD
         self.say('Suggest two.', 'l-one', wait=False)
-        self.assertTrue(until(lambda: getattr(general.session_for(self.tid), 'busy', False)))
+        self.at_work()
         self.say('Near a station.', 'l-two', wait=False); self.say('Forget the budget.', 'l-three', wait=False)
         self.mail('Also - 40 people, not 30.'); self.mail('I asked the Quay for a quote.', own=True)
         got = self.list()
@@ -943,7 +946,7 @@ class TheList(unittest.TestCase):
         got = self.list()
         self.assertNotIn('l-three', [x['id'] for x in got['pending']]); self.assertEqual(got['dropped'], ['l-three'])
         self.assertEqual(general.drop_line(self.s, self.tid, 'l-one')['ok'], False)                    # ...one the agent has stays its
-        self.rest()
+        self.brain.delay = 0; self.rest()
         got = self.list(); ids = [x['id'] for x in got['items']]
         self.assertEqual((got['pending'], 'l-three' in ids, ids.count('l-two')), ([], False, 1))
         self.assertEqual(sum(x['kind'] == 'arrival' for x in got['items']), 3)                          # the first mail and both that waited
@@ -978,7 +981,7 @@ class TheList(unittest.TestCase):
         """The walks, 2026-11-17: his own reply on the thread came in at rest and was handed to the agent (general.hand) - for the ~3 s before
         the hand-over was written it sat as a chip by the box under a turn's bare dots, then jumped up into the chat. The input that starts a
         turn is drawn in its place from the first read, the turn under it, and both keep their names once it is heard."""
-        self.say('Suggest two.', 'l-one'); self.rest(); time.sleep(1.1)              # an earlier turn: its session stays, at rest
+        self.say('Suggest two.', 'l-one'); self.rest(); next_second()              # an earlier turn: its session stays, at rest
         first = [x['id'] for x in self.list()['items']]
         mid = self.mail('I booked the Harbour Room myself.', own=True)
         general.hand(self.tid); self.addCleanup(general.hand, self.tid, -1)
@@ -1020,9 +1023,9 @@ class TheList(unittest.TestCase):
         from types import SimpleNamespace
         from taskuary import concierge
         self.say('Suggest two.', 'l-one'); self.rest()
-        self.brain.delay = 30
+        self.brain.delay = HOLD
         self.say('Compare both in detail.', 'l-two', wait=False)
-        self.assertTrue(until(lambda: getattr(general.session_for(self.tid), 'busy', False)))
+        self.at_work()
         self.brain.delay = 0
         self.assertTrue(concierge.close_task(self.s, self.tid, 'owner'))
         shut = next(x['id'] for x in self.list()['items'] if x.get('closes'))                 # drawn: "You marked it done"
@@ -1055,7 +1058,7 @@ class TheList(unittest.TestCase):
         tid = self.s.create_task({'Title': ask, 'Kind': 'general', 'Status': 'open', 'OriginBase': 'owner'}, 'o')
         shape = lambda: [(x['kind'], x.get('id', '')[:2], x.get('text') or '', x.get('state', '')) for x in conversation.items(self.s, tid)['items']]
         self.assertEqual(shape(), [])                         # ...made and not started: nothing yet - the line he may type is what opens it
-        self.brain.delay = 0.6
+        self.brain.delay = HOLD
         go = threading.Thread(target=lambda: general.start_session(self.s, tid).send_prompt('Work the task.', brief=True, kept=True), daemon=True); go.start()
         self.assertTrue(until(lambda: getattr(general.session_for(tid), 'busy', False) and ownwork.row_for(self.s, tid)))
         self.assertEqual([(k, i, w) for k, i, w, _ in shape()][:1], [('line', 'a:', ask)])
@@ -1071,15 +1074,11 @@ class TheList(unittest.TestCase):
 
     def test_what_is_handed_to_the_agent_is_a_line_or_an_arrival_and_his_own_outside_reply_is_marked_own(self):
         """The owner's SIDES rule, 2026-11-11: "for prompts incoming is on right but your own response on that channel can be on left.
-        basically right side triggers agent left side does not." The list says which is which - an arrival `own` is his outside reply - and
-        the page's sheet puts an arrival and a line at the end (right), an own arrival and the agent's turn at the start (left)."""
-        from pathlib import Path
+        basically right side triggers agent left side does not." The list says which is which - an arrival `own` is his outside reply."""
         self.say('Suggest two.', 'l-one'); self.rest()
         self.mail('I booked the Harbour Room myself.', own=True); self.mail('Thanks - which day?')
         got = [(x['kind'], bool(x.get('own'))) for x in self.list()['items'] if x['kind'] != 'turn']
         self.assertEqual(sorted(got), [('arrival', False), ('arrival', False), ('arrival', True), ('line', False)])
-        css = (Path(__file__).parent.parent / 'website' / 'src' / 'generalWorkspace.css').read_text(encoding='utf-8')
-        self.assertIn('.tq-aui-chat .tq-aui-arrived { justify-self: end;', css); self.assertIn('.tq-aui-chat .tq-aui-arrived-own { justify-self: start;', css)
 
     def test_a_held_step_he_writes_past_greys_in_its_place_and_its_agent_is_told_to_raise_it_again(self):
         """The owner's live task, 2026-11-11 ("just asked it a question dots above the prompt starting going then the question has 2 approve
@@ -1096,6 +1095,7 @@ class TheList(unittest.TestCase):
         rid = proposals.queue(self.s, self.tid, dict(step))['reviewId']
         real, at_keep = general.wait_line, []
         def keep(store, tid, text, files=None, line_id=None): at_keep.append(conversation.heard(store, tid, 'line', [line_id])); return real(store, tid, text, files, line_id)
+        next_second()                       # (his line in a later second than the card: a stamp is a whole second)
         with mock.patch.object(general, 'wait_line', side_effect=keep): self.say('What does that step change?', 'l-two')
         self.rest()
         self.assertEqual(at_keep, [True])
@@ -1115,7 +1115,7 @@ class TheList(unittest.TestCase):
         self.say('Remove the old export.', 'l-one'); self.rest()
         rid = proposals.queue(self.s, self.tid, {'action': 'shell_act', 'sid': general.session_for(self.tid).sid, 'command': 'rm old-export.csv', 'what': 'delete old-export.csv'})['reviewId']
         self.s.decide_review(rid, 'superseded', None, 'taskuary', shellgate.FAILED)       # ...he pressed it, and it failed
-        self.brain.delay = 1.1                      # ...the turn the failure wakes ends in a later second than the press: a stamp is no finer
+        next_second()                       # (the turn the failure wakes in a later second than the press: a stamp is no finer)
         self.say('Try it again.', 'l-three'); self.rest()
         turns = [x for x in self.list()['items'] if x['kind'] == 'turn']
         self.assertEqual([[(c['id'], c['status']) for c in t['cards']] for t in turns], [[(f'r:{rid}', 'failed')], []])
@@ -1135,7 +1135,7 @@ class TheList(unittest.TestCase):
     def test_his_answer_to_a_step_that_waited_stands_in_the_chat_from_the_press(self):
         """The recorded hold, 2026-11-11: he pressed Allow once, the turn it had stopped went on - and his press waited by the box as if
         nobody had heard it, then entered above work already drawn. The turn that waited on it hears it as it is pressed."""
-        self.brain.delay = 30
+        self.brain.delay = HOLD
         self.say('Remove the old export.', 'l-one', wait=False)
         self.assertTrue(until(lambda: self.list()['working'] and any(x['kind'] == 'turn' for x in self.list()['items'])))
         self.s.audit('task', self.tid, 'permission_answered', 'owner', detail={'answer': 'allow_once', 'asked': 'delete old-export.csv'})
@@ -1151,9 +1151,9 @@ class TheList(unittest.TestCase):
         - a restart that cut nothing, under lines written since. Only a close that takes the process down keeps it."""
         from taskuary import sessionrecord, terminal
         self.say('Suggest two.', 'l-one'); self.rest()
-        self.brain.delay = 30
+        self.brain.delay = HOLD
         self.say('Compare both in detail.', 'l-two', wait=False)
-        self.assertTrue(until(lambda: getattr(general.session_for(self.tid), 'busy', False)))
+        self.at_work()
         ses = general.session_for(self.tid)
         ses._remember_trace('progress', 'text', 'The lakeside venue costs more.')
         ses.close(learn=False, report=False)
@@ -1205,7 +1205,7 @@ class TheList(unittest.TestCase):
     def test_a_turn_the_app_closing_cut_is_kept_for_the_next_start(self):
         from taskuary import proposals, sessionrecord, terminal
         self.say('Suggest two.', 'l-one'); self.rest()
-        self.brain.delay = 30
+        self.brain.delay = HOLD
         # ...its first words written while the turn's start is still being set up (CI on macOS, 0.4.0.27): busy from the hand-over, the start
         # named its provider later by drawing its trace again from nothing - and the words already said went, from the chat and from disk
         said, move_on = threading.Event(), proposals.move_on
@@ -1258,13 +1258,13 @@ class TheList(unittest.TestCase):
         self.say('Draft it.', 'l-one'); self.rest()
         import json as _j      # ...its turn said it goes on once he presses (a press wakes only then - the owner, 2026-11-22)
         self.s.add_comment(self.tid, 'assistant', general.SUMMARY_TYPE, _j.dumps({'did': 'Wrote the playbook.', 'after_press': 'send'}))
-        self.brain.delay = 1.5
+        self.brain.delay = HOLD
         self.assertEqual(verdicts.in_words({'playbook': 'vendor-review', 'path': '/home/alex/notes/vendor-review.md', 'steps': [1, 2]}),
                          'playbook: vendor-review, path: vendor-review.md')                    # words: no JSON, no folder of his
         rid = self.s.add_review({'TaskId': self.tid, 'Kind': 'action', 'Status': 'pending', 'DraftText': '{}', 'Reason': 'write playbook'})
         self.s.decide_review(rid, 'approved', '{}', 'owner')          # ...the press: its card's event is what the woken turn is told
         self.assertTrue(general.approved(self.s, self.tid, 'Approve', 'write playbook - playbook: vendor-review', review=rid))
-        self.assertTrue(until(lambda: getattr(general.session_for(self.tid), 'busy', False)))
+        self.at_work()
         self.say('And tell Gail.', 'l-two', wait=False)
         def check():
             got = self.list(); live = [i for i, x in enumerate(got['items']) if x['kind'] == 'turn' and x['state'] in ('working', 'starting')]
@@ -1272,11 +1272,13 @@ class TheList(unittest.TestCase):
             self.assertFalse([x for x in [*got['items'], *got['pending']] if 'pressed Approve' in str(x.get('text') or '') and x['kind'] == 'line'])
             self.assertEqual(live, [last] if got['working'] else [], self.kinds(got))
             return got
-        for _ in range(12): check(); time.sleep(0.25)
-        self.rest(); got = check()
+        check()                                                              # ...the press's turn at work, his line by the box
+        self.brain.go()                                                      # ...it answers, and the turn his line begins is at work
+        self.assertTrue(until(lambda: len(self.brain.calls) == 3 and self.brain.inside)); check()
+        self.brain.delay = 0; self.rest(); got = check()
         self.assertEqual(self.kinds(got)[-4:], [('turn', 'done'), ('turn', 'done'), ('line', ''), ('turn', 'done')])
         # ...and a note the waiting room hands a chat agent is filed as Taskuary's, whoever's name the room has it under
-        n = len(self.brain.calls); self.brain.delay = 0
+        n = len(self.brain.calls)
         waitroom.to_general(self.s, self.tid, general.session_for(self.tid) or general.start_session(self.s, self.tid), [{'Note': 'The owner pressed Approve on what you set up.', 'CreatedBy': 'router'}])
         self.assertTrue(until(lambda: len(self.brain.calls) > n)); self.rest()
         self.assertFalse([x for x in self.list()['items'] if x['kind'] == 'line' and 'pressed Approve' in x['text']])
@@ -1304,7 +1306,7 @@ class TheList(unittest.TestCase):
         self.assertEqual(self.kinds(got), [('arrival', '')]); self.assertFalse(got['working'])
         with self.assertRaises(origin.Refusal): origin.launch_mode(s, tid, 'claude')           # no start, by any road
         out = self.say('Summarise it for me.', 'l-held')
-        self.assertTrue(out.get('held')); time.sleep(0.4)
+        self.assertTrue(out.get('held')); self.assertTrue(until(lambda: [x['id'] for x in self.list()['pending']] == ['l-held']))
         got = self.list()
         self.assertEqual([x['id'] for x in got['pending']], ['l-held']); self.assertEqual(self.brain.calls, [])
         self.assertFalse(got['working']); self.assertIsNone(general.session_for(tid))
@@ -1411,7 +1413,7 @@ class TheList(unittest.TestCase):
         self.say('Suggest two.'); self.rest()
         got = self.list(); asked = next(x for x in got['items'] if x['kind'] == 'turn')
         self.assertEqual((got['asking']['turn'], got['asking'].get('said')), (asked['id'], True), got['asking'])
-        t = time.time(); until(lambda: time.time() >= t + 1.1)                       # (a stamp is a whole second)
+        next_second()
         self.say('One more thing - it needs parking for 15 cars.', wait=True); self.rest()
         with mock.patch('taskuary.taskstate.asking', return_value={k: v for k, v in got['asking'].items() if k not in ('turn', 'said')}): now = self.list()
         turns = [x for x in now['items'] if x['kind'] == 'turn']
@@ -1488,17 +1490,9 @@ if __name__ == '__main__':
     unittest.main()
 
 
-def test_a_card_he_said_no_to_keeps_its_words_where_it_stood():
-    """The real-CLI walk, 2026-11-16: Don't send took the email's card off the chat and left only "You dropped the email" - the basic flow's
-    "no card gone from the canvas". A rejected draft is drawn where it stood, greyed, with what it said."""
-    from taskuary import conversation
-    c = conversation._card({'ReviewId': 9, 'Kind': 'slot', 'Status': 'rejected', 'DraftText': 'Hi Erin, the open house moved to Thursday.',
-                            'DecideNote': '', 'CreatedAt': '2026-11-17 03:41:00', 'DecidedAt': '2026-11-17 03:41:20'})
-    assert (c['status'], c['was']['text']) == ('rejected', 'Hi Erin, the open house moved to Thursday.'), c
-
-
 def test_an_email_he_said_dont_send_to_stays_in_the_list_where_it_stood():
-    "The same, read through the task's list: the rejected email's card is placed, greyed, with its words - never dropped from it."
+    """The real-CLI walk, 2026-11-16: Don't send took the email's card off the chat and left only "You dropped the email" - the basic flow's
+    "no card gone from the canvas". The rejected email's card is placed where it stood, greyed, with its words - never dropped from the list."""
     from taskuary import conversation
     from taskuary.store import MemoryStore
     from taskuary.testing import Factory

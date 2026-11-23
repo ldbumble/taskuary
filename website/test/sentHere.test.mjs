@@ -36,17 +36,13 @@ test("a sent reply stays its card: the subject, the words, and ✓ Sent on the b
 
 // THE LIVE SHAPE (the audit, 2026-11-13, on the real CLI): Send pressed, he stays on the task, the sender writes again, the agent drafts the
 // new reply. The sent letter stood where the new draft belonged - "✓ Sent" under the turn that said "it waits for your Send", no Send to press
-test("the sent card holds its draft's place only until the task reads it as gone - then it is its turn's card, and what waits now is drawn", () => {
+test("in a chat with turns the pressed card is the only one that says it went - from the press, never a second copy under the chat", () => {
   const here = { id: 2, text: "Yes, March 12 works.", channel: "email", closing: false };
-  const pressed = [{ ReviewId: 2, Status: "pending" }], read = [{ ReviewId: 2, Status: "approved" }], again = [...read, { ReviewId: 3, Status: "pending" }];
-  assert.equal(sentStands(here, pressed, true), here, "at the press, before the task is read again: where its draft stood");
-  assert.equal(sentStands(here, read, true), null, "read as gone: its turn's card says it");
-  assert.equal(sentStands(here, again, true), null, "and the next draft is never hidden behind it");
-  assert.equal(sentStands({ ...here, id: 2 }, [{ ReviewId: 2, Status: "edited" }], true), null);
-  assert.equal(sentStands(here, read, false), here, "a task with no turns has no such card: it stays where it stood");
-  assert.equal(sentStands(null, again, true), null);
+  assert.equal(sentStands(here, true), null, "at the press, before the task is read again: the pressed card in its turn says it - never a second one");
+  assert.equal(sentStands(here, false), here, "a task with no turns has no such card: it stays where it stood");
+  assert.equal(sentStands(null, true), null);
   const page = readFileSync(new URL("../src/TaskPage.jsx", import.meta.url), "utf8");
-  assert.match(page, /const sentBox = sentStands\(sentHere, allReviews, inTurns\);/);
+  assert.match(page, /const sentBox = sentStands\(sentHere, inTurns\);/);
   assert.match(page, /WENT\.includes\(r\.Status\) && r\.ReviewId !== sentBox\?\.id\)/);      // ...its turn's card is drawn from the same word
 });
 

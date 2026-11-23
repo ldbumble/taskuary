@@ -30,7 +30,9 @@ export const eventsOf = (steps, running, tail = true) => steps.flatMap((s, i) =>
   const id = s.id || `t${i}`, output = String(s.output || "").trim();
   if (s.k === "tool") return [{ type: "tool_call", name: s.name, detail: { tool_call_id: id, args: argsOf(s), output,
       ...(s.parent ? { parent: s.parent } : {}), ...(s.edit ? { edit: s.edit } : {}), ...(s.file ? { file: s.file } : {}),
-      ...(s.outcome ? { outcome: s.outcome } : {}), ...(s.why ? { why: s.why } : {}), ...(s.times > 1 ? { times: s.times } : {}), ...(s.did ? { did: s.did } : {}) } },
+      ...(s.outcome ? { outcome: s.outcome } : {}), ...(s.why ? { why: s.why } : {}), ...(s.times > 1 ? { times: s.times } : {}), ...(s.did ? { did: s.did } : {}),
+      // ...the agent's own words for it - its title, its kind, its files (agentSteps.agentWords) - and the options of a permission it waits on
+      ...(s.title ? { title: s.title } : {}), ...(s.tool_kind ? { tool_kind: s.tool_kind } : {}), ...(s.paths?.length ? { paths: s.paths } : {}), ...(s.ask?.length ? { ask: s.ask } : {}) } },
     ...(runs(s, running, tail && i === steps.length - 1) ? [] : [{ type: "tool_result", name: id, detail: { tool_call_id: id, ...ended(s, output) } }])];
   if (s.k === "plan") return [{ type: "tool_call", name: "TodoWrite", detail: { tool_call_id: id, args: { todos: s.items || [] } } },
     { type: "tool_result", name: id, detail: { tool_call_id: id, result: "" } }];

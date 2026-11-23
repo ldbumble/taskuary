@@ -48,7 +48,9 @@ export const StepRow = ({ step }) => {
   if (step.kind === "note" || step.kind === "error") return <div className={`tq-aui-note tq-aui-note-${step.kind}`}>{step.summary}</div>;
   // ...and the one at work now says what it is doing, with a quiet spinner where its word was
   // ...one still at work while later ones finished runs alongside them, and says so (agentSteps `alongside`)
+  // ...and the files the agent named for it that its title does not (agentSteps.agentWords), as quiet chips beside its words
   const head = <><Mark step={step} /><Label step={step} />
+    {(step.chips || []).map((c) => <span key={c} className="tq-aui-step-chip" data-tq-step-chip="">{c}</span>)}
     {!!step.outcome && <span className="tq-aui-step-outcome" data-tq-step-outcome=""> - {step.outcome}</span>}
     {step.times > 1 && <span className="tq-aui-step-outcome" data-tq-step-times=""> ({step.times} times)</span>}
     {step.status === "running" ? <>{step.alongside && <em data-tq-step-alongside="">still working in parallel</em>}

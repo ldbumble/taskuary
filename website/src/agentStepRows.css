@@ -44,3 +44,5 @@
 [data-tq-step-alongside] { margin-right: 6px; }
 /* a command at work: its newest output under its row, as a terminal shows it (agentSteps.tailOf) - its last lines, never a scroll to keep up */
 .tq-aui-step pre.tq-aui-step-tail { max-height: 9.5em; overflow: hidden; opacity: .85; }
+/* a file the agent named for a call that its title does not say (agentSteps.agentWords) */
+.tq-aui-step-chip { margin-left: 6px; padding: 0 5px; border-radius: 4px; background: var(--tq-inset, #f1ede5); color: var(--tq-muted, #858078); font-size: 11px; }

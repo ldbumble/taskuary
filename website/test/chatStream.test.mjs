@@ -245,6 +245,27 @@ test("a pushed row patches its turn in place, and a turn lays out the same at wo
 });
 
 
+// THE AGENT'S OWN WORDS ARE THE ROW (the owner, 2026-11-23: adopt the open-source model): an ACP agent's call reads by its title, an icon by
+// its kind and the files it named - never our reading of its command; Taskuary's own tools and a road that gives no title keep our words
+test("a titled call is the agent's title, kind and files; our own tools and an untitled call keep our words", async () => {
+  const { eventsOf, turnParts } = await import("../src/chatStream.js");
+  const rows = (steps) => turnParts(eventsOf(steps, false)).flatMap((p) => p.steps || []);
+  const [ls, rd, grep, own, plain] = rows([
+    { id: "s:x:c1", k: "tool", name: "Bash", title: "`ls -la vendors`", tool_kind: "execute", args: { command: "ls -la vendors", description: "List vendors" }, status: "completed" },
+    { id: "s:x:c2", k: "tool", name: "Read", title: "Read File", tool_kind: "read", paths: ["C:/work/ledger/budget.py"], args: { file_path: "C:/work/ledger/budget.py" }, status: "completed" },
+    { id: "s:x:c3", k: "tool", name: "Grep", title: "grep -n \"total\" src", tool_kind: "search", args: { pattern: "total" }, status: "completed" },
+    { id: "s:x:c4", k: "tool", name: "mcp__taskuary__my_task", title: "mcp__taskuary__my_task", tool_kind: "other", args: {}, status: "completed" },
+    { id: "s:x:c5", k: "tool", name: "Bash", args: { command: "ls -la vendors", description: "List vendors" }, status: "completed" }]);
+  assert.deepEqual([ls.summary, ls.kind, ls.code], ["ls -la vendors", "run", "ls -la vendors"], "its title, its back-ticks off, drawn as the command it is");
+  assert.deepEqual([rd.summary, rd.kind, rd.chips], ["Read File", "read", ["budget.py"]], "the file it named beside a title that does not say it");
+  assert.deepEqual([grep.summary, grep.kind], ['grep -n "total" src', "search"]);
+  assert.notEqual(own.summary, "mcp__taskuary__my_task", "Taskuary's own tool in the product's words");
+  assert.equal(plain.summary, "Listed the files in vendors", "a call with no title of the agent's: our words, as before");
+  assert.equal(rows([{ id: "a", k: "tool", name: "Read", title: "Read a.ts", tool_kind: "read", args: {}, status: "completed" },
+    { id: "b", k: "tool", name: "Read", title: "Read b.ts", tool_kind: "read", args: {}, status: "completed" }]).length, 2, "two titled reads are two rows");
+});
+
+
 // THE CALL'S OWN DIFF, AND A COMMAND'S OUTPUT AS IT COMES (the owner, 2026-11-23: Zed draws the agent's `diff` and a live terminal)
 test("an edit row is the call's own diff, never one read off its arguments, and a running command shows its newest output", async () => {
   const { eventsOf, turnParts } = await import("../src/chatStream.js");

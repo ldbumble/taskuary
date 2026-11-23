@@ -459,6 +459,22 @@ export const present = (s) => { const t = String(s || ""), m = /^([A-Z][a-z]+)\b
 // the row's words: what it is doing while it runs, what it did once done
 export const stepLabel = (s) => (s?.status === "running" ? s.doing || present(s.summary) : s?.summary || "");
 
+// ── THE AGENT'S OWN WORDS FOR A CALL (the owner, 2026-11-23: adopt the open-source model) ───────────────────────────────────────────
+// An ACP agent names each call itself - its `title`, upgraded as the call goes ("Read File", then "Read budget.py"), its `kind`, its files
+// (conversation.acp_steps) - and the row is that, as Zed, Toad and agent-shell draw it: the title (its back-ticks off), an icon by its kind, the
+// files it names that the title does not. Our own words only for Taskuary's own tools (the product's copy), a helper's work, and a road that
+// gives no title (describeCall): nothing of the command is read here for an agent that already said what it does
+const ACP_KIND = { read: "read", edit: "edit", delete: "edit", move: "edit", search: "search", execute: "run", fetch: "page", think: "tool", other: "tool", switch_mode: "tool" };
+const agentWords = (e) => {
+  const d = e.detail || {}, title = String(d.title || "").replace(/`/g, "").replace(/\s+/g, " ").trim();
+  if (!title || ownTool(e.name)) return null;
+  const ours = describeCall(e.name, d.args || {});
+  if (ours.kind === "helper") return null;                 // ...a helper's row reads by the work it was given, its steps under it (tidy)
+  const kind = ACP_KIND[d.tool_kind] || ours.kind || "tool", summary = title.length > 140 ? `${title.slice(0, 139)}…` : title;
+  const chips = [...new Set((d.paths || []).map(baseName).filter(Boolean))].filter((b) => !summary.includes(b)).slice(0, 3);
+  return { kind, summary, doing: summary, titled: true, file: (d.paths || [])[0] || "", ...(kind === "run" ? { code: summary } : {}), ...(chips.length ? { chips } : {}) };
+};
+
 // a mail search's own answer says how many it found - read off the JSON it returned, when it is JSON
 const countOf = (out) => {
   let j; try { j = JSON.parse(String(out || "").replace(/ ⏎ /g, "\n")); } catch { return null; }
@@ -527,7 +543,7 @@ export function stepsOf(trace, { keepStart = true } = {}) {
       const id = e.detail?.tool_call_id || `${e.name}-${steps.length}`;
       // ...A BROWSER CALL SAYS WHAT IT ACTED ON (the owner, 2026-11-23: "Clicked on the page, and 1 more"): the words the gate wrote where it read the
       // page (browsergate.did - "Clicked the "Post" button on x.example"), carried on the step (`did`), over any reading of the command here
-      const d = { ...describeCall(e.name, args), ...(e.detail?.did ? { summary: e.detail.did } : {}) };
+      const d = { ...(agentWords(e) || describeCall(e.name, args)), ...(e.detail?.did ? { summary: e.detail.did } : {}) };
       // ...its outcome in a few words and the same call made again, as the server's one reading of the turn says (chatlog.tool_rows)
       const step = { id, ...d, tool: e.name, raw: rawOf(e.name || "tool", args), output: String(e.detail?.output || ""), status: "running", own: ownTool(e.name),
         ...(e.detail?.outcome ? { outcome: e.detail.outcome } : {}), ...(e.detail?.why ? { why: e.detail.why } : {}), ...(e.detail?.times > 1 ? { times: e.detail.times } : {}),
@@ -625,8 +641,10 @@ function group(steps) {
     if (!("raw" in s) || s.kids?.length) { out.push(s); i += 1; continue; }
     let j = i + 1;
     while (j < steps.length && "raw" in steps[j] && !steps[j].kids?.length && steps[j].kind === s.kind
-           // ..."(2 times)" only for the same command: two scripts of one length are two
-           && (["read", "search", "web", "page", "edit"].includes(s.kind) || (steps[j].summary === s.summary && (s.kind !== "run" || steps[j].raw === s.raw))
+           // ..."(2 times)" only for the same command: two scripts of one length are two - and a call the agent titled stands as its own row,
+           // in its own words, never merged into ours ("Read a.ts, b.ts and 2 more"): only the same title again is "(2 times)"
+           && (["read", "search", "web", "page", "edit"].includes(s.kind) && !s.titled && !steps[j].titled
+               || (steps[j].summary === s.summary && (s.kind !== "run" || steps[j].raw === s.raw))
                || (s.kind === "mail" && s.q !== undefined && steps[j].q !== undefined))) j += 1;
     const run = steps.slice(i, j);
     const summary = run.length > 1 ? together(run) : null;

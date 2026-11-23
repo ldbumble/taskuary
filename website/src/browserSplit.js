@@ -229,6 +229,16 @@ export const heldOn = (review, sid) => {
   return { id: review.ReviewId, what: p.what || p.command || "the step the agent held", site: p.site || "", url: p.url || "", why: p.why || "" };
 };
 
+// THE CARDS HIS PRESS IS ON NOW, BY THE CHAT'S OWN LIST (conversation.items): a card drawn there and not greyed. The view's "waits for your
+// Approve in the chat" names only these (walk 10, 2026-11-23: it named a held sign-up for 15 minutes while the turn at work drew no card -
+// a card comes as a turn's last thing - and again after an input had greyed it)
+export const pressable = (list) => new Set((list?.items || [])
+  .flatMap((x) => (x.kind === "card" ? [x] : x.kind === "turn" ? x.cards || [] : []))
+  .filter((c) => c.status === "pending" && c.review != null).map((c) => c.review));
+
+// ONE THING IN FRONT OF HIM AT A TIME (the owner's rule): his turn on the page, else the held step that waits for his Approve - never both
+export const pageBars = (turn, held = []) => (turn ? { turn, held: [] } : { turn: null, held });
+
 // A CHAT TASK SHOWS THE BROWSER ONLY WHEN THE OWNER IS NEEDED ON IT (the owner, 2026-11-05: "for browser we don't really want to show it
 // unless they need login ... Browser should open side by side not top/bottom"). The agent browsing is a "Working on this…" line in the
 // chat and nothing more; the page is drawn for a sign-in or a code the vault does not keep (a `signin:` ask), a hand-over - a captcha,

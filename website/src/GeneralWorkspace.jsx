@@ -46,7 +46,7 @@ import ActionCard from "./ActionCard.jsx";
 import CopyCorner from "./CopyCorner.jsx";
 import { SessionPane, TerminalPane } from "./TerminalView.jsx";
 import ThreadReading from "./ThreadReading.jsx";
-import { askPlaceholder, heldOn, isSignin, isTurn, waitsOnPage } from "./browserSplit.js";
+import { askPlaceholder, heldOn, isSignin, isTurn, pageBars, pressable, waitsOnPage } from "./browserSplit.js";
 import { BORDER, DIM, FAINT, INK, PANEL, PANEL2, mono } from "./theme.jsx";
 import "./generalWorkspace.css";
 import "./agentStepRows.css";
@@ -994,7 +994,9 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
   /* WHAT WAITS ON THE BROWSER IS ON THE BROWSER (the owner, 2026-10-28: "it should show up as a BROWSER inside the agent canvas ... so it
      flows better to go back and continue"). A held act of this session's browser shows its Approve / Dismiss on the view, and the
      agent's hand-over of the page ("your turn") its Done - both into this same conversation. Off screen (a phone's chip), their cards. */
-  const viewActs = (data?.browserActs || []).map((r) => heldOn(r, session?.sid)).filter(Boolean);
+  // ...only a card the chat draws for his press now (pressable): never a line about a card that is not there
+  const drawn = pressable(conv.list);
+  const viewActs = (data?.browserActs || []).map((r) => heldOn(r, session?.sid)).filter((h) => h && drawn.has(h.id));
   // ...EVERY WAIT ON THE PAGE IS ONE TURN (a sign-in too - the Claude walk, 2026-11-19: a sign-in drew the toolbar's "I'm done", which only let
   // go of the page and told nobody): its bar's I'm done is the one hand-back - his line, the agent woken (handBack)
   const turn = asking && waitsOnPage(asking) ? asking : null;
@@ -1133,7 +1135,7 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
         {/* ...a coding agent's browser is its session's too, shown only while he is needed on its page (the recorded coding walk, 2026-11-12:
             the agent asked to be signed in, and with no chat session to name, no page was ever shown him) */}
         <SessionPane sid={(!noTools && session?.sid) || (coding && needNow && cli?.sid) || null} height="100%" yourTurn={waitsOnPage(asking)} idle={!busy}
-          stack taskId={task.TaskId} held={viewActs} turn={turn} onHandBack={handBack} onDecided={decidedOnView}
+          stack taskId={task.TaskId} held={pageBars(turn, viewActs).held} turn={turn} onHandBack={handBack} onDecided={decidedOnView}
           onView={viewShownIs} quiet={chat} need={needNow}>{thread}</SessionPane>
       </Box>
     </Box>

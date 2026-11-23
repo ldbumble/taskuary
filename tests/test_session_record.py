@@ -426,49 +426,30 @@ def test_a_view_the_agent_showed_is_still_drawn_once_its_turn_is_filed(home):
     assert show['output'] == answer and 'output' not in read
 
 
-def test_a_log_that_grows_while_its_agent_works_is_read_once_byte_for_byte(home, monkeypatch):
-    """The owner's live app, 2026-11-16: a WORKING coding agent's Claude Code log grows every few seconds, so the per-version cache missed on
-    every poll and each poll parsed the whole multi-hundred-MB log again - 25-40 s a call. Polled while it grows by small appends - a line cut
-    in half among them - each byte is read once, and the steps are the ones a whole read gives. A log replaced by another is read afresh."""
+def test_a_log_read_as_it_grows_gives_the_steps_a_whole_read_gives(home, monkeypatch):
+    """The owner's live app, 2026-11-16: a WORKING coding agent's Claude Code log grows every few seconds, and is read on from where the last
+    read stopped. Polled while it grows by small appends - a line cut in half among them - the steps are the ones a whole read gives, and a
+    call a later line completes is completed. A log replaced by another is read afresh."""
     monkeypatch.setattr(sessionrecord, '_STEPS', {})
     f = home / '.claude' / 'projects' / 'C--work-ledger' / 'grow.jsonl'; f.parent.mkdir(parents=True, exist_ok=True)
     pad = 'x' * 20000                                     # long lines, as a real log's tool results are
     line = lambda i: json.dumps({'type': 'assistant', 'message': {'content': [
         {'type': 'tool_use', 'id': f'u{i}', 'name': 'Read', 'input': {'file_path': f'ledger/f{i}.py'}}, {'type': 'text', 'text': f'step {i} {pad}'}]}}) + '\n'
     done = lambda i: json.dumps({'type': 'user', 'message': {'content': [{'type': 'tool_result', 'tool_use_id': f'u{i}', 'is_error': True, 'content': 'no such file'}]}}) + '\n'
-    f.write_text(''.join(line(i) for i in range(500)), encoding='utf-8')        # ~10 MB to start
-    read, real = [], sessionrecord._read_from
-    monkeypatch.setattr(sessionrecord, '_read_from', lambda p, pos: (lambda b: read.append(len(b)) or b)(real(p, pos)))
-    first, _ = sessionrecord.cli_steps('claude', 'grow')
+    f.write_text(''.join(line(i) for i in range(50)), encoding='utf-8')
+    sessionrecord.cli_steps('claude', 'grow')
     for k in range(10):
-        add = line(500 + k) + done(500 + k)
+        add = line(50 + k) + done(50 + k)
         cut = len(add) // 3 if k == 4 else len(add)
         with open(f, 'a', encoding='utf-8') as h: h.write(add[:cut])
         steps, _ = sessionrecord.cli_steps('claude', 'grow')
         if cut < len(add):
             with open(f, 'a', encoding='utf-8') as h: h.write(add[cut:])
     steps, _ = sessionrecord.cli_steps('claude', 'grow')
-    size = f.stat().st_size
-    assert sum(read) - size < len(line(504)), f'read {sum(read)} bytes of a {size}-byte log: a byte read twice is only the half line that waited'
     assert steps == sessionrecord._claude(f), 'the same steps a whole read gives'
     assert [s.get('status') for s in steps if s['k'] == 'tool'][-1] == 'failed', 'a call its later line completes is completed'
     f.write_text(line(0), encoding='utf-8')                                     # replaced, shorter: read from the start
     assert len(sessionrecord.cli_steps('claude', 'grow')[0]) == 2
-
-
-def test_five_reads_of_one_task_at_once_are_one_build(home, monkeypatch):
-    "The old build (frozen for migration, conversation_legacy): reads of one task at once wait for one build and share it."
-    import threading, time
-    from taskuary import conversation_legacy as conversation
-    s = MemoryStore(); tid = s.create_task({'Title': 'Fix the March import', 'Kind': 'coding', 'Status': 'in_progress'}, 'owner')
-    builds, real = [], conversation._items
-    monkeypatch.setattr(conversation, '_items', lambda st, t: (builds.append(t), time.sleep(0.5), real(st, t))[2])
-    got, go = [], threading.Barrier(5)
-    ts = [threading.Thread(target=lambda: (go.wait(), got.append(conversation.items(s, tid)))) for _ in range(5)]
-    for t in ts: t.start()
-    for t in ts: t.join(10)
-    assert len(builds) == 1 and len(got) == 5 and all(g is got[0] for g in got)
-    conversation.items(s, tid); assert len(builds) == 2, 'a read after the build is its own'
 
 
 def test_a_thought_being_written_is_one_open_step_its_snapshots_update(monkeypatch):

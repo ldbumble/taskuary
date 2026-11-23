@@ -2247,9 +2247,10 @@ def _make_task(store, i: dict, a: dict, agent: bool, actor: str) -> dict:
     store.set_idea_action(i['IdeaId'], a | {'tid': tid, 'took': 'agent' if agent else 'task'})
     if agent:
         # ...as the owner's ask, not a proposal to grade (the owner, 2026-11-03: an agent answered "change it, don't adopt it as written"
-        # to an idea they had already taken up - words about the idea, not for them)
-        brief = ("The owner took up this Advisor idea and handed it to you: do the work it points at and tell them, in plain words, what you "
-                 "found and what to do next - they already chose it, so it is not a proposal to judge.\n\n" + str(a.get('title') or i.get('Text') or '').strip())
+        # to an idea they had already taken up - words about the idea, not for them). HOW THE TURN ENDS IS THE AGENT'S (the owner, 2026-11-23:
+        # "a turn does not have to end in a card if that's not required"): an answer, a card for a step that needs his yes, a reminder - its call
+        brief = ("The owner took up this Advisor idea and handed it to you: do the job it points at - they already chose it, so it is "
+                 "not a proposal to judge.\n\n" + str(a.get('title') or i.get('Text') or '').strip())
         if a.get('why'): brief += f"\n\nWhy the assistant raised it: {a['why']}"
         if a.get('type') == 'lookout':                    # ...its next step, the pitch and the ids it rests on (lookout.brief)
             from . import lookout

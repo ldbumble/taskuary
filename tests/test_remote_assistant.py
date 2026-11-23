@@ -25,7 +25,7 @@ def armed_store(channel='whatsapp', chat=JID, on='1', talking=True):
     funnel.invalidate(); funnel.forget_states(); funnel._CACHE.update(cands_at=0.0, cands=[])
     cid = store.get_connector_by_type(channel)['ConnectorId']
     store.save_connector({'ConnectorId': cid, 'Active': 1, 'Roles': 'trigger,tool', 'Secret': 'tok',
-                          'ConfigJson': json.dumps({'assistant_chat': chat})}, 'test')
+                          'ConfigJson': json.dumps({'assistant_chat': chat, **({'me_number': chat.split('@')[0]} if str(chat).endswith('@s.whatsapp.net') else {})})}, 'test')
     store.set_setting('phone_assistant', on, 'test')
     if talking: remote_assistant.owner_spoke(store, channel, chat)      # the owner is talking in the chat: it may answer (in_session)
     return store, store.get_connector(cid, with_secret=True)

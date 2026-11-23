@@ -94,14 +94,18 @@ def is_private(store, connector, chat: str) -> bool:
     the shape check; `own_thread` is the one that counts the people in the room, and it is what the
     card offers from. Nothing reaches the assistant on a chat that was not configured there
     (connector_for_chat), so refusing to offer a real group is what keeps one out.
+
+    ON WHATSAPP A DIRECT CHAT IS ALSO SOMEONE ELSE'S (the phone walk, 2026-11-23: a 1:1 with a colleague was offered as his and taken by
+    use_chat - his own lines to her would have been read as asks, and answers about his mail posted to her): only on Telegram is a private
+    chat him alone with the bot. On WhatsApp, group or direct, the chat is his only when it carries the paired account's own number.
     """
     chat = str(chat or '').strip()
     if not chat: return False
-    if not chat.endswith('@g.us'): return True
-    if (connector or {}).get('Type') != 'whatsapp': return False
+    if (connector or {}).get('Type') != 'whatsapp': return not chat.endswith('@g.us')
     from . import messengers
     me = messengers.wa_self_number(store, connector)
-    return bool(me) and chat.split('-', 1)[0] == me
+    num = chat.partition('@')[0].split(':', 1)[0]
+    return bool(me) and (num.split('-', 1)[0] if chat.endswith('@g.us') else num) == me
 
 
 def own_thread(store, connector, row, configured: str = '') -> bool:

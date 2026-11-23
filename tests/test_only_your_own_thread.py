@@ -55,9 +55,23 @@ def test_somebody_elses_group_was_never_eligible(conn):
     assert remote_assistant.own_thread(s, c, row('120363000000000001@g.us', people=1)) is False
 
 
-def test_a_direct_chat_needs_no_counting(conn):
+def test_your_own_number_needs_no_counting(conn):
     s, c = conn
-    assert remote_assistant.own_thread(s, c, row('15551234567@s.whatsapp.net', group=False)) is True
+    assert remote_assistant.own_thread(s, c, row(f'{ME}@s.whatsapp.net', group=False)) is True
+    assert remote_assistant.own_thread(s, c, row(f'{ME}:12@s.whatsapp.net', group=False)) is True
+
+
+def test_a_direct_chat_with_someone_else_is_not_yours(conn):
+    """The phone walk, 2026-11-23: a 1:1 with a colleague was offered as his and taken - her chat would have carried his mail."""
+    s, c = conn
+    assert remote_assistant.own_thread(s, c, row('15551234567@s.whatsapp.net', group=False)) is False
+    assert remote_assistant.is_private(s, c, '15551234567@s.whatsapp.net') is False
+
+
+def test_on_telegram_a_private_chat_is_him_alone_with_the_bot():
+    s = MemoryStore()
+    assert remote_assistant.is_private(s, {'Type': 'telegram'}, '4242') is True
+    assert remote_assistant.is_private(s, {'Type': 'telegram'}, '-100200@g.us') is False
 
 
 # ── a bridge that cannot say yet ────────────────────────────────────────────────────────

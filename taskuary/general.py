@@ -1199,9 +1199,10 @@ def to_agent(store, tid: int, said: str, actor: str = 'owner', heard=None, *, fr
             return 'started'
     return ''
 def _asking(store, sess) -> bool:
-    "Is this live run waiting on an answer of its own (an open request)? Its answer is the waiting room's to bind (waitroom._deliver)."
+    """Is this live run waiting on an answer of its own (an open request)? Its answer is the waiting room's to bind (waitroom._deliver). A step
+    handed to the owner on its page is not one: Taskuary's words go in as its next turn and the step stays his (workerstate.page_step)."""
     from . import workerstate as ws
-    try: return bool(ws.asking_of(store, sess))
+    try: return not ws.page_step(req := ws.asking_of(store, sess)) and bool(req)
     except Exception: return False
 def _deliver_soon(store, tid: int):
     "The waiting room's hand-over for task `tid` now, on its own thread - never on the turn's, which the next turn would hold."
@@ -3611,9 +3612,9 @@ class GeneralSession:
                 # ...but never over a step of its own held on that tab: that card is his one move there (the HIPAA walk, 2026-11-22: "Sign in to
                 # 127.0.0.10 to continue" stood under the held sign-up's Approve, the sign-up form's password box read as a sign-in)
                 # ...on any of its tabs (the Codex walk, 2026-11-22: the held sign-up on one tab, its turn ending on a sign-in page it opened in another)
-                from .browsergate import holds_any
+                from .browsergate import held
                 if (signin.on_signin_page(self.sid) and not signin.set_aside(self.store, self.task_id, self.sid)
-                        and not holds_any(self.store, self.task_id, self.sid)): signing = ''
+                        and not held(self.store, self.task_id, self.sid)): signing = ''
             except Exception as e: logger.debug(f'task {self.task_id}: the browser could not be read for a sign-in - {e}')
         # ...a marker a session still writes (the road before hand_over) goes the one road hand_over takes
         if signing is not None or turn is not None:

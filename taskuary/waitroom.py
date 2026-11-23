@@ -311,6 +311,10 @@ def _deliver(store, tid: int, new: int = None) -> dict:
     # own answer - the card, the box, their reply on the channel - is what lets the question go
     if st == 'asking' and any((x.get('CreatedBy') or '') == TEAMMATE for x in notes):
         return {'delivered': 0, 'state': 'held_teammate', 'left': len(pending)}
+    # ...A STEP HANDED TO HIM ON THE PAGE IS ANSWERED BY HIS PRESS ALONE (workerstate.page_step): Taskuary's notes go in as the next turn
+    if st == 'asking' and not any(_by(x) == 'owner' for x in notes):
+        from . import workerstate as ws
+        if ws.page_step(ws.asking_of(store, t)): st = 'parked'
     # ...a coding agent over ACP is answered as a chat is: by its next turn, his words drawn as his and the turn at work from them - typed as a
     # bare answer, his line was nobody's and the chat read "working" for the rest of the run (the audit, 2026-11-10)
     if st == 'asking' and term.is_acp(t):

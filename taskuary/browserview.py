@@ -489,7 +489,7 @@ def keep_last(sid: str) -> dict | None:
     kind, store, tid = ENDED_ON.pop(str(sid), (None, None, None))
     if kind == 'held':
         from . import browsergate
-        if not browsergate.waiting(store, tid, sid): return None           # approved or dismissed since: it did not end waiting
+        if not browsergate.held(store, tid, sid): return None           # approved or dismissed since: it did not end waiting
     data = kind in LAST_SAYS and tid and sid not in FILLING and _frame((LAST.get(sid) or {}).get('frame'))
     if not data: return None
     from . import session_artifacts

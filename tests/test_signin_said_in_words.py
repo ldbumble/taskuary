@@ -59,7 +59,7 @@ def test_a_turn_that_ends_on_its_own_held_step_raises_no_sign_in_beside_it():
     """The HIPAA walk, 2026-11-22: the sign-up's held step stood as an Approve card, and the turn that ended on that form - its password box
     read as a sign-in page - raised "Sign in to 127.0.0.10 to continue" under it: two moves on one page. The held card is his one move there."""
     from taskuary import browsergate
-    with mock.patch.object(browsergate, 'holds_any', return_value=True):
+    with mock.patch.object(browsergate, 'held', return_value=[{'action': 'browser_act'}]):
         assert not _turn('Once you approve that step, I will finish the sign-up.', True).called
 
 
@@ -70,4 +70,4 @@ def test_a_step_held_on_another_tab_still_counts():
     s = MemoryStore(); tid = s.create_task({'Title': 'Get the listings', 'Kind': 'general', 'Status': 'open'}, 'owner')
     s.add_review({'TaskId': tid, 'Kind': 'action', 'Status': 'pending', 'Reason': 'held',
                   'DraftText': json.dumps({'action': 'browser_act', 'sid': 's1', 'tab': 't1', 'site': 'vendor.example'})})
-    assert browsergate.holds_any(s, tid, 's1') and not browsergate.holds_any(s, tid, 's2')
+    assert browsergate.held(s, tid, 's1') and not browsergate.held(s, tid, 's2')

@@ -228,6 +228,12 @@ def ask_of(rid) -> dict:
     return {'ask': 'signin', 'site': r[len(PREFIX):].split('~')[0]} if r.startswith(PREFIX) else {'ask': 'turn' if r.startswith(TURN_PREFIX) else 'question', 'site': ''}
 
 
+def page_step(req) -> bool:
+    """Is this open request a step on a page that is the owner's (a hand-over, a sign-in)? Only his press, the page moving on or the sign-in
+    road closes one - never Taskuary's words about something else (walk 9, 2026-11-23: an Approve's result answered a robot check)."""
+    return bool(req) and ask_of(req.get('request_id') or req.get('RequestId'))['ask'] != 'question'
+
+
 def reconcile_screen_request(store, t, asking: bool) -> dict | None:
     """Keep a request READ OFF THE SCREEN in step with the screen. Returns the open request, if any.
 

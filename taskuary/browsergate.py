@@ -594,9 +594,13 @@ def _check(store, tid: int, sid: str, cmd: str, brain=None, cwd: str = '') -> di
     from . import browserview, signin
     # ...A TAB HOLDING A STEP IS THAT STEP'S (walk 8, 2026-11-20: the agent opened each next vendor in the tab its held sign-up stood on, and
     # three cards went off the chat): its next site opens in a new tab - the one road for every held step, a click's and a sign-up's
-    if (held := holds_tab(store, tid, sid)) and (to := goes_to(cmd)) is not None:
-        return _deny(f"{HELD}: this tab holds your step on {held} for the owner's press - moving it would drop that card. Open the next page in "
-                     f"a new tab instead: `agent-browser tab new {to or '<address>'}`, and go on there.")
+    # ...AND A TAB HANDED TO HIM IS HIS (owner_tabs): never moved, reloaded or closed under him - nor the browser it is in
+    if (his := owner_tab(store, tid, sid)) and (to := goes_to(cmd)) is not None:
+        return _deny(f"{HELD}: this tab is the owner's - your step on {his} waits on him there, and moving it would drop that card. Open the next "
+                     f"page in a new tab instead: `agent-browser tab new {to or '<address>'}`, and go on there.")
+    if (shut := closes(cmd)) and (his := owner_tab(store, tid, sid) if shut == 'tab' else ', '.join(owner_tabs(store, tid, sid).values())):
+        return _deny(f"{HELD}: that would close the owner's tab - your step on {his} waits on him there. Leave it open and go on in another tab; "
+                     "you are told when he is done.")
     todo = acts(cmd)
     if not todo or all(typing(a) for a in todo): return {}
     pg, said, vs = page(sid), asked(store, tid), None
@@ -768,40 +772,53 @@ def goes_to(cmd: str):
         while i < len(a) and a[i].startswith('-'): i += 2 if a[i] in VALUED and '=' not in a[i] else 1
         verb = a[i].lower() if i < len(a) else ''
         if verb in NAVS: return a[i + 1] if i + 1 < len(a) else ''
-        if verb in ('back', 'forward'): return ''
+        if verb in ('back', 'forward', 'reload'): return ''
     return None
 
 
-def holds_any(store, tid, sid: str) -> bool:
-    "Does a step of session `sid` wait held for the owner's press on task `tid`, on any of its tabs?"
-    if not store or not tid: return False
+def held(store, tid, sid: str) -> list:
+    "The steps session `sid` holds for the owner's press on task `tid` (their card payloads), on any of its tabs."
+    if not store or not tid: return []
+    out = []
     for r in store._rows("SELECT DraftText FROM review WHERE TaskId=? AND Kind='action' AND Status='pending'", (int(tid),)):
         try: p = json.loads(r.get('DraftText') or '{}') or {}
         except (TypeError, ValueError): continue
-        if p.get('action') == 'browser_act' and str(p.get('sid')) == str(sid): return True
-    return False
+        if p.get('action') == 'browser_act' and str(p.get('sid')) == str(sid): out.append(p)
+    return out
 
 
-def holds_tab(store, tid, sid: str) -> str:
-    "The site whose held step stands on the tab session `sid` works now - '' when none does (or the tab cannot be read)."
+# ── WHOSE TAB IT IS: ONE RECORD (walk 9, 2026-11-23: the agent handed him a robot check on one tab, an Approve on another card was taken as the
+# hand-over's answer and closed it, and the browser went with the turn - his page was gone while the agent's last words still promised it).
+# A tab is the agent's unless a step on it waits on the owner: a step held for his press (its card names the tab) or one handed to him
+# (hand_over - HANDS names the tab). Until his press or his I'm done that tab is his: the gate refuses every command that would move, reload
+# or close it (_check) and the agent works in a new tab; the session is not idled out from under it (general.page_needs_owner). ────────────
+def owner_tabs(store, tid, sid: str) -> dict:
+    "{tab id: the site whose step waits on the owner there} for session `sid` on task `tid` - '' keys a held step whose card named no tab."
+    out = {str(p.get('tab') or ''): str(p.get('name') or p.get('site') or 'its page') for p in held(store, tid, sid)}
+    with _HANDS_LOCK: hands = [(rid, h) for rid, h in HANDS.items() if str(h.get('sid')) == str(sid) and str(h.get('tid')) == str(tid)]
+    for rid, h in hands:
+        if _waits(store, int(tid), sid, rid): out.setdefault(str(h.get('tab') or ''), str(h.get('site') or 'its page'))
+    return out
+
+
+def owner_tab(store, tid, sid: str) -> str:
+    "The site whose step waits on the owner on the tab session `sid` works now - '' when that tab is the agent's (or cannot be read)."
     from . import browserview
     if not store or not tid or not (tab := browserview.active_tab(sid)): return ''
-    for r in store._rows("SELECT DraftText FROM review WHERE TaskId=? AND Kind='action' AND Status='pending'", (int(tid),)):
-        try: p = json.loads(r.get('DraftText') or '{}') or {}
-        except (TypeError, ValueError): continue
-        if p.get('action') == 'browser_act' and str(p.get('sid')) == str(sid) and str(p.get('tab') or '') == tab:
-            return str(p.get('name') or p.get('site') or 'its page')
-    return ''
+    return owner_tabs(store, tid, sid).get(tab, '')
 
 
-def waiting(store, tid: int, sid: str) -> bool:
-    "Does an act of this session still wait on the owner's press on its card?"
-    if not store or not tid: return False
-    for r in store._rows("SELECT DraftText FROM review WHERE TaskId=? AND Kind='action' AND Status='pending'", (tid,)):
-        try: p = json.loads(r.get('DraftText') or '{}')
-        except ValueError: continue
-        if p.get('action') == 'browser_act' and p.get('sid') == str(sid): return True
-    return False
+def closes(cmd: str):
+    "What a command closes - 'browser' (close/quit), 'tab' (the tab it works), 'other' (a tab it names) - else None."
+    for argv in _segments(cmd) or []:
+        a = _head(argv)
+        if not a: continue
+        i = 0
+        while i < len(a) and a[i].startswith('-'): i += 2 if a[i] in VALUED and '=' not in a[i] else 1
+        verb, rest = (a[i].lower() if i < len(a) else ''), [x for x in a[i + 1:] if not x.startswith('-')]
+        if verb in ('close', 'quit', 'exit'): return 'browser'
+        if verb == 'tab' and rest[:1] == ['close']: return 'other' if rest[1:] else 'tab'
+    return None
 
 
 def _deny(why: str) -> dict:
@@ -1079,6 +1096,7 @@ def watch(store, tid: int, sid: str, rid: str, conn=None, every: float = PRESS_E
             now = _look(c, name)
             if now is None:
                 if not browserview.state(sid, fresh=True).get('open'): return not_pressed(store, tid, rid, 'the browser was closed before it was done')
+                if gone(sid, rid): return tab_gone(store, tid, rid)
                 continue
             steady = steady + 1 if past(start, now) else 0
             # ...WHO MOVED IT (the owner's rule: tell the truth): the agent's own browser command since the hand-over is the agent's move, never his
@@ -1121,6 +1139,16 @@ def left_by_agent(store, tid: int, rid: str) -> bool:
     return True
 
 
+def tab_gone(store, tid: int, rid: str) -> bool:
+    """The tab handed to him closed under the step: it stays on his card as gone, with Try again (shown_ask), and the agent is told the fact -
+    nothing was done there. False when nothing is open under `rid` any more."""
+    with _HANDS_LOCK: h = dict(HANDS.get(rid) or {})
+    if not h or not _waits(store, tid, h['sid'], rid): return False
+    _tell(store, tid, f"The tab you handed the owner ({h.get('what') or 'a step on ' + str(h.get('site') or 'the page')}) closed before they did "
+                      "the step - nothing was done there. Their card says so, with a way to open it again.", news=True)
+    return True
+
+
 def pressed(store, tid: int, rid: str, now: dict) -> bool:
     """The page moved past the step without his I'm done. Nobody saw who moved it - a site's error page moves it too (walk 7, 2026-11-23:
     "You did the step on" a page that had turned into a browser error, he had pressed nothing) - so it is never said as his: the agent is told
@@ -1135,11 +1163,14 @@ def pressed(store, tid: int, rid: str, now: dict) -> bool:
     return True
 
 
-def gone(sid: str) -> bool:
-    "Is the page a step was handed over on gone: no live session of ours under its id (idled, stopped, a restart), or its browser closed?"
+def gone(sid: str, rid: str = '') -> bool:
+    """Is the page a step was handed over on gone: no live session of ours under its id (idled, stopped, a restart), its browser closed - or
+    the tab it was handed on (`rid`'s, HANDS) no longer among the browser's tabs?"""
     from . import browserview, terminal as term
     s = term.SESSIONS.get(str(sid))
-    return not (s is not None and getattr(s, 'alive', False)) or not browserview.state(str(sid), fresh=True).get('open')
+    if not (s is not None and getattr(s, 'alive', False)) or not browserview.state(str(sid), fresh=True).get('open'): return True
+    with _HANDS_LOCK: tab = str((HANDS.get(rid) or {}).get('tab') or '')
+    return bool(tab) and bool(ts := browserview.pages(sid)) and not any(t.get('id') == tab for t in ts)
 
 
 # A STEP ON A PAGE THAT IS GONE SAYS SO, AND ITS ONE PRESS IS THE MOVE THAT WORKS (the owner, 2026-11-10: "i cant see the screen"). A hand-over
@@ -1150,7 +1181,7 @@ GONE_LINE = ('The page for this step has closed, so it cannot be done there now 
 def shown_ask(req: dict | None) -> dict | None:
     "An open ask as the task draws it: a step handed over on a page that is gone, said so, with Try again for its press."
     from . import browserview, buttons
-    if not req or not str(req.get('request_id') or '').startswith(browserview.TURN_PREFIX) or not gone(req.get('sid')): return req
+    if not req or not str(req.get('request_id') or '').startswith(browserview.TURN_PREFIX) or not gone(req.get('sid'), req['request_id']): return req
     again = buttons.label('try_again')
     return {**req, 'text': GONE_LINE.format(again=again), 'choices': [again], 'gone': True}
 
@@ -1164,7 +1195,7 @@ def done(store, tid: int, rid: str) -> bool:
     is its Try again: the agent opens the page again and hands the step back."""
     from . import browserview, buttons, workerstate as ws
     req = next((r for r in ws.open_requests(ws.events(store, tid)) if r['RequestId'] == rid), None)
-    lost = bool(req) and gone(req['Sid'])
+    lost = bool(req) and gone(req['Sid'], rid)
     h = _close(store, tid, rid, 'Try again' if lost else browserview.TURN_DONE)
     # ...A PRESS ON A HAND-OVER ALREADY CLOSED IS STILL HIS PRESS (walk 5, 2026-11-19: "I'm done" left no line and nothing moved for a minute -
     # the watch had closed the hand-over a beat before): a line in his voice, and the agent told to look and go on - never a press into nothing

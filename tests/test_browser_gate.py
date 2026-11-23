@@ -542,7 +542,7 @@ class HeldInTheChat(unittest.TestCase):
         self.assertEqual((p['action'], p['args'], p['control']), ('browser_act', ["click", "@e12"], {'name': 'Pay $42.00', 'role': 'button'}))
         self.assertFalse([r for r in self.ws.open_requests(self.ws.events(self.s, self.tid)) if r['RequestId'].startswith(browserview.TURN_PREFIX)],
                          'nothing is handed to him inside the page')
-        self.assertTrue(bg.waiting(self.s, self.tid, 'run1')); self.assertTrue(hooks.held_for(self.s, self.tid, 'run1'))
+        self.assertTrue(bg.held(self.s, self.tid, "run1")); self.assertTrue(hooks.held_for(self.s, self.tid, 'run1'))
         self.hand(); self.assertEqual(len(self.pending()), 1, 'tried again: the same card')
 
     def test_a_button_gone_from_the_same_address_is_past_too(self):

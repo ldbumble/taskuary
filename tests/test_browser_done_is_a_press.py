@@ -191,3 +191,47 @@ class DoneIsAPress(unittest.TestCase):
 
 
 if __name__ == '__main__': unittest.main()
+
+
+class TheHandedTabIsHis(unittest.TestCase):
+    """WALK 9 (2026-11-23): the agent handed him a robot check on one tab, he approved another card of the task, and that press's result was
+    bound as the ANSWER to the hand-over - it closed, the task idled out, the browser went with it, and the agent's last words still promised
+    the page. A tab handed to him is his (browsergate.owner_tabs) until his I'm done: Taskuary's words go in as the next turn, the gate never
+    moves or closes that tab, and a tab that closes anyway says so on his card with a way on."""
+    setUp = DoneIsAPress.setUp
+    turn = DoneIsAPress.turn
+    open = DoneIsAPress.open
+
+    def test_a_press_elsewhere_reaches_the_agent_and_never_closes_his_step(self):
+        rid = self.turn()
+        self.sess.waiting = lambda: True                                            # the chat at rest after the turn that handed it over
+        with mock.patch.object(general, '_next_turn') as nt:
+            self.assertEqual(general.to_agent(self.s, self.tid, 'The owner approved it and Taskuary ran the click.', frm='taskuary'), 'told')
+        self.assertTrue(nt.called)
+        self.assertEqual(self.open(), [rid], 'the robot check is still his')
+        self.assertTrue(general.page_needs_owner(self.s, self.tid), 'and the session is not idled out from under it')
+        from taskuary import waitroom
+        with mock.patch.object(waitroom, 'state', return_value=('asking', self.sess)), \
+             mock.patch.object(waitroom, 'to_general', return_value=False) as tg, mock.patch.object(general, 'GeneralSession', SimpleNamespace):
+            waitroom.add(self.s, self.tid, 'Your landing went in.', 'router'); waitroom._deliver(self.s, self.tid)
+        self.assertTrue(tg.called); self.assertEqual(self.open(), [rid])
+
+    def test_the_gate_never_moves_or_closes_his_tab_and_a_new_tab_runs(self):
+        with mock.patch.object(browserview, 'active_tab', return_value='T1'): self.turn()
+        with mock.patch.object(browserview, 'active_tab', return_value='T1'):
+            for cmd in ('agent-browser open https://futuretools.example/news', 'agent-browser reload', 'agent-browser tab close', 'agent-browser close'):
+                said = bg.check(self.s, self.tid, 'run1', cmd)['hookSpecificOutput']['permissionDecisionReason']
+                self.assertIn("the owner's", said, cmd)
+            self.assertEqual(bg.check(self.s, self.tid, 'run1', 'agent-browser tab new https://futuretools.example/news'), {})
+        with mock.patch.object(browserview, 'active_tab', return_value='T2'):
+            self.assertEqual(bg.check(self.s, self.tid, 'run1', 'agent-browser open https://futuretools.example/news'), {})
+            self.assertIn('close', bg.check(self.s, self.tid, 'run1', 'agent-browser close')['hookSpecificOutput']['permissionDecisionReason'])
+
+    def test_a_tab_that_closes_anyway_says_so_on_his_card_and_the_agent_is_told(self):
+        with mock.patch.object(browserview, 'active_tab', return_value='T1'): rid = self.turn()
+        req = ws.asking_of(self.s, self.sess)
+        with mock.patch.object(browserview, 'pages', return_value=[{'id': 'T2', 'url': PAY}]), mock.patch.object(bg, '_tell') as told:
+            self.assertTrue(bg.shown_ask(req)['gone'])
+            self.assertTrue(bg.tab_gone(self.s, self.tid, rid))
+        self.assertIn('closed before they did the step', told.call_args[0][2])
+        with mock.patch.object(browserview, 'pages', return_value=[{'id': 'T1', 'url': PAY}]): self.assertNotIn('gone', bg.shown_ask(req))

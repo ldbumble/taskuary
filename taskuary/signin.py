@@ -132,8 +132,10 @@ def site_of(url) -> str:
 # hand-over and toll.example:8443 on the page). Every card, hand-over and line names a site by this: the name it is registered under
 # (login.bank.example is bank.example), never a port or a www; a bare address by its page's own title where the session is named
 def site_name(where, sid: str = '') -> str:
-    "The site a URL or a host is on, as the owner reads it - '' for none."
+    """The site a URL or a host is on, as the owner reads it - '' for none: a page of the browser's own (its error page, a blank tab) is on no
+    site (walk 10, 2026-11-23: a step read 'tried to open "billing.payworth.example" on chromewebdata', Chrome's error page named as a site)."""
     s = str(where or '').strip()
+    if re.match(r'(chrome|chrome-error|about|edge|data|devtools):', s, re.I): return ''
     try: h = host_of(urlsplit(s if '://' in s else '//' + s).hostname)
     except ValueError: return ''
     if not h: return ''

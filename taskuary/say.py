@@ -98,6 +98,8 @@ def owner(e: dict) -> str:
     if k == 'signup_failed':
         why = ' '.join(str(e.get('why') or '').split())
         # ...who moves next is said once, by the card's own line (general.AGENT_TOLD): it read "The agent was told. The agent was told and goes on"
+        # ...a status code is no words of the site's (walk 10, 2026-11-23: 'it said "the site answered with an error (HTTP 400)"'): said by its kind
+        if raw(why): return f"No account was made on {e.get('site') or 'the site'}: the site answered the sign-up with an error."
         return f"No account was made on {e.get('site') or 'the site'}" + (f': it said "{why[:200]}"' if why else ': it kept its sign-up form up') + '.'
     if k == 'held':
         return held_why(e.get('why'))

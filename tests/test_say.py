@@ -124,6 +124,9 @@ def test_one_road_for_a_failures_words():
 def test_a_sign_up_that_made_no_account_says_who_moves_next_once():
     said = say.owner({'kind': 'signup_failed', 'site': 'Trainly sign-up', 'why': 'That email is already registered'})
     assert 'The agent was told' not in said and said.startswith('No account was made on Trainly sign-up')
+    # ...and a status code is said by its kind, never as the builder's "HTTP 400" (walk 10, 2026-11-23)
+    said = say.owner({'kind': 'signup_failed', 'site': 'VacancyIQ', 'why': 'the site answered with an error (HTTP 400)'})
+    assert 'HTTP' not in said and '400' not in said and said.startswith('No account was made on VacancyIQ'), said
 
 
 def test_a_failed_turn_says_taskuarys_own_reason_and_the_providers():

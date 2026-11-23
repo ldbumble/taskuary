@@ -39,6 +39,11 @@ class Sites(unittest.TestCase):
         self.assertTrue(signin.on_site('https://bank.example/', 'bank.example'))
         self.assertEqual(signin.site_of('https://www.bank.co.uk/login'), 'bank.co.uk')       # not co.uk: that would be every UK site
 
+    def test_a_page_of_the_browsers_own_is_on_no_site(self):
+        "Walk 10, 2026-11-23: a step read 'tried to open \"billing.payworth.example\" on chromewebdata' - Chrome's error page named as a site."
+        for url in ('chrome-error://chromewebdata/', 'about:blank', 'chrome://newtab/'): self.assertEqual(signin.site_name(url), '', url)
+        self.assertEqual(signin.site_name('https://billing.payworth.example/pay'), 'payworth.example')
+
     def test_a_lookalike_is_another_site(self):
         for url in ('https://bank.example.evil.example/', 'https://bank-example.example/', 'https://evilbank.example/',
                     'https://xn--bnk-sna.example/', 'https://bаnk.example/',              # a Cyrillic а: its punycode is another name

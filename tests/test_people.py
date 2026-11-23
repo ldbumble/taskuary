@@ -94,7 +94,8 @@ def test_the_sent_mail_is_read_once_until_new_mail_arrives(s):
     sent(s, ['gail.moreno@northwind.example'])
     people.resolve(s, 'Gail Moreno')
     with mock.patch.object(s, '_rows', side_effect=AssertionError('scanned again')):
-        people.written_to(s)
+        people._mailbox_sent(s)              # ...the mailbox's own scan; the record's (ledger.mailed) is one indexed read
+
     sent(s, ['erin@northwind.example'])
     assert 'erin@northwind.example' in people.written_to(s)
 
@@ -121,3 +122,28 @@ def test_a_name_with_one_word_wrong_offers_who_shares_the_rest(s):
     wrote_in(s, 'Ray Colton', 'ray@vendor.example')
     got = people.resolve(s, 'Anna Carlini')
     assert got == {'candidates': ['agarlanian@bank.example']}
+
+
+# AN ADDRESS HE GAVE IS ON THE RECORD (the design review, 2026-11-23: each look-up scanned his lines its own way - one task's comments here, his
+# last 400 lines there - and "the next task did not know" was fixed again at each door). His line, on any door that keeps one, writes the
+# address once (store.add_comment, store.create_task -> ledger.his_line); every look-up reads it there - on another task too
+def test_an_address_he_gave_on_one_task_is_found_on_another_and_by_the_agents_person_tool(s):
+    from taskuary import agenttools, general, ledger, mailsearch
+    first = s.create_task({'Title': 'Board pack', 'Kind': 'general', 'Status': 'open'}, 'owner')
+    s.add_comment(first, 'owner', general.USER_TYPE, "Paula Vance's address is pv.board@vendor.example - send it to her")
+    s.add_comment(first, general.BRIEF_ACTOR, general.USER_TYPE, 'THIS TASK IS ... ray.c@vendor.example')     # ...a brief in his voice is not his
+    later = s.create_task({'Title': 'Second copy', 'Kind': 'general', 'Status': 'open'}, 'owner')
+    assert people.resolve(s, 'Paula Vance') == {'address': 'pv.board@vendor.example'}
+    assert people.said_by_owner(s, first) == {'pv.board@vendor.example'} and people.said_by_owner(s, later) == set()
+    assert 'pv.board@vendor.example' in people.said_by_owner(s) and not ledger.rows(s, 'address', subject='ray.c@vendor.example')
+    with mock.patch.object(mailsearch, 'search', return_value=[]), mock.patch.object(mailsearch, 'says', return_value=''):
+        said = agenttools._call(s, later, 'person', {'name': 'Paula Vance'}, {}, ())
+    assert 'pv.board@vendor.example' in said and f'he gave this address on TQ-{first:04d}' in said, said
+
+
+def test_his_ask_from_new_keeps_its_files_and_address_on_the_record(s):
+    from taskuary import ledger
+    tid = s.create_task({'Title': 'Forward the lease', 'Summary': 'Send the lease to omar@vendor.example', 'OriginBase': 'owner',
+                         'Files': ['C:/tmp/lease.pdf']}, 'owner')
+    assert people.said_by_owner(s, tid) == {'omar@vendor.example'}
+    assert any('lease.pdf (attached)' in x for x in ledger.of_task(s, tid)), ledger.of_task(s, tid)

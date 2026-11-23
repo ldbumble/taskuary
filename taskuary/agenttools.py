@@ -609,13 +609,18 @@ def _call(store, tid: int, name: str, args: dict, doors: dict, skip=()) -> str:
         t = store.get_task(tid) or {}
         items = [f"[{i['id']}] {'x' if i.get('done') else ' '} {i.get('text')}" for i in store.task_checklist(tid)]
         from .store import files_of             # ...and the files his ask came with (walk 9: "no attached data" while one sat in its folder)
+        from . import ledger                    # ...and what this task made and was given, off the record (ledger.of_task)
+        rec = ledger.of_task(store, tid)
         return _out(_j({'task': t.get('Title'), 'summary': t.get('Summary'), 'status': t.get('Status'), 'done_when': t.get('DoneWhen'),
-                        'checklist': items, **({'files': files_of(t)} if files_of(t) else {})}), fence_it=True)
+                        'checklist': items, **({'files': files_of(t)} if files_of(t) else {}), **({'on_record': rec} if rec else {})}), fence_it=True)
     if name == 'search_tasks':
         from . import search
         got = search.everything(store, a.get('words', ''))
         # ...and the endings of earlier tasks on those words (search.outcomes): what one already settled is not asked of the owner again
         done = search.says_outcomes(search.outcomes(store, a.get('words', ''), skip=tid))
+        # ...and what EXISTS on those words (ledger.find): an account a task made, a mail that went, an address he gave
+        from . import ledger
+        if rec := ledger.find(store, str(a.get('words') or '').split()): done = '\n'.join(x for x in (done, 'ON RECORD:\n' + '\n'.join(f'- {x}' for x in rec)) if x)
         # ...AND NOTHING FOUND SAYS WHY AND WHAT NEXT (walk 8, 2026-11-20: "the pack" found nothing - "the" is in no title - beside the open board pack)
         if not got.get('hits') and not done:
             return f"Nothing has every word of {str(a.get('words') or '')!r} - each word must match. Search again with fewer or other words (a name, a key word)."
@@ -629,7 +634,10 @@ def _call(store, tid: int, name: str, args: dict, doors: dict, skip=()) -> str:
         if not who: return f"nobody in the owner's mail matches {a.get('name')!r}"
         if 'candidates' in who: return 'several people match - ask again with one of: ' + ', '.join(who['candidates'])
         hits = mailsearch.search(store, who['address'], limit=8)
-        return _out(f"{who['address']}\n\n{mailsearch.says(hits)}", fence_it=True)
+        # ...and what the record holds on them (ledger.person): mail Taskuary sent them from any task, the address he gave, his promises
+        from . import ledger
+        rec = ledger.person(store, who['address'])
+        return _out(f"{who['address']}\n\n" + (f"ON RECORD:\n" + '\n'.join(f'- {x}' for x in rec) + '\n\n' if rec else '') + mailsearch.says(hits), fence_it=True)
     if name == 'search_knowledge':
         from . import knowledge
         hits = knowledge.search(store, a.get('text', ''))

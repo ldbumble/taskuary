@@ -109,7 +109,7 @@ def world(store) -> dict:
         mid = f.message(task_id=tid, subject=title, body=body, from_name=who[0], from_email=who[1], sent_at=at(h), conversation_id=f'email:{title}')
         f.route(mid, tid, 'create', 'a question addressed to you'); return tid, mid
     # a review's delivery and decision are written by the send, never by add_review
-    def sent(rid, when): store._exec("UPDATE review SET DeliveryState='sent', DecidedAt=? WHERE ReviewId=?", (when, rid))
+    def sent(rid, when): f.sent(rid, when)
     out['reply-no-draft'] = asked('Badge access for the new AP clerk?', GAIL, 'Can you approve badge access for the new clerk by Friday?', 5)[0]
     for name, title, who, body, new in (('sent-quiet', 'Q3 accruals file', PAULA, 'Could you send the Q3 accruals file when you have it?', None),
                                         ('sent-then-new', 'Vendor master clean-up', RAY, 'Can you confirm which vendors we are retiring?',

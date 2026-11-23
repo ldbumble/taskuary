@@ -5,6 +5,12 @@ from unittest import mock
 
 from taskuary import evening, reports
 from taskuary.store import MemoryStore
+from taskuary.testing import Factory
+
+
+def _sent(s, rid, text):
+    "His Send on review `rid`, gone as the provider confirms it (Factory.sent: on the record)."
+    s.decide_review(rid, 'approved', text, 'owner'); Factory(s).sent(rid)
 
 
 def _ago(hours):
@@ -91,9 +97,9 @@ class TheDayAsItWasTests(unittest.TestCase):
         first = _mail(s, 'q1', 'Monitor quote', 'ray@northwind.example', hours=3, status='routed'); s._exec('UPDATE message SET TaskId=? WHERE MessageId=?', (tid, first))
         second = _mail(s, 'q2', 'Re: Monitor quote', 'ray@northwind.example', hours=2, status='routed'); s._exec('UPDATE message SET TaskId=? WHERE MessageId=?', (tid, second))
         rv = s.add_review({'TaskId': tid, 'MessageId': second, 'Kind': 'draft_reply', 'Status': 'pending', 'DraftText': 'Approved - order them.'})
-        s.decide_review(rv, 'approved', 'Approved - order them.', 'owner')
+        _sent(s, rv, 'Approved - order them.')
         mail = s.add_review({'TaskId': tid, 'Kind': 'slot', 'Status': 'pending', 'Deliver': json.dumps({'to': ['paula@northwind.example']})})
-        s.decide_review(mail, 'approved', 'Hi Paula', 'owner')
+        _sent(s, mail, 'Hi Paula')
         ev = evening.collect(s, 24)
         assert not [p for p in ev['priorities'] if 'Monitor quote' in p], ev['priorities']
         assert not [d for d in ev['done'] if 'Taskuary guide' in d], ev['done']
@@ -110,7 +116,7 @@ class TheDayAsItWasTests(unittest.TestCase):
         s._exec('UPDATE message SET TaskId=? WHERE MessageId=?', (tid, her))
         for who in ('erin@northwind.example', 'gail@northwind.example'):
             rv = s.add_review({'TaskId': tid, 'Kind': 'slot', 'Status': 'pending', 'Deliver': json.dumps({'to': [who], 'subject': 'Corrected Q3 board pack'})})
-            s.decide_review(rv, 'approved', 'Corrected pack attached.', 'owner')
+            _sent(s, rv, 'Corrected pack attached.')
         items = s.set_task_checklist(tid, ['Fix the headcount', 'Send the corrected pack'], 'agent')
         for i in items: s.tick_checklist_item(tid, i['id'], True, 'agent')
         s.add_comment(tid, 'agent', general.SUMMARY_TYPE, json.dumps({'did': 'Corrected the pack and sent it', 'on_you': [], 'nothing_left': True}))
@@ -127,7 +133,7 @@ class TheDayAsItWasTests(unittest.TestCase):
         s = MemoryStore()
         tid = s.create_task({'Title': 'Weekly hours', 'Kind': 'general', 'Status': 'open'}, 'owner')
         mail = s.add_review({'TaskId': tid, 'Kind': 'slot', 'Status': 'pending', 'Deliver': json.dumps({'to': ['gail@northwind.example'], 'subject': 'Weekly Timesheet Total'})})
-        s.decide_review(mail, 'approved', 'Hi Gail', 'owner')
+        _sent(s, mail, 'Hi Gail')
         session_artifacts.view(s, tid, '{"title": "Hours"}')
         moved = s.create_task({'Title': 'Office move date', 'Kind': 'general', 'Status': 'open'}, 'owner')
         s.add_comment(moved, 'assistant', general.SUMMARY_TYPE, json.dumps({'did': 'Asked.'}))

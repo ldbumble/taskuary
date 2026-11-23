@@ -1301,9 +1301,30 @@ def test_an_account_the_agent_made_is_one_vault_row_he_can_read_and_the_next_tas
     assert any('Kept the inbox.example account' in c['Body'] for c in s.list_comments(tid))
     told = docsync.agent_systems(s)
     assert f'inbox.example as {USER} (made by the agent on' in told and 'not signed in with yet' in told and typed[0] not in told
-    s._exec('UPDATE signin_vault SET LastUsed=1 WHERE Site=?', ('inbox.example',))
+    signin._used(s, 'inbox.example', tid)                # ...the site took a sign-in with it: the account is on the record (ledger.account)
     assert signin.listing(s)[0]['confirmed']
+    # ...and an account made AGAIN is unconfirmed again until a site takes the new one
+    signin.save(s, 'inbox.example', USER, 'Another-pw-2!', by='taskuary', task=tid)
+    s._exec('UPDATE signin_vault SET SavedAt=SavedAt+5 WHERE Site=?', ('inbox.example',))
+    assert not signin.listing(s)[0]['confirmed']
     # ...and the saved sign-in typed again by Taskuary, then pressed by the agent, stays the owner's own row
     signin.save(s, 'bank.example', USER, PW)
     signin.pressing(s, tid, 'sess1', 'bank.example', conn=UpPage('https://www.bank.example/signin', pw=PW))
     assert next(r for r in signin.listing(s) if r['site'] == 'bank.example')['by'] == 'owner'
+
+
+def test_an_account_a_site_took_on_one_task_is_known_on_another_and_a_sign_up_it_refused_writes_nothing():
+    """The design review, 2026-11-23: whether an account exists was read off the vault's own columns (LastUsed, SavedBy), the next task told
+    it by one door and not another. The account is on the record once the site lets it past (signin._answered -> ledger.account), and every
+    task reads it there - the agent's systems, its task's facts, its search. A sign-up the site turned down is no account anywhere."""
+    from taskuary import agenttools, docsync, ledger
+    s = MemoryStore(); f = Factory(s); made, later, refused = f.task('Market data'), f.task('Pull the rent comps'), f.task('Another vendor')
+    def took(sid, site, c): c.go('data', 'https://www.rentscope.example/data'); return {'ok': True, 'user': USER}
+    assert signing_up(s, made, UpPage(), took)[0]
+    told = docsync.agent_systems(s)
+    assert f'rentscope.example as {USER} (made by the agent on TQ-{made:04d})' in told and 'not signed in with yet' not in told, told
+    assert any('an account on rentscope.example' in x for x in ledger.of_task(s, made))
+    assert 'account: rentscope.example' in agenttools._call(s, later, 'search_tasks', {'words': 'rentscope'}, {}, ())
+    ok, said = signing_up(s, refused, UpPage('https://www.inbox.example/signup'), lambda *a: {'ok': False, 'why': 'That email is already in use'})
+    assert not ok and 'already in use' in said, said
+    assert [r['Subject'] for r in ledger.rows(s, 'account')] == ['rentscope.example'] and not signin.saved(s, 'inbox.example')

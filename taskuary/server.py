@@ -1761,7 +1761,8 @@ def _run_kind(op: dict, background: BackgroundTasks):
         return clarify_with_sender(tid, ClarifyBody(body=str(p.get('text') or ''), message_id=int(p['message_id']) if str(p.get('message_id') or '').isdigit() else None))
     # the owner vouching for a stranger's task (origin.raise_to) - a page press only: not in toolcatalog.PURPOSE, so no chat can vouch
     if kind == 'task.trust': return task_trust(tid, str(p.get('scope') or ''))
-    if kind == 'agent.continue': return continue_work(tid, ContinueBody(note=str(p.get('note') or '') or None, context=str(p.get('context') or '') or None))
+    if kind == 'agent.continue': return continue_work(tid, ContinueBody(note=str(p.get('note') or '') or None, context=str(p.get('context') or '') or None,
+                                                                         images=prompt_images(p.get('images'))))
     if kind == 'review.reject': return decide(tid, DecideBody(verb='reject'), background)
     if kind == 'hub.publish':
         from . import handbook
@@ -1939,6 +1940,9 @@ def _run_kind(op: dict, background: BackgroundTasks):
         # prompt as yes, and "which branch?" as the word yes
         said = ' '.join(str(p.get('text') or '').split())
         if not said: raise ValueError('say what to tell the agent')
+        # ...and an answer that carries his files goes by the box, which hands them over with the words and binds them to the question
+        # it waits on (waitroom._deliver) - the ask's own road takes words only (walk 6, H3: a PDF was dropped on the way)
+        if p.get('files'): return waitroom_add(tid, {'text': said, 'owner': p.get('owner'), 'files': p['files']})
         out = general.to_agent(store, tid, said, ACTOR, frm='owner', request='open', owner=p.get('owner') or None)
         if out['state'] == 'no_request': return waitroom_add(tid, {'text': said, 'owner': p.get('owner')})
         if not out['delivered']: raise RuntimeError(f"{out['state']}: {out.get('why') or ''}")
@@ -1947,8 +1951,8 @@ def _run_kind(op: dict, background: BackgroundTasks):
     # Tell the agent - typed in now when it is parked at its prompt, else held in the waiting room and typed at its next stop
     if kind == 'agent.tell':
         said = ' '.join(str(p.get('text') or '').split())
-        if not said: raise ValueError('say what to tell the agent')
-        return waitroom_add(tid, {'text': said, 'owner': p.get('owner')})
+        if not said and not p.get('files'): raise ValueError('say what to tell the agent')
+        return waitroom_add(tid, {'text': said, 'owner': p.get('owner'), 'files': p.get('files')})
     # the page's "Stop and save" (TasksView.wrapUp posts close=False): the agent ends, the task stays
     if kind == 'agent.stop': return _wrap_task(tid, False) if p.get('wrap') else stop_task_agent(tid)
     if kind == 'report.rerun':
@@ -7548,8 +7552,12 @@ def waitroom_add(tid: int, body: dict):
     """Queue a note for this task's agent. It is typed in the moment the agent parks at its
     prompt - and at once, as the answer, when it is already parked on a question for you."""
     from . import general            # ...by the one road into the agent (general.to_agent), kept for its next stop
-    try: return general.to_agent(store, tid, str((body or {}).get('text') or ''), ACTOR, frm='owner', wake=False, owner=(body or {}).get('owner') or None)
+    # ...with the files he attached, as files beside his words - only ones this server kept (prompt_images); the receipt names what went
+    files = prompt_images((body or {}).get('files'))
+    try: out = general.to_agent(store, tid, str((body or {}).get('text') or ''), ACTOR, frm='owner', wake=False, owner=(body or {}).get('owner') or None,
+                                files=files or None)
     except ValueError as e: raise HTTPException(422, str(e))
+    return {**out, 'files': files} if files and isinstance(out, dict) else out
 
 @app.post('/api/tasks/{tid}/waitroom/bulk')
 def waitroom_bulk(tid: int, body: dict):

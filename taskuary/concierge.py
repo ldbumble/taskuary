@@ -1952,6 +1952,27 @@ def _meeting(store, tid: int, table: dict | None, params: dict, text: str, actor
 # on the agent to do"): on the desk the Assistant's words to an agent, its answer to one that asked and a note on a task are the task opened,
 # his box there the place to say it. The phone has no task to open, so there they still go in (_tell_now, the proposal's yes)
 IN_TASK = frozenset({'agent.tell', 'agent.answer', 'answer_agent', 'task.comment'})
+# ...AND ON THE PHONE, WHAT GOES IN IS HIS LINE AS HE SENT IT (rule 1; walk 6, H3: "give this to the vendor trials agent: which of the vendors
+# ... do we already pay for?" with a PDF reached the agent as the model's rewrite of the question, the PDF dropped, and the chat said "it has
+# them now"): his own words and everything he attached, as a line typed on the task would carry them. The model only chose the task.
+AS_SENT = frozenset({'agent.tell', 'agent.answer', 'answer_agent', 'agent.continue'})
+
+
+def as_sent(params: dict, kind: str) -> dict:
+    "`params` for an act that hands his line to an agent, carrying that line as typed and the files of the turn - never the model's words."
+    turn = _TURN.get() or {}
+    said = ' '.join(str(turn.get('typed') or '').split()) or str(params.get('text') or params.get('note') or '')
+    files = [str(f) for f in turn.get('files') or []]
+    kept = {k: v for k, v in params.items() if k not in ('text', 'note', 'owner', 'context', 'files', 'images')}
+    return {**kept, ('note' if kind == 'agent.continue' else 'text'): said, **({'files': files} if files else {})}
+
+
+def _named(files) -> str:
+    "His files by their own names, for a receipt: 'lease.pdf and photo.jpg' ('' for none)."
+    import os
+    from .timewords import plural
+    names = [re.sub(r'^\d{8}-\d{6}-[0-9a-f]{6}-', '', os.path.basename(str(f))) for f in files or []]
+    return ' and '.join(names) if len(names) <= 2 else f"{', '.join(names[:2])} and {plural(len(names) - 2, 'more file')}"
 
 def _opened(store, tid: int, target: int) -> dict:
     "The task brought up as a press of its rail row does, and where his words go there - nothing written in it."
@@ -1962,20 +1983,23 @@ def _opened(store, tid: int, target: int) -> dict:
     return {'say': said, 'options': [], 'chips': [], 'decision': None, 'open': f'#task={int(target)}'}
 
 
-def _tell_now(store, tid: int, target: int, said: str, actor: str, owner: str = '') -> dict:
+def _tell_now(store, tid: int, target: int, said: str, actor: str, owner: str = '', files=()) -> dict:
     """Words for the agent WORKING on a task, as the owner's next prompt (the owner, 2026-11-02: "send a new prompt into the general/coding
     agent"): the page's own Tell the agent (waitroom.add) - typed in now when the agent is parked at its prompt, else held and typed at
-    its next stop, never into the middle of a step. Said in the past, with where the words are."""
+    its next stop, never into the middle of a step. Said in the past, with where the words are - and the files that went with them, named
+    from what was handed over."""
     said = ' '.join(str(said or '').split())
-    if not said: raise CallMiss('agent.tell needs `text` - the words for the agent. Nothing was sent.')
-    r = run_proposal(store, operations.propose(store, 'agent.tell', int(target), {'text': said, **({'owner': owner} if owner else {})}, actor), actor)
+    if not said and not files: raise CallMiss('agent.tell needs `text` - the words for the agent. Nothing was sent.')
+    r = run_proposal(store, operations.propose(store, 'agent.tell', int(target), {'text': said, **({'owner': owner} if owner else {}),
+                                                                                   **({'files': list(files)} if files else {})}, actor), actor)
     if r.get('status') != 'done': raise CallMiss(f"{r.get('error') or 'it did not go in'} - say so in plain words. Nothing was sent.")
     o = r.get('outcome') or {}
     when = ('it has them now' if o.get('delivered') else
             "they wait until you trust its sender" if o.get('state') == 'held_stranger' else
             'they go in when its agent starts - it waits its turn' if _queued(store, target) and not _on_task(target) else
             'they go in when it stops at its prompt')
-    return _did(store, tid, f"Told the agent on {task_ref(target)}: “{_title_cut(' '.join(str(owner or said).split()), 120)}” - {when}.", 'agent.tell')
+    sent = f" with {_named(o.get('files'))}" if o.get('files') else ''
+    return _did(store, tid, f"Told the agent on {task_ref(target)}: “{_title_cut(' '.join(str(owner or said).split()), 120)}”{sent} - {when}.", 'agent.tell')
 
 
 def _in_words(llm, system: str, table: str, text: str, verb: str) -> tuple[str, list]:
@@ -3905,6 +3929,7 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
         _r, _l, _own = find(store.get_doc('learned') or '', str(params.get('key') or ''))
         named = named or str((_l or {}).get('text') or (store._one('SELECT Text FROM learned_line WHERE Key=?', (str(params.get('key') or ''),)) or {}).get('Text') or '')[:120].rstrip('.')
     if routes() and kind in IN_TASK and target: return _opened(store, tid, int(target))
+    if not routes() and kind in AS_SENT and target: params = as_sent(params, kind)
     if tk == 'task' and (wrote := _landed(store, tid, kind, int(target or 0), params,
                                           lambda: _task_writes(store, tid, kind, int(target or 0), params, named, actor, said=text))) is not None: return wrote
     if routes(): return _route(store, tid, kind, int(target or 0), params, named, it, item, text, actor)
@@ -4038,7 +4063,8 @@ def _task_writes(store, tid: int, kind: str, target: int, params: dict, named: s
         return _did(store, tid, f"Added a note to {named}: \u201c{_title_cut(note, 120)}\u201d.", 'task.comment')
     # ...and THE OWNER'S NEXT PROMPT TO THE AGENT AT WORK, delivered and said (the owner, 2026-11-02) - the page's Tell the agent, typed by
     # nobody else: it reaches no one outside, so the phone runs it at once as well
-    if kind == 'agent.tell' and target: return _tell_now(store, tid, target, str(params.get('text') or ''), actor, owner=said)
+    if kind == 'agent.tell' and target:
+        return _tell_now(store, tid, target, str(params.get('text') or ''), actor, owner=said, files=params.get('files') or ())
     # ...and A GENERAL AGENT THE OWNER STOPPED, or a restart cut off, carried on by their words (the overnight run, 2026-11-03: "carry on with
     # the vendor notes" was answered "press Try again or Run another agent"): its row draws no Continue - its own box is the way on, and these
     # are the same owner's words - so it is the page's Continue with them as the note, run and said
@@ -4048,7 +4074,8 @@ def _task_writes(store, tid: int, kind: str, target: int, params: dict, named: s
         # ...under YOU as they typed them, what the Assistant made of them folded as Taskuary's (general.relayed)
         relay = ' '.join(str(params.get('note') or params.get('text') or '').split())
         note = ' '.join(str(said or relay).split())
-        r = run_proposal(store, operations.propose(store, 'agent.continue', target, {'note': note, 'context': general.relayed(note, relay)}, actor), actor)
+        r = run_proposal(store, operations.propose(store, 'agent.continue', target, {'note': note, 'context': general.relayed(note, relay),
+                                                                                     **({'images': list(params['files'])} if params.get('files') else {})}, actor), actor)
         # ...a note kept behind the sender's Trust is no failure: it waits there, said with why (general.kept_held), whatever the run's status
         if (held := general.kept_held(task_ref(target), r.get('outcome'))): return _did(store, tid, held, 'agent.continue')
         if r.get('status') != 'done': raise CallMiss(f"{r.get('error') or 'it did not pick up'} - say so in plain words. Nothing was started.")

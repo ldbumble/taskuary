@@ -317,8 +317,32 @@ class DeskRoutes(unittest.TestCase):
         with concierge.delivering(concierge.PHONE), mock.patch.object(concierge, '_on_task', return_value=True), \
              mock.patch.object(waitroom, 'state', return_value=('working', None)):
             out, _ = say(s, 'tell the agent to use the main branch', item['key'], 'CALL: {"kind": "agent.tell", "params": {"text": "use the main branch"}}')
-        self.assertEqual([waitroom.parts(n['Note']) for n in s.waiting_notes(tid)], [('tell the agent to use the main branch', 'use the main branch')])
+        # ...as he sent them: no second voice's version rides with his words (rule 1; walk 6, H3)
+        self.assertEqual([waitroom.parts(n['Note']) for n in s.waiting_notes(tid)], [('tell the agent to use the main branch', '')])
         self.assertNotIn('open', out)
+
+    def test_on_the_phone_his_line_and_his_file_reach_the_agent_as_he_sent_them(self):
+        """Walk 6 (H3): "give this to the vendor trials agent: which of the vendors ... do we already pay for?" with a PDF reached the agent as
+        the model's rewrite of the question, the PDF dropped, while the chat said "it has them now". His words go in verbatim, the file as a
+        file beside them, and the receipt names the file only because it went."""
+        import tempfile
+        from taskuary import config, waitroom
+        s = store(); tid, item = on_table(s)
+        s._exec('UPDATE task SET TrustedThrough=? WHERE TaskId=?', (10 ** 9, tid))
+        pdf = config.home() / 'attachments' / 'phone' / 'test' / 'vendor-report.pdf'
+        pdf.parent.mkdir(parents=True, exist_ok=True); pdf.write_bytes(b'%PDF-1.4 invented')
+        self.addCleanup(pdf.unlink)
+        line = 'give this to the vendor trials agent: which of the vendors it signed up for does this report say we already pay for?'
+        model = ('CALL: {"kind": "agent.tell", "params": {"text": "Which of the vendors signed up for does the Daily vendor invoices report say we '
+                 'already pay for?", "files": ["C:/elsewhere/secret.txt"]}}')
+        with concierge.delivering(concierge.PHONE), mock.patch.object(concierge, '_on_task', return_value=True), \
+             mock.patch.object(waitroom, 'state', return_value=('working', None)), mock.patch.object(terminal, 'live_sessions', return_value=[]), \
+             mock.patch.object(ingest, '_spawn'):
+            out = concierge.say(s, line, key=item['key'], llm=lambda *a, **k: model, images=[str(pdf)])
+        notes = s.waiting_notes(tid)
+        self.assertEqual([waitroom.parts(n['Note']) for n in notes], [(line, '')])
+        self.assertEqual(waitroom.files_of(notes[0]), [str(pdf.resolve())], 'his file, and never one the model named')
+        self.assertIn('vendor-report.pdf', out['say'])
 
     def test_an_outward_send_in_words_still_only_lights(self):
         # ...the line the owner kept: what leaves the app is theirs to press (pageview.is_send) - "send it" over a draft lights Send

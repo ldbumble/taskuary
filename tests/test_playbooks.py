@@ -2,6 +2,7 @@
 seeded into the session, drafted on close as a proposal, and never filed without the owner.
 """
 import json, unittest
+from taskuary import card
 from unittest import mock
 
 from taskuary import context, ingest, playbooks, proposals, terminal, triage, verdicts
@@ -284,7 +285,7 @@ class DraftedOnClose(unittest.TestCase):
         self.assertEqual([p['action'] for p in out['proposed']], ['write_playbook'])
         self.assertIn('two card fees', seen['user'])                       # drafted from the conversation itself...
         self.assertIn('does not tie to the ledger', seen['user'])          # ...and the mail that started it - the playbook's `when`
-        self.assertIsNotNone(proposals.playbook_pending(s, tid))
+        self.assertIsNotNone(card.pending(s, tid, 'playbook'))
 
     def test_a_proposal_on_a_task_that_closed_itself_is_kept_in_sight(self):
         """With nobody to answer, the task closed as done and its pending proposal was shown nowhere (store._VISIBLE_PENDING).

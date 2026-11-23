@@ -3,6 +3,7 @@ closed, the issue closed) and any playbook proposal its agent left (approved or 
 undecided playbook away as "no reply". Neither half closes the task, in either order - only the owner's Mark done does
 (2026-10-18: "sending and closing are two steps, never automatic")."""
 import json, unittest
+from taskuary import card
 from unittest import mock
 
 from taskuary import outbound, playbooks, proposals, verdicts
@@ -79,11 +80,11 @@ class OneLine(unittest.TestCase):
         s, tid, reply, book = finished()
         q = cardqueue.state(s, tid)
         self.assertEqual((q['live'], q['held']), ([reply], [book]))
-        self.assertEqual(cardqueue.closes_with(s, tid), 'the playbook')
+        self.assertEqual(card.may_close(s, tid), 'the playbook')
         self.assertIn('not the last card', concierge.cannot({'tid': tid, 'kind': 'review', 'rid': reply, 'ref': 'TQ-1', 'draft': 'x'}, 'send_close', s))
         send(s, reply)
         self.assertEqual(cardqueue.state(s, tid)['live'], [book], 'the playbook stands next')
-        self.assertEqual(cardqueue.closes_with(s, tid), '')
+        self.assertEqual(card.may_close(s, tid), '')
 
     def test_a_close_out_is_one_card_with_the_reply_it_closes(self):
         from taskuary import cardqueue
@@ -107,9 +108,9 @@ class OneLine(unittest.TestCase):
             with mock.patch('taskuary.llm.build_llm', return_value=llm), mock.patch('taskuary.handbook.enabled', return_value=False):
                 self.assertEqual(wrapup.wrap(s, tid, close=False, actor='owner')['proposed'], [])
         finally: wrapup.CLOSING.reset(shut)
-        self.assertIsNone(proposals.playbook_pending(s, tid))
+        self.assertIsNone(card.pending(s, tid, 'playbook'))
         concierge.close_task(s, tid, 'owner')
         proposals.queue(s, tid, {'action': 'write_playbook', 'slug': 'vendor-check', 'text': BOOK, 'why': 'it recurs'}, 'assistant')
         proposals.hold_for_playbook(s, tid, 'assistant')
         self.assertEqual(s.get_task(tid)['Status'], 'done', 'his close stands')
-        self.assertIsNone(proposals.playbook_pending(s, tid))
+        self.assertIsNone(card.pending(s, tid, 'playbook'))

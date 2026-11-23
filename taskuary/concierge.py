@@ -916,8 +916,8 @@ def cannot(item: dict | None, verb: str, store=None) -> str:
         rv = (store.get_review(int(item['rid'])) or {}) if store is not None and item.get('rid') else {}
         if not item.get('tid') or item.get('kind') != 'review' or item.get('closeout') or rv.get('Kind') in ('slot', 'clarification', 'action'):
             return f"There is no reply on a task to send and close on {what}."
-        from .cardqueue import closes_with
-        if store is not None and (after := closes_with(store, item['tid'])):
+        from .card import may_close
+        if store is not None and (after := may_close(store, item['tid'])):
             return f"The reply on {what} is not the last card on it - {after} waits after it, so Send sends it and the task stays open."
         return cannot(item, 'approve', store)
     if verb == 'approve' and item.get('kind') in ('review', 'action') and not item.get('draft') and item.get('kind') == 'review':
@@ -972,10 +972,10 @@ def cannot(item: dict | None, verb: str, store=None) -> str:
     if verb == 'defer' and item.get('closed'): return f"{what} is closed - there is nothing to put away."
     if verb == 'watch' and (item.get('closed') or not item.get('tid')): return f"{what} is not an open task - there is nothing to watch."
     need = NEEDS.get(verb)
-    # ...a task's or an agent's row with no draft carries the Approve of a step held there for the owner's yes (the 2026-11-02 audit)
+    # ...a task's or an agent's row with no draft carries the Approve of an act waiting there for the owner's yes (the 2026-11-02 audit)
     if verb == 'approve' and need and not item.get(need) and item.get('tid') and store is not None:
-        from . import proposals
-        if proposals.held_pending(store, item['tid']): return ''
+        from . import card
+        if card.pending(store, item['tid'], 'acts'): return ''           # ...any act to Approve: a held step, a proposal, a close-out, a playbook
     if need and not item.get(need):
         # the item's own line, not "TQ-0006 is assistant asked you: Should I…?." glued into a sentence (2026-10-06)
         state = str(item.get('why') or funnel.lane_word(item) or 'waiting').strip().rstrip('.')
@@ -4357,56 +4357,6 @@ def close_task(store, tid: int, actor: str = 'owner', save: bool = True, status:
     return True
 
 
-def owed_items(store, tid: int, asks: bool = True) -> list:
-    """EVERYTHING A TASK HOLDS FOR THE OWNER, item by item, from the reads its own page draws (server._assistant_payload): each pending or
-    held review - the reply draft, an email it owes, a post, any other proposal - and the agent's open question. Each {rid, verb, line,
-    says}: `line` one short line for the Assistant and the dock, `verb` the button that answers it (button.light), `says` the waiting
-    words close_after_send keeps a task open with. The Assistant said "it's waiting on you, I haven't seen what it needs yet" of a task
-    with two emails waiting to send (the owner, 2026-11-07)."""
-    from . import buttons, origin, proposals, workerstate as ws
-    A, S, out = buttons.label('approve', 'action'), buttons.label('approve'), []
-    # ...and none on a task a stranger STARTED: its one move is Trust, never a Send the page does not draw - one who only joined a known
-    # person's task never takes Send off what waits there (the ruling, 2026-11-19: origin.keeps_him)
-    held = bool(origin.keeps_him(store, tid))
-    for r in [] if held else store._rows("SELECT * FROM review WHERE TaskId=? AND Status IN ('pending','held') ORDER BY ReviewId", (tid,)):
-        try: d = json.loads((r.get('DraftText') if r.get('Kind') == 'action' else r.get('Deliver')) or '{}') or {}
-        except ValueError: d = {}
-        d = d if isinstance(d, dict) else {}
-        if r.get('Kind') != 'action':
-            to = ', '.join(d['to']) if isinstance(d.get('to'), list) else str(d.get('to') or '')
-            to = to or str((store.get_message(r['MessageId']) or {}).get('FromEmail') or '') if r.get('MessageId') else to
-            what = f"{'an email' if r.get('Kind') == 'slot' else 'a reply'}{' to ' + to if to else ''}"
-            says = (f"an email this task owes still waits for your {S}" if r.get('Kind') == 'slot' else
-                    'a reply held while the agent worked comes back for your Send' if r.get('Status') == 'held' else f'another reply still waits for your {S}')
-            out.append({'rid': r['ReviewId'], 'verb': 'approve', 'says': says, 'line': f"{what} is drafted - {S} sends it"
-                        + (' (held while the agent works)' if r.get('Status') == 'held' else '')})
-            continue
-        if d.get('action') in proposals.HELD_ACTS:
-            step = d.get('what') or str(d.get('command') or 'a step')[:120]
-            says, line = f"the agent's held step still waits for your {A} - {step}", f"the agent's held step - {step} - waits for your {A}"
-        else:
-            why = ' '.join(str(r.get('Reason') or 'a proposal').split())[:200]
-            says = f"{why} - still waiting for your {A}"
-            line = f"a {proposals.POSTS[d['type']]} post waits for your {A}" if proposals.is_post(d) else f"{why} - {A} does it"
-        out.append({'rid': r['ReviewId'], 'verb': 'approve', 'says': says, 'line': line})
-    # ...and what his press handed the agent to do is still owed - by the agent, not his press (cardqueue.handed)
-    from . import cardqueue
-    for r in [] if held else store._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action' AND Status IN ('approved','edited') ORDER BY ReviewId", (tid,)):
-        if not cardqueue.handed(r): continue
-        try: d = json.loads(r.get('FinalText') or '{}') or {}
-        except ValueError: d = {}
-        what = f"the {proposals.POSTS[d['type']]} post" if proposals.is_post(d) else ' '.join(str(r.get('Reason') or 'the act').split())[:120]
-        out.append({'rid': r['ReviewId'], 'verb': None, 'says': f'{what} is with the agent, not done yet',
-                    'line': f"{what} is handed to the agent - not done yet; its final press waits for your yes"})
-    if asks:
-        from . import general
-        live = general.session_for(tid) or ws._live(tid)
-        q = ws.asking_of(store, live) if live else None
-        if q and q.get('text'):
-            out.append({'rid': None, 'verb': 'answer_agent', 'says': '', 'line': f"the agent asks: {_cut(' '.join(str(q['text']).split()), 200)}"})
-    return out
-
-
 def close_behind(store, tid: int, actor: str = 'owner') -> bool:
     """The owner's close of a task whose reply has gone: with an agent live on it, the session is written up and the task closed BEHIND the
     press, by the job Mark done's own press starts (writeup.start) - the agent stops at once and the press answers once its session is kept.
@@ -4424,7 +4374,7 @@ def close_behind(store, tid: int, actor: str = 'owner') -> bool:
 SAME_PRESS = 30       # seconds in which a second ask about a send's close is the same press asking (close_after_send)
 def close_after_send(store, tid: int, actor: str = 'owner') -> dict:
     """THE ONE GATE on "the reply that went closes the task" (the Close out Send, 2026-10-29): closed unless something on it still waits for
-    the owner's own press (owed_items: a held agent step or a proposal for an Approve, another reply or email for a Send - a Close out Send
+    the owner's own press (card.holds_close: a held agent step or a proposal for an Approve, another reply or email for a Send - a Close out Send
     closed a task whose agent's `git push` was held, never approved, never pushed, and the task read done); then it stays open and says why
     on the task. {'status', 'closed', 'kept_open'}."""
     t = store.get_task(tid) or {}
@@ -4434,7 +4384,8 @@ def close_after_send(store, tid: int, actor: str = 'owner') -> dict:
     # his close, as Mark done is - the agent on it, at work or at rest, is saved and stopped (close_behind) and is not woken to hear of the send.
     # Kept open while a turn ran, the send woke the agent, the page's second ask closed the task under that turn, and the chat read "it stays
     # open: the agent session on it is still open" over a turn said to have stopped in the middle
-    kept = [i['says'] for i in owed_items(store, tid, asks=False)]
+    from . import card
+    kept = [i['says'] for i in card.lines(store, tid, asks=False)]
     if not kept: return {'status': 'done', 'closed': close_behind(store, tid, actor), 'kept_open': []}
     said = '; '.join(kept)
     # ...said ONCE a press: the send's own close says it (verdicts.decide `closes`), and the page's walk asks again a beat later
@@ -5061,12 +5012,11 @@ def propose_for(store, dock_tid: int, decision: dict, item: dict | None, text: s
         if not it.get('key'): raise ValueError('nothing is on the table')
         target, params = it.get('tid') or it.get('idea') or it.get('mid') or 0, {'key': it['key'], 'text': d_text or text or None}
     elif verb == 'approve':
-        # ...on a task's or an agent's row with no draft of its own, the card that waits there for his press (cardqueue's front - what the
-        # page draws), else the step held for his yes. A row with no review id found "nothing to approve", and the yes went to the agent as
+        # ...on a task's or an agent's row with no draft of its own, the card in front that waits for his press (card.front_review - what the
+        # page draws; never one his press already handed to the agent). A row with no review id found "nothing to approve", and the yes went to the agent as
         # a typed line that greyed the very card he approved (walk 9, 42)
-        from . import cardqueue, proposals
-        target = it.get('rid') or (((cardqueue.front(store, it['tid']) or {}).get('ReviewId')
-                                    or (proposals.held_pending(store, it['tid']) or {}).get('rid')) if it.get('tid') else None)
+        from . import card
+        target = it.get('rid') or (card.front_review(store, it['tid']).get('ReviewId') if it.get('tid') else None)
         label = closeout_label(it) or label         # "Send the reply" is not what a merge card's yes does
     elif verb == 'send_close': target, params = it.get('rid'), {'close': True}     # the reply, then the task's close (server: review.approve)
     elif verb == 'answer_agent':
@@ -5965,8 +5915,9 @@ def _rail_block(p: dict, cap: int = RAIL_CAP, store=None) -> str:
         bits = [x for x in (handle_of(i), i.get('who'), _cut(i.get('title') or '', 90)) if x]
         # ...and whether a DRAFT waits on it: the lane's word alone ("ready to send") left "reject the draft on TQ-0004" answered
         # "there is no draft", and "send the reply to Sam" written as a new one (real-AI check, 2026-10-18)
-        # ...and WHAT IT HOLDS, item by item (owed_items, the reads its page draws): an agent task's emails, post and question
-        held = owed_items(store, int(i['tid'])) if store is not None and str(i.get('tid') or '').isdigit() else []
+        # ...and WHAT IT HOLDS, card by card (card.lines, the cards its page draws): an agent task's emails, post and question
+        from . import card
+        held = card.lines(store, int(i['tid'])) if store is not None and str(i.get('tid') or '').isdigit() else []
         if bits: rows.append(f"- {' · '.join(bits)} ({funnel.lane_word(i)}"
                              + ('; a drafted reply waits for your yes' if i.get('rid') and i.get('draft') and not held else '') + ')'
                              + ''.join(f"\n  · {x['line']}" + (f" [rv{x['rid']}]" if x.get('rid') else '') for x in held[:6]))

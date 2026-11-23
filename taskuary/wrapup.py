@@ -4,7 +4,7 @@ this closes the loop: the transcript becomes the report, the reply the sender ge
 """
 import contextvars, json, re, threading
 from loguru import logger
-from . import aiusage
+from . import aiusage, card as cards
 
 FIELDS = ('determination', 'actions', 'summary')
 
@@ -1023,7 +1023,7 @@ def wrap(store, tid: int, close: bool = True, actor: str = 'owner', sid: str = N
         # a bill, a W-9, a month-end reconciliation, all general work - never drafted one: "the first real one is drafted for you
         # when an agent finishes a kind of job for the first time" held for code alone (walk 2026-10-21). Last, as there.
         pbd = chat_playbook(store, tid) if asks_playbook(close, actor) else None
-        if proposals.playbook_pending(store, tid): proposals.hold_for_playbook(store, tid, 'assistant')     # always in sight
+        if cards.pending(store, tid, 'playbook'): proposals.hold_for_playbook(store, tid, 'assistant')     # always in sight
         _ended(store, tid, close, actor)
         return {'wrap': 'done', 'taskId': tid, 'report': last, 'proposed': [pbd] if pbd else [],
                 'drafting': bool(fin.get('drafting')), 'can_send': bool(fin.get('can_send')),
@@ -1241,7 +1241,7 @@ def _wrap_session(store, tid, task, close, actor, sid, final_message, no_reply, 
     # answer are what a close is for, and this call must never be the one the drafter's AI budget goes to.
     pbd = playbooks.draft(store, tid, text, agent, llm=_answered(store, ahead)) if asks_playbook(close, actor) else None
     # ...and one the agent proposed itself (TASKUARY-PROPOSE, collected above) is held in sight the same way (proposals.HELD)
-    if proposals.playbook_pending(store, tid): proposals.hold_for_playbook(store, tid, agent)
+    if cards.pending(store, tid, 'playbook'): proposals.hold_for_playbook(store, tid, agent)
     if pbd: proposed.append(pbd)
     store.audit('terminal', tid, 'wrap', actor, detail={'sid': found or sid, 'close': close})
     _ended(store, tid, close, actor)

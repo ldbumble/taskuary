@@ -2206,12 +2206,13 @@ def _body(store, item: dict | None) -> tuple[dict, str, bool]:
 # ── THE CARD THAT WAITS IS THE ONE THE DESK AND THE AGENT SEE (walk 6, H1) ────────────────────────────────────────────────────────────
 # The phone read a task's draft off the one review id its rail row carried, so a card the row did not carry did not exist for it: the email to
 # Gail waited on the desk, the agent was told it waited, and the phone said "I do not have the text of the message in front of me here".
-# The task's line of cards is cardqueue's (the record the page draws and the agent is handed): its front card is read from there, shown in
-# full, and pressed from here through the desk's own door (server.decide).
+# The task's cards are card.py's (the record the page draws and the agent is handed): its front card is read from there, shown in full, and
+# pressed from here by the one press road (card.press -> server.decide), as the desk's.
 def front_card(store, item: dict | None) -> dict:
-    """The review row of the card that waits for his press now on the item's task (cardqueue's front) - {} when none does."""
-    from . import cardqueue
-    try: return cardqueue.front(store, (item or {}).get('tid'))
+    """The review row of the card that waits for his press now on the item's task (card.front_review) - {} when none does: one his press
+    handed to the agent is not his to press again, and a stranger's task has only its Trust."""
+    from . import card
+    try: return card.front_review(store, (item or {}).get('tid'))
     except Exception as e:
         logger.debug(f'the phone could not read the line of cards: {e}'); return {}
 
@@ -2240,20 +2241,13 @@ EDIT_KEY = 'remote_edit'                     # an Edit pick waiting for the new 
 
 
 def press_card(store, rid: int, verb: str, words: str = None) -> str:
-    """His press on a waiting card, from the phone - the desk's own door (server.decide), so a press reads the same wherever it was made:
-    sent, refused because the thread moved, or failed and why. Said with the walk's way on."""
-    from fastapi import HTTPException
-    from .server import DecideBody, decide
+    """His press on a waiting card, from the phone - the one press road (card.press: the desk's own door), so a press reads the same wherever
+    it was made: sent, handed to the agent, refused because the thread moved, or failed and why. Said with the walk's way on."""
+    from . import card
     rv = store.get_review(int(rid)) or {}
-    if rv.get('Status') != 'pending': return stuck(store, 'That card is not waiting any more - nothing was pressed.')
-    try: out = decide(int(rid), DecideBody(verb=verb, final_text=words))
-    except HTTPException as e: return stuck(store, f'Not done - {plain(e)}. Nothing went.')
-    if out.get('stale') or out.get('send_error') or not out.get('ok', True):
-        return stuck(store, f"Not sent - {out.get('send_error') or 'it did not go'}")
-    from . import cardqueue
-    what = cardqueue.what(store, {'rids': [int(rid)], 'rows': [rv]})
-    said = {'reject': f'Dismissed {what} - nothing ran.', 'approve': f"{'Approved' if rv.get('Kind') == 'action' else 'Sent'} {what}.",
-            'edit': f'Sent {what}, with your words.'}.get(verb, 'Done.')
+    got = card.press(store, int(rid), verb, words)
+    if not got['ok']: return stuck(store, got['did'])
+    said = got['did'] or 'Done.'
     tid = rv.get('TaskId')
     extra = ([(f'Open TQ-{int(tid):04d}', {'t': 'open', 'key': f'task:{int(tid)}'})] if tid else []) + [(_next_word(), {'t': 'next'})]
     return turn_text({'say': said, 'item': None}, store=store, extra=extra)

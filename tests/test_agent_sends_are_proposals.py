@@ -3,6 +3,7 @@
 that reaches a person waits as a proposal on the agent's own task; the owner's press runs it. The owner's own calls are unchanged.
 """
 import json, unittest
+from taskuary import card
 from unittest import mock
 from fastapi.testclient import TestClient
 from taskuary import config, guard, proposals, scopes, server
@@ -314,7 +315,7 @@ def test_a_post_handed_to_the_browser_is_pressed_not_done_for_the_agent_the_line
     said = cardqueue.screen(s, tid)
     assert any('NOT done yet' in l and f'rv{li}' in l for l in said.splitlines()) and not any(l.startswith('- Done') for l in said.splitlines()), said
     assert cardqueue.state(s, tid)['live'] == [li] and x in cardqueue.held(s, tid), 'the next post waits until this one has gone'
-    assert any(i['rid'] == li and 'not done yet' in i['line'] for i in concierge.owed_items(s, tid))
+    assert any(i['rid'] == li and 'not done yet' in i['line'] for i in card.lines(s, tid))
     # ...its own final press ran on the site: done, and the line moves on
     assert cardqueue.done(s, tid, 'Post on linkedin.example') == [li]
     assert not cardqueue.handed(s.get_review(li)) and cardqueue.state(s, tid)['live'] == [x]

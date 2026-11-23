@@ -818,7 +818,8 @@ def _decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = N
             and rv.get('TaskId') and str(rv.get('Status') or 'pending') == 'pending'
             and rv.get('DeliveryState') not in ('unknown', 'sending')):
         from . import proposals
-        co = proposals.closeout_pending(store, rv['TaskId'])
+        from .card import pending as pending_card
+        co = pending_card(store, rv['TaskId'], 'closeout')
         if co: return decide(store, co, 'approve', None, note, actor, learn_async, cc,
                              reply_text=final_text if (final_text or '').strip() else '', blanks_ok=blanks_ok)
     if reply_text is not None and rv.get('Kind') == 'action' and verb_in in ('approve', 'edit', 'close_pr', 'merge_anyway'):

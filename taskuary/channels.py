@@ -1847,7 +1847,8 @@ def close_upstream_ended(store, tid: int, said: str, actor: str = 'router'):
     # said once: a task kept open below for its unsent reply meets this ending again on a later poll
     if not any(c.get('Body') == said for c in store.list_comments(tid)): store.add_comment(tid, 'router', 'agent', said)
     # a close-out waiting on the owner (close the issue, merge) is answered by the upstream ending itself
-    rv = proposals.closeout_pending(store, tid)
+    from .card import pending as pending_card
+    rv = pending_card(store, tid, 'closeout')
     if rv: store.decide_review(rv['ReviewId'], 'no_reply', None, actor, 'the item ended upstream')
     # ...but NOT UNDER WORK STILL LIVE ON IT (the owner, 2026-11-01: "If anything still working never close the task automatically"): an
     # agent at its prompt, a routine - the task stays open, and a later poll meets this ending again once nothing is

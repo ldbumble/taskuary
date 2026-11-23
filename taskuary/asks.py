@@ -142,16 +142,17 @@ def phone_text(store, t: dict, lane: str, says: str) -> tuple:
 
 
 def send_picked(store, sends: list) -> str:
-    """A phone pick's send: each email exactly as it was shown - one rewritten since is not sent, but said."""
-    from . import verdicts
+    """A phone pick's send: each email exactly as it was shown - one rewritten since is not sent, but said. Pressed by the one press road
+    (card.press), so a thread that moved since stops it as it stops the desk's Send."""
+    from . import card, verdicts
     said = []
     for rid, sig in sends:
         rv = store.get_review(int(rid)) or {}
         to = ', '.join((json.loads(rv.get('Deliver') or '{}') or {}).get('to') or []) or 'the sender'
         if rv.get('Status') != 'pending': said.append(f'the one to {to} was {verdicts.already(rv)}'); continue
         if sig and _sig(rv.get('DraftText')) != sig: said.append(f'the email to {to} changed since I showed it - not sent; open it to see it again'); continue
-        out = verdicts.decide(store, rv, 'approve')
-        said.append(f'Sent to {to}' if out.get('ok') and not out.get('send_error') else f"not sent to {to} - {out.get('send_error') or out.get('status')}")
+        got = card.press(store, int(rid), 'approve')
+        said.append(f'Sent to {to}' if got['ok'] else f"not sent to {to} - {got['did'].removeprefix('Not sent - ')}")
     return '. '.join(s[:1].upper() + s[1:] for s in said) + '.'
 
 

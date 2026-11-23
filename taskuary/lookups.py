@@ -182,9 +182,9 @@ def agents_now(store, p: dict) -> str:
     return NL.join(out) if out else 'No agent is working on anything right now.'
 
 def _holds(store, tid, pad='    ') -> str:
-    "What a task holds for the owner, a line each (concierge.owed_items - the reads its own page draws)."
-    from .concierge import owed_items
-    return ''.join(f"{NL}{pad}· {x['line']}" + (f" [rv{x['rid']}]" if x.get('rid') else '') for x in owed_items(store, int(tid))[:6]) if tid else ''
+    "What a task holds for the owner, a line each (card.lines - the cards its own page draws)."
+    from .card import lines
+    return ''.join(f"{NL}{pad}· {x['line']}" + (f" [rv{x['rid']}]" if x.get('rid') else '') for x in lines(store, int(tid))[:6]) if tid else ''
 
 def approvals_list(store, p: dict) -> str:
     rows = store.waiting_reviews()

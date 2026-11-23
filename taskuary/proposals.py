@@ -556,12 +556,6 @@ _ISSUE = re.compile(r'github\.com/([^/]+/[^/]+)/issues/(\d+)')
 _PULL = re.compile(r'github\.com/([^/]+/[^/]+)/pull/(\d+)')
 
 
-def closeout_pending(store, tid: int):
-    """The task's close-out still waiting on the owner, if any."""
-    return next((r for r in store._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action' AND Status='pending'", (tid,))
-                 if _action(r) in CLOSEOUT), None)
-
-
 # ── close-out and playbook are TWO things (the owner, 2026-10-01) ────────────────────────────────────────────────────
 # Neither closes the task: its close-out (the reply sent, the pull request merged or closed, the issue closed) and the
 # playbook proposal its agent left (approved or dismissed) are each said on the task, and only the owner's Mark done closes it
@@ -572,17 +566,16 @@ PLAYBOOK = 'write_playbook'
 PLAYBOOKS = (PLAYBOOK, 'amend_playbook')
 
 
-def playbook_pending(store, tid: int):
-    """The playbook proposal still waiting on the owner's approve or dismiss, if any."""
-    return next((r for r in store._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action' AND Status='pending'", (tid,))
-                 if _action(r) in PLAYBOOKS), None)
-
-
 # A PLAYBOOK PROPOSAL IS ALWAYS SEEN (the owner, 2026-10-21). It is drafted after the task's ending, and a task that closed itself
 # with nobody to answer - a workflow run, the owner's own chat, a coding session - was done by then: a pending review on a done task
 # is shown nowhere (store._VISIBLE_PENDING), so the proposal waited where nobody could find it. Such a task waits for it instead,
 # marked HELD, and goes back to done once the owner answers it, yes or no - the close was already theirs or the agent's.
 HELD = 'held:playbook'
+
+
+def _pending(store, tid, sort):
+    from .card import pending
+    return pending(store, tid, sort)
 
 
 def owner_closed(store, tid: int) -> bool:
@@ -599,7 +592,7 @@ def hold_for_playbook(store, tid: int, actor: str) -> None:
     # only new work from outside reopens his close - a proposal raised after it is put down with the close, as the close puts down what waits
     if owner_closed(store, tid):
         from .concierge import CLOSED_TASK
-        while (r := playbook_pending(store, tid)): store.decide_review(r['ReviewId'], 'no_reply', None, actor, note=CLOSED_TASK)
+        while (r := _pending(store, tid, 'playbook')): store.decide_review(r['ReviewId'], 'no_reply', None, actor, note=CLOSED_TASK)
         return
     tags = [x for x in str(t.get('Tags') or '').split(',') if x.strip()]
     store.update_task(tid, {'Status': 'waiting', 'Tags': ','.join([*tags, HELD])}, actor)
@@ -609,26 +602,12 @@ def hold_for_playbook(store, tid: int, actor: str) -> None:
 def playbook_answered(store, tid: int, actor: str) -> None:
     t = store.get_task(tid) or {}
     tags = [x for x in str(t.get('Tags') or '').split(',') if x.strip()]
-    if HELD not in tags or playbook_pending(store, tid): return
+    if HELD not in tags or _pending(store, tid, 'playbook'): return
     from . import workerstate as ws          # ...never back to done under work still live on it (a Continue since, 2026-11-01)
     store.update_task(tid, {'Tags': ','.join(x for x in tags if x != HELD)}, actor)
     if not owed(store, tid) and not ws.live_work(store, tid):
         from . import concierge
         concierge.close_task(store, tid, actor, save=False)
-
-
-def held_pending(store, tid) -> dict | None:
-    """AN ACTION WAITING FOR THE OWNER'S YES on the task - a step a hook held (a `git push` the shell gate stopped), or a proposal its agent
-    filed - as {rid, action, what}, the newest; None when none waits. Not a close-out (its own card, the reply's settle) nor the playbook
-    (asked after the work ended). The Advisor read an agent's card as asking and lit nothing over the Approve it waited on (2026-11-02 audit)."""
-    if not tid: return None
-    for r in store._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action' AND Status='pending' ORDER BY ReviewId DESC", (int(tid),)):
-        try: p = json.loads(r.get('DraftText') or '{}') or {}
-        except (TypeError, ValueError): p = {}
-        if not isinstance(p, dict) or p.get('closeout') or p.get('action') in (*PLAYBOOKS, *CLOSEOUT): continue
-        what = (p.get('what') or str(p.get('command') or '')[:160]) if p.get('action') in HELD_ACTS else ''
-        return {'rid': r['ReviewId'], 'action': p.get('action') or '', 'what': ' '.join(str(what or r.get('Reason') or p.get('action') or 'a step').split())[:240]}
-    return None
 
 
 # A CARD YOU HAVE MOVED PAST IS OLD NEWS (the owner, 2026-11-10: "no once youa re passed it, it should stay where it is with buttons grayed
@@ -831,8 +810,9 @@ def _cut(w: str, n: int = 60) -> str: return (w := ' '.join(str(w or '').split()
 
 
 def owed(store, tid: int) -> bool:
-    """Something of the close-out still waits on the owner: a reply, a close-out act, any other proposal - not the playbook."""
-    return any(_action(r) not in PLAYBOOKS for r in store._rows("SELECT * FROM review WHERE TaskId=? AND Status='pending'", (tid,)))
+    """Something of the close-out still waits on the owner: a reply, a close-out act, any other proposal - not the playbook (card.holds_close)."""
+    from .card import holds_close
+    return any(c['sort'] != 'playbook' for c in holds_close(store, tid))
 
 
 def closed_out(store, tid: int, actor: str, said: str) -> None:
@@ -843,7 +823,7 @@ def closed_out(store, tid: int, actor: str, said: str) -> None:
     if (store.get_task(tid) or {}).get('Status') in ('done', 'dropped'): return
     n = len(slots.open_(store, tid))
     store.audit('task', tid, 'closed_out', actor)
-    rest = (f" {plural(n, 'email')} still to go." if n else ' Its playbook still waits on your approve or dismiss.' if playbook_pending(store, tid)
+    rest = (f" {plural(n, 'email')} still to go." if n else ' Its playbook still waits on your approve or dismiss.' if _pending(store, tid, 'playbook')
             else f" {buttons.label('close')} when the task is finished.")
     store.add_comment(tid, actor, 'human', f'{said}{rest}')
 
@@ -918,7 +898,7 @@ def _report(store, tid: int) -> str:
 def closeout(store, tid: int, p: dict, text: str = '', actor='agent'):
     """Queue the close-out `closeout_due` named. `text` is what the card shows and the owner may edit:
     the summary a merge is squashed with, or the comment an issue is closed with."""
-    if closeout_pending(store, tid): return None
+    if _pending(store, tid, 'closeout'): return None
     return queue(store, tid, {**p, 'text': (text or '').strip()}, actor)
 
 

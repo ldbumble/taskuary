@@ -286,7 +286,8 @@ def draft(store, task_id: int, transcript: str, agent: str = 'agent', llm=None) 
         if task.get('Source') == 'workflow' or task.get('SourceRef') == 'assistant:playbook': return None
         # ...nor asked again while this task's own proposal still waits: a chat task's agent ends its session after every turn, and each
         # ending proposed the same kind of job under another slug - three waiting on one task (the stress run, 2026-11-05)
-        if proposals.playbook_pending(store, task_id) or proposals.owner_closed(store, task_id): return None      # ...never after his close
+        from . import card as cards
+        if cards.pending(store, task_id, 'playbook') or proposals.owner_closed(store, task_id): return None      # ...never after his close
         llm = llm or build_llm(store, job='memory')
         if not llm: return None
         books = list_all()

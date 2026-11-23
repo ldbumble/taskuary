@@ -350,7 +350,8 @@ def card_for(store, item, compact, live_state, now, states=None, noise=None, lea
             if not card.get('summary'): card['summary'] = funnel.agent_found(store, tid)
             # a REPLY whose task also waits on a merge: its Close out runs both (verdicts.decide), so its card says so
             if review.get('Kind') not in ('action', 'slot'):
-                other = proposals.closeout_pending(store, tid)
+                from .card import pending as pending_card
+                other = pending_card(store, tid, 'closeout')
                 if other: card.update(closeout=proposals.CLOSEOUT.get(proposals._action(other)), rides=True)
             # the task's close-out (merge the PR, close the issue): ONE word, Approve - the card's sentence says what it does there
             closeout = proposals.CLOSEOUT.get(proposals._action(review)) if review.get('Kind') == 'action' else None

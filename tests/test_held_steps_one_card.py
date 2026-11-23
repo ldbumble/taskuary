@@ -5,7 +5,7 @@ import json, unittest
 from types import SimpleNamespace
 from unittest import mock
 
-from taskuary import general, proposals, shellgate as sg, verdicts
+from taskuary import card, general, proposals, shellgate as sg, verdicts
 from taskuary.store import MemoryStore
 from taskuary.testing import Factory
 
@@ -58,7 +58,7 @@ class HeldStepsOneCard(unittest.TestCase):
         ids, out, ran, told, _ = self.run_all([0, 1, 0])
         self.assertEqual([self.s.get_review(i)['Status'] for i in ids], ['approved', 'superseded', 'superseded'])
         self.assertIn('failed: rejected', self.s.get_review(ids[1])['ActError'])
-        self.assertIsNone(proposals.held_pending(self.s, self.tid), 'nothing on the card waits on him')
+        self.assertIsNone(card.pending(self.s, self.tid, 'held'), 'nothing on the card waits on him')
         [t] = told; self.assertIn('Nothing on that card waits on the owner now', t); self.assertIn('held as a new card', t)
         again = sg.approve_steps(self.s, ids[1:], verdicts.decide)                      # a second press on the old card runs nothing
         self.assertFalse(again['ok']); self.assertEqual(len(ran), 2)

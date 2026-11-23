@@ -365,7 +365,8 @@ def from_feed(store, rows: list, *, canonical=False) -> list:
             from . import proposals
             co = proposals.CLOSEOUT.get(proposals._action(rv)) if action else None
             if not action and r.get('TaskId'):         # a reply whose task also waits on its merge: Close out runs both
-                other = proposals.closeout_pending(store, r['TaskId'])
+                from .card import pending as pending_card
+                other = pending_card(store, r['TaskId'], 'closeout')
                 if other: out[-1].update(closeout=proposals.CLOSEOUT.get(proposals._action(other)), rides=True)
             if co: out[-1].update(closeout=co, why=f"the agent finished - {buttons.label('approve', 'action')} {co}",
                                   rides=bool(store._one("SELECT 1 x FROM review WHERE TaskId=? AND Status='pending' AND Kind<>'action'", (r.get('TaskId'),))))

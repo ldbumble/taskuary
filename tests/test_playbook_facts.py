@@ -2,7 +2,7 @@
 import json, unittest
 from datetime import datetime, timedelta
 from unittest import mock
-from taskuary import outcomes, playbook_facts, playbooks, proposals
+from taskuary import card, outcomes, playbook_facts, playbooks, proposals
 from taskuary.store import MemoryStore
 
 def ago(days=0): return (datetime.now() - timedelta(days=days)).strftime('%Y-%m-%d %H:%M:%S')
@@ -62,7 +62,7 @@ class WorkFactsTests(unittest.TestCase):
         t = closed_task(self.s, 'vendor-onboarding', True, True)
         with mock.patch.object(playbooks, 'read', return_value='# Vendor onboarding\nwhen: x\n'):
             playbook_facts.compile(self.s, 'vendor-onboarding', llm=lambda sys_, user, **kw: '- a fact [ev: out1]')
-        self.assertFalse(proposals.closeout_pending(self.s, t)); self.assertFalse(proposals.owed(self.s, t))
+        self.assertFalse(card.pending(self.s, t, 'closeout')); self.assertFalse(proposals.owed(self.s, t))
 
     def test_refresh_needs_five_closes_and_silence_files_nothing(self):
         for _ in range(4): closed_task(self.s, 'vendor-onboarding', False, False)

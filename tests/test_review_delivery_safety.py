@@ -575,7 +575,8 @@ def test_recovery_of_unknown_reply_does_not_execute_pending_closeout(s):
     with mock.patch.object(outbound, 'reply_to_message', side_effect=TimeoutError()), mock.patch.object(outbound, 'reconcile_sent', return_value=None):
         verdicts.decide(s, s.get_review(rid), 'approve')
     pending = {'ReviewId': 999, 'TaskId': tid, 'Kind': 'action', 'Status': 'pending', 'DraftText': 'fixture close-out'}
-    with mock.patch.object(proposals, 'closeout_pending', return_value=pending), mock.patch.object(proposals, 'execute') as execute, \
+    from taskuary import card
+    with mock.patch.object(card, 'pending', return_value=pending), mock.patch.object(proposals, 'execute') as execute, \
             mock.patch.object(outbound, 'reply_to_message') as sender, mock.patch.object(outbound, 'reconcile_sent', return_value=None) as checked:
         result = verdicts.decide(s, s.get_review(rid), 'approve')
     checked.assert_called_once()

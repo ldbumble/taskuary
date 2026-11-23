@@ -201,10 +201,11 @@ def state(store, item: dict, verbs: list) -> tuple:
     kind, lane, tid = str(it.get('kind') or ''), str(it.get('lane') or ''), it.get('tid')
     t = (store.get_task(int(tid)) or {}) if tid else {}
     if t.get('Status') in ('done', 'dropped'): return 'closed', {}
-    # AN ACTION WAITS FOR THE OWNER'S YES (proposals.held_pending - a `git push` the shell gate held): read before an agent asking or at work,
-    # which lit nothing over the Approve it waited on (the 2026-11-02 audit) - its Approve is lit
-    from . import proposals
-    if tid and (h := proposals.held_pending(store, tid)): return 'action_held', {'what': h['what'], EV: [f"rv{h['rid']}"]}
+    # AN ACTION WAITS FOR THE OWNER'S YES (card.pending - a `git push` the shell gate held, a proposal, a playbook): read before an agent asking
+    # or at work, which lit nothing over the Approve it waited on (the 2026-11-02 audit) - its Approve is lit
+    from . import card
+    if tid and (r := card.pending(store, tid, 'acts')):
+        h = card.of_review(store, r); return 'action_held', {'what': h['what'], EV: [h['id']]}
     if lane == 'working' or (tid and _at_work(store, 'task', tid)): return 'working', {}
     if kind == 'agent' and (it.get('asking') or lane == 'blocked'): return 'agent_asking', {}
     # ...and a run that ENDED on a question to the owner - a restart cut it off at "go ahead?" - is still asking, not stopped: the finish

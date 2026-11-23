@@ -4,6 +4,7 @@ reads the move off it - read the same by every surface: the desk
 canvas (the rail's key), the Tasks tab (task:N), a phone chat (remote_assistant.primary and the card's line). The desk at phone width is the
 page's (website/test/rulebookMatrix.test.mjs). Invented Northwind people only."""
 import json
+from taskuary import card
 from datetime import date, datetime, timedelta
 from unittest import mock
 import pytest
@@ -330,7 +331,7 @@ def test_a_close_out_or_a_playbook_is_no_held_action(s):
     t = Factory(s).task(title='Ledger fix', kind='code', status='in_progress')
     for p in ({'action': 'merge_pr', 'number': 7, 'closeout': True}, {'action': proposals.PLAYBOOK}):
         s.add_review({'TaskId': t, 'Kind': 'action', 'Status': 'pending', 'DraftText': json.dumps(p), 'Reason': 'x'})
-    assert proposals.held_pending(s, t) is None
+    assert card.pending(s, t, 'held') is None
 
 
 def test_a_held_action_moves_the_revision(s):

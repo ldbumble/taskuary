@@ -1742,8 +1742,9 @@ def dock_snapshot(store) -> str:
         review = f" | review {t.get('ReviewStatus')}" if t.get('ReviewStatus') else ''
         from .processing_order import level
         lines.append(f"- {task_ref(t['TaskId'])} | {t.get('Status') or 'open'} | {level(t.get('Priority'))} | {one_line(t.get('Title'))}{run}{review}")
-        # ...with what it holds for the owner, item by item - the reads its own page draws (concierge.owed_items)
-        lines += [f"  · {x['line']}" + (f" [rv{x['rid']}]" if x.get('rid') else '') for x in concierge.owed_items(store, t['TaskId'])[:6]]
+        # ...with what it holds for the owner, card by card - the cards its own page draws (card.lines)
+        from . import card
+        lines += [f"  · {x['line']}" + (f" [rv{x['rid']}]" if x.get('rid') else '') for x in card.lines(store, t['TaskId'])[:6]]
 
     lines.append('\nPENDING REVIEW')
     if not reviews: lines.append('- Nothing is waiting on the task.')

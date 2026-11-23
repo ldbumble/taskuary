@@ -1,6 +1,7 @@
 """The phone's agent card (2026-10-06): what the agent RETURNED is shown, its question is the agent's line and not the
 owner's, a task the owner asked for is never the Advisor's idea, and a receipt that says "open it" can be opened."""
 import json, unittest
+from taskuary import card
 from unittest import mock
 
 from taskuary import remote_assistant as ra
@@ -135,28 +136,28 @@ class WaitingCardTests(unittest.TestCase):
 
     def test_send_and_edit_press_the_desks_own_door(self):
         from taskuary import server
-        with mock.patch.object(server, 'decide', return_value={'ok': True, 'status': 'approved'}) as door:
+        with mock.patch.object(server, 'press_review', return_value={'ok': True, 'status': 'approved'}) as door:
             said = ra.run_act(self.s, {'t': 'card', 'rid': self.rid, 'verb': 'approve'}, self.item)
-        self.assertEqual((door.call_args.args[0], door.call_args.args[1].verb), (self.rid, 'approve'))
+        self.assertEqual((door.call_args.args[1], door.call_args.args[2].verb), (self.rid, 'approve'))
         self.assertIn('Sent the email to', said)
-        with mock.patch.object(server, 'decide', return_value={'ok': True}) as door:
+        with mock.patch.object(server, 'press_review', return_value={'ok': True}) as door:
             out = ra.press_card(self.s, self.rid, 'edit', 'Hi Gail, the pack is attached - page 3 has the chart.')
-        self.assertEqual((door.call_args.args[1].verb, door.call_args.args[1].final_text), ('edit', 'Hi Gail, the pack is attached - page 3 has the chart.'))
+        self.assertEqual((door.call_args.args[2].verb, door.call_args.args[2].final_text), ('edit', 'Hi Gail, the pack is attached - page 3 has the chart.'))
         self.assertIn('with your words', out)
 
     def test_approve_named_off_the_table_is_the_press_of_its_waiting_card(self):
         """Walk 9 (42): "approve the next card" on the phone, the email to Gail waiting on a task that was not on the table and whose row
         carried no review id - approve found "nothing to approve", so the yes went to the agent as a typed line, which greyed the very card
-        he approved. Approve on a task is the press of its front card (cardqueue.front), through the desk's door (review.approve -> decide)."""
+        he approved. Approve on a task is the press of its front card (card.front_review), through the desk's door (review.approve -> decide -> press_review)."""
         from taskuary import cardqueue, concierge, general
-        self.assertEqual(cardqueue.front(self.s, self.tid).get('ReviewId'), self.rid)
+        self.assertEqual(card.front_review(self.s, self.tid).get('ReviewId'), self.rid)
         dock = general.dock_task(self.s, 'owner-whatsapp')[0]['TaskId']
         prop = concierge.propose_for(self.s, dock, {'verb': 'approve'}, self.item, 'approve the email to Gail', elsewhere=True, table={'ref': 'TQ-0099'})
         self.assertEqual((prop['kind'], prop['target']), ('review.approve', self.rid))
 
     def test_a_failed_send_says_why_and_nothing_is_said_sent(self):
         from taskuary import server
-        with mock.patch.object(server, 'decide', return_value={'ok': True, 'status': 'pending', 'send_error': 'No mailbox is connected'}):
+        with mock.patch.object(server, 'press_review', return_value={'ok': True, 'status': 'pending', 'send_error': 'No mailbox is connected'}):
             said = ra.press_card(self.s, self.rid, 'approve')
         self.assertIn('Not sent - No mailbox is connected', said)
         self.assertNotIn('Sent the', said)

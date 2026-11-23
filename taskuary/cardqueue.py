@@ -37,7 +37,7 @@ def handed(r: dict) -> bool:
     """PRESSED IS NOT DONE (walk 6, 2026-11-23: Post via the browser on a LinkedIn card approved it, and its agent was told "Done 7:31 AM: post to
     LinkedIn" in the very message asking it to go and post it; the X card came forward as if it had gone, and the Assistant's list of what
     waits left it out). THE ONE STATE of a press that handed its act to the agent to do - pressed, not yet done - read by the line (the next
-    card waits behind it), the agent's screen fact and what the Assistant says a task holds (concierge.owed_items). Cleared by its real
+    card waits behind it), the agent's screen fact and what the Assistant says a task holds (card.lines). Cleared by its real
     result (done)."""
     if r.get('Kind') != 'action' or r.get('Status') not in ('approved', 'edited'): return False
     try: got = (json.loads(r.get('FinalText') or '{}') or {}).get('result') or {}
@@ -233,12 +233,6 @@ def _state(store, tid: int) -> dict:
     return {'live': live, 'held': held, 'n': n, 'of': n + len(waiting) - 1, 'next': what(store, waiting[1]) if len(waiting) > 1 else '', 'units': waiting, 'past': past}
 
 
-def front(store, tid) -> dict:
-    "The review row of the card on task `tid` that waits for his press now - the line's front - {} when none does."
-    if store is None or not str(tid or '').isdigit(): return {}
-    live = [x for x in state(store, int(tid))['live'] if str(x).isdigit()]
-    return (store.get_review(int(live[0])) or {}) if live else {}
-
 
 def mark(store, tid: int, s: dict) -> None:
     """Each card that waits marked as it is first seen waiting, in the chat's ledger: one taken back before its turn came never stands
@@ -246,14 +240,6 @@ def mark(store, tid: int, s: dict) -> None:
     if (ids := [x for x in s['held'] if x != LAND]):
         with store.lock: store.cx.executemany("INSERT OR IGNORE INTO shown (TaskId, Key, Seq, Host) VALUES (?,?,0,'held')", [(int(tid), f'q:r:{x}') for x in ids]); store.cx.commit()
 
-
-def closes_with(store, tid) -> str:
-    """May a press on the card in front close task `tid` with it (Send and close, Approve and close)? '' when nothing waits behind it in the
-    line - every kind, the playbook, the close-out and the landing question among them - else what comes next, in words. THE ONE ANSWER every
-    close-offering button reads: the card's own (queue.held on the page), the desk's and the phone's (concierge.cannot)."""
-    if not tid: return ''
-    s = state(store, int(tid))
-    return s['next'] or ('another card' if s['held'] else '')
 
 
 def held(store, tid: int) -> set:

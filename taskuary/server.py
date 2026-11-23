@@ -2292,6 +2292,10 @@ def _task_detail(task_id: int, rev: str = '', opened: bool = False):
     # ONE CARD AT A TIME (cardqueue): what waits behind the card that stands is not the page's to draw yet
     from . import cardqueue
     q = cardqueue.state(store, task_id)
+    # ...and what else holds the task open past a press on its front (card.may_close: the one answer Send and close is offered by, on the page
+    # as on the desk and the phone) - read beside the line, while it is fresh
+    from . import card
+    closes = card.may_close(store, task_id)
     held = set(q['held'])
     d['reviews'] = [r for r in d['reviews'] if r['ReviewId'] not in held and not cardqueue.obsolete_read(store, task_id, r)]
     # ...and on a task a stranger's words hold, no card waits for a press until he trusts them: the hold and its Trust are the one move
@@ -2302,7 +2306,7 @@ def _task_detail(task_id: int, rev: str = '', opened: bool = False):
     if _origin.keeps_him(store, task_id):
         past_ = set(q['past'])
         d['reviews'] = [r for r in d['reviews'] if r.get('Status') != 'pending' or r['ReviewId'] in past_]
-    d['queue'] = {'live': q['live'], 'held': q['held']}       # ...the page's reply door reads it: none beside a front that is another card
+    d['queue'] = {'live': q['live'], 'held': q['held'], 'closes': closes}       # ...the page's reply door reads it: none beside a front that is another card
     # ...and what the chat moved past reads as it will once its agent hears that (proposals.written_past): greyed in place, from this read on
     from .proposals import SET_ASIDE
     past = q['past']
@@ -5321,9 +5325,14 @@ def review_detach(rid: int, name: str):
 
 @app.post('/api/reviews/{rid}/decide')
 def decide(rid: int, body: DecideBody, background: BackgroundTasks = None):
+    "The desk's press on review `rid` - the one press road every surface takes (card.press -> press_review)."
+    return press_review(store, rid, body, background)
+
+
+def press_review(st, rid: int, body: DecideBody, background: BackgroundTasks = None):
     """The verdict itself lives in verdicts.decide - ONE door, shared with the phone road
     (a 'approve' typed in the notify chat lands the same way this button does)."""
-    rv = store.get_review(rid)
+    rv = st.get_review(rid)
     if not rv: raise HTTPException(404, 'review not found')
     from .verdicts import VERB2STATUS, context_moved, decide as land
     if body.verb not in VERB2STATUS: raise HTTPException(422, 'bad verb')
@@ -5332,11 +5341,11 @@ def decide(rid: int, body: DecideBody, background: BackgroundTasks = None):
     if body.steps:
         from . import shellgate
         if body.verb not in ('approve', 'reject'): raise HTTPException(422, 'held steps are approved or dismissed')
-        try: return shellgate.approve_steps(store, [rid, *[i for i in body.steps if i != rid]], land, ACTOR, body.verb)
+        try: return shellgate.approve_steps(st, [rid, *[i for i in body.steps if i != rid]], land, ACTOR, body.verb)
         except ValueError as e: raise HTTPException(422, str(e))
     # ...in the demo a card can be put down and never sent (demo.refuse_verdict - the path alone cannot tell Dismiss from Send)
     if (why := demo.refuse_verdict(body.verb, rv.get('Kind'))):
-        demo.refused(store, f'/api/reviews/{rid}/decide', why)
+        demo.refused(st, f'/api/reviews/{rid}/decide', why)
         return JSONResponse({'detail': why, 'demo': True}, status_code=403)
     if body.verb == 'close_unsent' and rv.get('Kind') == 'action': raise HTTPException(422, 'a proposal is rejected, not closed without sending')
     # An uncertain attempt must be reconciled using its saved payload first. Refreshing
@@ -5344,17 +5353,18 @@ def decide(rid: int, body: DecideBody, background: BackgroundTasks = None):
     # ...and never in the demo: its world was written in advance, nothing arrives between a draft and its Send, and there is no AI to redraft
     if (body.verb in ('approve', 'edit') and rv.get('Kind') != 'action' and not demo.enabled()
             and rv.get('DeliveryState') not in ('unknown', 'sending')):
-        try: _refresh_chat_context(task_id=rv.get('TaskId'), message_id=rv.get('MessageId'))
+        # ...the live poll reads the server's own mailboxes and chats: a press on another store (a test's) has none to read
+        try: st is store and _refresh_chat_context(task_id=rv.get('TaskId'), message_id=rv.get('MessageId'))
         except RuntimeError as e: raise HTTPException(503, str(e))
-        rv = store.get_review(rid) or rv
-        moved, latest = context_moved(store, rv)
+        rv = st.get_review(rid) or rv
+        moved, latest = context_moved(st, rv)
         if moved:
             # The click does not send (PW-239): the context materially changed - a new inbound line, a triage
             # update - so the owner is interrupted with what arrived. Their own edit is kept for comparison, the
             # draft is refreshed from the current context, and the refreshed draft needs its own yes.
             yours = str(body.final_text or '').strip()
             if yours and yours != str(rv.get('DraftText') or '').strip() and rv.get('TaskId'):
-                store.add_comment(rv['TaskId'], ACTOR, 'human', f'Your edited reply, kept for comparison - the thread moved before it was sent:\n{yours[:4000]}')
+                st.add_comment(rv['TaskId'], ACTOR, 'human', f'Your edited reply, kept for comparison - the thread moved before it was sent:\n{yours[:4000]}')
             draft, kept = None, None
             from .wrapup import agent_drafted
             if agent_drafted(rv) and rv.get('TaskId'):
@@ -5362,22 +5372,22 @@ def decide(rid: int, body: DecideBody, background: BackgroundTasks = None):
                 # session's question to the person it meant was gone (2026-11-02). It stays as written, to whom it was written;
                 # what arrived is shown, and it now stands against the thread as it is - the next press sends it
                 from . import operations
-                store.pin_review_context(rid, rv['MessageId'], operations.message_revision(store, rv['TaskId']))
+                st.pin_review_context(rid, rv['MessageId'], operations.message_revision(st, rv['TaskId']))
                 kept = draft = str(rv.get('DraftText') or '')
             else:
                 try:
-                    draft = (responder.write_draft(store, rv['TaskId'], rid, actor=ACTOR, pressed=True)
-                             if rv.get('TaskId') else responder.draft_for_message(store, latest, rid))
+                    draft = (responder.write_draft(st, rv['TaskId'], rid, actor=ACTOR, pressed=True)
+                             if rv.get('TaskId') else responder.draft_for_message(st, latest, rid))
                 except Exception as e:
                     logger.warning(f'could not refresh stale review {rid}: {e}')
-            now = store.get_review(rid) or rv
+            now = st.get_review(rid) or rv
             # ...and said truthfully: nothing went, and - where the refreshed draft answers someone else now - to whom it goes
-            them = lambda r: str((store.get_message(r.get('MessageId')) or {}).get('FromEmail') or '').lower() if r.get('MessageId') else ''
-            nm = store.get_message(now.get('MessageId')) if now.get('MessageId') else None
+            them = lambda r: str((st.get_message(r.get('MessageId')) or {}).get('FromEmail') or '').lower() if r.get('MessageId') else ''
+            nm = st.get_message(now.get('MessageId')) if now.get('MessageId') else None
             moved_to = (nm.get('FromName') or nm.get('FromEmail') or '') if nm and them(now) != them(rv) else ''
             triage = ''
             if rv.get('TaskId'):
-                notes = [c for c in store.list_comments(rv['TaskId']) if str(c.get('Actor') or '').lower() == 'triage']
+                notes = [c for c in st.list_comments(rv['TaskId']) if str(c.get('Actor') or '').lower() == 'triage']
                 triage = str(notes[-1].get('Body') or '')[:600] if notes else ''
             return {'ok': False, 'status': 'pending', 'sent': None, 'stale': True,
                     'draft': draft,
@@ -5390,7 +5400,7 @@ def decide(rid: int, body: DecideBody, background: BackgroundTasks = None):
                                       else 'I refreshed it with the latest context' + (f' - it now answers {moved_to}' if moved_to else '')
                                       + '; review it and approve again.' if draft
                                       else f"Press {buttons.label('redraft')} to write it with the latest context before approving."))}
-    return land(store, rv, body.verb, body.final_text, body.note, ACTOR,
+    return land(st, rv, body.verb, body.final_text, body.note, ACTOR,
                 learn_async=(background.add_task if background is not None else None), cc=body.cc, reply_text=body.reply_text, anyway=body.anyway, fields=body.fields,
                 blanks_ok=body.blanks_ok, bcc=body.bcc, subject=body.subject, closes=body.closes)
 

@@ -2,6 +2,7 @@
 (verdicts.decide), so the task page, the phone and the assistant all meet it - and only template slots count, never the brackets
 real mail carries. The edge cases are shared with the draft box's own marks (website/test/blanks.test.mjs)."""
 import json, unittest
+from taskuary import card
 from pathlib import Path
 from unittest import mock
 
@@ -94,10 +95,10 @@ class CloseOutTests(unittest.TestCase):
         reply = s.add_review({'TaskId': tid, 'Kind': 'draft', 'Status': 'pending', 'DraftText': 'Merged - it ships on [DATE].'})
         with mock.patch.object(github, 'pr', return_value=OPEN), mock.patch.object(github, 'checks', return_value=GREEN), \
              mock.patch.object(github, 'merge_pr', return_value='m') as merge:
-            out = verdicts.decide(s, proposals.closeout_pending(s, tid), 'approve', reply_text='')
+            out = verdicts.decide(s, card.pending(s, tid, 'closeout'), 'approve', reply_text='')
             merge.assert_not_called()
             self.assertEqual((out['ok'], out['send_error']), (False, 'Fill in [DATE] first'))
-            out = verdicts.decide(s, proposals.closeout_pending(s, tid), 'approve', reply_text='Merged - it ships Friday.')
+            out = verdicts.decide(s, card.pending(s, tid, 'closeout'), 'approve', reply_text='Merged - it ships Friday.')
         merge.assert_called_once()
         self.assertTrue(out['ok'] and out['reply']['ok'], out)
         self.assertEqual(s.get_review(reply)['FinalText'], 'Merged - it ships Friday.')

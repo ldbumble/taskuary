@@ -82,13 +82,13 @@ def test_asked_ahead_the_ending_writes_what_the_serial_ending_wrote(close, monke
             t = time.perf_counter(); out = wrapup.wrap(s, tid, close=close, actor='owner', no_reply=True); took = time.perf_counter() - t
         wrapup.forget(tid)
         runs[how] = (ended(s, tid), sorted(brain.asked), {k: v for k, v in out.items() if k != 'artifacts'}, took, brain.most)
-    (a, qa, oa, ta, _), (b, qb, ob, tb, most) = runs['serial'], runs['ahead']
+    (a, qa, oa, _, _), (b, qb, ob, _, most) = runs['serial'], runs['ahead']
     assert b == a, {k: (a[k], b[k]) for k in a if a[k] != b.get(k)}
     assert qb == qa and len(qa) == 3, 'the brain was asked the same three questions'
     assert ob == oa
     written = json.dumps(a)
     assert 'Card charges map to vendor 87' in written and 'write_playbook' in written and 'AGENT REPORT' in written, 'all three answers were applied'
-    assert most <= 3 and tb < ta - LAT, f'asked at once: {tb:.2f} s against {ta:.2f} s serial'
+    assert 2 <= most <= 3, f'asked at once: {most} questions were in flight together'  # a count, not a clock: CI runners are too noisy to time
 
 
 def test_a_question_whose_inputs_moved_is_asked_again_at_its_place(monkeypatch, tmp_path):

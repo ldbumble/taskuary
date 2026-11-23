@@ -265,17 +265,25 @@ def _outcome(sid: str, seen: dict) -> str:
         browserview.unstick(sid, every=True)
         return (f'TASKUARY: the page did not finish loading in {SETTLE_WAIT:.0f} s - the site is not answering, and the load was stopped. Decide the '
                 'next step: another way to the same thing, the rest of the work first and this once more later, or one question to the owner.')
+    return page_error(sid, seen)
+
+
+def page_error(sid: str, seen: dict = None) -> str:
+    """The line that says the page the browser is on is an error - the site's error status, or the browser's own error page - else ''.
+    `seen`: filled with the page it found ({url, title})."""
+    from . import signin
     try:
         c = signin.connect(sid)
         try: f = c.js(STATUS_JS) or {}
         finally: c.close()
     except Exception: return ''
-    seen.update({k: str(f.get(k) or '') for k in ('url', 'title')})
+    if seen is not None: seen.update({k: str(f.get(k) or '') for k in ('url', 'title')})
     n = int(f.get('status') or 0) if str(f.get('status') or '0').isdigit() else 0
-    if n < 400: return ''
-    what = ('a server error' if n >= 500 else 'a refusal - it turns this visit away' if n in (401, 403, 429) else 'an error')
-    return (f'TASKUARY: {f.get("url") or "the site"} answered with {what} (HTTP {n}). Decide the next step: another way to the same thing, '
-            'the rest of the work first and this once more later, or one question to the owner.')
+    if n < 400 and not str(f.get('url') or '').startswith('chrome-error:'): return ''
+    what = ('the browser\'s own error page - it could not load' if n < 400 else 'a server error' if n >= 500
+            else 'a refusal - it turns this visit away' if n in (401, 403, 429) else 'an error')
+    return (f'TASKUARY: {f.get("url") or "the site"} answered with {what}{f" (HTTP {n})" if n >= 400 else ""}. Decide the next step: another way '
+            'to the same thing, the rest of the work first and this once more later, or one question to the owner.')
 
 
 # ── the page it would act on, and the model's verdict ─────────────────────────────────────────────────────────────────────

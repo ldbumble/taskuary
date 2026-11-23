@@ -740,6 +740,18 @@ def handing(store, tid: int) -> dict | None:
     return next((r for r in ws.open_requests(ws.events(store, int(tid))) if ws.ask_of(r['RequestId'])['ask'] in ('signin', 'turn')), None)
 
 
+def front_tab(sid: str, site: str) -> bool:
+    """Bring the tab of `site` to the front of session `sid`'s browser where the one in front is on another site and a tab on it is open - by
+    each tab's own address (its Chrome's list), never the agent's word for what it shows. True when it switched."""
+    from .signin import registrable, site_of
+    want = registrable(site)
+    if not want: return False
+    tabs, on = pages(sid), active_tab(sid)
+    if any(t.get('id') == on and site_of(t.get('url')) == want for t in tabs): return False
+    hit = next((t for t in tabs if site_of(t.get('url')) == want), None)
+    return bool(hit) and switch_tab(sid, str(hit['id']))
+
+
 def hand_over(store, tid: int, what: str = '', site: str = '', sid: str = None, watch=..., sign_in: bool = False) -> dict:
     """Hand task `tid`'s owner the step `what` on its browser's page - done by Taskuary itself where it can (a saved sign-in), else one card.
     `site`: the domain the agent names for a sign-in ('new:<site>' a sign-up, as the old marker claimed it). `sign_in`: a sign-in that names no
@@ -751,6 +763,12 @@ def hand_over(store, tid: int, what: str = '', site: str = '', sid: str = None, 
     if (h := handing(store, tid)):
         return {'ok': False, 'why': f'one step is with him already ("{h.get("Text")}") - one at a time: go on with the rest, '
                                     'and hand this one over once he is done'}
+    # ...THE STEP IS ON THE TAB OF THE SITE IT NAMES (walk 9, CLI 8: three sites in three tabs, and "Sign in to Reddit" was handed over as "Your
+    # turn in the browser on linkedin.com" - the tab in front): that tab comes to the front, so what he is shown and named is that page's own
+    if site: front_tab(sid, signin.clean_claim(site))
+    # ...AND AN ERROR PAGE IS THE AGENT'S, NEVER HIS (CLI 4: LinkedIn's own error page was handed to him as a "security check")
+    from .browsergate import page_error
+    if (bad := page_error(sid)): return {'ok': False, 'why': f'nothing was handed to him - {bad.removeprefix("TASKUARY: ")}'}
     if site or sign_in: signin.needs(store, tid, sid, site, what=what, watch=watch)
     else: your_turn(store, tid, sid, what, watch=watch)
     # ...nothing raised for him: the saved sign-in is going in (signin._auto), and its end tells the agent

@@ -189,6 +189,23 @@ class DoneIsAPress(unittest.TestCase):
             got = browserview.hand_over(self.s, self.tid, 'sign in', 'vendor.example', 'run1', watch=None)
         self.assertTrue(got['ok'] and not got.get('auto')); self.assertEqual([ws.ask_of(r)['ask'] for r in self.open()], ['signin'])
 
+    def test_a_hand_over_is_the_page_of_the_tab_it_names_and_an_error_page_is_never_his(self):
+        """Walk 9 (CLI 8, 4): three sites in three tabs - "Sign in to Reddit" was handed over as "Your turn in the browser on linkedin.com", the
+        tab in front; and LinkedIn's own error page was handed to him as a "security check". The tab of the site named comes to the front first,
+        by each tab's own address; an error page goes back to the agent as the error it is, with nothing raised for him."""
+        tabs = [{'id': 'AAA1', 'type': 'page', 'url': 'https://www.linkedin.example/feed'}, {'id': 'BBB2', 'type': 'page', 'url': 'https://www.reddit.example/login'}]
+        switched = []
+        with mock.patch.object(browserview, 'pages', return_value=tabs), mock.patch.object(browserview, 'active_tab', return_value='AAA1'), \
+                mock.patch.object(browserview, 'switch_tab', side_effect=lambda sid, t: switched.append(t) or True), \
+                mock.patch.object(bg, 'page_error', return_value=''), mock.patch('taskuary.signin.needs') as needs:
+            browserview.hand_over(self.s, self.tid, 'Sign in to Reddit so I can post the tip', 'reddit.example', 'run1', watch=None)
+        self.assertEqual(switched, ['BBB2']); self.assertTrue(needs.called)
+        bad = 'TASKUARY: https://www.linkedin.example/checkpoint answered with an error (HTTP 404). Decide the next step: ...'
+        with mock.patch.object(browserview, 'pages', return_value=tabs), mock.patch.object(browserview, 'active_tab', return_value='AAA1'), \
+                mock.patch.object(bg, 'page_error', return_value=bad):
+            got = browserview.hand_over(self.s, self.tid, 'complete the security check', 'linkedin.example', 'run1', watch=None)
+        self.assertFalse(got['ok']); self.assertIn('HTTP 404', got['why']); self.assertEqual(self.open(), [], 'nothing was handed to him')
+
 
 if __name__ == '__main__': unittest.main()
 

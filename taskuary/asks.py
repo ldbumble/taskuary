@@ -475,10 +475,10 @@ def touched(store, hours: float) -> dict:
         "SELECT TaskId FROM task WHERE (AskedVia IS NOT NULL AND Status NOT IN ('done','dropped')) OR AskedWatch IN ('reply','any') OR ClosedAt>=? "
         f"OR (AskedToldAt>=? AND AskedTold IN ({','.join('?' * len(SAID))}))", (cut, cut, *SAID))}
     people = set()
-    for r in store._rows("SELECT TaskId, Deliver FROM review WHERE DeliveryState='sent' AND DecidedAt>=?", (cut,)):
+    from . import ledger                                   # ...what went, off the record of it (ledger.py)
+    for r in ledger.rows(store, ('sent', 'act'), since=cut):
         if r.get('TaskId'): tids.add(r['TaskId'])
-        try: people |= {str(a).lower() for a in (json.loads(r.get('Deliver') or '{}') or {}).get('to') or []}
-        except (TypeError, ValueError): pass
+        people |= set(r['detail'].get('to') or [])
     ids = sorted(tids)
     convs = {r['ConversationId'] for r in store._rows(
         f"SELECT DISTINCT ConversationId FROM message WHERE ConversationId IS NOT NULL AND TaskId IN ({','.join('?' * len(ids))})", ids)} if ids else set()

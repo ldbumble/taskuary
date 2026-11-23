@@ -36,8 +36,10 @@ def mail(s, tid, ext, body, at):
 
 
 def send(s, rid, at='17:33:00'):
-    """The owner's Send, as the review records it."""
-    s._exec("UPDATE review SET Status='approved', FinalText=DraftText, DecidedBy='owner', DecidedAt=? WHERE ReviewId=?", (f'{T} {at}', rid))
+    """The owner's Send, as the review records it once the provider confirms it - and as the record keeps it (ledger.sent)."""
+    from taskuary import ledger
+    s._exec("UPDATE review SET Status='approved', FinalText=DraftText, DecidedBy='owner', DecidedAt=?, DeliveryState='sent' WHERE ReviewId=?", (f'{T} {at}', rid))
+    ledger.sent(s, rid)
 
 
 def pending(s, tid): return [r for r in s.list_reviews('pending') if r['TaskId'] == tid]
@@ -129,7 +131,7 @@ class TheAgentIsTold(Base):
             text = context.build(self.s, self.tid)
         self.assertIn('YOUR REPLY WENT OUT', seed); self.assertIn('taskuary --follow-up --reply', seed)
         self.assertLess(len(seed.encode()), 1024, 'the seed rides a tty command line')
-        self.assertIn('## Replies already SENT on this task', text); self.assertIn(FIRST, text)
+        self.assertIn(context.SENT_HEAD, text); self.assertIn(FIRST, text)
 
     def test_a_read_cut_to_fit_keeps_what_already_went(self):
         from taskuary import context
@@ -145,6 +147,29 @@ class TheAgentIsTold(Base):
     def test_new_mail_since_the_send_is_news_not_a_sent_line(self):
         mail(self.s, self.tid, 'g-2', 'One more - can you also add September?', '18:00:00')
         self.assertEqual(continuity.sent_block(self.s, self.tid), '')
+
+
+def test_a_mail_sent_from_one_task_is_read_by_the_agent_on_its_thread_in_another_and_a_failed_one_by_none():
+    """The design review, 2026-11-23: nothing recorded what went, so each reader asked the review rows of ITS task - and a second task on the
+    same thread (Gail wrote again; triage made it its own) had an agent that never saw the letter the first task sent, and wrote it again. The
+    send the provider confirmed is on the record (store.finish_review_delivery -> ledger.sent), and every task on its thread reads it there."""
+    import tempfile
+    from taskuary import context, ledger
+    s = MemoryStore()
+    a = s.create_task({'Title': 'August export', 'Kind': 'general', 'Status': 'open'}, 't')
+    mid = mail(s, a, 'g-1', 'Could you fix the August export?', '09:00:00')
+    def deliver(text, state):
+        rid = s.add_review({'TaskId': a, 'MessageId': mid, 'Kind': 'draft_reply', 'Status': 'pending', 'DraftText': text})
+        c = s.claim_review_delivery(rid, {'envelope': {'kind': 'reply', 'to': ['gail@northwind.example']}, 'body': text, 'status': 'approved',
+                                          'actor': 'owner', 'attempted_at': f'{T} 17:30:00'}, s.get_review(rid))
+        assert s.finish_review_delivery(rid, c['token'], state, receipt={'channel': 'email', 'to': ['gail@northwind.example']} if state == 'sent' else None)
+    deliver(FIRST, 'sent'); deliver(AGAIN, 'failed')
+    b = s.create_task({'Title': 'Is the export done?', 'Kind': 'general', 'Status': 'open'}, 't')
+    mail(s, b, 'g-2', 'Is the export done yet?', '18:00:00')
+    with tempfile.TemporaryDirectory() as home, mock.patch.dict(os.environ, {'TASKUARY_HOME': home}): text = context.build(s, b)
+    assert context.SENT_HEAD in text and FIRST in text and f'from TQ-{a:04d}' in text, text
+    assert AGAIN not in text and len(ledger.rows(s, 'sent')) == 1, 'a send that failed is on no record'
+    assert 'gail@northwind.example' in ledger.mailed(s)
 
 
 if __name__ == '__main__': unittest.main()

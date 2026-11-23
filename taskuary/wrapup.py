@@ -332,13 +332,14 @@ def an_earlier_turns(store, rv) -> bool:
     return bool(s) and s.get('Text') == rv.get('DraftText')
 
 def sent_replies(store, task_id: int, n: int = 6) -> list:
-    "The replies and emails that went out on this task on the owner's Send, newest last: [{review, at, to, text}]."
+    "The replies and emails that went out on this task on the owner's Send, newest last: [{review, at, to, text}] - the record's (ledger.py)."
+    from . import ledger
     from .continuity import sent_to
-    rows = store._rows("SELECT * FROM review WHERE TaskId=? AND Kind<>'action' AND (DeliveryState='sent' OR "
-                       "(DeliveryState IS NULL AND Status IN ('approved','edited','sent'))) AND COALESCE(NULLIF(FinalText,''), DraftText, '')<>'' "
-                       "ORDER BY DecidedAt, ReviewId", (task_id,))
-    return [{'review': r['ReviewId'], 'at': r.get('DecidedAt') or r.get('CreatedAt'), 'to': sent_to(store, r),
-             'text': str(r.get('FinalText') or r.get('DraftText') or '')} for r in rows[-n:]]
+    out = []
+    for r in reversed(ledger.rows(store, 'sent', task=int(task_id), limit=n)):
+        rv = ledger.review_of(store, r) or {}
+        out.append({'review': rv.get('ReviewId'), 'at': r['At'], 'to': sent_to(store, rv, r['Subject']), 'text': str(rv.get('FinalText') or rv.get('DraftText') or '')})
+    return out
 
 def _sid_now(store, task_id):
     from . import workerstate as ws

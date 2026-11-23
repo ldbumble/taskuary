@@ -282,12 +282,13 @@ def collect(store, hours: int = HOURS) -> dict:
     # work on a chat task leaves no run row): the cards he sent and the files its turns made
     # ...each named by what it was - an email with its subject, a post, an act - never the card's own kind ("slot": walk 5, 2026-11-22, "Sent
     # availability slot to Gail" over the week's total), and never a view the agent drew in its chat as a file he made (session_artifacts.VIEW)
-    for r in store._rows("SELECT ReviewId, TaskId, Kind, Deliver, Reason FROM review WHERE Status IN ('approved','edited') AND DecidedAt>=? AND Kind NOT IN ('draft','draft_reply') "
-                         "AND IFNULL(DeliveryState,'') NOT IN ('failed','unknown') ORDER BY DecidedAt DESC LIMIT 40", (since,)):
-        try: d = json.loads(r.get('Deliver') or '{}') or {}
-        except (TypeError, ValueError): d = {}
-        to = ', '.join(d.get('to') or []) if isinstance(d, dict) else ''
-        what = (f"email \"{_one_line(d.get('subject'), 100)}\"" if isinstance(d, dict) and d.get('subject') else 'email') if r.get('Kind') in ('slot', 'reply')             else _one_line(r.get('Reason') or 'an act he approved', 120)
+    # ...read off the record of what went (ledger.py): a mail the provider confirmed, an act that ran
+    from . import ledger
+    for r in ledger.rows(store, ('sent', 'act'), since=since, limit=40):
+        if r['Kind'] == 'sent' and r['detail'].get('kind') in ('draft', 'draft_reply'): continue
+        to = ', '.join(r['detail'].get('to') or []) if r['Kind'] == 'sent' else ''
+        what = (f"email \"{_one_line(r['Value'], 100)}\"" if r['Value'] else 'email') if r['Kind'] == 'sent' else \
+               _one_line(r['detail'].get('what') or 'an act he approved', 120) + (f" ({r['Value']})" if r['Value'] else '')
         accomplished.append(f"state=sent | src=📤 | task={task_ref(r['TaskId']) if r.get('TaskId') else '-'} | what={what}{f' to {_one_line(to, 120)}' if to else ''}")
     from .session_artifacts import VIEW
     for a in store._rows("SELECT TaskId, Name FROM task_artifact WHERE CreatedAt>=? AND IFNULL(Kind,'')<>? ORDER BY ArtifactId DESC LIMIT 40", (since, VIEW)):
@@ -322,8 +323,8 @@ def owed(store, t: dict, since: str) -> str:
     except Exception: bits.append(str(t.get('Status') or 'open'))
     todo = store.task_checklist(tid); left = [i for i in todo if not i.get('done')]
     if todo: bits.append(f"to-dos left: {'; '.join(_one_line(i.get('text'), 80) for i in left[:4])}" if left else 'every to-do ticked')
-    sent = store._rows("SELECT Kind, Deliver FROM review WHERE TaskId=? AND Status IN ('approved','edited') AND DecidedAt>=? "
-                       "AND IFNULL(DeliveryState,'') NOT IN ('failed','unknown')", (tid, since))
+    from . import ledger
+    sent = ledger.rows(store, ('sent', 'act'), task=tid, since=since)
     if sent: bits.append(f"sent today: {len(sent)}")
     s = general._last_said(store, tid)[1]
     if isinstance(s, dict):

@@ -954,6 +954,9 @@ def _decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = N
                             # a grant the token lacks (github.Refused.needs): the owner's to add - a retry only repeats it
                             **({'needs': e.needs} if getattr(e, 'needs', '') else {})}
                 if not store.decide_review(rid, VERB2STATUS['approve'], proposals.receipt(rv, final, out, fields), actor, note): return _delivery_busy(store, rid)
+                from . import ledger
+                try: ledger.went(store, rid, out)                       # ...on the record: what went live, and where (ledger.py)
+                except Exception as e: logger.warning(f'review {rid}: the act ran, and was not written to the ledger - {e}')
                 proposals.settle(store, rv, 'approve' if verb == 'merge_anyway' else verb, actor)   # runs only the act: the task stays open
                 return {'ok': True, 'status': 'approved', 'sent': None, 'send_error': None, 'result': out}
             if not store.decide_review(rid, VERB2STATUS[verb], None, actor, note): return _delivery_busy(store, rid)

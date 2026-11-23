@@ -95,6 +95,14 @@ class Factory:
         fields = {k: v for k, v in fields.items() if v is not None}
         return self.s.add_review(fields)
 
+    def sent(self, rid, when=None):
+        "Review `rid` as a send the provider confirmed leaves it: decided, delivered, and on the record (ledger.sent) - as finish_review_delivery does."
+        from . import ledger
+        self.s._exec("UPDATE review SET Status=CASE WHEN Status='pending' THEN 'approved' ELSE Status END, DeliveryState='sent', DecidedAt=? WHERE ReviewId=?",
+                     (when or self.ago(), rid))
+        ledger.sent(self.s, rid)
+        return rid
+
     def run(self, task_id, status='running', agent='coding', instruction='go'):
         rid = self.s.start_run(task_id, agent, instruction, self.actor)
         if status != 'running':

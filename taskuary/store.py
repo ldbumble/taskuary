@@ -2258,6 +2258,10 @@ class SQLiteStore:
         with self.idlock:
             tid = self._insert('task', {**fields, 'TaskId': self._next_task_id() if numbered else self._next_internal_id()},
                                 TASK_COLS + ('TaskId',), {'CreatedBy': actor, 'CreatedAt': _now()})
+        # ...his ask on the record (ledger.his_line): the files New attached to it, the addresses he gave in it
+        if fields.get('Files') or (fields.get('OriginBase') == 'owner' and '@' in str(fields.get('Summary') or '')):
+            from . import ledger
+            ledger.his_line(self, tid, fields.get('Summary') if fields.get('OriginBase') == 'owner' else '', files_of(fields))
         self._bump_snapshots()
         self._poke('task-changed', task_id=tid)
         return tid
@@ -2989,6 +2993,8 @@ class SQLiteStore:
         self.arrive(mid, tid, free=True)
         from . import outcomes
         outcomes.record(self, 'promise.made', 'task', tid, 'promise', facts={'mid': mid, 'due': due})   # the ledger: kept, kept late, late?
+        from . import ledger
+        ledger.promise(self, tid, mid, what, due)                                                     # ...and the record of what exists
         return tid
     def sent_onto_task(self, mid: int, tid: int, why: str) -> bool:
         """The owner's own sent message, on no task yet, put on the open task the model read it as part of - so the thread is that
@@ -5256,6 +5262,10 @@ class SQLiteStore:
         "`files`: what he attached to this line of his - kept beside its words (files_json), never written into them."
         cid = self._exec('INSERT INTO comment (TaskId,Actor,ActorType,Body,CreatedAt,LineId,Files) VALUES (?,?,?,?,?,?,?)',
                          (task_id, actor, actor_type, body, at := _now(), line_id, fj := files_json(files)))
+        # ...a line of his is on the record (ledger.owner_line): the addresses he gave in it and the files he attached, known on every task
+        if task_id and str(actor_type).startswith('assistant_') and (files or '@' in str(body or '')):
+            from . import ledger
+            ledger.owner_line(self, task_id, actor, actor_type, body, files, at)
         # ...an answer filed ends its turn in the chat's log, in place (chatlog.answered: the one door every answer road goes through)
         if actor_type == 'assistant_agent' and task_id:
             from . import chatlog
@@ -5510,6 +5520,9 @@ class SQLiteStore:
 
     # the waiting room (waitroom.py): owner notes queued on a task while its agent works
     def add_waiting(self, task_id, note, actor, files=None):
+        if files:                                    # ...the files of a note he kept for a coding agent, on the record (ledger.his_line)
+            from . import ledger
+            ledger.his_line(self, task_id, '', files)
         return self._exec('INSERT INTO waitroom (TaskId, Note, CreatedBy, CreatedAt, Files) VALUES (?,?,?,?,?)', (task_id, note, actor, _now(), files_json(files)))
     def waiting_notes(self, task_id): return self._rows('SELECT * FROM waitroom WHERE TaskId=? AND DeliveredAt IS NULL ORDER BY WId', (task_id,))
     def waitroom(self, task_id, limit=40):
@@ -5742,6 +5755,10 @@ class SQLiteStore:
                                        json.dumps(receipt) if receipt is not None else None, json.dumps(env), reason, rid, token))
                 self.cx.commit(); self._writes += 1; changed = bool(cur.rowcount)
             _DELIVERY_CLAIMS.discard(token)
+        if changed and state == 'sent':
+            from . import ledger
+            try: ledger.sent(self, rid)               # ...on the record: a send the provider confirmed is what every task reads went (ledger.py)
+            except Exception as e: logger.warning(f'review {rid}: sent, and not written to the ledger - {e}')
         if changed: self._review_changed(rid)
         return changed
     def decide_review(self, rid, status, final, by, note=None):

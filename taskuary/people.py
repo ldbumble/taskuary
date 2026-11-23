@@ -41,7 +41,15 @@ def at_domain(store, domain: str) -> list:
 
 
 def written_to(store) -> dict:
-    """{address: (times, last sent)} over the To and Cc of the owner's own sent mail - one scan per new message."""
+    """{address: (times, last sent)} over the To and Cc of the owner's own sent mail - one scan per new message - and of the mail Taskuary
+    sent for him (ledger.mailed), known before the provider's copy is ever read back in."""
+    from . import ledger
+    out = dict(_mailbox_sent(store))
+    for a, (n, last) in ledger.mailed(store).items(): out[a] = (out.get(a, (0, ''))[0] + n, max(last, out.get(a, (0, ''))[1]))
+    return out
+
+
+def _mailbox_sent(store) -> dict:
     # kept ON the store, rescanned only when mail arrives. Keyed by id(store) it outlived its store: a closed store's id
     # came back for the next one, whose own recipients were then never read (CI, 2026-10-05)
     with store.lock: newest = store.cx.execute('SELECT MAX(MessageId) FROM message').fetchone()[0]
@@ -61,26 +69,14 @@ def written_to(store) -> dict:
     return seen
 
 
-_ADDR = re.compile(r'[\w.+-]+@[\w-]+(?:\.[\w-]+)+')
+from .ledger import ADDR as _ADDR
 def owner_lines(store, tid=None) -> list:
     """(address, the line it stands in) for every email address in the owner's OWN words - his memory (LEARNED.md: "Your people") and, on a
     task, what he typed on it. An address he gave is no guess (round 3, 2026-11-22: Paula's address was in his memory, and the agent was told
-    it guessed it and asked him for it)."""
-    texts = [str(store.get_doc('learned') or '')]
-    if tid:
-        from .general import USER_TYPE, WAITING_TYPE, is_brief
-        t = store.get_task(int(tid)) or {}
-        if t.get('OriginBase') == 'owner': texts.append(str(t.get('Summary') or ''))
-        texts += [str(c.get('Body') or '') for c in store.list_comments(int(tid), internal=True)
-                  if c.get('ActorType') in (USER_TYPE, WAITING_TYPE) and not is_brief(c)]
-    # ...AND WHAT HE TYPED ON ANY TASK (walk 9, 2026-11-23: he gave Paula's address answering one task, an email went to her, and the next
-    # task's agent found "nobody matches 'Paula'" and asked him again): his own lines only, the newest first
-    else:
-        from .general import USER_TYPE, WAITING_TYPE
-        texts += [str(r['Body']) for r in store._rows(
-            "SELECT Body FROM comment WHERE Actor='owner' AND ActorType IN (?,?) AND Body LIKE '%@%' ORDER BY CommentId DESC LIMIT 400",
-            (USER_TYPE, WAITING_TYPE))]
-    return [(m.group(0).lower(), line) for x in texts for line in x.splitlines() for m in _ADDR.finditer(line)]
+    it guessed it and asked him for it). The lines he typed are the record's (ledger.given: on task `tid`, else on ANY task - walk 9,
+    2026-11-23: he gave Paula's address answering one task, and the next task's agent found "nobody matches 'Paula'" and asked him again)."""
+    from . import ledger
+    return [(m.group(0).lower(), line) for line in str(store.get_doc('learned') or '').splitlines() for m in _ADDR.finditer(line)] + ledger.given(store, tid)
 def said_by_owner(store, tid=None) -> set: return {a for a, _ in owner_lines(store, tid)}
 
 

@@ -37,6 +37,7 @@ Not built yet (next phase): reading a code out of the mail, a code split over on
 port is LAN-only), and a 1Password/Bitwarden provider.
 """
 import hashlib, html as H, ipaddress, json, logging, re, secrets, shutil, subprocess, tempfile, threading, time
+from datetime import datetime
 from .say import said as _said            # a failure written to the chat is said in his words (say.py)
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -188,9 +189,14 @@ def saved(store, site) -> dict | None:
 # ONE VAULT FOR EVERY LOGIN (the owner, 2026-11-23: "if the agent made a login it should save it in the agent vault same as login I give it"):
 # an account an agent made is a row like one he typed, by the same save, shown the same way - the site, the user name, which task made it -
 # and its password his to reveal. An account Taskuary has not yet signed in with is said so (confirmed): a sign-up the site seemed to take
-# is not proof it was made (walk 9: a row read "signed in" for an account stopped at its phone step).
+# is not proof it was made (walk 9: a row read "signed in" for an account stopped at its phone step). Whether a site took it is the ledger's
+# (ledger.account, written by the sign-in or sign-up the site let past) - the one record every task reads what exists from.
 MADE_BY = ('taskuary', 'agent')
-def confirmed(row) -> bool: return bool(row.get('LastUsed')) or (row.get('SavedBy') or 'owner') not in MADE_BY
+def confirmed(row, known: dict) -> bool:
+    "The owner's own, or an account a site took since this row was saved (`known`: ledger.sites)."
+    if (row.get('SavedBy') or 'owner') not in MADE_BY: return True
+    k = known.get(str(row.get('Site') or '').lower())
+    return bool(k) and str(k['At']) >= datetime.fromtimestamp(float(row.get('SavedAt') or 0)).isoformat(sep=' ', timespec='seconds')
 
 
 def _user(row) -> str:
@@ -202,9 +208,10 @@ def listing(store) -> list:
     """Settings -> Saved sign-ins: the site, its user name, when it was saved and last used, whether a code key is kept, the task whose agent
     made it, and whether a sign-in with it has gone in yet. Never the secret or the key (reveal, on his press)."""
     from .store import task_ref
-    _tables(store)
+    from . import ledger
+    _tables(store); known = ledger.sites(store)
     return [{'site': r['Site'], 'user': _user(r), 'saved': r['SavedAt'], 'used': r['LastUsed'], 'code': bool(r['Totp']), 'fields': sorted(extra_of(r)),
-             'by': 'agent' if (r.get('SavedBy') or '') in MADE_BY else 'owner', 'confirmed': confirmed(r),
+             'by': 'agent' if (r.get('SavedBy') or '') in MADE_BY else 'owner', 'confirmed': confirmed(r, known),
              **({'task': int(r['Task']), 'ref': task_ref(int(r['Task']))} if r.get('Task') else {})}
             for r in store._rows('SELECT Site, User, SavedAt, SavedBy, LastUsed, Totp, Extra, Task FROM signin_vault ORDER BY Site')]
 
@@ -216,17 +223,6 @@ def reveal(store, site) -> str | None:
     if not row: return None
     store.audit('signin', 0, 'signin_revealed', 'owner', detail={'site': str(site).lower()})
     return vault.unseal(row['Secret'])
-
-
-def accounts(store) -> str:
-    """The saved sign-ins as an agent is told them (docsync.agent_systems): site and user name, who made it and whether it has signed in yet -
-    so the next task knows the inbox an earlier one made. Never a password: the browser types it (hand_over with the site)."""
-    rows = listing(store)
-    if not rows: return ''
-    def say(r):
-        made = f"made by the agent on {r['ref']}" if r.get('ref') else 'made by an agent' if r['by'] == 'agent' else "the owner's own"
-        return f"{r['site']}" + (f" as {r['user']}" if r['user'] else '') + f" ({made}{'' if r['confirmed'] else ', not signed in with yet'})"
-    return 'SAVED SIGN-INS (Taskuary types the password - hand_over with the site signs in; you never see one): ' + '; '.join(map(say, rows[:30]))
 
 
 def extra_of(row) -> dict:
@@ -269,6 +265,9 @@ def save(store, site, user, pw, by='owner', key=None, extra=None, keep_old=False
     # a sealed secret is a keychain entry, and forgetting it here left the put-back row pointing at nothing (CI, 2026-11-19)
     if not keep_old: forget_row(old, k, ex)
     store.audit('signin', 0, 'signin_saved', by, detail={'site': site, **({'code': True} if k else {})})
+    if by not in MADE_BY:                    # ...his own sign-in is an account he has: on the record (an agent's waits for a site to take it)
+        from . import ledger
+        ledger.account(store, site, user or '', 'given', task, by='owner')
 
 
 def set_key(store, site, key, by='owner') -> bool:
@@ -313,7 +312,12 @@ def _forget_live(site):
         except Exception as e: logger.debug(f'signin: {site} cookies not cleared from the live browser of {sid} - {e}')
 
 
-def _used(store, site): store._exec('UPDATE signin_vault SET LastUsed=? WHERE Site=?', (_now(), site))
+def _used(store, site, tid=None):
+    "The site took the saved sign-in: kept on its row, and the account on the record (ledger.account)."
+    from . import ledger
+    store._exec('UPDATE signin_vault SET LastUsed=? WHERE Site=?', (_now(), site))
+    row = saved(store, site) or {}
+    ledger.account(store, site, _user(row), 'signed_in', tid or row.get('Task'), by='agent' if row.get('SavedBy') in MADE_BY else 'owner')
 
 
 # ── the one-time fill link ───────────────────────────────────────────────────────────────────────────────────────────────
@@ -590,7 +594,7 @@ def _auto(store, tid, sid, site, rid, fill, ask=None):
         if ask and not code and asks_code(sid) and not on_password_page(sid): return _ready_code(store, tid, sid, site) or ask(CODE_ASK.format(site=site))
         typing(store, tid, site, sid)
         got = fill(sid, site, user, pw, **({'code': code} if code else {}), **({'extra': ex} if ex else {})) or {}
-        _used(store, site)
+        _used(store, site, tid)
         # THE PASSWORD WENT IN AND THE SITE ASKS A CODE NOBODY KEEPS: that step is the owner's, on the page, and it is said in one line - the
         # agent is not told "signed in" over a code prompt (the recorded walk, 2026-11-11: it was, read the page, said so and ended; nothing
         # was asked of anyone)
@@ -1658,6 +1662,8 @@ def _answered(store, tid, sid, site, c, user, kept) -> str:
     there = f'"{look.get("title") or ""}" ({look.get("href") or f.get("href") or ""})'
     if f.get('top') and on_site(f.get('href'), site) and not f.get('password') and (status or 200) < 400:
         _audit(store, tid, site, 'vault', True, 'signed up', saved=not kept, signup=True)
+        from . import ledger
+        ledger.account(store, site, user, 'signed_up', tid)          # ...the site let it past: the account is on the record
         return (f"{site} took the sign-up{who}: the page shows {there} - look at it for whether the account is made or asks for more.{coded} "
                 f"Its password is kept with the owner's saved sign-ins - you never need it; to sign in again later, open its sign-in page and "
                 f'hand_over with site {site}.{kept}')

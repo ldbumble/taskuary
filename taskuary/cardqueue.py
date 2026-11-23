@@ -51,6 +51,8 @@ def done(store, tid: int, said: str) -> list:
     if not (r := in_flight(store, tid)): return []
     p = json.loads(r['FinalText'])
     store.review_result(r['ReviewId'], json.dumps({**p, 'result': {**p['result'], 'done': str(said or 'done')[:300]}}))
+    from . import ledger
+    ledger.went(store, r['ReviewId'])                    # ...it went live: on the record (ledger.py), as an act its card ran is
     return [r['ReviewId']]
 
 

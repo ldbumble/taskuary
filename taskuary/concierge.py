@@ -2492,9 +2492,9 @@ def _system(store, llm=None) -> str:
     if mem: who += ("WHAT YOU KNOW ABOUT HOW THE OWNER WORKS (their memory, LEARNED.md - what they care about and what they do not, their "
                     f"people, their rhythm, their promises; weigh it, the documents above outrank it{more}):\n{mem}\n\n")
     # ...and the documents that are NOT here, by name: the tool index says docs.search is "how Taskuary itself works", so "how do I usually
-    # sign off?" and "what rules do the agents work under" had no road to STYLE.md or AGENT.md the model could see (2026-11-02)
-    who += ('THEIR OTHER DOCUMENTS are not above - STYLE.md (how they write: greeting, sign-off, tone), AGENT.md (the rules every agent '
-            'works under), TRIAGE.md, CODING.md: docs.search reads one whole with `section` "your doc style" (agent, triage, coding).\n\n')
+    # sign off?" had no road to STYLE.md the model could see (2026-11-02)
+    who += ('THEIR OTHER DOCUMENTS are not above - STYLE.md (how they write: greeting, sign-off, tone), TRIAGE.md: docs.search reads one '
+            'whole with `section` "your doc style" (triage).\n\n')
     # ...and the repositories a coding job can open in: the model picks one by name (`as`) and code only checks it is one of these
     from . import terminal as term
     try: repos = term.known_repos(store)

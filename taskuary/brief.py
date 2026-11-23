@@ -6,7 +6,7 @@ the task id and title, the objective, the triage checklist, the owner's explicit
 repository when there is one, the latest complete substantive conversation (the chain as stored,
 history included, cleaned and budgeted the way triage reads it), the attachments on the machine -
 and the revision of the context it was built from, so a worker's result can be checked against
-what it actually read. Rules ride separately: AGENT.md for both kinds, CODING.md on top for coding.
+what it actually read.
 """
 from .store import files_of, task_ref
 
@@ -102,10 +102,3 @@ def background(store, chars: int = 9_000, workstream: str = None, drop=()) -> st
     if saved: out.insert(0, '## Saved in About you\n' + '\n'.join(saved))
     return ('ABOUT THE OWNER (background for everything below - facts about whom you work for, not tasks to do)\n\n'
             + '\n\n'.join(out)) if out else ''
-
-
-def rules(store, doc: str, chars: int) -> str:
-    """An operator rules document, flattened for a prompt: headings become plain words, one line."""
-    text = str(store.doc(doc) or '')
-    keep = [l.strip(' #*-').strip() if l.lstrip().startswith('#') else l.strip() for l in text.splitlines() if l.strip()]
-    return ' '.join(' '.join(keep).split())[:chars]

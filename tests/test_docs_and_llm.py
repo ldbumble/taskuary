@@ -8,24 +8,23 @@ from taskuary import docsync, learn, llm
 class TemplateTests(unittest.TestCase):
     def test_docs_seeded_from_templates(self):
         s = MemoryStore()
-        soul, coding = s.get_doc('soul'), s.get_doc('coding')
+        soul, counsel = s.get_doc('soul'), s.get_doc('counsel')
         # the OPEN-SOURCE docs read as a person, not token soup: John Smith is the example.
         # A real owner converts every mention at once - via retoken + the one setting.
-        self.assertIn('John Smith', soul); self.assertIn('John', coding)
+        self.assertIn('John Smith', soul); self.assertIn('{{owner_first}}', counsel)
         self.assertEqual(s.owner()['owner'], 'the owner')       # the example is not an identity
         s.set_setting('owner_name', 'Dana Reyes', 'owner')
         s.set_setting('owner_email', 'dana@northwind.example', 'owner')
         from taskuary.store import retoken_doc
-        for name in ('soul', 'coding'):                         # what _heal_owner_docs does at launch
+        for name in ('soul',):                                   # what _heal_owner_docs does at launch
             s.save_doc(name, retoken_doc(retoken_doc(s.get_doc(name), 'John Smith', 'john.smith@example.com'),
                                          'Dana Reyes', 'dana@northwind.example'), 'test')
         self.assertIn('Dana Reyes', s.doc('soul'))
         self.assertIn('dana@northwind.example', s.doc('soul'))
-        self.assertIn('Dana is', s.doc('coding'))               # {{owner_first}}, in prose
+        self.assertIn('Dana', s.doc('counsel'))                 # {{owner_first}}, in prose
         self.assertNotIn('John', s.doc('soul'))
         self.assertNotIn('{{owner', s.doc('soul'))              # nothing unresolved reaches the AI
         self.assertIn(docsync.CONN_START, soul)
-        self.assertIn('Closing out', coding)     # no report contract: the transcript IS the report
         self.assertTrue(s.get_doc('digest'))
 
     def test_untouched_template_docs_track_shipped_improvements(self):

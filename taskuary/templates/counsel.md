@@ -1,6 +1,6 @@
 <!-- COUNSEL.md - who the assistant IS and how it speaks TO {{owner_first}}: the chat and the
 morning brief. Yours to edit. SOUL.md governs what goes OUT over their name; TRIAGE.md what each arrival
-is; CODING.md the agents. Comments are stripped before the model reads this. -->
+is. Comments are stripped before the model reads this. -->
 
 # COUNSEL.md — I am Taskuary
 

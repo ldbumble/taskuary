@@ -1,56 +1,37 @@
-"""How much of each document reaches the agent, said in the Docs editor (the owner, 2026-11-02: "it should not be hard coded in the
-code but in coding.md ... and you can always extend the length of what goes into it. Also ... tell the user the max amount of
-characters that go into the instructions, with a bar/percentage showing if you are over").
+"""How much of each document reaches the model that reads it, said in the Docs editor (the owner, 2026-11-02: "tell the user the max
+amount of characters that go into the instructions, with a bar/percentage showing if you are over").
 
-The subagent rule lives in CODING.md, every shipped document fits under the number its own prompt cuts with, GET /api/doc/{name}
-returns that number, and an edited CODING.md takes the new section once."""
-import tempfile, unittest
+Every shipped document fits under the number its own reader cuts with, and GET /api/doc/{name} returns that number."""
+import unittest
 from pathlib import Path
 from unittest import mock
 from fastapi.testclient import TestClient
 
 import taskuary
-from taskuary import doclimits, server, store as store_mod, terminal, triage
-from taskuary.store import MemoryStore, SQLiteStore
+from taskuary import doclimits, server, terminal, triage
+from taskuary.store import MemoryStore
 
 T = Path(taskuary.__file__).parent / 'templates'
-CODING = (T / 'coding.md').read_text(encoding='utf-8')
-
-
-class SubagentRuleTests(unittest.TestCase):
-    def test_coding_md_carries_the_rule_cli_neutral_and_short(self):
-        raw = CODING.split('## Several to-dos at once', 1)[1].split('##', 1)[0]
-        sec = ' '.join(raw.split())
-        for s in ('do not depend on each other', 'its own subagent in parallel', "Claude Code's Agent tool", 'Codex or Gemini CLI subagents',
-                  'the to-do, its id and what done means', 'tick it once it checks out', 'run the tests once at the end',
-                  'depend on each other stay in order'):
-            self.assertIn(s, sec, s)
-        self.assertEqual(store_mod._FANOUT_NOW.strip(), ('## Several to-dos at once' + raw).strip())
-        self.assertLess(len(sec), 500)   # the migration says what the template says
 
 
 class BudgetTests(unittest.TestCase):
     def test_every_shipped_document_fits_under_what_its_reader_takes(self):
         s = MemoryStore()
-        for name in ('soul', 'job', 'style', 'counsel', 'agent'):
-            lim = doclimits.limit(s, name)
-            text = (T / f'{name}.md').read_text(encoding='utf-8')
-            n = len(terminal.flatten_rules(text) if lim['flat'] else text)
+        for name in ('soul', 'job', 'style', 'counsel'):
+            lim, n = doclimits.limit(s, name), len((T / f'{name}.md').read_text(encoding='utf-8'))
             self.assertLess(n, lim['chars'] * .9, f'{name}: {n} of {lim["chars"]} - leave room for an edit')
 
     def test_one_number_per_document_and_the_prompts_cut_with_it(self):
         s = MemoryStore()
-        self.assertIsNone(doclimits.limit(s, 'coding'))                                   # no prompt carries CODING.md: nothing cuts it
-        self.assertEqual(doclimits.limit(s, 'agent')['chars'], terminal.AGENT_CHARS)
         self.assertEqual(doclimits.limit(s, 'soul')['chars'], triage.SOUL_CHARS)
         self.assertIsNone(doclimits.limit(s, 'triage'))                                   # triage's whole system prompt: nothing cuts it
         self.assertEqual(doclimits.limit(s, 'counsel')['past'], doclimits.WHOLE)          # warned, never sliced (PW-258)
-        self.assertGreater(terminal.DOC_CHARS, 6400)
+        for gone in ('agent', 'coding'): self.assertIsNone(doclimits.limit(s, gone))      # no agent reads them (2026-11-23)
 
     def test_the_seed_ceiling_leaves_room_on_a_windows_command_line(self):
         # CreateProcessW takes 32,767 UTF-16 units, NUL included; the exe, the flags and list2cmdline's escapes share it with the seed
         self.assertLessEqual(terminal.SEED_CEILING + 4000, 32767)
-        self.assertLess(terminal.DOC_CHARS + terminal.AGENT_CHARS + terminal.BRIEF_CONTEXT, terminal.SEED_CEILING)
+        self.assertLess(terminal.DOC_CHARS + terminal.BRIEF_CONTEXT, terminal.SEED_CEILING)
 
 
 class ApiTests(unittest.TestCase):
@@ -58,33 +39,10 @@ class ApiTests(unittest.TestCase):
         s = MemoryStore()
         with mock.patch.object(server, 'store', s):
             c = TestClient(server.app)
-            got = {n: c.get(f'/api/doc/{n}').json()['limit'] for n in ('coding', 'agent', 'soul', 'job', 'style', 'learned', 'triage')}
-        self.assertIsNone(got['coding'])
-        self.assertEqual(got['agent']['chars'], terminal.AGENT_CHARS)
+            got = {n: c.get(f'/api/doc/{n}').json()['limit'] for n in ('soul', 'job', 'style', 'learned', 'triage')}
         self.assertEqual(got['soul']['chars'], triage.SOUL_CHARS); self.assertFalse(got['soul']['flat'])
         self.assertEqual(got['learned']['past'], doclimits.SECTIONS)
         self.assertIsNone(got['triage'])
-
-
-class EditedCopyTests(unittest.TestCase):
-    def setUp(self): self.path = Path(tempfile.mkdtemp()) / 'taskuary.db'
-
-    def _reopen(self, body):
-        s = SQLiteStore(str(self.path)); s.save_doc('coding', body, 'owner')
-        s.cx.execute("DELETE FROM setting WHERE Name='coding_fans_out_todos'"); s.cx.commit()
-        return SQLiteStore(str(self.path))
-
-    def test_an_edited_copy_takes_the_section_once_lf_or_crlf(self):
-        for nl in ('\n', '\r\n'):
-            old = CODING.replace(store_mod._FANOUT_NOW, '').replace('## You may do alone', '## You may do alone\n- Our own line.').replace('\n', nl)
-            self.assertNotIn('Several to-dos', old)
-            got = self._reopen(old).get_doc('coding')
-            self.assertEqual(got.count('## Several to-dos at once'), 1); self.assertIn('- Our own line.', got)
-            if nl == '\r\n': self.assertNotIn('\n', got.replace('\r\n', ''))
-            self.assertEqual(SQLiteStore(str(self.path)).get_doc('coding'), got)            # once: a second start adds nothing
-
-    def test_a_copy_without_the_anchor_is_left_alone(self):
-        self.assertNotIn('Several to-dos', self._reopen('# CODING.md\nOur own rules only.\n').get_doc('coding'))
 
 
 if __name__ == '__main__':

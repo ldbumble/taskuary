@@ -256,9 +256,10 @@ def email_from_soul(soul: str):
     mt = _SOUL_NAME.search(soul or '')
     return (mt.group('email') or '').strip() if mt else ''
 
-# Every document that talks about the owner by name - set_owner and server._heal_owner_docs sweep the same list. AGENT.md was
-# missing from it, so every worker read "John decides" whoever the owner was (the email walk, 2026-10-29).
-OWNER_DOCS = ('soul', 'job', 'agent', 'coding', 'digest', 'learned', 'triage', 'style', 'counsel')
+# Every document that talks about the owner by name - set_owner and server._heal_owner_docs sweep the same list, and the store seeds it
+# from its template. AGENT.md and CODING.md left it when no agent read them any more (2026-11-23): a copy on disk stays, unshown and unread.
+OWNER_DOCS = ('soul', 'job', 'digest', 'learned', 'triage', 'style', 'counsel')
+UNREAD_DOCS = ('agent', 'coding')          # ...and an old install's copies of them are never listed, searched or shown (doc_names)
 TEMPLATE_OWNER = ('John Smith', 'john.smith@example.com')
 NO_NAME_YET = ("THE OWNER'S NAME IS NOT SET YET. Who the owner is comes from the mailbox the mail arrived in (addressed_to_you), never "
                "from a name: an ask addressed to that mailbox is the owner's, whatever name it greets.")
@@ -268,8 +269,7 @@ def docs_hold_template_owner(store) -> bool:
     return any(TEMPLATE_OWNER[0] in (store.get_doc(d) or '') for d in OWNER_DOCS)
 
 def set_owner(store, new: str, email=None, actor: str = 'owner') -> dict:
-    """Your name, in ONE place (server.put_owner, and setup's About your work). SOUL.md and CODING.md refer to the owner nine times
-    between them: every literal occurrence of the OLD name becomes a {{owner}} token, so the documents never drift again."""
+    """Your name, in ONE place (server.put_owner, and setup's About your work). SOUL.md and the rest refer to the owner by name: every literal occurrence of the OLD name becomes a {{owner}} token, so the documents never drift again."""
     was = store.owner()
     changed = []
     # 'the owner' is the fallback when no name is known, and real prose says those words - never retokenized
@@ -425,81 +425,6 @@ _REPO_CHOICE_WAS = ("**Which repository.** For a task an agent could work from a
 with open(__file__[:__file__.replace('\\', '/').rfind('/') + 1] + 'triage_kind_rules.json', encoding='utf-8') as _f:
     _KIND_RULES = [tuple(p) for p in json.load(_f)]
 _CODING_WAS = "`coding` is for work INSIDE a system this install holds the code or the credentials for: a change to one of the owner's repositories, a query against one of their databases, a file or report produced from them, an account on a system they run."
-# CODING.md said only "do not push, deploy, publish or release unless the brief says you may: commit locally and stop", so a
-# change the requester gets only once it is LIVE was committed, closed with --done and a reply promising "I'll let you know
-# when it's live" - and the owner had to Continue it to deploy (2026-10-20). The stop is a question now, and AGENT.md says a
-# reply never promises a later step. Both go into a document the owner edited where the old text still reads as shipped.
-_DEPLOY_WAS = '- Do not push, deploy, publish or release unless the brief says you may: commit locally and stop.'
-_DEPLOY_ASKED = ("- Push, deploy, publish or release only when the brief or John's Continue says to - otherwise commit locally and stop.\n"
-                 '  When the ask is met only once the change is LIVE, that stop is a question, not the end: ask John here, "ready to\n'
-                 '  deploy <what> to <where> - go ahead?", and wait - no `--reply`, no `--done`. On yes: deploy, check it is live, then finish.')
-# ...and that question, asked in words, left the owner typing "yes" under a card with no button (2026-11-09, the ~20th time: "i thought
-# actions should be cards/buttons???"). The stop is propose_land now - the landing card's Push / Push & deploy (landing.py) - and a repo
-# trusted to act on its own is pushed and deployed without stopping at all.
-_DEPLOY_HELD = ("- Push, deploy, publish or release when the brief or John's Continue says to, or your prompt says you may push and deploy (a\n"
-                '  repo John trusts to act on its own) - then do it, check it is live, and finish. Otherwise commit locally and stop.\n'
-                "  When the ask is met only once the change is LIVE, that stop is John's button, never a question in words: call\n"
-                '  `propose_land` - `how` push and `deploy` the branch that deploys it (pr, merge or rebase for a branch of your own) - and\n'
-                '  wait; no "go ahead?", no `--reply`, no `--done`. His press pushes it and tells you: check it is live, then finish.')
-# ...AND IT SAYS WHAT FOLLOWS THE PRESS (the owner, 2026-11-10: "it should prompt you, should i deploy and respond once deployed"):
-# the card, one line on what the agent does after it, and the press wakes it to do that (_DEPLOY_HELD -> _DEPLOY_NOW)
-_DEPLOY_NOW = ("- Push, deploy, publish or release when the brief or John's Continue says to, or your prompt says you may push and deploy (a\n"
-               '  repo John trusts to act on its own) - then do it, check it is live, and finish. Otherwise commit locally and stop.\n'
-               "  When the ask is met only once the change is LIVE, that stop is John's button, never a question in words: call\n"
-               '  `propose_land` - `how` push and `deploy` the branch that deploys it (pr, merge or rebase for a branch of your own) - and\n'
-               '  say in one line what follows it (the reply to whoever asked); no "go ahead?", no `--reply` before it, no `--done`. His press\n'
-               '  pushes it and wakes you: check it is live, then do that.')
-# A coding agent started in the wrong repository found the job was not there and closed the task "Nothing to do" (the owner,
-# 2026-10-27: "coding agent should be able to at least ask can I change repos"). CODING.md now says to ask; an edited copy takes
-# the section under the line it follows, where that line still reads as shipped (coding_asks_to_move).
-_ELSEWHERE_AT = '- Work ONLY in the repository the task brief names. Never wander into another checkout.\n'
-_ELSEWHERE_NOW = ('\n## The work is in another repository\n'
-                  'Work that lives in another repository is NOT "nothing to do": no `taskuary --done`, and stay out of that\n'
-                  'checkout. Ask John, naming where you think it is ("Not in northwind/ledger - looks like northwind/portal.\n'
-                  'Move it there?"), and wait: he moves it with **Change where the code is**.\n')
-# Independent to-dos were worked one by one in a CLI that can run them side by side (the owner, 2026-11-02: "not hard coded in the
-# code but in coding.md"). An edited copy takes the section under the line it follows, where that line still reads as shipped.
-_FANOUT_AT = '- Never force-push. Never touch archived repositories. Never create new repositories.\n'
-_FANOUT_NOW = ('\n## Several to-dos at once\n'
-               "When two or more of the checklist's to-dos do not depend on each other, hand each to its own subagent in\n"
-               "parallel (Claude Code's Agent tool, Codex or Gemini CLI subagents), each told the to-do, its id and what\n"
-               "done means. Review each one's work, tick it once it checks out, and run the tests once at the end.\n"
-               'To-dos that depend on each other stay in order.\n')
-_PROMISE_AT = '- "Nothing to do here" is also an ending'
-_PROMISE_HELD = ('- A reply goes when what it says is true. Never promise a later step ("I\'ll let you know when it\'s live"): do\n'
-                 '  it, or ask for the go-ahead and wait. If something is genuinely left, say plainly what, and who does it.\n')
-# THE ANSWER IS THE ANSWER (agenttools.VERIFY_RULE, 2026-11-16): an edited AGENT.md that still reads the verify line as shipped takes today's
-_VERIFY_WAS = ('- Never claim an effect you did not verify (searched, opened, sent, changed, pushed, deployed, on screen); say what you checked\n'
-               '  it by, or that you could not.\n')
-_VERIFY_NOW = ('- Answer what was asked. Claim an effect (searched, opened, sent, changed, pushed, deployed, on screen) only once you verified\n'
-               '  it, and say how; what you did not do or could not open is said only where it changes the answer.\n')
-_PROMISE_NOW = ('- A reply goes when what it says is true. Never promise a later step ("I\'ll let you know when it\'s live"): do\n'
-                '  it, or set up the press it waits on and write the reply once it is true. If something is genuinely left, say plainly what, and who does it.\n')
-# THE LOGIN RULE LIVES IN CODE (the owner, 2026-11-04, and the Task 3.4 review): a login the thread asks for and the owner's own files hold
-# goes in the drafted reply - the owner's Send is the decision - never the conversation. AGENT.md and ASSISTANT.md ride on a STRANGER's task
-# too, so neither carries it: general.GOAL_LINE, on the owner's own tasks only, is its one home. An edited copy stops tracking its template,
-# so the login lines an earlier wording put in it come out where they still read word for word (login_rule_in_code). {name: (froms, to)}
-# ...whose own line then said "say what you would do and wait" (_THEIRS_HELD): theirs to decide BY A PRESS, the step set up as its card
-# (_THEIRS_NOW, the owner, 2026-11-10) - the login lines come out to today's wording, and an edited copy that holds the earlier one takes it
-_THEIRS_HELD = ('- Money, legal, HR, credentials, permissions, production configuration, deletions and anything\n'
-                '  irreversible are theirs to decide. Say what you would do and wait.\n')
-_THEIRS_NOW = ('- Money, legal, HR, credentials, permissions, production configuration, deletions and anything\n'
-               '  irreversible are theirs to decide - by a press, never a question in words: set the step up as its card and say in\n'
-               '  one line what you will do once they press it; their press wakes you to do it.\n')
-_LOGIN_RULES = {
-    'agent': (('- Money, legal, HR, credentials, permissions, production configuration, deletions and anything\n'
-               '  irreversible are theirs to decide. Say what you would do and wait. A login or key the thread asks\n'
-               '  {{owner_first}} to supply, kept in their own files, is decided by their Send: find it and put it in the\n'
-               '  reply you draft, never in the conversation, your steps, a summary, a comment or a log.\n',),
-              _THEIRS_NOW),
-    # ...and the wording before it, whose "never paste a secret into the conversation or a draft" forbids the draft the ruling asks for
-    'assistant': (('  searching the disk. A file such as an .env holds settings: read the value the job needs.\n'
-                   '- When the thread asks {{owner}} to supply a login, a key or other details their own files hold, find\n'
-                   "  it and put it in the reply you draft: {{owner}}'s Send is their decision to share it. Never paste a\n"
-                   '  secret into the conversation, your steps, your summary, a comment or a log.\n',
-                   '  searching the disk. A file such as an .env holds settings: read the value the job needs, never paste\n'
-                   '  a secret into the conversation or a draft.\n'),
-                  '  searching the disk.\n')}
 _CODING_NOW = "`coding` is for a CHANGE inside a system this install holds the code or the credentials for: code changed in one of the owner's repositories, data changed in one of their systems, an account created or granted on a system they run. Reading from those systems - a query, a report, a look-up - changes nothing and is `general`."
 _SHAPE_WAS = ('Classify one inbound work message. Answer JSON only: {"intent": "task|reply_only|fyi", '
               '"kind": "coding|general|task", "why": "<one concrete sentence: what you saw in the message '
@@ -1775,8 +1700,8 @@ class SQLiteStore:
                     # boundaries forever because edited docs correctly stop following templates.
                     # Empty carries no owner intent to preserve: restore the complete default, and
                     # let the interview replace it only after the owner actually answers.
-                    # ...and not only SOUL: CODING.md went blank on a live install (2026-09-01) and
-                    # every coding session ran with no rules until somebody looked. Empty is empty.
+                    # ...and not only SOUL: a document went blank on a live install (2026-09-01) and its
+                    # reader ran with nothing until somebody looked. Empty is empty.
                     self.cx.execute("UPDATE doc SET Content=?, UpdatedBy='template', UpdatedAt=? "
                                     "WHERE Name=? AND TRIM(IFNULL(Content,''))=''",
                                     (txt, _now(), name))
@@ -1856,75 +1781,12 @@ class SQLiteStore:
                     if body.count(was) == 1:
                         self.cx.execute("UPDATE doc SET Content=?, UpdatedAt=? WHERE Name='triage'", (body.replace(was, ''), _now())); break
                 self.cx.execute("INSERT INTO setting (Name, Value, UpdatedBy) VALUES ('triage_no_repo_choice', '1', 'migration')")
-            # ...and THE STOP BEFORE A DEPLOY IS A QUESTION (_DEPLOY_WAS): a CODING.md / AGENT.md the owner edited no longer tracks
-            # the template, so the two rules go in where the old text still reads as shipped, once. Everything else stays theirs.
-            if not self.cx.execute("SELECT 1 FROM setting WHERE Name='coding_asks_before_deploy'").fetchone():
-                for name, was, now in (('coding', _DEPLOY_WAS, _DEPLOY_NOW), ('agent', _PROMISE_AT, _PROMISE_NOW + _PROMISE_AT)):
-                    row = self.cx.execute('SELECT Content FROM doc WHERE Name=?', (name,)).fetchone()
-                    body = (row['Content'] or '') if row else ''
-                    if body.count(was) != 1 or 'Never promise a later step' in body: continue
-                    if '\r\n' in body: now = now.replace('\n', '\r\n')
-                    self.cx.execute('UPDATE doc SET Content=?, UpdatedAt=? WHERE Name=?', (body.replace(was, now), _now(), name))
-                self.cx.execute("INSERT INTO setting (Name, Value, UpdatedBy) VALUES ('coding_asks_before_deploy', '1', 'migration')")
-            # ...and THAT STOP IS A BUTTON, NOT A QUESTION IN WORDS (_DEPLOY_ASKED -> _DEPLOY_NOW): where the asked text still reads as shipped, once
-            if not self.cx.execute("SELECT 1 FROM setting WHERE Name='coding_proposes_push'").fetchone():
-                row = self.cx.execute("SELECT Content FROM doc WHERE Name='coding'").fetchone()
-                body = (row['Content'] or '') if row else ''
-                nl = '\r\n' if '\r\n' in body else '\n'
-                was, now = _DEPLOY_ASKED.replace('\n', nl), _DEPLOY_NOW.replace('\n', nl)
-                if body.count(was) == 1: self.cx.execute("UPDATE doc SET Content=?, UpdatedAt=? WHERE Name='coding'", (body.replace(was, now), _now()))
-                self.cx.execute("INSERT INTO setting (Name, Value, UpdatedBy) VALUES ('coding_proposes_push', '1', 'migration')")
-            # ...and WHAT FOLLOWS THE PRESS IS SAID WITH THE CARD (_DEPLOY_HELD -> _DEPLOY_NOW, _PROMISE_HELD -> _PROMISE_NOW): into an edited
-            # CODING.md / AGENT.md where the earlier wording still reads as shipped, once
-            if not self.cx.execute("SELECT 1 FROM setting WHERE Name='guide_says_what_follows_the_press'").fetchone():
-                for name, was, now in (('coding', _DEPLOY_HELD, _DEPLOY_NOW), ('agent', _PROMISE_HELD, _PROMISE_NOW), ('agent', _THEIRS_HELD, _THEIRS_NOW)):
-                    row = self.cx.execute('SELECT Content FROM doc WHERE Name=?', (name,)).fetchone()
-                    body = (row['Content'] or '') if row else ''
-                    if '\r\n' in body: was, now = was.replace('\n', '\r\n'), now.replace('\n', '\r\n')
-                    if body.count(was) == 1: self.cx.execute('UPDATE doc SET Content=?, UpdatedAt=? WHERE Name=?', (body.replace(was, now), _now(), name))
-                self.cx.execute("INSERT INTO setting (Name, Value, UpdatedBy) VALUES ('guide_says_what_follows_the_press', '1', 'migration')")
-            # ...and THE ANSWER IS THE ANSWER (_VERIFY_WAS -> _VERIFY_NOW): into an edited AGENT.md where the earlier line still reads as shipped, once
-            if not self.cx.execute("SELECT 1 FROM setting WHERE Name='agent_answers_the_ask'").fetchone():
-                row = self.cx.execute("SELECT Content FROM doc WHERE Name='agent'").fetchone()
-                body = (row['Content'] or '') if row else ''
-                nl = '\r\n' if '\r\n' in body else '\n'
-                was, now = _VERIFY_WAS.replace('\n', nl), _VERIFY_NOW.replace('\n', nl)
-                if body.count(was) == 1: self.cx.execute("UPDATE doc SET Content=?, UpdatedAt=? WHERE Name='agent'", (body.replace(was, now), _now()))
-                self.cx.execute("INSERT INTO setting (Name, Value, UpdatedBy) VALUES ('agent_answers_the_ask', '1', 'migration')")
-            # ...and WORK IN ANOTHER REPOSITORY IS A QUESTION (_ELSEWHERE_NOW), into an edited CODING.md the same way, once
-            if not self.cx.execute("SELECT 1 FROM setting WHERE Name='coding_asks_to_move'").fetchone():
-                row = self.cx.execute("SELECT Content FROM doc WHERE Name='coding'").fetchone()
-                body = (row['Content'] or '') if row else ''
-                crlf = '\r\n' in body
-                at, now = (_ELSEWHERE_AT.replace('\n', '\r\n'), _ELSEWHERE_NOW.replace('\n', '\r\n')) if crlf else (_ELSEWHERE_AT, _ELSEWHERE_NOW)
-                if body.count(at) == 1 and '## The work is in another repository' not in body:
-                    self.cx.execute("UPDATE doc SET Content=?, UpdatedAt=? WHERE Name='coding'", (body.replace(at, at + now), _now()))
-                self.cx.execute("INSERT INTO setting (Name, Value, UpdatedBy) VALUES ('coding_asks_to_move', '1', 'migration')")
-            # ...and INDEPENDENT TO-DOS GO TO SUBAGENTS (_FANOUT_NOW), the same way, once
-            if not self.cx.execute("SELECT 1 FROM setting WHERE Name='coding_fans_out_todos'").fetchone():
-                row = self.cx.execute("SELECT Content FROM doc WHERE Name='coding'").fetchone()
-                body = (row['Content'] or '') if row else ''
-                nl = '\r\n' if '\r\n' in body else '\n'
-                at, now = _FANOUT_AT.replace('\n', nl), _FANOUT_NOW.replace('\n', nl)
-                if body.count(at) == 1 and '## Several to-dos at once' not in body:
-                    self.cx.execute("UPDATE doc SET Content=?, UpdatedAt=? WHERE Name='coding'", (body.replace(at, at + now), _now()))
-                self.cx.execute("INSERT INTO setting (Name, Value, UpdatedBy) VALUES ('coding_fans_out_todos', '1', 'migration')")
             # ...and THE ROUTE ROWS OF BRAINS BUILT AND NEVER CALLED go, once (brainroute.Lazy, 2026-11-06): the chat poll wrote one a second,
             # each 'ok' with no time and no tokens - a call made through the meter always has its time, so these were never calls
             if not self.cx.execute("SELECT 1 FROM setting WHERE Name='brainroute_uncalled_swept'").fetchone():
                 n = self.cx.execute(f"DELETE FROM brainroute WHERE {UNCALLED_ROUTES}", (_now(),)).rowcount
                 if n: logger.info(f'removed {n} AI route rows of brains that were built and never called')
                 self.cx.execute("INSERT INTO setting (Name, Value, UpdatedBy) VALUES ('brainroute_uncalled_swept', ?, 'migration')", (str(n),))
-            # ...and THE LOGIN RULE LIVES IN CODE (_LOGIN_RULES): out of an edited AGENT.md / ASSISTANT.md that still reads it as shipped, once
-            if not self.cx.execute("SELECT 1 FROM setting WHERE Name='login_rule_in_code'").fetchone():
-                for name, (froms, to) in _LOGIN_RULES.items():
-                    row = self.cx.execute('SELECT Content FROM doc WHERE Name=?', (name,)).fetchone()
-                    body = (row['Content'] or '') if row else ''
-                    nl = '\r\n' if '\r\n' in body else '\n'
-                    was = next((f.replace('\n', nl) for f in froms if body.count(f.replace('\n', nl)) == 1), None)
-                    if was:
-                        self.cx.execute('UPDATE doc SET Content=?, UpdatedAt=? WHERE Name=?', (body.replace(was, to.replace('\n', nl)), _now(), name))
-                self.cx.execute("INSERT INTO setting (Name, Value, UpdatedBy) VALUES ('login_rule_in_code', '1', 'migration')")
             # ...and THE GUIDE REPLACES THE PATCHWORK (the owner, 2026-10-09: "make it clear how to triage things, what to
             # look for, signs that would suggest things"). The sentence swaps above each fixed one rule; the template is now
             # one guide written as questions and signs, and the judgement code used to append lives in it. A document only
@@ -6766,7 +6628,7 @@ class SQLiteStore:
         if name == 'soul' and text.strip(): text = f'{text.rstrip()}\n\n{NO_NAME_YET}'     # an empty SOUL.md stays empty: nothing to misread
         return render_doc(text, who)
     def get_doc_row(self, name): return self._one('SELECT Name, Content, UpdatedBy, UpdatedAt FROM doc WHERE Name=?', (name,))
-    def doc_names(self) -> list: return [r['Name'] for r in self._rows('SELECT Name FROM doc ORDER BY Name')]
+    def doc_names(self) -> list: return [r['Name'] for r in self._rows('SELECT Name FROM doc ORDER BY Name') if r['Name'] not in UNREAD_DOCS]
     def github_permissions(self) -> tuple:
         """(use_github_as_tracker, agents_may_push) - read from the GitHub CONNECTOR, where the
         GitHub decisions belong, falling back to the legacy settings so nothing regresses.

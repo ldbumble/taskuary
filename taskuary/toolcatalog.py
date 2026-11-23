@@ -614,9 +614,9 @@ READS = {
     'sender.read':      ('one person at a glance - how often they write, their recent messages, their open tasks, when you last '
                          'wrote back and what the owner told you to remember about them. `who`: a name or an address'),
     # ...and the owner's docs your instructions do NOT carry, by name (2026-11-02): SOUL, JOB, COUNSEL and LEARNED ride every turn, but
-    # "how do I usually sign off?" is STYLE.md's and "what rules do the agents work under" AGENT.md's - and nothing said they could be read
+    # "how do I usually sign off?" is STYLE.md's - and nothing said it could be read
     'docs.search':      ("how Taskuary works and how to set it up (the help pages), and the owner's own docs - STYLE.md (how they write: "
-                         'greeting, sign-off, tone), AGENT.md (the rules every agent works under), TRIAGE.md, CODING.md, DIGEST.md (the '
+                         'greeting, sign-off, tone), TRIAGE.md, DIGEST.md (the '
                          'morning brief) - each read whole as `section` "your doc <name>" (your doc style) - and what each '
                          'release changed (help/whats-new). `query`: the words; `section`: one section read whole, as its contents list '
                          'names it. Use it for any "how do I", "what does X do", "what changed" or "why did it" about the app'),

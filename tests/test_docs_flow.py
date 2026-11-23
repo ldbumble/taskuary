@@ -153,7 +153,7 @@ if __name__ == '__main__':
 
 
 class BlankDocsHeal(unittest.TestCase):
-    """CODING.md went blank on a live install and every session ran with no rules. An empty operator
+    """A document went blank on a live install and its reader ran with nothing. An empty operator
     document carries no intent worth keeping: reading it, saving it blank, or restarting all put
     the shipped default back."""
 
@@ -161,18 +161,18 @@ class BlankDocsHeal(unittest.TestCase):
         from fastapi.testclient import TestClient
         from taskuary import server
         c = TestClient(server.app)
-        server.store.save_doc('coding', '   ', 'owner')
-        r = c.get('/api/doc/coding')
-        self.assertIn('CODING.md', r.json()['content'])
-        self.assertEqual(server.store.doc_owner('coding'), 'template')
+        server.store.save_doc('style', '   ', 'owner')
+        r = c.get('/api/doc/style')
+        self.assertIn('STYLE.md', r.json()['content'])
+        self.assertEqual(server.store.doc_owner('style'), 'template')
 
     def test_saving_blank_means_give_me_the_default_back(self):
         from fastapi.testclient import TestClient
         from taskuary import server
         c = TestClient(server.app)
-        r = c.put('/api/doc/coding', json={'content': ''})
+        r = c.put('/api/doc/style', json={'content': ''})
         self.assertTrue(r.json().get('restored'))
-        self.assertIn('CODING.md', server.store.get_doc('coding'))
+        self.assertIn('STYLE.md', server.store.get_doc('style'))
 
 
 class LearnedIsEditedWithTheName(unittest.TestCase):

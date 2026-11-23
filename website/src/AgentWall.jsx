@@ -4,8 +4,8 @@
 // which file, who is busy. That is true and about as expressive as a security camera. It
 // cannot say "the migration is half applied, don't run the tests yet" or "this is green, safe
 // to build on" — only the agent doing the work knows that. So they write it down here, one
-// line at a time, and the next agent reads the wall before it touches anything (CODING.md, and
-// `taskuary --board` in its own terminal).
+// line at a time, and the next agent reads the wall before it touches anything
+// (`taskuary --board` in its own terminal).
 //
 // It reads like a feed on purpose: a coding agent leaving a note for the next one IS a message
 // to a colleague, and a timeline of short messages with a face beside each is the form everyone

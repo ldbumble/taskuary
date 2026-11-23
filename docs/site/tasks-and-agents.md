@@ -252,8 +252,8 @@ otherwise the agent continues from Taskuary's own saved history and says so.
 
 Most general asks are short - read the message, recommend, draft the reply, or ask you what to do.
 When triage reads a general task as quick, it is answered in a single call instead of an agent
-session. The call reads what the agent would - the message, the task, `LEARNED.md`, today's calendar,
-`AGENT.md` - may use only read-only look-ups, and leaves the same things a finished
+session. The call reads what the agent would - the message, the task, `LEARNED.md`, today's calendar -
+may use only read-only look-ups, and leaves the same things a finished
 run does: what it found, a draft when a reply is owed, or a question to you. Nothing on the task page
 changes: it is the same chat, and what you type in its box opens a full session.
 
@@ -331,10 +331,9 @@ Two levels, and the difference is worth holding onto:
 - A **playbook** is a job — when it starts, which connections it uses, the steps, what an agent
   may do alone, what to ask first, and what counts as done.
 
-`CODING.md` is the playbook for code. Every other kind of recurring job gets its own page the
-first time an agent does it: on close, Taskuary asks whether that will recur and drafts the
-playbook onto the task. Approve it, and the next message like it is matched to that playbook by
-triage, and the agent is seeded from it instead of from `CODING.md`'s repository rules.
+A recurring kind of job gets its own page the first time an agent does it: on close, Taskuary
+asks whether that will recur and drafts the playbook onto the task. Approve it, and the next
+message like it is matched to that playbook by triage, and the agent finds it with its playbooks tool.
 
 Each connector card lists the playbooks that name it, and the words themselves are edited on
 **Reports → Playbooks**, where each has an on/off switch.

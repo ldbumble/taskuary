@@ -412,6 +412,7 @@ def test_an_adapter_that_will_not_start_is_todays_terminal_said_once(world, monk
     assert isinstance(t, acpcoding.ACPCoding)
     assert until(lambda: 'pty-1' in terminal.SESSIONS) and t.sid not in terminal.SESSIONS
     pane = terminal.SESSIONS['pty-1']
+    until(lambda: pane.seeded)                            # ...registered a beat before its seed is typed in
     assert pane.seeded == 'add a one-line comment to the top of totals.py'             # the same seed, typed in as today
     assert any('did not start over ACP' in (c.get('Body') or '') and 'its terminal' in (c.get('Body') or '') for c in s.list_comments(tid))
     assert acpcoding.FELL_BACK == {'claude'}

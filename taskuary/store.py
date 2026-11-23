@@ -2678,6 +2678,10 @@ class SQLiteStore:
                    SELECT TaskId, GROUP_CONCAT(DISTINCT SourceName) SearchSources
                    FROM message WHERE TaskId IN ids GROUP BY TaskId
                ) ms ON ms.TaskId=t.TaskId'''
+        # ...A SEARCH READS ON A READER CONNECTION, NEVER UNDER THE WRITER'S LOCK (his live app, 2026-11-23: triage's found_tasks ran a search per
+        # word and held the lock 3-4 s each, every other request - a press, the list - queued behind it for up to 10 s). Read only, so any snapshot serves
+        if q:
+            with self._snapshot_read() as cur: return [dict(r) for r in cur.execute(query + ' ORDER BY t.TaskId DESC', p).fetchall()]
         return self._rows(query + ' ORDER BY t.TaskId DESC', p)
     def delete_task(self, task_id):
         # the Advisor idea this task was made from goes with it: left open, it came back on the rail alone as "asked you",

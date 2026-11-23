@@ -63,7 +63,7 @@ class OutcomeTests(unittest.TestCase):
         self.assertEqual(s.get_review(rid)['DraftText'], mine)
         learned = []
         with mock.patch.object(outbound, 'reply_to_message', return_value=SENT), \
-             mock.patch('taskuary.learn.learn_from', side_effect=lambda st, ev: learned.append(ev)):
+             mock.patch('taskuary.learning.learn_from', side_effect=lambda st, ev, *a, **k: learned.append(ev)):
             out = verdicts.decide(s, s.get_review(rid), 'approve')
         self.assertEqual(out['status'], 'edited')
         self.assertEqual(s.get_review(rid)['Status'], 'edited')

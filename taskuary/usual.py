@@ -4,10 +4,9 @@ The Advisor says a line only for a checkable fact the card does not show (the ow
 the memory knows about how the owner works - kept to ONE line on the strip. Each fact here is counted from the owner's own acts, the
 same rows the episodes are written from (episodes.py), and cited by the same ids, so Why? can show what it rests on:
 
-    put_off_habits  the weekday the owner puts a sender's mail off to - fs ids, the tasks put off. The count writes or confirms a How
-                 you work line through the reflection (learn.put_off_lines), and it is THAT line Remind me reads (remind_day): the owner
-                 can see it and correct it, and the default follows (the owner, 2026-10-25: "Remind me's learned day comes from a How you
-                 work line ... the owner can see and correct")
+    put_off_habits  the weekday the owner puts a sender's mail off to - fs ids, the tasks put off. The count writes or confirms a learned
+                 line through the reflection (learning.put_offs), and it is THAT line Remind me reads (remind_day), once he confirmed it -
+                 or a line he said himself naming the day: he can see it and correct it, and the default follows (the owner, 2026-10-25)
     handed_to    whom the owner handed this sender's asks to - evidence the model weighs (a topic is the model's to read, never a
                  count's), never a button lit by a count; Hand it to a person opens with that person chosen, not sent (handoff_usual)
     chase_usual  the day a silence is late for this person (ruling 8: after 3 working days, then learned per person), from the ledger
@@ -59,7 +58,7 @@ def _put_offs(store, now=None) -> list:
 
 
 def put_off_habits(store, now=None) -> list:
-    """[{by, day, n, of, held, evidence}] - THE COUNT a How you work line is written or confirmed from (learn.put_off_lines): each sender
+    """[{by, day, n, of, held, evidence}] - THE COUNT a learned line is written or confirmed from (learning.put_offs): each sender
     whose put-offs went to one weekday, at least PUT_OFFS times and two in three, and each domain whose several senders did. `held`: the
     first of them HELD_DAYS ago or more (the owner's ruling 7: about two weeks of data). It sets no default by itself - Remind me reads
     the line, which the owner can see and correct (the owner, 2026-10-25)."""
@@ -86,31 +85,27 @@ def weekday_of(text: str):
     return DAYS.index(got.pop()) if len(got) == 1 else None
 
 
-def put_off_line(store, who: str, doc: str = None) -> dict | None:
-    """{text, key, by, evidence}: the in-use How you work line Remind me's day comes from for mail from `who` - a learned line whose
-    put-offs (fs ids) were this sender's, else their domain's; or one of the owner's own lines there naming the address or domain. The
-    owner's own line first, then the closest. Whatever day the line says now is the day: reworded, the default follows; deleted, there
-    is none (the owner, 2026-10-25)."""
-    from .learnedgraph import TAG
-    from .learned_cut import WORK, lines as section_lines
+def put_off_line(store, who: str) -> dict | None:
+    """{text, key, by, evidence}: the line in use Remind me's day comes from for mail from `who` - a learned line he confirmed whose put-offs
+    (fs ids) were this sender's, else their domain's; or a line he said naming the address or domain. His own line first, then the closest.
+    Whatever day the line says now is the day: corrected, the default follows; taken out, there is none (the owner, 2026-10-25)."""
+    from . import memory
     who = str(who or '').strip().lower()
     if '@' not in who: return None
     dom = who.rsplit('@', 1)[1]
     # A shared mail provider is no organisation: two strangers on gmail.com are not each other's people, and one's day never
     # reaches the other (the owner, 2026-10-25: people lines reach a task's own people, never strangers) - 2026-10-26.
     org = dom not in PUBLIC_MAIL
-    doc = store.get_doc('learned') if doc is None else doc
     got = []
-    for raw, key in section_lines(doc or '', WORK):
-        m = TAG.match(raw)
-        text = m.group('text').strip() if m else raw.strip().lstrip('-* ').strip()
+    for r in memory.in_use(store):
+        text, key, m = r['Text'], r['key'], r['Kind'] == memory.INFERRED
         if weekday_of(text) is None: continue
         if m:
-            ev = [e.strip() for e in m.group('ev').split(',') if e.strip().startswith('fs')]
+            ev = [e for e in r['ev'] if e.startswith('fs')]
             senders = {_sender_of(store, e[2:]) for e in ev if e[2:].isdigit()}
             near = 0 if who in senders else 1 if org and any(w.endswith('@' + dom) for w in senders) else None
         else:
-            low, ev = text.lower(), []
+            low, ev = ' '.join([text, *r['people']]).lower(), []
             near = 0 if who in low else 1 if org and re.search(rf'(?<![\w.-]){re.escape(dom)}\b', low) else None
         if near is not None: got.append((near, bool(m), {'text': text, 'key': key, 'by': who if near == 0 else dom, 'evidence': ev[:3]}))
     return min(got, key=lambda g: g[:2])[2] if got else None

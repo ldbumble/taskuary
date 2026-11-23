@@ -6,7 +6,7 @@ import json
 from datetime import datetime, timedelta
 from unittest import mock
 import pytest
-from taskuary import funnel, rulebook, terminal, usual
+from taskuary import funnel, memory, rulebook, terminal, usual
 from taskuary.testing import Factory
 from tests import memory_cases as C
 from tests.memory_cases import put_off, reflected
@@ -37,12 +37,16 @@ def test_no_line_when_nothing_is_checkable(w):
         assert (d['state'], d['verb']) == ('asked', None) and 'usual' not in d['line'], d     # no usual said, nothing filled (2026-11-15)
 
 
-def test_a_payworth_renewal_opens_remind_me_on_the_day_its_how_you_work_line_says(w):
-    """Remind me's day comes from a How you work line the owner can see and correct (the owner, 2026-10-25) - the count alone sets none."""
+def test_a_payworth_renewal_opens_remind_me_on_the_day_once_the_owner_confirms_the_learned_line(w):
+    """Remind me's day comes from a line the owner can see and correct (the owner, 2026-10-25) - the count alone sets none, and a line
+    learned from his put-offs is used only once he confirms it (r10: what was inferred is never used as his word before he says so)."""
     s, facts = w
     t = ask(s, 'payworth', 'Payworth renewal notice', 'Your annual subscription renews next month.')
     assert usual.remind_day(s, t) is None, 'counted, but no line says it yet'
     reflected(s, put_off(s, 'payworth', 13))
+    line = next(r for r in memory.rows(s, memory.INFERRED) if r['Subject'] == 'put off renewals@payworth.example')
+    assert usual.remind_day(s, t) is None, 'learned, not yet confirmed: not used'
+    memory.mark(s, line['key'], 'keep')
     d = usual.remind_day(s, t)
     assert d['day'] == 'Friday' and d['by'] == 'renewals@payworth.example' and d['line'] == 'You put mail from renewals@payworth.example off to Friday'
     on = datetime.strptime(d['on'], '%Y-%m-%d').date()
@@ -55,27 +59,22 @@ def test_a_payworth_renewal_opens_remind_me_on_the_day_its_how_you_work_line_say
     assert usual.remind_day(s, ask(s, 'gail', 'Rota', 'Can you check the rota?')) is None
 
 
-def test_the_owner_rewords_the_day_and_the_default_follows_then_deletes_it_and_there_is_none(w):
+def test_the_owner_says_another_day_and_the_default_follows_then_forgets_it_and_there_is_none(w):
     s, _ = w
     t = ask(s, 'payworth', 'Payworth renewal notice', 'Your annual subscription renews next month.')
     reflected(s, put_off(s, 'payworth', 13))
-    doc = s.get_doc('learned')
-    s.save_doc('learned', doc.replace('off to Friday [', 'off to Thursday ['), 'owner')
-    assert usual.remind_day(s, t)['day'] == 'Thursday', 'the owner said Thursday'
-    reflected(s)
-    assert usual.remind_day(s, t)['day'] == 'Thursday', '...and the next reflection keeps their word'
-    line = next(l for l in s.get_doc('learned').splitlines() if 'k: put off renewals@payworth.example' in l)
-    s.save_doc('learned', s.get_doc('learned').replace(line + '\n', ''), 'owner')
+    memory.remember(s, 'Mail from renewals@payworth.example waits for Thursday', 'put off renewals@payworth.example')
+    assert usual.remind_day(s, t)['day'] == 'Thursday', 'the owner said Thursday - his word replaced the learned line'
+    reflected(s, put_off(s, 'payworth', 6))
+    assert usual.remind_day(s, t)['day'] == 'Thursday', '...and the next reflection keeps his word'
+    memory.mark(s, next(r for r in memory.rows(s, memory.SAID) if 'Thursday' in r['Text'])['key'], 'forget')
     assert usual.remind_day(s, t) is None
-    reflected(s)
-    assert usual.remind_day(s, t) is None and 'renewals@payworth.example off to' not in s.get_doc('learned'), 'deleted stays deleted'
 
 
 def test_an_owner_line_of_their_own_sets_the_day(w):
     s, _ = w
     t = ask(s, 'spendly', 'Spendly invoice', 'Your invoice is ready.')
-    doc = s.get_doc('learned')
-    s.save_doc('learned', doc.replace('## How you work\n', '## How you work\n- Mail from spendly.example waits for Monday\n', 1), 'owner')
+    memory.remember(s, 'Mail from spendly.example waits for Monday', 'spendly mail')
     d = usual.remind_day(s, t)
     assert (d['day'], d['by'], d['evidence']) == ('Monday', 'spendly.example', [])
 
@@ -133,9 +132,9 @@ def test_a_learned_day_never_reaches_a_stranger_on_a_shared_mail_provider(w):
         f.message(task_id=t, subject='A note', body='Can you look at this?', from_name=frm, from_email=frm, conversation_id=f'email:{frm}')
         return t
     jo, kim = mail('jo.freelance@freemail.example'), mail('kim.parent@freemail.example')
-    tag = f' [s:4 | ev: fs{jo} | seen: 2026-10-20 | k: put off jo.freelance@freemail.example]'
     with mock.patch.object(usual, 'PUBLIC_MAIL', pub, create=True):
-        for line in ('- You put mail from jo.freelance@freemail.example off to Friday' + tag, '- Mail from jo.freelance@freemail.example waits for Friday'):
-            s.save_doc('learned', '## How you work\n' + line + '\n', 'owner')
+        for put in (lambda: memory.infer(s, 'You put mail from jo.freelance@freemail.example off to Friday', 'put off jo', [f'fs{jo}'], confirmed=True),
+                    lambda: memory.remember(s, 'Mail from jo.freelance@freemail.example waits for Friday', 'put off jo')):
+            line = put()
             assert usual.remind_day(s, jo)['day'] == 'Friday', line
             assert usual.remind_day(s, kim) is None, line

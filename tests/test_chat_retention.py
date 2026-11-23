@@ -146,8 +146,8 @@ class RetentionTests(unittest.TestCase):
         op = operations.record_direct(s, 'task.complete', t, {}, 'owner', {'status': 'done'})
         s.add_comment(t, 'coding', 'agent', 'AGENT REPORT\nSummary: fixed the export.')
         rv = s.add_review({'TaskId': t, 'MessageId': m, 'Kind': 'reply', 'DraftText': 'Fixed.', 'Status': 'approved'})
-        from taskuary import memoryedit
-        memoryedit.remember(s, 'Gail signs off on refunds', section='care')
+        from taskuary import memory
+        memory.remember(s, 'Gail signs off on refunds')
         s.set_setting(funnel.MUTES_KEY, json.dumps([{'sender': 'pvance@vendor.example', 'words': ['northwind'], 'why': 'the financials process'}]), 'o')
         s.add_correction({'OpId': op['id'], 'MessageId': m, 'TaskId': t, 'Sender': 'craig@vendor.com', 'Topic': 'export', 'Verdict': 'fyi',
                           'VerdictRouteId': None, 'Change': 'coding', 'ContextJson': '{}'})

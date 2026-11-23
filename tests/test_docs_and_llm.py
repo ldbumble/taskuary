@@ -2,7 +2,7 @@
 import unittest
 from unittest import mock
 from taskuary.store import MemoryStore
-from taskuary import docsync, learn, llm
+from taskuary import docsync, llm
 
 
 class TemplateTests(unittest.TestCase):
@@ -240,9 +240,9 @@ class DigestReportTests(unittest.TestCase):
         from taskuary.digest import gather
         from taskuary.store import MemoryStore
         s = MemoryStore()
-        from taskuary import memorylines
+        from taskuary import learning
         from tests.memlines import teacher
-        memorylines.teach(s, 'not_ours', 'msg1', 'Subject: Re: Resident Refund Request - Foote', 'sender', 'tonya@lillington.example',
+        learning.teach(s, 'not_ours', 'msg1', 'Subject: Re: Resident Refund Request - Foote', 'sender', 'tonya@lillington.example',
                           llm=teacher('Mail like "Re: Resident Refund Request - Foote" is other people\'s work - file it'))
         data = gather(s, 3)
         pend = data.split('WAITING ON THE OWNER', 1)[1].split('\n')[1]
@@ -387,109 +387,6 @@ class LocalAndOpenRouterTests(unittest.TestCase):
 
 
 class LearnTests(unittest.TestCase):
-    def test_learned_seeded_and_injectable_strips_gated_sections(self):
-        s = MemoryStore()
-        doc = s.get_doc('learned')
-        self.assertIn(learn.HYP_START, doc); self.assertIn(learn.PROP_START, doc)
-        inj = learn.injectable(doc)
-        self.assertIn('What you care about', inj)               # active sections travel...
-        self.assertNotIn('hypotheses:start', inj)               # ...the gated ones never do
-        self.assertNotIn('Proposed rules', inj)
-        self.assertNotIn('still being tested', inj)
-
-    def test_learn_from_updates_hypotheses_and_guards_garbage(self):
-        s = MemoryStore()
-        bullet = '- {{owner_first}} prefers replies without pleasantries. [s:2 | ev: rv7 | seen: ' + learn._today() + ']'
-        stamped = bullet[:-1] + ' | k: owner first prefers replies without pleasantries]'   # settle keys it on the way in
-        learn.learn_from(s, 'rv7: owner EDITED a draft', llm=lambda sys_, usr, **kw: bullet)
-        doc = s.get_doc('learned')
-        self.assertIn(stamped, doc.split(learn.HYP_START, 1)[1])  # landed inside the gated block
-        self.assertNotIn(stamped, learn.injectable(doc))          # a hypothesis is never injected
-        self.assertEqual(s.get_settings().get('learn_pending'), '1')
-        # a broken answer (a marker inside it would corrupt the splice) never lands in the doc
-        learn.learn_from(s, 'rv8: x', llm=lambda sys_, usr, **kw: f'junk {learn.HYP_END} junk')
-        self.assertEqual(s.get_doc('learned'), doc)
-        self.assertEqual(s.get_settings().get('learn_pending'), '2')   # the counter still ticks
-        # ...and there is no off switch any more (the owner, 2026-10-27: "we should always learn")
-
-    def test_reflect_rewrites_whole_doc_and_rejects_bad_output(self):
-        s = MemoryStore()
-        with mock.patch('taskuary.llm.build_llm', return_value=None):
-            self.assertFalse(learn.reflect(s))                   # no brain: the old doc always stands
-        for _ in range(3): s.add_review({'Kind': 'reply', 'Status': 'edited', 'DraftText': 'a', 'FinalText': 'b'})   # rv1-3 resolve (learn._books)
-        good = s.get_doc('learned').replace(
-            '## What you care about', '## What you care about\n- Short replies, no filler. [s:4 | ev: rv1,rv2,rv3 | seen: ' + learn._today() + ']')   # ...seen today: a fixed date ages past expire()
-        self.assertTrue(learn.reflect(s, llm=lambda sys_, usr, **kw: good))
-        self.assertIn('Short replies, no filler', learn.injectable(s.get_doc('learned')))   # promoted = injected
-        self.assertEqual(s.get_settings().get('learn_pending'), '0')
-        self.assertTrue(s.get_settings().get('learn_last_reflect'))
-        # an unusable rewrite (markers lost) is refused, whole cloth
-        self.assertFalse(learn.reflect(s, llm=lambda sys_, usr, **kw: '# LEARNED.md\nno markers here'))
-        self.assertIn('Short replies, no filler', s.get_doc('learned'))
-        # ...and so is a bloated one: the size budget is enforced in code, not just requested
-        fat = good + ('\n- padding that ignored the line budget. [s:2 | ev: x | seen: y]' * 200)
-        self.assertFalse(learn.reflect(s, llm=lambda sys_, usr, **kw: fat))
-        self.assertIn('Short replies, no filler', s.get_doc('learned'))
-
-    def test_reflect_sends_every_marker_of_a_doc_past_six_thousand(self):
-        """The prompt used to be `doc[:6000]`: a doc past that lost its later markers on the way out,
-        so no answer could carry them back and every reflection was refused."""
-        s = MemoryStore()
-        doc = s.get_doc('learned')
-        pad = '\n'.join(f'- Erin Blake likes item {i} handled early. [s:2 | ev: rv{i} | seen: {learn._today()}]'
-                        for i in range(60))
-        doc = learn._put_block(doc, learn.HYP_START, learn.HYP_END, pad)
-        s.save_doc('learned', doc, 'owner')
-        self.assertGreater(len(doc), 6000)
-        seen = {}
-        def fake(sys_, usr, **kw): seen['usr'], seen['kw'] = usr, kw; return doc
-        self.assertTrue(learn.reflect(s, llm=fake))
-        sent = seen['usr'].split('CURRENT LEARNED.md:\n', 1)[1].split('\n\nSOUL.md', 1)[0]
-        for m in (learn.HYP_START, learn.HYP_END, learn.PROP_START, learn.PROP_END): self.assertIn(m, sent)
-        self.assertIn('item 59 handled early', sent)                   # whole doc, under the cap
-        self.assertGreater(seen['kw']['max_tokens'], 1800)             # room to write it all back
-        self.assertEqual(s.get_settings().get('learn_pending'), '0')
-        # past the cap, the gated blocks lend their stalest lines - no cut - and get them back after
-        big = learn._put_block(doc, learn.HYP_START, learn.HYP_END, pad + '\n' + pad.replace('handled early', 'x' * 120))
-        out, held = learn._fit(big)
-        self.assertLessEqual(len(out), learn.REFLECT_FIT)
-        for m in (learn.HYP_START, learn.HYP_END, learn.PROP_START, learn.PROP_END): self.assertEqual(out.count(m), 1)
-        self.assertEqual(len(learn._restore(out, held)), len(big))
-
-    def test_a_refused_reflection_waits_for_tomorrow(self):
-        s = MemoryStore()
-        calls = []
-        def bad(sys_, usr, **kw): calls.append(sys_ is learn.REFLECT_SYSTEM); return '# LEARNED.md\nno markers here' if calls[-1] else ''
-        s.set_setting('learn_pending', str(learn.REFLECT_AT + 2), 't')
-        with mock.patch('taskuary.llm.build_llm', return_value=bad):
-            with mock.patch.object(learn.logger, 'warning') as warn:
-                self.assertFalse(learn.reflect_if_due(s))
-            self.assertTrue(warn.called)                                # a failure says so, not silently
-            self.assertEqual(s.get_settings().get('learn_reflect_failed'), learn._today())
-            self.assertFalse(learn.reflect_if_due(s))                   # the next launch today: no call
-            learn.learn_from(s, 'rv9: owner edited a draft', llm=bad)   # nor the next correction
-        self.assertEqual(calls.count(True), 1)
-        s.set_setting('learn_reflect_failed', '2020-01-01', 't')        # tomorrow: it tries again
-        good = s.get_doc('learned')
-        with mock.patch('taskuary.llm.build_llm', return_value=lambda sys_, usr, **kw: good):
-            self.assertTrue(learn.reflect_if_due(s))
-        self.assertEqual(s.get_settings().get('learn_reflect_failed'), '')
-
-    def test_reflect_if_due_debounce(self):
-        s = MemoryStore()
-        self.assertFalse(learn.reflect_if_due(s))                # nothing pending: silence
-        from datetime import datetime
-        s.set_setting('learn_pending', '1', 't')
-        s.set_setting('learn_last_reflect', datetime.now().isoformat(sep=' '), 't')
-        self.assertFalse(learn.reflect_if_due(s))                # one lesson, already reflected today
-        s.set_setting('learn_last_reflect', '2020-01-01 00:00:00', 't')
-        good = s.get_doc('learned')
-        with mock.patch('taskuary.llm.build_llm', return_value=lambda sys_, usr, **kw: good):
-            self.assertTrue(learn.reflect_if_due(s))             # one lesson + a stale day: due
-        s.set_setting('learn_pending', str(learn.REFLECT_AT), 't')
-        with mock.patch('taskuary.llm.build_llm', return_value=lambda sys_, usr, **kw: good):
-            self.assertTrue(learn.reflect_if_due(s))             # threshold: due same-day too
-
     def test_triage_md_overrides_the_shipped_prompt(self):
         """The classifier's instructions are a DOC now, not python: seeded from the template,
         owner-editable, comments stripped, and a blanked doc falls back to the shipped default."""
@@ -519,14 +416,15 @@ class LearnTests(unittest.TestCase):
         self.assertLess(seen['sys'].index('THE SOUL'), seen['sys'].index('Vendor'))   # soul outranks, so it leads
         # and the live path wires the doc in: a promoted line reaches the triage system prompt
         s = MemoryStore()
-        s.save_doc('learned', s.get_doc('learned').replace(
-            '## What you care about', '## What you care about\n- Vendor invoices are FYI, never tasks. [s:5 | ev: rv1,rv2,rv3 | seen: ' + learn._today() + ']'), 'reflect')
+        from taskuary import memory
+        memory.remember(s, 'Vendor invoices are FYI, never tasks.', 'vendor invoices')
+        memory.infer(s, 'Spend reports may be FYI too', 'spend reports', ['rv1'])      # ...learned, not confirmed: never read
         from taskuary.ingest import ingest_message
         seen.clear()
         ingest_message(s, {'external_id': 'lrn-1', 'channel': 'email', 'from_email': 'ap@vendor.example',
                            'subject': 'Invoice 42', 'body': 'Attached is the invoice, can you confirm?'}, llm=fake)
         self.assertIn('Vendor invoices are FYI', seen['sys'])
-        self.assertNotIn('still being tested', seen['sys'])      # gated sections stay home
+        self.assertNotIn('Spend reports may be FYI', seen['sys'])      # what waits on his word stays home
 
 
 class GraphCredsTests(unittest.TestCase):

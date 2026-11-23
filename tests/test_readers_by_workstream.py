@@ -38,5 +38,4 @@ def test_triage_and_the_reflection_read_every_section_first_so_a_cut_never_drops
     job = triage.job_doc(s, triage.JOB_CHARS)
     assert job.index('fixed in code') < job.index('A long history block')
     assert 'budget asks are answered the same day' in job and 'fixed in code' in job
-    from taskuary import learn
-    assert 'budget asks are answered the same day' in learn._job(s) and 'fixed in code' in learn._job(s)
+    

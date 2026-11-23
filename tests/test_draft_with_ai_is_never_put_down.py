@@ -7,7 +7,7 @@ from unittest import mock
 import pytest
 from fastapi.testclient import TestClient
 
-from taskuary import learn, responder, server
+from taskuary import responder, server, learning
 from taskuary.store import MemoryStore
 
 ASK = 'Hi Billing, the campaign video is delivered. Alex, can you approve the final invoice so Billing can pay it?'
@@ -34,7 +34,7 @@ def copied_ask(s):
 
 def test_the_writer_saying_no_reply_to_a_pressed_draft_fails_and_leaves_the_reply_open(s):
     tid, rid = copied_ask(s)
-    with mock.patch.object(learn, 'learn_from'), pytest.raises(RuntimeError, match='no reply'):
+    with mock.patch.object(learning, 'learn_from'), pytest.raises(RuntimeError, match='no reply'):
         responder.draft_for_review(s, tid, rid, llm=lambda *a, **k: 'NO REPLY', pressed=True)
     assert s.get_review(rid)['Status'] == 'pending' and s.get_task(tid)['Status'] == 'open'
 
@@ -44,13 +44,13 @@ def test_the_writer_is_told_the_owner_wants_to_answer_only_when_they_pressed(s):
     def llm(system, user, **k): seen.append(system); return 'Approved - Billing, please pay it.'
     for pressed in (True, False):
         tid, rid = copied_ask(s)
-        with mock.patch.object(learn, 'learn_from'): responder.draft_for_review(s, tid, rid, llm=llm, pressed=pressed)
+        with mock.patch.object(learning, 'learn_from'): responder.draft_for_review(s, tid, rid, llm=llm, pressed=pressed)
     assert responder.ASKED in seen[0] and responder.ASKED not in seen[1]
 
 
 def test_draft_with_ai_on_the_card_keeps_the_reply_when_the_writer_says_no_reply(s):
     tid, rid = copied_ask(s)
-    with mock.patch.object(server, 'store', s), mock.patch.object(server, '_refresh_chat_context'), mock.patch.object(learn, 'learn_from'), \
+    with mock.patch.object(server, 'store', s), mock.patch.object(server, '_refresh_chat_context'), mock.patch.object(learning, 'learn_from'), \
          mock.patch('taskuary.llm.build_llm', return_value=lambda *a, **k: 'NO REPLY'):
         r = TestClient(server.app).post(f'/api/reviews/{rid}/draft', json={})
     assert r.status_code == 422 and s.get_review(rid)['Status'] == 'pending' and s.get_task(tid)['Status'] == 'open'

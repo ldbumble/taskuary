@@ -802,7 +802,7 @@ def tick(store, llm=None, force: bool = False, wait: bool = False) -> dict:
             (raised if what == 'raised' else updated).append(r['IdeaId']); once_.add(x['family'])
         _hold(store, held_)
         if raised:
-            from .habits import _woke
+            from .learning import _woke
             _woke(store)
         _record_run(store, {'at': _ts(_now()), 'deep': lenses, 'reads': got['reads'], 'proposed': len(got['ideas']) + len(got['dropped']),
                             'raised': [store.get_idea(i)['Text'] for i in raised], 'updated': [store.get_idea(i)['Text'] for i in updated],

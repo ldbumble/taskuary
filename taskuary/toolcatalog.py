@@ -72,33 +72,24 @@ PURPOSE = {
     # written into LEARNED.md where every reader of its section has it, and the line it makes untrue is closed - kept as history
     # ...and EVERY fact, said in the owner's words, lands in LEARNED.md where triage, the report gate, the Advisor and agents read it - a
     # "don't care" above all (the owner, 2026-10-27: "if I don't care about something the system knows it")
-    # ...and a rule about HOW to write goes where the drafter reads its voice, STYLE.md's Owner notes - the model says which, by what the
-    # fact IS (the owner, 2026-10-28: "when I ask the chat to write Mrs X to women from now on it should go to STYLE.md ... It should know
-    # where each memory goes")
+    # ...and HOW he writes is what he said too: every draft reads what he said that bears on it (memory.for_task)
     'memory.remember':          ("keep a fact or rule the owner tells you, at once, and above the CALL answer them in a few natural words "
                                  '("Got it - Omar for badge faults.") - never that it was saved, where, or who reads it. `note`: it, in the owner\'s words '
-                                 '("Gail moved to Ops", "Ray handles payroll for me", "I put renewals off to Friday", "I don\'t care about the '
-                                 'legacy export job any more"); `section`, always: people (who someone is to them, how they deal with them) | '
-                                 'care (what they are responsible for and what they do NOT care about - a legacy process, a system no longer '
-                                 'theirs: triage and the report gate then make no task of it) | work (their rhythm) | promises | bring (what the '
-                                 'Advisor may raise) - those five are LEARNED.md, the memory every reader uses | style: a rule about HOW they '
-                                 'write - greetings and salutations ("write Mrs <surname> to women, never her first name"), tone, '
-                                 'length, formatting, words to use or avoid - saved to their writing style, STYLE.md\'s Owner notes, which '
-                                 'every draft reads; with `about` (one person: "write to Gail informally") it is kept for that person alone, '
-                                 'read only by the drafts to them | signature: how they sign, as the block under every email ("Best,\\nAlex") - '
-                                 'it becomes their saved signature, the one the signer puts on | soul: who the owner IS, lasting - their title, company, the systems and '
-                                 'repositories they use ("I\'m now the AP lead", "our ERP is Intacct") - SOUL.md, which triage, drafts, '
-                                 'agents and you read | counsel: how YOU should behave and speak to the owner ("be shorter with me", "don\'t '
-                                 'walk me through the FYI") - COUNSEL.md, your own instructions. SOUL and COUNSEL are added to, never '
-                                 'rewritten; a fact about their job or about what becomes a task is care or work, never these. '
-                                 "`about`: the person's address or name, for a people or style line; `replaces`: the key of the line "
-                                 'it makes untrue, closed and kept as history (memory.about gives the keys). Who reports to whom and who owns '
+                                 '("Gail moved to Ops", "Ray handles payroll for me", "no meetings before 10", "write Mrs <surname> to women", '
+                                 '"I don\'t care about the legacy export job any more") - triage, every agent on a task it bears on, every '
+                                 'draft and you read it from then on. `subject`, always: what it is about in a few words ("meeting hours", '
+                                 '"who handles payroll", "Gail\'s role") - the same subject as a line it corrects, which it then replaces '
+                                 '(memory.about and memory.list show each line\'s subject). `about`: the person it is about (an address or '
+                                 'name), never the owner himself. `signature`: true when the note IS how they sign, the block under every email '
+                                 '("Best,\\nAlex") - it becomes their saved signature. `doc`: soul for who the owner IS, lasting - their title, '
+                                 'company, the systems they use ("I\'m now the AP lead") - or counsel for how YOU should speak to them ("be '
+                                 'shorter with me"): appended to SOUL.md or COUNSEL.md, never rewritten. Who reports to whom and who owns '
                                  'what is people.relate'),
-    'memory.wrong':             ('take a line Taskuary learned out of its memory - `key` (from memory.about or memory.list), `how`: wrong '
-                                 '(it was never true: never written back) | forget (not now: back only on much more evidence) | ended (it '
-                                 'was true and stopped: kept as history) | keep (the memory page\'s Keep: a proposed line adopted as the owner\'s). '
-                                 '"forget that Ray does payroll", "that is wrong about Erin". On the habits row: Adopt is keep, No and Not right '
-                                 'are wrong. A line the owner wrote themselves takes forget only'),
+    'memory.wrong':             ('take a line out of the memory, or confirm one - `key` (from memory.about or memory.list), `how`: wrong '
+                                 '(a learned line that was never true: never learned again) | forget (out for now) | ended (it was true and '
+                                 'stopped: kept as history) | keep (a learned line confirmed: used from then on, as the Memory page\'s Keep). '
+                                 '"forget that Ray does payroll", "that is wrong about Erin". On the habits row: Adopt is keep, No is wrong. '
+                                 'A line the owner said himself takes forget or ended - a correction of it is memory.remember on its subject'),
     'people.relate':            ("who someone is to the owner, on their org chart - `who`: a name or address; `relation`: manager | report | none "
                                  '(none clears it); `owns`: areas they are responsible for ("payroll, benefits"), added; `drops`: areas taken off; '
                                  '`forget`: true takes them off the chart. "Erin is my manager", "Ray owns payroll", "Gail reports to me" - '
@@ -435,7 +426,7 @@ _DECIDE = {
     'stop_agent':      "stop the agent working on the item now - on the desk the x on its running turn, at once; on a phone the yes-or-no that ends its session",
     'rerun':           'run the report on the table again',
     'report_off':      "pause the report on the table - off its clock - only when its findings are about something the owner said they do not care about",
-    'remember':        "keep a fact about how the owner works in their memory - `text`, their words (\"I don't care about the legacy export job any more\" too), and `section`, as memory.remember's",
+    'remember':        "keep a fact about how the owner works in their memory - `text`, their words (\"I don't care about the legacy export job any more\" too), `subject` and `about`, as memory.remember's",
     # ...and a PLAYBOOK, which has its own New playbook: "can I build a playbook for it?" was sent to a general agent as its job (the
     # owner, 2026-10-22: "this is not playbook ui?")
     'setup':           ('build a report, a playbook (how one kind of recurring request is handled from now on), a connection to another '
@@ -550,8 +541,8 @@ BUCKETS = (
 
 
 # what a tool takes, when its registry entry cannot say it: a tool that needs one of several, or takes its words as `text`
-HINTS = {'task.create_from_text': 'kind, text, channel?, to?', 'report.route': 'line, how, to?', 'pipe.remove': 'select, learn?','agents.stop': 'refs|all', 'page.open': 'page, query?', 'pipe.block': 'select, how?', 'pipe.mine': 'select', 'rule.change': 'about, how?', 'hub.vote': 'post, up?', 'memory.remember': 'note, section, about?, replaces?', 'memory.wrong': 'key, how?', 'button.light': 'button, ref?, note?', 'app.repair': 'name, how', 'issue.draft': 'kind, trying, happened', 'pipe.clear': 'select, scope?', 'pipe.defer': 'select, until', 'pipe.close': 'select', 'hub.publish': 'title, body, topic?, kind?, why_earned?', 'task.update': 'priority|title|assignee|due', 'reply': 'text, cc?', 'redraft': 'text', 'regular_agent': 'text, new?', 'coding_agent': 'text, as?, new?',
-         'answer_agent': 'text', 'remember': 'text, section', 'setup': 'text', 'task.handoff': 'who, note?', 'task.share': 'who, about?', 'task.complete': 'note?',
+HINTS = {'task.create_from_text': 'kind, text, channel?, to?', 'report.route': 'line, how, to?', 'pipe.remove': 'select, learn?','agents.stop': 'refs|all', 'page.open': 'page, query?', 'pipe.block': 'select, how?', 'pipe.mine': 'select', 'rule.change': 'about, how?', 'hub.vote': 'post, up?', 'memory.remember': 'note, subject, about?, signature?, doc?', 'memory.wrong': 'key, how?', 'button.light': 'button, ref?, note?', 'app.repair': 'name, how', 'issue.draft': 'kind, trying, happened', 'pipe.clear': 'select, scope?', 'pipe.defer': 'select, until', 'pipe.close': 'select', 'hub.publish': 'title, body, topic?, kind?, why_earned?', 'task.update': 'priority|title|assignee|due', 'reply': 'text, cc?', 'redraft': 'text', 'regular_agent': 'text, new?', 'coding_agent': 'text, as?, new?',
+         'answer_agent': 'text', 'remember': 'text, subject, about?', 'setup': 'text', 'task.handoff': 'who, note?', 'task.share': 'who, about?', 'task.complete': 'note?',
          'dispatch.prepare': 'kind, instructions?', 'task.check': 'item, done?, note?', 'task.checklist': 'add?, items?, emails?, drop?', 'task.watch': 'what?', 'task.defer': 'until', 'meeting.new': 'who?, about?, when?, minutes?'}
 
 
@@ -639,9 +630,9 @@ READS = {
                          '"what broke", "why did X not happen", "is anything wrong"'),
     'memory.about':     ('who someone is to the owner: every line the memory holds about them, with its key, and what the org chart '
                          'says - `who`: a name or address. Use it for "who\'s Gail to me", "what do you know about Ray", and before '
-                         'memory.remember replaces or memory.wrong takes out a line about them'),
-    'memory.list':      ('everything kept about the owner: LEARNED.md - what they told you ("remember this"), their verdicts, '
-                         'and what it learned from what they did. `about`: words to narrow it (a sender, a topic). '
+                         'memory.remember corrects or memory.wrong takes out a line about them'),
+    'memory.list':      ('everything kept about the owner: what they said (each line with its key and subject), the facts, what was '
+                         'learned from what they did - confirmed, or still waiting on their word. `about`: words to narrow it (a sender, a topic). '
                          'Use it for "what do you remember", "what do you know about me"'),
     # ...and THE FILES THEY MADE (outputs.find, the owner 2026-10-28: "pull up the Excel created by the agent on the task about X")
     'outputs.find':     ('the files agents made on tasks - workbooks, PDFs, documents, charts, pages - each once, its newest version, with '

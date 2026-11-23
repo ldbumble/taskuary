@@ -3,7 +3,7 @@ something a What you care about line says the owner does not care about may have
 owner's, and runs the report's own pause - the report stays under Reports, switched off. Invented Northwind names only."""
 import json
 from unittest import mock
-from taskuary import buttons, concierge, learned_cut as lc, rulebook, toolcatalog
+from taskuary import buttons, concierge, rulebook, toolcatalog
 from taskuary.store import MemoryStore
 
 CARE = 'You no longer care about the legacy vendor export job - it was retired'
@@ -16,8 +16,8 @@ def _report(s, active=True):
 
 
 def _care(s, line=CARE):
-    from taskuary.learn import _under
-    s.save_doc('learned', _under(s.get_doc('learned') or '', lc.SECTIONS['care'], f'- {line}'), 'owner')
+    from taskuary import memory
+    memory.remember(s, line, 'the vendor export')
 
 
 def test_it_is_one_button_with_one_name():

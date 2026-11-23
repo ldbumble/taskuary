@@ -286,9 +286,9 @@ def refresh(store, llm, days: int = RECENT_DAYS) -> dict:
             logger.warning(f"workstream {w['slug']} not refreshed: {e}"); continue
         if new and '<!--' not in new and len(new) < 4000: W.write_section(store, w['slug'], new, 'wsrefresh'); out[w['slug']] = 'refreshed'
         marks[w['slug']] = str(recent[0]['s'])
-        # ...and how the owner writes there, where it differs from the shared style (stylews, S9 - an option the owner can switch off)
-        from . import stylews
-        if stylews.on(store): stylews.write(store, llm, w['slug'])
+        # ...and how the owner writes there, where it differs from the shared style (learning.style_write, S9 - an option the owner can switch off)
+        from . import learning
+        if learning.style_on(store): learning.style_write(store, llm, w["slug"])
     if out: W.save(store, xs, 'wsrefresh')
     store.set_setting(REFRESH_MARKS, json.dumps(marks), 'wsboot')
     return out

@@ -385,7 +385,7 @@ def world(backend: str, tmp: Path, monkeypatch):
         monkeypatch.setattr(llm, 'build_llm', lambda *a, **k: Brain(d, k.get('job')))
         monkeypatch.setattr(browserview, 'installed', lambda: False)
         monkeypatch.setattr(browserview, 'can_set_up', lambda: False)
-    from taskuary import learn, outbound, server
+    from taskuary import outbound, server, learning
     was = set(threading.enumerate())
     with mock.patch.dict(terminal.SESSIONS, {}, clear=True), mock.patch.object(server, 'store', s):
         r = Run(backend, s, TestClient(server.app), d, tmp)
@@ -396,7 +396,7 @@ def world(backend: str, tmp: Path, monkeypatch):
             return {'channel': 'email', 'to': ['x@example.com'], 'cc': []}
         monkeypatch.setattr(outbound, 'send_out', out); monkeypatch.setattr(outbound, 'reply_to_message', out)
         monkeypatch.setattr(outbound, 'send_block', lambda *a, **k: ''); monkeypatch.setattr(outbound, 'review_connect', lambda *a, **k: None)
-        monkeypatch.setattr(learn, 'learn_from', lambda *a, **k: None)
+        monkeypatch.setattr(learning, 'learn_from', lambda *a, **k: None)
         monkeypatch.setattr(server, '_refresh_chat_context', lambda *a, **k: {})       # no mailbox to sync before a Send
         try: yield r
         finally:

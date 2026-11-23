@@ -336,10 +336,10 @@ def _ruled_out(store, c: dict) -> str:
 
 def global_rules(store) -> list:
     """The owner's active GLOBAL verdicts, and their TOPIC verdicts with the topic named, whole - for the model to hold each ask against."""
-    # ...the owner's own general lines on what they care about, in LEARNED.md (memorylines, 2026-10-27) - what a global note was
-    from . import memorylines
+    # ...the owner's own general lines and the topic lines he confirmed (memory.standing) - what a global note was
+    from . import memory
     try: return [n['Note'].strip() + (f" (about: {n['ScopeKey']})" if n['Scope'] == 'subject' and n.get('ScopeKey') else '')
-                 for n in memorylines.standing(store) if n['Scope'] in ('global', 'subject') and str(n.get('Note') or '').strip()]
+                 for n in memory.standing(store) if n['Scope'] in ('global', 'subject') and str(n.get('Note') or '').strip()]
     except Exception as e:
         logger.debug(f'digest: global verdicts skipped - {e}'); return []
 
@@ -446,7 +446,7 @@ def gather(store, days: int = DAYS) -> str:
     _block(out, 'OUT OF OFFICE (from their auto-replies):', (f'  {k}: {v}' for k, v in away.items()))
     _block(out, 'OPEN WORK (each line ends with the link that opens the task):', _linked(A._open(store)))
     _block(out, 'FINISHED THIS WINDOW (with the agent\'s own summary where there is one):', _linked(A._done(store, span)))
-    from .memorylines import lessons
+    from .memory import lessons
     # what the owner's verdicts in the window taught, as the lines they are in LEARNED.md (the notes table is gone, 2026-10-27) - the
     # header says plainly that nothing here is live work: a quoted subject was once recycled into a fake pending review
     _block(out, 'WHAT YOUR VERDICTS TAUGHT THIS WINDOW (already lines in memory - standing lessons, NOT open work,\n'

@@ -1,6 +1,6 @@
 """Should be a task, on an FYI (the owner, 2026-10-29): the put-down Not a task does not apply to what triage already filed, so an FYI says
 the opposite correction in its place. The press makes the FYI a task - triage's ask, its To do list, on the owner's list - and writes the
-lesson the way Not a task writes its own (memorylines.teach, LEARNED.md), the other way round, so the next mail like it reaches triage with
+lesson the way Not a task writes its own (learning.teach, LEARNED.md), the other way round, so the next mail like it reaches triage with
 that line in front of it. No triage-guide edit, no pattern in code: the model writes the line. Invented Northwind world."""
 import json, unittest
 from unittest import mock

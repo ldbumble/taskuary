@@ -79,7 +79,7 @@ class LaneTests(unittest.TestCase):
         self.s.set_setting('startup_sync_days', '3', 't')
         with mock.patch('taskuary.channels.poll_channels', poll), \
              mock.patch.object(server, 'run_due_reports', reports), \
-             mock.patch('taskuary.wabridge.ready'), mock.patch('taskuary.learn.reflect_if_due'):
+             mock.patch('taskuary.wabridge.ready'), mock.patch('taskuary.learning.reflect_if_due'):
             server.catch_up_on_startup().join(60)
         self.assertEqual(order[0], 'inputs')                     # the mail is read first
         self.assertEqual(order[-1], 'reports')                   # ...and the reports come after it

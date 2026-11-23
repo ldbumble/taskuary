@@ -29,7 +29,7 @@ class Ask:
 
 # ---- the store, before and after --------------------------------------------------------------------------------------------------
 def snap(s) -> dict:
-    from taskuary import memoryedit
+    from taskuary import memory
     rows = lambda q: s._rows(q)
     return {'tasks': {t['TaskId']: {k: t.get(k) for k in ('Status', 'RemindAt', 'WatchedAt', 'Title', 'Priority', 'Kind')} for t in rows('SELECT * FROM task')},
             'reviews': {r['ReviewId']: {'draft': r.get('DraftText') or '', 'status': r.get('Status'), 'task': r.get('TaskId'),
@@ -37,7 +37,7 @@ def snap(s) -> dict:
             'notes': {t: len([c for c in s.list_comments(t) if c.get('ActorType') == 'human']) for t in (x['TaskId'] for x in rows('SELECT TaskId FROM task'))},
             'todo': {t['TaskId']: [(i['text'], bool(i.get('done'))) for i in s.task_checklist(t['TaskId'])] for t in rows('SELECT TaskId FROM task')},
             'msgs': {m['MessageId']: m.get('Status') for m in rows('SELECT MessageId, Status FROM message')},
-            'learned': s.get_doc(memoryedit.DOC) or '', 'settings': dict(s.get_settings() or {}), 'spawns': list(SPAWNS)}
+            'learned': s.get_doc(memory.DOC) or '', 'settings': dict(s.get_settings() or {}), 'spawns': list(SPAWNS)}
 
 
 def task(n, field, want):
@@ -145,8 +145,8 @@ def store_raises(attr, err='disk I/O error'):
 def remember_says_ok():
     "The memory's write comes back ok and writes nothing."
     def f(st):
-        from taskuary import memoryedit
-        st.enter_context(mock.patch.object(memoryedit, 'remember', lambda store, t, *a, **k: {'ok': True, 'text': t, 'section': 'people', 'title': 'Your people', 'closed': None}))
+        from taskuary import memory
+        st.enter_context(mock.patch.object(memory, 'remember', lambda store, t, *a, **k: {'ok': True, 'text': t, 'section': 'people', 'title': 'Your people', 'closed': None}))
     return f
 
 
@@ -204,9 +204,9 @@ ASKS = [
     Ask('open', 'bring up TQ-0012', None, 'Here: [TQ-0012](#task=12).', nothing),
     # remember something
     Ask('remember', 'remember that Ray Colton signs off every schema change', None,
-        c('memory.remember', note='Ray Colton signs off every schema change', about='Ray Colton', section='people'), learned('Ray Colton signs off every schema change')),
+        c('memory.remember', note='Ray Colton signs off every schema change', about='Ray Colton'), learned('Ray Colton signs off every schema change')),
     Ask('remember', 'remember that Paula Vance runs the vendor portal', None,
-        c('memory.remember', note='Paula Vance runs the vendor portal', about='Paula Vance', section='people'), learned('Paula Vance runs the vendor portal'),
+        c('memory.remember', note='Paula Vance runs the vendor portal', about='Paula Vance'), learned('Paula Vance runs the vendor portal'),
         fault=remember_says_ok(), note='the write says ok and writes nothing'),
     # set a setting
     Ask('setting', 'turn off the sounds', None, c('setting.set', setting='sounds', value='off'), nothing),

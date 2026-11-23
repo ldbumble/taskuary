@@ -1,4 +1,4 @@
-"""DOES WRITING PER WORKSTREAM HELP? (the owner, 2026-11-01: STYLE per workstream - "try it", measured and easily reverted; stylews.py).
+"""DOES WRITING PER WORKSTREAM HELP? (the owner, 2026-11-01: STYLE per workstream - "try it", measured and easily reverted; learning.style_block).
 Read-only: the home's database is opened `mode=ro`.
 
     python tools/style_by_workstream.py                  # the live home (TASKUARY_HOME, else ~/.taskuary), drafts decided in the last 30 days

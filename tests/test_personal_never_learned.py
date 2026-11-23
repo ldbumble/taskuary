@@ -3,7 +3,7 @@ An ask in it is an FYI, never a task; nothing in it teaches a memory line, an ep
 no idea about it. Invented people only (CLAUDE.md)."""
 import json
 import pytest
-from taskuary import episodes, ingest, memorylines, workstreams as W
+from taskuary import episodes, ingest, workstreams as W, learning
 from taskuary.store import MemoryStore
 from taskuary.testing import Factory
 
@@ -49,7 +49,7 @@ def test_a_verdict_on_something_personal_teaches_no_line(s):
     Factory(s).message(task_id=t, channel='whatsapp', source_name='Family', from_email=MOM)
     asked = []
     llm = lambda *a, **k: asked.append(1) or json.dumps({'line': 'Alex always picks up the car'})
-    assert memorylines.teach(s, 'not_a_task', f'task{t}', 'Pick up the car', llm=llm) == ''
+    assert learning.teach(s, 'not_a_task', f'task{t}', 'Pick up the car', llm=llm) == ''
     assert asked == [] and s.get_setting('learn_pending') in (None, '', '0')
 
 

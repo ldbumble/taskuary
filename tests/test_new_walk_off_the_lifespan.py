@@ -61,7 +61,7 @@ class NewWalkIsOffTheWindowsPathTests(unittest.TestCase):
         retire, reset = self._slow_reset()
         self.s.set_setting('startup_sync_days', '1', 't')
         with retire, reset, mock.patch.object(server, '_heal_ended'), mock.patch.object(server, 'report_pass'), \
-             mock.patch('taskuary.learn.reflect_if_due'), \
+             mock.patch('taskuary.learning.reflect_if_due'), \
              mock.patch.object(server, '_poll_reports', lambda *a, **k: order.append(('mail', self.s.get_setting(WALK_KEY)))), \
              mock.patch('taskuary.remote_assistant.push_alerts', side_effect=self._once(order)):
             w = server._start_new_walk(); catch = server.catch_up_on_startup()

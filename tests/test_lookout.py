@@ -274,11 +274,11 @@ def test_the_pass_runs_on_the_advisors_own_clock_never_inside_a_report_run(monke
 def test_the_server_clock_runs_it_off_the_reports_lock_at_most_every_fifteen_minutes(monkeypatch):
     import threading
     from taskuary import demo, server
-    from taskuary import brainroute, learn
+    from taskuary import brainroute, learning
     done, calls, reflected, held = threading.Event(), [], [], [False]
     monkeypatch.setattr(assistant, 'clock', lambda store: (calls.append(1), done.set()))
     # ...and what the verdicts taught is consolidated on the same clock: an app left open all week reflected only at its next start
-    monkeypatch.setattr(learn, 'reflect_if_due', lambda store: reflected.append(1))
+    monkeypatch.setattr(learning, 'reflect_if_due', lambda store: reflected.append(1))
     monkeypatch.setattr(brainroute, 'auto_held', lambda store: held[0])
     monkeypatch.setattr(demo, 'enabled', lambda: False)
     monkeypatch.setattr(server, '_ADVISOR_AT', [0.0])

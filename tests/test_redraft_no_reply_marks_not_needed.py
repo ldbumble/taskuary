@@ -6,7 +6,7 @@ from unittest import mock
 
 import pytest
 
-from taskuary import learn, responder
+from taskuary import responder, learning
 from taskuary.store import MemoryStore, SQLiteStore
 from tests.test_review_delivery_safety import make_review, BODY
 
@@ -17,7 +17,7 @@ def s():
 
 
 def redraft(s, said, rid, tid):
-    with mock.patch.object(learn, 'learn_from'): return responder.draft_for_review(s, tid, rid, llm=lambda *a, **k: said)
+    with mock.patch.object(learning, 'learn_from'): return responder.draft_for_review(s, tid, rid, llm=lambda *a, **k: said)
 
 
 def test_no_reply_with_why_puts_the_pending_draft_down_as_not_needed(s):

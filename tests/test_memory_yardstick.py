@@ -57,10 +57,9 @@ def test_e1_runs_end_to_end_on_a_scripted_brain():
     def brain(system, user, **k):
         if system == C.JUDGE: seen['judge'] = user; return '{"recovered": ["erin_fast"], "press_lines": [], "invented": []}'
         seen['user'] = user
-        doc = user.split('CURRENT LEARNED.md:\n', 1)[1].split('\n\nSOUL.md', 1)[0]
         ids = re.findall(r'^(msg\d+) \S+ · erin@northwind\.example', user, re.M)[:3]
-        line = f"- Erin Blake (erin@northwind.example) is your manager; you answer her within the hour [s:4 | ev: {', '.join(ids)} | seen: 2026-10-20]"
-        return doc.replace('## Your people\n', '## Your people\n' + line + '\n', 1)
+        return json.dumps({'lines': [{'subject': 'how soon you answer Erin', 'people': ['erin@northwind.example'], 'ev': ids,
+                                      'text': 'Erin Blake (erin@northwind.example) is your manager; you answer her within the hour'}]})
     r = C.e1(brain)
     assert r['reflected'] and 'replied 12 min after it arrived' in seen['user'] and 'within the hour' in seen['judge']
     assert r['recovered'] == ['erin_fast'] and any('within the hour' in l for l in r['lines'])

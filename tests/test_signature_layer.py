@@ -34,7 +34,7 @@ def send(s, rid, text=None):
     """Approve with `text` in the box; what reached the provider."""
     with mock.patch.object(outbound, 'reply_to_message', return_value={'channel': 'email', 'to': ['erin@northwind.example']}) as out, \
          mock.patch.object(outbound, 'send_block', return_value=''), mock.patch.object(outbound, 'can_reply', return_value=True), \
-         mock.patch('taskuary.learn.learn_from'):
+         mock.patch('taskuary.learning.learn_from'):
         got = verdicts.decide(s, s.get_review(rid), 'approve', text)
     return got, (out.call_args.args[2] if out.called else None)
 

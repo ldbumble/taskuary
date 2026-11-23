@@ -58,23 +58,24 @@ TOOLS = {
                _S({'name': _STR}, ('name',)), ('GET', '/api/agent/messages')),
     'search_knowledge': ('read', "Search the owner's knowledge base (indexed folders, SharePoint libraries). Read-only.",
                          _S({'text': _STR}, ('text',)), ('GET', '/api/knowledge/search')),
-    'owner_memory': ('read', "What Taskuary has learned about the owner (LEARNED.md): their people, what they care about, how they "
-                             "work, their promises, what to bring up. `section` "
-                             "(people, care, work, promises, bring) narrows it. Read-only: `remember` keeps a fact they tell you; "
-                             "a playbook or standing rule is saved by `propose` write_playbook on their Approve.",
-                     _S({'section': _STR}), ('GET', '/api/agent/memory')),
+    'owner_memory': ('read', "Look up the owner's memory: what they said (their rules, their hours, who handles what - each with the subject "
+                             "it is kept under), the facts about their people, and what was learned from what they did that they confirmed. "
+                             "`about`: one person (a name or address) narrows it to them. What bears on this task is in your brief already; "
+                             "read this when the work turns on more. Read-only: a fact they tell you is kept with `remember`; a way of working "
+                             "they ask you to keep (a playbook, a standing rule) is set up with `propose` write_playbook for their Approve.",
+                     _S({'about': _STR}), ('GET', '/api/agent/memory')),
     # WHAT THE OWNER TELLS ONE AGENT, EVERY READER KNOWS (the owner, 2026-11-14: "if the user tells you something, they should not have to say
-    # it again"): told "Erin left the company; send payroll questions to Gail now", the task's agent answered "I can't write to Taskuary's
-    # memory from this task" - its only road was a correction of its own reading, into a section nobody reads. The Assistant's road
-    # (memoryedit.remember), on the agent's own task: one line, in use at once for triage, every agent and the Assistant, and never drawn
+    # it again"): kept in his words in the memory's store of what he said (memory.remember), in use at once for triage, every agent and the
+    # Assistant, and never drawn
     'remember': ('own', "Keep a fact the owner tells you in this chat that will change how FUTURE work is handled - who handles what now, "
-                        "who left or moved, what they do or do not care about, how they want a kind of work done - "
-                        "in their memory, at once: triage, "
-                        "every agent and the Assistant read it from then on. `note`: one fact, in their "
-                        "words - two facts are two calls. `about`: the person it is about (name or address) - not the owner himself. `replaces`: a line of their memory it makes untrue, "
-                        "copied as it reads. " + __import__('taskuary.memoryedit', fromlist=['SECTION_WORDS']).SECTION_WORDS + ". "
-                        "It keeps the owner's own words - a sender's are not his. Nothing of it shows on his screen.",
-                 _S({'note': _STR, 'about': _STR, 'section': _STR, 'replaces': _STR}, ('note', 'section')), ('POST', '/api/agent/remember')),
+                        "who left or moved, their hours, what they do or do not care about, how they want a kind of work done or written - "
+                        "in their memory, at once: triage, every agent and the Assistant read it from then on. `note`: one fact, in their "
+                        "words - two facts are two calls. "
+                        + __import__('taskuary.memory', fromlist=['SUBJECT_WORDS']).SUBJECT_WORDS + ". `about`: the person it is about "
+                        "(name or address) - not the owner himself. `signature`: true when `note` IS how they sign - the closing block "
+                        "itself, as it goes under every email, one line per line (\"Best,\" then \"Alex\") - it becomes their "
+                        "saved signature. It keeps the owner's own words; a sender's are not his. Nothing of it shows on his screen.",
+                 _S({'note': _STR, 'subject': _STR, 'about': _STR, 'signature': {'type': 'boolean'}}, ('note',)), ('POST', '/api/agent/remember')),
     'calendar': ('read', "The owner's busy times for the next N days (default 14), from every connected calendar. Read-only.",
                  _S({'days': _INT}), ('GET', '/api/calendar/upcoming')),
     'list_systems': ('read', "The owner's other systems you may use (databases, ERPs, file shares, SharePoint...), each with its "
@@ -312,7 +313,7 @@ SHORT = {
     'search_tasks': "Search the owner's tasks, mail, chats and pull requests, and what earlier tasks settled.",
     'person': "Who a name or address is in the owner's mail, and their latest messages.",
     'search_knowledge': "Search the owner's knowledge base (indexed folders, SharePoint).",
-    'owner_memory': 'What Taskuary has learned about the owner: their people, priorities and ways.',
+    'owner_memory': "Look up the owner's memory: what they said, their people, what they confirmed.",
     'remember': 'Keep what the owner tells you.',
     'calendar': "The owner's busy times for the next N days.",
     'list_systems': "The owner's other systems you may use, with their connector ids and tool types.",
@@ -656,10 +657,8 @@ def _call(store, tid: int, name: str, args: dict, doors: dict, skip=()) -> str:
         hits = knowledge.search(store, a.get('text', ''))
         return _out(_j(hits) if hits else 'nothing in the knowledge base matches that', fence_it=bool(hits))
     if name == 'owner_memory':
-        from . import learned_cut
-        s = str(a.get('section') or '').strip().lower()
-        if s and s not in learned_cut.SECTIONS: raise ValueError(f"no section {s!r} - one of {', '.join(learned_cut.SECTIONS)}")
-        return _out(learned_cut.whole(store, 'agents', target=f'task:{tid}', sections=(s,) if s else None) or 'nothing learned about the owner yet')
+        from . import memory
+        return _out(memory.lookup(store, str(a.get('about') or ''), target=f'task:{tid}'))
     if name == 'calendar':
         from .calendar import reachable, run_calendar
         # ...and no calendar to read says where one is connected, as set_up_meeting does (the owner, 2026-11-09: the agent told the owner to
@@ -729,7 +728,7 @@ def _call(store, tid: int, name: str, args: dict, doors: dict, skip=()) -> str:
     if name == 'playbooks':
         from . import playbooks
         return _out(playbooks.lookup(store, store.get_task(tid), str(a.get('name') or '')))
-    if name == 'remember': return doors['remember'](tid, str(a.get('note') or ''), str(a.get('about') or ''), str(a.get('replaces') or ''), str(a.get('section') or ''))['says']
+    if name == 'remember': return doors['remember'](tid, str(a.get('note') or ''), str(a.get('subject') or ''), str(a.get('about') or ''), bool(a.get('signature')))['says']
     if name == 'ask_stronger':
         out = doors['ask_stronger'](tid, str(a.get('question') or ''), str(a.get('context') or ''))
         # ...no answer is a failure, never a result: "could not be started" read back as if it were the stronger model's word

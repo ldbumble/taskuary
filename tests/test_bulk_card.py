@@ -411,7 +411,7 @@ def test_a_routine_runs_many_emails_go_at_once_and_its_agent_hears_the_true_coun
         if 'owner1@' in str(to): raise RuntimeError('mailbox refused the recipient')
         sent.append(to); return {'channel': 'email', 'to': list(to)}
     with mock.patch.object(server, 'store', s), mock.patch.object(outbound, 'send_out', send), \
-            mock.patch.object(outbound, 'send_block', lambda *a, **k: ''), mock.patch('taskuary.learn.learn_from'):
+            mock.patch.object(outbound, 'send_block', lambda *a, **k: ''), mock.patch('taskuary.learning.learn_from'):
         out = call(tid, 'propose_email', items=emails(3))
     assert len(sent) == 2, sent
     assert (out['ok'], out['sent'], out['on_the_card']) == (True, 2, 1), out

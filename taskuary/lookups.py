@@ -89,9 +89,8 @@ def sender_read(store, p: dict) -> str:
     out.append('open tasks: ' + ('; '.join(f"{task_ref(t['TaskId'])} {_cut(t['Title'], 80)} ({t['Status']})" for t in tasks) if tasks else 'none'))
     replies = store.own_replies_to(em, since, 3)
     if replies: out.append('you last wrote back ' + _day(replies[0].get('SentAt')))
-    from . import memorylines                  # what LEARNED.md holds about them (2026-10-27: the one memory)
-    from .learned_cut import names
-    notes = [m['Note'] for m in memorylines.notes(store) if str(m.get('ScopeKey') or '').lower() == em or em in names(m['Note'])]
+    from . import memory                       # what the memory holds about them, in use
+    notes = [m['Note'] for m in memory.notes(store) if str(m.get('ScopeKey') or '').lower() == em or em in m['People']]
     if notes: out += ['what you told me about them:'] + [f'  - {_cut(n, 300)}' for n in notes[:8]]
     from . import orgchart
     if (rel := orgchart.relation_of(store, em, s.get('Name') or '')): out.append(f'to you: {rel}')
@@ -353,18 +352,19 @@ def _bearing(store, want: str, texts) -> set:
     return {by[k] for k in _find(store, want, list(by.items()))}
 
 def memory_list(store, p: dict) -> str:
-    """Everything kept about the owner: LEARNED.md - their verdicts and what they told the Assistant are lines in it (2026-10-27)."""
-    from . import learn
+    """Everything kept about the owner (memory.py): what they said, each with its key and subject; what was learned and they confirmed;
+    and what was learned that still waits on their word - said as such, never as theirs."""
+    from . import memory, orgchart
     want = _about(p)
-    doc = store.doc(learn.DOC) or ''
-    learned, testing = learn.injectable(doc), learn._block(doc, learn.HYP_START, learn.HYP_END)
-    from . import orgchart
-    lines, org = learned.splitlines(), orgchart.block(store).splitlines()
-    near = _bearing(store, want, lines + org)
-    if want: learned = NL.join(l for l in lines if l in near)
-    out = ['YOUR MEMORY (LEARNED.md - what you said and what I learned from what you did):' + NL + _cut(learned, 4000) if learned.strip()
-           else 'LEARNED.md has nothing' + (' that matches.' if want else ' in it yet.')]
-    if testing and not want: out.append('STILL BEING TESTED, not trusted yet:' + NL + _cut(testing, 1200))
+    say = lambda r: f"[key: {r['key']}] {memory.said_line(r, True)[2:]}"
+    said = [say(r) for r in memory.in_use(store)]
+    testing = [say(r) for r in memory.rows(store, memory.INFERRED) if not r['Confirmed']]
+    org = orgchart.block(store).splitlines()
+    near = _bearing(store, want, said + testing + org)
+    if want: said, testing = [l for l in said if l in near], [l for l in testing if l in near]
+    out = ['YOUR MEMORY (what you said, and what I learned from what you did that you confirmed):' + NL + _cut(NL.join(said), 4000) if said
+           else 'Your memory has nothing' + (' that matches.' if want else ' in it yet.')]
+    if testing: out.append('LEARNED, NOT CONFIRMED - not used until you say so (keep confirms one):' + NL + _cut(NL.join(testing), 1200))
     org = NL.join(l for l in org if l in near)
     if org: out.append('YOUR PEOPLE (the org chart - your manager, your reports, who owns what):' + NL + org)
     return NL.join(out)
@@ -404,11 +404,11 @@ def asks_list(store, p: dict) -> str:
 def memory_about(store, p: dict) -> str:
     """WHO SOMEONE IS TO THE OWNER (slice 7, 2026-10-25: "who's Gail to me"): the memory's lines about them, each with its key, and the
     org chart's word - read, never guessed; nothing known is said so."""
-    from . import memoryedit
-    a = memoryedit.about(store, str(p.get('who') or p.get('sender') or ''))
+    from . import memory
+    a = memory.about(store, str(p.get('who') or p.get('sender') or ''))
     out = [f"ABOUT {a['who']}" + (f" ({', '.join(n for n in a['names'] if '@' in n)})" if any('@' in n for n in a['names']) else '')
            + (f" - the org chart: {a['relation']}" if a['relation'] else '')]
-    out += [f"  [key: {l['key']}] ({l['section']}{', yours' if l['own'] else ''}{', still being tested' if l['status'] == 'watching' else ''}) {_cut(l['text'], 300)}"
+    out += [f"  [key: {l['key']}] ({'you said it, subject: ' + l['subject'] if l['own'] else 'learned, ' + l['status']}) {_cut(l['text'], 300)}"
             for l in a['lines']]
     if not a['lines']: out.append('  The memory holds nothing about them yet' + (' beyond the org chart.' if a['relation'] else '.'))
     return NL.join(out)

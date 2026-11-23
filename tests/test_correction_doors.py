@@ -17,7 +17,7 @@ from unittest import mock
 from fastapi import BackgroundTasks
 from fastapi.testclient import TestClient
 
-from taskuary import memorylines, server
+from taskuary import server, learning
 
 c, s = TestClient(server.app), server.store
 
@@ -33,12 +33,12 @@ def arrived(start='coding'):
 
 
 def wrote(go, start='coding', facts_seen=None):
-    """Everything one door leaves behind: what it taught LEARNED.md (memorylines.teach - one line in words per verdict, 2026-10-27,
+    """Everything one door leaves behind: what it taught LEARNED.md (learning.teach - one line in words per verdict, 2026-10-27,
     and the hot pass's guess where that still runs), the routing fact, and where the task ended up."""
     tid, mid = arrived(start)
     facts = sum(int(x['EvidenceCount'] or 0) for x in s.routing_facts())
     bg = BackgroundTasks()
-    with mock.patch.object(memorylines, 'teach') as taught, mock.patch('taskuary.learn.learn_from') as guessed:
+    with mock.patch.object(learning, 'teach') as taught, mock.patch('taskuary.learning.learn_from') as guessed:
         go(tid, mid, bg)
         for t in bg.tasks: t.func(*t.args, **t.kwargs)
     if facts_seen is not None: facts_seen += [str(c.args[3]) for c in taught.call_args_list]

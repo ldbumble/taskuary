@@ -104,7 +104,7 @@ def test_an_email_set_up_again_after_his_send_failed_keeps_his_pressed_card():
     s = MemoryStore(); tid = s.create_task({'Title': 'Q4 review room', 'Kind': 'general', 'Status': 'in_progress', 'OriginBase': 'owner'}, 'owner')
     rid = slots.draft(s, tid, 'Hi Paula - 3pm.', to='paula@northwind.example', subject='Q4 review')['review_id']
     with mock.patch.object(outbound, 'send_out', side_effect=RuntimeError('550 mailbox unavailable')), \
-         mock.patch.object(outbound, 'send_block', return_value=''), mock.patch('taskuary.learn.learn_from'):
+         mock.patch.object(outbound, 'send_block', return_value=''), mock.patch('taskuary.learning.learn_from'):
         assert verdicts.decide(s, s.get_review(rid), 'approve', 'Hi Paula - 3pm, and bring the Friday figures.')['delivery'] == 'failed'
     again = slots.draft(s, tid, 'Hi Paula - 3pm.', to='paula@northwind.example', subject='Q4 review')
     assert again['ok'] and again['review_id'] != rid

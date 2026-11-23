@@ -92,8 +92,8 @@ def check(store, say: list, llm=None, memo: str = None) -> tuple:
     if ask and llm is not None:
         try:
             from .llm import ask_json
-            from . import learned_cut as lc
-            bring = [raw for raw, _k in lc.lines(store.doc('learned') or '', lc.BRING)]
+            from . import memory
+            bring = memory.bring(store)
             user = ('WHAT THE OWNER ASKED TO BE BROUGHT UP:\n' + '\n'.join(bring) + '\n\n' if bring else '') + '\n\n'.join(f"NOTE {n}: {s['text']}\nwhy: {s.get('why') or '-'}\nworkstream: {_workstream(store, s.get('action') or {})}\n"
                                f"the owner last did on it: {_last_acts(store, s.get('action') or {})}" for n, s in enumerate(ask, 1))
             # THE SAME NOTES, THE SAME LOOK (`memo`, a clocked run's - llm.standing): a line held here is never posted, so the clock's next

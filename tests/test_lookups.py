@@ -62,8 +62,8 @@ class LookupTests(unittest.TestCase):
 
     def test_sender_read_gathers_one_person(self):
         s = world()
-        from taskuary import memoryedit
-        memoryedit.remember(s, 'She owns the freight budget.', about='gail@northwind.example', section='people')
+        from taskuary import memory
+        memory.remember(s, 'She owns the freight budget.', about='gail@northwind.example')
         out = read(s, 'sender.read', who='gail')
         for want in ('Gail Moreno', '1 message', 'Quarterly numbers', 'TQ-0002', 'freight budget'):
             self.assertIn(want, out)
@@ -235,17 +235,17 @@ class AppAtWorkTests(unittest.TestCase):
 class KeptAndFilteredTests(unittest.TestCase):
     """What is kept about the owner, and the rules that filter their mail."""
 
-    def test_memory_list_shows_what_the_owner_said_and_what_learned_md_learned(self):
-        """One memory (2026-10-27): what the owner said and their verdicts are LEARNED.md lines, beside what it learned."""
-        from taskuary import learn, memorylines
+    def test_memory_list_shows_what_the_owner_said_and_what_was_learned_said_as_such(self):
+        """One memory: what the owner said and the verdicts he confirmed are in use; what was learned and waits on his word is said apart."""
+        from taskuary import memory
         s = world()
-        s.save_doc(learn.DOC, '# Learned\n\n## What you care about\n- Vendor statements are fyi.\n\n## Watching\n' + learn.HYP_START
-                   + '\n- Maybe spend reports are fyi too.\n' + learn.HYP_END + '\n', 't')
+        memory.remember(s, 'Vendor statements are fyi.', 'vendor statements')
+        memory.infer(s, 'Maybe spend reports are fyi too.', 'spend reports', ['rv1'])
         put_note(s, {'Scope': 'sender', 'ScopeKey': 'gail@northwind.example', 'Note': 'She owns the freight budget.', 'Source': 'manual', 'Active': 1})
         put_note(s, {'Scope': 'subject', 'ScopeKey': 'weekly spend report', 'Note': '"Weekly spend" - NOT A TASK: filed', 'Source': 'verdict', 'Active': 1})
-        memorylines.migrate(s)
+        memory.migrate(s)
         out = read(s, 'memory.list')
-        for want in ('YOUR MEMORY', 'freight budget', 'weekly spend report', 'Vendor statements are fyi', 'STILL BEING TESTED', 'spend reports are fyi too'):
+        for want in ('YOUR MEMORY', 'freight budget', 'weekly spend report', 'Vendor statements are fyi', 'NOT CONFIRMED', 'spend reports are fyi too'):
             self.assertIn(want, out)
         narrow = read(s, 'memory.list', about='freight')
         self.assertIn('freight budget', narrow); self.assertNotIn('weekly spend', narrow)

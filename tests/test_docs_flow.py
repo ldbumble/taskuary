@@ -36,8 +36,8 @@ def seeded():
     put_note(s, {'Scope': 'global', 'ScopeKey': None, 'Note': f'{OFF} a switched-off note',
                   'Source': 'verdict', 'Active': 0, 'CreatedBy': 'owner'})
     # ...as an install that had them holds them after its first start: LEARNED.md lines (and STYLE.md for the writing note), 2026-10-27
-    from taskuary import memorylines
-    memorylines.migrate(s)
+    from taskuary import memory
+    memory.migrate(s)
     return s
 
 

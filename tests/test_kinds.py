@@ -39,11 +39,10 @@ def test_no_module_types_the_kinds():
 # ONE NAME FOR THE ASSISTANT, AND IT IS TASKUARY (the owner, 2026-11-15): its window said "Taskuary" over a box that said "Ask the Assistant",
 # and the phone called it "your Assistant chat". kinds.json names it once; what the phone and the page's lines say of it reads that name
 def test_the_assistant_is_named_once_and_the_phone_says_that_name():
-    from taskuary import agentchannels, aidefaults, remote_assistant as ra, learned_cut, walk
+    from taskuary import agentchannels, aidefaults, remote_assistant as ra, walk
     assert kinds.ASSISTANT == 'Taskuary'
     assert ra.ASK_SOMETHING == 'Ask Taskuary something' and ra.PICKED == 'Connected - this is your Taskuary chat now.'
     assert agentchannels.ASSISTANT_CHAT.startswith('your Taskuary chat')
-    assert learned_cut.READER_WORDS['assistant'] == 'Taskuary'
     assert next(s['label'] for s in aidefaults.SLOTS if s['key'] == 'concierge_ai') == 'Taskuary'
     # ...and no line of the modules the phone speaks from still types the old name into what the owner reads
     old = re.compile(r"""['"][^'"\n]*(?:[Yy]our Assistant chat|Ask the assistant|an Assistant chat)[^'"\n]*['"]""")

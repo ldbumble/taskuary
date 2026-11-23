@@ -202,7 +202,7 @@ _COMMENT = re.compile(r'<!--.*?-->', re.S)
 _TEMPLATE_LINES = re.compile(r'^.*(not generated yet|Write your own rules here).*$', re.M)
 
 # An explicit instruction about HOW to write (PW-060) lives in STYLE.md under Owner notes, which every draft reads (style_doc) - the
-# memory table's 'writing' notes were moved there once (memorylines.migrate, 2026-10-27), and the notes table is gone
+# memory table's 'writing' notes were moved there once (once, 2026-10-27), and the notes table is gone
 OWNER_NOTES = '## Owner notes'
 
 
@@ -227,11 +227,6 @@ def style_feedback(store, note: str, actor: str = 'owner') -> bool:
     return True
 
 
-# a quoted sign-off may span lines (Best, / name / company); an unquoted one is the rest of its line
-_SIGN_QUOTED = re.compile(r'(?:sign[- ]?off|signature)\s*:\s*"([^"]+)"', re.I | re.S)
-_SIGN_LINE = re.compile(r'^\s*-?\s*(?:sign[- ]?off|signature)\s*:\s*(.+?)\s*$', re.I | re.M)
-
-
 def mailbox_in(m) -> str | None:
     """The mailbox an email came in on (its SourceName) - None for anything else, or for mail the owner sent."""
     m = m or {}
@@ -241,8 +236,8 @@ def mailbox_in(m) -> str | None:
 
 def signature_for(store, mailbox: str = None) -> str:
     """The owner's email signature: the sending mailbox's own (its card), else the `email_signature` setting when set, else the
-    account's own (Gmail's, or the one its sent mail plainly ends with - signatures.account), else the `Sign off:` / `Signature:`
-    line in STYLE.md (quotes stripped, literal newlines honoured), else the name About you gives.
+    account's own (Gmail's, or the one its sent mail plainly ends with - signatures.account), else the name About you gives. ONE HOME for
+    what he said of it (the r10 review: a sign-off line in STYLE.md was a second one, read under the setting, and a memory line a third).
     '' when none says anything (PW-065) - and always '' with Settings' "Sign every email" off (signatures.ON)."""
     from .outbound import card_signature
     from .signatures import on, account
@@ -252,11 +247,6 @@ def signature_for(store, mailbox: str = None) -> str:
     sig = str(store.get_setting('email_signature') or '').strip()
     if sig: return sig.replace('\\n', '\n')
     if mailbox and (acct := account(store, mailbox)): return acct
-    doc = store.doc('style') or ''
-    q = _SIGN_QUOTED.search(doc)
-    if q: return q.group(1).strip().replace('\\n', '\n')
-    m = _SIGN_LINE.search(doc)
-    if m: return m.group(1).strip().strip('"\'').replace('\\n', '\n').strip()
     # the writer no longer signs (EMAIL), so with nothing saved the owner's own name is the signature - never none at all
     return ' '.join(str(store.get_setting('owner_name') or '').split())
 
@@ -332,10 +322,10 @@ def style_doc(store) -> str:
     so the untouched template never rides into a prompt as noise. The doc is the owner's
     voice distilled from their own sent mail (Docs → STYLE.md → Generate from history)."""
     from .byrecipient import without
-    from .stylews import shared
+    from .learning import style_shared
     # ...minus "By recipient": those lines are each for one person, and voice_line hands a draft only its own recipients'
-    # ...and minus each workstream's own lines: a draft reads only its own workstream's (stylews.block, 2026-11-01)
-    t = _TEMPLATE_LINES.sub('', _COMMENT.sub('', without(shared(store.doc('style') or ''))))
+    # ...and minus each workstream's own lines: a draft reads only its own workstream's (learning.style_block, 2026-11-01)
+    t = _TEMPLATE_LINES.sub('', _COMMENT.sub('', without(style_shared(store.doc('style') or ''))))
     meat = '\n'.join(l for l in t.splitlines() if l.strip() and not l.strip().startswith('#'))
     return t.strip() if len(meat) > 40 else ''
 
@@ -346,16 +336,17 @@ VOICE_HEAD = '\n\nHow you write to the people this goes to (learned from the dra
 def voice_line(store, to) -> str:
     """STYLE.md's "By recipient" lines for `to`, closest first (byrecipient.block) - the voice lessons the drafter finally reads (phase C,
     2026-10-23: they were learned into LEARNED.md, which no drafter reads)."""
-    from . import byrecipient, learned_cut
+    from . import byrecipient, memory
     b = byrecipient.block(store, to)
-    # ...and who they are to the owner, from LEARNED.md's people lines about THEM and nobody else ("Paula Vance is an exec; you keep it
-    # to a few lines" - the memory redesign, 2026-10-25). It shapes the draft; nothing here sends it
+    # ...and THE OWNER'S MEMORY AS A TASK READS IT (memory.for_task - one road): what he said about nobody or about these people - how he
+    # writes, his hours, who handles what - the facts about them, and what he confirmed of what was learned. It shapes the draft; nothing
+    # here sends it
     who = {str(a).strip().lower() for a in (to or []) if a and '@' in str(a)}
-    ppl = learned_cut.for_reader(store, 'drafter', people=who, target='draft:' + ','.join(sorted(who))) if who else ''
-    return (VOICE_HEAD + b if b else '') + (PEOPLE_HEAD + ppl.split('\n', 1)[1] if ppl else '')
+    mem = memory.for_task(store, who, target='draft:' + ','.join(sorted(who)))
+    return (VOICE_HEAD + b if b else '') + (MEMORY_HEAD + mem if mem else '')
 
 
-PEOPLE_HEAD = '\n\nWho they are to you and how you deal with them (learned from what you did - weigh it, the thread outranks it):\n'
+MEMORY_HEAD = "\n\nThe owner's memory (what he said is his word - follow it; the thread outranks the rest):\n"
 
 def history_block(store, m: dict) -> str:
     """What this mailbox already knows about the sender and the topic BEYOND this thread - their
@@ -566,9 +557,9 @@ def draft_reply(store, task_id: int, llm=None, resolution: str = None, nudge: st
     # only explicit writing instructions ride into a reply (PW-060) - STYLE.md's Owner notes, in `sty`; the routing verdicts stay with triage
     chat = written_as_chat(last.get('Channel'))
     sty = style_doc(store)
-    # ...and HOW THE OWNER WRITES IN THIS TASK'S WORKSTREAM, where it differs (stylews; the owner, 2026-11-01: "try it") - none, the shared
-    from . import stylews, workstreams
-    if sty and (wsb := stylews.block(store, ws := workstreams.of_task(store, task_id))): sty += wsb; stylews.used(store, task_id, ws)
+    # ...and HOW THE OWNER WRITES IN THIS TASK'S WORKSTREAM, where it differs (learning.style_block; the owner, 2026-11-01: "try it")
+    from . import learning, workstreams
+    if sty and (wsb := learning.style_block(store, workstreams.of_task(store, task_id), task_id)): sty += wsb
     box = mailbox_in(next((m for m in reversed(msgs) if m.get('Direction') != 'out'), last))
     # The 60-word rule is useful for ordinary mail, but destructive for a completed eight-part
     # request. DONE supplies its own completeness/shape rules, so do not put BREVITY in conflict.
@@ -787,8 +778,8 @@ def draft_for_message(store, m: dict, review_id: int, llm=None, instruction: str
     owner = owner_of(store, soul)
     chat = written_as_chat(m.get('Channel'))
     sty = style_doc(store)
-    from . import stylews, workstreams
-    if sty and (wsb := stylews.block(store, workstreams.of_message(store, m))): sty += wsb
+    from . import learning, workstreams
+    if sty and (wsb := learning.style_block(store, workstreams.of_message(store, m))): sty += wsb
     system = (SYSTEM.format(owner=owner) + signature_line(store) + BREVITY + (CHAT if chat else email_rule(store, mailbox_in(m))) + '\n' + NOT_YET + FEEDBACK + FILES_RULE + WHY_RULE
               # every block below describes YOU. They are written in the third person because
               # the same documents serve agents working FOR the owner - said once, here, so the

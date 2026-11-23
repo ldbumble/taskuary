@@ -211,7 +211,7 @@ def test_said_twice_for_one_person_becomes_a_style_line():
 def test_not_the_ask_is_an_owner_correction():
     s = MemoryStore(); tid = task(s)
     s.add_comment(tid, 'owner', general.USER_TYPE, 'No, the ask is the pay date, not the bonus')
-    with mock.patch('taskuary.learn.learn_from') as lf:
+    with mock.patch('taskuary.learning.learn_from') as lf:
         assert general.take_corrections(s, tid, [{'kind': 'ask', 'review': None, 'said': 'the ask is the pay date, not the bonus'}]) == 1
     lf.assert_called_once(); assert 'owner_correction' in lf.call_args[0][1] and 'the pay date, not the bonus' in lf.call_args[0][1]
 
@@ -221,7 +221,7 @@ def test_the_memory_learns_the_owners_own_words_never_the_agents_account_of_them
     model only says a correction was made; what is learned is what the owner typed."""
     s = MemoryStore(); tid = task(s)
     s.add_comment(tid, 'owner', general.USER_TYPE, 'Wrong one - Paula wants the vendor list, the invoices can wait')
-    with mock.patch('taskuary.learn.learn_from') as lf:
+    with mock.patch('taskuary.learning.learn_from') as lf:
         assert general.take_corrections(s, tid, [{'kind': 'ask', 'review': None, 'said': 'Alex prefers vendor work over invoices in general'}]) == 1
     said = lf.call_args[0][1]
     assert 'Paula wants the vendor list, the invoices can wait' in said and 'prefers vendor work' not in said
@@ -237,7 +237,7 @@ def test_the_models_statement_of_a_correction_is_trusted():
 
 def test_an_empty_or_secret_correction_or_one_with_no_owner_message_is_dropped():
     s = MemoryStore(); tid = task(s); rid = draft_for(s, tid, 'ray@northwind.example')
-    with mock.patch('taskuary.learn.learn_from') as lf:
+    with mock.patch('taskuary.learning.learn_from') as lf:
         assert general.take_corrections(s, tid, [{'kind': 'ask', 'review': None, 'said': 'wrong ask'}]) == 0      # nobody corrected anything
         s.add_comment(tid, 'owner', general.USER_TYPE, 'Use the new portal key')
         assert general.take_corrections(s, tid, [{'kind': 'redraft', 'review': None, 'said': '  '},

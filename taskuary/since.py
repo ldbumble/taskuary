@@ -22,7 +22,6 @@ def _n(store, q, p): return int((store._one(q, p) or {}).get('n') or 0)
 
 
 from .timewords import plural as _plural
-from .learnedgraph import _named
 
 
 def overnight(store, now: datetime = None) -> dict:
@@ -55,14 +54,13 @@ def overnight(store, now: datetime = None) -> dict:
 
 
 def learned(store, now: datetime = None) -> dict:
-    """{line, n, latest} - the lines that went INTO USE in the last seven days and are in use still, each once (learnedlines.week).
-    It counted every guess born and every rule promoted - rebirths, double counts and lines nobody reads - and said "Learned this
-    week: 32" over about three real things (the Advisor and memory design, 2026-10-23: "This week: N now in use")."""
-    from .learnedlines import week
+    """{line, n, latest} - the lines that went INTO USE in the last seven days and are in use still: what he said, and what he confirmed
+    of what was learned (memory.week) - never a guess still waiting on his word (the Advisor and memory design, 2026-10-23: "This week:
+    N now in use")."""
+    from .memory import week
     rows = week(store, now)
     n = len(rows)
-    return {'line': f'This week: {n} now in use' if n else '', 'n': n,
-            'latest': _named(store)(rows[0].get('OwnerText') or rows[0]['Text']) if rows else ''}
+    return {'line': f'This week: {n} now in use' if n else '', 'n': n, 'latest': rows[-1]['Text'] if rows else ''}
 
 
 CARDS = 3

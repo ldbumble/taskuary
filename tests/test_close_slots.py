@@ -85,7 +85,7 @@ def draft(s, tid, i, text='Tab is fine.'):
 
 def approve(s, rid):
     with mock.patch('taskuary.outbound.send_out', return_value=SENT), mock.patch.object(outbound, 'send_block', return_value=''), \
-         mock.patch('taskuary.learn.learn_from'):
+         mock.patch('taskuary.learning.learn_from'):
         return verdicts.decide(s, s.get_review(rid), 'approve')
 
 
@@ -96,7 +96,7 @@ def mail_task(s):
 
 def send_reply(s, rid):
     with mock.patch('taskuary.outbound.reply_to_message', return_value=SENT), mock.patch.object(outbound, 'send_block', return_value=''), \
-         mock.patch('taskuary.learn.learn_from'):
+         mock.patch('taskuary.learning.learn_from'):
         return verdicts.decide(s, s.get_review(rid), 'approve')
 
 
@@ -111,7 +111,7 @@ def test_four_slots_stay_open_through_all_four_sends(s):
 
 def test_a_rejected_slot_is_dropped_and_counts_as_settled(s):
     tid = typed(s, FOUR[:2]); a, b = draft(s, tid, 0), draft(s, tid, 1)
-    with mock.patch('taskuary.learn.learn_from'): verdicts.decide(s, s.get_review(a), 'reject')
+    with mock.patch('taskuary.learning.learn_from'): verdicts.decide(s, s.get_review(a), 'reject')
     assert s.get_task(tid)['Status'] != 'done' and s.get_review(b)['Status'] == 'pending'
     approve(s, b)
     assert s.get_task(tid)['Status'] == 'open' and all(i['done'] for i in slots.all_(s, tid))
@@ -120,7 +120,7 @@ def test_a_rejected_slot_is_dropped_and_counts_as_settled(s):
 @pytest.mark.parametrize('verb', ['no_reply', 'close_unsent'])
 def test_not_sending_one_slot_drops_that_slot_not_the_task(s, verb):
     tid = typed(s, FOUR[:2]); a, b = draft(s, tid, 0), draft(s, tid, 1)
-    with mock.patch('taskuary.learn.learn_from'): verdicts.decide(s, s.get_review(a), verb)
+    with mock.patch('taskuary.learning.learn_from'): verdicts.decide(s, s.get_review(a), verb)
     assert s.get_task(tid)['Status'] != 'done' and s.get_review(b)['Status'] == 'pending'
     assert [i['done'] for i in slots.all_(s, tid)] == [True, False]
 
@@ -151,7 +151,7 @@ def test_the_closeout_redirect_never_sends_a_slot_as_the_reply(s):
     co = s.add_review({'TaskId': tid, 'Kind': 'action', 'Status': 'pending', 'DraftText': 'merge',
                        'Deliver': json.dumps({'action': 'merge_pr'})})
     with mock.patch('taskuary.proposals.execute', return_value={'ok': True}), mock.patch('taskuary.proposals._action', return_value='merge_pr'), \
-         mock.patch('taskuary.outbound.send_out', return_value=SENT) as sent, mock.patch('taskuary.learn.learn_from'):
+         mock.patch('taskuary.outbound.send_out', return_value=SENT) as sent, mock.patch('taskuary.learning.learn_from'):
         verdicts.decide(s, s.get_review(co), 'approve', reply_text='thanks')
     assert not sent.called and s.get_review(a)['Status'] == 'pending'
 
@@ -511,7 +511,7 @@ def test_a_slot_is_never_rewritten_into_a_reply_and_sends_the_words_shown(s):
     c, p = api(s)
     with p, mock.patch('taskuary.server._refresh_chat_context', return_value={}), mock.patch('taskuary.responder.write_draft') as rewrite, \
          mock.patch('taskuary.outbound.send_out', return_value=SENT) as sent, mock.patch.object(outbound, 'send_block', return_value=''), \
-         mock.patch('taskuary.learn.learn_from'):
+         mock.patch('taskuary.learning.learn_from'):
         out = c.post(f'/api/reviews/{rid}/decide', json={'verb': 'approve'}).json()
     assert out.get('ok') and not rewrite.called and sent.called and s.get_review(rid)['DraftText'] == 'Tab 1 is fine.'
 
@@ -563,7 +563,7 @@ def test_a_mail_tasks_slots_show_on_the_processing_rail():
 def test_ticking_a_drafted_slot_drops_its_draft(s):
     tid = typed(s, FOUR[:2]); a = draft(s, tid, 0); sid = slots.all_(s, tid)[0]['id']
     c, p = api(s)
-    with p, mock.patch('taskuary.learn.learn_from'): c.patch(f'/api/tasks/{tid}/checklist/{sid}', json={'done': True})
+    with p, mock.patch('taskuary.learning.learn_from'): c.patch(f'/api/tasks/{tid}/checklist/{sid}', json={'done': True})
     assert s.get_review(a)['Status'] == 'rejected' and slots.all_(s, tid)[0]['done']
 
 
@@ -577,7 +577,7 @@ def test_dropping_the_last_undrafted_slot_leaves_a_typed_task_open(s):
 def test_the_assistants_drop_rejects_the_pending_draft(s):
     tid = typed(s, FOUR[:2]); a = draft(s, tid, 0)
     c, p = api(s)
-    with p, mock.patch('taskuary.learn.learn_from'):
+    with p, mock.patch('taskuary.learning.learn_from'):
         pr = c.post('/api/operations', json={'kind': 'task.checklist', 'target': tid, 'params': {'drop': [FOUR[0]['to']]}}).json()
         c.post(f"/api/operations/{pr['id']}/execute", json={'version': pr['version']})
     assert s.get_review(a)['Status'] == 'rejected'
@@ -614,7 +614,7 @@ def test_a_named_slot_takes_the_address_the_agent_found(s):
 def test_an_email_with_no_address_is_never_sent(s):
     tid = typed(s, FOUR[2:3]); sid = slots.open_(s, tid)[0]['id']
     rid = slots.draft(s, tid, 'Tab 3 is fine.', slot=sid)['review_id']
-    with mock.patch('taskuary.outbound.send_out', return_value=SENT) as sent, mock.patch('taskuary.learn.learn_from'):
+    with mock.patch('taskuary.outbound.send_out', return_value=SENT) as sent, mock.patch('taskuary.learning.learn_from'):
         out = verdicts.decide(s, s.get_review(rid), 'approve')
     assert not out['ok'] and not sent.called and 'address' in out['send_error']
 
@@ -765,7 +765,7 @@ def test_a_routines_own_email_goes_at_once_and_his_own_task_waits_for_his_send(s
     own still waits on his Send."""
     run = routine_run(s)
     own = s.create_task({'Title': 'Follow up with Ray', 'Kind': 'general', 'Status': 'open', 'Source': 'assistant'}, 'owner')
-    with mock.patch('taskuary.outbound.send_out', return_value=SENT) as send, mock.patch.object(outbound, 'send_block', return_value=''),             mock.patch('taskuary.learn.learn_from'):
+    with mock.patch('taskuary.outbound.send_out', return_value=SENT) as send, mock.patch.object(outbound, 'send_block', return_value=''),             mock.patch('taskuary.learning.learn_from'):
         went = slots.draft(s, run, 'Hi Ray, any update on the quote? Alex', 'ray@northwind.example', 'Quote')
         held = slots.draft(s, own, 'Hi Ray, any update on the quote? Alex', 'ray@northwind.example', 'Quote')
     assert went['sent'] is True and send.call_count == 1, went
@@ -783,7 +783,7 @@ def test_a_routines_own_email_goes_at_once_and_his_own_task_waits_for_his_send(s
 def test_a_routine_runs_email_to_an_address_its_agent_chose_is_a_card_and_nothing_goes(s):
     s.set_setting('owner_email', 'alex@northwind.example', 'owner')
     run = routine_run(s, 'Total the newest vendor spend export and email me the top five.')
-    with mock.patch('taskuary.outbound.send_out', return_value=SENT) as send, mock.patch.object(outbound, 'send_block', return_value=''),             mock.patch('taskuary.learn.learn_from'):
+    with mock.patch('taskuary.outbound.send_out', return_value=SENT) as send, mock.patch.object(outbound, 'send_block', return_value=''),             mock.patch('taskuary.learning.learn_from'):
         chose = slots.draft(s, run, 'Hi Gail, the October spend is attached. Alex', 'gail@northwind.example', 'October spend')
         assert send.call_count == 0 and 'sent' not in chose and s.get_review(chose['review_id'])['Status'] == 'pending', chose
         # ...and no other caller gets past it by pressing in the routine's name
@@ -810,7 +810,7 @@ def test_the_agent_on_a_routine_run_is_told_its_email_went_not_that_it_waits(s):
     from taskuary.selfclose import CARD_SAID
     run = routine_run(s, 'Ask ray@northwind.example and erin@northwind.example where the quote and the schedule stand.')
     with mock.patch('taskuary.outbound.send_out', return_value=SENT), mock.patch.object(outbound, 'send_block', return_value=''), \
-            mock.patch('taskuary.learn.learn_from'):
+            mock.patch('taskuary.learning.learn_from'):
         went = agenttools.said_once(slots.draft(s, run, 'Hi Ray, any update on the quote? Alex', 'ray@northwind.example', 'Quote'))
     assert went['shown'] != CARD_SAID and went['shown'].startswith('Sent to ray@northwind.example'), went
     with mock.patch('taskuary.outbound.send_out', side_effect=RuntimeError('SMTP 535')), mock.patch.object(outbound, 'send_block', return_value=''):
@@ -826,7 +826,7 @@ def test_a_sent_email_is_named_by_whom_it_went_to_not_by_its_cards_reason(s):
         rid = slots.draft(s, tid, 'Hi Ray, any update on the quote? Alex', 'ray@northwind.example', 'Quote', agent='assistant')['review_id']
         verdicts.decide(s, s.get_review(rid), 'approve', actor='owner')
     with mock.patch('taskuary.outbound.send_out', return_value=SENT), mock.patch.object(outbound, 'send_block', return_value=''), \
-            mock.patch('taskuary.learn.learn_from'):
+            mock.patch('taskuary.learning.learn_from'):
         assert verdicts.decide(s, s.get_review(rid), 'approve', actor='owner')['ok']
     said = s.list_comments(tid)[-1]['Body']
     assert said.startswith('Sent: the email to ray@northwind.example. ') and 'Not sent' not in said and 'approve to send' not in said, said

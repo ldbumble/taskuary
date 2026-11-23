@@ -58,19 +58,18 @@ class SinceTests(unittest.TestCase):
 
     def test_learned_counts_the_lines_that_went_into_use_this_week_and_are_still_in_use_each_once(self):
         """It counted every guess born and every rule promoted - rebirths and double counts too - and said "Learned this week: 32"
-        over about three real things (the Advisor and memory design, 2026-10-23)."""
-        from taskuary import learn
+        over about three real things (the Advisor and memory design, 2026-10-23). In use is what he said, or confirmed."""
+        from taskuary import memory
         s = MemoryStore()
-        doc = s.get_doc('learned')
-        live = '- Alex answers vendors himself. [s:5 | ev: mem1, mem2, mem3 | seen: 2026-10-20 | k: alex answers vendors himself]'
-        guess = '- Alex files newsletters. [s:2 | ev: mem4 | seen: 2026-10-20 | k: alex files newsletters]'
-        doc = learn._put_block(doc.replace(learn.CARE + '\n', learn.CARE + '\n' + live + '\n', 1), learn.HYP_START, learn.HYP_END, guess)
-        s.save_doc('learned', doc, 'reflect')
-        for _ in range(3): s.save_doc('learned', doc.replace(live + '\n', ''), 'reflect'); s.save_doc('learned', doc, 'reflect')   # churn
+        live = memory.infer(s, 'Alex answers vendors himself.', 'vendors', ['mem1', 'mem2'])
+        memory.infer(s, 'Alex files newsletters.', 'newsletters', ['mem4'])
+        for e in ('mem3', 'mem5', 'mem6'): memory.infer(s, 'Alex answers vendors himself.', 'vendors', [e])      # seen again: one line
+        self.assertEqual(since.learned(s, datetime.now())['line'], '', 'a guess waiting on his word is not in use')
+        memory.mark(s, live['key'], 'keep')
         out = since.learned(s, datetime.now())
-        self.assertEqual(out['line'], 'This week: 1 now in use')          # one line, once; a guess is not in use
+        self.assertEqual(out['line'], 'This week: 1 now in use')
         self.assertEqual(out['latest'], 'Alex answers vendors himself.')
-        s.save_doc('learned', doc.replace(live + '\n', ''), 'owner')       # the owner removed it: no longer in use
+        memory.mark(s, live['key'], 'forget')
         self.assertEqual(since.learned(s, datetime.now())['line'], '')
 
 

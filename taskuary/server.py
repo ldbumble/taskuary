@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 from . import kinds as task_kinds
 from . import buttons, config, failures, words
 from . import store as store_mod
-from .store import SQLiteStore, by_sentence, is_goal, render_doc, retoken_doc, task_ref
+from .store import SQLiteStore, by_sentence, is_goal, task_ref
 from .ingest import ingest_message, split_message, task_from_message
 from .reports import (PLANNED, REGISTRY, note_app_up, render_report, resolve_cfg, run_due_reports, run_one)
 from . import agents as hub_agents
@@ -29,7 +29,7 @@ from . import policy as policy_engine
 from . import reshape
 from . import terminal as hub_term
 from .wrapup import PAUSE_MARKER, REPORTS, pause_note, reply_target, wrap as end_task
-from . import aisetup, assistant, demo, deps, learn, learnedgraph, memorylines, operations, outbound, playbooks, rank, responder, signatures, waitroom
+from . import aisetup, assistant, demo, deps, learning, memory, operations, outbound, playbooks, rank, responder, signatures, waitroom
 from . import live as live_bus
 from . import processing_all
 
@@ -275,7 +275,7 @@ async def _lifespan(_app):
     except Exception as e: logger.warning(f'whatsapp log trim skipped: {e}')
     _heal_owner_docs()
     _refresh_soul_connections()
-    learn.migrate(store)           # one section per subject, once (2026-10-25) - before anything else writes the doc
+    memory.migrate(store)          # LEARNED.md read into the three stores, once (r10, 2026-11-23) - before anything else writes the memory
     try:                           # the app-wide mark-read setting as each card's own choice, once (2026-11-16) - before any poll reads it
         from . import filing
         if (n := filing.migrate(store)): logger.info(f'mark-read choice moved onto {n} card(s)')
@@ -290,8 +290,7 @@ async def _lifespan(_app):
         if (n := dashboards.migrate_ai_tiles(store)): logger.info(f'AI-use tiles added to {n} dashboard(s)')
         if (n := dashboards.migrate_ai_tiles_up(store)): logger.info(f'AI-use tiles moved up in {n} dashboard(s)')   # ...and up top (2026-11-07)
     except Exception as e: logger.warning(f'AI-use tiles not added: {e}')
-    learn.note_verdicts(store)     # an older install's notes table, written into LEARNED.md once and dropped (memorylines.migrate)
-    _fold_habits()                 # one habit card each, folded into the one habits row (habits.py, 2026-11-01)
+    _fold_habits()                 # the old habit cards closed, and the habits row drawn from the learned lines (learning.tick)
     try: blackboard.schedule_due(store, startup=True)   # a retry backing off when the app closed is re-armed, not reset (PW-085), and a slot wait runs
     except Exception as e: logger.warning(f'retry scheduling skipped: {e}')
     try:                           # historical triage failures stored as filed become retriable errors, once (PW-040)
@@ -1939,17 +1938,13 @@ def _run_kind(op: dict, background: BackgroundTasks):
         from . import remote_assistant
         return _rerun_report(tid, asked=remote_assistant.asking(), by='assistant')
     if kind == 'memory.remember':
-        from . import memoryedit
-        # ...every fact the owner tells it goes where its readers read it (LEARNED.md), and closes the line it makes untrue - a fact about
-        # nobody too, under What you care about: a saved note was read only when a mail's words matched it (the owner, 2026-10-27)
-        try: return {'learned': memoryedit.remember(store, str(p.get('note') or ''), str(p.get('about') or ''), str(p.get('section') or ''),
-                                                    str(p.get('replaces') or ''))}
-        except LookupError as e: raise HTTPException(404, f"{e} The line to replace was not found - read memory.about for its key.")
+        # ...what the owner says is kept in his words under its subject, and replaces what he said before on it (memory.remember)
+        try: return {'learned': memory.remember(store, str(p.get('note') or ''), str(p.get('subject') or ''), str(p.get('about') or ''),
+                                                signature=bool(p.get('signature')), doc=str(p.get('doc') or ''))}
         except ValueError as e: raise HTTPException(422, str(e))
     if kind == 'memory.wrong':
-        from . import memoryedit
         how = str(p.get('how') or 'wrong').strip().lower()
-        try: return memoryedit.close(store, str(p.get('key') or '')) | {'how': 'ended'} if how == 'ended' else memoryedit.mark(store, str(p.get('key') or ''), how)
+        try: return memory.mark(store, str(p.get('key') or ''), how)
         except LookupError as e: raise HTTPException(404, str(e))
         except ValueError as e: raise HTTPException(409, str(e))
     if kind == 'people.relate':
@@ -2997,7 +2992,7 @@ def update_task(task_id: int, body: TaskBody, background: BackgroundTasks = None
         fields['Priority'] = level(fields['Priority'])
     if fields.get('Priority') and fields['Priority'] != level(t.get('Priority')):
         store.audit('task', task_id, 'priority', ACTOR, detail={'from': level(t.get('Priority')), 'to': fields['Priority']})
-        # ...and what it teaches about which topics come first and which wait: one line, or none (memorylines.teach - 2026-11-12: a changed
+        # ...and what it teaches about which topics come first and which wait: one line, or none (learning.teach - 2026-11-12: a changed
         # priority taught nothing at all, only a count the Advisor's rule question reads at five)
         _teach_line(task_id, 'priority', f"triage made it {level(t.get('Priority'))}; the owner made it {fields['Priority']}", background)
     if closing:
@@ -3049,9 +3044,9 @@ def update_task(task_id: int, body: TaskBody, background: BackgroundTasks = None
                 background.add_task(reply_to_agent, store, task_id, rid)
         # a reclassification is a triage verdict the owner had to overturn - worth generalizing
         if background is not None:
-            background.add_task(learn.learn_from, store,
+            background.add_task(learning.learn_from, store,
                                 f"{task_ref(task_id)}: owner reclassified \"{(t.get('Title') or '')[:80]}\" from a "
-                                'coding task to a question needing only a reply - triage over-reached')
+                                'coding task to a question needing only a reply - triage over-reached', f'task{task_id}')
     return {'ok': True}
 
 @app.post('/api/tasks/{task_id}/code')
@@ -3594,7 +3589,7 @@ def set_task_repo(task_id: int, body: RepoBody, background: BackgroundTasks = No
         # "triage chose ledger and the owner moved the work to portal" is a pattern worth generalising,
         # and it reached LEARNED.md as nothing at all.
         if background is not None and str(t.get('Tags') or '').find(f'repo:{body.repo}') < 0:
-            try: background.add_task(learn.learn_from, store, rmem.lesson(store, task_id, 'repository', body.repo))
+            try: background.add_task(learning.learn_from, store, rmem.lesson(store, task_id, 'repository', body.repo), f'task{task_id}')
             except Exception as e: logger.debug(f'repo lesson skipped: {e}')
     from .docsync import sync_projects
     sync_projects(store, ACTOR)
@@ -3617,11 +3612,11 @@ class NotATaskBody(BaseModel):
 
 def report_not_for_me(m: dict, src: str, title: str = '') -> str:
     """A REPORT'S FINDING PUT DOWN FOR GOOD (the owner's GO, 2026-11-19): one plain line in his memory - the report, and what this finding
-    is about - written as it stands (memorylines.say). The routing judge and triage read the whole memory (reports.judge_memory), so the
+    is about - written as it stands (learning.say). The routing judge and triage read the whole memory (reports.judge_memory), so the
     next run of that finding makes no task. A finding has no sender or subject to key a verdict on; this is its whole lesson."""
     about = ' '.join(str(title or m.get('TriageTitle') or m.get('Subject') or 'this').split())[:160]
     line = f"Not for me: {m.get('SourceName') or 'this report'} findings about {about}"
-    return memorylines.say(store, 'not_ours', src, line) or line
+    return learning.say(store, 'not_ours', src, line) or line
 
 
 def _teach_not_a_task(m: dict, background=None):
@@ -3644,16 +3639,16 @@ def _teach_not_a_task(m: dict, background=None):
         report_not_for_me(m, src, (store.get_task(m['TaskId']) or {}).get('Title') if m.get('TaskId') else ''); return src
     em, topic = (m.get('FromEmail') or '').lower(), _topic_key(m)
     if not (em or topic): return None
-    # ...what it teaches about the owner, in words, or nothing (memorylines.teach - the owner, 2026-10-27): the line is the record, its
+    # ...what it teaches about the owner, in words, or nothing (learning.teach - the owner, 2026-10-27): the line is the record, its
     # evidence the message it was given on; the thread's own ruling is the ignore route the callers add, which an Undo takes back
     src = f"msg{m['MessageId']}"
-    memorylines.teach_soon(store, 'not_a_task', src, _verdict_facts(m), 'subject' if topic else 'sender', topic or em,
+    learning.teach_soon(store, 'not_a_task', src, _verdict_facts(m), 'subject' if topic else 'sender', topic or em,
                            background=background, stands=lambda: _put_down(m['MessageId']))
     return src
 
 
 def _verdict_facts(m: dict = None, t: dict = None, said: str = '') -> str:
-    """The item a verdict was given on, as the lesson writer reads it (memorylines.teach)."""
+    """The item a verdict was given on, as the lesson writer reads it (learning.teach)."""
     m, t = m or {}, t or {}
     who = ' '.join(x for x in (m.get('FromName'), f"<{m['FromEmail']}>" if m.get('FromEmail') else '') if x)
     out = [f'{k}: {v}' for k, v in (('From', who), ('Channel', m.get('Channel')), ('Subject', m.get('Subject')), ('Task', t.get('Title')),
@@ -3706,7 +3701,7 @@ def _teach_not_coding(task_id: int, t: dict, was: tuple, belongs_to: str = None,
     task'... does that trigger memory?" - it did not). Three writes:
 
     - the OVERTURNED VERDICT, so what triage said and what the owner made of it stay joined;
-    - ONE LEARNED.md line saying what kind of work this is for the owner and why (memorylines.teach) -
+    - ONE learned line saying what kind of work this is for the owner and why (learning.teach) -
       which ingest.notes_for puts in front of triage on the next message about this sender or topic -
       or none when nothing general can be said: "not for the agent" alone teaches nothing (2026-10-27);
     - the ROUTING FACT, weighted and task-keyed (routingmemory) - and, when the owner typed one,
@@ -3724,7 +3719,7 @@ def _teach_not_coding(task_id: int, t: dict, was: tuple, belongs_to: str = None,
         em, topic = (m.get('FromEmail') or '').lower(), _topic_key(m) if m else ''
         was_said = f'triage had made it {was_kind} work' if was_kind else ''
         learned = f'task{task_id}'
-        memorylines.teach_soon(store, 'not_for_agent', learned,
+        learning.teach_soon(store, 'not_for_agent', learned,
                                _verdict_facts(m, t, '; '.join(x for x in (was_said, f'the owner says it belongs to {belongs_to.strip()}'
                                                                            if (belongs_to or '').strip() else '') if x)),
                                'subject' if topic else 'sender' if em else 'global', topic or em or None, background=background,
@@ -3776,7 +3771,7 @@ def _teach_routing(task_id: int, field: str, value: str, belongs_to: str = None,
             n = rmem.learn_correction(store, task_id, f, v, ACTOR, reason=said[:200])
             if n: out[f'learned_{f}'] = n
             # ...and what it says about the owner, in words, where every reader reads it - once per correction and only when it taught
-            # something new: a re-press of the same button must not spend an AI call restating a known pattern (memorylines.teach,
+            # something new: a re-press of the same button must not spend an AI call restating a known pattern (learning.teach,
             # 2026-10-27 - it was the hot pass's Watching guess and a "ROUTING KIND:" line that only recorded the press)
             if n and line: _teach_line(task_id, f, said, background)
         except Exception as e:
@@ -3784,7 +3779,7 @@ def _teach_routing(task_id: int, field: str, value: str, belongs_to: str = None,
     return out
 
 def _teach_line(task_id: int, field: str, said: str, background=None):
-    """One correction of how a task was routed or judged, taught in words (memorylines.teach) about the topic (else the sender) of the
+    """One correction of how a task was routed or judged, taught in words (learning.teach) about the topic (else the sender) of the
     mail it came from - the line, or nothing when it says nothing general about the owner. Never raises."""
     try:
         m = next(iter(store.list_messages(task_id)), None) or {}
@@ -3792,7 +3787,7 @@ def _teach_line(task_id: int, field: str, said: str, background=None):
         if field in ('priority', 'watch') and not m: return
         em, topic = (m.get('FromEmail') or '').lower(), _topic_key(m) if m else ''
         kind = 'judged' if field in ('difficulty', 'data_class') else field if field in ('priority', 'watch') else 'routing'
-        memorylines.teach_soon(store, kind, f'task{task_id}', _verdict_facts(m, store.get_task(task_id), said),
+        learning.teach_soon(store, kind, f'task{task_id}', _verdict_facts(m, store.get_task(task_id), said),
                                'subject' if topic else 'sender' if em else 'global', topic or em or None,
                                section='care' if field in ('kind', 'system', 'priority', 'watch') else 'work', background=background)
     except Exception as e:
@@ -3821,7 +3816,7 @@ def not_a_task(task_id: int, body: NotATaskBody = None, background: BackgroundTa
     if msgs:
         snap['ignore'] = store.add_route(msgs[0]['MessageId'], None, 'ignore', None,
                                          f"not a task - {(msgs[0].get('Subject') or 'this conversation')[:80]}", [], ACTOR)
-    if learned: snap['taught'] = learned['source']        # ...the Undo takes back the line it teaches (memorylines.untaught)
+    if learned: snap['taught'] = learned['source']        # ...the Undo takes back the line it teaches (learning.untaught)
     kept = recentlydeleted.keep_task(store, snap)
     store.audit('task', task_id, 'not_a_task_delete', ACTOR)
     _drop_task(task_id)
@@ -4544,8 +4539,8 @@ def not_mine(mid: int, body: NotMineBody, background: BackgroundTasks = None):
         return {'ok': True, 'learned': src, 'note': line, 'scope': scope, 'scopeKey': key, 'taskDeleted': fate == 'deleted',
                 'taskArchived': fate == 'archived', 'ref': task_ref(tid) if tid else None, 'alsoCovered': []}
     # "not ours" draws a responsibility boundary: what it says about the owner - whose work this kind is, and why - is a line in their
-    # memory, in words, or nothing (memorylines.teach, 2026-10-27); the owner's own words, when they typed some, are its best evidence
-    memorylines.teach_soon(store, 'not_ours', src, _verdict_facts(m, said=f"the owner's words: {body.note.strip()}" if (body.note or '').strip() else ''),
+    # memory, in words, or nothing (learning.teach, 2026-10-27); the owner's own words, when they typed some, are its best evidence
+    learning.teach_soon(store, 'not_ours', src, _verdict_facts(m, said=f"the owner's words: {body.note.strip()}" if (body.note or '').strip() else ''),
                            scope, key, background=background, stands=lambda: _put_down(mid))
     return {'ok': True, 'learned': src, 'note': note, 'scope': scope, 'scopeKey': key,
             'taskDeleted': fate == 'deleted', 'taskArchived': fate == 'archived', 'ref': task_ref(tid) if tid else None,
@@ -4675,9 +4670,7 @@ def ignore_sender(mid: int, body: IgnoreSenderBody, background: BackgroundTasks 
     pid = store.save_policy({'Name': f'Skip {em}', 'Kind': 'sender', 'Pattern': em, 'Action': 'skip',
                              'Reason': f'the owner said to ignore mail from {em}', 'Active': 1}, ACTOR)
     store.audit('policy', pid, 'create', ACTOR, detail={'from': em, 'message_id': mid, 'via': 'ignore-sender'})
-    # ...the rule does the skipping; the memory says what it means about the owner, for every reader (2026-10-27)
-    from . import memorylines
-    memorylines.keep(store, 'You never want to see mail from this sender - it is skipped', 'sender', em, section='care', verdict=False)
+    # ...the rule does the skipping, and the memory reads it where it is kept: a fact about this sender for every reader (memory.facts)
     saved = next((p for p in store.list_policies(active_only=False) if p['PolicyId'] == pid), None)
     hidden = policy_engine.apply_retroactively(store, saved or {})
     if hidden: store.audit('policy', pid, 'apply_history', ACTOR, detail={'messages': hidden})
@@ -4924,12 +4917,12 @@ def _learn_promotion(m: dict, background, standing: bool = False):
     if m.get('TaskId') or m.get('Status') != 'filed': return None
     em, topic = (m.get('FromEmail') or '').lower(), _topic_key(m)
     if not (em or topic): return None
-    # ...what it says about the owner, in words, or nothing (memorylines.teach, 2026-10-27): a positive verdict is evidence, never a rule
+    # ...what it says about the owner, in words, or nothing (learning.teach, 2026-10-27): a positive verdict is evidence, never a rule
     # ...with what triage had made of it (an FYI's Should be a task, the owner 2026-10-29): Not a task's lesson the other way round, so the
     # line says what this kind of mail is to the owner, and triage reads it on the next one like it
     from .ingest import earlier_verdict
     src, why = f"msg{m['MessageId']}", earlier_verdict(store, m, m['MessageId'])['why']
-    memorylines.teach_soon(store, 'made_task', src, _verdict_facts(m, said=f'triage had filed it for information only - "{why}"' if why else ''),
+    learning.teach_soon(store, 'made_task', src, _verdict_facts(m, said=f'triage had filed it for information only - "{why}"' if why else ''),
                            'subject' if topic else 'sender', topic or em, background=background)
     return src
 
@@ -4956,7 +4949,7 @@ def _teach_reclassify(m: dict, was: str, road: str, background) -> str:
     if not (em or topic): return ''
     src = f"msg{m['MessageId']}"
     said = f'triage called it {was or "unclassified"}; the owner reclassified it as {road} - {ROADS[road]}'
-    memorylines.teach_soon(store, f'road_{road}', src, _verdict_facts(m, said=said), 'subject' if topic else 'sender', topic or em,
+    learning.teach_soon(store, f'road_{road}', src, _verdict_facts(m, said=said), 'subject' if topic else 'sender', topic or em,
                            background=background)
     return src
 
@@ -5028,7 +5021,7 @@ def assistant_ideas(status: str = None, mid: int = None):
         return out
     return {'data': [row(i) for i in store.list_ideas(status or None, mid)]}
 
-class IdeaBody(BaseModel): days: int = 1; until: str = None; line: str = None; yes: bool = None     # line/yes: one habit's answer (habits.py)
+class IdeaBody(BaseModel): days: int = 1; until: str = None; line: str = None; yes: bool = None     # line/yes: one habit's answer (learning.answer)
 
 @app.post('/api/assistant/ideas/{iid}/{verb}')
 def assistant_act(iid: int, verb: str, body: IdeaBody = None):
@@ -5893,14 +5886,13 @@ def agent_message(mid: str, request: Request, task_id: int):
     return m
 
 @app.get('/api/agent/memory')
-def agent_memory(request: Request, task_id: int, section: str = ''):
-    """`taskuary --memory [SECTION]` (and the owner_memory tool): LEARNED.md, read on demand - an agent's brief no longer carries it
-    (the owner, 2026-10-27: "progressive disclosure"). Never on a stranger's task: what the owner is like is not a stranger's to read."""
-    from . import learned_cut
+def agent_memory(request: Request, task_id: int, about: str = ''):
+    """`taskuary --memory [WHO]` (and the owner_memory tool): the owner's memory, looked up on demand (memory.lookup) - what bears on the
+    task rides in its brief already. Never on a stranger's task: what the owner is like is not a stranger's to read."""
+    from . import memory
     _owner_history(request, task_id)
-    if section and section not in learned_cut.SECTIONS: raise HTTPException(422, f"no section {section!r} - one of {', '.join(learned_cut.SECTIONS)}")
-    text = learned_cut.whole(store, 'agents', target=f'task:{task_id}', sections=(section,) if section else None)
-    return {'text': text, 'says': text or 'nothing learned about the owner yet' + (f' under {learned_cut.TITLE[section]}' if section else '')}
+    text = memory.lookup(store, about, target=f'task:{task_id}')
+    return {'text': text, 'says': text}
 
 # data is base64: the CLI reads the file, the server never opens a path it is handed - or `attachment`, a file on the task's own mail by its id
 class AgentFile(BaseModel): name: str; data: str = ''; attachment: int | None = None
@@ -6166,16 +6158,16 @@ def _start_new_task(new: int, kind: str, ask: str, model: str) -> dict:
     if got.get('dispatch') == 'needs_repo': return {'started': False, 'why': got.get('reason'), 'next': 'the owner picks its checkout on that task'}
     return {'started': bool(got.get('started') or got.get('existing')), 'next': f'say in one line that {task_ref(new)} is working on it'}
 
-class AgentRememberBody(BaseModel): task_id: int; note: str = ''; about: str = ''; replaces: str = ''; section: str = ''; agent: str = 'agent'
-AGENT_KEEPS = 5          # new memory lines one task's agent may write in a day; a correction (`replaces`) adds none and is always taken
+class AgentRememberBody(BaseModel): task_id: int; note: str = ''; subject: str = ''; about: str = ''; signature: bool = False; agent: str = 'agent'
+AGENT_KEEPS = 5          # new memory lines one task's agent may write in a day; a correction (a subject already kept) adds none and is always taken
 
 @app.post('/api/agent/remember')
 def agent_remember(body: AgentRememberBody, request: Request):
     """The remember tool (`taskuary --remember`): a fact the owner told the session on its OWN task, kept as the Assistant keeps one
-    (memoryedit.remember) - one line of LEARNED.md, in use at once for triage, every agent and the Assistant (the owner, 2026-11-14: "if the
-    user tells you something, they should not have to say it again"). Silent: no line in the chat, no card. Never on a stranger's task, and
-    only where the owner has spoken in this chat - a sender's words are never the owner's (general.owner_spoke)."""
-    from . import general, memoryedit, origin
+    (memory.remember) - what he said, in use at once for triage, every agent and the Assistant (the owner, 2026-11-14: "if the user tells
+    you something, they should not have to say it again"). Silent: no line in the chat, no card. Never on a stranger's task, and only where
+    the owner has spoken in this chat - a sender's words are never the owner's (general.owner_spoke)."""
+    from . import general, memory, origin
     _own_task_only(request, body.task_id)
     if not store.get_task(body.task_id): raise HTTPException(404, 'no such task')
     if origin.of_task(store, body.task_id)[0] == 'stranger':
@@ -6189,33 +6181,26 @@ def agent_remember(body: AgentRememberBody, request: Request):
     from datetime import timedelta
     since = (datetime.now() - timedelta(days=1)).isoformat(sep=' ', timespec='seconds')
     kept = store._one("SELECT COUNT(*) n FROM audit WHERE EntityType='task' AND EntityId=? AND Action='agent_remembered' AND CreatedAt>=?", (body.task_id, since))
-    if int((kept or {}).get('n') or 0) >= AGENT_KEEPS and not body.replaces.strip() and not memoryedit.said(store.get_doc('learned'), body.note):
+    known = any(memory.subject_of(r['Subject']) == memory.subject_of(body.subject) for r in memory.rows(store, memory.SAID))
+    if int((kept or {}).get('n') or 0) >= AGENT_KEEPS and not body.signature and not known and not memory.has_said(store, body.note):
         raise HTTPException(422, f"not kept: {AGENT_KEEPS} facts from this task are in the owner's memory since yesterday, and it holds only what "
-                                 "changes how future work is handled. Carry on with the task; a fact that corrects one of them is kept with `replaces`.")
-    try: r = memoryedit.remember(store, body.note, body.about, body.section, replaces=body.replaces, actor=f'agent:{body.agent}')
-    except LookupError:
-        # ...a line to replace that the memory does not hold: the lines it may have meant, to copy one from (memoryedit.nearby) - never "keep it
-        # beside them", the offer that left two lines disagreeing (walk 6); with nothing there to contradict, there is nothing to replace
-        near = memoryedit.nearby(store, body.section, body.about)
-        from .agenttools import echo, refusal
-        raise HTTPException(422, refusal(f"not kept: no line of the memory reads {echo(body.replaces)!r}",
-                                         f"call again with `replaces` copied exactly from the line it makes untrue - these are the memory's lines "
-                                         f"it may be: {json.dumps(near, ensure_ascii=False)}" if near else
-                                         "nothing there for it to replace - call again with no `replaces`"))
+                                 "changes how future work is handled. Carry on with the task; a fact that corrects one of them is kept under its subject.")
+    try: r = memory.remember(store, body.note, body.subject, body.about, actor=f'agent:{body.agent}', signature=body.signature)
     except ValueError as e: raise HTTPException(422, str(e))
-    if not r.get('already'): store.audit('task', body.task_id, 'agent_remembered', body.agent, 'agent', {'line': r['text'][:400], 'section': r.get('section'), 'closed': (r.get('closed') or {}).get('text')})
-    c = r.get('closed') or {}
-    # ...and the other lines about the same person, for the one this makes untrue: two lines that disagree are read as two truths
-    rest = [] if c or r.get('already') or not body.about.strip() else [l['text'] for l in memoryedit.about(store, body.about)['lines'] if l['text'] != r['text']][:6]
-    if r.get('section') == memoryedit.SIGNATURE:
+    if not r.get('already'): store.audit('task', body.task_id, 'agent_remembered', body.agent, 'agent', {'line': r['text'][:400], 'subject': r.get('subject'), 'replaced': r.get('replaced')})
+    if r.get('signature'):
         # ...and HE SEES IT CHANGED, where it happened (round 4, 2026-11-22: a memory sentence became his signature, said nowhere)
         store.add_comment(body.task_id, 'taskuary', 'agent', f"Your email signature now reads: {r['text']!r} - Settings, Email signature, changes it.")
         return {'ok': True, **r, 'says': f"Kept as the owner's saved signature, exactly as it goes under every email: {r['text']!r}. Every email set up from now carries it, "
                                        "and the drafts waiting for his Send were re-signed with it. Carry on."}
+    # ...and his other lines about the same person, each under its subject: one this makes untrue is corrected under that subject - two lines that
+    # disagree are read as two truths (walk 6)
+    rest = [] if r.get('replaced') or r.get('already') or not body.about.strip() else \
+        [f"[{l['subject']}] {l['text']}" for l in memory.about(store, body.about)['lines'] if l['own'] and l['key'] != r.get('key')][:6]
     return {'ok': True, **r, 'says': (f"Already in the owner's memory: {r['text']}" if r.get('already') else f"Kept in the owner's memory, in use from now: {r['text']}")
-            + (f" - and {c['text']!r} is closed as no longer true." if c else '')
+            + (f" - in place of {r['replaced']!r}, which it corrects." if r.get('replaced') else '')
             + (f" The memory's other lines about {body.about}: {json.dumps(rest, ensure_ascii=False)} - if this makes one of them untrue, call again "
-               "with it as `replaces`." if rest else '')}      # ...a fact, no order (the HIPAA walk, 2026-11-23: "never tell the owner it was saved")
+               "with that line's subject." if rest else '')}      # ...a fact, no order (the HIPAA walk, 2026-11-23: "never tell the owner it was saved")
 
 @app.delete('/api/tasks/{tid}/check-back')
 def cancel_check_back(tid: int, request: Request):
@@ -6563,7 +6548,7 @@ async def mcp_rpc(request: Request, task: int = 0):
              'todos': lambda tid, a: agent_todos(AgentTodosBody(**{k: v for k, v in a.items() if k in ('add', 'reword', 'merge')}, task_id=tid), request),
              'remind': lambda tid, until: agent_remind(AgentRemindBody(task_id=tid, until=until), request),
              'new_task': lambda tid, a: agent_new_task(AgentNewTaskBody(**{**{k: v for k, v in a.items() if k in AgentNewTaskBody.model_fields}, 'task_id': tid}), request),
-             'remember': lambda tid, note, about='', replaces='', section='': agent_remember(AgentRememberBody(task_id=tid, note=note, about=about, replaces=replaces, section=section), request),
+             'remember': lambda tid, note, subject='', about='', signature=False: agent_remember(AgentRememberBody(task_id=tid, note=note, subject=subject, about=about, signature=signature), request),
              'ask_stronger': lambda tid, q, c: agent_ask_stronger(AgentAskStrongerBody(task_id=tid, question=q, context=c), request),
              'reply': lambda tid, text, to='', files=(), **who: agent_reply(AgentReplyBody(task_id=tid, text=text, to=to, files=list(files), **who), request),
              'draft': lambda tid, text, to, subject, files=(), cc=(), mailbox='', guessed=(), slot='': agent_draft(AgentDraftBody(task_id=tid, text=text, to=to, subject=subject, slot=slot, files=list(files), cc=list(cc), mailbox=mailbox, guessed=list(guessed)), request),
@@ -10334,29 +10319,23 @@ def how_it_works():
 def get_doc(name: str):
     """Raw for the editor, rendered so you can see what an agent will actually read."""
     content = _heal_blank_doc(name)
-    if (who := _named_owner(name)): content = render_doc(content, who)
     # ...and how much of it reaches the model that reads it: the editor's meter counts what is typed against the prompt's own number
     from . import doclimits
     return {'name': name, 'content': content, 'rendered': store.doc(name) or '',
             'owner': store.owner(), 'limit': doclimits.limit(store, name)}
 
 
-# LEARNED.md IS EDITED WITH THE NAME IN IT (the setup sweep, 2026-10-28): its passes write {{owner_first}} where the name goes, and the
-# editor showed that placeholder raw. It is drawn with the name, and the name typed back is the token again on save (store.retoken_doc)
-def _named_owner(name: str):
-    who = store.owner()
-    return who if name == 'learned' and who['owner'] not in ('', 'the owner') and '{{' not in who['owner'] else None
-
 @app.put('/api/doc/{name}')
 def put_doc(name: str, body: DocBody):
+    # LEARNED.md is the memory's face, written from its stores (memory.render): a line is changed where it is kept, and the editor says where
+    if name == memory.DOC: raise HTTPException(409, memory.READ_ONLY)
     # blank = "give me the shipped default back", as the templates' own comments promise
     if not str(body.content or '').strip() and _template_text(name).strip():
         store.save_doc(name, _template_text(name), 'template')
         return {'ok': True, 'restored': True}
     from . import counsel as _counsel
     if name == 'counsel': _counsel.check_budget(store, name, body.content)
-    who = _named_owner(name)
-    store.save_doc(name, retoken_doc(body.content, who['owner'], who['owner_email']) if who else body.content, ACTOR)
+    store.save_doc(name, body.content, ACTOR)
     return {'ok': True}
 
 # ── playbooks: the fourth operator document, one file per kind of job (playbooks.py) ──────
@@ -10413,9 +10392,8 @@ def restore_playbook(slug: str):
 
 @app.get('/api/learned/graph')
 def learned_graph():
-    """LEARNED.md as a picture: lines, the verdicts that fed them, each line's score over time,
-    the lines that died - the Docs section's Visualize view (discussion #27)."""
-    return learnedgraph.graph(store)
+    """The Memory page: what the owner said, the facts, and what was learned - confirmed, or waiting on his word (memory.page)."""
+    return memory.page(store)
 
 @app.get('/api/since')
 def since_summary():
@@ -10425,10 +10403,8 @@ def since_summary():
 
 @app.get('/api/learned/changes')
 def learned_changes(days: int = 30):
-    """LEARNED.md's history as a list - what it learned, merged and let fade - the Docs section's What changed view."""
-    return {'data': learnedgraph.changes(store, max(1, min(days, 365)))}
-
-class AdoptBody(BaseModel): key: str
+    """What changed in the memory, newest first - the Docs section's What changed view (memory.changes)."""
+    return {'data': memory.changes(store, max(1, min(days, 365)))}
 
 class MarkBody(BaseModel):
     key: str
@@ -10436,17 +10412,11 @@ class MarkBody(BaseModel):
 
 @app.post('/api/learned/mark')
 def learned_mark(body: MarkBody):
-    """Keep, Wrong or Forget one line of LEARNED.md (the owner's ruling 2, 2026-10-23) - from What changed or Visualize. No AI needed.
-    409 with the reason in words when the line cannot take it (Wrong on a line the owner wrote); 404 when it changed under the page."""
-    from . import memoryedit
-    try: return memoryedit.mark(store, body.key, body.how)
+    """Keep (confirm), Wrong or Forget one line of the memory - from the Memory page or What changed. No AI needed. 409 with the reason
+    in words when the line cannot take it (Wrong on a line the owner said); 404 when it changed under the page."""
+    try: return memory.mark(store, body.key, body.how)
     except LookupError as e: raise HTTPException(404, str(e).strip("'\""))
     except ValueError as e: raise HTTPException(409, str(e))
-
-@app.post('/api/learn/adopt')
-def learn_adopt(body: AdoptBody):
-    try: return learn.adopt(store, body.key, ACTOR)
-    except ValueError as e: raise HTTPException(404, str(e))
 
 @app.get('/api/doc/generate/status')
 def doc_generate_status():
@@ -10496,10 +10466,9 @@ def doc_generate(name: str, days: int = 90):
 
 @app.post('/api/learn/reflect')
 def learn_reflect():
-    """Consolidate LEARNED.md now instead of waiting for the threshold - the Docs page's
-    'Reflect now'. False means there was no AI brain or nothing usable came back; the doc
-    is never replaced with a worse one."""
-    ok = learn.reflect(store)
+    """Reflect now instead of waiting for the threshold - the Docs page's 'Reflect now' (learning.reflect). False means there was no
+    AI brain or nothing usable came back."""
+    ok = learning.reflect(store)
     if ok: store.audit('doc', 0, 'reflect', ACTOR)
     return {'ok': True, 'reflected': ok}
 
@@ -10572,8 +10541,8 @@ def delete_policy(pid: int):
     return {'ok': True, **out}
 
 # THE NOTES PAGE IS GONE (the owner, 2026-10-27: "probably garbage, remove it"): /api/memory listed, added and switched off rows of a
-# second memory that triage, the Advisor and agents read only on a matching word. Every row is a LEARNED.md line now (memorylines),
-# edited, kept or forgotten on LEARNED.md itself (Docs) or told to the Assistant (memory.remember / memory.wrong).
+# second memory that triage, the Advisor and agents read only on a matching word. Every row is a line of the memory now (memory.py),
+# kept or forgotten on the Memory page or told to the Assistant (memory.remember / memory.wrong).
 
 @app.get('/api/audit/recent')
 def audit_recent(limit: int = 100): return {'data': store.list_audit(limit=max(1, min(limit, 500)))}
@@ -11361,10 +11330,10 @@ def advisor_pass(now: float = None) -> bool:
         try:
             # ...AND WHAT THE OWNER'S VERDICTS TAUGHT IS CONSOLIDATED ON THIS CLOCK TOO (the readiness review, 2026-11-14): reflection ran from
             # the startup catch-up alone, so an app left open all week learned nothing until a restart. Its own rule says when it is due
-            # (learn.reflect_if_due: once a day, never on silence); unasked work, so it waits past the day's ceiling as the Advisor does
+            # (learning.reflect_if_due: once a day, never on silence); unasked work, so it waits past the day's ceiling as the Advisor does
             from . import assistant, brainroute
             try:
-                if not brainroute.auto_held(store): learn.reflect_if_due(store)
+                if not brainroute.auto_held(store): learning.reflect_if_due(store)
             except Exception as e: logger.warning(f'reflection failed: {e}')
             assistant.clock(store)
         except Exception as e: logger.warning(f"the Advisor's own pass failed: {e}")
@@ -11449,7 +11418,7 @@ def catch_up_on_startup():
         # the Morning digest needs no call of its own anymore: it is a seeded REPORT, run by
         # the pass above like every other one. Consolidate what the verdicts taught next,
         # on the same once-a-day rhythm.
-        try: learn.reflect_if_due(store)
+        try: learning.reflect_if_due(store)
         except Exception as e: logger.warning(f'reflection failed: {e}')
         # ...and the workstreams kept current, once a week: each section from its last two weeks, a quiet one put by, and the hat a new
         # connector or GitHub project brought noticed - added when sure, else an Advisor card (wsboot.tick, the owner 2026-11-01)
@@ -11461,19 +11430,9 @@ def catch_up_on_startup():
 
 
 def _fold_habits():
-    """The habit cards of before 2026-11-01 become the one habits row (at once - the rail draws it), and each habit is said plainly to the
-    owner by the memory's brain (habits.py) off the window's path: the phrasing is a model call."""
-    from . import habits
-    try:
-        habits.fold(store)
-        if not habits.unphrased(store): return
-    except Exception as e: logger.warning(f'habit cards not folded: {e}'); return
-    def say():
-        try:
-            from .llm import build_llm
-            habits.phrase(store, build_llm(store, job='memory'))
-        except Exception as e: logger.warning(f'habits not phrased: {e}')
-    threading.Thread(target=say, daemon=True).start()
+    """The habit cards of before 2026-11-01 closed, and the one habits row drawn from the learned lines that wait on his word (learning.tick)."""
+    try: learning.tick(store)
+    except Exception as e: logger.warning(f'habits row not drawn: {e}')
 
 
 def _heal_owner_docs():

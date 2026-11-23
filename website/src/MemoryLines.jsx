@@ -35,7 +35,7 @@ export default function MemoryLines() {
         </Box>
       )}
       <Typography variant="caption" sx={{ color: DIM, lineHeight: 1.5 }}>
-        What Taskuary has learned about how you work. Keep makes a line yours, Wrong takes it out for good, Forget takes it out for now.
+        What you said, the facts about your people, and what Taskuary learned from what you did. Keep confirms a learned line - it is used from then on; Wrong takes it out for good, Forget for now.
       </Typography>
       {!groups.length && <Typography variant="body2" sx={{ color: FAINT, fontSize: 13 }}>Nothing learned yet.</Typography>}
       {groups.map((sec) => (

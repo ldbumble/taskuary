@@ -20,7 +20,7 @@ def s():
 
 def send(s, rid):
     with mock.patch('taskuary.outbound.reply_to_message', return_value=SENT), mock.patch.object(outbound, 'send_block', return_value=''), \
-         mock.patch('taskuary.learn.learn_from'):
+         mock.patch('taskuary.learning.learn_from'):
         return verdicts.decide(s, s.get_review(rid), 'approve')
 
 
@@ -50,7 +50,7 @@ def test_a_send_with_nothing_else_waiting_still_leaves_it_open(s):
 def test_approve_runs_only_the_action(s):
     tid = s.create_task({'Title': 'Land the fix', 'Kind': 'coding', 'Status': 'waiting'}, 'router')
     co = s.add_review({'TaskId': tid, 'Kind': 'action', 'Status': 'pending', 'DraftText': json.dumps({'action': 'merge_pr', 'repo': 'org/app', 'number': 7})})
-    with mock.patch('taskuary.proposals.execute', return_value={'merged': 'org/app#7'}) as ran, mock.patch('taskuary.learn.learn_from'):
+    with mock.patch('taskuary.proposals.execute', return_value={'merged': 'org/app#7'}) as ran, mock.patch('taskuary.learning.learn_from'):
         out = verdicts.decide(s, s.get_review(co), 'approve')
     assert out['ok'] and ran.call_count == 1 and s.get_review(co)['Status'] == 'approved'
     assert s.get_task(tid)['Status'] not in ('done', 'dropped')
@@ -61,7 +61,7 @@ def test_the_last_proposal_answered_puts_the_task_back_on_the_owner_open(s):
     tid = s.create_task({'Title': 'Pay the bill', 'Kind': 'general', 'Status': 'waiting'}, 'router')
     s.audit('task', tid, 'awaits_proposals', 'agent')
     rv = s.add_review({'TaskId': tid, 'Kind': 'action', 'Status': 'pending', 'DraftText': json.dumps({'action': 'pay_bill'})})
-    with mock.patch('taskuary.proposals.execute', return_value={'ok': True}), mock.patch('taskuary.learn.learn_from'):
+    with mock.patch('taskuary.proposals.execute', return_value={'ok': True}), mock.patch('taskuary.learning.learn_from'):
         verdicts.decide(s, s.get_review(rv), 'approve')
     assert s.get_task(tid)['Status'] == 'open'
 
@@ -137,7 +137,7 @@ def test_the_phone_offers_mark_done_and_next_under_a_send_and_its_mark_done_clos
 def test_an_email_sent_on_its_second_press_says_it_was_sent_not_the_failure(s):
     tid = typed(s, FOUR[:2]); a = draft(s, tid, 0)
     with mock.patch('taskuary.outbound.send_out', side_effect=RuntimeError('550 mailbox unavailable')), \
-         mock.patch.object(outbound, 'send_block', return_value=''), mock.patch('taskuary.learn.learn_from'):
+         mock.patch.object(outbound, 'send_block', return_value=''), mock.patch('taskuary.learning.learn_from'):
         assert verdicts.decide(s, s.get_review(a), 'approve')['delivery'] == 'failed'
     assert approve(s, a)['ok']
     said = comments(s, tid)

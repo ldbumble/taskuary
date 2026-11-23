@@ -7,7 +7,7 @@ light (no hard-coded rules): the facts say the state and its line, and the check
 import json
 from datetime import date, datetime, timedelta
 import pytest
-from taskuary import funnel, learn, learned_cut as lc, memoryedit, rulebook, terminal, usual
+from taskuary import funnel, rulebook, terminal, usual, memory
 from taskuary.store import MemoryStore
 from taskuary.testing import Factory
 
@@ -84,7 +84,7 @@ def test_how_soon_the_owner_answers_is_never_a_line_on_the_task(s):
     t, _ = ask(s, 'Trainly renewal', ERIN, 5)
     d = rulebook.decide(s, f'task:{t}')
     assert d['state'] == 'asked' and 'usually' not in (d.get('line') or '')
-    assert not hasattr(usual, 'late_reply') and not hasattr(learn, 'answer_lines')
+    assert not hasattr(usual, 'late_reply')
 
 
 
@@ -93,12 +93,3 @@ def _d(verb, kind, state='asked', line='x'):
     return {'key': 'task:1', 'state': state, 'verb': verb, 'line': line, 'by': 'model', 'evidence': [], 'kind': kind}
 
 
-
-def test_the_learned_page_says_a_kept_line_is_kept(s):
-    raw = '- Ray Colton (ray@northwind.example) runs payroll [s:4 | ev: task1 | seen: 2026-10-20 | k: payroll ray colton]'
-    s.save_doc('learned', learn._under(s.get_doc('learned') or '', lc.SECTIONS['people'], raw), 'reflect')
-    from taskuary import learnedgraph
-    line = lambda: next(l for l in learnedgraph.graph(s)['lines'] if l['key'] == 'payroll ray colton')
-    assert not line()['kept']
-    memoryedit.mark(s, 'payroll ray colton', 'keep')
-    assert line()['kept']

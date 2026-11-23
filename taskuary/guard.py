@@ -160,7 +160,7 @@ AGENT_READS = (
     (r'GET', r'^/api/agent/messages(/[mM]?\d+)?$',
      "`taskuary --search/--message`: the owner's mail and messages, read-only (mailsearch.py) - never a stranger's task"),
     (r'GET', r'^/api/agent/repos$', "the find_repos tool: the git checkouts under the folders agents may look in (repochoice.find) - never a stranger's task"),
-    (r'GET', r'^/api/agent/memory$', "`taskuary --memory`: LEARNED.md, read on demand (context.MEMORY_LINE) - never a stranger's task"),
+    (r'GET', r'^/api/agent/memory$', "`taskuary --memory`: the owner's memory, looked up on demand (memory.lookup) - never a stranger's task"),
 )
 
 # ── EVERY OTHER WRITE, NAMED ────────────────────────────────────────────────────────────

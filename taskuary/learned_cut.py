@@ -268,14 +268,18 @@ def for_reader(store, reader: str, about: dict = None, budget: int = None, doc: 
     others = lambda raw: who is not None and bool(names(raw)) and not ours(raw)
     off = [(raw, k) for raw, k, s in every if who is not None and not ours(raw) and rank(raw, k, about) == 2 and near[k] > 0]
     by_subject = {k for _, k in sorted(off, key=lambda x: -near[x[1]])[:NEAR_PEOPLE]}
-    ls = [(raw, k, s) for raw, k, s in every if not others(raw) or k in by_subject]
+    # ...AND A LINE ABOUT A PERSON ON THIS ITEM, under any heading but Your people (the brief carries those - context.build), is this
+    # reader's: "venue quotes from this sender go to Paula" was left out as a line about everyone else, the sender being on the task
+    item = {str(p).lower() for p in (about or {}).get('people') or [] if p}
+    on_item = lambda x: x[2] != 'people' and bool(names(x[0]) & item)
+    ls = [(raw, k, s) for raw, k, s in every if not others(raw) or k in by_subject or on_item((raw, k, s))]
     if own:
         from .learnedgraph import TAG
         ls = [x for x in ls if ours(x[0]) or x[1] in by_subject or not TAG.match(x[0])]
     # ...and a line about one OTHER sender, domain or topic (memorylines' `(about: ...)`: a verdict, a line each) is not this reader's:
     # it reaches the readers of the mail it is about, by what it is about (ingest.applicable_notes) - hundreds of them, about everyone
     # else, would be the whole budget
-    ls = [x for x in ls if rank(x[0], x[1], about) != 5]
+    ls = [x for x in ls if on_item(x) or rank(x[0], x[1], about) != 5]
     # ...and a line learned under ANOTHER workstream is not this item's (the design's S4/S5, 2026-11-01): a habit with the side product's
     # testers is noise on a day-job ask. Lines under no workstream, and the owner's own, are everyone's
     if (ws := (about or {}).get('workstream')):

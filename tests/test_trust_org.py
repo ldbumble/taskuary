@@ -40,7 +40,8 @@ def test_a_teams_sender_from_another_tenant_is_placed_by_the_chat_s_members():
     member = {'tenant': 'tenant-sister', 'email': 'ethan@sister.example'}
     with mock.patch('taskuary.channels.teams_member', return_value=member) as ask:
         assert senders.trust_org(s, t, 'owner') == {'domain': 'sister.example', 'tenant': 'tenant-sister'}
+        asked = ask.call_count        # (the hold's sender and the press both read the member - channels.teams_member keeps it, one call to Teams)
         # a colleague of theirs in another chat, recorded with their tenant at ingest: trusted without asking anyone
         other = _task(s, **{**line, 'FromEmail': 'teams:bbbb-2', 'MailMetaJson': json.dumps({'tenant': 'tenant-sister'})})
         assert origin.of_task(s, other)[0] == 'trusted'
-    assert ask.call_count == 1
+    assert ask.call_count == asked

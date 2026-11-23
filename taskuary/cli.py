@@ -135,7 +135,13 @@ def _stranger_task(tid: int) -> bool:
         cx = sqlite3.connect(f"file:{Path(config.db_path()).as_posix()}?mode=ro", uri=True, timeout=5)
         try: r = cx.execute('SELECT Origin FROM task WHERE TaskId=?', (int(tid),)).fetchone()
         finally: cx.close()
-        return r is None or r[0] == 'stranger'
+        if r is not None and r[0]: return r[0] == 'stranger'
+    except Exception: return True
+    # ...an origin never stored yet is worked out as the server would (it writes it), and one that cannot be is a stranger's
+    try:
+        from . import origin
+        from .store import SQLiteStore
+        return origin.of_task(SQLiteStore(config.db_path()), tid)[0] == 'stranger'
     except Exception: return True
 
 def session() -> tuple:

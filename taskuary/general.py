@@ -2409,6 +2409,7 @@ class GeneralSession:
         self._restore_terminal()
 
     browser_failed = ''                  # why this session's browser did not open, said in the turn (send_prompt)
+    upto = 0                             # the newest event the turn at work was handed (events.take): a steer hands only what came after it
 
     def holds_browser(self) -> bool:
         "Can its hook hold this session's shell steps? Only a Claude CLI's hook refuses a call (llm.HOLDS_CLI), and a stranger's run has its own. (Its browser and desktop presses are held on every AI, gate.)"
@@ -2582,7 +2583,7 @@ class GeneralSession:
             from . import events, sessionrecord
             from .conversation import unheard
             came = unheard(self.store, self.task_id)
-            new = lambda: [e for e in events.pending(self.store, self.task_id) if e['kind'] in ('message', 'said')]
+            new = lambda: [e for e in events.pending(self.store, self.task_id) if e['kind'] in ('message', 'said') and e['id'] > (self.upto or 0)]   # ...past what the turn at work was handed
             if take:
                 # ...the trace marked where they go in, before they are heard: the turn under them is what it does from here (since_heard)
                 self.trace.append(mark := sessionrecord.heard_mark())
@@ -2822,7 +2823,7 @@ class GeneralSession:
             except OSError as e: logger.debug(f'task {self.task_id}: the turn now beginning was not kept on disk - {e}')
             # ...WHAT IS PAST THE CURSOR, TO HERE, IS THIS TURN'S (events.take): a message put on the task from now on is the next turn's
             from . import events
-            upto = events.top(self.store, self.task_id)
+            upto = self.upto = events.top(self.store, self.task_id)
             system, late, user = prompt_parts(self.store, self.task_id, turn=True, upto=upto)
             # ...WHAT THIS TURN ALONE IS TOLD (what came in, how many lines he sent, a hand-over) rides the TURN of a conversation the CLI
             # already holds, never its system prompt (rule 10, the recorded flood 2026-11-11): changed there, everything after it - the whole

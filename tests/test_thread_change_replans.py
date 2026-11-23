@@ -93,8 +93,9 @@ class ThreadChangeReplans(unittest.TestCase):
                                             'sent_at': '2026-11-03 10:05'}, 'your line in the chat')
         self.assertEqual(names(spawn.call_args_list), [])
         s._exec("UPDATE comment SET CreatedAt='2026-11-03 09:00:00' WHERE TaskId=?", (tid,))
-        lb = general.latest_block(s, tid)
-        self.assertIn('WHAT THE OWNER REPLIED ON THE THREAD THEMSELVES', lb); self.assertIn('on Teams: "Friday - Gail has the courier."', lb)
+        from taskuary import events
+        lb = events.take(s, tid)[0]
+        self.assertIn("The owner's own message on the thread", lb); self.assertIn('Friday - Gail has the courier.', lb)
 
     def test_a_second_line_while_the_turn_is_live_queues_once(self):
         s = store(); tid, rid = drafted_task(s)

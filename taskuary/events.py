@@ -6,7 +6,10 @@ them (`commit`). Nothing is rebuilt from the stores each turn, so nothing is sai
 changed is a new event, never an old block read again.
 
 One agent per task, so one cursor per task. A conversation said afresh is told the task in full by its brief - the messages and lines are
-in it - and the rest of what is past the cursor (cards, presses, notes) with it."""
+in it - and the rest of what is past the cursor (cards, presses, notes) with it.
+
+A card is the answer to the call that raised it: the call's own result says it is up, so a conversation that made the call hears only what
+became of it - pressed, sent, failed, greyed - by the card's id, once (`render`, `own`)."""
 import json, logging, time
 
 logger = logging.getLogger(__name__)
@@ -74,7 +77,8 @@ def take(store, tid: int, fresh: bool = False, carried=(), upto: int = None, ski
     upto = top(store, tid) if upto is None else upto
     skip = set(skip) | (set(IN_BRIEF) if fresh else set())
     rows = [e for e in pending(store, tid, upto) if e['kind'] not in skip and not (e['kind'] == 'message' and e.get('mid') in set(carried))]
-    return render(rows, fresh), upto
+    return render(rows[-FRESH_N:] if fresh else rows, fresh), upto
+FRESH_N = 40                    # ...a brief said afresh carries the newest of them: the task's own record holds the rest
 
 
 def messages_after(store, tid: int, upto: int) -> set:
@@ -103,10 +107,11 @@ def _message(e) -> str:
     from .terminal import fence
     where = ', '.join(x for x in (f"by {e['channel']}" if e.get('channel') else '', f"subject \"{_flat(e['subject'], 140)}\"" if e.get('subject') else '') if x)
     if e.get('own'): head = f"The owner's own message on the thread, sent outside Taskuary (m{e.get('mid')}{', ' + where if where else ''})"
+    elif e.get('mine'): head = f"The owner's ask (m{e.get('mid')})"
     else: head = f"Message from {e.get('who') or 'someone'} (m{e.get('mid')}{', ' + where if where else ''})"
     if e.get('elsewhere'): head += f", filed on {e['elsewhere']}"
     text = str(e.get('text') or '')
-    return f"{head}:\n{text if e.get('own') else fence(text)}" + _files(e.get('files'))
+    return f"{head}:\n{text if e.get('own') or e.get('mine') else fence(text)}" + _files(e.get('files'))
 
 
 CARD = {'approved': 'he approved it', 'edited': 'he changed your words, then approved it', 'rejected': 'he turned it down',
@@ -175,7 +180,9 @@ def arrived(store, mid: int, tid: int = None) -> None:
     ours = lambda t: own and went_from_here(store, t)(m)
     files = [a.get('Path') or a.get('Name') for a in store.list_attachments(mid) or [] if a.get('Path') or a.get('Name')]
     from .outbox import asked
-    body = dict(mid=mid, who=asked(m) or m.get('FromName') or m.get('FromEmail') or '', channel=m.get('Channel') or '', own=own,
+    from .wrapup import from_owner
+    mine = not own and from_owner(store, m)              # ...his ask, filed as the task's own row (New, the phone): his words, never fenced
+    body = dict(mid=mid, who=asked(m) or m.get('FromName') or m.get('FromEmail') or '', channel=m.get('Channel') or '', own=own, mine=mine,
                 subject=str(m.get('Subject') or '').strip() if str(m.get('Channel') or 'email').lower() == 'email' else '',
                 text=_mail_text(store, m)[:3000], files=files[:8])
     if tid and not ours(tid): add(store, tid, 'message', f'message:{mid}', **body)
@@ -203,6 +210,7 @@ def card(store, r: dict) -> None:
     if not r or not r.get('TaskId') or not r.get('ReviewId'): return
     r = store.get_review(r['ReviewId']) or r
     if r.get('DeliveryState') == 'sending' or r.get('Status') == 'held': return
+    if r.get('Status') == 'pending' and r.get('Kind') != 'action' and not str(r.get('DraftText') or '').strip(): return     # ...a reply nobody wrote yet is no card
     tid, rid = int(r['TaskId']), int(r['ReviewId'])
     from . import general
     from .general import ACT_CUT, AGENT_TOLD
@@ -248,7 +256,11 @@ def audited(store, et: str, eid, action: str, actor: str, detail) -> None:
     if action == 'proposal_refused' and d.get('unheard'):
         from .proposals import refusal_line
         return add(store, eid, 'note', text=f"what you proposed ({d.get('action') or 'the proposal'}) was not put on a card - {refusal_line(d.get('why') or '')}")
-    if actor not in OWNER_ACTORS or action not in general.PRESSES or d.get('review'): return
+    # ...A REOPEN HIS TYPED LINE MADE IS SAID BY THAT LINE (general.QUIET's reopened_by_typing): the store's own `reopened` row, written by
+    # the same write, right after it, is no press of his
+    typed = lambda: [r['Action'] for r in store._rows("SELECT Action FROM audit WHERE EntityType='task' AND EntityId=? AND Action IN ('reopened','reopen','reopened_by_typing') "
+                                                      "ORDER BY Id DESC LIMIT 2", (eid,))][1:] == ['reopened_by_typing']
+    if actor not in OWNER_ACTORS or action not in general.PRESSES or d.get('review') or action in ('reopened', 'reopen') and typed(): return
     add(store, eid, 'press', what=general.PRESSES[action](d))
 
 

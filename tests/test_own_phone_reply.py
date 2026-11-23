@@ -54,10 +54,10 @@ class OwnPhoneReplyTests(unittest.TestCase):
         # ...drawn among Ray's lines as the owner's, and heard on the agent's next turn
         rows = [general.mail_row(s, x) for x in s._rows(general.JOINED, (tid,))]
         self.assertEqual([(r['who'], r['own'], r['channel']) for r in rows], [('Ray Colton', False, 'whatsapp'), ('You', True, 'whatsapp'), ('You', True, 'whatsapp')])
-        lb = general.latest_block(s, tid)
-        self.assertIn('WHAT THE OWNER REPLIED ON THE THREAD THEMSELVES', lb)
-        # ...by their time on the clock the turn uses, not a hard-coded hour: CI runs on UTC (2026-11-08)
-        a, b = lb.find('on WhatsApp: "Yes, booked it this morning.'), lb.find('on WhatsApp: "for Friday morning"')
+        from taskuary import events
+        lb = events.take(s, tid)[0]
+        self.assertEqual(lb.count("The owner's own message on the thread"), 2, lb)
+        a, b = lb.find('Yes, booked it this morning.'), lb.find('for Friday morning')
         self.assertTrue(0 <= a < b, lb)
         # ...and read again (a restarted bridge hands everything over) it is kept once, never heard twice
         with mock.patch.object(messengers, '_wa', lambda c_, p, body=None: feed), mock.patch('taskuary.wabridge.ready', lambda *a: None), \

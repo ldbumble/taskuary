@@ -176,7 +176,8 @@ class DraftedThenSent(unittest.TestCase):
             first = calwrite.answer(self.s, tid, 'accept')
             self.draft('decline')
         self.assertEqual(self.s.get_review(first['review'])['Status'], 'superseded')
-        self.assertEqual(general.owner_did(self.s, tid), [])
+        from taskuary import events
+        self.assertNotIn('turned it down', events.take(self.s, tid)[0], 'replaced, never a no')
 
     def test_its_agent_is_told_the_calendar_answer_went_never_a_reply(self):
         "Its Send told the agent \"the reply was sent\" - an invite accepted is no reply (the stress round, 2026-11-10)."

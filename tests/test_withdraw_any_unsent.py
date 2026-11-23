@@ -71,8 +71,9 @@ def test_an_agent_with_no_shell_takes_back_an_email_by_its_marker():
     s = MemoryStore(); tid = own_task(s, 'general')
     paula = slots.draft(s, tid, 'Hi Paula - the table.', to='paula@northwind.example', subject='The tools table')['review_id']
     gail = slots.draft(s, tid, 'Hi Gail - the table.', to='gail@northwind.example', subject='The tools table')['review_id']
-    brief = general.latest_block(s, tid)
-    assert f'rv{paula}, the email to paula@northwind.example' in brief and 'which=' in general.marker_lines(s, tid, False, False)
+    from taskuary import events
+    brief = events.take(s, tid)[0]          # ...each card its own event, by its id - the id its marker names
+    assert f'Card rv{paula} (the email to paula@northwind.example)' in brief and 'which=' in general.marker_lines(s, tid, False, False)
     text, found = selfclose.withdraw_markers(f'Done.\n[[TASKUARY-WITHDRAW which=rv{paula}: sent to Gail instead]]\n'
                                              '[[TASKUARY-WITHDRAW which="gail@northwind.example": Gail is away]]\n[[TASKUARY-WITHDRAW: no reply]]')
     assert text == 'Done.' and found == [(f'rv{paula}', 'sent to Gail instead'), ('gail@northwind.example', 'Gail is away'), ('', 'no reply')]
@@ -103,9 +104,11 @@ def test_a_reply_nobody_has_written_is_nothing_set_up():
     mid = s.add_message({'TaskId': tid, 'ExternalId': 'e1', 'ConversationId': 'c1', 'Channel': 'email', 'FromName': 'Erin Blake',
                          'FromEmail': 'erin@northwind.example', 'Subject': 'Tuesday', 'BodyText': 'Free Tuesday?', 'Status': 'routed'})
     rid = s.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft', 'Status': 'pending', 'DraftText': ''})
-    assert verdicts.unsent(s, tid) == [] and 'ALSO SET UP' not in general.turn_facts(s, tid)
+    from taskuary import events
+    assert verdicts.unsent(s, tid) == [] and f'Card rv{rid} ' not in events.take(s, tid)[0]
     s.update_review_draft(rid, 'Yes, Tuesday works.', None)
     assert [x['rid'] for x in verdicts.unsent(s, tid)] == [rid]
+    assert f'Card rv{rid} (the reply to erin@northwind.example (Erin Blake)): up for his press: "Yes, Tuesday works."' in events.take(s, tid)[0]
 
 
 def test_an_email_waiting_is_told_to_the_agent_with_its_words():
@@ -116,4 +119,5 @@ def test_an_email_waiting_is_told_to_the_agent_with_its_words():
     with mock.patch.object(server, 'store', s):
         call(tid, 'propose_email', to='paula@northwind.example', subject='October report', text='Hi Paula, here is the October report.')
     s.add_comment(tid, 'owner', general.USER_TYPE, 'make it shorter')
-    assert 'the email to paula@northwind.example: "Hi Paula, here is the October report."' in general.turn_facts(s, tid)
+    from taskuary import events
+    assert '(the email to paula@northwind.example): up for his press: "Hi Paula, here is the October report."' in events.take(s, tid, fresh=True)[0]

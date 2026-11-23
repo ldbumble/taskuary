@@ -312,8 +312,9 @@ def test_a_steered_line_reads_as_the_same_line_at_rest(words):
     session = general.GeneralSession(store, tid, pick='cli:claude')
     general.wait_line(store, tid, words, [f])
     [steered] = _steered(store, tid, session)
-    assert steered.startswith(f'TQ-{tid:04d} - the owner says:'), steered
-    assert at_rest.endswith(steered), (steered, at_rest[-300:])
+    from taskuary import events
+    assert steered.startswith(events.HEAD) and f'The owner wrote in this chat:\n{words}' in steered, steered
+    assert f'The owner wrote in this chat:\n{words}' in at_rest, at_rest[-300:]          # ...one shape, at rest and steered in
     assert _blocked(steered) == [f]
 
 
@@ -323,5 +324,6 @@ def test_lines_one_steer_takes_go_under_one_frame_and_a_steer_that_took_nothing_
     general.wait_line(store, tid, 'use the March export', [])
     general.wait_line(store, tid, 'and leave Payworth out', [])
     first, second = _steered(store, tid, session) + _steered(store, tid, session)
-    assert first == general._turn_only(store, tid, 'use the March export\n\nand leave Payworth out'), first
+    from taskuary import events
+    assert first.count(events.HEAD) == 1 and 'use the March export' in first and 'and leave Payworth out' in first, first
     assert second == '', 'the second steer found its line taken by the first: nothing goes into the turn'

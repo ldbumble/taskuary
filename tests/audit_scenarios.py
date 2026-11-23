@@ -9,7 +9,7 @@ the REAL routes on a temp store, with the agent's turn spoken by a stand-in of e
     coding  a coding agent over ACP (acpcoding, the coding chat's payload)
 
 After every step `snap` reads what the page reads (the chat payload, the task page's one lit move) and what the agent's next turn is told
-(general.turn_facts), normalized so two backends doing the same thing read the same. tests/test_audit_scenarios.py runs every scenario on every
+(events.take), normalized so two backends doing the same thing read the same. tests/test_audit_scenarios.py runs every scenario on every
 backend and holds the snapshots to the goal rules (`broken`). The replay sheet for the page is REPLAY in this file.
 Invented people only (CLAUDE.md)."""
 import contextlib, json, os, re, shutil, subprocess, sys, threading, time
@@ -308,7 +308,7 @@ class Run:
         return next(c for c in reversed(self.cards()) if c['status'] == 'pending' and (kind is None or c['kind'] == kind))
 
     def snap(self, label):
-        from taskuary import funnel, general, rulebook, taskstate
+        from taskuary import events, funnel, rulebook, taskstate
         p = self.payload()
         try:          # ...the rail as the app builds it (processing_unread, one builder): the row's one lit move and its line
             funnel.pile(self.s, force=True, quiet=True)
@@ -320,7 +320,7 @@ class Run:
                            'asking': p['asking'], 'permissions': p['permissions'], 'cards': self.cards(), 'status': t.get('Status'),
                            'chip': (ts := taskstate.task_state(self.s, tid=self.tid)).key, 'idle': (ts.idle or {}).get('line') or '', 'lit': rec.get('verb'), 'why': rec.get('why') or '',
                            'lane': rec.get('lane'), 'state': rec.get('state') or rec.get('error'),
-                           'told': general.turn_facts(self.s, self.tid, t), 'results': [str(x)[:300] for x in self.results or []]})
+                           'told': events.take(self.s, self.tid)[0], 'results': [str(x)[:300] for x in self.results or []]})
         self.results = []
 
 
@@ -451,21 +451,21 @@ def broken(r: Run) -> list:
         # ...and the ask that opened a task he made, where no typed line did (conversation.items: the first thing in its chat)
         ls = s['lines'][1:] if s['lines'][:1] == [getattr(r, 'asked', None)] and r.asked not in r.typed else s['lines']
         if ls != r.typed[:len(ls)] or [x for x in ls if x not in r.typed]: say('v', i, f"lines {s['lines']} != typed {r.typed}")
-        # (vii) told the truth: what the agent is told stands on his screen is what the page draws (cardqueue.screen) - a card told as waiting
-        # waits, one told as greyed is no longer pressable, one told as sent or done went
-        from taskuary.cardqueue import SCREEN_HEAD
-        want = {'Waiting': lambda c: c['status'] == 'pending' and not c['passed'], 'Not on his screen yet': lambda c: c['status'] == 'pending' and not c['passed'],
-                'Greyed': lambda c: c['passed'] or c['status'] == 'pending', 'Sent': lambda c: c['status'] in ('approved', 'edited', 'sent'),
-                'Done': lambda c: c['status'] in ('approved', 'edited', 'sent')}
-        for told, rid in re.findall(r'^- (Waiting|Not on his screen yet|Greyed|Sent|Done)[^\n]*?: rv(\d+)', s['told'].split(SCREEN_HEAD)[-1], re.M) * (SCREEN_HEAD in s['told']):
+        # (vii) told the truth: what the agent is told became of a card (its newest event, events.card) is what the page draws - one told as
+        # up for his press never went (his line greys it on the page before the turn that takes it sets it aside), one told as greyed is no longer pressable, one told as sent or done went
+        want = {'up for his press': lambda c: c['status'] not in ('approved', 'edited', 'sent'), 'greyed': lambda c: c['passed'] or c['status'] == 'pending',
+                'it was sent': lambda c: c['status'] in ('approved', 'edited', 'sent'), 'it was done': lambda c: c['status'] in ('approved', 'edited', 'sent')}
+        last = {rid: line for rid, line in re.findall(r'Card rv(\d+)[^\n]*?\): ([^\n]*)', s['told'])}
+        for rid, line in last.items():
             c = next((c for c in s['cards'] if c['id'] == int(rid)), None)
-            if not c or not want[told](c): say('vii', i, f"told rv{rid} is {told!r}, but it is {c and c['status']}")
-    # (vii) ...and each fact once: a press that woke the agent carried the screen fact in its note, and the turn's facts said it again above it
-    from taskuary.cardqueue import SCREEN_HEAD
+            for told in (k for k in want if line.startswith(k) or f'- {k}' in line or line.endswith(k)):
+                if not c or not want[told](c): say('vii', i, f"told rv{rid} is {told!r}, but it is {c and c['status']}")
+    # (vii) ...and each fact once: no event line is said twice in one turn, nor again in a later one (events.py: the cursor)
+    seen = {}
     for k, p in enumerate(r.prompts):
-        # ...(a fresh conversation's head quotes the turn's own words over the task on purpose - general.prompt_parts' lead - and is not counted)
-        p = re.sub(r"(?:TASKUARY'S WORDS ON THIS TURN|THE OWNER'S ASK)[^\n]*:\n.*?\n\nTASK TQ-", 'TASK TQ-', p, count=1, flags=re.S)
-        if p.count(SCREEN_HEAD) > 1: out.append(f'(vii) turn {k + 1} is told what stands on his screen {p.count(SCREEN_HEAD)} times')
+        for line in re.findall(r'^\[\d\d:\d\d\] (Card rv\d+[^\n]*|The owner (?!wrote in this chat:)[^\n]*|Taskuary: [^\n]*)$', p, re.M):
+            if line in seen: out.append(f'(vii) turn {k + 1} is told again what turn {seen[line] + 1} was: {line[:120]}')
+            seen.setdefault(line, k)
     # (iii) a card stands in the turn that raised it, from its first answer on, and never moves
     # ...BUT A RUN IS ONE TURN'S WORK (conversation.items, the owner 2026-11-13): a turn Taskuary woke with no line of his between - a press's
     # outcome handed back (general.approved, general.failed) - goes on from the one before it, and what still waits stands at the run's end

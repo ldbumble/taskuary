@@ -264,13 +264,12 @@ def test_a_turn_that_reached_its_limit_reads_the_one_sentence_for_it_on_the_kept
 
 def test_a_turn_a_restart_cut_is_followed_by_what_the_task_already_made():
     """Round 3, 2026-11-22: after a restart "carry on" redid every search - the turn that goes on is told the lines it was answering, and
-    what the task had already made (general.made_line, in the one fact of a turn that stopped before it answered)."""
-    from taskuary import general, outputs
+    what the task had already made (general.made_line, in the `stopped` event of a turn that stopped before it answered)."""
+    from taskuary import events, general, outputs
     from taskuary.store import MemoryStore
     s = MemoryStore(); tid = s.create_task({'Title': 'Board pack', 'Kind': 'general', 'Status': 'in_progress'}, 'owner')
     s.add_comment(tid, 'owner', general.USER_TYPE, 'Build the Q3 board pack.')
-    s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, f'Reading the figures.\n\n{general.CUT}')
     outputs.folder(tid).mkdir(parents=True, exist_ok=True); (outputs.folder(tid) / 'q3-pack.pptx').write_bytes(b'x')
-    said = general.cut_heard(s, tid)
-    assert said.startswith(general.CUT_HEARD) and 'Build the Q3 board pack.' in said
-    assert 'q3-pack.pptx' in general.stopped_line(s, tid, general.stopped_turn(s, tid))
+    general.file_turn(s, tid, [{'type': 'progress', 'name': 'text', 'detail': 'Reading the figures.'}], general.CUT)      # ...as the restart files it
+    said = events.take(s, tid)[0]
+    assert 'still owed' in said and 'Taskuary restarted' in said and 'q3-pack.pptx' in said, said

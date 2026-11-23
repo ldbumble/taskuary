@@ -139,9 +139,11 @@ class ClosedConversationTests(unittest.TestCase):
         general.answered(tid, every=True)
         said = [p['content'][0]['text'] for p in general.press_lines(s, tid)]
         self.assertNotIn('You reopened it.', said)
-        self.assertNotIn('reopened it', general.latest_block(s, tid, resumed=True))
+        from taskuary import events
+        self.assertNotIn('reopened it', events.take(s, tid)[0])
         s.update_task(tid, {'Status': 'done'}, 'owner'); s.update_task(tid, {'Status': 'open'}, 'owner')       # ...Reopen, pressed
         self.assertEqual([p['content'][0]['text'] for p in general.press_lines(s, tid)][-1], 'You reopened it.')
+        self.assertIn('The owner reopened it.', events.take(s, tid)[0])
 
     def test_his_words_by_any_road_open_a_closed_task_at_once_and_say_no_press(self):
         """The redesign walk, 2026-11-19: marked done, then he wrote into it - the agent set to work while the task stayed off the rail and its

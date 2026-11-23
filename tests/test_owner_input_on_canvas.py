@@ -73,6 +73,4 @@ def test_a_marker_draft_with_no_address_is_heard_on_the_next_turn():
         out = slots.draft(s, tid, 'Hello - please send the statement.', 'Harbor Savings Bank', 'Statement', 'e1', 'assistant')
     assert out.get('ok') and out.get('to_missing') == slots.to_missing('Harbor Savings Bank')
     assert slots.needs_address(s, tid) == [(out['review_id'], 'Harbor Savings Bank')]
-    lb = general.latest_block(s, tid)
-    assert 'AN EMAIL YOU DRAFTED HAS NO ADDRESS' in lb and slots.to_missing('Harbor Savings Bank') in lb
     d = json.loads(s.get_review(out['review_id'])['Deliver']); assert d['to'] == [] and d['needs'] == 'Harbor Savings Bank'

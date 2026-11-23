@@ -94,9 +94,11 @@ class Holding(unittest.TestCase):
     def pending(self): return self.s._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action' AND Status='pending'", (self.tid,))
 
     def heard(self):
+        "What the woken agent got: the words of the wake, and Taskuary's note among the events its turn is told (events.take)."
+        from taskuary import events
         end = time.time() + 5
         while not self.told and time.time() < end: time.sleep(.01)
-        return self.told
+        return [f'{t}\n{events.take(self.s, self.tid)[0]}' for t in self.told]
 
     def test_an_http_write_off_this_machine_is_held_like_a_push_on_the_hook_road(self):
         """The north-star audit, 2026-11-10: a CLI's `curl -X POST` to an outside host went out unseen on the hook road - only the ACP road
@@ -170,8 +172,9 @@ class Holding(unittest.TestCase):
         with mock.patch('taskuary.general.to_agent', lambda st, tid, note, actor='owner': told.append(note) or 'told'):
             hooks._events(t, {'hook_event_name': 'UserPromptSubmit', 'prompt': 'no, leave the checkout - is it ready to push?'})
         self.assertEqual(self.pending(), []); self.assertTrue(proposals.passed(self.s.get_review(rv['ReviewId'])))
-        from taskuary import cardqueue
-        self.assertTrue(told and cardqueue.SCREEN_HEAD in told[0] and f"rv{rv['ReviewId']}" in told[0].split('Greyed, will not go')[1], told)
+        from taskuary import events
+        said = events.take(self.s, self.tid)[0]
+        self.assertTrue(told and f"Card rv{rv['ReviewId']} " in said and 'greyed, it will not go' in said.split(f"Card rv{rv['ReviewId']} ")[-1], said)
 
     def test_the_agents_own_words_for_the_call_ride_on_the_card(self):
         sg.check(self.s, self.tid, 'run1', 'git push origin fix-export', 'Bash', r'C:\work\ledger', about='  ship the export fix  ')
@@ -181,7 +184,7 @@ class Holding(unittest.TestCase):
         self.held(); [rv] = self.pending()
         with mock.patch('taskuary.workerstate._live', return_value=self.sess):
             self.assertTrue(verdicts.decide(self.s, rv, 'reject')['ok'])
-        self.assertIn('did not approve it', self.heard()[0]); self.assertIn('git push origin fix-export', self.told[0])
+        self.assertIn('did not approve it', self.heard()[0]); self.assertIn('git push origin fix-export', self.heard()[0])
 
 
 class Running(unittest.TestCase):
@@ -371,9 +374,11 @@ class ReadingOutside(unittest.TestCase):
     def read(self, p): return {'toolCallId': 'c', 'kind': 'read', '_meta': {'claudeCode': {'toolName': 'Read'}}, 'rawInput': {'file_path': p}}
 
     def heard(self):
+        "What the woken agent got: the words of the wake, and Taskuary's note among the events its turn is told (events.take)."
+        from taskuary import events
         end = time.time() + 5
         while not self.told and time.time() < end: time.sleep(.01)
-        return self.told
+        return [f'{t}\n{events.take(self.s, self.tid)[0]}' for t in self.told]
 
     def test_a_shell_line_is_read_for_the_paths_it_names(self):
         from taskuary import readgate as rg
@@ -572,7 +577,7 @@ class ReadingOutside(unittest.TestCase):
         gate.tool_call(self.read(os.path.join(self.docs, 'conftest.py')), self.ctx); [rv] = self.pending()
         with mock.patch('taskuary.workerstate._live', return_value=self.sess):
             self.assertTrue(verdicts.decide(self.s, rv, 'reject')['ok'])
-        self.assertIn('did not approve it', self.heard()[0]); self.assertIn(browsergate.OWNER_NO, self.told[0])
+        self.assertIn('did not approve it', self.heard()[0]); self.assertIn(browsergate.OWNER_NO, self.heard()[0])
 
     def test_the_context_file_taskuary_wrote_for_the_task_is_its_to_read_and_no_other_tasks(self):
         """Recorded on the real CLI, 2026-11-16: the brief points the agent at its context file in Taskuary's home, and its Read was refused

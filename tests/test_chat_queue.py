@@ -66,7 +66,7 @@ class TakingTurnsTests(unittest.TestCase):
         self.assertEqual(sorted(got), ['', 'answered', 'answered'], 'two turns: the first, and one for both lines behind it')
         users = [c['Body'] for c in general.chat_rows(self.s, self.tid) if c['ActorType'] == general.USER_TYPE]
         self.assertEqual(users, ['one', 'two', 'actually three'])
-        self.assertTrue(any('THE OWNER SENT 2 MESSAGES' in p for p in prompts))
+        self.assertTrue(any('two' in p and 'actually three' in p for p in prompts[1:]), 'both lines in the one turn behind it')
 
     def test_news_a_turn_has_overtaken_is_not_a_turn_of_its_own(self):
         """Recorded on the real CLI (the browser audit, 2026-11-15): he typed a line while the saved sign-in was going in; his line's turn
@@ -226,7 +226,7 @@ class OneConversationNotTwentyTests(unittest.TestCase):
         self.assertIn('CONVERSATION', seen[0]['user'])               # the first says everything
         self.assertNotIn('CONVERSATION', seen[1]['user'])            # the second only the new turn
         self.assertIn('and what about the chat', seen[1]['user'])
-        self.assertLess(len(seen[1]['user']), len(seen[0]['user']))
+        self.assertNotIn('tell me about the wall', seen[1]['user'], 'what the conversation has is not told again')
 
     def test_a_memory_line_changed_mid_conversation_leads_its_next_turn_whichever_session_picks_it_up(self):
         """The real CLI, 2026-11-14: an agent drafted "laptop faults go to Marcus"; the owner then told the Assistant Marcus had moved and

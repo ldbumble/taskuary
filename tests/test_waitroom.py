@@ -385,7 +385,7 @@ class GeneralTests(unittest.TestCase):
         left 1 note for you. Take them in order:" stood in its place - the head the agent's own words were typed under."""
         from taskuary import general
         s = MemoryStore(); tid, ses = self.general(s)
-        said = general.APPROVED.format(press='Approve', what='saved the playbook vendor-review') + 'Say what you did and what comes next.'
+        said = 'The owner pressed Approve on what you set up, and it went through: saved the playbook vendor-review.'
         with mock.patch.dict(terminal.SESSIONS, {'g': ses}, clear=True):
             waitroom.add(s, tid, said, 'router'); time.sleep(0.3)
         self.assertEqual(self.said(s, tid), [('taskuary', said)], "the word itself, kept as Taskuary's for the record - and nothing else")
@@ -435,7 +435,9 @@ class SteerGeneralTests(unittest.TestCase):
         # ...the CLI had both lines before its turn's one result, which answered them - no second turn did the job again
         [reply] = [b for k, b in said if k == general.ASSISTANT_TYPE]
         # ...each steer a message into the turn, said as his as the same line at rest is (GeneralSession.steer: one frame per steer)
-        self.assertIn(':1:heard ' + ' | '.join(general._turn_only(s, tid, w) for w in ('use the March export', 'and leave Payworth out')), reply)
+        heard = reply.split(':1:heard ', 1)[1].split(' | ')
+        self.assertEqual([h.count(f'The owner wrote in this chat:\n{w}') for h, w in zip(heard, ('use the March export', 'and leave Payworth out'))], [1, 1], reply)
+        self.assertNotIn('Vendor totals', ' | '.join(heard), 'what the turn at work was handed already is not handed again')
         # ...and the chat files them inside that turn: his three lines, then its answer
         self.assertEqual([b for k, b in said if k == general.USER_TYPE][1:], ['use the March export', 'and leave Payworth out'])
         self.assertEqual(said[-1][0], general.ASSISTANT_TYPE)

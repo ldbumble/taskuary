@@ -1,7 +1,8 @@
 """The owner answers a task's thread themselves, outside Taskuary (the owner, 2026-11-05: "it should trigger a revaluation of the agent pondering
-i saw you responded and that took care of most of it so i recommend close it"): the agent is told so and RECOMMENDS the close - it never closes,
-and the reply is not drawn as a bubble of its own. Invented people only."""
-from taskuary import general, selfclose
+i saw you responded and that took care of most of it so i recommend close it"): the agent is told his reply as an event (events.py) and
+RECOMMENDS the close - it never closes, and the reply is not drawn as a bubble of its own. Invented people only."""
+from taskuary import events, general
+OWN = "The owner's own message on the thread"
 from taskuary.store import MemoryStore
 
 
@@ -14,10 +15,10 @@ def _task(s):
 
 def test_the_owners_own_reply_is_the_newest_and_marked_theirs():
     s = MemoryStore(); tid = _task(s)
-    assert not general.owner_answered_last(s, tid)
+    assert OWN not in events.take(s, tid)[0]
     s.add_message({'TaskId': tid, 'Channel': 'email', 'Subject': 'Re: Badge list', 'FromName': 'You', 'FromEmail': 'alex@northwind.example',
                    'BodyText': 'Sent it over just now.', 'Status': 'context', 'Direction': 'out', 'SentAt': '2026-11-05 09:30:00'})
-    assert general.owner_answered_last(s, tid)
+    assert OWN in events.take(s, tid)[0] and 'Sent it over just now.' in events.take(s, tid)[0]
 
 
 def test_the_agent_is_told_the_owner_answered_it_himself():
@@ -25,8 +26,8 @@ def test_the_agent_is_told_the_owner_answered_it_himself():
     s.add_message({'TaskId': tid, 'Channel': 'email', 'Subject': 'Re: Badge list', 'FromName': 'You', 'FromEmail': 'alex@northwind.example',
                    'BodyText': 'Sent it over just now.', 'Status': 'context', 'Direction': 'out', 'SentAt': '2026-11-05 09:30:00'})
     system, _ = general._prompt(s, tid)
-    assert selfclose.OWNER_ANSWERED_LINE in system
-    assert selfclose.MARKER not in selfclose.OWNER_ANSWERED_LINE
+    assert 'Sent it over just now.' not in system, 'what happened rides in the turn, never the system'
+    assert "The owner's own message on the thread" in events.take(s, tid)[0]
 
 
 def test_the_reply_they_sent_with_taskuarys_own_send_is_no_answer_from_outside():
@@ -36,14 +37,15 @@ def test_the_reply_they_sent_with_taskuarys_own_send_is_no_answer_from_outside()
     said = 'Hi Gail - the badge list is attached, all nine starters.'
     rid = s.add_review({'TaskId': tid, 'MessageId': s.list_messages(tid)[0]['MessageId'], 'Kind': 'draft_reply', 'Status': 'pending', 'DraftText': said})
     s.decide_review(rid, 'approved', said, 'owner')
+    from taskuary import ledger
+    ledger.sent(s, rid)                     # ...its send came back with a receipt: on the record of what went
     s.add_message({'TaskId': tid, 'Channel': 'email', 'Subject': 'Re: Badge list', 'FromName': 'You', 'FromEmail': 'alex@northwind.example',
                    'BodyText': said, 'Status': 'context', 'Direction': 'out', 'SentAt': '2026-11-05 09:30:00'})
-    assert not general.owner_answered_last(s, tid)
-    assert selfclose.OWNER_ANSWERED_LINE not in general._prompt(s, tid)[0]
+    assert OWN not in events.take(s, tid)[0], 'its card says it went: no reply of his from outside'
     # ...a line they then write themselves, from their own mailbox, is one
     s.add_message({'TaskId': tid, 'Channel': 'email', 'Subject': 'Re: Badge list', 'FromName': 'You', 'FromEmail': 'alex@northwind.example',
                    'BodyText': 'One more: Omar starts Monday too.', 'Status': 'context', 'Direction': 'out', 'SentAt': '2026-11-05 09:45:00'})
-    assert general.owner_answered_last(s, tid)
+    assert OWN in events.take(s, tid)[0] and 'Omar starts Monday' in events.take(s, tid)[0]
 
 
 def test_an_older_mail_of_theirs_that_joined_the_task_after_the_ask_is_no_answer():
@@ -53,8 +55,7 @@ def test_an_older_mail_of_theirs_that_joined_the_task_after_the_ask_is_no_answer
     s._exec("UPDATE message SET CreatedAt='2026-11-05 09:01:00' WHERE TaskId=?", (tid,))
     s.add_message({'TaskId': tid, 'Channel': 'email', 'Subject': 'Badge list', 'FromName': 'You', 'FromEmail': 'alex@northwind.example',
                    'BodyText': 'Who keeps the badge list these days?', 'Status': 'context', 'Direction': 'out', 'SentAt': '2026-10-26 14:00:00'})
-    assert not general.owner_answered_last(s, tid)
-    assert selfclose.OWNER_ANSWERED_LINE not in general._prompt(s, tid)[0]
+    assert 'answered' not in events.take(s, tid)[0], 'his mail is said as what it is - never as an answer to the ask'
 
 
 def test_a_chat_that_opens_on_an_answer_opens_on_the_mail_that_started_it_first():

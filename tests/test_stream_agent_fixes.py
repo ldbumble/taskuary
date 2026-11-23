@@ -94,17 +94,6 @@ def test_real_work_joining_a_watch_row_starts_its_agent():
 
 
 # ── F5: a draft written for the newest message is said so ──────────────────────────────────────────────────────────────────────────
-def test_a_draft_for_the_newest_message_is_not_called_earlier():
-    s = MemoryStore()
-    tid = s.create_task({'Title': 'Northwind app feedback', 'Kind': 'general', 'Status': 'open'}, 'router')
-    mid = s.add_message({'TaskId': tid, 'ExternalId': 'wa1', 'ConversationId': 'wa:ops', 'Channel': 'whatsapp', 'FromName': 'Ray Colton',
-                         'SentAt': '2026-11-08 09:00:00', 'BodyText': 'Keep posting here?', 'Status': 'routed'})
-    s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'Noted the first bug.')
-    s.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft', 'Status': 'pending', 'DraftText': 'Yes, keep posting here.'})
-    said = general.latest_block(s, tid)
-    assert 'written for this message' in said and 'BEFORE the newest message' not in said
-
-
 def test_a_draft_the_thread_moved_past_is_never_called_written_for_the_newest_message():
     # the owner, 2026-11-10: the agent drafted on a chat, the owner answered there from the phone, a minute later the sender asked something
     # new - the join re-pinned the old draft to the new line (its freshness marker), and the woken agent was told that draft was "written for
@@ -124,9 +113,9 @@ def test_a_draft_the_thread_moved_past_is_never_called_written_for_the_newest_me
         try: ingest.ingest_message(s, wa('w2', 'great - and can you bring the budget sheet?', stamp(-60)), llm=llm)
         finally: general.OPENING.discard(tid)
     assert [c[0][0].__name__ for c in spawn.call_args_list] == ['_replan_general']           # the agent is woken to answer it
-    said = general.latest_block(s, tid)
-    assert 'THE NEWEST MESSAGE - from Erin Blake' in said and 'budget sheet' in said
-    assert 'THE DRAFT WAITING NOW (' in said and 'written for this message' not in said and 'BEFORE the newest message' in said
+    from taskuary import events
+    said = events.take(s, tid)[0]          # ...each as it happened: the draft, then her new line under it - never "written for" the newer one
+    assert said.index(f'Card rv{rid} ') < said.index('budget sheet'), said
 
 
 # ── F6, F11: the to-do list and the owner's reminder ───────────────────────────────────────────────────────────────────────────────
@@ -238,8 +227,9 @@ def test_the_owners_line_over_a_waiting_draft_wakes_the_agent_and_nothing_else_t
     assert [w for w, _ in went] == ['_replan_general'] and 'yes 3pm, same room' in went[0][1] and 'you already answered on WhatsApp' in went[0][1]
     rv = s.get_review(rid)
     assert rv['Status'] == 'pending' and rv['DraftText'] == 'Hi Erin - yes, 3pm stands, and the room is booked till 4.'     # the agent's to keep or withdraw
-    lb = general.latest_block(s, tid)
-    assert 'WHAT THE OWNER REPLIED ON THE THREAD THEMSELVES' in lb and 'yes 3pm, same room' in lb and 'THE DRAFT WAITING NOW (' in lb
+    from taskuary import events
+    lb = events.take(s, tid)[0]
+    assert "The owner's own message on the thread" in lb and 'yes 3pm, same room' in lb and f'Card rv{rid} ' in lb
 
 
 def test_the_owners_line_while_a_turn_works_is_its_next_turn():
@@ -254,7 +244,8 @@ def test_the_owners_line_while_a_turn_works_is_its_next_turn():
 def test_a_line_with_no_draft_and_no_turn_at_work_stays_context_for_the_next_turn():
     # the owner, 2026-11-08: "it should show what i sent ... even if it does not trigger as a prompt"
     s = MemoryStore(); tid, rid = chat_task(s); s.decide_review(rid, 'sent', None, 'owner')
-    assert say_on_chat(s) == [] and 'yes 3pm, same room' in general.latest_block(s, tid)
+    from taskuary import events
+    assert say_on_chat(s) == [] and 'yes 3pm, same room' in events.take(s, tid)[0]
 
 
 def test_where_no_agent_may_take_the_line_the_one_read_still_settles_the_draft():

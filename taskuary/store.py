@@ -2341,8 +2341,10 @@ class SQLiteStore:
             # ...BUT A CHECK-BACK OUTLIVES MARK DONE (the owner, 2026-11-20): "Checks back Sat 8 AM" was cancelled by the close it promised to
             # come back after - at its time the agent checks, and the task comes back with what it found (checkback.due). Let it go ends it
             if fields.get('Status') == 'dropped': self._exec('UPDATE task SET CheckBackAt=NULL, CheckBackWhat=NULL WHERE TaskId=?', (task_id,))
+            live = [r['ReviewId'] for r in self._rows("SELECT ReviewId FROM review WHERE TaskId=? AND Status='pending'", (task_id,))]
             self._exec("UPDATE review SET Status='superseded', DecidedBy=?, DecidedAt=? "
                        "WHERE TaskId=? AND Status='pending'", (actor, _now(), task_id))
+            for rid in live: self._review_changed(rid)          # ...each card's state, said where every card's is (events.card)
             # ...and so does the Advisor idea the task was MADE from: left open, 96 ideas outlived their closed tasks
             # (2026-10-10). Only SourceRef - an idea that merely cites a task may name a separate follow-up.
             self._exec("UPDATE idea SET Status='done', DecidedBy='task', DecidedAt=? WHERE Status IN ('open','snoozed') AND "

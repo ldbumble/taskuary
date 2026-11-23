@@ -58,10 +58,10 @@ class TwoTasksOneRoom(unittest.TestCase):
         with mock.patch.object(ingest, 'thread_moved', lambda store, tid, *a, **k: woke.append((tid, k.get('own')))):
             self.assertEqual(_own(self.s, 'o5', '2026-10-29 11:43:00', 'interesting one..'), self.b)
         self.assertEqual(woke, [])
-        self.assertIn('on WhatsApp: "interesting one.."', general.latest_block(self.s, self.b))
-        # ...and the other task's agent is told which task it was filed on, to judge whether it is about its own (the night run, 2026-11-09)
-        self.assertIn(f'on WhatsApp (filed on TQ-{self.b:04d}, "Portal login error" - judge whether it is about this task): "interesting one.."',
-                      general.latest_block(self.s, self.a))
+        from taskuary import events
+        self.assertIn("The owner's own message on the thread", events.take(self.s, self.b)[0]); self.assertIn('interesting one..', events.take(self.s, self.b)[0])
+        # ...and the other task's agent is told which task it was filed on (the night run, 2026-11-09)
+        self.assertIn(f'filed on TQ-{self.b:04d}:\ninteresting one..', events.take(self.s, self.a)[0])
 
     def test_a_line_sent_while_a_turn_worked_reaches_the_next_turn(self):
         """The night run, 2026-11-09: the owner's phone line landed a second into the agent's turn - older than that turn's answer, so
@@ -73,7 +73,8 @@ class TwoTasksOneRoom(unittest.TestCase):
                 (general.USER_TYPE, t))
         _own(s, 'o6', '2026-10-29 11:41:00', 'yes 3pm, same room')
         s._exec("UPDATE message SET CreatedAt='2026-10-29 11:41:00' WHERE ExternalId='o6'")
-        self.assertIn('yes 3pm, same room', general.latest_block(s, t))
+        from taskuary import events
+        self.assertIn('yes 3pm, same room', events.take(s, t)[0])      # ...an event past the cursor, whenever its turn began
 
     def test_a_room_with_one_task_keeps_it(self):
         s = MemoryStore()

@@ -2349,10 +2349,14 @@ def prompt_parts(store, tid: int, turn: bool = False, heard: str = '') -> tuple[
     lead = ("TASKUARY'S WORDS ON THIS TURN - not the owner's" if is_brief(last) else "THE OWNER'S ASK - what they want done") + ' about the task and the material below'
     # ...and a coding task on an AI card, where it works and who else is in there - with the task, as its CLI's seed says it
     code = coding_brief(store, tid, stranger, opening=not any(r.get('ActorType') == ASSISTANT_TYPE for r in rows)) if tid in ON_CARD else ''
+    # triage's summary only where the task has no messages or conversation of its own - but the files his ask came with ride either way:
+    # carried on the summary's line alone, a task started from his words with a file named none of it to its agent (2026-11-23)
+    summed, tf = not (sources or said), files_of(task)
     head = ((f"{lead}:\n{ask}\n\n" if ask else '')
             + f"TASK {detail.get('ref') or tid}\n" + ours(f"TITLE: {task.get('Title') or ''}\n")
-            + (ours(f"SUMMARY: {with_files(task.get('Summary') or '', files_of(task))}\n") if not (sources or said) else '')
+            + (ours(f"SUMMARY: {with_files(task.get('Summary') or '', tf)}\n") if summed else '')
             + f"STATUS: {task.get('Status') or ''}\n" + ours(chk) + "\n"
+            + (with_files('', tf).lstrip('\n') + '\n\n' if tf and not summed else '')
             + (f'{code}\n\n' if code else '')
             + (dock_snapshot(store) + '\n\n' if dock else '')
             + (wall + '\n\n' if wall else '')

@@ -1999,7 +1999,11 @@ def _tell_now(store, tid: int, target: int, said: str, actor: str, owner: str = 
             'they go in when its agent starts - it waits its turn' if _queued(store, target) and not _on_task(target) else
             'they go in when it stops at its prompt')
     sent = f" with {_named(o.get('files'))}" if o.get('files') else ''
-    return _did(store, tid, f"Told the agent on {task_ref(target)}: “{_title_cut(' '.join(str(owner or said).split()), 120)}”{sent} - {when}.", 'agent.tell')
+    # ...and on the phone, that its answer comes back there (general.to_agent made the promise; remote_assistant.turn_ended keeps it)
+    from . import remote_assistant
+    back = f' {remote_assistant.PROMISE_LINE}' if remote_assistant.asking() and o.get('state') != 'held_stranger' else ''
+    return _did(store, tid, f"Told the agent on {task_ref(target)}: “{_title_cut(' '.join(str(owner or said).split()), 120)}”{sent} - {when}.{back}",
+                'agent.tell')
 
 
 def _in_words(llm, system: str, table: str, text: str, verb: str) -> tuple[str, list]:

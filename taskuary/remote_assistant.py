@@ -515,7 +515,6 @@ def push_alerts(store, force: bool = False) -> int:
 # whatsapp?" - "make sure the assistant on the phone never just drops you"). So work handed to an agent FROM a chat is a promise
 # kept in that chat: when the agent stops working - finished, asking, a draft for your yes - the card comes back there.
 PROMISES_KEY = 'phone_promises'
-WORKING = ('working', 'queued')
 PROMISE_HOURS = 12
 PROMISE_LINE = 'I will tell you here if it finishes or needs you while we are talking - after that it waits on the desktop.'
 
@@ -567,22 +566,37 @@ def _run(store, op: dict, actor: str) -> dict:
     return {**done, 'outcome': {**o, 'chat': False, **{k: out.get(k) for k in ('started', 'existing', 'dispatch') if k in out}}}
 
 
+# KEPT BY THE AGENT'S OWN TURN END, NEVER BY SAMPLING THE RAIL (walk 6, H2): the promise was kept by looking at the rail lane every 20 s and
+# arming only when a look caught it "working" - a 9 s turn that began and ended between two looks was never seen, and three phone lines that
+# set an agent going never came back. Now it is made where his words enter a task (general.to_agent, the one door for his line - asking()
+# says whether a phone chat is speaking) and where a start is made here (receipt_text, _ran), and kept by the event that ends the agent's
+# turn (workerstate.record -> turn_ended): its answer, its question, its card for his press, or its failure.
 def promise(store, tid) -> bool:
     """Work on `tid` was just handed to an agent from the chat speaking now (asking()): follow it up there."""
     at = asking()
     if not at or not str(tid or '').isdigit(): return False
-    try: lane = (_task_item(store, int(tid)) or {}).get('lane') or ''
-    except Exception: lane = ''
-    keep = [p for p in _promises(store) if int(p['tid']) != int(tid)]
-    keep.append({'tid': int(tid), 'channel': at['channel'], 'chat': at['chat'], 'connector_id': at.get('connector_id'),
-                 'at': time.time(), 'lane': lane, 'armed': lane in WORKING})
-    store.set_setting(PROMISES_KEY, json.dumps(keep), 'assistant')
+    with _LEDGER:
+        keep = [p for p in _promises(store) if int(p['tid']) != int(tid)]
+        keep.append({'tid': int(tid), 'channel': at['channel'], 'chat': at['chat'], 'connector_id': at.get('connector_id'), 'at': time.time()})
+        store.set_setting(PROMISES_KEY, json.dumps(keep), 'assistant')
+    return True
+
+
+def turn_ended(store, tid) -> bool:
+    """The agent on `tid` ended a turn (its answer, a question, a failure): a promise on it is owed now - unless his words are still waiting
+    for its next stop (a turn that ran before they went in is not the one he asked for). Sent at once, on its own thread."""
+    if not str(tid or '').isdigit() or not any(int(p['tid']) == int(tid) for p in _promises(store)): return False
+    if store.waiting_notes(int(tid)): return False
+    with _LEDGER:
+        ps = [{**p, 'ended': True} if int(p['tid']) == int(tid) else p for p in _promises(store)]
+        store.set_setting(PROMISES_KEY, json.dumps(ps), 'assistant')
+    threading.Thread(target=keep_promises, args=(getattr(store, '_store', store),), name=f'taskuary-promise-{tid}', daemon=True).start()
     return True
 
 
 def keep_promises(store, force: bool = False) -> int:
-    """Each promised task whose agent has STOPPED working comes back to its chat as its card - once. It waits until the agent
-    has been seen working (an answered question is still `blocked` for a moment), or until its row is something new."""
+    """Each promised task whose agent's turn has ENDED (turn_ended) comes back to its chat as its card - once. One waits only while a turn of
+    that chat is being answered (its answer would land in the middle of it); the chat clock's next look sends it then."""
     ps = _promises(store)
     if not ps: return 0
     from . import concierge, funnel
@@ -593,16 +607,9 @@ def keep_promises(store, force: bool = False) -> int:
         if time.time() - float(p.get('at') or 0) > PROMISE_HOURS * 3600: continue        # stale: the walk has long moved on
         # ...and the conversation that made it is over: the desktop's rail has the task, the phone hears nothing unasked (2026-10-23)
         if held_back(store, p['channel'], chat, f'the follow-up on TQ-{tid:04d}'): continue
+        if not p.get('ended') or (not force and _busy(store, p['channel'], chat)): keep.append(p); continue
+        if items is None: items = funnel.pile(store).get('items') or []
         it, t = _task_item(store, tid, items), store.get_task(tid) or {}
-        lane = (it or {}).get('lane') or ''
-        if lane in WORKING: keep.append({**p, 'armed': True}); continue
-        # ...and a run that ENDED by its own word with no row left on the pile is over too: a failed or finished agent on a task still
-        # open kept its promise unsaid for twelve hours (F5)
-        from . import workerstate as ws
-        end = None if it else ws.ended(store, tid)
-        done = (t.get('Status') in ('done', 'dropped') or end in ('finished', 'failed')) and not it
-        if not (p.get('armed') or done or (it and lane != p.get('lane'))): keep.append(p); continue
-        if not force and not quiet(store, p['channel'], chat): keep.append(p); continue   # mid-conversation: the next look tries again
         ref = f'TQ-{tid:04d}'
         if it:
             with concierge.delivering(concierge.PHONE): nxt = concierge.surface(store, it['key'], actor='owner')
@@ -616,9 +623,13 @@ def keep_promises(store, force: bool = False) -> int:
                              extra=again + [(f'Open {ref}', {'t': 'open', 'key': f'task:{tid}'}), (concierge.CHIP_WORDS['next'], {'t': 'next'})])
         send(store, p['channel'], chat, text, p.get('connector_id'))
         kept += 1
-    # ...plus any promise made WHILE this looked (a chat turn on another thread): rewriting the list read above would drop it
-    seen = {(int(p['tid']), p.get('at')) for p in ps}
-    store.set_setting(PROMISES_KEY, json.dumps(keep + [p for p in _promises(store) if (int(p['tid']), p.get('at')) not in seen]), 'assistant')
+    # ...plus any promise made or ended WHILE this looked (a chat turn, a turn end, on another thread): rewriting the list read above would
+    # drop it - each one this look settled is struck off by what it was when read
+    with _LEDGER:
+        seen = {(int(p['tid']), p.get('at')) for p in ps}
+        left = {(int(p['tid']), p.get('at')) for p in keep}
+        now = [p for p in _promises(store) if (int(p['tid']), p.get('at')) not in seen or (int(p['tid']), p.get('at')) in left]
+        store.set_setting(PROMISES_KEY, json.dumps(now), 'assistant')
     return kept
 
 

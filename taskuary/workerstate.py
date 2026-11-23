@@ -153,6 +153,11 @@ def record(store, tid: int, sid: str, kind: str, request_id: str = None, text: s
             from . import agentchannels
             agentchannels.on_event(store, tid, kind, text, source)
         except Exception as e: logger.debug(f'task {tid}: not said on its channel - {e}')
+    if kind in RESTS or kind in TERMINAL:         # ...and to the phone chat his line set it going from (remote_assistant.promise)
+        try:
+            from . import remote_assistant
+            remote_assistant.turn_ended(store, tid)
+        except Exception as e: logger.debug(f'task {tid}: the phone was not told its turn ended - {e}')
     return True
 
 

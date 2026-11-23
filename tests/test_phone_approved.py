@@ -301,7 +301,7 @@ class AfterTheRunTests(PhoneCase):
     def test_the_follow_up_of_a_failed_agent_leads_with_try_again(self):
         tid = self._ended('failed', live=True)
         self.s.set_setting(ra.PROMISES_KEY, json.dumps([{'tid': tid, 'channel': 'whatsapp', 'chat': self.ph.chat, 'connector_id': self.ph.cid,
-                                                          'at': time.time(), 'lane': 'working', 'armed': True}]), 't')
+                                                          'at': time.time(), 'lane': 'working', 'ended': True}]), 't')
         got = self.ph.push(lambda: ra.keep_promises(self.s, force=True))
         self.assertEqual(got[-1][1][0], 'Try again', got[-1][1])
 

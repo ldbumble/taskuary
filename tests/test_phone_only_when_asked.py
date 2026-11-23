@@ -112,7 +112,7 @@ def test_a_promise_from_a_conversation_that_ended_is_not_kept_on_the_phone():
     s, _c = armed_store()
     tid = s.create_task({'Title': 'Reconcile the March ledger', 'Kind': 'general', 'Status': 'done'}, 'owner')
     s.set_setting(ra.PROMISES_KEY, json.dumps([{'tid': tid, 'channel': 'whatsapp', 'chat': JID, 'at': time.time(), 'lane': 'working',
-                                                'armed': True}]), 't')
+                                                'ended': True}]), 't')
     _quiet_phone(s)
     with mock.patch.object(funnel, 'pile', return_value={'items': [], 'alerts': []}):
         assert _sent(lambda: ra.keep_promises(s, force=True)) == []

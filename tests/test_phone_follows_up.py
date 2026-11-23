@@ -17,33 +17,77 @@ def from_the_chat(store, tid):
     finally: ra._ASKING.chat = None
 
 
-def look(store, rows):
+class _Now:
+    "A thread that runs as it is started - the turn end's follow-up, in step with the test."
+    def __init__(self, target=None, args=(), kwargs=None, **k): self.t, self.a, self.k = target, args, kwargs or {}
+    def start(self): self.t(*self.a, **self.k)
+
+
+def look(store, rows, ended: int = None):
+    """The chat clock's look - or, `ended`, the agent on that task ending a turn (workerstate.record's own event)."""
     with mock.patch.object(funnel, 'pile', return_value=pile(*rows)), \
          mock.patch.object(concierge, 'surface', return_value={'say': 'The draft is ready.', 'item': None}) as surfaced, \
-         mock.patch.object(messengers, 'wa_send') as sent:
-        n = ra.keep_promises(store, force=True)
+         mock.patch.object(messengers, 'wa_send') as sent, mock.patch.object(ra.threading, 'Thread', _Now):
+        n = ra.keep_promises(store, force=True) if ended is None else ra.turn_ended(store, ended) and sent.call_count
     return n, surfaced, sent
 
 
 def test_an_answered_agent_comes_back_to_the_chat_with_its_draft_once():
     store, _c = armed_store()
-    with mock.patch.object(funnel, 'pile', return_value=pile({'key': 'agent:7', 'tid': 7, 'lane': 'blocked'})):
-        assert from_the_chat(store, 7)
-    # still `blocked` a moment after the answer: nothing yet - that is the question it was just answered on
-    assert look(store, [{'key': 'agent:7', 'tid': 7, 'lane': 'blocked'}])[0] == 0
+    assert from_the_chat(store, 7)
+    # the rail moving is no news - only the agent's own turn end is
     assert look(store, [{'key': 'agent:7', 'tid': 7, 'lane': 'working'}])[0] == 0
-    n, surfaced, sent = look(store, [{'key': 'review:9', 'tid': 7, 'lane': 'approve'}])
+    n, surfaced, sent = look(store, [{'key': 'review:9', 'tid': 7, 'lane': 'approve'}], ended=7)
     assert n == 1 and surfaced.call_args.args[1] == 'review:9'
     assert 'TQ-0007 is back' in sent.call_args.args[2]
     assert look(store, [{'key': 'review:9', 'tid': 7, 'lane': 'approve'}])[0] == 0          # said once
 
 
+def test_a_turn_too_short_for_the_rail_to_see_still_comes_back():
+    """Walk 6 (H2): the agent answered in 9 s with a new card on the same lane it was on - no look ever caught it working, the lane never
+    changed, and three phone lines that set it going never came back. Its own turn end is the news."""
+    store, _c = armed_store()
+    from_the_chat(store, 7)
+    row = {'key': 'review:9', 'tid': 7, 'lane': 'approve'}
+    assert look(store, [row])[0] == 0
+    store.add_worker_event = lambda f: 1                            # the event row itself is the store's; what follows it is under test
+    with mock.patch.object(funnel, 'pile', return_value=pile(row)), \
+         mock.patch.object(concierge, 'surface', return_value={'say': 'The new card.', 'item': None}), \
+         mock.patch.object(messengers, 'wa_send') as sent, mock.patch.object(ra.threading, 'Thread', _Now):
+        from taskuary import workerstate
+        workerstate.record(store, 7, 's1', 'turn_end', text='Changed the draft as you asked.')
+    assert sent.call_count == 1 and 'TQ-0007 is back' in sent.call_args.args[2]
+    assert json.loads(store.get_setting(ra.PROMISES_KEY)) == []
+
+
+def test_his_words_waiting_for_the_next_stop_wait_for_the_turn_that_hears_them():
+    store, _c = armed_store()
+    t = store.create_task({'Title': 'Vendor trials', 'Kind': 'general', 'Status': 'open'}, 'owner')
+    from_the_chat(store, t)
+    store.add_waiting(t, 'also check the invoice report', 'owner')                       # not typed in yet: the turn ending now ran without it
+    assert look(store, [], ended=t)[0] in (0, False)
+    assert len(json.loads(store.get_setting(ra.PROMISES_KEY))) == 1
+
+
+def test_any_line_of_his_from_the_phone_to_an_agent_is_followed_up():
+    """Walk 6 (H2): Tell the agent from the phone (concierge._tell_now) made no promise, while the answer and continue roads did. The
+    promise is made in the one door his line takes to an agent (general.to_agent), so every road makes it."""
+    from taskuary import general
+    store, _c = armed_store()
+    t = store.create_task({'Title': 'Vendor trials', 'Kind': 'general', 'Status': 'open'}, 'owner')
+    ra._ASKING.chat = {'channel': 'whatsapp', 'chat': JID, 'connector_id': 1}
+    try: general.to_agent(store, t, 'use the staging database', 'owner', frm='owner', wake=False)
+    finally: ra._ASKING.chat = None
+    assert [p['tid'] for p in json.loads(store.get_setting(ra.PROMISES_KEY))] == [t]
+    general.to_agent(store, t, 'and on the desk', 'owner', frm='owner', wake=False)         # the desk promises nothing to a phone
+    assert len(json.loads(store.get_setting(ra.PROMISES_KEY))) == 1
+
+
 def test_a_task_that_finished_with_nothing_for_you_says_so_with_a_way_on():
     store, _c = armed_store()
-    with mock.patch.object(funnel, 'pile', return_value=pile({'key': 'agent:7', 'tid': 7, 'lane': 'working'})):
-        from_the_chat(store, 7)
+    from_the_chat(store, 7)
     with mock.patch.object(store, 'get_task', return_value={'TaskId': 7, 'Status': 'done'}):
-        n, _s, sent = look(store, [])
+        n, _s, sent = look(store, [], ended=7)
     assert n == 1
     assert 'TQ-0007 is finished' in sent.call_args.args[2]
     offered = json.loads(store.get_setting(f'{ra.OFFERED_KEY}:whatsapp:{JID}') or '[]')         # the poll under it
@@ -56,16 +100,19 @@ def test_the_desk_makes_no_promise_to_a_phone():
     assert json.loads(store.get_setting(ra.PROMISES_KEY) or '[]') == []
 
 
-def test_nothing_is_pushed_while_the_chat_is_talking():
+def test_nothing_is_pushed_while_the_chat_is_answering_a_turn():
     store, _c = armed_store()
-    with mock.patch.object(funnel, 'pile', return_value=pile({'key': 'agent:7', 'tid': 7, 'lane': 'working'})):
-        from_the_chat(store, 7)
-    ra.talked(store, 'whatsapp', JID)
-    with mock.patch.object(funnel, 'pile', return_value=pile({'key': 'review:9', 'tid': 7, 'lane': 'approve'})), \
-         mock.patch.object(messengers, 'wa_send') as sent:
-        assert ra.keep_promises(store) == 0
-    sent.assert_not_called()
+    from_the_chat(store, 7)
+    key = (id(store), 'whatsapp', 1, JID)
+    with ra._locks_guard: ra._turns[key] = object()                                       # a turn of that chat is being answered
+    try:
+        assert look(store, [{'key': 'review:9', 'tid': 7, 'lane': 'approve'}], ended=7)[0] == 0
+        with mock.patch.object(messengers, 'wa_send') as sent: assert ra.keep_promises(store) == 0
+        sent.assert_not_called()
+    finally:
+        with ra._locks_guard: ra._turns.pop(key, None)
     assert len(json.loads(store.get_setting(ra.PROMISES_KEY))) == 1                     # kept for the next look
+    assert look(store, [{'key': 'review:9', 'tid': 7, 'lane': 'approve'}])[0] == 1
 
 
 def test_telling_the_agent_is_never_the_last_word():
@@ -145,6 +192,6 @@ def _tapped(store):
     assert any(ra.PROMISE_LINE in b for b in sent), sent
     assert [p['tid'] for p in json.loads(store.get_setting(ra.PROMISES_KEY))] == [t]
     assert look(store, [{'key': f'task:{t}', 'tid': t, 'lane': 'working'}])[0] == 0
-    n, _s, out = look(store, [{'key': f'agent:{t}', 'tid': t, 'lane': 'report'}])          # its turn ended: the card comes back
+    n, _s, out = look(store, [{'key': f'agent:{t}', 'tid': t, 'lane': 'report'}], ended=t)          # its turn ended: the card comes back
     assert n == 1 and f'TQ-{t:04d} is back' in out.call_args.args[2]
     assert look(store, [{'key': f'agent:{t}', 'tid': t, 'lane': 'report'}])[0] == 0       # said once

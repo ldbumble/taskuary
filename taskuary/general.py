@@ -1150,6 +1150,10 @@ def to_agent(store, tid: int, said: str, actor: str = 'owner', heard=None, *, fr
         # ...HIS WORDS ON A CLOSED TASK OPEN IT, whichever road they take - a line, an answer to what its agent asked, words kept for its next
         # stop (the phone): the walk's answer went by the ask's road, and the task stayed off the rail for the whole turn it began
         reopen(store, tid, actor)
+        # ...and his line from a phone chat is followed up THERE when the turn it starts ends, whichever road brought it (walk 6, H2:
+        # Tell the agent from the phone made no promise) - a no-op on the desk (remote_assistant.asking)
+        from . import remote_assistant
+        remote_assistant.promise(store, tid)
         if request: return (ws.answer_open(store, tid, said, actor, owner=owner) if request == 'open' else
                             ws.answer(store, tid, request, said, actor, owner=owner, press=bool(line.get('press'))))
         if not wake: return waitroom.add(store, tid, said, 'owner', owner=owner, files=files)

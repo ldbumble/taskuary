@@ -121,7 +121,7 @@ class FailedAgentTests(PhoneCase):
     def test_its_follow_up_reads_failed_too(self):
         tid = self._failed_with_its_session_open()
         self.s.set_setting(ra.PROMISES_KEY, json.dumps([{'tid': tid, 'channel': 'whatsapp', 'chat': self.ph.chat, 'connector_id': self.ph.cid,
-                                                          'at': time.time(), 'lane': 'working', 'armed': True}]), 't')
+                                                          'at': time.time(), 'lane': 'working', 'ended': True}]), 't')
         got = self.ph.push(lambda: ra.keep_promises(self.s, force=True))
         self.assertTrue(got); self.assertReadsFailed(text_of(got))
 

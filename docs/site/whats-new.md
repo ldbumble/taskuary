@@ -2,6 +2,12 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.4.1.9 - 2026-11-22
+
+- A card's spent monthly budget is said as itself and never tried again by the clock
+- His own mail that is the letter an agent drafted joins its task and stands the draft down
+- A provider's quota is still waited out - only a card's monthly budget is said and left to him; a source-text test goes
+
 ## 0.4.1.8 - 2026-11-22
 
 - Following a link never speaks for the owner or sends his details, whatever the judge named it

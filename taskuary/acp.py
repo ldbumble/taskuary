@@ -119,7 +119,7 @@ class ACPClient:
                         'error': {'code': -32601, 'message': f'{method} is not supported by this client'}})
 
     def _permit(self, params):
-        """The answer to one permission request. `permit` (acpgate.answerer: Taskuary's own rules) decides when it is set; a
+        """The answer to one permission request. `permit` (gate.answerer: Taskuary's own rules) decides when it is set; a
         bare client allows once, which is what a headless argv run does with its bypass flag. A rule that raises refuses -
         an error is no yes."""
         if not self.permit: return pick(params.get('options'), True)

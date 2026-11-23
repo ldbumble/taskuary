@@ -166,7 +166,7 @@ class SignUp(unittest.TestCase):
     def test_approve_on_a_closed_or_unnamed_browser_does_nothing_and_says_why(self):
         for i, (b, said) in enumerate(((TheBrowser(open_=False), 'browser is closed'), (TheBrowser(url=None), 'could not read which page'),
                                        (TheBrowser(url='https://events.vendor.example/other'), 'already left that page'))):
-            self.s, self.tid, self.mid, _ = world()     # his yes stands for its task (actrule.remember): each refusal on a task of its own
+            self.s, self.tid, self.mid, _ = world()     # his yes stands for its task (gate.remember): each refusal on a task of its own
             with TheBrowser(): self.check(f'agent-browser click @e{5 + i}')
             [rv] = self.pending()
             with b:

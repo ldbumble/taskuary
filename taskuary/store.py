@@ -882,7 +882,7 @@ DEFAULT_SETTINGS = {'attach_threshold': '0.42',
                     # how much of an agent's work its task chat shows by default (chatDetail.js): every tool call for coding, the summary for the rest
                     'chat_detail_coding': 'everything', 'chat_detail_other': 'summary',
                     'concierge_fast': 'auto',   # the Assistant's CLI in fast mode: codex yes, claude no (llm.fast_on)
-                    'acp_cli': '1',                 # general agents' CLI runs over ACP, argv as the fallback (agents.acp_on, acpgate)
+                    'acp_cli': '1',                 # general agents' CLI runs over ACP, argv as the fallback (agents.acp_on, gate)
                     'general_agent_hands': 'cli',   # ...with the CLI agent's own permissions unless the owner narrows it (general.full_hands)
                     # who counts as ours on a GitHub repository (batch.outside_row), and what an outsider's PR gets (cloudfix.py)
                     'repo_trust_private': 'ours', 'repo_trust_public': 'writers', 'outside_prs': 'review',

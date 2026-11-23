@@ -819,7 +819,7 @@ def v_attachments(r: Run):
         named = [x for x in re.findall(r"((?:[A-Za-z]:)?[\\/][^\s'\"]*" + re.escape(name) + ')', prompt)]     # ...a Windows path too (C:\...)
         assert named, f'{r.backend}: the agent is told where {name} is: {prompt!r}'
         assert all(os.access(x, os.R_OK) and Path(x).is_file() for x in named), f'{r.backend}: {name} is readable at the path it was told: {named}'
-        # ...in the task's own folder: under attachments/ an agent's Read is refused as Taskuary's own data (acpgate), whatever it was told
+        # ...in the task's own folder: under attachments/ an agent's Read is refused as Taskuary's own data (gate), whatever it was told
         assert not [x for x in named if '/attachments/' in x.replace('\\', '/')], f'{r.backend}: {name} is named where its Read is refused: {named}'
         r.extra.append((name, named))
     r.answer('The pack reads fine; the PDF totals match the picture.')

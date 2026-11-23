@@ -133,7 +133,7 @@ def session_env(agent: str = '', task_id=None, cwd: str = '', sid: str = None, s
     """What a CLI needs to know about ITSELF. `taskuary --note "..."` inside an agent's terminal
     should not have to be told which agent or which task it is - the session already knows, so
     it says so in the environment."""
-    from . import config, gatecmd, guard
+    from . import config, gate, guard
     srv = config.load()['server']
     host = '127.0.0.1' if srv.get('host') in ('0.0.0.0', '::', '', None) else srv.get('host')
     out = {k: str(v) for k, v in (('TASKUARY_AGENT', agent), ('TASKUARY_TASK', task_id or ''),
@@ -153,8 +153,8 @@ def session_env(agent: str = '', task_id=None, cwd: str = '', sid: str = None, s
     if tok: out[guard.AGENT_ENV] = tok
     # the token is shared by every session; this says which task is THIS one's (guard.owns_task)
     if tok and str(task_id or '').isdigit(): out[guard.TASK_ENV] = guard.task_proof(srv, task_id)
-    # ...and the browser and desktop presses held at the command, whatever AI runs it (gatecmd): its folder first, then `taskuary`'s
-    if task_id: out['PATH'] = os.pathsep.join(d for d in (gatecmd.folder(), own_command(), os.environ.get('PATH', '')) if d)
+    # ...and the browser and desktop presses held at the command, whatever AI runs it (gate): its folder first, then `taskuary`'s
+    if task_id: out['PATH'] = os.pathsep.join(d for d in (gate.folder(), own_command(), os.environ.get('PATH', '')) if d)
     return stranger_env(out, task_id, srv) if stranger else out
 
 

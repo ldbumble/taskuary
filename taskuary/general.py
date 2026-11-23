@@ -500,7 +500,7 @@ def handles(task: dict | None) -> bool:
 
 # A CODING TASK ON AN AI CARD (the owner, 2026-11-09: "coding tasks should run on hipaa, why not"): where the owner chose an API card for
 # coding - the coding brain setting, or this task's own pick - or it is the only AI here (a HIPAA-only install), the task runs as this
-# module's session through apiagent's loop: in its checkout (apiagent.workdir), its commands under hooks.command_gate as a CLI's are,
+# module's session through apiagent's loop: in its checkout (apiagent.workdir), its commands under gate.check as a CLI's are,
 # git by run_command, the push as propose_land's card, and CODING.md for its rules. A CLI chosen for coding still runs it in a terminal.
 ON_CARD = set()                # task ids of coding tasks running on an AI card - handles() is a pure read of the task, so it is told here
 # ...and TOLD AGAIN AT A RESTART (the spine audit, 2026-11-09): the set was empty until a page looked at each task, so new mail on a coding
@@ -593,7 +593,7 @@ def brain_options(store, keep: str = '') -> list:
     brains = dict(hub_agents.connection_brains(store))
     # not installed is not a choice - the same rule the coding brain list follows. ONE NAME per CLI, the clis.KNOWN label the task shows
     # once it runs ('gemini' here, 'Gemini CLI' after), and what matters for computer use said with it (2026-10-25): whether its last
-    # test said it isn't signed in (its browser presses are held on every AI, gatecmd)
+    # test said it isn't signed in (its browser presses are held on every AI, gate)
     tests = hub_agents.cli_tests(store)
     out = [{**o, 'agent': o['pick'][4:], 'models': climodels.catalog(o['cmd'])['models'], 'browser': True,
             'signed_out': tests.get(o['pick'][4:]) is False}
@@ -2641,7 +2641,7 @@ class GeneralSession:
     browser_failed = ''                  # why this session's browser did not open, said in the turn (send_prompt)
 
     def holds_browser(self) -> bool:
-        "Can its hook hold this session's shell steps? Only a Claude CLI's hook refuses a call (llm.HOLDS_CLI), and a stranger's run has its own. (Its browser and desktop presses are held on every AI, gatecmd.)"
+        "Can its hook hold this session's shell steps? Only a Claude CLI's hook refuses a call (llm.HOLDS_CLI), and a stranger's run has its own. (Its browser and desktop presses are held on every AI, gate.)"
         from . import origin
         try: return (self.pick.startswith('cli:') and _cli_of_pick(self.store, self.pick) in llm_mod.HOLDS_CLI
                      and origin.of_task(self.store, self.task_id)[0] != 'stranger')

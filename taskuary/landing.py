@@ -499,7 +499,7 @@ def from_proposal(store, tid: int, p: dict) -> dict | None:
 # AN AGENT'S OWN `git push` IS THE CARD'S QUESTION TOO (the agent walk, 2026-11-09). Told to call propose_land, a coding agent ran
 # `git add ... && git commit ... && git push` in its shell instead, and the owner got "THE AGENT ASKS - It wants to run ..." with Allow once /
 # Reject - the line cut mid-word, the push not on it - beside a card built to ask it with one Push. A plain push of the task's own work from
-# its own checkout is that card's question, on every road a shell step is held by (shellgate.check, acpgate.decide). What the button is
+# its own checkout is that card's question, on every road a shell step is held by (shellgate.check, gate.tool_call). What the button is
 # not - forced, tags, a delete, another remote or checkout, a push inside another shell's string - is held the way any other step is.
 _PUSH_OPTS = frozenset('-u --set-upstream -q --quiet -v --verbose --progress --porcelain'.split())
 _TO_NOWHERE = re.compile(r'\s\d?>{1,2}\s*(?:&\d|/dev/null|\$null|nul)(?=\s|$|[;&|)])', re.I)     # `2>&1`, `>/dev/null`: no part of what is pushed

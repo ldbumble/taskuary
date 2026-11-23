@@ -23,6 +23,7 @@ from pathlib import Path
 from loguru import logger
 from .selfclose import SHOW_WHAT
 from .browserview import SIGNUP_LINE
+from . import gate as _gate
 
 IDLE_STEPS = 8                 # steps in a row whose answers held nothing the turn had not read already: going in circles, not working
 CAP = 12_000                  # one tool answer, as the model reads it
@@ -85,9 +86,7 @@ WEB = [
 ASK_BY_CALLING = ("Call it for such a step all the same: the call is what puts the Approve button on the task, and it runs once the owner "
                   "presses. Saying in words that a step needs approval puts nothing there.")
 SHELL = [_fn('run_command', "Run a shell command in your working folder (PowerShell on Windows, bash elsewhere) - git, scripts, builds, "
-             "tests. The same rules as a Claude Code session here: a step that leaves this computer (push, publish, send), a delete outside "
-             "your folder, or a browser or desktop act that can't be undone waits for the owner's Approve; everything else runs now. "
-             + ASK_BY_CALLING,
+             "tests. The same rules as a Claude Code session here. " + _gate.brief('shell') + ' ' + ASK_BY_CALLING,
              _S({'command': {'type': 'string'}, 'why': {'type': 'string', 'description': 'what it does, in a few plain words'}}, ['command', 'why']))]
 LOCAL = {t['function']['name'] for t in (*BROWSER, SHOW, *FILES, *WRITE, *WEB, *SHELL)}
 # ONE LINE A TOOL (the owner, 2026-11-15: "MCP-style tools with simple JSON ... All methods can be searched later"): as agenttools.SHORT for
@@ -153,9 +152,9 @@ def _part(s, a: dict) -> str:
 
 
 def _act(store, tid, sid, args: list) -> str:
-    "One agent-browser command in this task's browser - held for the owner first where it can't be undone (gatecmd.judge, as a CLI's is)."
-    from . import browsergate as bg, gatecmd
-    if (held := gatecmd.judge(store, tid, sid, shlex.join([bg.EXE, *args]))): return held
+    "One agent-browser command in this task's browser - held for the owner first where it can't be undone (gate.judge, as a CLI's is)."
+    from . import browsergate as bg, gate
+    if (held := gate.judge(store, tid, sid, shlex.join([bg.EXE, *args]))): return held
     cmd = shlex.join([bg.EXE, *args])
     rc, said = bg._run(sid, args, WAIT, 'api')
     # ...what it did, in his words, and what the site did - the one road a CLI's command takes after it ran (browsergate.after)
@@ -315,15 +314,15 @@ def _search(store, tid: int, sid: str, q: str) -> str:
                   lambda url: _hands(store, tid, sid, 'web_fetch', {'url': url}))
 
 def _hands(store, tid: int, sid: str, name: str, a: dict) -> str:
-    "A CLI's own hands, run by the server: files, the web, and commands under the ONE gate a CLI's commands pass (hooks.command_gate)."
+    "A CLI's own hands, run by the server: files, the web, and commands under the ONE gate a CLI's commands pass (gate.check)."
     import os
     if name in ('files_list', 'file_read'):
         # ...a read outside the task's own folders waits for the owner, as a CLI's does (readgate.py)
-        from . import readgate, shellgate
+        from . import gate, readgate
         cwd = workdir(store, tid)
         held, never = readgate.judge(store, tid, [_path(store, tid, a.get('path') or '.')], cwd)
         if never: raise ValueError(never)
-        if held: return (shellgate.check(store, tid, sid, '', cwd=cwd, reads=held).get('hookSpecificOutput') or {}).get('permissionDecisionReason') or shellgate.HELD
+        if held: return gate.reason(gate.check(store, tid, sid, cwd=cwd, paths=[_path(store, tid, a.get('path') or '.')])) or gate.HELD_SAID
     if name == 'files_list':
         d = _path(store, tid, a.get('path') or '.')
         if not d.is_dir(): raise ValueError(f'{d} is not a folder')
@@ -366,12 +365,12 @@ def _hands(store, tid: int, sid: str, name: str, a: dict) -> str:
         return _part(head + chr(10) + str(got.get('text') or '').strip(), a)
     if name == 'web_search': return _search(store, tid, sid, str(a.get('query') or ''))
     if name == 'run_command':
-        from . import hooks, shellgate, spawn
+        from . import gate, shellgate, spawn
         cmd, why = str(a.get('command') or '').strip(), ' '.join(str(a.get('why') or '').split())[:300]
         if not cmd: raise ValueError('no command given')
         cwd, shell = workdir(store, tid), 'PowerShell' if os.name == 'nt' else 'Bash'
-        held = hooks.command_gate(store, tid, sid, cmd, shell, cwd, ask=False, about=why)
-        if held: return (held.get('hookSpecificOutput') or {}).get('permissionDecisionReason') or f'{shellgate.HELD}.'
+        held = gate.check(store, tid, sid, cmd, cwd, shell, about=why)
+        if held: return gate.reason(held) or f'{gate.HELD_SAID}.'
         import subprocess, time
         # ...its own process group off Windows, so the whole of it can be ended (_kill)
         p = spawn.popen(shellgate._argv(shell, cmd), cwd=cwd, env=env_of(store, tid, sid), stdout=subprocess.PIPE, stderr=subprocess.PIPE,
@@ -455,8 +454,8 @@ def run_tool(store, tid: int, sid: str, name: str, a: dict) -> str:
     if name == 'browser_open':
         u = _url(a.get('url'))
         if not bv.state(sid, fresh=True).get('open'):
-            held = bg.check(store, tid, sid, shlex.join([bg.EXE, 'open', u]))       # a magic link is judged like a click (browsergate.carries)
-            if held: return (held.get('hookSpecificOutput') or {}).get('permissionDecisionReason') or bg.HELD
+            from . import gate                                                  # a magic link is judged like a click (browsergate.carries)
+            if (held := gate.check(store, tid, sid, shlex.join([bg.EXE, 'open', u]), run=True)): return gate.reason(held) or bg.HELD
             if not bv.start(sid, u): raise ValueError(bv.FAILED_WHY)
         else:
             # ...A PAGE THAT CAME BUT NEVER FINISHED (an image or a tracker on it still loading) is open all the same: agent-browser's
@@ -472,8 +471,8 @@ def run_tool(store, tid: int, sid: str, name: str, a: dict) -> str:
     if name == 'browser_fill': return _act(store, tid, sid, ['fill', str(a.get('ref') or ''), str(a.get('text') or '')])
     if name == 'browser_press': return _act(store, tid, sid, ['press', str(a.get('key') or '')])
     if name == 'browser_signup':
-        from . import gatecmd
-        return gatecmd.run_own(store, tid, sid, 'signup')[1]
+        from . import gate
+        return gate.run_own(store, tid, sid, 'signup')[1]
     if name == 'browser_screenshot':
         import time
         from . import outputs

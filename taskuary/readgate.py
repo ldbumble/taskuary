@@ -16,9 +16,8 @@ Python's) are no one's files and pass.
 import os, re, sys, tempfile
 from pathlib import Path
 
-WHY = "it is outside this task's own folders"
-NEVER = ("Taskuary's own data and the places sign-ins are kept are never read by an agent - not even with the owner's yes. Go on without "
-         'it, and say what you needed if it matters')
+from .gate import TABLE
+WHY, NEVER = TABLE['reads'].why, TABLE['never'].why          # said as the one table says them (gate.TABLE)
 ALLOWED = 'Allowed - this task may read that folder'      # a read's Approve, said as what it did: nothing "ran" (heldCard says the same)
 GRANT = 'read:'                                         # a folder the owner let this task read (store.set_perm_rule)
 READ_TOOLS = ('Read', 'Glob', 'Grep', 'LS', 'NotebookRead')
@@ -173,6 +172,7 @@ def judge(store, tid, paths, cwd: str = '') -> tuple:
     """(held, never) for the paths a call reads: `held` one step per folder outside the work area ({'tool', 'what', 'why', 'where',
     'folder'} - shellgate's own shape), `never` the reason when one is Taskuary's own or a sign-in place ('' else). None in `paths` is a
     path that could not be read, held as a step of its own."""
+    if not paths: return [], ''
     from . import floor
     mine, nev, ok, sids = own(store, tid, cwd), [_n(p) for p in floor.kept_secret()], granted(store, tid) + _open(), _sids(store, tid)
     held, blind = {}, False
@@ -188,8 +188,8 @@ def judge(store, tid, paths, cwd: str = '') -> tuple:
         p = os.path.realpath(os.path.expanduser(_cut(str(raw))))     # ...said as the owner's own spelling of it, never case-folded
         folder = p if os.path.isdir(p) else os.path.dirname(p)
         held.setdefault(folder, []).append('' if folder == p else os.path.basename(p))
-    out = [{'tool': 'read', 'what': _said(f, ns), 'why': WHY, 'where': f, 'folder': f} for f, ns in held.items()]
-    if blind: out.append({'tool': 'read', 'what': 'read files at a path it builds from a variable', 'why': WHY, 'where': '', 'folder': ''})
+    out = [{'tool': 'read', 'kind': 'reads', 'what': _said(f, ns), 'why': WHY, 'where': f, 'folder': f} for f, ns in held.items()]
+    if blind: out.append({'tool': 'read', 'kind': 'reads', 'what': 'read files at a path it builds from a variable', 'why': WHY, 'where': '', 'folder': ''})
     return out, ''
 
 

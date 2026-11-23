@@ -85,7 +85,7 @@ class TheGeneralAgentsBrowserIsHeld(unittest.TestCase):
         self.assertNotIn('CANNOT HOLD', seen['system'])
 
     def test_a_codex_chat_is_told_its_presses_are_held_as_claudes_are(self):
-        """Its presses are held where they run (gatecmd), not by a hook it does not have - so it is told the same road as Claude."""
+        """Its presses are held where they run (gate), not by a hook it does not have - so it is told the same road as Claude."""
         connect_cli(self, codex={'cmd': 'codex', 'args': ['exec']})
         seen = self._turn('cli:codex')
         self.assertIsNone(seen['kw'].get('hold_sid'))

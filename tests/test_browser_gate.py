@@ -6,7 +6,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
-from taskuary import browsergate as bg, browserview, gatecmd, hooks, proposals, verdicts
+from taskuary import browsergate as bg, browserview, gate, hooks, proposals, verdicts
 from taskuary.store import MemoryStore
 from taskuary.testing import Factory
 
@@ -23,6 +23,7 @@ class Brain:
 
 def verdict(v):
     "ask_json stood in: the model's answer is `v` for each act it is shown, in one call (a dict, or an exception to raise)."
+    bg.SEEN.clear()                     # ...a judge stood in anew: what an earlier one said of the same control is not its answer
     def ask(brain, system, user, want=None, need=(), **kw):
         brain.seen.append(user) if hasattr(brain, 'seen') else None
         if isinstance(v, Exception): raise v
@@ -32,6 +33,7 @@ def verdict(v):
 
 def answers(*vs, calls=None):
     "ask_json stood in: the model's answer is the array `vs`, whatever it is shown; `calls` counts the asks."
+    bg.SEEN.clear()                     # ...a judge stood in anew: what an earlier one said of the same control is not its answer
     def ask(brain, system, user, want=None, need=(), **kw):
         if calls is not None: calls.append(user)
         return SimpleNamespace(data={'acts': list(vs)})
@@ -167,8 +169,9 @@ class Judging(unittest.TestCase):
         typed = ('agent-browser fill @e1 "alex@northwind.example"', 'agent-browser type @e2 "hello"', 'agent-browser keyboard type "abc"',
                  'agent-browser --session tq-1 keyboard inserttext "abc"', 'agent-browser find label "Email" fill "alex@northwind.example"',
                  'agent-browser find role textbox fill "x" --name Email')
-        pressed = ('agent-browser click @e12', 'agent-browser press Enter', 'agent-browser keyboard press Enter', 'agent-browser check @e4',
-                   'agent-browser select @e5 "Express"', 'agent-browser find role button click --name Submit', 'agent-browser eval "1"',
+        typed += ('agent-browser check @e4', 'agent-browser select @e5 "Express"')     # ...a tick or a choice fills the form too: a fact
+        pressed = ('agent-browser click @e12', 'agent-browser press Enter', 'agent-browser keyboard press Enter',
+                   'agent-browser find role button click --name Submit', 'agent-browser eval "1"',
                    'agent-browser find role x --exact fill click', 'agent-browser keyboard --delay 5 type "x"', 'agent-browser click "@e12')
         with mock.patch('taskuary.llm.build_llm', return_value=None):
             for cmd in typed: self.assertFalse(one(self.s, bg.acts(cmd)[0], {'url': CHECKOUT})['hold'], cmd)
@@ -180,21 +183,24 @@ class Judging(unittest.TestCase):
             with on(): self.assertEqual(bg.check(self.s, self.tid, 'run1', 'agent-browser fill @e1 "a" && agent-browser click @e3')
                                         ['hookSpecificOutput']['permissionDecision'], 'deny')
 
-    def test_with_an_ai_typing_is_still_judged(self):
-        # ...inside the line's one ask (2026-11-17): the fill is an entry of the same verdict as the click after it, never a free pass
+    def test_typing_is_decided_by_fact_and_only_the_press_is_put_to_the_guard(self):
+        # ...facts first (redesign R5): a box filled sends nothing, so the fill runs unasked; the click after it is the line's one ask
         b, todo = Brain(None), bg.acts('agent-browser fill @e1 "a" && agent-browser click @e12')
         with verdict({'irreversible': True, 'sure': True, 'what': 'x'}):
-            self.assertEqual([v['hold'] for v in bg.judge(self.s, todo, {'url': CHECKOUT}, b)], [True, True])
-        [seen] = b.seen; self.assertIn('ACT 1: ', seen); self.assertIn('agent-browser fill @e1 a', seen); self.assertIn('ACT 2: ', seen)
+            self.assertEqual([v['hold'] for v in bg.judge(self.s, todo, {'url': CHECKOUT}, b)], [False, True])
+        [seen] = b.seen; self.assertIn('ACT 1: ', seen); self.assertNotIn('agent-browser fill @e1 a', seen); self.assertNotIn('ACT 2: ', seen)
 
     def test_unsure_of_a_tick_or_a_choice_lets_it_go_but_sure_it_cannot_be_undone_still_holds(self):
         """The real-CLI walk, 2026-11-16: ticking a sign-up's "I agree to the terms" box was held as "the AI could not tell whether it can be
         undone" - the owner was handed a checkbox, and an Enter on the page could not tick it. A tick, an untick, a choice or typing sends
         nothing: unsure on one of them it goes on. Sure it can't be undone (a toggle that saves itself), it is held as ever; a click unsure is held."""
         unsure, sure = {'irreversible': True, 'sure': False, 'what': 'agrees to the terms'}, {'irreversible': True, 'sure': True, 'what': 'turns 2FA off'}
+        sw = {'url': CHECKOUT, 'elements': '- switch "Two-step sign-in" [ref=e4]'}
         for cmd in ('agent-browser check @e4', 'agent-browser uncheck @e4', 'agent-browser select @e5 "free"', 'agent-browser fill @e1 "a"'):
             with verdict(unsure): self.assertFalse(one(self.s, bg.acts(cmd)[0], {'url': CHECKOUT}, Brain(None))['hold'], cmd)
-            with verdict(sure): self.assertTrue(one(self.s, bg.acts(cmd)[0], {'url': CHECKOUT}, Brain(None))['hold'], cmd)
+            with verdict(sure): self.assertFalse(one(self.s, bg.acts(cmd)[0], {'url': CHECKOUT}, Brain(None))['hold'], cmd)
+        for cmd in ('agent-browser check @e4', 'agent-browser click @e4'):           # ...a switch saves itself: the guard judges it
+            with verdict(sure): self.assertTrue(one(self.s, bg.acts(cmd)[0], sw, Brain(None))['hold'], cmd)
         with verdict(unsure): self.assertTrue(one(self.s, self.act, {'url': CHECKOUT}, Brain(None))['hold'])
 
     def test_a_click_that_ticks_a_box_of_the_form_is_filling_it_whatever_the_judge_calls_it(self):
@@ -205,7 +211,8 @@ class Judging(unittest.TestCase):
         big = {'big': True, 'kind': 'speaks', 'sure': False, 'irreversible': False, 'what': 'Agree to the terms'}
         with verdict(big): self.assertFalse(one(self.s, bg.acts('agent-browser click @e7')[0], pg, Brain(None))['hold'])
         with verdict(big): self.assertTrue(one(self.s, bg.acts('agent-browser click @e8')[0], pg, Brain(None))['hold'])
-        with verdict({**big, 'sure': True, 'irreversible': True}): self.assertTrue(one(self.s, bg.acts('agent-browser click @e7')[0], pg, Brain(None))['hold'])
+        sw = {**pg, 'elements': '- switch "Two-step sign-in" [ref=e7]'}
+        with verdict({**big, 'sure': True, 'irreversible': True}): self.assertTrue(one(self.s, bg.acts('agent-browser click @e7')[0], sw, Brain(None))['hold'])
 
     def test_with_no_verdict_in_time_a_link_or_a_tick_goes_on_and_a_button_still_waits(self):
         """The HIPAA walk, 2026-11-22: the gateway answered the judge in 82-113 s, past its wait, and "Click the Sign up link" and the terms
@@ -362,7 +369,7 @@ class Holding(unittest.TestCase):
                          ['pays the $412.50 order on toll.example', 'closes the account on toll.example'])
 
     def test_his_yes_to_a_press_on_a_site_stands_for_the_task_and_his_no_is_told_not_asked_again(self):
-        # ONE RULE (actrule.decide, 2026-11-19): the same press on the same site he approved on this task runs; one he dismissed is his no
+        # ONE RULE (gate.decide, 2026-11-19): the same press on the same site he approved on this task runs; one he dismissed is his no
         self.held()
         [rv] = self.pending(); p = json.loads(rv['DraftText'])
         self.assertEqual(p['keys'], ['browser|toll.example|click the "Continue" button on toll.example'])
@@ -389,17 +396,16 @@ class Holding(unittest.TestCase):
     def test_his_words_pass_each_act_on_its_own_and_never_a_payment(self):
         said = 'Sign up for DealFlow and buy the Pro plan.'
         todo = bg.acts('agent-browser fill @e1 "a" && agent-browser click @e12')
-        with answers({'irreversible': True, 'sure': True, 'what': 'types', 'asked': True, 'big': False},
-                     {'irreversible': True, 'sure': True, 'what': 'pays $49', 'asked': True, 'big': True}):
+        with answers({'irreversible': True, 'sure': True, 'what': 'pays $49', 'asked': True, 'big': True}):      # ...the fill is a fact, never asked
             self.assertEqual([v['hold'] for v in bg.judge(self.s, todo, {'url': CHECKOUT}, Brain(None), said=said)], [False, True])
 
     def test_a_payment_in_a_line_that_also_pushes_is_held_where_it_runs(self):
         """A line that clicks Pay and pushes (`click @e12 && git push`): the shell's gate judges the push, and the click is held where it
-        runs (gatecmd) - never waved through with the push's card, a trusted repo or the terminal's own prompt."""
+        runs (gate) - never waved through with the push's card, a trusted repo or the terminal's own prompt."""
         pay = {'irreversible': True, 'sure': True, 'what': 'pays the $412.50 order on toll.example', 'big': True}
         with on(), verdict(pay), mock.patch('taskuary.shellgate.trusted', return_value='northwind/ledger'):
-            self.assertEqual(hooks.command_gate(self.s, self.tid, 'run1', 'agent-browser click @e12 && git push origin main', 'Bash', r'C:\work\ledger'), {})
-            self.assertIn(bg.HELD, gatecmd.judge(self.s, self.tid, 'run1', 'agent-browser click @e12', r'C:\work\ledger'))
+            self.assertEqual(_check(self.s, self.tid, 'run1', 'agent-browser click @e12 && git push origin main', 'Bash', r'C:\work\ledger'), {})
+            self.assertIn(bg.HELD, gate.judge(self.s, self.tid, 'run1', 'agent-browser click @e12', r'C:\work\ledger'))
         [rv] = self.pending(); p = json.loads(rv['DraftText'])
         self.assertEqual((p['action'], p['args']), ('browser_act', ['click', '@e12']))
 
@@ -459,7 +465,7 @@ class Holding(unittest.TestCase):
         `download @e5 ./invoice.pdf` saved where nobody looks. The held command runs where the agent ran it, as a held shell step does."""
         work = r'C:\work\offsite'
         with on(snap='- button "Attach your resume" [ref=e5]'), verdict({'irreversible': True, 'sure': True, 'what': 'uploads resume.pdf to jobs.example'}):
-            gatecmd.judge(self.s, self.tid, 'run1', 'agent-browser upload @e5 ./resume.pdf', work)
+            gate.judge(self.s, self.tid, 'run1', 'agent-browser upload @e5 ./resume.pdf', work)
         [rv] = self.pending(); self.assertEqual(json.loads(rv['DraftText'])['cwd'], work)
         ran = []
         def run(sid, args, wait, tag, cwd=None):
@@ -474,7 +480,7 @@ class Holding(unittest.TestCase):
         press. Once there is an act, a failure is a hold."""
         with on(), verdict({'irreversible': True, 'sure': True, 'what': 'pays the $412.50 order on toll.example'}), \
                 mock.patch('taskuary.proposals.queue', side_effect=RuntimeError('database is locked')):
-            self.assertIn('nothing was done', gatecmd.judge(self.s, self.tid, 'run1', 'agent-browser click @e12'))
+            self.assertIn('nothing was done', gate.judge(self.s, self.tid, 'run1', 'agent-browser click @e12'))
 
     def test_a_ref_that_names_another_control_by_the_press_is_not_acted_on(self):
         """A checkout on one address re-draws itself: held as @e12 "Continue", by the owner's Approve a fresh snapshot gave @e12 to "Remove
@@ -583,7 +589,7 @@ class HeldInTheChat(unittest.TestCase):
 
 class AtTheCommand(unittest.TestCase):
     """THE HOLD IS UNDER THE ROAD (the design round, 2026-11-18): on Codex the agent's browser pressed a site's final Post itself - the hold
-    lived in Claude's hook. Every task session runs Taskuary's `agent-browser` first (gatecmd), which asks before the real one runs."""
+    lived in Claude's hook. Every task session runs Taskuary's `agent-browser` first (gate), which asks before the real one runs."""
     def setUp(self): self.s = MemoryStore(); self.tid = Factory(self.s).task('Post the portal launch')
 
     def run_shim(self, *args, said=None):
@@ -600,20 +606,20 @@ class AtTheCommand(unittest.TestCase):
             # ...after it ran, every browser call says what it did (browsergate.after): asked of nothing, told
             if b.get('after'): self.told.append(b['cmd']); return Reply(bg.after(self.s, self.tid, 'run1', b['cmd'], b.get('rc', 0)))
             asked.append(b['cmd'])
-            return Reply(gatecmd.judge(self.s, self.tid, 'run1', b['cmd'], b['cwd']))
+            return Reply(gate.judge(self.s, self.tid, 'run1', b['cmd'], b['cwd']))
         with on(snap='- button "Post" [ref=e7]'), verdict(said or {'irreversible': True, 'sure': True, 'what': 'posts the announcement on x.example'}), \
-                mock.patch.object(gatecmd, 'real', return_value='real-agent-browser'), mock.patch('urllib.request.urlopen', urlopen), \
+                mock.patch.object(gate, 'real', return_value='real-agent-browser'), mock.patch('urllib.request.urlopen', urlopen), \
                 mock.patch('taskuary.spawn.run', lambda argv, **k: ran.append(argv) or type('Done', (), {'returncode': 0})()), mock.patch.object(browserview, 'on_demand'):
-            rc = gatecmd.main(['gatefolder', 'agent-browser', *args])
+            rc = gate.main(['gatefolder', 'agent-browser', *args])
         return rc, ran, asked
 
     def test_every_task_session_runs_the_gate_first_whatever_its_ai(self):
         from taskuary import terminal
         env = terminal.session_env('assistant', self.tid, sid='run1')
         first = env['PATH'].split(os.pathsep)[0]
-        self.assertEqual(first, gatecmd.folder())
+        self.assertEqual(first, gate.folder())
         for n in ('agent-browser', 'agent-browser.cmd', 'agent-desktop', 'agent-desktop.cmd'):
-            self.assertIn('taskuary.gatecmd', (Path(first) / n).read_text(encoding='utf-8'), n)
+            self.assertIn('taskuary.gate', (Path(first) / n).read_text(encoding='utf-8'), n)
 
     def test_a_final_post_on_a_road_with_no_hook_is_held_before_it_runs(self):
         rc, ran, asked = self.run_shim('click', '@e7')
@@ -632,8 +638,8 @@ class AtTheCommand(unittest.TestCase):
 
     def test_an_unreachable_taskuary_holds_a_press_and_lets_a_look_go(self):
         with mock.patch('urllib.request.urlopen', side_effect=OSError('connection refused')):
-            self.assertIn(bg.HELD, gatecmd.ask('agent-browser', ['click', '@e7']))
-            self.assertEqual(gatecmd.ask('agent-browser', ['open', 'https://x.example']), '')
+            self.assertIn(bg.HELD, gate.ask('agent-browser', ['click', '@e7']))
+            self.assertEqual(gate.ask('agent-browser', ['open', 'https://x.example']), '')
 
     def test_an_agent_token_may_ask(self):
         from taskuary import guard
@@ -704,14 +710,14 @@ def test_taskuarys_own_browser_calls_run_the_real_program_never_the_agents_hold_
     """macOS CI, 2026-11-18: with the agents' hold first on PATH, the pane's own navigation ran the hold's launcher - which asked the server
     to approve the server, and the run hung. Taskuary's own calls find the real agent-browser past any launcher of the hold."""
     import os, stat
-    from taskuary import browserview, gatecmd
+    from taskuary import browserview, gate as g
     gate, real = tmp_path / 'gate', tmp_path / 'real'; gate.mkdir(); real.mkdir()
-    for d, body in ((gate, '#!/bin/sh\nexec python -m taskuary.gatecmd "$(dirname "$0")" agent-browser "$@"\n'), (real, '#!/bin/sh\necho real\n')):
+    for d, body in ((gate, '#!/bin/sh\nexec python -m taskuary.gate "$(dirname "$0")" agent-browser "$@"\n'), (real, '#!/bin/sh\necho real\n')):
         for n in ('agent-browser', 'agent-browser.cmd'):
             (d / n).write_text(body, encoding='utf-8'); (d / n).chmod((d / n).stat().st_mode | stat.S_IEXEC)
     monkeypatch.setenv('PATH', os.pathsep.join([str(gate), str(real)]))
     got = browserview.program()
-    assert got and not gatecmd.is_gate(got) and os.path.dirname(got) == str(real), got
+    assert got and not g.is_gate(got) and os.path.dirname(got) == str(real), got
 
 
 
@@ -784,12 +790,12 @@ class WhatTheSiteDid(unittest.TestCase):
         self.assertEqual(said(200), ''); self.assertEqual(said(0), '')
 
     def test_the_command_prints_what_the_site_did_after_it_ran(self):
-        from taskuary import gatecmd
+        from taskuary import gate
         asked = []
         def ask(name, args, after=False, rc=0): asked.append(after); return 'TASKUARY: the page did not finish loading in 12 s' if after else ''
-        with mock.patch.object(gatecmd, 'real', return_value='agent-browser'), mock.patch.object(gatecmd, 'ask', ask), \
+        with mock.patch.object(gate, 'real', return_value='agent-browser'), mock.patch.object(gate, 'ask', ask), \
              mock.patch('taskuary.spawn.run', return_value=SimpleNamespace(returncode=0)), mock.patch('sys.stderr') as err:
-            self.assertEqual(gatecmd.main(['gate', 'agent-browser', 'click', '@e7']), 0)
+            self.assertEqual(gate.main(['gate', 'agent-browser', 'click', '@e7']), 0)
         self.assertEqual(asked, [False, True])
         self.assertIn('did not finish loading', ''.join(str(c.args[0]) for c in err.write.call_args_list))
 
@@ -811,29 +817,29 @@ def test_the_launcher_runs_this_servers_code_and_hands_the_real_programs_output_
     snapshot, url and read came back empty, and the agent worked the vendor sites with curl. And `-m taskuary` from the agent's folder ran
     whichever taskuary that Python had installed, not the server's own."""
     import subprocess, sys
-    root = str(Path(gatecmd.__file__).resolve().parent.parent)
-    gatecmd._DIR.clear()
+    root = str(Path(gate.__file__).resolve().parent.parent)
+    gate._DIR.clear()
     try:
-        with mock.patch('taskuary.config.home', return_value=tmp_path): d = gatecmd.folder()
-    finally: gatecmd._DIR.clear()
+        with mock.patch('taskuary.config.home', return_value=tmp_path): d = gate.folder()
+    finally: gate._DIR.clear()
     assert root in (Path(d) / 'agent-browser.cmd').read_text(encoding='utf-8') and root.replace(chr(92), '/') in (Path(d) / 'agent-browser').read_text(encoding='utf-8')
     real = tmp_path / ('real.cmd' if os.name == 'nt' else 'real.sh')
     real.write_text('@echo page-snapshot\r\n' if os.name == 'nt' else '#!/bin/sh\necho page-snapshot\n'); real.chmod(0o755)
     script = tmp_path / 'launch.py'
-    script.write_text(f'import sys; sys.path.insert(0, {root!r}); from unittest import mock; from taskuary import gatecmd\n'
-                      f'with mock.patch.object(gatecmd, "real", return_value={str(real)!r}), mock.patch.object(gatecmd, "ask", return_value=""):\n'
-                      f'    sys.exit(gatecmd.main(["gate", "agent-browser", "snapshot"]))\n', encoding='utf-8')
+    script.write_text(f'import sys; sys.path.insert(0, {root!r}); from unittest import mock; from taskuary import gate\n'
+                      f'with mock.patch.object(gate, "real", return_value={str(real)!r}), mock.patch.object(gate, "ask", return_value=""):\n'
+                      f'    sys.exit(gate.main(["gate", "agent-browser", "snapshot"]))\n', encoding='utf-8')
     out = subprocess.run([sys.executable, '-I', str(script)], capture_output=True, text=True, timeout=60)
     assert 'page-snapshot' in out.stdout, (out.stdout, out.stderr)
 
 
 def test_signup_is_taskuarys_own_verb_answered_by_the_server_never_the_real_program():
-    assert gatecmd.own('agent-browser signup') == 'signup' and gatecmd.own('agent-browser --session x signup') == 'signup'
-    assert gatecmd.own('agent-browser click @e3') == '' and gatecmd.own('agent-browser snapshot -i') == ''
+    assert gate.own('agent-browser signup') == 'signup' and gate.own('agent-browser --session x signup') == 'signup'
+    assert gate.own('agent-browser click @e3') == '' and gate.own('agent-browser snapshot -i') == ''
     ran, posted = [], []
-    with mock.patch.object(gatecmd, 'real', return_value='real-agent-browser'), mock.patch('taskuary.spawn.run', lambda argv, **k: ran.append(argv)), \
-         mock.patch.object(gatecmd, 'post', lambda cmd, after=False, wait=0: posted.append(cmd) or {'own': True, 'ok': True, 'said': 'Signed up on x.example'}):
-        assert gatecmd.main(['gate', 'agent-browser', 'signup']) == 0
+    with mock.patch.object(gate, 'real', return_value='real-agent-browser'), mock.patch('taskuary.spawn.run', lambda argv, **k: ran.append(argv)), \
+         mock.patch.object(gate, 'post', lambda cmd, after=False, wait=0: posted.append(cmd) or {'own': True, 'ok': True, 'said': 'Signed up on x.example'}):
+        assert gate.main(['gate', 'agent-browser', 'signup']) == 0
     assert ran == [] and posted == ['agent-browser signup']
 
 
@@ -948,3 +954,9 @@ class HisAskCoversWhatItNames(unittest.TestCase):
             with mock.patch.object(bg, 'page', return_value={**pg, 'fields': [{'k': 'first', 't': 'text', 'v': 'Sam'}]}):
                 bg.check(self.s, tid, 'run1', 'agent-browser click @e12', Brain(None))
         self.assertEqual(len(calls), 2, 'once per page, control and form as they stand - a changed form is asked again')
+
+
+def _check(s, tid, sid, cmd, tool='Bash', cwd='', **k):
+    "The one check point (gate.check), in the old hook's order of arguments."
+    from taskuary import gate
+    return gate.check(s, tid, sid, cmd, cwd, tool, **k)

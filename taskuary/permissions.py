@@ -13,7 +13,7 @@ and the answer is one of its options.
    It is a held ask (workerstate.hold), so the rail reads the agent as waiting on you, and the generic answer road resolves it too.
 3. No answer in TIMEOUT is a refusal, said plainly in the task and on the channel.
 
-THE ACP ROAD (step 1, acpgate.answerer): what acpgate would HOLD for the owner comes here through `acp(store, tid, params)` - the
+THE ACP ROAD (step 1, gate.answerer): what gate would HOLD for the owner comes here through `acp(store, tid, params)` - the
 session/request_permission params in, the ACP outcome out. ACP is always answered allow_once / reject_once: an "always" is kept here,
 so the next call still reaches Taskuary's rules first.
 """
@@ -163,7 +163,7 @@ ASIDE: dict = {}      # the requests set aside (set_aside) -> what closed them: 
 
 def ask(store, tid: int, request: dict, wait: float = None, timed_out=None, moved_on=None) -> str:
     """THE SEAM. Blocks until answered (call it off an event loop). Returns one of the request's options. `timed_out()` is called when
-    nobody answered - the refusal returned then is no owner's word, and a caller may file it for later (acpgate); `moved_on(said)` when it was
+    nobody answered - the refusal returned then is no owner's word, and a caller may file it for later (gate); `moved_on(said)` when it was
     still waiting as the chat moved past it or he stopped the turn (set_aside, `said` the words it closed with) - no one's no either, and its agent is told so (the owner, 2026-11-16: the agent wrote
     "You declined my search of the FanApp code" of a step he never answered)."""
     from . import agents, agentchannels, workerstate as ws
@@ -294,7 +294,7 @@ def refuse_orphans(store) -> list:
     return out
 
 
-# ── the ACP road (acpgate) ─────────────────────────────────────────────────────────────────────────────────────────────────
+# ── the ACP road (gate) ─────────────────────────────────────────────────────────────────────────────────────────────────
 def from_acp(params: dict) -> dict:
     "session/request_permission params as a request."
     tc = (params or {}).get('toolCall') or {}

@@ -1422,7 +1422,7 @@ def acp_tracer(trace, name: str, held: dict = None) -> ACPSteps: return ACPSteps
 ACP_SETTING = 'acp_cli'
 _FELL_BACK: set = set()
 # THE STORE AND TASK A RUN IS FOR, beside run_cli's arguments rather than in them: the ACP road's permission answers need both
-# (acpgate - the send filter's verdicts, a step held on this task), and run_cli's signature is the one every caller and test fake
+# (gate - the send filter's verdicts, a step held on this task), and run_cli's signature is the one every caller and test fake
 # shares. make_cli_llm sets it around its call; a run with none reads the switch's default and holds nothing on a task.
 _RUN = contextvars.ContextVar('taskuary_run', default=(None, None))
 
@@ -1766,14 +1766,14 @@ def run_acp(profile: dict, prompt: str, trace, resume: str = None, cancel=None, 
     nothing upstream can tell which road a run took.
 
     The session id is RETURNED by session/new rather than scraped out of a vendor's temp directory, the progress arrives as typed
-    events, and every tool call the agent asks to make is answered by acpgate - Taskuary's rules, not a bypass flag. A kept
+    events, and every tool call the agent asks to make is answered by gate - Taskuary's rules, not a bypass flag. A kept
     conversation (keep_alive: a general agent's task, the Assistant) holds its connection between turns in clipool, as the argv
     road holds its claude process, so a turn after the first pays no start-up. ACPStartError means nothing ran: run_cli falls back.
     """
     profile = with_cmd(profile, store); name = profile['cmd']
     launch, cwd, keep = acp_launch(profile), _long(profile.get('cwd')), profile.get('keep_alive')
     env, base = {**spawn_env(profile, extra_env), **launch['env']}, {**spawn_env(profile), **launch['env']}
-    from . import acpgate, clipool
+    from . import clipool, gate as gate_
     sig = _acp_sig(launch, cwd, env)
     opener = lambda: acp_mod.Conversation(_acp_open(name, launch, cwd, env, resume, profile.get('timeout'), trace, fresh_if_gone=True, base=base), sig)
     conv = clipool.take(keep, sig, opener, resume) if keep else opener()      # ...its turn read opening from its start where none was up (general.cold)
@@ -1792,7 +1792,7 @@ def run_acp(profile: dict, prompt: str, trace, resume: str = None, cancel=None, 
     steps = ACPSteps(trace, name, held)
     ctx_store, task_id = _RUN.get()
     gstore = store if store is not None else ctx_store
-    gate = acpgate.answerer({'store': gstore, 'task_id': task_id, 'cli': _cli_name(name), 'cwd': cwd,
+    gate = gate_.answerer({'store': gstore, 'task_id': task_id, 'cli': _cli_name(name), 'cwd': cwd,
                              'sid': client.session_id}, trace, held, told)
     client.on_update, client.permit = steps, lambda params: (steps.asked(params.get('toolCall')), gate(params))[1]
     with _CLI_CHILDREN_LOCK: _CLI_CHILDREN.add(client.p)

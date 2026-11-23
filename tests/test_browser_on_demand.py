@@ -85,11 +85,11 @@ class TheFirstNavigateLaunchesIt(unittest.TestCase):
     from the owner's saved sign-ins (browserview.start), so a sign-in task opens signed in."""
 
     def _hook(self, cmd, open_=False):
-        from taskuary import gatecmd
+        from taskuary import gate
         with mock.patch.object(bv, 'start', return_value=True) as started, \
              mock.patch.object(bv, 'state', return_value={'open': open_, 'url': '', 'port': 0}), \
              mock.patch('taskuary.browsergate.check', return_value={}):
-            gatecmd.judge(MemoryStore(), 1, 's-1', cmd)       # the server's side of the session's own `agent-browser` (gatecmd)
+            gate.judge(MemoryStore(), 1, 's-1', cmd)       # the server's side of the session's own `agent-browser` (gate)
         return started
 
     def test_open_launches_on_its_address(self):
@@ -180,7 +180,7 @@ class TheAgentAsksForIt(unittest.TestCase):
 
     def test_every_agent_is_told_one_road_whatever_its_ai(self):
         """Recorded on Codex (the browser audit, 2026-11-15): `agent-browser open` died in its sandbox launching Chrome. The session's own
-        `agent-browser` asks the server before it runs (gatecmd), and the server launches the page - so every AI is told the same road."""
+        `agent-browser` asks the server before it runs (gate), and the server launches the page - so every AI is told the same road."""
         for told in (bv.offer(), bv.brief(open_now=False)):
             self.assertIn('run `agent-browser open <url>` and it opens for you', told)
 

@@ -94,13 +94,13 @@ def program() -> str:
     cmd.exe, which reads & | < > ^ in an argument as its own: the owner's address bar opened https://portal.example/?app=1&return=...
     as ?app=1 and ran `return=...` as a command, and the page sat on a white loading spinner (2026-11-03). An approved fill or eval
     with an & in it was cut the same way. The shim only starts the .exe beside it, so that is what is run."""
-    from . import browserruntime, gatecmd
-    # ...the REAL one, never the agents' hold in front of it (gatecmd): Taskuary's own calls - the pane's address bar, an approved press -
+    from . import browserruntime, gate
+    # ...the REAL one, never the agents' hold in front of it (gate): Taskuary's own calls - the pane's address bar, an approved press -
     # found the hold first on a PATH that carried it, and asked the server to approve the server (macOS CI hung on it, 2026-11-18)
     p = shutil.which('agent-browser')
-    if p and gatecmd.is_gate(p):
+    if p and gate.is_gate(p):
         p = next((x for d in os.environ.get('PATH', '').split(os.pathsep) if d
-                  and (x := shutil.which('agent-browser', path=d)) and not gatecmd.is_gate(x)), None)
+                  and (x := shutil.which('agent-browser', path=d)) and not gate.is_gate(x)), None)
     p = p or browserruntime.find()
     if os.name == 'nt' and p.lower().endswith(('.cmd', '.bat')):
         import platform
@@ -1250,12 +1250,8 @@ def set_viewport(sid: str, w: int, h: int) -> bool:
 # resource that lasts, a public post, a delete - which is always one card in the chat for his press (browsergate._verdict).
 # ...REVISED 2026-11-19 (the owner: "anything big like spending money or putting in private info should wait for user for now"): the hold is
 # the big step only - money, his own details, speaking for him, a delete - and a free sign-up with made-up details runs (browsergate.BIG)
-HOLD_LINE = ('PRESS WHAT THE WORK NEEDS YOURSELF - a free sign-up or trial with made-up details, a form, a search. A PAYMENT IS HIS: never '
-             'press Pay, Buy or Order and never type a card - leave the page on it and hand it to him with hand_over. A press that '
-             'sends his own private details (his real phone, address, ID), speaks for him to others or deletes something of his is refused with "held for the owner" '
-             'and stands as one card in this chat: fill in everything first, run the command for that last button as you would, and when it is '
-             'held go on with the rest of the work - his press on the card runs it, and you are told what the page shows. Never try a held act '
-             'another way, and never ask him in words to approve or click it. ')
+from .gate import brief as _brief
+HOLD_LINE = _brief('browser')         # ...written from the one table (gate.TABLE), never prose of its own
 # ...and a browser that did not come up is said, not hidden: the agent got no brief and answered "no browser here" or sent the owner
 # looking for a connector that does not exist (the 2026-10-02 live check's gap #2, still open on 2026-10-25)
 FAILED_LINE = ('THE BROWSER DID NOT OPEN for this task ({why}). Do everything the work allows without it, then tell the owner in one '

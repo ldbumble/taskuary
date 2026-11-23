@@ -374,11 +374,29 @@ def found(query, names: dict) -> list:
     ws = [w for w in re.findall(r'[a-z0-9_]+', q) if len(w) > 2]
     score = lambda n: sum((w in n) * 3 + (w in str(names[n]).lower()) for w in ws)
     return [n for n in sorted(names, key=lambda n: -score(n)) if score(n)][:4]
+# THE CORE UP FRONT, THE REST ON DEMAND, ON A CARD'S HARNESS TOO (the review, 2026-11-23): Claude Code and his own Codex defer an MCP server's
+# tools themselves, but an AI card's Codex (no tool search through a gateway) and OpenCode sent all ~40 schemas (~14k) on every call. There
+# the list is what apiagent offers up front (apiagent.LATER: one table for both roads) and use_tool runs any other one find_tools named
+USE = 'use_tool'
+USE_TOOL = {'name': USE, 'description': "Run one of this task's Taskuary tools the list does not carry - find_tools names them and their parameters.",
+            'inputSchema': {'type': 'object', 'properties': {'name': _STR, 'arguments': {'type': 'string', 'description': 'its parameters as one JSON object'}},
+                            'required': ['name']}, 'annotations': ANNOTATIONS['own']}
+def deferred() -> frozenset:
+    from .apiagent import LATER
+    return LATER & set(TOOLS)
 def listing(skip=(), portable: bool = False) -> list:
-    "tools/list: every tool by its name, its line and its parameters, and whether it only reads - but those in `skip`."
+    """tools/list: every tool by its name, its line and its parameters, and whether it only reads - but those in `skip`. `portable` (a card's
+    harness): the core and use_tool, the rest found by find_tools."""
     from .apiagent import portable as fit_all
+    later = deferred() if portable else ()
     return [{'name': n, 'description': SHORT.get(n) or d, 'inputSchema': fit_all(lean(s)) if portable else lean(s), 'annotations': ANNOTATIONS[c], **({'_meta': {'anthropic/alwaysLoad': True}} if n in ALWAYS_LOAD else {})}
-            for n, (c, d, s, _) in TOOLS.items() if n not in skip]
+            for n, (c, d, s, _) in TOOLS.items() if n not in skip and n not in later] + ([USE_TOOL] if later else [])
+def as_called(server, tool, args) -> tuple:
+    "(the tool, its arguments) a call made: use_tool's own, for every reader of a session's steps - the name it ran, never the wrapper."
+    if str(server) != SERVER or str(tool) != USE or not isinstance(args, dict): return tool, args
+    try: inner = _arguments(args.get('arguments'))
+    except ValueError: inner = {}
+    return str(args.get('name') or tool), inner
 
 
 def _out(text, fence_it: bool = False) -> str:
@@ -1016,9 +1034,12 @@ def rpc(msg: dict, run, skip=(), portable: bool = False) -> dict | None:
     if m == 'ping': return ok({})
     if m == 'tools/list': return ok({'tools': listing(skip, portable)})
     if m == 'tools/call':
-        name = p.get('name')
+        name, args = p.get('name'), p.get('arguments') or {}
+        if portable and name == USE:
+            name, args = as_called(SERVER, USE, args)
+            if name == USE: return err(-32602, 'use_tool runs a tool by its `name` - find_tools names them')
         if name not in TOOLS or name in skip: return err(-32602, f"unknown tool {name!r} - this task's tools are the ones tools/list names")
-        try: return ok({'content': [{'type': 'text', 'text': run(name, p.get('arguments') or {})}], 'isError': False})
+        try: return ok({'content': [{'type': 'text', 'text': run(name, args)}], 'isError': False})
         except Exception as e: return ok({'content': [{'type': 'text', 'text': failed(name, e)}], 'isError': True})
     return err(-32601, f'method {m!r} is not served here')
 

@@ -1342,8 +1342,10 @@ class ACPSteps:
             act = raw.get('action') or {}
             if act.get('type') in ('openPage', 'findInPage'): return 'fetch', {'url': act.get('url') or raw.get('query') or ''}
             return 'web search', {'query': raw.get('query') or act.get('query') or ''}
-        if raw.get('server') and raw.get('tool'):              # codex MCP: {server, tool, arguments}
-            return f"mcp__{raw['server']}__{raw['tool']}", dict(raw.get('arguments') or {})
+        if raw.get('server') and raw.get('tool'):              # codex MCP: {server, tool, arguments} - use_tool's as the tool it ran
+            from .agenttools import as_called
+            tool, a = as_called(raw['server'], raw['tool'], dict(raw.get('arguments') or {}))
+            return f"mcp__{raw['server']}__{tool}", dict(a or {})
         paths = [l.get('path') for l in c.get('locations') or [] if isinstance(l, dict) and l.get('path')]
         if paths and not any(raw.get(k) for k in ('path', 'file_path', 'absolute_path', 'filePath')): raw['path'] = paths[0]
         if len(paths) > 1 and kind == 'move': raw.setdefault('to', paths[1])

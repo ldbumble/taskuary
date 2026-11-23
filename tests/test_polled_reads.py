@@ -2,15 +2,20 @@
 the task's own read and the chat's state, each 5-9 KB and re-read every 3-5 s while an agent works, now take it through the same function
 (server._revisioned): the page sends the name of what it holds and gets only that name back while it is still the answer. A working
 session's idle clock moves on every read and is outside the name; a real change is a new name at once. Invented people only."""
-import json, threading, unittest
+import json, threading, time, unittest
 from fastapi.testclient import TestClient
-from taskuary import general, server
+from taskuary import chatlog, general, server
 
 c = TestClient(server.app)
 store = server.store
 
 
 def made():
+    # ...after the one copy before the log is made (chatlog.backed_up, its own thread): until then a chat reads as the old build drew it and
+    # its name moves once when it is frozen - the macOS shard read across that moment (CI, 2026-11-23)
+    for _ in range(100):
+        if chatlog.backed_up(store): break
+        time.sleep(0.1)
     tid = store.create_task({'Title': 'Vendor review for Erin', 'Kind': 'general', 'Status': 'open', 'Summary': 'Erin Blake asks for a review'}, 'owner')
     store.add_message({'TaskId': tid, 'ExternalId': f'fx-{tid}', 'Channel': 'email', 'FromName': 'Erin Blake', 'FromEmail': 'erin@northwind.example',
                        'ToEmail': 'alex@northwind.example', 'Subject': 'Your review?', 'SentAt': '2026-11-10 08:00:00', 'BodyText': 'Hi Alex, a review?', 'Status': 'routed'})

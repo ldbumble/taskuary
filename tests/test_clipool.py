@@ -81,7 +81,7 @@ def test_close_and_the_pool_limit(cli, monkeypatch):
     ask(cli, 'concierge:1', 'x'); ask(cli, 'general:5', 'y')
     assert clipool.close('concierge:') == 1
     assert [x['key'] for x in clipool.live()] == ['general:5']
-    monkeypatch.setattr(clipool, 'MAX_LIVE', 2)
+    monkeypatch.setattr(clipool, 'MAX_LIVE', 2); monkeypatch.setattr(clipool, 'REST', 0)
     ask(cli, 'a', '1'); time.sleep(0.05); ask(cli, 'b', '2')
     assert {x['key'] for x in clipool.live()} == {'a', 'b'}         # the oldest (general:5) made room
 
@@ -236,3 +236,29 @@ def test_words_the_agent_did_not_take_stay_his_waiting_lines():
             with conv.lock: assert clipool.steer('general:81', lines) is went
             assert took == ([False, True] if went else [False]), 'taken only once it went in'
         finally: clipool._POOL.pop('general:81', None)
+
+
+class _Conv:
+    "An ACP conversation as the pool holds one (acp.Conversation's shape)."
+    def __init__(self): self.lock, self.used, self.closed, self.sid, self.turns = threading.Lock(), time.time(), False, None, 0
+    def alive(self): return not self.closed
+    def close(self): self.closed = True
+
+
+def test_a_full_pool_never_closes_a_conversation_at_work_or_just_opened(monkeypatch):
+    """Walk 9, 2026-11-23: three agents "died mid-turn" at once with 13 tasks open - the pool, full at 6, closed the oldest conversation
+    with no turn LOCKED on it: one just opened, whose turn had not yet taken its lock. A start past the cap waits for room instead."""
+    monkeypatch.setattr(clipool, 'MAX_LIVE', 2)
+    try:
+        busy, fresh = _Conv(), _Conv()
+        busy.lock.acquire()
+        clipool._put('general:1', busy); clipool._put('general:2', fresh)
+        third = _Conv(); t = threading.Thread(target=clipool._put, args=('general:3', third), daemon=True); t.start()
+        t.join(1.5)
+        assert not busy.closed and not fresh.closed, 'nothing at work is closed for room'
+        assert t.is_alive() and 'general:3' not in clipool._POOL, 'the third waits for room'
+        fresh.used -= clipool.REST + 1                   # ...the second one has sat at rest a while now: it makes room
+        t.join(3)
+        assert fresh.closed and not busy.closed and clipool._POOL.get('general:3') is third
+    finally:
+        busy.lock.release(); clipool.close('general:')

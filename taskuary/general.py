@@ -3707,6 +3707,8 @@ class GeneralSession:
         if not self._lock.acquire(blocking=False): return False
         try:
             if self.idle_why(now, locked=True): return False
+            # ...SAID AS IT WAS (walk 9, 2026-11-23: a 4-minute-old agent whose CLI the pool had closed was logged "idle for 1800s")
+            why = 'its CLI was closed while it sat between turns' if self.cli_gone() else f'it was idle for {int((now or time.time()) - max(self.last, self.seen))}s'
             self.alive, self.ended = False, time.time()
         finally: self._lock.release()
         from . import browserview, clipool, handraise, terminal
@@ -3726,7 +3728,7 @@ class GeneralSession:
             except RuntimeError: pass
         from . import workerstate
         workerstate.idled(self.store, self.task_id, self.sid)
-        logger.info(f'task {self.task_id}: its agent was idle for {int(idle_for())}s and closed quietly - the next input starts it again')
+        logger.info(f'task {self.task_id}: its agent closed quietly - {why}; the next input starts it again')
         handraise.moved(self.task_id)
         return True
 

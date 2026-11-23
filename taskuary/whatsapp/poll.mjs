@@ -72,6 +72,13 @@ export function createPolls(max = 200, keep = 8) {
       if (got) p.used = true;
       return got;
     },
+    // A VOTE ON A POLL OF OURS THIS BRIDGE NEVER SENT - sent before it restarted, its secret gone with it (walk 6, H4: the tap after a
+    // bridge restart did nothing, and "my last tap did nothing" got no answer). It cannot be opened, so it never runs; it is told
+    lost(update) {
+      const key = update?.pollCreationMessageKey;
+      if (!key?.id || !key.fromMe || !update?.vote?.encPayload) return false;
+      return ![...byChat.values()].some((x) => x.id === key.id) && ![...older.values()].some((l) => l.some((x) => x.id === key.id));
+    },
     // the chat of the NEWEST poll when this update is a real pick on it after it was already spent, or "" - told, never run
     spent(update, { creators = [], voters = [] } = {}) {
       const key = update?.pollCreationMessageKey, enc = update?.vote;

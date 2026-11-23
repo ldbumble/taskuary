@@ -376,9 +376,11 @@ async function connect() {
         const stale = picked ? "" : polls.stale(pu, who);
         // ...and a second pick on the newest one, already spent (2026-10-02): told the same way, never run
         const spent = picked || stale ? "" : polls.spent(pu, who);
-        if (picked || stale || spent) messages.push({ seq: ++seq, id: m.key.id, jid: picked ? chatGate.canonical(m.key.remoteJid) : stale || spent, sender: m.key.participant || m.key.remoteJid,
+        // ...and a pick on one of ours sent before this bridge restarted: unreadable, never run, told (poll.mjs lost)
+        const lost = picked || stale || spent || !m.key.fromMe || !polls.lost(pu) ? "" : chatGate.canonical(m.key.remoteJid);
+        if (picked || stale || spent || lost) messages.push({ seq: ++seq, id: m.key.id, jid: picked || lost ? chatGate.canonical(m.key.remoteJid) : stale || spent, sender: m.key.participant || m.key.remoteJid,
           group: m.key.remoteJid?.endsWith("@g.us"), name: m.pushName || "", text: picked, poll: true, quoted: "",
-          ...(stale ? { stalePoll: true } : spent ? { stalePoll: true, spentPoll: true } : {}),
+          ...(stale ? { stalePoll: true } : spent ? { stalePoll: true, spentPoll: true } : lost ? { stalePoll: true, lostPoll: true } : {}),
           ts: Number(m.messageTimestamp) || Math.floor(Date.now() / 1000), fromMe: !!m.key.fromMe, taskuary: false });
         while (messages.length > MAX_KEPT) messages.shift();
         continue;

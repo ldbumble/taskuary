@@ -611,7 +611,8 @@ class WhatsAppWhileClosedTests(WhileClosedTests):
 
 class TelegramSendRetryTests(PhoneCase):
     """A13: a failed Telegram send was only logged - the phone got nothing and never knew. It is tried again with backoff; still failing, the
-    next message that gets through says so first."""
+    next message that gets through says so first. H4 (walk 6): the same on WhatsApp, and what did not arrive goes again by itself once the
+    link takes it; a question heard when Taskuary restarted is answered by the next process, said late."""
     channel = 'telegram'
 
     def _flaky(self, fails):
@@ -620,7 +621,42 @@ class TelegramSendRetryTests(PhoneCase):
             if method == 'sendMessage' and left[0]:
                 left[0] -= 1; raise RuntimeError('telegram sendMessage: Bad Gateway')
             return self.ph._tg(tok, method, **p)
-        return mock.patch('taskuary.messengers.tg', side_effect=tg)
+        def wa(c, path, body=None, *a, **k):
+            if path == '/send' and left[0]:
+                left[0] -= 1; raise RuntimeError('bridge /send failed (503): WhatsApp is not connected')
+            return self.ph._wa(c, path, body, *a, **k)
+        return mock.patch('taskuary.messengers.tg', side_effect=tg) if self.channel == 'telegram' else mock.patch('taskuary.messengers._wa', side_effect=wa)
+
+    def test_what_did_not_arrive_goes_by_itself_once_the_link_is_back_and_once(self):
+        with self._flaky(99), mock.patch.object(ra, '_pause', create=True):
+            self.assertEqual(self.ph.tap('Next'), [])
+            self.assertEqual(self.ph.push(lambda: ra.flush_owed(self.s)), [], 'still down: kept for the next look')
+        got = self.ph.push(lambda: ra.flush_owed(self.s))
+        self.assertTrue(got and got[0][0].lstrip('Taskuary:\n').startswith(ra.LATE), got)
+        self.assertIn('Visitor parking', text_of(got))
+        self.assertTrue(got[-1][1], 'with its choices to tap')
+        self.assertEqual(self.ph.push(lambda: ra.flush_owed(self.s)), [], 'sent once')
+        self.assertNotIn('did not reach you', text_of(self.ph.type('help')))
+
+    def test_a_question_heard_when_taskuary_restarted_is_answered_by_the_next_one(self):
+        # the process that heard "help" died before answering: its OWED entry is all that is left of it
+        ra._book(self.s, ra.OWED_KEY, f'{self.channel}:{self.ph.chat}',
+                 {'words': 'help', 'mid': 'in-before', 'cid': self.ph.cid, 'at': time.time() - 30, 'boot': ra.STARTED - 60})
+        got = self.ph.push(lambda: ra.flush_owed(self.s))
+        said = text_of(got)
+        self.assertIn('Taskuary restarted before I could answer "help"', said)
+        self.assertIn('What you can do here', said)
+        self.assertEqual(ra.ledger(self.s, ra.OWED_KEY), {}, 'paid')
+        self.assertEqual(self.ph.push(lambda: ra.flush_owed(self.s)), [], 'answered once')
+
+    def test_a_question_being_answered_is_written_down_until_it_is(self):
+        seen = []
+        real = ra.respond
+        def respond(store, channel, chat, question, *a, **k):
+            seen.append(ra.ledger(store, ra.OWED_KEY).get(f'{channel}:{chat}', {}).get('words')); return real(store, channel, chat, question, *a, **k)
+        with mock.patch.object(ra, 'respond', side_effect=respond): self.ph.type('help')
+        self.assertEqual(seen, ['help'])
+        self.assertEqual(ra.ledger(self.s, ra.OWED_KEY), {})
 
     def setUp(self):
         super().setUp()
@@ -636,9 +672,22 @@ class TelegramSendRetryTests(PhoneCase):
         with self._flaky(99), mock.patch.object(ra, '_pause', create=True):
             self.assertEqual(self.ph.tap('Next'), [])
         got = self.ph.type('help')
-        self.assertTrue(got[0][0].startswith('My last message did not reach you ("'), got[0][0])
+        self.assertTrue(got[0][0].split('Taskuary:\n', 1)[-1].startswith('My last message did not reach you ("'), got[0][0])
         self.assertIn('What you can do here', text_of(got))
         self.assertNotIn('did not reach you', text_of(self.ph.type('help')))             # said once
+
+
+class WhatsAppSendRetryTests(TelegramSendRetryTests):
+    channel = 'whatsapp'
+
+    def test_a_tap_on_a_poll_sent_before_the_bridge_restarted_is_told_with_the_choices_again(self):
+        before = self.ph.choices()
+        self.ph.queue.append({'id': 'in-lost', 'jid': self.ph.chat, 'text': '', 'fromMe': True, 'poll': True, 'stalePoll': True,
+                              'lostPoll': True, 'ts': time.time()})
+        got = self.ph._took(self.ph._poll)
+        self.assertEqual(len(got), 1)
+        self.assertIn(ra.LOST_TAP, got[0][0])
+        self.assertEqual(got[0][1], before, 'the current choices, as a poll the bridge can read')
 
 
 class UrgentMidWalkTests(PhoneCase):

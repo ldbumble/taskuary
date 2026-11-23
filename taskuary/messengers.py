@@ -683,7 +683,8 @@ def poll_whatsapp(store, c, sources: list, llm=None, file_only=False) -> int:
         closed = q['older'] if q and m.get('id') == q['newest'] else None
         # A TAP ON AN OLDER LIST of the Assistant's (poll.mjs stale): nothing runs - its choices are gone - but it is answered
         if m.get('stalePoll'):
-            if jid == assistant_chat: remote_assistant.stale_tap(store, 'whatsapp', jid, c['ConnectorId'], spent=bool(m.get('spentPoll')))
+            if jid == assistant_chat: remote_assistant.stale_tap(store, 'whatsapp', jid, c['ConnectorId'], spent=bool(m.get('spentPoll')),
+                                                                 lost=bool(m.get('lostPoll')))
             took.append(m.get('id')); continue
         text, heard = (m.get('text') or '').strip(), False
         # A VOICE NOTE IN A CONTROL CHAT is the owner talking to Taskuary, so it is heard BEFORE the interceptors,

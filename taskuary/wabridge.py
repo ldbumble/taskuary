@@ -794,7 +794,12 @@ def check_link(store, c: dict, read=None, now: float = None):
     try: st = read() or {}
     except Exception as e: logger.debug(f'whatsapp link check: {e}'); return _LINK['err']
     if st.get('connected'):
-        if _LINK['down']: logger.info(f"whatsapp link is back after {now - _LINK['down']:.0f}s")
+        if _LINK['down']:
+            logger.info(f"whatsapp link is back after {now - _LINK['down']:.0f}s")
+            # ...and what the chat was owed while it was down goes now, not on the next question (walk 6, H4: an answer failed at 503 and
+            # was never sent again when the link came back)
+            from . import remote_assistant
+            if store is not None: threading.Thread(target=remote_assistant.flush_owed, args=(store,), name='taskuary-whatsapp-owed', daemon=True).start()
         # ...and connected is not reading: a link whose every message fails to decrypt brings nothing in, open socket or not
         from .messengers import wa_unreadable, UNREADABLE_SAY
         if wa_unreadable(st, now):

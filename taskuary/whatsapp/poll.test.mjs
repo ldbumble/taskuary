@@ -78,3 +78,16 @@ test("a poll answers once: a re-tap or a changed vote on the spent newest poll n
   polls.remember(CHAT, "P2", s2, ["Next", "Ask"]);
   assert.equal(polls.vote({ pollCreationMessageKey: { id: "P2" }, vote: encVote({ creator: CHAT, voter: CHAT, pollId: "P2", secret: s2, option: "Next" }) }, who), "Next");
 });
+
+test("a vote on a poll of ours sent before the bridge restarted is lost - told, never run", () => {
+  const before = createPolls(), secret = crypto.randomBytes(32);
+  before.remember(CHAT, "P1", secret, ["Send", "Next"]);
+  const vote = encVote({ creator: CHAT, voter: CHAT, pollId: "P1", secret, option: "Send" });
+  const after = createPolls();                                // the restarted bridge: nothing remembered
+  after.remember(CHAT, "P9", crypto.randomBytes(32), ["Other"]);
+  const pu = { pollCreationMessageKey: { id: "P1", fromMe: true }, vote };
+  assert.equal(after.vote(pu, { creators: [CHAT], voters: [CHAT] }), "", "it cannot be opened, so nothing runs");
+  assert.equal(after.lost(pu), true);
+  assert.equal(before.lost(pu), false, "a poll this bridge sent is not lost");
+  assert.equal(after.lost({ ...pu, pollCreationMessageKey: { id: "P1", fromMe: false } }), false, "someone else's poll is not ours");
+});

@@ -457,6 +457,8 @@ def push_alerts(store, force: bool = False) -> int:
     """
     if not force and time.monotonic() - _looked[0] < ALERT_EVERY: return 0
     _looked[0] = time.monotonic()
+    try: flush_owed(store)
+    except Exception as e: logger.warning(f'could not pay what a chat is owed: {e}')
     try: keep_promises(store, force=force)
     except Exception as e: logger.warning(f'could not follow up in the chat: {e}')
     h = handoff(store)
@@ -718,7 +720,7 @@ def intercept(store, channel: str, chat: str, text: str, *, from_me=False, tasku
 
 
 def _locked_respond(store, channel: str, chat: str, question: str, connector_id: int, message_id=None, poll=False,
-                    arrived=None, spoken=False, closed=None, images=None):
+                    arrived=None, spoken=False, closed=None, images=None, late: str = ''):
     # the thumb goes up BEFORE the lock: it says "heard you", and it must not wait behind the turn
     # already answering (which is exactly when the owner most needs to know they were heard)
     if message_id:
@@ -738,15 +740,22 @@ def _locked_respond(store, channel: str, chat: str, question: str, connector_id:
     # conversation at once instead of on its 30 s tick)
     from . import live
     live.emit(live.CHAT, thinking=True, channel=channel)
+    # ...and OWED from here until this process has answered it: a restart in between leaves it written down, and the next process answers it
+    # (flush_owed) - "is the page finished?" asked three seconds before a restart was never answered (walk 6, H4)
+    owed = f'{channel}:{chat}'
+    _book(store, OWED_KEY, owed, {'words': question, 'mid': message_id, 'cid': connector_id, 'images': list(images or []), 'at': time.time(),
+                                  'boot': STARTED})
     try:
         heard = time.time()
         with lock:
             ev = threading.Event()
             with _locks_guard: _turns[key] = ev
-            try: respond(store, channel, chat, question, connector_id, poll=poll, cancel=ev, heard=spoken, closed=closed, images=images)
+            try: respond(store, channel, chat, question, connector_id, poll=poll, cancel=ev, heard=spoken, closed=closed, images=images, late=late)
             finally:
                 with _locks_guard:
                     if _turns.get(key) is ev: _turns.pop(key, None)
+                rec = ledger(store, OWED_KEY).get(owed) or {}
+                if rec.get('mid') == message_id and rec.get('words') == question: _book(store, OWED_KEY, owed, None)
         # WHERE A SLOW TURN SPENT ITS TIME (2026-09-25: a poll tap took a minute and the log could not say why):
         # from reaching the bridge to being heard here, and from heard to answered
         lag = f'{heard - float(arrived):.1f}s to be heard, ' if arrived else ''
@@ -969,7 +978,7 @@ def walk(store, actor: str = 'owner', opener: bool = True) -> str:
 
 
 def respond(store, channel: str, chat: str, question: str, connector_id: int, poll: bool = False, cancel=None, heard: bool = False,
-            closed: list = None, images: list = None):
+            closed: list = None, images: list = None, late: str = ''):
     """Answer synchronously; the poller runs this on a serialized background worker. `cancel` is set when a pick
     arrives behind this turn: the model's answer is dropped, never sent after the pick's.
     `images`: the pictures the owner sent with it, kept under attachments/ - shown to the Assistant as the desktop's are, and named
@@ -987,6 +996,7 @@ def respond(store, channel: str, chat: str, question: str, connector_id: int, po
         store.set_setting(HANDED_KEY, json.dumps({**hb, 'told': True}), 'assistant')
         _ASKING.chat['again'] = True
     if closed is not None: _ASKING.chat['closed'] = closed_note(closed)       # it waited out a closed Taskuary (A10)
+    if late: _ASKING.chat['late'] = late                                        # ...or a restart in the middle of its answer (H4)
     try:
         task, _ = general.dock_task(store, f'owner-{channel}')
         tid = task['TaskId']
@@ -1126,6 +1136,7 @@ def respond(store, channel: str, chat: str, question: str, connector_id: int, po
                     logger.debug(f'the phone answered without its opening: {e}'); lead = ''
                 if lead: text = f'{lead}\n\n{text}'
         send(store, channel, chat, text, connector_id)
+    except Undelivered as e: logger.warning(f'{e} - kept, it goes again once the chat takes it')
     except Exception as e:
         if cancel is not None and cancel.is_set():
             logger.info(f'{channel}: a turn gave way to a pick'); return
@@ -1431,12 +1442,17 @@ def _item_for(store, key: str, item: dict | None) -> dict | None:
     return funnel.next_item(store, key, include_surfaced=True) or funnel.item_for_key(store, key)
 
 
-def stale_tap(store, channel: str, chat: str, connector_id=None, spent: bool = False):
+LOST_TAP = ('That tap was on a list I sent before WhatsApp restarted on this computer, so I could not read which choice it was - nothing ran. '
+            'The choices are below again.')
+
+
+def stale_tap(store, channel: str, chat: str, connector_id=None, spent: bool = False, lost: bool = False):
     """A tap on a poll that is no longer the newest: its choices went with the card it was under, so nothing runs (a stale
     pick must never fire) - but a tap that got no answer read as the assistant freezing (2026-09-29). The current choices
     are the ones under the last message; say so, once, in words. `spent`: a second pick on the newest poll, which answers
     once (the owner, 2026-10-02: "once a poll is answered it should never be allowed to be used again")."""
-    said = ('That list was already used - nothing ran. The choices under my last message are the current ones.' if spent
+    # `lost`: a tap on a poll the bridge sent before it restarted - unreadable; the current choices go again as a poll it can read (H4)
+    said = (LOST_TAP if lost else 'That list was already used - nothing ran. The choices under my last message are the current ones.' if spent
             else 'That was an older list, so nothing ran - the choices under my last message are the current ones.')
     # ...and this line is now the last message - on Telegram it takes the older buttons off (tg_send) - so the current choices come
     # with it, on both channels: an answer with nothing to tap under it is a dead end (F19)
@@ -3076,11 +3092,65 @@ def bare_number(text: str) -> bool: return str(text or '').strip().lstrip('#').r
 
 
 
-LOST_KEY = 'phone_undelivered'              # :<channel>:<chat> -> the opening of a message that never arrived (A13)
-RETRY_PAUSES = (1.0, 3.0, 9.0)             # a failed Telegram send is tried again after each - a blip passes, a dead bot does not
+# ── WHAT IS OWED TO A CHAT IS WRITTEN DOWN, ON EVERY CHANNEL (walk 6, H4) ──────────────────────────────────────────────────────
+# A question in flight when Taskuary restarted was never answered, and an answer that failed while WhatsApp's link was down was never sent
+# again once it came back: the "did not reach you" note and the retry were Telegram's alone, and which line was being answered lived only in
+# memory. Two durable records per chat, channel-blind: OWED - heard, its answer still being written (a process that died with it owes it, and
+# the next one answers it, saying it is late); LOST - an answer that did not arrive, sent again once the link takes it (flush_owed).
+LOST_KEY = 'phone_undelivered'              # {"<channel>:<chat>": {text, choices, cid, at}} - an answer that never arrived
+OWED_KEY = 'phone_owed'                     # {"<channel>:<chat>": {words, mid, cid, images, at, boot}} - heard, not yet answered
+RETRY_PAUSES = (1.0, 3.0, 9.0)             # a failed send is tried again after each - a blip passes, a dead link does not
+LATE = 'My last message did not reach you - here it is now.'
+_LEDGER = threading.Lock()
+
+
+class Undelivered(RuntimeError):
+    "An answer the chat did not take - kept (LOST_KEY) and sent again; the turn says no error over it, which could not arrive either."
 
 
 def _pause(secs: float): time.sleep(secs)
+
+
+def ledger(store, key: str) -> dict:
+    try: d = json.loads(store.get_setting(key) or '{}') or {}
+    except ValueError: d = {}
+    return d if isinstance(d, dict) else {}
+
+
+def _book(store, key: str, chat_key: str, rec: dict | None):
+    "One chat's entry in a ledger written (or, None, struck off) - read and written under one lock: two turns' entries never overwrite."
+    with _LEDGER:
+        d = ledger(store, key)
+        if rec is None and chat_key not in d: return
+        if rec is None: d.pop(chat_key, None)
+        else: d[chat_key] = rec
+        store.set_setting(key, json.dumps(d), 'assistant')
+
+
+def _busy(store, channel: str, chat: str) -> bool:
+    with _locks_guard: return any(k[0] == _sid(store) and k[1] == channel and str(k[3]) == str(chat) for k in _turns)
+
+
+def flush_owed(store) -> int:
+    """Pay what each chat is owed: a question a previous process heard and died answering is answered now, said late; an answer that
+    did not arrive goes again (no retry pauses here - still down, the next look tries again). Run on the chat clock (push_alerts) and the
+    moment WhatsApp's link is back (wabridge.check_link). -> how many went."""
+    n = 0
+    for k, rec in ledger(store, OWED_KEY).items():
+        if rec.get('boot') == STARTED: continue                       # this process is still answering it
+        _book(store, OWED_KEY, k, None)
+        ch, chat = k.split(':', 1)
+        if rec.get('mid') and not _claim(ch, rec['mid']): continue      # ...or a redelivery of it was answered already
+        late = f'Taskuary restarted before I could answer "{_cut(rec.get("words") or "", 80)}" - here is the answer now.'
+        threading.Thread(target=_locked_respond, args=(getattr(store, '_store', store), ch, chat, str(rec.get('words') or ''), rec.get('cid')),
+                         kwargs={'images': rec.get('images') or None, 'late': late}, name=f'taskuary-{ch}-owed', daemon=True).start()
+        n += 1
+    for k, rec in ledger(store, LOST_KEY).items():
+        ch, chat = k.split(':', 1)
+        if _busy(store, ch, chat) or not rec.get('text'): continue     # a turn is answering there: its answer carries the note
+        try: send(store, ch, chat, rec['text'], rec.get('cid'), choices=rec.get('choices') or None, resend=True); n += 1
+        except Exception as e: logger.info(f'{e} - still kept for the next look')
+    return n
 
 
 # NO MACHINE TEXT IS A BUBBLE (walk 6, 2026-11-23: a bubble whose whole text was `{}` - the Assistant's empty answer sent as it was - and a
@@ -3105,9 +3175,8 @@ def bubble(text) -> str:
     return EMPTY_ANSWER
 
 
-def _deliver(channel: str, out, store, chat: str, body: str, connector_id=None, **kw):
-    """One bubble out - on Telegram tried again with backoff before it counts as lost (A13, 2026-10-22: a failed send was only logged)."""
-    pauses = RETRY_PAUSES if channel == 'telegram' else ()
+def _deliver(channel: str, out, store, chat: str, body: str, connector_id=None, pauses=RETRY_PAUSES, **kw):
+    """One bubble out - tried again with backoff before it counts as lost (A13, 2026-10-22: a failed send was only logged), on every channel."""
     for i in range(len(pauses) + 1):
         try: return out(store, chat, body, connector_id=connector_id, **kw)
         except Exception as e:
@@ -3116,7 +3185,7 @@ def _deliver(channel: str, out, store, chat: str, body: str, connector_id=None, 
 
 
 def send(store, channel: str, chat: str, text: str, connector_id: int = None, page: int = 0, choices: list = None, asked: bool = False,
-         urgent: bool = False):
+         urgent: bool = False, resend: bool = False):
     """Everything we say to the owner leaves through here, so this is where it is SPELLED - and where it is HELD: outside a
     conversation the owner started in this chat (in_session) nothing goes. `asked`: the owner's own press this moment named this
     chat (hello_chat) - the one exception. `urgent`: an urgent item, which goes unasked only when the owner allowed it (urgent_rings).
@@ -3126,7 +3195,9 @@ def send(store, channel: str, chat: str, text: str, connector_id: int = None, pa
     writes one markup and puts chatformat.BREAK wherever a new bubble should start.
 
     Only the opening bubble wears the name. Four of them labelled "Taskuary (2/4):" over a
-    heading that already says what it is read as machinery rather than somebody talking."""
+    heading that already says what it is read as machinery rather than somebody talking.
+
+    `resend`: the kept answer that did not arrive (flush_owed), sent again once - said as late, with no retry pauses."""
     from . import chatformat, messengers
     if not asked and held_back(store, channel, chat, f'{len(str(text or ""))} chars', urgent): return
     text = bubble(text)
@@ -3139,6 +3210,8 @@ def send(store, channel: str, chat: str, text: str, connector_id: int = None, pa
         text, a['again'] = f'Picking the walk up here again.\n\n{text}', False
     if a and a.get('closed') and a.get('channel') == channel and str(a.get('chat')) == str(chat):
         text, a['closed'] = f"{a['closed']}\n\n{text}", ''
+    if a and a.get('late') and a.get('channel') == channel and str(a.get('chat')) == str(chat):
+        text, a['late'] = f"{a['late']}\n\n{text}", ''
     if a and a.get('heard') and a.get('channel') == channel and str(a.get('chat')) == str(chat):
         text, a['heard'] = f'🎤 Heard: "{_cut(a["heard"], 300)}"\n\n{text}', ''
     # every road to this chat passes here, so this is where what we offered is written down -
@@ -3180,10 +3253,11 @@ def send(store, channel: str, chat: str, text: str, connector_id: int = None, pa
     if channel == 'telegram' and tapped:
         on = set(tapped)
         text = '\n'.join(l for l in str(text or '').split('\n') if not ((m := _OFFERED.match(l)) and m.group(2) in on))
-    # A MESSAGE THAT NEVER ARRIVED IS SAID, on the next one that does (A13, 2026-10-22): a failed Telegram send left the phone silent
-    lost_key = f'{LOST_KEY}:{channel}:{chat}'
-    lost = str(store.get_setting(lost_key) or '') if channel == 'telegram' else ''
-    if lost: text = f'My last message did not reach you ("{lost}") - here is where we are now.\n\n{text}'
+    # A MESSAGE THAT NEVER ARRIVED IS SAID, on the next one that does (A13, 2026-10-22) - on every channel (H4)
+    here = f'{channel}:{chat}'
+    lost, kept = ledger(store, LOST_KEY).get(here), {'text': text, 'choices': offered, 'cid': connector_id, 'at': time.time()}
+    if resend: text = f'{LATE}\n\n{text}'
+    elif lost: text = f'My last message did not reach you ("{_cut(str(lost.get("text") or "").split(chr(10))[0], 80)}") - here is where we are now.\n\n{text}'
     msgs = []
     for part in str(text or '').split(chatformat.BREAK):
         shown = chatformat.render(chatformat.json_blocks(part), channel)        # rows as tables, never braces and quotes (F16)
@@ -3194,11 +3268,12 @@ def send(store, channel: str, chat: str, text: str, connector_id: int = None, pa
         # ...and on Telegram, its own buttons under the same last bubble (messengers.tg_send)
         kw = {'poll': [labels[w] for w in tapped]} if last and channel == 'whatsapp' else {'buttons': tapped} if last and channel == 'telegram' else {}
         # the name only where the chat does not already say who is talking: a Telegram bot's own name heads every message (F27)
-        try: _deliver(channel, out, store, chat, ('Taskuary:\n' + msg) if i == 0 and channel != 'telegram' else msg, connector_id, **kw)
-        except Exception:
-            if channel == 'telegram': store.set_setting(lost_key, _cut(lost or msg.split('\n', 1)[0], 80), 'assistant')   # the first one missed
-            raise
-    if lost: store.set_setting(lost_key, '', 'assistant')
+        try: _deliver(channel, out, store, chat, ('Taskuary:\n' + msg) if i == 0 and channel != 'telegram' else msg, connector_id,
+                      pauses=() if resend else RETRY_PAUSES, **kw)
+        except Exception as e:
+            _book(store, LOST_KEY, here, kept)                            # kept whole, to go again once the link takes it (flush_owed)
+            raise Undelivered(f'{channel}: the answer did not arrive - {plain(e)}') from e
+    if lost or resend: _book(store, LOST_KEY, here, None)
     # a SENT line, not only a failed one: "never responds" left nothing to tell a reply that went from one
     # that never did (2026-09-24)
     logger.info(f'{channel}: sent {len(msgs)} message(s), {sum(len(m) for m in msgs)} chars, to the assistant chat'

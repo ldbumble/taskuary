@@ -116,7 +116,8 @@ def resolve(store, name: str) -> dict:
         from . import peoplesearch
         try: hit = next(iter(peoplesearch.search(store, name[:120], 'email').get('data') or []), None)
         except Exception: hit = None
-        if hit and '@' in str(hit.get('to')): return {'address': str(hit['to']).lower()}
+        # ...a person by every word of their name; a hit by company or domain is someone AT it, a guess the draft marks (slots.address_for)
+        if hit and '@' in str(hit.get('to')) and set(words) <= set(_words(hit.get('name'))): return {'address': str(hit['to']).lower()}
     return {'candidates': found[:5]} if found else {}
 
 

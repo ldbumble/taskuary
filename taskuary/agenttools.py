@@ -301,7 +301,10 @@ CODING_TOOLS = ('note_peers', 'use_repo', 'find_repos', 'propose_land')
 # Claude Code defers an MCP server's tools - the model holds a bare name like `show` until it searches for it, and none of 8 sessions ever
 # did, so no view was drawn and every result came back as prose. These ride whole on every turn (Claude Code 2.1.285+, the per-tool
 # `anthropic/alwaysLoad`): the view, and the three that set an act up for the owner's press
-ALWAYS_LOAD = ('show', 'propose_reply', 'propose_email', 'propose', 'remember', 'tick', 'end_turn', 'ask_owner')     # ...and the one that keeps what the owner tells it: said in passing, never searched for
+# ...ON EVERY ROAD, ONE LIST (walk 10, 2026-11-23): an AI card's harness deferred propose and hand_over by a second table (apiagent.LATER),
+# so an agent asked to post saw no tool that posts and said "I cannot publish directly". Every act that raises a card for his press - and
+# the sign-up, the one way a password is typed - is here, and nothing here is ever deferred (apiagent.LATER is built without them)
+ALWAYS_LOAD = ('show', 'propose_reply', 'propose_email', 'propose', 'hand_over', 'browser_signup', 'remember', 'tick', 'end_turn', 'ask_owner')
 # ONE LINE A TOOL, FOR EVERY BRAIN (the owner, 2026-11-15: "They should be MCP-style tools with simple JSON: what they do and descriptions.
 # All methods can be searched later"): the whole description of every tool rode on every call - ~15,000 characters, ~650 a tool. A tool is
 # listed by its name, this line and its parameters' names and types (lean); its full words, rules and examples are find_tools' answer

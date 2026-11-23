@@ -181,6 +181,18 @@ def test_a_card_session_is_listed_the_core_and_runs_the_rest_by_use_tool():
     assert agents.ACPSteps._call(c) == ('mcp__taskuary__propose', {'action': 'pay', 'why': 'due'})
 
 
+def test_every_act_that_raises_a_card_is_offered_on_every_road(monkeypatch):
+    """Walk 10, 2026-11-23: on an AI card's harness propose and hand_over were deferred by apiagent.LATER while agenttools.ALWAYS_LOAD said they
+    ride every turn - asked to post, the agent saw no tool that posts and said "I cannot publish directly"."""
+    from taskuary import agenttools, apiagent
+    acts = {'propose', 'propose_reply', 'propose_email', 'hand_over', 'ask_owner', 'browser_signup'}
+    assert acts <= set(agenttools.ALWAYS_LOAD) and not acts & apiagent.LATER
+    assert acts - {'browser_signup'} <= {t['name'] for t in agenttools.listing(portable=True)}
+    listed = [apiagent._fn(t['name'], t['description'], t['inputSchema']) for t in agenttools.listing()]
+    monkeypatch.setattr(apiagent, 'taskuary_tools', lambda *a, **k: listed)
+    assert acts <= {t['function']['name'] for t in apiagent.tools_for(1, 'acts', browser=True, hands=False)}
+
+
 def test_the_cards_models_are_in_codexs_own_catalogue_so_no_metadata_warning_fires(here, monkeypatch):
     "Codex runs a model it has no catalogue entry for on fallback metadata, and says so above every answer (the gateway walk, 2026-11-20)."
     tpl = {'slug': 'gpt-x', 'base_instructions': 'You are Codex, an agent based on GPT-6. Use apply_patch.', 'tool_mode': 'code_mode_only',

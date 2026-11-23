@@ -24,6 +24,7 @@ from loguru import logger
 from .selfclose import SHOW_WHAT
 from .browserview import SIGNUP_LINE
 from . import gate as _gate
+from .agenttools import ALWAYS_LOAD
 
 IDLE_STEPS = 8                 # steps in a row whose answers held nothing the turn had not read already: going in circles, not working
 CAP = 12_000                  # one tool answer, as the model reads it
@@ -521,9 +522,9 @@ def tools_for(tid: int, sid: str, browser: bool, stranger: bool = False, post=No
 # file_write / file_edit (an invoice to fill, 2026-11-15): a model shown only their names said it had no way to make the file, and stopped.
 # ...and THE BROWSER'S OTHER HANDS COME WITH ITS FIRST PAGE (browser_open loads BROWSER_MORE): a page is only ever looked at and clicked after one is open
 LATER = frozenset({'read_attachment', 'search_knowledge', 'owner_memory', 'calendar', 'list_systems', 'run_system', 'remind', 'ask_stronger',
-                   'note_peers', 'note_lead', 'use_repo', 'find_repos', 'propose_land', 'withdraw_draft', 'keep_card', 'hand_over', 'sign_form', 'answer_invite', 'set_up_meeting', 'share',
+                   'note_peers', 'note_lead', 'use_repo', 'find_repos', 'propose_land', 'withdraw_draft', 'keep_card', 'sign_form', 'answer_invite', 'set_up_meeting', 'share',
                    'search_tasks', 'person', 'guide', 'todos', 'check_back', 'playbooks', 'browser_look', 'browser_click', 'browser_fill', 'browser_press',
-                   'browser_signup', 'browser_screenshot', 'web_fetch', 'files_list', 'reply_not_needed', 'propose', 'my_task', 'new_task'})
+                   'browser_screenshot', 'web_fetch', 'files_list', 'reply_not_needed', 'my_task', 'new_task'}) - set(ALWAYS_LOAD)
 BROWSER_MORE = ('browser_look', 'browser_click', 'browser_fill', 'browser_press', 'browser_signup', 'browser_screenshot', 'hand_over')
 LOAD = 'find_tools'
 DEFERRED = {}                  # (tid, sid) -> {name: schema} of the tools this turn named but has not loaded

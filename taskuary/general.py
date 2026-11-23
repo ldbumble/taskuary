@@ -2058,6 +2058,14 @@ def voice_block(store, tid: int, budget: int = VOICE_CHARS) -> str:
             'here (STYLE.md):\n' + '\n'.join(out + ([per] if per else [])))
 
 
+# HOW HE WRITES IS HIS STYLE.md, AS EVERY DRAFT READS IT (responder.style_doc - one road): COUNSEL.md's "Voice" stood here under this name,
+# the desk's rules about words never to say (walk 9, 2026-11-23). Less his Owner notes, which ride late, newest first (voice_block)
+_NOTES = re.compile(r'^## Owner notes\s*$.*?(?=^## |\Z)', re.M | re.S)
+def style_block(store) -> str:
+    from .responder import style_doc
+    return _NOTES.sub('', style_doc(store)).strip()
+
+
 # ...and the one waiting, told with each turn's facts (latest_block), so it is never set again for nothing (2026-11-17)
 CHECK_SET = 'YOUR CHECK-BACK IS SET - you are woken {when} to check: {what}.'
 def _md(at, clock=False) -> str:
@@ -2184,8 +2192,7 @@ def prompt_parts(store, tid: int, turn: bool = False, heard: str = '') -> tuple[
     # playbook menu and the how-to sections that rode here are gone. Only security is said as code: the fence (terminal.FENCE_LINE)
     from . import brief as _brief, selfclose
     from .terminal import FENCE_LINE
-    from . import counsel as _counsel
-    counsel = _counsel.check_budget(store, 'counsel', _counsel.for_worker(store))   # how he writes (STYLE.md), whole (PW-258)
+    counsel = style_block(store)                    # how he writes (STYLE.md) - his style, never the desk's rules (walk 9)
     # What is CERTIFIED about the company's own systems - facts a figure is taken from (semantic.py); how to prove one is the `number` guide
     from . import semantic
     layer = semantic.block(store)

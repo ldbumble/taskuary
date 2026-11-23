@@ -34,32 +34,14 @@ class Consumers(unittest.TestCase):
             out = system(self.st)
             self.assertIn('Be plain', out); self.assertIn('Walk them through', out); self.assertNotIn('I SURFACE', out)
 
-    def test_the_worker_prompt_carries_the_whole_voice_section_uncut(self):
+    def test_the_worker_prompt_carries_how_he_writes_and_none_of_the_desks_voice(self):
+        """Walk 9, 2026-11-23: COUNSEL.md's Voice - "Never to them: agent, AI, model ... error, failed, retry" - rode every task's system prompt
+        as "HOW THE OWNER WRITES (STYLE.md)". How he writes is his STYLE.md, as every draft reads it; the desk's rules are not a task's."""
+        self.st.save_doc('style', '## Reply style\n- Short, first names, no sign-off pleasantries.\n\n## Owner notes\n- Never mention the Q3 slip.\n', 'owner')
         out = _general_prompt(self.st)
-        self.assertIn('HOW THE OWNER WRITES', out)
-        self.assertEqual(out.count('- Long voice rule.'), 400, 'the 3,000-character cut is gone')
-        self.assertNotIn('I SURFACE', out)
-
-    def test_a_worker_never_reads_twice_what_agent_md_already_says(self):
-        """The instruction trim, 2026-11-16: two shipped Voice bullets restate AGENT.md - the desk keeps them (it has no AGENT.md), a
-        worker does not; a bullet the owner wrote or reworded always reaches it."""
-        st = MemoryStore()
-        desk, worker = counsel.for_discussion(st), counsel.for_worker(st)
-        for b in counsel.SAID_IN_AGENT:
-            self.assertIn(' '.join(b.split()[1:4]), ' '.join(desk.split())); self.assertNotIn(' '.join(b.split()[1:4]), ' '.join(worker.split()))
-        self.assertIn('calmer than before', worker)
-        own = counsel.load(st).replace('A clear next move, and why.', 'A clear next move, and why - always.')
-        st.save_doc('counsel', own, 'owner')
-        self.assertIn('A clear next move, and why - always.', counsel.for_worker(st))
-
-    def test_a_task_agent_never_hears_the_desks_nothing_goes_out_line(self):
-        """The owner, 2026-11-16: agents echoed "nothing goes out until you say so" over the card that says it. Dropped on the agent road
-        only - the Assistant keeps it, and his own document is untouched."""
-        st = MemoryStore(); doc = counsel.load(st)
-        self.assertIn('nothing goes out until you say so', counsel.for_discussion(st))
-        self.assertNotIn('nothing goes out', counsel.for_worker(st)); self.assertIn('"this one needs you".', counsel.for_worker(st))
-        st.save_doc('counsel', doc, 'owner'); counsel.for_worker(st)
-        self.assertEqual(st.get_doc('counsel'), doc)
+        self.assertIn('HOW THE OWNER WRITES (STYLE.md)', out); self.assertIn('first names, no sign-off', out)
+        self.assertNotIn('Long voice rule', out); self.assertNotIn('Be plain', out); self.assertNotIn('I SURFACE', out)
+        self.assertNotIn('Never mention the Q3 slip', out, 'his notes ride late, newest first (voice_block) - never twice')
 
     def test_over_budget_is_a_warning_and_an_audit_row_never_a_cut(self):
         big = '- Long voice rule.\n' * 600                                    # > counsel.BUDGET; DOC itself is under it

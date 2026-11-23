@@ -202,29 +202,8 @@ def for_chat(store) -> str:
     return text if capabilities.can_code(store) else without_coding(text, NO_CODING if agents.developer_mode(store) else NO_DEV)
 def for_brief(store) -> str: return pick(store, GOAL_HEAD, VOICE_HEAD)
 def for_discussion(store) -> str: return pick(store, VOICE_HEAD)
-# A worker gets the Voice alone (2026-11-09): the intro is the desk's ("I do not do the work myself: I ... bring up the button"),
-# and it opened every task agent's style section - an agent whose whole job is to do the work.
-def for_worker(store) -> str: return DESK_ONLY.sub('', without(pick(store, VOICE_HEAD, intro=False), SAID_IN_AGENT))
-
-# ...AND NOT THE DESK'S OWN "NOTHING GOES OUT UNTIL YOU SAY SO" (the owner, 2026-11-16): a task agent read it as a line to say, and said it over
-# the card that already says so. Left out on the agent road only - the Assistant keeps it, and his document is never edited
-DESK_ONLY = re.compile(r',?\s*"nothing\s+goes\s+out\s+until\s+you\s+say\s+so"', re.I)
-
-# ...LESS WHAT AGENT.md ALREADY TELLS A WORKER (the instruction trim, 2026-11-16): the desk needs these two bullets - it has no AGENT.md - and
-# a worker read each rule twice. Only the SHIPPED bullet, word for word, is left out: a bullet the owner wrote or reworded always reaches it
-SAID_IN_AGENT = ('- Plain and short; more only when they ask or a decision needs it. A clear next move, and why.',
-                 '- Verified facts apart from inference. An action happened only when Taskuary confirms it - never an invented fact or result. '
-                 'No repeated introductions, no "all done" announcements.')
-
-def without(text: str, bullets) -> str:
-    "`text` with each bullet (its wrapped lines read as one) whose words are one of `bullets` taken out."
-    drop, out, cur = {_squash(b) for b in bullets}, [], []
-    for line in (text or '').splitlines() + ['']:
-        if cur and (line.startswith('- ') or not line.startswith(' ')):
-            if _squash(' '.join(cur)) not in drop: out += cur
-            cur = []
-        (cur if line.startswith('- ') or cur else out).append(line)
-    return '\n'.join(out).rstrip()
+# ...and a task's agent reads none of it (walk 9, 2026-11-23): COUNSEL.md is the desk's own voice - its "Voice" rode every task's system prompt
+# as "HOW THE OWNER WRITES (STYLE.md)", ~900 characters of words never to say. How HE writes is STYLE.md (general.style_block)
 
 # ...and the Docs editor's meter shows it (doclimits). 10,000 since 2026-11-02: the shipped document measured 7,994 of 8,000, so the
 # meter would have stood amber on a fresh install for a document nobody had touched.

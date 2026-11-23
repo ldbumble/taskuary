@@ -161,7 +161,9 @@ def test_a_card_session_is_served_tool_schemas_its_model_takes():
 
 def test_the_cards_models_are_in_codexs_own_catalogue_so_no_metadata_warning_fires(here, monkeypatch):
     "Codex runs a model it has no catalogue entry for on fallback metadata, and says so above every answer (the gateway walk, 2026-11-20)."
-    tpl = {'slug': 'gpt-x', 'base_instructions': 'You are Codex.', 'tool_mode': 'code_mode_only', 'supports_search_tool': True,
+    tpl = {'slug': 'gpt-x', 'base_instructions': 'You are Codex, an agent based on GPT-6. Use apply_patch.', 'tool_mode': 'code_mode_only',
+           'supports_search_tool': True, 'multi_agent_version': 'v2',
+           'model_messages': {'instructions_template': 'You are Codex, an agent based on GPT-6. Hi.'},
            'service_tiers': [{'id': 'priority'}], 'available_access_programs': {'cyber': ['standard']}, 'context_window': 1}
     monkeypatch.setattr(harness, 'bundled', lambda cmd: tpl)
     s = MemoryStore(); cid = _card(s)
@@ -170,7 +172,12 @@ def test_the_cards_models_are_in_codexs_own_catalogue_so_no_metadata_warning_fir
     c = tomllib.loads((home / 'config.toml').read_text(encoding='utf-8'))
     assert c['model_catalog_json'] == str(home / 'models.json').replace(chr(92), '/')
     ms = json.loads((home / 'models.json').read_text(encoding='utf-8'))['models']
-    assert [m['slug'] for m in ms] == ['hydrogen', 'neon'] and all(m['base_instructions'] == 'You are Codex.' for m in ms)
+    assert [m['slug'] for m in ms] == ['hydrogen', 'neon']
+    # ...each told the model it is, Codex's how-to kept, and no sub-agents of its own (the HIPAA walk, 2026-11-23)
+    assert [m['base_instructions'] for m in ms] == ['You are hydrogen, an agent running in Codex. Use apply_patch.',
+                                                    'You are neon, an agent running in Codex. Use apply_patch.']
+    assert ms[0]['model_messages']['instructions_template'] == 'You are hydrogen, an agent running in Codex. Hi.'
+    assert all(m['multi_agent_version'] is None for m in ms) and c['features']['multi_agent'] is False
     assert all(m['tool_mode'] is None and m['supports_search_tool'] is False and m['service_tiers'] == [] and m['context_window'] == 1_000_000 for m in ms)
     assert prof['env']['CODEX_HOME'] == str(home)
 

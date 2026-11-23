@@ -7,7 +7,7 @@ the config names the variable it is read from, and nothing written to disk holds
 
 Triage and the other one-shot jobs stay on llm.make_llm. Where neither CLI can run here (not installed and no way to install it), the
 agent keeps Taskuary's own loop (apiagent.py) and the card says so in one line (line)."""
-import json
+import json, re
 from pathlib import Path
 
 from loguru import logger
@@ -168,7 +168,11 @@ def _toml(v) -> str:
 # picture tool and fast tier are his plan's to use, and an AI card closes them for the gateway alone)
 OWNER_CLI_OFF = ('apps', 'plugins', 'remote_plugin')
 CLOSED_FEATURES = {'apps': False, 'plugins': False, 'remote_plugin': False, 'image_generation': False, 'tool_suggest': False,
-                   'in_app_updates': False, 'fast_mode': False, 'ultrafast_mode': False, 'skill_mcp_dependency_install': False}
+                   'in_app_updates': False, 'fast_mode': False, 'ultrafast_mode': False, 'skill_mcp_dependency_install': False,
+                   # ...and what a card's agent has no use for here (the HIPAA walk, 2026-11-23: ~4.9k of multi-agent tools on every task):
+                   # its own sub-agents, and its own browser and computer tools - Taskuary's browser is the one it drives, held where it runs
+                   'multi_agent': False, 'multi_agent_v2': False, 'browser_use': False, 'browser_use_external': False, 'in_app_browser': False,
+                   'computer_use': False}
 
 
 def codex_config(cid: int, name: str, base: str, header: str, extra: dict, model: str, window: int = 0, catalog: str = '') -> str:
@@ -245,10 +249,17 @@ def catalog(cmd: str, models: list, window: int) -> dict:
     """model_catalog_json for a card: each of its models as Codex's own fallback entry - the same instructions, tools and shell it ran on
     unnamed - named, with the card's context window, and none of OpenAI's own service: no fast tiers, no hosted search, no code mode."""
     t = bundled(cmd)
+    # ...AND TOLD WHAT IT IS (the HIPAA walk, 2026-11-23: a gateway's own model read "You are Codex, an agent based on GPT-6"): the instructions
+    # stay Codex's - how its tools are driven - with its first line naming the model it is; and no sub-agents of its own (multi_agent_version)
+    said = lambda m, x: re.sub(r'^You are Codex, an agent based on [^.]*\.', f'You are {m}, an agent running in Codex.', str(x)) if isinstance(x, str) else x
+    msgs = lambda m: {**t['model_messages'], 'instructions_template': said(m, t['model_messages'].get('instructions_template'))} \
+        if isinstance(t.get('model_messages'), dict) else t.get('model_messages')
     one = lambda i, m: {**t, 'slug': m, 'display_name': m, 'priority': i + 1, 'visibility': 'list', 'context_window': window,
                         'max_context_window': window, 'service_tiers': [], 'additional_speed_tiers': [],
                         'upgrade': None, 'availability_nux': None, 'supports_search_tool': False, 'tool_mode': None,
-                        'experimental_supported_tools': []}
+                        'experimental_supported_tools': [], 'multi_agent_version': None,
+                        **({'base_instructions': said(m, t['base_instructions'])} if 'base_instructions' in t else {}),
+                        **({'model_messages': msgs(m)} if 'model_messages' in t else {})}
     return {'models': [one(i, m) for i, m in enumerate(models)]}
 
 

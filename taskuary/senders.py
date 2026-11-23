@@ -543,13 +543,19 @@ def row_msg(row: dict) -> dict:
             'status': row.get('Status'), 'MailMetaJson': row.get('MailMetaJson'), 'body': row.get('BodyText'), 'own_text': row.get('OwnText')}
 
 def whom(store, rows, through: int = 0) -> dict | None:
-    """Who the trust presses name: the first line since `through` whose sender is not trusted, or - its sender trusted - the outsider
-    it forwards or quotes (their address on the line, so vouch and trust_org act on THEM, never the colleague); else the opener."""
+    """THE HELD SENDER - who the hold's line, its Trust buttons and the press itself name (origin.hold, trust_offer, vouch, trust_org): the
+    first line since `through`, on any channel, whose sender is not trusted, or - its sender trusted - the outsider it forwards or quotes
+    (their address on the line, so vouch and trust_org act on THEM, never the colleague); else the opener."""
     from .ingest import is_ours
     memo, first = {}, next((m for m in rows if not is_ours(m)), None)
     for m in rows:
         if is_ours(m) or int(m.get('MessageId') or 0) <= through: continue
-        if m.get('Channel') != 'email': return first           # a chat, tracker or alert names its opener, as it always did
+        # ...A LINE ON ANY OTHER CHANNEL IS ITS OWN SENDER'S, judged as the hold judges it (HIPAA walk 6, H8: a colleague's trusted chat line
+        # past the mark returned the opener - "Trust Gail" under a printer's quote that joined her task, a press that vouched for her)
+        if m.get('Channel') != 'email':
+            from .origin import of_message
+            if of_message(store, m, memo, {})[0] == 'stranger': return m
+            continue
         d = row_msg(m)
         if not _known(store, d, m.get('MessageId'), memo=memo)[0]: return m
         if d['channel'] == 'email' and (o := outsider(store, d, memo, mid=m.get('MessageId'))):

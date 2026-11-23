@@ -5114,9 +5114,12 @@ def propose_for(store, dock_tid: int, decision: dict, item: dict | None, text: s
         if not it.get('key'): raise ValueError('nothing is on the table')
         target, params = it.get('tid') or it.get('idea') or it.get('mid') or 0, {'key': it['key'], 'text': d_text or text or None}
     elif verb == 'approve':
-        # ...on a task's or an agent's row with no draft of its own, the step held there for the owner's yes (rulebook action_held lights it)
-        from . import proposals
-        target = it.get('rid') or ((proposals.held_pending(store, it['tid']) or {}).get('rid') if it.get('tid') else None)
+        # ...on a task's or an agent's row with no draft of its own, the card that waits there for his press (cardqueue's front - what the
+        # page draws), else the step held for his yes. A row with no review id found "nothing to approve", and the yes went to the agent as
+        # a typed line that greyed the very card he approved (walk 9, 42)
+        from . import cardqueue, proposals
+        target = it.get('rid') or (((cardqueue.front(store, it['tid']) or {}).get('ReviewId')
+                                    or (proposals.held_pending(store, it['tid']) or {}).get('rid')) if it.get('tid') else None)
         label = closeout_label(it) or label         # "Send the reply" is not what a merge card's yes does
     elif verb == 'send_close': target, params = it.get('rid'), {'close': True}     # the reply, then the task's close (server: review.approve)
     elif verb == 'answer_agent':

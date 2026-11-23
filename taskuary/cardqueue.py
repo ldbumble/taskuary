@@ -222,6 +222,13 @@ def _state(store, tid: int) -> dict:
     return {'live': live, 'held': held, 'n': n, 'of': n + len(waiting) - 1, 'next': what(store, waiting[1]) if len(waiting) > 1 else '', 'units': waiting, 'past': past}
 
 
+def front(store, tid) -> dict:
+    "The review row of the card on task `tid` that waits for his press now - the line's front - {} when none does."
+    if store is None or not str(tid or '').isdigit(): return {}
+    live = [x for x in state(store, int(tid))['live'] if str(x).isdigit()]
+    return (store.get_review(int(live[0])) or {}) if live else {}
+
+
 def mark(store, tid: int, s: dict) -> None:
     """Each card that waits marked as it is first seen waiting, in the chat's ledger: one taken back before its turn came never stands
     (conversation.items). Written where the chat is read and where the agent is told its line - never by a read of what waits on him."""

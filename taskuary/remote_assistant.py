@@ -2192,13 +2192,10 @@ def _body(store, item: dict | None) -> tuple[dict, str, bool]:
 # full, and pressed from here through the desk's own door (server.decide).
 def front_card(store, item: dict | None) -> dict:
     """The review row of the card that waits for his press now on the item's task (cardqueue's front) - {} when none does."""
-    tid = (item or {}).get('tid')
-    if store is None or not str(tid or '').isdigit(): return {}
     from . import cardqueue
-    try: live = [x for x in cardqueue.state(store, int(tid))['live'] if str(x).isdigit()]
+    try: return cardqueue.front(store, (item or {}).get('tid'))
     except Exception as e:
         logger.debug(f'the phone could not read the line of cards: {e}'); return {}
-    return (store.get_review(int(live[0])) or {}) if live else {}
 
 
 LETTER_KINDS = ('draft', 'draft_reply', 'reply', 'slot')

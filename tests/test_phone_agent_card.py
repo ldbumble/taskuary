@@ -144,6 +144,16 @@ class WaitingCardTests(unittest.TestCase):
         self.assertEqual((door.call_args.args[1].verb, door.call_args.args[1].final_text), ('edit', 'Hi Gail, the pack is attached - page 3 has the chart.'))
         self.assertIn('with your words', out)
 
+    def test_approve_named_off_the_table_is_the_press_of_its_waiting_card(self):
+        """Walk 9 (42): "approve the next card" on the phone, the email to Gail waiting on a task that was not on the table and whose row
+        carried no review id - approve found "nothing to approve", so the yes went to the agent as a typed line, which greyed the very card
+        he approved. Approve on a task is the press of its front card (cardqueue.front), through the desk's door (review.approve -> decide)."""
+        from taskuary import cardqueue, concierge, general
+        self.assertEqual(cardqueue.front(self.s, self.tid).get('ReviewId'), self.rid)
+        dock = general.dock_task(self.s, 'owner-whatsapp')[0]['TaskId']
+        prop = concierge.propose_for(self.s, dock, {'verb': 'approve'}, self.item, 'approve the email to Gail', elsewhere=True, table={'ref': 'TQ-0099'})
+        self.assertEqual((prop['kind'], prop['target']), ('review.approve', self.rid))
+
     def test_a_failed_send_says_why_and_nothing_is_said_sent(self):
         from taskuary import server
         with mock.patch.object(server, 'decide', return_value={'ok': True, 'status': 'pending', 'send_error': 'No mailbox is connected'}):

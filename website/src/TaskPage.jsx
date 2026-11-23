@@ -2260,25 +2260,6 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       }
     } finally { endStart(id); }
   };
-  // TRIAGE'S OFFER, taken with one press (the owner, 2026-10-28: "I can register you for the webinar and put it on your calendar"):
-  // the general agent starts on it by the one dispatch door; anything that signs up or sends still waits for the owner's yes
-  const acceptOffer = async () => {
-    const id = selected;
-    if (!beginStart(id, "general")) return;
-    setErr(""); setStartFail(null);
-    try {
-      const { data } = await api.post(`/api/tasks/${id}/offer`, {});
-      const outcome = outcomeOf(data);
-      if (!stale(id)) setTerm(outcome.state === "started" || outcome.state === "existing" ? (data.session || null) : null);
-      await Promise.all([loadDetail(id), loadTasks()]);
-      onChanged?.();
-    } catch (e) {
-      if (!stale(id)) {
-        const msg = e?.response?.data?.detail || "Could not start the agent - check that an AI is connected under Connections, then press it again.";
-        setErr(msg); setStartFail({ ...failOf(e), text: msg, again: acceptOffer });
-      }
-    } finally { endStart(id); }
-  };
   // START AN AGENT ON A GOAL (the owner, 2026-10-12): the goal is up to its first step not done. That step becomes a task
   // of its own if it is not one yet (the goal's repository rides along), the regular agent starts on it through the one
   // dispatch door, and the step opens on the table so what the agent does is what you see.
@@ -3218,15 +3199,10 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                           the To do already say it - triage's reading opens the agent's chat only */}
                       {flow && fromConversation()}
                       {/* THE ASK - one line of what is wanted; the whole summary is the tooltip when the line cut it */}
-                      {(askBand || waitFor || detail?.offer) && <Part label="The ask" data-tq-ask="" data-tq-quoted={askQuoted ? "" : undefined}>
+                      {(askBand || waitFor) && <Part label="The ask" data-tq-ask="" data-tq-quoted={askQuoted ? "" : undefined}>
                         {waitFor && <Typography data-tq-waiting-on="" sx={{ color: INK, fontSize: 13.5, fontWeight: 600, lineHeight: 1.45 }}>{waitFor.line}</Typography>}
                         {askBand && <Typography title={askText} sx={{ color: INK, fontSize: 14, lineHeight: 1.45, overflowWrap: "anywhere",
                           display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{askBand}</Typography>}
-                        {/* WHAT AN AGENT COULD DO about it, as triage offered it - one press starts it (ingest.offer_of) */}
-                        {detail?.offer && <Box data-tq-offer="" sx={{ display: "flex", alignItems: "center", gap: 1, mt: 0.5, flexWrap: "wrap" }}>
-                          <Typography sx={{ color: INK, fontSize: 13.5, lineHeight: 1.45, flex: "1 1 200px", overflowWrap: "anywhere" }}>{detail.offer}</Typography>
-                          <Button size="small" variant="outlined" onClick={acceptOffer} sx={{ textTransform: "none", flex: "0 0 auto" }}>Yes, do it</Button>
-                        </Box>}
                       </Part>}
                       {/* TO DO - the checklist triage drew from the ask (PW-075): boxes are progress on the list, never task completion -
                           closing the task stays the owner's separate decision. The WHOLE LINE is the target, not the 16px box: on a

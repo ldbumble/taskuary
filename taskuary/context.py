@@ -690,13 +690,13 @@ def _recipients(m: dict) -> list: return [a for v in _addresses(m).values() for 
 
 def joins(store, tid: int) -> list:
     """One row per message on a task, oldest first - what is ON FILE about each and no read of the task carried (the stress run,
-    2026-11-10): where it was written (channel, conversation, subject), whom it went to, the addresses behind its words, what triage
-    called THIS message, and the road that put it on this task, in the route's own words. A task is one matter only as far as each road
+    2026-11-10): where it was written (channel, conversation, subject), whom it went to, the addresses behind its words, and whether it
+    opened or joined this task. Never triage's reading of it - its name, its why, "beside the ask": the agent reads the message itself
+    (2026-11-23). A task is one matter only as far as each road
     onto it was right - a mail thread whose subject moved on, a one-to-one chat line joined because triage was unsure, a line typed
     while an agent ran and read by nobody - and the agent working it saw one flat list of bodies. `doubt`: it joined with nothing
     having judged it, or with triage unsure it continues. `key`: (channel, conversation, bare subject) - two keys are two threads."""
     from .channels import kept_links
-    from .ingest import is_aside
     from .linkdocs import _unwrap
     from .routing import norm_subject
     from .outbox import asked
@@ -711,7 +711,7 @@ def joins(store, tid: int) -> list:
         out.append({'mid': m['MessageId'], 'who': asked(m) or m.get('FromName') or m.get('FromEmail') or '?', 'when': str(m.get('SentAt') or ''),
                     'channel': str(m.get('Channel') or ''), 'conversation': str(m.get('ConversationId') or ''), 'subject': str(m.get('Subject') or ''),
                     **_addresses(m), 'links': [[w, _unwrap(h)] for w, h in kept_links(m)], 'empty': not str(m.get('BodyText') or '').strip(),
-                    'title': str(m.get('TriageTitle') or ''), 'road': str(r.get('Reason') or ''), 'joined': joined, 'aside': is_aside(v),
+                    'joined': joined,
                     'unread': joined and not v, 'doubt': joined and (not v or v.get('relationship') == 'uncertain'),
                     'key': (str(m.get('Channel') or ''), str(m.get('ConversationId') or ''), norm_subject(m.get('Subject')))})
     return out
@@ -725,7 +725,7 @@ def came_in(store, tid: int) -> str:
     """joins() as a section, '' when it would say nothing the messages' own text does not. A message is listed for what its text lost:
     whom it went to when that is more than the owner alone, the addresses behind its words, a subject with no body under it. And when
     the task's messages did not all come as one thread read as one matter (two threads, or a join in doubt), EVERY message is listed,
-    with triage's own name for it and how it reached the task - facts for whoever works the task to tell its matters apart by."""
+    with whether it opened or joined the task - facts for whoever works the task to tell its matters apart by."""
     from .ingest import own_addresses
     from .timewords import plural
     rows, own = joins(store, tid), own_addresses(store)
@@ -740,10 +740,8 @@ def came_in(store, tid: int) -> str:
             out.append('behind its words: ' + '; '.join(f'"{_short(w, 60)}" -> ' + (h if len(h) <= LINK_CHARS else h[:LINK_CHARS] + '…') for w, h in r['links'][:CAME_LINKS])
                        + (f" (+{len(r['links']) - CAME_LINKS} more - read_message m{r['mid']} lists them all)" if len(r['links']) > CAME_LINKS else ''))
         if mixed:
-            out.append(' · '.join(x for x in (f"triage called it \"{_short(r['title'], 140)}\"" if r['title'] else '',
-                                              ('joined this task' if r['joined'] else 'opened this task') + (f": {_short(r['road'], 220)}" if r['road'] else ''),
-                                              'nothing read it before it joined' if r['unread'] else '',
-                                              'triage read it as beside the ask' if r['aside'] else '') if x))
+            out.append(' · '.join(x for x in ('joined this task' if r['joined'] else 'opened this task',
+                                              'nothing read it before it joined' if r['unread'] else '') if x))
         if not out and not (r['empty'] and r['subject']): return ''
         return f"[m{r['mid']}] {_short(r['who'], 60)} · {r['when']} · {r['channel']}" + (f" · \"{_short(r['subject'], 120)}\"" if r['subject'] else '') \
                + ''.join(f'\n  {o}' for o in out)
@@ -753,7 +751,7 @@ def came_in(store, tid: int) -> str:
     while len(kept) > 1 and sum(map(len, kept)) > CAME_CHARS: kept = kept[1:]
     lead = (f"{plural(len(rows), 'message')} from {plural(len(keys), 'thread or chat', 'threads or chats')}"
             + (f', {doubt} of them joined with nothing sure it continues the task' if doubt else '')
-            + ' - each line ends with what triage called that message and how it reached this task.\n') if mixed else ''
+            + ' - each line ends with whether that message opened or joined this task.\n') if mixed else ''
     return (f'{CAME_HEAD} (on file; [mNN] is a message\'s id' + (f', {len(lines) - len(kept)} older not listed' if len(lines) > len(kept) else '')
             + ')\n' + lead + '\n'.join(kept))
 

@@ -616,6 +616,7 @@ def template(s) -> str: return ' '.join(_VARYING.sub('#', str(s or '').lower()).
 def notice_template(subject, body) -> tuple: return template(norm_subject(subject)), template(body)
 
 
+READINGS = ('summary', 'checklist', 'reword', 'offer', 'offer_is_reply', 'difficulty', 'sure', 'goal', 'done_when')
 def reused_verdict(store, msg: dict) -> dict | None:
     who, cls, meta = str(msg.get('from_email') or '').strip().lower(), msg.get('sender_class'), msg.get('mail_meta') or {}
     if not who or cls not in ('automated', 'bulk') or msg.get('idea_context'): return None
@@ -630,8 +631,9 @@ def reused_verdict(store, msg: dict) -> dict | None:
     except ValueError: return None
     if len({v.get('intent') for v in vs}) != 1 or vs[0].get('intent') not in REUSABLE: return None
     if store._one('SELECT 1 x FROM correction WHERE lower(Sender)=? AND CreatedAt>=? LIMIT 1', (who, str(same[-1]['CreatedAt'] or ''))): return None
-    v = {k: x for k, x in vs[0].items() if k not in ('notes', 'notes_applied', 'related_message_ids', 'existing_task_id', 'same_as')}
-    return {**v, 'title': str(msg.get('subject') or v.get('title') or '')[:200], 'summary': str(msg.get('subject') or '')[:300], 'reused': True,
+    # ...never the readings an older verdict carried (summary, to-dos, offer, difficulty): triage routes and names, the agent reads the rest
+    v = {k: x for k, x in vs[0].items() if k not in ('notes', 'notes_applied', 'related_message_ids', 'existing_task_id', 'same_as', *READINGS)}
+    return {**v, 'title': str(msg.get('subject') or v.get('title') or '')[:200], 'reused': True,
             'why': f"filed as the last {REUSE_AFTER} like it from {who} were - their verdict reused, no AI call ({str(v.get('why') or '')[:120]})"}
 
 
@@ -1192,9 +1194,9 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         # its card; a start that may not happen says why under the arrival (not_started). Only a thread watched waits with no agent
         elif f['kind'] == 'task' and not watching: f['kind'] = 'general'
         from . import playbooks as _pb
-        # the verdict's own title/summary lead (PW-074); the router's subject/body cut is the fallback
+        # the verdict's own title leads (PW-074); the ask is the sender's own words (draft_task_fields) - an invite's, the calendar's facts
         if intent.get('title'): f['title'] = intent['title']
-        if intent.get('summary'): f['summary'] = intent['summary']
+        if intent.get('invite') and intent.get('summary'): f['summary'] = intent['summary']
         # ...and with the title known, the OTHER identity a repeat can carry. A daily machine alert
         # gets a fresh conversation id every morning, so identity_route rightly finds no thread to
         # join and the owner collects one indistinguishable task per day (TQ-0510 and TQ-0511, the
@@ -1207,16 +1209,11 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         # choose it; general work is the assistant's, so it names nobody (the owner, 2026-11-04)
         from . import agents as hub_agents
         role = hub_agents.routed_role(store, f['kind'])
-        # A GOAL (spec 2026-10-12): the open-ended ask opens as the owner's goal - its done-when sentence, its date, no steps
-        # and nobody on it; the planner proposes the steps behind the arrival, as the New sheet's Set a goal does
-        goal = intent['intent'] == 'task' and bool(intent.get('goal') and intent.get('done_when'))
-        if goal: f['kind'], role = 'task', None
         # ONE ARRIVAL IS ONE WAKE-UP (the load-once pass, 2026-10-27): the task, its message and what rides on them poke one by one, and
         # on a slow machine the task's wake-up went out alone - the page read the rail at once, before the message was in it, and read
         # it again a second later for the message (CI's browser runs). Held here and sent together, the page's one read holds them all.
         with store.one_poke():
             tid = store.create_task({'Title': f['title'], 'Summary': f['summary'], 'Kind': f['kind'],
-                                     **({'DoneWhen': intent['done_when']} if goal else {}),
                                      'Priority': f['priority'], 'Source': msg.get('channel') or 'api',
                                      'SourceRef': msg.get('source_link'),
                                      **({'Tags': _pb.tag(intent['playbook'])} if intent.get('playbook') else {}),
@@ -1228,12 +1225,7 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
             # ...and why it is important, said where the owner reads the task (the verdict text says why - the owner, 2026-10-25)
             if f['priority'] == 'important': store.add_comment(tid, actor, 'agent', f"Marked important - triage: {_priority_why(intent)}")
             if msg.get('_workflow_held'): store.add_comment(tid, 'triage', 'agent', msg['_workflow_held'] + '. It was not started on its own.')
-            if intent.get('checklist') and not goal: store.set_task_checklist(tid, intent['checklist'], 'triage')
             if intent.get('due'): remind.set_due(store, tid, intent['due'], actor)     # the day it is due, as triage read it
-            if goal:
-                from . import goals
-                store.tag_task(tid, 'goal', actor='triage')
-                goals.plan_later(store, tid, goals.words(store.get_task(tid)))
             # ...and NO RECIPIENTS LISTED FOR IT: an email to someone else is the agent's to judge and write (the owner, 2026-11-10: "it created
             # reply with nothing in it" - triage's "email to <them>, to draft" stood under the agent's turn with no words; "action is only
             # needed if it helps user"). The emails a task closes with are the ones its agent or the owner write (slots.draft)
@@ -1243,7 +1235,6 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
                 store.tag_task(tid, REPLY_TAG, actor='triage')
             # ...and WHERE the work is done is the coding agent's to pick when it starts (repochoice, the owner 2026-11-06): nothing here
             mid = _land(store, msg, tid, 'routed')
-            if intent.get('checklist') and not goal: store.source_checklist(tid, mid, 'triage')     # its boxes came from this message
             # ...and the part of a report's run that open work already holds is said on both sides: this task is for the rest (`covered`)
             if covered:
                 _mentioned(store, msg, covered, mid, actor, f" - what is new in it is {task_ref(tid)}")
@@ -1324,11 +1315,6 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
     if intent.get('invite'): reason = f"{intent['why']} · your answer goes out only when you press {buttons.label('approve')}"
     # a split is triage's own decision and recorded as one, so the correction loop and the eval replay read it like any verdict
     store.add_route(mid, tid, r['decision'], r['score'], reason, r['candidates'], 'triage' if split_from else actor, verdict=verdict)
-    # A REPLY NO AGENT WORKS takes what is on the owner from triage's reading (Task 3.5) - where an agent works, its turn summary says it.
-    # A reading is optional (older verdicts, CLI brains): none, or none with an on_you list, leaves the list as it is
-    th = (verdict or {}).get('thread') if isinstance(verdict, dict) else None
-    if tid and isinstance(th, dict) and isinstance(th.get('on_you'), list) and (store.get_task(tid) or {}).get('Kind') == 'reply' and not live_agent(store, tid):
-        store.set_on_you(tid, th['on_you'], 'triage')
     # ...and only now the agent it set going: started before the verdict was on file, the start read no needs_browser, took the quick
     # one-call path, and its session then found the verdict and opened a browser beside one call that never drives a page (2026-11-03)
     for a in starts: _spawn(*a)
@@ -1504,20 +1490,19 @@ def _priority_why(verdict: dict) -> str:
 def _retitle(store, t: dict, msg: dict, intent: dict, actor: str, reopened: bool = False) -> bool:
     """THE TASK SAYS WHAT IS ASKED NOW (the owner, 2026-10-15: "it's still task about come over but now it's about something
     else"). A chat keeps joining one task as the conversation moves on, and its title and summary stayed the FIRST message's
-    - "Gabi asks to come over today" over an hour of talk about an ad. A real ask joined here carries triage's own title and
-    summary for it, and the task takes them; the old title is kept in a note. Only a task this same channel made: a task the
+    - "Gabi asks to come over today" over an hour of talk about an ad. A real ask joined here carries triage's own title for it, and
+    the task takes it; the old title is kept in a note. Only a task this same channel made: a task the
     owner wrote, a goal, a workflow run or a report keeps the name it was given.
 
     ...and only when the ask itself moved (the owner, 2026-10-28): a separate ask is its own task now, so a line that joins is on
     the task's topic and the title stands - unless it `reopened` a closed task or triage says it `refines` the task's own ask.
 
     ...and a line that joins with another part of the task's subject, at the combine level (the owner, 2026-10-29), WIDENS it: never to
-    that line's own ask, but to triage's `task_title`, the common subject of everything on it. The summary stays the task's own."""
+    that line's own ask, but to triage's `task_title`, the common subject of everything on it."""
     narrows = reopened or (intent or {}).get('refines') is True
     wide = ' '.join(str((intent or {}).get('task_title') or '').split())[:120]
     if not (narrows or wide): return False
-    title, summary = ((' '.join(str(intent.get('title') or '').split())[:120], ' '.join(str(intent.get('summary') or '').split()))
-                      if narrows else (wide, ''))
+    title = ' '.join(str(intent.get('title') or '').split())[:120] if narrows else wide
     if not title or str(t.get('Source') or '') != str(msg.get('channel') or ''): return False
     if 'goal' in str(t.get('Tags') or '').split(): return False
     if not narrows:
@@ -1525,10 +1510,8 @@ def _retitle(store, t: dict, msg: dict, intent: dict, actor: str, reopened: bool
         store.update_task(t['TaskId'], {'Title': title}, actor)
         store.add_comment(t['TaskId'], actor, 'agent', f"Now covers: {title} (was: {t.get('Title') or 'untitled'})")
         return True
-    if title == t.get('Title'):
-        if summary and summary != t.get('Summary'): store.update_task(t['TaskId'], {'Summary': summary}, actor)
-        return False
-    store.update_task(t['TaskId'], {'Title': title, **({'Summary': summary} if summary else {})}, actor)
+    if title == t.get('Title'): return False
+    store.update_task(t['TaskId'], {'Title': title}, actor)
     store.add_comment(t['TaskId'], actor, 'agent', f"Now about: {title} (was: {t.get('Title') or 'untitled'})")
     return True
 
@@ -1572,14 +1555,13 @@ def joinable(store, tid, shut: bool = True):
     return tid if ok else None
 
 
-# ONE JOIN DECIDER (one road per decision, #2): words that start work - his in New, the Assistant or the phone, an agent's new_task, a part
-# broken out - were asked "is an open task already this work" by a model call of their own (samework), beside triage's same_as for every
+# ONE JOIN DECIDER (one road per decision, #2): words Taskuary starts work with - an agent's new_task, a part broken out - were asked "is an open task already this work" by a model call of their own (samework), beside triage's same_as for every
 # message: two deciders of one question, each shown the open work its own way. Now triage answers it for them too - the words are read as a
 # message is, with the same open work beside them, and its same_as is the join. No triage brain, no answer, nothing open: new work.
+# NEVER HIS OWN ASK (2026-11-23): what he types in New, on the phone or to the Assistant is a task of its own at once (concierge.handoff_task)
 OWNER_WORDS, WORDS_CHANNEL = 'the owner himself', 'words'
-def same_work(store, words: str, who: str = OWNER_WORDS, skip=(), llm=None, verdict: dict = None) -> int | None:
-    """The open task triage reads `words` as already being (its same_as), or None. `who`: who asks it; `skip`: tasks never to name (the asker).
-    `verdict`: filled with the whole reading - how hard the work is among it - for the caller that makes the new task (handoff_task)."""
+def same_work(store, words: str, who: str = OWNER_WORDS, skip=(), llm=None) -> int | None:
+    """The open task triage reads `words` as already being (its same_as), or None. `who`: who asks it; `skip`: tasks never to name (the asker)."""
     words, skip = ' '.join(str(words or '').split()), {int(x) for x in skip if x}
     if not words: return None
     try:
@@ -1596,7 +1578,6 @@ def same_work(store, words: str, who: str = OWNER_WORDS, skip=(), llm=None, verd
     except Exception as e:
         logger.info(f'the same-work reading was skipped, the work is new: {e}'); return None
     if fail or intent.get('degraded'): return None
-    if verdict is not None: verdict.update(intent)
     try: tid = int(intent.get('same_as'))
     except (TypeError, ValueError): return None
     # ...and never one its agent finished (round 4, 2026-11-22: an ask to get a course approved joined the task that had only kept a fact, its
@@ -1606,13 +1587,12 @@ def same_work(store, words: str, who: str = OWNER_WORDS, skip=(), llm=None, verd
     return tid
 
 
-def arrive_words(store, words: str, frm: str = 'owner', actor: str = 'owner', who: str = None, skip=(), files=None, said: str = None, llm=None,
-                 verdict: dict = None):
+def arrive_words(store, words: str, frm: str = 'owner', actor: str = 'owner', who: str = None, skip=(), files=None, said: str = None, llm=None):
     """WORDS THAT START WORK ARRIVE AS A MESSAGE DOES: triage says whether an open task is already that work (same_work), and where it is they go
     to that task's agent by the one road into it (general.to_agent) - his words as his line (`frm` 'owner'), Taskuary's (an agent's ask, a part
     broken out) as its note, its agent started where none ever worked it. `said`: the words as he typed them, where `words` is a rewording.
-    -> {'tid', 'how'} when they joined; None when they are new work, which the caller makes - `verdict` then holds triage's reading of it."""
-    tid = same_work(store, words, who or (OWNER_WORDS if frm == 'owner' else 'Taskuary, for the agent of another task'), skip, llm, verdict)
+    -> {'tid', 'how'} when they joined; None when they are new work, which the caller makes."""
+    tid = same_work(store, words, who or (OWNER_WORDS if frm == 'owner' else 'Taskuary, for the agent of another task'), skip, llm)
     if not tid: return None
     from . import general
     how = general.to_agent(store, tid, said or words, actor, frm=frm, files=files, **({'wait': False} if frm == 'owner' else {'start': True}))
@@ -1663,7 +1643,6 @@ def land_on(store, msg: dict, tid: int, v: dict | None, actor: str, how: str = '
         store.add_route(mid, tid, 'attach', score, why, [], 'triage', **kw)
         return {'status': 'error', 'task_id': tid, 'message_id': mid}
     v = owed_reply(store, msg, v)       # ...a reply owed only to somebody who reads one
-    reword_todos(store, tid, v)         # ...a correction first, filed or not: the words it changes are on the list already
     # the follow-up's own twelve words, like a new message's - an attached row read its raw subject (X2)
     if v and v.get('title'): msg['_title'] = str(v['title']).strip()[:140] or None
     # A CLOSED TASK COMES BACK ONLY WITH NEW WORK (the owner, 2026-10-15: "it should update the task description if something
@@ -1799,11 +1778,6 @@ def land_on(store, msg: dict, tid: int, v: dict | None, actor: str, how: str = '
             if not msg.get('_reply_agent') and not agent_drafts(store, tid, went):
                 if drafted: store.add_comment(tid, 'triage', 'agent', 'The thread moved - the drafted reply is behind it.')
                 owed = behind['ReviewId']
-    if v and v.get('checklist') and own:
-        # a later message that asks for something new adds boxes; nothing moves or unticks, and the
-        # change is said on the task rather than made silently (PW-076) - only a correction rewords an open one (reword_todos, above)
-        added = store.merge_task_checklist(tid, v['checklist'], 'triage', src=mid)
-        if added: store.add_comment(tid, 'triage', 'agent', 'New from the latest message:\n' + '\n'.join(f"- [ ] {i['text']}" for i in added))
     if (v and v.get('intent') == 'reply_only' and not talking and not v.get('invite')
             and not is_aside(v) and not store.pending_review(tid) and not agent_drafts(store, tid, went)):
         # a fresh question on an existing task is reply-needed there: one pending review for
@@ -1820,12 +1794,6 @@ def land_on(store, msg: dict, tid: int, v: dict | None, actor: str, how: str = '
     # ...or of the person the agent said it was waiting on (waiton.py) - the same owner setting, never a start of its own.
     # A line _carry_on already took (above) is not typed in a second time here
     if not went and (awaited or from_opener(store, tid, msg)): _hand_to_agent(store, cfg, tid, msg, actor)
-    # A REPLY NO AGENT WORKS takes what is on the owner from triage's reading (Task 3.5) - where an agent works, its turn summary says it.
-    # A reading is optional (older verdicts, CLI brains): none, or none with an on_you list, leaves the list as it is.
-    # The reading is of the message's OWN thread, so only a line that came by it sets the list
-    th = (v or {}).get('thread')
-    if how == 'thread' and isinstance(th, dict) and isinstance(th.get('on_you'), list) and (store.get_task(tid) or {}).get('Kind') == 'reply' and not live_agent(store, tid):
-        store.set_on_you(tid, th['on_you'], 'triage')
     logger.info(f"ingest: {how} -> {ref}" + (' and reopened' if back else ''))
     return {'status': 'attached' if how == 'thread' else 'routed', 'task_id': tid, 'message_id': mid}
 
@@ -1935,21 +1903,6 @@ def agent_on(store, tid) -> dict | None:
 def open_todos(store, tid) -> list:
     "A task's to-dos not yet done, as triage is shown them - numbered from 1 in this order, so a correction names the one it changes."
     return [i for i in store.task_checklist(tid) if not i.get('done')][:OPEN_TODOS] if tid else []
-
-
-def reword_todos(store, tid, intent: dict) -> list:
-    """A CORRECTION REWORDS THE TO-DO IT CORRECTS (the owner, 2026-11-09: "Tuesday 10am... sorry, Wednesday" left "book Tuesday" standing beside
-    "book Wednesday"): triage's `reword` [{n, text}] names an open to-do of the task the message joins, by the number it was shown it under
-    (open_todos). Only its words change - nothing is added, ticked or removed here, and a box that ticks itself keeps its words. Said on
-    the task. [(old, new)]"""
-    from .store import agent_tickable, agent_todos
-    if not tid or not intent or intent.get('degraded') or not intent.get('reword'): return []
-    shown = open_todos(store, tid)
-    want = {shown[x['n'] - 1]['id']: (shown[x['n'] - 1]['text'], x['text']) for x in intent['reword'] if 0 < x['n'] <= len(shown)
-            and agent_tickable(shown[x['n'] - 1]) and x['text'] != shown[x['n'] - 1]['text']}
-    if not want or not agent_todos(store, tid, reword={k: new for k, (_, new) in want.items()}, actor='triage').get('ok'): return []
-    store.add_comment(tid, 'triage', 'agent', 'Changed by the latest message:\n' + '\n'.join(f'- {a} -> {b}' for a, b in want.values()))
-    return list(want.values())
 
 
 def with_agent(store, w: dict) -> dict:
@@ -2617,17 +2570,6 @@ def reply_to_agent(store, tid, rid, msg: dict = None) -> bool:
         except Exception as e: logger.warning(f'the reply on task {tid} was not handed to an agent: {e}'); return False
 
 
-# WHAT AN AGENT COULD DO FOR THE OWNER (the owner, 2026-10-28): triage reads the main ask and may say, in one sentence to the owner, what
-# an agent could do about it - "I can register you for the webinar and put it on your calendar". The task shows it; one press starts the
-# general agent on it (server: /api/tasks/{id}/offer). Only on a task no agent works yet; a banter line on the thread offers nothing, so
-# the newest verdict that made an offer still speaks.
-OFFER_TAG = 'offer-taken'
-OFFER_JOB = ('The owner accepted your offer: "{offer}". Do that for them. Registering, signing up, booking, paying or submitting anything '
-             'outside Taskuary waits for the owner\'s yes - in Taskuary\'s browser its brief says how (a press held for their '
-             'Approve, or asking first); otherwise ask them first, with what you would enter. Never press it unasked. Nothing is sent: a reply or a '
-             'message you write waits for their Send.')
-
-
 def connected_systems(store) -> list:
     """The systems this install can reach, as triage is shown them: each signed-in card's name and type (connectorcatalog.connected) -
     a card switched on and never signed in was offered here while Connections said it was not connected. One failing for a moment
@@ -2636,28 +2578,6 @@ def connected_systems(store) -> list:
     try: return [f"{c.get('Name') or c.get('Type')} ({c.get('Type')}){as_now(c)}" for c in connected(store, failing=True)][:40]
     except Exception as e:
         logger.debug(f'ingest: connected systems unread - {e}'); return []
-
-
-def _drafted(store, tid) -> bool:
-    """A reply has been drafted on the task - waiting, sent or edited: the work of an offer that only drafts it is done."""
-    return bool(store._one("SELECT 1 x FROM review WHERE TaskId=? AND COALESCE(Kind,'')<>'action' AND COALESCE(DraftText,'')<>'' "
-                           "AND Status<>'rejected' LIMIT 1", (tid,)))
-
-
-def offer_of(store, tid) -> str:
-    """The offer triage made on this task, '' when there is none, it was taken, or an agent already works the task - or when all it
-    would produce is the reply (the verdict's offer_is_reply) and a reply is already drafted: "I can draft a reply" stood over the
-    draft it offered (B25, the email walk 2026-10-29). Read off the state, never the offer's words."""
-    t = store.get_task(tid) or {}
-    if not t or t.get('Kind') in task_kinds.AGENT or t.get('Status') in ('done', 'dropped'): return ''
-    if OFFER_TAG in re.split(r'[\s,]+', str(t.get('Tags') or '')): return ''
-    # one indexed read of the verdicts that made an offer, newest first - every task page asks this, so it reads no more than that
-    for r in store._rows("SELECT VerdictJson FROM route WHERE TaskId=? AND VerdictJson LIKE '%\"offer\"%' ORDER BY RouteId DESC LIMIT 5", (tid,)):
-        try: v = json.loads(r.get('VerdictJson') or 'null') or {}
-        except (TypeError, ValueError): continue
-        if isinstance(v, dict) and str(v.get('offer') or '').strip():
-            return '' if v.get('offer_is_reply') is True and _drafted(store, tid) else ' '.join(str(v['offer']).split())[:240]
-    return ''
 
 
 # WHAT THE WORK IS DECIDES THE BROWSER, WHEREVER IT IS STARTED (the owner, 2026-10-29: "if it's not hard-coded, triage knows what to do
@@ -3291,14 +3211,10 @@ def task_from_message(store, mid: int, actor: str = 'owner', kind: str = 'coding
                 logger.warning(f'routing memory: kind={kind} on {task_ref(tid)} not learned - {e}')
         return tid
     title = (m.get('Subject') or f"{m.get('FromName') or m.get('FromEmail') or m.get('Channel')} message")[:200]
-    # The ask, not the email. This used to store BodyText[:1000], so the task's own summary was
-    # the greeting, the signature, the legal footer and the quoted thread underneath - and it
-    # carried no checklist, because the automatic road is the only one that had ever asked for
-    # one (the owner, 2026-09-10). Same question, same wording, so a task promoted by hand reads
-    # like a task triage made - but AFTER the press: the task starts on the sender's own words (ask_later).
-    from . import triage as _triage
-    plain = _triage.extract_ask(m)['summary']
-    # what triage made of it while it was filed travels with it: the reading of the ask hears it, and the task's route keeps it (B4)
+    # THE SENDER'S OWN WORDS, not the email: the greeting, signature, footer and quoted chain are not the ask (the owner, 2026-09-10).
+    # Nothing reads them into a summary or to-dos for the agent - it reads the message itself
+    plain = own_ask(m)
+    # what triage made of it while it was filed is kept on the task's route (B4)
     said = earlier_verdict(store, m, mid)
     # ...AND A TASK HE MADE IS HIS (the full Claude walk, 2026-11-19: a CI no-reply notice he put to work read as a stranger's task and held his
     # own typed order behind "You have not trusted CI"): his press is the vouch, as New's and the Assistant's tasks carry it
@@ -3310,7 +3226,6 @@ def task_from_message(store, mid: int, actor: str = 'owner', kind: str = 'coding
     store.arrive(mid, tid, 'routed', decided=True)       # the owner's own hand
     # ...and the message he put to work is vouched for by that press: its words are the task's to work, never held behind its sender's Trust
     if actor in OWNER_ACTORS: store.update_task(tid, {'TrustedThrough': int(mid)}, actor)
-    ask_later(store, tid, m, plain, said)
     # what was said about THIS message before it was work travels with it (operations.py, PW-133)
     from . import operations
     operations.link_discussion(store, tid, [mid])
@@ -3336,14 +3251,12 @@ def split_message(store, mid: int, actor: str = 'owner', kind: str = None) -> in
     if parent and (parent.get('Title') or '').strip().lower() == title.strip().lower():
         title = first_line(body) or title
     title = (m.get('TriageTitle') or '').strip()[:200] or title
-    # the split-off task gets the same treatment as the promoted one: the ask, not the mail - read after the press
-    from . import triage as _triage
-    plain = _triage.extract_ask(m)['summary']
+    # the split-off task gets the same treatment as the promoted one: the sender's own words, not the mail
+    plain = own_ask(m)
     tid = store.create_task({'Title': title, 'Summary': plain,
                              'Kind': kind or (parent or {}).get('Kind') or 'coding',
                              'Source': m.get('Channel') or 'api', 'SourceRef': m.get('SourceLink')}, actor)
     store.arrive(mid, tid, 'routed', decided=True)       # the owner's own hand
-    ask_later(store, tid, m, plain)
     store.add_route(mid, tid, 'create', None,
                     f'split off {task_ref(old)} - a separate ask in the same thread' if old else 'made its own task',
                     [], actor)
@@ -3374,17 +3287,16 @@ def _spawn(fn, *args, **kw):
     threading.Thread(target=fn, args=args, kwargs=kw, daemon=True).start()
 
 
-# A BUTTON NEVER WAITS ON THE AI (the owner, 2026-10-01: "Split, Make a task are buttons - act instantly, triage enriches
-# after"). Make a task, Mine, Dispatch and Split message each asked the model for the summary and the to-dos INSIDE the
-# press, so the row sat on a spinner for as long as the brain took. The task is made from what is known - the subject, the
-# sender's own words, the kind the button says - and the model's reading lands on it in place once it has answered.
-ENRICH_THREAD = 'press-enrich'
+def own_ask(m: dict) -> str:
+    "What the sender typed THIS time - the ask itself, never the chain under it, the signature or the footer (the mailbox's own cut first)."
+    from .triage import own_words, strip_boilerplate
+    own = m.get('OwnText') or m.get('own_text')
+    return ((own and strip_boilerplate(str(own).strip())) or own_words(str(m.get('BodyText') or m.get('body') or '')))[:1000]
 
 
 def earlier_verdict(store, m: dict, mid) -> dict:
-    """{'why', 'danger', 'summary', 'checklist'}: what triage said of a message before it was work - its newest stored verdict's why (the
-    route's reason without its head when no verdict was kept), the ask it read out of it when it wrote one, and what it read the words as
-    trying to make an AI do (`danger`)."""
+    """{'why', 'danger'}: what triage said of a message before it was work - its newest stored verdict's why (the route's reason without
+    its head when no verdict was kept) and what it read the words as trying to make an AI do (`danger`)."""
     why, v = '', {}
     for r in reversed(store.message_routes(mid) if mid else []):
         try: v = json.loads(r.get('VerdictJson') or 'null') or {}
@@ -3392,38 +3304,7 @@ def earlier_verdict(store, m: dict, mid) -> dict:
         if isinstance(v, dict) and str(v.get('why') or '').strip(): why = str(v['why']); break
         v = {}
         if str(r.get('Reason') or '').startswith('triage:'): why = str(r['Reason']).split(' - ', 1)[-1]; break
-    items = [x.strip() for x in (v.get('checklist') or []) if isinstance(x, str) and x.strip()] if isinstance(v.get('checklist'), list) else []
-    return {'why': ' '.join(why.split())[:300], 'danger': danger(store, m, mid), 'summary': str(v.get('summary') or '').strip(), 'checklist': items[:12]}
-
-
-def ask_later(store, tid: int, m: dict, plain: str, earlier: dict = None, summary: bool = True):
-    """Read the ask out of `m` off the press and put it on `tid`. No brain, nothing to wait for: `plain` is the answer. Where triage
-    already read the ask when the message came in (its stored verdict's summary), that reading is it - never a model asked again; a
-    message it read as steering an AI is read again, told so (triage.extract_ask's flagged reading: the owner's own safe checklist).
-    `summary`: False where `plain` is the owner's own ask - his words stay the task's summary; only its steps are read out of them."""
-    if (earlier or {}).get('summary') and not earlier.get('danger'): return _fill(store, tid, plain, earlier, summary)
-    from . import llm as _llm
-    llm = _llm.build_llm(store, job='triage')
-    if llm: threading.Thread(target=_enrich, args=(store, tid, m, plain, llm, earlier, summary), daemon=True, name=ENRICH_THREAD).start()
-
-
-def _fill(store, tid: int, plain: str, ask: dict, summary: bool = True):
-    """Fill in only what the press left plain: an ask or a checklist the owner wrote meanwhile is theirs."""
-    t = store.get_task(tid)
-    if not t: return
-    if summary and ask.get('summary') and ask['summary'] != plain and (t.get('Summary') or '') == plain: store.update_task(tid, {'Summary': ask['summary']}, 'triage')
-    if ask.get('checklist') and not store.task_checklist(tid): store.set_task_checklist(tid, ask['checklist'], 'triage')
-    # ...and a title that is only a link is named from the ask (walk 5, 2026-11-19: "http://127.0.0.1:18803/" stood on the rail)
-    link, said = re.compile(r'\s*<?https?://\S+>?\s*'), ' '.join(str(ask.get('summary') or '').split())
-    if link.fullmatch(str(t.get('Title') or '')) and said and not link.fullmatch(said):
-        store.update_task(tid, {'Title': re.split(r'(?<=[.!?])\s', said)[0][:120]}, 'triage')
-
-
-@aiusage.named('triage.title')       # the triage brain titling a task the owner made by hand: not a mail's triage (aiusage.asking)
-def _enrich(store, tid: int, m: dict, plain: str, llm, earlier: dict = None, summary: bool = True):
-    from . import triage as _triage
-    try: _fill(store, tid, plain, _triage.extract_ask(m, llm, earlier=earlier), summary)
-    except Exception as e: logger.warning(f"the ask on {task_ref(tid)} stays the sender's own words - {e}")
+    return {'why': ' '.join(why.split())[:300], 'danger': danger(store, m, mid)}
 
 
 AUTO_SESSIONS = 4      # DEFAULT unattended sessions to keep alive at once; past this it waits for you
@@ -3509,66 +3390,6 @@ def _auto_code(store, tid):
         from . import funnel
         if funnel.needs_repo(e): funnel.hold_for_repo(store, tid)
         else: bb.record_failure(store, tid, e, agent, label='The coding agent')   # counted, said, and retried on a bounded budget (PW-085)
-
-
-def _is_raw_body(summary: str, body: str) -> bool:
-    """Is this task's summary a COPY of the message rather than a description of the ask?
-
-    Length alone is the wrong test - `body[:1000]` is the fingerprint of the two paths that
-    copied, but a genuine two-sentence summary could be any length and a short mail was copied
-    whole. The definitive test is that the summary is a PREFIX of the message: a model writing
-    two sentences about a mail does not reproduce its opening characters exactly.
-    """
-    s, b = ' '.join(str(summary or '').split()), ' '.join(str(body or '').split())
-    if not s or not b: return False
-    return b.startswith(s[:400]) if len(s) >= 400 else b.startswith(s)
-
-
-@aiusage.named('triage.reread')
-def backfill_asks(store, llm=None, actor: str = 'owner', dry_run: bool = True,
-                  include_closed: bool = False, limit: int = 0) -> list:
-    """Re-derive the ask and the todos for tasks that were filed with the raw email as their ask.
-
-    Two roads produced those: a generated TRIAGE.md that never asked the model for a summary or
-    a checklist (triage.TASK_FIELDS - the model answered intent only, so ingest fell back to
-    routing.draft_task_fields' body[:1000]), and task_from_message, which copied the body by
-    construction. Both are fixed going forward; this is for the rows already on the board.
-
-    Deliberately conservative, because this REWRITES the owner's tasks:
-      - only where the summary is literally a prefix of the source message (_is_raw_body);
-      - never where a checklist already exists - they may have ticked items off it;
-      - open tasks only unless asked otherwise: a closed task's ask is history;
-      - dry_run by default, so the first run tells you what it would do and changes nothing.
-    Returns one row per task considered, each saying what happened and why.
-    """
-    from . import triage
-    out = []
-    for t in store.list_tasks(active_only=not include_closed):
-        # both spellings: in a dry run nothing is 'rewrote', and a limit that only counted that
-        # ran the whole board anyway - which on a paid brain is a bill, not just a slow command
-        if limit and len([o for o in out if o['action'] in ('rewrote', 'would rewrite')]) >= limit: break
-        tid = t['TaskId']
-        msgs = store.list_messages(task_id=tid)
-        src = msgs[0] if msgs else None
-        row = {'task_id': tid, 'ref': task_ref(tid), 'title': t.get('Title') or '', 'action': 'skipped', 'why': ''}
-        if not src: row['why'] = 'no source message to re-read'; out.append(row); continue
-        if store.task_checklist(tid): row['why'] = 'already has a checklist'; out.append(row); continue
-        if not _is_raw_body(t.get('Summary'), src.get('BodyText')):
-            row['why'] = 'summary is not a copy of the message'; out.append(row); continue
-        ask = triage.extract_ask(src, llm)
-        # a fallback that only strips the footer is still worth writing - it is the difference
-        # between the ask and the ask plus an address block - but a no-op is not
-        if ' '.join((ask['summary'] or '').split()) == ' '.join(str(t.get('Summary') or '').split()) and not ask['checklist']:
-            row['why'] = 'nothing better to write'; out.append(row); continue
-        row.update(action='would rewrite' if dry_run else 'rewrote', summary=ask['summary'],
-                   checklist=ask['checklist'], why=f"{len(ask['checklist'])} todo(s)")
-        if not dry_run:
-            store.update_task(tid, {'Summary': ask['summary']}, actor)
-            if ask['checklist']: store.set_task_checklist(tid, ask['checklist'], 'triage')
-            store.audit('task', tid, 'backfill_ask', actor,
-                        detail={'todos': len(ask['checklist']), 'was_chars': len(str(t.get('Summary') or ''))})
-        out.append(row)
-    return out
 
 
 def advisor_brief(store, msg: dict, mid: int) -> str | None:

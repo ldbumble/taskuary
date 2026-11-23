@@ -149,8 +149,7 @@ class NewsBoxIsTheOneStartTests(unittest.TestCase):
         ask = 'Make a chart of monthly spend from this.'
         with mock.patch.object(llm, 'build_llm', return_value=Card()), mock.patch.object(bv, 'installed', return_value=False), \
              mock.patch.object(bv, 'can_set_up', return_value=False), mock.patch.object(apiagent, 'taskuary_tools', return_value=[]), \
-             mock.patch('taskuary.capabilities.has_ai', return_value=True), mock.patch('taskuary.concierge.threading', mock.Mock(Thread=Now)), mock.patch('taskuary.ingest.threading', mock.Mock(Thread=Now)), \
-             mock.patch('taskuary.triage.extract_ask', return_value={'summary': 'The sender asks for a chart. The message has no attached data.'}):
+             mock.patch('taskuary.capabilities.has_ai', return_value=True), mock.patch('taskuary.concierge.threading', mock.Mock(Thread=Now)), mock.patch('taskuary.ingest.threading', mock.Mock(Thread=Now)):
             tid = concierge.handoff_task(self.s, ask, 'general', 'owner', said=ask, files=[str(self.up)], door='New')['taskId']
         self.assertTrue(seen, 'the first turn ran')
         self.assertIn(str(outputs.folder(tid) / 'october-spend.csv'), seen[0])
@@ -166,13 +165,28 @@ class NewsBoxIsTheOneStartTests(unittest.TestCase):
     def test_an_ask_from_new_is_a_new_task_at_once_never_read_by_triage_first(self):
         # the owner, 2026-11-22: "it should not go through triage, no one asked for that. It should create new task right away"
         there = self.s.create_task({'Title': 'Find caterers for the offsite', 'Kind': 'general', 'Status': 'open'}, 'owner')
-        seen = []
-        with triage_reads(there, seen), mock.patch.object(general, 'take_line') as told, mock.patch.object(ingest, 'ask_later') as read:
+        seen, asked = [], []
+        with triage_reads(there, seen), mock.patch.object(general, 'take_line') as told, \
+             mock.patch('taskuary.triage.classify_intent', side_effect=lambda *a, **k: asked.append(a) or {}):
             r = self.start('Find three caterers near the office for the offsite')
         self.assertNotEqual(r.json()['taskId'], there); self.assertFalse(r.json().get('joined'))
-        self.assertEqual(seen, [], 'no reading before the task stands'); told.assert_not_called()
-        # ...and its ask is still read into its steps, beside its agent (walk 5: a 10-step ask got one box, ticked whole)
-        self.assertEqual((read.call_count, read.call_args.args[1]), (1, r.json()['taskId']))
+        self.assertEqual((seen, asked), ([], []), 'no triage reading, before the task stands or after'); told.assert_not_called()
+        # ...HIS WORDS STAY HIS (2026-11-23): no summary, no to-dos read out of them - the one box is his ask as typed; its agent reads it
+        t, ask = self.s.get_task(r.json()['taskId']), 'Find three caterers near the office for the offsite'
+        self.assertEqual((t['Summary'], [i['text'] for i in self.s.task_checklist(t['TaskId'])]), (ask, [ask]))
+
+    def test_his_ask_through_the_assistant_never_passes_triage_either(self):
+        """Every door his own ask comes by - New, the phone, the Assistant's hand-off - is the one start (handoff_task), and none of them
+        asks triage whether it is open work, how hard it is, or what its steps are: it is a task of its own, its agent at work on his words."""
+        there = self.s.create_task({'Title': 'Find caterers for the offsite', 'Kind': 'general', 'Status': 'open'}, 'owner')
+        seen, asked = [], []
+        with triage_reads(there, seen), mock.patch('taskuary.triage.classify_intent', side_effect=lambda *a, **k: asked.append(a) or {}), \
+             mock.patch.object(concierge, '_handoff_brief', return_value='Find three caterers near the office'), \
+             mock.patch.object(concierge, 'start_refusal', return_value=''):
+            made = concierge.handoff_task(self.s, 'Find three caterers near the office', 'general', 'owner')
+        self.assertNotEqual(made['taskId'], there); self.assertFalse(made.get('joined'))
+        self.assertEqual((seen, asked), ([], []))
+        self.assertIsNone(self.s.task_judged(made['taskId']).get('Difficulty'), 'nothing judged how hard it is')
 
 
 class AgentsNewTaskIsTheSameRoadTests(unittest.TestCase):

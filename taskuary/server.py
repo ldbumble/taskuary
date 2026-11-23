@@ -1273,33 +1273,6 @@ def _rail_tids() -> set:
     except Exception as e:
         logger.warning(f'tasks: the rail could not be read for OnWorkToday: {e}'); return set()
 
-def _read_hand_task(tid: int, text: str, goal: bool = False, store=None):
-    """A task typed into + New skips triage, so it had no checklist - one block of words with no boxes (the owner, 2026-10-09:
-    "when i create task the task list looks weird?? (no checkboxes?)"). The same reading a promoted message gets
-    (triage.extract_ask), off the request: each distinct thing asked becomes a box, an email it asks for becomes one of the
-    task's emails. The owner's own words stay the summary. A brain that fails leaves the task as typed. A goal's boxes are
-    its steps (plan_goal)."""
-    if goal: return plan_goal(tid, text)
-    store = store or globals()['store']          # ...the one start (concierge.handoff_task) reads its task in the store it made it in
-    try:
-        from . import concierge, slots, triage
-        from .ingest import own_addresses
-        from .responder import owner_of
-        ask = triage.extract_ask({'body': text}, concierge.brain(store, fast=True))
-        if ask.get('checklist') and not store.task_checklist(tid): store.set_task_checklist(tid, ask['checklist'], 'triage')
-        # ...AND A TITLE THAT IS ONLY A LINK IS NAMED FROM THE ASK (walk 5, 2026-11-19: "http://127.0.0.1:18803/" stood on the rail): the
-        # model's reading of what he asked, its first sentence - a link alone says nothing of the work
-        link = re.compile(r'\s*<?https?://\S+>?\s*')
-        said = ' '.join(str(ask.get('summary') or '').split())
-        if link.fullmatch(str((store.get_task(tid) or {}).get('Title') or '')) and said and not link.fullmatch(said):
-            store.update_task(tid, {'Title': re.split(r'(?<=[.!?])\s', said)[0][:120]}, 'triage')
-        # ...HIS OWN ASK OWES HIM NO EMAIL (a walk, 2026-11-18): "set it up for my press" was read as an email owed to the owner, and its
-        # agent drafted "please approve the note" to him - he is this ask's sender, and his press on the card is the approval
-        me = {'name': owner_of(store), 'address': min(own_addresses(store), default='')}
-        if ask.get('outputs'): slots.add(store, tid, ask['outputs'], 'triage', sender=me)
-    except Exception as e: logger.info(f'could not read the checklist of {task_ref(tid)}: {e}')
-
-
 def plan_goal(tid: int, text: str):
     """The model writes the goal's steps (goals.plan - one planner for the New sheet, Re-plan and triage's goal)."""
     from . import goals
@@ -1308,13 +1281,13 @@ def plan_goal(tid: int, text: str):
 
 @app.post('/api/tasks/{task_id}/read-ask')
 def read_hand_task(task_id: int, background: BackgroundTasks, body: ReadAskBody = None):
-    """+ New asks for its task to be read once it exists (_read_hand_task) - answered at once, read behind it."""
+    """A goal's Plan / Re-plan: the planner writes its steps behind the answer (goals.plan). An ask that is not a goal is never read for
+    to-dos - its agent reads his words (2026-11-23) - so this plans goals only."""
     t = store.get_task(task_id)
     if not t: raise HTTPException(404, 'task not found')
-    goal = bool(body and body.goal) or bool(t.get('DoneWhen'))
-    words = t.get('Summary') or t.get('Title') or ''
-    if goal: words = f"{t.get('Title') or ''}\nDone when: {t.get('DoneWhen') or ''}\n{words}"
-    background.add_task(_read_hand_task, task_id, words, goal)
+    if not (bool(body and body.goal) or bool(t.get('DoneWhen'))): return {'ok': True, 'planned': False}
+    from . import goals
+    background.add_task(plan_goal, task_id, goals.words(t))
     return {'ok': True}
 
 
@@ -2312,12 +2285,6 @@ def _earlier(d: dict) -> list:
     return out
 
 
-def _offer_of(task_id) -> str:
-    from . import ingest
-    try: return ingest.offer_of(store, task_id)
-    except Exception as e: logger.debug(f'offer on task {task_id} not read: {e}'); return ''
-
-
 @app.get('/api/tasks/{task_id}')
 def task_detail(task_id: int, rev: str = '', opened: bool = False):
     """ONE TASK AS ITS PAGE DRAWS IT, read every 3 s while an agent works. Each setting and document its many readers ask (the owner's addresses,
@@ -2411,8 +2378,6 @@ def _task_detail(task_id: int, rev: str = '', opened: bool = False):
             'workstream': hub_ws.label(store, hub_ws.of_task(store, task_id)),
             # an invite waiting on the owner, or a thread asking for a time: the row's Accept / Decline / Propose a new time / Find a time
             'calendar': _calendar_of(task_id, msgs),
-            # ...and what triage said an agent could do for the owner about the main ask - one press starts it (/api/tasks/{id}/offer)
-            'offer': _offer_of(task_id),
             'messages': [_readable(x, verdicts.get(x['MessageId'])) for x in msgs],
             # ...and the earlier messages triage said its ask rests on, shown with them, never moved onto this task (rests_on, 2026-10-22)
             'earlier': _earlier(d),
@@ -3510,29 +3475,6 @@ def _start_refused(task_id: int, body, e):
     if task_id: _start_failed(_pressed_on(task_id, body), e)
     raise StartRefused(c)
 
-
-@app.post('/api/tasks/{task_id}/offer')
-def accept_offer(task_id: int, background: BackgroundTasks):
-    """The owner's one press on triage's offer ("I can register you for the webinar and put it on your calendar", ingest.offer_of):
-    the general agent starts on the task with that as its job - by the one dispatch door, so every check of Send to agent holds.
-    Anything outside that signs up, books, pays or sends still waits for the owner (ingest.OFFER_JOB)."""
-    from . import ingest
-    if not store.get_task(task_id): raise HTTPException(404, 'task not found')
-    offer = ingest.offer_of(store, task_id)
-    if not offer: raise HTTPException(409, 'there is no offer on this task to accept')
-    # ...AN UNTRUSTED SENDER'S TASK IS REFUSED HERE with the hold's own line, as a changed Who does it is (_start_chosen): dispatched, the
-    # session's first turn was refused inside it and the task read "agent done" with Mark done lit, no agent having worked it (the bug
-    # hunt, 2026-11-12) - the offer stays for after Trust
-    from . import origin
-    if h := origin.hold(store, task_id): _start_refused(task_id, None, origin.RefusedForStranger(h['line']))
-    # ...the job is Taskuary's words about the press, and the press is the owner's line in the chat ("You accepted the offer: ...",
-    # general.PRESSES): sent as typed, the whole of OFFER_JOB stood in their bubble (the agent walk, 2026-11-09)
-    out = dispatch_task(task_id, DispatchBody(kind='general', instruction=ingest.OFFER_JOB.format(offer=offer), app_words=True), background)
-    if isinstance(out, dict) and (out.get('started') or out.get('existing')):
-        store.tag_task(task_id, ingest.OFFER_TAG, actor=ACTOR)
-        store.audit('task', task_id, 'offer', ACTOR, detail={'offer': offer})
-        store.add_comment(task_id, ACTOR, 'agent', f'You accepted the offer: {offer}')
-    return out
 
 class WorkstreamBody(BaseModel):
     workstream: str = ''

@@ -533,15 +533,11 @@ def stranger_file_path(tid: int):
     from .store import task_ref
     return stranger_path(tid) / f'{task_ref(tid)}.stranger.md'
 
-# ...HEADED BY THE TASK'S TITLE, AND ITS SUMMARY ONLY WHERE IT IS A READING (2026-11-17): a summary no model wrote is the message's own opening
-# (triage.extract_ask's fallback, ingest._is_raw_body), and over the message it put the same words in the file twice - every road that writes
-# a stranger's file heads it here
+# ...HEADED BY THE TASK'S TITLE ALONE: its summary is the message's own opening (ingest.own_ask), and over the message it put the same words
+# in the file twice (2026-11-17) - every road that writes a stranger's file heads it here
 def stranger_head(store, tid: int, t: dict = None) -> str:
-    from .ingest import _is_raw_body
     t = t or store.get_task(tid) or {}
-    s = str(t.get('Summary') or '').strip()
-    copied = any(_is_raw_body(s, m.get('BodyText')) for m in store.list_messages(tid))
-    return f"TITLE: {t.get('Title') or ''}" + ('' if copied or not s else f"\nSUMMARY: {s}")
+    return f"TITLE: {t.get('Title') or ''}"
 
 def stranger_file(store, tid: int, parts: list) -> str:
     stranger_dir(tid); p = stranger_file_path(tid)      # made private and checked for a planted link before a word is written

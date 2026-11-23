@@ -521,6 +521,13 @@ def no_stop_left_over():
 
 
 @pytest.fixture(autouse=True)
+def no_verdict_left_over():
+    "The browser gate keeps a verdict per page and control for a while (browsergate.SEEN): one test's page is the next one's too."
+    from taskuary import browsergate
+    browsergate.SEEN.clear(); yield
+
+
+@pytest.fixture(autouse=True)
 def no_adapter_priming(monkeypatch):
     "A server a test starts never launches the real ACP adapters to warm them (agents.prime_adapters)."
     from taskuary import agents

@@ -344,8 +344,9 @@ def page(sid: str) -> dict:
     from . import signin
     url = address(sid, st)
     # ...and what the site is called for him (signin.site_name): a page reached by a bare address by its own title, never "127.0.0.5"
+    form = signin.form_state(sid) if rc == 0 else {}         # ...and whether a password box of it holds one (pw): an account's form
     pg = _PAGES[str(sid)] = {'url': url, 'open': bool(st.get('open')), 'elements': snap[:SNAP_MAX] if rc == 0 else '',
-                             'fields': signin.form_fields(sid) if rc == 0 else [], 'name': signin.site_name(url, sid) if url else ''}
+                             'fields': form.get('fields') or [], 'pw': bool(form.get('pw')), 'name': signin.site_name(url, sid) if url else ''}
     return pg
 
 
@@ -507,6 +508,20 @@ def ask_acts(store, brain, system: str, user: str, want: dict, n: int) -> list |
 def judge(store, todo: list, pg: dict, brain=None, wait: float = None, said: str = '') -> list:
     "[{hold, what, why}] for each act of the line, in order, under JUDGE_WAIT."
     return timed(lambda: _judge(store, todo, pg, brain, said), JUDGE_WAIT if wait is None else wait, [_unjudged(a, pg) for a in todo])
+def judged(store, todo: list, pg: dict, brain=None, said: str = '') -> list:
+    "judge() for the command road (_check): each act judged once per page, control and form as they stand (SEEN)."
+    keys, now = [_seen_key(a, pg, said) for a in todo], time.time()
+    if all((g := SEEN.get(k)) and now - g[0] < SEEN_FOR for k in keys): return [dict(SEEN[k][1]) for k in keys]
+    out = judge(store, todo, pg, brain, said=said)
+    if not any(v.get('why') == _late('').get('why') for v in out):         # ...a verdict out of time is no verdict to keep
+        for k, v in zip(keys, out): SEEN[k] = (now, dict(v))
+        for k in [k for k, (t, _) in list(SEEN.items()) if now - t >= SEEN_FOR]: SEEN.pop(k, None)
+    return out
+# ...ONE VERDICT PER CONTROL ON A PAGE AS IT STANDS (walk 9, 2026-11-23: 6-13.6 s a browser command, the same Next on the same form asked again on
+# every try): the page, the control as its snapshot names it, the boxes the form holds and his words - any of them changed is asked again
+SEEN, SEEN_FOR = {}, 300.0
+def _seen_key(a: dict, pg: dict, said: str) -> tuple:
+    return (pg.get('url') or '', _cmd(a), target(a, pg), json.dumps(pg.get('fields') or [], sort_keys=True), bool(pg.get('pw')), said or '')
 
 
 def _judge(store, todo: list, pg: dict, brain=None, said: str = '') -> list:
@@ -560,7 +575,11 @@ def _verdict(act: dict, v: dict | None, pg: dict, said: str, mine: bool = False)
     # ...filling the form sends nothing - the press that sends it is judged by what it then holds - unless the judge is SURE it saves itself
     # and cannot be undone (a settings toggle)
     if fills(act, pg) and not (sure and irr): return {'hold': False, 'what': what, 'why': ''}
-    if big is True and str(v.get('kind') or '') == 'private' and mine: big = False
+    # ...and a form holding his name and email alone (a newsletter, a sign-up he asked for) carries no words of his to anybody, and an account
+    # form whose password the agent typed is a sign-up or a sign-in, never a message (walk 9, 2026-11-23: a free email account's last Next and a
+    # free newsletter held "it speaks for you to other people", against his ask): facts of the form, read by code. A post's box still waits
+    if big is True and str(v.get('kind') or '') in ('private', 'speaks') and mine: big = False
+    if big is True and str(v.get('kind') or '') == 'speaks' and pg.get('pw') and not any(f.get('t') == 'textarea' for f in pg.get('fields') or []): big = False
     # ...and following a link sends nothing of his - no form, no words: it cannot send his details or speak for him, whatever the judge named
     # it (the Claude CLI walk, 2026-11-22: "Open the Sign up page on ZoningNow" held as speaking for him). Money or a delete by a link still waits
     if big is True and str(v.get('kind') or '') in ('private', 'speaks') and follows(act, pg): big = False
@@ -631,7 +650,7 @@ def _check(store, tid: int, sid: str, cmd: str, brain=None, cwd: str = '') -> di
         # ...PLAIN TYPING PASSES WITHOUT A VERDICT: nothing leaves the page until something is pressed, and a model call per box was six
         # seconds a box - four boxes a sign-up, thirteen sign-ups (the vendor walk, 2026-11-18)
         if typing(a): continue
-        if vs is None: vs = iter(judge(store, [x for x in todo[i:] if not x.get('read') and not typing(x)], pg, brain, said=said))
+        if vs is None: vs = iter(judged(store, [x for x in todo[i:] if not x.get('read') and not typing(x)], pg, brain, said=said))
         v = next(vs)
         if not v['hold']: continue
         args = _own_args(a['args'])

@@ -917,3 +917,34 @@ def test_a_tab_holding_a_step_is_never_moved_on_the_next_site_opens_in_a_new_tab
         with mock.patch.object(browserview, 'active_tab', return_value='T2'):
             assert bg.check(s, tid, 'run1', 'agent-browser open https://next.vendor.example/signup') == {}, 'another tab moves freely'
         s._exec("UPDATE review SET Status='superseded' WHERE TaskId=?", (tid,))
+
+
+class HisAskCoversWhatItNames(unittest.TestCase):
+    """Walk 9, 2026-11-23: "Sign me up for a free email account" - the last Next of the sign-up held "it speaks for you to other people"; "sign
+    me up to two AI newsletters" - its form with his own address held the same. And each verdict took 6-13.6 s, asked again for the same
+    control on the same page."""
+    def setUp(self): self.s = MemoryStore(); self.act = bg.acts('agent-browser click @e12')[0]
+
+    def test_an_account_form_or_a_form_of_his_name_and_email_alone_never_speaks_for_him_and_a_post_still_waits(self):
+        self.s.set_setting('owner_name', 'Alex Doyle', 't'); self.s.set_setting('owner_email', 'alex@northwind.example', 't')
+        speaks = {'big': True, 'kind': 'speaks', 'sure': True, 'irreversible': True, 'what': 'Submit the sign-up form on mail.example'}
+        made = [{'k': 'first', 't': 'text', 'v': 'Robin'}, {'k': 'user', 't': 'text', 'v': 'robin.tests.2026'}]
+        mine = [{'k': 'email', 't': 'email', 'v': 'alex@northwind.example'}]
+        with verdict(speaks):
+            self.assertFalse(one(self.s, self.act, {'url': CHECKOUT, 'fields': made, 'pw': True}, Brain(None), said='Sign me up for a free email account')['hold'],
+                             'an account form, its password typed: a sign-up, never words to people')
+            self.assertFalse(one(self.s, self.act, {'url': CHECKOUT, 'fields': mine}, Brain(None), said='Sign me up to two AI newsletters')['hold'],
+                             'a form of his address alone carries no words of his')
+            self.assertTrue(one(self.s, self.act, {'url': CHECKOUT, 'fields': [{'k': 'msg', 't': 'textarea', 'v': 'Big news'}]}, Brain(None), said='post it')['hold'])
+            self.assertTrue(one(self.s, self.act, {'url': CHECKOUT, 'fields': made}, Brain(None), said='')['hold'], 'no password typed: as the judge said')
+
+    def test_the_same_control_on_the_same_page_and_form_is_judged_once(self):
+        calls, ok = [], {'big': False, 'sure': True, 'irreversible': False, 'what': 'Next'}
+        tid = Factory(self.s).task('Make a test inbox')
+        pg = {'url': CHECKOUT, 'open': True, 'elements': SNAP, 'fields': [{'k': 'first', 't': 'text', 'v': 'Robin'}]}
+        with answers(ok, calls=calls):
+            with mock.patch.object(bg, 'page', return_value=pg):
+                for _ in range(3): self.assertEqual(bg.check(self.s, tid, 'run1', 'agent-browser click @e12', Brain(None)), {})
+            with mock.patch.object(bg, 'page', return_value={**pg, 'fields': [{'k': 'first', 't': 'text', 'v': 'Sam'}]}):
+                bg.check(self.s, tid, 'run1', 'agent-browser click @e12', Brain(None))
+        self.assertEqual(len(calls), 2, 'once per page, control and form as they stand - a changed form is asked again')

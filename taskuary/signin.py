@@ -1732,11 +1732,14 @@ def pressing(store, tid, sid, site, conn=None) -> None:
 
 def form_fields(sid) -> list:
     "The boxes the agent filled on the page its browser is on (FORM) - kept with a card held there, so his press can fill it again. [] unread."
+    return form_state(sid).get('fields') or []
+def form_state(sid) -> dict:
+    "The form on the page its browser is on, as FORM reads it ({fields, pw, ...}) - {} unread."
     try:
         c = connect(sid)
-        try: return (c.js(FORM) or {}).get('fields') or []
+        try: return c.js(FORM) or {}
         finally: c.close()
-    except Exception: return []
+    except Exception: return {}
 
 
 def settled(store, sid, conn=None) -> str:

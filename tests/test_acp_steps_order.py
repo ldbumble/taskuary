@@ -45,14 +45,16 @@ def test_the_trace_of_a_run_has_each_call_once_with_the_input_it_ended_on():
                    ('tool_result', 't1'), ('progress', 'All 212 pass.')]
 
 
-def test_the_writing_line_never_shows_the_summary_cut_from_its_tag():
-    # 2026-11-17: the line of what it is writing kept the last 600 characters, and once the summary block passed them its opening
-    # tag fell off the front - the line read '..."], "nothing_left": false, "answ' since nothing downstream could tell it was the summary
-    out, prose = [], ' '.join(['Checked the ledger against the invoice and the totals agree.'] * 34)
-    s = agents.ACPSteps(lambda kind, name, detail=None: out.append((kind, name, detail)), 'claude')
-    s(say(prose + '\n[[TASKUARY-SUMMARY]]{"did": "checked it", "on_you": ["press Send on the reply to Erin Blake"], "nothing_left": false, "answ'))
-    live = [d for k, n, d in out if k == 'live' and n == 'writing']
-    assert live and live[-1].endswith('totals agree.') and '[[' not in live[-1] and 'nothing_left' not in live[-1]
+def test_a_streamed_row_never_shows_taskuarys_own_marks_whole_or_arriving():
+    # 2026-11-17 / ACP rows 2026-11-23: words stream into their own row, and an agent with no end_turn tool writes the summary mark into its
+    # message - it must never reach his screen, whole or cut off mid-arrival
+    from taskuary import conversation
+    prose = 'Checked the ledger against the invoice and the totals agree.'
+    whole = conversation.acp_steps([say(prose + '\n[[TASKUARY-SUMMARY]]{"did": "checked it", "nothing_left": false}')])
+    arriving = conversation.acp_steps([say(prose + '\n[[TASKUARY-SUMM')])
+    for got in (whole, arriving):
+        said = [s['text'] for s in got if s['k'] == 'said']
+        assert said == [prose], said
 
 
 def test_a_message_cut_by_a_line_he_typed_mid_turn_is_its_own_step():

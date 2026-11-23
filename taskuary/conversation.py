@@ -454,8 +454,15 @@ def acp_steps(updates: list) -> list:
         # ...each new step keeps its update's exact clock (`_t`, record_update): a stamp to the millisecond put the words said right after his
         # press, in the press's own millisecond, ABOVE it - the ledger's hand-over time is finer (a CI runner, 2026-11-12)
         if u.get('_t'): [x.setdefault('_t', u['_t']) for x in out[n0:]]
-    for s in out: s.pop('open', None); s.pop('mid', None)
-    return out
+    # ...AND WHAT IS SAID READS AS THE OWNER READS IT (the ACP rows, 2026-11-23: words now stream into their own row, and an agent with no
+    # end_turn tool still writes Taskuary's [[TASKUARY-...]] marks into its message): the app's own marks are cut, a mark still arriving
+    # is cut from its opening brackets, and a row left empty goes
+    from .selfclose import for_screen
+    for s in out:
+        s.pop('open', None); s.pop('mid', None)
+        if s['k'] == 'said' and '[[' in str(s.get('text') or ''):
+            t = for_screen(s['text']); s['text'] = re.sub(r'\[\[[^\]]*$', '', t).rstrip()
+    return [s for s in out if not (s['k'] == 'said' and not str(s.get('text') or '').strip())]
 
 
 # EVERY ROAD WRITES THE AGENT'S OWN SHAPE (the owner, 2026-11-23: "Does this work for both ACP and HIPAA AI or any AI we use?"): a road that is

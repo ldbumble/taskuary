@@ -289,8 +289,35 @@ def test_a_folder_toggle_runs_the_cli(world):
 
 def test_the_assistant_reads_none_of_the_owners_user_settings(monkeypatch):
     monkeypatch.setattr(agents, 'cli_has_flag', lambda name, flag: True)
-    assert agents._own_settings({'user_settings': False, 'cmd': 'claude'}, 'claude') == ['--setting-sources', 'project,local']
-    assert agents._own_settings({'cmd': 'claude'}, 'claude') == [], 'coding agents keep theirs - and their Reason Network'
+    args = agents._own_settings({'user_settings': False, 'cmd': 'claude'}, 'claude', ['-p'])
+    assert args[:3] == ['-p', '--setting-sources', 'project,local']
+    assert agents._own_settings({'cmd': 'claude'}, 'claude', ['-p']) == ['-p'], 'coding agents keep theirs - and their Reason Network'
+
+
+@pytest.mark.acp
+def test_a_judge_call_reads_none_of_the_laptop_users_own_claude_md_on_either_road(monkeypatch, tmp_path):
+    """Walk 6: every triage call carried the laptop user's ~/.claude/CLAUDE.md - "override any default behavior", and his real first name
+    in a summary. --setting-sources leaves that file in (the real CLI, 2.1.330), and the ACP road was handed no setting at all. A brain with
+    no hands runs with only the app's own instructions, on the argv road and the ACP road alike, and a --settings it carried is kept."""
+    import json
+    from pathlib import Path
+    from unittest import mock
+    from taskuary import config
+    monkeypatch.setattr(agents, 'cli_has_flag', lambda name, flag: True)
+    monkeypatch.setattr(config, 'home', lambda: tmp_path)
+    fast = tmp_path / 'fast.json'; fast.write_text('{"fastMode": true}', encoding='utf-8')
+    judge = {'user_settings': False, 'cmd': 'claude', 'args': ['-p', '--tools', '', '--settings', str(fast)]}
+    def settings(args):
+        assert args.count('--settings') == 1, args
+        return json.loads(Path(args[args.index('--settings') + 1]).read_text(encoding='utf-8'))
+    argv = agents._own_settings(judge, 'claude', judge['args'])
+    got = settings(argv)
+    assert got['fastMode'] is True and got['claudeMdExcludes'] == hooks.not_his()['claudeMdExcludes']
+    assert f'{Path.home().as_posix()}/.claude/CLAUDE.md' in got['claudeMdExcludes']
+    with mock.patch.object(agents.pathcache, 'which', return_value=None), mock.patch.object(agents, '_resolve_cmd', return_value=['/opt/bin/claude']):
+        opts = agents.acp_launch(judge)['meta']['claudeCode']['options']
+    assert opts['settingSources'] == ['project', 'local']
+    assert json.loads(Path(opts['settings']).read_text(encoding='utf-8'))['claudeMdExcludes'] == hooks.not_his()['claudeMdExcludes']
 
 
 def test_the_gate_endpoint_takes_the_assistants_folder_off_too(world, monkeypatch):

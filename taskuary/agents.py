@@ -1636,7 +1636,7 @@ def acp_launch(profile: dict) -> dict:
     except FileNotFoundError as e: raise acp_mod.ACPStartError(f"{ad['pkg']} cannot launch: {e}") from e
     cli = (_resolve_cmd(name) or [name])[-1]
     env = {k: v.replace('{cli}', cli) for k, v in ad['env'].items()}
-    args = list(profile.get('args') or clis_mod.preset_args(name) or [])
+    args = _own_settings(profile, name, list(profile.get('args') or clis_mod.preset_args(name) or []))
     meta = None
     if family == 'claude':
         opts = claude_acp_options(args)
@@ -2037,7 +2037,7 @@ def run_cli(profile: dict, prompt: str, trace, resume: str = None, cancel=None, 
     # trust prompt, so every one of those died before the model was reached (issue #34). The flag
     # only relaxes WHERE codex may run; the sandbox flags decide what it may do.
     if is_codex and '--skip-git-repo-check' not in args: args.append('--skip-git-repo-check')
-    cmd = _resolve_cmd(name) + args + _model_args(profile, name) + _own_settings(profile, name)
+    cmd = _resolve_cmd(name) + _own_settings(profile, name, args) + _model_args(profile, name)
     # A CONVERSATION KEPT OPEN: the Assistant and the general agent name theirs (`keep_alive`), and claude's
     # stream-json input serves every turn from one process instead of starting the CLI per call (clipool).
     keep = profile.get('keep_alive')
@@ -2306,14 +2306,21 @@ def cli_has_flag(name: str, flag: str) -> bool:
     return _FLAGS[(exe, flag)]
 
 
-def _own_settings(profile: dict, name: str) -> list:
+def _own_settings(profile: dict, name: str, args: list) -> list:
     """THE ASSISTANT READS NONE OF THE OWNER'S USER-LEVEL CLAUDE SETTINGS (the owner, 2026-10-21): their user-wide hooks POST to this app
     on every prompt and every stop - 0.3-0.5 s a turn, measured - and its headless, tool-less brain has no use for them. Only a profile
-    that asks (user_settings False: the Assistant's); coding and general agents keep theirs. A claude without the flag runs as before."""
-    if profile.get('user_settings') is not False or _cli_name(name) != 'claude': return []
-    args = list(profile.get('args') or [])
-    if '--setting-sources' in args or not cli_has_flag(name, '--setting-sources'): return []
-    return ['--setting-sources', 'project,local']
+    that asks (user_settings False: the Assistant's, and every one-shot with no hands - triage, summaries, judges, reports: llm.make_cli_llm);
+    coding and general agents keep theirs. `args` as they run, with that applied - on the argv road and the ACP road alike.
+    ...AND NONE OF HIS OWN CLAUDE.md (walk 6, 2026-11-23: every triage call carried the laptop user's ~/.claude/CLAUDE.md, its "override any
+    default behavior" and his real name among it - --setting-sources leaves that file in, and the ACP road was handed neither): kept out in
+    the one --settings Claude reads (hooks.not_his), merged into one the run already carries. A claude without the flag runs as before."""
+    args = list(args)
+    if profile.get('user_settings') is not False or _cli_name(name) != 'claude': return args
+    if '--setting-sources' not in args and cli_has_flag(name, '--setting-sources'): args += ['--setting-sources', 'project,local']
+    from . import hooks
+    i = args.index('--settings') if '--settings' in args[:-1] else -1
+    f = hooks.not_his_file(args[i + 1] if i >= 0 else '')
+    return (args[:i] + ['--settings', f] + args[i + 2:] if i >= 0 else args + ['--settings', f]) if f else args
 
 
 def _keeps(profile: dict, family: str, args: list) -> bool:
@@ -2336,7 +2343,7 @@ def warm_cli(profile: dict, resume: str = None, extra_env: dict = None, store=No
     if profile.get('keep_alive') and _acp_road(profile, store) and (ok := _warm_acp(profile, resume, extra_env, store, swap)) is not None: return ok
     if not _keeps(profile, _cli_name(name), args): return False
     from . import clipool
-    try: return clipool.warm(profile['keep_alive'], _resolve_cmd(name) + args + _model_args(profile, name) + _own_settings(profile, name),
+    try: return clipool.warm(profile['keep_alive'], _resolve_cmd(name) + _own_settings(profile, name, args) + _model_args(profile, name),
                              cwd=profile.get('cwd'), env=spawn_env(profile, extra_env), resume=resume, swap=swap)
     except PermissionError as e: raise FileNotFoundError(denied_msg(name, name, e)) from e
 

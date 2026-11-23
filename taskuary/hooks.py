@@ -805,13 +805,28 @@ def _session_file(name: str, d: dict) -> str:
     return str(f)
 
 
+def not_his() -> dict:
+    "The settings that keep the owner's own CLAUDE.md, and all under his ~/.claude, out of a run - which no --setting-sources does."
+    return {'claudeMdExcludes': [f'{Path.home().as_posix()}/.claude/CLAUDE.md', f'{Path.home().as_posix()}/.claude/**']}
+
+
+def not_his_file(base: str = '') -> str:
+    """One --settings file for a run that reads none of the owner's own setup: `base` (a settings file the run already carries - Claude keeps
+    only the last one it is given) with not_his merged in. '' when it cannot be written."""
+    import hashlib
+    try: d = json.loads(Path(base).read_text(encoding='utf-8')) if base else {}
+    except (OSError, ValueError): d = {}
+    d = {**(d if isinstance(d, dict) else {}), **not_his()}
+    return _session_file(f"headless-{hashlib.sha1(json.dumps(d, sort_keys=True).encode()).hexdigest()[:12]}", d)
+
+
 def general_settings(task_id, sid: str = '') -> str:
     """Claude's ONE --settings for a general task's session, which reads none of the owner's own Claude setup (the owner, 2026-11-09:
     a WhatsApp task's agent read their coding-style guide, their plugins' skills, and searched mail through their claude.ai connector).
     --setting-sources leaves out their user settings - and with them the user-wide hooks this app reports through - so Taskuary's
     own hooks ride here, with the browser hold naming its chat; their own CLAUDE.md, which no setting source reaches, is excluded.
     Claude keeps only the last --settings it is given, so this is the whole file."""
-    d = {'hooks': session_hooks(), 'claudeMdExcludes': [f'{Path.home().as_posix()}/.claude/CLAUDE.md', f'{Path.home().as_posix()}/.claude/**']}
+    d = {'hooks': session_hooks(), **not_his()}
     # ...THE SHELL HOLD NAMES ITS TASK (the real-CLI walks, 2026-11-12): a chat's session is found by its CLI's conversation id, which its
     # first turn has not given it yet - so a delete held in that turn passed the hook unread, was held at the ACP permission instead, and
     # the agent heard only "User refused permission": never the hold's own words, and it told the owner the step "waits for your approval"

@@ -292,7 +292,10 @@
 .tq-day-agenda { min-width: 0; }
 /* the list's pitch is assistantCards' EV_ROW / EV_NOW: it asks for that much room, and the rest scrolls inside */
 .tq-day-evs { position: relative; flex: 1 1 auto; }
-.tq-day-evs > .in { position: absolute; inset: 0; overflow-y: auto; scrollbar-width: thin; }
+/* ...and only a day longer than the card shows scrolls (the owner, 2026-11-23: one meeting drew a scroll bar - its room is the lines' sum,
+   and a scaled screen rounds it a pixel short): a day that fits never draws a bar, whatever the rounding */
+.tq-day-evs > .in { position: absolute; inset: 0; overflow: hidden; }
+.tq-day-evs.scrolls > .in { overflow-y: auto; scrollbar-width: thin; }
 .tq-day-agenda .ev { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 10px; align-items: baseline; height: 22px; }
 .tq-welcome .tq-day-agenda .t { font: 500 11.5px/22px 'IBM Plex Mono', Consolas, monospace; color: var(--tq-text, #262521); white-space: nowrap; }
 .tq-welcome .tq-day-agenda .s { font-size: 13px; line-height: 22px; color: var(--tq-secondary, #6e685f); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

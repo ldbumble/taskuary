@@ -1514,7 +1514,7 @@ export function DayOpener({ groups = [], onSection, top = null, loading = false 
         <div className="tq-day-pane tq-day-agenda">
           <div className="tq-day-h">Your day · {plural(evs.length, "meeting")}</div>
           {/* the list takes no height of its own past `room`: the card is as tall as its row, and the rest of the day scrolls */}
-          <div className="tq-day-evs" style={{ minHeight: room }}><div ref={evsRef} className="in" data-tq-day-evs="">
+          <div className={`tq-day-evs${nLines > EV_SHOWN ? " scrolls" : ""}`} style={{ minHeight: room }}><div ref={evsRef} className="in" data-tq-day-evs="">
             {allDay.map((e) => <div key={e.subject} className="ev allday"><span className="t">all day</span><span className="s"><b>{e.subject}</b></span></div>)}
             {evs.map((e, i) => (
               <React.Fragment key={`${e.start}-${i}`}>

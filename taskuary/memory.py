@@ -9,7 +9,13 @@ and his sign-off lived in two homes. Now there are three stores, told apart by W
   said      what HE said, in his words: his rules, his hours, who handles what now. One line per SUBJECT - a correction on the same
             subject replaces the line before it (the subject the model names, never a match of the words). In use at once, everywhere
   inferred  what was learned from what he DID - a verdict, a reflection over his episodes - with its evidence and how often it was seen.
-            Never shown or used as his word; used at all only once he confirms it (Keep, or Adopt on the habits row)
+            Never shown or used as his word. It goes into use BY ITSELF once his own acts bear it out - AUTO_AT distinct episodes, or a
+            press "like this, from now on" - and never by asking him (the owner, 2026-11-23: "we don't want to have to confirm manually").
+            Wrong or Forget takes it down at once; an act that goes against it weakens it (`weaken`)
+
+Memory is SHORT - conclusions (how he works, who handles what, his rules, his preferences), never records: those are the ledger's and
+the Hub's. A learned line is one sentence (MAX_WORDS); at most PER_ABOUT are kept about one person or topic and CAP in use in all, LEARNING
+still being seen - past them the line least recently borne out falls out first (`_trim`).
 
 How he writes is read from his sent mail (STYLE.md, learning.style_ws) and from what he said; his signature has ONE home, the
 `email_signature` setting (signatures.keep writes it, the Memory page shows it among what he said).
@@ -24,10 +30,14 @@ from loguru import logger
 
 DOC, BACKUP = 'learned', 'learned-before-r10'       # LEARNED.md, the stores' face; and the document as it stood before them, kept whole
 FACT, SAID, INFERRED = 'fact', 'said', 'inferred'
-LIVE, DOWN = 'live', ('replaced', 'wrong', 'forgotten', 'closed')
+LIVE, DOWN = 'live', ('replaced', 'wrong', 'forgotten', 'closed', 'dropped')
 WHOLE_CAP = 60_000            # ~15k tokens: past it the learned lines about one sender or topic go first, oldest first
 TASK_CAP = 6_000              # the confirmed learned lines a task's context carries; what he said rides whole
 MIGRATED = 'memory_r10'       # the setting that says LEARNED.md was read into the stores
+IN_USE_FIX = 'memory_r10_in_use'   # ...and that the lines in use before r10 were put back in use (its first cut left them waiting on a press)
+AUTO_AT = 3                   # distinct episodes of his own acts that put a learned line in use - LEARNED.md's bar from the beginning
+CAP, LEARNING, PER_ABOUT = 60, 30, 6    # learned lines in use (about what LEARNED.md held), still being seen, and about one person or topic
+MAX_WORDS = 30                # a conclusion is one sentence; a longer line is a record, and records are the ledger's
 _ADDR = re.compile(r'[\w.+-]+@[\w-]+(?:\.[\w-]+)+')
 SCOPE_SAYS = {'sender': '{}', 'sender_domain': 'anyone at {}', 'subject': 'the topic "{}"', 'source': 'mail arriving on "{}"'}
 YOURS = "That line is yours - you said it, so it is not something Taskuary learned wrong. Forget takes it out."
@@ -73,7 +83,7 @@ def rows(store, kind: str = None, live: bool = True) -> list:
 
 
 def in_use(store) -> list:
-    "What every reader may lean on: what he said, and what was learned that he confirmed."
+    "What every reader may lean on: what he said, and what was learned that his own acts bore out."
     return [r for r in rows(store) if r['Kind'] == SAID or r['Confirmed']]
 
 
@@ -217,10 +227,11 @@ def told(store, doc: str, text: str, actor: str = 'owner') -> dict:
 def infer(store, text: str, subject: str, ev=(), people=(), scope: str = 'global', key: str = '', source: str = 'learn',
           confirmed: bool = False) -> dict:
     """A line learned from what the owner did. The same subject learned again is the same line with more evidence - its newest words,
-    unless he confirmed the old ones. Never over what he said on that subject, never over a line he marked Wrong. {} when not written."""
+    until it is in use. In use by itself at AUTO_AT distinct episodes, or at once when `confirmed` (his press "from now on"). Never over
+    what he said on that subject, never over a line he marked Wrong, never a record (past MAX_WORDS). {} when not written."""
     t = ' '.join(str(text or '').split()).lstrip('-* ').strip()
     sk, ev = subject_of(subject), [e for e in dict.fromkeys(str(e).strip() for e in ev or ()) if e]
-    if not t or not sk: return {}
+    if not t or not sk or len(t.split()) > MAX_WORDS: return {}
     if store._one("SELECT 1 x FROM memory_line WHERE Kind=? AND Status='wrong' AND (Subject=? OR lower(Text)=?)", (INFERRED, sk, t.lower())): return {}
     if any(r['Kind'] == SAID and subject_of(r['Subject']) == sk for r in rows(store, SAID)): return {}
     ppl = set(people or ()) | names(t) | ({key.lower()} if scope == 'sender' and key else set())
@@ -228,19 +239,56 @@ def infer(store, text: str, subject: str, ev=(), people=(), scope: str = 'global
     if hit:
         more = [e for e in ev if e not in hit['ev']]
         if not more and (hit['Confirmed'] or not confirmed): return hit
-        allev = hit['ev'] + more
+        allev, used = hit['ev'] + more, hit['Confirmed'] or confirmed or hit['N'] + len(more) >= AUTO_AT
         store._exec('UPDATE memory_line SET Text=?, Ev=?, N=N+?, Confirmed=?, People=?, UpdatedAt=? WHERE Id=?',
-                    (hit['Text'] if hit['Confirmed'] else t, ','.join(allev), len(more), int(bool(hit['Confirmed'] or confirmed)),
+                    (hit['Text'] if hit['Confirmed'] else t, ','.join(allev), len(more), int(bool(used)),
                      ','.join(sorted(set(hit['people']) | ppl)), _now(), hit['Id']))
-        render(store)
-        return _row(store._one('SELECT * FROM memory_line WHERE Id=?', (hit['Id'],)))
+        return _settled(store, hit['Id'])
     try:
         from .workstreams import of_evidence
         ws = of_evidence(store, ev)
     except Exception: ws = ''
-    rid = _add(store, INFERRED, t, sk, ppl, scope, key, ev, confirmed, source, ws)
+    return _settled(store, _add(store, INFERRED, t, sk, ppl, scope, key, ev, confirmed or len(ev) >= AUTO_AT, source, ws))
+
+
+def _settled(store, rid) -> dict:
+    "A learned line written: the memory trimmed to its caps, LEARNED.md redrawn, and the line as it now stands ({} when it fell out)."
+    _trim(store); render(store)
+    r = _row(store._one('SELECT * FROM memory_line WHERE Id=?', (rid,)))
+    return r if r['Status'] == LIVE else {}
+
+
+def _about_of(r) -> str:
+    "Whom or what a learned line is about, as one key - its scope key, else its people - '' for a general line."
+    return str(r.get('ScopeKey') or '').lower() if r.get('Scope') != 'global' and r.get('ScopeKey') else ','.join(r['people'])
+
+
+def _trim(store) -> int:
+    """THE MEMORY STAYS SHORT (the owner, 2026-11-23: "don't write too much detail in memory, otherwise it's basically the hub"): of the
+    learned lines in use at most CAP, of those still being seen LEARNING, and in each at most PER_ABOUT about one person or topic - past it
+    the line least recently borne out goes first, the weaker of two seen at once. What he said is never trimmed. Returns the lines gone."""
+    n = 0
+    for used, cap in ((True, CAP), (False, LEARNING)):
+        rs = sorted((r for r in rows(store, INFERRED) if bool(r['Confirmed']) == used), key=lambda r: (str(r['UpdatedAt']), r['N'], r['Id']))[::-1]
+        per, kept = {}, 0
+        for r in rs:
+            a = _about_of(r)
+            per[a] = per.get(a, 0) + 1
+            if kept < cap and (not a or per[a] <= PER_ABOUT): kept += 1; continue
+            _down(store, r['Id'], 'dropped'); n += 1
+    return n
+
+
+def weaken(store, subject: str, ev: str = '') -> dict:
+    """An act of his that goes against a learned line (the model reads that it does, and names the line's subject): one episode less behind
+    it - below AUTO_AT it is out of use until his acts bear it out again, at none it is gone. Never his own line. {} when none matched."""
+    r = next((r for r in rows(store, INFERRED) if subject_of(r['Subject']) == subject_of(subject)), None)
+    if not r: return {}
+    if r['N'] <= 1: _down(store, r['Id'], 'dropped')
+    else: store._exec('UPDATE memory_line SET N=N-1, Confirmed=? WHERE Id=?', (int(bool(r['Confirmed']) and r['N'] - 1 >= AUTO_AT), r['Id']))
+    logger.info(f"memory: {ev or 'an act'} went against the learned line on {r['Subject']!r}")
     render(store)
-    return _row(store._one('SELECT * FROM memory_line WHERE Id=?', (rid,)))
+    return _row(store._one('SELECT * FROM memory_line WHERE Id=?', (r['Id'],)))
 
 
 def withdraw(store, ev: str) -> int:
@@ -274,7 +322,7 @@ def lessons(store, since: str = '') -> list:
 
 # ── the owner's hand: Keep, Wrong, Forget, No longer true ────────────────────────────────────────────────────────────────────────────
 def mark(store, key, how: str) -> dict:
-    """keep (a learned line confirmed: he leans on it from now on), wrong (it was never true - never learned again), forget (out for now),
+    """keep (he said a learned line is right - in use from now on; nothing asks him to), wrong (it was never true - never learned again), forget (out for now),
     ended (it was true and stopped: kept as history). His own line takes forget and ended only. ValueError in plain words; LookupError
     when the line is not there. {ok, key, how, text}."""
     how = {'confirm': 'keep', 'adopt': 'keep'}.get(how, how)
@@ -378,7 +426,7 @@ def _bears(r, who: set, doms: set, ws: str) -> bool:
     return not r['people'] or bool(set(r['people']) & who)
 
 
-SAID_HEAD, FACT_HEAD, LEARNED_HEAD = "## What the owner said", '## Facts about the people on it', '## Learned from what he did, confirmed by him'
+SAID_HEAD, FACT_HEAD, LEARNED_HEAD = "## What the owner said", '## Facts about the people on it', '## Learned from what he did, borne out by his own acts'
 NEAR = 2                      # the lines about someone NOT on the task a task still takes, when their subject is its subject
 def _stems(t) -> set: return {w[:5].rstrip('s') or w[:5] for w in re.findall(r'[a-z0-9][a-z0-9-]{3,}', _ADDR.sub(' ', str(t or '').lower()))}
 
@@ -465,7 +513,7 @@ def about(store, who: str) -> dict:
     ns = _names(store, who)
     hit = lambda r: bool(set(r['people']) & ns) or any(re.search(rf'(?<![\w@.]){re.escape(n)}(?![\w@])', r['Text'].lower()) for n in ns)
     out = [{'key': r['key'], 'text': r['Text'], 'subject': r['Subject'], 'kind': r['Kind'], 'own': r['Kind'] == SAID,
-            'status': 'in use' if r['Kind'] == SAID or r['Confirmed'] else 'not confirmed'} for r in rows(store) if r['Kind'] != FACT and hit(r)]
+            'status': 'in use' if r['Kind'] == SAID or r['Confirmed'] else 'still being learned'} for r in rows(store) if r['Kind'] != FACT and hit(r)]
     rel = ''
     try:
         from . import orgchart
@@ -476,7 +524,7 @@ def about(store, who: str) -> dict:
 
 def lookup(store, who: str = '', target: str = '') -> str:
     """The agent's lookup: what the memory holds about one person (`who`), else every line in use - what he said first, then the facts,
-    then what was learned and he confirmed; and how many learned lines still wait on his word, never their text."""
+    then what was learned that his acts bore out; and how many learned lines are still being seen, never their text."""
     if str(who or '').strip():
         a = about(store, who)
         out = [f"{l['text']}" + (f" [subject: {l['subject']}]" if l['own'] else '') for l in a['lines'] if l['status'] == 'in use']
@@ -485,13 +533,13 @@ def lookup(store, who: str = '', target: str = '') -> str:
         return '\n'.join([f"ABOUT {who}" + (f" - the org chart: {a['relation']}" if a['relation'] else '')] + [f'- {x}' for x in out + fs])
     text = whole(store, 'agents', target, subject=True)
     wait = sum(1 for r in rows(store, INFERRED) if not r['Confirmed'])
-    return (text or 'nothing kept about the owner yet') + (f'\n\n({wait} learned line(s) wait on his word and are not used yet.)' if wait else '')
+    return (text or 'nothing kept about the owner yet') + (f'\n\n({wait} learned line(s) are still being learned, not used yet.)' if wait else '')
 
 
 # ── the Memory page ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 SECTIONS = [{'slug': 'said', 'title': 'What you said', 'reads': 'in your words - read by triage, every task it bears on, drafts and the Assistant'},
             {'slug': 'facts', 'title': 'Facts', 'reads': 'from your org chart, your sent mail and your rules - change them there'},
-            {'slug': 'confirmed', 'title': 'Learned from what you did', 'reads': 'you confirmed these - read like what you said'}]
+            {'slug': 'confirmed', 'title': 'Learned from what you did', 'reads': 'your own actions bore these out - read like what you said'}]
 _EV_KIND = {'msg': 'message', 'rv': 'review', 'task': 'task', 'fs': 'deferred', 'sv': 'promise', 'idea': 'idea', 'say': 'said', 'out': 'outcome'}
 
 
@@ -501,7 +549,8 @@ def _evidence(ev) -> list:
 
 def page(store) -> dict:
     """What the Memory page draws, in the shape it reads: each line with its key, section and marks - what he said (Forget), the facts (read
-    where they are kept), what he confirmed (Wrong, Forget) - and what was learned and waits on his word (`hypothesis`: Keep confirms it)."""
+    where they are kept), what his acts bore out (Wrong, Forget) - and what is still being seen (`hypothesis`: in use by itself once his
+    acts bear it out; Wrong and Forget only - nothing asks him to confirm it). Within the same caps every reader has (_trim)."""
     from .capabilities import has_ai
     base = {'evidence': [], 'steps': [], 'effective': None, 'seen': '', 'over_budget': []}
     out = []
@@ -519,8 +568,9 @@ def page(store) -> dict:
     return {'lines': out, 'deleted': [], 'loose_evidence': [], 'soul': [], 'sections': SECTIONS, 'ai': has_ai(store)}
 
 
-SAYS = {'said': 'Said by you', 'born': 'Learned - waits on your word', 'kept': 'Confirmed by you', 'replaced': 'Replaced by a newer word',
-        'wrong': 'Wrong, you said - never learned again', 'forgotten': 'Taken out', 'closed': 'No longer true - kept as history'}
+SAYS = {'said': 'Said by you', 'born': 'Learned - still being seen in what you do', 'kept': 'In use - your own actions bore it out',
+        'replaced': 'Replaced by a newer word', 'wrong': 'Wrong, you said - never learned again', 'forgotten': 'Taken out',
+        'closed': 'No longer true - kept as history', 'dropped': 'Fell out - stronger lines, or your actions went against it'}
 
 
 def changes(store, days: int = 30) -> list:
@@ -537,13 +587,13 @@ def changes(store, days: int = 30) -> list:
 
 
 def week(store, now: datetime = None) -> list:
-    "The lines that went into use in the last seven days and are in use still - what he said, and what he confirmed."
+    "The lines that went into use in the last seven days and are in use still - what he said, and what his acts bore out."
     since = ((now or datetime.now()) - timedelta(days=7)).strftime('%Y-%m-%d')
     return [r for r in in_use(store) if str(r['UpdatedAt'] if r['Kind'] == INFERRED else r['At']) >= since]
 
 
 # ── LEARNED.md, the stores' face ─────────────────────────────────────────────────────────────────────────────────────────────────────
-HEAD = ('# What Taskuary knows about you\n\n_(written from your memory - what you said, the facts, and what you confirmed of what was learned. '
+HEAD = ('# What Taskuary knows about you\n\n_(written from your memory - what you said, the facts, and what your own actions bore out of what was learned. '
         'Change a line on the Memory page; this page follows it)_\n')
 READ_ONLY = 'LEARNED.md is written from your memory - change a line on the Memory page (Settings, About you, Memory) and this page follows it.'
 
@@ -574,45 +624,54 @@ def _scope(text: str) -> tuple:
     return (bare, 'sender', a.lower()) if '@' in a else (text, 'global', '')
 
 
+def _waiting(head: str) -> bool: return any(w in head for w in ('watching', 'proposed'))     # the two sections no reader read before r10
+
+
+def _old_lines(store, doc: str):
+    """LEARNED.md's lines as the stores take them: {kind, text, subject, people, scope, key, ev, confirmed, source}. A learned line that
+    stood in one of its sections was IN USE before r10 and stays in use; one in Watching or Proposed was read by nobody and waits as
+    before, now for his acts to bear it out. A line he marked Wrong or Forgot is not one."""
+    from .store import render_doc
+    fill = lambda t: re.sub(r'\{\{[^}]*\}\}', 'you', render_doc(t, store.owner())).strip()      # {{owner_first}} as the page reads it
+    has = lambda t: bool(store._one('SELECT name FROM sqlite_master WHERE type=? AND name=?', ('table', t)))
+    hist = store._rows("SELECT Key, Text, Action, Actor, Ev FROM learned_history ORDER BY Id") if has('learned_history') else []
+    taught = {str(h['Text'] or '').strip(): h for h in hist if h['Action'] == 'said' and str(h['Actor'] or '').startswith('verdict:')}
+    yes = {h['Key'] for h in hist if h['Actor'] == 'owner' and h['Action'] in ('promoted', 'kept')}
+    down = {r['Key']: r for r in store._rows("SELECT Key, Status, OwnerText FROM learned_line")} if has('learned_line') else {}
+    head = ''
+    for raw in doc.splitlines():
+        t = raw.strip()
+        if t.startswith('## '): head = t[3:].lower(); continue
+        if not t.startswith(('- ', '* ')) or 'verdict' in head or any(w in head for w in ('voice', 'style')): continue
+        if (m := _TAG.match(raw)):
+            k = (m.group('k') or '').strip() or _key(m.group('text'))
+            row = down.get(k) or {}
+            if row.get('Status') in ('wrong', 'forgotten', 'closed', 'retired'): continue
+            text, sc, sk = _scope(fill(row.get('OwnerText') or m.group('text').strip()))
+            yield dict(kind=INFERRED, text=text, subject=k, people=names(text) | ({sk} if sc == 'sender' else set()), scope=sc, key=sk,
+                       ev=[e.strip() for e in m.group('ev').split(',') if e.strip()], source='migrate',
+                       confirmed=not _waiting(head) or bool(row.get('OwnerText')) or k in yes)
+            continue
+        text, sc, sk = _scope(fill(t[2:].strip()))
+        if not text: continue
+        v = taught.get(t)
+        ppl, subj = names(text) | ({sk} if sc == 'sender' else set()), _key(text) + (f' · {sk}' if sk else '')
+        if v: yield dict(kind=INFERRED, text=text, subject=subj, people=ppl, scope=sc, key=sk, ev=[v['Ev']] if v.get('Ev') else [],
+                         confirmed=not _waiting(head) or v['Actor'].split(':', 1)[1] in FOR_GOOD, source=v['Actor'])
+        else: yield dict(kind=SAID, text=text, subject=subj, people=ppl, scope=sc, key=sk, ev=[], confirmed=False, source='owner')
+
+
 def migrate(store) -> int:
-    """LEARNED.md read into the three stores, once, without loss: his own untagged lines are what he SAID; tagged lines - and the lines a
-    verdict wrote in his document - are what was INFERRED, with their evidence, confirmed where he Kept or adopted them, or pressed "from now
-    on". A line he marked Wrong or Forgot stays down. The document as it stood is kept whole (BACKUP); LEARNED.md is then the stores' face.
-    An older install's notes table is read in the same way. Idempotent. Returns the lines read in. Never raises."""
-    if store.get_setting(MIGRATED): return 0
+    """LEARNED.md read into the three stores, once, without loss (_old_lines): his own untagged lines are what he SAID; tagged lines - and
+    the lines a verdict wrote in his document - are what was INFERRED, with their evidence, in use where they were in use before. The
+    document as it stood is kept whole (BACKUP); LEARNED.md is then the stores' face. An older install's notes table is read in the same
+    way. Idempotent. Returns the lines read in (or, on an install r10's first cut read in, put back in use). Never raises."""
+    if store.get_setting(MIGRATED): return in_use_again(store)
     try:
-        from .store import render_doc
         doc, n = store.get_doc(DOC) or '', 0
-        fill = lambda t: re.sub(r'\{\{[^}]*\}\}', 'you', render_doc(t, store.owner())).strip()      # {{owner_first}} as the page reads it
-        has = lambda t: bool(store._one('SELECT name FROM sqlite_master WHERE type=? AND name=?', ('table', t)))
-        hist = store._rows("SELECT Key, Text, Action, Actor, Ev FROM learned_history ORDER BY Id") if has('learned_history') else []
-        taught = {str(h['Text'] or '').strip(): h for h in hist if h['Action'] == 'said' and str(h['Actor'] or '').startswith('verdict:')}
-        yes = {h['Key'] for h in hist if h['Actor'] == 'owner' and h['Action'] in ('promoted', 'kept')}
-        down = {r['Key']: r for r in store._rows("SELECT Key, Status, OwnerText FROM learned_line")} if has('learned_line') else {}
-        head = ''
-        for raw in doc.splitlines():
-            t = raw.strip()
-            if t.startswith('## '): head = t[3:].lower(); continue
-            if not t.startswith(('- ', '* ')) or 'verdict' in head or any(w in head for w in ('voice', 'style')): continue
-            m = _TAG.match(raw)
-            if m:
-                k = (m.group('k') or '').strip() or _key(m.group('text'))
-                row = down.get(k) or {}
-                if row.get('Status') in ('wrong', 'forgotten', 'closed', 'retired'): continue
-                text, sc, sk = _scope(fill(row.get('OwnerText') or m.group('text').strip()))
-                ev = [e.strip() for e in m.group('ev').split(',') if e.strip()]
-                _add(store, INFERRED, text, k, names(text) | ({sk} if sc == 'sender' else set()), sc, sk, ev,
-                     bool(row.get('OwnerText')) or k in yes, 'migrate')
-            else:
-                text, sc, sk = _scope(fill(t[2:].strip()))
-                if not text: continue
-                v = taught.get(t)
-                subj = _key(text) + (f' · {sk}' if sk else '')
-                ppl = names(text) | ({sk} if sc == 'sender' else set())
-                if v: _add(store, INFERRED, text, subj, ppl, sc, sk, [v['Ev']] if v.get('Ev') else [], v['Actor'].split(':', 1)[1] in FOR_GOOD, v['Actor'])
-                else: _add(store, SAID, text, subj, ppl, sc, sk, source='owner')
-            n += 1
-        if has('memory'):                       # ...the notes table of before 2026-10-27, on an install that never drained it
+        for l in _old_lines(store, doc):
+            _add(store, l['kind'], l['text'], l['subject'], l['people'], l['scope'], l['key'], l['ev'], l['confirmed'], l['source']); n += 1
+        if store._one('SELECT name FROM sqlite_master WHERE type=? AND name=?', ('table', 'memory')):   # ...the notes table of before 2026-10-27
             for r in store._rows("SELECT * FROM memory WHERE IFNULL(Active,1)=1 AND IFNULL(Note,'')<>''"):
                 text, sc, sk = ' '.join(str(r['Note']).split()), r.get('Scope') or 'global', str(r.get('ScopeKey') or '')
                 _add(store, INFERRED if r.get('Source') == 'verdict' else SAID, text, _key(text) + (f' · {sk}' if sk else ''),
@@ -620,8 +679,25 @@ def migrate(store) -> int:
             store._exec('DROP TABLE IF EXISTS memory')
         if doc.strip(): store.save_doc(BACKUP, doc, 'migrate')
         store.set_setting(MIGRATED, _now(), 'migrate')
-        render(store)
+        in_use_again(store)                     # ...and what his acts already bear out goes into use, within the caps
         if n: logger.info(f'memory: {n} line(s) of LEARNED.md read into the three stores - the document as it was is kept as {BACKUP}')
         return n
     except Exception as e:
         logger.warning(f'LEARNED.md not read into the memory yet: {e}'); return 0
+
+
+def in_use_again(store) -> int:
+    """r10's first cut read LEARNED.md in and left the learned lines that were in use waiting on a Keep he was never going to press (the
+    owner, 2026-11-23). Once, on an install it migrated: each line that stood in a section of the document as it was (BACKUP) is in use
+    again, and every line his acts already bear out (AUTO_AT) goes into use. Returns the lines put back. Never raises."""
+    if store.get_setting(IN_USE_FIX): return 0
+    try:
+        was = {subject_of(l['subject']) for l in _old_lines(store, store.get_doc(BACKUP) or '') if l['kind'] == INFERRED and l['confirmed']}
+        back = [r['Id'] for r in rows(store, INFERRED) if not r['Confirmed'] and (subject_of(r['Subject']) in was or r['N'] >= AUTO_AT)]
+        for rid in back: store._exec('UPDATE memory_line SET Confirmed=1 WHERE Id=?', (rid,))
+        store.set_setting(IN_USE_FIX, _now(), 'migrate')
+        _trim(store); render(store)
+        if back: logger.info(f'memory: {len(back)} learned line(s) in use again, as they were before r10')
+        return len(back)
+    except Exception as e:
+        logger.warning(f'the lines in use before r10 not put back yet: {e}'); return 0

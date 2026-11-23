@@ -1223,7 +1223,7 @@ def install_processing_changes(app, store):
 
     # ── THE STATE MATRIX (browser/state-matrix, 2026-10-28): the task states the demo world lacks, each one task, invented people ──────────
     MATRIX = ('sent', 'working', 'coding_working', 'asked', 'stopped', 'finished', 'done', 'note', 'deferred', 'todo', 'idea', 'news',
-              'fyi_thread', 'idea_mail', 'habits')
+              'fyi_thread', 'idea_mail')
 
     @app.post('/api/fixture/task/matrix')
     def matrix_state(body: dict):
@@ -1318,13 +1318,6 @@ def install_processing_changes(app, store):
                                    'text': 'The Payworth statement still shows invoice 88213 open - worth checking it was paid.', 'action': {'mid': mid}},
                                   at(minutes=1807))
             from taskuary import funnel
-            store.reconcile_processing_membership(); funnel.invalidate(); store._poke('feed-changed')
-        elif s == 'habits':
-            tid = None
-            from taskuary import funnel, learning, memory
-            memory.infer(store, 'You close sign-in help threads directly; they need no drafted reply', 'matrix sso', [f'rv{i}' for i in range(901, 909)])
-            memory.infer(store, 'Forwarded FYI mail from the Payworth desk needs no reply', 'matrix fyi', ['rv920', 'rv921', 'rv922'])
-            learning.tick(store)
             store.reconcile_processing_membership(); funnel.invalidate(); store._poke('feed-changed')
         elif s == 'news':
             tid = task('Site ops: who has the gate code', 'general', 'in_progress', Assignee='agent:general', Tags=terminal.SAVED)

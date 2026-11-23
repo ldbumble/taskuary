@@ -35,7 +35,7 @@ class Q:
     would say it, 1-5 - ranks the unsupported list."""
     def __init__(self, cat, text, table, ideal, expect, tools=None, freq=3, sort=None, live=None, note='', phone=False, view=None, seed=None):
         self.cat, self.text, self.table, self.expect, self.freq, self.sort, self.view = cat, text, table, expect, freq, sort, view
-        self.seed = seed      # seed(store) -> key or None: a row the demo world lacks (a watched task, the habits row), its key on the table
+        self.seed = seed      # seed(store) -> key or None: a row the demo world lacks (a watched task, a meeting), its key on the table
         self.live, self.note, self.phone = live, note, phone      # live: the task whose agent session runs; note: why it grades so; phone: a phone chat
         self.ideal = ideal if isinstance(ideal, list) else [ideal]
         kinds = [json.loads(a[6:])['kind'] for a in self.ideal if isinstance(a, str) and a.startswith('CALL: ')]
@@ -550,8 +550,8 @@ AREA_TASK = [
 CASES += AREA_TASK
 
 # THE WORK RAIL AND ITS WALK (the rail audit, 2026-11-02; the owner: "test it all works ... to be able to help the user on every page"): Next
-# and Back, a section by its heading, the FYI's All read, Watching, the Advisor's ideas and its habits row, sets put away or closed. The demo
-# world has no watched task, idea or habit: each case that needs one seeds it (invented lines, nobody real)
+# and Back, a section by its heading, the FYI's All read, Watching, the Advisor's ideas, sets put away or closed. The demo
+# world has no watched task or idea: each case that needs one seeds it (invented lines, nobody real)
 T2 = 'TQ-0002'
 def watched(s):
     from taskuary import funnel, watch
@@ -562,14 +562,6 @@ def wa_group(s):
     from taskuary import wanames
     s.save_connector({'Type': 'whatsapp', 'Name': 'WhatsApp', 'Active': 1}, 't')
     s.set_setting(wanames.KEY, json.dumps({TEAM_GROUP: 'Northwind team'}), 't')
-def habits_row(s):
-    "Two habits on the one row, each a learned line it asks the owner to confirm (learning.tick)."
-    from datetime import datetime
-    from taskuary import funnel, learning, memory
-    memory.infer(s, 'You close sign-in help threads directly; they need no drafted reply', 'sso threads', [f'rv{i}' for i in range(1, 9)])
-    memory.infer(s, 'Forwarded FYI mail from the facilities team needs no reply', 'fwd fyi', ['rv20', 'rv21', 'rv22'])
-    learning.tick(s); funnel.invalidate()
-    return f"idea:{s._one('SELECT * FROM idea WHERE Key=?', (learning.KEY,))['IdeaId']}"
 def idea_row(s):
     from datetime import datetime
     from taskuary import funnel
@@ -606,16 +598,10 @@ AREA_RAIL = [
       note="the row's Watch it reads Stop watching while it watches - lit for the owner"),
     Q('rail', 'watch TQ-0002 for me', None, c('task.watch', ref=T2), 'light:watch', freq=3),
     Q('rail', 'close all the watched ones', None, [c('tasks.list'), c('pipe.close', select={'keys': [T2]})], 'did:pipe.close', freq=1, seed=watched),
-    # ── the Advisor's rows: an idea, and the one habits row (habits.py) ──
+    # ── the Advisor's rows: an idea ──
     Q('rail', 'put the advisor idea on my list', 'idea', c('mine'), 'light:mine', freq=2, seed=idea_row),
     Q('rail', 'no more ideas like this', 'idea', c('not_ours_kind'), 'light:not_ours', freq=2, seed=idea_row,
       note="one of the idea's Not ours choices - it was refused as no button"),
-    Q('rail', 'what habits did you learn about me?', 'habit', 'You close sign-in help threads yourself, so I will not draft replies to them.', 'words',
-      tools=('words',), freq=2, seed=habits_row),
-    Q('rail', 'adopt the one about forwarded fyi', 'habit', c('memory.wrong', key='fwd fyi', how='keep'), 'did:memory.wrong', freq=2, seed=habits_row,
-      note='keep was no `how` - refused'),
-    Q('rail', 'the sign-in one is not right', 'habit', c('memory.wrong', key='sso threads', how='wrong'), 'did:memory.wrong', freq=2, seed=habits_row),
-    Q('rail', 'no to the fyi one', 'habit', c('memory.wrong', key='fwd fyi', how='wrong'), 'did:memory.wrong', freq=1, seed=habits_row),
     # ── a meeting coming up: Prepare and Send to agent on its row, the agent box's words leading (the owner, 2026-11-02) ──
     Q('rail', 'send this meeting to an agent to prep me - pull the open issues with these people', 'meeting',
       c('regular_agent', text='Prep me for this meeting: pull the open issues with Gail Moreno and Paula Vance'), 'did:task.create_from_text', freq=4, seed=meeting_row,
@@ -628,7 +614,6 @@ AREA_RAIL = [
       freq=2, seed=meeting_row, note='the model says the job is not the meeting\'s (`new`); code never decides that'),
     # ── about the rail itself ──
     Q('rail', 'why is this one at the top?', 'todo', [c('docs.search', query='work rail'), 'Rows sit in the order they arrived.'], 'read:docs.search', freq=2),
-    Q('rail', 'what is the habits row', None, [c('docs.search', query='habits row'), 'One row for every habit the Advisor learned.'], 'read:docs.search', freq=1),
     Q('rail', 'my rail is empty, where did everything go?', None, [c('activity.list', days=1), 'You cleared them this morning.'], 'read:activity.list', freq=2),
     Q('rail', 'open the headcount report', None, find('headcount report'), 'link:#msg=9', freq=2),
     Q('rail', 'collapse the FYI section', None, 'The FYI heading folds with its own arrow - that press is yours.', 'words', tools=('words',), freq=1,

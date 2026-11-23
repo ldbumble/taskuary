@@ -87,8 +87,8 @@ PURPOSE = {
                                  'what is people.relate'),
     'memory.wrong':             ('take a line out of the memory, or confirm one - `key` (from memory.about or memory.list), `how`: wrong '
                                  '(a learned line that was never true: never learned again) | forget (out for now) | ended (it was true and '
-                                 'stopped: kept as history) | keep (a learned line confirmed: used from then on, as the Memory page\'s Keep). '
-                                 '"forget that Ray does payroll", "that is wrong about Erin". On the habits row: Adopt is keep, No is wrong. '
+                                 'stopped: kept as history) | keep (the owner said a learned line is right: used from then on). '
+                                 '"forget that Ray does payroll", "that is wrong about Erin". '
                                  'A line the owner said himself takes forget or ended - a correction of it is memory.remember on its subject'),
     'people.relate':            ("who someone is to the owner, on their org chart - `who`: a name or address; `relation`: manager | report | none "
                                  '(none clears it); `owns`: areas they are responsible for ("payroll, benefits"), added; `drops`: areas taken off; '

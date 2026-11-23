@@ -290,7 +290,7 @@ async def _lifespan(_app):
         if (n := dashboards.migrate_ai_tiles(store)): logger.info(f'AI-use tiles added to {n} dashboard(s)')
         if (n := dashboards.migrate_ai_tiles_up(store)): logger.info(f'AI-use tiles moved up in {n} dashboard(s)')   # ...and up top (2026-11-07)
     except Exception as e: logger.warning(f'AI-use tiles not added: {e}')
-    _fold_habits()                 # the old habit cards closed, and the habits row drawn from the learned lines (learning.tick)
+    _fold_habits()                 # the habits row of before closed: his own acts confirm a learned line now (learning.close_habits_row)
     try: blackboard.schedule_due(store, startup=True)   # a retry backing off when the app closed is re-armed, not reset (PW-085), and a slot wait runs
     except Exception as e: logger.warning(f'retry scheduling skipped: {e}')
     try:                           # historical triage failures stored as filed become retriable errors, once (PW-040)
@@ -5021,14 +5021,13 @@ def assistant_ideas(status: str = None, mid: int = None):
         return out
     return {'data': [row(i) for i in store.list_ideas(status or None, mid)]}
 
-class IdeaBody(BaseModel): days: int = 1; until: str = None; line: str = None; yes: bool = None     # line/yes: one habit's answer (learning.answer)
+class IdeaBody(BaseModel): days: int = 1; until: str = None
 
 @app.post('/api/assistant/ideas/{iid}/{verb}')
 def assistant_act(iid: int, verb: str, body: IdeaBody = None):
     """One word on one line (assistant.VERBS): task (Make a task), agent (Send to agent), dismiss (Not ours),
-    snooze (Remind me - `until` a day, or `days`), done; on the habits row, habit (`line`, `yes`) and seen."""
-    try: return assistant.act(store, iid, verb, ACTOR, days=(body.days if body else 1), until=(body.until if body else None),
-                              line=(body.line if body else None), yes=(body.yes if body else None))
+    snooze (Remind me - `until` a day, or `days`), done."""
+    try: return assistant.act(store, iid, verb, ACTOR, days=(body.days if body else 1), until=(body.until if body else None))
     except ValueError as e: raise HTTPException(422, str(e))
 
 # what GeneralWorkspace reads to open a chat with its question already asked (newTask.js)
@@ -11430,9 +11429,9 @@ def catch_up_on_startup():
 
 
 def _fold_habits():
-    """The habit cards of before 2026-11-01 closed, and the one habits row drawn from the learned lines that wait on his word (learning.tick)."""
-    try: learning.tick(store)
-    except Exception as e: logger.warning(f'habits row not drawn: {e}')
+    """The habits row that asked him to confirm learned lines, closed where it is still up (learning.close_habits_row)."""
+    try: learning.close_habits_row(store)
+    except Exception as e: logger.warning(f'habits row not closed: {e}')
 
 
 def _heal_owner_docs():

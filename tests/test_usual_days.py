@@ -37,16 +37,15 @@ def test_no_line_when_nothing_is_checkable(w):
         assert (d['state'], d['verb']) == ('asked', None) and 'usual' not in d['line'], d     # no usual said, nothing filled (2026-11-15)
 
 
-def test_a_payworth_renewal_opens_remind_me_on_the_day_once_the_owner_confirms_the_learned_line(w):
+def test_a_payworth_renewal_opens_remind_me_on_the_day_once_his_put_offs_bear_out_the_learned_line(w):
     """Remind me's day comes from a line the owner can see and correct (the owner, 2026-10-25) - the count alone sets none, and a line
-    learned from his put-offs is used only once he confirms it (r10: what was inferred is never used as his word before he says so)."""
+    learned from his put-offs is in use by itself once enough of them bear it out (2026-11-23: never a Keep he has to press)."""
     s, facts = w
     t = ask(s, 'payworth', 'Payworth renewal notice', 'Your annual subscription renews next month.')
     assert usual.remind_day(s, t) is None, 'counted, but no line says it yet'
     reflected(s, put_off(s, 'payworth', 13))
     line = next(r for r in memory.rows(s, memory.INFERRED) if r['Subject'] == 'put off renewals@payworth.example')
-    assert usual.remind_day(s, t) is None, 'learned, not yet confirmed: not used'
-    memory.mark(s, line['key'], 'keep')
+    assert line['Confirmed'], 'his put-offs are the confirmation'
     d = usual.remind_day(s, t)
     assert d['day'] == 'Friday' and d['by'] == 'renewals@payworth.example' and d['line'] == 'You put mail from renewals@payworth.example off to Friday'
     on = datetime.strptime(d['on'], '%Y-%m-%d').date()

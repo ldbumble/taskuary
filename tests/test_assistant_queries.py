@@ -183,14 +183,6 @@ class EverydayAsks(unittest.TestCase):
         # ...the tour, made last in the demo world (demo.seed_tour): 36 since the general agent's day joined it (demo.seed_agent_day)
         self.assertEqual(r['ideal']['say'], 'Opened TQ-0036.', 'Back from TQ-0001 is the row above it, Start here')
 
-    def test_the_habits_row_names_each_habit_and_answers_it_in_the_owners_words(self):
-        # the model was told only "Learned 1 habit · 1 to check"; a habit taken back read "Took {{owner_first}} closes..." (2026-11-02)
-        r = next(r for r in self.rows if r['q'].text == 'what habits did you learn about me?')
-        self.assertIn('[key: sso threads] adopted', r['ideal']['prompt']); self.assertIn('[key: fwd fyi] asking', r['ideal']['prompt'])
-        for r in (r for r in self.rows if r['q'].seed is Q.habits_row and r['q'].expect.startswith('did:')):
-            with self.subTest(ask=r['q'].text):
-                self.assertNotIn('{{', r['ideal']['say']); self.assertIn('1 habit still on the habits row', r['ideal']['say'])
-
     def test_a_watched_task_is_said_watched_where_the_assistant_reads_it(self):
         # "what am I watching?" and "where did it go?" read tasks.list and task.read, and neither said so (2026-11-02)
         r = next(r for r in self.rows if r['q'].text == f'where did {Q.T2} go')

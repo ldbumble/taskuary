@@ -353,7 +353,7 @@ def _bearing(store, want: str, texts) -> set:
 
 def memory_list(store, p: dict) -> str:
     """Everything kept about the owner (memory.py): what they said, each with its key and subject; what was learned and they confirmed;
-    and what was learned that still waits on their word - said as such, never as theirs."""
+    and what is still being learned - said as such, never as theirs."""
     from . import memory, orgchart
     want = _about(p)
     say = lambda r: f"[key: {r['key']}] {memory.said_line(r, True)[2:]}"
@@ -362,9 +362,9 @@ def memory_list(store, p: dict) -> str:
     org = orgchart.block(store).splitlines()
     near = _bearing(store, want, said + testing + org)
     if want: said, testing = [l for l in said if l in near], [l for l in testing if l in near]
-    out = ['YOUR MEMORY (what you said, and what I learned from what you did that you confirmed):' + NL + _cut(NL.join(said), 4000) if said
+    out = ['YOUR MEMORY (what you said, and what I learned from what you did that your actions bore out):' + NL + _cut(NL.join(said), 4000) if said
            else 'Your memory has nothing' + (' that matches.' if want else ' in it yet.')]
-    if testing: out.append('LEARNED, NOT CONFIRMED - not used until you say so (keep confirms one):' + NL + _cut(NL.join(testing), 1200))
+    if testing: out.append('STILL BEING LEARNED - used once your own actions bear it out:' + NL + _cut(NL.join(testing), 1200))
     org = NL.join(l for l in org if l in near)
     if org: out.append('YOUR PEOPLE (the org chart - your manager, your reports, who owns what):' + NL + org)
     return NL.join(out)

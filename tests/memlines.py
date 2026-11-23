@@ -31,11 +31,11 @@ def legacy_row(s, note, scope='global', key=None, source='manual', active=1) -> 
     return cur.lastrowid
 
 
-def teacher(line='', subject='', only_this=True, seen=None):
-    """A model that answers every lesson with `line`, kept under `subject`."""
+def teacher(line='', subject='', only_this=True, seen=None, against=''):
+    """A model that answers every lesson with `line`, kept under `subject` - and reads it as going `against` a line's subject."""
     def llm(system, user, **k):
         if seen is not None: seen.append(user)
-        return json.dumps({'line': line, 'subject': subject or line, 'only_this': only_this})
+        return json.dumps({'line': line, 'subject': subject or line, 'only_this': only_this, 'against': against})
     return llm
 
 

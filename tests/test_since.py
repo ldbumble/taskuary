@@ -58,14 +58,13 @@ class SinceTests(unittest.TestCase):
 
     def test_learned_counts_the_lines_that_went_into_use_this_week_and_are_still_in_use_each_once(self):
         """It counted every guess born and every rule promoted - rebirths and double counts too - and said "Learned this week: 32"
-        over about three real things (the Advisor and memory design, 2026-10-23). In use is what he said, or confirmed."""
+        over about three real things (the Advisor and memory design, 2026-10-23). In use is what he said, or what his own acts bore out."""
         from taskuary import memory
         s = MemoryStore()
         live = memory.infer(s, 'Alex answers vendors himself.', 'vendors', ['mem1', 'mem2'])
         memory.infer(s, 'Alex files newsletters.', 'newsletters', ['mem4'])
-        for e in ('mem3', 'mem5', 'mem6'): memory.infer(s, 'Alex answers vendors himself.', 'vendors', [e])      # seen again: one line
-        self.assertEqual(since.learned(s, datetime.now())['line'], '', 'a guess waiting on his word is not in use')
-        memory.mark(s, live['key'], 'keep')
+        self.assertEqual(since.learned(s, datetime.now())['line'], '', 'a line still being seen is not in use')
+        for e in ('mem3', 'mem5', 'mem6'): memory.infer(s, 'Alex answers vendors himself.', 'vendors', [e])      # seen again: one line, in use
         out = since.learned(s, datetime.now())
         self.assertEqual(out['line'], 'This week: 1 now in use')
         self.assertEqual(out['latest'], 'Alex answers vendors himself.')

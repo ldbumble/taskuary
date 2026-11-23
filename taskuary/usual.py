@@ -5,7 +5,7 @@ the memory knows about how the owner works - kept to ONE line on the strip. Each
 same rows the episodes are written from (episodes.py), and cited by the same ids, so Why? can show what it rests on:
 
     put_off_habits  the weekday the owner puts a sender's mail off to - fs ids, the tasks put off. The count writes or confirms a learned
-                 line through the reflection (learning.put_offs), and it is THAT line Remind me reads (remind_day), once he confirmed it -
+                 line through the reflection (learning.put_offs), and it is THAT line Remind me reads (remind_day), once it is in use -
                  or a line he said himself naming the day: he can see it and correct it, and the default follows (the owner, 2026-10-25)
     handed_to    whom the owner handed this sender's asks to - evidence the model weighs (a topic is the model's to read, never a
                  count's), never a button lit by a count; Hand it to a person opens with that person chosen, not sent (handoff_usual)
@@ -86,7 +86,7 @@ def weekday_of(text: str):
 
 
 def put_off_line(store, who: str) -> dict | None:
-    """{text, key, by, evidence}: the line in use Remind me's day comes from for mail from `who` - a learned line he confirmed whose put-offs
+    """{text, key, by, evidence}: the line in use Remind me's day comes from for mail from `who` - a learned line in use whose put-offs
     (fs ids) were this sender's, else their domain's; or a line he said naming the address or domain. His own line first, then the closest.
     Whatever day the line says now is the day: corrected, the default follows; taken out, there is none (the owner, 2026-10-25)."""
     from . import memory

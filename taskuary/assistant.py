@@ -2174,8 +2174,7 @@ def _run(store, llm, instruction, watch_source_ids, watch_sources, systems_only=
 # (snooze: back on its day), and done - handled some other way, which is what the rail's Done writes. Next is the
 # walk's own and touches nothing. Draft follow-up, Discuss and the talk-back chat are gone: a task's agent drafts.
 # ...and a rule question's yes (promote.py): the rule it proposed is made, through the one create path
-VERBS = ('task', 'agent', 'dismiss', 'dismiss_kind', 'snooze', 'done', 'rule', 'accept',   # accept: a workstream card's Add it (2026-11-01)
-         'habit', 'seen')                       # ...and the habits row's own: one habit's Adopt / No, and the row read (learning.answer)
+VERBS = ('task', 'agent', 'dismiss', 'dismiss_kind', 'snooze', 'done', 'rule', 'accept')   # accept: a workstream card's Add it (2026-11-01)
 # WHAT THE OWNER DID WITH AN IDEA, kept where the Advisor reads it (the owner, 2026-10-02: "feedback on assistant ideas even on
 # desktop does it teach it anything? we should have that"). The idea row's status said dismissed or done - and done covered a
 # task made from it and a line merely handled alike - and a dismissed row ages out of ALREADY SAID with the rest. This log is
@@ -2282,7 +2281,7 @@ def taken_up(store, idea_id: int, a: dict, verb: str) -> dict | None:
     return {'taskId': t['TaskId'], 'ref': task_ref(t['TaskId']), 'already': took} if t else None
 
 
-def act(store, idea_id: int, verb: str, actor: str = 'owner', days: int = 1, until: str = None, line: str = None, yes: bool = None) -> dict:
+def act(store, idea_id: int, verb: str, actor: str = 'owner', days: int = 1, until: str = None) -> dict:
     """One word on one idea. Every word writes the IDEA's own status - the rail's used to write only the rail's,
     and the Advisor went on listing an idea the owner had put down as open (I4, 2026-09-27)."""
     i = store.get_idea(idea_id)
@@ -2291,18 +2290,6 @@ def act(store, idea_id: int, verb: str, actor: str = 'owner', days: int = 1, unt
     try: a = json.loads(i.get('ActionJson') or '{}')
     except ValueError: a = {}
     out = {'ideaId': idea_id, 'verb': verb}
-    # THE HABITS ROW (learning.py; the owner, 2026-11-01): one row for every learned line that waits on his word, each answered on its own
-    # line - Adopt / No. No task, agent, reminder or rule from it: it is not work
-    if i.get('Kind') == 'habit':
-        from . import learning
-        if verb == 'habit':
-            if not line or yes is None: raise ValueError('say which habit, and yes or no')
-            return out | learning.answer(store, line, bool(yes), actor)
-        if verb == 'seen': return out | learning.seen(store, actor)
-        if verb not in ('done', 'dismiss', 'dismiss_kind'): raise ValueError('a habit is answered on its own line: Adopt or No')
-        # ...and put down whole (typed, or the phone): seen on Done, No on Not ours - never asked again
-        learning.seen(store, actor, 'seen' if verb == 'done' else 'no')
-    elif verb in ('habit', 'seen'): raise ValueError('only the habits row has that')
     if verb == 'snooze':
         # Remind me reads a day the way the task's own picker does ('2 weeks', a date, 'tomorrow')
         from . import remind

@@ -236,7 +236,7 @@ class KeptAndFilteredTests(unittest.TestCase):
     """What is kept about the owner, and the rules that filter their mail."""
 
     def test_memory_list_shows_what_the_owner_said_and_what_was_learned_said_as_such(self):
-        """One memory: what the owner said and the verdicts he confirmed are in use; what was learned and waits on his word is said apart."""
+        """One memory: what the owner said and the verdicts he confirmed are in use; what is still being learned is said apart."""
         from taskuary import memory
         s = world()
         memory.remember(s, 'Vendor statements are fyi.', 'vendor statements')
@@ -245,7 +245,7 @@ class KeptAndFilteredTests(unittest.TestCase):
         put_note(s, {'Scope': 'subject', 'ScopeKey': 'weekly spend report', 'Note': '"Weekly spend" - NOT A TASK: filed', 'Source': 'verdict', 'Active': 1})
         memory.migrate(s)
         out = read(s, 'memory.list')
-        for want in ('YOUR MEMORY', 'freight budget', 'weekly spend report', 'Vendor statements are fyi', 'NOT CONFIRMED', 'spend reports are fyi too'):
+        for want in ('YOUR MEMORY', 'freight budget', 'weekly spend report', 'Vendor statements are fyi', 'STILL BEING LEARNED', 'spend reports are fyi too'):
             self.assertIn(want, out)
         narrow = read(s, 'memory.list', about='freight')
         self.assertIn('freight budget', narrow); self.assertNotIn('weekly spend', narrow)

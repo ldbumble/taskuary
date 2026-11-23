@@ -677,12 +677,6 @@ def facts(store, item: dict, whole: bool = False) -> str:
     if item['kind'] == 'report' and item.get('source_id'):
         runs = store.report_runs(item['source_id'], 3)
         if runs: lines.append('LAST RUNS: ' + '; '.join(f"{str(r.get('at') or '')[:16]} {'FAILED: ' + _cut(r.get('error'), 200) if r.get('failed') else 'ok'}" for r in runs))
-    # THE HABITS ROW SAYS ITS HABITS (the rail audit, 2026-11-02): the model read only "Learned 1 habit · 1 to check", so "what habits did
-    # you learn?" had nothing to answer from and "adopt the second one" no key to name
-    if item['kind'] == 'idea' and item.get('idea_kind') == 'habit':
-        lines.append('HABITS ON THIS ROW (learned from what the owner did, used only once he confirms - each has its own Adopt / No inside the '
-                     'row; typed, they are memory.wrong with its key - keep for Adopt, wrong for No):\n' + '\n'.join(
-                         f"  [key: {h.get('line')}] asking: {_cut(h.get('say'), 300)}" for h in (item.get('action') or {}).get('habits') or []))
     if item['kind'] == 'idea' and item.get('action', {}).get('chat'):
         lines.append('what was said about it before: ' + ' // '.join(f"{t.get('role')}: {_cut(t.get('text'), 200)}" for t in item['action']['chat'][-4:]))
     return '\n'.join(lines)
@@ -1083,9 +1077,6 @@ def chips_for(store, item: dict | None, first: str = None) -> list:
     if item.get('lane') == 'forgotten': verbs = ['chase', 'let_go', 'elsewhere', 'defer', 'next']
     # ...and a WATCH back after a quiet week (watch.py, the owner, 2026-11-01): Chase them / Let it go lead, the task's own moves after
     elif item.get('tid') and _quiet_watch(store, item): verbs = ['chase', 'let_go'] + [v for v in verbs if v not in ('chase', 'let_go')]
-    # THE HABITS ROW (learning.py; the owner, 2026-11-01: "what does keep it/remind me do here? doesn't make much sense"): each habit carries
-    # its own Adopt / No / Not right inside the row, so the row itself is only passed - no task, agent, reminder or Not ours of an idea
-    if item.get('kind') == 'idea' and item.get('idea_kind') == 'habit': verbs = ['next']
     # AN INVITE WAITING ON YOUR ANSWER is answered here - Accept, Decline, Propose a new time, each drafted for your Send - and a
     # thread asking to meet offers Find a time beside Reply (calwrite.py, the owner, 2026-10-20). An email reply is not how an
     # invite is answered, nor is it a list's - but it may be handed to an agent to prepare, as its task page's own Send to agent does
@@ -1638,12 +1629,6 @@ def _memory(store, tid: int, kind: str, p: dict) -> dict:
         how = str(p.get('how') or 'wrong').strip().lower()
         if how not in ('wrong', 'forget', 'ended', 'keep'): raise ValueError(f'memory.wrong how is wrong, forget, ended or keep - not {how!r}')
         key = str(p.get('key') or '')
-        # A HABIT ON THE HABITS ROW IS ANSWERED THERE (the rail audit, 2026-11-02): "adopt the one about forwarded FYI" was refused - keep was
-        # no `how` - and a habit taken out here left the row still offering it. The row's own Adopt / No (learning.answer) runs it
-        if how in ('keep', 'wrong') and (h := learning._asked(store).get(key) or {}).get('state') == 'open':
-            r, said = learning.answer(store, key, how == 'keep'), h.get('say') or key
-            line = f"Adopted {q(said)} - I go on it from now." if how == 'keep' else f"Put down {q(said)} - not adopted, and never asked again."
-            return _did(store, tid, line + (f" {plural(r['open'], 'habit')} still on the habits row." if r['open'] else ''), kind)
         r = memory.mark(store, key, how)
         return _did(store, tid, {'keep': f"Kept {q(r['text'])} - I go on it from now.", 'ended': f"{q(r['text'])} is kept as history - no longer true.",
                                  'wrong': f"Took {q(r['text'])} out - it will not be learned again."}.get(how, f"Took {q(r['text'])} out for now."), kind)

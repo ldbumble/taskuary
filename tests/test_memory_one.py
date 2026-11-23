@@ -1,6 +1,7 @@
 """THE ONE MEMORY, THREE STORES (memory.py, r10 2026-11-23): what the owner SAID is kept in his words and used everywhere it bears, a
-correction on the same subject replaces it, what was INFERRED from what he did is never his word and never used before he confirms it,
-and his signature has one home. Each test is a shape a walk found broken, with invented Northwind people."""
+correction on the same subject replaces it, what was INFERRED from what he did is never his word and goes into use by itself once his own
+acts bear it out - never by asking him - the memory stays short, and his signature has one home.
+Each test is a shape a walk found broken, with invented Northwind people."""
 import json
 from unittest import mock
 from taskuary import context, general, learning, memory, responder, signatures
@@ -55,27 +56,67 @@ def test_a_correction_on_the_same_subject_replaces_the_old_line_and_nobody_reads
     assert len(memory.rows(s, memory.SAID)) == 1
 
 
-def test_a_press_is_evidence_never_his_word_and_never_used_before_he_confirms_it():
-    """Walk 6, 2026-11-23: one Watch it press taught "you leave paying vendor invoices to someone else" as his own line, read by triage and
-    every agent at once - while on that very task he had typed "set the payment up for my approval". A press teaches a learned line, with
-    its evidence; it is used only once he confirms it, and it is never shown as what he said."""
+def _taught(s, line, subject, *srcs, against=''):
+    with mock.patch.object(learning, '_llm', lambda st, llm=None: teacher(line, subject, only_this=False, against=against)):
+        for src in srcs: learning.teach(s, 'watch', src, 'From: Payworth Billing\nSubject: Invoice 88')
+
+
+def test_a_lesson_his_own_acts_keep_bearing_out_goes_into_use_with_no_press_from_him():
+    """Walk 6, 2026-11-23: one Watch it press taught "you leave paying vendor invoices to someone else" as his own line, read at once. Then
+    r10 made every learned line wait on an Adopt on a habits row - and the owner: "we don't want to have to confirm manually. that's
+    useless. it has to learn from confirmation". One press is evidence, unused; the same lesson in three of his episodes is in use by
+    itself, still what was learned and never what he said, with nothing put to him to confirm."""
     s = _store()
-    with mock.patch.object(learning, '_llm', lambda st, llm=None: teacher('You leave paying vendor invoices to someone else', 'vendor invoices', only_this=False)):
-        learning.teach(s, 'watch', 'task7', 'From: Payworth Billing\nSubject: Invoice 88')
-    line = memory.get(s, 'vendor invoices')
-    assert line['Kind'] == memory.INFERRED and not line['Confirmed'] and line['ev'] == ['task7']
+    line = 'You leave paying vendor invoices to someone else'
     readers = lambda: memory.whole(s, 'triage') + memory.for_task(s, {'billing@payworth.example'}) + s.get_doc('learned')
-    assert 'vendor invoices to someone else' not in readers(), 'a guess in a prompt is a rule'
-    page = {l['key']: l for l in memory.page(s)['lines']}[line['key']]
-    assert page['status'] == 'hypothesis' and not page['own'], 'the Memory page shows it as learned, waiting on his word'
-    learning.tick(s)
-    assert line['key'] not in learning._asked(s), 'seen once is not asked'
-    for e in ('task8', 'task9'): memory.infer(s, 'You leave paying vendor invoices to someone else', 'vendor invoices', [e])
-    learning.tick(s)
-    assert learning._asked(s)[line['key']]['state'] == 'open', 'seen three times, it is asked on the habits row'
-    learning.answer(s, line['key'], True)
-    assert 'vendor invoices to someone else' in memory.whole(s, 'triage'), 'confirmed: used from now on'
-    assert memory.get(s, line['key'])['Kind'] == memory.INFERRED, '...and still what was learned, never what he said'
+    _taught(s, line, 'vendor invoices', 'task7', 'task8')
+    r = memory.get(s, 'vendor invoices')
+    assert r['Kind'] == memory.INFERRED and not r['Confirmed'] and r['ev'] == ['task7', 'task8']
+    assert line not in readers(), 'two episodes are not yet how he works'
+    assert {l['key']: l for l in memory.page(s)['lines']}[r['key']]['status'] == 'hypothesis', 'the Memory page shows it still being learned'
+    _taught(s, line, 'vendor invoices', 'task9')
+    assert memory.get(s, r['key'])['Confirmed'] and line in readers(), 'the third of his own episodes puts it in use - no press from him'
+    assert memory.get(s, r['key'])['Kind'] == memory.INFERRED and not memory.has_said(s, line), '...still learned, never his word'
+    assert {l['key']: l for l in memory.page(s)['lines']}[r['key']]['status'] == 'live'
+    assert not s._rows("SELECT 1 FROM idea WHERE Key LIKE 'habit%'"), 'nothing is put to him to confirm'
+    memory.mark(s, r['key'], 'wrong')
+    assert line not in readers(), 'his Wrong takes it down at once'
+    _taught(s, line, 'vendor invoices', 'task10', 'task11', 'task12')
+    assert line not in readers() and not memory.get(s, 'vendor invoices'), '...and it is never learned again'
+
+
+def test_an_act_of_his_that_goes_against_a_line_in_use_weakens_it_until_his_acts_bear_it_out_again():
+    s = _store()
+    line = 'You leave paying vendor invoices to someone else'
+    _taught(s, line, 'vendor invoices', 'task7', 'task8', 'task9')
+    assert line in memory.whole(s, 'triage')
+    _taught(s, 'You pay the vendor invoices you approved yourself', 'paying approved invoices', 'task10', against='vendor invoices')
+    assert memory.get(s, 'vendor invoices')['N'] == 2 and line not in memory.whole(s, 'triage'), 'a contradicting act takes it out of use'
+    _taught(s, line, 'vendor invoices', 'task11')
+    assert line in memory.whole(s, 'triage'), 'borne out again, in use again'
+
+
+def test_the_memory_stays_short_conclusions_within_its_caps_never_a_record():
+    """The owner, 2026-11-23: "don't write too much detail in memory, otherwise it's basically the hub". A learned line is a conclusion of
+    one sentence; at most PER_ABOUT about one person, CAP in use and LEARNING still being seen - the line least recently borne out goes
+    first - and what he said is never trimmed. The Memory page shows the same lines every reader has."""
+    s = _store()
+    memory.remember(s, 'Only meetings between 10am and 2pm', 'meeting hours')
+    for i in range(memory.CAP + 15): memory.infer(s, f'You sign off on spend category {i} yourself', f'spend {i}', [f'rv{i}a', f'rv{i}b', f'rv{i}c'])
+    for i in range(memory.LEARNING + 10): memory.infer(s, f'You might batch topic {i} on Fridays', f'batch {i}', [f'msg{i}'])
+    for i in range(memory.PER_ABOUT + 4): memory.infer(s, f'Erin handles vendor question kind {i}', f'erin {i}', [f'task{i}'], people=[ERIN])
+    live = memory.rows(s, memory.INFERRED)
+    used, waiting = [r for r in live if r['Confirmed']], [r for r in live if not r['Confirmed']]
+    assert len(used) == memory.CAP and len(waiting) == memory.LEARNING, 'never past its caps'
+    assert sum(ERIN in r['people'] for r in live) <= memory.PER_ABOUT, 'nor past its share about one person'
+    assert not memory.get(s, 'spend 0') and memory.get(s, f'spend {memory.CAP + 14}'), 'the oldest fell out first, the newest stays'
+    assert memory.has_said(s, 'Only meetings between 10am and 2pm'), 'what he said is never trimmed'
+    learned = [l for l in memory.page(s)['lines'] if not l['own'] and not l.get('fact')]
+    assert {l['key'] for l in learned} == {r['key'] for r in live}, 'the Memory page shows the same lines'
+    record = ('Invoice 4471 from Payworth for 12,480.00 was approved on 2026-11-03 by Erin Blake after the second reminder, then paid by wire '
+              'on 2026-11-07 against purchase order 88-301 with the late fee waived')
+    assert memory.infer(s, record, 'payworth invoice 4471', ['rv90', 'rv91', 'rv92']) == {} and not memory.get(s, 'payworth invoice 4471'), \
+        'a record is the ledger\'s, never a memory line'
 
 
 def test_a_press_for_mail_like_this_from_now_on_is_his_confirmation_and_a_wrong_is_never_learned_again():
@@ -122,9 +163,27 @@ def test_learned_md_is_read_into_the_three_stores_once_without_loss():
     said, inferred = memory.rows(s, memory.SAID), {r['Subject']: r for r in memory.rows(s, memory.INFERRED)}
     assert [r['Text'] for r in said] == ['No meetings before 10, none on Fridays'], 'his own untagged line is what he said'
     assert inferred['monday approvals']['Text'] == 'You batches approvals on Mondays' or 'Alex' in inferred['monday approvals']['Text']
-    assert inferred['monday approvals']['ev'] == ['rv1', 'rv2'] and not inferred['monday approvals']['Confirmed'], 'tagged: learned, not confirmed'
+    assert inferred['monday approvals']['ev'] == ['rv1', 'rv2'] and inferred['monday approvals']['Confirmed'], 'in use before r10: in use still'
+    assert not inferred['gail matters']['Confirmed'], 'Watching was read by nobody: it waits for his acts, as before'
     v = next(r for r in inferred.values() if r['Source'] == 'verdict:not_ours')
     assert v['Confirmed'] and v['Scope'] == 'sender' and v['ScopeKey'] == GAIL, 'a verdict his press made for good is a confirmed learned line'
     assert 'gail matters' in inferred and 'stale guess' not in inferred, 'Watching is waiting; a Wrong stays down'
     assert s.get_doc(memory.BACKUP) == doc, 'the document as it stood is kept whole'
     assert 'No meetings before 10' in s.get_doc('learned') and '[s:' not in s.get_doc('learned'), 'LEARNED.md is now the stores\' face'
+    assert 'approvals on Mondays' in memory.whole(s, 'triage')
+
+
+def test_an_install_r10s_first_cut_migrated_gets_its_lines_in_use_back_once():
+    """The owner, 2026-11-23: r10's first cut read LEARNED.md in and demoted the learned lines that were in use to wait on a Keep. On such
+    an install the lines that stood in a section of the document as it was are in use again, once; Watching's stay learning."""
+    s = _store()
+    doc = ('# LEARNED.md\n\n## How you work\n- You batch approvals on Mondays [s:5 | ev: rv1, rv2 | seen: 2026-11-01 | k: monday approvals]\n'
+           '\n## Watching — not read by anyone yet\n<!-- hypotheses:start -->\n- Maybe Gail matters [s:2 | ev: msg9 | seen: 2026-11-01 | k: gail matters]\n'
+           '<!-- hypotheses:end -->\n')
+    s.save_doc('learned', doc, 'reflect')
+    memory.migrate(s)
+    s._exec('UPDATE memory_line SET Confirmed=0'); s.set_setting(memory.IN_USE_FIX, '', 't')       # ...as the first cut left it
+    assert 'approvals on Mondays' not in memory.whole(s, 'triage')
+    assert memory.migrate(s) == 1 and memory.migrate(s) == 0, 'once'
+    assert memory.get(s, 'monday approvals')['Confirmed'] and 'approvals on Mondays' in memory.whole(s, 'triage')
+    assert not memory.get(s, 'gail matters')['Confirmed']

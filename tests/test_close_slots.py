@@ -805,6 +805,7 @@ def test_the_agent_is_told_which_of_its_emails_went(s):
     tid = typed(s, FOUR[:2]); a, b = draft(s, tid, 0), draft(s, tid, 1)
     told = []
     with mock.patch('taskuary.general.approved', lambda st, t, press, what, *x, **k: told.append(what)):
+        assert approve(s, a)['ok'] and told == [], 'a card still stands behind it: the row is not over (cardqueue.row_over)'
         assert approve(s, b)['ok']
     assert len(told) == 1 and told[0].startswith(f'rv{b} (the email to ray@northwind.example) was sent'), told
 

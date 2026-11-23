@@ -120,7 +120,8 @@ class Server(unittest.TestCase):
         self.assertEqual((out['shut']['closed'], out['shut']['kept_open'], woke), (True, [], []), 'a press that closes the task wakes nobody')
 
     def test_kept_open_is_said_once_in_words_and_its_agent_hears_the_send(self):
-        "What still waits for his own press keeps it open - another email the task owes - said once, and the agent hears the send as before."
+        """What still waits for his own press keeps it open - another email the task owes - said once; the agent hears the send with that one,
+        the row's last (the owner, 2026-11-23: cardqueue.row_over)."""
         from taskuary import general, verdicts
         self.s.add_review({'TaskId': self.tid, 'Kind': 'slot', 'DraftText': 'Hello Gail', 'Status': 'pending'})
         woke = []
@@ -129,7 +130,7 @@ class Server(unittest.TestCase):
             out = verdicts.decide(self.s, self.s.get_review(self.rid), 'approve', None, None, 'owner', closes=True)
             again = concierge.close_after_send(self.s, self.tid, 'owner')
         why = 'an email this task owes still waits for your Send'
-        self.assertEqual((out['shut']['closed'], out['shut']['kept_open'], again['kept_open'], woke), (False, [why], [why], [self.tid]))
+        self.assertEqual((out['shut']['closed'], out['shut']['kept_open'], again['kept_open'], woke), (False, [why], [why], []))
         self.assertEqual([c['Body'] for c in self.s.list_comments(self.tid)].count(f'Sent. Kept open: {why[0].upper()}{why[1:]}.'), 1)
         said = [x[2] for x in general.presses(self.s, self.tid)]
         self.assertEqual([x for x in said if 'open' in x], [f'asked to close it with that send - it stays open: {why}'])

@@ -465,7 +465,7 @@ def _many(store, tid: int, name: str, args: dict, doors: dict) -> str:
     if bulk: store._exec(f"UPDATE review SET Batch=? WHERE ReviewId IN ({','.join('?' * len(mine))})", (key, *mine))
     n = len(mine)
     card = ('They stand as ONE card: the owner reviews a few and does them all with one press; you hear the whole run once.' if bulk
-            else f'They stand one at a time, {n} in a row: the owner sees each in turn and presses it; you hear how they went once the last is pressed.')
+            else f'They stand one at a time, {n} in a row: the owner sees each in turn and presses it; you hear how they went once the last is answered, or at once if a press fails.')
     shown = ((f"{len(went)} of {len(items)} sent at once - a routine's email to what its owner saved into it goes without a press; say they went."
               + (f" Not sent: {'; '.join(held)}." if held else '') + (f" The {n} unsent stand for the owner's Send{' as ONE card' if bulk else ', one at a time'}." if n else '')) if went
              else card if n else 'Nothing was filed, so no card stands - fix what each item was refused for and call it again.')

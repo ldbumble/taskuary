@@ -638,8 +638,39 @@ class OneCardAtATime(unittest.TestCase):
         self.assertEqual(cardqueue.line(cardqueue.state(self.s, tid)), '1 of 2 · next: the email to erin@northwind.example')
         with mock.patch('taskuary.ci.open_for_task', return_value={'url': 'https://github.com/northwind/ledger/pull/12'}):
             self.assertTrue(self.press(push)['ok'])
-        [n] = self.s.waiting_notes(tid); self.assertIn('it went through', n['Note']); self.assertIn(f'rv{note}', n['Note'])
+        self.assertEqual(self.s.waiting_notes(tid), [], 'a card still stands behind it: the press is recorded, nobody is woken')
         self.assertEqual((cardqueue.state(self.s, tid)['live'], cardqueue.held(self.s, tid)), ([note], set()))
+
+    def test_presses_in_a_row_wake_the_agent_once_after_the_last(self):
+        """Walk 6 (the owner, 2026-11-23): three letters stood in a row and the agent was told it would hear once the last was pressed - then
+        it was woken by every Send and wrote "Gail's copy has gone." under a card that already said Sent. One wake, after the last, naming all."""
+        from taskuary import outbound
+        tid = Factory(self.s).task('Send the board pack'); self.answered(tid, 'Three letters are set up.', '2000-01-01 00:00:00')
+        ids = [self.email(tid, f'{n}@northwind.example', f'{n.title()} - the pack is attached.') for n in ('erin', 'gail', 'paula')]
+        told = []
+        with mock.patch.object(general, 'to_agent', lambda st, t, said, actor='owner', heard=None, **k: told.append(said) or (heard and heard('woke')) or 'woke'), \
+             mock.patch.object(general, 'carries_on', return_value=True), mock.patch('taskuary.learn.learn_from'), \
+             mock.patch.object(outbound, 'send_out', side_effect=lambda st, ch, to, *a, **k: {'channel': ch, 'to': to, 'cc': []}), \
+             mock.patch.object(outbound, 'send_block', return_value=''):
+            for i, rid in enumerate(ids):
+                self.assertTrue(verdicts.decide(self.s, self.s.get_review(rid), 'approve')['ok'])
+                self.assertEqual(len(told), 0 if i < 2 else 1, f'after press {i + 1}')
+        [said] = told
+        for rid in ids: self.assertIn(f'rv{rid}', said)
+
+    def test_a_no_that_ends_a_row_of_yeses_is_its_one_wake(self):
+        from taskuary import outbound
+        tid = Factory(self.s).task('Answer Gail and tell Ray'); self.answered(tid, 'Both letters are set up.', '2000-01-01 00:00:00')
+        first, second = self.email(tid, 'gail@northwind.example', 'Gail - the rate is 4%.'), self.email(tid, 'ray@northwind.example', 'Ray - Gail has the rate.')
+        told = []
+        with mock.patch.object(general, 'to_agent', lambda st, t, said, actor='owner', heard=None, **k: told.append(said) or (heard and heard('woke')) or 'woke'), \
+             mock.patch('taskuary.learn.learn_from'), mock.patch.object(outbound, 'send_block', return_value=''), \
+             mock.patch.object(outbound, 'send_out', side_effect=lambda st, ch, to, *a, **k: {'channel': ch, 'to': to, 'cc': []}):
+            self.assertTrue(verdicts.decide(self.s, self.s.get_review(first), 'approve')['ok'])
+            self.assertEqual(told, [])
+            self.assertTrue(verdicts.decide(self.s, self.s.get_review(second), 'reject')['ok'])
+        [said] = told
+        self.assertIn(f'turned down rv{second}', said); self.assertIn(f'rv{first}', said)
 
     def test_a_no_to_the_first_card_tells_its_agent_whose_no_it_was_and_the_next_comes_forward(self):
         tid = Factory(self.s).task('Answer Gail and tell Ray'); self.answered(tid, 'Both letters are set up.', '2000-01-01 00:00:00')

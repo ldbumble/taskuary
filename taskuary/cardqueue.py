@@ -2,9 +2,9 @@
 step or action card, so the agent should wait on it and then go to next steps ... action cards should hold up the agent until it's completed.
 In chat flow it makes more sense"). Every card on a task - a reply or an email to Send, an act to Approve (a push, a PR, a post, a SQL write,
 a held step), a calendar answer, the landing question - stands in ONE line, in the order it was raised. Only its front is live; the rest are
-held: drawn nowhere, named on the front as what comes next. One comes forward once the owner has pressed (or turned down) the one before it
-AND the agent has heard what came of it - the turn that press woke has ended - so the agent goes on from each outcome: it lets the next stand,
-changes it, or takes it back. A press never sends or closes another card; nothing goes without its own press.
+held: drawn nowhere, named on the front as what comes next. One comes forward the moment the owner has pressed the one before it; the agent
+hears the row once it is over (row_over), at once where a press failed, and from a no where cards still stand behind it (said_no) - it then
+lets the rest stand, changes them, or takes them back. A press never sends or closes another card; nothing goes without its own press.
 
 Plain code, read wherever a card is drawn, listed or told: the chat's list (conversation.items), the page's detail (server.task_detail), what
 waits on the owner (store.waiting_reviews), and what its agent hears (agenttools, general.latest_block, general.approved/failed)."""
@@ -120,12 +120,21 @@ def _units(store, tid: int, past: set) -> list:
     return out
 
 
-# A LETTER AFTER A LETTER STANDS AT ONCE (design round 5, I4: three emails the agent had already written stood one at a time, and between each
-# Send and the next card its agent was woken to think ~12 s - "Thinking..." over a letter that was there): a letter he sent with another
-# letter written behind it wakes nobody - the next stands the moment his press lands, and the agent hears every one of them with the press
-# that ends the run (or one that fails, which wakes it at once - general.failed). An act's outcome is the agent's to go on from: it still wakes
-LETTERS = ('slot', 'draft_reply', 'draft')
-def _letters(rows) -> bool: return bool(rows) and all(r.get('Kind') in LETTERS for r in rows)
+# PRESSES IN A ROW WAKE THE AGENT ONCE (the owner, 2026-11-23; walk 6: told "you hear how they went once the last is pressed", it was woken by
+# every Send and wrote one line each, saying what the card's own Sent already said). Each press is recorded on its card and the next stands at
+# once; the agent is woken when the row is over, or at once by a press that fails (general.failed). THE ONE ANSWER to "is the row finished"
+def row_over(store, tid: int) -> bool:
+    "Does nothing on task `tid` wait for his press? A card its press handed to the agent to do (handed) is the agent's now, not his."
+    return not any(u['rids'] == [LAND] or _waits(u) for u in state(store, tid)['units'])
+
+
+def unheard(store, tid: int) -> bool:
+    "Has a yes of his on a card of the line gone since task `tid`'s agent last answered, told to nobody yet (general.TOLD)?"
+    from .general import TOLD, _last_answer
+    told = lambda r: store._one("SELECT 1 AS x FROM audit WHERE EntityType='review' AND EntityId=? AND Action=? AND CreatedAt>=?", (r['ReviewId'], TOLD, r['DecidedAt']))
+    return any(in_line({**r, 'Status': 'pending', 'DecideNote': None}) and not told(r) for r in store._rows(
+        "SELECT * FROM review WHERE TaskId=? AND Status IN ('approved','edited') AND DecidedAt>?", (int(tid), _last_answer(store, int(tid)) or '')))
+
 
 def state(store, tid: int) -> dict: return fresh(store, ('state', int(tid)), lambda: _state(store, tid))
 
@@ -158,7 +167,7 @@ def _state(store, tid: int) -> dict:
     held = [x for u in waiting[1:] for x in u['rids']]
     # ...AND EACH PRESS BRINGS THE NEXT AT ONCE (the owner, 2026-11-20: asked to post to three platforms, one card stood and the rest never
     # appeared - the next was held while the agent went on from the press, and a turn that went on longer hid it): every card raised stands
-    # queued, the front is drawn, and its agent hears each press as it is made (verdicts: told at once)
+    # queued, the front is drawn, and its agent hears the row once it is over (row_over)
     live = front['rids']
     return {'live': live, 'held': held, 'n': n, 'of': n + len(waiting) - 1, 'next': what(store, waiting[1]) if len(waiting) > 1 else '', 'units': waiting, 'past': past}
 
@@ -333,7 +342,8 @@ def said_no(store, rv: dict, verb: str, actor: str = 'owner') -> str:
     tid = rv.get('TaskId')
     # ...(a held step turned down tells its agent by its own road, the gate's; and Close without sending a reply closes the task)
     if _p(rv).get('action') in HELD_ACTS or verb == 'close_unsent' and rv.get('Kind') != 'slot': return ''
-    if not tid or not state(store, tid)['units']: return ''
+    # ...and a no that ends a row whose yeses woke nobody (row_over) is the row's one wake
+    if not tid or not (state(store, tid)['units'] or unheard(store, tid)): return ''
     no = {'reject': 'turned down', 'no_reply': 'said no reply is needed for', 'close_unsent': 'closed without sending', 'close_pr': 'turned down'}.get(verb, 'turned down')
     return general.to_agent(store, tid, f"The owner {no} rv{rv['ReviewId']} ({what(store, {'rids': [rv['ReviewId']], 'rows': [rv]}, True)}) - their own no.\n\n{screen(store, tid)}", actor,
                         heard=lambda how: store.audit('review', int(rv['ReviewId']), general.TOLD, actor, 'system', {'task': int(tid), 'how': how, 'no': verb}))

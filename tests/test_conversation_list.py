@@ -653,12 +653,12 @@ class TheList(unittest.TestCase):
         with sent, mock.patch.object(general, 'to_agent', lambda st, t_, said, *a, **k: woke.append(said) or 'woke'), mock.patch('taskuary.learn.learn_from'):
             self.assertTrue(verdicts.decide(s, s.get_review(ray), 'approve', None, None, 'owner')['ok'])
             now = self.list()
-            self.assertEqual(len(woke), 1, 'each send is told at once, even with the next letter written behind it (decided 2026-11-20)')
+            self.assertEqual(woke, [], 'a letter behind it still stands: the press is recorded, nobody woken (the owner, 2026-11-23: cardqueue.row_over)')
             self.assertEqual((now['queue']['live'], now['queue']['held'], now['working']), ([erin], [], False), "Erin's stands at once")
             self.assertEqual(cards(now)[wrote['id']], [(ray, 'approved'), (erin, 'pending')]); self.assertEqual(conversation.flow_breaks(now, was), [])   # ...letters are card rows
             self.assertEqual(now['letters'], wrote['id'], 'it stands in the turn that wrote it, under the one that went')
             self.assertTrue(verdicts.decide(s, s.get_review(erin), 'approve', None, None, 'owner')['ok'])
-        self.assertEqual(len(woke), 2, 'and the press that ends the run is told too, once')
+        self.assertEqual(len(woke), 1, 'the press that ends the run is the one wake'); self.assertIn(f'rv{ray}', woke[0]); self.assertIn(f'rv{erin}', woke[0])
         self.assertEqual(cards(self.list())[wrote['id']], [(ray, 'approved'), (erin, 'approved')], 'each where it stood, for good')
 
     def test_an_email_that_waited_its_turn_and_was_taken_back_never_stands(self):

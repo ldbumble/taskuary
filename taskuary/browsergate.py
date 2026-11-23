@@ -541,6 +541,9 @@ def _verdict(act: dict, v: dict | None, pg: dict, said: str, mine: bool = False)
     # and cannot be undone (a settings toggle)
     if fills(act, pg) and not (sure and irr): return {'hold': False, 'what': what, 'why': ''}
     if big is True and str(v.get('kind') or '') == 'private' and mine: big = False
+    # ...and following a link sends nothing of his - no form, no words: it cannot send his details or speak for him, whatever the judge named
+    # it (the Claude CLI walk, 2026-11-22: "Open the Sign up page on ZoningNow" held as speaking for him). Money or a delete by a link still waits
+    if big is True and str(v.get('kind') or '') in ('private', 'speaks') and follows(act, pg): big = False
     if big is True: return {'hold': True, 'what': what, 'why': WHY.get(str(v.get('kind') or ''), BIG_WHY), 'kind': str(v.get('kind') or '')}
     # ...only a verdict that SAYS it is not big passes on that: one that left `big` out (a CLI judge carries no schema) is read the old way -
     # it passed a payment he had asked for with no press, 2026-11-18

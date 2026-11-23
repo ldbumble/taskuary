@@ -233,6 +233,15 @@ class Judging(unittest.TestCase):
                                 said=said + '\nMy mobile is 555-0142')['hold'])
             self.assertTrue(one(self.s, self.act, {'url': CHECKOUT, 'fields': both}, Brain(None), said='')['hold'], 'with no ask of his, nothing is covered')
 
+    def test_following_a_link_never_speaks_for_him_or_sends_his_details_and_a_paying_link_still_waits(self):
+        """The Claude CLI walk, 2026-11-22: "Open the Sign up page on ZoningNow" - a link - held as speaking for him to other people."""
+        pg = {'url': CHECKOUT, 'elements': '- link "Sign up" [ref=e3]\n- link "Buy now" [ref=e4]'}
+        for kind in ('speaks', 'private'):
+            with verdict({'big': True, 'kind': kind, 'sure': True, 'irreversible': True, 'what': 'Open the Sign up page'}):
+                self.assertFalse(one(self.s, bg.acts('agent-browser click @e3')[0], pg, Brain(None))['hold'], kind)
+        with verdict({'big': True, 'kind': 'money', 'sure': True, 'irreversible': True, 'what': 'Buy the plan'}):
+            self.assertTrue(one(self.s, bg.acts('agent-browser click @e4')[0], pg, Brain(None))['hold'])
+
     def test_his_ask_typed_in_new_is_his_words_to_the_judge(self):
         """The Codex walk, 2026-11-22: his ask typed in New is the task's own message, and its agent's first prompt is Taskuary's brief - the
         judge was told he had said nothing, and his go-ahead to sign up (and the email he named) counted for nothing."""

@@ -45,10 +45,8 @@ test("each old link becomes a canvas request", () => {
   assert.deepEqual(pb("#about=new-playbook"), { section: "playbooks", open: null, newPb: 1 });
   assert.deepEqual(about("#about"), { section: null, open: null });
   assert.deepEqual(about("#about=bogus"), { section: null, open: null });
-  assert.deepEqual(canvasRequestFromHash("#settings=profiles").state, { section: "profiles", open: null }, "Profiles is a section of its own");
   assert.deepEqual(pb("#playbook=weekly-close"), { section: "playbooks", open: "pb:weekly-close" });
   assert.deepEqual(pb("#playbook=new:quickbooks"), { section: "playbooks", open: null, newFor: "quickbooks" }, "a card's New playbook");
-  assert.deepEqual(canvasRequestFromHash("#profiles").state, { section: "profiles", open: null }, "the Profiles section, every profile a card");
 });
 
 // THE ONE CANVAS (the owner, 2026-10-20: "it should not take you there regardless"): a link to a message - an idea's "Based on", a
@@ -64,7 +62,7 @@ test("no link the app writes resolves to the old row view", () => {
   const src = (f) => fs.readFileSync(path.join(process.cwd(), "src", f), "utf8");
   // every kind a link can ask for has a handler on the canvas, and none of them is a stage panel
   const kinds = new Set(["#task=5", "#msg=5", "#message=5", "#new-task", "#report=3", "#connector=gmail", "#connections", "#settings",
-    "#settings=policies", "#hub", "#playbook=x", "#profiles", "#cli-agents"].map((h) => canvasRequestFromHash(h).kind));
+    "#settings=policies", "#hub", "#playbook=x", "#cli-agents"].map((h) => canvasRequestFromHash(h).kind));
   const view = src("AssistantView.jsx");
   for (const k of kinds) assert.match(view, new RegExp(`request\\.kind === "${k}"`), `the canvas opens a ${k} link`);
   // ...and the view itself, and every door into it, is out of the code

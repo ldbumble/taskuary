@@ -1,6 +1,5 @@
 // THE TASK SECTION'S FACTS (the redesign of section 1, 2026-10-16): what triage decided, as read-only pills in the header,
 // and where the task came from, as conversations - pure, so node --test reads them without React or MUI.
-import { assignedAgent } from "./agentIdentity.js";
 import { routeIntent, routeWhy } from "./triageVerdict.js";
 import { plural } from "./timeWords.js";
 import { level } from "./priority.js";
@@ -165,7 +164,7 @@ export function askLine(text, max = 220) {
 }
 
 // WHAT TRIAGE DECIDED, as facts you read - never a control (the owner, 2026-10-16: "why are there dropdowns by the triage results?
-// you can't change it"). The task row is the live answer for who, profile, repository and priority; the verdict names the intent.
+// you can't change it"). The task row is the live answer for who, repository and priority; the verdict names the intent.
 // in plain words: "Who does it: an agent · general" was the app's own bookkeeping read out to a finance user (2026-10-17 audit)
 const INTENT = { task: "task", reply_only: "reply", watch: "watch", fyi: "fyi" };   // TaskPage.sortedLine reads these ids into its own words
 const WHO = { general: "an agent", coding: "a coding agent" };
@@ -206,7 +205,6 @@ export function headerFacts({ verdict = null, route = null, task = {}, workflow 
   const intent = INTENT[said] || "";
   // the owner's pick, else the coding agent's own (use_repo, repochoice.py) - triage names none any more (the owner, 2026-11-06)
   const repo = kind === "coding" ? repoTag(task?.Tags) || repoTag(task?.Tags, "agent-repo") || "" : "";
-  const profile = kind === "general" ? assignedAgent(task?.Assignee) || verdict?.profile || "" : "";
   const pri = level(task?.Priority);
   const by = run ? startedBy(task, workflow) : "";
   return {
@@ -221,7 +219,6 @@ export function headerFacts({ verdict = null, route = null, task = {}, workflow 
       // ...a run of steps with no agent step is done by those steps (workflows.of_task by_code), not by the agent its kind names
       run && workflow?.by_code ? { key: "who", label: "Who does it", value: "its steps", tone: "agent" }
         : { key: "who", label: "Who does it", value: WHO[kind] || "yours", tone: WHO[kind] ? "agent" : "" },
-      profile && { key: "profile", label: "Agent", value: profile },
       repo && { key: "repo", label: "Repository", value: repo, mono: true },
       // a start that stopped on "which repository?" (funnel.HELD_REPO) says so where the repository would be; the pick is on the bar
       !repo && kind === "coding" && /(?:^|[\s,])held:repo(?:$|[\s,])/.test(String(task?.Tags || "")) && { key: "repo", label: "Repository", value: "none - not started", tone: "alert" },

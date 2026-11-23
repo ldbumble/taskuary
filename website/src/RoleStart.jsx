@@ -1,6 +1,6 @@
-// Start from a role: one click from "I do accounts payable" to the worker, its playbooks and its daily job - no mail is
-// routed to it: a task's general work runs on the assistant (2026-11-04). Everything it lays out (roles.py) already had its
-// own page; nobody who is not technical ever found them all, so the role is offered here, where the workers live, until it is taken.
+// Start from a role: one click from "I do accounts payable" to its playbooks and its daily job - no mail is moved: a task's
+// general work runs on the assistant (2026-11-04). Everything it lays out (roles.py) already had its own page; nobody who is not
+// technical ever found them all, so the role is offered here, on the Playbooks shelf, until it is taken.
 import React, { useCallback, useEffect, useState } from "react";
 import { Box, Button, Dialog, DialogContent, DialogTitle, TextField, Typography } from "@mui/material";
 import { ButtonBar } from "./ButtonBar.jsx";
@@ -9,8 +9,7 @@ import { FAINT, INK } from "./theme.jsx";
 
 // what changed, in the owner's words - a receipt, not a log
 const said = (r) => [
-  r.profile_added ? `Added the ${r.profile.toUpperCase()}.md worker.` : `The ${r.profile.toUpperCase()}.md worker was already here.`,
-  r.playbooks_added.length ? `Added ${r.playbooks_added.length} playbook${r.playbooks_added.length > 1 ? "s" : ""}.` : "",
+  r.playbooks_added.length ? `Added ${r.playbooks_added.length} playbook${r.playbooks_added.length > 1 ? "s" : ""}.` : "Its playbooks were already here.",
   r.ledger_narrowed ? `${r.ledger_narrowed} is set to read: every bill becomes a proposal you approve.` : "",
   r.workflow_id ? "The daily portal job is under Reports, in Workflows, switched off until you have signed in to the portal once." : "",
 ].filter(Boolean).join(" ");
@@ -29,7 +28,7 @@ export default function RoleStart({ onApplied }) {
     try {
       const { data } = await api.post(`/api/roles/${open.name}`, { portal });
       setDone(said(data)); setOpen(null); await load(); onApplied?.();
-    } catch (e) { setErr(e?.response?.data?.detail || "Could not set it up. Try again, or add the profile by hand."); }
+    } catch (e) { setErr(e?.response?.data?.detail || "Could not set it up. Try again."); }
     finally { setBusy(false); }
   };
   const offered = roles.filter((r) => !r.applied);
@@ -50,7 +49,7 @@ export default function RoleStart({ onApplied }) {
         <DialogTitle sx={{ fontSize: 16 }}>Set up for {open?.title.toLowerCase()}</DialogTitle>
         <DialogContent>
           <Typography sx={{ fontSize: 12.5, color: INK, mb: 1.5 }}>
-            Adds the {open?.profile.toUpperCase()}.md worker, its playbooks and its daily job.
+            Adds its playbooks and its daily job.
             Nothing is posted to your ledger without your approval.
           </Typography>
           {open?.portal_needed && (

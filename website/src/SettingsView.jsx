@@ -47,7 +47,6 @@ import { mailboxChoices, mailboxValue } from "./ruleMailbox.js";
 import { ABOUT_SECTIONS, AUDIT_SECTIONS, onePage, secId, pageId, scrollToSection, sectionOffset, SCROLL_TOP } from "./settingsMap.js";
 import MenuBookIcon from "@mui/icons-material/MenuBook";
 import DocsView, { OPERATOR_DOCS } from "./DocsView.jsx";
-import RoleStart from "./RoleStart.jsx";
 import LinesSetting from "./LinesSetting.jsx";
 import TrustedSenders from "./TrustedSenders.jsx";
 import DetailSlider, { chatDefaultsChanged } from "./DetailSlider.jsx";
@@ -158,8 +157,8 @@ const jsonProblem = (v) => {
   try {
     const o = JSON.parse(v);
     if (!o || typeof o !== "object" || Array.isArray(o)) return 'Write it as {"role": "brain"} pairs inside curly braces.';
-    return Object.values(o).every((x) => typeof x === "string") ? "" : 'Each role needs a brain name in quotes, e.g. {"researcher": "codex"}.';
-  } catch { return 'That is not valid JSON yet — check the quotes and braces, e.g. {"researcher": "codex"}. Not saved.'; }
+    return Object.values(o).every((x) => typeof x === "string") ? "" : 'Each role needs a brain name in quotes, e.g. {"coding": "codex"}.';
+  } catch { return 'That is not valid JSON yet — check the quotes and braces, e.g. {"coding": "codex"}. Not saved.'; }
 };
 
 import schema from "../../taskuary/settings_schema.json";
@@ -562,7 +561,7 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
   };
 
   // Where a model is really saved. The AI defaults panel names the owning screen and this opens it, the road every link takes:
-  // its own map sent "the claude connection" to the Profiles shelf (the 2026-10-19 UI walk)
+  // its own map once sent "the claude connection" to the wrong shelf (the 2026-10-19 UI walk)
   const goFromPanel = (where) => openAppLink(ownerHref(where));
 
   // Deep search: every hit knows the page and the section it lives in, and scrolls there.
@@ -738,7 +737,7 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
       const bad = jsonBad[s.Name];
       return (
         <TextField defaultValue={s.Value} multiline minRows={1} error={!!bad} helperText={bad || " "}
-          placeholder='{"researcher": "codex"}' sx={{ width: 260, bgcolor: "var(--tq-panel, #fff)" }} inputProps={{ style: { fontSize: 12.5, fontFamily: "monospace" } }}
+          placeholder='{"coding": "codex"}' sx={{ width: 260, bgcolor: "var(--tq-panel, #fff)" }} inputProps={{ style: { fontSize: 12.5, fontFamily: "monospace" } }}
           onBlur={(e) => {
             const v = e.target.value.trim(), why = jsonProblem(v);
             setJsonBad((b) => ({ ...b, [s.Name]: why }));
@@ -1049,25 +1048,16 @@ const NAV = ["about", "docs", "config", "policies", PHONE_PAGE, "audit", "update
 // DOCS IS A TREE, not a list of scroll anchors: its rail entries SWITCH the document rather than
 // scrolling to a heading, because a document is not a heading you scroll past. Groups are headers
 // with their files under them, and the buttons that used to sit on a shelf inside the page - New
-// playbook, Manage profiles - are entries here too. Nothing about this page lives in a header any
+// playbook - are entries here too. Nothing about this page lives in a header any
 // more (the owner, 2026-09-22: "everything moves to sidebar").
-const docsTree = ({ profiles = [], people = [] }) => [
+const docsTree = ({ people = [] }) => [
   { key: "g:documents", label: "Your documents", head: true, sel: { group: "documents" } },
   ...OPERATOR_DOCS.map((d) => ({ key: `d:${d.name}`, label: d.label, sel: { group: "documents", doc: d.name } })),
-  { key: "g:profiles", label: "Profiles", head: true, sel: { group: "profiles" } },
-  // by WORKER NAME, not by filename. A profile's rules document can BE an operator document -
-  // the coding profile's is CODING.md - so filenames here put the same label in the rail twice,
-  // under two groups, and a click landed on whichever came first.
-  ...profiles.map((r) => ({ key: `p:${r.name}`, label: r.name, sel: { group: "profiles", doc: r.name } })),
-  { key: "a:new-profile", label: "+ New profile", sel: { action: "new-profile" } },
-  { key: "a:manage-profiles", label: "Manage profiles", sel: { action: "manage-profiles" } },
   // NO PLAYBOOKS HERE: they live on the Reports page beside reports and workflows (the owner, 2026-10-21 - Settings is for regular
   // configuration), PlaybookShelf.jsx
   // the pages the ledger keeps per person (people_pages.py), by address; none until reflection has compiled one
   ...(people.length ? [{ key: "g:people", label: "People", head: true, sel: { group: "people" } }] : []),
   ...people.map((p) => ({ key: `pp:${p.name}`, label: p.who, sel: { group: "documents", doc: p.name } })),
-  // no "Import skills" entry: that road was deliberately consolidated onto the Agents panel,
-  // which holds both ways in - a second door from here is the thing that was removed.
   { key: "g:how", label: "How it works", head: true, sel: { group: "how" } },
 ];
 const sameSel = (a, b) => !!a && !!b && (a.action || "") === (b.action || "")
@@ -1077,7 +1067,7 @@ const RAIL = 236, GUTTER = 24;   // the rail's own width, and the grid gap besid
 // `browse` (the assistant canvas, CanvasBrowse.jsx): the pages are the sections, Configuration's groups its cards, and one
 // group (or one page) opens with its own controls - drawn through the canvas's frame instead of this tab's rail.
 // `area` "about": the same view as ABOUT YOU (the owner, 2026-11-06: "general things you care about, how you do your job, personality,
-// goals") - You, Docs and Memory on one page of their own; Settings keeps the knobs, Profiles, Mail rules and Updates. Playbooks are
+// goals") - You, Docs and Memory on one page of their own; Settings keeps the knobs, Mail rules and Updates. Playbooks are
 // how you work, not who you are: they live on Reports (the owner, the same day; PlaybookShelf.jsx)
 export default function SettingsView({ onNavigate, browse = null, browseState = {}, onBrowseState = null, area = "settings" }) {
   const about = area === "about";
@@ -1087,10 +1077,9 @@ export default function SettingsView({ onNavigate, browse = null, browseState = 
   // Docs' rail entries switch the document, so the selection belongs here beside `page` - and the
   // catalog they draw comes from DocsView, which already fetches and derives both lists.
   const [docSel, setDocSel] = useState({ group: "documents", doc: OPERATOR_DOCS[0].name });
-  const [docCat, setDocCat] = useState({ profiles: [], playbooks: [], people: [] });
-  const [catN, setCatN] = useState(0);    // a role just laid out new profiles and playbooks: read the catalogue again
+  const [docCat, setDocCat] = useState({ playbooks: [], people: [] });
   const onCatalog = useCallback((c) => setDocCat((cur) =>
-    (cur.profiles === c.profiles && cur.playbooks === c.playbooks && cur.people === c.people ? cur : c)), []);
+    (cur.playbooks === c.playbooks && cur.people === c.people ? cur : c)), []);
   // WHICH RAIL ENTRIES SHOW THEIR SECTIONS. The page you are in shows its own - it has to, or the
   // rail would highlight a section folded away under a title - and the rest stay shut. Scrolling
   // the whole document would otherwise leave all seven open behind you, with eleven Configuration
@@ -1111,7 +1100,7 @@ export default function SettingsView({ onNavigate, browse = null, browseState = 
   // may not have settled yet - the page below it is still fetching its rows - so the scroll is
   // retried until it lands or two seconds pass.
   // Picking a document DOES swap what Docs shows, and it also scrolls you to Docs, so a rail
-  // click always lands on the thing you clicked. An ACTION entry (New playbook, Manage profiles)
+  // click always lands on the thing you clicked. An ACTION entry (New playbook)
   // carries a nonce: it is a one-shot, and without it a second click on the same entry would be
   // the same selection and nothing would reopen.
   const pickDoc = useCallback((sel) => {
@@ -1188,9 +1177,6 @@ export default function SettingsView({ onNavigate, browse = null, browseState = 
     // ...the canvas's card is handed its page in `browseState` (canvasLinks.js), and the address is the router's (appLinks.js)
     if (browse) return;
     const hash = window.location.hash || "";
-    // #playbook=<slug> / #profiles come from a connector card and name no settings page. They are
-    // left in place for DocsView to read; this only has to open the page that renders it.
-    if (/^#profiles(?:$|=)/.test(hash)) { goTo("docs", ""); return; }
     if (!/settings=/.test(hash)) return;
     const m = /settings=([\w-]+)/.exec(hash);
     const g = /group=([^&]+)/.exec(hash);
@@ -1211,12 +1197,10 @@ export default function SettingsView({ onNavigate, browse = null, browseState = 
 
   if (browse) {
     // a page or a group this install does not have (an old link) opens the list, and says why - never a crash or a blank card
-    // PROFILES AND PLAYBOOKS ARE SECTIONS OF THEIR OWN up here, beside Docs - not shelves inside it (the owner, 2026-10-07: "separate
-    // docs and profiles ... it should have separate section on the top level settings thing"). They open in the Docs page's editor.
-    // ...and ABOUT YOU is its own page now (the owner, 2026-11-06): You, Docs, Memory - Settings keeps the rest, the Activity
+    // ABOUT YOU is its own page now (the owner, 2026-11-06): You, Docs, Memory - Settings keeps the rest, the Activity
     // log only in Developer mode
-    const SHELF = { docs: ["g:documents", "g:how"], profiles: ["g:profiles"] };
-    const mine = about ? ["you", "docs", "memory"] : ["config", "profiles", "policies", PHONE_PAGE, ...(devMode ? ["audit"] : []), "updates"];
+    const SHELF = { docs: ["g:documents", "g:how"] };
+    const mine = about ? ["you", "docs", "memory"] : ["config", "policies", PHONE_PAGE, ...(devMode ? ["audit"] : []), "updates"];
     const asked = mine.includes(browseState.section) ? browseState.section : null, section = sectionOr(asked, mine);
     // ...and SAYS WHY (the product audit, 2026-11-08: #settings=audit with Developer mode off drew the list with no pill and no word)
     const hidden = !about && browseState.section === "audit" && !section ? "The Activity log shows only in Developer mode." : "";
@@ -1234,13 +1218,11 @@ export default function SettingsView({ onNavigate, browse = null, browseState = 
       .map((h) => (h.page === "config" ? { key: h.section, title: h.label, sub: h.crumb, section: "config", knob: h.knob || "" }
         : { key: h.page, title: h.label, sub: h.crumb, section: h.page })) : [];
     // DOCS IS A SHELF OF FILES, not one page (the owner, 2026-09-29: "I don't see the rest of the docs ... we need sub
-    // settings to see all the files soul.md/counsel"): the same tree the tab's rail drew - the operator documents, the
-    // profiles, the playbooks and their New / Manage entries, How it works - each a card that opens that document
+    // settings to see all the files soul.md/counsel"): the same tree the tab's rail drew - the operator documents, the people
+    // pages, How it works - each a card that opens that document
     // ...each card saying what it is, not which shelf it is on ("Operator documents" in grey under every name)
     // ...and LEARNED.md is Memory's, as sentences (2026-11-06): not a card of raw lines beside it
     const what = { ...Object.fromEntries(OPERATOR_DOCS.map((d) => [`d:${d.name}`, d.blurb])),
-      ...Object.fromEntries((docCat.profiles || []).map((r) => [`p:${r.name}`, r.purpose])),
-      "a:new-profile": "A new worker with its own rules", "a:manage-profiles": "Add, rename or remove workers",
       "g:how": "Taskuary's chat and the gates a message passes" };
     let shelf = "";
     const docCards = docsTree(docCat).flatMap((e) => {
@@ -1259,7 +1241,7 @@ export default function SettingsView({ onNavigate, browse = null, browseState = 
       : section ? [{ key: section, title: PAGES[page].title, sub: PAGES[page].desc }] : [];
     // ...a first section that IS its one page (About you's You) opens as that page, as its chip would
     const open = gone || !section ? null : browseState.open ?? (!asked && onePage(section, SHELF) ? section : null);
-    const label = (k) => (k === "you" ? "You" : k === "profiles" ? "Profiles" : k === "memory" ? "Memory" : PAGES[k].title);
+    const label = (k) => (k === "you" ? "You" : k === "memory" ? "Memory" : PAGES[k].title);
     const where = about ? "About you" : "Settings";
     return browse({
       title: where, wide: about && section === "memory", onePage: onePage(section, SHELF),
@@ -1271,7 +1253,7 @@ export default function SettingsView({ onNavigate, browse = null, browseState = 
       cards: cards.map((c, i) => ({ ...c, key: needle ? `${c.key}-${i}` : c.key,
         onOpen: c.node ? undefined : () => {
           setQ("");
-          // a document is picked the way the rail picked it; an action entry (New profile) is a one-shot, so it carries a nonce
+          // a document is picked the way the rail picked it; an action entry is a one-shot, so it carries a nonce
           if (c.sel) { const e = c; setDocSel(e.sel.action ? { ...e.sel, n: Date.now() } : e.sel); }
           onBrowseState?.({ ...browseState, section: c.section || section, open: c.key, knob: c.knob || "", at: c.knob ? Date.now() : browseState.at });
         } })),
@@ -1285,14 +1267,11 @@ export default function SettingsView({ onNavigate, browse = null, browseState = 
       // what the assistant changed here - the tab drew it over Configuration
       tools: <>{hidden && <Typography data-tq-settings-hidden="" variant="body2" sx={{ mt: 1.5, color: DIM }}>{hidden}</Typography>}
         {section === "config" && !open && !needle ? <Box sx={{ mt: 1.5 }}><AssistantChanges /></Box>
-        // the shelf's profiles come from DocsView's own reads - mounted unseen, as the tab's rail had it
-        : SHELF[section] && !open ? <>
-          {/* the one-click road to a whole role - worker, playbooks, where the mail goes (roles.py) - offered beside the workers */}
-          {section === "profiles" && !needle && <Box sx={{ mt: 1.5 }}><RoleStart onApplied={() => setCatN((n) => n + 1)} /></Box>}
-          <Box key={catN} sx={{ display: "none" }}><DocsView onCatalog={onCatalog} catalogOnly /></Box></> : null}</>,
+        // the shelf's people pages come from DocsView's own reads - mounted unseen, as the tab's rail had it
+        : SHELF[section] && !open ? <Box sx={{ display: "none" }}><DocsView onCatalog={onCatalog} catalogOnly /></Box> : null}</>,
       detail: open && section !== "memory" ? <SettingsPages only={{ page, group: section === "config" ? open : null, knob: browseState.knob || "", at: browseState.at }} q="" setQ={() => {}} onNavigate={onNavigate}
         onJump={() => {}} onSections={setCfgSecs} docSel={docSel} setDocSel={setDocSel} onCatalog={onCatalog} /> : null,
-      openLabel: !open ? "" : SHELF[section] ? `the document "${docCards.find((c) => c.key === open)?.title || (open === "d:learned" ? "LEARNED.md" : "Docs")}" (${where} - ${section === "docs" ? "Docs" : "Profiles"})`
+      openLabel: !open ? "" : SHELF[section] ? `the document "${docCards.find((c) => c.key === open)?.title || (open === "d:learned" ? "LEARNED.md" : "Docs")}" (${where} - Docs)`
         : section === "you" ? "who you are - your name, your identity on each channel, what the agents are told (About you)"
         : section === PHONE_PAGE ? `Phone & chats (Settings) - your Taskuary chat on WhatsApp or Telegram${devMode ? ", and the chats bound to coding agents" : ""}`
         : `the settings group "${section === "config" ? open : PAGES[section]?.title}" (Settings)`,

@@ -8,7 +8,7 @@ import { appLink, firstAppLink, inApp, linkName, linkRoad, ownPath } from "../sr
 const read = (name) => fs.readFileSync(new URL(`../src/${name}`, import.meta.url), "utf8");
 
 test("our pages are app links; the web and unknown hashes are not", () => {
-  for (const h of ["#connector=intacct", "#cli-agents", "#settings=policies", "#report=new-agent", "#report=12", "#profiles", "#setup"])
+  for (const h of ["#connector=intacct", "#cli-agents", "#settings=policies", "#report=new-agent", "#report=12", "#setup"])
     assert.equal(appLink(h), h, h);
   for (const h of ["https://example.com", "#nothing-here", "", "#task=12"]) assert.equal(appLink(h), null, h);
 });

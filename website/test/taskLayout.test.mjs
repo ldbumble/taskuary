@@ -240,8 +240,8 @@ test("the two sections come in the flow's order, and each closed tab says where 
   const tp = fs.readFileSync(new URL("../src/TaskPage.jsx", import.meta.url), "utf8");
   assert.match(tp, /const stoppedRun = !term\?\.alive && \(detail\?\.runEnded === "stopped" \|\| \["saved", "interrupted"\]\.includes\(detail\?\.agentStory\?\.kind\)\);/);
   assert.match(tp, /failed: failedRun, stopped: stoppedRun \|\| agentState === AGENT\.stopped,/);
-  assert.deepEqual(agentStatus({ profile: "assistant", word: "finished", said: "Wrote a one-page plan.", made: "Plan for a first box" }),
-    { lines: ["assistant · finished", "Wrote a one-page plan.", "Made: Plan for a first box"], foot: "✓ Done" });
+  assert.deepEqual(agentStatus({ name: "Agent", word: "finished", said: "Wrote a one-page plan.", made: "Plan for a first box" }),
+    { lines: ["Agent · finished", "Wrote a one-page plan.", "Made: Plan for a first box"], foot: "✓ Done" });
   assert.deepEqual(agentStatus({}), { lines: ["not started"], foot: "" });
 });
 

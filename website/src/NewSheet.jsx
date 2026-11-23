@@ -210,8 +210,7 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
   // NOTHING TO PICK (the owner, TQ-1397: "you ask the agent what you need and it should do it ... never, ever be stuck on a repo thing"): no
   // agent, AI, model or repository picker - Settings names the AI, and a live session opens in its task's own folder and picks its repository
   // itself (repochoice.block). A list that never loaded held a tester's Start for five minutes
-  const { agents, kinds, agentsRead, codingReady, devMode } = useAgents();
-  const [role, setRole] = useState("");     // a general agent: which profile (researcher, analyst...)
+  const { agentsRead, codingReady, devMode } = useAgents();
   // "terminal" = a CLI on a keyboard, "general" = a general agent with no repository. Held here rather
   // than inferred from the words: a question landing in a terminal by ACCIDENT is exactly what
   // newTask.planTask exists to stop, and it will not guess for us.
@@ -236,9 +235,6 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
   const [deskOn, setDeskOn] = useState(false);
   const [desk, setDesk] = useState(false);
   useEffect(() => { if (open) api.get("/api/desktop").then(({ data }) => setDeskOn(!!data?.active)).catch(() => setDeskOn(false)); }, [open]);
-  // a new general task has no profile to keep, so the first general role is chosen rather than "the profile it has"
-  const roles = agents.filter((a) => !["coding", "cli"].includes(String(kinds[a] || "").toLowerCase()));
-  useEffect(() => { if (!role && roles.length) setRole(roles.includes("researcher") ? "researcher" : roles[0]); }, [roles, role]);
   useEffect(() => {
     if (!open) return;
     api.get("/api/send-targets").then(({ data }) => {
@@ -324,7 +320,7 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
           // `needs_repo` with started: false, and this announced "is on it in a live session" over
           // the top of it (the owner, 2026-09-22: "hit the new button with coding agent but it did
           // not start"). One reading of a dispatch answer, the same one every other surface uses.
-          ({ data: out } = await api.post(`/api/tasks/${data.taskId}/dispatch`, general ? { kind: "general", agent: role || null } : {}));
+          ({ data: out } = await api.post(`/api/tasks/${data.taskId}/dispatch`, general ? { kind: "general" } : {}));
         } catch (e) {
           // ...and the line says the task is there: "nothing started" over a task already filed sent the owner to press again
           throw { response: { data: { detail: `${data.ref} is filed but did not start - ${String(e?.response?.data?.detail || "the start was refused").replace(/\.$/, "")}. Press ${verb} to try it again.` } } };
@@ -365,7 +361,7 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
       }
     } catch (e) { setErr(e?.response?.data?.detail || "That did not go through"); }
     if (!(inline && opened)) setBusy(false);
-  }, [kind, channel, to, emailTo, cc, mode, how, role, when, by, who, plan, noAi, noPlanner, onDone, onOpenTask, onClose, pics, line, inline]);
+  }, [kind, channel, to, emailTo, cc, mode, how, when, by, who, plan, noAi, noPlanner, onDone, onOpenTask, onClose, pics, line, inline]);
 
   // ...and no live session without a coding tool the owner chose (owner-approved, 2026-10-21): Send to coding agent stays disabled
   const noCodingTool = kind === "agent" && how === "terminal" && (!agentsRead || !codingReady);

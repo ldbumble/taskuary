@@ -17,7 +17,7 @@ import { LOCAL, place } from "./words.js";
 // lets Taskuary guess again (and it will pick something), where this says there is nothing to pick.
 const NO_REPO = "none";
 
-// `agent` is the coding profile when the caller knows it; blank lets the server find the profile of kind coding
+// `agent` is the coding agent's row when the caller knows it; blank lets the server find the one of kind coding
 export const RepoPicker = ({ taskId, agent = "", hasSession, onDone }) => {
   const [rows, setRows] = useState(null);
   const [picked, setPicked] = useState(null);

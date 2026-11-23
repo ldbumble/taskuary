@@ -132,7 +132,7 @@ export const fromStatus = ({ channel = "", count = 0, msgs = [], workflow = null
   lines: [count ? [channel, plural(count, "message")].filter(Boolean).join(" · ") : workflow ? `Routine · ${workflow.title}` : made, to,
     ...msgs.slice(0, TAB_MOST).map((m) => `${m.who}: ${q(m.words)}`)].filter(Boolean),
   foot: sorted ? `✓ ${sorted}` : "" });
-// ...the Agent: its profile and where it stands, what it did in a line, what it made - and at its foot its state
+// ...the Agent: its name and where it stands, what it did in a line, what it made - and at its foot its state
 // ...and a start held back for a free agent slot says so (`queued`, QueuedStart), never "not started" over a start already on its way (2026-11-04)
 export const agentWord = ({ live = false, waiting = false, failed = false, stopped = false, result = false, record = false, codeRun = false, queued = false } = {}) =>
   live ? (waiting ? "needs you" : "working") : queued ? "waiting its turn" : failed ? "failed" : stopped ? "stopped" : result ? "finished" : record ? "ran" : codeRun ? "steps ran by code" : "not started";
@@ -146,8 +146,8 @@ export const reportLine = (body) => {
   // 2026-10-29): the line it opens rides with it
   return line.endsWith(":") && ls[i + 1] ? `${line} ${ls[i + 1]}` : line;
 };
-export const agentStatus = ({ profile = "", word = "not started", said = "", made = "" } = {}) => ({
-  lines: [[profile, word].filter(Boolean).join(" · "), said, made ? `Made: ${made}` : ""].filter(Boolean),
+export const agentStatus = ({ name = "", word = "not started", said = "", made = "" } = {}) => ({
+  lines: [[name, word].filter(Boolean).join(" · "), said, made ? `Made: ${made}` : ""].filter(Boolean),
   foot: word === "finished" ? "✓ Done" : "" });
 
 // ANSWERED OUTSIDE TASKUARY: the newest message on the task is the owner's own, typed in Teams, the mail client or a chat

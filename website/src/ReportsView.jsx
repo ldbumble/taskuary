@@ -43,6 +43,7 @@ import { plural } from "./timeWords.js";
 import { openAppLink } from "./appLinks.js";
 import { routeOfHash } from "./canvasLinks.js";
 import { NewPlaybook, PB_EMPTY, PB_OPEN, PlaybookDetail, PlaybookRow, RecentlyDeleted as PlaybooksDeleted, pbOpen, usePlaybooks } from "./PlaybookShelf.jsx";
+import RoleStart from "./RoleStart.jsx";
 import { NEW_PB, takePlaybookAsk } from "./playbookOpen.js";
 import SetupWithAi, { onBuilt } from "./SetupWithAi.jsx";
 import { useViewExtras } from "./pageView.js";
@@ -179,7 +180,6 @@ export const FIELDS = {
   // review every Monday". The summary pass is optional: the agent already wrote prose.
   agent: [["skill — the slash command the agent should run (optional)", "skill", "text", "/weekly-user-review"],
     ["prompt — what to do, or what the skill needs to know", "prompt", "multiline", "Review this week's user-management changes and list anything unusual."],
-    ["profile (blank = the coding profile)", "agent", "text", "coding · research · analysis"],
     ["repository folder — for a skill that lives in a repo (optional)", "cwd", "text", "C:/work/census"],
     ["model (optional — the agent's default otherwise)", "model", "text", ""], AI_FIELD],
   rest: [["url", "url", "text", "https://api.example.com/items"], ["headers (JSON)", "headers", "multiline", '{"Authorization": "Bearer ..."}'], ["json path", "path", "text", "data.items"], AI_FIELD],
@@ -641,7 +641,9 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
       tools: section === "playbooks" ? (browseState.open == null ? <Box sx={{ display: "flex", flexDirection: "column" }}>
         <NewPlaybook key={browseState.newFor || browseState.newPb || ""} connectorType={browseState.newFor || ""} asked={!!browseState.newPb} onDone={pbs.load} button={false}
           onManual={() => onBrowseState?.({ section: "playbooks", open: `${PB_OPEN}new` })} />
-        {!!pbs.err && <Typography variant="body2" sx={{ mt: 1, fontWeight: 600, color: "var(--tq-danger, #6b2733)" }}>✗ {pbs.err}</Typography>}</Box> : null)
+        {!!pbs.err && <Typography variant="body2" sx={{ mt: 1, fontWeight: 600, color: "var(--tq-danger, #6b2733)" }}>✗ {pbs.err}</Typography>}
+        {/* ...and the one-click road to a whole role - its playbooks and its daily job (roles.py) - until it is taken */}
+        <Box sx={{ mt: 1.5 }}><RoleStart onApplied={pbs.load} /></Box></Box> : null)
       : section && browseState.open == null ? (
         <Box sx={{ mt: 1.5, display: "flex", flexDirection: "column", gap: 1 }}>
           <UndoLine kinds={["report", "workflow", "dashboard"]} onRestored={load} sx={{ mb: 0 }} />

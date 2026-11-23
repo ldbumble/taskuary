@@ -5,11 +5,10 @@ import { readFileSync, readdirSync } from "node:fs";
 
 const src = (f) => readFileSync(new URL(`../src/${f}`, import.meta.url), "utf8");
 
-test("Reports says routines, a data card has no template line, profiles live in Settings, the Hub names no agent's tool", () => {
+test("Reports says routines, a data card has no template line, the Hub names no agent's tool", () => {
   assert.match(src("ReportsView.jsx"), /plural\(workflowSources\.length, "routine"\)[^`]*routines act/);
   const cv = src("ConnectorsView.jsx");
   assert.doesNotMatch(cv, /\{meta\.desc\} The connection only/); assert.doesNotMatch(cv, /ships at authority READ/);
-  assert.match(src("AgentsPanel.jsx"), />Manage profiles in Settings</);
   const hub = src("HubView.jsx");
   assert.doesNotMatch(hub, /`agent \$\{p\.Author/); assert.doesNotMatch(hub, /whitfield/i, "no person's name decides whose a post is"); assert.match(hub, /byOwner\(p\.Author\) \? \(\s*<Typography[^>]*>posted by hand/);
 });
@@ -31,9 +30,9 @@ test("an ask that is its message's words, a second New playbook and a single pag
   assert.match(src("PlaybookShelf.jsx"), /\{button && <Button size="small" variant="outlined"/);
   assert.match(src("SettingsView.jsx"), /onePage: onePage\(section, SHELF\)/);
   // ...and every section that is one page opens from its chip: Mail rules and Updates drew one card named like the chip, to press again
-  const { onePage } = await import("../src/settingsMap.js"), SHELF = { docs: 1, profiles: 1 };
-  assert.deepEqual(["you", "phone", "policies", "updates", "audit", "config", "memory", "docs", "profiles", null].map((k) => onePage(k, SHELF)),
-    [true, true, true, true, true, false, false, false, false, false]);
+  const { onePage } = await import("../src/settingsMap.js"), SHELF = { docs: 1 };
+  assert.deepEqual(["you", "phone", "policies", "updates", "audit", "config", "memory", "docs", null].map((k) => onePage(k, SHELF)),
+    [true, true, true, true, true, false, false, false, false]);
   assert.match(src("SettingsView.jsx"), /open: onePage\(key, SHELF\) \? key : null/);
   assert.match(src("CanvasBrowse.jsx"), /const folded = opened && !onePage;/);
 });

@@ -1,33 +1,27 @@
-﻿// Connections own commands; profiles are a name and instructions, run on whatever brain the AI defaults choose.
+﻿// Connections own commands; every agent runs on whatever brain the AI defaults choose.
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Alert, Box, Button, Chip, CircularProgress, Dialog, DialogContent, DialogTitle, MenuItem, TextField, Typography } from "@mui/material";
+import { Alert, Box, Button, Chip, CircularProgress, Dialog, DialogContent, DialogTitle, TextField, Typography } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
 import api from "./api";
 import { noun, placeName } from "./words.js";
 import { BORDER, DIM, ROLES, card, mono } from "./theme.jsx";
-import { Crumb, Empty, TaskuaryMark } from "./ui.jsx";
-import { RecentlyDeleted, UndoLine, removeNow } from "./Removed.jsx";
+import { Crumb, TaskuaryMark } from "./ui.jsx";
+import { UndoLine, removeNow } from "./Removed.jsx";
 import { useCliInstall, InstallLine, UpdateLine, ConnectorLine } from "./cliInstall.jsx";
 import { useCliSetup, SetupButton, CliPane } from "./cliSetup.jsx";
-import SkillImport from "./SkillImport.jsx";
-import { openAppLink } from "./appLinks.js";
 import { toolUpdateLine } from "./cliCard.js";
 
 const lines = (v) => String(v || "").split("\n").map((x) => x.trim()).filter(Boolean);
 const failure = (e) => e?.response?.data?.detail || e?.message || "Could not save changes";
 const BLANK_CONNECTION = { name: "", cmd: "", args: "", resumeArgs: "", timeout: 1500, modelArg: "" };
-// A PROFILE IS A NAME AND INSTRUCTIONS (the owner, 2026-10-22): no provider, no model - the brain is the AI defaults' answer. A saved
-// profile carrying those keys from before still loads; they are not shown and Save does not send them
-const BLANK_PROFILE = { name: "", purpose: "", kind: "general", rulesDoc: "" };
-const PROFILE_KINDS = ["general", "coding", "research", "analysis", "coordination", "marketing", "markets", "accounts-payable"];
 
 export const CliConnectionsPage = ({ onBack }) => {
   const [clis, setClis] = useState(null), [draft, setDraft] = useState(null);
   const [err, setErr] = useState(""), [saving, setSaving] = useState(false);
   const [tests, setTests] = useState({});
   // DISCONNECT IS AT ONCE (the owner, 2026-10-21: no "are you sure"): "Disconnected <it> - Undo" over the cards puts it back, and the
-  // profiles on it with it. A profile left on it is never moved to another CLI (2026-10-06) - it has none until one is picked.
+  // agent rows on it with it. One left on it is never moved to another CLI (2026-10-06) - it has none until one is picked.
   const disconnect = async (cli) => {
     setErr("");
     try { await removeNow(() => api.delete(`/api/cli/connections/${encodeURIComponent(cli.name)}?detach=1`), "cli", cli.label || cli.name, "Disconnected"); await load(); }
@@ -86,9 +80,7 @@ export const CliConnectionsPage = ({ onBack }) => {
       // checklist's "Set up an AI" row sends you here and nothing you can do on this page ticks it.
       // Only when nothing is chosen yet - a brain the owner picked is never stomped by a test run.
       // First writer wins, decided server-side (not a compare-and-set - two tests landing together
-      // can race, and either winner is a working brain). `name` is a CONNECTION; the setting names
-      // a worker profile, so the server resolves one and adopts nothing when no profile runs this
-      // CLI. Nothing here reads the answer on purpose: the alert below reports the TEST, and saying
+      // can race, and either winner is a working brain). `name` is a CONNECTION. Nothing here reads the answer on purpose: the alert below reports the TEST, and saying
       // "adopted" for a false reply is exactly how the row it exists to tick stayed grey.
       if (data.ok) await api.post('/api/setup/adopt-brain', { cli: name }).catch(() => {});
     } catch (e) { setTests((t) => ({ ...t, [name]: { ok: false, error: failure(e) } })); }
@@ -96,10 +88,9 @@ export const CliConnectionsPage = ({ onBack }) => {
   return <Box sx={{ maxWidth: 980, mx: "auto" }}>
     <Crumb section={placeName("connections")} title={noun("cli_agents")} onBack={onBack} />
     <Box sx={{ display: "flex", gap: 2, alignItems: "center", mb: 1 }}>
-      <Typography variant="body2" sx={{ color: DIM, flex: 1 }}>Configure each CLI once. Its command and arguments are shared by every profile that chooses it.</Typography>
+      <Typography variant="body2" sx={{ color: DIM, flex: 1 }}>Configure each CLI once. Its command and arguments are shared by every agent that runs on it.</Typography>
       <Button variant="contained" startIcon={<AddIcon />} onClick={() => setDraft({ ...BLANK_CONNECTION })}>Add CLI connection</Button>
     </Box>
-    <Button size="small" onClick={() => { openAppLink("profiles"); }} sx={{ mb: 2 }}>Manage profiles in Settings</Button>
     {err && !draft && <Alert severity="error" sx={{ mb: 2 }}>{err}</Alert>}
     <UndoLine kinds={["cli"]} onRestored={load} />
     {!clis && !err && <CircularProgress size={22} />}
@@ -161,90 +152,10 @@ export const CliConnectionsPage = ({ onBack }) => {
           onChange={(e) => setDraft({ ...draft, resumeArgs: e.target.value })} />
         <TextField label="Timeout (seconds)" type="number" value={draft.timeout} onChange={(e) => setDraft({ ...draft, timeout: e.target.value })} />
         <TextField label="Model flag (optional)" helperText="Leave blank to use this CLI's standard model flag." value={draft.modelArg} onChange={(e) => setDraft({ ...draft, modelArg: e.target.value })} />
-        <Typography variant="caption" sx={{ color: DIM }}>Changes apply to every profile using this connection on its next run.</Typography>
+        <Typography variant="caption" sx={{ color: DIM }}>Changes apply to every agent using this connection on its next run.</Typography>
         <Box><Button variant="contained" disabled={saving || !draft.name.trim() || !draft.cmd.trim() || !(Number(draft.timeout) > 0)} onClick={save}>Save</Button><Button onClick={() => setDraft(null)}>Cancel</Button></Box>
       </Box></DialogContent>
     </Dialog>}
   </Box>;
 };
 
-export const AgentsPage = ({ onBack, section = "Docs", title = "Manage profiles", initialCreate = false, onCreated, onRules }) => {
-  const [agents, setAgents] = useState(null);
-  const [draft, setDraft] = useState(initialCreate ? { ...BLANK_PROFILE } : null);
-  const [err, setErr] = useState(""), [saving, setSaving] = useState(false);
-  // REMOVE IS AT ONCE (the owner, 2026-10-21): "Removed <profile> - Undo" over the list, and Recently deleted keeps it 30 days
-  const remove = async (name) => {
-    setErr("");
-    try { await removeNow(() => api.delete(`/api/agents/${encodeURIComponent(name)}`), "profile", name); await load(); }
-    catch (e) { setErr(failure(e)); }
-  };
-  const [importSkills, setImportSkills] = useState(false);   // the same wizard Docs -> Profiles opens
-  const load = useCallback(async () => {
-    try {
-      const a = await api.get("/api/agents");
-      const rows = Object.fromEntries((a.data.data || []).map((r) => [r.Name, r]));
-      setAgents(Object.fromEntries(Object.entries(a.data.config || {}).map(([name, p]) => [name, {
-        ...p, purpose: p.purpose || rows[name]?.purpose || "", kind: p.kind || rows[name]?.Kind || "coding", rules_doc: rows[name]?.rules_doc || p.rules_doc || "",
-      }])));
-      setErr("");
-    } catch (e) { setErr(failure(e)); }
-  }, []);
-  useEffect(() => { load(); }, [load]);
-  const edit = (name) => {
-    const a = agents[name];
-    setDraft({ name, existing: true, purpose: a.purpose, kind: a.kind, rulesDoc: a.rules_doc });
-  };
-  const save = async () => {
-    setSaving(true); setErr("");
-    const name = draft.name.trim();
-    const p = { purpose: draft.purpose.trim(), kind: draft.kind, rules_doc: draft.rulesDoc || (draft.kind === "coding" ? "coding" : name) };
-    try {
-      const { data } = await api.put(`/api/agents/${encodeURIComponent(name)}`, p);
-      const isNew = !draft.existing;
-      setDraft(null); await load();
-      if (isNew) onCreated?.(name, data.rules_doc || p.rules_doc);
-    } catch (e) { setErr(failure(e)); } finally { setSaving(false); }
-  };
-  return <Box sx={{ maxWidth: 980, mx: "auto" }}>
-    <Crumb section={section} title={title} onBack={onBack} />
-    {err && !draft && <Alert severity="error" sx={{ mb: 2 }}>{err}</Alert>}
-    <Box sx={{ display: "flex", alignItems: "center", gap: 2, mb: 2 }}>
-      <Typography variant="body2" sx={{ color: DIM, flex: 1 }}>Give each worker a purpose and instructions. A routine names the worker it runs on.</Typography>
-      {/* the two roads to a new worker, side by side and named as a choice: this screen IS the one
-          door, so Docs sends you here rather than offering either of them again (2026-09-17) */}
-      <Button variant="contained" startIcon={<AddIcon />} onClick={() => setDraft({ ...BLANK_PROFILE })}>Add profile manually</Button>
-      <Button variant="outlined" onClick={() => setImportSkills(true)} title="Bring in somebody else's SKILL.md - from a link or this machine - as a worker profile">Import skills</Button>
-    </Box>
-    {importSkills && <SkillImport onClose={() => setImportSkills(false)} onImported={load} />}
-    <UndoLine kinds={["profile"]} onRestored={load} />
-    {!agents && !err && <CircularProgress size={22} />}
-    {agents && !Object.keys(agents).length && <Empty>Add a profile to create your first worker.</Empty>}
-    {Object.entries(agents || {}).map(([name, a]) => <Box key={name} data-profile={name} sx={{ py: 2, borderBottom: `1px solid ${BORDER}` }}>
-      <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
-        <Chip size="small" label={name} /><Box sx={{ flex: 1 }} />
-        {onRules && <Button size="small" onClick={() => onRules(a.rules_doc || name)}>Instructions</Button>}
-        <Button size="small" onClick={() => edit(name)}>Edit</Button><Button size="small" color="error" onClick={() => remove(name)}>Remove</Button>
-      </Box>
-      <Typography variant="body2" sx={{ color: DIM, mt: 1 }}>{a.purpose || "Add a purpose: what this worker is for."}</Typography>
-    </Box>)}
-    {draft && <Dialog open fullWidth maxWidth="sm" onClose={() => !saving && setDraft(null)}>
-      <DialogTitle>{draft.existing ? `Edit profile · ${draft.name}` : "Add profile"}</DialogTitle>
-      <DialogContent><Box sx={{ display: "flex", flexDirection: "column", gap: 2, pt: 1 }}>
-        {err && <Alert severity="error">{err}</Alert>}
-        <TextField autoFocus label="Profile name" disabled={draft.existing} value={draft.name}
-          error={!draft.existing && !!agents?.[draft.name.trim()]} helperText={!draft.existing && agents?.[draft.name.trim()] ? "A profile already uses this name." : ""}
-          onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
-        <TextField label="Purpose — what is this worker for?" multiline minRows={2} value={draft.purpose} onChange={(e) => setDraft({ ...draft, purpose: e.target.value })} />
-        <TextField select label="Type of work" value={draft.kind} onChange={(e) => setDraft({ ...draft, kind: e.target.value })}>
-          {[...new Set([...PROFILE_KINDS, draft.kind])].map((k) => <MenuItem key={k} value={k}>{k}</MenuItem>)}
-        </TextField>
-        <TextField select label="Instructions document" SelectProps={{ displayEmpty: true }} InputLabelProps={{ shrink: true }} value={draft.rulesDoc} onChange={(e) => setDraft({ ...draft, rulesDoc: e.target.value })}>
-          <MenuItem value="">{draft.kind === "coding" ? "Shared CODING.md" : "Own document with starter instructions"}</MenuItem>
-          {[...new Set(["coding", ...Object.entries(agents || {}).map(([n, a]) => a.rules_doc || n), draft.rulesDoc])].filter(Boolean).map((n) => <MenuItem key={n} value={n}>{n.toUpperCase()}.md</MenuItem>)}
-        </TextField>
-        <Box><Button variant="contained" disabled={saving || !agents || !draft.name.trim() || (!draft.existing && !!agents?.[draft.name.trim()]) || !draft.purpose.trim()} onClick={save}>Save</Button><Button onClick={() => setDraft(null)}>Cancel</Button></Box>
-      </Box></DialogContent>
-    </Dialog>}
-    <RecentlyDeleted kinds={["profile"]} onRestored={load} />
-  </Box>;
-};

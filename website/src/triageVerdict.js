@@ -11,7 +11,7 @@ export const routeIntent = (reason) => {
 export const routeWhy = (reason) => String(reason || "").replace(/^triage:\s*[^\u00b7]*?\s-\s/, "");
 
 const DISPLAY_KEYS = new Set([
-  "intent", "kind", "profile", "playbook", "why", "title", "summary", "checklist",
+  "intent", "kind", "playbook", "why", "title", "summary", "checklist",
   "repository", "needs_repo_choice", "repo_reason", "relationship", "related_message_ids",
   "existing_task_id", "notes", "notes_left",
 ]);
@@ -44,11 +44,9 @@ export const legacyTriageVerdict = ({ routeReason = "", routes = [], task = {}, 
   const repository = String(task?.Tags || "").split(",").map((value) => value.trim())
     .find((value) => value.toLowerCase().startsWith("repo:"));
   const items = checklist.map((value) => typeof value === "string" ? value : value?.text).filter(Boolean);
-  const assignee = String(task?.Assignee || "");
   return {
     intent: intent.toLowerCase(),
     kind: task?.Kind || "",
-    profile: assignee.startsWith("agent:") ? assignee.slice(6) : "",
     title: task?.Title || "",
     summary: task?.Summary || "",
     checklist: items,

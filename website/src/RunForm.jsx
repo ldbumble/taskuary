@@ -46,7 +46,7 @@ export function RunForm({ title, picker, note, value, onValue, pics, placeholder
 // so "prep me for this meeting: pull the open issues with these people" fills it and starts it as the owner would (the owner, 2026-11-02)
 export function AgentAsk({ coding: wantCoding = false, title, what, placeholder = ASK_WHAT, onStart, onClose, inline = false, view = null }) {
   const caps = useCapabilities(), canCode = !!caps.coding;
-  const { agents, models, kinds, brainList, brainModels, generalBrains, agentsRead, codingReady } = useAgents();
+  const { models, brainList, brainModels, generalBrains, agentsRead, codingReady } = useAgents();
   const [general, setGeneral] = useState(!(wantCoding && canCode));
   const coding = canCode && !general;
   const [run, setRun] = useState({ agent: "", brain: "", pick: "", model: "" });
@@ -62,7 +62,7 @@ export function AgentAsk({ coding: wantCoding = false, title, what, placeholder 
     setBusy(true); setErr("");
     try {
       await onStart?.({ verb: coding ? "coding_agent" : "regular_agent", kind: coding ? "coding" : "general",
-        text: text.trim(), files: pics.paths, agent: coding ? null : run.agent || null,
+        text: text.trim(), files: pics.paths,
         brain: coding ? run.brain || null : null, pick: coding && run.brain ? null : run.pick || null, model: run.model || null });
     } catch (e) { setErr(e?.response?.data?.detail || e?.message || "It did not start - press it again."); }
     finally { setBusy(false); }
@@ -73,12 +73,11 @@ export function AgentAsk({ coding: wantCoding = false, title, what, placeholder 
       <RunForm title={title || btn(verb)} value={text} onValue={setText} pics={pics} autoFocus placeholder={placeholder}
         sx={inline ? { mt: 0, pt: 0, borderTop: 0 } : {}}
         note={what}
-        picker={<AgentPicker agents={agents} models={models} kinds={kinds} coding={coding} agent={run.agent} model={run.model}
+        picker={<AgentPicker models={models} coding={coding} model={run.model}
           brains={brainList} brainModels={brainModels} brain={run.brain}
           generalBrains={generalBrains} brainsRead={agentsRead} codingReady={codingReady} pick={run.pick}
           onPick={(p) => setRun((r) => ({ ...r, pick: p }))}
           onBrain={(b) => setRun((r) => ({ ...r, brain: b, model: "" }))}
-          onAgent={(a) => setRun((r) => ({ ...r, agent: a }))}
           onModel={(m) => setRun((r) => ({ ...r, model: m }))} size={28} />}
         actions={<>
           <span title={why || undefined}><Button size="small" variant="contained" disableElevation data-tq-agent-start={coding ? "coding" : "general"}

@@ -1,12 +1,12 @@
 // A REMOVE ACTS AT ONCE, AND IS TAKEN BACK IN PLACE (the owner, 2026-10-21: no "are you sure"). Every Remove - a report, a workflow,
-// a routing rule, a profile, a mailbox address, a connection, a sign-in - runs on the press; the server keeps what it took
+// a routing rule, a mailbox address, a connection, a sign-in - runs on the press; the server keeps what it took
 // (recentlydeleted.py) and answers with its id. The page then says "Removed <it> - Undo" where the thing was. The press and the
 // line are often on two screens (an editor removes, its list shows the line), so the line is announced here and drawn by whichever
 // list is showing that kind.
 const subs = new Set();
 let last = null, timer = null;
 
-// `kind`: which lists draw it ("report", "workflow", "rule", "profile", "source", "connection", "signout", "signin" - a saved sign-in); `did`: the server's id
+// `kind`: which lists draw it ("report", "workflow", "rule", "source", "connection", "signout", "signin" - a saved sign-in); `did`: the server's id
 export const removedLine = (title, verb = "Removed") => `${verb} ${title || "it"}`;
 export function announceRemoved({ did, title, kind, verb = "Removed" }) {
   last = did ? { did, title, kind, verb, at: Date.now() } : null;

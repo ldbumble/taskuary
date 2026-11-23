@@ -35,8 +35,7 @@ import { FULL_SX, useFullScreen } from "./fullScreen.js";
 import { pickFor } from "./assistantProvider.js";
 import { agentName, turnStamp } from "./agentWork.js";
 import { RunClock, StopCtx, turnStart, when } from "./RunClock.jsx";
-import { AGENT_TURN, MESSAGE, instructionsHint } from "./kinds.js";
-import { assignedAgent } from "./agentIdentity.js";
+import { AGENT_TURN, MESSAGE } from "./kinds.js";
 import { LinkPopups, LocalFiles, Md } from "./md.jsx";
 import PublishedPages, { FileDialog } from "./PublishedPages.jsx";
 import { Attachments } from "./Attachments.jsx";
@@ -1098,8 +1097,7 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
         flexWrap: "wrap", flexShrink: 0 }}>
         <Box sx={{ width: 7, height: 7, borderRadius: 99, bgcolor: session?.alive ? "#78a17b" : "#c7a258" }} />
         {/* the strip named the window after the concierge; it belongs to the agent working in it */}
-        <Typography noWrap sx={{ ...mono, fontSize: 10.5, letterSpacing: ".13em", textTransform: "uppercase", color: DIM, flexShrink: 0 }}
-          title={instructionsHint(assignedAgent(task?.Assignee)) || undefined}>{name}</Typography>
+        <Typography noWrap sx={{ ...mono, fontSize: 10.5, letterSpacing: ".13em", textTransform: "uppercase", color: DIM, flexShrink: 0 }}>{name}</Typography>
         <Box sx={{ flex: 1, minWidth: 8 }} />
         {tools}
       </Box>}

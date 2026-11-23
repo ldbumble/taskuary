@@ -156,8 +156,8 @@ export const onPlace = (fn) => {
   return () => { window.removeEventListener("popstate", go); window.removeEventListener("hashchange", go); };
 };
 
-// WHERE A SETTING IS SAVED, as a link (aidefaults.owner_link): a place of words.json, or one connector's card. "agents" opened the
-// Profiles shelf - the claude connection lives on Connections' AI CLI agents page (the 2026-10-19 UI walk)
+// WHERE A SETTING IS SAVED, as a link (aidefaults.owner_link): a place of words.json, or one connector's card - the claude connection
+// lives on Connections' AI CLI agents page (the 2026-10-19 UI walk)
 export const ownerHref = (link) => {
   const l = String(link || "");
   return l.startsWith("connector:") ? `#connector=${l.slice(10)}` : l ? placeHref(l) : "";

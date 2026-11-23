@@ -77,7 +77,7 @@ function OnlyIf({ flow, index, step, onChange }) {
   );
 }
 
-function KindConfig({ step, flow, index, set, typeOptions, connectors, agents, test }) {
+function KindConfig({ step, flow, index, set, typeOptions, connectors, test }) {
   const tf = (k, label, ph, more = {}) => <TokenField flow={flow} index={index} value={step[k]} label={label} placeholder={ph}
     onChange={(v) => set({ [k]: v })} {...more} />;
   if (step.kind === "source") return (
@@ -110,9 +110,10 @@ function KindConfig({ step, flow, index, set, typeOptions, connectors, agents, t
     <>
       {tf("title", "Task title", "Duplicate bill: {{s1.head}}")}
       {tf("summary", "What the task says", "The pairs, and what to do about them", { multiline: true, minRows: 2 })}
-      <Select size="small" displayEmpty value={step.assignee || ""} sx={{ ...field, fontSize: 12.5, maxWidth: 260 }} onChange={(e) => set({ assignee: e.target.value })}>
+      {/* an agent works it, or it is yours (flow._task) - a name saved before is still an agent's */}
+      <Select size="small" displayEmpty value={step.assignee ? "agent" : ""} sx={{ ...field, fontSize: 12.5, maxWidth: 260 }} onChange={(e) => set({ assignee: e.target.value })}>
         <MenuItem value="" sx={{ fontSize: 12.5 }}>for you</MenuItem>
-        {agents.map((a) => <MenuItem key={a} value={a} sx={{ fontSize: 12.5 }}>for the {a} agent</MenuItem>)}
+        <MenuItem value="agent" sx={{ fontSize: 12.5 }}>for an agent</MenuItem>
       </Select>
       {/* the task it opens takes one of the three priorities and no other word (the owner, 2026-10-25) - a step saved as high reads important */}
       <Select size="small" value={level(step.priority)} sx={{ ...field, fontSize: 12.5, maxWidth: 200 }} data-tq-step-priority=""
@@ -159,7 +160,7 @@ function AddStep({ flow, at, onAdd, last }) {
   );
 }
 
-export default function WorkflowSteps({ flow, setFlow, outputs, setOutputs, connectors, types, agents, title, sourceId, inputs, changed }) {
+export default function WorkflowSteps({ flow, setFlow, outputs, setOutputs, connectors, types, title, sourceId, inputs, changed }) {
   const [open, setOpen] = useState(() => new Set(flow.length <= 3 ? flow.map((s) => s.id) : []));
   const [testing, setTesting] = useState("");
   const [tested, setTested] = useState(false);       // a test has run here - the outputs below are a test's, not the last run's
@@ -243,7 +244,7 @@ export default function WorkflowSteps({ flow, setFlow, outputs, setOutputs, conn
                   <TextField size="small" label="Step name" value={s.label || ""} placeholder={KIND_WORDS[s.kind]} sx={{ ...field, mt: mark ? 0 : 1 }}
                     onChange={(e) => setStep(i, { label: e.target.value })} />
                   <KindConfig step={s} flow={flow} index={i} set={(p, replace) => setStep(i, p, replace)} typeOptions={typeOptions}
-                    connectors={connectors || []} agents={agents || []} test={test} />
+                    connectors={connectors || []} test={test} />
                   {!!bad.length && <Typography variant="caption" sx={{ color: ALERT_INK }}>
                     {bad.map((r) => `{{${r}}}`).join(", ")} {bad.length === 1 ? "is not a step" : "are not steps"} above this one.</Typography>}
                   {s.kind !== "agent" && <OnlyIf flow={flow} index={i} step={s} onChange={(p) => setStep(i, p)} />}

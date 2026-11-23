@@ -13,10 +13,10 @@ export const kindLabel = (kind) => KIND[kind]?.label || kind;
 export const shortKind = (kind) => String(kindLabel(kind || "task")).replace(/^agent · /, "");
 // what triage's panel calls the destination ("Coding agent", "My task list")
 export const verdictLabel = (kind) => KIND[kind]?.verdict || String(kind || "");
-// "Start the coding agent": who works it, said by what it IS - a profile's name is not a worker (the owner, 2026-10-16)
+// "Start the coding agent": who works it, said by what it IS (the owner, 2026-10-16)
 export const agentWord = (kind) => KIND[kind === "coding" ? "coding" : "general"].worker;
-// WHO THE OWNER SEES AT WORK (kinds.json `shown_`): Agent, whatever profile, tool or demo runs it (the owner, 2026-11-08 - Taskuary is the
-// app, the Assistant the corner pop-up). The profile is told on hover only (instructionsHint).
+// WHO THE OWNER SEES AT WORK (kinds.json `shown_`): Agent, whatever tool or demo runs it (the owner, 2026-11-08 - Taskuary is the
+// app, the Assistant the corner pop-up).
 export const AGENT_SHOWN = kinds.shown;
 // THE ONE PROMPT WORDING (audit, 2026-11-05): every box that talks to the agent says this; only a sign-in hand-over adds its own warning
 // ...WHO IS TALKING (the owner, 2026-11-06: "assistant should be more general bringing you around places and agent is more specific to this but
@@ -27,4 +27,3 @@ export const AGENT_TURN = "Agent";
 export const ASSISTANT_NAME = kinds.assistant;
 export const MESSAGE = "Message the agent…", ASK_ASSISTANT = `Ask ${ASSISTANT_NAME}…`;
 export const shownAgent = () => AGENT_SHOWN;      // `run` was read for a tool's name; every agent is Agent now
-export const instructionsHint = (profile) => profile ? `Instructions: ${profile}` : "";

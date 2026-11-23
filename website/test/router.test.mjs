@@ -29,7 +29,7 @@ test("every place words.json names is a place the canvas opens", () => {
   assert.equal(canvasRequestFromHash(PLACES.ai_apps.href).state.connector, "cli-agents");
 });
 
-test("where a setting is saved opens that card - never the Profiles shelf", () => {
+test("where a setting is saved opens that card", () => {
   // every owner_link the server writes (aidefaults.py): a place id, or one connector
   const links = [...src("../../taskuary/aidefaults.py").matchAll(/owner_link=(?:'([^']*)'|f"connector:)/g)].map((m) => m[1] ?? "connector:7");
   assert.ok(links.includes("ai_apps") && links.includes("connector:7"), JSON.stringify(links));
@@ -52,7 +52,7 @@ test("the address of a place reads back as the same place", () => {
     ["connections", {}], ["connections", { section: "Email", open: null }], ["connections", { section: "Email", open: "c3", connector: "3" }],
     ["connections", { connector: "cli-agents" }], ["settings", { section: null }], ["settings", { section: "config", open: null }],
     ["settings", { section: "config", open: "Sync & startup", knob: "poll_minutes" }], ["settings", { section: "policies", open: "policies" }],
-    ["about", { section: "docs", open: "d:learned", view: "changes" }], ["settings", { section: "profiles", open: null }],
+    ["about", { section: "docs", open: "d:learned", view: "changes" }],
     ["about", {}], ["about", { section: "you", open: "you" }], ["about", { section: "memory", open: null }], ["about", { section: "docs", open: null }],
     ["reports", { section: "reports", open: 17 }], ["reports", { section: "reports", open: "new-report" }], ["reports", { section: "workflows", open: null }],
     ["reports", { section: "workflows", open: "new-agent" }], ["reports", { section: "playbooks", open: null }],

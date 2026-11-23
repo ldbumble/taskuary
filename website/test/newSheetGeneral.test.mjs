@@ -23,7 +23,7 @@ test("a general agent's job is typed into the chat's own box, with no pickers, a
   // ...and no Cancel beside the × (the design walk, 2026-11-20): the × and Esc close it
   assert.doesNotMatch(ns, />Cancel<\/Button>/);
   assert.match(ns, /!aiFor\(await capabilities\(\), "general"\)/, "no AI is the one capability's answer for general work - the demo's agents work");
-  assert.ok(ns.includes('/dispatch`, general ? { kind: "general", agent: role || null } : {})'));
+  assert.ok(ns.includes('/dispatch`, general ? { kind: "general" } : {})'));
 });
 
 // NO KINDS TO PICK (TQ-1397): New is one box - the Assistant makes the words what they are - so there is no row of kinds to lose

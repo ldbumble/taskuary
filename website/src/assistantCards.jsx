@@ -1223,7 +1223,7 @@ export function MessageCard({ card, onDone, onOpenTask, onTimeline, onSurface, o
       const msg = errText(e);
       // Compatibility with an older server response when this card already knows its task.
       if (card.tid && /no local path/i.test(msg))
-        setRepoAsk({ taskId: card.tid, agent: "" });   // blank: the server finds the coding profile
+        setRepoAsk({ taskId: card.tid, agent: "" });   // blank: the server finds the coding agent
       else setErr(msg);
     }
     setBusy("");

@@ -1,8 +1,7 @@
 import { AGENT_SHOWN } from "./kinds.js";
 
-// A task stores people and bots in one Assignee field. `agent:` is storage syntax only, and the profile after it is the
-// instructions the agent runs under, never who it is: screens say Taskuary (kinds.json `shown_`), never "agent:Atlas" or "Atlas"
-// (the owner, 2026-10-29: hide profile names in Settings and the Assigned to picker too). The profile is told on hover only.
+// A task stores people and bots in one Assignee field. `agent:` is storage syntax only, and the name after it is never who the
+// agent is: screens say Taskuary (kinds.json `shown_`), never "agent:coding" (the owner, 2026-10-29).
 export const agentAssignee = (name) => name ? `agent:${name}` : "";
 
 export const assignedAgent = (value) => {

@@ -13,9 +13,8 @@ import { AGENT_SHOWN } from "./kinds.js";
 import { toolTarget } from "./assistantStream.js";
 import { plural } from "./timeWords.js";
 
-// ONE NAME AT WORK (the owner, 2026-10-28): the agent is Taskuary on every screen. The profile it runs under ("researcher",
-// a kind's "Research") read as the actor - "researcher asked you something" over a run signing the owner up for things - and it
-// is the instructions, not the worker: it shows on hover only (kinds.instructionsHint), and Settings edits it.
+// ONE NAME AT WORK (the owner, 2026-10-28): the agent is Taskuary on every screen - "researcher asked you something" named a set of
+// instructions as the actor.
 export const agentName = () => AGENT_SHOWN;
 
 const HOST = /^https?:\/\/(?:www\.)?([^/?#]+)/i;

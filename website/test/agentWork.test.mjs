@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { shownAgent, instructionsHint } from "../src/kinds.js";
+import { shownAgent } from "../src/kinds.js";
 import { agentName, workOf, doingNow, trailText, turnStart, elapsedText, sourceOf, saidFromTail, saidOf } from "../src/agentWork.js";
 
 const read = (name) => readFileSync(fileURLToPath(new URL(`../src/${name}`, import.meta.url)), "utf8");
@@ -12,9 +12,6 @@ test("the agent doing the work is Agent - never the app, a tool, a profile or a 
     assert.equal(agentName(t), "Agent");
   for (const run of [{ mode: "terminal", cli: "claude" }, { mode: "chat", cli: "taskuary", agent: "researcher" }, { mode: "terminal", cli: "demo" }, null])
     assert.equal(shownAgent(run), "Agent");
-  // ...and the profile is said only where a look for it finds it
-  assert.equal(instructionsHint("researcher"), "Instructions: researcher");
-  assert.equal(instructionsHint(""), "");
 });
 
 test("a call with no result yet is what the agent is doing right now", () => {

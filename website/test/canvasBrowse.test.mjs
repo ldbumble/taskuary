@@ -78,9 +78,9 @@ test("a link to a report or a connection that is gone says so, and opens nothing
 test("Docs in the canvas lists every document the tab's rail did, and opens the one picked", () => {
   const s = src("SettingsView.jsx");
   const b = s.slice(s.indexOf("if (browse) {"), s.indexOf("return browse({", s.indexOf("if (browse) {")));
-  assert.match(b, /docsTree\(docCat\)/, "the same tree the rail drew: documents, profiles, playbooks, How it works");
+  assert.match(b, /docsTree\(docCat\)/, "the same tree the rail drew: documents, people, How it works");
   assert.match(s, /setDocSel\(e\.sel\.action \? \{ \.\.\.e\.sel, n: Date\.now\(\) \} : e\.sel\)/);
-  assert.match(s, /<DocsView (?:key=\{catN\} )?onCatalog=\{onCatalog\} catalogOnly \/>/, "the profiles and playbooks are listed before any document is opened");
+  assert.match(s, /<DocsView onCatalog=\{onCatalog\} catalogOnly \/>/, "the people pages are listed before any document is opened");
 });
 
 // the sidebar and "Run a report or workflow" hand no state: the page opened on three chips and no list (the UX walk, 2026-10-22)
@@ -110,7 +110,7 @@ test("a page or task left behind is not drawn; the canvas holds one view", async
 // under all 21 chips. A page opens on its first section; a card open collapses the picker to its lit chip, which is the list again.
 test("a page opens on its first section", async () => {
   const { sectionOr } = await import("../src/browseSection.js");
-  assert.equal(sectionOr(null, ["config", "profiles"]), "config");
-  assert.equal(sectionOr("profiles", ["config", "profiles"]), "profiles");
+  assert.equal(sectionOr(null, ["config", "policies"]), "config");
+  assert.equal(sectionOr("policies", ["config", "policies"]), "policies");
   assert.equal(sectionOr("gone", ["config"]), "config");
 });

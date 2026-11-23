@@ -93,13 +93,12 @@ export function canvasRequestFromHash(hash, n = 0) {
     const asked = decodeURIComponent(m[1] || "config") || "config", g = m[2] ? decodeURIComponent(m[2]) : "";
     // the phone's knobs left Configuration for Phone & chats: search and the Assistant still say their group, and land on the page
     const [page, group] = asked === "config" && g === PHONE_GROUP ? ["phone", ""] : [asked, g];
-    // Profiles is a section of its own (2107f0d2): its link opens that section's list. PLAYBOOKS LEFT SETTINGS for the Reports page
+    // PLAYBOOKS LEFT SETTINGS for the Reports page
     // (the owner, 2026-10-21) - an old link to them still lands, on their new shelf
     // ...and About you took them, with Docs, Memory and the identity page (2026-11-06)
     if (page === "playbooks") return pbAt(n);
     if (page === "docs" || page === "memory") return aboutAt(page, n);
     if (page === "about") return aboutAt("you", n);
-    if (page === "profiles") return { kind: "browse", area: "settings", state: { section: page, open: null }, n };
     if (!SETTINGS_PAGES.includes(page)) return { kind: "browse", area: "settings", state: { section: null, open: null }, n };
     // Docs is a shelf of files: its link opens the shelf, not whichever document happens to be first
     // ...and &key=<knob>: the one setting the Assistant brought the page up for (concierge._route), outlined and in view
@@ -111,14 +110,12 @@ export function canvasRequestFromHash(hash, n = 0) {
   if ((m = /^#playbook=new:([\w-]+)/.exec(h))) return pbAt(n, { newFor: m[1] });
   // a playbook: Reports -> Playbooks, that one open in its editor (#playbook=new is a new one)
   if ((m = /^#playbook=([\w.-]+)/.exec(h))) return pbAt(n, { open: `pb:${m[1]}` });
-  // "Manage profiles": the Profiles section, where every profile is a card beside Manage profiles and + New profile
-  if (/^#profiles(?:$|=)/.test(h)) return { kind: "browse", area: "settings", state: { section: "profiles", open: null }, n };
   return null;
 }
 
 // THE ADDRESS OF A PLACE ON THE CANVAS - canvasRequestFromHash read backwards (the 2026-10-19 UI walk: the URL was never written, so
 // the browser's Back left the app and a reload reopened a task the walk had moved past). What it cannot name - an open document on
-// the Profiles shelf, a guide card - is written as the section it sits in; reading the address back lands there.
+// a shelf, a guide card - is written as the section it sits in; reading the address back lands there.
 const enc = encodeURIComponent;
 // ONE ADDRESS FOR A SETTING, the twin of settings_schema.href: Python's quote(safe='') escapes !'()* where encodeURIComponent does not, and
 // both are held to the same cases (website/test/settingHref.cases.json) - a group named "Mail / routing" opened the wrong anchor from one road

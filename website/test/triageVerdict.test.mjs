@@ -34,12 +34,12 @@ test("an old taskless FYI is reconstructed from its saved route", () => {
     ],
   });
   assert.deepEqual(verdict, {
-    intent: "fyi", kind: "", profile: "", title: "", summary: "", checklist: [],
+    intent: "fyi", kind: "", title: "", summary: "", checklist: [],
     why: "Automatic reply with no ask.", repository: "",
   });
 });
 
-test("an old task keeps its extracted work, checklist, worker, and repository", () => {
+test("an old task keeps its extracted work, checklist and repository", () => {
   const verdict = legacyTriageVerdict({
     routeReason: "triage: task - asks for a code change",
     task: { Kind: "coding", Title: "Fix exports", Summary: "Dana asked for the export fix.",
@@ -47,7 +47,6 @@ test("an old task keeps its extracted work, checklist, worker, and repository", 
     checklist: [{ text: "Fix CSV quoting" }],
   });
   assert.equal(verdict.repository, "acme/widgets");
-  assert.equal(verdict.profile, "coding");
   assert.deepEqual(verdict.checklist, ["Fix CSV quoting"]);
 });
 

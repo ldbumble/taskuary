@@ -10,7 +10,6 @@ import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import api from "./api";
 import { label as btnLabel } from "./buttons.js";
 import { BORDER, DIM, FAINT, INK, card } from "./theme.jsx";
-import { useAgents } from "./ui.jsx";
 import { removeNow } from "./Removed.jsx";
 import { effortChoices, keepEffort, modelChoices } from "./workflowBrain.js";
 import WorkflowSteps from "./WorkflowSteps.jsx";
@@ -104,9 +103,6 @@ export default function WorkflowEditor({ sourceId, sources, connectors, types, d
     try { await removeNow(() => api.delete(`/api/sources/${cur.SourceId}`), "workflow", cfg.title || cur.Address); await reload(); onBack(); }
     catch (e) { setMsg({ ok: false, text: e?.response?.data?.detail || "It could not be removed." }); }
   };
-  const { agents, kinds } = useAgents();
-  // who does it: the general profiles. A coding name only runs code work (a repository folder below), so it is not offered here
-  const roles = agents.filter((a) => !["coding", "cli"].includes(String(kinds[a] || "").toLowerCase()));
   const live = useMemo(() => (connectors || []).filter((c) => c.Active), [connectors]);
   const uses = (cfg.uses || []).map(Number);
   const set = (k, v) => setCfg((c) => ({ ...c, [k]: v }));
@@ -248,7 +244,7 @@ export default function WorkflowEditor({ sourceId, sources, connectors, types, d
             action={onReport ? <Button size="small" color="inherit" sx={{ whiteSpace: "nowrap" }} onClick={() => onReport(asReport(cfg))}>{btnLabel("make_report")}</Button> : null}>
             {REPORT_WORDS} Add a step that acts - open a task, draft a message, write to a system - or make it a report.</Alert>}
           <WorkflowSteps flow={cfg.flow || []} setFlow={setFlow} outputs={outputs} setOutputs={setOutputs} connectors={connectors} types={types}
-            agents={roles} title={cfg.title} sourceId={cur?.SourceId} inputs={cfg.inputs} changed={changed} />
+            title={cfg.title} sourceId={cur?.SourceId} inputs={cfg.inputs} changed={changed} />
           {!(cfg.flow || []).length && <Typography component="button" type="button" onClick={() => setCfg((c) => { const n = { ...c }; delete n.flow; return n; })}
             sx={{ border: 0, bgcolor: "transparent", p: 0, mt: 0.5, cursor: "pointer", color: "var(--tq-link, #55697a)", fontSize: 12, fontWeight: 600 }}>
             Use one agent prompt instead</Typography>}
@@ -266,13 +262,6 @@ export default function WorkflowEditor({ sourceId, sources, connectors, types, d
             <Typography variant="caption" sx={{ color: FAINT }}>so the same reads and writes run as code, and the AI only judges</Typography>
           </Box>
         </Field>}
-        <Field label="Who does it" hint="the profile whose rules it works by">
-          <Select size="small" displayEmpty value={roles.includes(cfg.agent) && cfg.agent !== "assistant" ? cfg.agent : ""} onChange={(e) => set("agent", e.target.value)}
-            sx={{ minWidth: 220, bgcolor: "var(--tq-panel, #fff)", fontSize: 13 }}>
-            <MenuItem value="" sx={{ fontSize: 13 }}>{roles.includes("assistant") ? "assistant (the default)" : "the default"}</MenuItem>
-            {roles.filter((a) => a !== "assistant").map((a) => <MenuItem key={a} value={a} sx={{ fontSize: 13 }}>{a}</MenuItem>)}
-          </Select>
-        </Field>
         {brain && <Field label="Model" hint="the general agents' own unless this job is hard enough to need a stronger model or more thought">
           <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
             <Select size="small" displayEmpty value={cfg.model || ""} sx={{ minWidth: 280, bgcolor: "var(--tq-panel, #fff)", fontSize: 13 }}

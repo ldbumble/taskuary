@@ -10098,106 +10098,9 @@
     "Runner": "cli",
     "Config": "{\"kind\": \"coding\", \"cwd_map\": {}}",
     "Active": 1,
-    "installed": false,
-    "rules_doc": "coding",
-    "purpose": "writes and changes code, in a repository"
-   },
-   {
-    "AgentId": 2,
-    "Name": "researcher",
-    "Kind": "research",
-    "Runner": "cli",
-    "Config": "{\"kind\": \"research\", \"purpose\": \"Information from outside - the web, vendors, public filings, documents, what other companies do. Reads and reports with sources; queries none of our systems\", \"cwd_map\": {}}",
-    "Active": 1,
-    "installed": false,
-    "rules_doc": "researcher",
-    "purpose": "Information from outside - the web, vendors, public filings, documents, what other companies do. Reads and reports with sources; queries none of our systems"
-   },
-   {
-    "AgentId": 3,
-    "Name": "analyst",
-    "Kind": "analysis",
-    "Runner": "cli",
-    "Config": "{\"kind\": \"analysis\", \"purpose\": \"Our own figures - the databases, the ledger, the bank feeds, our reports. Queries them, reconciles them, explains what the numbers say\", \"cwd_map\": {}}",
-    "Active": 1,
-    "installed": false,
-    "rules_doc": "analyst",
-    "purpose": "Our own figures - the databases, the ledger, the bank feeds, our reports. Queries them, reconciles them, explains what the numbers say"
-   },
-   {
-    "AgentId": 4,
-    "Name": "coordinator",
-    "Kind": "coordination",
-    "Runner": "cli",
-    "Config": "{\"kind\": \"coordination\", \"purpose\": \"meetings, chasing people, scheduling and follow-ups\", \"cwd_map\": {}}",
-    "Active": 1,
-    "installed": false,
-    "rules_doc": "coordinator",
-    "purpose": "meetings, chasing people, scheduling and follow-ups"
-   },
-   {
-    "AgentId": 5,
-    "Name": "marketer",
-    "Kind": "marketing",
-    "Runner": "cli",
-    "Config": "{\"kind\": \"marketing\", \"purpose\": \"copy, positioning and campaigns - drafts, never sends\", \"cwd_map\": {}}",
-    "Active": 1,
-    "installed": false,
-    "rules_doc": "marketer",
-    "purpose": "copy, positioning and campaigns - drafts, never sends"
-   },
-   {
-    "AgentId": 6,
-    "Name": "trader",
-    "Kind": "markets",
-    "Runner": "cli",
-    "Config": "{\"kind\": \"markets\", \"purpose\": \"markets and positions - proposes, never places an order\", \"cwd_map\": {}}",
-    "Active": 1,
-    "installed": false,
-    "rules_doc": "trader",
-    "purpose": "markets and positions - proposes, never places an order"
-   },
-   {
-    "AgentId": 7,
-    "Name": "assistant",
-    "Kind": "general",
-    "Runner": "cli",
-    "Config": "{\"kind\": \"general\", \"purpose\": \"general work no other profile owns - writing, planning, follow-ups, looking things up in our connections\", \"cwd_map\": {}}",
-    "Active": 1,
-    "installed": false,
-    "rules_doc": "assistant",
-    "purpose": "general work no other profile owns - writing, planning, follow-ups, looking things up in our connections"
+    "installed": false
    }
   ],
-  "config": {
-   "coding": {
-    "kind": "coding"
-   },
-   "researcher": {
-    "kind": "research",
-    "purpose": "Information from outside - the web, vendors, public filings, documents, what other companies do. Reads and reports with sources; queries none of our systems"
-   },
-   "analyst": {
-    "kind": "analysis",
-    "purpose": "Our own figures - the databases, the ledger, the bank feeds, our reports. Queries them, reconciles them, explains what the numbers say"
-   },
-   "coordinator": {
-    "kind": "coordination",
-    "purpose": "meetings, chasing people, scheduling and follow-ups"
-   },
-   "marketer": {
-    "kind": "marketing",
-    "purpose": "copy, positioning and campaigns - drafts, never sends"
-   },
-   "trader": {
-    "kind": "markets",
-    "purpose": "markets and positions - proposes, never places an order"
-   },
-   "assistant": {
-    "kind": "general",
-    "purpose": "general work no other profile owns - writing, planning, follow-ups, looking things up in our connections"
-   }
-  },
   "default": "coding",
   "models": {
    "coding": {
@@ -10208,153 +10111,16 @@
     "models": [],
     "current": {},
     "source": "built-in"
-   },
-   "researcher": {
-    "cmd": null,
-    "cli": "",
-    "default": null,
-    "choices": [],
-    "models": [],
-    "current": {},
-    "source": "built-in"
-   },
-   "analyst": {
-    "cmd": null,
-    "cli": "",
-    "default": null,
-    "choices": [],
-    "models": [],
-    "current": {},
-    "source": "built-in"
-   },
-   "coordinator": {
-    "cmd": null,
-    "cli": "",
-    "default": null,
-    "choices": [],
-    "models": [],
-    "current": {},
-    "source": "built-in"
-   },
-   "marketer": {
-    "cmd": null,
-    "cli": "",
-    "default": null,
-    "choices": [],
-    "models": [],
-    "current": {},
-    "source": "built-in"
-   },
-   "trader": {
-    "cmd": null,
-    "cli": "",
-    "default": null,
-    "choices": [],
-    "models": [],
-    "current": {},
-    "source": "built-in"
-   },
-   "assistant": {
-    "cmd": null,
-    "cli": "",
-    "default": null,
-    "choices": [],
-    "models": [],
-    "current": {},
-    "source": "built-in"
    }
   },
   "brains": {
-   "coding": "",
-   "researcher": "",
-   "analyst": "",
-   "coordinator": "",
-   "marketer": "",
-   "trader": "",
-   "assistant": ""
+   "coding": ""
   },
   "general_brains": [],
   "brain_list": [],
   "coding_ready": false,
   "developer_mode": false,
-  "brain_models": {},
-  "work": {
-   "coding": {
-    "tasks": [],
-    "reports": []
-   },
-   "researcher": {
-    "tasks": [],
-    "reports": []
-   },
-   "analyst": {
-    "tasks": [],
-    "reports": []
-   },
-   "coordinator": {
-    "tasks": [],
-    "reports": []
-   },
-   "marketer": {
-    "tasks": [],
-    "reports": []
-   },
-   "trader": {
-    "tasks": [],
-    "reports": []
-   },
-   "assistant": {
-    "tasks": [],
-    "reports": []
-   },
-   "general": {
-    "tasks": [
-     {
-      "taskId": 35,
-      "ref": "TQ-0035",
-      "title": "PhishGuard renewal invoice INV-3391",
-      "status": "in_progress",
-      "playbook": null
-     },
-     {
-      "taskId": 34,
-      "ref": "TQ-0034",
-      "title": "Trainly renewal - how many seats?",
-      "status": "in_progress",
-      "playbook": null
-     },
-     {
-      "taskId": 33,
-      "ref": "TQ-0033",
-      "title": "Same-day pay - which payroll providers do it?",
-      "status": "in_progress",
-      "playbook": null
-     },
-     {
-      "taskId": 32,
-      "ref": "TQ-0032",
-      "title": "Vendor spend as a dashboard?",
-      "status": "in_progress",
-      "playbook": null
-     },
-     {
-      "taskId": 31,
-      "ref": "TQ-0031",
-      "title": "September overtime by site",
-      "status": "in_progress",
-      "playbook": null
-     },
-     {
-      "taskId": 30,
-      "ref": "TQ-0030",
-      "title": "Fairhaven safety milestone - LinkedIn post?",
-      "status": "in_progress",
-      "playbook": null
-     }
-    ],
-    "reports": []
-   }
-  }
+  "brain_models": {}
  },
  "/api/brains": {
   "data": [],

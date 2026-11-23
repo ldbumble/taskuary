@@ -73,7 +73,7 @@ import { WorkstreamSelect } from "./Workstream.jsx";
 import { Attachments, mentionsPicture } from "./Attachments.jsx";
 import { remotePicture, wordsOnly } from "./mailLinks.js";
 import ChatThread from "./ChatThread.jsx";
-import { ChannelIcon, StateChip, stateOf, TASK_STATES, asUtc, tsMs, AgentPicker, useAgents, codingProfile, RunTrace, DiffBlock, DiffFiles, timeAgo, fmtDateTime, cleanText, LinkedText, Empty, FilterPills, Confirm, isWaiting, TaskuaryMark, DraftField, assignedAgent } from "./ui.jsx";
+import { ChannelIcon, StateChip, stateOf, TASK_STATES, asUtc, tsMs, AgentPicker, useAgents, codingAgent, RunTrace, DiffBlock, DiffFiles, timeAgo, fmtDateTime, cleanText, LinkedText, Empty, FilterPills, Confirm, isWaiting, TaskuaryMark, DraftField, assignedAgent } from "./ui.jsx";
 import { Md, looksMd } from "./md.jsx";
 import TerminalIcon from "@mui/icons-material/Terminal";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
@@ -135,7 +135,7 @@ import { isPublished } from "./PublishedPages.jsx";
 import EmailSomeone from "./EmailSomeone.jsx";
 import { useShareParts } from "./Share.jsx";
 import { ago, filesLine, plural } from "./timeWords.js";
-import { AGENT_KINDS, KIND_OPTIONS, KINDS, kindLabel, shortKind, shownAgent, instructionsHint } from "./kinds.js";
+import { AGENT_KINDS, KIND_OPTIONS, KINDS, kindLabel, shortKind, shownAgent } from "./kinds.js";
 import { PICK_REPO, openAppLink, takeRepoPick } from "./appLinks.js";
 import { FOCUS_RING, pressable } from "./pressable.js";
 import { place } from "./words.js";
@@ -992,17 +992,11 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     // ...when the write was to THIS task (or named none): each mail landing on other work re-read it (the intake walk, 2026-10-26)
     return onLive("task-changed", (ev) => { if (selRef.current && touches(ev, selRef.current)) loadDetail(selRef.current); });
   }, [active, loadDetail]);
-  // the roster is user-config - default to whatever actually exists. A GENERAL task's blank is an answer, not a gap: it means
-  // "the profile it has", and filling it with the roster's first name sent the coding profile - which the dispatch refuses on a non-coding task (422), so
-  // Send to agent failed on every general task nobody had assigned a role (the owner, 2026-10-07: "we don't want the coding profile always")
+  // A GENERAL task's blank agent is an answer, not a gap: it runs on the assistant - only a coding start names the coding agent's row
+  // (the owner, 2026-10-07: "we don't want the coding profile always"), and with no coding tool connected every start is the general agent's (B3)
   const generalTask = opensOnRegular(detail?.task?.Kind);
-  // the profile a blank pick runs (general.py: the role triage gave, else the assistant's own)
-  const ownProfile = (agents.includes(assignedAgent(detail?.task?.Assignee)) && assignedAgent(detail?.task?.Assignee)) || (agents.includes("assistant") ? "assistant" : "");
   useEffect(() => {
-    // ...and nor is a hand-off's: on a reply or a coding task, "Use non-coding agent" left blank was refilled with the
-    // roster's first role, so a task with no profile showed - and would have started - a researcher (2026-10-15)
-    // ...nor with no coding tool connected: every start is the general agent's then, and the coding profile is refused (B3)
-    if (agents.length && !agents.includes(run.agent) && !((generalTask || handOff || !canCode) && !run.agent)) setRun((r) => ({ ...r, agent: codingProfile(agents, kinds), model: "" }));
+    if (agents.length && !agents.includes(run.agent) && !((generalTask || handOff || !canCode) && !run.agent)) setRun((r) => ({ ...r, agent: codingAgent(agents, kinds), model: "" }));
   }, [agents, kinds, run.agent, generalTask, handOff, canCode]);
   useEffect(() => { loadDetail(selected, true); }, [selected, loadDetail]);
   useEffect(() => {
@@ -1011,10 +1005,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     pickerTask.current = task.TaskId;
     // another task opens on its own question, not the last one's hand-off - and a general task's box on the regular agent
     setHandOff(opensOnRegular(task.Kind));
-    const owned = assignedAgent(task.Assignee);
-    // a general task starts from the role it was handed, else blank (its configured profile) - never the roster's first name;
-    // a coding task from the profile of kind coding, else blank and the server finds it
-    setRun((r) => ({ ...r, agent: agents.includes(owned) ? owned : opensOnRegular(task.Kind) || !canCode ? "" : codingProfile(agents, kinds), model: "" }));
+    // a general task starts blank (the assistant); a coding task on the agent of kind coding, else blank and the server finds it
+    setRun((r) => ({ ...r, agent: opensOnRegular(task.Kind) || !canCode ? "" : codingAgent(agents, kinds), model: "" }));
   }, [selected, detail?.task, agents, kinds, canCode]);
   // ...and an error belongs to the task it happened on: a failed Mark done stayed up over the next task opened, as if about it.
   // Only a move from one task straight to another clears it: "That task is gone" empties the selection, and the list then
@@ -1667,7 +1659,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // document (every coding task's role is the profile of kind coding), a BRAIN is the CLI that runs it, and the model
   // is the brain's - it is not a property of the task, so the card does not offer one. A live
   // session names the CLI it was ASKED to run; otherwise the roster says which brain the role uses.
-  const runRole = assignedAgent(t?.Assignee) || (t?.Kind === "coding" ? codingProfile(agents, kinds) : "");
+  const runRole = t?.Kind === "coding" ? assignedAgent(t?.Assignee) || codingAgent(agents, kinds) : "";
   // NAME THE BRAIN, NOT THE PRODUCT. `term.cli` is hardcoded to the string "taskuary" on every
   // general session (general.info), so the one card that could not say which brain was running
   // read "brain taskuary" - the product's own name, on the row whose whole job is to answer that
@@ -1966,7 +1958,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       msgs: newestFirst(sources.flatMap((g) => g.msgs)).map((m) => ({ who: m.who || m.FromName || m.FromEmail || (m.Direction === "out" ? "You" : ""),
         words: (rowText(m, sourceFiles.get(m.MessageId)) || cleanText(m.ReadText || m.BodyText || "")).slice(0, 200) })),
       count: sourceCount, workflow: fromWorkflow, made: `${detail.ref} · ${made}`, to: toLine(cameIn?.Recipients).short, sorted: sortedLine(facts, t?.Kind || "task").replace(/^Sorted as: /, "Sorted: ") }),
-    agent: agentStatus({ profile: runRole || hasRecord || term ? agentName(t) : "",   /* Taskuary, never the profile (kinds.js shownAgent) */
+    agent: agentStatus({ name: runRole || hasRecord || term ? agentName(t) : "",   /* Taskuary (kinds.js shownAgent) */
       word: agentWord({ live: !!term?.alive || agentOpening, waiting: agentState === AGENT.waiting, failed: failedRun, stopped: stoppedRun || agentState === AGENT.stopped,
         result: resultShown, record: hasRecord, codeRun, queued: !!queuedRow }),
       // ...a path into the task's outputs as the file's name, and no markdown marks mid-line: the folded spine read
@@ -2247,9 +2239,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       if (another && term?.alive) { await api.post(`/api/tasks/${id}/pause`, {}); if (!stale(id)) setTerm(null); }
       // one shared dispatch whatever the task's kind was: it switches the kind, starts (or reuses) the
       // assistant session and records the live worker - a relabelled task is not a started one (PW-213)
-      // profile, brain and model - whichever of them was chosen; blank means "as configured"
+      // brain and model - whichever of them was chosen; blank means "as configured"
       const { data } = await api.post(`/api/tasks/${id}/dispatch`,
-        { kind: "general", agent: run.agent || null, pick: run.pick || null, model: run.model || null, ...(another ? { fresh: true } : {}),
+        { kind: "general", pick: run.pick || null, model: run.model || null, ...(another ? { fresh: true } : {}),
           // what was typed in the box goes to it - this sent the pickers and dropped the words
           instruction: run.instruction.trim() || null, files: runPics.paths });
       const outcome = outcomeOf(data);
@@ -2301,7 +2293,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       const child = step.tid || (await api.post(`/api/tasks/${id}/steps/${step.id}/start`)).data.taskId;
       // `via`: the press was made HERE, so a start that fails is left on the goal, where its line is read (server._pressed_on)
       // ...with what was said in the box: the owner's words are the step's ask, the step and the goal its material
-      const { data } = await api.post(`/api/tasks/${child}/dispatch`, { kind: "general", agent: run.agent || null, pick: run.pick || null, model: run.model || null, via: id,
+      const { data } = await api.post(`/api/tasks/${child}/dispatch`, { kind: "general", pick: run.pick || null, model: run.model || null, via: id,
         instruction: run.instruction.trim() || null, files: runPics.paths });
       if (!stale(id)) { askTaken(id); runPics.clear(); setRestartOpen(false); }
       const outcome = outcomeOf(data);
@@ -2706,16 +2698,13 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       value={run.instruction} onValue={runText} pics={runPics} autoFocus={restartOpen}
                       placeholder={ASK_WHAT}
                       note={goalRun ? "It starts on the goal's next step, with what you write here." : "It gets the task, its messages and files, and what was saved last time."}
-                      /* coding asks ONE question (which CLI); a hand-off asks three - which profile, which brain, which model - and all
-                         three reach the session. */
-                      picker={<AgentPicker agents={agents} models={models} kinds={kinds} coding={!generalOnly}
-                          agent={run.agent} model={run.model}
+                      /* coding asks ONE question (which CLI); a hand-off asks two - which brain, which model - and both reach the session. */
+                      picker={<AgentPicker models={models} coding={!generalOnly} model={run.model}
                           brains={brainList} brainModels={brainModels} brain={run.brain || ""}
-                          generalBrains={generalBrains} brainsRead={agentsRead} codingReady={codingReady} pick={run.pick || ""} has={ownProfile}
+                          generalBrains={generalBrains} brainsRead={agentsRead} codingReady={codingReady} pick={run.pick || ""}
                           browser={String(t?.Tags || "").split(/[\s,]+/).includes(BROWSER_TAG)}
                           onPick={(p) => setRun((r) => ({ ...r, pick: p }))}
                           onBrain={(b) => setRun((r) => ({ ...r, brain: b, model: "" }))}
-                          onAgent={(a) => setRun((r) => ({ ...r, agent: a }))}
                           onModel={(m) => setRun((r) => ({ ...r, model: m }))} size={28} />}
                       actions={<>
                         {!generalOnly && <span title={runWhy(true) || undefined}><Button size="small" variant="contained" disableElevation
@@ -2727,7 +2716,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                         {/* NO REPOSITORY CHOSEN IS NO HOLD (the owner, 2026-11-06): the agent picks it once it starts (use_repo) - the
                             RepoSelect below still pins one first when the owner chooses */}
                         {/* it SWITCHES the row rather than dispatching on the spot: the pickers above
-                            become the profile, brain and model, and the next press starts it */}
+                            become the brain and model, and the next press starts it */}
                         {!generalOnly && <Button size="small" variant="outlined" disabled={!!startingAgent}
                           startIcon={<TaskuaryMark size={13} />}
                           onClick={() => { setHandOff(true); setRun((r) => ({ ...r, agent: "", pick: "", model: "" })); }}>{choice("agent", "regular_agent")}</Button>}
@@ -2740,7 +2729,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                         {/* ...and the coding agent is one press away from a hand-off, never chosen for the owner */}
                         {handOff && canCode && !goalRun && <Button size="small" variant="outlined" disabled={!!startingAgent}
                           startIcon={<TerminalIcon sx={{ fontSize: 14 }} />}
-                          onClick={() => { setHandOff(false); setRun((r) => ({ ...r, agent: codingProfile(agents, kinds), pick: "", model: "" })); }}>{choice("agent", "coding_agent")}</Button>}
+                          onClick={() => { setHandOff(false); setRun((r) => ({ ...r, agent: codingAgent(agents, kinds), pick: "", model: "" })); }}>{choice("agent", "coding_agent")}</Button>}
                         {(restartOpen || report || detail?.transcript) && <Button size="small" variant="text"
                           onClick={() => setRestartOpen(false)}>Cancel</Button>}
                       </>}>
@@ -3375,7 +3364,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                         (taskLifecycle.agentPhase); the heading now says what the chip says. */}
                     {/* AN EMPTY AGENT WORK ROW IS QUIET (the owner, 2026-10-25: Agent work stays where it is, the reply is what the eye should
                         land on): no agent ran, nothing to say - a smaller, dimmer line, the same press opening it */}
-                    <WorkflowHeading number="2" sec={twoUp && !sessionView ? SECTIONS[1] : null} here={hereSec === "agent"} quiet={agentEmpty} title={<span title={instructionsHint(runRole) || undefined}>{!term?.alive ? (chatPane && hasGeneralHistory ? `${agentName(t)} answered` : resultShown ? "Result" : "Agent work")
+                    <WorkflowHeading number="2" sec={twoUp && !sessionView ? SECTIONS[1] : null} here={hereSec === "agent"} quiet={agentEmpty} title={<span>{!term?.alive ? (chatPane && hasGeneralHistory ? `${agentName(t)} answered` : resultShown ? "Result" : "Agent work")
                       : answered ? `${agentName(t)} answered`
                       : agentState === AGENT.waiting ? says(subState(term), agentName(t))   /* asked, approval, stuck (T6) */
                         : `${agentName(t)} is working`}</span>}
@@ -3525,12 +3514,10 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                         ? { ml: 0.9, pl: 1.1, borderLeft: `1px solid ${BORDER}`, flexShrink: 0 }
                         : { mt: 1.25 }) }}>
                       {/* plain words on the facts (the audit, 2026-10-17): "role" and "brain" were the app's own vocabulary */}
-                      {/* the profile is no chip of its own (the owner, 2026-10-28: "works as researcher" named instructions as the worker):
-                          it is told on hover, beside the AI it ran on */}
                       {factBrain && <Box sx={{ ...chipBtnStatic }}
                         title={(factBrain === detail?.ranOn?.brain ? "The AI that did this work. Which AI the agents use is set in Settings, not per task."
                           : "The AI that does the work. Which AI the agents use is set in Settings, not per task.")
-                          + (detail?.routeWhy ? ` Last AI call: ${detail.routeWhy}` : "") + (runRole ? ` ${instructionsHint(runRole)} - set in Settings.` : "")}>
+                          + (detail?.routeWhy ? ` Last AI call: ${detail.routeWhy}` : "")}>
                         <Box component="span" sx={{ color: FAINT, fontWeight: 600 }}>AI</Box>&nbsp;{factBrain}</Box>}
                       {/* the repository pill only where a coding tool is connected (B3) */}
                       {!isGeneral && canCode && <Button size="small" variant="outlined" sx={chipBtn}
@@ -3626,7 +3613,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       <Box key={r.RunId} sx={{ mb: 0.75, p: 1, bgcolor: r.Status === "running" ? "var(--tq-inset, #dfeade)" : PANEL2, borderRadius: 1.5, border: `1px solid ${BORDER}` }}>
                         <Box sx={{ display: "flex", gap: 0.75, alignItems: "center" }}>
                           <TaskuaryMark size={13} />
-                          <Typography variant="body2" sx={{ color: INK, fontWeight: 600 }} title={instructionsHint(r.AgentName) || undefined}>run {r.RunId} · {shownAgent(r)} · {r.Status}</Typography>
+                          <Typography variant="body2" sx={{ color: INK, fontWeight: 600 }} >run {r.RunId} · {shownAgent(r)} · {r.Status}</Typography>
                           {r.Status === "running" && <CircularProgress size={11} />}
                           <Typography variant="caption" sx={{ color: FAINT }}>· {timeAgo(r.StartedAt)} · by {r.DispatchedBy}</Typography>
                         </Box>

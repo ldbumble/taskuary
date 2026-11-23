@@ -40,7 +40,12 @@ def find(doc: str, key: str) -> tuple:
     return None, None, False
 
 
-def _same(a, b) -> bool: return ' '.join(str(a or '').lower().split()).rstrip('.') == ' '.join(str(b or '').lower().split()).rstrip('.')
+# ...the line as said, whoever it names: remember writes whom a fact is about after it ("(gail@northwind.example)"), and a `replaces` copied
+# from what was told is the same line without it
+_WHOM = re.compile(r'\s*\([^()\s]+@[^()\s]+\)$')
+def _same(a, b) -> bool:
+    said = lambda x: _WHOM.sub('', ' '.join(str(x or '').lower().split()).rstrip('.')).rstrip('.')
+    return said(a) == said(b)
 
 
 def resolve(store, key: str) -> str:

@@ -160,7 +160,7 @@ test("the working line names what no row in sight says - at every beat of a turn
   // ConvTurn reads the open state of the fold the newest work is in (its first part's key, chatStream.runsOf), and the dock's trail as always open
   const src = await readFile(new URL("../src/GeneralWorkspace.jsx", import.meta.url), "utf8");
   assert.match(src, /const folded = useFoldOpen\(lastFold \? `\$\{foldKey\(t\.id\)\}:\$\{lastFold\.id\}` : ""\), work = React\.useContext\(WorkCtx\), open = folded \|\| !work \|\| level !== "summary";/, "both hooks called on every render");
-  assert.match(src, /const Fold = \(\{ k, label, quiet = false, children \}\) => \{\n  const open = useFoldOpen\(k\);/);
+  assert.match(src, /const Fold = \(\{ k, label, quiet = false, force = false, children \}\) => \{\r?\n  const open = useFoldOpen\(k\) \|\| force;/);
   // ...and the fold's open state is set by his click, in the render the click causes - heard from the native toggle (a task later), the line on
   // ACP followed the opened fold 75-90 ms late, saying the row's words under it (the judges' recording, 2026-11-18)
   const fold = src.slice(src.indexOf("const Fold = "), src.indexOf("// ONE RULE FOR EVERY FOLD"));

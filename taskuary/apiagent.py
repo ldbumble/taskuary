@@ -728,12 +728,14 @@ def turn(brain, store, tid: int, sid: str, system: str, user: str, max_tokens: i
             if not calls: return said(m)
             msgs.append({'role': 'assistant', **{k: v for k, v in m.items() if v is not None}})          # as sent: a Gemini model's thought signature rides on it
             new = False
-            for c in calls:
+            for j, c in enumerate(calls):
                 f = c.get('function') or {}
                 name = str(f.get('name') or '')
+                # ...EACH CALL BY ITS OWN ID, as an ACP agent's is (chatlog.feed keys its row by it): the provider's, else its place in this turn
+                cid = str(c.get('id') or f'{name}-{i}.{j}')
                 try: a = json.loads(f.get('arguments') or '{}') or {}
                 except ValueError: a = {}
-                if trace: trace('tool_call', name, {'args': a})
+                if trace: trace('tool_call', name, {'tool_call_id': cid, 'args': a})
                 if name in (DEFERRED.get((tid, sid)) or {}): load(tid, sid, tools, [name])       # called by the name it was given: loaded as it runs
                 if name == 'browser_open': load(tid, sid, tools, BROWSER_MORE)
                 key, again = (name, json.dumps(a, sort_keys=True, default=str)), False
@@ -746,7 +748,7 @@ def turn(brain, store, tid: int, sid: str, system: str, user: str, max_tokens: i
                         out, err = failed(name, e), True
                         logger.info(f'apiagent: task {tid} {name} failed - {e}')
                     if name not in reads and name != LOAD: seen.clear()
-                if trace: trace('tool_result', name, {'result': out, 'is_error': err})
+                if trace: trace('tool_result', name, {'tool_call_id': cid, 'result': out, 'is_error': err})
                 msgs.append(ans := {'role': 'tool', 'tool_call_id': c.get('id') or name, 'content': _cut(out, CAP + 200)})   # ...a part's own line kept
                 if name in reads and not err and not again: seen[key] = (ans, ans['content'])
                 if again: continue                  # ...and it is nothing new read: going in circles is still counted (idle)

@@ -39,10 +39,22 @@ def record_update(tid: int, sid: str, update: dict) -> None:
     # ...and `_t`, the same moment to the clock's full grain: the ledger's hand-overs are time.time(), and a step and a press in one millisecond
     # must read in the order they happened (conversation.acp_steps)
     now = time.time()
-    update = {**update, '_at': update.get('_at') or datetime.fromtimestamp(now).isoformat(sep=' ', timespec='milliseconds'), '_t': update.get('_t') or now}
+    _append(_acp_path(tid, sid), tid, {**update, '_at': update.get('_at') or datetime.fromtimestamp(now).isoformat(sep=' ', timespec='milliseconds'),
+                                     '_t': update.get('_t') or now})
+
+
+def _append(p: Path, tid, update: dict) -> None:
     try:
-        with _acp_path(tid, sid).open('a', encoding='utf-8') as f: f.write(json.dumps(slim(update), ensure_ascii=False) + '\n')
-    except (OSError, TypeError, ValueError) as e: logger.debug(f'coding chat: ACP update for task {tid} not kept - {e}')
+        with p.open('a', encoding='utf-8') as f: f.write(json.dumps(slim(update), ensure_ascii=False) + '\n')
+    except (OSError, TypeError, ValueError) as e: logger.debug(f'chat record: an update for task {tid} not kept - {e}')
+
+
+def record_general(tid: int, sid: str, update: dict) -> None:
+    """A GENERAL AGENT'S TURN KEPT AS THE SAME RECORD (the owner, 2026-11-23: one record shape for every road): each ACP update - its CLI's own
+    over ACP, or a trace road's said as one (conversation.acp_of_trace) - appended beside the task as a coding session's is. Apart from the
+    coding sessions' (general-acp-*.jsonl, never listed as one); never raises."""
+    if not isinstance(update, dict) or not sid or not tid: return
+    p = _acp_path(tid, sid); _append(p.with_name('general-' + p.name), tid, {**update, '_t': update.get('_t') or time.time()})
 
 
 def _capped(o):

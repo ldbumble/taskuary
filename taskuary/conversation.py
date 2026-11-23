@@ -386,6 +386,7 @@ def acp_steps(updates: list) -> list:
         elif kind == 'error' and _meta(u, 'taskuary') == 'error':
             from . import say
             out.append({'k': 'error', 'text': say.owner({'kind': 'turn_failed', 'raw': _text(u.get('content'))}), 'at': at})
+        elif kind == 'error' and _meta(u, 'taskuary') == 'step_error': out.append({'k': 'error', 'text': _text(u.get('content')), 'at': at})     # ...a trace road's (acp_of_trace)
         elif kind == 'compaction_update' or (kind in ('tool_call', 'tool_call_update') and (_meta(u, 'claudeCode', 'toolName') == 'compact' or str(u.get('toolCallId')) in compacts)):
             cid = str(u.get('compactionId') if kind == 'compaction_update' else u.get('toolCallId'))
             if cid not in compacts: compacts[cid] = {'k': 'compact', 'id': cid, 'at': at}; out.append(compacts[cid])
@@ -403,9 +404,14 @@ def acp_steps(updates: list) -> list:
                     tool, a = as_called(mcp['server'], mcp['tool'], mcp['arguments']); mcp = {**mcp, 'tool': tool, 'arguments': a}
                 s = by[u.get('toolCallId')] = {'k': 'tool', 'id': str(u.get('toolCallId') or ''), 'at': at,
                                                'args': dict(mcp['arguments']) if mcp and isinstance(mcp.get('arguments'), dict) else {},
-                                               'name': f"mcp__{mcp['server']}__{mcp['tool']}" if mcp else
+                                               'name': f"mcp__{mcp['server']}__{mcp['tool']}" if mcp else _meta(u, 'taskuary', 'tool') or
                                                _meta(u, 'claudeCode', 'toolName') or _ACP_TOOL.get(u.get('kind')) or u.get('title') or u.get('kind') or 'tool'}
                 out.append(s)
+            # ...AND THE AGENT'S OWN WORDS FOR IT (the owner, 2026-11-23: adopt the open-source model): its title as it upgrades it, its kind, its
+            # files - what the row says (agentSteps.stepsOf); ours only for Taskuary's own tools and a road that gives none (acp_of_trace)
+            if isinstance(u.get('title'), str) and u['title'].strip(): s['title'] = u['title'].strip()[:300]
+            if u.get('kind'): s['tool_kind'] = str(u['kind'])
+            if (ls := [str(l['path']) for l in u.get('locations') or [] if isinstance(l, dict) and l.get('path')]): s['paths'] = ls[:8]
             if (par := _meta(u, 'claudeCode', 'parentToolUseId') or _meta(u, 'parentToolUseId') or _meta(u, 'parentToolCallId')): s['parent'] = str(par)
             # ...a command as the words it was run with too (codex-acp's ["powershell.exe", "-Command", "..."]): dropped, the row read "Ran a command"
             if isinstance(u.get('rawInput'), dict): s['args'].update({k: v for k, v in u['rawInput'].items() if k in _ARGS and (isinstance(v, str) and v.strip()
@@ -423,11 +429,53 @@ def acp_steps(updates: list) -> list:
             if loc and not any(s['args'].get(k) for k in _PATHS): s['args']['file_path'] = loc
             if (diffs := [c for c in u.get('content') or [] if isinstance(c, dict) and c.get('type') == 'diff']):
                 s['edit'] = {'whole': True, 'parts': [{'old': d.get('oldText') or '', 'new': d.get('newText') or ''} for d in diffs]}; s['file'] = diffs[0].get('path') or loc
+            elif (p := _meta(u, 'taskuary', 'patch')): s['edit'] = {'patch': p}; s['file'] = s.get('file') or loc
         # ...each new step keeps its update's exact clock (`_t`, record_update): a stamp to the millisecond put the words said right after his
         # press, in the press's own millisecond, ABOVE it - the ledger's hand-over time is finer (a CI runner, 2026-11-12)
         if u.get('_t'): [x.setdefault('_t', u['_t']) for x in out[n0:]]
     for s in out: s.pop('open', None); s.pop('mid', None)
     return out
+
+
+# EVERY ROAD WRITES THE AGENT'S OWN SHAPE (the owner, 2026-11-23: "Does this work for both ACP and HIPAA AI or any AI we use?"): a road that is
+# not ACP - claude's stream-json, Codex's JSONL, the API agent's own tool loop - records its turn as the ACP updates it stands for, here, once,
+# so acp_steps is the one projection and the page the one renderer. Each call keeps its id, its tool's own name and its input; an edit carries
+# its diff as ACP content; a paragraph it said is a message of its own. No title: our words for a call are the page's (agentSteps.describeCall)
+_OWN_EDIT = {'file_write': ('', 'text'), 'file_edit': ('old', 'new')}
+def acp_of_trace(e: dict, n: int = 0) -> list:
+    "A trace event (agents.py's vocabulary) as ACP session/updates; `n` numbers what has no id of its own. [] for what is no step."
+    from .sessionrecord import _FILE_TOOLS, _cut, _cut_said, _edit, _parsed, hide_draft, EDIT_N, SAID_N, THOUGHT_N
+    k, name, d = e.get('type'), str(e.get('name') or ''), e.get('detail')
+    d = d if isinstance(d, dict) else {}
+    if k == 'tool_call':
+        a = hide_draft(name, _parsed(d.get('args'))); a = a if isinstance(a, dict) else {'input': str(a or '')}
+        todos = a.get('todos') or a.get('plan')
+        if isinstance(todos, list) and todos and all(isinstance(t, dict) for t in todos):
+            return [{'sessionUpdate': 'plan', 'entries': [{'content': _cut(t.get('content') or t.get('step') or t.get('text') or '', 300),
+                                                           'status': str(t.get('status') or 'pending')} for t in todos]}]
+        f = next((a[x] for x in _PATHS if isinstance(a.get(x), str) and a[x]), '')
+        # ...and the API agent's own file tools (apiagent.WRITE) by their own arguments: it is Taskuary's tool, its input is ours to read
+        o, w = _OWN_EDIT.get(name, ('', ''))
+        ed = _edit(a) if name in _FILE_TOOLS else {'parts': [{'old': str(a.get(o) or '')[:EDIT_N], 'new': a[w][:EDIT_N]}]} if w and isinstance(a.get(w), str) else None
+        patch = a.get('patch') if isinstance(a.get('patch'), str) else a.get('input') if isinstance(a.get('input'), str) and re.search(r'\*\*\* (Update|Add) File|^@@', a['input'], re.M) else None
+        meta = {'tool': name, **({'patch': patch[:20000]} if patch else {})}
+        return [{'sessionUpdate': 'tool_call', 'toolCallId': str(d.get('tool_call_id') or f'{name}-{n}'), 'status': 'in_progress', 'rawInput': a,
+                 **({'locations': [{'path': f}]} if f else {}),
+                 **({'content': [{'type': 'diff', 'path': f, 'oldText': p['old'], 'newText': p['new']} for p in ed['parts']]} if ed else {}),
+                 '_meta': {'taskuary': meta, **({'parentToolUseId': str(d['parent'])} if d.get('parent') else {})}}]
+    if k == 'tool_result':
+        bad, out = bool(d.get('is_error')), str(d.get('result') or '')
+        return [{'sessionUpdate': 'tool_call_update', 'toolCallId': str(d.get('tool_call_id') or name), 'status': 'failed' if bad else 'completed',
+                 **({'content': [{'type': 'content', 'content': {'type': 'text', 'text': _cut_said(out) if bad else out}}]} if out.strip() else {})}]
+    t = str(e.get('detail') or '').strip() if not isinstance(e.get('detail'), dict) else ''
+    if k == 'progress' and name in ('text', 'agent_message') and t:
+        return [{'sessionUpdate': 'agent_message_chunk', 'messageId': f't{n}', 'content': {'type': 'text', 'text': _cut(t, SAID_N)}}]
+    if k == 'progress' and name in ('thinking', 'reasoning') and t:
+        return [{'sessionUpdate': 'agent_thought_chunk', 'messageId': f't{n}', 'content': {'type': 'text', 'text': _cut(t, THOUGHT_N)}}]
+    if k == 'error':
+        r = e['detail'].get('result') if isinstance(e.get('detail'), dict) else e.get('detail')
+        return [{'sessionUpdate': 'error', 'content': {'type': 'text', 'text': _cut(r, 400)}, '_meta': {'taskuary': 'step_error'}}] if str(r or '').strip() else []
+    return []
 
 
 # ── the list ─────────────────────────────────────────────────────────────────────────────────────

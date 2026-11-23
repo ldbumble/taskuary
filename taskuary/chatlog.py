@@ -228,14 +228,15 @@ def _logged(store, tid: int) -> None:
 
 
 def steps_of(store, tid: int, sid: str, steps: list) -> None:
-    "A CLI log's steps (sessionrecord: Claude's, Codex's, Copilot's, Gemini's) by their place in its log: new ones appended, changed ones in place."
+    """A CLI log's steps (sessionrecord: Claude's, Codex's, Copilot's, Gemini's) by their place in its log - which only grows, so a place is a
+    step's for good: new ones appended, changed ones in place."""
     f = _feeds(store).setdefault((int(tid), f'log:{sid}'), {'wrote': {}})
     for i, s in enumerate(steps):
         if s.get('k') in ('you', 'brief'): continue
-        x = one_step(s)
-        if f['wrote'].get(i) == (j := json.dumps(x, sort_keys=True, default=str)): continue
-        f['wrote'][i] = j
-        step(store, tid, sid, f'log:{i}', x, state=x.get('status'))
+        x, ref = one_step(s), f'log:{i}'
+        if f['wrote'].get(ref) == (j := json.dumps(x, sort_keys=True, default=str)): continue
+        f['wrote'][ref] = j
+        step(store, tid, sid, ref, x, state=x.get('status'))
 
 
 def read(store, tid: int, level: str = None, ending: bool = False) -> dict:
@@ -589,19 +590,9 @@ def one_step(s: dict) -> dict:
     if desc and cmd: out['detail'] = _cut(cmd, 4000)
     elif s.get('detail'): out['detail'] = s['detail']
     if (kept := _args(a)): out['args'] = kept
-    for x in ('file', 'edit', 'status', 'output', 'out', 'id', 'parent', 'did', 'why'):
+    for x in ('file', 'edit', 'status', 'output', 'out', 'id', 'parent', 'did', 'why', 'title', 'tool_kind', 'paths'):
         if s.get(x) not in (None, '', {}): out[x] = s[x]
     return out
-
-
-def _convert(road: str, events: list) -> list:
-    from . import conversation, sessionrecord
-    if road == 'trace': return sessionrecord.trace_steps(events)
-    if road == 'acp': return conversation.acp_steps(events)
-    st = {'out': []}
-    line_of = {'claude-log': sessionrecord._claude_line, 'codex-log': sessionrecord._codex_line}[road]
-    for j in events: line_of(st, j)
-    return st['out']
 
 
 import weakref as _weakref
@@ -611,26 +602,110 @@ _FEEDS = _weakref.WeakKeyDictionary()
 def _feeds(store) -> dict:
     try: return _FEEDS.setdefault(store, {})
     except TypeError: return {}
+def _ms() -> str: return f'{time.time_ns() // 1_000_000}'
+
+
+# ONE ROW PER THING THE AGENT DID, KEYED BY ITS OWN ID (the owner, 2026-11-23: adopt the open-source model - Zed, Toad, agent-shell): a tool call
+# is the row s:<sid>:<toolCallId>, a message s:<sid>:m:<messageId>, the turn's plan s:<sid>:plan:<run>. Each update patches its own row and
+# nothing else - never a re-reading of the whole turn written back by its place in it, where a step that came between shifted every row after
 @_safe
-def feed(store, tid: int, sid: str, road: str, event) -> None:
-    """ONE EVENT OF A ROAD'S RECORD (a chat agent's trace event, an ACP update, a line of a CLI's log), as it comes: the turn's steps are
-    read in the one shape and each new or changed one is written in place - by its place in the turn, so an update never moves it."""
+def feed(store, tid: int, sid: str, road: str, event, keep: bool = False) -> None:
+    """ONE EVENT OF A ROAD'S RECORD, as it comes. An ACP update ('acp') is the record; a trace event ('trace': stream-json, Codex's JSONL, the
+    API agent's loop) is first said as the ACP updates it stands for (conversation.acp_of_trace); a CLI's own log ('claude-log', 'codex-log')
+    is read by its parser. `keep`: the updates are the task's own record too (codingchat.record_general - a coding session keeps its own)."""
     if not store or not tid or event is None: return
     # ...his stop is his press's line in the chat, never an error step of the turn (the trace marks it: general.send_prompt)
     if isinstance(event, dict) and event.get('type') == 'error' and isinstance(event.get('detail'), dict) and event['detail'].get('stop'): return
-    t = open_turn(store, tid)
-    root = (t['Key'] if t else '').split('+')[0]
-    fs = _feeds(store); f = fs.get((int(tid), sid))
-    if not f or f['root'] != root: f = fs[(int(tid), sid)] = {'root': root, 'seq': f'{int(time.time() * 1000)}', 'events': [], 'wrote': {}}
-    f['events'].append(event); f['road'] = road
-    # ...words a token at a time are written a few times a second, not once a token: the rest at the next step or the answer (flush)
-    if _chunk(event) and time.time() - f.get('at', 0) < CHUNK_S: f['dirty'] = True; return
-    _write(store, tid, sid, f)
+    f = _feeds(store).setdefault((int(tid), sid), {'run': _ms(), 'n': 0, 'k': 0, 'ents': {}, 'ids': {}, 'last': None, 'dirty': set()})
+    if road in _LOGS: return _logged_road(store, tid, sid, road, event, f)
+    if road == 'trace':
+        if not isinstance(event, dict): return
+        if event.get('type') == 'prompt': f['run'], f['acp'] = _ms(), False          # ...a run begins: what it numbers is its own
+        # ...A RUN OVER ACP IS ITS UPDATES (agents.run_acp hands them in): its trace's tool calls and words are their echo, never a second row
+        if f.get('acp') and event.get('type') != 'error': return
+        from .conversation import acp_of_trace
+        f['n'] += 1
+        ups = [_own_ids(f, u) for u in acp_of_trace(event, f['n'])]
+    else:
+        if not isinstance(event, dict): return
+        f['acp'], ups = True, [event]
+    for u in ups:
+        if keep:
+            from . import codingchat
+            codingchat.record_general(tid, sid, u)
+        _upsert(store, tid, sid, f, u)
 
 
-CHUNK_S = 0.4
-def _chunk(e) -> bool:
-    return isinstance(e, dict) and (e.get('sessionUpdate') in ('agent_message_chunk', 'agent_thought_chunk') or e.get('type') == 'live')
+def _own_ids(f: dict, u: dict) -> dict:
+    "A trace road's ids made its run's own: `tool-0` and Codex's `item_0` begin again every run, and a message has none."
+    if u.get('sessionUpdate') == 'tool_call':
+        raw = str(u['toolCallId']); u['toolCallId'] = f['ids'][raw] = f"{f['run']}.{raw}"
+    elif u.get('sessionUpdate') == 'tool_call_update': u['toolCallId'] = f['ids'].get(str(u['toolCallId']), f"{f['run']}.{u['toolCallId']}")
+    elif u.get('messageId'): u['messageId'] = f"{f['run']}.{u['messageId']}"
+    return u
+
+
+CHUNK_S, OUT_KEEP, ENTS = 0.25, 20000, 600
+_MSG = ('agent_message_chunk', 'agent_thought_chunk', 'user_message_chunk')
+def _delta_only(u: dict) -> bool:
+    return u.get('sessionUpdate') == 'tool_call_update' and set(u) <= {'sessionUpdate', 'toolCallId', '_meta', '_at', '_t'} and \
+        set((u.get('_meta') or {})) <= {'terminal_output_delta'}
+
+
+def _upsert(store, tid: int, sid: str, f: dict, u: dict) -> None:
+    "One update into the one thing it is of - its row patched in place, or appended where it first came. Session state is no row."
+    from .acp import _text_of
+    kind, now, chunky = u.get('sessionUpdate'), time.time(), False
+    if kind in ('tool_call', 'tool_call_update'):
+        if not (ref := str(u.get('toolCallId') or '')): return
+        e = f['ents'].setdefault(ref, {'ups': []})
+        last = e['ups'][-1] if e['ups'] else None
+        # ...a command's output as it streams is one growing tail on its call, never an update kept per delta (kept to its head)
+        if (chunky := _delta_only(u)) and last is not None and _delta_only(last):
+            d = last['_meta']['terminal_output_delta']
+            d['data'] = (str(d.get('data') or '') + str(u['_meta']['terminal_output_delta'].get('data') or ''))[:OUT_KEEP]
+        else: e['ups'].append({**u, '_meta': {**(u.get('_meta') or {})}} if chunky else u)
+    elif kind in _MSG:
+        unnamed = not u.get('messageId')
+        if kind == 'agent_thought_chunk': f['last'] = (kind, unnamed); return            # ...a model's private reasoning is never a row (the owner)
+        if unnamed and f['last'] != (kind, True): f['k'] += 1
+        ref = f"m:{u.get('messageId') or f'''{f['run']}.{f['k']}'''}"
+        e = f['ents'].get(ref)
+        if e is None: e = f['ents'][ref] = {'ups': [{**u, 'content': {'type': 'text', 'text': _text_of(u.get('content'))}}]}
+        else: e['ups'][0]['content']['text'] += _text_of(u.get('content'))
+        chunky, f['last'] = True, (kind, unnamed)
+    elif kind == 'plan': ref = f"plan:{f['run']}"; e = f['ents'][ref] = {**f['ents'].get(ref, {}), 'ups': [u]}       # ...one plan, replaced whole
+    elif kind == 'error': f['n'] += 1; ref = f"e:{f['run']}.{f['n']}"; e = f['ents'][ref] = {'ups': [u]}
+    elif kind == 'compaction_update':
+        ref = f"c:{u.get('compactionId')}"; e = f['ents'].setdefault(ref, {'ups': []}); e['ups'].append(u)
+    else: return            # ...commands, mode, usage: the session's state (acp.ACPClient), never a line of the chat
+    if kind not in _MSG: f['last'] = (kind, False)
+    # ...words a token at a time are written a few times a second, the rest at the next thing it does or its answer (flush)
+    if chunky and e.get('j') is not None and now - e.get('at', 0) < CHUNK_S: f['dirty'].add(ref); return
+    for r in [r for r in f['dirty'] if r != ref]: _put(store, tid, sid, f, r)
+    _put(store, tid, sid, f, ref)
+    while len(f['ents']) > ENTS: f['ents'].pop(next(iter(f['ents'])))
+
+
+def _put(store, tid: int, sid: str, f: dict, ref: str) -> None:
+    from .conversation import acp_steps
+    f['dirty'].discard(ref)
+    if not (e := f['ents'].get(ref)) or not (got := acp_steps(e['ups'])): return
+    if (s := got[0]).get('k') in ('you', 'brief', 'thought'): return       # ...his lines and Taskuary's briefs are the hand-over's, never a step
+    x = one_step(s)
+    e['at'] = time.time()
+    if e.get('j') == (j := json.dumps(x, sort_keys=True, default=str)): return
+    e['j'] = j
+    step(store, tid, sid, ref, x, state=x.get('status'))
+
+
+_LOGS = ('claude-log', 'codex-log')
+def _logged_road(store, tid: int, sid: str, road: str, event, f: dict) -> None:
+    "A line of a CLI's own log, read by its parser into the steps it keeps, each written by its own id (steps_of)."
+    from . import sessionrecord
+    st = f.setdefault('log', {'out': []})
+    {'claude-log': sessionrecord._claude_line, 'codex-log': sessionrecord._codex_line}[road](st, event)
+    steps_of(store, tid, sid, st['out'])
 
 
 @_safe
@@ -638,17 +713,8 @@ def flush(store, tid: int) -> None:
     "What the roads of task `tid` still hold back (a sentence's last tokens): written now - its answer is filed, or its turn ended."
     if not store or not tid: return
     for (t, sid), f in list(_feeds(store).items()):
-        if t == int(tid) and f.get('dirty'): _write(store, tid, sid, f)
-
-
-def _write(store, tid: int, sid: str, f: dict) -> None:
-    f['at'], f['dirty'] = time.time(), False
-    for i, s in enumerate(_convert(f['road'], f['events'])):
-        if s.get('k') in ('you', 'brief'): continue          # ...his lines and Taskuary's briefs are the hand-over's, never a step
-        x = one_step(s)
-        if f['wrote'].get(i) == (j := json.dumps(x, sort_keys=True, default=str)): continue
-        f['wrote'][i] = j
-        step(store, tid, sid, f"{f['seq']}:{i}", x, state=x.get('status'))
+        if t == int(tid):
+            for r in list(f.get('dirty') or ()): _put(store, tid, sid, f, r)
 
 
 # ── HOW MUCH OF THE WORK IS SHOWN: the one place the detail setting is applied ──────────────────────────────────────────────────────────

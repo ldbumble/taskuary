@@ -34,7 +34,7 @@ export const eventsOf = (steps, running, tail = true) => steps.flatMap((s, i) =>
     ...(runs(s, running, tail && i === steps.length - 1) ? [] : [{ type: "tool_result", name: id, detail: { tool_call_id: id, ...ended(s, output) } }])];
   if (s.k === "plan") return [{ type: "tool_call", name: "TodoWrite", detail: { tool_call_id: id, args: { todos: s.items || [] } } },
     { type: "tool_result", name: id, detail: { tool_call_id: id, result: "" } }];
-  if (s.k === "said") return [{ type: "progress", name: "text", detail: s.text }];
+  if (s.k === "said") return [{ type: "progress", name: "text", detail: s.text, ...(s.id ? { id: s.id } : {}) }];
   if (s.k === "thought") return [];                    // ...a model's private reasoning is never a step (conversation._said)
   if (s.k === "error") return [{ type: "error", ...(s.name ? { name: s.name } : {}), detail: { result: s.text } }];      // ...by the call it came from
   return s.text ? [{ type: "progress", name: "note", detail: s.text }] : [];
@@ -93,8 +93,8 @@ export function turnParts(events, { answer = "", keepStart = false, live = false
     const ids = new Set(run.filter((e) => e.type === "tool_call").map((e) => e.detail?.tool_call_id));
     const got = [...ids].map((id) => results.get(id)).filter(Boolean);
     for (const st of stepsOf([...run, ...got], { answer, keepStart: keepStart && first })) {
-      if (st.kind === "said") parts.push({ type: "said", text: st.summary });
-      else { const w = parts.at(-1)?.type === "work" ? parts.at(-1) : (parts.push({ type: "work", steps: [] }), parts.at(-1)); w.steps.push(st); }
+      if (st.kind === "said") parts.push({ type: "said", text: st.summary, id: st.id });
+      else { const w = parts.at(-1)?.type === "work" ? parts.at(-1) : (parts.push({ type: "work", steps: [], id: st.id }), parts.at(-1)); w.steps.push(st); }
     }
     run = []; first = false;
   };
@@ -102,8 +102,10 @@ export function turnParts(events, { answer = "", keepStart = false, live = false
     if (e.type === "tool_result") continue;
     // ...and a VIEW the agent showed (agenttools `show`) is its own part, drawn as the UI it describes (ViewSpec.jsx)
     // ...and the FILES it showed with it (viewSpec.filesOf): the pictures themselves, over any view the same call drew
-    const res = results.get(e.detail?.tool_call_id), ps = [filesOf(e, res), editOf(e, res, live) || planOf(e) || viewOf(e, res)].filter(Boolean);
-    if (ps.length) { flush(); special.add(e.detail?.tool_call_id); parts.push(...ps); } else run.push(e);
+    // ...each part by the call it is of (its row's own id in the log), never by where it falls: one drawn later never re-keys those after it
+    const cid = e.detail?.tool_call_id, res = results.get(cid), ps = [filesOf(e, res), editOf(e, res, live) || planOf(e) || viewOf(e, res)].filter(Boolean)
+      .map((p, j) => ({ ...p, id: j ? `${cid}:${j}` : cid }));
+    if (ps.length) { flush(); special.add(cid); parts.push(...ps); } else run.push(e);
   }
   flush();
   // ...an edit that failed and was then made is no failure (agentSteps' `recovered`): Claude's first try at a string not found, its second made
@@ -120,7 +122,7 @@ export function turnParts(events, { answer = "", keepStart = false, live = false
     if (parts[i - 1]?.type === "work") parts.splice(i - 1, 2, { ...parts[i - 1], steps: [...parts[i - 1].steps, ...parts[i].steps] });
   }
   const lastPlan = parts.map((p) => p.type).lastIndexOf("plan");
-  return parts.filter((p, i) => p.type !== "plan" || i === lastPlan).map((p, i) => ({ ...p, id: `p${i}` }));
+  return parts.filter((p, i) => p.type !== "plan" || i === lastPlan).map((p, i) => ({ ...p, id: p.id || `p${i}` }));
 }
 // what a turn did, counted for its fold's line: "6 steps" - its edits each one
 export const workCount = (parts) => workRows(parts).length;
@@ -144,7 +146,7 @@ const lower = (t) => String(t || "").replace(/^[A-Z](?![A-Z])/, (c) => c.toLower
 // ...and rows of one kind say it once, counted (walk 5: "read 3 web pages, read 4 web pages" - two runs of reads cut by a sentence)
 const KIND_SAID = { read: (k) => `read ${plural(k, "file")}`, page: (k) => `read ${plural(k, "web page")}`, run: (k) => `ran ${plural(k, "command")}`,
   edit: (k) => `changed ${plural(k, "file")}`, search: (k) => `searched files ${k} times`, web: (k) => `searched the web ${k} times`, mail: () => "searched your mail" };
-const calls = (r) => String(r.id || "").split("+").length;
+const calls = (r) => r.n || 1;
 // ...ONE COUNTING UNIT (the judge's walk, 2026-11-19: "1 step - ..., and 2 more" - the head counted rows, the tail counted calls): every
 // number is of calls - a row folding three calls is three steps - and "and N more" is the steps the named words did not cover
 const callsOf = (r) => (r.type === "edit" ? 1 : calls(r));

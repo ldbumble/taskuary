@@ -504,7 +504,8 @@ export function stepsOf(trace, { answer = "", keepStart = true } = {}) {
   // which came first, so the line written before the first tool call no longer slipped into the box as raw text.
   const structured = events.some((e) => e?.type === "tool_call" || e?.type === "progress");
   const steps = [], byId = new Map(), called = new Set();
-  const say = (kind, text) => {
+  // ...each by the id its row has in the log (chatlog.feed: the agent's own message id), so a row is the same row on every read
+  const say = (kind, text, id = "") => {
     const t = forScreen(text);
     if (!t || QUICK_RAW.test(t)) return;
     const last = steps[steps.length - 1];
@@ -516,7 +517,7 @@ export function stepsOf(trace, { answer = "", keepStart = true } = {}) {
       return;
     }
     if (kind === "said" && last?.kind === "said" && last.live) { last.summary += `\n${t}`; return; }
-    steps.push({ id: `${kind}-${steps.length}`, kind, summary: t, detail: "", status: "done", live: kind === "said" && !structured, src: String(text) });
+    steps.push({ id: id || `${kind}-${steps.length}`, kind, summary: t, detail: "", status: "done", live: kind === "said" && !structured, src: String(text) });
   };
   for (const e of events) {
     if (!e) continue;
@@ -553,7 +554,7 @@ export function stepsOf(trace, { answer = "", keepStart = true } = {}) {
       // ...A MODEL'S PRIVATE REASONING IS NO STEP (the owner, 2026-11-23: "Locating account menu", "Awaiting final approval" in italics among what
       // it did): his screen shows what happened and what the agent said - the thought being written is the working line's (chatlog._now)
       if (name === "thinking" || name === "reasoning") continue;
-      if (name === "text" || name === "agent_message") say("said", e.detail);
+      if (name === "text" || name === "agent_message") say("said", e.detail, e.id);
       else say("note", e.detail);
     } else if (e.type === "live" && (e.name === "writing" || e.name === "thinking")) {
       // ...the answer as it streams, and a thought being written, are the turn's line of what it is doing (chatlog._now), never rows
@@ -636,7 +637,9 @@ function group(steps) {
     const summary = run.length > 1 ? together(run) : null;
     // ...and a run still under way is doing its NEWEST call: "Reading 3 files" said less than "Reading BudgetTable.js"
     const last = run[run.length - 1], doing = last.status === "running" ? last.doing || present(last.summary) : present(summary || "");
-    if (run.length > 1 && summary) out.push({ ...s, id: run.map((x) => x.id).join("+"), summary: withCount(summary, run), doing, status: statusOf(run), detail: run.map(detailOf).join("\n\n"),
+    // ...KEYED BY ITS FIRST CALL, whatever joins it after (the owner, 2026-11-23: Zed, Toad keep a row's key for good): keyed by every call in it,
+    // the row was a new one each time the run grew - drawn again from nothing, its open output shut - `n` says how many it holds
+    if (run.length > 1 && summary) out.push({ ...s, id: s.id, n: run.length, summary: withCount(summary, run), doing, status: statusOf(run), detail: run.map(detailOf).join("\n\n"),
       // ...and the server's why of the newest try that failed rides on the merged row (say.step_why) - the page's reading is the fallback only
       ...(run.some((x) => x.why) ? { why: run.filter((x) => x.why).at(-1).why } : {}) });
     else for (const x of run) out.push({ ...x, summary: withCount(x.summary, [x]), detail: detailOf(x) });

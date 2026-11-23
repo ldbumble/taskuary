@@ -538,3 +538,84 @@ def test_a_row_written_this_beat_on_another_connection_is_updated_not_lost(tmp_p
         n = chatlog.put(b, tid, 'card', 'r:7', {'review': 7, 'what': 'slot', 'line': '1 of 1'}, state='pending')
     rows = [r for r in b.cx.execute("SELECT Id, Body FROM chatlog WHERE TaskId=? AND Key='r:7'", (tid,))]
     assert len(rows) == 1 and rows[0]['Id'] == n and '1 of 1' in rows[0]['Body']
+
+
+# ── EVERY STEP BY THE AGENT'S OWN ID (the owner, 2026-11-23: adopt the open-source model - Zed, Toad, agent-shell key a row by the tool call) ──
+def _rows(s, tid):
+    return {r['Key']: (r['Id'], r['Rev'], json.loads(r['Body'])) for r in s._rows("SELECT Key, Id, Rev, Body FROM chatlog WHERE TaskId=? AND Kind='step' ORDER BY Id", (tid,))}
+
+
+def test_a_step_is_its_agents_own_id_and_an_update_patches_that_row_alone():
+    """A call announced with a generic title, words said while it runs, the call's own update, another call: each is ONE row keyed by the id the
+    agent gave it - and an update touches its own row and no other (a re-reading of the whole turn by place rewrote them all)."""
+    from taskuary import conversation
+    s, tid = world()
+    conversation.hear(s, tid, turn=True)
+    put = lambda u: chatlog.feed(s, tid, 'sid1', 'acp', u)
+    put({'sessionUpdate': 'tool_call', 'toolCallId': 'toolu_1', 'kind': 'read', 'title': 'Read File', 'status': 'pending'})
+    put({'sessionUpdate': 'agent_message_chunk', 'messageId': 'msg_1', 'content': {'type': 'text', 'text': 'Reading the vendor sheet.'}})
+    before = _rows(s, tid)
+    put({'sessionUpdate': 'tool_call_update', 'toolCallId': 'toolu_1', 'title': 'Read vendors.csv', 'locations': [{'path': 'C:/work/vendors.csv'}],
+         'rawInput': {'file_path': 'C:/work/vendors.csv'}, 'status': 'completed'})
+    put({'sessionUpdate': 'tool_call', 'toolCallId': 'toolu_2', 'kind': 'execute', 'title': 'ls vendors', 'rawInput': {'command': 'ls vendors'}})
+    after = _rows(s, tid)
+    assert list(after) == ['s:sid1:toolu_1', 's:sid1:m:msg_1', 's:sid1:toolu_2'], list(after)
+    assert after['s:sid1:m:msg_1'][:2] == before['s:sid1:m:msg_1'][:2], 'the words were not touched by the call\'s update'
+    assert after['s:sid1:toolu_1'][0] == before['s:sid1:toolu_1'][0] and after['s:sid1:toolu_1'][2]['title'] == 'Read vendors.csv'
+    assert after['s:sid1:toolu_1'][2]['paths'] == ['C:/work/vendors.csv'] and after['s:sid1:toolu_1'][2]['tool_kind'] == 'read'
+
+
+def test_a_call_that_ends_after_his_line_ends_in_its_own_row_above_it():
+    """A command still running when Paula's line is heard: the rest of the turn goes on under her line, and the command's end is ITS row's -
+    read again from that point on by place, its completion had nothing to land on and the row above spun for good."""
+    from taskuary import conversation, general
+    s, tid = world()
+    conversation.hear(s, tid, turn=True)
+    for e in [{'type': 'prompt', 'name': 'prompt_sent_to_agent', 'detail': 'go'},
+              {'type': 'tool_call', 'name': 'Bash', 'detail': {'tool_call_id': 'c1', 'args': {'command': 'pytest -q'}}}]: chatlog.feed(s, tid, 'sid1', 'trace', e)
+    general.wait_line(s, tid, 'Paula says use the March export', line_id='l-paula'); conversation.hear(s, tid, ['l-paula'])
+    chatlog.feed(s, tid, 'sid1', 'trace', {'type': 'tool_result', 'name': 'c1', 'detail': {'result': '3 passed'}})
+    chatlog.feed(s, tid, 'sid1', 'trace', {'type': 'progress', 'name': 'text', 'detail': 'Tests pass; switching to the March export.'})
+    items = chatlog.read(s, tid, 'everything')['items']
+    assert [x['kind'] for x in items] == ['turn', 'line', 'turn']
+    assert [(x['k'], x.get('status')) for x in items[0]['steps']] == [('tool', 'completed')] and items[0]['steps'][0]['output'] == '3 passed'
+    assert [x['k'] for x in items[2]['steps']] == ['said']
+
+
+def test_an_api_agent_turn_and_an_acp_turn_write_the_same_rows():
+    """ONE RECORD SHAPE FOR EVERY AI (the owner, 2026-11-23: "Does this work for both ACP and HIPAA AI or any AI we use?"): the API agent's own
+    tool loop (apiagent.turn, the HIPAA AI card's road) and an ACP agent doing the same work write one row per call keyed by its call id, each
+    with its input, its output and - for a file it wrote - its diff, and its words as their own row; nothing on either road is a second shape."""
+    from unittest import mock
+    from taskuary import apiagent, conversation, general
+    said = 'Two vendor files; the totals are in totals.csv.'
+    def api(s, tid):
+        steps = iter([{'role': 'assistant', 'content': None, 'tool_calls': [
+                           {'id': 'call_1', 'type': 'function', 'function': {'name': 'run_command', 'arguments': '{"command": "ls vendors"}'}},
+                           {'id': 'call_2', 'type': 'function', 'function': {'name': 'file_write', 'arguments': '{"path": "totals.csv", "text": "vendor,total"}'}}]},
+                      {'role': 'assistant', 'content': said}])
+        class Brain:
+            def chat(self, msgs, tools, max_tokens, **kw): return next(steps)
+        feed = lambda kind, name, detail=None: chatlog.feed(s, tid, 'sid1', 'trace', {'type': kind, 'name': name, 'detail': detail})
+        with mock.patch.object(apiagent, 'run_tool', side_effect=lambda st, t, sid, name, a: 'payworth.csv trainly.csv' if name == 'run_command' else 'ok'):
+            assert apiagent.turn(Brain(), s, tid, 'sid1', 'sys', 'go', 500, trace=feed) == said
+        feed('progress', 'text', said)
+    def acp(s, tid):
+        for u in [{'sessionUpdate': 'tool_call', 'toolCallId': 'call_1', 'kind': 'execute', 'title': 'ls vendors', 'rawInput': {'command': 'ls vendors'}},
+                  {'sessionUpdate': 'tool_call_update', 'toolCallId': 'call_1', 'status': 'completed',
+                   'content': [{'type': 'content', 'content': {'type': 'text', 'text': 'payworth.csv trainly.csv'}}]},
+                  {'sessionUpdate': 'tool_call', 'toolCallId': 'call_2', 'kind': 'edit', 'title': 'Write totals.csv', 'locations': [{'path': 'totals.csv'}],
+                   'rawInput': {'path': 'totals.csv'}, 'content': [{'type': 'diff', 'path': 'totals.csv', 'oldText': '', 'newText': 'vendor,total'}]},
+                  {'sessionUpdate': 'tool_call_update', 'toolCallId': 'call_2', 'status': 'completed', 'content': [{'type': 'content', 'content': {'type': 'text', 'text': 'ok'}}]},
+                  {'sessionUpdate': 'agent_message_chunk', 'messageId': 'm1', 'content': {'type': 'text', 'text': said}}]:
+            chatlog.feed(s, tid, 'sid1', 'acp', u)
+    seen = {}
+    for road, run in (('api', api), ('acp', acp)):
+        s, tid = world(); conversation.hear(s, tid, turn=True)
+        run(s, tid)
+        s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, said)
+        t = chatlog.read(s, tid, 'everything')['items'][-1]
+        seen[road] = ([(x['k'], x.get('status'), x.get('output'), x.get('file'), [p['new'] for p in (x.get('edit') or {}).get('parts') or []]) for x in t['steps']],
+                      [k.rsplit('.', 1)[-1].rsplit(':', 1)[-1] for k in _rows(s, tid) if ':m:' not in k])
+    assert seen['api'] == seen['acp'], seen
+    assert seen['acp'][1] == ['call_1', 'call_2'], 'each row keyed by its own call id'

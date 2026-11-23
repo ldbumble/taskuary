@@ -208,3 +208,21 @@ test("his line keeps its words through the swap: placed by the server before it 
   const filed = { ...placed, items: [{ ...placed.items[0], text: "Post it to all three." }, placed.items[1]] };
   assert.deepEqual(withMine(filed, mine).items.filter((x) => x.kind === "line").map((x) => x.text), ["Post it to all three."]);
 });
+
+
+// EVERY ROW KEEPS ITS KEY (the owner, 2026-11-23: adopt the open-source model - Zed, Toad and agent-shell key a row by the agent's own id): the
+// turn's rows as the log serves them, read again after a call joins the run and after words come under it - every row and part keeps its id,
+// so React patches it in place and nothing is drawn again from nothing (a run keyed by all its calls was a new row each time it grew; parts p0, p1)
+test("a row and a part keep their keys as the turn grows", async () => {
+  const { eventsOf, turnParts } = await import("../src/chatStream.js");
+  const read = (id, f) => ({ id, k: "tool", name: "Read", args: { file_path: `C:/work/${f}` }, status: "completed" });
+  const said = (id, t) => ({ id, k: "said", text: t });
+  const ids = (steps) => turnParts(eventsOf(steps, true), { live: true }).map((p) => [p.type, p.id, (p.steps || []).map((s) => s.id)]);
+  const one = [said("s:x:m:1", "Reading the sheets."), read("s:x:c1", "a.csv")];
+  const two = [...one, read("s:x:c2", "b.csv")];
+  const three = [...two, said("s:x:m:2", "Both read.")];
+  assert.deepEqual(ids(one), [["said", "s:x:m:1", []], ["work", "s:x:c1", ["s:x:c1"]]]);
+  assert.deepEqual(ids(two)[1].slice(0, 2), ["work", "s:x:c1"], "the run that grew is the same part");
+  assert.deepEqual(ids(two)[1][2], ["s:x:c1"], "and the same row, keyed by its first call");
+  assert.deepEqual(ids(three).map((p) => p[1]), ["s:x:m:1", "s:x:c1", "s:x:m:2"], "words under it are a part of their own, by their own id");
+});

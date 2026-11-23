@@ -436,6 +436,16 @@ def asked(store, tid) -> str:
     lines = [str(m.get('BodyText') or m.get('Subject') or '') for m in store.list_messages(int(tid)) if (m.get('Channel') or '') == CHANNEL]
     lines += [str(c.get('Body') or '') for c in store.list_comments(int(tid)) if c.get('ActorType') == USER_TYPE and c.get('Actor') == 'owner']
     lines += [str(w.get('text') or '') for w in waiting_lines(store, int(tid))]
+    # ...AND THE PRESS THAT HANDED THE ACT TO ITS AGENT IS HIS GO-AHEAD FOR THAT ACT (his live app, 2026-11-23: Post via the browser on the X post
+    # card, and the agent's final Post on X was held for a second press - then set aside by his next line, and the post never went): what he
+    # approved on the card, the act in flight (cardqueue.in_flight), is said with his words, and the judge reads it as his go-ahead
+    from . import cardqueue
+    if (r := cardqueue.in_flight(store, int(tid))):
+        try: p = json.loads(r.get('FinalText') or r.get('DraftText') or '{}') or {}
+        except (TypeError, ValueError): p = {}
+        words = ' '.join(str(p.get('text') or p.get('body') or '').split())[:700]
+        lines.append(f"I pressed Post via the browser on this card - do it: {' '.join(str(r.get('Reason') or '').split())[:200]}"
+                     + (f'. The words: "{words}"' if words else ''))
     return '\n'.join(lines[-6:])[-2000:]
 
 

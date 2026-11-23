@@ -594,6 +594,7 @@ def one_step(s: dict) -> dict:
     if (kept := _args(a)): out['args'] = kept
     for x in ('file', 'edit', 'status', 'output', 'out', 'id', 'parent', 'did', 'why', 'title', 'tool_kind', 'paths', 'ask'):
         if s.get(x) not in (None, '', {}): out[x] = s[x]
+    if s.get('id'): out['call'] = str(s['id'])          # ...the agent's own id for it, kept beside the row's key: a permission asked names it
     return out
 
 

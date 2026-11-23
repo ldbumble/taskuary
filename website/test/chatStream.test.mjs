@@ -266,6 +266,21 @@ test("a titled call is the agent's title, kind and files; our own tools and an u
 });
 
 
+// A PERMISSION ASKED IS ON ITS CALL'S ROW (the owner, 2026-11-23: action cards stay cards; "just permissions to push something" in the row)
+test("a permission waiting on him is drawn on its call's row with the agent's option names, and its card only where no row names it", async () => {
+  const { askOn, asksOff, eventsOf, turnParts } = await import("../src/chatStream.js");
+  const p = { id: "p1", call: "toolu_7", options: [{ kind: "allow_once", label: "Allow once" }, { kind: "reject_once", label: "Reject" }] };
+  const row = { id: "s:x:toolu_7", call: "toolu_7", k: "tool", name: "Bash", title: "git push origin main", tool_kind: "execute", args: { command: "git push origin main" },
+    status: "pending", ask: [{ id: "allow", name: "Yes, push it", kind: "allow_once" }, { id: "no", name: "No", kind: "reject_once" }, { id: "always", name: "Always", kind: "allow_always" }] };
+  const [step] = turnParts(eventsOf([row], true), { live: true })[0].steps;
+  const asked = askOn(step, new Map([[p.call, p]]));
+  assert.deepEqual(asked.options, [{ kind: "allow_once", label: "Yes, push it" }, { kind: "reject_once", label: "No" }], "the agent's names, only what the request offers (no Always for a push)");
+  assert.equal(askOn(step, new Map()), null, "answered, nothing waits on the row");
+  const list = [{ kind: "turn", id: "t:1", steps: [row] }];
+  assert.deepEqual(asksOff([p, { id: "p2", call: "toolu_8", options: [] }, { id: "p3", options: [] }], list).map((x) => x.id), ["p2", "p3"]);
+});
+
+
 // THE CALL'S OWN DIFF, AND A COMMAND'S OUTPUT AS IT COMES (the owner, 2026-11-23: Zed draws the agent's `diff` and a live terminal)
 test("an edit row is the call's own diff, never one read off its arguments, and a running command shows its newest output", async () => {
   const { eventsOf, turnParts } = await import("../src/chatStream.js");

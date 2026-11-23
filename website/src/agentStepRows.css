@@ -46,3 +46,8 @@
 .tq-aui-step pre.tq-aui-step-tail { max-height: 9.5em; overflow: hidden; opacity: .85; }
 /* a file the agent named for a call that its title does not say (agentSteps.agentWords) */
 .tq-aui-step-chip { margin-left: 6px; padding: 0 5px; border-radius: 4px; background: var(--tq-inset, #f1ede5); color: var(--tq-muted, #858078); font-size: 11px; }
+/* a permission the agent waits on, on its call's row (AgentStepRows AskBar): the question, then the agent's own options */
+.tq-aui-step-ask { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 3px 0 6px 21px; font-size: 12px; }
+.tq-aui-step-ask-q { color: var(--tq-text, #3f423c); margin-right: 4px; }
+.tq-aui-step-ask .tq-chip { padding: 3px 11px; font-size: 12px; }
+.tq-aui-step-ask .tq-chip-on { border-color: var(--tq-accent, #4f6b5a); color: var(--tq-accent, #4f6b5a); font-weight: 600; }

@@ -651,6 +651,31 @@ def test_the_answer_draws_only_what_its_words_did_not_say_a_file_by_its_name_or_
     assert unsaid('Two vendor files.', []) == 'Two vendor files.' and unsaid('Two vendor files.', [{'k': 'tool'}]) == 'Two vendor files.'
 
 
+def test_a_permission_asked_is_its_calls_update_with_the_agents_options_and_clears_when_it_runs():
+    """THE ASK BELONGS TO THE CALL'S ROW (the ACP spec: a request_permission's toolCall IS that call's update; Zed draws it in the call's card):
+    Codex announces a read with no input and asks for it with the input and its own kind - the ask fills only what the call left out, the row
+    carries the agent's options while it waits, and they are gone from it once the call runs."""
+    from taskuary import acp, conversation, permissions
+    s, tid = world()
+    conversation.hear(s, tid, turn=True)
+    put = lambda u: chatlog.feed(s, tid, 'sid1', 'acp', u)
+    put({'sessionUpdate': 'tool_call', 'toolCallId': 'call_9', 'kind': 'read', 'title': 'Read', 'status': 'pending'})
+    put(acp.asked_update({'toolCall': {'toolCallId': 'call_9', 'kind': 'execute', 'title': "powershell.exe -Command 'Get-Content notes.md'",
+                                       'rawInput': {'command': ['powershell.exe', '-Command', 'Get-Content notes.md']}},
+                          'options': [{'optionId': 'ok', 'name': 'Yes', 'kind': 'allow_once'}, {'optionId': 'no', 'name': 'No', 'kind': 'reject_once'}]}))
+    row = lambda: next(x for x in chatlog.read(s, tid, 'everything')['items'][-1]['steps'] if x['k'] == 'tool')
+    r = row()
+    assert (r['title'], r['tool_kind'], r['call']) == ('Read', 'read', 'call_9'), 'what the call said stands; the ask only fills its gaps'
+    assert r['text'] == 'Get-Content notes.md' and [o['name'] for o in r['ask']] == ['Yes', 'No'], r
+    put({'sessionUpdate': 'tool_call_update', 'toolCallId': 'call_9', 'status': 'in_progress'})
+    assert not row().get('ask'), 'answered and running: nothing waits on the row'
+    # ...and a request put to him names that call, so the page draws its buttons on that row (chatStream.askOn)
+    with permissions._LOCK: permissions.PENDING['t-row'] = {'id': 't-row', 'tid': tid, 'store': s, 'req': permissions.normal({'call': 'call_9', 'tool': 'Bash'}),
+                                                           'g': 'g', 'rid': 'r', 'sid': 'sid1', 'at': '2026-11-23 10:00:00', 'until': '2026-11-23 10:05:00'}
+    try: assert [p['call'] for p in permissions.pending(tid, s)] == ['call_9']
+    finally: permissions.PENDING.pop('t-row', None)
+
+
 def test_a_row_is_pushed_to_the_open_chat_as_it_is_written():
     """THE WORDS STREAM INTO THEIR ROW (the owner, 2026-11-23): each write of a row goes out on the task's run-tail with the row as a read
     serves it and the turn it stands in - the page patches it in place (chatStream.patchSteps), never waiting on a 600 ms read."""

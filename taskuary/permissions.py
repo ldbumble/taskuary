@@ -127,6 +127,7 @@ def pending(tid: int = None, store=None) -> list:
     with _LOCK: rows = [dict(p) for p in PENDING.values() if (tid is None or p['tid'] == int(tid)) and (store is None or p['store'] is store)]
     return [{'id': p['id'], 'tid': p['tid'], 'ref': task_ref(p['tid']), 'line': line(p['req']), 'title': p['req']['title'], 'tool': p['req']['tool'],
              'kind': p['req']['kind'], 'locations': p['req']['locations'], 'at': p['at'], 'until': p['until'], 'risky': p['req']['risky'],
+             'call': p['req']['call'],          # ...the tool call it is about: the chat draws it on that call's row (chatlog one_step `call`)
              **{k: p['req'][k] for k in ('about', 'what', 'why', 'command')},
              'options': [{'kind': o, 'label': LABEL[o]} for o in p['req']['options']]} for p in sorted(rows, key=lambda p: p['at'])]
 

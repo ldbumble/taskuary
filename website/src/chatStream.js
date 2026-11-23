@@ -32,7 +32,7 @@ export const eventsOf = (steps, running, tail = true) => steps.flatMap((s, i) =>
       ...(s.parent ? { parent: s.parent } : {}), ...(s.edit ? { edit: s.edit } : {}), ...(s.file ? { file: s.file } : {}),
       ...(s.outcome ? { outcome: s.outcome } : {}), ...(s.why ? { why: s.why } : {}), ...(s.times > 1 ? { times: s.times } : {}), ...(s.did ? { did: s.did } : {}),
       // ...the agent's own words for it - its title, its kind, its files (agentSteps.agentWords) - and the options of a permission it waits on
-      ...(s.title ? { title: s.title } : {}), ...(s.tool_kind ? { tool_kind: s.tool_kind } : {}), ...(s.paths?.length ? { paths: s.paths } : {}), ...(s.ask?.length ? { ask: s.ask } : {}) } },
+      ...(s.title ? { title: s.title } : {}), ...(s.tool_kind ? { tool_kind: s.tool_kind } : {}), ...(s.paths?.length ? { paths: s.paths } : {}), ...(s.ask?.length ? { ask: s.ask } : {}), ...(s.call ? { call: s.call } : {}) } },
     ...(runs(s, running, tail && i === steps.length - 1) ? [] : [{ type: "tool_result", name: id, detail: { tool_call_id: id, ...ended(s, output) } }])];
   if (s.k === "plan") return [{ type: "tool_call", name: "TodoWrite", detail: { tool_call_id: id, args: { todos: s.items || [] } } },
     { type: "tool_result", name: id, detail: { tool_call_id: id, result: "" } }];
@@ -123,6 +123,19 @@ export const runsOf = (parts) => (parts || []).reduce((out, p) => {
   else out.push({ id: p.id, fold: true, parts: [p] });
   return out;
 }, []);
+// A PERMISSION ASKED IS ON ITS CALL'S ROW (the owner, 2026-11-23: "just permissions to push something" in the row, Zed-style - action cards
+// stay cards): the request waiting on him (permissions.pending, by the call it names) drawn on that row, each option by the agent's own name
+// for it where it gave one; the requests no row in the list names stand as their card, as before
+export const askOn = (step, byCall) => {
+  const p = step?.call && byCall?.get?.(step.call);
+  if (!p) return null;
+  const named = new Map((step.ask || []).map((o) => [o.kind, o.name]));
+  return { p, options: (p.options || []).map((o) => ({ kind: o.kind, label: named.get(o.kind) || o.label })) };
+};
+export const asksOff = (perms, items) => {
+  const calls = new Set((items || []).flatMap((x) => (x.kind === "turn" ? (x.steps || []).map((s) => s.call).filter(Boolean) : [])));
+  return (perms || []).filter((p) => !p.call || !calls.has(p.call));
+};
 // THE ROWS THE SERVER PUSHED AS IT WROTE THEM (chatlog.pushed - a message as it streams, a call as it moves): each patched into its turn in
 // place, by its own id, or added at the turn's foot where it is new - the list's next read is the same rows, so nothing moves when it lands
 export const patchSteps = (list, pushed, tid) => {

@@ -21,7 +21,20 @@ import ToolIcon from "@mui/icons-material/BuildOutlined";
 import ThoughtIcon from "@mui/icons-material/LightbulbOutlined";
 import { Md } from "./md.jsx";
 import { stepLabel } from "./agentSteps.js";
+import { askOn } from "./chatStream.js";
 import "./agentStepRows.css";
+
+// THE PERMISSIONS WAITING ON HIM, BY THE CALL THEY ARE ABOUT (GeneralWorkspace provides it on a coding chat): {byCall, answer(p, kind), busy}
+export const PermitCtx = React.createContext(null);
+const AskBar = ({ asked }) => {
+  const permit = React.useContext(PermitCtx), busy = permit?.busy?.[asked.p.id];
+  return <div className="tq-aui-step-ask" role="group" aria-label="The agent asks permission" data-tq-permission={asked.p.id}>
+    <span className="tq-aui-step-ask-q">Waits for your answer{asked.p.why ? ` - ${asked.p.why}` : ""}</span>
+    {asked.options.map((o) => <button key={o.kind} type="button" className={`tq-chip${o.kind === "allow_once" ? " tq-chip-on" : ""}`} disabled={!!busy}
+      data-tq-permission-answer={o.kind} onClick={() => permit.answer(asked.p, o.kind)}>{busy === o.kind ? "…" : o.label}</button>)}
+    {permit?.err?.[asked.p.id] && <span className="tq-aui-asking-err" role="alert">{permit.err[asked.p.id]}</span>}
+  </div>;
+};
 
 // A SMALL MARK BY KIND (the owner, 2026-11-05: "look how other chat libraries show intermediately the tool calls"): a search, a web page, a
 // file, a command, the browser - read at a glance down the column, the words beside it say which
@@ -63,6 +76,9 @@ export const StepRow = ({ step }) => {
   // ...a helper's own steps open under its row (agentSteps `kids`), never interleaved with the main agent's
   if (step.kids?.length) return <details className={`${cls} tq-aui-step-helper`} data-tq-helper=""><summary>{head}</summary>
     <div className="tq-aui-helper-steps"><AgentSteps data={{ steps: step.kids }} /></div></details>;
+  // ...A PERMISSION IT WAITS ON IS ON ITS ROW, open, the agent's options as buttons (chatStream.askOn) - answered, the row reads how it went
+  const asked = askOn(step, React.useContext(PermitCtx)?.byCall);
+  if (asked) return <div className={cls}><div className="tq-aui-step-line">{head}</div><AskBar asked={asked} /></div>;
   // ...a command at work shows its newest output open under it, as a terminal does (agentSteps.tailOf) - behind its row again once it ends
   if (step.status === "running" && step.tail) return <div className={cls}><div className="tq-aui-step-line">{head}</div>
     <pre className="tq-aui-step-tail" data-tq-step-tail="">{step.tail}</pre></div>;

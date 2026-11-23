@@ -174,9 +174,15 @@ def _bullets(name: str) -> str:
 PRIORITY = _bullets('priority') + '\n' + _bullet('priority_why')
 URGENT = PRIORITY        # the 2026-09-25 name for the one bullet an older document is given; it says the three now (2026-10-25)
 DUE, SENDER, DANGER, MEET = (_bullet('due'), _bullet('sender_class'), _bullet('danger'), _bullet('meet'))
-DANGER_AIM = _bullet('danger_aim')      # ...and who it is aimed at, the owner or the agent: the warning's words follow it (2026-10-30)
 LEVELS = ('regular', 'important', 'urgent')
 DATA = _bullet('data_class')
+DANGER_KINDS = {'steer': 'agent', 'scam': 'owner'}      # the attack, and whom it is aimed at (message.DangerAim)
+def danger_of(v) -> tuple | None:
+    """(warning, aim) when the verdict's `danger` names an attack by its kind, else None. A bare sentence is no verdict: it is how a model's
+    caution about the work ("approve before anything is sent") read as an attack and held a colleague's agent (2026-11-23)."""
+    if not isinstance(v, dict) or v.get('kind') not in DANGER_KINDS: return None
+    says = ' '.join(str(v.get('says') or '').split())[:320]
+    return (says, DANGER_KINDS[v['kind']]) if says else None
 REFINES = _bullet('refines')
 REPEAT = _bullet('repeat')           # ...and whether a notice an open task holds, come again, changed: only a change wakes its agent (2026-11-15)
 SAME_NOTICE = _bullet('same_notice')   # ...and the filed notice a repeat of it is, so one failure stays one row (2026-11-16)
@@ -197,7 +203,7 @@ def worded(text: str, lean: bool = True) -> str:
     return str(text or '').replace(*((WRAPPER_COPIED, WRAPPER_NAMED) if lean else (WRAPPER_NAMED, WRAPPER_COPIED)))
 # the keys few mails answer: under a schema the provider enforces every key must be written, so these ride in ONE group that is null
 # as a whole (verdict_schema) - the title stays enforced, which is what the schema is for (TQ-0665)
-MORE = ('danger', 'danger_aim', 'needs_browser', 'needs_desktop', 'meet')
+MORE = ('danger', 'needs_browser', 'needs_desktop', 'meet')
 ALWAYS = ('intent', 'why', 'title', 'sender_class', 'asks_owner')
 # ...said in words to a brain with no schema to carry it (a CLI), and the group named to one that has
 # ...`same_problem` with them on a chat line: its "no" makes a line that continues a task a new job (relationship_of), which silence does not
@@ -305,12 +311,11 @@ def verdict_schema(candidates=None, playbooks=None, same=False, goals=False, cod
          'due': {'type': ['string', 'null']},
          # who wrote it (categories.sender_class) - the Timeline's info/automated/promo and the Advisor's people (2026-10-11)
          'sender_class': {'type': 'string', 'enum': ['person', 'automated', 'bulk']},
-         # what the text tries to make an AI do, or null - read here because triage already reads every word (the owner,
-         # 2026-10-15: "not a separate call but part of the triage"); a stranger's card shows it, nothing is gated on it
-         'danger': {'type': ['string', 'null']},
-         # ...and WHO IT IS AIMED AT (the owner, 2026-10-30): a phish on the owner read "an attempt to steer the agent" - it says "a scam
-         # aimed at you" now, and the steer words are kept for text written to hijack the agent
-         'danger_aim': {'type': ['string', 'null'], 'enum': ['owner', 'agent', None]},
+         # AN ATTACK, OR NULL - a verdict, not a note (walk 10, 2026-11-23): a free sentence held every start, so a colleague's "send it to
+         # each of us" came back as a caution ("Alex must approve before anything is sent") and stopped her agent. `kind` says WHICH attack -
+         # "steer" hijacks the agent, "scam" is a fraud on the owner (the 2026-10-30 aim) - and `says` is the warning the screens show
+         'danger': {'type': ['object', 'null'], 'additionalProperties': False, 'required': ['kind', 'says'],
+                    'properties': {'kind': {'type': 'string', 'enum': list(DANGER_KINDS)}, 'says': {'type': 'string'}}},
          # the line still waits on the owner - a question or an ask put to them, not a thanks or a "sure" (the owner, 2026-10-25: a
          # colleague's question on a closed task's thread was kept on it, closed, and nearly missed). It is what reopens a closed task
          'asks_owner': {'type': ['boolean', 'null']},
@@ -914,8 +919,9 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
             if not shape and '"priority"' not in base: system += '\n\n' + PRIORITY
             if not shape and '"due"' not in base: system += '\n\n' + DUE          # ...and the due day (2026-10-06)
             if not shape and 'sender_class' not in base: system += '\n\n' + SENDER   # ...and who wrote it (2026-10-11)
-            if not shape and '"danger"' not in base: system += '\n\n' + DANGER     # ...and what it tries to make an AI do (2026-10-15)
-            if not shape and 'danger_aim' not in base: system += '\n\n' + DANGER_AIM   # ...and whether that is the owner or the agent (2026-10-30)
+            # ...and whether it is an attack, and which (2026-10-15; a verdict with a kind since 2026-11-23): a document that asks the old free
+            # sentence is handed the bullet too, because only an answer with a kind is read as one (danger_of)
+            if not shape and DANGER not in base: system += '\n\n' + DANGER
             if not shape and '"meet"' not in base: system += '\n\n' + MEET         # ...and whether it asks for a time to meet (2026-10-20)
             if not shape and '"data_class"' not in base: system += '\n\n' + DATA                   # ...and what data it carries (2026-10-25)
             # ...and whether a joining line refines the task's own ask, wherever a task it may join was shown (2026-10-28)
@@ -1036,12 +1042,8 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                 elif lean and 'data_class' not in j: out['data_class'] = 'ordinary'
                 if out['intent'] == 'task' and j.get('needs_browser') is True: out['needs_browser'] = True
                 if out['intent'] == 'task' and j.get('needs_desktop') is True: out['needs_desktop'] = True
-                # ...and what it tries to make an AI do (TRIAGE.md's danger): asked for since 2026-10-15 and dropped here, so only ranking's
-                # reading ever reached message.Danger - and it holds the unattended start now (ingest.danger, the owner 2026-10-28)
-                dg = ' '.join(str(j.get('danger') or '').split())[:320]
-                if dg and dg.lower() not in ('null', 'none', 'no', 'false'):
-                    out['danger'] = dg
-                    if j.get('danger_aim') in ('owner', 'agent'): out['danger_aim'] = j['danger_aim']
+                # ...and whether it is an attack (TRIAGE.md's danger), which holds the unattended start (ingest.danger, the owner 2026-10-28)
+                if (dg := danger_of(j.get('danger'))): out['danger'], out['danger_aim'] = dg
                 # the text around the sender's words that they did not write - what a screen leaves out (strip_wrapper)
                 wr = wrapper_in(j, msg.get('body') or '', msg.get('own_text') or '')
                 if wr: out['wrapper'] = wr

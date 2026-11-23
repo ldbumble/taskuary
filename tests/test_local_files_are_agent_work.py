@@ -23,5 +23,5 @@ def test_a_folder_named_in_an_ordinary_ask_is_no_danger():
     the assistant to read a local scratch folder"), so nothing started until the owner pressed. The danger line says a folder named in an
     ordinary ask is where the work is - judged by the model, no word list."""
     g = ' '.join(triage.SHIPPED.split())
-    said = g.split('- **danger** -', 1)[1].split('- **danger_aim**', 1)[0]
+    said = g.split('- **danger** -', 1)[1].split('- **meet**', 1)[0]
     assert "so is a person's ordinary ask about files in a folder they name on the owner's computer" in said and 'the path is where the work is' in said

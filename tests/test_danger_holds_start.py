@@ -23,7 +23,7 @@ def ingested(s, m, danger=None, intent='task'):
 class DangerHoldsTests(unittest.TestCase):
     def test_a_mail_read_as_steering_an_ai_starts_no_agent(self):
         s = store()
-        out, spawned = ingested(s, mail(), danger=STEER)
+        out, spawned = ingested(s, mail(), danger={'kind': 'steer', 'says': STEER})
         self.assertNotIn('_auto_general', spawned)
         tid = out['task_id']
         self.assertTrue(tid, 'the task is still made - the owner starts it by hand')
@@ -31,13 +31,22 @@ class DangerHoldsTests(unittest.TestCase):
         self.assertIn('attempt to steer an AI', said)
         self.assertEqual(s.list_messages(tid)[-1]['Danger'], STEER, 'and the flag stays on the message')
 
+    def test_a_caution_about_the_work_is_no_attack_and_the_colleague_s_agent_starts(self):
+        # walk 10 (2026-11-23): a colleague asked for a pack "sent to each of us separately"; triage wrote a caution into `danger` ("asks
+        # for external messages; Alex must approve before anything is sent", aim owner) and the free sentence held her agent as "an attempt
+        # to steer an AI". Only a verdict that names the attack's kind holds a start
+        s = store()
+        out, spawned = ingested(s, mail(), danger='The request to send it separately asks for external messages; Alex must approve first.')
+        self.assertEqual(spawned, ['_auto_general'])
+        self.assertIsNone(s.list_messages(out['task_id'])[-1]['Danger'])
+
     def test_the_same_mail_without_it_starts_as_before(self):
         _out, spawned = ingested(store(), mail(), danger=None)
         self.assertEqual(spawned, ['_auto_general'])
 
     def test_new_work_that_steers_does_not_carry_the_stopped_conversation_on(self):
         s = store(); tid = finished_task(s)
-        _out, spawned = ingested(s, mail(**AGAIN), danger=STEER)
+        _out, spawned = ingested(s, mail(**AGAIN), danger={'kind': 'steer', 'says': STEER})
         self.assertNotIn('_continue_general', spawned)
         self.assertIn('steer an AI', ingest.carry_on_why(s, tid, mail(**AGAIN), None, {'intent': 'task', 'danger': STEER}))
 

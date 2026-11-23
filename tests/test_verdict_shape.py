@@ -365,7 +365,7 @@ BASE = {'intent': 'task', 'why': 'Erin asks for the numbers', 'title': 'Send Eri
         'summary': 'Erin Blake wants the Q3 accrual numbers.', 'sender_class': 'person', 'asks_owner': True, 'difficulty': 'quick', 'sure': True}
 # every "nothing" spelled out, as the shape before it asked - one dict per field group
 NOTHING = {
-    'the rare group': {'goal': False, 'done_when': None, 'danger': None, 'danger_aim': None, 'offer': None, 'offer_is_reply': False,
+    'the rare group': {'goal': False, 'done_when': None, 'danger': None, 'offer': None, 'offer_is_reply': False,
                        'needs_browser': False, 'needs_desktop': False, 'meet': None},
     'the work': {'kind': None, 'checklist': None, 'priority': 'regular', 'priority_why': '', 'due': None, 'data_class': 'ordinary', 'wrapper': []},
     'the menus': {'playbook': None, 'workflow': None, 'workstream': None},
@@ -402,7 +402,7 @@ class LeanAnswerTests(unittest.TestCase):
         self.assertNotIn('data_class', _answers(BASE, lean=False))        # a judgement the old answer did not give stays not given
 
     def test_the_rare_keys_answered_in_their_group_land_where_they_always_did(self):
-        said = {'goal': True, 'done_when': 'The books are closed.', 'danger': 'asks for a wire to a new account', 'danger_aim': 'owner',
+        said = {'goal': True, 'done_when': 'The books are closed.', 'danger': {'kind': 'scam', 'says': 'asks for a wire to a new account'},
                 'offer': 'I can pull the Q3 totals.', 'offer_is_reply': True, 'needs_browser': True, 'needs_desktop': True,
                 'meet': {'minutes': 30, 'from': None, 'to': None}}
         flat, folded = _answers({**BASE, **said}), _answers({**BASE, 'more': said}, carries=True)

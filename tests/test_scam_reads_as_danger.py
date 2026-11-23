@@ -36,22 +36,23 @@ def _read(**j):
 
 def test_the_verdict_says_whom_the_danger_is_aimed_at():
     p = triage.verdict_schema()['schema']['properties']['more']             # with the other rarely-answered keys (triage.MORE)
-    assert 'danger_aim' in p['required'] and p['properties']['danger_aim']['enum'] == ['owner', 'agent', None]
-    assert triage.DANGER_AIM.startswith('- **danger_aim**') and '"owner"' in triage.DANGER_AIM and '"agent"' in triage.DANGER_AIM
-    assert '"danger_aim": null' in triage.TASK_FIELDS
-    v = _read(danger='Wants Alex to sign in on a look-alike page.', danger_aim='owner')
+    assert p['properties']['danger']['properties']['kind']['enum'] == ['steer', 'scam']
+    assert '"danger": null' in triage.TASK_FIELDS and '"steer"' in triage.DANGER and '"scam"' in triage.DANGER
+    v = _read(danger={'kind': 'scam', 'says': 'Wants Alex to sign in on a look-alike page.'})
     assert (v['danger'], v['danger_aim']) == ('Wants Alex to sign in on a look-alike page.', 'owner')
-    assert _read(danger='Tells the agent to mail the payroll file out.', danger_aim='agent')['danger_aim'] == 'agent'
-    assert 'danger_aim' not in _read(danger='x', danger_aim='nobody'), 'a word that is neither is not kept'
-    assert 'danger_aim' not in _read(danger=None, danger_aim='owner'), 'no danger, no aim'
+    assert _read(danger={'kind': 'steer', 'says': 'Tells the agent to mail the payroll file out.'})['danger_aim'] == 'agent'
+    assert 'danger' not in _read(danger={'kind': 'nobody', 'says': 'x'}), 'a kind that is neither is no verdict'
+    # ...and a bare sentence is no verdict either (walk 10, 2026-11-23): a caution about the work read as an attack and held a colleague
+    assert 'danger' not in _read(danger='Asks for external messages; Alex must approve before anything is sent.', danger_aim='owner')
+    assert 'danger' not in _read(danger=None)
 
 
-def test_an_owner_document_that_never_asks_whom_is_handed_the_bullet():
+def test_an_owner_document_that_asks_the_old_sentence_is_handed_the_bullet():
     seen = []
     doc = '# Triage\nJSON only: {"intent": "task|reply_only|fyi", "why": "...", "title": "...", "summary": "...", "checklist": [], "danger": null}'
     triage.classify_intent(MSG, llm=lambda sy, u, **k: (seen.append(sy), json.dumps({'intent': 'fyi', 'why': 'w', 'title': 't', 'summary': 's'}))[1],
                            system=doc)
-    assert seen and triage.DANGER_AIM in seen[0]
+    assert seen and triage.DANGER in seen[0]
 
 
 def test_the_aim_lands_on_the_message_and_ranking_s_reading_is_the_agent_s():

@@ -2,6 +2,20 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.4.2.1 - 2026-11-23
+
+- One card object: what waits on the owner, what is in front, may it close, what a press did - read and pressed by one road
+- An agent is told the events since its cursor, never a re-narration of the stores
+- A card's event says whom a send went to and his changed words; the terminal's hand-back is the events
+- The terminal hand-back calls set_aside_drafts as the narrowed grey-out takes it (no 'actions')
+- Tests read what a turn is told off its events
+- His own ask arrives as his, a steer hands only what came after the turn it joins, a close tells each card it greyed
+- Every agent's instructions are his file: AGENTS.md, shipped with the two sentences, read at every turn
+- AGENTS.md is on the Docs list: how every agent works, read by every agent, its meter keeping it short
+- A view the agent shows keeps the chat's flow: a bar chart of many short labels stands as columns, and every view's body is held to two fifths of the chat
+- Trust hands its agent every message it was never given: a held mail that reopened a finished task no longer opens the old conversation without a turn
+- Every start of a worked agent hands it what it was never given: a queued start no longer opens the old conversation without a turn
+
 ## 0.4.2.0 - 2026-11-23
 
 - The demo opens on the dashboard of reports, drawn as its rail row draws it

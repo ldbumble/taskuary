@@ -151,9 +151,9 @@ def test_the_hold_names_the_new_sender_and_trust_vouches_for_them_alone():
     origin.raise_to(s, t, 'trusted', 'owner')
     chat = {'TaskId': t, 'Channel': 'whatsapp', 'Status': 'routed', 'FromEmail': 'whatsapp:15550004444', 'FromName': 'Gail Moreno', 'BodyText': 'Headcount is 214.'}
     s.remember_trust('whatsapp', senders.chat_key(chat), 'you vouched for them'); s.add_message(chat)
-    s.add_message({'TaskId': t, 'Channel': 'email', 'Status': 'routed', 'FromEmail': 'quotes@printshop.example', 'FromName': 'Harbor Print',
+    s.add_message({'TaskId': t, 'Channel': 'email', 'Status': 'routed', 'FromEmail': 'quotes@vendor.example', 'FromName': 'Spendly Print',
                    'BodyText': 'Our quote for 1,000 colour pages.', 'SourceName': 'alex@northwind.example'})
     h = origin.hold(s, t)
-    assert h and 'Harbor Print' in h['line'] and 'Gail' not in h['line'] and h['person'] == 'Trust Harbor', h
+    assert h and 'Spendly Print' in h['line'] and 'Gail' not in h['line'] and h['person'] == 'Trust Spendly', h
     origin.raise_to(s, t, 'trusted', 'owner')                                                      # ...the press
-    assert senders.known(s, {'channel': 'email', 'from_email': 'quotes@printshop.example', 'source_name': 'alex@northwind.example'})[0]
+    assert senders.known(s, {'channel': 'email', 'from_email': 'quotes@vendor.example', 'source_name': 'alex@northwind.example'})[0]

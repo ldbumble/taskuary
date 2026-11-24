@@ -3367,9 +3367,10 @@ class SQLiteStore:
                     if target is None and str(key).split(':', 1)[0] in (
                             'processing', 'msg', 'report', 'review', 'idea', 'agent', 'wrap', 'task'):
                         raise ValueError('processing target is unavailable')
+                    # ...AND THE PRESS IS NOT BEHIND THE CENSUS (the load run, 2026-11-24: Mark done waited up to 4.75 s on a whole-home
+                    # census run inside it while mail kept landing). It puts down what its card showed (_units_shown) on the item as filed
+                    # now; whatever the census moves is the membership worker's, behind it - mail filed onto the item since is unread news
                     if target is not None:
-                        if not calendar and not clean:
-                            clean = self._processing_validate_settlement_census(cur, stamp, key, target)
                         iid, kind, local_id = target
                         verified_picture = None
                         if not calendar and expected_context is not None:
@@ -3464,52 +3465,6 @@ class SQLiteStore:
             cur.execute('''UPDATE processing_reconcile_state
                 SET AttemptedGeneration=DirtyGeneration, ReconciledGeneration=DirtyGeneration
                 WHERE Singleton=1''')
-
-    def _processing_validate_settlement_census(self, cur, stamp, key, target):
-        """Bring the census current before a settle, and refuse only what it says about THIS row. Returns whether it came out clean.
-
-        This is an explicit writer, never a GET. A conflict ANYWHERE used to refuse every settle on every row, for good: a conflicted
-        census never advances ReconciledGeneration, so each press re-ran it, met the same unrelated conflict and raised - "All read,
-        next" on a pile of FYI failed every time (2026-11-02: one reply draft whose mail had been refiled under another task). Now what
-        the census changes on OTHER items is applied here, as the background reconcile would. A settle is refused only when the row's
-        own item moved (the savepoint keeps it from accepting members the card never showed) or a conflict touches it.
-        Done still covers current substantive versions; this is not a content-CAS API.
-        """
-        from .processing_membership import reconcile_membership, census_current, mark_census
-        if census_current(cur):         # nothing the census reads moved since a clean one: it would change nothing
-            cur.execute('''UPDATE processing_reconcile_state SET AttemptedGeneration=DirtyGeneration,
-                ReconciledGeneration=DirtyGeneration, LastAttemptAt=? WHERE Singleton=1''', (stamp,))
-            return True
-        def members(i): return {tuple(r) for r in cur.execute(
-            'SELECT EntityKind,LocalId FROM processing_member WHERE ItemId=? AND RetiredAt IS NULL', (i,))}
-        def item_of(c):
-            r = cur.execute('SELECT ItemId FROM processing_member WHERE EntityKind=? AND LocalId=? AND RetiredAt IS NULL',
-                            (c['entity_kind'], c['local_id'])).fetchone()
-            return self._processing_follow(cur, r[0]) if r else None
-        iid = target[0]; before = members(iid)
-        cur.execute('SAVEPOINT processing_settlement_census')
-        try:
-            result = reconcile_membership(cur, stamp=stamp, new_item_id=self._processing_item_id)
-            now = self._processing_read_target(cur, key)
-            if now is None or now[0] != iid or members(iid) != before:
-                raise ValueError('processing membership must be reconciled before settlement')
-            if any((c['entity_kind'], c['local_id']) in before or item_of(c) == iid for c in result['conflicts']):
-                raise ValueError('processing membership conflicts on this item')
-            clean = not result['conflicts']
-            mark_census(cur, clean)
-            # ...a conflict elsewhere stays pending, recorded, for the reconcile that can see it resolved
-            cur.execute('''UPDATE processing_reconcile_state
-                SET AttemptedGeneration=DirtyGeneration,
-                    ReconciledGeneration=CASE WHEN ? THEN DirtyGeneration ELSE ReconciledGeneration END,
-                    LastAttemptAt=?,ConflictsJson=?,DiagnosticsJson=? WHERE Singleton=1''',
-                (int(clean), stamp, json.dumps(result['conflicts'], sort_keys=True),
-                 json.dumps(result['diagnostics'], sort_keys=True)))
-            cur.execute('RELEASE processing_settlement_census')
-            return clean
-        except BaseException:
-            cur.execute('ROLLBACK TO processing_settlement_census')
-            cur.execute('RELEASE processing_settlement_census')
-            raise
 
     def _clear_funnel_compat(self, where, params):
         from .processing_reads import active_version
@@ -4218,6 +4173,24 @@ class SQLiteStore:
                 if first is None or first > low + 1: return None
                 return {(str(k), str(i)) for k, i in cx.execute(sql[1], (low, high))}
         except sqlite3.OperationalError: return None
+
+    def rail_touched_tasks(self, low, high):
+        """The tasks a write in (low, high] can have moved, by the rail's own reading of its dirty rows (processing_rail.touched): its own
+        rows and every item it sits in - None when that cannot be told (rows trimmed, a setting or a connector every card reads)."""
+        from . import processing_rail
+        rows = self.rail_written(low, high)
+        if rows is None or any(k in ('setting', 'connector') for k, _ in rows): return None
+        with self._processing_read() as cur:
+            roots = processing_rail.touched(cur, rows, lambda i: self._processing_follow(cur, i))[0]
+            if roots is None: return None
+            tids = {int(i) for k, i in rows if k == 'task' and i.isdigit()}
+            mids = [int(i) for k, i in rows if k == 'message' and i.isdigit()]
+            for part in (sorted(roots)[o:o + 400] for o in range(0, len(roots), 400)):
+                tids |= {int(r[0]) for r in cur.execute("SELECT LocalId FROM processing_member WHERE EntityKind='task' AND RetiredAt IS NULL "
+                                                        f"AND ItemId IN ({','.join('?' * len(part))})", part)}
+            for part in (mids[o:o + 400] for o in range(0, len(mids), 400)):
+                tids |= {r[0] for r in cur.execute(f"SELECT TaskId FROM message WHERE TaskId IS NOT NULL AND MessageId IN ({','.join('?' * len(part))})", part)}
+        return tids
 
     def rail_cold_building(self) -> bool:
         """A first rail build is running - a restart's - and there is no rail yet: a read of it would wait for that build."""

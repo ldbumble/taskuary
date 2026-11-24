@@ -452,3 +452,21 @@ def test_a_picture_read_ahead_writes_what_one_read_under_the_lock_wrote(tmp_path
         assert got == want and got[0] and got[2]
         assert not any(under_a) and any(under_b)
     finally: a.close(); b.close()
+
+
+def test_a_look_at_a_2000_line_chat_writes_one_read_row(s):
+    """Every look moved every line's receipt: an open of a 2,000-line chat rewrote 1,500 rows and logged each as a change, so the rail's
+    change log was trimmed and its next build was full (the load run, 2026-11-24). A look again moves one; the item reads read, and newer."""
+    from taskuary import processing_reads
+    tid = chat(s, 2000); key = f'task:{tid}'
+    def read():
+        with s._processing_read() as cur:
+            return processing_reads.state(projection.processing_projection(cur, s._processing_read_target(cur, key)[0]), datetime.now())
+    s.set_funnel_state(key, 'surfaced', 'owner', read=True)             # the first look: one receipt per line, once
+    first, was = read(), s.rail_top()
+    time.sleep(1.1)                                                     # receipts are stamped to the second
+    s.set_funnel_state(key, 'surfaced', 'owner', read=True)
+    rows = [r[0] for r in s.cx.execute('SELECT Kind FROM processing_dirty_row WHERE Id>?', (was,))]
+    assert sum(k in ('message', 'task') for k in rows) == 1, rows
+    again = read()
+    assert not again['unread'] and again['read_at'] > first['read_at']

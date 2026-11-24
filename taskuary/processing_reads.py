@@ -236,13 +236,20 @@ def record(cur, current, *, version, at, by, origin):
     # first read more than three hours ago came straight back to On you every time Next put it down (the owner,
     # 2026-09-30: "i hit next why is this still showing in on you"). A later read now moves ReadAt forward - never back,
     # and compared as times, since an older receipt may be spelled with a T.
-    for unit in current:
-        cur.execute('''INSERT INTO processing_read_receipt
-            (EntityKind,LocalId,Fingerprint,Version,ReadAt,ReadBy,Origin)
-            VALUES (?,?,?,?,?,?,?)
-            ON CONFLICT(EntityKind,LocalId,Fingerprint) DO UPDATE SET ReadAt=excluded.ReadAt, ReadBy=excluded.ReadBy
-            WHERE julianday(excluded.ReadAt) > julianday(processing_read_receipt.ReadAt)''', (unit['entity_kind'], unit['local_id'],
-            unit['fingerprint'], version, at, by, origin))
+    # ...ON ONE RECEIPT, NOT ON EVERY LINE (the load run, 2026-11-24): each look moved all of them, so an open of a 2,000-line chat
+    # rewrote 1,500 rows and logged each as a change - the rail's change log was trimmed and its next build was full. A version read
+    # before keeps its receipt; the look's clock moves on the last unit (the task's own where there is one: units sort it last), and
+    # every reader takes the newest of an item's receipts (state).
+    if not current: return
+    *rest, clock = current
+    row = lambda u: (u['entity_kind'], u['local_id'], u['fingerprint'], version, at, by, origin)
+    cur.executemany('INSERT OR IGNORE INTO processing_read_receipt (EntityKind,LocalId,Fingerprint,Version,ReadAt,ReadBy,Origin) '
+                    'VALUES (?,?,?,?,?,?,?)', map(row, rest))
+    cur.execute('''INSERT INTO processing_read_receipt
+        (EntityKind,LocalId,Fingerprint,Version,ReadAt,ReadBy,Origin)
+        VALUES (?,?,?,?,?,?,?)
+        ON CONFLICT(EntityKind,LocalId,Fingerprint) DO UPDATE SET ReadAt=excluded.ReadAt, ReadBy=excluded.ReadBy
+        WHERE julianday(excluded.ReadAt) > julianday(processing_read_receipt.ReadAt)''', row(clock))
 
 
 def legacy_verdicts(cur, version):

@@ -208,34 +208,35 @@ def test_the_task_an_ideas_vehicle_carries_is_still_a_row_while_an_agent_works_i
     assert [(i['lane'], i['order_band'], i['tid']) for i in working['items']] == [('working', 2, tid)]   # a task, under Tasks (2026-10-21)
 
 
-def test_a_census_that_moved_under_a_settle_is_reconciled_instead_of_refused(store):
-    """Mail landing mid-sweep moves the membership census, and the settlement guard rolled the whole
-    write back - the owner was handed "processing membership must be reconciled before settlement"
-    with 27 items still in the pipe (the owner, 2026-09-07: "what does this mean as well when I got it
-    to clear the rest of what was left?"). It is the worker's lag: reconcile once and settle."""
+def test_mark_done_is_not_behind_the_census(store, monkeypatch):
+    """Mail landing mid-sweep moves the membership census. The press first refused (the owner, 2026-09-07: "what does this mean as
+    well when I got it to clear the rest of what was left?"), then ran the whole census inside itself - up to 4.75 s of Mark done on a
+    busy home, the writer's lock held (the load run, 2026-11-24). It writes what its card showed; the census is the worker's, behind it."""
+    from taskuary import processing_membership
     add(store, 'First FYI')
     _, unread = both(store)
     key = unread['items'][0]['key']
     add(store, 'A late arrival')                       # census dirty; nothing has reconciled it yet
     census = store.processing_reconcile_status()
     assert census['dirty_generation'] > census['reconciled_generation']
-    store.set_funnel_state(key, 'done', 'owner')       # mail landing on ANOTHER row is reconciled in the settle itself (2026-11-02)
-    assert store.funnel_states()[key]['Status'] == 'done'
-    assert not store.processing_reconcile_status()['pending']
+    ran, real = [], processing_membership.reconcile_membership
+    monkeypatch.setattr(processing_membership, 'reconcile_membership', lambda *a, **k: ran.append(1) or real(*a, **k))
+    store.set_funnel_state(key, 'done', 'owner')
+    assert store.funnel_states()[key]['Status'] == 'done' and not ran, 'no census inside the press'
+    assert store.processing_reconcile_status()['pending'], 'the census is left to the worker'
     assert key not in {i['key'] for i in both(store)[1]['items']}
 
 
-def test_a_row_whose_own_item_moved_under_the_press_is_refused_raw_and_settled_by_the_pipe(store):
-    """The savepoint still guards the row being settled: mail filed onto a task after the card was drawn is not read by a press
-    that never showed it - the raw write refuses, and the pipe reconciles and settles."""
+def test_a_row_whose_own_item_moved_under_the_press_puts_down_only_what_its_card_showed(store):
+    """Mail filed onto a task after the card was drawn: the press on the loose FYI reads that mail - what its card showed - and never
+    the task it was filed onto, which stays on the rail once the worker files it."""
     mid = add(store, 'Loose FYI')
     both(store)
     tid = store.create_task({'Title': 'Somewhere to file it'}, 'fixture')
     store.place_message(mid, tid, 'routed')            # its item moves into the task's; nothing has reconciled it yet
-    with pytest.raises(ValueError, match='reconciled before settlement'):
-        store.set_funnel_state(f'msg:{mid}', 'done', 'owner')
-    funnel.settle(store, f'msg:{mid}', 'done', 'owner')
+    store.set_funnel_state(f'msg:{mid}', 'done', 'owner')
     assert store.funnel_states()[f'msg:{mid}']['Status'] == 'done'
+    assert tid in {i.get('tid') for i in both(store)[1]['items']}, 'the task was not read by a press on the mail'
 
 
 def stale_draft(s):
@@ -262,14 +263,13 @@ def test_a_conflict_elsewhere_never_blocks_marking_fyi_read(store):
     assert st['pending'] and st['conflicts'][0]['local_id'] == str(rid), 'the conflict stays recorded, not hidden'
 
 
-def test_a_conflict_on_the_row_itself_still_refuses_in_plain_words(store):
-    from taskuary import concierge
+def test_a_conflict_on_the_row_itself_does_not_refuse_its_press(store):
+    """A census conflict is the filing's to resolve, not a reason the owner cannot put a card down: it stays recorded."""
     rid = stale_draft(store)
     add(store, 'Arrived meanwhile')
-    with pytest.raises(ValueError, match='conflicts on this item') as e:
-        store.set_funnel_state(f'review:{rid}', 'done', 'owner')
-    said = concierge.clear_refused(e.value)
-    assert 'processing' not in said and 'membership' not in said
+    store.set_funnel_state(f'review:{rid}', 'done', 'owner')
+    assert store.funnel_states()[f'review:{rid}']['Status'] == 'done'
+    assert store.processing_reconcile_status()['conflicts'][0]['local_id'] == str(rid)
 
 
 def test_a_row_that_just_landed_can_be_settled_before_the_worker_reaches_it(store):

@@ -533,7 +533,8 @@ def _rank_first(store, rows: list) -> list:
         if heads[ch] <= 0: continue
         heads[ch] -= 1
         in_order.append(fresh[mid])
-    return [r for r in rows if r['MessageId'] not in keep] + in_order
+    # a ranked input is ONE line in value order (_conv_key): lanes side by side started its head in whatever order their threads woke
+    return [r for r in rows if r['MessageId'] not in keep] + [{**r, '_ranked': True} for r in in_order]
 
 
 def await_quiet(store, channels, timeout: float) -> bool:
@@ -584,7 +585,9 @@ class _Lane:
             if self.ok >= 10 and self.width < self.top: self.width, self.ok = self.width + 1, 0; self.cv.notify_all()
 
 
-def _conv_key(r) -> str: return f"c:{r['ConversationId']}" if r.get('ConversationId') else f"m:{r['MessageId']}"
+def _conv_key(r) -> str:
+    "What is judged one row at a time: a conversation, and a ranked input's head (its order is its value, _rank_first)."
+    return f"r:{r.get('Channel')}" if r.get('_ranked') else f"c:{r['ConversationId']}" if r.get('ConversationId') else f"m:{r['MessageId']}"
 
 
 def _throttled(e) -> bool:

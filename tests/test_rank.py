@@ -251,6 +251,18 @@ class RankBeforeTriageTests(unittest.TestCase):
         self.assertEqual(judged, list(reversed(mids))[:rank.head_size(self.s)], 'the most valuable first')
         self.assertEqual(len(self.s.pending_triage()), 10 - rank.head_size(self.s), 'the rest wait, ranked')
 
+    def test_side_by_side_lanes_still_start_the_head_in_value_order(self):
+        """Parallel triage (one lane per conversation) started a ranked head 8, 7, 10, 9 - whichever thread woke first."""
+        for lanes in ('1', '8'):
+            self.setUp(); rank_mode(self.s); self.s.set_setting('triage_lanes', lanes, 't')
+            mids = [pending(self.s, f'l{i}') for i in range(10)]
+            for i, m in enumerate(mids): self.s.set_message_rank(m, i / 10, 'floor', 'rank')
+            started, judged = [], []
+            with mock.patch.object(ingest, 'ingest_message', side_effect=judging(self.s, judged)):
+                ingest.drain(self.s, on_start=lambda r: started.append(r['MessageId']))
+            self.assertEqual(started, list(reversed(mids))[:rank.head_size(self.s)], f'{lanes} lanes: the most valuable first')
+            self.assertEqual(judged, started)
+
     def test_judged_arrivals_hold_the_head_until_the_owner_deals_with_one(self):
         """The owner, 2026-09-28: eight pull requests were brought in ranked, and all eight were triaged - four,
         then the rest as each sync re-queued the channel - where four were meant to wait. A judged arrival whose

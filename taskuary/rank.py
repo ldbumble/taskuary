@@ -251,8 +251,10 @@ def rank_pending(store, force: bool = False) -> int:
         if not rows: return 0
         from .ingest import owner_addresses
         mine = owner_addresses(store)
-        # the floor first, so a cold start (or an install with no AI) still has a sane order
+        # the floor first, so a cold start (or an install with no AI) still has a sane order - for a row with NO rank yet: a pass
+        # with no brain floored every row, and the order an earlier call gave fell back to arrival
         for r in rows:
+            if r.get('RankValue') is not None: continue
             v, why = floor(store, {}, r, mine)
             store.set_message_rank(r['MessageId'], v, why, 'rank')
         llm = build_rank_llm(store)

@@ -969,9 +969,9 @@ async function links() {
     walked.push("links: Back after two opens");
   }
   // a setting by its key: the group opened over the owner's page, the knob two screens down in view - then the same from a fresh page.
-  // Two groups: Assistant, and How mail is sorted, whose AI panel stands up from a spinner ABOVE its rows after they are drawn - one
+  // Two groups: Assistant, and Which AI does what, whose AI panel stands up from a spinner ABOVE its rows after they are drawn - one
   // scroll on arrival was undone by it, the "Fallback AI programs" hit landing 1,700px over its setting (verify, 2026-10-19)
-  for (const grp of ["Assistant", "How mail is sorted"]) {
+  for (const grp of ["Assistant", "Which AI does what"]) {
     const g = encodeURIComponent(grp);
     page.step = `links knob ${grp}`;
     await open(`#settings=config&group=${g}`); await wait(4000);
@@ -1004,18 +1004,18 @@ async function links() {
     else { await hit.click(); await wait(3500); if (!(await knobAt(k))?.inView) note("PLACE", page.step, `the search hit for "${label.trim()}" opened its group with ${k} off the screen`); }
     walked.push(`links: a ${grp} setting by link, fresh and over Settings, and by search`);
   }
-  // NOTHING: a link the How mail is sorted panel draws in its own words ("still Connections") opens its place
+  // NOTHING: a link the Which AI does what panel draws in its own words ("still Connections") opens its place
   page.step = "links panel";
-  await page.goto(`${srv.base}/#settings=config&group=${encodeURIComponent("How mail is sorted")}`, { waitUntil: "load" }); await wait(6000);
+  await page.goto(`${srv.base}/#settings=config&group=${encodeURIComponent("Which AI does what")}`, { waitUntil: "load" }); await wait(6000);
   const before = await page.evaluate(() => location.hash);
   const pressed = await page.evaluate(() => {
     const b = [...document.querySelectorAll("[data-tq-browse='settings'] p button")].find((x) => x.innerText.trim() === "Connections");
     b?.click(); return !!b;
   });
-  if (!pressed) note("PLACE", page.step, "How mail is sorted drew no Connections link in its description - the panel link was not walked");
+  if (!pressed) note("PLACE", page.step, "Which AI does what drew no Connections link in its description - the panel link was not walked");
   else { await wait(3000); const after = await page.evaluate(() => location.hash);
     if (after === before || !(await page.$("[data-tq-browse='connections']"))) note("NOTHING", page.step, `the panel's Connections link left ${after} and no Connections page`);
-    walked.push("links: the How mail is sorted panel's own Connections link"); }
+    walked.push("links: the Which AI does what panel's own Connections link"); }
   // ADDRESS: Next moves the table on, and the address goes with it
   page.step = "links address";
   await page.goto(`${srv.base}/`, { waitUntil: "load" }); await wait(5000); await clickText(page, "Walk me through my tasks"); await wait(5000);

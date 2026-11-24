@@ -38,7 +38,7 @@ test("there is a card to paste the key on, and it says what it is for", () => {
 test("the slot with no model of its own does not show a model box", () => {
   const panel = read("AiDefaults.jsx");
   const slot = panel.slice(panel.indexOf("const Slot"), panel.indexOf("export default"));
-  assert.match(slot, /!isJudge && \(/);
+  assert.match(slot, /!isJudge && model\("model"/);
 });
 
 // A rule you cannot read is a rule you cannot trust, and this slot IS four questions. It is also the

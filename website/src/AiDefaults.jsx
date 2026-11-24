@@ -1,67 +1,39 @@
-// The AI defaults panel: who triages, who codes, who assists — and on WHICH MODEL, in one
-// place. Before this, Settings named a brain and stopped: the model that brain would actually
-// run lived on the connector's card, or on the CLI profile's light-model field, or in a plain
-// text box, depending on what you had picked. Three defaults, three screens, and the page that
-// chose the brain could not tell you what was about to happen (the owner, 2026-09-10).
-//
-// So every row here answers the same two questions out loud — what runs, and who owns it — and
-// writes each half back to the screen that owns it. Nothing is stored twice: the connector card
-// and Connections → AI CLI agents remain the truth and keep working.
-import React, { useCallback, useEffect, useState } from "react";
-import { Alert, AlertTitle, Autocomplete, Box, Checkbox, CircularProgress, FormControlLabel, MenuItem, Select, TextField, Typography } from "@mui/material";
+// WHICH AI DOES WHAT (the owner, 2026-11-23): one page, each job once - sorting new mail, the task agents, the coding agent, the
+// Assistant and where reports go - each with the AI that does it and the model it runs on, then the quick / normal / hard levels.
+// Every card says what runs (the server's own answer, aidefaults) and writes each half back to the screen that owns it: nothing is
+// stored twice. The page is the ONE place these are set - there are no fallback rows - so a failed read says why and tries again.
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { Alert, Box, Button, Checkbox, CircularProgress, FormControlLabel, MenuItem, Select, Typography } from "@mui/material";
 import api from "./api";
 import { ACCENT2, BORDER, DIM, FAINT, INK, card, mono } from "./theme.jsx";
-import { RecentRoutes, RouteRules, TodayUsage } from "./RouteRules.jsx";
+import { RouteRules } from "./RouteRules.jsx";
+import ModelPick from "./ModelPick.jsx";
 import { repick, runsLine } from "./aiCards.js";
 
-// A model box left blank is not "unconfigured" — it means the provider's own default, and the
-// server says which. Shown as the placeholder so an empty field never reads as broken.
-// `field` is which gear the box sets: the card's own model, or the brain's STRONG model - what hard work steps up to (the
-// router, 2026-10-25). The strong box is blank by default, and blank means this brain does not step up: nothing is guessed.
-const Model = ({ slot, onSave, field = "model", label = "model", hint, locked }) => {
-  const [v, setV] = useState(slot[field] || "");
-  // the provider's own list of what this key can call, on top of the static suggestions; a failed read leaves the typed box working
-  const [live, setLive] = useState([]);
-  useEffect(() => {
-    if (!slot.connector || !slot.ready) { setLive([]); return; }
-    let on = true;
-    api.get(`/api/ai/models/${slot.connector}`).then((r) => on && setLive(r.data?.models || [])).catch(() => {});
-    return () => { on = false; };
-  }, [slot.connector, slot.ready]);
-  useEffect(() => { setV(slot[field] || ""); }, [slot[field], slot.value]);
-  const commit = (next) => { if ((next || "") !== (slot[field] || "")) onSave({ [field]: next || "" }); };
-  return (
-    // A DROPDOWN THAT LOOKS LIKE ONE (the owner, 2026-10-01: "i thought you were going to get dropdown of models?"): freeSolo hid
-    // the arrow and opened only on typing, so a list of five deployments read as an empty text box. Typing a name still works.
-    <Autocomplete freeSolo forcePopupIcon openOnFocus size="small" options={[...new Set([...live, ...(slot.choices || [])])]} value={v} disabled={!slot.ready || !!locked}
-      onInputChange={(_e, next) => setV(next)}
-      onChange={(_e, next) => { setV(next || ""); commit(next || ""); }}
-      onBlur={() => commit(v)}
-      sx={{ minWidth: 260 }}
-      renderInput={(p) => <TextField {...p} label={label} placeholder={hint ?? (slot.default_hint || "provider default")}
-        sx={{ bgcolor: "var(--tq-panel, #fff)" }} />} />
-  );
-};
+const link = { border: 0, background: "none", p: 0, font: "inherit", textAlign: "inherit", color: "var(--tq-link, #55697a)", cursor: "pointer",
+  "&:hover": { textDecoration: "underline" } };
+const head = { color: FAINT, display: "block", mb: 0.4, fontWeight: 600 };
 
-// One default = one card. Colour only IDENTIFIES (the sage rule) - the emphasis is
-// typographic, and the line that matters most, "what will actually run", is the loudest thing
-// in the card rather than a caption under two dropdowns.
+// One job = one card. Colour only IDENTIFIES (the sage rule); the loudest line is RUNS - what will actually run.
 const Slot = ({ slot, brains, agents, judgeOptions, onSave, onGo }) => {
-  // the coding brain: a connected CLI or an active AI card (agents.coding_options), its value what resolve_brain answers
   const isAgent = slot.key === "default_brain";
-  // The judge is the one slot that may be pointed at a model which cannot write, so it is the one
-  // picker that shows them. Its own blank row already means "auto" (the report's own brain), so
-  // the brains' auto entry — same empty value — is dropped rather than offered twice.
+  // The judge is the one slot that may be pointed at a model which cannot write, so it is the one picker that shows them. Its own blank
+  // row already means "the report's own AI", so the brains' blank entry is dropped rather than offered twice.
   const isJudge = slot.key === "judge_ai";
-  const options = isAgent ? (agents || []).map((a) => typeof a === "string"
-    ? { value: a, label: a, ready: true }
-    : a) : isJudge ? [...(judgeOptions || []), ...(brains || []).filter((o) => o.value)] : brains;
+  const options = isAgent ? (agents || []).map((a) => (typeof a === "string" ? { value: a, label: a, ready: true } : a))
+    : isJudge ? [...(judgeOptions || []), ...(brains || []).filter((o) => o.value)] : brains;
   const picked = options.find((o) => o.value === slot.value);
-  // the judge names no model of its own, so RUNS is the thing itself rather than "· the provider default"
-  const runs = isJudge ? (slot.default_hint || "") : (slot.model || slot.default_hint || "the provider default");
+  const ai = picked?.label?.split(" · ")[0] || slot.runs?.brain || "";
+  const model = (field, label, hint) => (
+    <Box>
+      <Typography variant="caption" sx={head}>{label}</Typography>
+      <ModelPick value={slot[field] || ""} models={slot.choices} connector={slot.connector} ready={slot.ready} ai={ai}
+        placeholder={hint} onSave={(v) => onSave({ [field]: v })} />
+    </Box>
+  );
   return (
     // ...the place a link to its settings lands (SettingsView's knob, by the same word list: `~=` matches any one of them)
-    <Box data-tq-knob={(slot.settings || [slot.key]).join(" ")} sx={{ ...card, p: 2, mb: 1.5, bgcolor: "var(--tq-panel, #fff)" }}>
+    <Box data-tq-knob={(slot.settings || [slot.key]).join(" ")} data-tq-slot={slot.key} sx={{ ...card, p: 2, mb: 1.5, bgcolor: "var(--tq-panel, #fff)" }}>
       <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.25 }}>
         <Box sx={{ width: 7, height: 7, borderRadius: "50%", bgcolor: ACCENT2, flexShrink: 0 }} />
         <Typography sx={{ color: INK, fontWeight: 600, fontSize: 14 }}>{slot.label}</Typography>
@@ -71,12 +43,9 @@ const Slot = ({ slot, brains, agents, judgeOptions, onSave, onGo }) => {
 
       <Box sx={{ display: "flex", gap: 1.5, flexWrap: "wrap", alignItems: "flex-start" }}>
         <Box>
-          <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 0.4, fontWeight: 600 }}>
-            {isJudge ? "what decides" : "which AI"}
-          </Typography>
+          <Typography variant="caption" sx={head}>{isJudge ? "what decides" : "which AI"}</Typography>
           <Select size="small" displayEmpty value={picked ? slot.value : ""} data-tq-slot-brain={slot.key}
-            onChange={(e) => onSave({ value: e.target.value })}
-            MenuProps={{ PaperProps: { sx: { maxHeight: 340 } } }}
+            onChange={(e) => onSave({ value: e.target.value })} MenuProps={{ PaperProps: { sx: { maxHeight: 340 } } }}
             sx={{ minWidth: 250, fontSize: 12.5, bgcolor: "var(--tq-panel, #fff)" }}>
             {options.map((o) => (
               <MenuItem key={o.value} value={o.value} disabled={o.ready === false} data-tq-brain-option={o.value} sx={{ fontSize: 12.5 }}
@@ -84,75 +53,51 @@ const Slot = ({ slot, brains, agents, judgeOptions, onSave, onGo }) => {
                 {o.label}{o.ready === false ? " — no key saved" : ""}
               </MenuItem>
             ))}
-            {!options.length && <MenuItem value="" disabled sx={{ fontSize: 12.5 }}>nothing configured yet</MenuItem>}
+            {!options.length && <MenuItem value="" disabled sx={{ fontSize: 12.5 }}>nothing connected yet</MenuItem>}
           </Select>
         </Box>
-        {/* four yes/nos do not get better on a bigger model, and this slot owns no model setting
-            to write one to - a box that saved nowhere would be worse than no box */}
-        {!isJudge && (
+        {/* four yes/nos do not get better on a bigger model, and this slot owns no model setting to write one to */}
+        {!isJudge && model("model", "model", slot.default_hint || "its own default")}
+        {!isJudge && slot.strong_model !== undefined && model("strong_model", "strong model, for hard work", "none - hard work stays on the model")}
+        {/* effort only where the AI can actually be told one - an empty list is an AI that takes none */}
+        {!isJudge && !!(slot.efforts || []).length && (
           <Box>
-            <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 0.4, fontWeight: 600 }}>model</Typography>
-            <Model slot={slot} onSave={onSave} />
+            <Typography variant="caption" sx={head}>effort</Typography>
+            <Select size="small" displayEmpty value={slot.effort || ""} onChange={(e) => onSave({ effort: e.target.value })}
+              sx={{ minWidth: 150, fontSize: 12.5, bgcolor: "var(--tq-panel, #fff)" }}>
+              <MenuItem value="" sx={{ fontSize: 12.5 }}>its own default</MenuItem>
+              {slot.efforts.map((eff) => <MenuItem key={eff} value={eff} sx={{ fontSize: 12.5 }}>{eff}</MenuItem>)}
+            </Select>
           </Box>
         )}
-        {!isJudge && slot.strong_model !== undefined && (
-          <Box>
-            <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 0.4, fontWeight: 600 }}>strong model</Typography>
-            <Model slot={slot} onSave={onSave} field="strong_model" label="strong model" hint="none, this brain doesn't step up" />
-          </Box>
-        )}
-        {/* the owner's own mark, off by default and never set by code: once the data rule is on, sensitive work reaches only a
-            brain marked here (the router's data seam, 2026-10-25) */}
+        {/* the owner's own mark, off by default and never set by code: once the data rule is on, sensitive work reaches only an AI marked here */}
         {!isJudge && slot.sensitive_ok !== undefined && (
           <FormControlLabel sx={{ ml: 0, mt: 2.25 }} control={<Checkbox size="small" checked={!!slot.sensitive_ok} data-tq-sensitive-ok=""
             onChange={(e) => onSave({ sensitive_ok: e.target.checked })} />}
             label={<Typography sx={{ fontSize: 12.5, color: DIM }}>may read sensitive data</Typography>} />
         )}
-        {/* effort only where the CLI can actually be told one - climodels leaves it empty for
-            the CLIs whose flag we cannot spell, and a dead dropdown would imply otherwise */}
-        {!!(slot.efforts || []).length && (
-          <Box>
-            <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 0.4, fontWeight: 600 }}>effort</Typography>
-            <Select size="small" displayEmpty value={slot.effort || ""} onChange={(e) => onSave({ effort: e.target.value })}
-              sx={{ minWidth: 150, fontSize: 12.5, bgcolor: "var(--tq-panel, #fff)" }}>
-              <MenuItem value="" sx={{ fontSize: 12.5 }}>default</MenuItem>
-              {slot.efforts.map((eff) => <MenuItem key={eff} value={eff} sx={{ fontSize: 12.5 }}>{eff}</MenuItem>)}
-            </Select>
-          </Box>
-        )}
       </Box>
 
-      <Box sx={{ mt: 1.5, pt: 1.25, borderTop: `1px solid ${BORDER}`, display: "flex", gap: 1,
-        alignItems: "baseline", flexWrap: "wrap" }}>
+      <Box sx={{ mt: 1.5, pt: 1.25, borderTop: `1px solid ${BORDER}`, display: "flex", gap: 1, alignItems: "baseline", flexWrap: "wrap" }}>
         <Typography variant="caption" sx={{ color: FAINT, fontWeight: 600 }}>RUNS</Typography>
-        <Typography sx={{ ...mono, fontSize: 12.5, color: INK, fontWeight: 600 }}>
-          {slot.runs ? runsLine(slot) : <>{picked ? picked.label : "—"}{slot.ready && runs && !picked?.label?.endsWith(` · ${runs}`) ? ` · ${runs}` : ""}{slot.ready && slot.resolved ? ` → ${slot.resolved}` : ""}{slot.effort ? ` · ${slot.effort}` : ""}</>}
+        <Typography sx={{ ...mono, fontSize: 12.5, color: INK, fontWeight: 600 }} data-tq-slot-runs="">
+          {slot.runs ? runsLine(slot) : [picked?.label || "—", isJudge ? "" : slot.ready && (slot.model || slot.default_hint)].filter(Boolean).join(" · ")}
         </Typography>
         {/* whose choice it was (the owner, 2026-11-11: "never change from what's in settings") - said only where it was not theirs */}
         {slot.set_by && !slot.ask && <Typography variant="caption" data-tq-slot-set-by="" sx={{ color: FAINT }}>{slot.set_by}</Typography>}
-        {slot.owner && (
+        {slot.owner && slot.owner_link && (
           <Typography variant="caption" sx={{ color: FAINT }}>
             saved on {slot.owner}
-            {slot.owner_link && (
-              <Typography component="button" type="button" variant="caption" onClick={() => onGo(slot.owner_link)}
-                sx={{ border: 0, background: "none", p: 0, font: "inherit", textAlign: "inherit", color: "var(--tq-link, #55697a)", cursor: "pointer", ml: 0.5, "&:hover": { textDecoration: "underline" } }}>
-                open →
-              </Typography>
-            )}
+            <Typography component="button" type="button" variant="caption" onClick={() => onGo(slot.owner_link)} sx={{ ...link, ml: 0.5 }}>open →</Typography>
           </Typography>
         )}
       </Box>
       {slot.runs?.why && <Typography variant="caption" data-tq-slot-why="" sx={{ color: FAINT, display: "block", mt: 0.5 }}>{slot.runs.why}</Typography>}
       {slot.note && <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.5 }}>{slot.note}</Typography>}
-      {/* What it is actually asked. This slot is not a taste setting - it is four yes/nos, and
-          whichever thing answers them answers exactly these (the owner, 2026-09-17: "show the
-          wording for jev ... what are the decision choices it's going for"). The criterion in each
-          one is the sentence on the report's own card, which is why it is not repeated here. */}
+      {/* what it is actually asked: four yes/nos, whose criterion is the sentence on each report's own card (the owner, 2026-09-17) */}
       {isJudge && !!(slot.decides || []).length && (
         <Box sx={{ mt: 1.25, pt: 1, borderTop: `1px solid ${BORDER}` }}>
-          <Typography variant="caption" sx={{ color: FAINT, fontWeight: 600, display: "block", mb: 0.5 }}>
-            Asked of it, once per run
-          </Typography>
+          <Typography variant="caption" sx={{ color: FAINT, fontWeight: 600, display: "block", mb: 0.5 }}>Asked of it, once per run</Typography>
           {slot.decides.map((d) => (
             <Typography key={d.line} sx={{ ...mono, fontSize: 11.5, color: INK, whiteSpace: "pre-wrap" }}>
               {d.line.toUpperCase()}: {d.says} <Typography component="span" sx={{ ...mono, fontSize: 11.5, color: FAINT }}>
@@ -166,65 +111,50 @@ const Slot = ({ slot, brains, agents, judgeOptions, onSave, onGo }) => {
   );
 };
 
-export default function AiDefaults({ brains, agents, onGo, onLoaded }) {
+// a read that failed is tried again by itself - a server still starting, a slow first answer - and says why with a button meanwhile
+export const RETRY_MS = [1500, 4000, 10000];
+
+export default function AiDefaults({ brains, onGo }) {
   const [state, setState] = useState(null);
   const [err, setErr] = useState("");
+  const tries = useRef(0);
   const load = useCallback(async () => {
-    try { setState((await api.get("/api/ai/defaults")).data); onLoaded?.(true); }
+    try { setState((await api.get("/api/ai/defaults")).data); setErr(""); tries.current = 0; }
     catch (e) {
-      // Tell the page this panel is not standing up, so it puts the PLAIN rows back. Hiding
-      // them in favour of a panel that then fails made the triage brain, the default agent and
-      // the assistant unreachable altogether - worse than the duplication it was avoiding.
-      onLoaded?.(false);
-      // A failed load used to leave `state` null forever, and the spinner below never came
-      // down: the panel span the whole error away. 404 here means one specific thing - the
-      // server predates this endpoint - so say that rather than "something went wrong".
-      setErr(e?.response?.status === 404
-        ? "this Taskuary server is older than this page — restart Taskuary to pick up the new backend"
-        : (e?.response?.data?.detail || e?.message || "could not read the AI defaults"));
-      setState({ slots: [], agents: [] });
+      setErr(e?.response?.status === 404 ? "This Taskuary is older than this page - restart Taskuary and the page appears."
+        : `Could not read which AI does what${e?.response?.data?.detail ? ` - ${e.response.data.detail}` : ""}.`);
+      const wait = RETRY_MS[tries.current++];
+      if (wait && e?.response?.status !== 404) setTimeout(load, wait);
     }
   }, []);
   useEffect(() => { load(); }, [load]);
-  // The checklist's models row is the one step with nothing to derive - a fresh install already
-  // ships working brain and model defaults, so "the defaults are fine" and "I never looked" are the
-  // same state. Arriving here is the evidence, so arriving here is what records it. Failure is
-  // ignored on purpose: a checklist row is a nicety and this page is the point.
+  // The checklist's models row: arriving here is the evidence it was looked at. A failure is ignored - this page is the point.
   useEffect(() => { api.post("/api/setup/seen", { step: "models" }).catch(() => {}); }, []);
-
+  const [say, setSay] = useState("");
   const save = async (slot, patch) => {
-    try { setErr(""); await api.post("/api/ai/defaults", { slot: slot.key, ...patch }); load(); }
-    catch (e) { setErr(e?.response?.data?.detail || "could not save that"); }
+    try { setSay(""); await api.post("/api/ai/defaults", { slot: slot.key, ...patch }); load(); }
+    catch (e) { setSay(e?.response?.data?.detail || "could not save that"); }
   };
 
-  const stale = /restart Taskuary/.test(err);
-  if (!state) return <CircularProgress size={20} sx={{ m: 2 }} />;
+  if (!state && !err) return <CircularProgress size={20} sx={{ m: 2 }} />;
+  const slots = state?.slots || [];
   return (
     <Box sx={{ mb: 1 }}>
       <Typography variant="body2" sx={{ color: DIM, mb: 1.5 }}>
-        Which AI does what, and on which model. Adding or signing into a CLI or an API key is
-        still <Typography component="button" type="button" variant="body2" onClick={() => onGo("connections")}
-          sx={{ border: 0, background: "none", p: 0, font: "inherit", textAlign: "inherit", color: "var(--tq-link, #55697a)", cursor: "pointer", "&:hover": { textDecoration: "underline" } }}>Connections</Typography>;
-        this page only chooses between what you have connected.
+        Each job, the AI that does it and the model it runs on - picked from that AI's own list. Adding an AI or signing in is under{" "}
+        <Typography component="button" type="button" variant="body2" onClick={() => onGo("connections")} sx={link}>Connections</Typography>.
       </Typography>
       {err && (
-        <Alert severity={stale ? "error" : "warning"} sx={{ mb: 1.5, fontSize: 12.5 }}>
-          {stale && <AlertTitle sx={{ fontSize: 13, fontWeight: 600 }}>Restart Taskuary to finish this update</AlertTitle>}
-          {err}
-          {stale && " — until then the rows below are the older, plainer controls, and the model and effort pickers are not available."}
-        </Alert>
+        <Alert severity="warning" sx={{ mb: 1.5, fontSize: 12.5 }} data-tq-ai-defaults-error=""
+          action={<Button size="small" onClick={() => { tries.current = 0; load(); }} sx={{ textTransform: "none" }}>Try again</Button>}>{err}</Alert>
       )}
-      {/* a payload without slots is a payload, not a crash: the public demo serves one and the
-          whole Settings view fell into the error boundary - "Something in this view failed to
-          draw" - over a page of knobs that simply had nothing to list (2026-09-22) */}
-      {/* the mode line and its rules sit above the cards they govern (the router, 2026-10-25) - Fixed is the cards alone */}
-      {!!(state.slots || []).length && <RouteRules />}
-      {(state.slots || []).map((s) => (
-        <Slot key={s.key} slot={s} brains={brains} agents={state.agent_options || agents || state.agents || []}
-          judgeOptions={state.judge_options || []} onSave={(patch) => save(s, patch)} onGo={onGo} />
-      ))}
-      {!!(state.slots || []).length && <TodayUsage />}
-      {!!(state.slots || []).length && <RecentRoutes />}
+      {say && <Alert severity="warning" sx={{ mb: 1.5, fontSize: 12.5 }}>{say}</Alert>}
+      {/* the levels govern the agents' cards above them: each level's AI and model, Auto on or off, the strong cap (the router, 2026-10-25);
+          where reports go is its own job, after them */}
+      {[...slots.filter((s) => s.key !== "judge_ai"), ...(slots.length ? ["levels"] : []), ...slots.filter((s) => s.key === "judge_ai")].map((s) => (s === "levels"
+        ? <RouteRules key="levels" />
+        : <Slot key={s.key} slot={s} brains={brains} agents={state.agent_options || []}
+          judgeOptions={state.judge_options || []} onSave={(patch) => save(s, patch)} onGo={onGo} />))}
     </Box>
   );
 }

@@ -22,7 +22,10 @@ test("each old link becomes a canvas request", () => {
   assert.equal(hashFor("connections", { connector: "whatsapp", chats: "Northwind Team" }), "#connector=whatsapp&chats=Northwind%20Team");
   assert.equal(canvasRequestFromHash("#connector=gmail").state.chats, undefined);
   assert.equal(canvasRequestFromHash("#cli-agents").area, "connections");
-  assert.deepEqual(canvasRequestFromHash("#settings=config&group=How%20mail%20is%20sorted").state, { section: "config", open: "How mail is sorted" });
+  assert.deepEqual(canvasRequestFromHash("#settings=config&group=Which%20AI%20does%20what").state, { section: "config", open: "Which AI does what" });
+  // ...and a link written before the section was renamed (one already said in a chat) lands on it too, its setting held
+  assert.deepEqual(canvasRequestFromHash("#settings=config&group=How%20mail%20is%20sorted&key=triage_ai").state,
+    { section: "config", open: "Which AI does what", knob: "triage_ai" });
   assert.deepEqual(canvasRequestFromHash("#settings=policies").state, { section: "policies", open: "policies" });
   // "update taskuary" (2026-10-23): Updates comes up with its one button lit, and the link round-trips
   assert.deepEqual(canvasRequestFromHash("#settings=updates&key=update").state, { section: "updates", open: "updates", knob: "update" });

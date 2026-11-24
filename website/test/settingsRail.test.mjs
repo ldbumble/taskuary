@@ -19,7 +19,7 @@ test("Configuration is one page, not a strip of tabs", () => {
   assert.ok(!/cfgTab/.test(src), "and so is the state that remembered which tab you were on");
   // (Notifications lost its panel with the notify pushes, 2026-10-02 - its sound and desktop switches are plain rows)
   // (the phone's panel moved to Settings > Phone & chats with its knobs, 2026-11-06)
-  assert.ok(src.includes(`"How mail is sorted":`), "How mail is sorted still gets its panel above its knobs");
+  assert.ok(src.includes(`"Which AI does what":`), "Which AI does what still gets its panel above its knobs");
   assert.match(src, /assistant=\{<><PhoneDoorways [^>]*\/>\{rowsOf\(PHONE_GROUP\)\.map\(knobRow\)\}/, "the phone's panel sits above its knobs on Phone & chats");
   assert.ok(schema.groups.length > 8, "the point of the change: there are a lot of them, and more coming");
 });

@@ -3,6 +3,8 @@
 // becomes a request for the assistant canvas: open this task's view, or post this browse card at this place.
 // Pure, so test/canvasLinks.test.mjs can hold every link the app writes. `n` numbers the request; null = not ours.
 import { PHONE_GROUP } from "./phoneChats.js";
+// Configuration sections renamed: {old name: new} - "How mail is sorted" became one page for every AI job (the owner, 2026-11-23)
+const MOVED = { "How mail is sorted": "Which AI does what" };
 const REPORT_BUCKETS = ["workflows", "new-invoices", "new-agent"];
 // Settings' pages (SettingsView NAV): a link to any other opens the section list - "#settings=foo" crashed the app on
 // every reload (the final review, 2026-09-29)
@@ -90,7 +92,8 @@ export function canvasRequestFromHash(hash, n = 0) {
   // ...on About you now (2026-11-06)
   if ((m = /^#settings=docs&doc=(\w+)(?:&view=(\w+))?/.exec(h))) return docAt(m[1], m[2], n);
   if ((m = /^#settings=([^&]*)(?:&group=([^&]*))?/.exec(h))) {
-    const asked = decodeURIComponent(m[1] || "config") || "config", g = m[2] ? decodeURIComponent(m[2]) : "";
+    // ...a section renamed keeps its old links working: one already said in a chat still lands (MOVED)
+    const asked = decodeURIComponent(m[1] || "config") || "config", g = m[2] ? MOVED[decodeURIComponent(m[2])] || decodeURIComponent(m[2]) : "";
     // the phone's knobs left Configuration for Phone & chats: search and the Assistant still say their group, and land on the page
     const [page, group] = asked === "config" && g === PHONE_GROUP ? ["phone", ""] : [asked, g];
     // PLAYBOOKS LEFT SETTINGS for the Reports page

@@ -2,13 +2,17 @@
 // Every line names the AI and the model that run, from the server's own answer (brainroute.runs / default_level) - never "the card's
 // AI" or "its own model" with nothing to say which.
 
-// a level left on Default: the General agent card's AI by name, and the Coding agent's where that is another
+// a level left on Default: the Task agents card's AI by name, and the Coding agent's where that is another
 export const levelDefault = (d) => {
   const g = d?.general, c = d?.coding;
-  if (!g?.pick) return "Default - the General agent card below";
-  return `Default - ${g.brain}${c?.pick && c.pick !== g.pick ? ` (coding: ${c.brain})` : ""}, set on its card below`;
+  if (!g?.pick) return "Default - the Task agents card above";
+  return `Default - ${g.brain}${c?.pick && c.pick !== g.pick ? ` (coding: ${c.brain})` : ""}, set on its card above`;
 };
-// the model a level runs while its model box is blank: the AI picked for it, else the General agent card's
+// A MODEL IS ITS ID (a brain's models are {id, label}; the live setting once held the whole object as text)
+export const idOf = (x) => (typeof x === "string" ? x : x?.id || "");
+// a saved model the AI's own list does not hold - said on its box, only once that list was read (null: not read, or no list)
+export const offList = (value, live) => !!(value && live?.length && !live.includes(value));
+// the model a level runs while its model box is blank: the AI picked for it, else the Task agents card's
 export const levelModel = (d, brain, lvl) => (brain ? brain.runs?.[lvl] : d?.general?.[lvl]) || "its default model";
 // a card's RUNS line: the router's answer for the card's job this minute
 export const runsLine = (slot) => (slot.runs?.brain ? [slot.runs.brain, slot.runs.model].filter(Boolean).join(" · ") : "nothing yet");

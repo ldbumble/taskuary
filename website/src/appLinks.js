@@ -185,7 +185,7 @@ const flash = (el) => {
   clearTimeout(el.tqFlash); el.tqFlash = setTimeout(() => el.classList?.remove("tq-flash"), 1800);   // shown again: an earlier timer must not cut it
 };
 // ...AND KEPT THERE WHILE THE PAGE FINISHES DRAWING (verify, 2026-10-19): one scroll on arrival was undone by whatever loaded above it
-// afterwards - How mail is sorted's AI panel stands up from a spinner over its rows, so a "Fallback AI programs" hit landed at the top
+// afterwards - Which AI does what's AI panel stands up from a spinner over its rows, so a backups hit landed at the top
 // of its group with the setting 1,700px down. The thing's place in the page (its top plus every scroll above it, so a scroll does not
 // count as a move) is watched each frame; when the page above it moves, it is brought back. It is marked [data-tq-held] too, so the
 // chat's own hold on the card (AssistantView keepTable) holds IT rather than the card's top - two holds on one scroll fought. The

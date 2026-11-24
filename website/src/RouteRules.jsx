@@ -4,39 +4,25 @@
 // instead where it can. Fixed is the cards, exactly as before. A rule is
 // built from dropdowns over the values the router knows, never a typed condition, and its sentence is made from what it does.
 import React, { useCallback, useEffect, useState } from "react";
-import { Alert, Autocomplete, Box, Button, MenuItem, Select, Switch, TextField, Typography } from "@mui/material";
+import { Alert, Box, Button, FormControlLabel, MenuItem, Select, Switch, TextField, Typography } from "@mui/material";
 import api from "./api";
 import { BORDER, DIM, FAINT, INK, card, mono } from "./theme.jsx";
 import { levelDefault, levelLines, levelModel, nowRows, sharedWhy } from "./aiCards.js";
+import ModelPick from "./ModelPick.jsx";
 
-const JOB = { triage: "triage", draft: "redrafts", summary: "summaries", advisor: "the Advisor", memory: "memory", rank: "ranking",
-  general: "general work", coding: "coding", judge: "judgements" };
+const JOB = { triage: "sorting new mail", draft: "redrafts", summary: "summaries", advisor: "the Advisor", memory: "memory", rank: "ranking",
+  general: "task agents", coding: "coding", judge: "where reports go" };
 const USE = { light: "the quick model", standard: "the card's own model", strong: "the strong model" };
 // triage's three judgements, in the words a person uses for them
 const LEVEL = { quick: "Quick", standard: "Normal", hard: "Hard" };
-export const SAYS = "Triage judges each task quick, normal or hard and picks the model for it: quick work runs on a smaller model, "
-  + "hard work on a stronger one. An AI with only one model thinks less or harder instead, where it can.";
+export const SAYS = "Each task is judged quick, normal or hard when it comes in, and runs on the model for that level: quick work on a smaller "
+  + "model, hard work on a stronger one. An AI with only one model thinks less or harder instead, where it can.";
 const sel = { fontSize: 12.5, bgcolor: "var(--tq-panel, #fff)", minWidth: 150 };
 const err = (e, d) => e?.response?.data?.detail || e?.message || d;
-// AN AI PER LEVEL (the owner, 2026-11-06: "not by default but you can adjust in settings"): for the agents' work only - general work,
-// quick work, and coding on a CLI. Blank is Default - the General agent card's AI, by name (aiCards.levelDefault); set, that level runs
-// on the AI named here when it can take the call.
+// AN AI PER LEVEL (the owner, 2026-11-06: "not by default but you can adjust in settings"): for the agents' work only - task agents,
+// quick work, and coding. Blank is Default - the Task agents card's AI, by name (aiCards.levelDefault); set, that level runs on the AI
+// named here when it can take the call, on a model from that AI's own list (ModelPick).
 const LEVELS = [["quick", "Quick"], ["normal", "Normal"], ["hard", "Hard"]];
-
-function LevelModel({ value, models, disabled, onSave, runs }) {
-  const [v, setV] = useState(value || "");
-  useEffect(() => setV(value || ""), [value]);
-  // ...a brain's models are {id, label}: what is saved is the id, never the object as text (the live setting held "{'id': 'gpt-6.2-sol', ...}")
-  const idOf = (x) => (typeof x === "string" ? x : x?.id || "");
-  const commit = (next) => idOf(next) !== (value || "") && onSave(idOf(next));
-  return (
-    <Autocomplete freeSolo forcePopupIcon openOnFocus size="small" options={(models || []).map(idOf)} value={v} disabled={disabled}
-      getOptionLabel={(o) => { const m = (models || []).find((x) => idOf(x) === o); return (typeof m === "object" && m?.label) || o || ""; }}
-      onInputChange={(_e, next) => setV(next)} onChange={(_e, next) => { setV(idOf(next)); commit(next); }} onBlur={() => commit(v)}
-      sx={{ minWidth: 170 }} renderInput={(p) => <TextField {...p} placeholder={runs} sx={{ bgcolor: "var(--tq-panel, #fff)" }}
-        inputProps={{ ...p.inputProps, style: { fontSize: 12.5 } }} />} />
-  );
-}
 
 function ByLevel({ p, save }) {
   const by = p.by_level || {}, brains = p.brains || [];
@@ -59,11 +45,12 @@ function ByLevel({ p, save }) {
               sx={{ ...sel, minWidth: 300 }} inputProps={{ "aria-label": `${word} work runs on` }}>
               <MenuItem value="" sx={{ fontSize: 12.5 }}>{levelDefault(p.default)}</MenuItem>
               {brains.map((x) => (
-                <MenuItem key={x.pick} value={x.pick} sx={{ fontSize: 12.5 }}>{x.label}{x.cli ? "" : " - not for coding"}</MenuItem>
+                <MenuItem key={x.pick} value={x.pick} sx={{ fontSize: 12.5 }}>{x.label}{x.coding ? "" : " - no coding: it has no shell here"}</MenuItem>
               ))}
               {cur.pick && !b && <MenuItem value={cur.pick} sx={{ fontSize: 12.5 }}>{cur.pick} (not connected)</MenuItem>}
             </Select>
-            <LevelModel value={cur.model} models={b?.models} disabled={!cur.pick} onSave={(model) => put(lvl, { model })} runs={levelModel(p.default, b, lvl)} />
+            <ModelPick value={cur.model} models={b?.models} connector={/^connector:(\d+)$/.exec(cur.pick || "")?.[1]} disabled={!cur.pick} width={170}
+              ai={b?.label?.split(" · ")[0]} onSave={(model) => put(lvl, { model })} placeholder={levelModel(p.default, b, lvl)} />
           </Box>
         );
       })}
@@ -97,16 +84,12 @@ export function RouteRules() {
   };
   return (
     <Box data-tq-knob="ai_route_mode ai_route_strong_cap" data-tq-route-rules="" sx={{ ...card, p: 2, mb: 1.5, bgcolor: "var(--tq-panel, #fff)" }}>
-      <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, flexWrap: "wrap" }}>
-        <Typography sx={{ color: INK, fontWeight: 600, fontSize: 14 }}>Which AI does each job</Typography>
-        <Select size="small" value={p.mode} onChange={(e) => save({ mode: e.target.value })} sx={sel} data-tq-route-mode="">
-          <MenuItem value="fixed" sx={{ fontSize: 12.5 }}>Fixed - the cards below</MenuItem>
-          <MenuItem value="auto" sx={{ fontSize: 12.5 }}>Auto - by how hard the work is</MenuItem>
-        </Select>
-      </Box>
-      <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.5 }}>
+      <Typography sx={{ color: INK, fontWeight: 600, fontSize: 14 }}>Quick, normal and hard work</Typography>
+      <FormControlLabel sx={{ ml: 0, mt: 0.5 }} label={<Typography sx={{ fontSize: 12.5, color: DIM }}>Pick the model by how hard the work is</Typography>}
+        control={<Switch size="small" checked={auto} onChange={() => save({ mode: auto ? "fixed" : "auto" })} inputProps={{ "data-tq-route-mode": "" }} />} />
+      <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.25 }}>
         {auto ? `${SAYS} An AI you pick for something always wins.`
-          : "Every job runs exactly as its card says. Auto lets triage judge each task quick, normal or hard and pick the model for it."}
+          : "Off: every job runs on the AI and model its card says."}
       </Typography>
       {auto && !!levelLines(p).length && (
         <Box sx={{ mt: 1 }} data-tq-route-levels="">

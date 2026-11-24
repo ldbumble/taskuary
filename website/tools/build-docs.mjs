@@ -59,7 +59,7 @@ function settingsMarkdown() {
       out.push(`### ${m.label}\n`);
       const bits = [`\`${key}\``, `type: ${m.type}`];
       if (key in defaults) bits.push(`default: ${shownDefault(m, defaults[key])}`);
-      if (owned.has(key)) bits.push("set on a card at the top of the page");
+      if (owned.has(key)) bits.push("set on a card on this page");
       out.push(`${bits.join(" · ")}\n`);
       out.push(`${m.desc}\n`);
       if (m.options?.length) out.push(`Options: ${m.options.map((o) => `\`${o}\``).join(", ")}\n`);

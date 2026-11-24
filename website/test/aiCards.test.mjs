@@ -12,8 +12,8 @@ const D = { general: { pick: "cli:codex", brain: "OpenAI Codex CLI", quick: "gpt
   coding: { pick: "cli:codex", brain: "OpenAI Codex CLI" } };
 
 test("a level left on Default names the AI it resolves to, and its model box the model that runs", () => {
-  assert.equal(levelDefault(D), "Default - OpenAI Codex CLI, set on its card below");
-  assert.equal(levelDefault({ ...D, coding: { pick: "cli:claude", brain: "Claude Code" } }), "Default - OpenAI Codex CLI (coding: Claude Code), set on its card below");
+  assert.equal(levelDefault(D), "Default - OpenAI Codex CLI, set on its card above");
+  assert.equal(levelDefault({ ...D, coding: { pick: "cli:claude", brain: "Claude Code" } }), "Default - OpenAI Codex CLI (coding: Claude Code), set on its card above");
   assert.equal(levelModel(D, null, "quick"), "gpt-5.5, low effort");
   assert.equal(levelModel(D, { runs: { hard: "opus" } }, "hard"), "opus");
   const rr = read("RouteRules.jsx");
@@ -55,4 +55,21 @@ test("the routing card says each fact once: no line of levels the rows repeat, a
   assert.equal(sharedWhy(same), "");
   const rr = read("RouteRules.jsx");
   assert.ok(rr.includes("{levelLines(p).map((l) => (") && rr.includes("{nowRows(p.now).map((n) => (") && rr.includes("{sharedWhy(p.now)}"));
+});
+
+// ONE PICKER, ITS AI'S OWN LIST, SAVED AS AN ID (the owner, 2026-11-23): a brain's models are {id, label} and the level picker once saved
+// the whole object as text; a saved model the AI's list does not hold is said on its box - only once that list was read.
+test("a model picked is saved as its id, and one its AI does not list is said", async () => {
+  const { idOf, offList } = await import("../src/aiCards.js");
+  assert.equal(idOf({ id: "gemini-4-hydrogen", label: "Gemini 4 Hydrogen" }), "gemini-4-hydrogen");
+  assert.equal(idOf("gemini-3.8-flash"), "gemini-3.8-flash");
+  assert.equal(idOf(null), "");
+  const served = ["gemini-3.8-flash", "gemini-4-hydrogen", "gemini-4-neon"];
+  assert.equal(offList("claude-sonnet-5-5", served), true, "a model the gateway does not serve is flagged");
+  assert.equal(offList("gemini-4-hydrogen", served), false);
+  assert.equal(offList("claude-sonnet-5-5", null), false, "a list not read says nothing");
+  assert.equal(offList("", served), false, "blank is the AI's own default");
+  // ...both pickers on the page are this one, so neither can save anything but an id
+  for (const f of ["AiDefaults.jsx", "RouteRules.jsx"]) assert.ok(read(f).includes('import ModelPick from "./ModelPick.jsx"'), f);
+  assert.ok(!read("RouteRules.jsx").includes("not for coding"));
 });

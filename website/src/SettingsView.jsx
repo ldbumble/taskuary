@@ -27,6 +27,7 @@ import AltRouteIcon from "@mui/icons-material/AltRoute";
 import AccountCircleIcon from "@mui/icons-material/AccountCircle";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import AiDefaults from "./AiDefaults.jsx";
+import { RecentRoutes, TodayUsage } from "./RouteRules.jsx";
 import AgentPermissions from "./AgentPermissions.jsx";
 import SharedLinks from "./SharedLinks.jsx";
 import SavedSignins from "./SavedSignins.jsx";
@@ -72,8 +73,6 @@ const ACTION_LABEL = { skip: "Skip — hide it completely", ignore: "Ignore — 
 // "ignore" because it is the gentlest of the three - the old default, "draft", was honoured nowhere
 // (policy.py) and a rule saved with it looked set and never fired
 const NEW_POLICY = { Name: "", Kind: "keyword", Pattern: "", Action: "ignore", Reason: "", SortOrder: 100, Active: true };
-// settings whose value is JSON: checked on the page before it is sent
-const JSON_KNOBS = new Set(["profile_brains"]);
 
 // THE EMAIL SIGNATURE, CHECKED (the owner, 2026-10-16: "pull the signature from the email and use that in emails ... have a setting so
 // they can check it that it looks good"): the exact block, a preview under an email, and Read it from my sent mail - which fills the
@@ -152,14 +151,6 @@ function MailboxSignature({ box, save }) {
       inputProps={{ style: { fontSize: 12.5 } }} onBlur={() => text.trim() !== (box.signature || "") && save(box.address, text.trim())} />
   );
 }
-const jsonProblem = (v) => {
-  if (!v) return "";
-  try {
-    const o = JSON.parse(v);
-    if (!o || typeof o !== "object" || Array.isArray(o)) return 'Write it as {"role": "brain"} pairs inside curly braces.';
-    return Object.values(o).every((x) => typeof x === "string") ? "" : 'Each role needs a brain name in quotes, e.g. {"coding": "codex"}.';
-  } catch { return 'That is not valid JSON yet — check the quotes and braces, e.g. {"coding": "codex"}. Not saved.'; }
-};
 
 import schema from "../../taskuary/settings_schema.json";
 import MorningDigest from "./MorningDigest.jsx";
@@ -180,7 +171,7 @@ const KNOB_META = schema.knobs;
    Only chats you are ALONE in are offered, and that is enforced again on the way in
    (remote_assistant.use_chat) - the picker is a convenience, not the guard. */
 // the service's own spelling (phoneChats.CHANNEL_NAME): capitalize made "Whatsapp", and the button said "Open the whatsapp card"
-const PhoneDoorways = ({ onLoaded, onNavigate }) => {
+const PhoneDoorways = ({ onNavigate }) => {
   const [rows, setRows] = useState(null);
   const [handoff, setHandoff] = useState(null);   // the walk handed to a chat right now ({channel, chat}), or null
   const [busy, setBusy] = useState("");
@@ -191,15 +182,14 @@ const PhoneDoorways = ({ onLoaded, onNavigate }) => {
   // or Telegram connection", which is a lie about the owner's own setup, and the one thing a
   // settings page must never tell you (2026-09-17: "don't see anything there just one setting?").
   const load = useCallback(async () => {
-    try { const { data } = await api.get("/api/assistant/doorways"); setRows(data.data || []); setHandoff(data.handoff || null); setErr(""); onLoaded?.(true); }
+    try { const { data } = await api.get("/api/assistant/doorways"); setRows(data.data || []); setHandoff(data.handoff || null); setErr(""); }
     catch (e) {
       setRows(null);
       setErr(e?.response?.status === 404
         ? "This page needs a newer Taskuary than the one running — restart the app and it appears."
         : (e?.response?.data?.detail || "could not read your channels just now"));
-      onLoaded?.(false);
     }
-  }, [onLoaded]);
+  }, []);
   useEffect(() => { load(); }, [load]);
   // the list fills from chats the app has SEEN, so the owner is told to go and message themselves -
   // coming back to this window is the moment to look again, without a reload
@@ -428,7 +418,7 @@ const PAGE = 980;
 const PAGES = {
   about: { title: "About you", icon: AccountCircleIcon, desc: "Who the system knows you are — your identities per channel, the facts only you can add, your avatar." },
   docs: { title: "Docs", icon: MenuBookIcon, desc: "The documents the system writes from and writes to — how you sound, what triage is told, and what it has learned." },
-  config: { title: "Configuration", icon: TuneIcon, desc: "How mail is sorted, replies, agents and display - how Taskuary behaves." },
+  config: { title: "Configuration", icon: TuneIcon, desc: "Which AI does what, replies, agents and display - how Taskuary behaves." },
   policies: { title: "Mail rules", icon: AltRouteIcon, desc: "Rules the AI always follows — ignore a sender, escalate, auto-answer." },
   phone: { title: "Phone & chats", icon: SmartphoneIcon, desc: "The chats that reach Taskuary from outside — your Taskuary chat on WhatsApp or Telegram, and in Developer mode the chats that talk to your coding agents." },
   audit: { title: "Activity log", icon: VerifiedIcon, desc: "Who did what, when — a record of every action, and a check that proves nobody edited it." },
@@ -494,12 +484,9 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
   const [draft, setDraft] = useState(null);
   const [verify, setVerify] = useState(null);
   const [help, setHelp] = useState(null);
-  const [panelOk, setPanelOk] = useState(false);   // the AI defaults panel is standing up; until it is, the plain rows stay
   const [err, setErr] = useState("");
 
   const [brains, setBrains] = useState([]);
-  const [agentNames, setAgentNames] = useState([]);
-  const [agentOptions, setAgentOptions] = useState([]);
   const [agentModels, setAgentModels] = useState({});
   const [connectors, setConnectors] = useState([]);
   const [mailboxes, setMailboxes] = useState(null);         // the sending mailboxes a rule can be scoped to (ruleMailbox.js); null until read - no "Applies to" until then
@@ -510,17 +497,7 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
       setPolicies(p.data.data || []); setSettings(s.data.data || []);
       api.get("/api/brains").then(({ data }) => setBrains(data.data || [])).catch(() => {});
       api.get("/api/mailboxes").then(({ data }) => setMailboxes(data.data || [])).catch(() => setMailboxes([]));
-      api.get("/api/agents").then(({ data }) => {
-        const rows = data.data || [], models = data.models || {}, seen = new Set();
-        setAgentNames(rows.map((a) => a.Name));
-        setAgentModels(models);
-        // Settings asks which coding CLI runs, not which instruction profile it wears.
-        // The endpoint puts the saved default first; keep that order and collapse profiles
-        // backed by the same executable into one provider choice.
-        setAgentOptions(rows.filter((a) => ["coding", "cli"].includes(String(a.Kind || "").toLowerCase()))
-          .map((a) => ({ value: a.Name, label: models[a.Name]?.cli || models[a.Name]?.cmd || a.Name }))
-          .filter((a) => !seen.has(a.label) && seen.add(a.label)));
-      }).catch(() => {});
+      api.get("/api/agents").then(({ data }) => setAgentModels(data.models || {})).catch(() => {});
       api.get("/api/connectors").then(({ data }) => setConnectors(data.data || [])).catch(() => {});
     } catch (e) { setErr(e?.response?.data?.detail || "Failed to load settings"); }
   }, []);
@@ -551,7 +528,6 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
     if (ok) chatDefaultsChanged(name, value);                        // an open chat follows its kind's new default     // coding comes or goes on every screen, this one's Coding agent group too
     load();
   };
-  const [jsonBad, setJsonBad] = useState({});           // a JSON knob's problem, said under its box until fixed
   const [verifying, setVerifying] = useState(false);
   const runVerify = async () => {
     setVerifying(true); setVerify(null);
@@ -582,31 +558,6 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
 
   const control = (s) => {
     const m = meta(s.Name);
-    const codingOptions = agentOptions.length ? agentOptions : agentNames.map((n) => ({ value: n, label: n }));
-    // Coding defaults choose an executable. The stored value remains its representative worker
-    // so existing task/session APIs keep their profile-specific model and repository mappings.
-    if (m.type === "agent") return (
-      <Select size="small" value={codingOptions.some((o) => o.value === s.Value) ? s.Value : (codingOptions[0]?.value || "")}
-        onChange={(e) => saveSetting(s.Name, e.target.value)} sx={{ minWidth: 140, fontSize: 12.5, bgcolor: "var(--tq-panel, #fff)" }}>
-        {codingOptions.map((o) => <MenuItem key={o.value} value={o.value} sx={{ fontSize: 12.5 }}>{o.label}</MenuItem>)}
-        {!codingOptions.length && <MenuItem value="" disabled sx={{ fontSize: 12.5 }}>no coding CLI yet — add one under Connections</MenuItem>}
-      </Select>
-    );
-    if (m.type === "agents") {
-      const values = s.Value === "*" ? ["*"] : String(s.Value || "").split(",").filter((v) => codingOptions.some((o) => o.value === v));
-      return (
-        <Select size="small" multiple displayEmpty value={values}
-          renderValue={(picked) => picked.includes("*") ? "automatic — any other coding CLI"
-            : picked.length ? picked.map((v) => codingOptions.find((o) => o.value === v)?.label || v).join(" → ") : "none"}
-          onChange={(e) => {
-            const picked = typeof e.target.value === "string" ? e.target.value.split(",") : e.target.value;
-            saveSetting(s.Name, picked.includes("*") ? "*" : picked.join(","));
-          }} sx={{ minWidth: 250, maxWidth: 380, fontSize: 12.5, bgcolor: "var(--tq-panel, #fff)" }}>
-          <MenuItem value="*" sx={{ fontSize: 12.5 }}>automatic — any other configured coding CLI</MenuItem>
-          {codingOptions.map((o) => <MenuItem key={o.value} value={o.value} sx={{ fontSize: 12.5 }}>{o.label}</MenuItem>)}
-        </Select>
-      );
-    }
     // the brains list is dynamic: AI connectors that actually hold a key + your CLI agents
     if (m.type === "brain") return (
       <Select size="small" displayEmpty value={brainOptions.some((b) => b.value === s.Value) ? s.Value : ""}
@@ -731,20 +682,6 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
       <Switch checked={s.Value === "1"} title={m.hover || undefined} inputProps={{ "aria-label": m.label || s.Name.replaceAll("_", " ") }}
         onChange={() => saveSetting(s.Name, s.Value === "1" ? "0" : "1")} />
     );
-    // A JSON KNOB IS CHECKED BEFORE IT IS SENT. A stray quote used to save, and the reader ignored the
-    // whole value without a word - so every role quietly fell back to the default brain.
-    if (JSON_KNOBS.has(s.Name)) {
-      const bad = jsonBad[s.Name];
-      return (
-        <TextField defaultValue={s.Value} multiline minRows={1} error={!!bad} helperText={bad || " "}
-          placeholder='{"coding": "codex"}' sx={{ width: 260, bgcolor: "var(--tq-panel, #fff)" }} inputProps={{ style: { fontSize: 12.5, fontFamily: "monospace" } }}
-          onBlur={(e) => {
-            const v = e.target.value.trim(), why = jsonProblem(v);
-            setJsonBad((b) => ({ ...b, [s.Name]: why }));
-            if (!why && v !== (s.Value || "")) saveSetting(s.Name, v, e.target);
-          }} />
-      );
-    }
     return (
       <TextField defaultValue={s.Value} sx={{ width: 150, bgcolor: "var(--tq-panel, #fff)" }} inputProps={{ style: { fontSize: 12.5, padding: "6px 10px" } }}
         onBlur={(e) => e.target.value !== s.Value && saveSetting(s.Name, e.target.value, e.target)} />
@@ -754,17 +691,19 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
   // WHAT CONFIGURATION ACTUALLY DRAWS, decided once and told to the rail. A group with nothing in
   // it ("Other", on an install where no stray key fell there) must not be a rail entry: it would
   // scroll nowhere and highlight nothing. The rail cannot work this out - the rows are here.
-  const rowsOf = (g) => settings.filter((s) => !hidden(s.Name) && meta(s.Name).group === g
-    && !(panelOk && PANEL_OWNED.has(s.Name)));
+  // ...never a setting a panel holds: the panel is its one place (the owner, 2026-11-23: no "fallback if that panel cannot load" rows)
+  const rowsOf = (g) => settings.filter((s) => !hidden(s.Name) && meta(s.Name).group === g && !PANEL_OWNED.has(s.Name));
   // A PANEL IS A PLACE SEARCH CAN LAND ON: each under its id in settings_schema.json `panels`, which holds the words it is found by
   // (settingsSearch.js) - the id is its anchor and, as a knob, what #settings=config&group=..&key=<id> scrolls to
   const panel = (k, el) => <Box key={k} id={secId("config", k)} data-tq-knob={k} sx={{ scrollMarginTop: `${SCROLL_TOP}px` }}>{el}</Box>;
   const panels = {
-    "How mail is sorted": panel("panel:aidefaults", <AiDefaults brains={brainOptions} agents={agentOptions} onGo={goFromPanel} onLoaded={setPanelOk} />),
+    "Which AI does what": panel("panel:aidefaults", <AiDefaults brains={brainOptions} onGo={goFromPanel} />),
     "Agent permissions": panel("panel:agentperms", <AgentPermissions />),
   };
   // ...and what a section lists UNDER its knobs: the share links still open sit below the switch that allows them
   const after = {
+    // ...the backups above it, then the day's AI calls with their limit, and the last routes - read-only
+    "Which AI does what": <><TodayUsage /><RecentRoutes /></>,
     Sharing: panel("panel:sharedlinks", <SharedLinks />),
     Assistant: panel("panel:digest", <MorningDigest />),            // ...the digest it opens the main screen with: its time and on/off (2026-11-22)
     Replies: panel("panel:handsig", <HandSignature />),              // the signature forms are signed with sits beside the one under the email
@@ -785,8 +724,8 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
   // ...and the panel's own keys are suppressed wherever they would otherwise land. Scoping this
   // to the panel's tab was fine while every owned key had a KNOB_META entry in that group -
   // then `assistant_ai` lost its entry when it became a card, fell to "Other" by default, and
-  // came back as a bare unlabelled text box (d3bde8bd). `panelOk` still puts the plain rows
-  // back if the panel fails to load, which is why they keep their KNOB_META entries.
+  // came back as a bare unlabelled text box (d3bde8bd). They keep their KNOB_META entries so search, a link and the Assistant
+  // name them, and land on the panel's card.
   // A FUNCTION, NOT A COMPONENT: a component declared in here is a new type on every render,
   // so React would remount every row and the box you are typing in would lose the caret.
   const knobRow = (s) => {
@@ -932,7 +871,7 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
     // PHONE & CHATS: the Assistant chat and its knobs, then - Developer mode only - the chats bound to coding agents (PhoneChats.jsx)
     if (page === PHONE_PAGE) return (
       <PhoneChats devMode={devMode} head={(name) => <SectionHead page={PHONE_PAGE} name={name} />}
-        assistant={<><PhoneDoorways onLoaded={setPanelOk} onNavigate={onNavigate} />{rowsOf(PHONE_GROUP).map(knobRow)}</>} />
+        assistant={<><PhoneDoorways onNavigate={onNavigate} />{rowsOf(PHONE_GROUP).map(knobRow)}</>} />
     );
     if (page === "about") return <AboutYou />;
     if (page === "docs") return <DocsView sel={docSel} onSel={setDocSel} onCatalog={onCatalog} />;

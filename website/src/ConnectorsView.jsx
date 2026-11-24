@@ -810,7 +810,7 @@ const META = {
       "Paste it under Credentials. Leave model blank for openai.gpt-oss-120b-1:0, or name another from the provider's model list.",
       "Test runs a real round trip. Turn it on for sorting, drafts and the digest."] },
   // A decision model, not a brain. It sits in this group because it is an AI card you paste a key
-  // on, but it is offered in exactly ONE picker (Settings → How mail is sorted → Where runs go): it
+  // on, but it is offered in exactly ONE picker (Settings → Which AI does what → Where reports go): it
   // emits no text at all, so chosen as the Assistant's brain it would have nothing to say.
   // The owner's ChatGPT plan through Sign in with ChatGPT (chatgptauth.py) - no key; the sign-in box at the top of
   // the card IS the credential, and it is a brain like any other once signed in.

@@ -463,6 +463,25 @@ class TerminalTests(unittest.TestCase):
         finally:
             terminal.close(t.sid)
 
+    def test_a_pane_that_opens_on_a_session_already_ended_hears_its_end(self):
+        """macOS, release 0.4.3.2: the shard hung 35 minutes in the test above. Starting a child had grown slower (spawn.listed), the CLI
+        printed and exited before the socket subscribed, and the exit marker went to no one - the pane waited for an end already past."""
+        t = terminal.Term(ECHO, os.getcwd(), 'test')
+        terminal.SESSIONS[t.sid] = t
+        try:
+            end = time.monotonic() + 15
+            while not t.ended and time.monotonic() < end: time.sleep(.05)
+            self.assertTrue(t.ended, 'the child never ended')
+            got = []
+            with c.websocket_connect(f'/api/terminals/{t.sid}/ws') as ws:
+                def read():
+                    while not got or got[-1]['type'] != 'exit': got.append(ws.receive_json())
+                th = threading.Thread(target=read, daemon=True); th.start(); th.join(10)
+                self.assertEqual(got[-1:] and got[-1]['type'], 'exit', 'a pane opened on an ended session never heard its end')
+                self.assertIn('hello-from-pty', ''.join(m.get('data', '') for m in got if m['type'] == 'out'))
+        finally:
+            terminal.close(t.sid)
+
     def test_api_validates_before_spawning_anything(self):
         self.assertEqual(c.post('/api/terminals', json={'agent': 'ghost-cli'}).status_code, 422)
         self.assertEqual(c.post('/api/terminals', json={'cwd': os.path.join(os.getcwd(), 'no-such-dir')}).status_code, 422)

@@ -253,7 +253,13 @@ class TheList(unittest.TestCase):
         from taskuary import ingest
         self.say('Suggest two.', 'l-one'); self.rest(); self.end()
         opens = general.start_session
-        p = mock.patch.object(general, 'start_session', lambda store, tid, **k: opens(store, tid, **{**k, 'actor': 'owner'})); p.start(); self.addCleanup(p.stop)
+        # ...ON THE ROAD IT NAMES (Windows CI, 0.4.3.2): the stand-in brain keeps no CLI conversation, so the turn was said afresh, the mails
+        # in its SOURCE MATERIAL - and passed only while they landed in the second of the last turn (no news then). Picked back up, as a
+        # real CLI's is, and a second later, as a poll comes
+        def picked_up(store, tid, **k):
+            g = opens(store, tid, **{**k, 'actor': 'owner'}); g.cli_sid = g.cli_sid or 'cli-conversation-1'; return g
+        p = mock.patch.object(general, 'start_session', picked_up); p.start(); self.addCleanup(p.stop)
+        next_second()
         mids = [self.mail('ALPHA, the first mail of the poll.'), self.mail('BRAVO, the second mail of the poll.')]
         ingest._continue_general(self.s, self.tid, ingest._from_row(self.s.get_message(mids[0]), self.s), mids[0]); self.rest()
         turn = self.brain.calls[-1]

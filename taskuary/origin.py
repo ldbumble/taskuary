@@ -11,26 +11,23 @@ ORDER = ('stranger', 'trusted', 'owner')
 OURS = ('assistant', 'report')       # Taskuary's own voice
 def worse(a, b): return a if ORDER.index(a) <= ORDER.index(b) else b
 
-def _own(row): return row.get('Direction') == 'out' or row.get('Status') == 'context'
+def _own(row):
+    "His own words: what he sent, kept as context, or his ask from New filed on the task (outbox.is_ask, ownwork.is_own) - Taskuary's row, never a From."
+    from .outbox import is_ask
+    from .ownwork import is_own
+    return row.get('Direction') == 'out' or row.get('Status') == 'context' or is_ask(row) or is_own(row)
 
-# HIS OWN SYSTEMS ARE HIS (the owner, 2026-11-19): his CI's "[northwind/ledger] Build failed on main", his repositories' bots, his
-# connected systems' automated mail never put his task in safe mode - a real stranger's mail still does, until Trust. Read from stored
-# facts, never words: a machine's mail (its SenderClass, the verdict's else the headers') on his own domain, or naming one of his
-# repositories (the SOUL.md map, the coding checkouts) in the [owner/repo] marker a repository's notices head their subject with.
-REPO_MARK = re.compile(r'^\s*(?:(?:re|fwd?):\s*)*\[([\w.-]+/[\w.-]+)\]', re.I)
+# HIS OWN SYSTEMS ARE HIS (the owner, 2026-11-19): his CI's "Build failed on main" from ci.northwind.example, his connected systems' automated
+# mail never put his task in safe mode - a real stranger's mail still does, until Trust. Read from stored facts, never words: a machine's mail
+# (its SenderClass, the verdict's else the headers') from his own domain or one under it - and only where the receiving server verified
+# that domain sent it (mailauth 'pass', the red team 2026-11-24, F3: an automated header and a From typed as his domain, or an
+# "[northwind/ledger]" subject from anyone's, ran with his full power). A subject's repository name is the sender's to type: never proof.
 def own_system(store, row: dict) -> str:
-    "Why this message is a notice from one of his own systems, else ''."
-    if str(row.get('SenderClass') or row.get('HeaderClass') or '').lower() != 'automated' or _own(row): return ''
-    dom = str(row.get('FromEmail') or '').rsplit('@', 1)[-1].lower() if '@' in str(row.get('FromEmail') or '') else ''
-    # ...his domain or one under it: his CI mails from ci.northwind.example (the Codex walk, 2026-11-19: it joined his ledger task as a stranger)
+    "Why this message is a verified notice from one of his own systems, else ''."
+    if str(row.get('SenderClass') or row.get('HeaderClass') or '').lower() != 'automated' or _own(row) or senders.auth(row) != 'pass': return ''
+    dom = senders._domain(str(row.get('FromEmail') or ''))
     own = senders.own_domains(store) - senders.PUBLIC_MAIL
-    if dom and any(dom == d or dom.endswith('.' + d) for d in own): return f'an automated notice from your own domain, {dom}'
-    if (m := REPO_MARK.match(str(row.get('Subject') or ''))):
-        # ...his repositories: the SOUL.md map, the coding checkouts and the ones his GitHub card reaches (its sources, channels.github_sync)
-        from .terminal import known_repos
-        mine = {*known_repos(store), *(s['Address'] for s in store.list_sources(active_only=False) if s.get('Channel') == 'github' and s.get('Address'))}
-        if m.group(1).lower() in {str(r).lower() for r in mine}: return f'a notice from your repository {m.group(1)}'
-    return ''
+    return f'an automated notice from your own domain, {dom}' if dom and any(dom == d or dom.endswith('.' + d) for d in own) else ''
 
 
 def of_message(store, row: dict, memo: dict = None, seen: dict = None) -> tuple:
@@ -366,13 +363,16 @@ def hold(store, tid) -> dict | None:
 # A TASK'S HOLD IS A STORED FACT (origin_hold), judged again only when what it was judged on moved: the task's thread (its count and newest
 # line), its TrustedThrough and OriginBase, and change_gen 'trust' - every write to what a sender's trust is read from (store.TRUST_INPUTS),
 # from any process. The cold rail after a restart judged every open task's senders afresh, ~4 s of its first pile (2026-11-24)
+# ...and the rules it was judged BY: a stored hold outlives an update, so a change to who counts as trusted (the mail-proof rule, 2026-11-24)
+# moves this and every task is judged again on its next read
+RULES = 2
 _SIG = """SELECT t.Status, t.TrustedThrough, t.OriginBase, (SELECT COUNT(*) FROM message WHERE TaskId=t.TaskId) n,
     (SELECT MAX(MessageId) FROM message WHERE TaskId=t.TaskId) m, (SELECT Gen FROM change_gen WHERE Tbl='trust') g,
     h.Sig, h.HoldJson FROM task t LEFT JOIN origin_hold h ON h.TaskId=t.TaskId WHERE t.TaskId=?"""
 def _judged(store, tid) -> dict | None:
     "{hold, own (his_own, read only where a hold stands)} for an open task, from origin_hold while it is current, else judged and kept."
     if not tid or not (r := store._one(_SIG, (int(tid),))) or r['Status'] in ('done', 'dropped'): return None
-    sig = json.dumps([r['n'], r['m'], r['TrustedThrough'], r['OriginBase'], r['g']])
+    sig = json.dumps([RULES, r['n'], r['m'], r['TrustedThrough'], r['OriginBase'], r['g']])
     if r['Sig'] == sig:
         try: return json.loads(r['HoldJson'])
         except (TypeError, ValueError): pass
@@ -381,6 +381,18 @@ def _judged(store, tid) -> dict | None:
     # ...kept under what it was judged ON: a write meanwhile (its own lift, another process) leaves it stale, so it is judged again
     store._exec('INSERT OR REPLACE INTO origin_hold (TaskId, Sig, HoldJson) VALUES (?,?,?)', (int(tid), sig, json.dumps(got)))
     return got
+# ...AND WHAT THE HOLD NAMES IS HANDED TO NO AGENT (the red team, 2026-11-24, F5: a stranger's reply on his trusted thread rode his full-power
+# agent's next turn as an event, under a page that said "the agent hears nothing more"): every road that hands a task's messages to its agent -
+# its events, its brief, its context file, a coding seed - leaves these out until his Trust, and then hands them once (events.commit)
+def withheld(store, tid) -> set:
+    "The messages on the task no agent is handed until he trusts their senders - whatever the task's status (a closed one is judged afresh)."
+    if not tid: return set()
+    if (j := _judged(store, tid)) is not None: h = j.get('hold')
+    else: h = _hold(store, int(tid), t) if (t := store.get_task(int(tid))) else None
+    return set((h or {}).get('mids') or ())
+def heard(store, tid, msgs) -> list:
+    "`msgs` of task `tid` less what is withheld from its agent."
+    return [m for m in msgs if m.get('MessageId') not in w] if (w := withheld(store, tid)) else list(msgs)
 # ...TRUST IS A PRESS ON A PERSON, NOT A TASK (the owner, 2026-11-11: "Trust starts the held agent"; the roads audit, 2026-11-19 #6): Omar
 # Keller held on two tasks, trusted on one, stayed held on the other until a second Trust. The press remembers him (senders.vouch, read by
 # of_message on every task); these two say which of his other tasks it released, so the press starts them too

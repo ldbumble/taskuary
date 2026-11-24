@@ -889,7 +889,8 @@ def resume_seed(instruction: str = '', store=None, tid: int = None, pressed: boo
         try:
             from . import context as ctx
             since = str((store.last_transcript(tid) or {}).get('CreatedAt') or '')
-            new = [m for m in store.list_messages(tid) if ctx.is_new(m, since)] if since else []     # the file marks the same ones
+            from .origin import heard
+            new = [m for m in heard(store, tid, store.list_messages(tid)) if ctx.is_new(m, since)] if since else []     # the file marks the same ones
             cpath = ctx.write(store, tid)
             if new and _stranger_task(store, tid):
                 from . import origin
@@ -1873,7 +1874,8 @@ def seed_text(store, tid: int, instruction: str = None, repo: str = None, cwd: s
     from . import agentdesktop as _ad
     _ad.mark_from_triage(store, tid)                 # ...the desktop's the same way, only with its card on (2026-10-31)
     t = store.get_task(tid) or {}
-    msgs = [m for m in store.list_messages(tid) if m.get('Status') != 'context']
+    from .origin import heard
+    msgs = [m for m in heard(store, tid, store.list_messages(tid)) if m.get('Status') != 'context']     # ...never a line held for his Trust
     m = msgs[-1] if msgs else None
     from . import origin as _origin
     # the reviewer reads this prompt as the owner's intent: a stranger's words go to a labelled file (origin.stranger_file), never here

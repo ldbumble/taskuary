@@ -67,7 +67,8 @@ def test_known_refuses_a_failed_colleague_address_and_keeps_pass_and_none():
 
 def test_an_own_domain_from_with_dmarc_fail_is_not_trusted():
     s = _store()
-    assert senders.known(s, _msg('erin@northwind.example'))[0]
+    assert senders.known(s, _msg('erin@northwind.example', auth='pass'))[0]
+    assert not senders.known(s, _msg('erin@northwind.example'))[0]           # ...unverified, his domain is anyone's to type (F3)
     assert not senders.known(s, _msg('erin@northwind.example', auth='fail'))[0]
     assert not senders.known(s, _msg('erin@northwind.example', MailMetaJson=json.dumps({'auth': 'fail'})))[0]
     assert not senders.known(s, _msg('alex@northwind.example', auth='fail'))[0]

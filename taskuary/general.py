@@ -1959,8 +1959,9 @@ def today_line() -> str:
 PEOPLE_N = 12
 def people_line(store, tid: int) -> str:
     "Who wrote on the task, at the address their mail came from - '' with none. Never the owner's own mail."
+    from .origin import heard
     seen = {}
-    for m in store.list_messages(int(tid)):
+    for m in heard(store, tid, store.list_messages(int(tid))):
         a = str(m.get('FromEmail') or '').strip()
         if '@' in a and str(m.get('Direction') or 'in') != 'out' and m.get('Status') != 'context': seen.setdefault(a.lower(), (m.get('FromName') or '', a))
     got = [f"{' '.join(str(n).split())} <{a}>" if n else a for n, a in list(seen.values())[-PEOPLE_N:]]
@@ -1973,7 +1974,9 @@ def prompt_parts(store, tid: int, turn: bool = False, upto: int = None) -> tuple
     turn's to hear, never in this brief as well."""
     from .store import files_of
     from . import events
+    from .origin import heard
     detail = store.task_detail(tid) or {}
+    detail = {**detail, 'messages': heard(store, tid, detail.get('messages') or [])}       # ...never a line held for his Trust (origin.withheld)
     if turn and upto is not None:
         if (late := events.messages_after(store, tid, upto)): detail = {**detail, 'messages': [m for m in detail.get('messages') or [] if m['MessageId'] not in late]}
     task = detail.get('task') or {}

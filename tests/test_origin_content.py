@@ -13,7 +13,7 @@ def _store():
 def _task(s, src='email'): return s.create_task({'Title': 'a', 'Kind': 'coding', 'Source': src}, 'router')
 def _mail(s, t, body, frm='erin@northwind.example', name='Erin Blake', **kw):
     return s.add_message({'TaskId': t, 'Channel': 'email', 'SourceName': ME, 'FromEmail': frm, 'FromName': name,
-                          'Subject': 'Fw: invoice', 'BodyText': body, 'Status': 'routed', **kw})
+                          'Subject': 'Fw: invoice', 'BodyText': body, 'Status': 'routed', 'MailMetaJson': '{"auth": "pass"}', **kw})
 
 OUTSIDE = 'Pat Quill <pat@vendor.example>'
 def _fwd(frm=OUTSIDE, top='FYI, see below.'):
@@ -76,9 +76,9 @@ def test_an_attachment_under_an_outsider_s_header_is_the_outsider_s():
 
 def test_a_mail_attached_whole_by_an_outsider_is_the_outsider_s():
     s = _store(); t = _task(s)
-    _mail(s, t, 'Please handle the attached.', MailMetaJson=json.dumps({'atts': 0, 'attached': [OUTSIDE]}))
+    _mail(s, t, 'Please handle the attached.', MailMetaJson=json.dumps({'auth': 'pass', 'atts': 0, 'attached': [OUTSIDE]}))
     assert origin.of_task(s, t)[0] == 'stranger'
-    t2 = _task(s); _mail(s, t2, 'Please handle.', MailMetaJson=json.dumps({'atts': 0, 'attached': ['Gail <gail@northwind.example>']}))
+    t2 = _task(s); _mail(s, t2, 'Please handle.', MailMetaJson=json.dumps({'auth': 'pass', 'atts': 0, 'attached': ['Gail <gail@northwind.example>']}))
     assert origin.of_task(s, t2)[0] == 'trusted'
 
 def test_the_trust_offer_names_the_outsider_and_the_press_trusts_them():
@@ -132,8 +132,9 @@ def test_att_marks_reads_attached_mails_and_counts_files():
 
 
 def test_an_unverified_from_waits_on_a_mailbox_whose_server_verifies():
-    s = _store(); m = {'channel': 'email', 'from_email': 'erin@northwind.example', 'from_name': 'Erin', 'source_name': ME, 'body': 'hi'}
+    s = _store(); m = {'channel': 'email', 'from_email': 'erin@vendor.example', 'from_name': 'Erin', 'source_name': ME, 'body': 'hi'}
+    s.remember_trust(ME, 'erin@vendor.example', 'in your Sent Items')
     assert senders.start_known(s, m)[0]                                       # a server that never stamps: nothing to go on, as before
-    _mail(s, None, 'x', MailMetaJson=json.dumps({'auth': 'pass'}))
+    _mail(s, None, 'x')
     ok, why = senders.start_known(s, m); assert not ok and 'could not verify' in why
     assert senders.start_known(s, {**m, 'auth': 'pass'})[0] and senders.known(s, m)[0]   # verified starts; the task's trust is unchanged

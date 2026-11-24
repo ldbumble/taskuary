@@ -283,9 +283,16 @@ def _known(store, msg: dict, exclude_mid=None, deep: bool = False, memo: dict = 
         return False, _said(f'{addr} failed sender verification (DMARC/DKIM), so the From address may be forged and no agent starts on it by itself.')
     # ...the owner's addresses and domains read once across a memo's lines, as its settings are
     once = (lambda k, f: f()) if memo is None else (lambda k, f: memo[k] if k in memo else memo.setdefault(k, f()))
-    if addr in once('own', lambda: own_addresses(store)): return True, _said('It came from your own address.')
-    # a public mail domain is everybody's: an owner on gmail.com made every stranger there 'your own domain'
-    if _domain(addr) in once('domains', lambda: own_domains(store)) - PUBLIC_MAIL:
+    # ...HIS ADDRESS AND HIS DOMAIN ARE HIS ONLY ON THE RECEIVING SERVER'S WORD (the red team, 2026-11-24, F3): a From typed as his own domain,
+    # with no DMARC or an unverified pass, ran its task with his full power. Unverified it is anyone's until he says so - his press, or his
+    # trust in the organisation; a public mail domain is everybody's (an owner on gmail.com made every stranger there 'your own domain')
+    if addr in once('own', lambda: own_addresses(store)) or _domain(addr) in once('domains', lambda: own_domains(store)) - PUBLIC_MAIL:
+        if auth(msg) != 'pass':
+            if _vouched(store, (msg.get('source_name') or '').strip().lower(), addr, memo) == 'you vouched for them': return True, _said(f'You vouched for {who}.')
+            if (o := org_of(store, _domain(addr))): return True, _said(f"Everyone at {o.get('domain') or _domain(addr)} is trusted - you said so.")
+            return False, _said(f'{who} writes from your own domain, but the mail server did not verify that they sent it (no DMARC or DKIM '
+                                f'pass), {NOBODY}.', True)
+        if addr in once('own', lambda: own_addresses(store)): return True, _said('It came from your own address.')
         return (True, _said(f'{addr} is on your own domain.')) if on('trust_own_domain') else \
                (False, _said(f'{who} is on your own domain, but trusting your own domain is switched off in Settings, {NOBODY}.'))
     if (o := org_of(store, _domain(addr))):
@@ -525,9 +532,12 @@ def outsider(store, msg: dict, memo: dict = None, deep: bool = False, mid=None) 
     if not (mostly or n_att or meta.get('attached')): return None
     src = msg.get('source_name') or msg.get('SourceName')
     sender = _person({'from_name': msg.get('from_name') or msg.get('FromName')}, str(msg.get('from_email') or msg.get('FromEmail') or ''))
+    # ...a quoted header has no server to verify it: it is the word of the sender whose own From was judged first (known), so its address is
+    # read as that sender wrote it - verified as they are
     def bad(name, addr):
         addr = addr or _by_name(store, name)
-        return not (addr and _known(store, {'channel': 'email', 'from_email': addr, 'from_name': name, 'source_name': src}, deep=deep, memo=memo)[0])
+        return not (addr and _known(store, {'channel': 'email', 'from_email': addr, 'from_name': name, 'source_name': src, 'auth': 'pass'},
+                                        deep=deep, memo=memo)[0])
     def hit(name, addr, what):
         who = _person({'from_name': name}, addr) if (name or addr) else 'someone Taskuary cannot name'
         return {'name': name, 'addr': addr, 'said': _said(f'{sender} {what} {who}, who is not someone you work with here, {NOBODY}.', True)}

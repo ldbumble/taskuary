@@ -265,6 +265,7 @@ class TriageRoutesOnlyTests(unittest.TestCase):
         from unittest import mock
         from taskuary import general
         s = MemoryStore(); s.set_setting('owner_email', 'alex@northwind.example', 'owner')
+        s.remember_trust('', 'dana@vendor.example', 'in your Sent Items')         # ...someone he writes to: a held line reaches no agent (origin.withheld)
         with mock.patch.object(ingest, 'judge', return_value=(dict(self.OLD), {})), mock.patch.object(ingest, '_spawn'):
             tid = ingest.ingest_message(s, self.mail(s), llm=lambda *a, **k: '')['task_id']
         system, late, user = general.prompt_parts(s, tid)

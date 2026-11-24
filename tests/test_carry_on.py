@@ -20,7 +20,7 @@ def llm_says(intent='task', **extra):
 def mail(**kw):
     base = {'external_id': 'x1', 'channel': 'email', 'subject': 'pilot plan', 'body': 'Can you draft a pilot plan for the new box?',
             'from_email': 'erin@northwind.example', 'from_name': 'Erin Blake', 'conversation_id': 'AAQk-pilot',
-            'sent_at': '2026-10-27 18:00', 'source_name': 'alex@northwind.example'}
+            'sent_at': '2026-10-27 18:00', 'source_name': 'alex@northwind.example', 'auth': 'pass'}
     return {**base, **kw}
 
 

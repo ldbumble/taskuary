@@ -10,7 +10,7 @@ def _store():
 
 def _mail(s, tid, frm, **kw):
     return s.add_message({'TaskId': tid, 'Channel': 'email', 'SourceName': 'alex@northwind.example', 'FromEmail': frm,
-                          'Subject': 'x', 'BodyText': 'y', 'Status': 'routed', **kw})
+                          'Subject': 'x', 'BodyText': 'y', 'Status': 'routed', 'MailMetaJson': '{"auth": "pass"}', **kw})
 
 def test_a_colleague_is_trusted_and_a_stranger_is_not():
     s = _store(); t = s.create_task({'Title': 'a', 'Kind': 'coding', 'Source': 'email'}, 'router')

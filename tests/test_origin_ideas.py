@@ -15,7 +15,7 @@ def _store():
 
 def _mail(s, frm, tid=None, body='y', **kw):
     return s.add_message({'TaskId': tid, 'Channel': 'email', 'SourceName': 'alex@northwind.example', 'FromEmail': frm,
-                          'Subject': 'x', 'BodyText': body, 'Status': 'routed', **kw})
+                          'Subject': 'x', 'BodyText': body, 'Status': 'routed', 'MailMetaJson': '{"auth": "pass"}', **kw})
 
 def _report(s, body='Morning digest: three threads slipped'):
     "A report row in Taskuary's voice - the digest, summarising everyone's mail."

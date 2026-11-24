@@ -1024,6 +1024,10 @@ def seed(store) -> int:
     seed_dashboard(store)
     made += seed_agent_day(store, f)
     made += seed_tour(store, f)
+    # ...HER COLLEAGUES' MAIL IS VERIFIED, as her Outlook stamps it (channels: Exchange's own word on internal mail, mailauth): her domain is
+    # hers only on that proof (senders._known), so the demo's mailbox says what a real one would
+    store._exec("UPDATE message SET MailMetaJson=json_set(IFNULL(MailMetaJson, '{}'), '$.auth', 'pass') WHERE Channel='email' AND "
+                "IFNULL(Direction, 'in')<>'out' AND lower(FromEmail) LIKE ?", (f"%@{OWNER_EMAIL.rsplit('@', 1)[1]}",))
     seed_set_ups(store, f)
     seed_ai_usage(store)          # ...and the morning's asks, for their "AI used" folds
     run_dashboards(store)

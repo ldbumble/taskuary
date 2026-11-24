@@ -214,7 +214,7 @@ class NewestFirstTests(unittest.TestCase):
     """A reopened coding task's context file kept the thread's FIRST mails and cut the ones after them - the very ones it was
     reopened for - while the resume seed said "3 new messages, read them in this file" (the owner, 2026-10-14)."""
     def test_a_long_thread_keeps_what_came_after_the_last_run_and_marks_it(self):
-        s = MemoryStore()
+        s = MemoryStore(); s.set_setting('owner_email', 'alex@northwind.example', 't')     # ...his colleagues: a stranger's held line is in no file
         tid = s.create_task({'Title': 'Budget tab still missing', 'Kind': 'coding'}, 't')
         def mail(n, sent, reached):
             mid = s.add_message({'TaskId': tid, 'ExternalId': f'b{n}', 'ConversationId': 'cb', 'Channel': 'email', 'Subject': 'Budget tab',
@@ -331,6 +331,7 @@ class TwoMattersOnOneTaskTests(unittest.TestCase):
                 'body': body, 'sent_at': f'2026-11-09 1{n}:00:00', 'to': [ALEX], 'cc': []}
 
     def test_a_one_to_one_line_joined_because_triage_was_unsure_says_so(self):
+        self.s.remember_trust('whatsapp', 'erin@wa.example', 'you vouched for them')       # ...someone he trusts: a held line is in no file
         a, b = self.come([self.chat(1, 'the portal is down, it says 502'), self.chat(2, 'btw did payroll go out for Marcus?')],
                          [{'relationship': 'new', 'title': 'Portal is down'}, {'relationship': 'uncertain', 'title': 'Did payroll go out for Marcus'}])
         self.assertEqual((b['status'], b['task_id']), ('attached', a['task_id']), 'the widest door: unsure joins in a one-to-one chat')

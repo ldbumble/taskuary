@@ -519,6 +519,7 @@ def isolated_runtime_boundaries():
 
 def pytest_configure(config):
     config.addinivalue_line('markers', 'acp: the test drives the ACP road itself, so it keeps clis.ADAPTERS (no_real_acp_adapters)')
+    config.addinivalue_line('markers', 'mail_auth: the test reads the mail verdicts it stored as they are (mail_arrives_verified)')
     config.addinivalue_line('markers', 'real_chrome: the test drives browserview.real_chrome itself, its spawn stood in for (no_real_chrome)')
 
 
@@ -542,6 +543,18 @@ def no_adapter_priming(monkeypatch):
     "A server a test starts never launches the real ACP adapters to warm them (agents.prime_adapters)."
     from taskuary import agents
     monkeypatch.setattr(agents, 'prime_adapters', lambda *a, **k: [])
+
+
+@pytest.fixture(autouse=True)
+def mail_arrives_verified(request, monkeypatch):
+    """A From on his own domain is his only on the receiving server's proof (senders._known, the red team's F3, 2026-11-24) - and his own
+    mailbox's server stamps it on every colleague's mail (Exchange's own word, a DMARC pass). The test world's mail arrives so: a mail a test
+    writes with no verdict reads as verified. The tests OF that proof (marker `mail_auth`, and the modules below) read what is stored."""
+    if request.node.get_closest_marker('mail_auth') or request.module.__name__.rsplit('.', 1)[-1] in MAIL_AUTH_MODULES: return
+    from taskuary import senders
+    real = senders.auth
+    monkeypatch.setattr(senders, 'auth', lambda m: 'pass' if (v := real(m)) == 'none' else v)
+MAIL_AUTH_MODULES = ('test_mailauth', 'test_origin_launch', 'test_origin_content')
 
 
 @pytest.fixture(autouse=True)

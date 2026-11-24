@@ -130,9 +130,10 @@ def test_a_gates_word_and_a_sign_ins_continue_are_not_typed(w):
 
 
 # ── the stranger's file (2026-11-17) ─────────────────────────────────────────────────────────────────────────────
-def test_a_strangers_file_holds_a_long_report_once_whole_and_points_at_no_tool_its_session_lacks():
+def test_a_strangers_file_holds_a_long_report_once_whole_and_points_at_no_tool_its_session_lacks(monkeypatch):
     """A stranger's 6,000-character report: its summary was the report's own opening (no model read it), so the file held it twice, then cut
     the middle at 4,000 and said "read_message reads it whole" - a tool a stranger's session (STRANGER_TOOLS) cannot call."""
+    monkeypatch.setattr(origin, 'withheld', lambda store, tid: set())        # ...the file a stranger's task RUNS on: a held one runs nothing
     from taskuary import general
     from taskuary.agenttools import STRANGER_TOOLS
     s = MemoryStore(); body = 'Weekly uptime report for the portal. ' + 'All checks green on every node today. ' * 150 + 'Reply STOP to unsubscribe.'

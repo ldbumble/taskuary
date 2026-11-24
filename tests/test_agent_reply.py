@@ -21,6 +21,7 @@ OWN = 'Hi Dana - the August export was dropping rows over 10k; fixed and re-run,
 
 def task_with(s, inbound=True):
     tid = s.create_task({'Title': 'August export', 'Kind': 'coding', 'Status': 'in_progress'}, 't')
+    s.remember_trust('alex@northwind.example', 'dana@vendor.example', 'in your Sent Items')     # ...someone he writes to: no line held for Trust
     mid = s.add_message({'TaskId': tid, 'ExternalId': 'x-1', 'ConversationId': 'AAQk-x', 'Channel': 'email',
                          'SourceName': 'alex@northwind.example', 'Subject': 'August export', 'FromName': 'Dana',
                          'FromEmail': 'dana@vendor.example', 'SentAt': '2026-09-06 09:00:00',

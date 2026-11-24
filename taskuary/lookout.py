@@ -27,6 +27,7 @@ why. The Assistant's advisor.ideas starts one now (`start`). ONE RUN, at most CA
 No word list decides anything: the quality bar is the prompt. Code checks only what is checkable - quotes, counts, numbers, ids, that
 nothing rests on a personal workstream, and that a family the owner said No more ideas like this to is not asked for.
 
+This is the Advisor's ONE road for ideas: its twice-a-day post writes none of its own and carries what a look raised (unposted).
 What passes lands as the Advisor's ordinary idea row (Key idea:lookout-<slug>, Kind = its family): Do it (Send to agent) hands it to a
 task agent briefed with the idea and the words it rests on, which does the job as the job needs; Make a task, Remind me, Not ours, No more ideas like this - the verbs every idea has. The owner's verdicts
 (assistant.verdicts) and how each earlier idea graded (ideagrade) are the next pass's evidence, and each family is held to the same 80%
@@ -159,6 +160,12 @@ def _every(store) -> float:
     try: return max(1.0, float(store.get_setting('lookout_every_days') or EVERY_DAYS))
     except (TypeError, ValueError): return float(EVERY_DAYS)
 def open_ideas(store) -> list: return store._rows("SELECT * FROM idea WHERE Key LIKE ? AND Status IN ('open','snoozed')", (KEY + '%',))
+
+
+def unposted(store) -> list:
+    "What a look raised in the last day that no Advisor post has carried yet - the post's ideas (assistant._run), oldest first."
+    return store._rows("SELECT * FROM idea WHERE Key LIKE ? AND Status='open' AND MessageId IS NULL AND FirstSeen>=? ORDER BY IdeaId",
+                       (KEY + '%', _ago(days=1)))
 
 
 def waiting(store) -> list:

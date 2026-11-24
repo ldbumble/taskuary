@@ -131,11 +131,12 @@ def connect_says(pattern, card='quickbooks'):
 
 
 def idea_says(text, mid_of=None):
-    """The model's own line - under a NEW slug each check, as a model rewording itself does."""
+    """The model's own line about what someone said - under a NEW slug each check, as a model rewording itself does. Its own ideas
+    about the job are the job-ideas look's (lookout.py), never the post's: a line in the ideas section is dropped (one road, 2026-11-23)."""
     n = [0]
     def extra(user):
         n[0] += 1
-        return [{'key': f'idea:scripted-{n[0]}', 'text': text, 'why': 'scripted', 'section': 'ideas', 'mid': mid_of() if mid_of else None}]
+        return [{'key': f'idea:scripted-{n[0]}', 'text': text, 'why': 'scripted', 'section': 'people', 'mid': mid_of() if mid_of else None}]
     return extra
 
 
@@ -322,7 +323,7 @@ CASES = [
     ('idea', 'about a task closed yesterday', False, _idea_closed, None),
     ('idea', 'the same thought again after a No', False, _idea_plus, 'dismiss'),
     # what to bring up (slice 5): three newsletter ideas said no to - a fourth, about another newsletter, is not raised; with no such No it is
-    ('idea', 'a newsletter idea, nothing said no to yet', True, _newsletter, None),
+    ('idea', 'a newsletter idea, nothing said no to yet', False, _newsletter, None),       # an idea: the job-ideas look's to raise, not the post's
     ('idea', 'a fourth newsletter idea after three were said no to', False, _said_no_to_newsletters, None),
     # rule: a learned pattern clear-cut enough to be a rule (promote.py)
     ('rule', 'twelve mails put down, none taken up', True, _rule_plus, None),

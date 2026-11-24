@@ -520,7 +520,7 @@ class OwnerIsProvenanceTests(unittest.TestCase):
         server.save_source(server.SourceBody(SourceId=sid, Active=False))
         server.save_source(server.SourceBody(SourceId=sid, Active=True))
         reports.run_report_source(s, s.get_source(sid), lambda *a, **k: json.dumps(
-            {'say': [{'key': 'idea:ledger', 'text': 'The ledger looks stuck.', 'why': 'nothing moved'}]}))
+            {'say': [{'key': 'idea:ledger', 'text': 'The ledger looks stuck.', 'why': 'nothing moved', 'section': 'loose'}]}))
         self.assertIn('idea:ledger', {i['Key'] for i in s.list_ideas()})                 # not report:<sid>:idea:ledger
         posts = [m for m in s.recent_messages('2000-01-01', limit=80) if str(m.get('FromName') or '') == 'Advisor']
         self.assertTrue(posts and posts[0]['ConversationId'] == 'assistant', 'the Assistant left its own Timeline thread')

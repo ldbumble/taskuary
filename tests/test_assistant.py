@@ -141,7 +141,7 @@ class PostTests(unittest.TestCase):
                 return json.dumps({'say': [{'key': 'idea:intacct-payment-spike',
                                             'text': 'Intacct payments are unusually high today.',
                                             'why': 'Intacct payments: 125000 versus a normal 40000.',
-                                            'mid': None, 'task': None}], 'notes': ''})
+                                            'mid': None, 'task': None, 'section': 'systems'}], 'notes': ''})
             out = assistant.run(s, llm=llm, force=True)
         finally:
             reports.REGISTRY.pop('_finance_watch', None)
@@ -231,7 +231,7 @@ class PostTests(unittest.TestCase):
         def llm(system, user, **k):
             seen.append(user)
             return json.dumps({'say': [{'key': 'followup:c1', 'text': "Dana owes you the reconciled ledger since Tuesday - I'd nudge.", 'mid': None},
-                                       {'key': 'idea:ledger-close', 'text': 'Q3 close is a week out; I would book the sign-off now.', 'mid': None, 'task': None}]})
+                                       {'key': 'idea:ledger-close', 'text': 'Q3 close is a week out; I would book the sign-off now.', 'mid': None, 'task': None, 'section': 'loose'}]})
         out = assistant.run(s, llm=llm, force=True)
         self.assertEqual(out['said'], 2)
         row = s.get_message(out['message_id'])
@@ -259,8 +259,8 @@ class PostTests(unittest.TestCase):
         def llm(system, user, **k):
             self.assertIn('"why":', system)
             return json.dumps({'say': [{'key': 'followup:c1', 'text': "Dana owes you the ledger - I'd nudge.", 'why': 'four days is long for her', 'mid': None},
-                                       {'key': 'idea:po-numbers', 'text': 'Two PO questions this week - I would keep a PO sheet.', 'why': 'mails on "Invoice 88" and "Q3 ledger" both circle a reference number', 'mid': None, 'task': None},
-                                       {'key': 'idea:hunch', 'text': 'Something feels off with the close.', 'mid': None, 'task': None}]})
+                                       {'key': 'idea:po-numbers', 'text': 'Two PO questions this week - I would keep a PO sheet.', 'why': 'mails on "Invoice 88" and "Q3 ledger" both circle a reference number', 'mid': None, 'task': None, 'section': 'people'},
+                                       {'key': 'idea:hunch', 'text': 'Something feels off with the close.', 'mid': None, 'task': None, 'section': 'loose'}]})
         out = assistant.run(s, llm=llm, force=True)
         row = s.get_message(out['message_id']); brief = json.loads(row['Brief'])
         ideas = brief['ideas']
@@ -311,7 +311,7 @@ class PostTests(unittest.TestCase):
     def test_lines_per_post_is_a_setting(self):
         s = self._seed()
         s.set_setting('assistant_max_lines', '2', 't')
-        say = [{'key': f'idea:n{i}', 'text': f'idea number {i}', 'mid': None, 'task': None} for i in range(5)]
+        say = [{'key': f'idea:n{i}', 'text': f'idea number {i}', 'mid': None, 'task': None, 'section': 'people'} for i in range(5)]
         out = assistant.run(s, llm=lambda *a, **k: json.dumps({'say': say}), force=True)
         self.assertEqual(out['said'], 2)
 
@@ -815,7 +815,7 @@ class WhatItReadsTests(unittest.TestCase):
         s = _store()
         self._chat(s, 'Priya Shah', 'can you please fill out the performance review?', hours=4)
         long = "I would go into Monday's Target Meeting with Priya's note that exporting freezes the app every afternoon at four"
-        out = assistant.run(s, llm=lambda *a, **k: json.dumps({'say': [{'key': 'idea:a', 'text': long, 'mid': None}, {'key': 'idea:b', 'text': 'Second.', 'mid': None}]}), force=True)
+        out = assistant.run(s, llm=lambda *a, **k: json.dumps({'say': [{'key': 'idea:a', 'text': long, 'mid': None, 'section': 'people'}, {'key': 'idea:b', 'text': 'Second.', 'mid': None, 'section': 'people'}]}), force=True)
         row = s.get_message(out['message_id'])
         self.assertEqual(row['Subject'], long[:90].rsplit(' ', 1)[0] + '… (+1 more)')
         self.assertEqual(out['reviewed']['people'], 1); self.assertIn('1 thread(s) of what people said', row['BodyText'])
@@ -830,7 +830,7 @@ class WhatItReadsTests(unittest.TestCase):
         tid = s.create_task({'Title': 'July financials', 'Kind': 'coding', 'Status': 'in_progress'}, 't')
         self._chat(s, 'Priya Shah', 'can you please fill out the performance review?', hours=4)
         out = assistant.run(s, force=True, llm=lambda *a, **k: json.dumps(
-            {'say': [{'key': 'idea:a', 'text': f'TQ-{tid:04d} July financials has not moved since Tuesday.', 'mid': None, 'about': f'TQ-{tid:04d}'}]}))
+            {'say': [{'key': 'idea:a', 'text': f'TQ-{tid:04d} July financials has not moved since Tuesday.', 'mid': None, 'about': f'TQ-{tid:04d}', 'section': 'loose'}]}))
         self.assertTrue(out['reviewed']['model'])                                  # the pass ran; it did not fall back
         self.assertEqual([l['action'].get('tid') for l in out['lines']], [tid])    # from the model's `about`
         # a ref in the words alone ties it to nothing: which task a line is about is the model's to say (2026-10-11)

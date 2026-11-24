@@ -77,7 +77,7 @@ class TriageLineTests(unittest.TestCase):
         self.assertEqual(reports.route_of({'type': 'assistant'}, 'triage'), ('always', ''))
         from taskuary import assistant
         llm = lambda *a, **k: json.dumps({'say': [{'key': 'idea:contract', 'text': 'Erin has waited three days on the contract.',
-                                                   'why': 'her last mail', 'mid': None, 'task': None}]})
+                                                   'why': 'her last mail', 'mid': None, 'task': None, 'section': 'loose'}]})
         for how, called in (('always', True), ('never', False)):
             s = MemoryStore()
             cfg = {'type': 'assistant', 'route': {'timeline': {'how': 'always'}, 'triage': {'how': how}}}

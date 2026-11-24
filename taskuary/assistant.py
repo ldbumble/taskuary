@@ -2044,6 +2044,12 @@ def _run(store, llm, instruction, watch_source_ids, watch_sources, systems_only=
     # (own_identity): a monitor that also reads a Taskuary block is still its own monitor.
     if own_post:
         say = [{**s, 'key': f"report:{report_id}:{s['key']}"} if str(s.get('key') or '').startswith('idea:') else s for s in say]
+    # ONE ROAD FOR THE ADVISOR'S IDEAS (the design review, 2026-11-23): its own ideas about the job come from the job-ideas look, which
+    # reads before it proposes and has every quote, number and stake checked in code (lookout.py) - never from this post's one-shot answer,
+    # which nothing checked. The post carries what that look raised (lookout.unposted); what people said, the loose ends and the systems
+    # stay the post's own
+    advisor = not systems_only and not own_post
+    if advisor: say = [s for s in say if not (is_model_idea(s.get('key')) and (s.get('action') or {}).get('section', 'ideas') == 'ideas')]
     # the state is read AGAIN here: another process may have posted while the model was thinking, and a
     # model echoing a dismissed key changes nothing
     state = {i['Key']: i for i in store.list_ideas()}
@@ -2099,7 +2105,10 @@ def _run(store, llm, instruction, watch_source_ids, watch_sources, systems_only=
     # the report's routing card reads the lines BEFORE they post; a judge that fails leaves the run
     # unjudged, and an unjudged run reaches the owner (reports.decide's rule)
     d = _judged(judge, say) if say and judge else None
-    if not say:
+    # ...and what the job-ideas look raised since the last post joins it, as it stands - checked already, never judged or triaged again
+    from . import lookout
+    looked = lookout.unposted(store) if advisor else []
+    if not say and not looked:
         # Nothing to say is the normal outcome of a monitor and it posts NOTHING - unless the owner
         # chose "every run", in which case the check still says it ran, in one line, with what it
         # read behind it. A setting that promises every run and then shows nothing is a lie.
@@ -2129,11 +2138,12 @@ def _run(store, llm, instruction, watch_source_ids, watch_sources, systems_only=
         if not src: return head
         win = f" ({src['window']})" if src['window'] else ''
         return f"{head}\n    from: {src['label']}{win}"
-    body = ('\n'.join(_said_line(i, s_) for i, s_ in zip(rows, say)) + '\n\n' + _footer(rv)
+    posted, lines = rows + looked, say + [{'why': (a := json.loads(i.get('ActionJson') or '{}') or {}).get('why') or '', 'action': a} for i in looked]
+    body = ('\n'.join(_said_line(i, s_) for i, s_ in zip(posted, lines)) + '\n\n' + _footer(rv)
             + (f"\nNote to my next check: {note}" if note else ''))
     # the row's one line: the first idea, cut at a word, and how many more wait behind it
-    head = rows[0]['Text'] if len(rows[0]['Text']) <= 90 else rows[0]['Text'][:90].rsplit(' ', 1)[0] + '…'
-    subj = head + (f' (+{len(rows) - 1} more)' if len(rows) > 1 else '')
+    head = posted[0]['Text'] if len(posted[0]['Text']) <= 90 else posted[0]['Text'][:90].rsplit(' ', 1)[0] + '…'
+    subj = head + (f' (+{len(posted) - 1} more)' if len(posted) > 1 else '')
     identity = f'assistant:{report_id}' if own_post else 'assistant'
     name = (report_title or 'Advisor') if own_post else 'Advisor'
     mid = store.add_message({'TaskId': None, 'ExternalId': f'{identity}:{stamp}', 'ConversationId': identity, 'Channel': CHANNEL,
@@ -2144,15 +2154,15 @@ def _run(store, llm, instruction, watch_source_ids, watch_sources, systems_only=
     # the two blocks the model does not write. What is in flight and what the day counted are facts
     # the hub already holds; asking a model to restate them is how a brief starts describing work
     # that is not there. Snapshotted onto the post so it still reads correctly tomorrow.
-    store.set_brief(mid, json.dumps({'ideas': [_public(i) for i in rows], 'reviewed': rv,
+    store.set_brief(mid, json.dumps({'ideas': [_public(i) for i in posted], 'reviewed': rv,
                                      'flight': [] if systems_only else in_flight(store),
                                      'stats': [] if systems_only else day_stats(store)}))
-    store.set_ideas_message([i['IdeaId'] for i in rows], mid)
-    store.audit('message', mid, 'assistant_post', 'assistant', 'agent', {'ideas': len(rows)})
+    store.set_ideas_message([i['IdeaId'] for i in posted], mid)
+    store.audit('message', mid, 'assistant_post', 'assistant', 'agent', {'ideas': len(posted)})
     # the ideas are ARRIVALS: each newly said one goes through the same triage as a mail (PW-199) - by
     # the TRIAGE brain, the one every message is judged by, not the assistant's own model. Unless the
     # report's triage line says not (reports.LINES, 2026-10-16): then they are shown, and only shown
-    if d is None or d.get('triage', True):
+    if rows and (d is None or d.get('triage', True)):
         try:
             from .llm import build_llm
             try: brain = build_llm(store, job='summary')
@@ -2164,8 +2174,8 @@ def _run(store, llm, instruction, watch_source_ids, watch_sources, systems_only=
         from . import funnel
         for i in rows:
             if not linked_task(store, i['IdeaId'], json.loads(i.get('ActionJson') or '{}')): funnel.settle(store, f"idea:{i['IdeaId']}", 'done', 'report')
-    logger.info(f'assistant: posted {len(rows)} idea(s) as message {mid}')
-    return {'ran': True, 'said': len(rows), 'message_id': mid, 'reviewed': rv, 'inputs': read, 'lines': [_public(i) for i in rows],
+    logger.info(f'assistant: posted {len(posted)} idea(s) as message {mid}' + (f', {len(looked)} of them from the job-ideas look' if looked else ''))
+    return {'ran': True, 'said': len(posted), 'message_id': mid, 'reviewed': rv, 'inputs': read, 'lines': [_public(i) for i in posted],
             **({'decided': d} if d is not None else {})}
 
 

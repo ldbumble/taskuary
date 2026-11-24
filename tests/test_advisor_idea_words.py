@@ -106,12 +106,16 @@ class RunTests(unittest.TestCase):
         for at in ('06:00', '07:00', '08:00'):
             s.add_report_run(A.AR['sid'], {'at': f'2026-09-18 {at}:00', 'title': 'Monthly AR Report', 'failed': True, 'error': 'x'})
         s.set_setting('assistant_max_lines', '1', 't')
-        idea = {'key': 'idea:ar-and-close', 'kind': 'clash', 'text': 'The AR report fails on the day the close is due.', 'sig': 'x',
-                'action': {'type': 'note'}, 'why': 'both on the 18th'}
-        with mock.patch.object(assistant, 'think', return_value=([idea], '', '', {}, 'asked')), \
+        # ...the idea is the job-ideas look's, raised this morning (one road, 2026-11-23); the post's own answer writes none
+        from datetime import datetime
+        s.upsert_idea({'key': 'idea:lookout-ar-and-close', 'kind': 'connection', 'text': 'The AR report fails on the day the close is due.',
+                       'sig': 'x', 'action': {'type': 'lookout', 'why': 'both on the 18th'}}, datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
+        own = {'key': 'idea:a-thought', 'kind': 'idea', 'text': 'A thought nothing checked.', 'sig': 'y', 'action': {'type': 'note', 'section': 'ideas'}, 'why': 'a hunch'}
+        with mock.patch.object(assistant, 'think', return_value=([own], '', '', {}, 'asked')), \
              mock.patch('taskuary.ideacheck.check', side_effect=lambda store, say, **k: (say, [])):
             out = assistant.run(s, llm=lambda *a, **k: '{}', force=True)
         self.assertEqual(sorted(l['key'].split(':')[0] for l in out['lines']), ['health', 'idea'])
+        self.assertEqual([l['key'] for l in out['lines'] if l['key'].startswith('idea:')], ['idea:lookout-ar-and-close'], "the post's own thought is dropped")
         # ...and parse keeps each list to its own cap
         cands = [{'key': f'followup:{n}', 'kind': 'followup', 'facts': f'chase {n}', 'action': {}} for n in range(3)]
         said = json.dumps({'say': [{'key': c['key'], 'text': f'chase {n}'} for n, c in enumerate(cands)]

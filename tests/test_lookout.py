@@ -653,3 +653,25 @@ def test_a_run_that_keeps_reading_never_passes_its_budget_or_its_reads():
     assert r['tokens']['in'] + r['tokens']['out'] <= lookout.RUN_TOKENS and sum(calls) <= lookout.RUN_TOKENS + lookout.PROPOSE_TOKENS, (r['tokens'], calls)
     assert len(lookout.window(s)[0]) <= lookout.WINDOW_CHARS, 'a big mailbox is a summary, never the mailbox'
     assert 'tokens in 3 call(s) (ceiling 30,000)' in lookout.run_line(r)
+
+
+def test_the_advisor_post_carries_what_the_look_raised_once_and_no_idea_of_its_own():
+    """ONE ROAD (the design review, 2026-11-23): the twice-a-day post wrote ideas of its own from a one-shot answer nothing checked. Its
+    ideas are now the look's - read before proposing, every quote, number and stake checked - and its own answer keeps what people said,
+    the loose ends and the systems."""
+    s, ids = lookout_world.busy()
+    ph = f"msg{ids['phish'][-1]}"
+    raised = lookout.tick(s, brain({'reads': [rd('spend', q='phishguard')]}, {'ideas': [idea('money', 'PhishGuard charged invoice INV-2207 twice in 5 days - $380 to claim back', [ph],
+                                                   quotes=[{'ref': ph, 'quote': 'the same $380 twice in 5 days'}],
+                                                   stake={'expr': '380', 'unit': '$ once', 'assume': []})]}), force=True)['raised']
+    seen = []
+    def post(system, user, **k):
+        if 'YOUR INSTRUCTION' not in system: return '{"verdicts": []}'
+        seen.append(system)
+        return json.dumps({'say': [{'key': 'idea:spendly-hunch', 'text': 'Spendly is probably overcharging you', 'section': 'ideas', 'mid': None},
+                                   {'key': 'idea:erin-column', 'text': 'Erin asked for the vendor column again', 'section': 'people', 'mid': None}]})
+    out = assistant.run(s, llm=post, force=True)
+    assert [l['key'] for l in out['lines']] == ['idea:erin-column', s.get_idea(raised[0])['Key']], "its own idea dropped; the look's carried"
+    assert s.get_idea(raised[0])['MessageId'] == out['message_id'] and 'What it comes to: $380 once = 380' in s.get_message(out['message_id'])['BodyText']
+    again = assistant.run(s, llm=post, force=True)
+    assert s.get_idea(raised[0])['Key'] not in [l['key'] for l in again.get('lines') or []], 'carried once'

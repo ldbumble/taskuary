@@ -169,10 +169,15 @@ def holds_close(store, tid, pressing=None) -> list:
 
 def may_close(store, tid, pressing=None) -> str:
     """MAY A PRESS ON THE CARD IN FRONT CLOSE TASK `tid` WITH IT (Send and close, Approve and close)? '' when nothing else holds the close,
-    else what does, in words ('the email to Erin Blake'). `pressing`: the card pressed - the front where none is named."""
+    else what does, in words ('the email to Erin Blake'). `pressing`: the card pressed - the front where none is named. A check-back its agent
+    set holds it too (walk 16: Send and close stood first under a reply while the agent's own check-back said the work goes on) - Send and
+    Mark done stay, and a check-back outlives Mark done (store.update_task)."""
     if not tid: return ''
     if pressing is None: pressing = next((c['id'] for c in waiting(store, tid, asks=False, trust=False) if c['front'] and c['kind'] != TRUST), None)
-    return next((c['what'] or 'another card' for c in holds_close(store, tid, pressing)), '')
+    if (c := next((c['what'] or 'another card' for c in holds_close(store, tid, pressing)), '')): return c
+    from .checkback import of_task
+    cb = of_task(store.get_task(int(tid)))
+    return f"the check-back the agent set ({' '.join(cb['what'].split()[:12]) or 'its next look'})" if cb else ''
 
 
 def lines(store, tid, asks: bool = True) -> list:

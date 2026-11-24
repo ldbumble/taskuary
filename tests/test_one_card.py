@@ -158,6 +158,21 @@ def test_the_last_card_may_close_and_a_handed_one_holds_it():
     assert card.may_close(s, tid, f'rv{front}'), 'an act handed to the agent is not done - the close waits for it'
 
 
+def test_a_check_back_its_agent_set_holds_send_and_close():
+    """Walk 16: the reply asking the vendor for a fresh order-form link stood with Send and close first, while the agent's own check-back said
+    it would look again Friday. Its check-back holds the close as another card does - on the page, the desk and the chat's read alike."""
+    from taskuary import checkback, concierge
+    s = MemoryStore(); tid = task(s, 'Sort out the Trainly renewal')
+    front = reply(s, tid, 'Hi Dana - could you send a fresh link to the order form?')
+    assert card.may_close(s, tid) == ''
+    checkback.set_check(s, tid, 'in 2 days', 'Dana sent the signed order form')
+    assert card.may_close(s, tid) == 'the check-back the agent set (Dana sent the signed order form)'
+    item = {'tid': tid, 'rid': front, 'kind': 'review', 'ref': f'TQ-{tid:04d}', 'draft': True}
+    assert 'stays open' in concierge.cannot(item, 'send_close', s)
+    checkback.cancel(s, tid)
+    assert card.may_close(s, tid) == ''
+
+
 # ── what the press did, by the one road ──────────────────────────────────────────────────────────────────────────────────────────────
 def test_the_desk_the_phone_and_the_phones_pick_press_through_the_one_road():
     """The phone's pick of an email (asks.send_picked) sent through verdicts.decide directly, past the desk's check that the thread moved

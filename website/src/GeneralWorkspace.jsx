@@ -563,7 +563,8 @@ function Conversation({ items, nodes = [], posts = [], reviews = [], next = null
     return <div key={x.id} className={`tq-aui-message tq-aui-press${prev && (prev.kind === "press" || prev.kind === "note") ? " tq-aui-press-more" : ""}`} data-tq-item={x.id} data-tq-chat-press="">
       <div className="tq-aui-press-line">{pressLine(x.text, x.at ? when(String(x.at)) : "")}</div></div>;
   });
-  return <MoreCardsCtx.Provider value={held.size > 0}>{rows}
+  // ...and Send and close only where nothing else holds the close (card.may_close, the one answer: another card, or the check-back its agent set)
+  return <MoreCardsCtx.Provider value={held.size > 0 || !!queue?.closes}>{rows}
     {/* ...EVERY CARD IS A ROW THE LOG PLACED (chatlog.advance - one road): under everything only the page's own block, a hand-off or a
         write-up he opened, never a card of the line */}
     {!!next && <Box data-tq-next-steps="" className="tq-aui-summary" sx={{ mt: 1, mx: { xs: 1, sm: 2 } }}>{next}</Box>}

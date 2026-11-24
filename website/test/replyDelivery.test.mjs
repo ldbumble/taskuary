@@ -93,7 +93,7 @@ test("the card holds Send and opens To while the address is missing", async () =
   const { readFileSync } = await import("node:fs");
   const rd = readFileSync(new URL("../src/ReviewDecision.jsx", import.meta.url), "utf8");
   assert.match(rd, /needsTo && \[no\("approve"\), no\("send_close"\), no\("anyway"\)\]\.includes\(v\.id\) \? \{ \.\.\.v, disabled: true/);
-  assert.match(rd, /needs=\{needsTo\}/);
+  assert.match(rd, /needs: needsTo/, "its To field asks for the address");
 });
 // THE RECEIPT NAMES EVERYONE IT WENT TO (the walk, 2026-11-17): a mail to Erin copying Gail read "To erin@" on its sent card while the agent
 // said it went to both. The To box keeps the To alone (its save is the To); what went - the sent card and the line at the press - names the Cc too.
@@ -106,7 +106,7 @@ test("what went names the copied, as the agent says it; the To line keeps the To
   assert.equal(sentTo(deliver({ to: ["erin@northwind.example"] })), "erin@northwind.example");
   const { readFileSync } = await import("node:fs"), src = (f) => readFileSync(new URL(`../src/${f}`, import.meta.url), "utf8");
   assert.match(src("replyDelivery.js"), /export const sentCardOf = [^\n]*\n[^\n]*to: sentTo\(review\)/);   // ...one reading of a sent card, wherever drawn
-  assert.match(src("TaskPage.jsx"), /<SentCard \{\.\.\.sentCardOf\(r\)\}/);
+  assert.match(src("TaskPage.jsx"), /<SentReview \{\.\.\.sentCardOf\(r\)\}/);
   assert.match(src("ReviewDecision.jsx"), /said: verb === "approve" \? \{[^}]*to: sentTo\(r\)/);
 });
 

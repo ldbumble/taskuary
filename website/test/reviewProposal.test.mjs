@@ -167,7 +167,7 @@ test("a held shell step leads with what it does and why, its command folded", ()
   assert.equal(gate.lead, "Delete build in ledger"); assert.equal(gate.leadWhy, "Held before it ran - it can't be undone.");
   const card = readFileSync(new URL("../src/ReviewDecision.jsx", import.meta.url), "utf8");
   assert.match(card, /\$\{cmdOpen \? "Hide" : "Show"\} the \$\{proposal\.foldWord \|\| "command"\}/);
-  assert.match(card, /\.\.\.\(\(proposal\?\.folded && !cmdOpen\) \|\| proposal\?\.bare \? \{ display: "none" \} : \{\}\)/, "the command's box stays folded until asked for");
+  assert.match(card, /hidden: \(proposal\?\.folded && !cmdOpen\) \|\| proposal\?\.bare/, "the command's box stays folded until asked for");
 });
 
 // WALK 15 (S12): a held Submit on a post's form was "Publish your Ask HN post ..." over `agent-browser click @e12` - the agent said "check it on
@@ -205,7 +205,8 @@ test("every card says what it does in words: a held browser or desktop act leads
   assert.equal(proposalPresentation(land).bare, true); assert.equal(reviewText(land), "");
   const note = act({ action: "comment_issue", body: "Fixed in the totals branch." }, "the agent proposes to post a PUBLIC comment on the linked issue/PR");
   assert.equal(reviewText(note), "Fixed in the totals branch."); assert.equal(proposalPresentation(note).bare, false);
-  assert.equal(proposalPresentation(note).readOnly, true, "its box is what goes: the server takes no edit of it (proposals._edited)");
+  // ...its words are his to change while it waits, and what he left is what is posted (proposals.execute); its press says what it does
+  assert.ok(!proposalPresentation(note).readOnly); assert.equal(proposalPresentation(note).approveLabel, "Comment");
 });
 
 test("a break-out card says the new task and what moves to it, and its result names the task", () => {

@@ -124,7 +124,7 @@ test("Decline says what goes out with it: the text in the box exactly as edited,
   assert.match(src, /The box is empty, so nothing is sent/);
   assert.match(src, /`\$\{co\.alt\.label\} & send your text`/, "the label says it sends the owner's text only when there is text");
   assert.match(src, /reply_text: verb !== "reject" && sendable && words.trim()\(\) \? value : null/, "an empty box sends no reply - Decline only closes the pull request");
-  assert.equal((src.match(/title=\{altTitle\}|title: altTitle/g) || []).length, 2, "the row's Decline and the card's carry the one sentence");
+  assert.equal((src.match(/title=\{altTitle\}|title: altTitle/g) || []).length, 1, "the row's Decline IS the card's (one list, `moves`): one sentence");
   assert.doesNotMatch(src, /disabled: busy \|\| \(sendable && !words.trim()\(\)\), run: \(\) => decideBoth\(co\.alt/, "Decline is not disabled by an empty box");
 });
 
@@ -358,7 +358,8 @@ test("the draft's own Send is never on the bar and leaves no empty slot; advised
   assert.deepEqual(later.more.filter((x) => x.tone === "p").map((x) => x.id), ["remind"], "an advised Remind me is filled where it stands");
   assert.deepEqual(ids(later), ids(quiet)); assert.equal(later.lit, "");
   // ...and the draft's own buttons under it are outlined while the row carries the item, but the one the Advisor lit
-  assert.match(fs.readFileSync(path.join(process.cwd(), "src", "ReviewDecision.jsx"), "utf8"), /const solid = toRow && lit !== no\("approve"\) \? "outlined" : "contained";/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "src", "ReviewDecision.jsx"), "utf8"), /lit=\{lit\} quiet=\{toRow\}/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "src", "Artifact.jsx"), "utf8"), /const filled = v\.id === lit \|\| \(!anyLit && !quiet && v\.tone === "p"\);/);
 });
 
 // issue 263 / the UI audit (2026-10-21): two mounted copies of one card registered under one name, cleared each other's verbs on

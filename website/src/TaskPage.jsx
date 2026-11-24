@@ -52,8 +52,8 @@ import { clock, fmtDate } from "./dates.js";
 import { deliveryCc, deliveryFiles, deliveryMeta, replyContext, sentCardOf } from "./replyDelivery.js";
 import { sizeText } from "./replyFiles.js";
 import { completionTransition, cutAway, filterForSelectedState, remindWaiting, remindDay } from "./taskFilter.js";
-import ReviewDecision from "./ReviewDecision.jsx";
-import BulkCard from "./BulkCard.jsx";
+import ReviewDecision, { SentReview } from "./ReviewDecision.jsx";
+import BulkReview from "./BulkCard.jsx";
 import HeldSteps from "./HeldSteps.jsx";
 import SlotList, { Letter, letterItems } from "./SlotList.jsx";
 import BatchItems from "./BatchItems.jsx";
@@ -108,7 +108,6 @@ import { completionFact, completionLine, waitingEmails, wentOut,
 } from "./taskLifecycle.js";
 import { askNote, closeoutOf, decidedAsk, heldGroups, splitHeld } from "./reviewProposal.js";
 import PassedCard, { isPassed, isReplaced } from "./PassedCard.jsx";
-import SentCard from "./SentCard.jsx";
 import { sentStands, WENT } from "./sentLine.js";
 import { FullText } from "./assistantCards.jsx";
 import { isCardReview } from "./actionCard.js";
@@ -2667,7 +2666,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       why={rec?.state === "draft_ready" ? rec.why || "" : ""}
       onChanged={() => { loadDetail(selected); loadTasks(); onChanged?.(); }} /></Box> }] : [];
   const turnCards = [...replyNode, ...passedCards, ...batches.map((rs) => ({ key: `batch:${rs[0].Batch}`, at: rs[0].CreatedAt || "", rid: rs[0].ReviewId, waits: true,
-      node: <BulkCard rows={rs} tid={t?.TaskId} onChanged={decided} /> })), ...replacedCards, ...unsentCards, ...pressedCards.map((g) => ({ key: g.key, at: g.at, rid: g.reviews[0].ReviewId,
+      node: <BulkReview rows={rs} tid={t?.TaskId} onChanged={decided} /> })), ...replacedCards, ...unsentCards, ...pressedCards.map((g) => ({ key: g.key, at: g.at, rid: g.reviews[0].ReviewId,
       node: g.held ? <HeldSteps reviews={g.reviews} onChanged={decided} /> : <PassedCard reviews={g.reviews} /> })),
     ...(inTurns ? askCards : []).map((g) => ({ key: g.key, at: g.reviews[0].CreatedAt || "", rid: g.reviews[0].ReviewId, waits: true, also: asksBelow, note: g.held ? "" : askNote(g.reviews[0]),
       node: g.held ? <HeldSteps reviews={g.reviews} toRow={inRow && !pendingReview && liveAsks === 1} onChanged={decided} />
@@ -2680,7 +2679,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
         node: <Letter taskId={t?.TaskId} item={letterOf[r.ReviewId] || null} rv={r} onChanged={decided} /> })),
     // ...and the reply just pressed here says what the press did to the task beside it (`closing`, `kept`), as it did where its draft stood
     ...allReviews.filter((r) => r.Kind !== "action" && r.Kind !== "slot" && WENT.includes(r.Status) && r.ReviewId !== sentBox?.id)
-      .map((r) => ({ key: `sent:${r.ReviewId}`, at: r.CreatedAt || "", rid: r.ReviewId, node: <SentCard {...sentCardOf(r)}
+      .map((r) => ({ key: `sent:${r.ReviewId}`, at: r.CreatedAt || "", rid: r.ReviewId, node: <SentReview {...sentCardOf(r)}
         {...(sentHere?.id === r.ReviewId ? { closing: sentHere.closing, kept: sentHere.kept } : {})} /> }))];
   // ...the reply that went is that card in its turn, so the chat's cards say it no second time - no "What was sent", no To over it
   const sentCarded = !!sentReview && turnCards.some((c) => c.key === `sent:${sentReview.ReviewId}`);
@@ -2872,7 +2871,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const waits = !!(chatReview || proposals.length - (inTurns ? asks.length : 0) || (owesEmails && !inTurns) || handoff);
   // ...ONLY WHAT CAN STILL BE DONE (the owner, 2026-11-05: "it's a chat nothing else"): a draft waiting on Send, an invite to answer, emails owed -
   // never a closed task's "Mark done 11m ago", a reply sent outside or a draft closed without sending; the chat says those
-  const chatCards = sentBox ? <SentCard {...sentBox} /> : !["done", "dropped"].includes(t?.Status) && (waits || (!inTurns && kept.length) || upFailed
+  const chatCards = sentBox ? <SentReview {...sentBox} /> : !["done", "dropped"].includes(t?.Status) && (waits || (!inTurns && kept.length) || upFailed
     || chatReplyShown({ replyMessage, pendingReview: chatReview, sentReview: null }) || calAsk?.invite) ? <Box ref={cardsRef} data-tq-chat-cards="" data-tq-waits={waits ? "" : undefined}
       sx={{ minWidth: 0, "& textarea": { fontSize: "13.5px !important", lineHeight: "1.5 !important", color: INK } }}>{chatBody()}</Box> : null;
   return (

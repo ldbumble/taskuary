@@ -245,8 +245,8 @@ test("every card and file of a turn stands in the one frame, which reads the one
   // ...ONE COMPONENT draws that frame (the owner, 2026-11-24: "any chart/pdf etc should also be a white artifact"): Artifact.jsx, and every
   // card, file and view stands in it - none spells the frame's class itself
   assert.match(src("Artifact.jsx"), /tq-turn-frame/);
-  for (const f of ["ActionCard.jsx", "BulkCard.jsx", "SentCard.jsx", "ReviewDecision.jsx", "TurnFiles.jsx", "PublishedPages.jsx", "ViewSpec.jsx"]) {
-    assert.match(src(f), /<Artifact\b/, `${f} draws its card in the one Artifact`);
+  for (const f of ["BulkCard.jsx", "ReviewDecision.jsx", "TurnFiles.jsx", "PublishedPages.jsx", "ViewSpec.jsx"]) {
+    assert.match(src(f), /<Artifact\b|<ReviewCard\b/, `${f} draws its card in the one Artifact`);
     assert.doesNotMatch(src(f), /className="[^"]*tq-turn-frame/, `${f} draws no frame of its own`);
   }
   assert.doesNotMatch(src("publishedPages.css"), /\.tq-published-page \{[^}]*border:/, "no frame of its own beside it");

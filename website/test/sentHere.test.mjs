@@ -15,9 +15,8 @@ test("a reply that went says where, and that the task is closing or why it stays
   assert.equal(sentLine({ channel: "email", to: "Erin Blake" }), "Sent to Erin Blake by email");
   assert.equal(sentLine({ channel: "", to: "erin@northwind.example" }), "Sent to erin@northwind.example");
   assert.equal(sentSaid({ channel: "email", to: "Erin Blake", closing: true }), "to Erin Blake by email");
-  assert.doesNotMatch(read("SentCard.jsx"), />To \{p\.to\}</, "the line beside the mark says whom - no second To over it");
   const page = read("TaskPage.jsx");
-  assert.match(page, /const chatCards = sentBox \? <SentCard \{\.\.\.sentBox\} \/> :/);
+  assert.match(page, /const chatCards = sentBox \? <SentReview \{\.\.\.sentBox\} \/> :/);
   assert.match(read("ReviewDecision.jsx"), /said: verb === "approve" \? \{ text: value, channel: r\.Channel \|\| "", to: sentTo\(r\), subject: deliverySubject\(r\), id: r\.ReviewId, done: pw\.sentAs \} : null/);
 });
 
@@ -38,8 +37,9 @@ test("a sent reply stays its card: the subject, the words, and ✓ Sent on the b
   const { markDemo } = await import("../src/demoWorld.js");
   markDemo(true); assert.equal(sentLine({ channel: "teams" }), "Sent - in the demo, nothing left this computer"); markDemo(false);
   assert.equal(sentLine({ channel: "teams" }), "Sent on Teams");
-  const card = read("SentCard.jsx");
-  assert.match(card, /<PressedButton pressed="sent" label=\{sentMark\(p\)\} \/>/);      // ...a mark, never a button nobody can press (passedCard.test.mjs)
+  // ...a mark, never a button nobody can press (passedCard.test.mjs): the one card's after-state (oneReviewCard.test.mjs renders it)
+  assert.match(read("Artifact.jsx"), /<PressedButton pressed=\{a\.mark \|\| "approved"\} label=\{a\.label \|\| ""\} \/>/);
+  assert.match(read("ReviewDecision.jsx"), /after=\{\{ mark: "sent", label: sentMark\(p\)/);
 });
 
 // THE LIVE SHAPE (the audit, 2026-11-13, on the real CLI): Send pressed, he stays on the task, the sender writes again, the agent drafts the
@@ -91,7 +91,8 @@ test("an email's card goes sending… then Sent in its one place, and a card dra
   const rd = read("ReviewDecision.jsx"), page = read("TaskPage.jsx"), gw = read("GeneralWorkspace.jsx");
   assert.doesNotMatch(rd, /const \[sent, setSent\] = useState/, "the press is the review's, not the card's");
   assert.doesNotMatch(rd, /if \(delivery\.frozen\) setSent\(false\);/);
-  assert.match(rd, /if \(look === "sent" && !proposal && !co\) return <SentCard /, "Sent is the card's own last look");
+  assert.match(rd, /wentNow = look === "sent" && !proposal && !co/, "Sent is the card's own last look, on the same card");
+  assert.doesNotMatch(rd, /return <SentReview|return <SentCard/, "never a second card swapped in at the press");
   assert.match(rd, /else if \(data\.ok && verb === "approve" && !proposal\) setSent\(true\);/, "an email's Send with no page behind it is Sent from its answer");
   // ...one node per email, keyed by its review, drawn by the chat in its turn - pending and sent alike; the block under the chat holds none
   assert.match(page, /key: `rv:\$\{r\.ReviewId\}`[^\n]*letter: true/);

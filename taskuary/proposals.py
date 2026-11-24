@@ -989,6 +989,8 @@ def execute(store, rv: dict, actor='owner', final_text: str = None, skip_checks:
     if edited and p.get('action') in ('write_playbook', 'amend_playbook', *CLOSEOUT): p['text'] = final_text.strip()
     # a tracker close-out's box IS its comment: what the owner left there goes, emptied included (None = pressed off the card, as filed)
     if p.get('action') == 'close_item' and final_text is not None and not str(final_text).lstrip().startswith('{'): p['text'] = str(final_text).strip()
+    # ...a GitHub comment's box IS its words: what the owner left there is what is posted
+    if edited and p.get('action') == 'comment_issue': p['body'] = final_text.strip()
     p = _edited(p, final_text, fields)
     ok, why = validate(store, p)
     if not ok: raise RuntimeError(f'refused at execution: {why}')

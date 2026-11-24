@@ -42,7 +42,6 @@ import { Attachments } from "./Attachments.jsx";
 import { placeShown } from "./shownPages.js";
 import { carried, forTurn, outputRefs, outputRow, placeMade, shownOnce, turnFiles } from "./taskOutputs.js";
 import TurnFiles from "./TurnFiles.jsx";
-import ActionCard from "./ActionCard.jsx";
 import CopyCorner from "./CopyCorner.jsx";
 import { SessionPane, TerminalPane } from "./TerminalView.jsx";
 import ThreadReading from "./ThreadReading.jsx";
@@ -55,7 +54,7 @@ import { label as btn } from "./buttons.js";
 import { placeName } from "./words.js";
 import { plural } from "./timeWords.js";
 import ConnectAi from "./ConnectAi.jsx";
-import ReviewDecision, { MoreCardsCtx } from "./ReviewDecision.jsx";
+import ReviewDecision, { ActReview, MoreCardsCtx } from "./ReviewDecision.jsx";
 import { askNote, heldActsLine, proposalFrom } from "./reviewProposal.js";
 import BriefLine from "./BriefLine.jsx";
 import { OneBox } from "./AgentSummary.jsx";
@@ -541,7 +540,7 @@ function Conversation({ items, nodes = [], posts = [], reviews = [], next = null
     // ...ONE REVIEW IS ONE CARD: a post or a tracker comment an earlier build set aside has its settled card among the nodes, and was drawn
     // again under it as the act's own card reading "Not posted · dismissed" (the card round, 2026-11-12)
     const out = [...got.map((n) => <React.Fragment key={n.key}>{past ? React.cloneElement(n.node, { past: true }) : n.node}</React.Fragment>),
-      ...(post && !got.length && !used.has(`post:${c.review}`) && used.add(`post:${c.review}`) ? [<ActionCard key={`post:${c.review}`} row={post} tid={tid} onChanged={onChanged} past={past} />] : [])];
+      ...(post && !got.length && !used.has(`post:${c.review}`) && used.add(`post:${c.review}`) ? [<ActReview key={`post:${c.review}`} row={post} tid={tid} onChanged={onChanged} past={past} />] : [])];
     return out.length && live.has(c.review) && c.status === "pending" ? [...qLine(), ...out] : out;
   });
   // A TURN'S CARDS, ITS LAST THING: what the log placed in it - a reply, a letter, an act - then the work's card

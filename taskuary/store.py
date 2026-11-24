@@ -6428,9 +6428,16 @@ class SQLiteStore:
     def wrote_to_locally(self, mailbox: str, email: str, exclude_mid=None, memo=None) -> bool:
         """Verified SENT evidence this store already holds, scoped to the receiving mailbox: the mailbox's own
         words on a thread with this address (a 'context' row or an outbound one from the mailbox), or a reply
-        to them the owner approved or sent. Incoming rows alone never count (PW-079). `memo`: see _witnessed."""
+        to them the owner approved or sent - or the mailbox's own mail TO them (its To or Cc): what a card sent is written as it
+        goes (channels.record_sent), so the person he just wrote to is no stranger before the Sent folder syncs (walk 14).
+        Incoming rows alone never count (PW-079). `memo`: see _witnessed."""
         if not (email and mailbox): return False
-        return self._witnessed(memo, ('wrote', mailbox.lower(), email.lower()), exclude_mid, lambda ex, n: [r['x'] for r in self._rows("""SELECT m.MessageId x FROM message m
+        rj = "CASE WHEN json_valid(o.RecipientsJson) THEN o.RecipientsJson ELSE '{}' END"
+        to = lambda ex, n: [r['x'] for r in self._rows(f"""SELECT o.MessageId x FROM message o WHERE o.Channel='email' AND LOWER(o.SourceName)=LOWER(?)
+                             AND (o.Status='context' OR o.Direction='out') AND o.MessageId<>? AND EXISTS (SELECT 1 FROM json_each({rj}, '$.to') j
+                             WHERE lower(trim(j.value))=LOWER(?) UNION SELECT 1 FROM json_each({rj}, '$.cc') j WHERE lower(trim(j.value))=LOWER(?)) LIMIT ?""",
+                                                       (mailbox, ex, email, email, n))]
+        return self._witnessed(memo, ('wrote', mailbox.lower(), email.lower()), exclude_mid, lambda ex, n: to(ex, n) or [r['x'] for r in self._rows("""SELECT m.MessageId x FROM message m
                              WHERE m.Channel='email' AND LOWER(m.SourceName)=LOWER(?)
                                AND LOWER(m.FromEmail)=LOWER(?) AND m.MessageId<>? AND (
                                EXISTS (SELECT 1 FROM message o WHERE o.ConversationId=m.ConversationId AND o.ConversationId IS NOT NULL

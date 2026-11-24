@@ -1211,6 +1211,55 @@ def _answered_task(store, conv, sent_at, quoted, open_ids):
     return (hit or (before[-1] if before else {})).get('TaskId')
 
 
+# THE APP'S OWN SEND IS ON ITS TASK FROM THE MOMENT IT GOES (walk 14): a NEW email a card sent waited for its sent-folder copy to say whom
+# it went to, and that copy found no task (it answers no mail, and its thread was new) - so the person he had just written to was a
+# stranger, and her answer was filed "nothing to do" beside the task that asked. The send writes its own row: the task, the people, the
+# Message-ID and thread where the provider gave them; the sent-folder copy, when it comes, is that row (bind_sent), never a second one
+SENT = 'sent:'
+def record_sent(store, rv: dict, body: str, sent: dict, msg: dict = None) -> int | None:
+    "The outgoing row of email card `rv`, written as it is confirmed sent (verdicts._deliver_review): its MessageId, or None for no email."
+    if str((sent or {}).get('channel') or '').lower() != 'email': return None
+    msg, tid = msg or {}, rv.get('TaskId')
+    try: env = json.loads(rv.get('Deliver') or '{}') or {}
+    except (TypeError, ValueError): env = {}
+    from .outbound import re_subject
+    subj = ' '.join(str(env.get('subject') or '').split()) or (re_subject(msg.get('Subject')) if msg else '')
+    mid_, refs = sent.get('message_id'), [r for r in sent.get('refs') or [] if r]
+    to, cc = [a for a in sent.get('to') or [] if a], [a for a in sent.get('cc') or [] if a]
+    box = sent.get('mailbox') or env.get('mailbox') or msg.get('SourceName')
+    # its thread: the answered mail's, else (SMTP) its own Message-ID - the key an answer to it files under (imapmail.thread_key)
+    conv = msg.get('ConversationId') or (refs[0] if refs else mid_)
+    meta = {**({'mid': mid_} if mid_ else {}), **({'refs': refs} if refs else {})}
+    mid = store.add_message({'TaskId': tid, 'ExternalId': f"{SENT}{rv['ReviewId']}", 'ConversationId': conv, 'Channel': 'email', 'SourceName': box,
+                             'Subject': subj or None, 'FromName': 'You', 'FromEmail': box, 'SentAt': datetime.now().isoformat(timespec='seconds'),
+                             'BodyText': body, 'OwnText': body, 'RecipientsJson': json.dumps({'to': to, 'cc': cc}), 'Status': 'context',
+                             'Direction': 'out', 'MailMetaJson': json.dumps(meta) if meta else None})
+    if tid: store.add_route(mid, tid, 'attach', None, "sent from this task on the owner's press", [], 'router')
+    return mid
+
+
+def _meta(r) -> dict:
+    try: return json.loads((r or {}).get('MailMetaJson') or '{}') or {}
+    except (TypeError, ValueError): return {}
+def bind_sent(store, msg: dict) -> bool:
+    """Is own mail `msg` the sent-folder copy of a send the app recorded (record_sent)? Then that row takes the copy's ids - its thread,
+    Message-ID and link - and no second row is stored. By its Message-ID, else its subject and opening words to the same people."""
+    if str(msg.get('channel') or '').lower() != 'email': return False
+    from .context import _recipients
+    meta, body = msg.get('mail_meta') or {}, msg.get('body') or ''
+    went = {str(a).lower() for a in [*(msg.get('to') or []), *(msg.get('cc') or [])]}
+    rows = store._rows(f"SELECT * FROM message WHERE ExternalId LIKE '{SENT}%' AND Channel='email' "
+                       'AND (SourceName IS NULL OR LOWER(SourceName)=LOWER(?)) ORDER BY MessageId DESC LIMIT 50', (str(msg.get('source_name') or ''),))
+    hit = next((r for r in rows if meta.get('mid') and _meta(r).get('mid') == meta['mid']), None) or next(
+        (r for r in rows if not _meta(r).get('mid') and _subject(r.get('Subject')) == _subject(msg.get('subject'))
+         and _same_words(body, r.get('BodyText') or '') and (not went or went & {a.lower() for a in _recipients(r)})), None)
+    if not hit: return False
+    both = {**_meta(hit), **{k: v for k, v in meta.items() if v}}
+    store._exec('UPDATE message SET ExternalId=?, ConversationId=COALESCE(?, ConversationId), MailMetaJson=?, SourceLink=COALESCE(?, SourceLink) '
+                'WHERE MessageId=?', (msg['external_id'], msg.get('conversation_id'), json.dumps(both) if both else None, msg.get('source_link'), hit['MessageId']))
+    return True
+
+
 def ingest_own_message(store, msg: dict, why: str, keep_unmatched: bool = True) -> int:
     """Anything YOU sent - a mail reply, a line in a chat - never gets its own timeline row and
     never becomes work: it rides INSIDE the thread as a 'context' message, which is what the
@@ -1220,7 +1269,7 @@ def ingest_own_message(store, msg: dict, why: str, keep_unmatched: bool = True) 
     there is: you answer a mail in Outlook that Taskuary filed, or one whose task closed
     yesterday. The router only ever matched OPEN tasks, so both of those replies were dropped on
     the floor - the row kept saying nothing had happened, forever (owner, 2026-09-02)."""
-    if store.message_exists(msg['external_id']): return 0
+    if store.message_exists(msg['external_id']) or bind_sent(store, msg): return 0
     from . import agentchannels
     if agentchannels.swallows(store, msg): return 0          # a chat bound to an agent: the owner's line there was the agent's (heard)
     conv, body = msg.get('conversation_id'), (msg.get('body') or '').strip()

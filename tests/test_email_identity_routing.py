@@ -207,6 +207,52 @@ class IdentityTests(unittest.TestCase):
         self.assertTrue([c for c in s.list_comments(a) if 'You replied' in c['Body']])
         self.assertEqual(s.get_review(waits)['Status'], 'pending')
 
+    def _sent_new_email(self, to='erin@northwind.example'):
+        """Walk 14: the owner's own task asks Erin for a sheet; its agent's NEW email card (no thread, no mail it answers) is pressed Send."""
+        import json
+        from taskuary import verdicts
+        s, box = MemoryStore(), 'alex@northwind.example'
+        s.set_setting('owner_email', box, 'owner')
+        t = s.create_task({'Title': 'Get the 2026 vendor spend sheet', 'Kind': 'task', 'Status': 'open', 'OriginBase': 'owner'}, 'owner')
+        body = 'Hi Erin, could you send me the 2026 monthly vendor spend sheet? Thanks, Alex'
+        rid = s.add_review({'TaskId': t, 'Kind': 'draft', 'Status': 'pending', 'DraftText': body,
+                            'Deliver': json.dumps({'channel': 'email', 'to': [to], 'subject': '2026 vendor spend sheet', 'mailbox': box})})
+        out = verdicts._deliver_review(s, s.get_review(rid), body, 'approve', 'owner',
+                                       send_fn=lambda snap: {'channel': 'email', 'to': [to], 'cc': [], 'mailbox': box})
+        self.assertTrue(out['ok'])
+        return s, t, box, body
+
+    def test_the_apps_new_email_is_on_its_task_as_it_goes(self):
+        """Walk 14 (S5a): the sent copy of a NEW email was stored with no task, so Erin's answer saw no open work tied to her and was filed
+        "nothing to do", and the task that asked never heard it. The send writes its own row - the task, whom it went to - at once."""
+        s, t, box, body = self._sent_new_email()
+        out = [m for m in s.list_messages(t) if m.get('Direction') == 'out']
+        self.assertEqual(len(out), 1); self.assertEqual(s.task_recipients([t]), {t: {'erin@northwind.example'}})
+        # ...so her answer, even on a thread of its own, is shown to triage as this task's (written to him, from the one his letter went to)
+        from taskuary.context import recent_open
+        ans = {'channel': 'email', 'from_email': 'erin@northwind.example', 'to': [box], 'conversation_id': 'AAQk-other',
+               'subject': 'Re: Trainly seats', 'body': 'Attached is the sheet you asked for.'}
+        self.assertIn(t, [c['tid'] for c in recent_open(s, ans)])
+        # ...and its sent-folder copy, when the sync brings it, is that row - with its thread and Message-ID - never a second one
+        from taskuary.channels import ingest_outbound_mail
+        with mock.patch.object(ingest, '_spawn'), mock.patch.object(ingest, 'thread_moved') as moved:
+            ingest_outbound_mail(s, box, {'id': 'sent-n1', 'subject': '2026 vendor spend sheet', 'conversationId': 'AAQk-new', 'bodyPreview': body,
+                                          'internetMessageId': '<sent-n1@northwind.example>', 'sentDateTime': '2026-11-24T07:20:00Z',
+                                          'toRecipients': [{'emailAddress': {'address': 'erin@northwind.example'}}]})
+        out = [m for m in s._rows('SELECT * FROM message') if m.get('Direction') == 'out']
+        self.assertEqual([(m['TaskId'], m['ExternalId'], m['ConversationId']) for m in out], [(t, 'graph:sent-n1', 'AAQk-new')])
+        moved.assert_not_called(); self.assertFalse([c for c in s.list_comments(t) if 'You replied' in c['Body']])
+        reply = {'conversation_id': 'AAQk-new', 'channel': 'email', 'from_email': 'erin@northwind.example', 'mail_meta': {'refs': ['<sent-n1@northwind.example>']}}
+        self.assertEqual(ingest.identity_route(s, reply)['task_id'], t)
+
+    def test_the_person_he_just_wrote_to_is_no_stranger(self):
+        "Walk 14 (NEW-a): Dana answered minutes after his card's email to her and was held as a stranger - the Sent folder had not synced."
+        from taskuary import senders
+        s, t, box, body = self._sent_new_email('dana@trainly.example')
+        ok, _why = senders._known(s, {'channel': 'email', 'from_email': 'dana@trainly.example', 'source_name': box, 'subject': 'Re: 2026 vendor spend sheet'})
+        self.assertTrue(ok)
+        self.assertFalse(senders._known(s, {'channel': 'email', 'from_email': 'jordan@vendor.example', 'source_name': box})[0])
+
 
 if __name__ == '__main__':
     unittest.main()

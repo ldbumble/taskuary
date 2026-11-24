@@ -367,6 +367,11 @@ def _deliver_review(store, rv, final, verb, actor, note=None, cc=None, envelope=
         finished = store.finish_review_delivery(rid, token, 'sent', receipt=sent)
         if not finished: raise RuntimeError('the provider receipt could not be saved; verify delivery before retrying')
         for m in {rv.get('MessageId'), rv.get('AnswersMid')} - {None}: store.set_message_status(m, 'sent')
+        # ...and the letter is on its task as it goes - whom it reached, its thread - not only once its sent-folder copy comes back
+        from .channels import record_sent
+        try: record_sent(store, rv, attempted['body'], {**sent, 'to': sent.get('to') or attempted['envelope'].get('to')},
+                             None if outgoing else msg)
+        except Exception as e: logger.warning(f'review {rid}: the sent letter was not recorded on its task - {e}')
         if attempted['envelope'].get('kind') == 'zoho_invoice':
             from . import invoice_workflow
             invoice_workflow.mark_sent(store, int(attempted['envelope'].get('item_id')),

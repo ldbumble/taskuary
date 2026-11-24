@@ -965,5 +965,7 @@ def send_smtp(store, c, to: list, subject: str, body: str, in_reply_to: str = No
                 raise RuntimeError(f'{GOOGLE_REFUSED} for {user} - press Sign in with Google on the Gmail card again.') from e
         else: S.login(user, c['Secret'])
         S.sendmail(user, list(to) + cc + bcc, m.as_string())
+    # ...and the Message-ID it went with: the app's own record of the send (channels.record_sent), so an answer to it finds its task
     return {'channel': 'email', 'to': to, 'cc': cc, 'bcc': bcc, 'mailbox': user, 'threaded': bool(in_reply_to),
-            'attached': [f['name'] for f in (attachments or [])]}
+            'attached': [f['name'] for f in (attachments or [])], 'message_id': m['Message-ID'],
+            'refs': list(references or ([in_reply_to] if in_reply_to else []))}

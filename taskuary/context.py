@@ -364,8 +364,9 @@ def _people(msg: dict) -> set: return {str(a).strip().lower() for a in [*(msg.ge
 
 
 def written_between(sender: str, to: set, senders: set, recips: set, own: set) -> bool:
-    "The arrival's sender was written to on the task, and it writes to one who wrote the task's mail - neither of them the owner."
-    return bool(sender and sender not in own and sender in recips and (senders & to) - own - {sender})
+    """The arrival's sender was written to on the task, and it writes to one who wrote the task's mail - neither of them the owner. Or, on a
+    task only the owner wrote (his own letter, channels.record_sent), it writes to him: an answer to his letter on a thread of its own (walk 14)."""
+    return bool(sender and sender not in own and sender in recips and ((senders & to) - own - {sender} or (not senders - own and to & own)))
 
 
 BETWEEN = 'written between the same people - this comes from someone its mail went to, and goes to who wrote it'

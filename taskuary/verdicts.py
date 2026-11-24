@@ -370,7 +370,7 @@ def _deliver_review(store, rv, final, verb, actor, note=None, cc=None, envelope=
         # ...and the letter is on its task as it goes - whom it reached, its thread - not only once its sent-folder copy comes back
         from .channels import record_sent
         try: record_sent(store, rv, attempted['body'], {**sent, 'to': sent.get('to') or attempted['envelope'].get('to')},
-                             None if outgoing else msg)
+                             None if outgoing else msg, attempted['envelope'])
         except Exception as e: logger.warning(f'review {rid}: the sent letter was not recorded on its task - {e}')
         if attempted['envelope'].get('kind') == 'zoho_invoice':
             from . import invoice_workflow

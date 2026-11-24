@@ -253,6 +253,40 @@ class IdentityTests(unittest.TestCase):
         self.assertTrue(ok)
         self.assertFalse(senders._known(s, {'channel': 'email', 'from_email': 'jordan@vendor.example', 'source_name': box})[0])
 
+    def test_the_agents_own_email_card_is_drawn_once_and_its_person_is_no_stranger(self):
+        """Walk 15 (S2, NEW-a): the agent's email card (propose_email - a 'slot', no mailbox picked) was pressed Send, and its outgoing row
+        was (a) drawn again under the card's "Sent" as "You - by email" - the chat knew a card's send only by sent_replies, which no slot
+        is in - and (b) stored with no mailbox, its receipt naming none, so Dana answering 30 s later was held as a stranger "you have never
+        written to"."""
+        import json
+        from taskuary import conversation, senders, verdicts
+        from taskuary.channels import ingest_outbound_mail
+        s, box = MemoryStore(), 'alex@northwind.example'
+        s.set_setting('owner_email', box, 'owner')
+        c = s.save_connector({'Type': 'outlook', 'Name': 'Work mail', 'Active': 1, 'ConfigJson': json.dumps({'address': box})}, 't')
+        s.save_source({'Channel': 'email', 'Address': box, 'Owner': 'me', 'Active': 1, 'ConnectorId': c if isinstance(c, int) else c['ConnectorId']}, 't')
+        t = s.create_task({'Title': 'Sort out the Trainly renewal', 'Kind': 'general', 'Status': 'open', 'OriginBase': 'owner'}, 'owner')
+        body = 'Hi Dana,\n\nCould you send a revised quote for 230 seats with SSO?\n\nThanks,\nAlex'
+        rid = s.add_review({'TaskId': t, 'Kind': 'slot', 'Status': 'pending', 'DraftText': body,
+                            'Deliver': json.dumps({'channel': 'email', 'to': ['dana@trainly.example'], 'subject': 'Trainly renewal for 230 seats'})})
+        out = verdicts._deliver_review(s, s.get_review(rid), body, 'approve', 'owner',
+                                       send_fn=lambda snap: {'channel': 'email', 'to': ['dana@trainly.example'], 'cc': []})
+        self.assertTrue(out['ok'])
+        self.assertEqual([x['FromName'] for x in conversation._mail(s, t)], [], 'the card draws its send - no second bubble under it')
+        ok, why = senders._known(s, {'channel': 'email', 'from_email': 'dana@trainly.example', 'source_name': box, 'subject': 'Re: Trainly renewal for 230 seats'})
+        self.assertTrue(ok, why)
+        # ...and its sent-folder copy binds to that row, which stays the card's: one row, still drawn by the card alone
+        with mock.patch.object(ingest, '_spawn'), mock.patch.object(ingest, 'thread_moved'):
+            ingest_outbound_mail(s, box, {'id': 'sent-d1', 'subject': 'Trainly renewal for 230 seats', 'conversationId': 'AAQk-dana', 'bodyPreview': body,
+                                          'sentDateTime': '2026-11-24T09:08:11Z', 'toRecipients': [{'emailAddress': {'address': 'dana@trainly.example'}}]})
+        self.assertEqual([m['ExternalId'] for m in s._rows('SELECT * FROM message') if m.get('Direction') == 'out'], ['graph:sent-d1'])
+        self.assertEqual([x['FromName'] for x in conversation._mail(s, t)], [])
+        # ...while his own words written outside the app on that thread are still his line
+        ingest_outbound_mail(s, box, {'id': 'sent-d2', 'subject': 'Re: Trainly renewal for 230 seats', 'conversationId': 'AAQk-dana',
+                                      'bodyPreview': 'Also - can you include the SSO add-on in writing?', 'sentDateTime': '2026-11-24T09:20:00Z',
+                                      'toRecipients': [{'emailAddress': {'address': 'dana@trainly.example'}}]})
+        self.assertEqual([x['FromName'] for x in conversation._mail(s, t)], ['You'])
+
 
 if __name__ == '__main__':
     unittest.main()

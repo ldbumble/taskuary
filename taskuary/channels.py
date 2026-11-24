@@ -1216,24 +1216,35 @@ def _answered_task(store, conv, sent_at, quoted, open_ids):
 # stranger, and her answer was filed "nothing to do" beside the task that asked. The send writes its own row: the task, the people, the
 # Message-ID and thread where the provider gave them; the sent-folder copy, when it comes, is that row (bind_sent), never a second one
 SENT = 'sent:'
-def record_sent(store, rv: dict, body: str, sent: dict, msg: dict = None) -> int | None:
-    "The outgoing row of email card `rv`, written as it is confirmed sent (verdicts._deliver_review): its MessageId, or None for no email."
+BY_CARD = 'review'               # the key in a recorded send's MailMetaJson: the card whose send it is
+def record_sent(store, rv: dict, body: str, sent: dict, msg: dict = None, env: dict = None) -> int | None:
+    """The outgoing row of email card `rv`, written as it is confirmed sent (verdicts._deliver_review): its MessageId, or None for no email.
+    `env`: the envelope the send went with, else the card's own."""
     if str((sent or {}).get('channel') or '').lower() != 'email': return None
     msg, tid = msg or {}, rv.get('TaskId')
-    try: env = json.loads(rv.get('Deliver') or '{}') or {}
-    except (TypeError, ValueError): env = {}
-    from .outbound import re_subject
-    subj = ' '.join(str(env.get('subject') or '').split()) or (re_subject(msg.get('Subject')) if msg else '')
+    if env is None:
+        try: env = json.loads(rv.get('Deliver') or '{}') or {}
+        except (TypeError, ValueError): env = {}
+    from . import outbound
+    subj = ' '.join(str(env.get('subject') or '').split()) or (outbound.re_subject(msg.get('Subject')) if msg else '')
     mid_, refs = sent.get('message_id'), [r for r in sent.get('refs') or [] if r]
     to, cc = [a for a in sent.get('to') or [] if a], [a for a in sent.get('cc') or [] if a]
-    box = sent.get('mailbox') or env.get('mailbox') or msg.get('SourceName')
+    # ...the mailbox it left from, always (walk 15: a new email's receipt named none, so its row had none, wrote_to_locally - scoped by mailbox -
+    # never saw it, and the person written to 30 s earlier was held as one "you have never written to"): the receipt's, the envelope's, the
+    # answered mail's, else the one the send road itself defaults to
+    box = sent.get('mailbox') or env.get('mailbox') or msg.get('SourceName') or outbound.sending_mailbox(store, rv, msg or None)
+    if not box:
+        try: box = outbound._mailbox(store)
+        except Exception: box = None
     # its thread: the answered mail's, else (SMTP) its own Message-ID - the key an answer to it files under (imapmail.thread_key)
     conv = msg.get('ConversationId') or (refs[0] if refs else mid_)
-    meta = {**({'mid': mid_} if mid_ else {}), **({'refs': refs} if refs else {})}
+    # ...and marked the card's own send (by_card), whatever the card's kind: the card draws it, so no surface draws or tells it again - kept
+    # when its sent-folder copy binds to it (bind_sent merges the copy's ids into this)
+    meta = {BY_CARD: rv['ReviewId'], **({'mid': mid_} if mid_ else {}), **({'refs': refs} if refs else {})}
     mid = store.add_message({'TaskId': tid, 'ExternalId': f"{SENT}{rv['ReviewId']}", 'ConversationId': conv, 'Channel': 'email', 'SourceName': box,
                              'Subject': subj or None, 'FromName': 'You', 'FromEmail': box, 'SentAt': datetime.now().isoformat(timespec='seconds'),
                              'BodyText': body, 'OwnText': body, 'RecipientsJson': json.dumps({'to': to, 'cc': cc}), 'Status': 'context',
-                             'Direction': 'out', 'MailMetaJson': json.dumps(meta) if meta else None})
+                             'Direction': 'out', 'MailMetaJson': json.dumps(meta)})
     if tid: store.add_route(mid, tid, 'attach', None, "sent from this task on the owner's press", [], 'router')
     return mid
 
@@ -1241,6 +1252,9 @@ def record_sent(store, rv: dict, body: str, sent: dict, msg: dict = None) -> int
 def _meta(r) -> dict:
     try: return json.loads((r or {}).get('MailMetaJson') or '{}') or {}
     except (TypeError, ValueError): return {}
+def by_card(r) -> bool:
+    "Is message row `r` a card's own send (record_sent) - bound to its sent-folder copy or not yet?"
+    return bool(_meta(r).get(BY_CARD))
 def bind_sent(store, msg: dict) -> bool:
     """Is own mail `msg` the sent-folder copy of a send the app recorded (record_sent)? Then that row takes the copy's ids - its thread,
     Message-ID and link - and no second row is stored. By its Message-ID, else its subject and opening words to the same people."""

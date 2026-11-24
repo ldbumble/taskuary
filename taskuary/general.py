@@ -798,10 +798,11 @@ JOINED = ("SELECT m.*, MAX(m.CreatedAt, IFNULL((SELECT MAX(r.CreatedAt) FROM rou
 
 def went_from_here(store, tid: int):
     "A test for a message on task `tid`: is it a reply Taskuary sent on the owner's press, come back from their Sent folder? (its opening words)"
-    from .channels import _same_words
-    # ...by the receipts the copy is filed by (channels.ingest_own_message's `ours`): one record says what Taskuary sent
+    from .channels import _same_words, by_card
+    # ...the row a card's send wrote is its card's by its mark (channels.record_sent), whatever the card's kind (walk 15: an agent's email card,
+    # a slot, is no sent_reply - its send drew twice); an older copy by the receipts it is filed by (channels.ingest_own_message's `ours`)
     sent = [str(x.get('FinalText') or x.get('DraftText') or '') for x in store.sent_replies(task_id=int(tid))]
-    return lambda x: any(_same_words(x.get('OwnText') or x.get('BodyText') or '', t) for t in sent)
+    return lambda x: by_card(x) or any(_same_words(x.get('OwnText') or x.get('BodyText') or '', t) for t in sent)
 def _quote(x, n) -> str: return '"' + _cut(' '.join(str(x or '').split()), n) + '"'
 
 # THE OWNER'S HAND-OFF (Hand it to a person, server.handoff) is a 'human' comment headed this - the agent's next turn hears it with what went

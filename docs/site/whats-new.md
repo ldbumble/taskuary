@@ -2,6 +2,17 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.4.2.5 - 2026-11-24
+
+- A turn the AI cut short fails, and an unsorted arrival says so on its page
+- The app's own sent mail is filed on the task that sent it, and his reply on the task it answers
+- A sign-up's hold is decided by what it does, and its card says only that
+- A hand-over asks for the step the page shows, not always a sign-in
+- A saved sign-in keeps the user name the site kept, and typing replaces a box's text
+- One send, one sentence: "Sent to Erin Blake by email"
+- Tabs a turn left close with it, and the quit closes every agent browser
+- The chat keeps what he was reading in place when the browser pane opens or shuts
+
 ## 0.4.2.4 - 2026-11-23
 
 - A level set to an AI card whose agent runs on Codex here takes coding work on that harness

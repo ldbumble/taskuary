@@ -489,6 +489,10 @@
             }
           ]
         }
+      ],
+      "secret_config": [
+        "google_client_secret",
+        "google_refresh_token"
       ]
     },
     {
@@ -634,6 +638,9 @@
       "match": [
         "google sheets",
         "google"
+      ],
+      "secret_config": [
+        "google_client_secret"
       ]
     },
     {
@@ -931,6 +938,9 @@
         "sage intacct",
         "sage",
         "intacct"
+      ],
+      "secret_config": [
+        "sender_password"
       ]
     },
     {
@@ -953,6 +963,9 @@
         "quickbooks online",
         "quickbooks",
         "online"
+      ],
+      "secret_config": [
+        "client_secret"
       ]
     },
     {
@@ -973,6 +986,9 @@
         "amazon seller",
         "amazon business",
         "business reconciliation"
+      ],
+      "secret_config": [
+        "client_secret"
       ]
     },
     {
@@ -1193,6 +1209,9 @@
         "zoho invoice",
         "zoho",
         "invoice"
+      ],
+      "secret_config": [
+        "client_secret"
       ]
     },
     {
@@ -1851,7 +1870,10 @@
       "replies": {
         "on": true,
         "says": "an email reply, from your own mailbox"
-      }
+      },
+      "secret_config": [
+        "inbound_key"
+      ]
     },
     {
       "type": "google_chat",
@@ -1863,6 +1885,9 @@
         "google chat",
         "hangouts chat",
         "gchat"
+      ],
+      "secret_config": [
+        "google_client_secret"
       ]
     },
     {
@@ -1916,7 +1941,10 @@
       "replies": {
         "on": true,
         "says": "a reply in the channel's thread, or in the direct chat (the app needs chat_message:write)"
-      }
+      },
+      "secret_config": [
+        "client_secret"
+      ]
     },
     {
       "type": "webex",
@@ -1930,7 +1958,10 @@
       "replies": {
         "on": true,
         "says": "a reply in the space thread, or in the direct chat (the sign-in needs messages write - sign in again once)"
-      }
+      },
+      "secret_config": [
+        "client_secret"
+      ]
     },
     {
       "type": "rocketchat",
@@ -2127,7 +2158,10 @@
       "replies": {
         "on": true,
         "says": "a comment on the to-do, or a line in the Ping"
-      }
+      },
+      "secret_config": [
+        "client_secret"
+      ]
     },
     {
       "type": "basecamp",
@@ -2569,7 +2603,10 @@
         "on": true,
         "says": "a comment on the case - the contact sees it in your portal - or a post on the task's feed",
         "note": "Keep case comments private - only your users see them"
-      }
+      },
+      "secret_config": [
+        "client_secret"
+      ]
     },
     {
       "type": "hubspot",
@@ -2583,7 +2620,10 @@
       "replies": {
         "on": true,
         "says": "a note on the ticket (sign in again once, for the write scope)"
-      }
+      },
+      "secret_config": [
+        "client_secret"
+      ]
     },
     {
       "type": "servicenow",
@@ -3318,6 +3358,9 @@
       "desc": "Your Box files for the agents and reports, read with your own sign-in - GET /search?query=budget, /folders/0/items, /files/<id>. Reads only.",
       "match": [
         "box"
+      ],
+      "secret_config": [
+        "client_secret"
       ]
     },
     {
@@ -3437,6 +3480,9 @@
       "desc": "DocuSign envelopes waiting on your signature land on your work rail through triage, and agents read an envelope's status - GET /envelopes/<id>, /envelopes/<id>/recipients.",
       "match": [
         "docusign"
+      ],
+      "secret_config": [
+        "client_secret"
       ]
     },
     {
@@ -3447,6 +3493,9 @@
       "desc": "Your Zoom meetings and cloud recordings for the agents and reports - GET /users/me/meetings, /users/me/recordings?from=2026-11-01. Reads only.",
       "match": [
         "zoom"
+      ],
+      "secret_config": [
+        "client_secret"
       ]
     },
     {
@@ -4263,6 +4312,10 @@
             }
           ]
         }
+      ],
+      "secret_config": [
+        "client_secret",
+        "refresh_token"
       ]
     },
     {
@@ -4381,7 +4434,10 @@
       "replies": {
         "on": false,
         "says": "a public reply on Threads (sign in again once, for the publish and reply scopes)"
-      }
+      },
+      "secret_config": [
+        "client_secret"
+      ]
     },
     {
       "type": "reddit",
@@ -4446,6 +4502,10 @@
             }
           ]
         }
+      ],
+      "secret_config": [
+        "client_secret",
+        "totp_key"
       ]
     },
     {
@@ -4873,7 +4933,10 @@
       "replies": {
         "on": true,
         "says": "a LINE message back (a push message - it counts against your plan)"
-      }
+      },
+      "secret_config": [
+        "channel_secret"
+      ]
     },
     {
       "type": "brightdata",

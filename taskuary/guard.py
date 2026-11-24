@@ -510,20 +510,9 @@ def without_config_secrets(row: dict) -> dict:
 # WRITE-ONLY CARD FIELDS (the owner, 2026-10-21: "hide secrets"): an app's client secret is typed into
 # the card's form like any field, but once saved it is never sent back to the browser - like the
 # Secret column, it can be replaced and not read. The server keeps spending the stored value.
-# LinkedIn's refresh token lives in ConfigJson too (linkedin._save), so it is held back the same way.
-WRITE_ONLY_CONFIG = {'linkedin': ('client_secret', 'refresh_token'), 'reddit': ('client_secret', 'totp_key'),
-                     'quickbooks': ('client_secret',), 'amazon_sp': ('client_secret',), 'zoho_invoice': ('client_secret',),
-                     # the Google cards' OAuth client secret and the Gmail card's calendar refresh token came back readable in plain
-                     # boxes on reopen, beside an App Password that was masked (the UI audit, 2026-10-21)
-                     'gmail': ('google_client_secret', 'google_refresh_token'),
-                     'google_sheets': ('google_client_secret',), 'google_chat': ('google_client_secret',),
-                     # a keyed read with a second secret beside its key (apireads.json `write_only`): Schwab's app secret, NetSuite's consumer secret, Plaid's access token
-                     **__import__('taskuary.apireads', fromlist=['write_only']).write_only(),
-                     # the cards that sign in by OAuth (oauth.py) keep their app's secret here; LINE its channel secret, which checks
-                     # every push; SendGrid the key in its push address - the owner reads that through its own door, never the card
-                     **dict.fromkeys(('box', 'zoom', 'zoom_chat', 'webex', 'threads', 'hubspot', 'salesforce', 'docusign', 'basecamp_todos'),
-                                     ('client_secret',)),
-                     'line': ('channel_secret',), 'sendgrid': ('inbound_key',)}
+# Which fields they are is the card's own declaration (connectorcatalog.secret_config) - the same list that is sealed in the database.
+from .connectorcatalog import secret_config
+WRITE_ONLY_CONFIG = secret_config()
 
 
 def masked_config(row: dict) -> dict:

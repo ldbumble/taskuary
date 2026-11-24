@@ -135,12 +135,12 @@ class SecretsAreWriteOnly(unittest.TestCase):
                 self.assertIn('client_secret', r['ConfigSaved'])
                 # the card saves what it was sent - no secret - and the stored one stays
                 self.client.post('/api/connectors', json={'ConnectorId': cid, 'ConfigJson': json.dumps({'client_id': 'app-id-2'})})
-                stored = json.loads(self.server.store.get_connector(cid)['ConfigJson'])
+                stored = json.loads(self.server.store.get_connector(cid, with_secret=True)['ConfigJson'])
                 self.assertEqual((stored['client_id'], stored['client_secret']), ('app-id-2', 'app-secret'))
                 # typed, it replaces
                 self.client.post('/api/connectors', json={'ConnectorId': cid,
                                  'ConfigJson': json.dumps({'client_id': 'app-id-2', 'client_secret': 'new-secret'})})
-                self.assertEqual(json.loads(self.server.store.get_connector(cid)['ConfigJson'])['client_secret'], 'new-secret')
+                self.assertEqual(json.loads(self.server.store.get_connector(cid, with_secret=True)['ConfigJson'])['client_secret'], 'new-secret')
 
     def test_linkedins_refresh_token_is_held_back_too_and_the_status_still_sees_the_app(self):
         cid = self.server.store.get_connector_by_type('linkedin')['ConnectorId']

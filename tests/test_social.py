@@ -434,8 +434,8 @@ class RedditTwoFactor(unittest.TestCase):
 
     def test_the_key_is_sealed_and_never_sent_back_to_the_page(self):
         from taskuary import guard
-        from taskuary.store import SQLiteStore
-        self.assertIn('totp_key', SQLiteStore.SEALED_CONFIG)
+        from taskuary.connectorcatalog import secret_keys
+        self.assertIn('totp_key', secret_keys('reddit'))
         self.assertIn('totp_key', guard.WRITE_ONLY_CONFIG['reddit'])
 
 

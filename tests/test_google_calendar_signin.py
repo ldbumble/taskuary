@@ -24,8 +24,10 @@ class R:
 
 def fake_vault():
     """A seal anyone can see through, so the test reads what the column holds on any OS."""
-    seal = lambda v: v if not v or str(v).startswith('vault:') else f'vault:test:{v}'
-    unseal = lambda v: v[len('vault:test:'):] if isinstance(v, str) and v.startswith('vault:test:') else v
+    from taskuary import vault
+    seal, real = lambda v: v if not v or str(v).startswith('vault:') else f'vault:test:{v}', vault.unseal
+    # ...a value the card sealed for real before (its declared client secret, saved outside this patch) still opens
+    unseal = lambda v: v[len('vault:test:'):] if isinstance(v, str) and v.startswith('vault:test:') else real(v)
     return mock.patch.multiple('taskuary.store.vault', seal=seal, unseal=unseal)
 
 

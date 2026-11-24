@@ -9,6 +9,7 @@ from loguru import logger
 from . import vault
 from .inboxes import TYPES as INBOXES, NAMES as INBOX_NAMES     # the helpdesks and newer trackers: seeded and triggering like the rest
 from .apireads import types as _read_types                     # a vendor's REST API read (apireads.json): each row a card
+from .connectorcatalog import secret_keys                      # the config fields a card declares secret: sealed like the Secret column
 def _posts() -> set:
     from .connectorcatalog import cards
     return {c['type'] for c in cards() for a in c.get('actions') or [] if a.get('road') == 'run_tool'}
@@ -1687,13 +1688,15 @@ class SQLiteStore:
             for cid, sec in self.cx.execute("SELECT ConnectorId, Secret FROM connector WHERE Secret IS NOT NULL AND Secret != '' "
                                             "AND Secret NOT LIKE 'vault:%'").fetchall():
                 if vault.sealed(new := vault.seal(sec)): self.cx.execute('UPDATE connector SET Secret=? WHERE ConnectorId=?', (new, cid))
-            # ...and a Google calendar refresh token pasted into a card's config before it was sealed there too (SEALED_CONFIG)
-            for cid, cj in self.cx.execute("SELECT ConnectorId, ConfigJson FROM connector WHERE ConfigJson LIKE '%google_refresh_token%'").fetchall():
+            # ...and the config fields a card declares secret (connectorcatalog.secret_config) saved before they were sealed there too
+            n = 0
+            for cid, t, cj in self.cx.execute("SELECT ConnectorId, Type, ConfigJson FROM connector WHERE ConfigJson IS NOT NULL AND ConfigJson != ''").fetchall():
                 try: c = json.loads(cj)
                 except (TypeError, ValueError): continue
-                if isinstance(c, dict) and c.get('google_refresh_token') and vault.sealed(new := vault.seal(c['google_refresh_token'])) \
-                        and new != c['google_refresh_token']:
-                    self.cx.execute('UPDATE connector SET ConfigJson=? WHERE ConnectorId=?', (json.dumps({**c, 'google_refresh_token': new}), cid))
+                if not isinstance(c, dict): continue
+                got = {k: v for k in secret_keys(t) if c.get(k) and not vault.sealed(c[k]) and vault.sealed(v := vault.seal(c[k]))}
+                if got: n += len(got); self.cx.execute('UPDATE connector SET ConfigJson=? WHERE ConnectorId=?', (json.dumps({**c, **got}), cid))
+            if n: logger.info(f'sealed {n} secret config field(s) that were kept as text')
             # The handbook ships ON - handbook.enabled has said so since it was written - but its
             # card is seeded like every other, at Active 0, and enabled() reads the card when one
             # exists. So the feature was off on every install that ever ran: wrapup.wrap skipped
@@ -6222,33 +6225,35 @@ class SQLiteStore:
             if got is None or got[0] != gen[0]:
                 got = self._conn_cache = (gen[0], [dict(r) for r in cur.execute(f'SELECT {self._CONN_SAFE} FROM connector ORDER BY ConnectorId')])
         return [dict(r) for r in got[1]]
-    # A REFRESH TOKEN KEPT IN ConfigJson IS SEALED LIKE THE Secret COLUMN: the Gmail card's Google calendar sign-in (googlecal.py,
-    # 2026-10-26) keeps its token there beside the App Password, and a copy of taskuary.db must not carry it in the clear either
-    SEALED_CONFIG = ('google_refresh_token', 'totp_key')      # ...and a card's authenticator key (Reddit's two-factor sign-in, totp.py)
-    @classmethod
-    def _opened(cls, r):
-        """A with_secret row carries the secret itself: the column holds it sealed (vault.py) - and so do SEALED_CONFIG keys."""
+    # A SECRET KEPT IN ConfigJson IS SEALED LIKE THE Secret COLUMN: the fields a card declares secret (connectorcatalog.secret_config -
+    # an app's client secret, a refresh token, an authenticator key, a sender password) - a copy of taskuary.db must not carry them in the clear
+    @staticmethod
+    def _opened(r):
+        """A with_secret row carries the secret itself: the column holds it sealed (vault.py) - and so do its config's sealed fields.
+        Every sealed value opens, declared or not: the marker is the app's own, and a field once sealed must stay readable."""
         if r and r.get('Secret'): r['Secret'] = vault.unseal(r['Secret'])
         if r and vault.PREFIX in (r.get('ConfigJson') or ''):
             try: cfg = json.loads(r['ConfigJson'])
             except (TypeError, ValueError): return r
-            if isinstance(cfg, dict) and any(vault.sealed(cfg.get(k)) for k in cls.SEALED_CONFIG):
-                r['ConfigJson'] = json.dumps({k: vault.unseal(v) if k in cls.SEALED_CONFIG else v for k, v in cfg.items()})
+            if isinstance(cfg, dict) and any(vault.sealed(v) for v in cfg.values()):
+                r['ConfigJson'] = json.dumps({k: vault.unseal(v) if vault.sealed(v) else v for k, v in cfg.items()})
         return r
-    def _cfg_sealed(self, cid, cj):
-        """ConfigJson as stored: SEALED_CONFIG values sealed. A value that opens to what is stored keeps its seal - a card saved
+    def _cfg_sealed(self, cid, cj, typ=None):
+        """ConfigJson as stored: its declared secret fields sealed. A value that opens to what is stored keeps its seal - a card saved
         from a with_secret read would otherwise mint a new keychain entry on every save - and one replaced is forgotten."""
         try: cfg = json.loads(cj) if cj else None
         except (TypeError, ValueError): return cj
         if not isinstance(cfg, dict): return cj
-        try: old = json.loads((self._one('SELECT ConfigJson FROM connector WHERE ConnectorId=?', (cid,)) or {}).get('ConfigJson') or '{}') if cid else {}
+        row = (self._one('SELECT Type, ConfigJson FROM connector WHERE ConnectorId=?', (cid,)) or {}) if cid else {}
+        try: old = json.loads(row.get('ConfigJson') or '{}')
         except (TypeError, ValueError): old = {}
-        return self._seal_cfg(cfg, old if isinstance(old, dict) else {}, cj)
-    def _seal_cfg(self, cfg: dict, old: dict, cj=None):
-        """`cfg` as stored over `old`, the stored config: what _cfg_sealed says, from a config already read."""
+        return self._seal_cfg(cfg, old if isinstance(old, dict) else {}, row.get('Type') or typ, cj)
+    def _seal_cfg(self, cfg: dict, old: dict, typ, cj=None):
+        """`cfg` as stored over `old`, the stored config of a card of type `typ`: what _cfg_sealed says, from a config already read."""
         if cj is None: cj = json.dumps(cfg)
-        if not any(cfg.get(k) or old.get(k) for k in self.SEALED_CONFIG): return cj
-        for k in self.SEALED_CONFIG:
+        keys = secret_keys(typ)
+        if not any(cfg.get(k) or old.get(k) for k in keys): return cj
+        for k in keys:
             v, was = cfg.get(k), old.get(k)
             if v and not vault.sealed(v): cfg[k] = was if vault.sealed(was) and vault.unseal(was) == v else vault.seal(v)
             if was and was != cfg.get(k): vault.forget(was)
@@ -6271,7 +6276,7 @@ class SQLiteStore:
             fields = {**fields, 'Secret': vault.seal(fields['Secret'])}
             if old and old != fields['Secret']: vault.forget(old)
         cid = fields.get('ConnectorId')
-        if fields.get('ConfigJson'): fields = {**fields, 'ConfigJson': self._cfg_sealed(cid, fields['ConfigJson'])}
+        if fields.get('ConfigJson'): fields = {**fields, 'ConfigJson': self._cfg_sealed(cid, fields['ConfigJson'], fields.get('Type'))}
         cols = [c for c in ('Type', 'Name', 'ConfigJson', 'Secret', 'Active', 'Roles', 'Scope') if c in fields and fields[c] is not None]
         if cid:
             # nothing to change is not "UPDATE connector SET  WHERE" - a syntax error that failed the chat's Create (2026-10-06)
@@ -6307,7 +6312,7 @@ class SQLiteStore:
         with self.lock:
             self._clear_stale(); self.cx.execute('BEGIN IMMEDIATE')
             try:
-                found = self.cx.execute(f'SELECT ConfigJson FROM {table} WHERE {key}=?', (row_id,)).fetchone()
+                found = self.cx.execute(f"SELECT ConfigJson, {'Type' if table == 'connector' else 'NULL'} FROM {table} WHERE {key}=?", (row_id,)).fetchone()
                 if found is None: self.cx.rollback(); return None
                 try: cur = json.loads(found[0]) if found[0] else {}
                 except (TypeError, ValueError): cur = None
@@ -6317,7 +6322,7 @@ class SQLiteStore:
                     if v is None: new.pop(k, None)
                     elif k in keep and v == '': continue
                     else: new[k] = v
-                cj = self._seal_cfg(new, cur) if table == 'connector' else json.dumps(new)
+                cj = self._seal_cfg(new, cur, found[1]) if table == 'connector' else json.dumps(new)
                 self.cx.execute(f'UPDATE {table} SET ConfigJson=? WHERE {key}=?', (cj, row_id))
                 self.cx.commit(); self._writes += 1
                 return new

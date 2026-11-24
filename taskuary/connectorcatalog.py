@@ -36,6 +36,18 @@ def own_groups() -> tuple:
 def by_type(t: str) -> dict | None: return next((c for c in cards() if c['type'] == t), None)
 
 
+# A CARD'S SECRET CONFIG FIELDS, DECLARED ONCE: each card's `secret_config` here, and a keyed API read's `write_only` (apireads.json).
+# They are sealed in the column (store.py through vault.py) and never sent back to the browser (guard.masked_config) - by what the card
+# declares, never by a key's name. An app password kept in ConfigJson beside a sealed Secret sat there as text until 2026-11-24.
+@lru_cache(maxsize=1)
+def secret_config() -> dict:
+    from .apireads import write_only
+    out = {c['type']: tuple(c['secret_config']) for c in cards() if c.get('secret_config')}
+    for t, ks in write_only().items(): out[t] = tuple(dict.fromkeys((*out.get(t, ()), *ks)))
+    return out
+def secret_keys(t) -> tuple: return secret_config().get(t, ())
+
+
 # A CARD NOT SIGNED IN SAYS SO IN PLAIN WORDS, WITH THE WAY TO IT (design round 6, D8: a post failed "save the app's Client ID and Client Secret
 # ... or paste a token from the developer portal's OAuth token generator" - setup words, and nothing to press). One line for every connector
 def not_signed_in(t: str) -> str:

@@ -157,7 +157,7 @@ class ExchangingTheCode(unittest.TestCase):
         with mock.patch.object(linkedin.requests, 'post',
                                return_value=_Resp({'access_token': 't', 'refresh_token': 'r-1'})):
             linkedin.exchange_code(cfg, 'c', 'http://localhost/cb')
-        self.assertEqual(json.loads(s.get_connector(cid)['ConfigJson'])['refresh_token'], 'r-1')
+        self.assertEqual(json.loads(s.get_connector(cid, with_secret=True)['ConfigJson'])['refresh_token'], 'r-1')
 
 
 class DaysLeft(unittest.TestCase):

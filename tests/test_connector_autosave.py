@@ -47,7 +47,7 @@ class FieldSaves(unittest.TestCase):
 
     def test_a_sealed_key_saved_by_patch_is_sealed_in_the_row(self):
         gm = self.s.get_connector_by_type('gmail')['ConnectorId']
-        k = self.s.SEALED_CONFIG[0]
+        k = 'google_refresh_token'                                   # the Gmail card declares it secret (connectorcatalog.json)
         with mock.patch('taskuary.vault.seal', side_effect=lambda v: f'sealed:{v}'), \
              mock.patch('taskuary.vault.sealed', side_effect=lambda v: str(v).startswith('sealed:')):
             self.c.post('/api/connectors', json={'ConnectorId': gm, 'ConfigPatch': {k: 'refresh-1', 'address': 'alex@northwind.example'}})

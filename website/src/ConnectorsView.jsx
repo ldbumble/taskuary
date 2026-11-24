@@ -1081,7 +1081,7 @@ const DATA_META = {
     desc: "The general ledger, AP bills, vendors, budgets and statistical accounts over the XML gateway \u2014 read as scheduled reports, and write by object once you approve it.",
     howto: ["Intacct wants a WEB SERVICES user, not your login: Company \u2192 Admin \u2192 Web Services Users \u2192 add one, give it a role that can read what you'll report on.",
       "Then Company \u2192 Setup \u2192 Security \u2192 Web Services Authorizations and add the sender id \u2014 without this every call is refused however correct the password is.",
-      "Five credentials, and they authorise different things: the SENDER pair identifies the integration (Sage issues it), the USER pair is the web services user above, and the company id picks the tenant. Only the user password is stored write-only.",
+      "Five credentials, and they authorise different things: the SENDER pair identifies the integration (Sage issues it), the USER pair is the web services user above, and the company id picks the tenant. Both passwords are stored write-only: saved, never shown again.",
       "Multi-entity? Leave the entity id blank to sit at the top level, or name one to scope every report to it.",
       "Test logs in for real and then tries to READ \u2014 a green card that only proves the password works hides the usual failure, which is a role with permission on nothing.",
       "Build the reports on the REPORTS tab: name an object (GLENTRY, APBILL, VENDOR, GLACCOUNT\u2026), the fields you want and any filters. Nobody remembers the field ids: the source card's 'What fields does APBILL have?' asks Sage itself and lists them, custom fields included, and the same lookup is a report in its own right when you want to hear about a new one.",

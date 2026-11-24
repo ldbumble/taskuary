@@ -1219,10 +1219,9 @@ def azure_connection(store, connector_id=None) -> dict:
 
 
 def intacct_connection(store, connector_id=None) -> dict:
-    """Five credentials, of which exactly one is a secret worth hiding: the API USER's
-    password. The sender pair identifies the integration and the company id names the tenant -
-    neither is a password to this company's books, and burying them write-only would only mean
-    nobody can ever check the sender id for a typo."""
+    """Five credentials, two of them passwords: the API user's (the card's Secret) and the sender's
+    (sealed in the config, write-only - the card declares it, connectorcatalog.json). The ids stay
+    readable on the card, so a typo in the sender id can still be seen."""
     return _card(store, 'intacct', 'user_password', connector_id)
 
 

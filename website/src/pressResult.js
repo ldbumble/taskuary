@@ -25,6 +25,14 @@ export function pressBeat(verb, x = {}, on = last) {
   return new Promise((r) => setTimeout(() => { if (now?.k === k) set({ ...now, beating: false }); r(); }, PRESS_BEAT));
 }
 export const pressOver = () => { if (now) set(null); };
+// ...AND THE MOVE THAT CLOSED A TASK STAYS ITS RESULT while this page is open (the owner, 2026-11-24: "Done" stood a beat, then the closed task's row
+// drew without it): by task, so the task opened again - unfolded, Back onto it - still says what closed it beside Reopen (taskMoves closedWith).
+// closedBy(tid, verb) at the press ("" forgets it: Reopen, a close that failed); closedResult(tid, closed) as the row draws - once the task has
+// been seen closed, seen open again (reopened by anyone) it is forgotten, so a later close by somebody else never wears his word
+const closes = new Map();
+export const closedBy = (tid, verb) => { if (verb) closes.set(Number(tid), { verb, seen: false }); else closes.delete(Number(tid)); };
+export const closedResult = (tid, closed) => { const e = closes.get(Number(tid)); if (!e) return "";
+  if (closed) { e.seen = true; return e.verb; } if (e.seen) closes.delete(Number(tid)); return ""; };
 export const pressNow = () => now;
 // true while a press's result is up and its move has not begun: Back and Next grey for it
 const beating = () => !!now?.beating, current = () => now;

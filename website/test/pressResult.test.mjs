@@ -79,6 +79,24 @@ test("one toolbar: held, at work, after a restart and closed wear the same task 
   assert.ok(off(states.closed).length >= 6 && off(states.closed).every((x) => x.endsWith("the task is closed - reopen it first")), "closed: Reopen alone lit");
 });
 
+test("Mark done's result stays on the closed row - a greyed ✓ Done beside Reopen while he is on the task, never gone with the button", async () => {
+  // the owner, 2026-11-24: "Done" stood on Mark done for a beat, then the closed task's row drew without it and the result vanished
+  const m = await P;
+  for (const [verb, word] of [["done", "✓ Done"], ["close-note", "✓ Done · note kept"]]) {
+    const r = m.rowOf({ list: m.taskMoves({ closed: true, closedWith: verb }, run, words), ref: "" });
+    assert.deepEqual(r.decide.slice(0, 2).map((v) => v.id), ["closed-result", "reopen"], verb);
+    assert.deepEqual([r.decide[0].label, r.decide[0].disabled], [word, true], verb);
+    assert.match(m.strip(m.taskMoves({ closed: true, closedWith: verb }, run, words)), new RegExp(`disabled=""[^>]*data-tq-verb="closed-result"[^>]*>${word}</button><button[^>]*data-tq-verb="reopen"`));
+  }
+  // ...kept by task while the page is open, so the task opened again (unfolded, Back onto it) still says it - and forgotten once it is seen open
+  m.closedBy(7, "done");
+  assert.equal(m.closedResult(7, false), "", "before the close lands the task still reads open - nothing yet, nothing forgotten");
+  assert.equal(m.closedResult(7, true), "done"); assert.equal(m.closedResult(7, true), "done", "opened again, still its result");
+  assert.equal(m.closedResult(7, false), ""); assert.equal(m.closedResult(7, true), "", "reopened by anyone, a later close is not his press");
+  // ...closed by anything else, or open again, there is no result to keep: Reopen alone leads
+  for (const s of [{ closed: true }, { closedWith: "done" }]) assert.ok(!m.taskMoves(s, run, words).some((v) => v.id === "closed-result"), JSON.stringify(s));
+});
+
 test("held for a sender he has not trusted, Trust is the row's own move - first on the strip, wherever the chat that says why is folded", async () => {
   // walk 14, 2026-11-24: opened from the rail the held task's one Trust sat in its folded Agent pane ("Agent not started"), nothing on screen moved it
   const m = await P, trusted = [], go = { ...run, trust: () => trusted.push(1) };

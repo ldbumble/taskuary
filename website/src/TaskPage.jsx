@@ -27,7 +27,7 @@ import { steady } from "./steadyAnchor.js";
 import { SlotPicker } from "./CalendarPick.jsx";
 import { onPressing, useVerbs } from "./actionRow.js";
 import { BUTTONS_AT, FOCUS_EDGE, MOVES_AT, OPENS_FORM, PaneMoves, SEC_NAME, SpineMoves, TaskButtons } from "./TaskRow.jsx";
-import { pressBeat, pressOver, pressedOn } from "./pressResult.js";
+import { closedBy, closedResult, pressBeat, pressOver, pressedOn } from "./pressResult.js";
 import { taskMoves } from "./taskMoves.js";
 import { MADE_RUN } from "./madeTask.js";
 import { choice, hint as btnHint, hintOfRow, label as btn, labelOfRow, liveVerb } from "./buttons.js";   // theme.jsx owns `label`
@@ -943,7 +943,7 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
   const reopen = async () => {
     const id = selected;
     if (!id || reopening === id) return;
-    setErr(""); setReopening(id);
+    setErr(""); setReopening(id); closedBy(id, "");
     // ...and "Reopening…" never outlives its press: whatever the answer, or none, the button is the button again (the owner, 2026-11-06)
     const done = () => setReopening((r) => (r === id ? null : r)), cap = setTimeout(done, REOPEN_MAX_MS);
     try { await runOperation(api, "task.reopen", id); }
@@ -1246,11 +1246,12 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
     // walk folds the task now and the close runs behind the "…"; a close that fails hands it back with the reason
     // ...ONCE THE PRESS HAS SAID WHAT IT DID, on its own button (pressResult, the owner 2026-11-23): "Done" for a beat, then the move
     if (!beaten) await pressBeat(note ? "close-note" : "done");
+    closedBy(selected, note ? "close-note" : "done");
     onLeave?.();
     // the shared road (PW-215), the Wall's Close agent too (closeAgent.jsx) - on the walk's table, the walk's one close (railwalk.leave)
     const close = walkLeave ? () => walkLeave(note ? "note" : "done", note ? { note } : {}) : () => completeTask(api, selected, note);
     try { await (onFinish ? onFinish(status, close) : close()); }
-    catch (e) { const msg = e?.response?.data?.detail || e?.message || "Failed to finish task"; pressOver(); setErr(msg); onStay?.(msg); loadTasks(); return msg; }
+    catch (e) { const msg = e?.response?.data?.detail || e?.message || "Failed to finish task"; pressOver(); closedBy(selected, ""); setErr(msg); onStay?.(msg); loadTasks(); return msg; }
     finally { setFinishing(false); }
     loadTasks(); onChanged?.();
   };
@@ -1347,6 +1348,7 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
     // ...and it is put down at the press like any close: the write-up below takes as long as the AI does (18 s on
     // 2026-10-01), and the task sat open on the page and the rail all that time - under For later, already seen
     await pressBeat("done");
+    closedBy(id, "done");
     onLeave?.();
     // ...and the write-up runs on the server, which closes the task after it (writeup.py, 2026-10-20): the press is answered once
     // the session is harvested, and the page walks on. A write-up that cannot start closes the task here, as before.
@@ -2451,7 +2453,7 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
   // THE TASK'S OWN MOVES ARE ONE TOOLBAR (taskMoves.js, the owner 2026-11-23): the same buttons in every state - held, at work, closed - greyed
   // with why where they do not apply now; only the stage moves below come and go with what they act on
   const closedNow = !notDone || reopening === selected;
-  const ownMoves = !t ? [] : taskMoves({ made: made?.moves, closed: closedNow, live: liveSession, reopening: reopening === selected, finishing, waitingDraft: !!pendingReview,
+  const ownMoves = !t ? [] : taskMoves({ made: made?.moves, closed: closedNow, closedWith: reopening !== selected ? closedResult(selected, closedNow) : "", live: liveSession, reopening: reopening === selected, finishing, waitingDraft: !!pendingReview,
     watching, away: remindWaiting(t) ? `Back ${remindDay(t.RemindAt)}` : "", manual, repo: { held: heldRepo, can: !isGeneral && canCode },
     // ...held for a sender he has not trusted: its Trust is the row's lit move, wherever the chat that says why is folded (detail.origin.held)
     trust: detail?.origin?.held ? { label: detail.origin.trust?.person || "Trust them", busy: trusting === "person", hint: HELD_TRUST_HINT } : null },

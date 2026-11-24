@@ -555,7 +555,7 @@ export function splitRow(row, on, desk = false) {
 // its group's list; a verb not listed goes where its kind says (an agent's verb to Agent, a closing one to Finish), else to More. `change` is
 // the Change ▾ menu. Change THIS table to move a button - the row, its dividers and its fold all read it.
 export const TASK_GROUPS = [
-  ["finish", "Finish", ["done", "reopen", "close-note", "send_close", "approve", "elsewhere"]],
+  ["finish", "Finish", ["closed-result", "done", "reopen", "close-note", "send_close", "approve", "elsewhere"]],
   ["later", "Pass on", ["hand", "remind", "nat", "watch", "defer", "let_go", "not_ours", "not_ours_sender", "not_ours_kind", "block_sender"]],
   ["agent", "Agent", ["run-another", "send-general", "start-agent", "continue", "strong-again", "rerun", "diff", "attach", "email-file", "prepare",
     "reply", "redraft", "palt", "reject", "chase", "email", "copy", "accept_invite", "decline_invite", "propose_time", "find_time"]],
@@ -575,8 +575,8 @@ export const taskButtons = (by, skip = () => false) => {
   const change = (by.change || []).filter((v) => !skip(v)), xs = [...all, ...(change.length ? [{ change, grp: "more" }] : [])];
   return xs.map((x, n) => [x, ...rankIn(x), n]).sort((a, b) => a[1] - b[1] || a[2] - b[2] || a[3] - b[3]).map(([x]) => x);
 };
-// what never folds: Mark done (a closed task's Reopen in its place) and the lit move
-export const pinnedMove = (v) => !!v && (isDone(v) || verbKey(v) === "reopen" || v.tone === "p");
+// what never folds: Mark done (a closed task's Reopen in its place, and the result of the press that closed it beside it) and the lit move
+export const pinnedMove = (v) => !!v && (isDone(v) || ["reopen", "closed-result"].includes(verbKey(v)) || v.tone === "p");
 // THE FOLD (the row is ONE line): `drop` moves go into the ▾ from the right - More first, then Agent, then Pass on, Finish last - never a pinned
 // one. Returns the items still in view, in the row's order
 export const foldRow = (items, drop) => { const loose = items.filter((x) => !pinnedMove(x.v)), out = new Set(drop > 0 ? loose.slice(-drop) : []);

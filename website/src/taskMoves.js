@@ -5,7 +5,9 @@
 // done's place. The agent's stage moves (Send to agent, Continue, Review changes) and a calendar's answers come with what they act on.
 // `s`: the task's state - { closed, live, reopening, finishing, waitingDraft, watching, away (its Remind me's "Back <day>"), manual (no AI:
 // Hand it to a person stands), repo: { held, can, set }, trust: { label, busy } (held for a sender he has not trusted) }; `run`: the page's
-// handler for each move; `w`: its words ({ label, hint, doneHint })
+// handler for each move; `w`: its words ({ label, hint, doneHint }). `s.closedWith`: the move that closed it here ("done" | "close-note") - while he
+// stays on the task its result stands greyed beside Reopen ("✓ Done"), where it used to vanish with Mark done the moment the closed row drew
+import { pressWord } from "./pressResult.js";
 const CLOSED = "the task is closed - reopen it first";
 const LIVE = "an agent is working - Mark done stops it and closes the task";
 // ...AND AN ITEM TASKUARY MADE (madeTask.js: a report, a dashboard, an Advisor idea) is drawn by the same page with ITS moves, from this same
@@ -25,6 +27,8 @@ export function taskMoves(s, run, w) {
     // the folded Agent pane, "Agent not started", and nothing on screen moved it) - the row's own move, as a start held for a repository is
     ...(s.trust && !s.closed ? [{ id: "trust", group: "decide", tone: "p", unblocks: true, label: s.trust.busy ? "Starting…" : s.trust.label, run: run.trust,
       ...off(s.trust.busy ? "it is starting" : ""), title: s.trust.hint }] : []),
+    ...(s.closed && pressWord(s.closedWith) ? [{ id: "closed-result", group: "decide", tone: "s", label: `✓ ${pressWord(s.closedWith)}`, result: true, disabled: true,
+      why: "you closed it - Reopen brings it back" }] : []),
     s.closed
       ? { id: "reopen", group: "decide", tone: "s", label: s.reopening ? "Reopening…" : w.label("reopen"), run: run.reopen, ...off(s.reopening ? "it is reopening" : ""), title: w.hint("reopen") }
       // ...a live session has no primary; nor a waiting draft: its Send, under the draft, is the move (2026-10-06), so Mark done stands outlined

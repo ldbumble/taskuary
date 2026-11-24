@@ -183,11 +183,13 @@ def may_close(store, tid, pressing=None) -> str:
 def lines(store, tid, asks: bool = True) -> list:
     """What waits on him on task `tid`, a line each, for the Assistant, the dock and the phone's reads: {rid, verb, line, says} - `line` the
     short line, `verb` the button that answers it, `says` the words a Send and close kept open says. The page's own waiting cards
-    (`waiting`), never a reading of its own: a stranger's Trust is said by its hold, not here."""
+    (`waiting`), never a reading of its own. A stranger's Trust in front is the one line, in its hold's words: nothing behind it is his to
+    press until then (walk 16: the phone's "list them all" left both held senders out - their tasks had no line)."""
     from . import buttons, proposals
     A, S, out = buttons.label('approve', 'action'), buttons.label('approve'), []
     cs = waiting(store, tid, asks)
-    for c in [] if cs and cs[0]['kind'] == TRUST else cs:
+    if cs and cs[0]['kind'] == TRUST: return [{'rid': None, 'verb': 'trust', 'says': '', 'line': cs[0]['what']}]      # ...no press it holds open (HOLDS_CLOSE)
+    for c in cs:
         r = c.get('row') or {}
         if c['kind'] == SEND:
             d = json.loads(r.get('Deliver') or '{}') if str(r.get('Deliver') or '').startswith('{') else {}

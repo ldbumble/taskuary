@@ -4386,7 +4386,7 @@ def close_after_send(store, tid: int, actor: str = 'owner') -> dict:
     # Kept open while a turn ran, the send woke the agent, the page's second ask closed the task under that turn, and the chat read "it stays
     # open: the agent session on it is still open" over a turn said to have stopped in the middle
     from . import card
-    kept = [i['says'] for i in card.lines(store, tid, asks=False)]
+    kept = [i['says'] for i in card.lines(store, tid, asks=False) if i['says']]
     if not kept: return {'status': 'done', 'closed': close_behind(store, tid, actor), 'kept_open': []}
     said = '; '.join(kept)
     # ...said ONCE a press: the send's own close says it (verdicts.decide `closes`), and the page's walk asks again a beat later

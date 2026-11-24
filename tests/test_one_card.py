@@ -131,7 +131,9 @@ def test_a_stranger_started_task_has_its_trust_in_front_and_no_send_on_the_phone
     reply(s, tid)
     with mock.patch('taskuary.origin.keeps_him', return_value={'line': 'You have not trusted this sender yet.'}):
         assert card.front(s, tid)['kind'] == card.TRUST
-        assert ra.front_card(s, {'tid': tid}) == {} and card.lines(s, tid) == []
+        assert ra.front_card(s, {'tid': tid}) == {}
+        # ...and what waits on him there is its Trust, in its hold's words - a list of what needs him left held tasks out (walk 16)
+        assert card.lines(s, tid) == [{'rid': None, 'verb': 'trust', 'says': '', 'line': 'You have not trusted this sender yet.'}]
         assert card.press(s, f'trust:{tid}', 'approve')['ok'] is False
 
 

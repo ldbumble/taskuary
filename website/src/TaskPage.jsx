@@ -2964,7 +2964,7 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
                     logo={<ChannelIcon channel={rail?.channel || t.Source || "email"} sx={{ fontSize: 13 }} />} />
                   {/* ...and the AI that works it, a press away from another (SwitchAi) - on every open task, at work or at rest */}
                   {/* ...named, or not drawn until an AI is known (the owner, 2026-11-23: a bare "AI" chip said nothing) */}
-                  {notDone && aiChoices.said && <SwitchAi choices={aiChoices} busy={startingAgent === "switch"} onPick={switchAi} />}
+                  {notDone && aiChoices.said && <SwitchAi choices={aiChoices} off={detail?.aiOff || ""} busy={startingAgent === "switch"} onPick={switchAi} />}
                   {/* ...what AI the task used, and - a coding task in Developer mode - the chats its agent can be talked to from: quiet corner
                       buttons, each its popover (the owner, 2026-11-06: never at the bottom of the chat) */}
                   <HeadPop id="ai-used" title="AI used" icon={<TokenOutlinedIcon sx={{ fontSize: 16 }} />}><AiUsed taskId={t.TaskId} pop /></HeadPop>

@@ -13,10 +13,11 @@ const PILL = { fontSize: 11.5, fontWeight: 600, height: 26, minHeight: 26, py: 0
   bgcolor: "var(--tq-panel, #f4f1ec)", color: INK, borderColor: BORDER, whiteSpace: "nowrap", maxWidth: 220, flexShrink: 1, minWidth: 0,
   "& .MuiButton-startIcon": { mr: 0.5 }, "&:hover": { borderColor: "var(--tq-border, #d8cfbe)", bgcolor: "var(--tq-panel, #f4f1ec)" } };
 
-export default function SwitchAi({ choices, busy = false, onPick }) {
+// `off`: the AI at work stands in for one that is off (brainroute.stands_in) - "Running on Claude Code - HIPAA AI is off", said first
+export default function SwitchAi({ choices, off = "", busy = false, onPick }) {
   const [at, setAt] = useState(null), [open, setOpen] = useState({});
   const { rows, said, why } = choices || switchChoices();
-  const title = why || (said ? `Working on ${said} - hand this task to another AI` : "Hand this task to an AI");
+  const title = why || (off ? `${off} - hand this task to another AI` : said ? `Working on ${said} - hand this task to another AI` : "Hand this task to an AI");
   return <>
     <Tooltip title={title}><span style={{ display: "inline-flex", minWidth: 0 }}>
       <Button size="small" variant="outlined" sx={PILL} data-tq-switch-ai="" disabled={!!why || busy} aria-haspopup="menu" aria-label={title}

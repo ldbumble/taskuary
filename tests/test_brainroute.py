@@ -280,8 +280,9 @@ def test_the_default_question_lists_every_cli_that_can_take_work_and_ends_with_t
         assert f'so work runs on OpenAI Codex CLI, the first one ready, once it is back.' in agents.default_ask(s)['note']
         s.set_setting('triage_backup_ai', '', 'owner')
         gen, rows = aidefaults.resolve(s, cfg, 'assistant_ai'), brainroute.now(s, cfg)
-        assert gen['runs']['brain'] == 'OpenAI Codex CLI' and gen['runs']['why'] == f'OpenAI Codex CLI is limited until {till}'
-        assert {r['why'] for r in rows} == {f'OpenAI Codex CLI is limited until {till}'} and brainroute.resting(s, 'cli:gemini') == ''
+        # ...and with both resting, whatever else is connected takes the work meanwhile (the owner, 2026-11-24), and says why
+        assert gen['runs']['brain'] == 'Gemini CLI' and gen['runs']['why'] == f'Running on Gemini CLI - OpenAI Codex CLI is limited until {till}'
+        assert {r['why'] for r in rows} == {f'Running on Gemini CLI - OpenAI Codex CLI is limited until {till}'} and brainroute.resting(s, 'cli:gemini') == ''
         s.set_setting(brainroute.COOL_KEY, json.dumps({'cli:claude': brainroute.cooldowns(s)['cli:claude'].isoformat(sep=' ', timespec='minutes')}), 'router')
         # ...and THE CURRENT ONE, CHOSEN, IS A CHOICE: the same value, now the owner's - the question is over and nothing else moved
         card = aidefaults.apply(s, cfg, 'default_brain', value=aidefaults.resolve(s, cfg, 'default_brain')['value'])

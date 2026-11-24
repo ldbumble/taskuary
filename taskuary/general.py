@@ -196,9 +196,10 @@ def provider_down(e) -> str:
         if isinstance(e, requests.ConnectionError): return DOWN[3]
     return ''
 def _until(e): return next((x.until for x in _chain(e) if getattr(x, 'until', None) is not None), None)
-def queue_retry(store, tid: int, e, why: str, fresh: bool = False) -> str:
+def queue_retry(store, tid: int, e, why: str, fresh: bool = False, soon: bool = False) -> str:
     """The turn queued for its next try (the start queue's row, Turn RETRY_TURN) -> the one line the chat holds. `fresh`: his own line or Try
-    again failed - a new round of tries. Past RETRY_WAITS the queue lets go, and the line says Try again is his."""
+    again failed - a new round of tries. Past RETRY_WAITS the queue lets go, and the line says Try again is his. `soon`: tried at once - another
+    AI stands in for the one that failed (GeneralSession._moved_off)."""
     from datetime import datetime, timedelta
     from . import blackboard
     q = store.get_dispatch(tid) or {}
@@ -206,14 +207,14 @@ def queue_retry(store, tid: int, e, why: str, fresh: bool = False) -> str:
     if n > len(RETRY_WAITS):
         store.clear_dispatch(tid)
         return f'{why} - it was tried {n} times. Try again when you want one more try.'
-    wait = RETRY_WAITS[n - 1]
-    if (until := _until(e)): wait = max(wait, (until - datetime.now()).total_seconds())
+    wait = 1 if soon else RETRY_WAITS[n - 1]
+    if not soon and (until := _until(e)): wait = max(wait, (until - datetime.now()).total_seconds())
     at = datetime.now() + timedelta(seconds=wait)
     store.enqueue_dispatch(tid, None, 'assistant', why, turn=RETRY_TURN)
     store._exec("UPDATE dispatchq SET Turn=?, Attempts=?, LastError=?, NextAt=?, State='retrying' WHERE TaskId=?",
                 (RETRY_TURN, n, why, at.isoformat(sep=' ', timespec='seconds'), tid))
     blackboard.drain_later(store, wait + 0.5)
-    return retry_said(why, at)
+    return retry_said(why, None if soon else at)
 def retry_said(why: str, at) -> str:
     "One line, every surface: what is wrong and when it is tried again."
     from datetime import datetime
@@ -679,8 +680,9 @@ def opening(store, task: dict = None, level: bool = True) -> tuple:
     # the role no longer nominates a provider, so there is nothing left to reconcile it against
     # ...but never a gateway card no job is set to any more (agents.PICKED_ONLY): a session started while HIPAA AI was wrongly the
     # general agent's brain kept every later turn on it after the setting was put back (the owner, 2026-11-09: "we changed it back");
-    # nor a CLI whose test failed and that he did not choose (_failed)
-    if (p := saved.get('Pick')) and not _unset_gateway(store, p) and not _failed(store, p):
+    # nor a CLI whose test failed and that he did not choose (_failed); nor an AI that is off now (brainroute.down): the router's stand-in opens
+    from . import brainroute
+    if (p := saved.get('Pick')) and not _unset_gateway(store, p) and not _failed(store, p) and not brainroute.down(store, p):
         if any(o['pick'] == p for o in provider_options(store)): return p, saved.get('Model') or None, 'saved'
     # ...and the same is true of any task with a BROWSER, whoever opened it. A workflow's repeat run
     # carried its browser and its brief and answered "opening the secure area cannot be done from
@@ -689,11 +691,9 @@ def opening(store, task: dict = None, level: bool = True) -> tuple:
     if str((task or {}).get('SourceRef') or '') == SETUP_REF or _browser_task(task):
         walk = walk_pick(store, task)
         if walk: return walk, None, 'walk'
-    # ...a first start nobody steered opens on the AI the owner set for this task's level in AI routing (brainroute.by_level)
-    if level and task and not is_dock(task):
-        from . import brainroute
-        lp = brainroute.level_pick(store, 'general', task) if brainroute.by_level(store) else None
-        if lp: return lp[0], lp[1] or None, 'level'
+    # ...a first start nobody steered opens on the AI the owner set for this task's level in AI routing (brainroute.by_level), or on the one
+    # that stands in for an AI that is off
+    if level and task and not is_dock(task) and (lp := brainroute.level_pick(store, 'general', task)): return lp[0], lp[1] or None, 'level'
     return _selected(store)[0], None, 'card'
 
 
@@ -2397,6 +2397,9 @@ class GeneralSession:
         if model is None and (pick or (f'connector:{connector_id}' if connector_id else '')) == saved.get('Pick'):
             model = saved.get('Model') or None
         self.pick, self.provider, self.model = _selected(store, connector_id, model, pick)
+        # ...its conversation's AI is off, so another stands in (opening): it takes the turns back once it is on (_steer)
+        from . import brainroute
+        self.stood_for = p if (p := saved.get('Pick')) and p != self.pick and brainroute.down(store, p) else ''
         self.started = datetime.now().isoformat(sep=' ', timespec='seconds')
         self.buf, self.n, self.ended, self.last, self.seen = deque(), 0, None, time.time(), 0.0
         self.subs, self.taps = [], []
@@ -2476,6 +2479,38 @@ class GeneralSession:
                 self.cli_sid = ''
                 self._remember_session()
         except Exception as skipped: logger.debug(f'could not move task {self.task_id} off an unusable brain: {skipped}')
+
+    def _steer(self):
+        """AN AI THAT IS OFF TAKES NO TURN (the owner, 2026-11-24: "It should switch back to whatever else is connected"): the turn goes to the AI
+        the router puts in its place (brainroute.choose), on that AI's own model, said once in the chat - and back to the one it stood in for
+        once that one is on again."""
+        from . import brainroute, sessionrecord
+        back, say = getattr(self, 'stood_for', ''), lambda p: brainroute._said(self.store, p)
+        if back and back != self.pick and not brainroute.down(self.store, back): to, model, line = back, None, f'{say(back)} is on again - the agent runs on it.'
+        elif back and back != self.pick and not getattr(self, 'told', False):
+            # ...a conversation that opened on the stand-in says so at its first turn - unless the failure that queued this try already did
+            self.told, q = True, self.store.get_dispatch(self.task_id) or {}
+            if q.get('Turn') == RETRY_TURN and say(self.pick) in str(q.get('LastError') or ''): return
+            to, model, line = self.pick, self.model, f'Running on {say(self.pick)} - {say(back)} {brainroute.down(self.store, back)}.'
+        elif (no := brainroute.down(self.store, self.pick)):
+            r = brainroute.choose(self.store, 'general', self.store.get_task(self.task_id), want_pick=self.pick)
+            if r.off != self.pick: return
+            to, model, line, back = r.pick, r.model or None, f'Running on {say(r.pick)} - {say(self.pick)} {no}.', back or self.pick
+        else: return
+        if to != self.pick: self.select_provider(pick=to, model=model)
+        self.stood_for = '' if to == back else back
+        try: self.store.add_comment(self.task_id, sessionrecord.NOTE_ACTOR, ASSISTANT_TYPE, line)
+        except Exception as e: logger.debug(f'task {self.task_id}: the AI it moved to was not said - {e}')
+
+    def _moved_off(self, e) -> str:
+        """The line for a turn whose AI went off under it - its budget spent, out of reach (llm._Cooling rests it) - when another stands in: the
+        turn is tried again at once on that one (queue_retry soon), once a round. '' otherwise."""
+        import requests
+        from . import agents as hub_agents, brainroute
+        if not any(hub_agents.availability_failure(x) or isinstance(x, requests.ConnectionError) for x in _chain(e)): return ''
+        if (self.store.get_dispatch(self.task_id) or {}).get('Turn') == RETRY_TURN or not (no := brainroute.down(self.store, self.pick)): return ''
+        r = brainroute.choose(self.store, 'general', self.store.get_task(self.task_id), want_pick=self.pick)
+        return f'{brainroute._said(self.store, self.pick)} {no}, so {brainroute._said(self.store, r.pick)} takes this turn' if r.off == self.pick else ''
 
     def select_provider(self, connector_id=None, model=None, pick=None):
         from . import continuity
@@ -2821,6 +2856,7 @@ class GeneralSession:
             # lost under "Started the selected agent" and a `working` record for an agent that never could start (2026-10-22 walk)
             if as_owner and not kept:
                 for w in lines: self.store.add_comment(self.task_id, BRIEF_ACTOR if brief else "owner", USER_TYPE, w)   # `kept`: the door, or the take, wrote them
+            self._steer()
             if not self.pick:
                 self.trace = []; self.trace_revision += 1
                 # ...in plain words: the AI CLI agents page's own name read "CLI agent" on the failed card (the 2026-10-21 audit, R2)
@@ -3194,12 +3230,15 @@ class GeneralSession:
             if stopped and _unfinished(e): said = 'stopped'
             # ...AN AI THAT COULD NOT ANSWER NOW is queued to try again (queue_retry) and said in its one line - and a card this turn set aside
             # stands again: no agent read past it (proposals.restore_set_aside)
-            down = '' if stopped or timed is not None or is_dock(self.store.get_task(self.task_id)) else provider_down(e)
+            # ...and one whose AI went off under it (its budget, its address) is tried again at once where another AI stands in (_moved_off)
+            quiet = stopped or timed is not None or is_dock(self.store.get_task(self.task_id))
+            moved = '' if quiet else self._moved_off(e)
+            down = moved or ('' if quiet else provider_down(e))
             try:
                 if down:
                     # ...in its own words where Taskuary wrote them (llm.QuotaSpent: which model, and the way past it), else the plain kind
-                    q = next((x for x in _chain(e) if isinstance(x, llm_mod.QuotaSpent)), None)
-                    said = queue_retry(self.store, self.task_id, e, str(q) if q else down, fresh=getattr(self, 'owned', False))
+                    q = None if moved else next((x for x in _chain(e) if isinstance(x, llm_mod.QuotaSpent)), None)
+                    said = queue_retry(self.store, self.task_id, e, str(q) if q else down, fresh=getattr(self, 'owned', False), soon=bool(moved))
                     from . import proposals
                     proposals.restore_set_aside(self.store, self.task_id)
                 else: let_go_retry(self.store, self.task_id)

@@ -695,3 +695,107 @@ def test_the_advisor_post_carries_what_the_look_raised_once_and_no_idea_of_its_o
         and '= 380' not in s.get_message(out['message_id'])['BodyText'], 'the Advisor says the result, not its formula'
     again = assistant.run(s, llm=post, force=True)
     assert s.get_idea(raised[0])['Key'] not in [l['key'] for l in again.get('lines') or []], 'carried once'
+
+
+# ── ADVISOR.md: WHAT THE ADVISOR LOOKS OUT FOR IS HIS FILE (the owner, 2026-11-24) ────────────────────────────────────────────────────────
+def test_an_edited_advisor_md_line_reaches_the_look_and_the_post_and_an_empty_one_reads_the_shipped_goals():
+    s, ids = world()
+    s.save_doc('advisor', '<!-- mine -->\n# What I want\n- Watch the vendor renewals at Northwind above all.', 'owner')
+    llm = brain({'ideas': []})
+    lookout.tick(s, llm, force=True)
+    system = llm.seen[0][0]
+    assert 'Watch the vendor renewals at Northwind above all.' in system and '<!-- mine -->' not in system
+    assert 'communicate more' not in system, "the goals are his words, not the code's"
+    assert 'word for word' in system.lower() and all(t in system for t in lookout.READS), 'the evidence rules and the reads stay in code'
+    post = []
+    assistant.run(s, llm=lambda sy, u, **k: post.append(sy) or '{"say": []}', force=True)
+    assert any('Watch the vendor renewals at Northwind above all.' in p for p in post if 'YOUR INSTRUCTION' in p), 'the twice-a-day post reads it too'
+    s.save_doc('advisor', '<!-- only a comment -->\n', 'owner')
+    assert lookout.goals(s) == lookout.GOALS and 'never make one up' in lookout.goals(s), 'empty reads the shipped goals, never none'
+    assert 'advisor' in s.doc_names() and s.get_doc('advisor'), 'seeded like every owner document'
+
+
+# ── WAITING FOR THEIR REPLY, PER THREAD, WHATEVER THE TASK (the live miss, 2026-11-24) ───────────────────────────────────────────────────
+VENDOR = 'omar@vendor.example'
+
+
+def asked_thread(s, conv, *, asks=True, their_reply=False, days=7):
+    """Omar at a vendor wrote; the owner answered with a question on a task that was then closed with a reply watch on it - the shape that sat
+    a week unanswered. `asks`: his last line asked something (sentjudge's stored verdict); `their_reply`: Omar wrote again after it."""
+    f = Factory(s)
+    tid = f.task(title=f'Set up the {conv} sign-in', status='done', ClosedAt=ago(days=days), AskedVia='desktop', AskedWatch='reply',
+                 AskedWatchAt=ago(days=days))
+    f.message(tid, from_email=VENDOR, from_name='Omar Keller', subject=f'RE: {conv} SSO', body='Here is the metadata link.',
+              conversation_id=conv, sent_at=ago(days=days + 1), SenderClass='person')
+    mine = f.message(tid, status='context', direction='out', from_email=ALEX, subject=f'RE: {conv} SSO', body='Can you confirm the reply URL on your side?',
+                     conversation_id=conv, sent_at=ago(days=days), RecipientsJson=json.dumps({'to': [VENDOR]}))
+    s.put_sent_verdict(mine, conv, asks, False, '', None, 'model')
+    if their_reply: f.message(tid, from_email=VENDOR, from_name='Omar Keller', subject=f'RE: {conv} SSO', body='Confirmed.',
+                              conversation_id=conv, sent_at=ago(days=days - 2), SenderClass='person')
+    return tid, mine
+
+
+def owed_block(user): return user.split('WHAT IS OWED, EITHER WAY')[1].split('TASKS:')[0]
+
+
+def test_a_closed_task_whose_thread_ends_on_his_question_is_in_the_advisors_input_and_an_answered_one_is_not():
+    from taskuary.store import task_ref
+    s, _ = world()
+    tid, mine = asked_thread(s, 'qa1')
+    asked_thread(s, 'qa2', asks=False)                    # his last line asked nothing
+    asked_thread(s, 'qa3', their_reply=True)              # the other side wrote after it
+    user, seen, _ = lookout.window(s)
+    owed = owed_block(user)
+    line = next(l for l in owed.splitlines() if 'qa1 SSO' in l)
+    assert '[followup]' in line and 'Omar Keller' in line and 'nothing has come back in 7 days' in line and f'On {task_ref(tid)}, done.' in line, line
+    assert f'msg{mine}' in line and f'msg{mine}' in seen, 'his own line is citable, and its age backs "7 days"'
+    assert 'qa2 SSO' not in owed and 'qa3 SSO' not in owed
+    # ...and the Advisor may raise it: the quote and the 7 days check against what it was shown
+    got = lookout.tick(s, brain({'ideas': [idea('reminder', 'Omar has not answered your SSO question in 7 days - nudge him?', [f'msg{mine}'],
+                                                quotes=[{'ref': f'msg{mine}', 'quote': 'Can you confirm the reply URL on your side?'}])]}), force=True)
+    assert len(got['raised']) == 1, got
+
+
+# ── ...AND THE MAILBOX ITSELF (the owner, 2026-11-24: "look at Taskuary AND the connector itself") ──────────────────────────────────────
+def mailbox(monkeypatch, msgs):
+    """A stand-in Outlook mailbox: the one connected box, answering Graph-shaped searches from `msgs` (folder, at, from, to, subject, conv, body)."""
+    from taskuary import mailboxread
+    monkeypatch.setattr(mailboxread, 'boxes', lambda store: [(ALEX, {'Type': 'outlook', 'ConnectorId': 1})])
+    def graph(store, c, box, folder, who, subject, since, limit):
+        side = (lambda m: who in m['to']) if folder == 'sent' else (lambda m: who in m['from'])
+        return [mailboxread._hit(box, folder, m['at'], m['from'], m['to'], m['subject'], m['conv'], m['body']) for m in msgs
+                if m['folder'] == folder and (not who or side(m)) and m['at'] >= since.strftime('%Y-%m-%d %H:%M:%S')][:limit]
+    monkeypatch.setattr(mailboxread, '_graph', graph)
+
+
+def test_a_follow_up_only_in_the_mailboxs_sent_folder_is_found_and_a_reply_only_in_the_mailbox_clears_one(monkeypatch):
+    from taskuary import sentjudge
+    s, _ = world()
+    asked_thread(s, 'qa1')                                # stored, unanswered in Taskuary - but Omar answered in the mailbox
+    sent_only = {'folder': 'sent', 'at': ago(days=5), 'from': ALEX, 'to': ['ray@vendor.example'], 'subject': 'Renewal quote for 2027',
+                 'conv': 'box-only', 'body': 'Could you send the renewal quote by Friday?'}
+    mailbox(monkeypatch, [sent_only, {'folder': 'inbox', 'at': ago(days=3), 'from': VENDOR, 'to': [ALEX], 'subject': 'RE: qa1 SSO',
+                                      'conv': 'qa1', 'body': 'Confirmed on our side.'}])
+    judged = []
+    monkeypatch.setattr(sentjudge, 'judge_text', lambda store, body, subject='', to='', llm=None: judged.append(body) or {'asks_them': 'Could you' in body})
+    user, seen, _ = lookout.window(s)
+    owed = owed_block(user)
+    assert 'qa1 SSO' not in owed, 'a reply the mailbox holds clears it, though Taskuary never stored it'
+    line = next(l for l in owed.splitlines() if 'Renewal quote for 2027' in l)
+    assert 'ray@vendor.example' in line and 'in the mailbox only' in line and 'nothing has come back in 5 days' in line, line
+    assert 'mailbox' in seen and 'Could you send the renewal quote by Friday?' in seen['mailbox'], 'citable as mailbox'
+    assert judged == ['Could you send the renewal quote by Friday?'], 'only the sent mail Taskuary never stored is read for an ask'
+    # ...the reply comes into the mailbox: the mailbox-only follow-up is gone too
+    mailbox(monkeypatch, [sent_only, {'folder': 'inbox', 'at': ago(days=1), 'from': 'ray@vendor.example', 'to': [ALEX],
+                                      'subject': 'RE: Renewal quote for 2027', 'conv': 'box-only', 'body': 'Attached.'}])
+    assert 'Renewal quote for 2027' not in owed_block(lookout.window(s)[0])
+
+
+def test_the_look_may_ask_the_mailbox_itself_read_only(monkeypatch):
+    mailbox(monkeypatch, [{'folder': 'sent', 'at': ago(days=40), 'from': ALEX, 'to': [VENDOR], 'subject': 'Old contract terms', 'conv': 'c-old',
+                           'body': 'Please countersign the 2026 terms.'}])
+    s, _ = world()
+    seen, counts = {}, {}
+    text = lookout.read(s, rd('mailbox', name=VENDOR, sent=True, days=60), seen, counts)
+    assert 'Old contract terms' in text and 'cite it as mailbox' in text and 'Please countersign' in seen['mailbox']
+    assert lookout.read(s, rd('mailbox'), seen, counts).startswith('mailbox: say whose mail')

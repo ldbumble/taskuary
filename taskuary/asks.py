@@ -255,9 +255,9 @@ def _reply(store, t: dict) -> str | None:
 # ── "I'll keep an eye out" that keeps it: a sent reply that asks something watches for the answer ──
 # Sending closes the task, so an ordinary reply had no "waiting on them" at all, and the sweep forgot any watch on a task
 # over 30 days old however recently it began (2026-10-06). Now the watch starts at the send and counts its own 30 days;
-# their answer ends it; a quiet stretch offers one nudge - held while they are out of office; at 30 days it stops, and
-# says so. The lines nobody asked for at that moment (the nudge, the end) stay in the app.
-NUDGE_DAYS = 2                     # assistant.CHASE_STEPS' first step: silence worth a word
+# their answer ends it; at 30 days it stops. The silence itself is the Advisor's to raise, per thread (assistant.followups): the
+# watch's own nudge was said nowhere - the desktop hears no background line - and still kept the Advisor's chase off the thread
+# (touched), so a vendor follow-up on a closed task sat a week unanswered with nothing saying so (the owner, 2026-11-24).
 
 
 def _background(fn):
@@ -299,23 +299,6 @@ def _start_watch(store, tid: int, msg: dict, now: datetime = None, via: str = No
 def _waiting_on(store, t: dict) -> dict:
     """Whose answer a watch waits for: the message the owner answered (what was seen when it began)."""
     return (store.get_message(t['AskedSeenMid']) if t.get('AskedSeenMid') else None) or {}
-
-
-def nudge(store, t: dict, now: datetime = None) -> str | None:
-    """Two days of silence on a reply watch: offered once - never to someone whose auto-reply says they are away."""
-    from . import assistant
-    from .store import task_ref
-    now = now or datetime.now()
-    if t.get('AskedWatch') not in ('reply', 'any') or t.get('AskedNudgedAt') or not t.get('AskedWatchAt'): return None
-    try: quiet = now - datetime.fromisoformat(str(t['AskedWatchAt'])[:19])
-    except ValueError: return None
-    if quiet < timedelta(days=NUDGE_DAYS): return None
-    m = _waiting_on(store, t)
-    if str(m.get('FromEmail') or '').lower() in assistant.ooo(store): return None     # held while they are away
-    line = f"{task_ref(t['TaskId'])} {_title(t)} - still nothing from {_who(m)}. Want a short nudge ready?"
-    if not _say(store, t, line, desktop=True): return None
-    store._exec('UPDATE task SET AskedNudgedAt=? WHERE TaskId=?', (now.isoformat(' ', 'seconds'), t['TaskId']))
-    return line
 
 
 def stop_watching(store, t: dict, quiet: bool = False) -> str | None:
@@ -403,7 +386,7 @@ def sweep(store, now: datetime = None):
     for r in store._rows("SELECT TaskId FROM task WHERE AskedVia IS NOT NULL AND COALESCE(AskedWatchAt, CreatedAt)>=? AND "
                          "(Status NOT IN ('done','dropped') OR IFNULL(AskedTold,'')<>'finished' OR AskedWatch IN ('reply','any')) "
                          "ORDER BY TaskId", (since,)):
-        try: check(store, r['TaskId']); nudge(store, store.get_task(r['TaskId']) or {}, now)
+        try: check(store, r['TaskId'])
         except Exception as e: logger.warning(f"asks: could not check {r['TaskId']} - {e}")
 
 
@@ -479,8 +462,8 @@ def touched(store, hours: float) -> dict:
     reached. The Advisor's follow-ups on any of these are not news yet."""
     cut = _since(hours)
     tids = {r['TaskId'] for r in store._rows(
-        # ...and a reply being watched: the watch offers its own nudge, so the Advisor's chase would be the same line twice
-        "SELECT TaskId FROM task WHERE (AskedVia IS NOT NULL AND Status NOT IN ('done','dropped')) OR AskedWatch IN ('reply','any') OR ClosedAt>=? "
+        # ...never a reply watch: it waits for the answer, and the chase after a quiet stretch is the Advisor's (see watch_reply)
+        "SELECT TaskId FROM task WHERE (AskedVia IS NOT NULL AND Status NOT IN ('done','dropped')) OR ClosedAt>=? "
         f"OR (AskedToldAt>=? AND AskedTold IN ({','.join('?' * len(SAID))}))", (cut, cut, *SAID))}
     people = set()
     from . import ledger                                   # ...what went, off the record of it (ledger.py)

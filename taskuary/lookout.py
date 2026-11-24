@@ -35,24 +35,16 @@ bar as the Advisor's own kinds (ideagrade.quiet_kinds)."""
 import json, re, threading
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta
+from pathlib import Path
 from loguru import logger
 from . import aiusage
 
-FAMILIES = {
-    'money': "money or time left on the table - the work version of asking for a refund when a price dropped: a duplicate charge or record, "
-             "two tools or subscriptions doing one job, a credit owed, an unused licence, a better plan, an SLA breach, a late fee, a renewal with a cost on it",
-    'pitch': "a recurring pain for the owner or others - the same question asked again, the same report fixed by hand, the same failure coming "
-             "back - with its ROOT fix: what to change so it stops, not that it failed again",
-    'reminder': "something the owner let slip: an ask in his mail he never answered, a promise in his own sent mail not yet kept, a date a "
-                "message named that is near or past - how long it has been, and what is owed",
-    'connection': "two things the owner has not put together: one thread's answer settles another, the same issue from two systems or people, "
-                  "a meeting or deadline that bears on an open ask",
-    'new_idea': "a better way to do part of the job the evidence points to - a report, check or automation that removes a weekly chore, a "
-                "process worth proposing",
-    'credit': "work the owner did that leadership likely does not see, with the numbers from the window, and a concrete way to show it",
-    'early_warning': "a developing problem - a process drifting, a recurring job that will fail again on a date you can name, a deadline at "
-                     "risk, a report that stopped arriving, a colleague whose pattern changed sharply",
-    'leverage': "who depends on the owner, who to loop in, an introduction that would unblock something"}
+# WHAT IT LOOKS FOR IS HIS FILE (the owner, 2026-11-24): the goals - the families and what each means, the bar, 2-3 a day, never invented,
+# never repeated, new angles welcome, how a person is spoken of - are ADVISOR.md (templates/advisor.md), read at every run (goals) by this
+# look and by the twice-a-day post (assistant.think). The code keeps only what it checks: the family names an answer may carry (one per
+# kind of idea, ideagrade.LOOKOUT), the reads, the evidence rules, the budgets and the answer's shape.
+FAMILIES = ('money', 'pitch', 'reminder', 'connection', 'new_idea', 'credit', 'early_warning', 'leverage')
+ADVISOR_DOC, ADVISOR_CHARS = 'advisor', 4000
 KEY = 'idea:lookout-'
 EVERY_DAYS, RETRY_H = 1, 6           # a day between passes (setting lookout_every_days); a pass that got no answer tries again in 6 hours
 # FOUR, NOT TWO (the owner, 2026-11-05: "where is the advisor ideas about your pain points ... don't see any in my advisor today"): two
@@ -105,45 +97,45 @@ READS = {'search_mail': 'search_mail {q, sent, days}: messages in and out whose 
                   'how often, the latest against the one before, the same amount twice within days, what it comes to a year; q narrows it (default 90 days)',
          'repeats': 'repeats {days}: what happens again and again, counted by code - what the owner sends by hand on a cadence, what keeps arriving '
                     'from one sender (a failure, a complaint, a question), the threads that drag (default 60 days)',
-         'memory': "memory {q}: the lines of the owner's memory and JOB.md that hold any word of q"}
+         'memory': "memory {q}: the lines of the owner's memory and JOB.md that hold any word of q",
+         'mailbox': "mailbox {name, q, sent, days}: the connected mailbox itself, asked directly - mail Taskuary never stored (sent outside "
+                    "its sync, older than its first sync): name is the other side (an address or a name), q words in the subject, sent true "
+                    "for the Sent folder, false for the Inbox, null both; days back (default 30). Cite it as mailbox"}
 READ_CHARS, READS_PER_STEP, HITS = 10000, 4, 12
 SPEND_DAYS, SPEND_ROWS, SPEND_EACH, TWICE_DAYS, REPEAT_DAYS, REPEAT_MIN, REPEAT_ROWS, DRAG_N, DRAG_DAYS = 90, 20, 6, 10, 60, 3, 8, 4, 10
 # what a stake may multiply by beyond what it read: the calendar's own numbers, and a percent
 CONVERT = {'12', '52', '4', '7', '30', '365', '24', '60', '100'}
 
-SYSTEM = (
-    "You are the owner's chief of staff: a sharp, proactive thinker looking out for them at work. You read their job and what you raised "
-    "before, a light pass over what came and went since your last look, the money and repeats code counted, and a THOROUGH look at one or "
-    "two parts of their work taken in turn. You propose what would make a real difference to the owner's day, standing or organisation - "
-    "up to three, each about a different part of the job where the evidence allows - from these families:\n"
-    + '\n'.join(f"- {k}: {v}" for k, v in FAMILIES.items()) +
-    "\nTHE BAR. An idea rests on specific evidence - counts, dates, the same thing again and again - and joins things the owner could not "
-    "see from any single message. Generic advice is worthless here: 'communicate more', 'document the process', 'hold a meeting', 'improve "
-    "monitoring', 'automate it' - unless the evidence makes it specific and new (what exactly, from which counts, saving what). A failure "
-    "notice is not an idea; the pattern across failures and the fix that ends them can be. Never restate one message unless it is something "
-    "the owner let slip, never raise what the owner's own sent words show him already doing, never repeat or rephrase an idea under BEFORE - "
-    "coming back to the same subjects from another angle (cost, process, risk, a person) is a new idea in another family when new evidence "
-    "supports it. Before naming a person, look for signs they have left - a departure notice, a removed account, mail that stops after "
-    "bounces - and say nothing about someone who has gone. Think like the assistant that notices a price dropped and asks for the refund: "
-    "what is owed, wasted, at risk or uncredited, in numbers.\n"
-    "ABOUT A PERSON: only the observed pattern (counts, dates, what changed), never a diagnosis, motive, blame or a guess about health, "
-    "family or private life; the next step is private and kind - a check-in, an offer of help - and nothing that would embarrass them.\n"
+MECHANICS = (
+    f"You may raise at most three ideas a run, each in one of these families: {', '.join(FAMILIES)}.\n"
     f"LOOK BEFORE YOU PROPOSE. You may read further first, up to {READS_PER_STEP} reads a turn and {MAX_READS} in all - only reading, nothing moves:\n"
     + '\n'.join(f"- {v}" for v in READS.values()) +
     "\nEVIDENCE IS CHECKED WORD FOR WORD. Each idea quotes what it rests on: quotes (at least one) are {ref, quote} - an id you were shown or "
-    "read (msg12, att3, task7, memory) and words copied exactly from what you saw of it. Every number in the title, evidence, why or pitch must "
-    "be in what you quote from, a count you claim in counts ({search, sent, days, n} - a search_mail you made, and its count), the days "
-    "since a cited message, or your stake's result.\n"
+    "read (msg12, att3, task7, memory, mailbox) and words copied exactly from what you saw of it. Every number in the title, evidence, why or "
+    "pitch must be in what you quote from, a count you claim in counts ({search, sent, days, n} - a search_mail you made, and its count), the "
+    "days since a cited message, or your stake's result.\n"
     "THE STAKE is what it saves or costs, as arithmetic on numbers you read: {expr: \"1600 * 12\", unit: \"$ a year\" or \"hours a month\", "
     "assume: [{n, what}]} - a figure you estimate (the minutes a task takes) goes in assume, said as yours; the code works it out and shows "
     "it. A money idea always has one; any other when the evidence allows, else expr \"\". An idea whose quote, number or stake does not hold is dropped.\n"
     "Each idea: family, title (one line to the owner, under 100 characters), evidence (what was seen, with the counts and dates, in plain "
     "words - no ids), quotes, counts ([] when none), stake, why (one sentence: why it matters, at what scale), next_step (concrete enough "
-    "for an agent to start: a draft, a query, a fix to build), pitch (one sentence the owner could say to their boss). One idea per theme, "
-    "different families where the evidence allows. Fewer is better; none is a good answer when nothing clears the bar - never make one up.\n"
+    "for an agent to start: a draft, a query, a fix to build), pitch (one sentence the owner could say to their boss).\n"
     'Answer JSON only: {"reads": [{"tool": "search_mail", "q": "...", "sent": null, "days": null, "id": null, "name": null}], "ideas": []} '
     'to read more, or {"reads": [], "ideas": [{"family": "...", "title": "...", "evidence": "...", "quotes": [{"ref": "msg1", "quote": "..."}], '
     '"counts": [], "stake": {"expr": "", "unit": "", "assume": []}, "why": "...", "next_step": "...", "pitch": "..."}]} when done.')
+_COMMENT = re.compile(r'<!--.*?-->', re.S)
+GOALS = _COMMENT.sub('', (Path(__file__).parent / 'templates' / f'{ADVISOR_DOC}.md').read_text(encoding='utf-8')).strip()
+
+
+def goals(store=None) -> str:
+    "What the Advisor looks out for: ADVISOR.md as the owner keeps it, comments out, cut at ADVISOR_CHARS - the shipped text when it is empty"
+    return (_COMMENT.sub('', str(store.doc(ADVISOR_DOC) or '')).strip()[:ADVISOR_CHARS].strip() if store is not None else '') or GOALS
+
+
+def prompt(store=None) -> str:
+    "The look's instructions: his goals, then what the code checks - the reads, the evidence, the answer's shape"
+    return f"WHAT YOU LOOK OUT FOR (the owner's ADVISOR.md):\n{goals(store)}\n\n{MECHANICS}"
+SYSTEM = prompt()           # the shipped instructions: what an idea raised before its prompt was kept opens on (asked)
 _N = lambda t: {'type': [t, 'null']}
 _OBJ = lambda need, props: {'type': 'object', 'additionalProperties': False, 'required': need, 'properties': props}
 WANT = {'name': 'lookout', 'schema': _OBJ(['reads', 'ideas'], {
@@ -345,9 +337,74 @@ def owed(store) -> tuple:
     from . import assistant
     try: cs = assistant.candidates(store, assistant.cfg(store))
     except Exception as e: logger.info(f'lookout: what is owed was not read - {e}'); return [], set()
-    ids = {f"msg{c['action']['mid']}" for c in cs if (c.get('action') or {}).get('mid')}
-    return [f"- [{c.get('kind')}] {_one(c.get('facts') or c.get('text'), 300)}" + (f" (msg{c['action']['mid']})" if (c.get('action') or {}).get('mid') else '')
-            for c in cs], ids
+    try: cs, only = in_mailbox(store, cs)
+    except Exception as e: logger.info(f'lookout: the mailbox was not asked - {e}'); only = []
+    def ids_of(c): return [f'msg{m}' for m in dict.fromkeys(((c.get('action') or {}).get(k) for k in ('ask_mid', 'mid'))) if m]
+    return ([f"- [{c.get('kind')}] {_one(c.get('facts') or c.get('text'), 300)}" + (f" ({', '.join(ids_of(c))})" if ids_of(c) else '') for c in cs]
+            + only, {i for c in cs for i in ids_of(c)})
+
+
+# ── WAITING FOR THEIR REPLY, ASKED OF THE MAILBOX TOO (the owner, 2026-11-24: "look at Taskuary AND the connector itself") ─────────────────
+# Taskuary's stored threads say it first, for free (assistant.followups: his last word on a thread asked something - sentjudge's verdict -
+# and nothing came back, whatever its task's status). The mailbox then settles what the store cannot see, in a handful of searches: a reply
+# in its Inbox that Taskuary never synced clears a follow-up, and his own sent mail it never stored that asked something (the same reading,
+# sentjudge.judge_text) with nothing back is one more. CONFIRM: stored follow-ups checked; SENT_LOOK: his newest sent mail read; JUDGE: of
+# those never stored, how many are read for an ask.
+CONFIRM, SENT_LOOK, JUDGE = 3, 10, 3
+
+
+def _days_since(at) -> int:
+    try: return max(0, (_now() - datetime.fromisoformat(str(at)[:19])).days)
+    except ValueError: return DAYS
+
+
+def _thread(h: dict, conv, subject) -> bool:
+    from .routing import norm_subject
+    return bool(conv and h.get('conv') == conv) or (bool(norm_subject(subject)) and norm_subject(h.get('subject')) == norm_subject(subject))
+
+
+def _answered_in_box(store, who: str, at: str, conv, subject) -> bool:
+    "Did `who` write on this thread after `at`, as the mailbox's Inbox has it?"
+    from . import mailboxread
+    hits, _ = mailboxread.search(store, who, '', 'inbox', _days_since(at) + 1, 10)
+    return any(h['at'] > str(at)[:19] and _thread(h, conv, subject) for h in hits)
+
+
+def in_mailbox(store, cs: list) -> tuple:
+    "(the candidates, a stored follow-up the mailbox shows answered left out; lines for the follow-ups only the mailbox holds)"
+    from . import assistant, mailboxread, sentjudge
+    if not mailboxread.boxes(store): return cs, []
+    out, n = [], 0
+    for c in cs:
+        a = c.get('action') or {}
+        if c.get('kind') == 'followup' and n < CONFIRM and a.get('who_email') and a.get('asked_at'):
+            n += 1
+            m = store.get_message(a['mid']) if a.get('mid') else {}
+            if _answered_in_box(store, a['who_email'], a['asked_at'], (m or {}).get('ConversationId'), (m or {}).get('Subject')): continue
+            c = c | {'facts': f"{c.get('facts')} The mailbox itself shows no reply either."}
+        out.append(c)
+    hits, _ = mailboxread.search(store, folder='sent', days=DAYS, limit=SENT_LOOK)
+    cut, lines, judged = _ago(hours=assistant.cfg(store)['followup_h']), [], 0
+    for h in hits:
+        if judged >= JUDGE: break
+        if h['at'] > cut or not h['to'] or _stored(store, h): continue
+        judged += 1
+        v = sentjudge.judge_text(store, h['snippet'], h['subject'], h['to'][0])
+        if not (v and v['asks_them']) or _answered_in_box(store, h['to'][0], h['at'], h['conv'], h['subject']): continue
+        lines.append(f"- [followup] mailbox: the owner wrote to {h['to'][0]} on {h['at'][:10]} re \"{_one(h['subject'], 70)}\": \"{_one(h['snippet'], 160)}\" "
+                     f"- in the mailbox only (Taskuary never stored it); nothing has come back in {_days_since(h['at'])} days")
+    return out, lines
+
+
+def _stored(store, h: dict) -> bool:
+    """Does Taskuary hold this sent mail's thread from that day on? Then the stored check speaks for it. Half a day either way: a provider's
+    clock and the stored one are not the same second."""
+    from .routing import norm_subject
+    lo = _ts(datetime.fromisoformat(h['at'][:19]) - timedelta(hours=12)) if h.get('at') else ''
+    if h.get('conv') and store._one('SELECT 1 x FROM message WHERE ConversationId=? AND SentAt>=? LIMIT 1', (h['conv'], lo)): return True
+    s = norm_subject(h.get('subject'))
+    return bool(s) and any(norm_subject(m.get('Subject')) == s for m in store._rows(
+        "SELECT Subject FROM message WHERE SentAt>=? AND (Status='context' OR Direction='out') LIMIT 400", (lo,)))
 
 
 def areas(store, rows: list) -> dict:
@@ -615,7 +672,7 @@ _DATE = re.compile(r'\d{4}-\d{2}-\d{2}(?:[ T]\d{2}:\d{2}(?::\d{2})?)?|\b\d{1,2}:
                    r'\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.? \d{1,2}(?:st|nd|rd|th)?\b|'
                    r'\b\d{1,2}(?:st|nd|rd|th)? (?:of )?(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\b', re.I)
 _NUM = re.compile(r'(?<![\w.])\d{1,3}(?:,\d{3})+(?:\.\d+)?|(?<![\w.,])\d+(?:\.\d+)?')
-_REF = re.compile(r'\b((?:msg|task)\d+)\b')
+_REF = re.compile(r'\b((?:msg|task)\d+|mailbox)\b')
 
 
 def _norm(s) -> str: return ' '.join(re.sub(r'[‘’]', "'", re.sub(r'[“”]', '"', str(s or ''))).lower().split())
@@ -710,6 +767,15 @@ def read(store, r: dict, seen: dict, counts: dict) -> str:
         text = '\n'.join(ls) or 'nothing'
         if ls: seen['memory'] = seen.get('memory', '') + text + '\n'
         return f'memory "{_one(r.get("q"), 60)}" (cite it as memory):\n{text}'
+    if t == 'mailbox':
+        from . import mailboxread
+        who, q, sent, days = _one(r.get('name'), 120), _one(r.get('q'), 120), r.get('sent'), _days(r.get('days'))
+        if not (who or q): return 'mailbox: say whose mail (name) or what subject (q) to look for'
+        hits, errs = mailboxread.search(store, who, q, '' if sent is None else 'sent' if sent else 'inbox', days, HITS)
+        ls = [mailboxread.line(h) for h in hits]
+        for l in ls: seen_add(seen, l)
+        said = ('\n'.join(ls) or ('- nothing' if mailboxread.boxes(store) else '- no mailbox is connected to ask'))
+        return f'mailbox "{who or q}" ({days} days, cite it as mailbox):\n{said}' + (f"\n(not asked: {'; '.join(errs)})" if errs else '')
     return f'no tool "{_one(t, 30)}" - the tools are {", ".join(READS)}'
 
 
@@ -843,6 +909,7 @@ def same(store, family: str, subs: list) -> dict | None:
 def ref_line(store, ref: str) -> str:
     """What one cited id is, for the card: a message's day, sender and subject, a task's title."""
     if ref == 'memory': return "the owner's memory"
+    if ref == 'mailbox': return 'the connected mailbox, asked directly'
     k, n = _ID.match(ref).groups()
     if k == 'att': return f"{(store.get_attachment(int(n)) or {}).get('Name') or 'an attachment'} on {ref_line(store, _owner_ref(store, ref))}"
     if k == 'msg':
@@ -854,13 +921,14 @@ def ref_line(store, ref: str) -> str:
 
 
 @aiusage.named('advisor.lookout')
-def investigate(store, llm, user: str, seen: dict) -> dict | None:
+def investigate(store, llm, user: str, seen: dict, system: str = None) -> dict | None:
     """The run: the model reads the window, asks for reads (STEPS turns, MAX_READS reads at most), and answers its ideas - all inside
     RUN_TOKENS. None when it never answered; else {'ideas': as checked, 'dropped': [(idea, why)], 'reads': what it read, 'tokens'}."""
     from .llm import ask_json
+    SYS = system or prompt(store)
     LAST = '\n\nThis is your last turn: answer your ideas now, no reads.'
     counts, reads, said, fams, tok = {}, [], user, families(store), {'in': 0, 'out': 0, 'calls': 0, 'budget': RUN_TOKENS}
-    def cost(text): return (len(SYSTEM) + len(text)) // 4 + PROPOSE_TOKENS        # a turn: its prompt, and the room to answer
+    def cost(text): return (len(SYS) + len(text)) // 4 + PROPOSE_TOKENS        # a turn: its prompt, and the room to answer
     def spent(): return tok['in'] + tok['out']
     def ask(text):
         # ...the meter wraps the brain, so a re-ask for JSON inside ask_json is counted - and refused, past the ceiling - too
@@ -870,7 +938,7 @@ def investigate(store, llm, user: str, seen: dict) -> dict | None:
             a = llm(system, user_, **kw); tok['out'] += len(str(a or '')) // 4
             return a
         metered.takes_want = getattr(llm, 'takes_want', None)
-        return ask_json(metered, SYSTEM, text, want=WANT, max_tokens=PROPOSE_TOKENS)
+        return ask_json(metered, SYS, text, want=WANT, max_tokens=PROPOSE_TOKENS)
     def done(**k):
         if (real := real_tokens(store, getattr(aiusage.asked(), 'rids', None))): tok['real'] = real
         return {'ideas': [], 'dropped': [], 'reads': reads, 'tokens': tok} | k
@@ -910,7 +978,8 @@ def asked(action) -> str:
     Agent tab opens with (the owner, 2026-11-23: "anything that comes in on the Agent tab shows the input prompt that created it"; 2026-11-24:
     "shouldn't the input show the whole thing"); one raised before the window was kept shows the instructions alone; '' for any other line."""
     a = action or {}
-    return '\n\n'.join(x for x in (SYSTEM, a.get('window')) if x) if a.get('type') == 'lookout' else ''
+    if a.get('type') != 'lookout': return ''
+    return a['window'] if a.get('whole') else '\n\n'.join(x for x in (SYSTEM, a.get('window')) if x)
 
 
 def key_of(x: dict) -> str:
@@ -933,20 +1002,20 @@ def _said(x: dict) -> dict:
 
 def land(store, x: dict, window: str = '') -> tuple:
     """(what happened, the row): 'raised' a new idea row, 'updated' the one already on these subjects in this family when new evidence came
-    (in place, never said twice), or 'repeat' with the earlier row when nothing is new or it was already put down. `window`: the run's prompt
-    as sent, kept on the idea for its chat (asked)."""
+    (in place, never said twice), or 'repeat' with the earlier row when nothing is new or it was already put down. `window`: the run's whole prompt
+    as sent - his goals as they stood, then the window - kept on the idea for its chat (asked)."""
     subs, was = subjects(store, x['refs']), None
     if (old := same(store, x['family'], subs)) or (was := store._one('SELECT * FROM idea WHERE Key=?', (key_of(x),))):
         old = old or was | {'act': json.loads(was.get('ActionJson') or '{}') or {}}
         a, new = old['act'], [r for r in x['refs'] if r not in {e.get('ref') for e in old['act'].get('evidence') or []}]
         if old.get('Status') not in ('open', 'snoozed') or not new: return 'repeat', old
         ev = (a.get('evidence') or []) + [e for e in _evidence(store, x) if e['ref'] in new]
-        act = a | _said(x) | {'evidence': ev, 'subjects': sorted(set(a.get('subjects') or []) | set(subs)), 'window': window}
+        act = a | _said(x) | {'evidence': ev, 'subjects': sorted(set(a.get('subjects') or []) | set(subs)), 'window': window, 'whole': True}
         store._exec('UPDATE idea SET Text=?, ActionJson=?, LastSaid=? WHERE IdeaId=?', (x['title'], json.dumps(act), _ts(_now()), old['IdeaId']))
         store.audit('idea', old['IdeaId'], 'lookout_updated', 'advisor', 'agent', {'family': x['family'], 'new': new})
         return 'updated', store.get_idea(old['IdeaId'])
     # ...the pitch on a line of its own, apart from the next step (the owner, 2026-11-02)
-    act = {'type': 'lookout', 'family': x['family'], 'whose': 'yours - nobody asked for it', **_said(x), 'evidence': _evidence(store, x), 'subjects': subs, 'window': window}
+    act = {'type': 'lookout', 'family': x['family'], 'whose': 'yours - nobody asked for it', **_said(x), 'evidence': _evidence(store, x), 'subjects': subs, 'window': window, 'whole': True}
     r = store.upsert_idea({'key': key_of(x), 'kind': x['family'], 'text': x['title'], 'sig': key_of(x), 'action': act}, _ts(_now()))
     store.audit('idea', r['IdeaId'], 'lookout_raised', 'advisor', 'agent', {'family': x['family'], 'refs': x['refs']})
     return 'raised', r
@@ -1090,8 +1159,8 @@ def tick(store, llm=None, force: bool = False, wait: bool = False) -> dict:
             why = f'nothing new since the last pass and every part of the work was looked at within {REVISIT_DAYS} days of its own last news'
             _skipped(store, why, loud=True); return out | {'skipped': why}
         store.set_setting(TRIED_KEY, _ts(_now()), 'advisor')
-        lenses = [(a, lens_of(store, a)) for a in deep]
-        try: got = investigate(store, counted, user, seen)
+        lenses, sys_ = [(a, lens_of(store, a)) for a in deep], prompt(store)
+        try: got = investigate(store, counted, user, seen, sys_)
         except RuntimeError as e: logger.info(f'lookout: {e}'); got = {'ideas': [], 'dropped': [], 'reads': [], 'tokens': None}
         out |= {'ran': True, 'deep': deep}
         if got is None: return out | {'calls': n[0]}
@@ -1104,7 +1173,7 @@ def tick(store, llm=None, force: bool = False, wait: bool = False) -> dict:
         for x in got['ideas']:
             if x['family'] in quiet and x['family'] in once_: held_.append((x, 'its kind raises one a day while under the bar')); continue
             if len(raised) >= room: held_.append((x, 'enough raised for now')); continue
-            what, r = land(store, x, user)
+            what, r = land(store, x, f'{sys_}\n\n{user}')
             if what == 'repeat': held_.append((x, f"said before as \"{_one(r.get('Text'), 80)}\" - nothing new since")); continue
             (raised if what == 'raised' else updated).append(r['IdeaId']); once_.add(x['family'])
         _hold(store, held_)

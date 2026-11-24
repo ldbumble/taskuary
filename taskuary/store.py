@@ -263,8 +263,9 @@ def email_from_soul(soul: str):
 
 # Every document that talks about the owner by name - set_owner and server._heal_owner_docs sweep the same list, and the store seeds it
 # from its template. AGENT.md and CODING.md left it when no agent read them any more (2026-11-23): a copy on disk stays, unshown and unread.
-# AGENTS.md ('agents', selfclose.guidance) is the one every agent reads - seeded on an install that had none, like the rest.
-OWNER_DOCS = ('soul', 'agents', 'job', 'digest', 'triage', 'style', 'counsel')     # LEARNED.md is written from the memory (memory.render), never a template
+# AGENTS.md ('agents', selfclose.guidance) is the one every agent reads - seeded on an install that had none, like the rest. ADVISOR.md
+# ('advisor', lookout.goals) is what the Advisor looks out for, read by its look and its twice-a-day post (the owner, 2026-11-24).
+OWNER_DOCS = ('soul', 'agents', 'job', 'digest', 'triage', 'style', 'counsel', 'advisor')     # LEARNED.md is written from the memory (memory.render), never a template
 UNREAD_DOCS = ('agent', 'coding', 'learned-before-r10')          # ...and an old install's copies of them are never listed, searched or shown (doc_names)
 TEMPLATE_OWNER = ('John Smith', 'john.smith@example.com')
 NO_NAME_YET = ("THE OWNER'S NAME IS NOT SET YET. Who the owner is comes from the mailbox the mail arrived in (addressed_to_you), never "

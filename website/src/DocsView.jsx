@@ -11,6 +11,7 @@ import WorkOutlineIcon from "@mui/icons-material/WorkOutline";
 import RateReviewIcon from "@mui/icons-material/RateReview";
 import SupportAgentIcon from "@mui/icons-material/SupportAgent";
 import SmartToyIcon from "@mui/icons-material/SmartToy";
+import TipsAndUpdatesIcon from "@mui/icons-material/TipsAndUpdates";
 import MenuBookIcon from "@mui/icons-material/MenuBook";
 import AddIcon from "@mui/icons-material/Add";
 import api from "./api";
@@ -40,6 +41,9 @@ const DOCS = {
     blurb: "How you write email — greeting, tone, length, phrasing, sign-off, and your recurring signature — layered onto SOUL.md for every draft. Write it yourself, or Generate from history distills it from your last three months of sent mail; your own lines outside the marked block always survive a regenerate." },
   counsel: { label: "COUNSEL.md", icon: <SupportAgentIcon sx={{ fontSize: 19, color: "var(--tq-link, #55697a)" }} />,
     blurb: "Who Taskuary is and how it speaks to YOU — in the chat, its posts on your work rail, the morning brief. It surfaces and takes a position; it does no work itself. SOUL.md keeps replies careful; this is where Taskuary is allowed an opinion." },
+  // WHAT THE ADVISOR LOOKS OUT FOR IS HIS FILE (the owner, 2026-11-24): its look for ideas and its twice-a-day post read it (lookout.goals)
+  advisor: { label: "ADVISOR.md", icon: <TipsAndUpdatesIcon sx={{ fontSize: 19, color: "var(--tq-link, #55697a)" }} />,
+    blurb: "What the Advisor looks out for — money left on the table, pain worth a root fix, new ideas, what slipped (an ask you never answered, a follow-up nobody answered), what your mail and systems say together — and the bar an idea must clear. Its look for ideas and its twice-a-day post read it at their next run. Blank it to restore the default." },
   digest: { label: "DIGEST.md", icon: <HistoryEduIcon sx={{ fontSize: 19, color: "var(--tq-link, #55697a)" }} />,
     blurb: "Your morning brief — what's in flight, who waits on whom. Written by the Morning digest report: the same brief lands on your work rail daily, its prompt is edited under Reports (that decides what goes in here), and deleting that report turns it off." },
   learned: { label: "LEARNED.md", icon: <PsychologyIcon sx={{ fontSize: 19, color: "var(--tq-link, #55697a)" }} />,

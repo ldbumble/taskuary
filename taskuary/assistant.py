@@ -66,9 +66,8 @@ _LOCK = threading.Lock()   # one check at a time: two clocks firing in the same 
 # placed right there when the check runs, so the prompt IS the payload's shape - the owner reads
 # which data feeds which instruction, and can move or drop a card by editing the words.
 PROMPT = (
-    'You are my assistant; twice a day, at the start and the end of my working day, you read the sources below and check in. Tell me only what a sharp human assistant who had READ everything '
-    'would lean over and say - never a summary of my inbox, never a count I can see myself. A good line connects two things I '
-    'have not connected, or names the one thing I am about to miss. Read:\n'
+    'You are my assistant; twice a day, at the start and the end of my working day, you read the sources below and check in - '
+    'never a summary of my inbox, never a count I can see myself. Read:\n'
     '0. CONFIGURED SYSTEM CHECKS - current views from finance, operations, CRM, infrastructure, or any other connected system (they follow '
     'this prompt, each under its own name). Look for threshold breaches, unusual totals, sharp changes, missing expected activity, and facts '
     'that conflict across systems.\n'
@@ -99,8 +98,7 @@ PROMPT = (
     'sent without my press), a standing prompt, a scheduled report. Never one the existing rules already cover; one a week is plenty, '
     'none when nothing repeats enough.\n'
     '6. WHAT I ALREADY KNOW - never repeat anything under ALREADY SAID, reworded or not; use my notes; draw on the knowledge base by name:\n[taskuary.memory]\n'
-    'Be useful, not busy: a check with nothing NEW posts nothing, and most checks are that. When you do speak, prefer the '
-    'specific over the general: a name, a date, a quoted phrase, a cause. A fact that CHANGES an earlier line (they are out of office; the failure has a cause; they answered) is new and worth one line.\n'
+    'A check with nothing NEW posts nothing. A fact that CHANGES an earlier line (they are out of office; the failure has a cause; they answered) is new and worth one line.\n'
     'End every check with a note to your next one: what you looked at and found nothing in, when something becomes worth '
     'raising (a date, a length of silence), anything you would otherwise have to work out again - facts, never rules.')
 
@@ -139,7 +137,9 @@ OLD_PROMPT_SHA = ('06a4ec48fcec9d8bbc9fc6f423f52360aa1b0a2e7f5affe31582e7da56d1e
                   # 2026-11-12, while it still said "every 30 minutes" - the Advisor reads twice a day now (TWICE_A_DAY)
                   '4d13664387d65994e3407d7ca5f0f8d599aebbd313e3362850d0941b88bdc908',
                   # 2026-11-23, while it ranked the system checks first and said three ideas were noise - alerts and ideas have their own room now
-                  '0e1ed64ff18f89d7fd62c74fd7eb4c386602926562e2e7cf53eaa5a59aca4b52')
+                  '0e1ed64ff18f89d7fd62c74fd7eb4c386602926562e2e7cf53eaa5a59aca4b52',
+                  # 2026-11-24, while it carried the Advisor's goals itself - they are ADVISOR.md's now (lookout.goals)
+                  '4e7c0ce4f1567a11c1a081299a9e729358310953d7e30d8df678470e0dfe15b3')
 # TWICE A DAY, BOTH WHOLE (the owner, 2026-11-12: "run the advisor twice a day in AM and PM ... make sure the full advisor run happens"): every
 # half hour cost ~50K a look on a live install, nearly all of them whole as the day's mail moved past the short check. 07:30 is half an hour
 # after the day's job-ideas pass may start (lookout.MORNING_H), so the morning look follows it; 16:30 is before the day ends and ahead of the
@@ -316,12 +316,15 @@ def followups(store, hours: int, want=('followup', 'promise')) -> list:
         else:
             from . import outcomes
             late_day = outcomes.late_after(store, (inbound.get('FromEmail') or '').lower(), int(store.get_setting('slipped_default_days', 5) or 5))
+            # ...WHATEVER THE TASK'S STATUS (the owner, 2026-11-24): the thread is what waits, and a closed task is named as closed, not skipped
+            tid = r.get('TaskId') or inbound.get('TaskId')
+            on = f" On {task_ref(tid)}, {(store.get_task(tid) or {}).get('Status') or 'gone'}." if tid else ''
             out.append({'key': f"followup:{cid}", 'kind': 'followup', 'sig': _ts(r['SentAt']) + (':away' if gone else '') + step,
                         'facts': (f"You wrote {who} on {_ts(r['SentAt'])[:10]} re \"{_short(r.get('Subject'), 70)}\": \"{_short(body, 160)}\" "
-                                  f"- nothing has come back in {plural(days, 'day')}; late for them after {late_day} days." + (f" BUT {who} is {gone}." if gone else '')),
+                                  f"- nothing has come back in {plural(days, 'day')}; late for them after {late_day} days." + on + (f" BUT {who} is {gone}." if gone else '')),
                         'text': (f"No answer from {who} in {plural(days, 'day')} on \"{subj}\" - " + (f"they are {gone}; I'd wait." if gone else 'follow up?')),
                         # the person key, the day asked and whether they are away: what the slipped lane reads (funnel.slipped_followup)
-                        'action': {'type': 'followup', 'mid': inbound['MessageId'], 'tid': inbound.get('TaskId'),
+                        'action': {'type': 'followup', 'mid': inbound['MessageId'], 'tid': inbound.get('TaskId'), 'ask_mid': r['MessageId'],
                                    'who_email': (inbound.get('FromEmail') or '').lower(), 'asked_at': _ts(r['SentAt']), 'away': bool(gone)},
                         'who': who, 'subject': subj, 'days': days, 'away': gone})
     return out
@@ -1488,6 +1491,7 @@ def think(store, cands: list, llm, instruction: str = None, max_lines: int = MAX
           watch_source_ids=None, watch_sources=None, systems_only: bool = False, blocks=None, report_id=None, memo: str = None) -> list:
     """One call: the owner's instruction (the Reports tab), the candidates, the day, what was already said."""
     from .triage import job_doc
+    from . import lookout
     soul, job = store.doc('soul') or '', job_doc(store, SOUL_CHARS)
     direction = ((SYSTEMS_PROMPT + (f"\n\nTHE OWNER'S RULE FOR THIS MONITOR:\n{instruction.strip()}" if instruction else ''))
                  if systems_only else (instruction or PROMPT).strip())
@@ -1510,7 +1514,9 @@ def think(store, cands: list, llm, instruction: str = None, max_lines: int = MAX
               + (f"\n\nWho the owner is (their own document; its reply rules are for text sent to OTHERS):\n{soul[:SOUL_CHARS]}" if soul else '')
               # ...and what their JOB is - what they are accountable for, who they serve, the cadences. SOUL says how the
               # funnel behaves; this is what "matters" is measured against when the assistant says what comes first
-              + (f"\n\nThe owner's job (their own document - weigh what matters by it):\n{job}" if job else ''))
+              + (f"\n\nThe owner's job (their own document - weigh what matters by it):\n{job}" if job else '')
+              # ...and WHAT IT LOOKS OUT FOR is his ADVISOR.md (the owner, 2026-11-24), the same goals the look for ideas reads - never a monitor's
+              + ('' if systems_only else f"\n\nWhat you look out for (the owner's ADVISOR.md):\n{lookout.goals(store)}"))
     images = []
     if not systems_only:
         from .llm import readable_images

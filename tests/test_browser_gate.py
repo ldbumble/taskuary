@@ -8,7 +8,7 @@ from unittest import mock
 
 from taskuary import browsergate as bg, browserview, gate, hooks, proposals, verdicts
 from taskuary.store import MemoryStore
-from taskuary.testing import Factory
+from taskuary.testing import Factory, turn_told
 
 CHECKOUT = 'https://pay.toll.example/checkout/review'
 SNAP = '- heading "Review your order" [level=1]\n- text "Total $412.50"\n- button "Continue" [ref=e12]\n- link "Back to cart" [ref=e3]'
@@ -326,7 +326,7 @@ class Holding(unittest.TestCase):
     def setUp(self):
         self.s = MemoryStore(); self.tid = Factory(self.s).task('Pay the toll invoice')
         self.told = []
-        self.sess = SimpleNamespace(sid='run1', send_prompt=lambda text, as_owner=True: self.told.append(text))
+        self.sess = SimpleNamespace(sid='run1', send_prompt=lambda text, as_owner=True: self.told.append(turn_told(self.s, self.tid, text)))
 
     def held(self, cmd='agent-browser click @e12', v=None):
         with on(), verdict(v or {'irreversible': True, 'sure': True, 'what': 'pays the $412.50 order on toll.example'}):
@@ -527,7 +527,7 @@ class HeldInTheChat(unittest.TestCase):
         from taskuary import workerstate as ws
         self.ws, self.s = ws, MemoryStore(); self.tid = Factory(self.s).task('Pay the course fee')
         self.told = []
-        self.sess = SimpleNamespace(sid='run1', alive=True, task_id=self.tid, send_prompt=lambda text, as_owner=True: self.told.append(text))
+        self.sess = SimpleNamespace(sid='run1', alive=True, task_id=self.tid, send_prompt=lambda text, as_owner=True: self.told.append(turn_told(self.s, self.tid, text)))
         self.live = mock.patch.dict('taskuary.terminal.SESSIONS', {'run1': self.sess}, clear=True); self.live.start()
         self.addCleanup(self.live.stop); self.addCleanup(bg.HANDS.clear)
 

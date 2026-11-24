@@ -14,6 +14,7 @@ from fastapi.testclient import TestClient
 
 from taskuary import browsergate as bg, browserview, cli, config, general, guard, mailsearch, server, verdicts
 from taskuary.store import MemoryStore
+from taskuary.testing import turn_told
 
 c = TestClient(server.app)
 SRV = config.load()['server']
@@ -125,7 +126,7 @@ class SignUp(unittest.TestCase):
     def setUp(self):
         self.s, self.tid, self.mid, _ = world()
         self.told = []
-        self.sess = SimpleNamespace(sid='run1', send_prompt=lambda text, as_owner=True: self.told.append(text))
+        self.sess = SimpleNamespace(sid='run1', send_prompt=lambda text, as_owner=True: self.told.append(turn_told(self.s, self.tid, text)))
         self.noai = mock.patch('taskuary.llm.build_llm', return_value=None); self.noai.start()
 
     def tearDown(self): self.noai.stop()

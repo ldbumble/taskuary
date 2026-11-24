@@ -348,6 +348,13 @@ class Factory:
         return pics
 
 
+def turn_told(store, tid: int, text: str = '') -> str:
+    """What a turn woken with `text` reads: its own words, then the events past the task's cursor (events.take) - a press wakes with ''
+    and says itself by its card's event. A fake session's send_prompt records this, so a test reads what the agent was handed."""
+    from . import events
+    return '\n\n'.join(x for x in (text, events.take(store, tid)[0]) if x)
+
+
 def _open_home():
     from . import config
     return SQLiteStore(config.db_path())

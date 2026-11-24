@@ -9,7 +9,7 @@ from unittest import mock
 
 from taskuary import browsergate as bg, browserview, general, workerstate as ws
 from taskuary.store import MemoryStore
-from taskuary.testing import Factory
+from taskuary.testing import Factory, turn_told
 
 PAY, SITE = 'https://pay.vendor.example/checkout', 'vendor.example'      # the one name of a site (signin.site_name)
 
@@ -18,7 +18,7 @@ class DoneIsAPress(unittest.TestCase):
     def setUp(self):
         self.s = MemoryStore(); self.tid = Factory(self.s).task('Pay the course fee')
         self.told = []
-        self.sess = SimpleNamespace(sid='run1', alive=True, task_id=self.tid, send_prompt=lambda text, as_owner=True, **k: self.told.append((text, as_owner)))
+        self.sess = SimpleNamespace(sid='run1', alive=True, task_id=self.tid, send_prompt=lambda text, as_owner=True, **k: self.told.append((turn_told(self.s, self.tid, text), as_owner)))
         live = mock.patch.dict('taskuary.terminal.SESSIONS', {'run1': self.sess}, clear=True); live.start()
         self.addCleanup(live.stop); self.addCleanup(bg.HANDS.clear)
         up = mock.patch.object(browserview, 'state', return_value={'open': True, 'url': PAY}); up.start(); self.addCleanup(up.stop)

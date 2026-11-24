@@ -9,7 +9,7 @@ from unittest import mock
 
 from fastapi.testclient import TestClient
 
-from taskuary import bulkcard, cardqueue, conversation, general, github, outbound, proposals, server, taskstate, verdicts
+from taskuary import bulkcard, cardqueue, conversation, events, general, github, outbound, proposals, server, taskstate, verdicts
 from taskuary.store import MemoryStore
 from test_agent_toolbox import hdr
 from test_own_ask_no_reply import own_task
@@ -180,7 +180,9 @@ def test_sends_that_did_not_go_still_wait_on_the_card_and_its_agent_never_sets_t
     assert len(waiting) == 4, 'a send that did not go still waits on its card'
     [said] = told
     assert 'set up again only what failed' not in said
-    assert 'Did not go and still on the card for their press: 4' in said and 'never set them up again' in said, said
+    assert 'Did not go and still on the card for their press: 4' in said, said
+    ev = events.take(s, tid)[0]
+    assert all(f"Card rv{r['ReviewId']} " in ev for r in waiting) and ev.count('the card waits for his press') >= 4, ev
     rest = cardqueue.state(s, tid)['units'][0]
     assert cardqueue.what(s, rest) == '4 emails', 'what still waits on it, not what it once held'
     assert cardqueue.screen(s, tid).split('Waiting for his press now')[1].split('\n')[0].count('rv') == 4, cardqueue.screen(s, tid)
@@ -289,7 +291,9 @@ def test_after_a_bulk_run_its_agent_hears_what_still_waits_behind_it():
     with mock.patch.object(outbound, 'send_out', lambda *a, **k: {'channel': 'email', 'to': k.get('to') or []}), mock.patch.object(outbound, 'send_block', lambda *a, **k: ''):
         st, told = press(s, out['batch'])
     [said] = told
-    assert '10 done' in said and f"rv{last['review_id']}, the email to gail@northwind.example" in said, said
+    assert '10 done' in said, said
+    ev, note = events.take(s, tid)[0], f"Card rv{last['review_id']} (the email to gail@northwind.example):"
+    assert f'{note} up for his press' in ev and f'{note} he' not in ev, 'the woken turn reads the note behind them still up, by its card event'
 
 
 def chat_cards(s, tid):

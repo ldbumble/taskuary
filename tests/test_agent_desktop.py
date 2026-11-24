@@ -7,7 +7,7 @@ from unittest import mock
 
 from taskuary import agentdesktop as ad, clis, hooks, proposals, verdicts
 from taskuary.store import MemoryStore
-from taskuary.testing import Factory
+from taskuary.testing import Factory, turn_told
 from test_browser_gate import Brain, verdict
 
 
@@ -97,7 +97,7 @@ class Holding(unittest.TestCase):
     def setUp(self):
         self.s = MemoryStore(); self.tid = Factory(self.s).task('Reply to Erin about the Payworth invoice', Tags=ad.WANTS); turn_on(self.s)
         self.told = []
-        self.sess = SimpleNamespace(sid='run1', send_prompt=lambda text, as_owner=True: self.told.append(text))
+        self.sess = SimpleNamespace(sid='run1', send_prompt=lambda text, as_owner=True: self.told.append(turn_told(self.s, self.tid, text)))
 
     def check(self, cmd=SEND, v=None):
         with installed(), names(), verdict(v or {'irreversible': True, 'sure': True, 'what': 'sends the reply in the mail app'}):

@@ -10,6 +10,7 @@ import pytest
 
 from taskuary import acp, gate, agents, clipool, clis, permissions, shellgate
 from taskuary.store import MemoryStore
+from taskuary.testing import turn_told
 
 FAKE = [sys.executable, str(Path(__file__).parent / 'fake_acp_server.py')]
 HERE = str(Path(__file__).parent)
@@ -142,7 +143,7 @@ def test_the_owners_reject_reaches_the_agent_as_the_owners_no_and_their_allow_sa
         s = STORE[0] = MemoryStore()
         tid = s.create_task({'Title': 'Fix the budget total', 'Kind': 'coding', 'Status': 'open'}, 'owner')
         told = []
-        sess = SimpleNamespace(sid='run1', send_prompt=lambda text, as_owner=True: told.append((text, as_owner)))
+        sess = SimpleNamespace(sid='run1', send_prompt=lambda text, as_owner=True: told.append((turn_told(s, tid, text), as_owner)))
         with mock.patch.object(shellgate, 'trusted', return_value=''), mock.patch('taskuary.workerstate._live', return_value=sess), \
              mock.patch('taskuary.terminal.stranger_now', return_value=False):
             t = _answering(option)

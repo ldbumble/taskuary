@@ -13,6 +13,16 @@ from taskuary import browserview, wrapup, general, handbook, llm, responder, ser
 from taskuary.store import MemoryStore
 
 
+def _answered(c, tid):
+    "The chat's state once its turn has answered (a line answers when kept; its turn answers in the chat)."
+    end = time.time() + 15
+    while time.time() < end:
+        got = c.get(f'/api/tasks/{tid}/assistant').json()
+        if any(m['role'] == 'assistant' for m in got.get('messages') or []) and not general.at_work(tid): return got
+        time.sleep(0.05)
+    return got
+
+
 def general_task(store, kind='general'):
     return store.create_task({'Title': 'Plan the customer launch', 'Summary': 'Compare the three options',
                               'Kind': kind, 'Status': 'open'}, 'owner')
@@ -427,9 +437,10 @@ class GeneralApiTests(unittest.TestCase):
         connect_cli(self, claude={'cmd': 'claude'})
         with mock.patch.object(server, 'store', store), mock.patch.dict(terminal.SESSIONS, {}, clear=True), \
              mock.patch.object(llm, 'build_llm', return_value=lambda *a, **k: 'CLI answer'):
-            out = TestClient(server.app).post(f'/api/tasks/{tid}/assistant/messages',
-                                               json={'text': 'Plan it', 'pick': 'cli:claude'}).json()
-        self.assertEqual(out['reply'], 'CLI answer')
+            c = TestClient(server.app)
+            self.assertTrue(c.post(f'/api/tasks/{tid}/assistant/messages', json={'text': 'Plan it', 'pick': 'cli:claude'}).json()['kept'])
+            out = _answered(c, tid)                    # ...the line answers once kept; its turn answers in the chat
+        self.assertEqual(out['messages'][-1]['content'][0]['text'], 'CLI answer')
         self.assertEqual(out['session']['pick'], 'cli:claude')
 
     def test_api_starts_and_resumes_the_same_session(self):
@@ -438,11 +449,10 @@ class GeneralApiTests(unittest.TestCase):
              mock.patch.object(llm, 'build_llm', return_value=lambda *a, **k: 'Research result'):
             client = TestClient(server.app)
             first = client.post(f'/api/tasks/{tid}/assistant/session', json={'connector_id': cid}).json()
-            sent = client.post(f'/api/tasks/{tid}/assistant/messages', json={'text': 'Research this', 'connector_id': cid}).json()
-            resumed = client.get(f'/api/tasks/{tid}/assistant').json()
-        self.assertEqual(first['session']['sid'], sent['session']['sid'])
-        self.assertEqual(sent['session']['sid'], resumed['session']['sid'])
-        self.assertEqual(sent['reply'], 'Research result')
+            self.assertTrue(client.post(f'/api/tasks/{tid}/assistant/messages', json={'text': 'Research this', 'connector_id': cid}).json()['kept'])
+            resumed = _answered(client, tid)
+        self.assertEqual(first['session']['sid'], resumed['session']['sid'])
+        self.assertEqual(resumed['messages'][-1]['content'][0]['text'], 'Research result')
         self.assertEqual(len(resumed['messages']), 2)
 
     def test_coding_task_cannot_accidentally_start_the_general_assistant(self):

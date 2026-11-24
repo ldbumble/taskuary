@@ -784,6 +784,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // are left out of it - the terminal pane draws those live over its own socket, and they move on every read while an agent prints
   const detailLast = useRef(""), detailMoves = useRef(0), loadFailed = useRef(false);
   const servedDetail = useRef(null), detailNow = useRef(null); detailNow.current = detail;
+  // ...A LONG TASK'S OLDER MESSAGES RIDE AS WHO AND WHEN (server _cut_messages, `messagesCut`): Came from's Show all reads them whole
+  const wholeRead = useRef(false);
   detailReads.current ||= coalesce(async (id, signal) => {
     try {
       const asked = Date.now();             // the read's age, against the rail's (taskDetail.noteRead)
@@ -793,7 +795,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       const held = servedDetail.current, rev = held && held.data === detailNow.current && held.id === id ? held.data.rev : "";
       // ...and the page's first read of a task says it was OPENED: its chat's next turn starts being prepared (server: general.warm)
       const opened = held?.id !== id;
-      const { data } = await api.get(`/api/tasks/${id}`, { signal, params: rev ? { rev } : opened ? { opened: 1 } : {} });
+      const { data } = await api.get(`/api/tasks/${id}`, { signal, params: { ...(rev ? { rev } : opened ? { opened: 1 } : {}), ...(wholeRead.current ? { whole: 1 } : {}) } });
       if (stale(id)) return;
       // ...and "nothing new" is the fresh word too: what stands is the server's, pressable
       if (data?.same) { setKeptCopy(null); if (loadFailed.current) { loadFailed.current = false; setErr(""); } return false; }
@@ -1012,6 +1014,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   }, [selected]);
   // Came from: every message drawn instead of each conversation's ends, and the one message opened in full under its row
   const [showAll, setShowAll] = useState(false);
+  useEffect(() => { wholeRead.current = showAll; if (showAll && detailNow.current?.messagesCut) loadDetail(selected); }, [showAll]);   // eslint-disable-line react-hooks/exhaustive-deps
   const [openMsg, setOpenMsg] = useState(undefined);
   // ON A PHONE From shows three lines and opens on a tap (owner-approved 2026-10-21); the tap only opens it - nothing under it is pressed
   const [fromOpen, setFromOpen] = useState(false);
@@ -1938,9 +1941,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                                     (the owner, 2026-10-16: "wasn't this supposed to be a chat back and forth if you hit show all?") - and an email
                                     thread as every row, each opening its letter. Each scrolls in its own box, so one long thread cannot bury the next. */}
                                 <Box sx={{ mt: 0.5, minWidth: 0 }}>
-                                  {showAll && isChat(g.channel) ? <ChatThread messages={g.msgs} maxHeight={THREAD_MAX} />
+                                  {showAll && isChat(g.channel) ? <ChatThread messages={g.msgs.filter((m) => !m.stub)} maxHeight={THREAD_MAX} />
                                     : <Box data-tq-thread-box="" sx={showAll ? { maxHeight: THREAD_MAX, overflowY: "auto", minWidth: 0 } : undefined}>
-                                        <ConversationRows rows={fromRows(g, 3, showAll)} open={shownMsg} onOpen={(f) => setOpenMsg(f(shownMsg))} narrow
+                                        <ConversationRows rows={fromRows(g, 3, showAll).filter((r) => !r.m?.stub)} open={shownMsg} onOpen={(f) => setOpenMsg(f(shownMsg))} narrow
                                           onExpand={() => setShowAll(true)} files={sourceFiles} fetchFor={fetchFor} subject={g.title} /></Box>}
                                 </Box>
                               </Box>
@@ -2058,7 +2061,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       {timeline.length > CONV_KEEP && <Link component="button" type="button" underline="hover" data-tq-conversation-more="" onClick={() => setShowAll((v) => !v)}
         sx={{ display: "block", fontSize: 12, mb: 0.4, textAlign: "left" }}>{showAll ? "Show fewer" : `Show all ${timeline.length}`}</Link>}
       <Box ref={cameFromRef} sx={{ minWidth: 0, scrollMarginTop: 8 }}>
-        <ConversationRows rows={(showAll ? timeline : timeline.slice(-CONV_KEEP)).map((m) => ({ m }))} open={shownMsg} onOpen={(f) => setOpenMsg(f(shownMsg))}
+        <ConversationRows rows={(showAll ? timeline : timeline.slice(-CONV_KEEP)).filter((m) => !m.stub).map((m) => ({ m }))} open={shownMsg} onOpen={(f) => setOpenMsg(f(shownMsg))}
           files={sourceFiles} fetchFor={fetchFor} newest={timeline.at(-1)?.MessageId} />
       </Box>
     </Part>

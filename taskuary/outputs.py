@@ -308,17 +308,13 @@ def keep_turn(tid: int, turn: int, since: float) -> list:
 # A FILE A CARD CARRIES IS DRAWN ON THAT CARD ONLY (the owner, 2026-11-10: "it should have drafted email not show me the file and the privew of
 # the file. don't need preview need the email acion card"): the file the agent attached to its reply stood under its answer as a preview card
 # of its own, read there as the thing it made. `show` still draws what the agent chose to show (agenttools.show_files) - never a card's file
-# ...AND A POST'S PICTURE (the owner's live task, 2026-11-24: the comparison image stood under the answer as a file of its own) - on its card once
 def on_cards(store, tid: int) -> set:
-    "The names of the files a draft or card of task `tid` carries (its delivery envelope's attachments, an act's picture)."
+    "The names of the files a draft or card of task `tid` carries (its delivery envelope's attachments)."
     out = set()
-    for r in store._rows("SELECT Kind, Deliver, DraftText FROM review WHERE TaskId=? AND (IFNULL(Deliver,'')<>'' OR Kind='action')", (int(tid),)):
-        try: d = json.loads(r['Deliver'] or '{}') or {}
-        except (TypeError, ValueError): d = {}
+    for r in store._rows("SELECT Deliver FROM review WHERE TaskId=? AND IFNULL(Deliver,'')<>''", (int(tid),)):
+        try: d = json.loads(r['Deliver']) or {}
+        except (TypeError, ValueError): continue
         out |= {str(a['name']) for a in (d.get('attachments') or []) if isinstance(a, dict) and a.get('name')} if isinstance(d, dict) else set()
-        try: p = json.loads(r['DraftText'] or '{}') if r['Kind'] == 'action' else {}
-        except (TypeError, ValueError): p = {}
-        if isinstance(p, dict) and isinstance(p.get('image'), str) and p['image'].strip(): out.add(Path(p['image']).name)
     return out
 
 

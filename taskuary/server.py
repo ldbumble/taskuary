@@ -2318,12 +2318,37 @@ def _earlier(d: dict) -> list:
 
 
 @app.get('/api/tasks/{task_id}')
-def task_detail(task_id: int, rev: str = '', opened: bool = False):
+def task_detail(task_id: int, rev: str = '', opened: bool = False, whole: bool = False):
     """ONE TASK AS ITS PAGE DRAWS IT, read every 3 s while an agent works. Each setting and document its many readers ask (the owner's addresses,
-    the AI pick, trusted organisations, SOUL.md for the owner's name) is read once for the whole read (store.held_settings)."""
-    with store.held_settings(): return _task_detail(task_id, rev, opened)
+    the AI pick, trusted organisations, SOUL.md for the owner's name) is read once for the whole read (store.held_settings). `whole`: every
+    message in full (Came from's Show all) - else a long task's older ones ride as who, where and when (_cut_messages)."""
+    with store.held_settings(): return _task_detail(task_id, rev, opened, whole)
 
-def _task_detail(task_id: int, rev: str = '', opened: bool = False):
+# A LONG TASK'S READ CARRIES ITS NEWEST MESSAGES WHOLE (the load run, 2026-11-24: a 2,000-line chat's task read was 2 MB and 6-16 s, polled every
+# 3 s beside its conversation, which is where its chat is drawn from): the rest ride as who, where and when - Came from counts and names them
+# and opens each conversation's first one - and in full on `whole`. The facts read off the messages (origin, repeats, the row's move) read all.
+KEEP_MESSAGES = 40
+_STUB = ('MessageId', 'TaskId', 'ConversationId', 'Channel', 'SourceName', 'Subject', 'SentAt', 'CreatedAt', 'FromName', 'FromEmail', 'Status', 'Direction', 'ExternalId')
+
+def _cut_messages(d: dict, keep: set) -> None:
+    """The task read `d` with only the newest KEEP_MESSAGES, each conversation's first and those in `keep` (a card's, a danger) whole; the rest
+    stubs. One of the owner's own keeps its words: the page tells what he sent outside Taskuary from a reply it sent by them
+    (taskLifecycle.sentElsewhere). And the routes of the whole ones, the first that made the task and the newest: what triage said (TaskPage)."""
+    msgs = d.get('messages') or []
+    if len(msgs) <= KEEP_MESSAGES: return
+    when = lambda m: (str(m.get('SentAt') or m.get('CreatedAt') or ''), m.get('MessageId') or 0)
+    whole, firsts = {m['MessageId'] for m in sorted(msgs, key=when)[-KEEP_MESSAGES:]} | set(keep), {}
+    for m in sorted(msgs, key=when): firsts.setdefault(m.get('ConversationId') or m.get('SourceName') or m.get('Subject') or m['MessageId'], m['MessageId'])
+    whole |= set(firsts.values())
+    mine = lambda m: m.get('Status') == 'context' or m.get('Direction') == 'out'
+    d['messages'] = [m if m['MessageId'] in whole else {**{k: m.get(k) for k in _STUB}, **({'BodyText': m.get('BodyText')} if mine(m) else {}), 'stub': True}
+                     for m in msgs]
+    rs = d.get('routes') or []
+    made = next((r for r in rs if r.get('VerdictJson') or r.get('Decision') == 'create'), None)
+    d['routes'] = [r for i, r in enumerate(rs) if r.get('MessageId') in whole or r is made or i >= len(rs) - KEEP_MESSAGES]
+    d['messagesCut'] = sum(1 for m in d['messages'] if m.get('stub'))
+
+def _task_detail(task_id: int, rev: str = '', opened: bool = False, whole: bool = False):
     d = store.task_detail(task_id)
     if not d: raise HTTPException(404, 'task not found')
     # ONE CARD AT A TIME (cardqueue): what waits behind the card that stands is not the page's to draw yet
@@ -2359,7 +2384,10 @@ def _task_detail(task_id: int, rev: str = '', opened: bool = False):
     if opened: general.warm(store, task_id, d.get('task'))
     # ...and whether its channel can carry a reply, as /api/reviews says: without it a Teams draft offered Send, and
     # the press came back "not sent" instead of the card offering Copy & close from the start
-    memo, sigs, here = {}, {}, {m['MessageId']: m for m in d.get('messages') or []}
+    full = d.get('messages') or []
+    routes = d.get('routes') or []
+    if not whole: _cut_messages(d, {r.get('MessageId') for r in d['reviews']} | {m['MessageId'] for m in full if m.get('Danger')})
+    memo, sigs, here = {}, {}, {m['MessageId']: m for m in full}
     from . import chatlog as _chatlog
     for r in d.get('reviews') or []:
         # ...AND WHAT AN OWED REPLY NEEDS IS SAID ONCE: by the turn it stands in, where that turn said anything (chatlog.card_said - the ask's one rule)
@@ -2372,6 +2400,7 @@ def _task_detail(task_id: int, rev: str = '', opened: bool = False):
     from .wrapup import from_owner, reads_reply_row
     me, memo = own_addresses(store), {}
     for m in d.get('messages') or []:
+        if m.get('stub'): continue
         m['FromOwner'] = from_owner(store, m, me)
         # ...and whether ANYBODY reads a reply to it - a person, not the owner nor a machine (wrapup.reads_reply_row): the page's Reply doors read it
         m['ReadsReply'] = reads_reply_row(store, m, me)
@@ -2389,7 +2418,7 @@ def _task_detail(task_id: int, rev: str = '', opened: bool = False):
     strong = _brainroute().strong_offered(d['task'], judged, ran, story)
     # ...each reader handed the messages already read, and every verdict in one read: on a 1,500-line chat each asked again, line by
     # line, and the page drew a spinner over an empty frame while it did (the owner, 2026-11-01: "this still happens")
-    msgs, verdicts = d.get('messages') or [], store.task_verdicts(task_id)
+    msgs, verdicts = full, store.task_verdicts(task_id)
     o = dict(zip(('origin', 'why'), origin.of_task(store, task_id, msgs)))
     dm = next((m for m in msgs if m.get('Danger')), {})
     # THE ONE MOVE ITS ROW FILLS (rulebook.recommended: its agent's own turn and the task's facts) - the same field the rail's item on the
@@ -2407,18 +2436,18 @@ def _task_detail(task_id: int, rev: str = '', opened: bool = False):
                        # whom: 'owner' for a scam on them, 'agent' for text written to steer the AI (the owner, 2026-10-30)
                        'danger': dm.get('Danger'), 'danger_aim': (dm.get('DangerAim') or 'agent') if dm else None},
             # the same sender writing again and again about this one thing, said once (concierge.repeats) - counted here, no model
-            'repeats': concierge.repeats(store, task_id, d.get('messages'), d.get('routes')),
+            'repeats': concierge.repeats(store, task_id, msgs, routes),
             # a WORKFLOW RUN has no message and no triage behind it: which workflow, and what started it (workflows.of_task)
             'workflow': workflows.of_task(store, d['task']),
             # which of the owner's workstreams it is under, for its small label and the picker (workstreams.py, the owner 2026-11-01)
             'workstream': hub_ws.label(store, hub_ws.of_task(store, task_id)),
             # an invite waiting on the owner, or a thread asking for a time: the row's Accept / Decline / Propose a new time / Find a time
             'calendar': _calendar_of(task_id, msgs),
-            'messages': [_readable(x, verdicts.get(x['MessageId'])) for x in msgs],
+            'messages': [x if x.get('stub') else _readable(x, verdicts.get(x['MessageId'])) for x in d['messages']],
             # ...and the earlier messages triage said its ask rests on, shown with them, never moved onto this task (rests_on, 2026-10-22)
-            'earlier': _earlier(d),
+            'earlier': _earlier({**d, 'messages': msgs, 'routes': routes}),
             # ...and a task Taskuary itself raised (an Advisor idea): who, and its one sentence - Came from's line, not a message card
-            'raised': assistant.raised_by(store, d['task'], d.get('messages')),
+            'raised': assistant.raised_by(store, d['task'], msgs),
             # ...and on a promise task, the owner's own mail the promise was made in, with whom it was made to: the page answers it as a
             # task's reply source, so Close out says "Answering <them>" and the row leads with Reply (store.promised_in, 2026-10-26)
             'owed': _owed(d),
@@ -2783,19 +2812,16 @@ def _demo_turn(task_id: int, text: str, line_id=None):
 @app.post('/api/tasks/{task_id}/assistant/messages')
 def assistant_message(task_id: int, body: AssistantMessageBody):
     """A LINE TYPED IN ANY TASK'S BOX, to whatever agent works it (general.take_line - the one road, the owner 2026-11-10: "coding and general
-    use the same code when it comes to interactions so there should be no difference"). A chat answers with its turn, as it always did; a
-    coding session's turn is its own, and this answers once the line is kept and handed on."""
-    from . import codingchat, general
+    use the same code when it comes to interactions so there should be no difference"). It answers once the line is kept and its turn begun;
+    the turn answers in the chat."""
     if (said := _demo_turn(task_id, body.text, _line_id(body))) is not None: return {'reply': said, **_assistant_payload(task_id)}
     # ...A LINE SENT WHILE A TURN WORKS IS KEPT, AND THIS ANSWERS (the flood, 2026-11-11: fifty lines held fifty requests open until the turn
     # ended): it waits by the box (conversation.items `pending`) and the turn that takes it is the one that answers for it
-    busy = general.at_work(task_id)
-    try: out = _say(task_id, body, wait=not busy)
+    # ...AND ONE SENT TO AN AGENT AT REST TOO (the load run, 2026-11-24: held until its turn ended, up to 242 s behind a full house, each a
+    # request thread borrowed): kept and heard, its turn begun behind the answer - the chat draws the reply as it comes, a failed start in place
+    try: _say(task_id, body, wait=False)
     except (ValueError, RuntimeError) as e: return _chat_failed(e)
-    if busy: return {'reply': '', 'kept': True}
-    if not general.handles(store.get_task(task_id)): return {'reply': '', 'handed': out, **codingchat.chat(store, task_id)}
-    session, reply = out
-    return {'reply': reply, **_assistant_payload(task_id, session)}
+    return {'reply': '', 'kept': True}
 
 @app.post('/api/tasks/{task_id}/waiting/{line_id}/drop')
 def waiting_drop(task_id: int, line_id: str):
@@ -3969,12 +3995,15 @@ def _drop_task(tid: int):
     """Deleting a task must also stop the agent working it. "Not a task" read as a kill - it
     was not: the pty kept running, kept editing files, and kept holding the task id, so when
     SQLite handed that id to the NEXT task the orphan showed up as the agent working it. A
-    task that no longer exists has nobody working it, by definition."""
+    task that no longer exists has nobody working it, by definition. Its process is let go of behind the answer (terminal.close `behind`);
+    what it writes for the task as it ends is deleted with it once it has, unless the id is another task's by then."""
+    def after():
+        if not store.get_task(tid): store.delete_task(tid)
     try:
         live = hub_term.for_task(tid)
         if live:
-            hub_term.close(live['sid'])
-            logger.info(f'closed the session on task {tid} - the task was deleted')
+            hub_term.close(live['sid'], behind=True, then=after)
+            logger.info(f'closing the session on task {tid} - the task was deleted')
     except Exception as e:
         logger.warning(f'could not close the session on deleted task {tid}: {e}')
     store.delete_task(tid)
@@ -6960,7 +6989,8 @@ def _pile_payload(force: bool = False, current: str = None, only: str = None,
     # desk a task's news is its rail row and the task itself, and the Assistant hears none of it (the owner, 2026-11-10: "the agents
     # don't tell the assistant anything unless you ask assistant questions")
     p = {**{k: v for k, v in cached.items() if k not in ('alerts', 'events')}, 'display_revision': None,
-         'generated_at': int(started * 1000), 'live_seq': cached.get('live_seq', seen)}
+         'generated_at': int(started * 1000), 'live_seq': cached.get('live_seq', seen),
+         'sorting': _sorting_line()}            # ...a backlog being read is said over the rail, never a silent wait
     # ...and what the page is HOLDING: an item whose review was decided (or whose task closed)
     # leaves the pile, and nothing told the page - so a sent reply sat on the table as
     # "reply pending" for as long as the tab stayed open (the owner, 2026-09-03). Looked up in the build the pile came from.
@@ -7011,7 +7041,9 @@ def funnel_settle(body: SettleBody):
         # its badge on the page and lost it on the next read - this road, not Next's, is the one its button takes (concierge._stamp_next)
         # ...a button's own word, never free text: anything else is not a press of this app's
         if body.pressed and body.pressed in buttons.labels(): concierge._stamp_next(store, dock, body.key, body.pressed)
-        out = {**out, 'pile': _pile_along(only=body.only, fyi=body.fyi)}
+        # ...answered with the rail it can have at once, as the walk's light answer is: forced, Mark done waited out a whole rebuild of a
+        # rail its own write had just made stale (6 s p50, 48 s at 300 mails, 2026-11-24). Nothing warm, nothing rides: the page reads it behind
+        out = {**out, 'pile': _pile_along(only=body.only, fyi=body.fyi, force=False) if funnel.warm(store) else None}
     return _encoded(out)
 
 def _warm_assistant():
@@ -11552,6 +11584,11 @@ def _thinking_line() -> str:
     except Exception: return ''
     return f"{t['title']}. {t['detail']}" if t else ''
 
+def _sorting_line() -> str:
+    from . import problems
+    try: return problems.sorting(store)
+    except Exception: return ''
+
 @app.get('/api/ingest/status')
 def ingest_status():
     try: st = json.loads(store.get_setting('ingest_status') or '{"state": "idle"}')
@@ -11582,6 +11619,8 @@ def ingest_status():
             'triageError': store.get_setting('triage_last_error') or '',
             # ...and the same thing in the assistant's voice, while held mail keeps it true (problems.thinking)
             'thinking': _thinking_line(),
+            # ...and what is still being sorted, in the rail's words (problems.sorting) - whichever road brought it, a sync or a chat's lane
+            'sorting': _sorting_line(),
             'timelineFade': store.get_setting('timeline_fade') or 'normal'}  # how old rows dim (FeedView)
 
 # ── interactive terminals (real pty + websocket; the headless runs live on /api/runs) ──

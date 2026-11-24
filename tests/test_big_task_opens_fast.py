@@ -129,3 +129,61 @@ def test_the_owner_s_first_line_after_theirs_is_the_one_that_counts():
     assert senders.known(s, {'channel': 'whatsapp', 'from_name': 'Ray Colton', 'conversation_id': 'grp'})[0]
 
 
+def test_its_read_carries_the_newest_lines_whole_and_the_rest_as_who_and_when(big):
+    """The load run, 2026-11-24: a 2,000-line chat's task read was 2 MB and 6-16 s, polled every 3 s beside the conversation its chat is drawn
+    from. The newest lines and each conversation's first ride whole; the rest as who, where and when, counted - and all of them on `whole`."""
+    import json
+    s, tid = big
+    cut, whole = server.task_detail(tid), server.task_detail(tid, whole=True)
+    full = [m for m in cut['messages'] if not m.get('stub')]
+    assert len(cut['messages']) == len(whole['messages']) == LINES and cut['messagesCut'] == LINES - len(full)
+    assert len(full) <= server.KEEP_MESSAGES + 2 and full[-1]['MessageId'] == whole['messages'][-1]['MessageId']
+    assert full[0]['MessageId'] == whole['messages'][0]['MessageId'], "the conversation's first line, whole: Came from opens on it"
+    assert all(set(m) <= {*server._STUB, 'BodyText', 'stub'} for m in cut['messages'] if m.get('stub'))
+    assert len(json.dumps(cut, default=str)) < len(json.dumps(whole, default=str)) / 2
+    assert (cut['origin'], cut['repeats'], cut['earlier']) == (whole['origin'], whole['repeats'], whole['earlier']), 'facts read off every line'
+    assert 'messagesCut' not in whole and len(cut['routes']) < len(whole['routes'])
+
+
+def test_its_chat_reads_each_line_s_route_by_the_line(big):
+    """The chat's mail (general.JOINED) found each line's route through the task's index: every route of the task read for every line, the
+    square of the chat - 0.5 s a read at 2,000 lines, on every poll. By the line's own index it is one look a line."""
+    from taskuary import general
+    s, tid = big
+    with s.lock: plan = ' '.join(str(tuple(r)) for r in s.cx.execute('EXPLAIN QUERY PLAN ' + general.JOINED, (tid,)))
+    assert 'idx_route_message' in plan and 'idx_route_task' not in plan, plan
+
+
+def test_its_chat_is_built_with_the_writer_s_lock_free(big):
+    """The load run, 2026-11-24: the chat of a 2,000-line task was read and built under the writer's lock on every poll - 243 s of it in 13 min,
+    every triage write and press queued behind. Read on one reader snapshot, it is built with the lock free for any other thread."""
+    import threading
+    from taskuary import chatlog
+    s, tid = big
+    chatlog.serve(s, tid)
+    free, item = [], chatlog._item
+    def built(r):
+        if not free:
+            t = threading.Thread(target=lambda: free.append(s.lock.acquire(blocking=False) and (s.lock.release() or True))); t.start(); t.join()
+        return item(r)
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(chatlog, '_item', built); got = chatlog.serve(s, tid)
+    assert free == [True] and len(got['items']) >= LINES / 2
+
+
+def test_its_chat_reads_what_came_in_off_the_writer(big):
+    """The load run, 2026-11-24 (after the fix above): what came in since was found by reading every arrival of the chat, bodies and all, on
+    the writer's connection under its lock - 312 holds, 66 s of it in 15 min with one 2,000-line chat open. None of the chat's reads go there."""
+    from taskuary import chatlog
+    s, tid = big
+    chatlog.serve(s, tid)
+    seen, cx = [], s.cx
+    class Spy:
+        def __getattr__(self, k): return getattr(cx, k)
+        def execute(self, q, *a): seen.append(q); return cx.execute(q, *a)
+    s.cx = Spy()
+    try: chatlog.serve(s, tid)
+    finally: s.cx = cx
+    assert not [q for q in seen if 'FROM chatlog' in q and q.lstrip().upper().startswith('SELECT') and "Kind='arrival'" in q], seen
+
+

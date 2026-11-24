@@ -107,6 +107,7 @@ class _TimedLock:
 # second by the pile, the doorways, the pollers - queued 1-3 s behind each membership census, 6-8 deep. A reader sees exactly
 # what is committed; only the thread that holds the writer's lock (its own open transaction) reads through the writer.
 _OFF_WRITER, _ON_WRITER = threading.local(), threading.local()
+_PINNED = threading.local()      # pinned_read(): (the store, its reader cursor) - this thread's plain reads share one snapshot
 _HELD = threading.local()        # held_settings(): (the store, {name: its row}) for this thread while a build holds them
 # ...and A WRITE TO WHAT IS HELD lets go of it, whoever wrote it (_exec): the statement's own target table, read off its grammar
 _HELD_TABLES = re.compile(r'^\s*(?:INSERT(?:\s+OR\s+\w+)?\s+INTO|REPLACE\s+INTO|UPDATE(?:\s+OR\s+\w+)?|DELETE\s+FROM)\s+(?:setting|doc)\b', re.I)
@@ -2107,7 +2108,24 @@ class SQLiteStore:
         the writer's lock (its own open transaction must be read back), and not while a transaction sits open on the writer
         with nobody holding the lock - a failed write left it (see _undone) and the writer is where it can be seen."""
         return self._rail_cx is not None and not self.lock._is_owned() and not (self.cx.in_transaction and not self.lock._depth)
+    @contextlib.contextmanager
+    def pinned_read(self):
+        """ONE VIEW, READ OFF THE WRITER (the load run, 2026-11-24: a 2,000-line chat polled once a second held the writer's lock 243 s in
+        13 min, every triage write and press queued behind it): this thread's plain reads till the block ends share one reader snapshot -
+        begun under the writer's lock, so it is never the middle of a write made in steps under it (take_kept: his line heard, then taken
+        off the box), and read after the lock is let go. A memory database, or a thread inside the lock, reads under the lock as before."""
+        if (getattr(_PINNED, 'at', None) or (None,))[0] is self: yield; return
+        if not self._off_writer():
+            with self.lock: yield
+            return
+        with self._snapshot_read() as cur:
+            with self.lock: cur.execute('SELECT COUNT(*) FROM chatlog_task').fetchone()      # ...the snapshot is taken by its first read
+            was, _PINNED.at = getattr(_PINNED, 'at', None), (self, cur)
+            try: yield
+            finally: _PINNED.at = was
     def _rows(self, q, p=()):
+        if (pin := getattr(_PINNED, 'at', None)) and pin[0] is self and q.lstrip()[:6].upper() == 'SELECT' and not self.lock._is_owned():
+            return [dict(r) for r in pin[1].execute(q, p).fetchall()]
         if q.lstrip()[:6].upper() == 'SELECT' and self._off_writer():
             with self._snapshot_read() as cur: return [dict(r) for r in cur.execute(q, p).fetchall()]
         with self.lock: return [dict(r) for r in self.cx.execute(q, p).fetchall()]

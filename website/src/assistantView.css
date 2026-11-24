@@ -906,7 +906,8 @@
 .tq-cl-b .tq-ab { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tq-cl .tq-ab { min-height: 30px; min-width: 78px; padding: 0 14px; font-size: 12.5px; }
 .tq-cl .tq-ab.next { min-width: 0; }
-.tq-cl-more { min-width: 30px !important; width: 30px; padding: 0 !important; color: var(--tq-secondary, #6e685f); }
+/* ...the fold is named ("More ▾", the owner 2026-11-23), never a bare ▾: as wide as its word */
+.tq-cl-more { min-width: 30px !important; padding: 0 10px !important; white-space: nowrap; color: var(--tq-secondary, #6e685f); }
 .tq-arow-sep { width: 1px; height: 22px; background: var(--tq-inset, #ddd6cb); flex: 0 0 auto; margin: 0 2px; }
 .tq-arow-why { font-size: 11px; line-height: 1.25; color: var(--tq-warning, #8a6d1f); text-align: center; }
 /* NARROWER THAN 1100px the row stacked one type per line - four lines over the box, a third of a 768px screen taken from the task

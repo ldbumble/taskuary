@@ -11,6 +11,7 @@ import TaskPage from "./TaskPage.jsx";
 import ActionRow from "./ActionRow.jsx";
 import { adviceShown, stripWord } from "./advice.js";
 import { TableVerbs, useHost, useVerbs } from "./actionRow.js";
+import { useBeat } from "./pressResult.js";
 import { rowWhy } from "./railStatus.js";
 import { hint as btnHint, label as btnLabel } from "./buttons.js";
 
@@ -105,7 +106,9 @@ export default function CanvasItem({ card, height, expanded, onExpand, onNext, b
   // NEXT, in the row: the walk's ONE button on a task (the owner, 2026-09-29), the same handler as the button it replaces
   useHost(phone);
   // ...greyed from a press until its move lands (the owner, 2026-11-03: one move at a time - ten fast clicks are one move, not a queue)
-  useVerbs("next", [{ id: "next", group: "next", label: btnLabel("next"), disabled: !!busy, run: () => onNext(), title: btnHint("next") }]);
+  // ...greyed through a press's beat too (pressResult): what the press did is on its button, and the walk moves only after it
+  const beat = useBeat();
+  useVerbs("next", [{ id: "next", group: "next", label: btnLabel("next"), disabled: !!busy || beat, run: () => onNext(), title: btnHint("next") }]);
   // A NARROW WINDOW'S ROW FILLS THE CANVAS'S ONE PICK (`advice`, AssistantView): the task's own recommended move - the field its task and
   // its rail item are served with (the owner, 2026-11-09: "the agents while running should recommend actions, no assistant") - and on an
   // idea row the Advisor's decision. It read /api/advice for itself here, a second ask for a second answer; nothing is asked now

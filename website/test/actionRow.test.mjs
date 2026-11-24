@@ -258,7 +258,7 @@ test("...and beside it next to the way back into a session", () => {
 });
 
 test("the task page registers Close with a note with Mark done, not as a decision of its own", () => {
-  const page = fs.readFileSync(path.join(process.cwd(), "src", "TaskPage.jsx"), "utf8");
+  const page = fs.readFileSync(path.join(process.cwd(), "src", "taskMoves.js"), "utf8");
   assert.match(page, /id: "close-note", group: "more"/);
 });
 
@@ -314,7 +314,7 @@ test("one name per button: the bar says the label itself, no short bar word (but
   const mod = await import("../src/actionRow.js");
   assert.equal(mod.shortLabel, undefined, "no second, shorter name for the bar");
   const src = fs.readFileSync(path.join(process.cwd(), "src", "ActionRow.jsx"), "utf8");
-  assert.match(src, />\{v\.label\}<\/button>/);
+  assert.match(src, /><PressLabel v=\{v\} \/><\/button>/);
   assert.doesNotMatch(src, /\bSHORT\b|shortLabel/);
   const view = fs.readFileSync(path.join(process.cwd(), "src", "AssistantView.jsx"), "utf8");
   assert.doesNotMatch(view, /tq-compose-hint|Enter sends · Shift\+Enter/);           // no hint under the box

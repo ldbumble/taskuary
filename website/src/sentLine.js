@@ -1,6 +1,7 @@
 // where a reply went, in the owner's words, and what the task does now (TaskPage SentHere, the owner 2026-11-05)
 import { inDemo } from "./demoWorld.js";
 import { label } from "./buttons.js";
+import { pressWord } from "./pressResult.js";
 const SENT = label("approve", "done");
 // ...IN THE DEMO A SEND IS PLAYED (the owner, 2026-11-15; demo.SENT is the server's same sentence): the card settles as it would, and says what did not happen
 export const DEMO_SENT = "Sent - in the demo, nothing left this computer";
@@ -14,8 +15,10 @@ export const sentLine = ({ channel, to, closing, kept, done = "", demo = inDemo(
 // ...and on the sent card (SentCard): its title - the subject as it went (deliverySubject already says "Re:" for a reply; a new email of its
 // own is no reply, 2026-11-13) - and the line beside its pressed "✓ Sent"
 export const sentTitle = ({ to, subject }) => subject || (to ? `Reply to ${to}` : "Your reply");
-export const sentSaid = (p) => sentLine(p).replace(new RegExp(`^${p.done && !p.demo ? p.done : SENT}(?: - | )?`), "");
-export const sentMark = (p) => `✓ ${p.done || SENT}`;
+// ...and SEND AND CLOSE SAYS SO ON ITS BUTTON, in the one press-result word (pressResult, the owner 2026-11-23: "Sent · closed"): the line beside
+// it then says only where it went
+export const sentSaid = (p) => sentLine({ ...p, closing: false }).replace(new RegExp(`^${p.done && !p.demo ? p.done : SENT}(?: - | )?`), "");
+export const sentMark = (p) => `✓ ${p.closing ? pressWord("send_close") : p.done || SENT}`;
 // THE SENT CARD STANDS IN FOR ITS OWN DRAFT, NEVER FOR WHAT COMES AFTER IT (the audit, 2026-11-13: the sender wrote again, the agent drafted
 // the new reply, and where its card belonged stood the letter that had gone). AND NEVER BESIDE IT (his live app, 2026-11-23: "on hitting Send a
 // duplicate appears quickly then it goes away" - recorded, ~170 ms of two "✓ Sent" letters: the card in its turn turned Sent in place, and the

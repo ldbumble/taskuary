@@ -29,16 +29,17 @@ import { SETTING_HREF, offersSetting, shareBody, shareVerb, shareable, sharedNot
 const failOf = (e) => e?.response?.data?.detail || e?.message || "It did not go - try again.";
 
 // ...in two parts where the badge and the menu belong in different places (TaskPage: the badge on the Result, the menu always drawn)
-export function useShareParts(owner, result, on = true, { onShared, summary = null, summaryWhy = "", noResult = "" } = {}) {
+// `offWhy`: why it cannot share now - the button stands greyed with it, never gone (a task's one toolbar, the owner 2026-11-23)
+export function useShareParts(owner, result, on = true, { onShared, summary = null, summaryWhy = "", noResult = "", offWhy = "" } = {}) {
   const [at, setAt] = useState(null), [ways, setWays] = useState(null), [failed, setFailed] = useState(false);
   const [busy, setBusy] = useState(""), [err, setErr] = useState(""), [done, setDone] = useState(null);
   const [mailOpen, setMailOpen] = useState(false), [people, setPeople] = useState([]), [to, setTo] = useState([]);
-  const can = on && shareable(result);
+  const can = on && shareable(result) && !offWhy;
   const open = (e, anchor) => {
     setAt(anchor || e?.currentTarget || null); setErr(""); setWays(null); setFailed(false);
     api.get("/api/shares/ways").then(({ data }) => setWays(data || {})).catch(() => setFailed(true));
   };
-  useVerbs(`share:${owner}`, can ? [shareVerb(open, !!busy, busy ? "sharing…" : "")] : [], can);
+  useVerbs(`share:${owner}`, can ? [shareVerb(open, !!busy, busy ? "sharing…" : "")] : on && offWhy ? [shareVerb(() => {}, true, offWhy)] : [], on);
   if (!can) return { badge: null, menu: null };
   const go = async (how, extra = {}) => {
     setBusy(how); setErr("");

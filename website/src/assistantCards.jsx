@@ -62,7 +62,7 @@ import { connError, openBugReport } from "./bugReportOpen.js";
 import { dayLabel, fmtTime } from "./dates.js";
 import { useShare } from "./Share.jsx";
 import ItemSections, { ItemLay, ItemPart, handToItem } from "./ItemSections.jsx";
-import { PaneMoves } from "./TaskPage.jsx";   // an FYI's Came from carries its pane's moves as a task's does
+import { PaneMoves } from "./TaskRow.jsx";   // an FYI's Came from carries its pane's moves as a task's does
 import { TYPE_LABELS } from "./reportWords.js";
 import { SECTIONS as STEPS } from "./taskLayout.js";   // a task's sections, by name (ItemSections)
 import { WorkstreamLabel } from "./Workstream.jsx";   // the idea's workstream, a small label (the owner, 2026-11-01)

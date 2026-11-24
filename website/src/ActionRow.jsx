@@ -5,10 +5,12 @@ import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Menu, MenuItem, useMediaQuery } from "@mui/material";
 import { NAV, ROW_HOLD_MS, ROW_STUCK_MS, TYPES, fitRow, navShort, press, shortParts, putSpineVerbs, rowOf, lightOnCard, sameRow, heldOff, heldRow, splitRow, laidOf, useHosted, useRowVerbs } from "./actionRow.js";
 import { label } from "./buttons.js";
+import { PressLabel } from "./pressResult.js";
 const shortNext = (w) => (w === label("next", "batch") ? label("next", "batch_short") : w);   // a squeezed desk bar's word for a batch's Next
 
 // ONE PILL: the moves the width holds, and its own ▾ for the rest (foldsOf) - the move pill unlabelled, Change with its one quiet word
 const PILL = { move: "What to do", change: "Change the task", more: "More" };
+const foldWord = (g) => `${g.label || "More"} ▾`;
 function Cluster({ g, btn, act = press }) {
   const [at, setAt] = useState(null);
   return (
@@ -17,8 +19,9 @@ function Cluster({ g, btn, act = press }) {
       <div className="tq-cl-b">
         {g.shown.map(btn)}
         {g.rest.length > 0 && <>
-          <button type="button" className="tq-ab s tq-cl-more" aria-haspopup="menu" aria-expanded={!!at} aria-label={`More ${g.label ? g.label.toLowerCase() + " " : ""}actions`}
-            data-tq-more={g.type} disabled={heldOff(g.rest)} aria-disabled={heldOff(g.rest) || undefined} onClick={(e) => setAt(e.currentTarget)}>▾</button>
+          {/* ...NAMED, never a bare ▾ (the owner, 2026-11-23): "More ▾", or the pill's own name */}
+          <button type="button" className="tq-ab s tq-cl-more" aria-haspopup="menu" aria-expanded={!!at}
+            data-tq-more={g.type} disabled={heldOff(g.rest)} aria-disabled={heldOff(g.rest) || undefined} onClick={(e) => setAt(e.currentTarget)}>{foldWord(g)}</button>
           <Menu open={!!at} anchorEl={at} onClose={() => setAt(null)} anchorOrigin={{ vertical: "top", horizontal: "center" }} transformOrigin={{ vertical: "bottom", horizontal: "center" }}
             slotProps={{ paper: { sx: { minWidth: 200, borderRadius: 2 } } }}>
             {g.rest.map((v) => (
@@ -130,7 +133,7 @@ export default function ActionRow({ inline = false, advised: given = null, hold 
   // a short bar word ("Snooze", "Stop") beside a long hover one was two names for one button
   const btn = (v) => (
     <button key={v.id} type="button" className={`tq-ab ${v.tone}`} disabled={v.disabled} aria-disabled={v.disabled || undefined} data-tq-inert={v.inert ? "" : undefined} data-tq-verb={v.id} data-tq-for={v.at}
-      title={(v.disabled && v.why) || v.title || (fit.tight ? v.label : undefined)} onClick={(e) => act(v.id, e, e.currentTarget, v.of)}>{v.label}</button>
+      title={(v.disabled && v.why) || v.title || (fit.tight ? v.label : undefined)} onClick={(e) => act(v.id, e, e.currentTarget, v.of)}><PressLabel v={v} /></button>
   );
   return (
     <div className={inline ? "tq-arow inline" : "tq-arow"} role="toolbar" aria-label={ref ? `What to do with ${ref}` : "What to do with this one"} data-tq-row=""
@@ -159,7 +162,7 @@ export default function ActionRow({ inline = false, advised: given = null, hold 
             {back && <span className={`tq-ab ${back.tone} next`} data-tq-back="" data-tq-wbk="" data-tq-short={phone ? "" : undefined}>{phone ? "" : back.label}</span>}
             {back && <span className={`tq-ab ${back.tone} next`} data-tq-back="" data-tq-wbs="" data-tq-short=""></span>}
             {[...decide, ...agent, ...more].map((v) => <span key={v.id} className={`tq-ab ${v.tone}`} data-tq-w={v.id}>{v.label}</span>)}
-            <span className="tq-ab s tq-cl-more" data-tq-wm="">▾</span>
+            <span className="tq-ab s tq-cl-more" data-tq-wm="">{foldWord({})}</span>
           </div>
         </div>
       </div>

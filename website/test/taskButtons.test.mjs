@@ -55,12 +55,12 @@ test("the fold goes from the right - More, then Agent, then Pass on - and never 
 });
 
 test("one look: every task-row button is the same class, the lit one alone adds the fill, and the row is drawn once where BUTTONS_AT says", () => {
-  const page = readFileSync(new URL("../src/TaskPage.jsx", import.meta.url), "utf8");
-  assert.match(page, /className=\{`tq-ab row\$\{v\.tone === "p" \? " p" : ""\}`\}/);
-  assert.match(page, /<MovesLine items=\{items\} tucked=\{tucked\} sec="task" name="Task" even \/>/);
-  assert.match(page, /import \{ ROW_LOOK \} from "\.\/ButtonBar\.jsx";/);
-  assert.match(page, /const EVEN_ROW = \{ \.\.\.ROW_LOOK,/);
-  assert.match(page, /export const BUTTONS_AT = "strip";/);
+  const page = readFileSync(new URL("../src/TaskPage.jsx", import.meta.url), "utf8"), row = readFileSync(new URL("../src/TaskRow.jsx", import.meta.url), "utf8");
+  assert.match(row, /className=\{`tq-ab row\$\{v\.tone === "p" \? " p" : ""\}`\}/);
+  assert.match(row, /<MovesLine items=\{items\} tucked=\{tucked\} sec="task" name="Task" even act=\{act\} \/>/);
+  assert.match(row, /import \{ ROW_LOOK \} from "\.\/ButtonBar\.jsx";/);
+  assert.match(row, /const EVEN_ROW = \{ \.\.\.ROW_LOOK,/);
+  assert.match(row, /export const BUTTONS_AT = "strip";/);
   assert.match(page, /const buttonsHere = \(k\) => BUTTONS_AT === "strip" && k === \(isOpen\("agent"\) \? "agent"/);
   assert.match(page, /\{!task \? <SpineMoves sec=\{sec\.key\} name=\{sec\.name\} \/> : BUTTONS_AT === "spine" && sec\.key === "from" \? <TaskButtons spine \/> : null\}/);
 });

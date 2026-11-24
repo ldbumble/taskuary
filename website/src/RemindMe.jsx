@@ -4,6 +4,7 @@ import EventIcon from "@mui/icons-material/Event";
 import api from "./api.js";
 import { remindDay, remindWaiting, usualLabel, usualLine, usualWhy } from "./taskFilter.js";
 import { hint, label } from "./buttons.js";
+import { pressBeat, pressOver } from "./pressResult.js";
 
 // REMIND ME (the owner, 2026-09-25): put an open task away until a day - "remind me of this in 2 weeks, or
 // whenever I want". Until then it is Upcoming in Tasks and off the work rail; that morning it is back. One road
@@ -33,16 +34,18 @@ export function RemindPicker({ task, anchor, onClose, onDone, path, act = null, 
     api.get(`/api/tasks/${task.TaskId}/remind/usual`).then(({ data }) => on && setUsual(data || {})).catch(() => on && setUsual({}));
     return () => { on = false; };
   }, [reads, task?.TaskId]);
-  const set = async (until) => {
+  // `day`: the day as the press named it ("tomorrow", "Mon 24 Nov") - what the Remind me button says it did, for a beat before the walk moves
+  // (pressResult, the owner 2026-11-23); the picker shuts at the press, the button under it is what was pressed
+  const set = async (until, day = "") => {
     setBusy(true); setErr("");
     const leaving = until !== "none";
-    if (leaving) onLeave?.();
+    if (leaving && onLeave) { onClose?.(); await pressBeat("remind", { day: day || remindDay(until) }); onLeave(); }
     try {
       const data = act && leaving ? await act(until) : (await api.post(path || `/api/tasks/${task.TaskId}/remind`, { until })).data;
       onClose?.(); onDone?.(data);
     } catch (e) {
       const msg = e?.response?.data?.detail || e?.message || "could not set the reminder";
-      setErr(msg); if (leaving) onStay?.(msg);
+      pressOver(); setErr(msg); if (leaving) onStay?.(msg);
     }
     finally { setBusy(false); }
   };
@@ -54,13 +57,13 @@ export function RemindPicker({ task, anchor, onClose, onDone, path, act = null, 
         <>
           {/* THE DAY THE OWNER SAID leads (the owner, 2026-10-27): "remind me Monday" lit this picker with no Monday in it */}
           {said?.until && said?.day && !away && (
-            <Button size="small" variant="contained" disabled={busy} onClick={() => set(said.until)} disableElevation data-tq-remind-said=""
+            <Button size="small" variant="contained" disabled={busy} onClick={() => set(said.until, said.day)} disableElevation data-tq-remind-said=""
               sx={{ justifySelf: "start", fontSize: 11, minHeight: 26, py: 0, px: 1, color: "#fff", bgcolor: "#55697a", "&:hover": { bgcolor: "#46586a" } }}>{said.day}</Button>)}
           {/* the learned day leads, filled - its row keeps its height while it is read, so the days under it never jump */}
           {reads && !away && (usual === null || usualLabel(usual)) && (
             <Box sx={{ minHeight: 26, display: "flex", alignItems: "center", gap: 0.75 }} data-tq-remind-usual="">
               {usualLabel(usual) && <>
-                <Button size="small" variant="contained" disabled={busy} onClick={() => set(usual.on)} disableElevation
+                <Button size="small" variant="contained" disabled={busy} onClick={() => set(usual.on, usualLabel(usual))} disableElevation
                   sx={{ fontSize: 11, minHeight: 26, py: 0, px: 1, color: "#fff", bgcolor: "#55697a", "&:hover": { bgcolor: "#46586a" } }}>{usualLabel(usual)}</Button>
                 {/* ...the line it is read from on hover: the owner corrects the day in LEARNED.md, How you work (2026-10-25) */}
                 <Typography component="span" sx={{ fontSize: 11, color: "var(--tq-warning, #6b6459)" }} title={usualLine(usual)}>{usualWhy(usual)}</Typography>
@@ -68,7 +71,7 @@ export function RemindPicker({ task, anchor, onClose, onDone, path, act = null, 
             </Box>)}
           <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
             {QUICK.map(([label, until]) => (
-              <Button key={until} size="small" variant="outlined" disabled={busy} onClick={() => set(until)}
+              <Button key={until} size="small" variant="outlined" disabled={busy} onClick={() => set(until, label.toLowerCase())}
                 sx={{ fontSize: 11, minHeight: 26, py: 0, px: 1 }}>{label}</Button>
             ))}
           </Box>
@@ -76,7 +79,7 @@ export function RemindPicker({ task, anchor, onClose, onDone, path, act = null, 
           <Box component="label" sx={{ display: "grid", gap: 0.4, fontSize: 11.5, color: "var(--tq-warning, #6b6459)" }}>
             Later today
             <input type="time" id={`remind-time-${task.TaskId}`} disabled={busy}
-              onBlur={(e) => e.target.value && set(`today ${e.target.value}`)}
+              onBlur={(e) => e.target.value && set(`today ${e.target.value}`, `today at ${e.target.value}`)}
               style={{ font: "inherit", fontSize: 13, padding: "4px 6px", borderRadius: 6, border: "1px solid var(--tq-border, #d8d1c5)" }} />
           </Box>
           <Box component="label" sx={{ display: "grid", gap: 0.4, fontSize: 11.5, color: "var(--tq-warning, #6b6459)" }}>

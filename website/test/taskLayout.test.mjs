@@ -322,8 +322,9 @@ test("no task kind or state lays a Close out section: Came from and the chat, a 
   assert.doesNotMatch(from, /<NoAgentChat /);
   assert.match(src, /\{!solo && slot\("agent", <Box data-tq-work=/);
   // ...the task's own moves ride the chat's strip
-  assert.match(src, /function useTaskMoves\(sec\) \{/);
-  assert.match(src, /close = sec === "agent";/);
+  const row = fs.readFileSync(new URL("../src/TaskRow.jsx", import.meta.url), "utf8");
+  assert.match(row, /function useTaskMoves\(sec\) \{/);
+  assert.match(row, /close = sec === "agent";/);
 });
 
 // ONE RULE FOR EVERY KIND (the owner, 2026-11-08): any agent, turn or draft on a task opens it on its chat with Came from the thin arrow tab -

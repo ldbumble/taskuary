@@ -181,6 +181,27 @@ def test_a_saved_session_on_one_brain_with_anothers_model_shows_and_runs_that_br
         assert general._selected(s, model='claude-sonnet-5-5', pick='cli:claude')[2] == 'claude-sonnet-5-5'
 
 
+def test_a_task_no_ai_has_worked_names_the_one_that_will(real, monkeypatch):
+    """Walk 11 (2026-11-23): a stranger's task, held before any agent ran, wore a bare "AI" chip at its head - nothing had run, so nothing was
+    named. The task says which AI WILL take it - the router's own answer, the one Settings says - and nothing where none would."""
+    from taskuary import climodels, server
+    real.update({'codex'})
+    s, cfg, _ = _home(('codex',), {'codex': True}, {'default_brain': 'codex'})
+    with mock.patch.object(config, 'load', lambda: cfg), mock.patch.object(climodels, 'catalog', lambda cli: {'choices': ['gpt-5.5']}):
+        clic.sync(cfg, s)
+        monkeypatch.setattr(server, 'store', s)
+        tid = s.create_task({'Title': 'Seat pricing for next year', 'Kind': 'general', 'Status': 'open'}, 'router')
+        assert server._ran_on(tid) is None, 'the live shape: nothing has run it'
+        will = server._will_run(s.get_task(tid))
+        assert will and will['pick'] == 'cli:codex' and will['brain'], will
+        assert will == {k: v for k, v in brainroute.runs(s, 'general', cfg).items() if k in ('pick', 'brain', 'model')}, 'the router says it, once'
+    bare, cfg2, _ = _home()
+    with mock.patch.object(config, 'load', lambda: cfg2):
+        monkeypatch.setattr(server, 'store', bare)
+        tid = bare.create_task({'Title': 'Seat pricing for next year', 'Kind': 'general', 'Status': 'open'}, 'router')
+        assert server._will_run(bare.get_task(tid)) is None, 'no AI connected: no chip'
+
+
 def test_a_cli_is_never_handed_a_model_it_does_not_run(real):
     """The live shape, 2026-11-13: "Quick general work -> standard on codex (CLI), claude-sonnet-5-5 (rule work)" - Codex exited 1, "not
     supported when using Codex with a ChatGPT account", on every quick call. The general card's model came along whatever it was saved for,

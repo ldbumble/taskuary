@@ -34,6 +34,7 @@ import { loadGeneral } from "./lazyGeneral.js";
 // the static demo's guided journey: nothing outside the demo build ever draws it, so nothing there fetches it
 const DemoJourney = DEMO ? lazyView(() => import("./DemoJourney.jsx")) : () => null;
 import { BACK, advisedIn, aimed, navEnd, onPressed, onPressing, press as pressRow, walkMove, leaveRow, rowNow, rowDrawable, rowReady, rowTable, useHosted, useRowHold, useRowVerbs, useVerbs } from "./actionRow.js";
+import { useBeat } from "./pressResult.js";
 import { forgetTasks, heldTask, notePile, pageRead, prefetchTask, recRead, watchReads, watchRecs } from "./taskDetail.js";
 import { readLists } from "./connectorLists.js";
 import { hint as btnHint, howFar, label as btn, liveVerb, verbOfRow } from "./buttons.js";
@@ -105,7 +106,7 @@ import { isImportant, level as priorityOf } from "./priority.js";
 import { age, ago, band, bandUntil, plural } from "./timeWords.js";
 const GeneralWorkspace = lazyView(loadGeneral);
 import CanvasItem, { CANVAS_ITEM_HEIGHT, showsTask, wordsCap } from "./CanvasItem.jsx";
-import { PaneMoves } from "./TaskPage.jsx";
+import { PaneMoves } from "./TaskRow.jsx";
 import ActionRow from "./ActionRow.jsx";
 import { floorOf } from "./inView.js";
 const CanvasBrowse = lazyView(() => import("./CanvasBrowse.jsx"));
@@ -3321,7 +3322,8 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true, r
   const [, setStepped] = useState(0);                 // ...a step of history moves what a page's Back returns to
   useEffect(() => onStep(() => setStepped((n) => n + 1)), []);
   const backNav = navTarget(viewIs);
-  const moving = busy || deferring || resetting;
+  // ...and through a press's beat (pressResult): its result is on its button, the move comes after it - one move at a time
+  const beat = useBeat(), moving = busy || deferring || resetting || beat;
   // ...greyed, and refused, while a move is out (the owner, 2026-11-03): a row's Back draws its row at its press as Next does; it reads nothing
   // and passes nothing, the row it leaves stays exactly as it was
   const goBack = () => {

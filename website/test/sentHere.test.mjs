@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { sentLine, sentSaid, sentStands, sentTitle } from "../src/sentLine.js";
+import { sentLine, sentMark, sentSaid, sentStands, sentTitle } from "../src/sentLine.js";
 
 const read = (f) => readFileSync(new URL(`../src/${f}`, import.meta.url), "utf8");
 
@@ -22,7 +22,10 @@ test("a sent reply stays its card: the subject, the words, and ✓ Sent on the b
   assert.equal(sentTitle({ subject: "Portal login", to: "erin@northwind.example" }), "Portal login");     // a new email is no reply
   assert.equal(sentTitle({ subject: "RE: Q3 numbers" }), "RE: Q3 numbers");
   assert.equal(sentTitle({ to: "Erin Blake" }), "Reply to Erin Blake");
-  assert.equal(sentSaid({ channel: "email", closing: true }), "by email - closing the task");
+  // ...Send and close's close is said on the button, in the one press-result word (pressResult): the line says where it went
+  assert.equal(sentSaid({ channel: "email", closing: true }), "by email");
+  assert.equal(sentMark({ channel: "email", closing: true }), "✓ Sent · closed");
+  assert.equal(sentMark({ channel: "email" }), "✓ Sent");
   assert.equal(sentSaid({ to: "Ray Colton" }), "to Ray Colton");
   // ...IN THE DEMO A SEND IS PLAYED (the owner, 2026-11-15): the card settles and says what did not happen - one sentence, the server's own
   assert.equal(sentLine({ channel: "email", demo: true }), "Sent - in the demo, nothing left this computer");

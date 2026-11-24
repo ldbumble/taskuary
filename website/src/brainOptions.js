@@ -48,7 +48,8 @@ export const codingChoice = (v) => String(v).startsWith("cli:") ? { brain: Strin
 // `why` is the reason the control is greyed: there is nothing else to hand it to.
 export const SHOWN = 3;
 const modelRows = (ms = []) => ms.map((m) => (typeof m === "string" ? { id: m, label: m } : { id: m?.id, label: m?.label || m?.id })).filter((m) => m.id);
-export function switchChoices({ coding = false, codingOptions = [], generalBrains = [], brainModels = {}, current = "", model = "", read = true } = {}) {
+// `named`: the AI's own name where its pick is not one of the rows (the server's willRun / ranOn brain) - the pill says it rather than nothing
+export function switchChoices({ coding = false, codingOptions = [], generalBrains = [], brainModels = {}, current = "", model = "", read = true, named: own = "" } = {}) {
   const cardModels = (pick) => generalBrains.find((b) => b.pick === pick)?.models;
   const ais = coding
     ? codingOptions.filter((o) => o.ready !== false).map((o) => ({ pick: o.value, label: o.label,
@@ -63,7 +64,7 @@ export function switchChoices({ coding = false, codingOptions = [], generalBrain
   // ...and THE PILL NAMES THE MODEL ITS TICK MARKS (the owner, 2026-11-23: "why does this say both claude and codex????" - Codex ticked at its
   // default under a pill reading "Codex · claude-sonnet"): a model its AI does not list is that AI's default; with no list read, as given
   const shown = on?.models.length ? named : model;
-  const said = on ? `${on.label}${shown ? ` · ${shown}` : ""}` : "";
+  const said = on ? `${on.label}${shown ? ` · ${shown}` : ""}` : own ? `${own}${model ? ` · ${model}` : ""}` : "";
   const why = !read ? "Reading which AIs are ready…" : !ais.length ? "No AI is connected - connect one under Connections."
     : rows.length === 1 || rows.every((r) => r.now) ? "Only one AI is ready - connect another under Connections to hand this to it." : "";
   return { rows, said, why };

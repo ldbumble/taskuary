@@ -4,6 +4,7 @@
 // Only a change in what the row SHOWS (a label, a disabled flag, a verb arriving or going) wakes the row; a fresh closure does not.
 import React, { createContext, useContext, useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
 import { label, liveVerb, verbOfRow } from "./buttons.js";
+import { pressOver, pressedOn } from "./pressResult.js";
 
 // verb: { id, label, group: "decide" | "agent" | "more" | "next" | "back", tone: "p" | "s" | "q", title, disabled, why, run(event, anchorEl) }
 //   `why`: what a DISABLED verb is waiting for, said in the row itself ("write the reply first") - a greyed button that does not say why is a dead end
@@ -45,7 +46,8 @@ export function put(owner, verbs, ref = "", at = null) {
 // ...and from the PRESS that moves the table on (`leaving`, AssistantView.surface): the old item stays up the ~100 ms the pull takes,
 // and its Send under a ring already on the next row read as the next one's. A press that fails gives them back (leaveRow(null)).
 let table = null, leaving = null;
-export const rowTable = (key) => { if ((key || null) === table) return; table = key || null; draw(); };
+// ...and a press's result goes with the item it was pressed on (pressResult): the row held over the next one is not what was pressed there
+export const rowTable = (key) => { if ((key || null) === table) return; table = key || null; pressOver(); draw(); };
 export const leaveRow = (key) => { if ((key || null) === leaving) return; leaving = key || null; draw(); };
 const shows = ({ at }) => !at || ((!table || at === table) && at !== leaving);
 // ...and WHERE THE TABLE'S ITEM LAYS ITS MOVES, said by the item itself (ItemSections, on a desk), not only by its card's verbs: a line said
@@ -171,6 +173,8 @@ export const press = (id, e, anchor, of = null) => {
   const hand = !!e?.isTrusted && (!(v?.group === "next" || v?.group === "back") || /^(setup|about):/.test(String(id)));
   if (hand && Date.now() - (lastAt.get(k) ?? -Infinity) < REPEAT_MS) return undefined;
   if (hand) lastAt.set(k, Date.now());
+  // ...and which button it was, for what the press did to show on it (pressResult)
+  pressedOn(id, by || "", snap.list.find((x) => x.id === id && (!by || x.of === by))?.at || "");
   announce(id);
   const out = v?.run?.(e, anchor);
   // ...and Back the same as Next (2026-11-02): a second Back while the first is out was dropped here, never reaching the walk's own hold
@@ -186,12 +190,12 @@ export const lightOnCard = (id) => { if ((id || "") === lit) return; lit = id ||
 export const useLit = () => useSyncExternalStore((f) => { litSubs.add(f); return () => litSubs.delete(f); }, () => lit);
 export const rowNow = () => snap;          // what the row carries this moment - an Advisor press looks for its real button here
 const subscribe = (f) => { subs.add(f); return () => subs.delete(f); };
-export const useRowVerbs = () => useSyncExternalStore(subscribe, () => snap);
+export const useRowVerbs = () => useSyncExternalStore(subscribe, () => snap, () => snap);
 
 // A PHONE'S TASK VIEW CARRIES THE ROW AT ITS OWN FOOT, in both states: the view is sized once (Expand pins that same box), so the
 // row inside it must be there before and after Expand, or the pane would grow. While one is hosted the dock draws none.
 let hosts = 0;
-export const useHosted = () => useSyncExternalStore(subscribe, () => hosts > 0);
+export const useHosted = () => useSyncExternalStore(subscribe, () => hosts > 0, () => hosts > 0);
 export function useHost(on) {
   useEffect(() => {
     if (!on) return undefined;
@@ -404,7 +408,8 @@ export function pillsOf(row) {
 }
 // ...the Change pill's most used first (the owner's list, 2026-10-28: split / merge / not a task / Remind me - Remind me the one pressed most)
 // ...and Watch it beside Remind me (watch.py, the owner, 2026-11-01)
-const CHANGE_FIRST = ["remind", "defer", "watch", "reshape", "split", "nat"];
+// ...and in the desk strip's own order (actionRow.TASK_GROUPS: Pass on is Remind me, Not for me, Watch it - the owner, 2026-11-23: one toolbar, one order)
+const CHANGE_FIRST = ["remind", "defer", "nat", "watch", "reshape", "split"];
 // a pill with `n` of its moves in view: `must` first claims its places, the rest go by the pill's order; drawn in that order
 const pill = (type, vs, n, must) => {
   const can = vs.filter((v) => !v.tucked || v.tone === "p"), keep = new Set(must.filter((v) => vs.includes(v)));
@@ -502,7 +507,7 @@ const spineSubs = new Set(), spineSub = (f) => { spineSubs.add(f); return () => 
 export const laidOf = (list) => (list || []).find((v) => v.laid)?.laid || null;
 export const putSpineVerbs = (by) => { const s = JSON.stringify(by); if (s === spineSig) return; spineSig = s; spineVerbs = by; spineDraw(); };
 export const useSpineVerbs = (sec) => useSyncExternalStore(spineSub, () => spineVerbs[sec] || NONE);
-export const useSpineAll = () => useSyncExternalStore(spineSub, () => spineVerbs);
+export const useSpineAll = () => useSyncExternalStore(spineSub, () => spineVerbs, () => spineVerbs);
 // ...the row: Back and Next alone; each pane's stage moves in the move pill's order (`spine`: the word a folded pane shows - Draft reply
 // where nothing is drafted yet); the title bar's the task's own, Mark done first - a live agent's too: the press stops and saves first
 // THE BAR IS NAVIGATION ONLY (the owner, 2026-11-10: "on bottom the only buttons should be nav. all other buttons should be on task no????"):

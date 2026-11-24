@@ -97,7 +97,8 @@ test("three pills: Mark done, the agent's move and the reply's lead the move pil
   const row = rowOf({ ref: "TQ-1", list: STATES["new task"] }, PICKS["new task"]), all = foldsOf(row);
   assert.deepEqual(all[0].map((g) => [g.type, g.label]), [["move", ""], ["change", "Change"]], "no REPLY / AGENT / CLOSE words");
   assert.deepEqual(all[0][0].shown.slice(0, 3).map((x) => x.id), ["done", "start-agent", "reply"]);
-  assert.deepEqual(all[0][1].shown.map((x) => x.id).slice(0, 3), ["remind", "watch", "reshape"], "Remind me first, Watch it beside it (2026-11-01)");
+  // ...in the desk strip's own order (TASK_GROUPS: Remind me, Not for me, Watch it) - one toolbar, one order on every surface (the owner, 2026-11-23)
+  assert.deepEqual(all[0][1].shown.map((x) => x.id).slice(0, 3), ["remind", "nat", "watch"], "Remind me first, as on the desk");
   // ...folding: Change first, to its ▾ alone, then the move pill from its end, then one ▾ for both
   const shape = (l) => l.map((g) => `${g.type}:${g.shown.length}+${g.rest.length}`).join(" ");
   const ch = all.findIndex((l) => l.find((g) => g.type === "change")?.shown.length === 0);
@@ -228,14 +229,5 @@ test("on a phone, an unlit move with no room goes into the ▾ - always beside M
   assert.match(fs.readFileSync(new URL("../src/assistantView.css", import.meta.url), "utf8"), /\.tq-arow-verbs\.tight \.tq-ab\[data-tq-verb="done"\], \.tq-arow-verbs\.tight \.tq-ab\[data-tq-verb\$=":done"\], \.tq-arow-verbs\.tight \.tq-cl-more \{ flex-shrink: 0; \}/);
 });
 
-test("the Tasks tab's bar folds the same way: Change first, Mark done and Remind me never", () => {
-  const items = [{ id: "#0", w: 120, rank: 0 }, { id: "nat", w: 160, rank: 4 }, { id: "#2", w: 110, rank: 0 }, { id: "sep", w: 8, rank: 3 },
-    { id: "hand", w: 170, rank: 3 }, { id: "reshape", w: 130, rank: 2 }, { id: "change", w: 100, rank: 1 }];
-  assert.deepEqual(barFolds(items, 2000, 6, 34), []);
-  assert.deepEqual(barFolds(items, 780, 6, 34), ["change"]);
-  assert.deepEqual(barFolds(items, 640, 6, 34), ["reshape", "change"]);
-  assert.deepEqual(barFolds(items, 450, 6, 34), ["sep", "hand", "reshape", "change"]);
-  assert.deepEqual(barFolds(items, 200, 6, 34), ["nat", "sep", "hand", "reshape", "change"], "never Mark done or Remind me");
-  const page = fs.readFileSync(new URL("../src/TaskPage.jsx", import.meta.url), "utf8");
-  assert.match(page, /<Box data-tq-task-bar="" ref=\{bar\.ref\} sx=\{\{ display: "flex", alignItems: "center", gap: 0\.8, flexWrap: "nowrap"/);
-});
+// ...and THE TASKS TAB HAS NO BAR OF ITS OWN (the owner, 2026-11-23: one toolbar, one builder): its foot draws the canvas's TaskButtons from the
+// page's verbs - pressResult.test.mjs renders it

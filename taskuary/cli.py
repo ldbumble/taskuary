@@ -91,7 +91,7 @@ def _open_private(url):
     cmd = _http_browser() if '?k=' in url else None
     if not cmd: return webbrowser.open(url)
     from . import spawn
-    try: spawn.bare(_with_target(cmd, str(launchkey.via_file(url, config.home() / 'launch'))))
+    try: spawn.bare(_with_target(cmd, str(launchkey.via_file(url, config.home() / 'launch'))), outlive=True)     # the owner's own browser
     except OSError: webbrowser.open(url)          # a stale registration - the browser uninstalled: still a window, as before
 
 # STARTED WITH NO BROWSER (a container, a server): the address alone opens a page that is not signed in - it said only "Open Taskuary from

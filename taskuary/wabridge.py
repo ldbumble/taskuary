@@ -437,7 +437,7 @@ def start(force_install: bool = False, wait: bool = False, filter_policy: dict =
                 out = open(lg, 'ab')
                 # bare: detached, outlives us by design - so it must hold nothing of the exe's unpack folder (spawn's note)
                 p = spawn.bare([node(), 'bridge.mjs'], cwd=str(run), stdout=out, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
-                                     env=env, **kw)
+                                     env=env, outlive=True, **kw)
                 _launched(p.pid)
                 # until it answers or dies, not a fixed 2.5s: loading Baileys outlasts that on a cold Windows start, so a copy that died
                 # on EADDRINUSE a moment later was already called running - the card's Start said yes and the bridge stayed down (#269)

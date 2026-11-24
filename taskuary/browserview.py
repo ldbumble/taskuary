@@ -1189,6 +1189,7 @@ def _spawn_chrome(argv: list, hidden: bool = True) -> int:
         ok = k.CreateProcessW(None, ctypes.create_unicode_buffer(subprocess.list2cmdline(argv)), None, None, False,
                               0x00000400 | 0x00000200, block, cwd, ctypes.byref(si), ctypes.byref(pi))     # unicode env, its own process group
     if not ok: raise OSError(f'Chrome did not start ({ctypes.get_last_error()})')
+    spawn.tie(handle=pi.hp); spawn.listed(pi.pid)     # it ends with the app, however the app ends
     k.CloseHandle(pi.hp); k.CloseHandle(pi.ht)
     return int(pi.pid)
 

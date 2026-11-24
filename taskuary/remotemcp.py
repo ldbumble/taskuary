@@ -125,7 +125,7 @@ def sign_in(store, t: str, actor: str = 'owner', start=None) -> dict:
     from . import demo, spawn
     if demo.enabled(): raise RuntimeError('This is the demo - nothing signs in here.')
     if t not in MCPS or t in HEADERS: raise RuntimeError(f'{t} has no sign-in of its own' if t not in MCPS else 'This card signs in with the token pasted on it')
-    start, said = start or (lambda argv: spawn.popen(argv, stdin=spawn.subprocess.DEVNULL, stdout=spawn.subprocess.DEVNULL,
+    start, said = start or (lambda argv: spawn.popen(argv, stdin=spawn.subprocess.DEVNULL, stdout=spawn.subprocess.DEVNULL, outlive=True,
                                                       stderr=spawn.subprocess.DEVNULL)), []
     clis = state(store, t)['clis']
     for c, v in clis.items():

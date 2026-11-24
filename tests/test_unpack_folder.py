@@ -154,7 +154,7 @@ def test_an_agent_terminal(frozen, monkeypatch):
 # subprocess.Popen somewhere is a new child that may sit in the unpack folder - so it fails here first.
 DIRECT = re.compile(r'\bsubprocess\.(Popen|run|call|check_call|check_output)\(|PtyProcess\.spawn\(|os\.(system|startfile|spawn\w*)\(|create_subprocess_')
 NOT_ON_THE_EXE = {('imessage.py', "['open'"), ('imessage.py', "['osascript'"), ('wabridge.py', "['lsof'"),
-                  ('terminal.py', 'subprocess.Popen(argv, cwd=cwd, stdin=slave'), ('terminal.py', 'PtyProcess.spawn(argv, cwd=spawn.cwd_for')}
+                  ('terminal.py', 'PtyProcess.spawn(argv, cwd=spawn.cwd_for')}
 
 
 def test_nothing_starts_a_process_around_spawn():
@@ -278,3 +278,56 @@ def test_old_unpack_folders_of_ours_are_swept_and_nothing_else(frozen, tmp_path)
     assert not old.exists() and not claimed.exists() and not (tmp_path / '_MEI1111.taskuary-sweep').exists()
     assert other.exists() and fresh.exists() and frozen.mei.exists()          # another app's, one unpacking, ours
     if os.name == 'nt': assert busy.exists()                                   # in use: Windows refuses the rename
+
+
+# ── what the app started ends with it, however it ends ─────────────────────────────────────
+# The load test, 2026-11-24: a server killed outright - not quit - left the agent CLIs it started running on. A stand-in Taskuary starts its
+# children down spawn's road and is killed the hard way (TerminateProcess / SIGKILL): no handler of ours runs, and what it started must end
+# all the same - the grandchild too - while the one started outlive=True lives on.
+HARNESS = Path(__file__).resolve().parent / 'fake_spawn_parent.py'
+
+def _gone(pid, within=8.0):
+    end = time.monotonic() + within
+    while time.monotonic() < end:
+        if not spawn._stamp(pid): return True
+        time.sleep(.2)
+    return False
+
+def _end(pid):
+    if not spawn._stamp(pid): return
+    if os.name == 'nt': spawn._end_tree(pid)
+    else: os.kill(pid, 9)
+
+
+def test_what_the_app_started_ends_when_the_app_is_killed(tmp_path):
+    parent = subprocess.Popen([sys.executable, str(HARNESS)], stdout=subprocess.PIPE, text=True, env={**os.environ, 'TASKUARY_HOME': str(tmp_path)})
+    kid = grand = out = 0
+    try:
+        kid, grand, out = map(int, parent.stdout.readline().split())
+        assert spawn._stamp(kid) and spawn._stamp(grand) and spawn._stamp(out)
+        parent.kill(); parent.wait(10)
+        assert _gone(kid), 'the agent the app started outlived the app'
+        assert _gone(grand), 'what the agent started outlived the app'
+        assert spawn._stamp(out), 'a child started outlive=True was ended with the app'
+    finally:
+        if parent.poll() is None: parent.kill()
+        for p in (kid, grand, out): p and _end(p)
+
+
+def test_the_next_start_ends_what_a_dead_run_left_and_keeps_a_live_ones(tmp_path, monkeypatch):
+    env = {**os.environ, 'TQ_SPAWN_MODE': 'sleep'}
+    left, kept = (subprocess.Popen([sys.executable, str(HARNESS)], env=env) for _ in range(2))
+    try:
+        dead = subprocess.Popen([sys.executable, str(HARNESS)], env=env); dead.kill(); dead.wait(10)
+        monkeypatch.setenv('TASKUARY_HOME', str(tmp_path))
+        stale = str(left.pid), [spawn._stamp(left.pid), dead.pid, 'a run that is gone']
+        live = str(kept.pid), [spawn._stamp(kept.pid), os.getpid(), spawn._stamp(os.getpid())]
+        reused = str(dead.pid), ['its pid, since handed on', 12345, 'x']
+        spawn._write_list(dict([stale, live, reused]))
+        assert spawn.close_left() == 1
+        assert _gone(left.pid), 'a child the dead run left was not ended'
+        assert kept.poll() is None, "a live run's child was ended"
+        assert spawn._read_list() == dict([live])
+    finally:
+        for p in (left, kept):
+            if p.poll() is None: p.kill()

@@ -217,6 +217,7 @@ class _WinPty:
         # ConPTY's host and the CLI it runs inherit our DLL directory, cwd and environment like any other child
         with spawn.clean_dll_dir():
             self.p = PtyProcess.spawn(argv, cwd=spawn.cwd_for(cwd), dimensions=(rows, cols), env=spawn.env_for(clean_env(env, strict)))
+        if isinstance(self.p, PtyProcess): spawn.adopt(self.p.pid)     # ...and ends with the app, however it ends (spawn.tie)
     def read(self):
         try: return self.p.read(65536)
         except EOFError: return ''
@@ -233,8 +234,9 @@ class _UnixPty:
         import fcntl, pty, struct, termios
         self.fd, slave = pty.openpty()
         fcntl.ioctl(self.fd, termios.TIOCSWINSZ, struct.pack('HHHH', rows, cols, 0, 0))
-        self.p = subprocess.Popen(argv, cwd=cwd, stdin=slave, stdout=slave, stderr=slave,
-                                  close_fds=True, start_new_session=True, env=clean_env(env, strict))
+        from . import spawn             # tied: it ends with the app, however it ends (spawn.tie)
+        self.p = spawn.bare(argv, cwd=cwd, stdin=slave, stdout=slave, stderr=slave,
+                            close_fds=True, start_new_session=True, env=clean_env(env, strict))
         os.close(slave)
         import codecs
         self.dec = codecs.getincrementaldecoder('utf-8')(errors='replace')

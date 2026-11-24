@@ -162,10 +162,14 @@ async def _lifespan(_app):
         from . import browserruntime; browserruntime.on_path()
     except Exception as e: logger.warning(f'browser folder not put on PATH: {e}')
     # ONE LIVE TASKUARY PER DATA FOLDER (instance.py): every way in - the CLI, the desktop, --server-only - comes through here
-    from . import instance, hooks as _hooks
+    from . import instance, hooks as _hooks, spawn
     if not instance.claim(_hooks.base_url()):
         at = instance.holder().get('url')
         raise RuntimeError(f"another Taskuary is already running on {config.home()}{f' at {at}' if at else ''} - open that one, or quit it first")
+    # ...and the agents a run of this folder that died left running are ended before any new one starts (spawn.close_left)
+    try:
+        if (n := spawn.close_left()): logger.info(f'ended {n} agent process(es) the last run left running')
+    except Exception as e: logger.warning(f'agent processes the last run left were not ended: {e}')
     is_demo = demo.enabled()
     if not is_demo:
         # Capture historical read results before startup catch-up, worker repair,
@@ -8533,7 +8537,7 @@ def voice_open_settings(request: Request, which: str = 'speech'):
     if sys.platform != 'win32' or not _is_loopback(request.client.host if request.client else ''):
         raise HTTPException(409, "Windows' settings open only on the computer Taskuary runs on")
     from . import spawn
-    try: spawn.bare(['explorer.exe', _SETTINGS[which]])     # explorer opens an ms-settings: page; every process goes through spawn
+    try: spawn.bare(['explorer.exe', _SETTINGS[which]], outlive=True)     # the owner's Settings; explorer opens an ms-settings: page; every process goes through spawn
     except OSError as e: raise HTTPException(409, f'Windows would not open its settings: {str(e)[:120]}')
     store.audit('setting', 0, 'voice_open_settings', ACTOR, detail={'which': which})
     return {'opened': which}

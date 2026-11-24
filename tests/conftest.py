@@ -362,7 +362,7 @@ def isolated_runtime_boundaries():
             return (hashlib.sha256(script.encode()).hexdigest() in allowed
                     and all(x in {'exec', '--json', '--skip-git-repo-check'} for x in trailing))
         allowed_files = {Path(__file__).resolve().parent / name
-                         for name in ('fake_mcp_server.py', 'fake_tui.py', 'fake_acp_server.py')}
+                         for name in ('fake_mcp_server.py', 'fake_tui.py', 'fake_acp_server.py', 'fake_spawn_parent.py')}
         # ...and the fake stream-json CLI takes the flags a real one is launched with (tests/test_clipool.py)
         if args and Path(args[0]).resolve() == Path(__file__).resolve().parent / 'fake_stream_cli.py': return True
         # ...and the replay of a recorded backend stream, by fixture name only (tests/test_agent_steps_backends.py)
@@ -418,8 +418,15 @@ def isolated_runtime_boundaries():
         except ValueError: return None
         return inner if inner[:1] == ['git'] else None
 
+    def spawn_own(argv) -> bool:
+        "spawn's own POSIX helpers: the one watchdog that ends tied children when we die, and the read of a process's start time (spawn._stamp)."
+        from taskuary import spawn
+        command = [str(x) for x in (argv if isinstance(argv, (list, tuple)) else [argv])]
+        return command == ['/bin/sh', '-c', spawn.WATCH_SH] or (command[:4] == ['ps', '-o', 'lstart=', '-p'] and len(command) == 5 and command[4].isdigit())
+
     def allowed_process(argv, kwargs) -> bool:
-        return reviewed_python(argv) or git_allowed(argv, kwargs) or bool((g := shell_git(argv)) and git_allowed(g, kwargs))
+        return (reviewed_python(argv) or git_allowed(argv, kwargs) or bool((g := shell_git(argv)) and git_allowed(g, kwargs))
+                or spawn_own(argv))
 
     def guarded_popen(argv, *args, **kwargs):
         if allowed_process(argv, kwargs): return real_popen(argv, *args, **kwargs)

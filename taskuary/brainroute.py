@@ -808,6 +808,7 @@ def levels(store, cfg=None) -> list:
         w = _words(store, p, cfg)
         for l, v in sets.items():
             if not p.startswith('cli:') and by['general'] != p: continue      # an API card runs no coding, so only its general work moves
+            if v['pick'] == p and not v['model']: continue                  # set to this very AI on its own model: nothing moves
             to = f"{_said(store, v['pick'])}, {spell(v['model']) or _words(store, v['pick'], cfg)[l]}"
             w[l] = to if p not in reads else f'{w[l]}; agents: {to}'
         out.append({'pick': p, 'brain': _said(store, p), **w})

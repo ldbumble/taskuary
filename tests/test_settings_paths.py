@@ -44,7 +44,7 @@ def _refs():
 class SettingsPathTests(unittest.TestCase):
     def test_every_settings_path_names_a_place_that_exists(self):
         _, places = _places()
-        self.assertIn('How mail is sorted', places)
+        self.assertIn('Which AI does what', places)
         bad = [(f, a[:40]) for f, _, a in _refs() if not any(re.match(re.escape(n) + r'(?![\w&])', a) for n in places)]
         self.assertEqual(bad, [])
 
@@ -60,10 +60,8 @@ class SettingsPathTests(unittest.TestCase):
     def test_schema_help_says_where_the_other_defaults_live(self):
         s = json.loads(SCHEMA.read_text(encoding='utf-8'))
         k = s['knobs']
-        for key in ('triage_ai', 'default_agent'): self.assertEqual(k[key]['group'], k['concierge_ai']['group'])
-        self.assertNotIn('(Triage & routing)', k['concierge_ai']['help'])
-        self.assertNotIn('(Coding agent)', k['concierge_ai']['help'])
-        # one section now (U19, "How mail is sorted"): the brain and the switch it drives sit together, the panel above the knobs
+        for key in ('triage_ai', 'default_brain'): self.assertEqual(k[key]['group'], k['concierge_ai']['group'])
+        # one section now (U19, "Which AI does what"): the brain and the switch it drives sit together, the panel above the knobs
         self.assertEqual(k['triage_ai']['group'], k['intent_classify_enabled']['group'])
         self.assertNotIn('Triage & agents', s['groups']); self.assertNotIn('Triage & routing', s['groups'])
         self.assertNotIn('brain below', k['intent_classify_enabled']['help'])

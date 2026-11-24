@@ -27,10 +27,10 @@ from .kinds import ASSISTANT
 # One row per default. `gear` says WHICH of a CLI profile's two models this slot sets, and is
 # the reason a coding brain and a triage brain can be the same agent without fighting over one field.
 SLOTS = [
-    {'key': 'triage_ai', 'label': 'Triage', 'pick': 'brain', 'gear': 'light',
-     'desc': 'Reads every inbound message and decides: a task to do, a question to answer, or FYI to file. '
-             'Also runs the Advisor, writes what Taskuary remembers, and rewrites a reply when you press Redraft.',
-     'why': 'One message in, one line of JSON out - so this wants your cheapest fast model, not your best one.'},
+    {'key': 'triage_ai', 'label': 'Sorting new mail', 'pick': 'brain', 'gear': 'light',
+     'desc': 'Reads each new message and decides: a task to do, a question to answer, or something to file. '
+             'It also runs the Advisor, writes what Taskuary remembers, and rewrites a reply when you press Redraft.',
+     'why': 'One message in, one short answer out - a quick, cheap model does this well.'},
     # The fourth worker had no row here, so the page that exists to say "what will actually run"
     # was silent about half the tasks on the board. `assistant_ai` was buried on the Assistant tab
     # calling itself the bubble's brain, and with it blank general._selected quietly prefers an API
@@ -39,21 +39,21 @@ SLOTS = [
     # connector, whichever this work needs.
     # ...and it WRITES (the owner, 2026-11-11: "drafting which the agent does now no more drafting ai"): the task's agent writes every
     # reply, so Drafting has no card. The one-shot writer left (a press of Draft with AI or Redraft) is a quick job on triage's AI
-    {'key': 'assistant_ai', 'label': 'General agent', 'pick': 'brain', 'gear': 'main',
+    {'key': 'assistant_ai', 'label': 'Task agents', 'pick': 'brain', 'gear': 'main',
      'model_setting': 'assistant_model',
-     'desc': 'Works every task that is not coding - research, planning, a job in one of your systems - and writes the replies '
+     'desc': 'Work every task that is not coding - research, planning, a job in one of your systems - and write the replies '
              'you approve.',
-     'why': 'A CLI here can run tools and drive a browser; an AI card has no shell, so it can only read and write.'},
+     'why': 'An AI on this computer can run tools and drive a browser; an AI card with no agent of its own can only read and write.'},
     # the CLI tool itself, never a profile (the owner, 2026-10-15: "it's models or cli tools only") - it held `default_agent`,
     # a profile name, which is how a profile came to be read as a brain
     # ...or an AI card (the owner, 2026-11-09: "coding tasks should run on hipaa, why not") - saved as `connector:<id>`
     {'key': 'default_brain', 'label': 'Coding agent', 'pick': 'cli', 'gear': 'main',
-     'desc': 'Works the coding tasks. Start session, Send to coding agent and auto-dispatch all use this one - a CLI, or an AI card.',
-     'why': 'This is the expensive, capable gear: it reads your repository and writes code.'},
+     'desc': 'Works the coding tasks - an AI on this computer, or an AI card.',
+     'why': 'It reads your repository and writes code, so it wants your most capable model.'},
     {'key': 'concierge_ai', 'label': ASSISTANT, 'pick': 'brain', 'gear': 'light',
      'model_setting': 'concierge_model',
      'desc': 'Speaks in the chat here and on your phone (WhatsApp, Telegram), and walks you through what is waiting.',
-     'why': 'Turn by turn and conversational, so it rides the same quick gear as triage.'},
+     'why': 'Short turns of conversation, so a quick model is enough.'},
     # The fifth worker, and the only one that does not have to be able to write. A report's own
     # brain writes its summary; this decides where the finished run goes - four yes/nos about text
     # somebody else produced. They were one setting while both were chat models; they are two now
@@ -61,8 +61,7 @@ SLOTS = [
     {'key': 'judge_ai', 'label': 'Where reports go', 'pick': 'judge', 'gear': 'light',
      'desc': 'Decides whether a finished report shows under Reports, lands on your work rail, reaches you '
              'right away, or goes out - against the sentences you wrote on its card.',
-     'why': 'Four yes/nos about a result somebody else wrote. It does not need to be able to talk, '
-            'so a decision model belongs here and nowhere else.'},
+     'why': 'Four yes/nos about a result somebody else wrote. It does not need to write, so a model that only decides can do it.'},
 ]
 SLOT = {s['key']: s for s in SLOTS}
 
@@ -254,7 +253,7 @@ def _resolve(store, cfg, slot_key: str) -> dict:
         out.update(value=pick, model=model, effort=effort, choices=cat['choices'], efforts=_efforts(cat, model), resolved=_resolved(cat, model),
                    owner=f'the {key} connection' if key else '', owner_link='ai_apps', cli=cli, display=key, default=not value,
                    ready=bool(key))
-        if not key: out['note'] = 'nothing will run yet - choose a CLI or an AI card above'
+        if not key: out['note'] = 'nothing will run yet - choose an AI above'
         # ...and the one question a start may not answer for the owner (agents.default_ask), in the bell's own sentence, until it is
         # answered here or put down there
         from . import problems
@@ -309,7 +308,7 @@ def _resolve(store, cfg, slot_key: str) -> dict:
             from .brainroute import _base
             light, dflt, owner = model_on(store, s['model_setting'], f'cli:{key}', settings), _base(store, f'cli:{key}', cfg), 'this page'
         # ...triage's quick model a blank box runs (climodels.gears' light model): triage reads at its own effort (brainroute.choose)
-        else: dflt, owner = climodels.split_pick(climodels.gears(cli).get('light') or '')[0] or LIGHT_DEFAULT.get(cli, ''), f'the {key} connection (light model)'
+        else: dflt, owner = climodels.split_pick(climodels.gears(cli).get('light') or '')[0] or LIGHT_DEFAULT.get(cli, ''), f"the {key} connection's quick model"
         model, effort = ('', light[7:]) if light.startswith('effort:') else climodels.split_pick(light)
         if slot_key == 'concierge_ai' and not effort:
             from .llm import ASSISTANT_EFFORT
@@ -318,9 +317,9 @@ def _resolve(store, cfg, slot_key: str) -> dict:
         # a blank box runs the gear's default model, so its efforts and version are that model's
         seen = model or ('' if dflt.startswith('effort:') else dflt)
         out.update(model=model, effort=effort, choices=cat['choices'], efforts=_efforts(cat, seen), resolved=_resolved(cat, seen),
-                   default_hint=said if slot_key == 'assistant_ai' else f"{said} - the {ASSISTANT if slot_key == 'concierge_ai' else 'light'} default",
+                   default_hint=said if slot_key == 'assistant_ai' else f"{said} - the {ASSISTANT if slot_key == 'concierge_ai' else 'quick'} default",
                    owner=owner, owner_link='' if owner == 'this page' else 'ai_apps', cli=cli)
-        if not light and not dflt: out['note'] = f'no light model set - this runs on the {cli} coding model, which is the expensive gear'
+        if not light and not dflt: out['note'] = f"no quick model set - this runs on {cli}'s main model"
         from .agents import runs_here
         # a brain that does not start is not "what will run": the card said claude while triage failed on it
         if not runs_here({'cmd': conn.get('cmd') or cli}): out.update(ready=False, note=f"'{cli}' is not installed on this machine")

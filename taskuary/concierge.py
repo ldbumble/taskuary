@@ -2502,7 +2502,7 @@ def pages_block(store) -> str:
             # the brains (the owner, 2026-10-15: "can you find me the setting for assistant ai brain" got "I can't see the exact name
             # or location of that setting")
             '- the brains - which CLI tool or AI connection, at which model, runs triage, this Assistant, general agents and coding, '
-            'and where report runs go: #settings=config&group=How%20mail%20is%20sorted\n'
+            'and where report runs go: #settings=config&group=Which%20AI%20does%20what\n'
             # SETUP IS THE BUTTON AT THE TOP, never a link or a script here (the owner, 2026-10-19): it replaces the whole page
             # ...and the demo has no Setup button (it cannot connect an inbox): there it is said so, never pointed at (verify, 2026-10-19)
             + ('- setup itself has no link and no button here: this is the demo, with invented mail - Taskuary installed on their own computer '

@@ -45,7 +45,7 @@ STOPS = [
         _can('or sign in with a coding tool you already pay for - Claude Code, Codex',
              'Connections', 'cli-agents'),
         _can('either one is enough; your mail is sorted by whichever you pick', 'Settings',
-             'settings=config&group=How%20mail%20is%20sorted')]},
+             'settings=config&group=Which%20AI%20does%20what')]},
     {'key': 'inbound', 'can': [
         _can('connect a mailbox - Outlook, Gmail, or any IMAP host', 'Connections'),
         _can('or start with a work chat such as Teams or Slack', 'Connections'),
@@ -60,9 +60,9 @@ STOPS = [
     {'key': 'models', 'title': 'Optional: models and agents',
      'blurb': 'The existing model defaults are enough to start. Adjust costs, add a coding agent, '
               'or choose separate models after you have reviewed your first result.',
-     'goto': _goto('Settings', 'settings=config&group=How%20mail%20is%20sorted'), 'can': [
-        _can('choose which AI sorts your mail', 'Settings', 'settings=config&group=How%20mail%20is%20sorted'),
-        _can(f'choose a different AI for {ASSISTANT} or the agents', 'Settings', 'settings=config&group=How%20mail%20is%20sorted'),
+     'goto': _goto('Settings', 'settings=config&group=Which%20AI%20does%20what'), 'can': [
+        _can('choose which AI sorts your mail', 'Settings', 'settings=config&group=Which%20AI%20does%20what'),
+        _can(f'choose a different AI for {ASSISTANT} or the agents', 'Settings', 'settings=config&group=Which%20AI%20does%20what'),
         _can('keep the current defaults and continue')]},
 
     {'key': 'connections', 'title': 'Connections', 'image': '/walk/connections.png',
@@ -92,7 +92,7 @@ STOPS = [
      'blurb': 'The knobs. Most people change three and never come back: what drafts automatically, '
               'how finished work lands, and what reaches them.',
      'goto': _goto('Settings'), 'can': [
-        _can('choose which AI sorts your mail, and its backups', 'Settings', 'settings=config&group=How%20mail%20is%20sorted'),
+        _can('choose which AI sorts your mail, and its backups', 'Settings', 'settings=config&group=Which%20AI%20does%20what'),
         _can('decide whether replies draft themselves', 'Settings'),
         _can('write routing policies the AI can never override', 'Settings', 'settings=policies'),
         _can('see what it knows about how you work, and correct a wrong line', 'Settings', 'settings=docs&doc=learned'),
@@ -231,7 +231,7 @@ def _fact_hub(s) -> str:
 
 
 def _fact_settings(s) -> str:
-    on = [k for k in ('triage_ai', 'default_agent', 'notify_channel') if str(s.get_setting(k) or '').strip()]
+    on = [k for k in ('triage_ai', 'default_brain', 'notify_channel') if str(s.get_setting(k) or '').strip()]
     return f"{len(on)} of the three headline settings chosen" if on else 'all on their defaults'
 
 

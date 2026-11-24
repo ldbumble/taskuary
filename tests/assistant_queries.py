@@ -59,7 +59,7 @@ CASES = [
     Q('navigation', f'open {T4}', 'todo', f'Here: [{T4}](#task=4).', 'link:#task=4', tools=('pages',), freq=5),
     Q('navigation', 'open the invoice 88213 task', 'todo', [c('tasks.list', contains='invoice 88213'), f'That is [{T4}](#task=4).'], 'read:tasks.list', freq=4),
     Q('navigation', "pull up Marcus's month-end close", None, [c('tasks.list', contains='month-end close'), f'That is [{T1}](#task=1).'], 'read:tasks.list', freq=4),
-    Q('navigation', 'where do I set up the AI?', None, 'Under [Connections → AI](#settings=config&group=How%20mail%20is%20sorted).', 'link:#settings', tools=('pages',), freq=3),
+    Q('navigation', 'where do I set up the AI?', None, 'Under [Connections → AI](#settings=config&group=Which%20AI%20does%20what).', 'link:#settings', tools=('pages',), freq=3),
     Q('navigation', 'show me the workflows', None, 'Here: [Workflows](#report=workflows).', 'link:#report=workflows', tools=('pages',), freq=2),
     Q('navigation', 'go to reports', None, 'Here: [Reports](#report=reports).', 'link:#report=reports', tools=('pages',), freq=4),
     Q('navigation', 'show me my dashboards', None, 'Here: [Dashboards](#report=dashboards).', 'link:#report=dashboards', tools=('pages',), freq=3),
@@ -263,9 +263,9 @@ BRING_UP = [
     ('where do I change my signature', 'signature', '#settings=config&group=Replies&key=email_signature'),
     ('the sync interval', 'sync interval', '#settings=config&group=Sync%20%26%20startup&key=poll_minutes'),
     ('desktop notifications', 'desktop notification', '#settings=config&group=Notifications&key=hand_desktop'),
-    ('which AI sorts my mail', 'AI that sorts your mail', '#settings=config&group=How%20mail%20is%20sorted&key=triage_ai'),
+    ('which AI sorts my mail', 'AI that sorts your mail', '#settings=config&group=Which%20AI%20does%20what&key=triage_ai'),
     # ...by the name it has on screen since 2026-11-15 ("Taskuary"): that is the word a model that has seen the page searches by
-    ('the assistant model', 'model for Taskuary', '#settings=config&group=How%20mail%20is%20sorted&key=concierge_model'),
+    ('the assistant model', 'model for Taskuary', '#settings=config&group=Which%20AI%20does%20what&key=concierge_model'),
     ('how many days back it catches up', 'catch-up window', '#settings=config&group=Sync%20%26%20startup&key=startup_sync_days'),
     ('the FYI batching setting', 'fyi read together', '#settings=config&group=Assistant&key=fyi_batch'),
     ('my second Outlook', 'outlook', '#connector=outlook'),
@@ -301,7 +301,7 @@ BRING_UP = [
     ('install the latest release', 'install the latest release', '#settings=updates&key=update'),
     # ...and its siblings: a connection or a brain is its own screen too, never an agent's job
     ('connect my mail', 'email connections', '#connections=Email'),
-    ('change the assistant brain', 'Taskuary brain', '#settings=config&group=How%20mail%20is%20sorted&key=concierge_ai'),
+    ('change the assistant brain', 'Taskuary brain', '#settings=config&group=Which%20AI%20does%20what&key=concierge_ai'),
     ('the Hub', 'hub', '#hub'),
 ]
 CASES += [Q('bring-up', t, None, find(q), f'link:{h}', freq=4) for t, q, h in BRING_UP]

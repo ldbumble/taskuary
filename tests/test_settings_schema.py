@@ -18,7 +18,7 @@ class SchemaTests(unittest.TestCase):
             if meta['type'] == 'select': self.assertTrue(meta.get('options'), f'{key} is a select with no options')
 
 
-    def test_every_ai_slot_is_owned_by_its_card_and_has_a_fallback_row(self):
+    def test_every_ai_slot_is_owned_by_its_card_and_named_in_the_schema(self):
         """A slot the AI-defaults panel draws must be named in `panel_owned`, or the Settings page
         offers it a SECOND time as a bare box - and since a slot key carries no KNOB_META entry of
         its own by default, that box lands in the empty "Other" group with the raw key for a label.
@@ -31,7 +31,31 @@ class SchemaTests(unittest.TestCase):
             for key in (slot['key'], slot.get('model_setting')):
                 if not key: continue
                 self.assertIn(key, owned, f'{key} is drawn as a card but the knob list still offers it')
-                self.assertTrue(knobs.get(key), f'{key} has no schema entry to fall back to when the panel fails')
+                self.assertTrue(knobs.get(key), f'{key} has no schema entry for search, a link or the Assistant to name it by')
+
+    def test_no_setting_is_both_on_the_panel_and_a_row_and_the_page_speaks_plainly(self):
+        """WHICH AI DOES WHAT (the owner, 2026-11-23): nine settings were drawn twice - a card, and a row "normally set on the card
+        above; this row is the fallback if that panel cannot load". A panel's setting is named in the schema and has no row: no row
+        text (`help`), and SettingsView draws no row for it. And the page's words are a person's, not the builder's."""
+        owned, knobs = settings_schema.panel_owned(), settings_schema.knobs()
+        self.assertEqual([k for k in owned if knobs[k].get('help') and knobs[k]['group'] == 'Which AI does what'], [], 'a panel setting carries row text')
+        view = (ROOT / 'website' / 'src' / 'SettingsView.jsx').read_text(encoding='utf-8')
+        self.assertIn('meta(s.Name).group === g && !PANEL_OWNED.has(s.Name)', view)
+        self.assertNotIn('panelOk', view)
+        for k in ('profile_brains', 'default_agent'): self.assertNotIn(k, knobs)
+        page = [m for m in knobs.values() if m['group'] == 'Which AI does what']
+        said = ' '.join(f"{m['label']} {m['desc']} {m.get('help', '')}" for m in page)
+        for w in ('fallback if that panel', 'heart of the funnel', 'TWO BRAINS', 'TQ-', 'raw value', 'SOUL.md', '--model', 'model@effort'):
+            self.assertNotIn(w, said)
+
+    def test_every_settings_link_the_app_writes_opens_a_section_that_exists(self):
+        "A section renamed leaves no link behind on its old name: the words the Assistant, the walk and the docs say all land."
+        import re
+        from urllib.parse import unquote
+        files = [*(ROOT / 'taskuary').glob('*.py'), ROOT / 'taskuary' / 'words.json', *(ROOT / 'website' / 'src').glob('*.js*')]
+        groups = {unquote(g) for f in files for g in re.findall(r'settings=config&group=([A-Za-z0-9%&]+?)(?:[&"\')\s]|$)', f.read_text(encoding='utf-8'))}
+        self.assertIn('Which AI does what', groups)
+        self.assertEqual(groups - set(settings_schema.GROUPS), set())
 
     def test_a_stamp_is_never_a_knob(self):
         # the page treats any key ending `_at` as machine state (`setup_walk_at`, `phone_morning_line_at`
@@ -39,8 +63,8 @@ class SchemaTests(unittest.TestCase):
         self.assertEqual([k for k in settings_schema.knobs() if k.endswith('_at')], [])
 
     def test_describe_says_the_value_in_the_schemas_words(self):
-        self.assertEqual(settings_schema.describe('intent_classify_enabled', '1'), 'Sort new mail with AI (How mail is sorted): on')
-        self.assertEqual(settings_schema.describe('intent_classify_enabled', '0'), 'Sort new mail with AI (How mail is sorted): off')
+        self.assertEqual(settings_schema.describe('intent_classify_enabled', '1'), 'Sort new mail with AI (Which AI does what): on')
+        self.assertEqual(settings_schema.describe('intent_classify_enabled', '0'), 'Sort new mail with AI (Which AI does what): off')
         self.assertIn('AI that sorts your mail', settings_schema.describe('triage_ai', 'connector:80'))
         self.assertEqual(settings_schema.describe('no_such_key', 'x'), 'no_such_key: x')
 

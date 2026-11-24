@@ -105,7 +105,7 @@ class DeskTests(unittest.TestCase):
 
     def test_a_setting_opens_its_group_with_the_knob_named(self):
         out = self._turn('setting.set', label='sort new mail with AI', value='off')
-        self.assertTrue(out['open'].startswith('#settings=config&group=How%20mail%20is%20sorted&key=intent_classify_enabled'), out['open'])
+        self.assertTrue(out['open'].startswith('#settings=config&group=Which%20AI%20does%20what&key=intent_classify_enabled'), out['open'])
         self.assertIn('Sort new mail with AI', out['say']); self.assertNotEqual(self.s.get_settings()['intent_classify_enabled'], '0')
 
     def test_a_connection_opens_its_card(self):
@@ -209,7 +209,7 @@ class ActsTests(unittest.TestCase):
     def test_a_setting_by_label_is_validated_against_the_schema(self):
         done = concierge.run_proposal(self.s, self._turn('setting.set', label='sort new mail with AI', value='off')['proposal'])
         self.assertEqual(self.s.get_settings()['intent_classify_enabled'], '0')
-        self.assertIn('Sort new mail with AI (How mail is sorted): off', concierge.receipt(self.s, done))
+        self.assertIn('Sort new mail with AI (Which AI does what): off', concierge.receipt(self.s, done))
         bad = concierge.run_proposal(self.s, self._turn('setting.set', setting='poll_minutes', value='often')['proposal'])
         self.assertEqual(bad['status'], 'error'); self.assertIn('takes a number', bad['error'])
         self.assertEqual(self.s.get_settings()['poll_minutes'], '10')

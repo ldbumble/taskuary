@@ -161,7 +161,7 @@ class SignUp(unittest.TestCase):
         with TheBrowser(url=None): out = self.check('agent-browser click @e5')
         why = out['hookSpecificOutput']['permissionDecisionReason']
         self.assertIn('could not read which page your browser is on', why); self.assertIn('nothing was done', why)
-        self.assertIn('"retry": true', why); self.assertNotIn('send another message', why)   # a Try again button, never a chore (F5, 2026-11-18)
+        self.assertNotIn('send another message', why)   # never a chore (F5, 2026-11-18) - and no Try again promised that may not be drawn (walk 13)
         self.assertEqual(self.pending(), [])                                                # no card that could never be approved
 
     def test_approve_on_a_closed_or_unnamed_browser_does_nothing_and_says_why(self):

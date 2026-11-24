@@ -711,6 +711,10 @@ class _Cooling:
         except Exception as e:
             if isinstance(e, BudgetSpent): brainroute.spend(self._store, self._pick, str(e), e.until)
             elif getattr(e, 'until', None): brainroute.cool(self._store, self._pick, e.until)
+            # ...and one whose address did not answer rests a few minutes too: the router hands its calls to the next ready AI meanwhile
+            elif isinstance(e, requests.ConnectionError):
+                from datetime import datetime, timedelta
+                brainroute.spend(self._store, self._pick, str(e), datetime.now() + timedelta(seconds=brainroute.UNREACHED_REST), brainroute.UNREACHED)
             raise
         brainroute.unspend(self._store, self._pick)
         brainroute.heard(self._store, self._pick, box)

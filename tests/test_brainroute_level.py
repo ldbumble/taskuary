@@ -75,11 +75,35 @@ def test_set_but_unavailable_falls_back_to_the_card_and_says_why(s):
     assert (r.pick, r.level) == (s.a, '') and r.why.endswith('; hard work is set to Gemini CLI in AI routing, but it is not connected, so its card')
     _set(s, hard=('cli:codex', ''))
     s.set_setting('cli_tests', json.dumps({'codex': False}), 'owner')
-    assert 'but it failed its last test, so its card' in brainroute.choose(s, 'general', task=_task(s)).why
+    assert 'running on Anthropic API - OpenAI Codex CLI failed its last test' in brainroute.choose(s, 'general', task=_task(s)).why
     s.set_setting('cli_tests', '', 'owner')
     brainroute.cool(s, 'cli:codex', datetime.now() + timedelta(hours=1))
     r = brainroute.choose(s, 'general', task=_task(s))
-    assert r.pick == s.a and 'but it is limited until' in r.why
+    assert r.pick == s.a and 'OpenAI Codex CLI is limited until' in r.why
+
+
+def test_a_level_on_a_card_that_is_off_runs_on_the_next_ready_ai_on_its_own_model_and_comes_back(s):
+    """The owner, 2026-11-24: "I shut off access to HIPAA on my machine and the agent levels did not work, of course. It should switch back to
+    whatever else is connected." Every level, the general card, triage and the Assistant on one card; another card connected, named nowhere."""
+    h = _card(s, 'openai', model='gemini-x')
+    for k in ('triage_ai', 'assistant_ai', 'concierge_ai'): s.set_setting(k, h, 'owner')
+    _set(s, **{l: (h, 'gemini-x') for l in ('quick', 'normal', 'hard')})
+    tid = _task(s, 'standard')
+    assert brainroute.choose(s, 'general', task=tid)[2:4] == (h, 'gemini-x') and general.GeneralSession(s, tid).pick == h
+    s.save_connector({'ConnectorId': int(h[10:]), 'Active': 0}, 'owner')                   # he switches the card off
+    for job in ('general', 'quick_work', 'triage', 'assistant', 'advisor'):
+        r = brainroute.choose(s, job, task=tid)
+        assert r.pick != h and r.off == h and 'gemini-x' not in r.model, (job, r)     # ...never the other AI's model id
+        assert r.why.endswith(f'; running on {brainroute._said(s, r.pick)} - OpenAI API is off'), r.why
+    sess = general.GeneralSession(s, tid)
+    assert sess.pick == brainroute.choose(s, 'general', task=tid).pick and sess.model != 'gemini-x'
+    # ...and the levels page and the task's AI pill say it in plain words
+    line = f"Running on {brainroute._said(s, sess.pick)} - OpenAI API is off"
+    assert {r['why'] for r in brainroute.now(s)} == {line} and brainroute.stands_in(s, tid) == line
+    s.save_connector({'ConnectorId': int(h[10:]), 'Active': 1}, 'owner')                   # on again: the work goes back to it
+    r = brainroute.choose(s, 'general', task=tid)
+    assert (r.pick, r.model, r.off, r.level) == (h, 'gemini-x', '', 'normal') and general.GeneralSession(s, _task(s, 'standard')).pick == h
+    assert brainroute.stands_in(s, tid) == ''
 
 
 def test_the_sensitive_rule_still_wins(s):
@@ -131,7 +155,7 @@ def test_settings_says_what_each_level_runs_on_right_now_and_why_in_the_router_s
     assert '->' in brainroute.choose(s, 'general', task=_task(s)).why, "a task's own AI line keeps the router's sentence"
     brainroute.cool(s, 'cli:codex', datetime.now() + timedelta(hours=1))        # ...resting on its limit: back on the card, until when
     hard = rows()['hard']
-    assert hard['pick'] == s.a and 'but it is limited until' in hard['why']
-    assert hard['why'].startswith('Hard work is set to OpenAI Codex CLI in AI routing, but it is limited until') and '(rule' not in hard['why'] and '->' not in hard['why'] and hard['why'].endswith("so its card's AI took it")
+    assert hard['pick'] == s.a and hard['why'].startswith('Running on Anthropic API - OpenAI Codex CLI is limited until')
+    assert '(rule' not in hard['why'] and '->' not in hard['why']
     s.set_setting('ai_route_mode', 'fixed', 'owner')                            # Fixed: every level is the card, and nothing to explain
     assert {(r['pick'], r['model'], r['why']) for r in rows().values()} == {(s.a, 'claude-sonnet-5', '')}

@@ -20,32 +20,37 @@ export function fitTable({ need, least = need, room, chat, font }) {
 const NUM = /^\s*[-+]?[$€£¥]?\s*[\d.,]+\s*[%kKmMbB]?\s*$/;
 export const shortColumn = (cells) => cells.every((c) => { const s = String(c ?? "").trim(); return !s || NUM.test(s) || !/\s/.test(s) || s.length <= 20; });
 
-// ...measured where it is drawn: the table at its natural width, then with its text columns wrapped; its frame (.tq-turn-frame, else the
-// chat's column) told the width it may take as --tq-fit-w, the table its font, and each short column marked no-wrap
+// ...measured where it is drawn (`wrap`: the table's own box): the table at its natural width, then with its text columns wrapped; its frame
+// (.tq-turn-frame, else the chat's column) told the width it may take as --tq-fit-w, the table its font, and each short column marked no-wrap.
+// The same answer however often it runs: a frame it widened is never read back as room (the flicker, 2026-11-24)
+export function fitIn(wrap) {
+  const t = wrap.querySelector("table");
+  if (!t) return;
+  const frame = wrap.closest(".tq-turn-frame"), chat = (frame?.parentElement || wrap.parentElement)?.clientWidth || wrap.clientWidth;
+  const rows = [...t.rows], n = Math.max(0, ...rows.map((r) => r.cells.length));
+  const short = Array.from({ length: n }, (_, i) => shortColumn(rows.slice(1).map((x) => x.cells[i]?.innerText)));
+  rows.forEach((r) => [...r.cells].forEach((c, i) => c.toggleAttribute("data-tq-short", short[i])));
+  if (!wrap.dataset.tqFit) wrap.dataset.tqFit = "fit";         // ...measured under the fit's own layout: under the chat's fixed one a table is its box's width
+  t.style.fontSize = ""; const font = parseFloat(getComputedStyle(t).fontSize) || 13;
+  t.style.width = "max-content"; t.style.maxWidth = "none"; t.style.minWidth = "0"; const need = t.offsetWidth;
+  t.style.width = "min-content"; const least = t.offsetWidth; t.style.width = t.style.maxWidth = t.style.minWidth = "";
+  const pad = (frame ? frame.offsetWidth - frame.clientWidth : 0) + (wrap.offsetLeft || 0) * 2;
+  // ...the room is the frame's OWN width, never one this fit gave it (the owner's recording, 2026-11-24: the whole chat flickered - a frame
+  // widened to fit read as "it fits", went back, no longer fit, widened again). Measured with the fit taken off, in the same beat: no paint between
+  frame?.style.setProperty("--tq-fit-w", "0px");
+  const room = wrap.clientWidth, f = fitTable({ need, least, room, chat: chat - pad, font });
+  frame?.style.setProperty("--tq-fit-w", f.width ? `${f.width + pad}px` : "0px");
+  if (f.font !== font) t.style.fontSize = `${f.font}px`;
+  wrap.dataset.tqFit = f.scroll ? "scroll" : f.wrap ? "wrap" : "fit"; wrap.dataset.tqCols = String(n);
+}
+
 export function useTableFit(ref, deps = []) {
   useLayoutEffect(() => {
     const wrap = ref.current, t = wrap?.querySelector("table");
     if (!t) return undefined;
-    const fit = () => {
-      const frame = wrap.closest(".tq-turn-frame"), chat = (frame?.parentElement || wrap.parentElement)?.clientWidth || wrap.clientWidth;
-      const rows = [...t.rows], n = Math.max(0, ...rows.map((r) => r.cells.length));
-      const short = Array.from({ length: n }, (_, i) => shortColumn(rows.slice(1).map((x) => x.cells[i]?.innerText)));
-      rows.forEach((r) => [...r.cells].forEach((c, i) => c.toggleAttribute("data-tq-short", short[i])));
-      if (!wrap.dataset.tqFit) wrap.dataset.tqFit = "fit";         // ...measured under the fit's own layout: under the chat's fixed one a table is its box's width
-      t.style.fontSize = ""; const font = parseFloat(getComputedStyle(t).fontSize) || 13;
-      t.style.width = "max-content"; t.style.maxWidth = "none"; t.style.minWidth = "0"; const need = t.offsetWidth;
-      t.style.width = "min-content"; const least = t.offsetWidth; t.style.width = t.style.maxWidth = t.style.minWidth = "";
-      const pad = (frame ? frame.offsetWidth - frame.clientWidth : 0) + (wrap.offsetLeft || 0) * 2;
-      // ...the room is the frame's OWN width, never one this fit gave it (the owner's recording, 2026-11-24: the whole chat flickered - a frame
-      // widened to fit read as "it fits", went back, no longer fit, widened again). Measured with the fit taken off, in the same beat: no paint between
-      frame?.style.setProperty("--tq-fit-w", "0px");
-      const room = wrap.clientWidth, f = fitTable({ need, least, room, chat: chat - pad, font });
-      frame?.style.setProperty("--tq-fit-w", f.width ? `${f.width + pad}px` : "0px");
-      if (f.font !== font) t.style.fontSize = `${f.font}px`;
-      wrap.dataset.tqFit = f.scroll ? "scroll" : f.wrap ? "wrap" : "fit"; wrap.dataset.tqCols = String(n);
-    };
+    const fit = () => fitIn(wrap);
     fit();
-    // ...and again when the chat's column changes, or the table itself does (its font loaded after the first measure: a dark-theme shot measured
+    // ...and again when its font has loaded after the first measure: a dark-theme shot measured
     // it in the fallback face, too narrow, and three rows wrapped)
     let live = true; document.fonts?.ready?.then(() => { if (live) fit(); });
     if (typeof ResizeObserver === "undefined") return () => { live = false; };

@@ -243,7 +243,6 @@ def test_a_card_whose_harness_runs_here_takes_a_coding_level_and_says_so(here, m
     s = MemoryStore(); cid = _card(s); p = f'connector:{cid}'
     assert next(b for b in brainroute.brains(s) if b['pick'] == p)['coding'] is True
     hands = lambda x: str(x or '').startswith('cli:')
-    monkeypatch.setattr(brainroute, '_not_ready', lambda st, x: '')
     brainroute.save_by_level(s, {'hard': {'pick': p, 'model': 'neon'}})
     assert brainroute._level(s, 'coding', 'strong', None, None, hands, None) == ((f'cli:card-{cid}', 'neon'), '')
     assert brainroute._said(s, f'cli:card-{cid}') == 'HIPAA AI'

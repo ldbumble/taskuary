@@ -23,13 +23,16 @@ def s():
     return s
 
 
-def test_a_resting_claude_hands_the_call_to_codex_and_says_until_when(s):
+def test_a_resting_claude_hands_the_call_to_codex_and_says_until_when(s, monkeypatch):
+    from taskuary import config
+    monkeypatch.setattr(config, 'load', lambda: {'cli_connections': {'claude': {'cmd': 'claude'}, 'codex': {'cmd': 'codex'}}})
+    monkeypatch.setattr(agents, 'connection_brains', agents.connection_brains.real); monkeypatch.setattr(agents, 'runs_here', lambda prof: bool(prof))
     s.set_setting('triage_ai', 'cli:claude', 'owner'); s.set_setting('triage_backup_ai', 'cli:codex', 'owner')
     at = datetime.now().replace(second=0, microsecond=0) + timedelta(hours=2)
     brainroute.cool(s, 'cli:claude', at)
     r = brainroute.choose(s, 'triage')
-    assert (r.pick, r.chain) == ('cli:codex', ['cli:claude'])
-    assert f"Claude Code is limited until {__import__('taskuary.timewords', fromlist=['clock']).clock(at)}, so OpenAI Codex CLI" in r.why
+    assert (r.pick, r.chain, r.off) == ('cli:codex', [], 'cli:claude')
+    assert f"running on OpenAI Codex CLI - Claude Code is limited until {__import__('taskuary.timewords', fromlist=['clock']).clock(at)}" in r.why
     s.set_setting('ai_route_mode', 'fixed', 'owner')
     assert brainroute.choose(s, 'triage').pick == 'cli:claude'                  # Fixed: the cards stand, as before
     s.set_setting('ai_route_mode', 'auto', 'owner')

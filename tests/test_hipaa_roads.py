@@ -496,6 +496,45 @@ class BudgetRoad(unittest.TestCase):
         gw, sent, p = self.spent_gateway(self.backup(s))
         with gw, p: self.assertEqual(llm.build_llm(s, job='summary')('s', 'u'), 'from the backup')
 
+    def test_an_agent_turn_its_card_turned_away_on_budget_is_tried_once_at_once_on_the_next_connected_ai_and_comes_back(self):
+        """The owner, 2026-11-24: "I shut off access to HIPAA on my machine and the agent levels did not work ... It should switch back to
+        whatever else is connected." The card is every job's and every level's; another AI is connected and named nowhere (no backups)."""
+        from datetime import datetime, timedelta
+        from taskuary import general
+        s = MemoryStore(); fx = Factory(s); cid = card(s, SONNET); jobs_on(s, cid, mode='auto'); h = f'connector:{cid}'
+        brainroute.save_by_level(s, {l: {'pick': h, 'model': SONNET} for l in ('quick', 'normal', 'hard')})
+        self.backup(s); s.set_setting('triage_backup_ai', '', 'owner')
+        other = f"connector:{s.get_connector_by_type('openai')['ConnectorId']}"
+        tid = fx.task(title='Compare payroll vendors', kind='general'); s.judge_task(tid, {'difficulty': 'standard'}, 'owner')
+        spent, sent = [True], []
+        def post(url, headers=None, json=None, timeout=None):
+            sent.append((url, dict(json)))
+            if url.startswith(BASE): return R(422, SPENT) if spent[0] else gw.post(url, headers, json, timeout)
+            text = 'Payworth is cheaper.'      # ...the other AI, on chat completions or responses
+            return R(200, {'model': 'gpt-x', 'choices': [{'message': {'content': text}}],
+                           'output': [{'type': 'message', 'content': [{'type': 'output_text', 'text': text}]}]})
+        gw = Gateway(lambda b: 'Back on the card.')
+        with gw, mock.patch('taskuary.llm.requests.post', side_effect=post), mock.patch('taskuary.browserview.installed', return_value=False),              mock.patch('taskuary.apiagent.can', return_value=False), mock.patch('taskuary.blackboard.drain_later'):
+            sess = general.GeneralSession(s, tid); self.assertEqual((sess.pick, sess.model), (h, SONNET))
+            with self.assertRaises(llm.BudgetSpent): sess.send_prompt('Compare Payworth and Trainly')
+            q = s.get_dispatch(tid)
+            self.assertEqual(q['Turn'], general.RETRY_TURN, 'the turn is queued to go again')
+            self.assertLess(datetime.fromisoformat(q['NextAt']), datetime.now() + timedelta(seconds=5), 'at once, not when the budget resets')
+            line = general.with_failure(s, tid, general.shown_history(s, tid))[-1]
+            self.assertIn("HIPAA AI has spent its budget, so OpenAI API takes this turn - trying again shortly.", json.dumps(line))
+            general.drop_session(tid); sess.close()
+            # ...the queued try, as the drain runs it (retry_turn): on the other AI, on ITS model - never the card's model id
+            again = general.GeneralSession(s, tid)
+            self.assertEqual((again.pick, again.stood_for), (other, h)); self.assertNotEqual(again.model, SONNET)
+            self.assertIn('Payworth is cheaper', again.send_prompt(general.retry_ask(tid), as_owner=False))
+            self.assertEqual(sum(u.startswith(BASE) for u, _ in sent), 1, 'the card was asked once')
+            self.assertTrue(all(b.get('model') != SONNET for u, b in sent if not u.startswith(BASE)))
+            # ...and once the card answers again, the next turn is its own, said once in the chat
+            spent[0] = False; brainroute.unspend(s, h); s.set_setting(brainroute.COOL_KEY, '', 'router')
+            self.assertIn('Back on the card', again.send_prompt('And Trainly?'))
+            self.assertEqual((again.pick, again.model), (h, SONNET))
+            self.assertIn('HIPAA AI is on again - the agent runs on it.', [c['Body'] for c in s.list_comments(tid, internal=True)])
+
     def test_a_sensitive_task_waits_on_its_marked_card_and_never_goes_to_the_unmarked_backup(self):
         s = MemoryStore(); fx = Factory(s); cid = card(s, FLASH, sensitive_ok='1'); jobs_on(s, cid, 'triage_ai', mode='auto')
         brainroute.save_rules(s, [{**r, 'on': True} if r['id'] == 'sensitive' else r for r in brainroute.rules(s)])

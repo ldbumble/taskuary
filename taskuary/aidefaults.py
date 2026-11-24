@@ -216,7 +216,8 @@ def _runs(store, cfg, slot_key: str, out: dict) -> dict:
     # the Assistant's blank model is its own default (llm.ASSISTANT_DEFAULT), which the card already names - never the triage gear's
     model = own if job == 'assistant' and not x['route'].model else x['model']
     return {'runs': {'brain': x['brain'] if x['pick'] else '', 'model': model,
-                     'why': x['why'] if x['pick'] != out.get('value') else brainroute.resting(store, x['pick'])},
+                     # ...one standing in for an AI that is off says so in plain words: "Running on Claude Code - HIPAA AI is off"
+                     'why': brainroute.plain(x['route']) if x['route'].off else x['why'] if x['pick'] != out.get('value') else brainroute.resting(store, x['pick'])},
             'chosen': chosen, 'set_by': set_by}
 
 

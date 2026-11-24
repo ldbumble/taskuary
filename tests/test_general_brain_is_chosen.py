@@ -10,7 +10,7 @@ from unittest import mock
 
 import pytest
 
-from taskuary import agents, cli_connections as clic, config, general, llm, origin, playbooks
+from taskuary import agents, brainroute, cli_connections as clic, config, general, llm, origin, playbooks
 from taskuary.store import MemoryStore
 
 
@@ -200,7 +200,9 @@ def test_a_launch_that_finds_a_saved_claude_signed_out_moves_to_codex_for_the_ne
     assert not s.get_setting('default_brain') and not s.get_setting('assistant_ai')
 
 
-def test_a_claude_the_person_picked_stays_and_says_it_is_not_signed_in(world):
+def test_a_claude_the_person_picked_says_it_is_not_signed_in_and_the_next_try_runs_on_what_else_is_connected(world):
+    """His pick stays his - the setting is never rewritten - but an AI signed out takes no work while another is connected (the owner,
+    2026-11-24: "It should switch back to whatever else is connected"), and the route says why: never quietly another AI."""
     world['installed'] |= {'codex', 'claude'}; world['signed_out'] |= {'claude'}
     s, cfg = _pinned('owner')
     with mock.patch.object(config, 'load', lambda: cfg), mock.patch('taskuary.clisetup.signed_in', return_value=False) as probe:
@@ -208,9 +210,10 @@ def test_a_claude_the_person_picked_stays_and_says_it_is_not_signed_in(world):
     tid = _researcher(s)
     said = _run(s, cfg, tid)
     assert "claude isn't signed in" in said and 'Set it up' in said, said
-    with mock.patch.object(config, 'load', lambda: cfg), pytest.raises(RuntimeError, match="claude isn't signed in"):
-        _again(s, tid)
-    assert [r['cmd'] for r in world['ran']] == ['claude', 'claude']          # never quietly another AI
+    with mock.patch.object(config, 'load', lambda: cfg): again = _again(s, tid)
+    assert not again.startswith('error') and [r['cmd'] for r in world['ran']] == ['claude', 'codex']
+    said = [c['Body'] for c in s.list_comments(tid, internal=True)]
+    assert said.count('Running on OpenAI Codex CLI - Claude Code failed its last test.') == 1, said      # ...said once, in the chat
     assert s.get_setting('assistant_ai') == 'cli:claude'
 
 

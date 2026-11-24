@@ -50,6 +50,7 @@ class Route(NamedTuple):
     difficulty: str = ''; data_class: str = ''
     escalate: str = ''             # the tier a retry would go up to, '' when none
     level: str = ''                # 'quick'|'normal'|'hard' when the owner's AI for that level runs it (by_level), else ''
+    off: str = ''                  # the AI this call was moved off because it is off now (off), else ''
 
 
 KEEP_DAYS = 30           # how long a route's reason is kept (retention.tick trims the rest)
@@ -423,16 +424,6 @@ def save_by_level(store, d: dict, actor: str = 'owner') -> dict:
     return by_level(store)
 
 
-def _not_ready(store, p: str) -> str:
-    "Why a pick could not start a call here - '' when it can: connected (a CLI installed, its last test not failed; a card on, with a key)."
-    from . import agents, general
-    if not any(o['pick'] == p for o in general.provider_options(store)): return 'is not connected'
-    if p.startswith('cli:'):
-        if not agents.runs_here(dict(agents.connection_brains(store)).get(p[4:])): return 'is not installed here'
-        if agents.cli_tests(store).get(p[4:]) is False: return 'failed its last test'
-    return ''
-
-
 def _level(store, job: str, tier: str, want_pick, want_model, hands, only) -> tuple:
     """((pick, model), '') when the owner's AI for this tier's level takes this call; (None, '; why not') when one is set and cannot;
     (None, '') when none is set or the caller named another AI or model - an explicit pick always wins."""
@@ -444,9 +435,13 @@ def _level(store, job: str, tier: str, want_pick, want_model, hands, only) -> tu
     if want_model and want_model != m:
         from . import general
         if job != 'general' or want_model != general._selected(store, pick=to)[2]: return None, ''
-    cold = cooldowns(store)
-    no = (_not_ready(store, to) or ('has no shell, and this work needs a CLI' if not hands(run) else '')
-          or (f"is limited until {clock(cold[to])}" if to in cold else '') or ('has spent its budget' if spent(store, to) else '')
+    # ...a CLI not connected or not installed here is no level's; an AI that is OFF now still names the level - choose moves the call to the next
+    # ready AI and says so (off)
+    from . import agents, general
+    cli = to.startswith('cli:')
+    no = (('is not connected' if cli and not any(o['pick'] == to for o in general.provider_options(store)) else '')
+          or ('is not installed here' if cli and not agents.runs_here(dict(agents.connection_brains(store)).get(to[4:])) else '')
+          or ('has no shell, and this work needs a CLI' if not hands(run) else '')
           or ('is not marked to read sensitive data' if only and not may_read_sensitive(store, to) else ''))
     if no: return None, f"; {LEVEL_OF[tier]} work is set to {_said(store, to)} in AI routing, but it {no}, so its card"
     return (run, m), ''
@@ -502,7 +497,9 @@ def choose(store, job: str, task=None, want_pick=None, want_model=None, gear=Non
             if to != pick: chain, pick = [pick, *chain], to
             lvl = LEVEL_OF[tier]
             if tier == 'strong' and not cap_left(store): tier, said = 'standard', f"; today's {cap(store)} strong calls are spent, so standard"
-            elif tier == 'strong' and not m and not strong_of(store, pick) and not lift(store, pick, 'strong'): tier, said = 'standard', '; it has no strong model, so standard'
+            # ...an AI that is off has no say in the tier: the one standing in runs the level on its own (below)
+            elif tier == 'strong' and not m and not off(store, pick, want_pick is None) and not strong_of(store, pick) and not lift(store, pick, 'strong'):
+                tier, said = 'standard', '; it has no strong model, so standard'
             g, model = GEAR_OF[tier], m or (lift(store, pick, tier, agent=job in LEVEL_JOBS) if tier in LIFT else '')
             why = f"{JOB_WORDS[job]}{hard}: {lvl} work -> {_said(store, pick)}{f', {spell(model)}' if model else ''} as set in AI routing (rule {rule}){said}{held}"
         elif r and not want_model:
@@ -526,13 +523,21 @@ def choose(store, job: str, task=None, want_pick=None, want_model=None, gear=Non
             if not model: model = gear_of(store, pick, tier) if job != 'triage' else gear_of(store, pick, tier).split('@')[0]
             why = f"{JOB_WORDS[job]}{hard} -> {tier} on {_said(store, pick)}{f', {spell(model)}' if model else ''} (rule {rule}){said}{held}"
         why += miss
-    # a brain resting on its usage limit hands the call to the first backup that is not (Auto mode; the cards stand in Fixed)
-    if pick and mode(store) == 'auto' and pick in (cold := cooldowns(store)):
-        to = next((c for c in chain if c and c not in cold and hands(c)), '')
+    # AN AI THAT IS OFF NOW TAKES NO CALL (the owner, 2026-11-24: "I shut off access to HIPAA on my machine and the agent levels did not work ...
+    # It should switch back to whatever else is connected"): its card switched off, signed out, its budget spent, out of reach, resting on its
+    # limit (off) - the owner's backups take it, then any other connected AI that is ready, ON ITS OWN MODEL: the other's model id means nothing
+    # to it. Asked again each call, so the AI takes its work back once it is on. Auto mode; the cards stand in Fixed
+    moved = ''
+    # ...one picked outright is moved only when it cannot run at all: a failed test is no proof, and its answer clears the mark
+    if pick and mode(store) == 'auto' and (no := off(store, pick, tested=want_pick is None)):
+        rest = [*chain, *(o for o in others(store) if o not in chain)]
+        ready = {f'cli:{k}' for k in agents.ready_brains(store)}       # ...a CLI that stands in starts here
+        to = next((c for c in rest if c and c != pick and hands(c) and not off(store, c) and (not c.startswith('cli:') or c in ready)
+                   and (not only or may_read_sensitive(store, c))), '')
         if to:
-            why += f"; {_said(store, pick)} is limited until {clock(cold[pick])}, so {_said(store, to)}"
-            # ...on its own model, as a failover always is: the resting brain's model id means nothing to another provider
-            chain, pick, model = [pick, *chain], to, (lift(store, to, tier, agent=job in LEVEL_JOBS) if tier in LIFT else '')
+            why += f"; running on {_said(store, to)} - {_said(store, pick)} {no}"
+            chain, moved, pick, lvl = rest, pick, to, ''
+            model = lift(store, to, tier, agent=job in LEVEL_JOBS) if tier in LIFT else ''
             if tier == 'strong' and not strong_of(store, pick) and not model: tier, g = 'standard', GEAR_OF['standard']
     up = ''
     if pick and mode(store) == 'auto' and tier != 'strong' and job in ESCALATES and _first(store, f, 'escalate'): up = 'strong'
@@ -543,14 +548,58 @@ def choose(store, job: str, task=None, want_pick=None, want_model=None, gear=Non
     if model and not fits(store, model, pick):
         why, e = why + f"; {split_pick(model)[0]} is not a model {_said(store, pick)} runs, so its own", split_pick(model)[1]
         model = f'@{e}' if e else ''
-    return Route(job, tier, pick, model, g, [c for c in chain if c and c != pick], rule, why[0].upper() + why[1:],
-                 (j or {}).get('difficulty', ''), (j or {}).get('data_class', ''), up, lvl)
+    return Route(job, tier, pick, model, g, [c for c in chain if c and c not in (pick, moved)], rule, why[0].upper() + why[1:],
+                 (j or {}).get('difficulty', ''), (j or {}).get('data_class', ''), up, lvl, moved)
 
 
 def level_pick(store, job: str, task) -> tuple | None:
-    "(pick, model) of the owner's AI for this task's level when it would run `job` now (choose), else None - what a new session opens on."
+    """(pick, model) of the owner's AI for this task's level when it would run `job` now (choose) - or of the AI that stands in for one that is
+    off - else None: what a new session opens on."""
     r = choose(store, job, task)
-    return (r.pick, r.model) if r.level else None
+    return (r.pick, r.model) if r.level or r.off else None
+
+
+def others(store) -> list:
+    "Every connected AI, in the pickers' order - what a call falls to after the owner's own backups when its AI is off. Never a gateway no job names."
+    from . import general
+    return [o['pick'] for o in general.provider_options(store) if not general._unset_gateway(store, o['pick'])]
+
+
+UNREACHED, UNREACHED_REST, SPENT_WHY = "couldn't be reached", 300, 'has spent its budget'
+
+
+def off(store, pick: str, tested: bool = True) -> str:
+    """WHY `pick` CANNOT TAKE A CALL NOW, said after its name - its card switched off, gone or without a key, a CLI that (`tested`) failed its last
+    test - signed out - its budget spent, out of reach, resting on its usage limit - '' when it can. ONE reading for the router and a session."""
+    if not pick or pick == 'demo': return ''
+    if pick.startswith('connector:'):
+        c = next((c for c in store.list_connectors() if f"connector:{c['ConnectorId']}" == pick), None)
+        if not c: return 'is not connected'
+        if not c.get('Active'): return 'is off'
+        if not c.get('HasSecret') and c.get('Type') != 'ollama': return 'has no key'
+    from . import agents
+    if tested and pick.startswith('cli:') and agents.cli_tests(store).get(pick[4:]) is False: return 'failed its last test'
+    t = cooldowns(store).get(pick)
+    if not t: return ''
+    e = _spent_map(store).get(pick)
+    return (e.get('why') or SPENT_WHY) if isinstance(e, dict) else SPENT_WHY if e else f'is limited until {clock(t)}'
+
+
+def down(store, pick: str, tested: bool = True) -> str:
+    "`off`, where the router moves work off an AI that is off (Auto) - '' in Fixed, where the cards stand."
+    return off(store, pick, tested) if mode(store) == 'auto' else ''
+
+
+def stands_in(store, task) -> str:
+    """'Running on Claude Code - HIPAA AI is off' while this task's agent works on an AI standing in for one that is off - its live session's, else
+    what its next start would open on (choose) - else '': what the AI pill at the task's head says."""
+    from . import general
+    t = task if isinstance(task, dict) else store.get_task(int(task)) if str(task or '').isdigit() else None
+    if not t: return ''
+    s = general.session_for(t['TaskId'])
+    if s and (back := getattr(s, 'stood_for', '')) and (no := down(store, back)): return f'Running on {_said(store, s.pick)} - {_said(store, back)} {no}'
+    r = None if s else choose(store, 'general', t)
+    return f'Running on {_said(store, r.pick)} - {_said(store, r.off)} {off(store, r.off)}' if r and r.off else ''
 
 
 def for_session(store, task, brain: str = None) -> tuple:
@@ -560,7 +609,7 @@ def for_session(store, task, brain: str = None) -> tuple:
     r = choose(store, 'coding', task, want_pick=f'cli:{brain}' if brain else None)
     log(store, r, (task or {}).get('TaskId') if isinstance(task, dict) else task)
     # ...and on the CLI the owner set for this level in AI routing (by_level): its model, else its strong gear on hard work
-    if r.level and r.pick.startswith('cli:'): return r.pick[4:], r.model or (strong_of(store, r.pick) if r.gear == 'strong' else '') or None
+    if (r.level or r.off) and r.pick.startswith('cli:'): return r.pick[4:], r.model or (strong_of(store, r.pick) if r.gear == 'strong' else '') or None
     if r.gear != 'strong' or not r.pick.startswith('cli:'): return brain, None
     return r.pick[4:], strong_of(store, r.pick) or r.model or None
 
@@ -630,19 +679,20 @@ def _spent_map(store) -> dict:
     return d if isinstance(d, dict) else {}
 
 
-def spend(store, pick: str, line: str, until: datetime) -> None:
-    "Rest `pick` on its spent budget until `until`, and keep the line it is said in."
+def spend(store, pick: str, line: str, until: datetime, why: str = SPENT_WHY) -> None:
+    "Rest `pick` until `until` - on its spent budget, or `why` (out of reach) - and keep the line it is said in."
     import json
     if not pick: return
     cool(store, pick, until)
-    try: store.set_setting(SPENT_KEY, json.dumps({**_spent_map(store), pick: str(line)[:300]}), 'router')
+    try: store.set_setting(SPENT_KEY, json.dumps({**_spent_map(store), pick: {'line': str(line)[:300], 'why': why}}), 'router')
     except Exception as e: logger.debug(f'brainroute: could not note {pick} spent - {e}')
 
 
 def spent(store, pick: str) -> str:
     "The spent-budget line while `pick` still rests on it, else '' - a rest that ran out is asked again."
-    line = _spent_map(store).get(pick) if pick else None
-    return str(line) if line and pick in cooldowns(store) else ''
+    e = _spent_map(store).get(pick) if pick else None
+    if isinstance(e, dict): e = e.get('line') if e.get('why', SPENT_WHY) == SPENT_WHY else None
+    return str(e) if e and pick in cooldowns(store) else ''
 
 
 def unspend(store, pick: str) -> None:

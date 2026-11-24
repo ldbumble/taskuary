@@ -2486,6 +2486,8 @@ def _task_detail(task_id: int, rev: str = '', opened: bool = False, whole: bool 
             'ranOn': _ran_on(task_id, tr),
             # ...and before any has, WHICH WILL (_will_run): the head's AI pill names it, never a bare "AI" (the owner, 2026-11-23)
             'willRun': _will_run(d['task']),
+            # ...and, where that AI stands in for one that is off, the line that says so (brainroute.stands_in): the pill's own words
+            'aiOff': _safe_off(d['task']),
             # ...and why the router put its last AI call on that brain, for the AI pill's tooltip (brainroute.why_for_task)
             'routeWhy': _brainroute().why_for_task(store, task_id),
             # ...and how hard its work is, how sure its reader was, what data it carries - triage's word or the owner's (brainroute.judged)
@@ -2575,6 +2577,14 @@ def _will_run(task) -> dict | None:
     try: x = _brainroute().runs(store, 'coding' if str((task or {}).get('Kind') or '').lower() in CODING_KINDS else 'general')
     except Exception as e: logger.debug(f'will_run: {e}'); return None
     return {'pick': x['pick'], 'brain': x['brain'], 'model': x['model']} if x.get('pick') else None
+
+
+def _safe_off(task) -> str:
+    "brainroute.stands_in, never failing the task's read."
+    from .agents import CODING_KINDS
+    if str((task or {}).get('Kind') or '').lower() in CODING_KINDS: return ''
+    try: return _brainroute().stands_in(store, task)
+    except Exception as e: logger.debug(f'ai off: {e}'); return ''
 
 
 def _ran_on(task_id: int, tr=None):

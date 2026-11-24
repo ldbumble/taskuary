@@ -4,9 +4,9 @@ their reply").
 An agent that needs a fact only a third party has says so - `taskuary --waiting-on "<who>"` - and the task records WHO
 (`WaitingOn`, an address where one is known) and since when. It reads `waiting on them` on the rail until that person
 writes on it. Their line wakes it: the wait ends, the task is the owner's news again, and a session the agent left is
-offered Continue - which hands it their reply first (continuity.news_block, terminal.resume_seed). Nothing starts by
-itself: a live session hears it only under the owner's own answer_to_agent=auto, as any answer does (ingest._hand_to_agent).
-Anybody else writing on the thread is news as it always was, and the wait stands.
+offered Continue - which hands it their reply first (continuity.news_block, terminal.resume_seed). Their line goes to the
+task's agent as it arrives, whatever triage made of it - the wait is why it matters (ingest.land_on; walk 18: a holding reply
+read as fyi woke the task and reached no agent). Anybody else writing on the thread is news as it always was, and the wait stands.
 """
 from datetime import datetime
 
@@ -69,11 +69,11 @@ def on_them(store, t: dict) -> list:
     not yet read through to a turn's end (settle) - a holding "still working on it" is no end of the wait (walk 17, K2)."""
     from . import asks
     if not t or t.get('Status') in ('done', 'dropped'): return []
-    out = [{'who': name_of(k), 'what': f'an answer from {name_of(k)}', 'since': t.get('WaitingSince'), 'field': 'WaitingOn',
+    out = [{'who': name_of(k), 'what': f'an answer from {name_of(k)}', 'since': t.get('WaitingSince'), 'field': 'WaitingOn', 'key': k,
             'answered': _wrote_since(store, t['TaskId'], t.get('WaitingSince'), lambda m: is_them(k, m))} for k in (waiting(t),) if k]
     if t.get('AskedWatch') == 'reply' and (m := asks._waiting_on(store, t)):
         subj, who, a = ' '.join(str(m.get('Subject') or '').split())[:70], asks._who(m, first=False), asks._answer(store, t['TaskId'])
-        out.append({'who': who, 'what': f"{who}'s answer to the reply sent {str(t.get('AskedWatchAt') or '')[:16]}" + (f' re "{subj}"' if subj else ''),
+        out.append({'who': who, 'key': _addr(m), 'what': f"{who}'s answer to the reply sent {str(t.get('AskedWatchAt') or '')[:16]}" + (f' re "{subj}"' if subj else ''),
                     'since': t.get('AskedWatchAt'), 'field': 'AskedWatch', 'answered': a if a and str(a.get('CreatedAt') or '') > str(t.get('AskedWatchAt') or '') else None})
     return out
 
@@ -100,6 +100,11 @@ def is_them(key: str, msg: dict) -> bool:
     """Is this message from the person the task waits on?"""
     if not key or not msg: return False
     return _addr(msg) == key if '@' in key else _named(key, _name(msg))
+
+
+def awaits(store, t: dict, msg: dict) -> bool:
+    "Is this line from somebody task `t` waits on for an answer (on_them - the one list where it stands reads)?"
+    return any(is_them(w['key'], msg) for w in on_them(store, t))
 
 
 def declare(store, tid: int, who: str, agent: str = 'agent') -> dict:

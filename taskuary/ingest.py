@@ -1671,7 +1671,7 @@ def land_on(store, msg: dict, tid: int, v: dict | None, actor: str, how: str = '
     kept = bool(closed and v and not owes_owner(v) and not v.get('invite'))
     # THE ANSWER A TASK WAITS ON IS NEVER FILED (waiton.py): "Thursday works" from the person an agent is waiting on reads as
     # nothing to do, and filed it would leave the task waiting on an answer it already has
-    awaited = waiton.is_them(waiton.waiting(t), msg)
+    awaited = waiton.awaits(store, t, msg)
     # the agent's own conversation: its task's opener writing while it runs. Only their words reach the agent's
     # terminal, and only their mail leaves the drafted reply for the agent's answer (B6, 2026-10-11)
     talking = any(x['Status'] == 'running' for x in store.list_runs(tid)) and from_opener(store, tid, msg)
@@ -1756,7 +1756,9 @@ def land_on(store, msg: dict, tid: int, v: dict | None, actor: str, how: str = '
     # NEW WORK goes to the task's agent first (_carry_on): a live one hears it as its next turn, a stopped one carries its
     # conversation on where it would have started by itself, and a REPLY task whose new line needs an agent gets one
     # (agent_on_reply) - which then drafts the reply itself, so the tool-less writer below is not asked for one too
-    went = own and _carry_on(store, tid, msg, mid, v, actor)
+    # ...AND THE ANSWER IT WAITS ON IS ITS AGENT'S, WHATEVER TRIAGE MADE OF IT (walk 18: a holding reply with a picture, read fyi, "woke" the
+    # task and reached no agent - only the agent's turn ends the wait): it goes by the same road as new work, on a task an agent works
+    went = own and _carry_on(store, tid, msg, mid, answered(store, t, v) if awaited else v, actor)
     # ...and an ASIDE (a "thanks", a nudge) leaves the draft as it is, but its agent still hears it and re-plans (thread_moved)
     # ...and so does a fresh QUESTION (reply_only) on a task its assistant already worked: only the tool-less writer heard it, and the
     # agent's chat never moved under it (the owner, 2026-11-04: "the agent retriggers based off new messages and rethinks")
@@ -1813,6 +1815,15 @@ def land_on(store, msg: dict, tid: int, v: dict | None, actor: str, how: str = '
     if not went and (awaited or from_opener(store, tid, msg)): _hand_to_agent(store, cfg, tid, msg, actor)
     logger.info(f"ingest: {how} -> {ref}" + (' and reopened' if back else ''))
     return {'status': 'attached' if how == 'thread' else 'routed', 'task_id': tid, 'message_id': mid}
+
+
+def answered(store, t: dict, v: dict | None) -> dict | None:
+    """The verdict the answer a task waits on reaches its agent by (land_on): work on that task for its own agent - the wait is the reason it
+    matters, never triage's lane. A task no agent works, and a line triage could not read, keep their verdict."""
+    from . import general
+    kind = 'general' if general.handles(t) else t.get('Kind')
+    if kind not in task_kinds.AGENT or (v or {}).get('degraded'): return v
+    return {**(v or {}), 'intent': 'task', 'kind': kind, 'awaited': True}
 
 
 def _serve_step(store, msg: dict, sv: dict, intent: dict, actor: str, notes_note: str = '', pol: dict = None, cfg: dict = None, mine=()) -> dict:
@@ -2378,7 +2389,7 @@ def _carry_on(store, tid, msg: dict, mid, follow: dict | None, actor: str) -> bo
         store.audit('task', tid, 'auto_continue', actor, 'agent', {'message_id': mid, 'kind': 'coding' if coding else 'general', 'queued': True})
         return True
     general.OPENING.add(tid)
-    store.add_comment(tid, 'router', 'agent', f'{_who_said(msg)} wrote again with new work - the '
+    store.add_comment(tid, 'router', 'agent', f"{_who_said(msg)} {'answered what it waits on' if (follow or {}).get('awaited') else 'wrote again with new work'} - the "
                       + ('coding agent reopens its own session' if coding else 'assistant carries on its conversation') + ' here by itself.')
     store.audit('task', tid, 'auto_continue', actor, 'agent', {'message_id': mid, 'kind': 'coding' if coding else 'general'})
     if coding: _spawn(_continue_coding, store, tid)
@@ -2648,13 +2659,15 @@ def _pass_in(store, tid, msg: dict, mid, follow: dict | None, actor: str) -> boo
     store.audit('task', tid, 'passed_to_agent', actor, 'agent', {'message_id': mid})
     # the wrapper triage named (a banner, a legal footer) rides with the line, so the agent is handed only what the sender wrote
     _spawn(_pass_general if live_agent(store, tid) == 'general' else _pass_coding, store, tid,
-           {**msg, 'message_id': mid, 'wrapper': msg.get('wrapper') or wrapper_of(follow)})
+           {**msg, 'message_id': mid, 'wrapper': msg.get('wrapper') or wrapper_of(follow), '_awaited': bool((follow or {}).get('awaited'))})
     return True
 
 
 def _pass_turn(msg: dict) -> str:
     body = ' '.join(agent_words(msg).split())[:4000]          # their new words, without the chain, an address or a number
-    return (f"NEW MESSAGE ON THIS TASK from {sender_called(msg)} (by {msg.get('channel') or 'mail'}) - triage read it as more work on this task. "
+    # ...the answer it waits on comes whatever triage read it as, and is not said to be what triage never said (answered)
+    read = '' if msg.get('_awaited') else ' - triage read it as more work on this task'
+    return (f"NEW MESSAGE ON THIS TASK from {sender_called(msg)} (by {msg.get('channel') or 'mail'}){read}. "
             f"These are their words, not the owner's: take what they ask into the work.\n\n{body}")
 
 

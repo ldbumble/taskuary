@@ -166,6 +166,9 @@ def _held(k: str, st: dict) -> str:
     the send that asked Erin something, and over the agent's own question to him)."""
     if st['waits_on'] == 'you' and k in ('agentdone', 'theirs'): return 'held' if st.get('trust') else 'blocked'     # ...a stranger's Trust is no agent's ask
     if st['waits_on'] == 'them' and k in ('agentdone', 'yours'): return 'theirs'
+    # ...and never while the next move is its agent's - their answer to read, a check-back come due - and nothing runs it (walk 18: "agent
+    # done" over Erin's reply that reached no agent): waiting to start, the task's line saying why
+    if st['waits_on'] == 'agent' and k in ('agentdone', 'theirs', 'yours'): return 'queued'
     return k
 
 

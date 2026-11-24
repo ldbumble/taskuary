@@ -103,6 +103,27 @@ class CarryOnTests(unittest.TestCase):
         self.assertNotIn('_continue_general', spawned)
         self.assertEqual(spawned, ['_replan_general'])
 
+    def test_the_answer_the_task_waits_on_reaches_its_agent_whatever_triage_read(self):
+        """Walk 18 (L1): the agent asked Gail for the vendor split and waited on her; her holding reply with the quote's picture "woke" the
+        task, but triage read it fyi, nothing passed it on, and the chip read "agent done" - the picture was read only when the next mail came
+        6 minutes later. The answer it waits on goes to its agent as it arrives; until a turn runs it never reads "agent done"."""
+        from taskuary import taskstate, waiton
+        s = store()
+        out, _ = ingested(s, mail())
+        tid = out['task_id']; general.OPENING.discard(tid)
+        s.add_comment(tid, 'owner', general.USER_TYPE, 'Can you draft a pilot plan for the new box?')
+        s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'Asked Gail for the vendor split; waiting on her.')
+        waiton.declare(s, tid, 'gail@northwind.example', 'agent')
+        s._exec("UPDATE task SET WaitingSince='2026-01-01 09:00:00' WHERE TaskId=?", (tid,))       # ...asked a while before she answers
+        gail = dict(external_id='x3', from_email='gail@northwind.example', from_name='Gail Moreno', sent_at='2026-10-28 10:00',
+                    body='Still working on the split - the quote is in the picture.')
+        out, spawned = ingested(s, mail(**gail), intent='fyi')
+        self.assertEqual((out['task_id'], spawned), (tid, ['_continue_general']))
+        self.assertTrue(any('answered what it waits on' in c['Body'] for c in s.list_comments(tid)))
+        general.OPENING.discard(tid)
+        self.assertEqual(taskstate.standing(s, tid)['waits_on'], 'agent')
+        self.assertEqual(taskstate.state(s, s.get_task(tid)), 'queued', 'its agent owes the next move: never "agent done"')
+
     def test_never_over_a_live_session(self):
         s = store(); tid = finished_task(s)
         with mock.patch.object(general, 'session_for', return_value=object()):

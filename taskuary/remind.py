@@ -28,7 +28,7 @@ def parse(until, now: datetime = None) -> str | None:
     s = str(until or '').strip().lower()
     if s in NONE_WORDS: return None
     from .agenttools import echo                # ...the value bounded and its cut marked, so the way on is never what a length cut takes
-    unreadable = f'"{echo(until)}" is not a day I can read - say a date (2026-10-09), "in 2 weeks" or "today 3pm"'
+    unreadable = f'"{echo(until)}" is not a day I can read - say a date (2026-10-09, 9 October), "in 2 weeks" or "today 3pm"'
     if m := _SOON.fullmatch(s):
         n = {'a': 1, 'an': 1, 'one': 1, 'two': 2, 'three': 3, 'four': 4}.get(m.group(1)) or (0.5 if m.group(1).startswith('half') else int(m.group(1)))
         if not n: raise ValueError(unreadable)
@@ -45,8 +45,10 @@ def parse(until, now: datetime = None) -> str | None:
         if not (0 <= h < 24 and 0 <= mi < 60): raise ValueError(unreadable)
         at, timed = f'{h:02d}:{mi:02d}:00', True
     s = re.sub(r'\s+(morning|in the morning)$', '', s.strip())
+    s = re.sub(r'^(?:on|next|this|coming)\s+', '', s)
     m = re.fullmatch(r'(\d{4}-\d{2}-\d{2})(?:[ t].*)?', s)
-    if m:
+    if (named := _named(s, now)) is not None: day = named
+    elif m:
         try: day = datetime.strptime(m.group(1), '%Y-%m-%d')
         except ValueError: raise ValueError(unreadable) from None     # 2026-02-30 has the shape, not the day
     elif s == 'today': day = now
@@ -65,6 +67,27 @@ def parse(until, now: datetime = None) -> str | None:
     return f"{day:%Y-%m-%d} {at}"
 
 DAYS = ('monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday')
+MONTHS = ('january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december')
+_WD = r'(?:(mon|tue|wed|thu|fri|sat|sun)[a-z]*\.?,?\s+)?'
+_MON, _DAY = r'([a-z]{3,9})\.?', r'(\d{1,2})(?:st|nd|rd|th)?'
+_DMY = re.compile(_WD + _DAY + r'\s+(?:of\s+)?' + _MON + r'(?:,?\s+(\d{4}))?')
+_MDY = re.compile(_WD + _MON + r'\s+' + _DAY + r'(?:,?\s+(\d{4}))?')
+
+def _named(s: str, now: datetime) -> datetime | None:
+    """A day by its month's name, as people write one - "Thursday 26 November", "Nov 26", "the 3rd of December 2026", "Fri, Dec 4": the
+    walk, 2026-11-24, an agent promised "Thursday 26 November" and it was no day this read. With no year it is the next such day; a weekday
+    that is not that date's is said back, never guessed past. None where `s` is no such form."""
+    s = re.sub(r'^the\s+', '', s)
+    if m := _DMY.fullmatch(s): wd, d, mon, y = m.groups()
+    elif m := _MDY.fullmatch(s): wd, mon, d, y = m.groups()
+    else: return None
+    if not (n := next((i for i, x in enumerate(MONTHS, 1) if x.startswith(mon)), 0)): return None
+    try: day = datetime(int(y) if y else now.year, n, int(d))
+    except ValueError: raise ValueError(f'{MONTHS[n - 1].title()} has no day {d} - say the date again') from None
+    if not y and day.date() < now.date(): day = day.replace(year=now.year + 1)
+    if wd and DAYS[day.weekday()][:3] != wd:
+        raise ValueError(f'{day.day} {day:%B %Y} is a {DAYS[day.weekday()].title()}, not a {next(x for x in DAYS if x.startswith(wd)).title()} - say which day you mean')
+    return day
 
 
 def clock(at: datetime) -> str: return f"{at.hour % 12 or 12}:{at.minute:02d}"

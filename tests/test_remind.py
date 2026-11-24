@@ -45,6 +45,20 @@ class ParseTests(unittest.TestCase):
         for bad in ('tomorrow 25pm', 'tomorrow 13pm', 'tomorrow 9:75'):
             with self.assertRaisesRegex(ValueError, 'is not a day I can read'): remind.parse(bad, self.NOW)
 
+    def test_a_day_named_by_its_month_is_read_and_a_wrong_weekday_is_said_back(self):
+        """Walk 14, 2026-11-24: the agent promised "On Thursday, I'll check" with a check-back of "Thursday 26 November" - no day this read, so
+        nothing was set. A date written with its month's name is a day; with no year it is the next one; a weekday that is not that date's
+        is refused with which day it is."""
+        now = datetime(2026, 11, 24, 3, 0)
+        for said, at in (('Thursday 26 November', '2026-11-26 07:00:00'), ('thursday, 26 november at 9am', '2026-11-26 09:00:00'),
+                         ('Nov 26', '2026-11-26 07:00:00'), ('November 26, 2026', '2026-11-26 07:00:00'), ('the 3rd of December', '2026-12-03 07:00:00'),
+                         ('Fri, Dec 4', '2026-12-04 07:00:00'), ('3 January', '2027-01-03 07:00:00'), ('next friday', '2026-11-27 07:00:00'),
+                         ('on Friday 9 a.m.', '2026-11-27 09:00:00'), ('26 nov 9:30', '2026-11-26 09:30:00')):
+            self.assertEqual(remind.parse(said, now), at, said)
+        with self.assertRaisesRegex(ValueError, 'is a Thursday, not a Friday'): remind.parse('Friday 26 November', now)
+        with self.assertRaisesRegex(ValueError, 'November has no day 31'): remind.parse('31 November', now)
+        with self.assertRaisesRegex(ValueError, 'is not a day I can read'): remind.parse('junk 5', now)
+
     def test_none_clears_and_nonsense_or_the_past_is_refused(self):
         self.assertIsNone(remind.parse('none', self.NOW)); self.assertIsNone(remind.parse('', self.NOW))
         for bad in ('whenever', '2026-09-25', '2026-01-01', '2026-02-30'):

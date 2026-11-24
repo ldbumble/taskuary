@@ -598,6 +598,14 @@ def _searched(one, q: str) -> str:
     except Exception as e: return f'(this search failed: {e})'
 
 
+def _end_check(store, tid: int, cb, doors: dict, skip=()) -> str:
+    "end_turn's check-back, set as the check_back tool sets one - what it says back, or why it was not set and how to set it."
+    if 'check_back' in skip: return ' No check-back was set: a task from someone the owner has not vouched for wakes nobody later.'
+    try: out = json.loads(_call(store, tid, 'check_back', cb if isinstance(cb, dict) else {}, doors, skip))
+    except Exception as e: return '\n' + refusal(f"The check-back was NOT set: {getattr(e, 'detail', None) or e}", 'call check_back with a day it reads to set it')
+    return f" The check-back is set for {out.get('when') or out.get('at')}: {out.get('what')}."
+
+
 def _call(store, tid: int, name: str, args: dict, doors: dict, skip=()) -> str:
     """Run one tool for the session on task `tid`. `doors` are the server's own handlers for the acts that have one (tool_run, tick,
     reply, draft, propose), called with the caller's request so their own checks - owns_task, scopes, the send-to-proposal rule -
@@ -725,9 +733,11 @@ def _call(store, tid: int, name: str, args: dict, doors: dict, skip=()) -> str:
     if name == 'new_task': return _j(doors['new_task'](tid, a))
     if name == 'end_turn':
         from . import selfclose
-        keep = {k: a[k] for k in ('name', 'about', 'did', 'on_you', 'nothing_left', 'answer_is_result', 'after_press', 'retry', 'corrections', 'check_back') if k in a}
+        keep = {k: a[k] for k in ('name', 'about', 'did', 'on_you', 'nothing_left', 'answer_is_result', 'after_press', 'retry', 'corrections') if k in a}
         selfclose.keep_mark(tid, 'summary', selfclose.summary_mark(keep))
-        return 'Kept - it shows on the task when your answer is filed.'
+        # ...ITS CHECK-BACK SET NOW, THROUGH THE check_back TOOL'S OWN DOOR (walk 14, 2026-11-24): kept unread and answered "Kept", a
+        # "Thursday 26 November" it could not read was set nowhere at filing, while the agent told the owner "On Thursday, I'll check"
+        return 'Kept - it shows on the task when your answer is filed.' + (_end_check(store, tid, a['check_back'], doors, skip) if a.get('check_back') else '')
     if name == 'ask_owner':
         from . import selfclose
         if not str(a.get('question') or '').strip(): raise ValueError('`question` is empty - write the one thing you need from the owner')

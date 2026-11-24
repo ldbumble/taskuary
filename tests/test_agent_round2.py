@@ -325,6 +325,27 @@ class CheckBackTests(unittest.TestCase):
         from taskuary import cli
         self.assertIn('check_back', cli.AGENT_ACTS); self.assertNotIn('check_back', cli.STRANGER_ACTS)
 
+    def test_end_turns_check_back_is_set_as_it_is_called_or_said_not_set(self):
+        """Walk 14, 2026-11-24 (invented people): the agent told the owner "On Thursday, I'll check", its end_turn carried check_back
+        {when: "Thursday 26 November"}, and end_turn answered "Kept" - at filing the day was not read, nothing was set. It is set at the call,
+        through the check_back tool's own door, and the answer says what stands - or that it was NOT set, why, and what to do."""
+        s = MemoryStore(); tid = owner_task(s)
+        srv, c = config.load()['server'], TestClient(server.app)
+        hdr = {'X-Taskuary-Token': srv['agent_token'], guard.TASK_HDR: guard.task_proof(srv, tid)}
+        def end(when):
+            r = c.post(f'/api/mcp?task={tid}', headers=hdr, json={'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call', 'params': {'name': 'end_turn',
+                        'arguments': {'did': 'Asked Erin Blake for the signed order form', 'check_back': {'when': when, 'what': 'Erin sent the order form'}}}})
+            selfclose.take_marks(tid); return r.json()['result']['content'][0]['text']
+        with mock.patch.object(server, 'store', s), mock.patch('taskuary.remind.datetime') as dt:
+            dt.now.return_value, dt.side_effect = datetime(2026, 11, 24, 3, 0), datetime
+            dt.strptime = datetime.strptime
+            said = end('Friday 26 November')
+            self.assertIn('NOT set', said); self.assertIn('is a Thursday, not a Friday', said); self.assertIn('check_back', said)
+            self.assertFalse(s.get_task(tid).get('CheckBackAt'))
+            said = end('Thursday 26 November')
+        self.assertEqual(s.get_task(tid)['CheckBackAt'], '2026-11-26 07:00:00')
+        self.assertIn('The check-back is set for', said); self.assertIn('Erin sent the order form', said)
+
 
 if __name__ == '__main__':
     unittest.main()

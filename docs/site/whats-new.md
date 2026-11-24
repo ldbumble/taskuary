@@ -2,6 +2,20 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.4.2.9 - 2026-11-24
+
+- Triage sees what each open task waits on now
+- Where a task stands is told by its state, never its agent's title
+- A sender's new thread is its own line after one the owner answered
+- A step whose title is its own command reads by what the command did
+- An adapter that answers its turn with its server's death is said as the death
+- A browser screenshot the agent takes is its own picture, never a read to approve
+- A check-back the agent set holds Send and close, as another card does
+- A task held for a stranger's Trust says so in what waits on him
+- A phone answer that names one task by its ref brings that task up
+- The task page offers Send and close by the one answer, card.may_close
+- On a tight row the lit move keeps its words
+
 ## 0.4.2.8 - 2026-11-24
 
 - A card's send is drawn once and names the mailbox it left from

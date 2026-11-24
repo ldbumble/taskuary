@@ -389,5 +389,21 @@ def test_a_letter_with_a_blank_left_to_fill_is_no_card():
     assert wrapup.agent_reply(s, tid, 'Hi Dana, the August export is fixed [1].', 'assistant')['ok']
 
 
+def test_a_letter_that_is_only_its_greeting_and_sign_off_is_no_card():
+    """Walk 14, 2026-11-24: `taskuary --reply` saved "Hi Erin,\\n\\nAlex Doyle" and answered that the card shows its words - a card one press
+    from sending nothing. By shape: his name and saved signature, a closing above them, a short first line that greets - nothing left is no
+    message, refused with what to do next. On both doors: a reply, and a new email."""
+    from taskuary import slots
+    s = MemoryStore(); s.set_setting('owner_name', 'Alex Doyle', 't'); s.set_setting('email_signature', 'Best,\nAlex Doyle\nNorthwind', 't')
+    tid, _ = task_with(s)
+    for bare in ('Hi Erin,\n\nAlex Doyle', 'Hi Erin,\n\nThanks,\nAlex', 'Dear Erin,\n\nBest,\nAlex Doyle\nNorthwind', 'Hi Erin,'):
+        out = wrapup.agent_reply(s, tid, bare, 'assistant')
+        assert out['ok'] is False and 'no message in it yet' in out['why'] and 'ask the owner' in out['why'], bare
+        assert not s.pending_review(tid, 'draft_reply', live_only=False), bare
+        assert slots.draft(s, tid, bare, 'erin@northwind.example', 'Spend sheet', agent='assistant')['ok'] is False, bare
+    assert wrapup.message_of(s, 'Hi Erin,\n\nFriday works.\n\nAlex Doyle') == 'Friday works.'
+    assert wrapup.agent_reply(s, tid, 'Hi Erin,\n\nFriday works.\n\nAlex Doyle', 'assistant')['ok']
+
+
 if __name__ == '__main__':
     unittest.main()

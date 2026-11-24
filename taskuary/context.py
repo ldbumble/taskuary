@@ -394,6 +394,7 @@ def recent_open(store, msg: dict, limit: int = OPEN_SEATS) -> list:
     the thread, the record, the sender, a name on another channel - newest first."""
     conv, sender, text, own = _arrival_keys(msg)
     ids = ids_of(f"{msg.get('subject') or ''} {msg.get('body') or ''}")
+    from . import waiton
     out, rows = [], store.tasks_open_linked()
     near = alike(store, text, rows, NEAREST)
     names = [] if own else arrival_names(store, msg)
@@ -422,6 +423,7 @@ def recent_open(store, msg: dict, limit: int = OPEN_SEATS) -> list:
         out.append({'tid': t['TaskId'], 'ref': task_ref(t['TaskId']), 'title': t.get('Title') or '',
                     'from': OWN_TASK if t.get('OriginBase') == 'owner' else _who(sender, senders),
                     'why': hit[0], **({'about': _short(t.get('Summary'), 200)} if (meant or named or tied) and t.get('Summary') else {}),
+                    **({'waits_on': w} if (w := waiton.stands(store, t)) else {}),
                     **_threads(convs), **({'in_another_chat': True} if chat and convs and conv not in convs else {}), '_rank': hit[1]})
     out.sort(key=lambda r: -r['_rank'])
     return [{k: v for k, v in r.items() if k != '_rank'} for r in out[:limit]]
@@ -433,7 +435,7 @@ def recent_open(store, msg: dict, limit: int = OPEN_SEATS) -> list:
 # is the model's to read, so it is shown the owner's open work itself: newest first, the ones already shown above left out. N bounds
 # the prompt: 40 lines of at most 140 characters is ~5.6K characters (~1.4K tokens) against a prompt of 20K+, and an item idle past the
 # 40 newest is the one least likely to be what arrives now - the structural ties above still reach it by thread, sender or number.
-OPEN_ITEMS, OPEN_ITEM_CHARS = 40, 140
+OPEN_ITEMS, OPEN_ITEM_CHARS, OPEN_WAITS_CHARS = 40, 140, 200
 
 
 def _age(at) -> str:
@@ -455,21 +457,24 @@ def open_items(store, skip=(), limit: int = OPEN_ITEMS) -> list:
     """The owner's open tasks and Watching items as one line each - ref and tid, title, what it asks, where it came from, age - so an
     arrival about the same matter from anyone, on any channel, can be named as that task (same_as). `skip` is what triage was already
     shown. Evidence, never a rule: the model says whether one of them is this."""
+    from . import waiton
     from .senders import channel_name
     out = []
     for t in store.tasks_open_brief(limit + len(skip)):
         if t['TaskId'] in skip: continue
         src = 'yours' if _own(t) else ', '.join(x for x in (channel_name(t.get('Channel') or t.get('Source')), _short(t.get('FromName'), 30)) if x)
-        out.append(_item(t, src, 'watching' if t.get('WatchedAt') else ''))
+        out.append(_item(t, src, 'watching' if t.get('WatchedAt') else '', waits=' ; '.join(waiton.stands(store, t))))
         if len(out) >= limit: break
     return out
 
 
-def _item(t: dict, *tail) -> str:
-    "One line: ref and (tid), title, what it asks, then `tail` and its age - what it asks gives way, never which task or its state."
-    head = f"{task_ref(t['TaskId'])} (tid {t['TaskId']}) {_short(t.get('Title'), 50)}"
+def _item(t: dict, *tail, waits: str = '') -> str:
+    """One line: ref and (tid), title, what it asks, what it waits on now (waiton.stands), then `tail` and its age - what it asks gives way,
+    never which task or its state."""
+    head, waits = f"{task_ref(t['TaskId'])} (tid {t['TaskId']}) {_short(t.get('Title'), 50)}", _short(waits, OPEN_WAITS_CHARS)
     tail = ' | '.join(x for x in (*tail, _age(t.get('CreatedAt'))) if x)
-    return ' | '.join(x for x in (head, _short(_asks(t), OPEN_ITEM_CHARS - len(head) - len(tail) - 6), tail) if x)[:OPEN_ITEM_CHARS]
+    asks = _short(_asks(t), OPEN_ITEM_CHARS - len(head) - len(tail) - 6)
+    return ' | '.join(x for x in (head, asks, waits, tail) if x)[:OPEN_ITEM_CHARS + (len(waits) + 3 if waits else 0)]
 
 
 # CLOSED WORK IS FOUND BY THE OWNER'S OWN SEARCH (the owner, 2026-11-04: triage should "check if there is something like this"). A follow-up

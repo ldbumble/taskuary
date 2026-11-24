@@ -49,6 +49,27 @@ def name_of(key: str) -> str:
     return holder_name('person:' + key) if '@' in key else key.title()
 
 
+def said(key: str) -> str: return f'waiting on {name_of(key)}' if key else ''
+
+
+def stands(store, t: dict) -> list:
+    """WHAT AN OPEN TASK WAITS ON NOW, as stored - never its title or the ask that opened it: the person an agent said only they can answer
+    (`said`, the rail's own "waiting on them"), the answer a reply he sent asked them for (asks.py's watch, nothing from them on its thread
+    since), and the question its agent asks him. What triage is shown of each open task (context.open_items) - walk 16: an answer on a new
+    thread to the reply a task had sent was read as a notice, since nothing it was shown said that task waited on it. [] when nothing."""
+    from . import asks, taskstate
+    t = store.get_task(int(t['TaskId'])) if t and t.get('TaskId') else None
+    if not t or t.get('Status') in ('done', 'dropped'): return []
+    out = [x for x in (said(waiting(t)),) if x]
+    if t.get('AskedWatch') == 'reply' and (m := asks._waiting_on(store, t)) and \
+            str((asks._answer(store, t['TaskId']) or {}).get('MessageId') or '') == str(t.get('AskedSeenMid') or ''):
+        subj = ' '.join(str(m.get('Subject') or '').split())[:70]
+        out.append(f"waiting on {asks._who(m, first=False)}'s answer to the reply sent {str(t.get('AskedWatchAt') or '')[:10]}" + (f' re "{subj}"' if subj else ''))
+    if (q := taskstate.open_question(store, t['TaskId'])) and q.get('text'):
+        out.append(f"its agent asks you: {' '.join(str(q['text']).split())[:120]}")
+    return out
+
+
 def is_them(key: str, msg: dict) -> bool:
     """Is this message from the person the task waits on?"""
     if not key or not msg: return False

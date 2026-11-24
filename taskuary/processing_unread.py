@@ -493,7 +493,7 @@ def card_for(store, item, compact, live_state, now, states=None, noise=None, lea
     # agent stopped or saved (whose Continue would only ask again), nor one parked at its prompt reading "waiting on you"
     them = waiton.waiting(task) if active and not review and not news else ''
     if them and (not worker or worker.get('waiting')) and card['lane'] in ('yours', 'queued', 'stopped', 'saved', 'asked', 'blocked'):
-        card.update(lane='theirs', waiting_on=them, why=f'waiting on {waiton.name_of(them)}')
+        card.update(lane='theirs', waiting_on=them, why=waiton.said(them))
     # A LOOSE END (sweep.py): the daily check found this open task in no state that moves it - waiting on nobody named, or with
     # no date - and said so on the task's own row. It is the owner's move until the state is fixed, read live here, so a date or
     # a name put on it takes the line off at once; `lane_was` is what the check reads again tomorrow

@@ -11,6 +11,7 @@ from taskuary.store import MemoryStore
 from tests import fake_embed
 
 ALEX, GAIL, PORTAL, ONBOARD = 'alex@northwind.example', 'gail@northwind.example', 'support@vendor.example', 'welcome@payworth.example'
+ERIN = 'erin@northwind.example'
 
 
 def brain(seen, topic):
@@ -55,6 +56,38 @@ class OpenItemsJoinTests(unittest.TestCase):
         self.assertTrue(any(f'(tid {self.tid})' in l for l in json.loads(seen[-1]).get('open_items') or []))
         self.assertNotEqual(r['task_id'], self.tid)
         self.assertEqual(len(self.s.list_tasks()), 2)
+
+
+class WhatItWaitsOnTests(unittest.TestCase):
+    """Walk 16: a task's sent reply asked Erin whether the growth was more users or a price change; her answer came on a NEW thread and was
+    filed as a notice with nothing to do - triage was shown the task's title and first ask, never that it waited on her answer."""
+    def setUp(self):
+        cm = fake_embed.no_embedder(); cm.__enter__(); self.addCleanup(cm.__exit__, None, None, None)
+        self.s = MemoryStore(); self.s.set_setting('owner_email', ALEX, 't')
+        self.tid = arrive(self.s, brain([], 'nothing'), 'v', 'thread-S', ERIN, 'Erin Blake', [ALEX], 'Q4 vendor spend',
+                          'Here is the Q4 vendor spend sheet. Spendly is up 40% on last quarter.')['task_id']
+
+    def test_an_answer_on_a_new_thread_is_shown_the_task_that_waits_on_it(self):
+        from taskuary import asks
+        asks._start_watch(self.s, self.tid, self.s.list_messages(self.tid)[0])     # the reply he sent asked her something
+        seen = []
+        r = arrive(self.s, reader(seen, "waiting on erin blake's answer"), 'w', 'thread-N', ERIN, 'Erin Blake', [ALEX], 'Spendly',
+                   'More users - we added the sales team in October. The price did not change.')
+        said = [txt for t, txt in shown(json.loads(seen[-1])) if t == self.tid]
+        self.assertTrue(said and "waiting on erin blake's answer" in said[0].lower() and 'Q4 vendor spend' in said[0], said)
+        self.assertEqual(r['task_id'], self.tid, 'her answer reaches the task that asked')
+
+    def test_the_agents_question_and_a_named_wait_are_on_its_line_and_go_when_answered(self):
+        from taskuary import waiton, workerstate as ws
+        ws.record(self.s, self.tid, 'g1', 'turn_end', text='One thing first.', source='api')
+        ws.record(self.s, self.tid, 'g1', 'input_needed', text='Is 25 seats or 250 the right count?', source='api')
+        waiton.declare(self.s, self.tid, 'gail@northwind.example')
+        line = next(l for l in context.open_items(self.s) if f'(tid {self.tid})' in l)
+        self.assertIn('its agent asks you: Is 25 seats or 250 the right count?', line)
+        self.assertIn('waiting on Gail', line)
+        ws.record(self.s, self.tid, 'g1', 'working', text=ws.WAKE, source='api')
+        ws.record(self.s, self.tid, 'g1', 'turn_end', text='250 - it is in the contract.', source='api')
+        self.assertNotIn('its agent asks you', next(l for l in context.open_items(self.s) if f'(tid {self.tid})' in l))
 
 
 class OpenItemsBoundTests(unittest.TestCase):

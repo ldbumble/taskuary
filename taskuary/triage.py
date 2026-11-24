@@ -52,11 +52,11 @@ FIELDS = {
                        "tid and how it ended - the finding the agent wrote, or the ask if no agent ran.",
     'filed_notices': ("filed_notices is this sender's earlier messages filed as notices with no task, newest first: each with its mid, "
                       "subject, how triage read it and when."),
-    'open_work': ("open_work is the OPEN tasks this message touches, each with its tid; in_another_chat is true on one whose lines sit in "
-                  "a different chat or group than this chat line."),
+    'open_work': ("open_work is the OPEN tasks this message touches, each with its tid and what it waits on now (waits_on); in_another_chat "
+                  "is true on one whose lines sit in a different chat or group than this chat line."),
     'open_items': ("open_items is the owner's other open tasks and Watching items, newest first, one line each: its ref and (tid), title, "
-                   "what it asks, where it came from, whether it is watched, and its age. Nothing ties them to this message by thread, sender "
-                   "or number - most are unrelated; for a chat line, none of them is this chat's (those are room_tasks). When this message is "
+                   "what it asks, what it waits on now (a person's answer, the reply it sent, its agent's question), where it came from, "
+                   "whether it is watched, and its age. Nothing ties them to this message by thread, sender or number - most are unrelated; for a chat line, none of them is this chat's (those are room_tasks). When this message is "
                    "about the same matter as one of them, whoever wrote it and on whatever channel or thread, answer same_as with that tid."),
     'found_by_search': ("found_by_search is what the owner's own task search finds for this message's subject and words, open or closed, "
                         "best found first, one line each: ref and (tid), title, what it asks, its status (open, watching, or closed and "

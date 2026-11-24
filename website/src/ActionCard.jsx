@@ -12,7 +12,7 @@ import api from "./api.js";
 import { openAppLink } from "./appLinks.js";
 import { attUrl } from "./fileSave.js";
 import { FileDialog } from "./PublishedPages.jsx";
-import { actionFor, changed, choiceOf, faceOf, fieldsOf, pressable, stateOf, textKey, valuesOf, viaBrowserSaid, wordsOf } from "./actionCard.js";
+import { POST_PICTURE, actionFor, changed, choiceOf, faceOf, fieldsOf, pressable, stateOf, textKey, valuesOf, viaBrowserSaid, wordsOf } from "./actionCard.js";
 import { outputRow } from "./taskOutputs.js";
 import { hint, label as btn } from "./buttons.js";
 import { failLine, landed, press } from "./press.js";
@@ -20,8 +20,6 @@ import { asLive, MovedPast } from "./PassedCard.jsx";
 import { MdLine } from "./md.jsx";
 import { ACCENT, ALERT_INK, DIM, FAINT, INK } from "./theme.jsx";
 
-// ...a post's picture is a preview at a glance, not half the screen (the owner, 2026-11-05): its press opens it whole (FileDialog)
-const IMG_H = 220;
 // ...as wide as the pick it shows, its chevron beside it - sized to its longest choice, "Anyone" stood a word's gap from its own arrow - and
 // a ring when the keyboard is on it (the scenario run, 2026-11-06: no outline at all)
 const PICK = { font: "inherit", fontSize: 11.5, color: INK, border: 0, background: "transparent", padding: 0, cursor: "pointer", outline: 0,
@@ -115,10 +113,10 @@ export default function ActionCard({ row: was, tid, live = true, onChanged, past
         ? <Box component="textarea" data-tq-act-text="" value={text} onChange={(e) => setText(e.target.value)} disabled={!!busy} rows={Math.min(14, Math.max(3, text.split("\n").length + 1))}
             sx={{ display: "block", width: "100%", boxSizing: "border-box", resize: "vertical", border: 0, outline: 0, px: 1.5, py: 0.5, font: "inherit", fontSize: 13.5, lineHeight: 1.5, color: INK, bgcolor: "transparent" }} />
         : <Typography data-tq-act-text="" sx={{ px: 1.5, py: 0.5, fontSize: 13.5, lineHeight: 1.5, color: gone ? INK : DIM, whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{shown[tk]}</Typography>}
-      {/* ...the picture as itself, hugging its own shape on the card's edge - no grey band around it (the owner, 2026-11-23) - its height held
-          from the first frame (a picture landing grew the card 2 -> 180 px, 2026-11-12) */}
+      {/* ...the picture as the feed will show it, the words' width at its own shape - no grey band around it (the owner, 2026-11-23) - its room
+          held from the first frame (a picture landing grew the card 2 -> 180 px, 2026-11-12): actionCard.POST_PICTURE */}
       {pic && <Box component="img" data-tq-act-image={img.value} src={attUrl(pic)} alt={p.alt || pic.name} onClick={() => setViewing(pic)}
-        sx={{ display: "block", height: IMG_H, width: "auto", maxWidth: "calc(100% - 24px)", objectFit: "contain", mx: 1.5, mt: 0.75, borderRadius: "8px", cursor: "zoom-in" }} />}
+        sx={POST_PICTURE} />}
       {pic && img.manual && !gone && <Typography data-tq-act-image-manual="" sx={{ px: 1.5, pt: 0.5, fontSize: 11.5, color: FAINT }}>
         {`${row?.network || "This network"} gets the words from here - open the picture to save it, and add it yourself`}</Typography>}
       <Box sx={{ display: "flex", alignItems: "center", gap: 1, px: 1.5, py: 1, flexWrap: "wrap" }}>

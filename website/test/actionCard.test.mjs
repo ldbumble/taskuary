@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { actionFor, cardOf, changed, faceOf, fieldsOf, isCardReview, stateOf, textKey, valuesOf, wordsOf } from "../src/actionCard.js";
+import { POST_PICTURE, actionFor, cardOf, changed, faceOf, fieldsOf, isCardReview, stateOf, textKey, valuesOf, wordsOf } from "../src/actionCard.js";
 import { turnFiles } from "../src/taskOutputs.js";
 
 const read = (name) => readFileSync(fileURLToPath(new URL(`../src/${name}`, import.meta.url)), "utf8");
@@ -120,4 +120,15 @@ test("a post's title and content warning are his to change while it waits, and g
   assert.deepEqual(fieldsOf(act, P, false).filter((x) => x.editable), [], "gone or past, it reads what went");
   const m = actionFor("mastodon_post");
   assert.deepEqual(changed(m, { type: "mastodon_post", text: "Hi" }, { ...valuesOf(m, { text: "Hi" }), spoiler: "spoilers ahead" }), { spoiler: "spoilers ahead" });
+});
+
+// A POST'S PICTURE AT ITS FEED SIZE (the owner, 2026-11-23: "the size it would look like on LinkedIn, the same size as the text"): a 220px-tall
+// thumbnail at the card's left stood beside its words; it is the words' width, its own shape, the feed's ratio held until it loads
+test("a post's picture is as wide as its words, at its own shape, with its room held before it loads", () => {
+  assert.equal(POST_PICTURE.width, "calc(100% - 24px)");          // the words' column: the card's 12px each side
+  assert.equal(POST_PICTURE.mx, 1.5);
+  assert.equal(POST_PICTURE.height, "auto");
+  assert.match(POST_PICTURE.aspectRatio, /^auto /, "its own ratio once loaded, the feed's before");
+  assert.ok(POST_PICTURE.borderRadius);
+  for (const t of ["linkedin_post", "bluesky_post", "mastodon_post"]) assert.equal(actionFor(t)?.kind, "post", `${t} is a post card - it draws the same picture`);
 });

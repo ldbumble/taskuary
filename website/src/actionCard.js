@@ -21,6 +21,12 @@ export const cardOf = (review) => {
     post: p, network: act.title, as: "", connect: review.Status === "pending" ? review.Connect || null : null } : null;
 };
 
+// A POST'S PICTURE AS ITS FEED SHOWS IT (the owner, 2026-11-23: "the size it would look like on LinkedIn, the same size as the text"): the words'
+// whole width (the card's 12px each side), at its own shape once loaded - a feed's 1.91:1 held for it until then, so nothing jumps - and as tall
+// as a feed lets one stand, cropped past that as the feed crops it, rounded as it rounds. Every network's post card draws it so
+export const POST_PICTURE = { display: "block", width: "calc(100% - 24px)", height: "auto", aspectRatio: "auto 1.91 / 1", maxHeight: "min(60vh, 560px)",
+  objectFit: "cover", mx: 1.5, mt: 0.75, borderRadius: "8px", cursor: "zoom-in" };
+
 // A POST'S FACE IS ITS OWN NETWORK'S (walk 7, 2026-11-23: a Reddit post card wore LinkedIn's "in" - the fallback for a card with no account
 // name): the account it goes out as, else the network's own initials - words, never marks ("X (Twitter)" drew "X(", design round 6, D3)
 export const faceOf = (row) => { const s = String(row?.as || row?.network || "").trim(); return s ? initialsOf(s) : ""; };

@@ -11,7 +11,6 @@
 // folded; the bar is Back and Next. A phone's stacked sections keep the row as it was
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Box, Typography } from "@mui/material";
-import BoltIcon from "@mui/icons-material/Bolt";
 import { label as btn } from "./buttons.js";
 import { AttachChip, usePromptImages } from "./promptImages.jsx";
 import { PromptBox } from "./AgentSummary.jsx";
@@ -45,24 +44,13 @@ const HANDS = new Map();
 export const handToItem = (key, hand) => { const f = key && HANDS.get(key); if (!f) return false; f(hand); return true; };
 let START = null;
 export const startsItems = (f) => { START = f; };
+// ...and the same start for an item Taskuary made, drawn by the task page (madeTask: its chat's box)
+export const startItem = (item, o) => (START ? START(item, o) : Promise.reject(new Error("It did not start - press Send again.")));
 // `draft`: { text, setText, pics } - his words and files, held by the item (ItemSections) so they stay his when Send to agent moves the box to the
 // Agent section: a box of its own lost what he had typed at the press (the stress round, 2026-11-18)
 // `agent`: it stands in the Agent section - the box is always there, as a task's chat has it (the owner, 2026-11-20: "chat box is only on the agent tab")
 const AGENT = "regular_agent";
-const KIND_NOUN = { fyi: "notice", report: "report", dashboard: "dashboard", idea: "idea", review: "draft" };
-// WHAT TASKUARY MADE ON ITS OWN IS A CHAT ON THE AGENT TAB (the owner, 2026-11-23: "Anything that comes in on the Agent tab shows the input prompt
-// that created it (even if automated: a report, routine, dashboard, Advisor) ... Same card as the other ones"): the ask that made it on the
-// asking side, marked as automated, then the turn that answered it - its content in the turn's one frame - in the task chat's own rows
-// (GeneralWorkspace ConvLine, ConvTurn: the same classes, generalWorkspace.css). `input`: { head, text }; ItemAsk's box stands under it.
-// ...the WHOLE prompt that made it (the owner, 2026-11-24: "shouldn't the input show the whole thing as just the beginning and ... as any long
-// prompt?"): its first lines, the rest one press away - the one long-line clamp (GeneralWorkspace ArrivedWords)
-export function MadeTurn({ input, name = "Taskuary", children }) {
-  return <div className="tq-aui-chat" data-tq-made="">
-    <div className="tq-aui-message tq-aui-user" data-tq-made-input="">
-      <div className="tq-aui-user-head"><BoltIcon aria-hidden sx={{ fontSize: 13, verticalAlign: "-2px", mr: 0.4 }} />{input.head}</div>
-      {!!input.text && <div className="tq-aui-user-bubble" dir="auto"><ArrivedWords words={input.text} /></div>}</div>
-    <div className="tq-aui-message tq-aui-agent"><div className="tq-aui-role">{name}</div><div className="tq-aui-agent-body">{children}</div></div></div>;
-}
+const KIND_NOUN = { fyi: "notice", review: "draft" };
 export function ItemAsk({ ask, hand = null, onHand = null, agent = false, hint = "", draft }) {
   const ls = hand || agent ? [] : itemLines(readingOf(ask?.reading));
   const { text, setText, pics } = draft;
@@ -88,14 +76,14 @@ export function ItemAsk({ ask, hand = null, onHand = null, agent = false, hint =
   // ...its Send lit by words only (2026-11-18): the item's box goes on his words, and a file alone lit a press that did nothing
   // ...THE SAME BOX IN THE SAME PLACE (the owner, 2026-11-05: "the box should be where it always is, not moved up. Don't have separate code"): the
   // task chat's own PromptBox, held at the foot of the pane whatever is above it; Send to agent puts the item on it as a chip - nothing moves
-  // ...his line and its answer in the task chat's own rows (MadeTurn, ConvLine, ConvTurn), never a look of their own - laid straight in the
+  // ...his line and its answer in the task chat's own rows (ConvLine, ConvTurn), never a look of their own - laid straight in the
   // section (`contents`), so the box under them holds the section's foot however long what is above it runs
   return <Box className="tq-aui-chat" data-tq-item-ask={ask?.kind || (hand ? "agent" : "")} data-tq-item-hand={hand ? hand.items.length : undefined}
     sx={{ display: "contents" }}>
     {ls.map((l) => <Typography key={l.k} data-tq-item-reading={l.k} title={SAYS[l.k]}
       sx={{ fontSize: 13.5, lineHeight: 1.55, color: INK, overflowWrap: "anywhere" }}>{l.text}</Typography>)}
     {/* ...THE BOX IS THE AGENT TAB'S ALONE (the owner, 2026-11-20: "if you put prompt box on the bottom of Came from you are confusing the 2 tabs"):
-        never under what came in - it stands in the Agent section: under what Taskuary made there, or once Send to agent has put the item on it */}
+        never under what came in - it stands in the Agent section: or once Send to agent has put the item on it */}
     {(hand || agent) && <><Box aria-hidden sx={{ flex: "1 1 auto" }} />
     {/* ...down over the section's own foot padding (TaskPage SECTION's 12px), or what scrolls under it shows through beneath it */}
     <Box sx={{ position: "sticky", bottom: "-12px", mb: "-12px", pb: "12px", bgcolor: `var(--tq-item-ground, ${SHADE})`, pt: 0.5, mx: -0.5, px: 0.5 }}>

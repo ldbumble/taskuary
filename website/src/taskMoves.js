@@ -8,7 +8,17 @@
 // handler for each move; `w`: its words ({ label, hint, doneHint })
 const CLOSED = "the task is closed - reopen it first";
 const LIVE = "an agent is working - Mark done stops it and closes the task";
+// ...AND AN ITEM TASKUARY MADE (madeTask.js: a report, a dashboard, an Advisor idea) is drawn by the same page with ITS moves, from this same
+// builder, in one order: its own move (an idea's Connect, a failed run's Run it again), Pause, Make it a task, Remind me, Not for me - the words
+// its row is served (concierge.chips_for), each its press. Share is the page's own (useShareParts); starting an agent is the chat's box
+// `s.made`: [{ verb, label, title, disabled, onClick, own }] - `own` lit
+const MADE_ORDER = ["rerun", "report_off", "mine", "defer", "watch", "not_ours"], MADE_STARTS = new Set(["regular_agent", "coding_agent", "next"]);
+const madeMoves = (words) => words.filter((a) => !MADE_STARTS.has(a.verb))
+  .sort((a, b) => (b.own ? 1 : 0) - (a.own ? 1 : 0) || (MADE_ORDER.indexOf(a.verb) + 1 || 99) - (MADE_ORDER.indexOf(b.verb) + 1 || 99))
+  .map((a, i) => ({ id: `w:${a.verb || a.label}`, group: a.own || i < 3 ? "decide" : "more", tone: a.own ? "p" : "s", label: a.label, title: a.title,
+    ...(a.disabled ? { disabled: true, why: a.title || "" } : {}), run: (e, anchor) => a.onClick?.({ currentTarget: anchor || e?.currentTarget }) }));
 export function taskMoves(s, run, w) {
+  if (s.made) return madeMoves(s.made);
   const off = (why) => (why ? { disabled: true, why } : {}), shut = off(s.closed ? CLOSED : "");
   return [
     // A TASK HELD FOR A SENDER HE HAS NOT TRUSTED IS UNBLOCKED BY ONE PRESS, LIT ON THE ROW (walk 14, 2026-11-24: opened from the rail its Trust sat in

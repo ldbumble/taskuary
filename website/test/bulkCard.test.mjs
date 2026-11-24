@@ -61,8 +61,11 @@ const R = (() => {
     render: (C, p) => { Comp = C; props = p; draw(); },
     root: () => tree,
     reset: () => { slots = []; },          // ...a test of its own: no hook state left by the one before
+    // ...the one card's own words are its props (Artifact ReviewCard): its label, what stands over its rows, its press and what is beside it
     text: () => { const out = []; const walk = (n) => { if (n == null || typeof n === "boolean") return; if (Array.isArray(n)) return n.forEach(walk);
-      if (typeof n !== "object") return void out.push(String(n)); walk(n.props.children); }; walk(tree); return out.join(" "); },
+      if (typeof n !== "object") return void out.push(String(n));
+      if (n.type === "ReviewCard") [n.props.label, n.props.before, (n.props.press || []).map((v) => v.label), n.props.tail].forEach(walk);
+      walk(n.props.children); }; walk(tree); return out.join(" "); },
   };
 })();
 
@@ -70,9 +73,9 @@ const build = async () => {
   const { build: esb } = await import("esbuild");
   const stub = { "react": "export const { useState, useRef, useCallback, useMemo, useEffect } = globalThis.__R; export default globalThis.__R;",
     "react/jsx-runtime": "export const { jsx, jsxs, Fragment } = globalThis.__R;",
-    "@mui/material": "const C = (n) => n; export const Box = C('Box'), Button = C('Button'), Checkbox = C('Checkbox'), LinearProgress = C('LinearProgress'), Typography = C('Typography');",
-    "./api": "export default globalThis.__api;", "./theme.jsx": "export const BORDER = '', DIM = '', FAINT = '', INK = '';",
-    "./ReviewDecision.jsx": "export default 'ReviewDecision';", "./ActionCard.jsx": "export default 'ActionCard';",
+    "@mui/material": "const C = (n) => n; export const Box = C('Box'), LinearProgress = C('LinearProgress'), Typography = C('Typography');",
+    "./api": "export default globalThis.__api;", "./theme.jsx": "export const DIM = '', FAINT = '';",
+    "./ReviewDecision.jsx": "export default 'ReviewDecision'; export const ActReview = 'ActReview';", "./Artifact.jsx": "export const ReviewCard = 'ReviewCard';",
     "./PassedCard.jsx": "export const MovedPast = ({ children }) => children;" };
   const out = await esb({ entryPoints: [fileURLToPath(new URL("../src/BulkCard.jsx", import.meta.url))], bundle: true, write: false, format: "esm",
     jsx: "automatic", logLevel: "silent", plugins: [{ name: "stubs", setup(b) {

@@ -241,11 +241,16 @@ test("every card and file of a turn stands in the one frame, which reads the one
   const fs = await import("node:fs"), src = (f) => fs.readFileSync(new URL(`../src/${f}`, import.meta.url), "utf8");
   const all = fs.readdirSync(new URL("../src/", import.meta.url), { recursive: true }).filter((f) => /\.css$/.test(f)).map((f) => src(f)).join("\n");
   assert.equal((all.match(/--tq-turn-item:/g) || []).length, 1, "declared in one place");
-  assert.match(src("appTheme.css"), /\.tq-turn-frame\.tq-turn-frame \{ max-width: min\(100%, var\(--tq-turn-item\)\); \}/, "the frame holds the width itself");
-  for (const f of ["ActionCard.jsx", "BulkCard.jsx", "SentCard.jsx", "ReviewDecision.jsx", "TurnFiles.jsx", "PublishedPages.jsx"])
-    assert.match(src(f), /tq-turn-frame/, `${f} draws its card in the one frame`);
+  assert.match(src("appTheme.css"), /\.tq-turn-frame\.tq-turn-frame \{ max-width: min\(100%, max\(var\(--tq-turn-item\), var\(--tq-fit-w, 0px\)\)\); \}/, "the frame holds the width itself");
+  // ...ONE COMPONENT draws that frame (the owner, 2026-11-24: "any chart/pdf etc should also be a white artifact"): Artifact.jsx, and every
+  // card, file and view stands in it - none spells the frame's class itself
+  assert.match(src("Artifact.jsx"), /tq-turn-frame/);
+  for (const f of ["BulkCard.jsx", "ReviewDecision.jsx", "TurnFiles.jsx", "PublishedPages.jsx", "ViewSpec.jsx"]) {
+    assert.match(src(f), /<Artifact\b|<ReviewCard\b/, `${f} draws its card in the one Artifact`);
+    assert.doesNotMatch(src(f), /className="[^"]*tq-turn-frame/, `${f} draws no frame of its own`);
+  }
   assert.doesNotMatch(src("publishedPages.css"), /\.tq-published-page \{[^}]*border:/, "no frame of its own beside it");
-  assert.match(src("viewSpec.css"), /\.tq-dash\.tq-view \{ max-width: min\(100%, max\(var\(--tq-turn-item\), var\(--tq-view-need, 0px\)\)\); \}/);
+  assert.match(src("viewSpec.css"), /\.tq-dash\.tq-view\.tq-turn-frame \{ max-width: min\(100%, max\(var\(--tq-turn-item\), var\(--tq-fit-w, 0px\)\)\); \}/);
 });
 
 // A FILE ANOTHER TURN MADE IS NOT DRAWN AGAIN (the walk, 2026-11-18): the agent's posts file stood whole under three answers that only spoke of it

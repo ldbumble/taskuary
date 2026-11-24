@@ -29,6 +29,7 @@ import { onPressing, useVerbs } from "./actionRow.js";
 import { BUTTONS_AT, FOCUS_EDGE, MOVES_AT, OPENS_FORM, PaneMoves, SEC_NAME, SpineMoves, TaskButtons } from "./TaskRow.jsx";
 import { pressBeat, pressOver, pressedOn } from "./pressResult.js";
 import { taskMoves } from "./taskMoves.js";
+import { MADE_RUN } from "./madeTask.js";
 import { choice, hint as btnHint, hintOfRow, label as btn, labelOfRow, liveVerb } from "./buttons.js";   // theme.jsx owns `label`
 import { PRIORITIES, level } from "./priority.js";
 import AltRouteIcon from "@mui/icons-material/AltRoute";
@@ -52,8 +53,8 @@ import { clock, fmtDate } from "./dates.js";
 import { deliveryCc, deliveryFiles, deliveryMeta, replyContext, sentCardOf } from "./replyDelivery.js";
 import { sizeText } from "./replyFiles.js";
 import { completionTransition, cutAway, filterForSelectedState, remindWaiting, remindDay } from "./taskFilter.js";
-import ReviewDecision from "./ReviewDecision.jsx";
-import BulkCard from "./BulkCard.jsx";
+import ReviewDecision, { SentReview } from "./ReviewDecision.jsx";
+import BulkReview from "./BulkCard.jsx";
 import HeldSteps from "./HeldSteps.jsx";
 import SlotList, { Letter, letterItems } from "./SlotList.jsx";
 import BatchItems from "./BatchItems.jsx";
@@ -108,7 +109,6 @@ import { completionFact, completionLine, waitingEmails, wentOut,
 } from "./taskLifecycle.js";
 import { askNote, closeoutOf, decidedAsk, heldGroups, splitHeld } from "./reviewProposal.js";
 import PassedCard, { isPassed, isReplaced } from "./PassedCard.jsx";
-import SentCard from "./SentCard.jsx";
 import { sentStands, WENT } from "./sentLine.js";
 import { FullText } from "./assistantCards.jsx";
 import { isCardReview } from "./actionCard.js";
@@ -665,16 +665,21 @@ function GoalSteps({ task, onOpenTask, onChanged }) {
   );
 }
 
-export default function TaskPage({ taskId: selected, listRow = null, onListChanged, onSelect, onClose, onFinish, walkLeave = null, onReminded, onLeave, onStay, onOpenTask,
+// `made`: an item Taskuary made - a report's run, a dashboard, an Advisor idea - read into a task's record (madeTask.js): this same page draws it,
+// its Came from the item's source, its chat the prompt that asked and the run that answered, its box the item's start, its row the item's moves
+// (taskMoves). Nothing is read for it here: the record is the item's, and opening it starts nothing
+export default function TaskPage({ taskId: asked, made = null, listRow = null, onListChanged, onSelect, onClose, onFinish, walkLeave = null, onReminded, onLeave, onStay, onOpenTask,
   onChanged, autostart, onAutostarted, active = true, openAct, onActOpened, canvas = false,
   onNext = null, nextBusy = false, expanded = false, onExpand = null, backArrow = false, title = "", rail = null, saidDay = null, saidHand = null, litMove = "" }) {
   const caps = useCapabilities(), canCode = caps.coding;     // no coding tool connected: coding is not offered (capabilities.js)
   const manual = caps.ai === false;                          // no AI: the owner replies and hands off from the bar's ▾ themselves
   // ...drawn from the task's read held ahead of it (taskDetail.js) - a view on the table opens whole, not as an empty shell (G8)
-  const [detail, setDetail] = useState(() => (aheadChat(selected) ? null : heldTask(selected) || lastTask(selected)));
+  const selected = made ? made.key : asked, madeRef = useRef(made); madeRef.current = made;
+  const [heldDetail, setDetail] = useState(() => (made || aheadChat(selected) ? null : heldTask(selected) || lastTask(selected)));
+  const detail = made ? made.detail : heldDetail;
   // ...A KEPT COPY IS SEEN, NEVER PRESSED (the owner, 2026-11-20): drawn from the last read on a revisit, its buttons stand as they look and take
   // no press until the fresh read has replaced it - a press never acts on a card or a state the server has moved past
-  const [keptCopy, setKeptCopy] = useState(() => (aheadChat(selected) || heldTask(selected) ? null : lastTask(selected)));
+  const [keptCopy, setKeptCopy] = useState(() => (made || aheadChat(selected) || heldTask(selected) ? null : lastTask(selected)));
   const fromKept = !!detail && detail === keptCopy;     // ...with its chat (loadDetail)
   // Which task is on screen RIGHT NOW, readable from inside any await. Every fetch here is
   // keyed to a task, and a response that lands after you clicked another one must be dropped:
@@ -825,6 +830,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // ...its chat waited for by ANY read while that is out: a just-started job's write re-read the task and drew its head over an empty chat
   // (the bug hunt, 2026-11-12)
   const loadDetail = useCallback(async (id, first = false) => {
+    if (madeRef.current) return;      // ...an item Taskuary made is its own record: nothing on the server to read
     if (!id) { setDetail(null); return; }
     const ahead = heldTask(id), coming = !ahead && first && aheadTask(id);
     // ...A REVISIT NEVER WAITS (the owner, 2026-11-20): with no fresh read held, the last one this page had of the task is drawn at once and the
@@ -1534,7 +1540,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const shownMsg = openMsg !== undefined ? openMsg : sourceCount === 1 && !askIsBody ? sources[0]?.msgs[0]?.MessageId ?? null : null;
   // ...and a task handed to a person opens on who it waits on, and when it was due (taskLayout.waitingOn)
   const waitFor = waitingOn({ task: t || {}, messages: storedMessages });
-  const made = t ? madeLine(t, timeAgo(t.CreatedAt)) : "";   // "sorted 1m ago", never "created ... by triage" (taskSources.madeLine)
+  const madeAt = t ? madeLine(t, timeAgo(t.CreatedAt)) : "";   // "sorted 1m ago", never "created ... by triage" (taskSources.madeLine)
   // WHAT RUNS THIS, in the vocabulary the brain layer landed on 2026-09-16: a ROLE picks the
   // document (every coding task's role is the profile of kind coding), a BRAIN is the CLI that runs it, and the model
   // is the brain's - it is not a property of the task, so the card does not offer one. A live
@@ -1790,7 +1796,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     && !owesEmails && !emailsWaiting && !writeup && !outside
     && !!t && !["done", "dropped"].includes(t.Status);
   // the one line From folds to while an agent works (sessionView)
-  const fromLine = fromLineOf({ sender: ownSource, count: sourceCount, workflow: fromWorkflow, made: t ? `${detail.ref} · ${made}` : "" });
+  const fromLine = fromLineOf({ sender: ownSource, count: sourceCount, workflow: fromWorkflow, made: t ? `${detail.ref} · ${madeAt}` : "" });
   // the note a close was written with (server task.complete: "Closed out: ...") - the chat's closing line says it: the current round's
   // close (store.closeouts), never an earlier round's; a detail with no closeouts (the site's demo) reads the newest note
   const closedNote = detail?.closeouts ? round.close?.note || "" : String([...(detail?.comments || [])].reverse().find((c) => /^Closed out: /.test(String(c.Body || "")))?.Body || "").replace(/^Closed out: /, "");
@@ -1832,12 +1838,15 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // ...and a task the Advisor raised on a mail it never moved here (another task's, or an older build's) came in as that mail
   const cameIn = answering || newestFirst(inbound)[0]
     || (detail?.raised && newestFirst((detail?.earlier || []).filter((m) => m.Status !== "context" && m.Direction !== "out"))[0]) || null;
-  const tabLines = () => !twoUp || !t ? {} : {
+  // ...an item Taskuary made: its source in a line or two, and the run - Taskuary's, done - with what it says
+  const madeTabs = () => ({ from: { lines: [made.source?.head, ...(made.source?.rows || []).map(([k, v]) => `${k}: ${String(v).slice(0, 120)}`)].filter(Boolean), foot: "" },
+    agent: agentStatus({ name: "Taskuary", word: "ran", said: String(made.said || "").slice(0, 240) }) });
+  const tabLines = () => !twoUp || !t ? {} : made ? madeTabs() : {
     from: fromStatus({ channel: cameIn ? cameFrom(cameIn) || channelName(cameIn.Channel) : sources[0] ? channelName(sources[0].channel) : "",
       // ...EVERY message of its conversations, newest first - the tab draws as many as it has room for (fitTabLines): who, and their words
       msgs: newestFirst(sources.flatMap((g) => g.msgs)).map((m) => ({ who: m.who || m.FromName || m.FromEmail || (m.Direction === "out" ? "You" : ""),
         words: (rowText(m, sourceFiles.get(m.MessageId)) || cleanText(m.ReadText || m.BodyText || "")).slice(0, 200) })),
-      count: sourceCount, workflow: fromWorkflow, made: `${detail.ref} · ${made}`, to: toLine(cameIn?.Recipients).short, sorted: sortedLine(facts, t?.Kind || "task").replace(/^Sorted as: /, "Sorted: ") }),
+      count: sourceCount, workflow: fromWorkflow, made: `${detail.ref} · ${madeAt}`, to: toLine(cameIn?.Recipients).short, sorted: sortedLine(facts, t?.Kind || "task").replace(/^Sorted as: /, "Sorted: ") }),
     agent: agentStatus({ name: runRole || hasRecord || term ? agentName(t) : "",   /* Taskuary (kinds.js shownAgent) */
       word: agentWord({ live: !!term?.alive || agentOpening, waiting: agentState === AGENT.waiting, failed: failedRun, stopped: stoppedRun || agentState === AGENT.stopped,
         result: resultShown, record: hasRecord, codeRun, queued: !!queuedRow }),
@@ -1958,7 +1967,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                               <ChannelIcon channel="workflow" sx={{ fontSize: 14 }} /></Box>
                             <Box sx={{ flex: 1, minWidth: 0 }}>
                               <Typography noWrap sx={{ color: INK, fontWeight: 600, fontSize: 13 }} title={fromWorkflow.title}>Workflow · {fromWorkflow.title}</Typography>
-                              <Typography variant="caption" sx={{ color: DIM, fontSize: 11.5, display: "block" }} title={`${detail.ref} · ${made}`}>
+                              <Typography variant="caption" sx={{ color: DIM, fontSize: 11.5, display: "block" }} title={`${detail.ref} · ${madeAt}`}>
                                 {fromWorkflow.line} · {whenShort(t?.CreatedAt)}</Typography>
                             </Box>
                             {fromWorkflow.link && <Link href={fromWorkflow.link} underline="hover" sx={{ fontSize: 12, flexShrink: 0 }}>Open the routine</Link>}
@@ -1969,7 +1978,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                                 onFix={fromWorkflow.sourceId != null && fromWorkflow.runId != null
                                   ? () => { openAppLink(`report=${fromWorkflow.sourceId}&fix=${fromWorkflow.runId}`); } : null} /></Box>}
                           </Box>
-                        ) : <Typography variant="caption" sx={{ display: "block", color: FAINT, mt: 0.25 }}>{detail.ref} · {made}</Typography>}
+                        ) : <Typography variant="caption" sx={{ display: "block", color: FAINT, mt: 0.25 }}>{detail.ref} · {madeAt}</Typography>}
                         {fromLinks()}
   </>);
   // WHAT ITS MESSAGES LINK TO (linkdocs), each once - the items behind the task, a press from it (the redesign,
@@ -1992,7 +2001,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       onClick={() => { pickRepo(); if (twoUp) openSection("agent"); requestAnimationFrame(() => document.querySelector("[data-tq-repo-picker]")?.scrollIntoView({ block: "nearest", behavior: "smooth" })); }}>
       {PICK_CODE}</Button>);
   const fromSorted = () => (
-                      <Box data-tq-sorted="" title={`${detail.ref} · ${made}${triaged.at ? ` · sorted ${whenShort(triaged.at)}` : ""}`}
+                      <Box data-tq-sorted="" title={`${detail.ref} · ${madeAt}${triaged.at ? ` · sorted ${whenShort(triaged.at)}` : ""}`}
                         sx={{ display: "flex", gap: 1, alignItems: "flex-start", pt: 1, borderTop: `1px solid ${BORDER}` }}>
                         <AltRouteIcon sx={{ fontSize: 15, color: "var(--tq-link, #55697a)", mt: 0.2, flexShrink: 0 }} />
                         <Typography sx={{ fontSize: 12, color: DIM, minWidth: 0, overflowWrap: "anywhere", lineHeight: 1.5 }}>
@@ -2011,7 +2020,21 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const CARD = { bgcolor: "var(--tq-panel, #fff)", border: `1px solid ${FOCUS_EDGE}`, borderRadius: "12px", px: 2, py: 1.75, minWidth: 0, display: "flex", flexDirection: "column", gap: 0.75 };
   const cardHead = { fontSize: 12, fontWeight: 600, color: DIM };
   const cameReport = !!cameIn && t?.Source === "report" && typeof cameIn.MessageId === "number";
-  const fromCards = () => (
+  // ...AN ITEM TASKUARY MADE CAME FROM ITS SOURCE (madeTask: the owner, 2026-11-24): the routine that runs it - its schedule, prompt, the data it
+  // reads, where it goes, Edit - or what an idea rests on, each mail and task it cites a link into the app; in What came in's own card
+  const madeFrom = () => { const src = made.source || {};
+    return <Box data-tq-from-cards="" data-tq-made-source={made.kind} sx={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr)", gap: 2 }}>
+      <Box data-tq-came-in="" sx={CARD}>
+        <Typography sx={cardHead}>{src.head || "Where it comes from"}</Typography>
+        {(src.rows || []).map(([k, v]) => <Box key={k} data-tq-source-row={k} sx={{ display: "grid", gridTemplateColumns: "88px minmax(0, 1fr)", gap: 1, alignItems: "baseline" }}>
+          <Typography sx={{ fontSize: 12, color: DIM }}>{k}</Typography>
+          <Typography sx={{ fontSize: 13.5, color: INK, lineHeight: 1.5, overflowWrap: "anywhere", whiteSpace: "pre-wrap" }}>{v}</Typography></Box>)}
+        {(src.links || []).map((l) => <Link key={`${l.href}${l.label}`} href={l.href} underline="hover" data-tq-cite={l.href}
+          onClick={(e) => { e.preventDefault(); openAppLink(l.href); }} sx={{ display: "block", fontSize: 13, color: "var(--tq-link, #55697a)" }}>{l.label} ↗</Link>)}
+        {src.edit && <Link href={src.edit.href} underline="hover" data-tq-made-edit="" onClick={(e) => { e.preventDefault(); openAppLink(src.edit.href); }}
+          sx={{ display: "block", fontSize: 12.5, color: "var(--tq-link, #55697a)", mt: 0.4 }}>{src.edit.label} ↗</Link>}
+      </Box></Box>; };
+  const fromCards = () => made ? madeFrom() : (
     <Box data-tq-from-cards="" sx={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr)", gap: 2, "@container (min-width: 620px)": { gridTemplateColumns: "repeat(2, minmax(0, 1fr))" } }}>
       <Box data-tq-came-in="" sx={CARD}>
         <Typography sx={cardHead}>What came in</Typography>
@@ -2035,10 +2058,10 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
             onClick={() => setCameInFull((v) => !v)} sx={{ display: "block", fontSize: 12.5, color: "var(--tq-link, #55697a)", mt: 0.4, textAlign: "left" }}>
             {cameInFull ? "Show less" : `Show the whole ${cameIn.Channel === "email" ? "email" : "message"}`}</Link>}
           {!flow && cameInFull && typeof cameIn.MessageId === "number" && <Attachments messageId={cameIn.MessageId} dense original={cameIn.SourceLink} />}
-        </> : !sources.length && fromWorkflow ? fromConvs() : <Typography sx={{ fontSize: 13, color: DIM }}>{detail.ref} · {made}</Typography>}
+        </> : !sources.length && fromWorkflow ? fromConvs() : <Typography sx={{ fontSize: 13, color: DIM }}>{detail.ref} · {madeAt}</Typography>}
         {fromFacts()}
       </Box>
-      <Box data-tq-sorted="" title={`${detail.ref} · ${made}${triaged.at ? ` · sorted ${whenShort(triaged.at)}` : ""}`} sx={CARD}>
+      <Box data-tq-sorted="" title={`${detail.ref} · ${madeAt}${triaged.at ? ` · sorted ${whenShort(triaged.at)}` : ""}`} sx={CARD}>
         {/* ...in his words, never the app's own name for its sorting (design round 5, 2026-11-19: "What triage made of it") */}
         <Typography sx={cardHead}>How Taskuary read it</Typography>
         <Typography sx={{ fontSize: 15, lineHeight: 1.5, color: INK }}>{madeOf(facts, t?.Kind || "task")}</Typography>
@@ -2428,7 +2451,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // THE TASK'S OWN MOVES ARE ONE TOOLBAR (taskMoves.js, the owner 2026-11-23): the same buttons in every state - held, at work, closed - greyed
   // with why where they do not apply now; only the stage moves below come and go with what they act on
   const closedNow = !notDone || reopening === selected;
-  const ownMoves = !t ? [] : taskMoves({ closed: closedNow, live: liveSession, reopening: reopening === selected, finishing, waitingDraft: !!pendingReview,
+  const ownMoves = !t ? [] : taskMoves({ made: made?.moves, closed: closedNow, live: liveSession, reopening: reopening === selected, finishing, waitingDraft: !!pendingReview,
     watching, away: remindWaiting(t) ? `Back ${remindDay(t.RemindAt)}` : "", manual, repo: { held: heldRepo, can: !isGeneral && canCode },
     // ...held for a sender he has not trusted: its Trust is the row's lit move, wherever the chat that says why is folded (detail.origin.held)
     trust: detail?.origin?.held ? { label: detail.origin.trust?.person || "Trust them", busy: trusting === "person", hint: HELD_TRUST_HINT } : null },
@@ -2436,7 +2459,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     hand: () => setHandoff(true), reshape: () => setReshape(true), kind: (e, a) => setPick({ what: "kind", at: steady(a || e?.currentTarget) }),
     priority: (e, a) => setPick({ what: "priority", at: steady(a || e?.currentTarget) }), repo: pickRepo },
   { label: labelOfRow, hint: hintOfRow, doneHint: markDoneHint, natTitle: NAT_TITLE, repo: btn("pick_repo", repoOf(t) ? "set" : null), repoHint: heldRepo ? heldWhy : btnHint("pick_repo") });
-  const rowVerbs = !t ? [] : closedNow ? ownMoves : [
+  const rowVerbs = !t ? [] : closedNow || made ? ownMoves : [
       ...calVerbs,
       ...(rec?.verb === "chase" && !liveSession ? [{ id: "chase", group: "decide", label: chasing ? "Drafting…" : rec.label || btn("chase"), disabled: chasing,
         run: chase, title: btnHint("chase") }] : []),
@@ -2493,7 +2516,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // and whether an agent is live, whose bar is Stop and save alone
   // ...a chat task's strip is never a live agent's: its moves are the task's own row (TaskButtons), working or not
   const laid = twoUp && active && !!t ? { open: section } : null;
-  useVerbs("task", laid ? rowVerbs.map((v) => ({ ...v, laid })) : rowVerbs, inRow && !!t, detail?.ref || "");
+  useVerbs("task", laid ? rowVerbs.map((v) => ({ ...v, laid })) : rowVerbs, inRow && !!t, made ? made.navRef || "" : detail?.ref || "");
   // A PRESS OPENS THE SECTION IT BELONGS TO (the owner, 2026-10-27: "when you hit a button on the bottom that relates to a group, the correct
   // section opens"): the reply's, the draft's, the close's and the agent's presses open the chat - never a closed section for the thing
   // pressed. Heard before it runs (actionRow.onPressing), the row's presses and a card's own alike
@@ -2511,8 +2534,10 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // (sharing.py) - and "Email a summary", the AI's message about the work (EmailSomeone), wherever something can be sent from here.
   // A draft either way lands in this task's chat, its Send under it
   const hasResult = resultShown || codeRun, canSummary = !liveSession && !cantSend && notDone;
-  const { badge: shareBadge, menu: shareMenu } = useShareParts(`task:${t?.TaskId}`, { kind: fromWorkflow ? "workflow" : "agent", title: t?.Title || "", task: t?.TaskId },
-    inRow && !!t, {
+  // ...an item Taskuary made shares ITS result (madeTask `share`: a report off its message, a dashboard's frozen rows), by the same road
+  const { badge: shareBadge, menu: shareMenu } = useShareParts(made ? made.share?.owner || `made:${selected}` : `task:${t?.TaskId}`,
+    made ? made.share?.result || {} : { kind: fromWorkflow ? "workflow" : "agent", title: t?.Title || "", task: t?.TaskId },
+    inRow && !!t && (!made || !!made.share?.on), made ? made.share?.opts || {} : {
       // ...ON EVERY TASK, greyed with why where nothing can go now (taskMoves: one toolbar in every state)
       offWhy: liveSession ? "an agent is still working" : !(hasResult || canSummary) ? "there is nothing to share from here yet" : "",
       noResult: hasResult ? "" : "there is no result to share yet - an agent's Result or a routine run is what goes",
@@ -2667,7 +2692,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       why={rec?.state === "draft_ready" ? rec.why || "" : ""}
       onChanged={() => { loadDetail(selected); loadTasks(); onChanged?.(); }} /></Box> }] : [];
   const turnCards = [...replyNode, ...passedCards, ...batches.map((rs) => ({ key: `batch:${rs[0].Batch}`, at: rs[0].CreatedAt || "", rid: rs[0].ReviewId, waits: true,
-      node: <BulkCard rows={rs} tid={t?.TaskId} onChanged={decided} /> })), ...replacedCards, ...unsentCards, ...pressedCards.map((g) => ({ key: g.key, at: g.at, rid: g.reviews[0].ReviewId,
+      node: <BulkReview rows={rs} tid={t?.TaskId} onChanged={decided} /> })), ...replacedCards, ...unsentCards, ...pressedCards.map((g) => ({ key: g.key, at: g.at, rid: g.reviews[0].ReviewId,
       node: g.held ? <HeldSteps reviews={g.reviews} onChanged={decided} /> : <PassedCard reviews={g.reviews} /> })),
     ...(inTurns ? askCards : []).map((g) => ({ key: g.key, at: g.reviews[0].CreatedAt || "", rid: g.reviews[0].ReviewId, waits: true, also: asksBelow, note: g.held ? "" : askNote(g.reviews[0]),
       node: g.held ? <HeldSteps reviews={g.reviews} toRow={inRow && !pendingReview && liveAsks === 1} onChanged={decided} />
@@ -2680,7 +2705,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
         node: <Letter taskId={t?.TaskId} item={letterOf[r.ReviewId] || null} rv={r} onChanged={decided} /> })),
     // ...and the reply just pressed here says what the press did to the task beside it (`closing`, `kept`), as it did where its draft stood
     ...allReviews.filter((r) => r.Kind !== "action" && r.Kind !== "slot" && WENT.includes(r.Status) && r.ReviewId !== sentBox?.id)
-      .map((r) => ({ key: `sent:${r.ReviewId}`, at: r.CreatedAt || "", rid: r.ReviewId, node: <SentCard {...sentCardOf(r)}
+      .map((r) => ({ key: `sent:${r.ReviewId}`, at: r.CreatedAt || "", rid: r.ReviewId, node: <SentReview {...sentCardOf(r)}
         {...(sentHere?.id === r.ReviewId ? { closing: sentHere.closing, kept: sentHere.kept } : {})} /> }))];
   // ...the reply that went is that card in its turn, so the chat's cards say it no second time - no "What was sent", no To over it
   const sentCarded = !!sentReview && turnCards.some((c) => c.key === `sent:${sentReview.ReviewId}`);
@@ -2872,7 +2897,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const waits = !!(chatReview || proposals.length - (inTurns ? asks.length : 0) || (owesEmails && !inTurns) || handoff);
   // ...ONLY WHAT CAN STILL BE DONE (the owner, 2026-11-05: "it's a chat nothing else"): a draft waiting on Send, an invite to answer, emails owed -
   // never a closed task's "Mark done 11m ago", a reply sent outside or a draft closed without sending; the chat says those
-  const chatCards = sentBox ? <SentCard {...sentBox} /> : !["done", "dropped"].includes(t?.Status) && (waits || (!inTurns && kept.length) || upFailed
+  const chatCards = sentBox ? <SentReview {...sentBox} /> : !["done", "dropped"].includes(t?.Status) && (waits || (!inTurns && kept.length) || upFailed
     || chatReplyShown({ replyMessage, pendingReview: chatReview, sentReview: null }) || calAsk?.invite) ? <Box ref={cardsRef} data-tq-chat-cards="" data-tq-waits={waits ? "" : undefined}
       sx={{ minWidth: 0, "& textarea": { fontSize: "13.5px !important", lineHeight: "1.5 !important", color: INK } }}>{chatBody()}</Box> : null;
   return (
@@ -2930,6 +2955,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                   {/* THE STATUS, TOP RIGHT: the rail's own mark and word for this task (railStatus.taskStatus) - its logo ringed while an
                       agent works. A task Taskuary closed under a working agent says so on its hover (the list row's "agent stopped"). */}
                   {/* ...and beside it the agent's check-back, its × cancelling it (CheckBackChip, the owner 2026-11-06) - desktop only */}
+                  {/* ...AN ITEM TASKUARY MADE says where it is from and when, in the status's place - no agent, AI or check-back of its own yet */}
+                  {made ? !!made.aside && <Box data-tq-made-aside="" sx={{ flexShrink: 0, color: DIM, fontSize: 11.5, display: "flex", alignItems: "center", gap: 0.75 }}>{made.aside}</Box> : <>
                   <CheckBackChip task={t} onChanged={() => { loadDetail(t.TaskId); onChanged?.(); }} />
                   <StatusPill status={status} agent={agentName(t)} note={interruptedTask ? INTERRUPTED : ""}
                     logo={<ChannelIcon channel={rail?.channel || t.Source || "email"} sx={{ fontSize: 13 }} />} />
@@ -2946,7 +2973,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                   {detail?.checkout && <HeadPop id="changes" title="Changes" wide icon={<DifferenceOutlinedIcon sx={{ fontSize: 16 }} />}>
                     <CodeChanges taskId={t.TaskId} /></HeadPop>}
                   {canCode && t.Kind === "coding" && <HeadPop id="agent-channels" title="Talk to this agent from…" icon={<ForumOutlinedIcon sx={{ fontSize: 16 }} />}>
-                    <AgentChannels taskId={t.TaskId} pop /></HeadPop>}
+                    <AgentChannels taskId={t.TaskId} pop /></HeadPop>}</>}
                   {/* ON THE ASSISTANT CANVAS Expand gives the view the whole canvas - the pane keeps its size either way.
                       Next is NOT up here: it sits under the view, where the walk has always put it (CanvasItem) */}
                   {onExpand && (
@@ -2963,9 +2990,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       the task behind it - the session keeps running; from the task, X goes to the list.
                       ...but a CHAT is the task itself (chatPane): stepping back drew the same chat, and "Back to task" did nothing he could
                       see (design round 6, D8, recorded) - its X goes to the list, the agent still at work */}
-                  <Tooltip title={sessionView && !chatPane ? "Back to the task — the session keeps running" : "Close — back to the list (the task stays)"}>
+                  {(!made || onClose) && <Tooltip title={sessionView && !chatPane ? "Back to the task — the session keeps running" : "Close — back to the list (the task stays)"}>
                     <IconButton aria-label={sessionView && !chatPane ? "Back to task" : "Close task"} size="small" onClick={() => (sessionView && !chatPane ? setPeek(true) : dismiss())}><CloseIcon sx={{ fontSize: 15 }} /></IconButton>
-                  </Tooltip>
+                  </Tooltip>}
                 </Box>
               </Box>
                 {/* THE ASK LEADS, UNDER THE TITLE AND ACROSS BOTH COLUMNS (the task-view cleanup, owner-approved 2026-10-25): what is wanted is
@@ -3008,7 +3035,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                     aria-label={fromDrawer || twoUp ? "Came from" : undefined} aria-hidden={twoUp && !isOpen("from") ? true : undefined}
                     onClickCapture={stacked && !solo ? phoneFromTap : undefined} sx={twoUp ? { ...SECTION(isOpen("from"), openW("from"), false, false, fades), gap: 1.75 }
                       : { minWidth: 0, display: "flex", flexDirection: "column", gap: 1.75, ...(fromDrawer ? { ...card, px: 1.5, py: 1.25, ...FROM_SIDE } : PHONE_FROM(fromOpen || solo)) }}>
-                    {twoUp && <SectionHead sec={SECTIONS[0]} sub="what came in, and how Taskuary read it" here={hereSec === "from"}
+                    {twoUp && <SectionHead sec={SECTIONS[0]} sub={made ? "what made it" : "what came in, and how Taskuary read it"} here={hereSec === "from"}
  />}
                     {/* SECTION 1, IN THE ORDER THE OWNER APPROVED (2026-10-16): the ask, what there is to do, where it came from - and no
                         buttons. "The buttons stay on bottom by the prompt box like always. No buttons there." On the canvas that is the row
@@ -3401,10 +3428,10 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                         onAnswered={() => { findTerm(selected); loadTasks(); loadDetail(selected); onChanged?.(); }}
                         toolsAt={canvas ? chatTools : null} noAiSaid={!notDone || (failedRun && runFix?.href === place("ai").href)} noTools={!liveSession} noComposer={isGeneral && continueHere && !chatPane} chat={home}
                         opening={agentOpening} seed={chatPane ? chatSeed : null}
-                        came={home ? { label: cameChip(sourceMessage) || (sources.length ? cameFromLabel(sources) : fromWorkflow ? `Routine · ${fromWorkflow.title}` : "Came from"),
+                        came={home ? { label: cameChip(sourceMessage) || (sources.length ? cameFromLabel(sources) : fromWorkflow ? `Routine · ${fromWorkflow.title}` : made?.came || "Came from"),
                           title: "Where this came from - opens it", onOpen: twoUp ? () => openSection("from") : null } : null}
                         closedLine={closedSaid} term={term}
-                        turnCards={turnCards}
+                        turnCards={made ? [{ key: MADE_RUN, rid: MADE_RUN, node: made.turn }] : turnCards} made={made}
                         landing={detail?.checkout && <LandingCard key={`land-${t.TaskId}`} taskId={t.TaskId} inChat
                           onChanged={() => { loadDetail(selected); onChanged?.(); }} />}
                         onChanged={() => { findTerm(selected); loadDetail(selected); onChanged?.(); }} />

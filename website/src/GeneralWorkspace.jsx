@@ -42,7 +42,6 @@ import { Attachments } from "./Attachments.jsx";
 import { placeShown } from "./shownPages.js";
 import { carried, forTurn, outputRefs, outputRow, placeMade, shownOnce, turnFiles } from "./taskOutputs.js";
 import TurnFiles from "./TurnFiles.jsx";
-import ActionCard from "./ActionCard.jsx";
 import CopyCorner from "./CopyCorner.jsx";
 import { SessionPane, TerminalPane } from "./TerminalView.jsx";
 import ThreadReading from "./ThreadReading.jsx";
@@ -55,7 +54,7 @@ import { label as btn } from "./buttons.js";
 import { placeName } from "./words.js";
 import { plural } from "./timeWords.js";
 import ConnectAi from "./ConnectAi.jsx";
-import ReviewDecision, { MoreCardsCtx } from "./ReviewDecision.jsx";
+import ReviewDecision, { ActReview, MoreCardsCtx } from "./ReviewDecision.jsx";
 import { askNote, heldActsLine, proposalFrom } from "./reviewProposal.js";
 import BriefLine from "./BriefLine.jsx";
 import { OneBox } from "./AgentSummary.jsx";
@@ -67,7 +66,9 @@ import TelegramIcon from "@mui/icons-material/Telegram";
 import ChatBubbleOutlineIcon from "@mui/icons-material/ChatBubbleOutline";
 import AssessmentOutlinedIcon from "@mui/icons-material/AssessmentOutlined";
 import PersonOutlineIcon from "@mui/icons-material/PersonOutline";
+import BoltIcon from "@mui/icons-material/Bolt";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
+import Artifact from "./Artifact.jsx";
 
 const errText = (e) => e?.response?.data?.detail || e?.message || "The assistant could not respond.";
 const textOf = (message) => (message?.content || []).filter((p) => p.type === "text").map((p) => p.text).join("\n").trim();
@@ -485,25 +486,28 @@ const AgainButton = ({ again }) => <><button type="button" className="tq-chip pr
 const StopTriesCtx = React.createContext(null);
 // the line a Try again press puts in his voice - the agent reads it as the go-ahead to try what failed once more
 const WaitOnCtx = React.createContext("");
+// ...AN ASK NOBODY TYPED (madeTask: the prompt a report, a dashboard or an Advisor look ran on) heads as what asked for it, marked automated, its
+// whole prompt the line - its first lines, the rest one press away, as any long one (the owner, 2026-11-24)
 const ConvLine = ({ x, more }) => {
   const stamp = x.at ? when(x.at instanceof Date ? x.at : String(x.at)) : "", retry = React.useContext(RetryCtx);
-  return <div className={`tq-aui-message tq-aui-user${more ? " tq-aui-user-more" : ""}`} data-tq-item={x.id} data-tq-chat-line={x.id}>
-    {!more && <div className="tq-aui-user-head"><PersonOutlineIcon aria-hidden sx={{ fontSize: 14, verticalAlign: "-2px", mr: 0.5 }} />You{stamp ? ` · ${stamp}` : ""}</div>}
-    <div className="tq-aui-user-bubble" dir="auto">{(!!x.came || !!x.files?.length) && <div data-tq-line-came="" style={{ marginBottom: 6, display: "flex", flexWrap: "wrap", gap: 4 }}>
+  return <div className={`tq-aui-message tq-aui-user${more ? " tq-aui-user-more" : ""}`} data-tq-item={x.id} data-tq-chat-line={x.id} data-tq-auto-line={x.auto ? "" : undefined}>
+    {!more && <div className="tq-aui-user-head">{x.auto ? <><BoltIcon aria-hidden sx={{ fontSize: 13, verticalAlign: "-2px", mr: 0.4 }} />{x.auto}</>
+      : <><PersonOutlineIcon aria-hidden sx={{ fontSize: 14, verticalAlign: "-2px", mr: 0.5 }} />You{stamp ? ` · ${stamp}` : ""}</>}</div>}
+    {(!x.auto || !!x.text) && <div className="tq-aui-user-bubble" dir="auto">{(!!x.came || !!x.files?.length) && <div data-tq-line-came="" style={{ marginBottom: 6, display: "flex", flexWrap: "wrap", gap: 4 }}>
       {!!x.came && <AttachChip name={x.came} title={`Sent with ${x.came}`} />}
       {/* ...AND EVERY FILE HE SENT WITH IT (the owner, 2026-11-17: "the prompt box should show attachment of whatever goes into prompt"): a pill each,
           as on the box he typed it in - from the press (his own line, drawn at once) to the heard line (conversation's `files`) */}
-      {(x.files || []).map((f) => <AttachChip key={f} name={fileName(f)} title={`Sent with ${fileName(f)}`} data-tq-line-file="" />)}</div>}{x.text}</div>
+      {(x.files || []).map((f) => <AttachChip key={f} name={fileName(f)} title={`Sent with ${fileName(f)}`} data-tq-line-file="" />)}</div>}{x.auto ? <ArrivedWords words={x.text} /> : x.text}</div>}
     {/* ...a send that failed: ONE plain line under his words, with the way past it - never glued into them */}
     {!!x.err && <div className="tq-aui-note tq-aui-note-error" role="alert" data-tq-line-failed="">{x.err}{retry && <> · <button type="button" className="tq-aui-arrived-more-btn"
       data-tq-try-again="" onClick={() => retry(x)}>{btn("try_again")}</button></>}</div>}</div>;
 };
 /* A DRAFT HE SAID NO TO says what he pressed, with its words, in its own place (answered cards stay greyed saying what was pressed) */
-const NotSent = ({ c }) => <div className="tq-conv-past tq-turn-frame" data-tq-past-card={c.status} data-tq-past-review={c.review} role="note">
+const NotSent = ({ c }) => <Artifact className="tq-conv-past" data-tq-past-card={c.status} data-tq-past-review={c.review} role="note">
   {/* ...a letter is not sent; a step he turned down (a read of a folder, a push) is a no, never a send (walk 5: "Not sent - you said don't send ·
       read the folder Users") */}
   <div className="tq-conv-past-head">{c.what === "action" ? "You said no to this" : "Not sent - you said don't send"}</div>
-  {!!c.was?.text && <div className="tq-conv-past-words" dir="auto">{c.was.text}</div>}</div>;
+  {!!c.was?.text && <div className="tq-conv-past-words" dir="auto">{c.was.text}</div>}</Artifact>;
 /* A CARD THE CHAT MOVED PAST IS THE CARD IT WAS, ITS BUTTONS GREYED (the owner, 2026-11-18: "don't need reason. just keep it with buttons but
    the buttons grayed out once you moved on"): rewritten by a later turn, set aside as he wrote again, or taken back by its agent - drawn in its
    own place from the words it had then (`was`), never moved, never gone, and no line saying why */
@@ -540,7 +544,7 @@ function Conversation({ items, nodes = [], posts = [], reviews = [], next = null
     // ...ONE REVIEW IS ONE CARD: a post or a tracker comment an earlier build set aside has its settled card among the nodes, and was drawn
     // again under it as the act's own card reading "Not posted · dismissed" (the card round, 2026-11-12)
     const out = [...got.map((n) => <React.Fragment key={n.key}>{past ? React.cloneElement(n.node, { past: true }) : n.node}</React.Fragment>),
-      ...(post && !got.length && !used.has(`post:${c.review}`) && used.add(`post:${c.review}`) ? [<ActionCard key={`post:${c.review}`} row={post} tid={tid} onChanged={onChanged} past={past} />] : [])];
+      ...(post && !got.length && !used.has(`post:${c.review}`) && used.add(`post:${c.review}`) ? [<ActReview key={`post:${c.review}`} row={post} tid={tid} onChanged={onChanged} past={past} />] : [])];
     return out.length && live.has(c.review) && c.status === "pending" ? [...qLine(), ...out] : out;
   });
   // A TURN'S CARDS, ITS LAST THING: what the log placed in it - a reply, a letter, an act - then the work's card
@@ -599,7 +603,7 @@ const PendingStrip = ({ items, now = false, later = "", onRetry = null, onDrop =
 function AssistantThread({ task, onAsked, onStop, selectionRef, attachmentsRef, onSent, onClearAttachments, onAttach, onAttachBack, pics = null,
   prompt, onPromptUsed, name = "Taskuary", asking, onAnswer, drafts = [], acts = [], onDraftDecided, noComposer = false,
   chat = false, reading = null, came = null, noAi = null, closedLine = "", road = null, cards = null, landing = null, turnCards = null, queued = null, stopTries = null, hold = null, trustOnRow = false, idle = "", onTrusted, hint = "", placeholder = "",
-  empty = "", seed = null, list = null, reloadList = null }) {
+  empty = "", seed = null, list = null, reloadList = null, start = null }) {
   // A TASK'S CHAT DRAWS THE SERVER'S LIST (Conversation) - whatever agent works it; this holds the box, what it sent, and the view's end
   const turnName = React.useContext(AgentNameCtx);
   const [mine, setMine] = useState([]), merged = useMemo(() => withMine(list, mine), [list, mine]);
@@ -622,11 +626,13 @@ function AssistantThread({ task, onAsked, onStop, selectionRef, attachmentsRef, 
     const id = `l${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`, sel = selectionRef.current || {};
     setMine((m) => [...m, { id, kind: "line", text: w, files: files.map((a) => a.path), at: new Date(), rest: !listNow.current?.working && !listNow.current?.hold && !listNow.current?.permissions?.length }]);      // ...on an untrusted sender's task it waits by the box at once (the list's `hold`), and under a step that waits on his Allow (`permissions`)
     stick.current = true;
-    api.post(`/api/tasks/${task.TaskId}/assistant/messages`, { text: w, attachments: files.map((a) => a.path), line_id: id, pick: sel.connectorId || null, model: sel.model || null }, { timeout: 0 })
+    // ...on an item Taskuary made (`start`, madeTask) the line starts its agent: the item its Came from, his words the ask (AssistantView.startOnItem)
+    (start ? start({ text: w, files: files.map((a) => a.path) }).then(() => ({}))
+      : api.post(`/api/tasks/${task.TaskId}/assistant/messages`, { text: w, attachments: files.map((a) => a.path), line_id: id, pick: sel.connectorId || null, model: sel.model || null }, { timeout: 0 }))
       .then((r) => { if (road) road(); else if (r.data?.messages) onSent?.(r.data); reloadList?.(); })
       .catch((x) => { setMine((m) => m.map((l) => (l.id === id ? { ...l, err: errText(x) } : l))); if (files.length) onAttachBack(files); reloadList?.(); });
     setTimeout(() => reloadList?.(), 120);
-  }, [runtime, attachmentsRef, selectionRef, onClearAttachments, onAttachBack, onSent, road, reloadList, task.TaskId]);
+  }, [runtime, attachmentsRef, selectionRef, onClearAttachments, onAttachBack, onSent, road, reloadList, task.TaskId, start]);
   // ...and a line whose send failed is sent again as it was typed, the failed one taken off the screen
   // ...with the files its failure put back in the box (onAttachBack)
   const retry = useCallback((l) => { setMine((m) => m.filter((x) => x.id !== l.id)); sendLine(String(l.text || ""), true); }, [sendLine]);
@@ -790,9 +796,12 @@ function AssistantThread({ task, onAsked, onStop, selectionRef, attachmentsRef, 
 
 export function GeneralWorkspace({ task, onSession, onAnswered, compact = false, toolsAt = null,
   prompt, onPromptUsed, noAiSaid = false, noTools = false, noComposer = false, liveSid = "", reread = 0, mails = [], reviews = [],
-  checklist = null, opening = false, next = null, chat = false, came = null, closedLine = "", term = null, landing = null, turnCards = null, queued = null, stopTries = null, onChanged, seed = null, trustOnRow = false }) {
+  checklist = null, opening = false, next = null, chat = false, came = null, closedLine = "", term = null, landing = null, turnCards = null, queued = null, stopTries = null, onChanged, seed = null, trustOnRow = false,
+  made = null }) {
+  // `made`: { list, start } - an item Taskuary made (madeTask): its chat is its own list, nothing on the server to read or poll yet, and its box
+  // starts the agent on it. The same chat, rows, cards and box as every task's
   // ...drawn on its first frame from what is held of it (chatOf); a coding task's chat stands on its list alone
-  const first = () => (chatSource(task, term) === "coding" ? { messages: [] } : chatOf(task.TaskId));
+  const first = () => (made ? { messages: [], made: true } : chatSource(task, term) === "coding" ? { messages: [] } : chatOf(task.TaskId));
   const [data, setData] = useState(first);
   const [connectorId, setConnectorId] = useState(() => String(pickFor(first())?.id || ""));
   const [model, setModel] = useState(() => { const d = first(), p = pickFor(d); return p ? d?.session?.model || p.model || "" : ""; });
@@ -812,7 +821,8 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
   // ONE CHAT, WHATEVER THE SOURCE (chatStream.chatSource): a coding task's sessions, or the general agent's conversation - and how much of the
   // work it draws (chatDetail.js): this task's own choice, else its kind's default from Settings. Off a task's own chat (the Wall), as ever
   const source = chatSource(task, term), coding = source === "coding";
-  const conv = useConversation(task.TaskId, true);
+  const served = useConversation(task.TaskId, !made), madeList = made?.list;
+  const conv = useMemo(() => (madeList ? { list: madeList, load: () => Promise.resolve(false) } : served), [madeList, served]);
   // ..."WORKING" IS ONE FACT ON THE WHOLE PAGE (the recorded walk, 2026-11-11: the chat stood finished under a header that still read "agent
   // working"): the moment the list's own word on it changes, the task's header and its row are read again
   // ...but only when it CHANGES, and only by itself where no push will say it: an opening that holds the list already read its task and its rail,
@@ -853,7 +863,7 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
     setData(first()); setError(""); pics.clear();
     // Looking at a general task is not sending it to an agent. Load saved state only; the first
     // actual message (or an explicit Send to agent action) starts the regular agent.
-    if (coding) return () => { live = false; };
+    if (coding || made) return () => { live = false; };
     // ...the read asked ahead with the task, still on its way, is drawn the moment it lands - unless this view's own, newer, landed first
     let own = false;
     if (!first()) aheadChat(task.TaskId)?.then((d) => { if (live && !own && d) accept(d); });
@@ -878,8 +888,8 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
   }, [task.TaskId, coding, conv.load]);
   /* On screen, the agent's CLI stays open: the server reaps one nobody touches for 30 minutes, and this is the touch. Nothing starts here. */
   useEffect(() => {
-    if (coding) return undefined;
-    const seen = () => { if (!document.hidden) api.post(`/api/tasks/${task.TaskId}/assistant/seen`).catch(() => {}); };
+    if (coding || made) return undefined;
+    const seen =() => { if (!document.hidden) api.post(`/api/tasks/${task.TaskId}/assistant/seen`).catch(() => {}); };
     seen(); const t = setInterval(seen, 60000);
     return () => clearInterval(t);
   }, [task.TaskId, coding]);
@@ -932,9 +942,9 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
   // Continue note waited for the next poll to show (the owner, 0.3.9.51: "I did Continue, filled it out and nothing happened")
   const refresh = useCallback(() => {
     conv.load();
-    if (coding) return;
+    if (coding || made) return;
     api.get(`/api/tasks/${task.TaskId}/assistant`).then((r) => accept(r.data)).catch(() => {});
-  }, [accept, task.TaskId, coding, conv.load]);
+  }, [accept, task.TaskId, coding, conv.load, made]);
   // A SESSION ANOTHER DOOR STARTED (`liveSid`, the page's live one): the canvas's Continue card, the Assistant, the phone. The page
   // adopted it, but this conversation had loaded before it existed and polls only while it knows of a turn, so a Continue with a note
   // showed the old turns under an agent that had already asked its question (the agents walk, 2026-10-26). Read again when they differ.
@@ -1059,7 +1069,7 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
   const steps = checklist || (() => { try { const a = JSON.parse(task?.Checklist || "[]"); return Array.isArray(a) ? a : []; } catch { return []; } })();
   const thread = (
     <PermitProvider taskId={task.TaskId} perms={perms} onAnswered={conv.load}>
-    <LevelCtx.Provider value={level}><ChatCtx.Provider value={chat}><AgentNameCtx.Provider value={AGENT_TURN}><ShownCtx.Provider value={placed.by}>
+    <LevelCtx.Provider value={level}><ChatCtx.Provider value={chat}><AgentNameCtx.Provider value={made ? "Taskuary" : AGENT_TURN}><ShownCtx.Provider value={placed.by}>
     <WorkCtx.Provider value={{ reviews, checklist: steps, acts: [...(data?.browserActs || []), ...(data?.playbookDrafts || [])], next,
       cards: data?.cards || [], refresh }}>
     {/* ...and each file in the turn that made it (placeMade): one no turn made, or a page no turn holds, is not drawn in the conversation */}
@@ -1076,7 +1086,7 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
         chat={chat} reading={chat && readingOf(data?.thread || task?.ThreadJson)?.asking
           ? <div className="tq-aui-ask" data-tq-chat-ask="">{readingOf(data?.thread || task?.ThreadJson).asking}</div> : null}
         came={chat ? came : null} closedLine={chat ? closedLine : ""} queued={chat ? queued : null} stopTries={chat ? stopTries : null} hold={conv.list?.hold || null} trustOnRow={trustOnRow} idle={conv.list?.idle || ""} onTrusted={() => { conv.load(); onAnswered?.(); onChanged?.(); }}
-        road={road} cards={codingCards} landing={chat ? landing : null} turnCards={chat ? turnCards : null}
+        road={road} cards={codingCards} landing={chat ? landing : null} turnCards={chat ? turnCards : null} start={made?.start || null}
         // ...THE BOX SAYS WHAT THE HEADER SAYS (the owner's live task, 2026-11-12: "Write to pick the session back up" under a turn at work - its
         // session was being opened again for his line): "working" is the list's one fact, whatever process is up yet
         placeholder={coding ? (closedTask && !convWorks ? "Write to pick it back up…" : cli || convWorks || !conv.list?.ran ? MESSAGE : "Write to pick the session back up…") : ""}
@@ -1084,7 +1094,7 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
           : cli ? "Enter types it into the running agent · Shift+Enter adds a line" : convWorks ? "Enter sends it when this turn ends · Shift+Enter adds a line"
           : "Enter picks the session back up with what you wrote · Shift+Enter adds a line"}
         empty={coding && conv.list ? (cli ? "The agent is starting - its turns show here as it works." : "No session has run on this task yet - write below to start one.") : ""}
-        noAi={!coding && chat && !data?.providers?.length && !noAiSaid && !data?.demo
+        noAi={!coding && chat && !made && !data?.providers?.length && !noAiSaid && !data?.demo
           ? <div className="tq-aui-noai" data-tq-no-ai="">No AI is connected yet - what you type waits for one. <ConnectAi size="small" variant="text" /></div> : null} />
     </LocalFiles.Provider>
     </OutputsCtx.Provider>

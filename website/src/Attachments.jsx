@@ -53,7 +53,7 @@ const titleOf = (a, original) => a.link ? `${a.kind} — ${a.note ? `not read: $
 // a mail whose body points at a picture it does not carry ([image: ...], cid:) - worth a "look for attachments" offer
 export const mentionsPicture = (body) => /\[(image|cid|inline image)|cid:/i.test(String(body || ""));
 
-// `skip`: what the item already draws itself (a report's chart, drawn live from its rows - madeView.reportView `owns`): never drawn again
+// `skip`: what the item already draws itself (a report's chart, drawn live from its rows - madeTask.reportView `owns`): never drawn again
 // `bare`: { remote } when the message has no words of its own (mailLinks.bareLine) - a picture-only mail. Its pictures are the message, so
 // a small inline one is drawn, not chipped as a signature's logo; and the panel says what it is, never a blank
 export const Attachments = ({ messageId, canFetch, dense, original, skip = null, bare = null }) => {

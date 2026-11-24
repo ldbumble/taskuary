@@ -269,11 +269,12 @@ class OneRoundTripTests(unittest.TestCase):
             assert set(x.get('required') or ()) <= set(x.get('properties') or {}), (name, x)
             assert not {'additionalProperties', '$schema', 'default', 'title'} & set(x), (name, x)
             for k, v in x.items(): [walk(s, name) for s in v.values()] if k == 'properties' else walk(v, name)
-        assert {'propose_email', 'propose', 'sign_form'} <= {t['function']['name'] for t in tools}
+        assert {'propose', 'sign_form'} <= {t['function']['name'] for t in tools}
         for t in tools:
             assert t['function']['parameters']['type'] == 'object'; walk(t['function']['parameters'], t['function']['name'])
         # ...the server still holds a call to what one card needs: the schema the model reads is not the check
-        with self.assertRaisesRegex(ValueError, 'not given'): agenttools.fit('propose_email', {'subject': 'Q3'})
+        with self.assertRaisesRegex(ValueError, 'not given'): agenttools.fit('read_message', {})
+        with self.assertRaisesRegex(ValueError, '`kind` was not given'): agenttools.call(MemoryStore(), 1, 'propose', {'subject': 'Q3'}, {})
 
     def test_tools_are_offered_as_the_work_needs_them_and_a_loaded_one_is_added_at_the_end(self):
         """The owner's rule, "model sees all, tools progressive" (2026-11-10: "the ai limits as much as possible to use ai"): every schema rode
@@ -285,7 +286,7 @@ class OneRoundTripTests(unittest.TestCase):
         whole = len(json.dumps(apiagent.tools_for(1, 'p', True, post=post) + list(apiagent.DEFERRED[(1, 'p')].values())))
         core = apiagent.tools_for(1, 'p', True, post=post)
         names = [t['function']['name'] for t in core]
-        assert {'search_messages', 'read_message', 'propose_reply', 'propose_email', 'show', 'file_write'} <= set(names) and 'calendar' not in names
+        assert {'search_messages', 'read_message', 'propose', 'show', 'file_write'} <= set(names) and 'calendar' not in names
         assert names[-1] == 'find_tools' and len(json.dumps(core)) < whole * 0.5
         TOOL_CHARS = 7_000                # what every call carries before a word of the job: was ~15,000 (23 tools at ~650 characters); end_turn and ask_owner ride in it since the prompt's protocols became tools, and every act that raises a card since walk 10 (2026-11-23)
         assert len(json.dumps(core, separators=(',', ':'))) < TOOL_CHARS
@@ -446,7 +447,7 @@ class TheSessionTests(unittest.TestCase):
         seen = []
         class Brain:
             def chat(self, msgs, tools, max_tokens, **kw): seen.append(msgs[0]['content']); return {'content': 'Read them.'}
-        self._turn(Brain(), toolbox=('search_messages', 'tick', 'propose_reply', 'propose_email'))
+        self._turn(Brain(), toolbox=('search_messages', 'tick', 'propose'))
         self.assertNotIn("NONE OF TASKUARY'S TOOLS", seen[0]); self.assertNotIn(selfclose.SUMMARY_OPEN, seen[0])
         seen.clear(); self._turn(Brain())
         self.assertIn("NONE OF TASKUARY'S TOOLS", seen[0])         # ...a card without them writes its acts as marks
@@ -541,11 +542,11 @@ class TheSessionTests(unittest.TestCase):
         seen = []
         class Brain:
             def chat(self, msgs, tools, max_tokens, **kw): seen.append((msgs[0]['content'], [t['function']['name'] for t in tools])); return {'content': 'ok'}
-        self._turn(Brain(), toolbox=('search_messages', 'propose_reply', 'show'))
+        self._turn(Brain(), toolbox=('search_messages', 'propose', 'show'))
         system, names = seen[0]
         self.assertIn(apiagent.TOOLS_BRIEF, system)
         self.assertEqual(names.count('show'), 1, "the server's show, never a second")
-        self.assertTrue({'search_messages', 'propose_reply', 'browser_open'} <= set(names))
+        self.assertTrue({'search_messages', 'propose', 'browser_open'} <= set(names))
 
     def test_a_card_with_tools_is_told_the_owners_systems_and_mailboxes_as_a_cli_is(self):
         # design round 2, 2026-11-18: one prompt for every road - a CLI with hands is told the owner's connections and the mailboxes it sends
@@ -565,7 +566,7 @@ class TheSessionTests(unittest.TestCase):
         seen = []
         class Brain:
             def chat(self, msgs, tools, max_tokens, **kw): seen.append(msgs[0]['content']); return {'content': 'ok'}
-        self._turn(Brain(), toolbox=('search_messages', 'propose_email', 'show'))
+        self._turn(Brain(), toolbox=('search_messages', 'propose', 'show'))
         self.assertNotIn(selfclose.DRAFT_OPEN, seen[0])
 
     def test_no_browser_but_a_toolbox_still_loops_and_says_set_the_browser_up(self):
@@ -773,7 +774,7 @@ class TheToolboxTests(unittest.TestCase):
             apiagent.taskuary_tools(7, 'r', post=post)
             reads = apiagent.READS[(7, 'r')]
             self.assertTrue({'my_task', 'read_message', 'search_messages', 'person'} <= reads)
-            self.assertFalse(reads & {'run_system', 'tick', 'propose_reply', 'todos'}, 'an outside system, or anything that moves, runs every time')
+            self.assertFalse(reads & {'run_system', 'tick', 'propose', 'todos'}, 'an outside system, or anything that moves, runs every time')
         finally: apiagent.forget(7, 'r')
         self.assertNotIn((7, 'r'), apiagent.READS)
 

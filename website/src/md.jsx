@@ -17,6 +17,7 @@ import { FileView, isPdf } from "./PublishedPages.jsx";
 import ViewSpec from "./ViewSpec.jsx";
 import { fencedView } from "./viewSpec.js";
 import { useOverlay } from "./overlays.js";
+import { useTableFit } from "./tableFit.js";
 export { looksMd };
 
 const TASK_LINK = /#task=(\d+)/;
@@ -162,12 +163,14 @@ const Pre = ({ children, node, ...rest }) => { const box = React.useRef(null), s
 export const MdLine = ({ text }) => (
   <ReactMarkdown remarkPlugins={[remarkGfm]} components={{ a: A, img: Img, p: ({ children }) => <>{children}</> }}>{plainCitations(text || "")}</ReactMarkdown>
 );
+// ...every table fits by the one rule (tableFit.js): its frame widens, then its font steps down, then it wraps at words, then it scrolls
+const FitTable = ({ children }) => { const ref = React.useRef(null); useTableFit(ref, [children]); return <div className="tbl" ref={ref}><table>{children}</table></div>; };
 export const Md = ({ text, onTask = null }) => {
   const at = React.useContext(LocalFiles), words = at ? codeLocalPaths(plainCitations(text || ""), at.tid) : plainCitations(text || "");
   return (
   <Box sx={sx} className="tq-md">
     <ReactMarkdown remarkPlugins={[remarkGfm]}
-      components={{ a: onTask ? (p) => <A {...p} onTask={onTask} /> : A, img: Img, td: Td, pre: Pre, code: Code, table: ({ children }) => <div className="tbl"><table>{children}</table></div> }}>
+      components={{ a: onTask ? (p) => <A {...p} onTask={onTask} /> : A, img: Img, td: Td, pre: Pre, code: Code, table: FitTable }}>
       {/* a Codex citation marker reads as the file's name wherever an answer is shown; the chat makes it a file (taskOutputs.js) */}
       {/* ...and in the chat a task it names is a link that opens it (linkRefs); a path into the task's own folder, the file (Code) */}
       {onTask ? linkRefs(words) : words}

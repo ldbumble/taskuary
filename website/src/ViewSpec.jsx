@@ -4,7 +4,8 @@
 // Its buttons are never the page's own (data-tq-view-skip): the reader that lights one never finds this copy instead.
 // A VIEW IS DRAWN, NEVER ITS JSON (the owner, 2026-11-15): a spec the page cannot read is no view (viewSpec.viewOf - it stays a step), and one
 // that throws while drawing says so in a line - a view never takes the chat down with it.
-import React, { useLayoutEffect, useMemo, useRef } from "react";
+import React, { useMemo, useRef } from "react";
+import { useTableFit } from "./tableFit.js";
 import { Button } from "@mui/material";
 import PlanDone from "@mui/icons-material/CheckBoxRounded";
 import NowIcon from "@mui/icons-material/IndeterminateCheckBoxRounded";
@@ -26,6 +27,7 @@ import { fmtNum, numOf, places, reportShape } from "./reportRows.js";
 import { run as pageRun } from "./pageView.js";
 import { openAppLink } from "./appLinks.js";
 import { buttonOf, columnsOf, fmtAs, labels, placesOf } from "./viewSpec.js";
+import Artifact from "./Artifact.jsx";
 
 // A CHECKLIST: done ticked, the one being done marked, the rest open - the agent's plan (GeneralWorkspace) is drawn by the same row
 const PLAN_ICON = { done: PlanDone, now: NowIcon, todo: PlanTodo };
@@ -50,17 +52,10 @@ function Table({ columns, rows }) {
   const p = useMemo(() => Object.fromEntries(names.map((c, i) => [c, fmts[i] ? placesOf(objs.map((r) => numOf(r[c])), fmts[i]) : places(objs, c)])), [names, objs, fmts]);
   // ...and a cell written with its money's symbol keeps it (round 4, 2026-11-22: "$1,234" read as a number drew as "1,234" - the price lost its "$")
   const show = (r, c, i) => (r[c] == null ? "" : !nums.has(c) ? String(r[c]) : fmts[i] ? fmtAs(numOf(r[c]), fmts[i], p[c]) : withSym(r[c], fmtNum(numOf(r[c]), p[c])));
-  // ...A TABLE WIDER THAN THE TURN'S COLUMN TAKES THE ROOM ITS COLUMNS NEED (the owner, 2026-11-23: "if it requires full page it can"): what it
-  // would overflow by with every column at its own width, measured before it is painted, widens its view past --tq-turn-item
-  // (appTheme.css), up to the chat's width. Measured here because the view is a size container (dashboard.css), and a container's own
-  // width can never follow what is inside it
+  // ...A TABLE WIDER THAN THE TURN'S COLUMN TAKES THE ROOM ITS COLUMNS NEED (the owner, 2026-11-23: "if it requires full page it can"), by the
+  // one rule every table fits by (tableFit.js)
   const ref = useRef(null);
-  useLayoutEffect(() => {
-    const el = ref.current, t = el?.firstChild, v = el?.closest(".tq-view");
-    if (!t || !v) return;
-    t.style.width = "max-content"; t.style.maxWidth = "none"; const over = t.offsetWidth - el.clientWidth; t.style.width = t.style.maxWidth = "";
-    v.style.setProperty("--tq-view-need", over > 1 ? `${v.offsetWidth + over}px` : "0px");
-  }, [names, objs]);
+  useTableFit(ref, [names, objs]);
   return <div className="tq-view-table" ref={ref}><table>
     <thead><tr>{names.map((c) => <th key={c} scope="col" className={nums.has(c) ? "n" : ""}>{c}</th>)}</tr></thead>
     <tbody>{objs.map((r, j) => <tr key={j}>{names.map((c, i) => <td key={c} className={nums.has(c) ? "n" : ""} title={show(r, c, i)}>{show(r, c, i)}</td>)}</tr>)}</tbody>
@@ -146,8 +141,8 @@ class Guard extends React.Component {
 
 export default function ViewSpec({ spec }) {
   if (!spec) return null;
-  return <Guard><section className="tq-dash tq-view" data-tq-view="" data-tq-view-skip="" aria-label={spec.title || "A view from the agent"}>
+  return <Guard><Artifact as="section" className="tq-dash tq-view" data-tq-view="" data-tq-view-skip="" aria-label={spec.title || "A view from the agent"}>
     {spec.title && <h3 className="tq-view-title">{spec.title}</h3>}
     <Node els={spec.elements} id={spec.root} />
-  </section></Guard>;
+  </Artifact></Guard>;
 }

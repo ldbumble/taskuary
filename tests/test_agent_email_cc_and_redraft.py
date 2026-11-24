@@ -74,7 +74,7 @@ def test_the_agents_email_fills_the_slot_it_names_rather_than_adding_another():
     assert out['ok'] and [(i['id'], i.get('rid')) for i in owed] == [(sid, out['review_id'])]
     assert deliver(s, out['review_id'])['to'] == ['ray.colton@northwind.example'] and waiting(s, tid) == [('slot', out['review_id'])]
     from taskuary import agenttools
-    assert 'slot' in agenttools.TOOLS['propose_email'][2]['properties'] and 'slot' not in agenttools.TOOLS['propose_email'][2]['anyOf'][0]['required']
+    assert 'slot' in agenttools.TOOLS['propose'][2]['properties'] and not agenttools.TOOLS['propose'][2].get('required')
 
 
 def test_an_email_the_agent_rewrites_after_the_owner_prompted_is_a_new_card_the_old_one_its_record():

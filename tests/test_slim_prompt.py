@@ -49,7 +49,7 @@ def test_the_guide_is_a_tool_and_the_coding_tools_stay_with_coding():
     assert 'guide' in agenttools.TOOLS and agenttools.TOOLS['guide'][0] == 'read'
     assert 'TEACHING YOU A NUMBER' in agenttools.call(MemoryStore(), 1, 'guide', {'topic': 'number'}, {})
     names = {t['name'] for t in agenttools.listing(agenttools.CODING_TOOLS)}
-    assert not names & set(agenttools.CODING_TOOLS) and {'guide', 'show', 'propose_reply'} <= names
+    assert not names & set(agenttools.CODING_TOOLS) and {'guide', 'show', 'propose'} <= names
 
 
 
@@ -59,7 +59,8 @@ def test_the_rarer_proposal_shapes_are_a_guide_away_not_in_every_tools_list():
     d = agenttools.TOOLS['propose'][1]
     assert '`propose` topic' in d and 'jira_move' not in d
     got = agenttools.call(MemoryStore(), 1, 'guide', {'topic': 'propose'}, {})
-    for want in ('linkedin_post', 'github_issue', 'jira_move', 'monday_', 'Post button'): assert want in got, want
+    for want in ('github_issue', 'jira_move', 'monday_'): assert want in got, want
+    assert 'linkedin_post' not in got, "a post is propose's own kind"
 
 
 # A STEP THAT WAITS ON THE OWNER IS A CARD, AND ITS PRESS IS WHAT THE AGENT PLANS ON (the owner, 2026-11-10: "it shoudl prompt you, should i

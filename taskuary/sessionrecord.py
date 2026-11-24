@@ -32,7 +32,7 @@ _TARGET_KEYS = ('command', 'cmd', 'pattern', 'query', 'url', 'file_path', 'path'
 # never on the pane, the live trace or a kept step - so the call that files one (the toolbox's propose_*, or `taskuary --reply/--draft`
 # in a shell) is shown by what it is, its body replaced. The draft itself lands in the review untouched.
 DRAFT_SHOWN = '(the drafted reply)'
-_DRAFTING = ('propose_reply', 'propose_email')                  # agenttools: the calls whose `text` is a draft
+_DRAFTING = ('propose',)                  # agenttools: the call whose `text` is a draft for his review (its old names too)
 _DRAFT_FLAG = re.compile(r'(--(?:reply|draft))(?:=|\s+).*?(?=\s--(?:to|attach|subject|item|cc)\b|$)', re.S)
 
 

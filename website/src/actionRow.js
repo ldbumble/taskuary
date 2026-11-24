@@ -187,7 +187,7 @@ export const press = (id, e, anchor, of = null) => {
 let lit = "";
 const litSubs = new Set();
 export const lightOnCard = (id) => { if ((id || "") === lit) return; lit = id || ""; litSubs.forEach((f) => f()); };
-export const useLit = () => useSyncExternalStore((f) => { litSubs.add(f); return () => litSubs.delete(f); }, () => lit);
+export const useLit = () => useSyncExternalStore((f) => { litSubs.add(f); return () => litSubs.delete(f); }, () => lit, () => lit);
 export const rowNow = () => snap;          // what the row carries this moment - an Advisor press looks for its real button here
 const subscribe = (f) => { subs.add(f); return () => subs.delete(f); };
 export const useRowVerbs = () => useSyncExternalStore(subscribe, () => snap, () => snap);

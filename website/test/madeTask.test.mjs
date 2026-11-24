@@ -1,8 +1,9 @@
-// WHAT TASKUARY MADE ON ITS OWN, AS A VIEW (madeView.js): a report's run and an Advisor's idea are read once into the spec the one view renderer
-// draws (ViewSpec.jsx) - never a renderer of their own - and the files a run carries that its view already IS are never drawn again.
+// WHAT TASKUARY MADE ON ITS OWN, AS A TASK (madeTask.js): a report's run and an Advisor's idea are read once into the spec the one view renderer
+// draws (ViewSpec.jsx) - never a renderer of their own - the files a run carries that its view already IS are never drawn again, and what it
+// rests on is its Came from (the routine behind it; an idea's evidence).
 import test from "node:test";
 import assert from "node:assert/strict";
-import { ideaView, reportView } from "../src/madeView.js";
+import { ideaSource, ideaView, madeTask, reportView, routineSource } from "../src/madeTask.js";
 import { normalise } from "../src/viewSpec.js";
 
 const els = (spec) => Object.values(spec.elements);
@@ -37,13 +38,29 @@ test("a brief reads as its roll-ups side by side, each group of items, and its c
   assert.deepEqual(typed(words, "text").map((t) => t.props.text), ["Three things worth your time today.\n\n- **Payworth charged twice**"]);
 });
 
-test("an Advisor's idea is what it noticed and what to do, then what it rests on - each a link into the app", () => {
+test("an Advisor's idea is what it noticed and what to do; what it rests on is its Came from - each a link into the app", () => {
   const card = { title: "Payworth charged the October run twice", action: { type: "lookout", next_step: "Ask Payworth to refund the second charge.",
     pitch: "Caught a duplicate charge before close.", mid: 9, who: "Erin Blake", why: "the same amount twice", evidence: [{ ref: "msg9", label: "the invoice" }, { ref: "task7", label: "the close" }] } };
-  const spec = ideaView(card), [lead, facts] = typed(spec, "text");
+  const spec = ideaView(card), [lead, pitch] = typed(spec, "text");
   assert.deepEqual(lead.props, { title: card.title, text: "Ask Payworth to refund the second charge." });
-  assert.match(facts.props.text, /\*\*Pitch\*\* - Caught a duplicate charge/);
-  assert.match(facts.props.text, /\*\*Based on\*\* - \[Erin Blake's message ↗\]\(#msg=9\): the same amount twice/);
-  assert.match(facts.props.text, /\*\*Rests on\*\* - \[the invoice ↗\]\(#msg=9\) · \[the close ↗\]\(#task=7\)/);
+  assert.match(pitch.props.text, /\*\*Pitch\*\* - Caught a duplicate charge/);
   assert.ok(normalise(spec));
+  const src = ideaSource(card);
+  assert.deepEqual(src.links, [{ label: "Erin Blake's message", href: "#msg=9" }, { label: "the invoice", href: "#msg=9" }, { label: "the close", href: "#task=7" }]);
+  assert.deepEqual(src.rows, [["Why", "the same amount twice"]]);
+});
+
+test("a report's source is its routine: name, schedule, prompt, what it reads, where it goes, and Edit", () => {
+  const row = { SourceId: 4, Address: "Headcount by site", ScheduleWords: "every day at 07:00", RouteWords: "Reports: every run" };
+  const src = routineSource(row, { ai_prompt: "Count heads per site.", sources: [{ type: "mssql" }, { type: "mssql" }, { type: "rss" }] }, { types: { mssql: "SQL Server" }, edit: "Edit this report" });
+  assert.deepEqual(src.rows, [["Name", "Headcount by site"], ["Runs", "every day at 07:00"], ["Prompt", "Count heads per site."], ["Reads", "SQL Server, rss"], ["Goes to", "Reports: every run"]]);
+  assert.deepEqual(src.edit, { label: "Edit this report", href: "#report=4" });
+});
+
+test("the item is a task-shaped record: its prompt the chat's input line, its run the turn whose artifact is the made view", () => {
+  const m = madeTask({ key: "report:4", kind: "report", label: "Report", title: "Headcount", when: "2026-11-24 07:00:00", input: { head: "Automated · Headcount", text: "Count heads." }, source: { rows: [] } });
+  assert.equal(m.detail.task.TaskId, "report:4"); assert.equal(m.detail.ref, "Report");
+  const [line, turn] = m.list.items;
+  assert.deepEqual([line.kind, line.auto, line.text], ["line", "Automated · Headcount", "Count heads."]);
+  assert.deepEqual([turn.kind, turn.state, turn.cards[0].review], ["turn", "done", "made:run"]);
 });

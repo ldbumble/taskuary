@@ -241,6 +241,19 @@ export const proposalPresentation = (review) => {
     rejectLabel: "Dismiss",
     readOnly: true,
   };
+  // A PUBLIC COMMENT ON GITHUB (proposals 'comment_issue'): where it goes, its words his to change while it waits - what he left in the box is
+  // what is posted (proposals.execute) - and its press named by what it does
+  if (proposal?.action === "comment_issue") return {
+    kind: "action",
+    title: "Comment on GitHub",
+    context: review.Reason || "Nothing is posted until you press Comment",
+    destinationLabel: "On",
+    destination: proposal.repo ? `${proposal.repo}${proposal.number != null ? `#${proposal.number}` : ""}` : "the issue or pull request this task came from",
+    approveLabel: "Comment",
+    bare: !reviewText(review).trim(),
+    busyLabel: "Commenting…",
+    rejectLabel: "Dismiss",
+  };
   // A PART OF THE TASK THAT IS ANOTHER MATTER (proposals.break_out, the owner 2026-11-10): the new task's title leads, what moves is read-only -
   // Approve runs the task page's own split with exactly those messages and to-dos
   if (proposal?.action === "break_out") return {

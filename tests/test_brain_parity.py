@@ -354,7 +354,7 @@ class TestTheCliRoadsReachTheSameTools:
         with mock.patch.object(server, 'store', s):
             names = {t['function']['name'] for t in apiagent.taskuary_tools(tid, 'sid-p', post=post)}
         assert posted == [agenttools.url(tid)], 'the AI card asks the same server, for the same task'
-        assert {'propose_email', 'propose_reply', 'show', 'read_attachment', 'search_messages'} <= names
+        assert {'propose', 'show', 'read_attachment', 'search_messages'} <= names
 
     def test_every_hand_a_cli_has_the_ai_card_has_by_its_own_name(self):
         """Claude Code's Read/Write/Edit/Bash/WebSearch/WebFetch and agent-browser - each one the API road offers, listed or found with find_tools

@@ -411,3 +411,16 @@ def test_a_step_handed_to_him_on_a_page_is_on_his_screen_never_nothing_waits():
     ws.record(s, tid, 'run1', 'input_needed', request_id=f'{TURN_PREFIX}robot1', text="Your turn in the browser on news.example: tick the human check")
     said = cardqueue.screen(s, tid)
     assert 'tick the human check' in said and cardqueue.NOTHING not in said, said
+
+
+def test_a_github_comment_posts_the_words_he_left_on_its_card():
+    """The one card (the owner, 2026-11-24: "one generic white raised artifact with editable text"): a GitHub comment's box was read-only and
+    Approve posted the agent's words as proposed. What he left in the box is what is posted; pressed off the card, it goes as filed."""
+    from taskuary.store import MemoryStore
+    s = MemoryStore(); tid = s.create_task({'Title': 'Totals off in the export', 'Kind': 'general', 'Status': 'open'}, 'owner')
+    rv = {'ReviewId': 0, 'TaskId': tid, 'Kind': 'action', 'DraftText': json.dumps({'action': 'comment_issue', 'body': 'Fixed.', 'why': 'he asked'})}
+    with mock.patch.object(proposals, 'validate', return_value=(True, '')), mock.patch.object(proposals, 'linked', return_value=('northwind/ledger', 12)), \
+         mock.patch('taskuary.ci._conn', return_value={'Secret': 'fixture-token'}), mock.patch('taskuary.github.comment_issue', return_value='https://github.example/c/1') as post:
+        proposals.execute(s, rv, 'owner', 'Fixed in the totals branch - thanks Erin.')
+        proposals.execute(s, rv, 'owner', None)
+    assert [c.args[3] for c in post.call_args_list] == ['Fixed in the totals branch - thanks Erin.', 'Fixed.']

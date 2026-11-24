@@ -6,6 +6,7 @@ import { Button } from "@mui/material";
 import { attUrl, useSave } from "./fileSave.js";
 import { CopyFile, FileDialog, isText, Preview } from "./PublishedPages.jsx";
 import { mediaFit } from "./taskOutputs.js";
+import Artifact from "./Artifact.jsx";
 
 const isPic = (f) => /^image\//.test(f?.content_type || "") && !/svg/.test(f?.content_type || "");
 
@@ -15,7 +16,7 @@ export default function TurnFiles({ files }) {
   return (
     <div className="tq-published" data-tq-turn-files="">
       {files.map((f) => (
-        <div key={f.path} className="tq-published-page tq-turn-frame" data-tq-turn-file={f.path} style={mediaFit(f)?.box}>
+        <Artifact key={f.path} className="tq-published-page" data-tq-turn-file={f.path} style={mediaFit(f)?.box}>
           <div className="tq-published-row">
             <button type="button" className="tq-published-name" onClick={() => setViewing(f)} title="Open it here">
               <b>{f.name}</b><span>{isPic(f) ? "picture" : f.preview || "file"} · open</span></button>
@@ -27,7 +28,7 @@ export default function TurnFiles({ files }) {
                 <img src={attUrl(f)} alt={f.name} width={f.dims?.[0]} height={f.dims?.[1]} onClick={() => setViewing(f)}
                   style={{ cursor: "zoom-in", objectFit: "contain", ...(mediaFit(f)?.media || { maxHeight: 320 }) }} /></div>
             : f.preview ? <Preview page={f} /> : null}
-        </div>))}
+        </Artifact>))}
       {err && <div className="tq-published-note" data-tq-file-error="">{err}</div>}
       {saved && <div className="tq-published-note" data-tq-file-saved="">{saved}</div>}
       <FileDialog file={viewing} onClose={() => setViewing(null)} />

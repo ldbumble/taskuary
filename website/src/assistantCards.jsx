@@ -4,11 +4,11 @@
 // queue or the Board; the card only puts it under the sentence that was just said. Reading
 // happens IN the card (the full text unfolds under it) and every card links to where the whole of
 // it lives - the task, or the row on the Timeline - because everything is the chat.
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { cannotStart, draftCanSend, useCapabilities } from "./capabilities.js";
 import { movesOf, repeatClick, useVerbs } from "./actionRow.js";
 import { choice, hint as btnHint, label as btn } from "./buttons.js";
-import { Button, TextField } from "@mui/material";
+import { Box, Button, TextField } from "@mui/material";
 import SendRoundedIcon from "@mui/icons-material/SendRounded";
 import RefreshRoundedIcon from "@mui/icons-material/RefreshRounded";
 import DoneRoundedIcon from "@mui/icons-material/DoneRounded";
@@ -32,7 +32,7 @@ import { Md, looksMd } from "./md.jsx";
 import { jsonRows, nameAndRest } from "./reportRows.js";
 import DigestText from "./DigestText.jsx";
 import ViewSpec from "./ViewSpec.jsx";
-import { ideaView, reportView } from "./madeView.js";
+import { citeHref, ideaSource, ideaView, madeTask, reportView, routineSource } from "./madeTask.js";
 import TodayMeetingsStrip from "./TodayMeetingsStrip.jsx";
 import { useCalendarToday } from "./calendarToday.js";
 import { ROLES, ASSISTANT, ALERT, ALERT_INK } from "./theme.jsx";
@@ -60,13 +60,15 @@ import { READY } from "./taskLifecycle.js";
 import { connError, openBugReport } from "./bugReportOpen.js";
 import { dayLabel, fmtTime } from "./dates.js";
 import { useShare } from "./Share.jsx";
-import ItemSections, { ItemLay, ItemPart, MadeTurn, handToItem } from "./ItemSections.jsx";
+import ItemSections, { ItemLay, ItemPart, handToItem, startItem } from "./ItemSections.jsx";
+import TaskPage from "./TaskPage.jsx";   // what Taskuary made is drawn by the one task page (useMade)
 import { PaneMoves } from "./TaskRow.jsx";   // an FYI's Came from carries its pane's moves as a task's does
 import { TYPE_LABELS } from "./reportWords.js";
 import { SECTIONS as STEPS } from "./taskLayout.js";   // a task's sections, by name (ItemSections)
 import { WorkstreamLabel } from "./Workstream.jsx";   // the idea's workstream, a small label (the owner, 2026-11-01)
 import { channelName } from "./taskSources.js";
 import { repliesOf } from "./connectorCatalog.js";
+import Artifact from "./Artifact.jsx";
 
 const errText = (e) => e?.response?.data?.detail || e?.message || "That did not work";
 const edge = (lane) => { const r = laneMeta(lane).role; return r ? ROLES[r].solid : "#d3ccc1"; };
@@ -511,7 +513,7 @@ export function FullText({ mid, revision }) {
 const isMorning = (doc) => doc.SourceName === "Morning digest" || /^Morning digest\b/i.test(doc.Subject || "");
 const digestOf = (doc) => /^report:(\d+)/.exec(doc.ConversationId || "")?.[1] ?? null;
 
-// A REPORT'S RUN, AS THE TURN THAT ANSWERED ITS ASK (MadeTurn): its words read once into a view (madeView.reportView) and drawn by the one view
+// A REPORT'S RUN, AS THE TURN THAT ANSWERED ITS ASK (useMade): its words read once into a view (madeTask.reportView) and drawn by the one view
 // renderer in the one frame - a data report's line, chart and table, a brief's roll-ups and groups, words as words - then the files its run
 // carries, less what the view already is (its chart's picture: ONE THING, ONE PLACE). A morning digest keeps its own way on (DigestText)
 function ReportTurn({ mid, revision, name }) {
@@ -520,7 +522,7 @@ function ReportTurn({ mid, revision, name }) {
   const v = useMemo(() => reportView(text, name), [text, name]);
   if (!doc) return <div className="tq-card-excerpt">…</div>;
   if (doc.error) return <div className="tq-card-err">{doc.error}</div>;
-  return <>{isMorning(doc) ? <div className="tq-turn-frame" style={{ padding: 16 }}><DigestText text={text} sourceId={digestOf(doc)} /></div> : <ViewSpec spec={v.spec} />}
+  return <>{isMorning(doc) ? <Artifact style={{ padding: 16 }}><DigestText text={text} sourceId={digestOf(doc)} /></Artifact> : <ViewSpec spec={v.spec} />}
     <Attachments messageId={mid} dense skip={v.owns} /></>;
 }
 
@@ -896,16 +898,34 @@ export function MeetingCard({ card, table = null }) {
   );
 }
 
-// WHAT ASKED FOR IT, the line its Agent tab opens with (MadeTurn): a report's or a dashboard's own instruction (its AI prompt), else its run by
-// name, under "Automated · <name> · <when it runs>" - the Reports tab's words (the server's ScheduleWords) - and the way to change it. Its
-// source row, read once and kept (useFetched)
-function useMadeInput(card, edit) {
-  const rows = useFetched(card?.source_id != null ? "/api/sources" : null), row = (rows?.data || []).find((r) => r.SourceId === card?.source_id);
+// WHAT TASKUARY MADE, ON THE TABLE, IS A TASK IN THE ONE TASK PAGE (the owner, 2026-11-24: "reports/dashboards/ideas and tasks are the SAME CODE,
+// not just consistent - the one task page, the same cards, the prompt as the input into the agent, the same box. Made-item special pages get
+// deleted; only the data mapping differs"): the item read into a task's record (madeTask.js) and drawn by TaskPage - Came from its source, its
+// chat the prompt that asked and the run as the turn that answered, the box that starts the agent on it, the row its moves (taskMoves).
+// `own`: the item's own move (an idea's Connect, a failed run's Run it again), lit; Next is the walk's, as a task's is under CanvasItem.
+// `on`: it is on the table - off it, the card is drawn as a card and this registers nothing
+function useMade(on, card, { kind, label, title, input, source, turn, aside, share = null, own = [], said = "", wide = false }) {
+  const nav = React.useContext(CardNav), src = JSON.stringify(source || {});
+  const base = useMemo(() => madeTask({ key: card.key, kind, label, title, when: card.when, channel: card.channel || "", input, source: JSON.parse(src), wide }),
+    [card.key, kind, label, title, card.when, card.channel, input.head, input.text, src, wide]);   // eslint-disable-line react-hooks/exhaustive-deps
+  const start = useCallback((o) => startItem({ key: card.key, title: card.title }, { verb: "regular_agent", text: o.text, files: o.files }), [card.key, card.title]);
+  useVerbs("next", on && nav.onNext ? [{ id: "next", group: "next", label: btn("next"), disabled: nav.busy, run: () => nav.onNext(), title: btnHint("next") }] : null,
+    on && !!nav.row, nav.ref);
+  return { ...base, turn, aside, share, start, said, came: label, navRef: nav.ref || "", moves: [...own.map((v) => ({ ...v, own: true })), ...(nav.also || [])] };
+}
+const MadePage = ({ made, height }) => <Box data-tq-made-page={made.kind} data-tq-canvas-item={made.key} sx={{ height, display: "flex", flexDirection: "column", minWidth: 0 }}>
+  <TaskPage made={made} canvas active /></Box>;
+
+// WHAT ASKED FOR IT AND WHERE IT COMES FROM: a report's or a dashboard's routine - read once and kept (useFetched) - its own instruction (its AI
+// prompt) the chat's input line, else its run by name, under "Automated · <name> · <when it runs>" (the server's ScheduleWords); the routine
+// itself its Came from (madeTask.routineSource), Edit there
+function useRoutine(card, kind, edit) {
+  const rows = useFetched(card && card.source_id != null ? "/api/sources" : null), row = (rows?.data || []).find((r) => r.SourceId === card?.source_id);
   let cfg = {};
   try { cfg = JSON.parse(row?.ConfigJson || "{}") || {}; } catch { cfg = {}; }
   const [name] = nameAndRest(card?.title, card?.who);
-  return { head: <>{["Automated", name, row?.ScheduleWords].filter(Boolean).join(" · ")}{card?.source_id != null
-    && <> · <a className="tq-card-link" href={`#report=${card.source_id}`} data-tq-made-edit="">{edit} ↗</a></>}</>, text: String(cfg.ai_prompt || "").trim() || `Run ${name}` };
+  return { input: { head: ["Automated", name, row?.ScheduleWords].filter(Boolean).join(" · "), text: String(cfg.ai_prompt || "").trim() || `Run ${name}` },
+    source: routineSource(row || (card?.source_id != null ? { SourceId: card.source_id, Address: name } : { Address: name }), cfg, { types: TYPE_LABELS, edit, kind }) };
 }
 // WHAT AN ITEM SAYS AND THE BOX UNDER IT (ItemSections ItemAsk): triage's reading rides the message the item is drawn from - the very payload
 // FullText reads, so one fetch serves both. `card` false: not on the table, nothing asked
@@ -931,12 +951,6 @@ export function RowMoves({ close = null, lead = "What happens next is on the row
   );
 }
 
-// WHAT TASKUARY MADE ON ITS OWN OPENS ON THE AGENT TAB (the owner, 2026-11-23: "Anything that comes in on the Agent tab shows the input prompt
-// that created it (even if automated: a report, routine, dashboard, Advisor)"): a report's run, a dashboard, an Advisor's idea - one section,
-// the agent's, a chat: what asked for it, the turn that answered with it in the one frame (MadeTurn), and the box under them (ItemAsk). What
-// came in from outside - a mail, a message, an FYI - stays on Came from
-const madeSection = (title, input, body) => [{ key: "agent", n: 1, name: STEPS[1].name, lines: [title], body: <MadeTurn input={input}>{body}</MadeTurn> }];
-
 // a report landed: read it here, or go to the row
 export function ReportCard({ card, onOpenTask, onTimeline, onDone, table = null }) {
   // Open, like the mail card: a digest behind a "Read it" is a digest nobody reads (the owner,
@@ -946,32 +960,23 @@ export function ReportCard({ card, onOpenTask, onTimeline, onDone, table = null 
   // first lines are the box, and More - only when there is more - unfolds the rest in place (2026-09-23)
   // ...and its heading says the DAY it ran beside its name: the kicker's "18h ago" left an old one reading like today's (the owner,
   // 2026-10-22: "end of day checkup should say the day it's from")
-  const [name, rest] = nameAndRest(card.title, card.who), day = dayLabel(card.when);
+  const [name, rest] = nameAndRest(card.title, card.who), day = dayLabel(card.when), on = table != null;
   // SHARE IT (the owner, 2026-10-23: "button on report on bottom named share") - the row's Share, while this report is the item on the
-  // table; the server reads the report off its message, never off the page (sharing.py)
+  // table; the server reads the report off its message, never off the page (sharing.py). On the table it is the task page's own Share
   const nav = React.useContext(CardNav);
   // ...and an email it drafts opens on the table at once, its task's Close out, for the owner to read and Send (the owner, 2026-10-23)
-  const share = useShare(`report:${card.key || card.mid}`, { kind: "report", title: card.title, message: card.mid }, !!(nav.table ?? nav.row) && !!card.mid && !card.bad,
-    { onShared: (how, out) => { if (how === "email" && out?.task_id) onOpenTask?.(out.task_id); },
-      summaryWhy: "a summary is written from a task's work - a report is its own result; Email the result sends it" });
-  // ON THE TABLE, ON THE AGENT TAB (madeSection): what asked for it, then the run as the turn that answered - its moves the same ones, on its pane
-  const input = useMadeInput(table != null && card, "Edit this report"), ask = useItemAsk(table != null && card, "report");
-  if (table != null) {
-    return <ItemSections kind="report" itemKey={card.key} label={card.bad ? "Report failed" : "Report"} height={table} about="agent" lays ask={ask}
-      title={<>{name}<span style={{ fontWeight: 400 }} data-tq-report-day={day || undefined}>{day && ` · ${day}`}{rest}</span></>}
-      aside={<><SourceMark item={card} size={13} />{card.when && ago(card.when)}</>}
-      sections={madeSection(card.title, input, <>
-        {card.bad && <div className="tq-card-excerpt">The run failed — the cause is in the report.</div>}
-        {card.brief_today && <TodayMeetingsStrip />}
-        {card.mid && <ReportTurn mid={card.mid} revision={card.presentation_revision} name={name} />}
-        {share}</>)}
-        moves={<ItemPart data-tq-report-close="">
-            <RowMoves close={card} on="at the top of the report" />
-            <Foot close={card} onDone={onDone} promote={card.bad ? "rerun" : null}
-              then={card.bad ? "Running it again runs the report in the background - its result goes where the report sends it, and if it fails the bell says why." : null}
-              where={<Where card={card} onOpenTask={onOpenTask} onTimeline={onTimeline} />} />
-          </ItemPart>} />;
-  }
+  const shareOpts = { onShared: (how, out) => { if (how === "email" && out?.task_id) onOpenTask?.(out.task_id); },
+    summaryWhy: "a summary is written from a task's work - a report is its own result; Email the result sends it" };
+  const shareOn = !!(nav.table ?? nav.row) && !!card.mid && !card.bad, shareOwner = `report:${card.key || card.mid}`, shareWhat = { kind: "report", title: card.title, message: card.mid };
+  const share = useShare(shareOwner, shareWhat, shareOn && !on, shareOpts);
+  const routine = useRoutine(on && card, "report", "Edit this report");
+  const made = useMade(on, card, { kind: "report", label: card.bad ? "Report failed" : "Report", title: `${name}${day ? ` · ${day}` : ""}${rest || ""}`, ...routine,
+    aside: <><SourceMark item={card} size={13} />{card.when && ago(card.when)}</>, said: card.title, share: { owner: shareOwner, result: shareWhat, on: shareOn, opts: shareOpts },
+    own: card.bad ? (nav.also || []).filter((a) => a.verb === "rerun") : [],
+    turn: <>{card.bad && <div className="tq-card-excerpt">The run failed — the cause is in the report.</div>}
+      {card.brief_today && <TodayMeetingsStrip />}
+      {card.mid && <ReportTurn mid={card.mid} revision={card.presentation_revision} name={name} />}</> });
+  if (on) return <MadePage made={made} height={table} />;
   return (
     <CardShell card={card} kicker={card.bad ? "a report failed" : "report"} title={card.title}
       lead={<div className="tq-card-lead" data-tq-report-day={day || undefined}><b>{name}</b>{day && ` · ${day}`}{rest}</div>}>
@@ -994,13 +999,14 @@ export function ReportCard({ card, onOpenTask, onTimeline, onDone, table = null 
 // A DASHBOARD landed: it is LOOKED AT, so it takes the canvas - the filter row, the tiles, the charts and the lists at the canvas's
 // height, scrolling inside itself - with the day it ran and when its rows were read, like a report card's heading (dashboards.py)
 export function DashboardCard({ card, onOpenTask, onDone, table = null }) {
-  const [got, setGot] = useState(null), [err, setErr] = useState("");
+  const [got, setGot] = useState(null), [err, setErr] = useState(""), on = table != null;
   // SHARE IT, like a report (the owner, 2026-10-23: Share on report / workflow / Result / dashboard): the store holds no page for a
   // dashboard, so it brings its own words - the tiles and the rows it drew, frozen at the press (snapshotOf); an email opens at once
   const nav = React.useContext(CardNav), snap = useMemo(() => (got?.data ? snapshotOf(got.config, got.data) : null), [got]);
-  const share = useShare(`dashboard:${card.key || card.mid || card.source_id}`, { kind: "dashboard", title: card.title, ...(snap || {}) }, !!(nav.table ?? nav.row) && !!snap,
-    { onShared: (how, out) => { if (how === "email" && out?.task_id) onOpenTask?.(out.task_id); },
-      summaryWhy: "a summary is written from a task's work - a dashboard is its own result; Email the result sends it" });
+  const shareOpts = { onShared: (how, out) => { if (how === "email" && out?.task_id) onOpenTask?.(out.task_id); },
+    summaryWhy: "a summary is written from a task's work - a dashboard is its own result; Email the result sends it" };
+  const shareOn = !!(nav.table ?? nav.row) && !!snap, shareOwner = `dashboard:${card.key || card.mid || card.source_id}`, shareWhat = { kind: "dashboard", title: card.title, ...(snap || {}) };
+  const share = useShare(shareOwner, shareWhat, shareOn && !on, shareOpts);
   useEffect(() => {
     let live = true;
     setErr("");
@@ -1008,19 +1014,16 @@ export function DashboardCard({ card, onOpenTask, onDone, table = null }) {
     return () => { live = false; };
   }, [card.source_id, card.mid]);
   const [name] = nameAndRest(card.title, card.who), day = dayLabel(card.when), at = got?.data?.at ? fmtTime12(got.data.at) : "";
-  // ON THE TABLE, ON THE AGENT TAB as a report is (madeSection) - in the turn's frame at the chat's whole width: a dashboard is looked at, and
-  // room is what it needs (the owner, 2026-11-23: "Dashboards should take up most of the screen since real estate is paramount")
-  const input = useMadeInput(table != null && card, DASH.edit), ask = useItemAsk(table != null && card, "dashboard");
-  const drawn = <div className={table != null ? "tq-dash-canvas tq-turn-frame tq-turn-wide" : "tq-dash-canvas"} data-tq-dash-canvas="">
+  // ...ON THE TABLE in the turn's frame at the chat's whole width: a dashboard is looked at, and room is what it needs (the owner, 2026-11-23:
+  // "Dashboards should take up most of the screen since real estate is paramount")
+  const drawn = <div className={on ? "tq-dash-canvas tq-turn-frame tq-turn-wide" : "tq-dash-canvas"} data-tq-dash-canvas="">
     {got?.data ? <Dashboard spec={got.config} data={got.data} /> : <div className="tq-card-excerpt">{err || (got ? DASH.never : DASH.loading)}</div>}
   </div>;
-  if (table != null) {
-    return <ItemSections kind="dashboard" itemKey={card.key} label="Dashboard" height={table} about="agent" lays ask={ask}
-      title={<>{name}<span style={{ fontWeight: 400 }} data-tq-report-day={day || undefined}>{day && ` · ${day}`}{at && ` · ${DASH.updated} ${at}`}</span></>}
-      aside={<><SourceMark item={card} size={13} />{card.when && ago(card.when)}</>}
-      sections={madeSection(card.title, input, <>{drawn}{share}</>)}
-        moves={<ItemPart data-tq-dash-close=""><RowMoves close={card} on="at the top of the dashboard" /><Foot close={card} onDone={onDone} /></ItemPart>} />;
-  }
+  const routine = useRoutine(on && card, "dashboard", DASH.edit);
+  const made = useMade(on, card, { kind: "dashboard", label: "Dashboard", title: `${name}${day ? ` · ${day}` : ""}${at ? ` · ${DASH.updated} ${at}` : ""}`, ...routine, wide: true,
+    aside: <><SourceMark item={card} size={13} />{card.when && ago(card.when)}</>, said: card.title, share: { owner: shareOwner, result: shareWhat, on: shareOn, opts: shareOpts },
+    turn: drawn });
+  if (on) return <MadePage made={made} height={table} />;
   return (
     <CardShell card={card} kicker="dashboard" title={card.title}
       lead={<div className="tq-card-lead" data-tq-report-day={day || undefined}><b>{name}</b>{day && ` · ${day}`}{at && ` · ${DASH.updated} ${at}`}</div>}>
@@ -1033,8 +1036,7 @@ export function DashboardCard({ card, onOpenTask, onDone, table = null }) {
 }
 
 // the ids a lookout idea rests on (lookout.land: [{ref: "msg12" | "task7", label}]) as links into the app: #msg=N puts that mail's card up,
-// #task=N opens the task (canvasLinks.canvasRequestFromHash); null with none
-export const citeHref = (ref) => { const m = /^(msg|task)(\d+)$/.exec(String(ref || "")); return m ? `#${m[1]}=${m[2]}` : null; };
+// #task=N opens the task (canvasLinks.canvasRequestFromHash) - madeTask.citeHref; null with none
 function citesOf(evidence) {
   const xs = (Array.isArray(evidence) ? evidence : []).map((e) => ({ ...e, href: citeHref(e?.ref) })).filter((e) => e.href);
   return xs.length ? <span data-tq-idea-cites="">{xs.map((e) => (
@@ -1044,9 +1046,7 @@ function citesOf(evidence) {
 
 // the assistant's own line: the slipped ask, the promise, the thread gone quiet
 export function IdeaCard({ card, onOpenTask, onTimeline, onNavigate, onDone, table = null }) {
-  // ...its own box answers questions on it, as a report's and an FYI's do (the owner, 2026-11-05) - no task, no agent
-  const ask = useItemAsk(table != null && card, "idea");
-  const a = card.action || {};
+  const a = card.action || {}, on = table != null;
   // A RULE QUESTION's yes makes the rule it proposed (promote.py); its no is the chips' Not ours, like a connect idea's
   const [busy, setBusy] = useState(false), [err, setErr] = useState("");
   const rule = card.idea_kind === "rule" && a.policy && card.idea;
@@ -1084,44 +1084,32 @@ export function IdeaCard({ card, onOpenTask, onTimeline, onNavigate, onDone, tab
   const rows = [["Pitch", look && a.pitch], ["Based on", (from || why) && <>{from}{from && why && ": "}{why}</>], ["Rests on", cites]];
   const facts = rows.filter(([, v]) => v);
   const chip = card.lane === "asked" ? "on you" : "not on you";
-  const foot = (
-      <Foot
-        verb={card.idea_kind === "connect" && a.connector_type ? (
-          <Button size="small" variant="contained" disableElevation sx={primary}
-            onClick={() => go("Connections", `connector=${a.connector_type}`)}>{a.planned ? `See ${a.title || a.connector_type}` : `Connect ${a.title || a.connector_type}`}</Button>
-        ) : card.idea_kind === "health" && a.tab ? (
-          <Button size="small" variant="contained" disableElevation sx={primary} onClick={() => go(a.tab, a.hash || "")}>Open {a.tab}</Button>
-        ) : card.idea_kind === "workstream" && a.slug ? (
-          <Button size="small" variant="contained" disableElevation sx={primary} disabled={busy} data-tq-workstream-add={a.slug}
-            onClick={addWorkstream}>{busy ? "Adding…" : a.added ? "Keep it" : "Add it"}</Button>
-        ) : card.idea_kind === "report" && a.report ? (
-          // TASKUARY ITSELF FAILING AGAIN (reportideas.py): the one Report popup, drafted from what the Advisor counted - scrubbed, the owner's Submit
-          <Button size="small" variant="contained" disableElevation sx={primary}
-            onClick={() => openBugReport(a.report)}>{btn("report_bug", "ask")}</Button>
-        ) : rule ? (
-          <Button size="small" variant="contained" disableElevation sx={primary} disabled={busy} onClick={makeRule}>{busy ? "Making it…" : "Make it a rule"}</Button>
-        ) : null}
-        then={card.idea_kind === "connect" && a.connector_type ? <><b>{a.planned ? "See" : "Connect"}</b> opens its card on Connections - nothing changes until you finish there.</>
-          : card.idea_kind === "health" && a.tab ? <><b>Open {a.tab}</b> takes you to the tab that fixes it.</>
-          : card.idea_kind === "report" && a.report ? <><b>{btn("report_bug", "ask")}</b> drafts it for Taskuary's tracker with names and mail taken out - you read it and submit it on GitHub.</>
-          : rule ? <><b>Make it a rule</b> adds it under Settings, Rules - switch it off there to undo it.</>
-          // the buttons in the bar say what they do; the sentence that explained them is gone (2026-10-10)
-          : null}
-        where={<Where card={{ ...card, tid: a.tid || card.tid, mid: a.mid || card.mid }} onOpenTask={onOpenTask} onTimeline={onTimeline} />} />);
-  // ON THE TABLE, ON THE AGENT TAB (madeSection; the owner, 2026-11-23: "Right now the Advisor comes in the Came from tab but should be in the
-  // Agent tab since it's generated"): what its look was asked to find, then what it noticed, what to do and what it rests on, as a view - the
-  // mail it is based on one press away; its moves are the same ones, on its pane (ItemLay), and the bar is Back and Next
-  if (table != null) return (
-    <ItemSections kind="idea" itemKey={card.key} label={look ? `Advisor · ${ideaWord(card.idea_kind)}` : "Advisor"} height={table} about="agent" lays ask={ask} title={card.title}
-      aside={<><SourceMark item={card} size={13} />{card.when && ago(card.when)}{card.workstream && <WorkstreamLabel slug={card.workstream} sx={{ ml: 0.75 }} />}</>}
-      sections={madeSection(card.title, { head: `Automated · Advisor · ${ideaWord(card.idea_kind)}`, text: card.asked || "" },
-        <><ViewSpec spec={ideaView(card)} /><CardErr err={err} /></>)}
-        moves={<ItemPart data-tq-idea-close=""><RowMoves on="on its panes" />{foot}</ItemPart>} />);
+  // ITS OWN MOVE, by kind - a press of its own, lit: on the table the task page's row carries it (taskMoves `made`), off it the card's Foot
+  const own = card.idea_kind === "connect" && a.connector_type ? { verb: "connect", label: `${a.planned ? "See" : "Connect"} ${a.title || a.connector_type}`, onClick: () => go("Connections", `connector=${a.connector_type}`),
+      then: <><b>{a.planned ? "See" : "Connect"}</b> opens its card on Connections - nothing changes until you finish there.</> }
+    : card.idea_kind === "health" && a.tab ? { verb: "open_tab", label: `Open ${a.tab}`, onClick: () => go(a.tab, a.hash || ""), then: <><b>Open {a.tab}</b> takes you to the tab that fixes it.</> }
+    : card.idea_kind === "workstream" && a.slug ? { verb: "workstream", label: busy ? "Adding…" : a.added ? "Keep it" : "Add it", disabled: busy, onClick: addWorkstream }
+    // TASKUARY ITSELF FAILING AGAIN (reportideas.py): the one Report popup, drafted from what the Advisor counted - scrubbed, the owner's Submit
+    : card.idea_kind === "report" && a.report ? { verb: "report_bug", label: btn("report_bug", "ask"), onClick: () => openBugReport(a.report),
+      then: <><b>{btn("report_bug", "ask")}</b> drafts it for Taskuary's tracker with names and mail taken out - you read it and submit it on GitHub.</> }
+    : rule ? { verb: "rule", label: busy ? "Making it…" : "Make it a rule", disabled: busy, onClick: makeRule, then: <><b>Make it a rule</b> adds it under Settings, Rules - switch it off there to undo it.</> }
+    : null;
+  // ON THE TABLE, A TASK IN THE ONE PAGE (useMade; the owner, 2026-11-23: "Right now the Advisor comes in the Came from tab but should be in the
+  // Agent tab since it's generated"): the prompt its look was sent as the input line, what it noticed and what to do as the turn - and what it
+  // rests on, each mail and task it cites, its Came from (madeTask.ideaSource)
+  const made = useMade(on, card, { kind: "idea", label: look ? `Advisor · ${ideaWord(card.idea_kind)}` : "Advisor", title: card.title,
+    input: { head: `Automated · Advisor · ${ideaWord(card.idea_kind)}`, text: card.asked || "" }, source: ideaSource(card), own: own ? [own] : [], said: suggest || card.title,
+    aside: <><SourceMark item={card} size={13} />{card.when && ago(card.when)}{card.workstream && <WorkstreamLabel slug={card.workstream} sx={{ ml: 0.75 }} />}</>,
+    turn: <><ViewSpec spec={ideaView(card)} /><CardErr err={err} /></> });
+  if (on) return <MadePage made={made} height={table} />;
   return (
     <CardShell card={card} kicker={<>{ideaWord(card.idea_kind)}<span className="tq-card-chip">{chip}</span></>} title={card.title}>
       {suggest && <div className="tq-card-lead">{suggest}</div>}
       {facts.length > 0 && <div className="tq-card-facts">{facts.map(([k, v]) => <React.Fragment key={k}><div>{k}</div><div>{v}</div></React.Fragment>)}</div>}
-      {foot}
+      <Foot verb={own && <Button size="small" variant="contained" disableElevation sx={primary} disabled={!!own.disabled} onClick={own.onClick}
+          data-tq-workstream-add={own.verb === "workstream" ? a.slug : undefined}>{own.label}</Button>}
+        then={own?.then || null}
+        where={<Where card={{ ...card, tid: a.tid || card.tid, mid: a.mid || card.mid }} onOpenTask={onOpenTask} onTimeline={onTimeline} />} />
       <CardErr err={err} />
     </CardShell>
   );

@@ -52,8 +52,8 @@ test("a close-out's pair: Approve and close and Approve, on the one list, and th
 test("an invite's other answers fold into the card's ▾ after Send, on the bar's own fold road", () => {
   assert.match(rd, /import \{ useFoldBar \} from "\.\/foldBar\.js";/);
   assert.doesNotMatch(rd, /foldSend|new ResizeObserver\(fit\)/, "the card keeps no second measure of its own");
-  assert.match(rd, /data-tq-cal-instead=\{a\} data-tq-bar-item=\{`cal:\$\{a\}`\} style=\{bar\.shown\(`cal:\$\{a\}`\) \? undefined : HIDE\}/);
-  assert.match(rd, /data-tq-send="open" data-tq-bar-item="send" style=\{folded \? HIDE : undefined\}/);
+  assert.match(rd, /hidden: !bar\.shown\(`cal:\$\{a\}`\), attrs: \{ "data-tq-cal-instead": a, "data-tq-bar-item": `cal:\$\{a\}` \}/);
+  assert.match(rd, /\{ hidden: folded, attrs: \{ "data-tq-bar-item": "send", "data-tq-send": "open" \} \}/);
   // the card's line at 390px: [Propose this time and close 182] [Propose this time 128] [Accept 66] [Decline 68] in ~300px, 6px apart, a 30px ▾
   const line = [{ id: "#0", w: 182, rank: 0 }, { id: "send", w: 128, rank: 1 }, { id: "cal:accept", w: 66, rank: 2 }, { id: "cal:decline", w: 68, rank: 2 }];
   assert.deepEqual(barFolds(line, 480, 6, 30), [], "a desk holds all four");

@@ -409,6 +409,48 @@ def _install_fresh_routes(app, store):
         rid = store.add_review({"TaskId": tid, "Kind": "action", **legacy, "Origin": "agent", "DraftText": json.dumps(p), "Reason": body.get("reason") or "the comment Erin asked for"})
         return {"taskId": tid, "reviewId": rid}
 
+    @app.post("/api/fixture/review-rows")
+    def fixture_review_rows(body: dict = Body(...)):
+        """A task holding the review rows given as they are stored - one of each kind the one review card draws (browser/one-card.mjs): `mail`
+        a colleague's message it answers, `source` the task's SourceRef (a GitHub issue's link), `github` a stand-in GitHub that takes a comment,
+        `refuses` a run_tool type whose press fails. Nothing leaves the fixture: every send is the outbox's (/api/fixture/outbox)."""
+        import json
+        store.set_setting("owner_name", "Alex Doyle", "owner"); store.set_setting("owner_email", "alex@northwind.example", "owner")
+        tid = store.create_task({"Title": body.get("title") or "Review the card", "Kind": "general", "Status": "open", "SourceRef": body.get("source") or None}, "owner")
+        mid = store.add_message({"TaskId": tid, "ExternalId": f"fx-rows-{tid}", "Channel": body.get("channel") or "email", "FromName": "Erin Blake",
+                                 "FromEmail": "erin@northwind.example", "ToEmail": "alex@northwind.example", "Subject": body.get("subject") or "Vendor plans",
+                                 "SentAt": "2026-11-24 08:00:00", "BodyText": body.get("mail") or "Hi Alex, could you send me the plans? Thanks, Erin", "Status": "routed"})
+        if body.get("github"):
+            from taskuary import ci, github
+            github.comment_issue = lambda *a, **k: "https://github.example/northwind/ledger/issues/12#issuecomment-1"
+            ci._conn = lambda *a, **k: {"Secret": "fixture-token"}
+        if body.get("refuses"):
+            from taskuary import reports
+            def refused(_cfg): raise RuntimeError("LinkedIn refused the post: the token has expired - sign in again on its card.")
+            reports.REGISTRY[body["refuses"]] = refused
+        # ...`connect`: the network's card connected, its act landing on a stand-in that answers with where it went
+        cid = None
+        if body.get("connect"):
+            from taskuary import reports
+            c = store.get_connector_by_type(body["connect"])
+            cid = store.save_connector({"ConnectorId": c["ConnectorId"], "Active": 1, "Secret": "fixture-token", "Roles": "tool"}, "owner")
+            reports.REGISTRY[f"{body['connect']}_post"] = lambda cfg: {"rows": [{"url": "https://social.example/alex/posts/1"}], "columns": ["url"]}
+        for r in body.get("rows") or []:
+            if cid and isinstance(r.get("DraftText"), dict): r["DraftText"] = {**r["DraftText"], "connector_id": cid}
+        # ...the agent's turn that set the cards up, as a chat with turns holds them (each card stands in the turn that raised it)
+        from taskuary import general
+        store.add_comment(tid, general.BRIEF_ACTOR, general.USER_TYPE, body.get("ask") or "Set it up for my press.")
+        store.add_transcript(tid, "run1", "Set it up.", "claude", os.environ["TASKUARY_HOME"])
+        store.add_comment(tid, "assistant", general.ASSISTANT_TYPE, body.get("answer") or "It is set up below and waits for your press.")
+        rids = [store.add_review({"TaskId": tid, "Status": "pending", "Origin": "agent", **({"MessageId": mid} if r.pop("answers", False) else {}),
+                                  **{k: (json.dumps(v) if k in ("DraftText", "Deliver") and not isinstance(v, str) else v) for k, v in r.items()}})
+                for r in [dict(x) for x in body.get("rows") or []]]
+        # ...and what a filed review does not take at its filing (a batch, a failure kept, when it was decided), as the run that set it writes it
+        for rid, r in zip(rids, body.get("rows") or []):
+            for k in ("Batch", "ActError", "DecidedAt", "FinalText"):
+                if r.get(k): store._exec(f"UPDATE review SET {k}=? WHERE ReviewId=?", (r[k], rid))
+        return {"taskId": tid, "reviewIds": rids, "messageId": mid}
+
     @app.post("/api/fixture/overcome")
     def fixture_overcome(body: dict = Body(...)):
         """A held sign-up his press could not make - its card failed - and then (`taskId`) the same sign-up made on a later try: what the card

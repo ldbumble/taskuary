@@ -14,6 +14,7 @@ import { plural } from "./timeWords.js";
 import stepKinds from "../../taskuary/stepkinds.json" with { type: "json" };
 import ownTools from "../../taskuary/owntools.json" with { type: "json" };
 import { forOwner } from "./stepWhy.js";
+import { CATALOGUE } from "./connectorCatalog.js";
 
 const flat = (s) => String(s || "").split(/\s+/).join(" ").trim();
 const clip = (s, n = 90) => { const t = flat(s); return t.length > n ? `${t.slice(0, n - 1)}…` : t; };
@@ -334,11 +335,19 @@ const OWN = {
   calendar: () => ({ kind: "data", summary: "Looked at your calendar" }),
   listsystems: () => ({ kind: "data", summary: "Looked at your connected systems" }),
   runsystem: (a) => ({ kind: "data", summary: a.type ? `Looked up data in ${clip(a.type, 30)}` : "Looked up data in a connected system" }),
-  proposereply: () => ({ kind: "edit", summary: "Drafted a reply", tried: "Could not set up the reply" }),
-  proposeemail: () => ({ kind: "edit", summary: "Drafted an email", tried: "Could not set up the email" }),
+  // ...THE ONE REVIEW TOOL by its kind (agenttools propose); its old names, in a kept session's steps, read as their kind
+  proposereply: (a) => OWN.propose({ ...a, kind: "reply" }),
+  proposeemail: (a) => OWN.propose({ ...a, kind: "email" }),
+  proposepost: (a) => OWN.propose({ ...a, kind: "post" }),
   replynotneeded: () => ({ kind: "plan", summary: "Marked the reply as not needed", tried: "Could not mark the reply as not needed" }),
   signform: () => ({ kind: "edit", summary: "Filled in and signed a form", tried: "Could not fill in the form" }),
-  propose: () => ({ kind: "plan", summary: "Asked for your yes", tried: "Could not set up the step for your yes" }),
+  // ...a post by the network's own card title ("X (Twitter)" is X), the catalogue's - never a second list of names here
+  propose: (a) => { const k = a.kind || (a.network ? "post" : "");
+    if (k === "reply") return { kind: "edit", summary: "Drafted a reply", tried: "Could not set up the reply" };
+    if (k === "email") return { kind: "edit", summary: "Drafted an email", tried: "Could not set up the email" };
+    if (k !== "post") return { kind: "plan", summary: "Asked for your yes", tried: "Could not set up the step for your yes" };
+    const w = String(a.network || "").trim(), card = CATALOGUE.find((c) => c.type === w.toLowerCase()), n = card ? card.title.replace(/\s*\(.*\)\s*$/, "") : clip(w, 30);
+    return { kind: "edit", summary: n ? `Drafted a post for ${n}` : "Drafted a post", tried: n ? `Could not set up the post for ${n}` : "Could not set up the post" }; },
   // ...a view by what it shows - its own title, the file it put up, its kind - never "a view" (the walk, 2026-11-17: "Showing you a view")
   show: (a) => { const el = a.elements?.[a.root] || {}, t = a.title || el.props?.title, fs = [a.files || []].flat().filter(Boolean);
     return { kind: "plan", tried: t ? `Could not show you ${quoted(t)}` : "Could not show it", summary: t ? `Showed you ${quoted(t)}` : fs.length ? `Showed you ${baseName(fs[0])}${fs.length > 1 ? `, and ${fs.length - 1} more` : ""}`

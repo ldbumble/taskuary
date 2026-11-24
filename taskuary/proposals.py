@@ -129,6 +129,24 @@ MEDIA = {'linkedin_post', 'x_post'}
 
 
 def is_post(p: dict) -> bool: return (p or {}).get('action') == 'run_tool' and (p or {}).get('type') in POSTS
+NETWORKS = {t.removesuffix('_post'): t for t in POSTS}         # ...propose's post `network`: the card's own type (linkedin, x, reddit ...)
+def post_type(network) -> str | None:
+    "The run_tool type a post on `network` is - by its card's type, its name or a word of its card's title (\"X (Twitter)\"); None for none."
+    from .connectorcatalog import by_type
+    n = str(network or '').strip().lower().removesuffix('_post')
+    return next((t for k, t in NETWORKS.items() if n in (k, POSTS[t].lower(), *re.findall(r'[a-z0-9]+', ((by_type(k) or {}).get('title') or '').lower()))), None)
+def post_of(a: dict) -> dict:
+    """A post propose call as the run_tool proposal the post road files (queue, card_roads, via_browser): `picture` is its `image`, and a
+    `link` where the network has no field of its own for one goes at the end of its words. ValueError names the networks there are."""
+    from .connectorcatalog import action_for, field
+    t = post_type(a.get('network'))
+    if not t: raise ValueError(f"no post card for {a.get('network')!r} - one of: {', '.join(NETWORKS)}")
+    text, link = str(a.get('text') or '').strip(), str(a.get('link') or '').strip()
+    own = field(action_for(t), 'link')
+    if link and not own and link not in text: text = f'{text}\n\n{link}'.strip()
+    keep = {k: a[k] for k in ('subreddit', 'title', 'why') if str(a.get(k) or '').strip()}
+    return {'action': 'run_tool', 'type': t, 'text': text, **keep, **({'image': a['picture']} if a.get('picture') else {}),
+            **({'link': link} if link and own else {})}
 # A POST ON A NETWORK NOT CONNECTED IS STILL ITS CARD, AND ITS PRESS HANDS IT TO THE AGENT FOR THE SITE (the owner, 2026-11-22: "card first,
 # sign-in at the press"): the agent went to LinkedIn's sign-in before writing a word, then gave the posts back as prose. The card stands with
 # the words and picture; Post via the browser saves them as he left them, once (decide_review takes one press), and hands them to its agent,
@@ -971,6 +989,8 @@ def execute(store, rv: dict, actor='owner', final_text: str = None, skip_checks:
     if edited and p.get('action') in ('write_playbook', 'amend_playbook', *CLOSEOUT): p['text'] = final_text.strip()
     # a tracker close-out's box IS its comment: what the owner left there goes, emptied included (None = pressed off the card, as filed)
     if p.get('action') == 'close_item' and final_text is not None and not str(final_text).lstrip().startswith('{'): p['text'] = str(final_text).strip()
+    # ...a GitHub comment's box IS its words: what the owner left there is what is posted
+    if edited and p.get('action') == 'comment_issue': p['body'] = final_text.strip()
     p = _edited(p, final_text, fields)
     ok, why = validate(store, p)
     if not ok: raise RuntimeError(f'refused at execution: {why}')

@@ -10,7 +10,7 @@ const subs = new Set();
 const put = (rid, job) => { jobs.set(rid, job); subs.forEach((f) => f()); };
 export const draftJob = (rid) => (rid && jobs.get(rid)) || null;
 export const subscribeDrafts = (f) => { subs.add(f); return () => subs.delete(f); };
-export const useDraftJob = (rid) => useSyncExternalStore(subscribeDrafts, () => draftJob(rid));
+export const useDraftJob = (rid) => useSyncExternalStore(subscribeDrafts, () => draftJob(rid), () => draftJob(rid));
 
 // the draft, written behind a card already drawn; a second ask while one runs is the same job
 // `line`: the Assistant's "Drafting a reply on TQ-n" line - the server says it again with how it went, and `receipt` is that (server._draft_receipt)

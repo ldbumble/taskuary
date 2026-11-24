@@ -151,7 +151,7 @@ def seen(store, tid: int):
 
 
 # A CHAT ID IS NO MAILBOX, whoever named it - the agent or triage's slot (the night run, 2026-11-09: "emails" went to whatsapp:1555...)
-_NO_MAILBOX = "{to} is a chat, not a mailbox - answer them in that chat (propose_reply, `answers` their line) or give their email address as `to`"
+_NO_MAILBOX = "{to} is a chat, not a mailbox - answer them in that chat (propose kind reply, `answers` their line) or give their email address as `to`"
 NO_WORDS = "the email has no words, so nothing was filed - write the email in `text`, or ask the owner what it should say"
 def _chat_id(to) -> bool:
     from .ingest import CHAT_CHANNELS
@@ -247,7 +247,7 @@ def draft(store, tid: int, text: str, to: str = '', subject: str = '', slot: str
             same = [i for i in open_(store, tid) if str(i['out'].get('to')).casefold() == want]
             return {'ok': False, 'why': f"no email to {to} was added - " + (
                 f"one to them is already this task's (slot {same[0]['id']}): rewrite it with `slot` set to that id, or `slot: \"new\"` for a second letter"
-                if same else "`to` must be one address or one person's name; to answer someone who wrote on this task, propose_reply with `to`")}
+                if same else "`to` must be one address or one person's name; to answer someone who wrote on this task, propose kind reply with `to`")}
         hit, added = made[0], True
         store.add_comment(tid, agent, 'agent', f'{agent} added an email to {to} to what this task owes.')
     o = hit['out']; kind = o.get('kind') or 'email'
@@ -291,7 +291,7 @@ def draft(store, tid: int, text: str, to: str = '', subject: str = '', slot: str
             **({'to_missing': to_missing(missing)} if missing else {}),
             **({'rewrote': rid, 'says': f"This rewrote your earlier email to {to} in this turn - one card stands, holding these words. For a second, "
                                         f"separate email to them, call again with slot=\"{NEW_SLOT}\"."} if rewrote == rid else {})}
-NEW_SLOT = 'new'                 # propose_email's `slot` for a second letter to someone this turn already wrote to
+NEW_SLOT = 'new'                 # propose (kind email)'s `slot` for a second letter to someone this turn already wrote to
 
 
 def _written_before(store, tid: int, rv: dict) -> bool:

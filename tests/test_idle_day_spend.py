@@ -197,7 +197,7 @@ def test_both_looks_read_whole_even_when_nothing_changed_and_the_days_job_ideas_
     monkeypatch.setattr(lookout, 'CLOCK', True)
     monkeypatch.setattr(lookout, 'brain', lambda st: brain)
     monkeypatch.setattr(lookout, 'window', lambda st, **k: ('', {}, ['source:email']))       # a part of the work is due its look
-    monkeypatch.setattr(lookout, 'investigate', lambda st, llm, user, seen: order.append('job ideas') or {'ideas': [], 'dropped': [], 'reads': []})
+    monkeypatch.setattr(lookout, 'investigate', lambda st, llm, user, seen, *a: order.append('job ideas') or {'ideas': [], 'dropped': [], 'reads': []})
     cand = [{'key': 'cold:1', 'kind': 'cold', 'facts': 'Gail Moreno asked for the accruals and nothing has moved'}]
     def run(stamp):
         clock = _at(stamp)

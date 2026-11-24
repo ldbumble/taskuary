@@ -18,7 +18,7 @@ import { holdUnsent } from "./unsent.js";
 import { howToOpen } from "./bugReportOpen.js";
 import { baseName } from "./agentSteps.js";
 import { AgentSteps, PermitCtx } from "./AgentStepRows.jsx";
-import { chatSource, checkBackDue, waitingShown, eventsOf, hasParts, isPastCard, standing, heldAtEnd, anchorOf, anchorShift, turnParts, workCount, folds, ranUnder, foldLine, paintable, withMine, waitingChips, workingLine, waitingOn, askTurn, onYouTurn, askedFirst, runsOf, patchSteps, askOn, asksOff } from "./chatStream.js";
+import { chatSource, checkBackDue, waitingShown, eventsOf, hasParts, isPastCard, standing, heldAtEnd, anchorOf, anchorShift, shrinkHeld, SHRINK_HOLD, turnParts, workCount, folds, ranUnder, foldLine, paintable, withMine, waitingChips, workingLine, waitingOn, askTurn, onYouTurn, askedFirst, runsOf, patchSteps, askOn, asksOff } from "./chatStream.js";
 import { stepLabel } from "./agentSteps.js";
 export { checkBackDue };
 import { detailFor, ownDetail, useOwnDetail } from "./chatDetail.js";
@@ -652,7 +652,13 @@ function AssistantThread({ task, onAsked, onStop, selectionRef, attachmentsRef, 
     // ...and away from the end, the row he was reading (chatStream.anchorOf): kept where it stood through a change of size
     const hold = () => { mark = stick.current ? null : anchorOf(v, el); };
     const on = () => { stick.current = heldAtEnd(stick.current, { top: v.scrollTop, was, gap: v.scrollHeight - v.scrollTop - v.clientHeight, own: performance.now() - used < 1500 }); was = v.scrollTop; hold(); };
+    // ...and at the end a fold waits a beat for what comes under it (chatStream.shrinkHeld): one move, never up and back down
+    let tall = 0, free = null;
+    const own = () => { const m = el.style.minHeight; el.style.minHeight = ""; const h = el.offsetHeight; el.style.minHeight = m; return h; };
     const ro = new ResizeObserver(() => {
+      const h = own(), keep = shrinkHeld(stick.current, tall, h);
+      if (keep) { el.style.minHeight = `${keep}px`; clearTimeout(free); free = setTimeout(() => { tall = own(); el.style.minHeight = ""; }, SHRINK_HOLD); }
+      else { if (el.style.minHeight) { clearTimeout(free); el.style.minHeight = ""; } tall = h; }
       if (stick.current) v.scrollTop = v.scrollHeight;
       else { const d = anchorShift(v, mark); if (Math.abs(d) > 1) v.scrollTop += d; }
       hold();
@@ -662,7 +668,7 @@ function AssistantThread({ task, onAsked, onStop, selectionRef, attachmentsRef, 
     v.addEventListener("scroll", on, { passive: true }); ro.observe(el); ro.observe(v);
     const off = [[v, "wheel", mine], [v, "touchmove", mine], [v, "pointerdown", down], [window, "pointerup", mine], [window, "pointercancel", mine], [document, "keydown", mine]];
     off.forEach(([t, n, f]) => t.addEventListener(n, f, { passive: true, capture: true }));
-    return () => { v.removeEventListener("scroll", on); ro.disconnect(); off.forEach(([t, n, f]) => t.removeEventListener(n, f, { capture: true })); };
+    return () => { clearTimeout(free); v.removeEventListener("scroll", on); ro.disconnect(); off.forEach(([t, n, f]) => t.removeEventListener(n, f, { capture: true })); };
   }, [!!list]);   // eslint-disable-line react-hooks/exhaustive-deps
   // ...after EVERY draw, not only the list's: a card's own words (the page's node) grow the chat too - and once more when the draw is whole
   // (a microtask: after the rows that measured themselves in this same draw have grown), still before anything is painted

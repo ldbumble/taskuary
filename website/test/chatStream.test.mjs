@@ -85,6 +85,19 @@ test("the general chat's ACP trace keeps the words where they were said: the ans
 // Moreno, the agent at rest: the chat pinned its end on the first draw, then each of forty long messages measured itself and drew a "Show
 // all" - 896px more, after the pin and before the pin's own scroll event. That event found the end far away, read it as the owner having
 // moved off, and nothing followed the chat down again - not the late picture either.
+// Walk 17, recorded: Send on the first of two cards folded it to "✓ Sent" a beat before the second was drawn - the chat, held at its end,
+// got 400 px shorter and then longer again, and the view flicked up to the turn's words and back down within 0.2 s.
+test("at its end a card's fold and the card drawn under it are one move, never up and back down", async () => {
+  const { shrinkHeld, SHRINK_HOLD } = await import("../src/chatStream.js");
+  let tall = 0; const drawn = [];
+  for (const h of [1720, 1320, 1745]) { const keep = shrinkHeld(true, tall, h); drawn.push(Math.max(h, keep)); if (!keep) tall = h; }
+  assert.deepEqual(drawn, [1720, 1720, 1745], "the fold waits for what comes under it: the chat never got shorter under him");
+  assert.equal(shrinkHeld(false, 1720, 1320), 0, "away from its end the row he reads holds his place instead (anchorOf)");
+  assert.ok(SHRINK_HOLD >= 300 && SHRINK_HOLD <= 800, "a beat, not a gap left standing");
+  const view = fs.readFileSync(new URL("../src/GeneralWorkspace.jsx", import.meta.url), "utf8");
+  assert.match(view, /keep = shrinkHeld\(stick\.current, tall, h\)/, "the chat's own observer keeps it");
+});
+
 test("the chat lets go of its end only for the owner's own scroll up, never for its own growth", async () => {
   const { heldAtEnd, AT_END } = await import("../src/chatStream.js");
   // the live order: pinned at 4763 of 5297+534, grown to 6193 before the event - the same top, 896 from the end, nobody touching it
@@ -104,7 +117,7 @@ test("the chat lets go of its end only for the owner's own scroll up, never for 
   let moved = 0; const chat = { hasAttribute: (n) => n === "data-tq-follows-end", getBoundingClientRect: () => ({ top: 0, left: 0, width: 400, height: 300, bottom: 300 }), scrollTo: () => { moved += 1; }, scrollTop: 72 };
   unclip(chat, { getBoundingClientRect: () => ({ top: 200, bottom: 230 }) });
   assert.equal(moved, 0, "a scroller that follows its own end is never unclipped");
-  assert.match(view, /const ro = new ResizeObserver\(\(\) => \{\s*if \(stick\.current\) v\.scrollTop = v\.scrollHeight;/, "and any resize while held pins it");
+  assert.match(view, /const ro = new ResizeObserver\(\(\) => \{[\s\S]{0,700}?\s+if \(stick\.current\) v\.scrollTop = v\.scrollHeight;/, "and any resize while held pins it");
   assert.doesNotMatch(view, /stick\.current = v\.scrollHeight - v\.scrollTop - v\.clientHeight < 56/, "where it stands alone no longer decides");
 });
 

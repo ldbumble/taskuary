@@ -248,6 +248,11 @@ export const anchorOf = (view, root, depth = 5) => {
   }
   return el ? { el, off: el.getBoundingClientRect().top - top } : null;
 };
+// ...AND AT ITS END A FOLD IS NOT A MOVE OF ITS OWN (walk 17, recorded: on "✓ Sent" the pressed card folded before the next one was drawn, and
+// the chat flicked up 400 px and back down within 0.2 s): held at its end, the chat keeps the height it had for SHRINK_HOLD ms, so the fold and
+// what comes under it are one move. `tall`: its height before; `now`: its own height now - the height to keep, or 0
+export const SHRINK_HOLD = 500;
+export const shrinkHeld = (held, tall, now) => (held && now < tall - 1 ? tall : 0);
 export const anchorShift = (view, a) => (a?.el?.isConnected ? a.el.getBoundingClientRect().top - view.getBoundingClientRect().top - a.off : 0);
 
 // THE CHAT'S OWN LIST ON THE PAGE (GeneralWorkspace): what is drawn is the server's list (conversation.items), with two things of the page's -

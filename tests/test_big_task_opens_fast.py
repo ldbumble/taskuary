@@ -129,6 +129,22 @@ def test_the_owner_s_first_line_after_theirs_is_the_one_that_counts():
     assert senders.known(s, {'channel': 'whatsapp', 'from_name': 'Ray Colton', 'conversation_id': 'grp'})[0]
 
 
+def test_its_read_carries_the_newest_lines_whole_and_the_rest_as_who_and_when(big):
+    """The load run, 2026-11-24: a 2,000-line chat's task read was 2 MB and 6-16 s, polled every 3 s beside the conversation its chat is drawn
+    from. The newest lines and each conversation's first ride whole; the rest as who, where and when, counted - and all of them on `whole`."""
+    import json
+    s, tid = big
+    cut, whole = server.task_detail(tid), server.task_detail(tid, whole=True)
+    full = [m for m in cut['messages'] if not m.get('stub')]
+    assert len(cut['messages']) == len(whole['messages']) == LINES and cut['messagesCut'] == LINES - len(full)
+    assert len(full) <= server.KEEP_MESSAGES + 2 and full[-1]['MessageId'] == whole['messages'][-1]['MessageId']
+    assert full[0]['MessageId'] == whole['messages'][0]['MessageId'], "the conversation's first line, whole: Came from opens on it"
+    assert all(set(m) <= {*server._STUB, 'BodyText', 'stub'} for m in cut['messages'] if m.get('stub'))
+    assert len(json.dumps(cut, default=str)) < len(json.dumps(whole, default=str)) / 2
+    assert (cut['origin'], cut['repeats'], cut['earlier']) == (whole['origin'], whole['repeats'], whole['earlier']), 'facts read off every line'
+    assert 'messagesCut' not in whole and len(cut['routes']) < len(whole['routes'])
+
+
 def test_its_chat_reads_each_line_s_route_by_the_line(big):
     """The chat's mail (general.JOINED) found each line's route through the task's index: every route of the task read for every line, the
     square of the chat - 0.5 s a read at 2,000 lines, on every poll. By the line's own index it is one look a line."""

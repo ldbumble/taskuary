@@ -2318,12 +2318,37 @@ def _earlier(d: dict) -> list:
 
 
 @app.get('/api/tasks/{task_id}')
-def task_detail(task_id: int, rev: str = '', opened: bool = False):
+def task_detail(task_id: int, rev: str = '', opened: bool = False, whole: bool = False):
     """ONE TASK AS ITS PAGE DRAWS IT, read every 3 s while an agent works. Each setting and document its many readers ask (the owner's addresses,
-    the AI pick, trusted organisations, SOUL.md for the owner's name) is read once for the whole read (store.held_settings)."""
-    with store.held_settings(): return _task_detail(task_id, rev, opened)
+    the AI pick, trusted organisations, SOUL.md for the owner's name) is read once for the whole read (store.held_settings). `whole`: every
+    message in full (Came from's Show all) - else a long task's older ones ride as who, where and when (_cut_messages)."""
+    with store.held_settings(): return _task_detail(task_id, rev, opened, whole)
 
-def _task_detail(task_id: int, rev: str = '', opened: bool = False):
+# A LONG TASK'S READ CARRIES ITS NEWEST MESSAGES WHOLE (the load run, 2026-11-24: a 2,000-line chat's task read was 2 MB and 6-16 s, polled every
+# 3 s beside its conversation, which is where its chat is drawn from): the rest ride as who, where and when - Came from counts and names them
+# and opens each conversation's first one - and in full on `whole`. The facts read off the messages (origin, repeats, the row's move) read all.
+KEEP_MESSAGES = 40
+_STUB = ('MessageId', 'TaskId', 'ConversationId', 'Channel', 'SourceName', 'Subject', 'SentAt', 'CreatedAt', 'FromName', 'FromEmail', 'Status', 'Direction', 'ExternalId')
+
+def _cut_messages(d: dict, keep: set) -> None:
+    """The task read `d` with only the newest KEEP_MESSAGES, each conversation's first and those in `keep` (a card's, a danger) whole; the rest
+    stubs. One of the owner's own keeps its words: the page tells what he sent outside Taskuary from a reply it sent by them
+    (taskLifecycle.sentElsewhere). And the routes of the whole ones, the first that made the task and the newest: what triage said (TaskPage)."""
+    msgs = d.get('messages') or []
+    if len(msgs) <= KEEP_MESSAGES: return
+    when = lambda m: (str(m.get('SentAt') or m.get('CreatedAt') or ''), m.get('MessageId') or 0)
+    whole, firsts = {m['MessageId'] for m in sorted(msgs, key=when)[-KEEP_MESSAGES:]} | set(keep), {}
+    for m in sorted(msgs, key=when): firsts.setdefault(m.get('ConversationId') or m.get('SourceName') or m.get('Subject') or m['MessageId'], m['MessageId'])
+    whole |= set(firsts.values())
+    mine = lambda m: m.get('Status') == 'context' or m.get('Direction') == 'out'
+    d['messages'] = [m if m['MessageId'] in whole else {**{k: m.get(k) for k in _STUB}, **({'BodyText': m.get('BodyText')} if mine(m) else {}), 'stub': True}
+                     for m in msgs]
+    rs = d.get('routes') or []
+    made = next((r for r in rs if r.get('VerdictJson') or r.get('Decision') == 'create'), None)
+    d['routes'] = [r for i, r in enumerate(rs) if r.get('MessageId') in whole or r is made or i >= len(rs) - KEEP_MESSAGES]
+    d['messagesCut'] = sum(1 for m in d['messages'] if m.get('stub'))
+
+def _task_detail(task_id: int, rev: str = '', opened: bool = False, whole: bool = False):
     d = store.task_detail(task_id)
     if not d: raise HTTPException(404, 'task not found')
     # ONE CARD AT A TIME (cardqueue): what waits behind the card that stands is not the page's to draw yet
@@ -2359,7 +2384,10 @@ def _task_detail(task_id: int, rev: str = '', opened: bool = False):
     if opened: general.warm(store, task_id, d.get('task'))
     # ...and whether its channel can carry a reply, as /api/reviews says: without it a Teams draft offered Send, and
     # the press came back "not sent" instead of the card offering Copy & close from the start
-    memo, sigs, here = {}, {}, {m['MessageId']: m for m in d.get('messages') or []}
+    full = d.get('messages') or []
+    routes = d.get('routes') or []
+    if not whole: _cut_messages(d, {r.get('MessageId') for r in d['reviews']} | {m['MessageId'] for m in full if m.get('Danger')})
+    memo, sigs, here = {}, {}, {m['MessageId']: m for m in full}
     from . import chatlog as _chatlog
     for r in d.get('reviews') or []:
         # ...AND WHAT AN OWED REPLY NEEDS IS SAID ONCE: by the turn it stands in, where that turn said anything (chatlog.card_said - the ask's one rule)
@@ -2372,6 +2400,7 @@ def _task_detail(task_id: int, rev: str = '', opened: bool = False):
     from .wrapup import from_owner, reads_reply_row
     me, memo = own_addresses(store), {}
     for m in d.get('messages') or []:
+        if m.get('stub'): continue
         m['FromOwner'] = from_owner(store, m, me)
         # ...and whether ANYBODY reads a reply to it - a person, not the owner nor a machine (wrapup.reads_reply_row): the page's Reply doors read it
         m['ReadsReply'] = reads_reply_row(store, m, me)
@@ -2389,7 +2418,7 @@ def _task_detail(task_id: int, rev: str = '', opened: bool = False):
     strong = _brainroute().strong_offered(d['task'], judged, ran, story)
     # ...each reader handed the messages already read, and every verdict in one read: on a 1,500-line chat each asked again, line by
     # line, and the page drew a spinner over an empty frame while it did (the owner, 2026-11-01: "this still happens")
-    msgs, verdicts = d.get('messages') or [], store.task_verdicts(task_id)
+    msgs, verdicts = full, store.task_verdicts(task_id)
     o = dict(zip(('origin', 'why'), origin.of_task(store, task_id, msgs)))
     dm = next((m for m in msgs if m.get('Danger')), {})
     # THE ONE MOVE ITS ROW FILLS (rulebook.recommended: its agent's own turn and the task's facts) - the same field the rail's item on the
@@ -2407,18 +2436,18 @@ def _task_detail(task_id: int, rev: str = '', opened: bool = False):
                        # whom: 'owner' for a scam on them, 'agent' for text written to steer the AI (the owner, 2026-10-30)
                        'danger': dm.get('Danger'), 'danger_aim': (dm.get('DangerAim') or 'agent') if dm else None},
             # the same sender writing again and again about this one thing, said once (concierge.repeats) - counted here, no model
-            'repeats': concierge.repeats(store, task_id, d.get('messages'), d.get('routes')),
+            'repeats': concierge.repeats(store, task_id, msgs, routes),
             # a WORKFLOW RUN has no message and no triage behind it: which workflow, and what started it (workflows.of_task)
             'workflow': workflows.of_task(store, d['task']),
             # which of the owner's workstreams it is under, for its small label and the picker (workstreams.py, the owner 2026-11-01)
             'workstream': hub_ws.label(store, hub_ws.of_task(store, task_id)),
             # an invite waiting on the owner, or a thread asking for a time: the row's Accept / Decline / Propose a new time / Find a time
             'calendar': _calendar_of(task_id, msgs),
-            'messages': [_readable(x, verdicts.get(x['MessageId'])) for x in msgs],
+            'messages': [x if x.get('stub') else _readable(x, verdicts.get(x['MessageId'])) for x in d['messages']],
             # ...and the earlier messages triage said its ask rests on, shown with them, never moved onto this task (rests_on, 2026-10-22)
-            'earlier': _earlier(d),
+            'earlier': _earlier({**d, 'messages': msgs, 'routes': routes}),
             # ...and a task Taskuary itself raised (an Advisor idea): who, and its one sentence - Came from's line, not a message card
-            'raised': assistant.raised_by(store, d['task'], d.get('messages')),
+            'raised': assistant.raised_by(store, d['task'], msgs),
             # ...and on a promise task, the owner's own mail the promise was made in, with whom it was made to: the page answers it as a
             # task's reply source, so Close out says "Answering <them>" and the row leads with Reply (store.promised_in, 2026-10-26)
             'owed': _owed(d),

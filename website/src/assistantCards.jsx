@@ -548,8 +548,9 @@ function CombinedTaskText({ card, list = true }) {
   if (!doc) return <div className="tq-card-full">…</div>;
   if (doc.error) return <div className="tq-card-err">{doc.error}</div>;
   // NEWEST FIRST (the owner, 2026-09-28): the latest word is what the card is about; the thread reads back from it
-  const messages = (doc.messages || []).filter((m) => String(m.Status || "") !== "context")
-    .slice().sort((a, b) => String(b.SentAt || "").localeCompare(String(a.SentAt || "")));
+  // ...a long task's older ones ride as who and when (server _cut_messages): counted, and the newest read in full
+  const all = (doc.messages || []).filter((m) => String(m.Status || "") !== "context");
+  const messages = all.filter((m) => !m.stub).sort((a, b) => String(b.SentAt || "").localeCompare(String(a.SentAt || "")));
   // The job is the reason this card exists, so it sits above the source thread as a todo rather than
   // disappearing into the thread's pale metadata. The list is read-only here; ticking stays on the task.
   const taskText = String(doc.task?.Summary || doc.task?.Title || card.title || "").trim();
@@ -595,7 +596,7 @@ function CombinedTaskText({ card, list = true }) {
     {task}
     <div className="tq-card-full tq-card-context">
       <div className="tq-card-note" style={{ marginBottom: 7, fontWeight: 600 }}>
-        Email context · {messages.length} messages read together
+        Email context · {all.length} messages read together{all.length > messages.length ? ` · the newest ${messages.length}` : ""}
       </div>
       {messages.map((m, n) => {
         const body = noImages(cleanText(m.ReadText ?? m.BodyText ?? ""));

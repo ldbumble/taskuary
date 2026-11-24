@@ -5,6 +5,11 @@ import test, { mock } from "node:test";
 import assert from "node:assert/strict";
 
 const page = async () => {
+  // ...the loop held open while esbuild works: its service is unref'd, and on Node 22 the runner saw an empty loop and gave up on the build
+  const hold = setInterval(() => {}, 1000);
+  try { return await page_(); } finally { clearInterval(hold); }
+};
+const page_ = async () => {
   const { build } = await import("esbuild");
   const out = await build({ stdin: { resolveDir: new URL("..", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1"), loader: "jsx", contents: `
     import React from "react"; import { renderToStaticMarkup } from "react-dom/server.browser";
@@ -23,11 +28,14 @@ const page = async () => {
 let P_; const P = { then: (a, b) => (P_ ||= page()).then(a, b) };
 const words = { label: (k, s) => `${k}${s ? `:${s}` : ""}`, hint: () => "", doneHint: "", natTitle: "", repo: "Pick", repoHint: "" };
 const noop = () => {};
+// ...only setTimeout is mocked: Node 22 reads enable({apis}) and took the old array form as "every timer" - setImmediate too, so the awaited
+// beat never came; Node 20.10 knows only the array
+const onlyTimeouts = () => { try { mock.timers.enable({ apis: ["setTimeout"] }); } catch { mock.timers.enable(["setTimeout"]); } };
 const run = { reopen: noop, done: noop, note: noop, nat: noop, remind: noop, watch: noop, hand: noop, reshape: noop, kind: noop, priority: noop, repo: noop };
 
 test("each press that moves the walk on shows what it did on its own button first, then moves - Back and Next greyed through the beat", async () => {
   const m = await P;
-  mock.timers.enable(["setTimeout"]);
+  onlyTimeouts();
   try {
     for (const [verb, label, word] of [["nat", "Not for me", "Not for you - filed"], ["done", "Mark done", "Done"], ["close-note", "Close with a note", "Done · note kept"],
       ["watch", "Watch it", "Watching"]]) {

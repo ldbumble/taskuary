@@ -146,6 +146,22 @@ class FileRoutesTests(unittest.TestCase):
         self.assertIn('was moved or deleted', self.client.get(f'/api/attachments/{kept}').json()['detail'])
         self.assertIn('never saved', self.client.get(f'/api/attachments/{never}').json()['detail'])
 
+    def test_a_stored_type_never_reaches_a_header_as_written(self):
+        """Red team F4: a mail's ContentType "image/png, text/html" was served inline verbatim - a browser read it as a page on this origin,
+        where the owner token is - and a CR/LF in one broke the response. A file goes out as the type its name says, or one well-formed
+        type, sandboxed when opened as a page, never sniffed."""
+        d = config.home() / 'attachments' / '79'; d.mkdir(parents=True, exist_ok=True); self.addCleanup(shutil.rmtree, d, True)
+        page = b'<script>fetch("/api/connectors")</script>'
+        for n in ('photo.png', 'photo'): (d / n).write_bytes(page)
+        for n, ct in (('photo.png', 'image/png, text/html'), ('photo', 'image/png, text/html'), ('photo', 'text/html\r\nSet-Cookie: x=1'),
+                      ('photo.png', 'image/png\r\nX-Evil: 1')):
+            aid = self.store.add_attachment({'MessageId': 79, 'Name': n, 'ContentType': ct, 'Size': len(page), 'Inline': 0, 'Path': str(d / n)})
+            got = self.client.get(f'/api/attachments/{aid}')
+            self.assertEqual(got.status_code, 200, (n, ct))
+            t = got.headers['content-type']
+            self.assertNotIn('html', t, (n, ct)); self.assertNotIn(',', t); self.assertNotIn('x-evil', got.headers); self.assertNotIn('set-cookie', got.headers)
+            self.assertEqual((got.headers['x-content-type-options'], got.headers['content-security-policy']), ('nosniff', 'sandbox'))
+
     def test_a_mail_attachment_previews_on_the_road_an_agents_file_does(self):
         "The owner, 2026-11-16: a Word, Excel, CSV or text attachment only downloaded, while the same file an agent made opened in place."
         from openpyxl import Workbook

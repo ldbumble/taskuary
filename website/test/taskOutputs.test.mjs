@@ -217,14 +217,33 @@ test("a line that is only one of the task's files goes, and a path in backticks 
 // A PICTURE AT ITS OWN SHAPE (the design round, 2026-11-18; the owner: "images should be able to render however the agent wants it or make sense
 // to show"): every picture in a turn was squeezed into one fixed height - "make it bigger" drew a square half the chat's width. Its pixels reserve
 // its real room before it loads, as wide as it is and never wider than the chat; one with none known keeps the fixed room, so nothing jumps
-test("a turn's picture draws at its own shape, its room reserved before it loads", async () => {
-  const { pictureFit } = await import("../src/taskOutputs.js");
-  assert.deepEqual(pictureFit({ dims: [1024, 1024] }), { width: "min(100%, 1024px)", height: "auto", aspectRatio: "1024 / 1024", maxHeight: "80vh" });
-  assert.equal(pictureFit({ dims: [300, 900] }).aspectRatio, "300 / 900");
-  assert.equal(pictureFit({ name: "old.png" }), null);
-  const files = (await import("node:fs")).readFileSync(new URL("../src/TurnFiles.jsx", import.meta.url), "utf8");
-  assert.match(files, /width=\{f\.dims\?\.\[0\]\} height=\{f\.dims\?\.\[1\]\}/);
-  assert.match(files, /\.\.\.\(pictureFit\(f\) \|\| \{ maxHeight: 320 \}\)/);
+// ...AND A VIDEO TOO (the owner, 2026-11-23: an upright video stood full width, letterboxed in a 16:9 frame): an upright one is as narrow as its
+// shape at the height cap, its card hugging it in the turn's reading column - never the chat's whole width
+test("a turn's picture or video draws at its own shape, an upright one upright, its card hugging it", async () => {
+  const { mediaFit, MEDIA_H } = await import("../src/taskOutputs.js");
+  const up = mediaFit({ dims: [720, 1280] }), wide = mediaFit({ dims: [1280, 720] });
+  assert.equal(up.media.aspectRatio, "720 / 1280");
+  assert.equal(up.media.width, `min(100%, min(720px, calc(${MEDIA_H} * 720 / 1280)))`, "as wide as its height cap allows, never 100% of the card");
+  assert.equal(up.box.width, `min(100%, var(--tq-turn-item), max(260px, min(720px, calc(${MEDIA_H} * 720 / 1280))))`, "its card hugs it");
+  assert.equal(wide.media.aspectRatio, "1280 / 720");
+  assert.match(wide.box.width, /var\(--tq-turn-item\)/, "a landscape one fills the turn's column, not the chat");
+  assert.equal(mediaFit({ name: "old.png" }), null);
+  const fs = await import("node:fs"), src = (f) => fs.readFileSync(new URL(`../src/${f}`, import.meta.url), "utf8");
+  assert.match(src("TurnFiles.jsx"), /style=\{mediaFit\(f\)\?\.box\}/);
+  assert.match(src("PublishedPages.jsx"), /mediaFit\(page\)\?\.media/, "the player takes the video's own shape");
+  assert.doesNotMatch(src("PublishedPages.jsx"), /aspectRatio: "16 \/ 9"/, "no fixed 16:9 frame");
+});
+
+// ONE WIDTH FOR WHAT A TURN SETS DOWN (the owner, 2026-11-23: "make the card only use up the left side and a little more if it needs it"): the
+// cards of a turn, a card standing alone, a file a turn made and a view it showed all read --tq-turn-item, declared once
+test("every item of a turn reads the one turn width, declared once", async () => {
+  const fs = await import("node:fs"), src = (f) => fs.readFileSync(new URL(`../src/${f}`, import.meta.url), "utf8");
+  const all = fs.readdirSync(new URL("../src/", import.meta.url), { recursive: true }).filter((f) => /\.css$/.test(f)).map((f) => src(f)).join("\n");
+  assert.equal((all.match(/--tq-turn-item:/g) || []).length, 1, "declared in one place");
+  const ws = src("generalWorkspace.css"), rule = ws.match(/([^{}]*)\{\s*max-width: min\(100%, var\(--tq-turn-item\)\); \}/);
+  assert.ok(rule, "the turn's items are capped at the token");
+  for (const sel of ["[data-tq-turn-cards]", "[data-tq-row-cards]", ".tq-published-page"]) assert.ok(rule[1].includes(sel), sel);
+  assert.match(src("viewSpec.css"), /\.tq-dash\.tq-view \{ max-width: min\(100%, max\(var\(--tq-turn-item\), var\(--tq-view-need, 0px\)\)\); \}/);
 });
 
 // A FILE ANOTHER TURN MADE IS NOT DRAWN AGAIN (the walk, 2026-11-18): the agent's posts file stood whole under three answers that only spoke of it

@@ -211,10 +211,16 @@ export const turnFiles = ({ listed = [], id, words = "", did = "", tid, skip = [
   return deliverables([...by.values()].filter((r) => !no.has(baseName(r.path || r.name)) && !r.missing)).made;
 };
 
-// A PICTURE AT ITS OWN SHAPE (the owner, 2026-11-18: "images should be able to render however the agent wants it or make sense to show"): its
-// pixels, read by the server off the file (outputs.pixels), reserve its room before it loads - as wide as it is, never wider than the chat, its
-// height following, a very tall one fitted inside the window. null where they are not known: that one keeps the fixed room (publishedPages.css)
-export const pictureFit = (f) => {
+// A PICTURE OR A VIDEO AT ITS OWN SHAPE (the owner, 2026-11-18: "images should be able to render however the agent wants it"; 2026-11-23: an
+// upright video stood in a 16:9 frame the chat's whole width): its pixels, read by the server off the file (outputs.pixels), reserve its room
+// before it loads. `media`: as wide as it is, never wider than its card, never taller than MEDIA_H - its height follows its own ratio. `box`: the
+// card around it hugs it, in the turn's reading column (--tq-turn-item, generalWorkspace.css), and keeps room for its name and Download.
+// null where they are not known: that one keeps the fixed room (publishedPages.css)
+export const MEDIA_H = "60vh";
+export const mediaFit = (f) => {
   const [w, h] = Array.isArray(f?.dims) ? f.dims : [];
-  return w > 0 && h > 0 ? { width: `min(100%, ${w}px)`, height: "auto", aspectRatio: `${w} / ${h}`, maxHeight: "80vh" } : null;
+  if (!(w > 0 && h > 0)) return null;
+  const own = `min(${w}px, calc(${MEDIA_H} * ${w} / ${h}))`;
+  return { media: { width: `min(100%, ${own})`, height: "auto", aspectRatio: `${w} / ${h}` },
+    box: { width: `min(100%, var(--tq-turn-item), max(260px, ${own}))` } };
 };

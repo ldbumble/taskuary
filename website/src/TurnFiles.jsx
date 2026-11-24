@@ -5,7 +5,7 @@ import React, { useState } from "react";
 import { Button } from "@mui/material";
 import { attUrl, useSave } from "./fileSave.js";
 import { CopyFile, FileDialog, isText, Preview } from "./PublishedPages.jsx";
-import { pictureFit } from "./taskOutputs.js";
+import { mediaFit } from "./taskOutputs.js";
 
 const isPic = (f) => /^image\//.test(f?.content_type || "") && !/svg/.test(f?.content_type || "");
 
@@ -15,7 +15,7 @@ export default function TurnFiles({ files }) {
   return (
     <div className="tq-published" data-tq-turn-files="">
       {files.map((f) => (
-        <div key={f.path} className="tq-published-page" data-tq-turn-file={f.path}>
+        <div key={f.path} className="tq-published-page" data-tq-turn-file={f.path} style={mediaFit(f)?.box}>
           <div className="tq-published-row">
             <button type="button" className="tq-published-name" onClick={() => setViewing(f)} title="Open it here">
               <b>{f.name}</b><span>{isPic(f) ? "picture" : f.preview || "file"} · open</span></button>
@@ -23,9 +23,9 @@ export default function TurnFiles({ files }) {
             <Button size="small" href={attUrl(f, true)} data-tq-download="" onClick={(e) => { e.preventDefault(); save(f); }}>Download</Button>
           </div>
           {isPic(f)
-            ? <div className="tq-published-picture" {...(pictureFit(f) ? { "data-tq-natural": "" } : {})}>
+            ? <div className="tq-published-picture" {...(mediaFit(f) ? { "data-tq-natural": "" } : {})}>
                 <img src={attUrl(f)} alt={f.name} width={f.dims?.[0]} height={f.dims?.[1]} onClick={() => setViewing(f)}
-                  style={{ cursor: "zoom-in", objectFit: "contain", ...(pictureFit(f) || { maxHeight: 320 }) }} /></div>
+                  style={{ cursor: "zoom-in", objectFit: "contain", ...(mediaFit(f)?.media || { maxHeight: 320 }) }} /></div>
             : f.preview ? <Preview page={f} /> : null}
         </div>))}
       {err && <div className="tq-published-note" data-tq-file-error="">{err}</div>}

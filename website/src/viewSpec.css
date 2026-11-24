@@ -11,8 +11,11 @@
   --v-info: #3f6489; --v-info-bg: #f1f5f9; --v-info-bd: #d9e3ec;
   --v-ok: #2f6b34; --v-ok-bg: #f1f6f0; --v-ok-bd: #d6e5d4;
   --v-warn: #8a5a12; --v-warn-bg: #fbf6ec; --v-warn-bd: #eedfc0;
-  gap: var(--v-gap); margin: 6px 0 12px; max-width: 980px;
+  gap: var(--v-gap); margin: 6px 0 12px;
 }
+/* ...IN THE TURN'S READING COLUMN (--tq-turn-item, generalWorkspace.css), left-aligned; one whose table needs more takes what it needs
+   (--tq-view-need, measured by ViewSpec's Table), up to the chat's width. Two classes: the chat's own `* { max-width: 100% }` never beats it */
+.tq-dash.tq-view { max-width: min(100%, max(var(--tq-turn-item), var(--tq-view-need, 0px))); }
 :root[data-theme="dark"] .tq-view {
   --v-shadow: none;
   --v-info: #9cbbe0; --v-info-bg: rgba(79, 138, 203, .1); --v-info-bd: rgba(79, 138, 203, .28);

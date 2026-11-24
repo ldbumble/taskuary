@@ -15,7 +15,7 @@ import { copyText } from "./CopyCorner.jsx";
 import { Md } from "./md.jsx";
 import { useOverlay } from "./overlays.js";
 import { csvRows, fitSvg, lockDown } from "./shownPages.js";
-import { deliverables } from "./taskOutputs.js";
+import { deliverables, MEDIA_H, mediaFit } from "./taskOutputs.js";
 import "./publishedPages.css";
 
 // sandboxed WITHOUT allow-same-origin: the page's scripts run (charts, tabs) but in an opaque origin -
@@ -112,14 +112,15 @@ function DocPreview({ page }) {
 }
 
 // the browser's own player, fed from the file's address (attUrl: the token rides in its query, as a picture's does); a codec it cannot
-// play (an HEVC .mov) says so and points at Download, never a blank box
+// play (an HEVC .mov) says so and points at Download, never a blank box. A video at its own shape (mediaFit): an upright one is upright, never
+// a 16:9 frame the card's width with the clip letterboxed in it; one whose shape is not known takes its own as it reads it
 function MediaPlayer({ page }) {
   const [err, setErr] = useState(false), V = isVideo(page) ? "video" : "audio";
   if (err) return <div className="tq-published-note" data-tq-media-error="">This {V === "video" ? "video" : "sound"} can't play here - Download it to open it in your player.</div>;
   return (
     <div className="tq-published-media" data-tq-media={V}>
       <V controls preload="metadata" src={attUrl(page)} onError={() => setErr(true)} title={page.name}
-        style={V === "video" ? { display: "block", width: "100%", maxHeight: "70vh", aspectRatio: "16 / 9", background: "#000" } : { display: "block", width: "100%" }} />
+        style={V === "video" ? { display: "block", background: "#000", ...(mediaFit(page)?.media || { maxWidth: "100%", maxHeight: MEDIA_H }) } : { display: "block", width: "100%" }} />
     </div>
   );
 }
@@ -153,7 +154,7 @@ export function Preview({ page }) {
   if (err) return <div className="tq-published-note">{err}</div>;
   if (body == null) return <div className="tq-published-note"><CircularProgress size={12} /></div>;
   if (pdf) return <iframe className="tq-published-frame" title={page.name} src={body} />;
-  if (picture) return <div className="tq-published-picture"><img src={body} alt={page.name} /></div>;
+  if (picture) return <div className="tq-published-picture"><img src={body} alt={page.name} style={mediaFit(page)?.media} /></div>;
   if (text) return <pre className="tq-published-text">{body.length > 200000 ? `${body.slice(0, 200000)}\n…` : body}</pre>;
   if (page.preview === "table" || /csv/.test(type(page))) {
     const [head, ...rows] = csvRows(body);
@@ -216,7 +217,7 @@ const sizeOf = (n) => n < 1024 ? `${n} B` : n < 1048576 ? `${Math.round(n / 1024
 function OutputFile({ file: p, open, onToggle, verb = "" }) {
   const can = !!p.preview && !p.missing, [err, save, saved] = useSave();
   return (
-    <div className="tq-published-page" data-tq-output={p.path} data-tq-pdf={isPdf(p) ? "" : undefined}>
+    <div className="tq-published-page" data-tq-output={p.path} data-tq-pdf={isPdf(p) ? "" : undefined} style={mediaFit(p)?.box}>
       <div className="tq-published-row">
         {/* ...its name opens it too, as a page's does: a PDF clicked by its name was read nowhere */}
         <button type="button" className={`tq-published-name${can ? "" : " tq-published-file"}`} disabled={!can} onClick={onToggle}
@@ -286,7 +287,7 @@ export default function PublishedPages({ pages, open: openAll = false, verb = ""
 function PageRow({ p, open, onToggle, verb }) {
   const [err, save, saved] = useSave();
   return (
-    <div className="tq-published-page" data-tq-pdf={isPdf(p) ? "" : undefined}>
+    <div className="tq-published-page" data-tq-pdf={isPdf(p) ? "" : undefined} style={mediaFit(p)?.box}>
       <div className="tq-published-row">
         <button type="button" className="tq-published-name" disabled={!p.url} onClick={onToggle}
           title={p.url ? (open ? "Hide it" : "Show it here") : "No copy was kept - open it on claude.ai"}>

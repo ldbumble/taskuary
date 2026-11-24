@@ -31,6 +31,7 @@ import { RecentRoutes, TodayUsage } from "./RouteRules.jsx";
 import AgentPermissions from "./AgentPermissions.jsx";
 import SharedLinks from "./SharedLinks.jsx";
 import SavedSignins from "./SavedSignins.jsx";
+import SignupsUse from "./SignupsUse.jsx";
 import HandSignature from "./HandSignature.jsx";
 import SendFilter from "./SendFilter.jsx";
 import AboutYou from "./AboutYou.jsx";
@@ -707,7 +708,7 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
     Sharing: panel("panel:sharedlinks", <SharedLinks />),
     Assistant: panel("panel:digest", <MorningDigest />),            // ...the digest it opens the main screen with: its time and on/off (2026-11-22)
     Replies: panel("panel:handsig", <HandSignature />),              // the signature forms are signed with sits beside the one under the email
-    "Agent permissions": <>{panel("panel:trusted", <TrustedSenders />)}{panel("panel:signins", <SavedSignins />)}{panel("panel:sendfilter", <SendFilter />)}</>,
+    "Agent permissions": <>{panel("panel:trusted", <TrustedSenders />)}{panel("panel:signins", <SavedSignins />)}{panel("panel:signups", <SignupsUse />)}{panel("panel:sendfilter", <SendFilter />)}</>,
   };
   // no coding tool connected: the Coding agent section has nothing to set (capabilities.js)
   // ...and the phone's knobs are Phone & chats' (the owner, 2026-11-06: "it's not clear where that is"), never a Configuration group too

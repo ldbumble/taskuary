@@ -1588,3 +1588,86 @@ def test_an_account_a_site_took_on_one_task_is_known_on_another_and_a_sign_up_it
     ok, said = signing_up(s, refused, UpPage('https://www.inbox.example/signup'), lambda *a: {'ok': False, 'why': 'That email is already in use'})
     assert not ok and 'already in use' in said, said
     assert [r['Subject'] for r in ledger.rows(s, 'account')] == ['rentscope.example'] and not signin.saved(s, 'inbox.example')
+
+
+# ── SIGN-UPS USE HIS MAILBOX AND DETAILS (the owner, 2026-11-24): real sites refuse a throwaway inbox ───────────────────────────────────
+MAILBOX = 'alex@northwind.example'
+def his_mailbox(s, **d):
+    s.save_source({'Channel': 'email', 'Address': MAILBOX, 'Owner': 'o', 'Active': 1, 'ConfigJson': '{}'}, 'o')
+    return signin.set_identity(s, {'mailbox': MAILBOX, **d})
+
+
+class WhoPage(UpPage):
+    "A sign-up form whose email, company and name boxes Taskuary fills from what sign-ups use (signin.WHO): what it was asked to fill, kept."
+    def __init__(self, *a, **k): super().__init__(*a, **k); self.who = []
+    def js(self, expr):
+        if expr.startswith(signin.WHO):
+            self.who.append(json.loads(expr[len(signin.WHO) + 1:-1])); self.user = self.who[-1].get('mailbox') or self.user
+            return [k for k in ('mailbox', 'company', 'name') if self.who[-1].get(k)]
+        return super().js(expr)
+
+
+def test_a_sign_up_uses_his_mailbox_and_details_on_his_press_and_its_code_comes_back_to_that_mailbox():
+    """A trial site refused the address an agent made for itself. With Sign-ups use set, the sign-up is one card that names his mailbox and
+    details - nothing of his typed before the press, the judge not asked - and his press fills the form's email (the agent's throwaway replaced),
+    company and name boxes, makes and keeps the password under his mailbox, and the code the site emails to that mailbox is typed from it."""
+    from taskuary import browsergate
+    s = MemoryStore(); tid = Factory(s).task('Trial account on RentScope')
+    his_mailbox(s, company='Northwind', name='Alex Doyle')
+    page = WhoPage(user='alex.trial77@tempbox.example'); page.fields_ = [{'k': 'email', 't': 'email', 'v': 'alex.trial77@tempbox.example'}]
+    judged = []
+    with gate(False), mock.patch.object(browsergate, 'judge', lambda *a, **k: judged.append(a) or [{'hold': False}]), on_page(page.href), \
+         mock.patch.object(signin, 'connect', return_value=page):
+        ok, said = signin.signup(s, tid, 'sess1')
+    assert ok and said.startswith('HELD for the owner') and not judged and not page.who, said
+    [rv] = s._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action' AND Status='pending'", (tid,))
+    p = json.loads(rv['DraftText'])
+    assert p['what'] == f'Make an account on rentscope.example with {MAILBOX} and Northwind, Alex Doyle', p['what']
+    assert p['as'] == {'mailbox': MAILBOX, 'company': 'Northwind', 'name': 'Alex Doyle'}
+    again, codes, told = WhoPage(user='alex.trial77@tempbox.example'), [], []
+    class Own:
+        def __init__(self, sid, url): self.url = url
+        def __enter__(self): again.href = self.url; return again, True
+        def __exit__(self, *a): pass
+    def send(sid, site, c):
+        s.add_message({'Channel': 'email', 'SourceName': MAILBOX, 'FromEmail': 'no-reply@rentscope.example', 'FromName': 'RentScope',
+                       'RecipientsJson': json.dumps({'to': [MAILBOX]}), 'Subject': 'Your RentScope code', 'BodyText': 'Your code is 552019.'})
+        c.go('code', 'https://www.rentscope.example/verify'); return {'ok': True}
+    def code(c, site, make): codes.append(make()); c.go('data', 'https://www.rentscope.example/data')
+    with mock.patch.object(browserview, 'pages', return_value=[]), mock.patch.object(signin, 'tab_at', Own), mock.patch.object(signin, 'type_new', lambda *a: 1), \
+         mock.patch.object(signin, 'send_new', send), mock.patch.object(signin, '_type_code', code), mock.patch.object(signin, 'SETTLE', 0), \
+         mock.patch.object(browsergate, '_tell', lambda s_, t, text, **k: told.append(text)):
+        browsergate.perform(s, tid, p)
+    assert again.who == [p['as']] and codes == ['552019'], (again.who, codes)
+    assert vault.unseal(signin.saved(s, 'rentscope.example')['User']) == MAILBOX
+    assert told[0].startswith(f'The owner approved the sign-up on rentscope.example. rentscope.example took the sign-up as {MAILBOX}'), told
+
+
+def test_sign_ups_use_only_a_mailbox_taskuary_reads_and_empty_is_as_before():
+    """A code sent where Taskuary reads nothing reaches nobody: a mailbox that is not connected is refused, and one disconnected later is no
+    longer used. Empty, a sign-up is today's: the judge decides, the form goes as the agent filled it, and nothing of his is typed."""
+    s = MemoryStore(); tid = Factory(s).task('Market data')
+    with pytest.raises(ValueError): signin.set_identity(s, {'mailbox': 'someone@elsewhere.example'})
+    assert signin.identity(s) == {}
+    his_mailbox(s, phone='555-0100')
+    assert signin.identity(s) == {'mailbox': MAILBOX, 'phone': '555-0100'}
+    for r in s.list_sources(): s.delete_source(r['SourceId'])
+    assert signin.identity(s) == {'phone': '555-0100'}
+    signin.set_identity(s, {})
+    page = WhoPage()
+    ok, said = signing_up(s, tid, page, lambda sid, site, c: c.go('data', 'https://www.rentscope.example/data') or {'ok': True, 'user': USER})
+    assert ok and not said.startswith('HELD') and page.who == [], said
+
+
+def test_the_owner_alone_reads_and_sets_what_sign_ups_use():
+    s = server.store
+    s.save_source({'Channel': 'email', 'Address': MAILBOX, 'Owner': 'o', 'Active': 1, 'ConfigJson': '{}'}, 'o')
+    try:
+        r = c.post('/api/signins/as', json={'mailbox': MAILBOX, 'company': ' Northwind '})
+        assert r.status_code == 200 and r.json()['data'] == {'mailbox': MAILBOX, 'company': 'Northwind'}, r.text
+        got = c.get('/api/signins/as').json()
+        assert got['data']['mailbox'] == MAILBOX and MAILBOX in got['mailboxes']
+        assert c.post('/api/signins/as', json={'mailbox': 'x@elsewhere.example'}).status_code == 422
+        assert c.get('/api/signins/as', headers=AGENT).status_code == 403
+        assert c.post('/api/signins/as', json={'mailbox': ''}, headers=AGENT).status_code == 403
+    finally: signin.set_identity(s, {})

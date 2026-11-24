@@ -12,7 +12,8 @@
     "ai_route_mode",
     "ai_route_strong_cap",
     "auto_ai_daily_calls",
-    "phone_assistant"
+    "phone_assistant",
+    "signup_identity"
   ],
   "_panels": "What a section draws as a PANEL rather than as knobs, by the words a person would type for it - search had only the knobs to read, so the saved sign-ins were found by no word at all (the owner, 2026-11-10: \"don't see the vault settings either for saved passwords. where is it?\"). SettingsView wraps each panel under its id and a search hit scrolls to it; search.py offers the same rows in the top search; Connections' Saved sign-ins card reads its words from here. `title` is the panel's own heading, `group` the Configuration section it sits in.",
   "panels": {
@@ -32,7 +33,9 @@
     "panel:signins": {"title": "Saved sign-ins", "group": "Agent permissions",
       "words": "saved sign-ins sign in signin sign-in login log in password passwords vault credentials user name site portal"},
     "panel:sendfilter": {"title": "Your own tools that send", "group": "Agent permissions",
-      "words": "tools that send send filter mcp servers connectors claude.ai connectors leave out keep tool sending email post"}
+      "words": "tools that send send filter mcp servers connectors claude.ai connectors leave out keep tool sending email post"},
+    "panel:signups": {"title": "Sign-ups use", "group": "Agent permissions",
+      "words": "sign-ups use sign up signup new account accounts register trial email mailbox company name phone address details identity"}
   },
   "groups": [
     "Which AI does what",
@@ -248,6 +251,12 @@
       "type": "text",
       "desc": "Tried in order when a coding session's AI has used its allowance, is signed out or will not start. * = every other one you have set up.",
       "help": "Only for an AI that cannot run - a limit, a sign-in, a missing program - never for one that made a mistake. The task, its messages, its files and its repository go to the next AI, which starts a fresh conversation on its own model."
+    },
+    "signup_identity": {
+      "group": "Agent permissions",
+      "label": "Sign-ups use",
+      "type": "detail",
+      "desc": "The mailbox and company details an agent's sign-up fills in - each sign-up still waits for your press."
     },
     "acp_cli": {
       "group": "Agent permissions",

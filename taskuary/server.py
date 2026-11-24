@@ -768,6 +768,35 @@ def signins(request: Request):
     return {'data': signin.listing(store)}
 
 
+# WHAT SIGN-UPS USE (signin.identity): one of his connected mailboxes and his company details - the mailboxes to pick from beside it. Under
+# /api/signins, so no session reads or sets it (guard)
+class SignupAsBody(BaseModel):
+    mailbox: str = ''
+    company: str = ''
+    name: str = ''
+    phone: str = ''
+    address: str = ''
+
+
+@app.get('/api/signins/as')
+def signup_as(request: Request):
+    from . import signin
+    from .ingest import owner_addresses
+    _owner_only(request, "what sign-ups use is the owner's")
+    return {'data': signin.identity(store), 'mailboxes': sorted(owner_addresses(store))}
+
+
+@app.post('/api/signins/as')
+def set_signup_as(body: SignupAsBody, request: Request):
+    from . import signin
+    _owner_only(request, "what sign-ups use is the owner's")
+    prev = signin.identity(store)
+    try: now = signin.set_identity(store, body.model_dump(), ACTOR)
+    except ValueError as e: raise HTTPException(422, str(e))
+    store.audit('setting', 0, 'set', ACTOR, detail={'key': signin.IDENTITY, 'from': prev, 'to': now})
+    return {'data': now}
+
+
 @app.delete('/api/signins/{site}')
 def signin_remove(site: str, request: Request):
     from . import signin

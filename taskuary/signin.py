@@ -1744,6 +1744,67 @@ def _dead_inbox(store, tid, site: str, addr: str) -> str:
     return head + 'Taskuary reads no mailbox, so the owner is asked once on this task which address to use; go on with what does not hang on it.'
 
 
+# ── WHO A SIGN-UP IS (the owner, 2026-11-24): real sites refuse a throwaway inbox ──────────────────────────────────────────────────────
+# Settings > Agent permissions > Sign-ups use: one of his connected mailboxes and, if he likes, his company, name, phone and address. Set, a
+# sign-up's email, company, name, phone and address boxes are filled from it at his press - by the boxes' structure (their autocomplete, type,
+# name and id, as the vault's fill finds a user box) - its code comes back to that mailbox, and every such sign-up is one card naming them.
+# Empty, a sign-up is as before.
+IDENTITY = 'signup_identity'
+IDENTITY_KEYS = ('mailbox', 'company', 'name', 'phone', 'address')
+def identity(store) -> dict:
+    "What sign-ups use, as set - {} where nothing is. A mailbox no longer connected is dropped: a code sent there would reach nobody."
+    from .ingest import owner_addresses
+    try: d = json.loads(store.get_setting(IDENTITY) or '{}')
+    except ValueError: d = {}
+    d = {k: str(d.get(k) or '').strip() for k in IDENTITY_KEYS} if isinstance(d, dict) else {}
+    if d.get('mailbox') and d['mailbox'].lower() not in owner_addresses(store): d['mailbox'] = ''
+    return {k: v for k, v in d.items() if v}
+
+
+def set_identity(store, d: dict, by='owner') -> dict:
+    "Keep what sign-ups use. ValueError: a mailbox Taskuary does not read."
+    from .ingest import owner_addresses
+    d = {k: ' '.join(str((d or {}).get(k) or '').split())[:200] for k in IDENTITY_KEYS}
+    if d['mailbox'] and d['mailbox'].lower() not in owner_addresses(store):
+        raise ValueError(f"{d['mailbox']} is not a mailbox Taskuary reads - connect it under Connections first")
+    store.set_setting(IDENTITY, json.dumps({k: v for k, v in d.items() if v}), by)
+    return identity(store)
+
+
+def identity_words(who: dict) -> str:
+    "The mailbox and details a sign-up will use, as his card names them: 'with alex@northwind.example and Northwind, Alex Doyle' - '' for none."
+    rest, m = ', '.join(who[k] for k in IDENTITY_KEYS[1:] if who.get(k)), who.get('mailbox')
+    return f'with {m}' + (f' and {rest}' if rest else '') if m else f'with {rest}' if rest else ''
+
+
+# ...each box read by its structure only: the autocomplete token the page gives it, its type, then its name and id. The email box is always
+# his mailbox (the agent's throwaway replaced); the others are filled only where empty. -> the kinds filled
+WHO = "((who) => { " + DEEP + r"""
+  const vis = (e) => { const r = e.getBoundingClientRect(); return !e.disabled && !e.readOnly && r.width > 2 && r.height > 2; };
+  const marked = deepAll('form[data-tq-signup]')[0], ins = deepAll('input, textarea').filter(vis)
+    .filter((e) => !['hidden', 'password', 'checkbox', 'radio', 'submit', 'button', 'image', 'reset', 'file'].includes(e.type) && (!marked || marked.contains(e)));
+  const ac = (e) => String(e.autocomplete || '').toLowerCase(), nm = (e) => [e.name, e.id].join(' ');
+  const kind = (e) => { const a = ac(e), n = nm(e);
+    if (a.includes('email') || e.type === 'email' || /e-?mail/i.test(n)) return 'mailbox';
+    if (a.startsWith('tel') || a.includes(' tel') || e.type === 'tel' || /phone|mobile/i.test(n)) return 'phone';
+    if (a.includes('organization') || /company|organi[sz]ation|business/i.test(n)) return 'company';
+    if (a.includes('given-name') || /first.?name|given|fname/i.test(n)) return 'first';
+    if (a.includes('family-name') || /last.?name|family|surname|lname/i.test(n)) return 'last';
+    if (/(^| )name$/.test(a) || /full.?name|^name$|your.?name/i.test(n.trim())) return 'name';
+    if (a.includes('street-address') || a.includes('address-line1') || /street|address/i.test(n)) return 'address';
+    return ''; };
+  const parts = String(who.name || '').trim().split(/\s+/), val = { ...who, first: parts[0] || '', last: parts.length > 1 ? parts.slice(1).join(' ') : '' };
+  const set = (e, v) => { const p = Object.getOwnPropertyDescriptor(e.tagName === 'TEXTAREA' ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype, 'value');
+    p.set.call(e, v); e.dispatchEvent(new Event('input', { bubbles: true })); e.dispatchEvent(new Event('change', { bubbles: true })); };
+  const did = []; for (const e of ins) { const k = kind(e), v = val[k];
+    if (!k || !v || (k !== 'mailbox' && e.value)) continue; set(e, v); if (!did.includes(k)) did.push(k); } return did; })"""
+def fill_identity(c, site: str, who: dict) -> list:
+    "Fill the sign-up form's boxes on the pinned site from what sign-ups use (WHO). -> the kinds filled."
+    _guard(c, site, '')
+    scope(c)
+    return c.js(f'{WHO}({json.dumps(who)})') or []
+
+
 def signup(store, tid, sid) -> tuple[bool, str]:
     """`agent-browser signup`: the agent filled a sign-up form but its password. -> (made or held, what the command prints)."""
     from . import browsergate, browserview, proposals, say
@@ -1759,24 +1820,29 @@ def signup(store, tid, sid) -> tuple[bool, str]:
         # the address read was another tab's) - the card names that tab, and his press runs there only (browsergate.held_tab)
         here = str(c.js('location.href') or '')
         if site_of(here) and site_of(here) != site: url, site = here, site_of(here)
-        if dead := unread_inbox(store, f := c.js(FORM) or {}): return False, _dead_inbox(store, tid, site, dead)
-        # ...WHAT THIS ACT DOES IS KNOWN, so the page is read as it (walk 12): it sends a password Taskuary makes with the boxes the agent filled -
-        # an account's form, never a message (pw) - and spends money only where a box of the form takes a card (`pay`: the page's own cc-
-        # marks). Neither "it spends your money" over a free sign-up nor "speaks for you" over a user name is the judge's to say
-        pg = {**browsergate.page(sid), 'pw': True}
+        # ...his mailbox on the form (Sign-ups use) replaces whatever address the agent typed, so only an unset one is checked for a dead inbox
+        f, who = c.js(FORM) or {}, identity(store)
+        if not who.get('mailbox') and (dead := unread_inbox(store, f)): return False, _dead_inbox(store, tid, site, dead)
         name = site_name(url, sid) or site
-        v = browsergate.judge(store, [{'verb': 'press', 'args': [], 'raw': f'send the filled sign-up form on {name}, creating an account there'}], pg,
-                              said=browsergate.asked(store, tid))[0]
-        if v.get('kind') == 'money' and not f.get('pay'): v = {'hold': False}
-        if not v['hold']: return _make(store, tid, sid, site, c)
+        # ...HIS OWN MAILBOX AND DETAILS GO ONLY ON HIS PRESS: a sign-up that uses them is always one card, the judge not asked
+        if who: v = {'hold': True, 'why': 'it signs up with your own mailbox and details'}
+        else:
+            # ...WHAT THIS ACT DOES IS KNOWN, so the page is read as it (walk 12): it sends a password Taskuary makes with the boxes the agent
+            # filled - an account's form, never a message (pw) - and spends money only where a box of the form takes a card (`pay`: the page's
+            # own cc- marks). Neither "it spends your money" over a free sign-up nor "speaks for you" over a user name is the judge's to say
+            pg = {**browsergate.page(sid), 'pw': True}
+            v = browsergate.judge(store, [{'verb': 'press', 'args': [], 'raw': f'send the filled sign-up form on {name}, creating an account there'}], pg,
+                                  said=browsergate.asked(store, tid))[0]
+            if v.get('kind') == 'money' and not f.get('pay'): v = {'hold': False}
+            if not v['hold']: return _make(store, tid, sid, site, c)
         f = c.js(FORM) or {}
         if not f.get('password'): return False, _no_box(site)
         # ...and the card says only what is true of it, from these facts (say.owner): the judge's "under your name and email" over a form
-        # that asked neither, "you asked to see this Submit first" of a Submit he never named (walk 12)
-        what = say.owner({'kind': 'signup_held', 'site': name})
+        # that asked neither, "you asked to see this Submit first" of a Submit he never named (walk 12) - and the mailbox and details it uses
+        what = say.owner({'kind': 'signup_held', 'site': name, 'as': identity_words(who)})
         proposals.queue(store, tid, {'action': 'browser_act', 'sid': str(sid), 'args': ['signup'], 'signup': site, 'url': here or url, 'site': site,
                                      'name': name, **({'tab': t} if (t := getattr(c, 'target', '')) else {}), 'fields': f.get('fields') or [], 'command': f'send the sign-up form on {name}',
-                                     'what': what, 'why': v['why']}, 'agent')
+                                     'what': what, 'why': v['why'], **({'as': who} if who else {})}, 'agent')
         return True, (f'HELD for the owner: {what} ({v["why"]}). It stands as one card in the chat; their press fills this form again as you '
                       'left it, makes and keeps the password and sends it - even after you have moved on - and you are told what the site '
                       'answered. Do not ask them in words; go on with the rest of the work.' + browsergate.stands(store, tid))
@@ -1788,15 +1854,18 @@ def _no_box(site) -> str:
             '`agent-browser signup` on the page that asks for the password.')
 
 
-def _make(store, tid, sid, site, c, fill=None, send=None, said: dict = None) -> tuple[bool, str]:
+def _make(store, tid, sid, site, c, fill=None, send=None, said: dict = None, who: dict = None) -> tuple[bool, str]:
     """Type a new password into the page `c` is on, keep it, send the form, and say what the site answered. Kept BEFORE it is sent: a restart
-    in those seconds left an account nobody could sign in to (2026-11-18). The row it replaced comes back if the site turns the form down."""
+    in those seconds left an account nobody could sign in to (2026-11-18). The row it replaced comes back if the site turns the form down.
+    `who`: the mailbox and details his card named (Sign-ups use), filled into their boxes first."""
     f = c.js(FORM) or {}
     if not f.get('password'): return False, _no_box(site)
     pw, prev = new_password(), _raw(store, site)
     user = f.get('user') or _USERS.get((int(tid), site), '')
     typing(store, tid, site, sid)
-    try: (fill or type_new)(sid, site, pw, c)
+    try:
+        if who and 'mailbox' in fill_identity(c, site, who): user = who['mailbox']
+        (fill or type_new)(sid, site, pw, c)
     except Exception as e:
         why = str(e) if isinstance(e, SignInError) else 'the browser could not be reached'
         _audit(store, tid, site, 'vault', False, why)
@@ -1883,7 +1952,7 @@ def send_held(store, tid, sid, p) -> dict:
         # his yes to one site's sign-up ran on another site's page)
         if p.get('tab') and held_on(sid, p):
             c = Cdp(_cdp_url(sid), str(p['tab']), exact=True)
-            try: ok, line = _make(store, tid, sid, site, c, said=got)
+            try: ok, line = _make(store, tid, sid, site, c, said=got, who=p.get('as'))
             finally: c.close()
         # ...ELSE ITS FORM OPENED AGAIN at its own address in a tab of Taskuary's own, its kept boxes filled back (walk 8, 2026-11-20: the agent
         # took its tab on to the next vendor, as it was told it could, and three held sign-ups went off their cards before he pressed)
@@ -1891,7 +1960,7 @@ def send_held(store, tid, sid, p) -> dict:
             with tab_at(sid, url) as (c, _):
                 if not _same(c.js('location.href'), url): raise SignInError(f'its sign-up page at {url} did not open again')
                 c.js(f'{REFILL}({json.dumps(p.get("fields") or [])})')
-                ok, line = _make(store, tid, sid, site, c, said=got)
+                ok, line = _make(store, tid, sid, site, c, said=got, who=p.get('as'))
     except SignInError as e: ok, line, got = False, f'Nothing was sent: {e}.', {'why': str(e)}
     _tell(store, tid, f'The owner approved the sign-up on {site}. {line}', wake=True)
     # ...his card says what became of it in his words (say.owner) - the agent's own next step ("run `agent-browser signup` again") is the agent's

@@ -9507,9 +9507,11 @@ def quickbooks_status(cid: int):
             'realm_id': conf.get('realm_id') or '', 'env': conf.get('env') or 'production', 'has_app': bool(conf.get('client_id') and conf.get('client_secret'))}
 
 @app.get('/api/connectors/{cid}/quickbooks/authorize')
-def quickbooks_authorize(cid: int):
-    """Where the browser goes to say yes. The state carries the connector id back."""
+def quickbooks_authorize(request: Request, cid: int):
+    """Where the browser goes to say yes. The state carries the connector id back - and only the owner is handed it: an agent holding one
+    signed in to a company of its own choosing through its own browser, and the card posted his bills there (red team F6)."""
     from . import quickbooks as qb
+    _owner_only(request, OAUTH_OWNER)
     c = store.get_connector(cid)
     if not c or c['Type'] != 'quickbooks': raise HTTPException(404, 'not a QuickBooks connector')
     nonce = secrets.token_urlsafe(16); _QB_STATES[cid] = (nonce, time.time())
@@ -9517,6 +9519,7 @@ def quickbooks_authorize(cid: int):
     except qb.QuickBooksError as e: raise HTTPException(409, str(e))
 
 _QB_STATES = {}      # connector id -> (nonce, issued at): a callback must answer a Connect we actually started
+OAUTH_OWNER = "connecting an account is the owner's own sign-in - an agent is never handed its link (the state in it re-points the card)"
 
 @app.get('/api/quickbooks/callback', response_class=HTMLResponse)
 def quickbooks_callback(code: str = None, state: str = '', realmId: str = None, error: str = None):
@@ -9562,8 +9565,9 @@ def zoho_status(cid: int):
             'has_app': bool(conf.get('client_id') and conf.get('client_secret'))}
 
 @app.get('/api/connectors/{cid}/zoho/authorize')
-def zoho_authorize(cid: int):
+def zoho_authorize(request: Request, cid: int):
     from . import zoho
+    _owner_only(request, OAUTH_OWNER)
     c = store.get_connector(cid)
     if not c or c['Type'] != 'zoho_invoice': raise HTTPException(404, 'not a Zoho Invoice connector')
     nonce = secrets.token_urlsafe(16); _ZOHO_STATES[cid] = (nonce, time.time())
@@ -9614,8 +9618,9 @@ def linkedin_status(cid: int):
             'member': conf.get('member_name') or '', 'days_left': linkedin.days_left(conf)}
 
 @app.get('/api/connectors/{cid}/linkedin/authorize')
-def linkedin_authorize(cid: int):
+def linkedin_authorize(request: Request, cid: int):
     from . import linkedin
+    _owner_only(request, OAUTH_OWNER)
     c = store.get_connector(cid)
     if not c or c['Type'] != 'linkedin': raise HTTPException(404, 'not a LinkedIn connector')
     nonce = secrets.token_urlsafe(16); _LI_STATES[cid] = (nonce, time.time())

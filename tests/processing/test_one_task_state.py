@@ -188,6 +188,8 @@ def read(name, tmp_path_factory) -> tuple:
     "(rail, All, key, stage) for the case, each off the surface's own road - one store and one rail build a case."
     if name in READ: return READ[name]
     s = SQLiteStore(str(tmp_path_factory.mktemp(name) / 'one.db')); s.set_setting('funnel_hours', '72', 'fixture')
+    # ...Erin is somebody he trusts: these are the agent's states, and a stranger's untrusted mail would hold every one of them for Trust
+    s.remember_trust('', 'erin@northwind.example', 'fixture')
     tid, live = SAYS[name][0](s); live, seen = list(live), {}
     real = processing_unread.card_for
     def card_for(store, item, compact, *a, **k):

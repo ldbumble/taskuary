@@ -435,7 +435,7 @@ def test_a_yes_its_agent_was_handed_is_said_once_not_again_under_what_the_owner_
     told, kept = [], s.add_review({'TaskId': tid, 'Kind': 'action', 'Status': 'pending', 'DraftText': '{}', 'Reason': 'post it'})
     time.sleep(1.1)
     s.decide_review(kept, 'approved', '{}', 'owner')
-    with mock.patch.object(general, 'to_agent', side_effect=lambda st, t, said, actor='owner', heard=None: told.append(said) or (heard and heard('told')) or 'told'):
+    with mock.patch.object(general, 'to_agent', side_effect=lambda st, t, said, actor='owner', heard=None, **kw: told.append(said) or (heard and heard('told')) or 'told'):
         assert general.approved(s, tid, 'Approve', 'post - {"url": "https://social.example/p/1"}', review=kept) == 'told'
     assert told == [''], 'the wake carries no words of its own'
     assert events.take(s, tid)[0].count('he approved it - it was done') == 1, 'said once, by its card'

@@ -36,7 +36,7 @@ class ShouldBeATaskTests(unittest.TestCase):
         prop = concierge.propose_for(self.s, None, {'verb': 'mine', 'on_item': True}, {'kind': 'fyi', 'lane': 'fyi', 'mid': self.mid, 'key': f'msg:{self.mid}'}, '')
         self.assertEqual(prop['label'], 'Make it a task')
 
-    def test_pressing_it_makes_an_open_task_and_triage_reads_the_lesson_on_the_next_one_like_it(self):
+    def test_pressing_it_makes_an_open_task_and_triage_reads_the_lesson_once_three_presses_bear_it_out(self):
         seen = []
         with teaching(LINE, seen=seen):
             r = self.c.post(f'/api/messages/{self.mid}/mine', json={'kind': 'task'})
@@ -47,16 +47,23 @@ class ShouldBeATaskTests(unittest.TestCase):
         # ...the lesson the model wrote, from the item and triage's own miss - the same table Not a task writes, the other way round
         self.assertIn('Made a task - triage had filed it as nothing to do', seen[0])
         self.assertIn('a vendor event notice', seen[0], "what triage had said rides with it")
-        self.assertIn(LINE, self.s.get_doc('learned'))
         from taskuary import memory
         self.assertEqual([l['kind'] for l in memory.lessons(self.s) if l['ev'] == f'msg{self.mid}'], ['made_task'])
-        # ...and the next mail of the same shape is triaged with that line in its prompt (the model's answer is the model's)
+        # ...ONE PRESS IS ONE PRESS (the owner, 2026-11-24): an episode, not yet a line triage reads
+        self.assertNotIn(LINE, self.s.get_doc('learned'))
         prompts = []
         def brain(system, user, **k): prompts.append(system); return FYI()
-        ingest.ingest_message(self.s, {**MSG, 'external_id': 'web-2', 'conversation_id': 'conv-web-2',
-                                       'subject': 'Reminder: your Trainly webinar on payroll audits starts in one hour'}, llm=brain)
+        def next_one(n, llm):
+            return ingest.ingest_message(self.s, {**MSG, 'external_id': f'web-{n}', 'conversation_id': f'conv-web-{n}',
+                                                  'subject': f'Reminder: your Trainly webinar number {n} starts in one hour'}, llm=llm)['message_id']
+        next_one(2, brain)
+        self.assertFalse(any(LINE in p for p in prompts), 'one press is not yet a rule triage reads')
+        # ...the same press on two more like it is the pattern: in use, and the next mail of the shape is triaged with it in front
+        for n in (3, 4):
+            with teaching(LINE): self.assertEqual(self.c.post(f'/api/messages/{next_one(n, FYI)}/mine', json={'kind': 'task'}).status_code, 200)
+        self.assertIn(LINE, self.s.get_doc('learned'))
+        prompts.clear(); next_one(5, brain)
         self.assertTrue(any(LINE in p for p in prompts), 'the learned line reached triage')
-
 
 if __name__ == '__main__':
     unittest.main()

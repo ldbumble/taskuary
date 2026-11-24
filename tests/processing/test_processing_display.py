@@ -28,6 +28,9 @@ def seeded(*, body=None, review=False):
         "FromName": "Dana", "FromEmail": "dana@example.test", "SentAt": stamp(-30),
         "BodyText": body or "Please reconcile the close.", "Status": "routed",
     })
+    # ...Dana is somebody he trusts, and the task's origin is judged as its arrival judges it (origin.of_task writes it down the first time)
+    from taskuary import origin
+    store.remember_trust("inbox", "dana@example.test", "fixture"); origin.of_task(store, tid)
     rid = None
     if review:
         rid = store.add_review({

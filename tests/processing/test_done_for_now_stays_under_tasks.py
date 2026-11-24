@@ -18,6 +18,7 @@ STAMP = datetime.now().replace(microsecond=0).isoformat(sep=' ')
 @pytest.fixture
 def store(tmp_path):
     s = SQLiteStore(str(tmp_path / 'done.db')); s.set_setting('funnel_hours', '72', 'fixture')
+    for who in ('erin', 'ray'): s.remember_trust('', f'{who}@northwind.example', 'fixture')     # ...people he trusts: a stranger's holds it for Trust
     yield s
     s.close()
 

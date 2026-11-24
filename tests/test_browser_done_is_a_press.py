@@ -129,7 +129,7 @@ class DoneIsAPress(unittest.TestCase):
 
     def test_a_resting_agent_is_started_on_it(self):
         rid, woke = self.turn(), []
-        with mock.patch.dict('taskuary.terminal.SESSIONS', {}, clear=True), mock.patch.object(general, 'to_agent', lambda s, t, w, *a: woke.append(w) or 'woke'):
+        with mock.patch.dict('taskuary.terminal.SESSIONS', {}, clear=True), mock.patch.object(general, 'to_agent', lambda s, t, w, *a, **kw: woke.append(w) or 'woke'):
             self.assertTrue(ws.answer(self.s, self.tid, rid, '', press=True)['delivered'])
         self.assertIn('open it again', woke[0]); self.assertEqual(self.open(), [])
 
@@ -140,7 +140,7 @@ class DoneIsAPress(unittest.TestCase):
         from taskuary import taskstate
         rid, woke = self.turn(), []
         bg.HANDS.clear()
-        with mock.patch.dict('taskuary.terminal.SESSIONS', {}, clear=True), mock.patch.object(browserview, 'state', return_value={'open': False}),                 mock.patch.object(general, 'to_agent', lambda s, t, w, *a: woke.append(w) or 'woke'):
+        with mock.patch.dict('taskuary.terminal.SESSIONS', {}, clear=True), mock.patch.object(browserview, 'state', return_value={'open': False}),                 mock.patch.object(general, 'to_agent', lambda s, t, w, *a, **kw: woke.append(w) or 'woke'):
             ask = bg.shown_ask({**taskstate.open_question(self.s, self.tid), 'resting': True})
             self.assertIn('has closed', ask['text']); self.assertNotIn('on the page. I', ask['text'])
             self.assertEqual(ask['choices'], ['Try again']); self.assertEqual(ask['request_id'], rid)

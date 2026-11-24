@@ -37,7 +37,11 @@ class NotATaskUndoTests(unittest.TestCase):
         out = self.remove()
         ignore = self.s._one("SELECT RouteId FROM route WHERE MessageId=? AND Decision='ignore'", (self.mid,))
         self.assertTrue(ignore, 'the thread was ruled on')
-        self.assertIn("Fuel card statements are accounting's", self.s.get_doc('learned'))
+        # ...one press is one episode (the owner, 2026-11-24): kept on the Memory page, not yet a line in use
+        from taskuary import memory
+        said = lambda: [l['text'] for l in memory.lessons(self.s)]
+        self.assertTrue(any("Fuel card statements are accounting's" in x for x in said()))
+        self.assertNotIn("Fuel card statements are accounting's", self.s.get_doc('learned'))
         r = self.c.post(f"/api/deleted/{out['deleted']}/restore")
         self.assertEqual(r.status_code, 200, r.text)
         tid = r.json()['task_id']
@@ -48,7 +52,7 @@ class NotATaskUndoTests(unittest.TestCase):
         self.assertEqual(self.s.get_message(self.mid)['TaskId'], tid)
         self.assertNotEqual(self.s.get_message(self.mid)['Status'], 'filed')
         self.assertIsNone(self.s._one('SELECT 1 FROM route WHERE RouteId=?', (ignore['RouteId'],)), 'the thread may open work again')
-        self.assertNotIn("Fuel card statements are accounting's", self.s.get_doc('learned'), 'the line it taught is taken back')
+        self.assertFalse(any("Fuel card statements are accounting's" in x for x in said()), 'the line it taught is taken back')
         # ...once: a second Undo finds nothing
         self.assertEqual(self.c.post(f"/api/deleted/{out['deleted']}/restore").status_code, 404)
 

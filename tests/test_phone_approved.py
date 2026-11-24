@@ -244,6 +244,9 @@ class AfterTheRunTests(PhoneCase):
         from types import SimpleNamespace as NS
         from taskuary import terminal, workerstate as ws
         p = self.f.running('Fix the export', agent='claude')
+        # ...its sender trusted: an agent ran on it, which a stranger's held task never does (origin.hold)
+        from taskuary import origin
+        self.s._exec('UPDATE task SET TrustedThrough=? WHERE TaskId=?', (p.mid, p.tid)); origin._HOLDS.clear()
         if live:
             rows = [{'taskId': p.tid, 'sid': 'sF', 'agent': 'claude', 'label': 'claude', 'waiting': True, 'idle': 300,
                      'started': self.f.ago(minutes=10), 'state': 'asking', 'tail': ['Which database should I use?']}]

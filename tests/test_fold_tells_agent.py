@@ -47,7 +47,7 @@ class FoldTellsAgentTests(unittest.TestCase):
         self.assertTrue(turn.startswith(f'{general.FOLD_HEAD}{task_ref(self.a)}: Payworth export, again'))
         self.assertIn('The March export is missing 14 rows.', turn)                                    # the moved mail, in its sender's words
         self.assertIn(f'From {task_ref(self.a)} (folded in): its agent last said - Found the export drops rows', turn)
-        self.assertIn('say whether to backfill', turn)
+        self.assertIn('Now waiting for your input', turn)          # ...where it stood, as every surface says it (taskstate.standing)
         self.assertIn('Hi Erin - the blank cost centers drop out.', turn)                              # its draft, as text
         self.assertNotIn('TRANSCRIPT-OF-Payworth export, again', turn)                                                     # never A's transcript
         self.assertNotIn('TRANSCRIPT-OF-Payworth export, again', ' '.join(c['Body'] for c in self.s.list_comments(self.b, internal=True)))

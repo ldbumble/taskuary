@@ -865,9 +865,11 @@ class ApiTests(unittest.TestCase):
         with teaching('Export job noise from vendor.com is never a task for you'):
             r = c.post(f'/api/tasks/{tid}/not-a-task').json()
         self.assertEqual(c.get(f'/api/tasks/{tid}').status_code, 404)
-        # ...and what the verdict teaches is a line in LEARNED.md, where every reader reads it (memorylines, 2026-10-27)
+        # ...and what the verdict teaches is kept as a lesson; one press is one episode (the owner, 2026-11-24), not yet a line in use
+        from taskuary import memory
         self.assertTrue(r['learned']['source'].startswith('msg'))
-        self.assertIn('Export job noise from vendor.com is never a task for you', server.store.get_doc('learned'))
+        self.assertIn('Export job noise from vendor.com is never a task for you', [l['text'] for l in memory.lessons(server.store)])
+        self.assertNotIn('Export job noise from vendor.com is never a task for you', server.store.get_doc('learned'))
         self.assertNotIn('policy', r['learned'])
         self.assertEqual(len(c.get('/api/policies').json()['data']), before)      # nobody was muted
         self.assertFalse(any(p['Pattern'] == 'noise@vendor.com' for p in c.get('/api/policies').json()['data']))

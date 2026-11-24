@@ -4,17 +4,22 @@
 // does not apply now stands greyed and says why - never gone - and what is lit is the task's own pick. A closed task's Reopen stands in Mark
 // done's place. The agent's stage moves (Send to agent, Continue, Review changes) and a calendar's answers come with what they act on.
 // `s`: the task's state - { closed, live, reopening, finishing, waitingDraft, watching, away (its Remind me's "Back <day>"), manual (no AI:
-// Hand it to a person stands), repo: { held, can, set } }; `run`: the page's handler for each move; `w`: its words ({ label, hint, doneHint })
+// Hand it to a person stands), repo: { held, can, set }, trust: { label, busy } (held for a sender he has not trusted) }; `run`: the page's
+// handler for each move; `w`: its words ({ label, hint, doneHint })
 const CLOSED = "the task is closed - reopen it first";
 const LIVE = "an agent is working - Mark done stops it and closes the task";
 export function taskMoves(s, run, w) {
   const off = (why) => (why ? { disabled: true, why } : {}), shut = off(s.closed ? CLOSED : "");
   return [
+    // A TASK HELD FOR A SENDER HE HAS NOT TRUSTED IS UNBLOCKED BY ONE PRESS, LIT ON THE ROW (walk 14, 2026-11-24: opened from the rail its Trust sat in
+    // the folded Agent pane, "Agent not started", and nothing on screen moved it) - the row's own move, as a start held for a repository is
+    ...(s.trust && !s.closed ? [{ id: "trust", group: "decide", tone: "p", label: s.trust.busy ? "Starting…" : s.trust.label, run: run.trust,
+      ...off(s.trust.busy ? "it is starting" : ""), title: s.trust.hint }] : []),
     s.closed
       ? { id: "reopen", group: "decide", tone: "s", label: s.reopening ? "Reopening…" : w.label("reopen"), run: run.reopen, ...off(s.reopening ? "it is reopening" : ""), title: w.hint("reopen") }
       // ...a live session has no primary; nor a waiting draft: its Send, under the draft, is the move (2026-10-06), so Mark done stands outlined
       : { id: "done", group: "more", label: s.finishing ? "Marking done…" : w.label("done"), ...off(s.finishing ? "it is closing" : ""), run: run.done, title: w.doneHint,
-        promote: !s.live && !s.waitingDraft, beside: s.live, onCard: s.waitingDraft && !s.live },
+        promote: !s.live && !s.waitingDraft && !s.trust, beside: s.live, onCard: s.waitingDraft && !s.live },
     // ...Mark done with words: its card opens in the conversation, under the item
     { id: "close-note", group: "more", label: w.label("close-note"), run: run.note, title: w.hint("close-note"), ...off(s.closed ? CLOSED : s.live ? LIVE : "") },
     // ONE VERB FOR IT, button and dialog (U13)

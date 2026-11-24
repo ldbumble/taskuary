@@ -79,6 +79,20 @@ test("one toolbar: held, at work, after a restart and closed wear the same task 
   assert.ok(off(states.closed).length >= 6 && off(states.closed).every((x) => x.endsWith("the task is closed - reopen it first")), "closed: Reopen alone lit");
 });
 
+test("held for a sender he has not trusted, Trust is the row's own move - first on the strip, wherever the chat that says why is folded", async () => {
+  // walk 14, 2026-11-24: opened from the rail the held task's one Trust sat in its folded Agent pane ("Agent not started"), nothing on screen moved it
+  const m = await P, trusted = [], go = { ...run, trust: () => trusted.push(1) };
+  const held = m.taskMoves({ trust: { label: "Trust Omar Keller", hint: "starts it" } }, go, words);
+  const r = m.rowOf({ list: held, ref: "" });
+  assert.equal(r.decide[0].id, "trust"); assert.equal(r.decide[0].label, "Trust Omar Keller");
+  assert.ok(!r.decide.some((v) => v.id === "done"), "Mark done does not lead over the move that unblocks the task");
+  assert.match(m.strip(held), /data-tq-verb="trust"[^>]*>(<[^>]+>)*Trust Omar Keller/);
+  held[0].run(); assert.equal(trusted.length, 1);
+  const busy = m.taskMoves({ trust: { label: "Trust Omar Keller", busy: true } }, go, words)[0];
+  assert.deepEqual([busy.label, busy.disabled], ["Starting…", true]);
+  for (const s of [{}, { closed: true, trust: { label: "Trust Omar Keller" } }]) assert.ok(!m.taskMoves(s, go, words).some((v) => v.id === "trust"), JSON.stringify(s));
+});
+
 test("the folded group is named - never a bare ▾ - on the task's strip and on the row", async () => {
   const m = await P;
   // a tucked move (Hand it to a person with no AI) always rides in the fold, so the fold is drawn

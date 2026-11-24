@@ -598,7 +598,7 @@ const PendingStrip = ({ items, now = false, later = "", onRetry = null, onDrop =
 
 function AssistantThread({ task, onAsked, onStop, selectionRef, attachmentsRef, onSent, onClearAttachments, onAttach, onAttachBack, pics = null,
   prompt, onPromptUsed, name = "Taskuary", asking, onAnswer, drafts = [], acts = [], onDraftDecided, noComposer = false,
-  chat = false, reading = null, came = null, noAi = null, closedLine = "", road = null, cards = null, landing = null, turnCards = null, queued = null, stopTries = null, hold = null, idle = "", onTrusted, hint = "", placeholder = "",
+  chat = false, reading = null, came = null, noAi = null, closedLine = "", road = null, cards = null, landing = null, turnCards = null, queued = null, stopTries = null, hold = null, trustOnRow = false, idle = "", onTrusted, hint = "", placeholder = "",
   empty = "", seed = null, list = null, reloadList = null }) {
   // A TASK'S CHAT DRAWS THE SERVER'S LIST (Conversation) - whatever agent works it; this holds the box, what it sent, and the view's end
   const turnName = React.useContext(AgentNameCtx);
@@ -739,7 +739,7 @@ function AssistantThread({ task, onAsked, onStop, selectionRef, attachmentsRef, 
               <Typography variant="caption" sx={{ display: "block", color: DIM, mb: 0.75 }}>{heldActsLine(acts)}</Typography>
               {acts.map((r) => <ReviewDecision key={r.ReviewId} review={r} onChanged={onDraftDecided} />)}</Box>}
             {/* AN UNTRUSTED SENDER'S TASK: one plain line why no agent works on it, and its one action (the list's `hold`, origin.hold) */}
-            {hold && <HeldStart taskId={task.TaskId} hold={hold} onChanged={onTrusted} />}
+            {hold && <HeldStart taskId={task.TaskId} hold={hold} onChanged={onTrusted} onRow={trustOnRow} />}
             {/* A START THAT DID NOT HAPPEN, AND WHY (the list's `idle`): one plain line under the chat until a turn begins - the box is the way on */}
             {!hold && !!idle && <Box data-tq-not-started="" className="tq-aui-summary" sx={{ mt: 1, mx: { xs: 1, sm: 2 }, fontSize: 13.5, color: "var(--tq-text, #292824)" }}>{idle}</Box>}
             {queued && <div className="tq-aui-message tq-aui-agent" data-tq-queued-turn=""><div className="tq-aui-role">{AGENT_TURN}</div><div className="tq-aui-agent-body">{queued}</div></div>}
@@ -784,7 +784,7 @@ function AssistantThread({ task, onAsked, onStop, selectionRef, attachmentsRef, 
 
 export function GeneralWorkspace({ task, onSession, onAnswered, compact = false, toolsAt = null,
   prompt, onPromptUsed, noAiSaid = false, noTools = false, noComposer = false, liveSid = "", reread = 0, mails = [], reviews = [],
-  checklist = null, opening = false, next = null, chat = false, came = null, closedLine = "", term = null, landing = null, turnCards = null, queued = null, stopTries = null, onChanged, seed = null }) {
+  checklist = null, opening = false, next = null, chat = false, came = null, closedLine = "", term = null, landing = null, turnCards = null, queued = null, stopTries = null, onChanged, seed = null, trustOnRow = false }) {
   // ...drawn on its first frame from what is held of it (chatOf); a coding task's chat stands on its list alone
   const first = () => (chatSource(task, term) === "coding" ? { messages: [] } : chatOf(task.TaskId));
   const [data, setData] = useState(first);
@@ -1069,7 +1069,7 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
         drafts={data?.playbookDrafts || []} acts={actsHere} onDraftDecided={refresh} seed={seed}
         chat={chat} reading={chat && readingOf(data?.thread || task?.ThreadJson)?.asking
           ? <div className="tq-aui-ask" data-tq-chat-ask="">{readingOf(data?.thread || task?.ThreadJson).asking}</div> : null}
-        came={chat ? came : null} closedLine={chat ? closedLine : ""} queued={chat ? queued : null} stopTries={chat ? stopTries : null} hold={conv.list?.hold || null} idle={conv.list?.idle || ""} onTrusted={() => { conv.load(); onAnswered?.(); onChanged?.(); }}
+        came={chat ? came : null} closedLine={chat ? closedLine : ""} queued={chat ? queued : null} stopTries={chat ? stopTries : null} hold={conv.list?.hold || null} trustOnRow={trustOnRow} idle={conv.list?.idle || ""} onTrusted={() => { conv.load(); onAnswered?.(); onChanged?.(); }}
         road={road} cards={codingCards} landing={chat ? landing : null} turnCards={chat ? turnCards : null}
         // ...THE BOX SAYS WHAT THE HEADER SAYS (the owner's live task, 2026-11-12: "Write to pick the session back up" under a turn at work - its
         // session was being opened again for his line): "working" is the list's one fact, whatever process is up yet

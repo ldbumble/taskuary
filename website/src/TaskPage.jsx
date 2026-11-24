@@ -380,6 +380,7 @@ const chipBtn = { fontSize: 11.5, fontWeight: 600, height: 26, minHeight: 26, py
   borderRadius: 13, bgcolor: "var(--tq-panel, #f4f1ec)", color: INK, borderColor: BORDER,
   "&:hover": { borderColor: "var(--tq-border, #d8cfbe)", bgcolor: "var(--tq-panel, #f4f1ec)" } };
 const barBtn = { minHeight: 34, py: 0, px: 1.6, fontSize: 12.5, color: INK, borderColor: BORDER };
+const HELD_TRUST_HINT = "No agent works this until you trust the sender - the press starts it";
 const TRUST_PILL = { minHeight: 22, py: 0, px: 1.1, ml: 0.5, my: 0.25, fontSize: 12, lineHeight: 1.6, borderRadius: 999, textTransform: "none", color: INK, borderColor: BORDER, verticalAlign: "baseline" };
 // ...and the one filled move beside them. Every card's bar reads [ primaryBtn ] | [ barBtn ] [ barBtn ].
 const primaryBtn = { minHeight: 34, py: 0, px: 1.75, fontSize: 12.5 };
@@ -1812,7 +1813,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     if (trusting) return;
     const word = scope === "org" ? strangerLine(detail)?.trustOrg : strangerLine(detail)?.trust;
     setTrusting(scope || "person");
-    try { await runOperation(api, "task.trust", selected, scope ? { scope } : undefined); await loadDetail(selected); loadTasks(); onChanged?.(); }
+    try { await runOperation(api, "task.trust", selected, scope ? { scope } : undefined); setChatRead((n) => n + 1); await loadDetail(selected); loadTasks(); onChanged?.(); }
     // ...the demo's no as its own line: "That didn't go through - This is the demo - ... Press Trust Priya again" asked for a press that
     // can never work (the walk, 2026-11-18)
     catch (e) { setErr(demoNo(e) || `That didn't go through - ${opError(e, "Taskuary didn't answer")}.${word ? ` Press ${word} again.` : ""}`); }
@@ -2425,8 +2426,10 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // with why where they do not apply now; only the stage moves below come and go with what they act on
   const closedNow = !notDone || reopening === selected;
   const ownMoves = !t ? [] : taskMoves({ closed: closedNow, live: liveSession, reopening: reopening === selected, finishing, waitingDraft: !!pendingReview,
-    watching, away: remindWaiting(t) ? `Back ${remindDay(t.RemindAt)}` : "", manual, repo: { held: heldRepo, can: !isGeneral && canCode } },
-  { reopen, done: askFinish, note: (e, a) => setNoteAt(steady(a || e?.currentTarget)), nat: notATask, remind: (e, a) => remindHere(steady(a || e?.currentTarget)), watch: watchIt,
+    watching, away: remindWaiting(t) ? `Back ${remindDay(t.RemindAt)}` : "", manual, repo: { held: heldRepo, can: !isGeneral && canCode },
+    // ...held for a sender he has not trusted: its Trust is the row's lit move, wherever the chat that says why is folded (detail.origin.held)
+    trust: detail?.origin?.held ? { label: detail.origin.trust?.person || "Trust them", busy: trusting === "person", hint: HELD_TRUST_HINT } : null },
+  { trust: () => trustPress(""), reopen, done: askFinish, note: (e, a) => setNoteAt(steady(a || e?.currentTarget)), nat: notATask, remind: (e, a) => remindHere(steady(a || e?.currentTarget)), watch: watchIt,
     hand: () => setHandoff(true), reshape: () => setReshape(true), kind: (e, a) => setPick({ what: "kind", at: steady(a || e?.currentTarget) }),
     priority: (e, a) => setPick({ what: "priority", at: steady(a || e?.currentTarget) }), repo: pickRepo },
   { label: labelOfRow, hint: hintOfRow, doneHint: markDoneHint, natTitle: NAT_TITLE, repo: btn("pick_repo", repoOf(t) ? "set" : null), repoHint: heldRepo ? heldWhy : btnHint("pick_repo") });
@@ -3386,7 +3389,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       {/* ONE CHAT FOR EVERY KIND (the owner, 2026-11-06: "one shared chat object for coding and regular"): the component reads its own
                           source (chatStream.chatSource) - a coding task's sessions, or the general agent's conversation - and the branch's landing
                           card joins it wherever the task works in a checkout */}
-                      <GeneralWorkspace key={`${t.TaskId}-${generalRevision}`} task={t} compact onSession={generalSession} reread={chatRead}
+                      <GeneralWorkspace key={`${t.TaskId}-${generalRevision}`} task={t} compact onSession={generalSession} reread={chatRead} trustOnRow
                         queued={chatPane && !liveSession && queuedRow && !queuedRow.retryTurn ? <QueuedStart taskId={t.TaskId} queued={queuedRow} line onChanged={() => { loadTasks(); loadDetail(t.TaskId); }} /> : null}
                         stopTries={queuedRow?.retryTurn ? () => api.delete(`/api/tasks/${t.TaskId}/dispatch`).then(() => { loadTasks(); loadDetail(t.TaskId); }).catch(() => {}) : null}
                         liveSid={term?.alive && term.mode === "assistant" ? term.sid : ""}

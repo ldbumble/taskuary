@@ -403,7 +403,8 @@ export function pillsOf(row) {
   const all = [...row.decide, ...row.agent, ...row.more].filter((v) => !v.slot), pin = pinOf(row), of = (t) => all.filter((v) => typeOf(v) === t);
   const head = (vs) => { const up = vs.filter((v) => !v.tucked || v.tone === "p"); return up.find((v) => v.tone === "p") || up.find((v) => v.lead) || up[0]; };
   const cl = of("close").filter((v) => v !== pin), ag = of("agent"), rp = of("reply");
-  const move = [...new Set([pin || head(cl), head(ag), head(rp), ...of("act"), ...rp, ...ag, ...cl].filter(Boolean))];
+  // ...the press the task waits on (`unblocks`) first of all, ahead of Mark done - as on the desk's strip (groupOf)
+  const move = [...new Set([all.find((v) => v.unblocks), pin || head(cl), head(ag), head(rp), ...of("act"), ...rp, ...ag, ...cl].filter(Boolean))];
   const rank = (v) => { const i = CHANGE_FIRST.indexOf(String(v.id).split(":").pop()); return i < 0 ? CHANGE_FIRST.length : i; };
   // ...a result's Share (Share.jsx) keeps its own small band at the row's end: it acts on the whole result, never on a reply or the task
   return { move, share: of("share"), change: of("task").map((v, i) => [v, i]).sort((a, b) => rank(a[0]) - rank(b[0]) || a[1] - b[1]).map(([v]) => v), pin, lead: leadOf(row), held: leadOf(row, false) };

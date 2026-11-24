@@ -100,7 +100,7 @@ test("held for a sender: Trust stands first on the row, filled, and never folds 
   assert.ok(foldRow(row, 99).shown.some((x) => x.v?.id === "trust"), "never folded into More");
   const phone = rowOf({ list: verbs, ref: "" });
   assert.equal(pillsOf(phone).lead?.id, "trust", "the phone's lead");
-  assert.ok(phoneRow(phone).shown.some((v) => v.id === "trust"));
+  assert.equal(phoneRow(phone).shown[0]?.id, "trust", "first on the phone's row too");
   // ...a start held for its repository is the same: the task's one way on
   const held = taskMoves({ repo: { held: true, can: true } }, run, w), r2 = taskButtons(splitRow(rowOf({ list: held, ref: "" }), { open: "agent" }).by);
   assert.deepEqual([r2[0].v.id, r2[0].v.tone], ["repo", "p"]);

@@ -240,7 +240,7 @@ class StandingTests(unittest.TestCase):
         self.assertEqual((mine['key'], mine['header'], mine['rail'], mine['phone']),
                          ('blocked', 'waiting for your input', ('blocked', 'waiting for your input'), 'waiting for your input'))
         for k in ('brief', 'advisor', 'assistant', 'triage'): self.assertIn("waiting for your input: the agent's question: Is it 25 seats or 250?", mine[k], k)
-        self.assertEqual(mine['may_close'], '', 'a question never held a Send and close')
+        self.assertEqual(mine['may_close'], "the agent's question (Is it 25 seats or 250?)", 'his answer is owed first (J1)')
         # ...somebody else's, by name - never "agent done"
         self.assertEqual((theirs['key'], theirs['header'], theirs['rail'], theirs['phone']),
                          ('theirs', "waiting for Erin's input", ('theirs', "waiting for Erin's input"), "waiting for Erin's input"))
@@ -269,6 +269,23 @@ class StandingTests(unittest.TestCase):
         self.assertEqual(taskstate.open_question(s, tid), None, 'a reopened agent reads what the page reads')
         row = s._one("SELECT Detail FROM audit WHERE EntityType='task' AND EntityId=? AND Action='close_from_assistant'", (tid,))
         self.assertIn('Which vendor first?', row['Detail'])
+
+    def test_send_and_close_is_not_offered_under_the_agents_standing_question(self):
+        """Walk 18 (L3, S9): the agent drafted the reply to Erin and asked him which seat count is right; "Send and close" stood first under the
+        card, though the question stands until he answers, the task closes or the agent takes it back (J1). Send stays; the close waits."""
+        from taskuary import agenttools, card, concierge, workerstate as ws
+        s = self.s
+        tid = _chat(s, 'Seat count')
+        mid = s.add_message({'TaskId': tid, 'ExternalId': 'q1', 'Channel': 'email', 'FromName': 'Erin Blake', 'FromEmail': ERIN,
+                             'Subject': 'Seats', 'BodyText': 'How many seats?', 'Status': 'routed'})
+        rv = s.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft', 'Status': 'pending', 'DraftText': 'Hi Erin - checking the count.'})
+        self.assertEqual(card.may_close(s, tid), '')
+        ws.record(s, tid, 'sid1', 'input_needed', text='Is it 25 seats or 250?', source='api')
+        self.assertEqual(card.may_close(s, tid), "the agent's question (Is it 25 seats or 250?)")
+        item = {'tid': tid, 'rid': rv, 'kind': 'review', 'ref': f'TQ-{tid:04d}', 'draft': True}
+        self.assertIn('stays open', concierge.cannot(item, 'send_close', s))
+        self.assertIn('Withdrawn', agenttools.call(s, tid, 'ask_owner', {'withdraw': True}, {}))
+        self.assertEqual(card.may_close(s, tid), '', 'taken back, nothing holds the close')
 
     def test_their_answer_or_a_check_back_come_due_moves_it_back_to_the_agent(self):
         from taskuary import checkback, waiton

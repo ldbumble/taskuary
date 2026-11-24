@@ -176,13 +176,16 @@ def holds_close(store, tid, pressing=None) -> list:
 def may_close(store, tid, pressing=None) -> str:
     """MAY A PRESS ON THE CARD IN FRONT CLOSE TASK `tid` WITH IT (Send and close, Approve and close)? '' when nothing else holds the close,
     else what does, in words ('the email to Erin Blake'). `pressing`: the card pressed - the front where none is named. An answer awaited from
-    somebody else and a check-back its agent set hold it too, as the task stands (taskstate.standing - walk 16: Send and close stood first
+    somebody else, the agent's own question and a check-back its agent set hold it too, as the task stands (taskstate.standing - walk 16: Send and close stood first
     under a reply while the agent's own check-back said the work goes on) - Send and Mark done stay, and a check-back outlives Mark done."""
     if not tid: return ''
     if pressing is None: pressing = next((c['id'] for c in waiting(store, tid, asks=False, trust=False) if c['front'] and c['kind'] != TRUST), None)
     if (c := next((c['what'] or 'another card' for c in holds_close(store, tid, pressing)), '')): return c
     from .taskstate import standing
     st = standing(store, tid)
+    # ...and the agent's own question to him (the owner, 2026-11-24, J1: it stands until he answers, the task closes or the agent withdraws it -
+    # walk 18: Send and close stood first under it)
+    if st.get('ask'): return f"the agent's question ({' '.join(st['ask'].split()[:12])})"
     if st['them']: return st['them'][0]['what']
     return f"the check-back the agent set ({' '.join(st['check']['what'].split()[:12]) or 'its next look'})" if st['check'] else ''
 

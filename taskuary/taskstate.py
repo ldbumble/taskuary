@@ -118,7 +118,8 @@ def left_on_him(store, tid: int) -> list:
 def standing(store, tid, key: str = None) -> dict:
     """{waits_on: 'you'|'them'|'agent'|None, who, what: [...], since, next, closed, them, check} for task `tid` - `who` the person it waits on
     ('them'), `what` what is awaited (the cards, the question, the mail), `since` from when, `next` the check-back's time or None; `them` every
-    answer awaited from others, and `check` the check-back {at, what}, whoever's move it is now. `key`: the task's state already read
+    answer awaited from others, `check` the check-back {at, what}, whoever's move it is now, and `ask` the agent's own question to him while
+    it stands. `key`: the task's state already read
     (TaskState.base), else it is read here. ONE READ OF A PAGE ASKS IT ONCE (cardqueue.fresh): the rail, the header, Send and close and the
     rulebook each ask it of the same task within one read (tests/test_big_task_opens_fast)."""
     from . import cardqueue
@@ -137,7 +138,8 @@ def _standing(store, tid, key: str = None) -> dict:
     mine = [c for c in card.waiting(store, tid) if c['state'] == 'pending' and c['what']]
     what = [say.get(c['kind'], '{}').format(c['what']) for c in mine] or left_on_him(store, tid)
     if what: return {**out, 'waits_on': 'you', 'what': what, 'since': min((str(c['at']) for c in mine if c.get('at')), default=None),
-                     'rids': [r for c in mine for r in c['rids'] if isinstance(r, int)], 'trust': bool(mine) and mine[0]['kind'] == card.TRUST}
+                     'rids': [r for c in mine for r in c['rids'] if isinstance(r, int)], 'trust': bool(mine) and mine[0]['kind'] == card.TRUST,
+                     'ask': next((c['what'] for c in mine if c['kind'] == card.ANSWER), '')}
     if cb and str(cb['at']) <= f'{datetime.now():%Y-%m-%d %H:%M:%S}': return {**out, 'waits_on': 'agent', 'what': [f"its check-back: {cb['what']}"], 'since': cb['at']}
     # ...their line came in and its agent has not read it to a turn's end: the agent's move, the wait still standing (waiton.settle)
     if (a := next((x for x in w if x['answered']), None)):

@@ -527,11 +527,11 @@ def _events(t, p: dict) -> None:
                 agent = getattr(t, 'agent', '') or 'agent'
                 outcomes.stopped(st, tid, f'agent:{agent}', facts={'pr': bool(ci.pr_of(st, tid)), 'agent': agent})
             except Exception as e: logger.debug(f'task {tid}: the stop was not ledgered - {e}')
-            # ...as plain questions: a marker's words are no chooser, so they carry no chips (the owner, 2026-11-03)
+            # ...with the choices it offered, a button each as on every road (general._file; walk 13): its answer still goes as words
             g = ws.group_key('|'.join(q for q, _ in asks)) if len(asks) > 1 else None
-            for i, (q, _) in enumerate(asks, 1):
+            for i, (q, c) in enumerate(asks, 1):
                 ws.record(st, tid, sid, 'input_needed', request_id=ws.question_id(g, i) if g else ws.request_id_for(q),
-                          text=q, source='hook')
+                          text=q, choices=c, source='hook')
             # ...and a turn that asked only in its PROSE asked nothing here (the owner, 2026-11-10: "why would we ask anything in the
             # assistant rail? remove that no need for that ever"). A light model used to read every last message and write its own
             # wording of a question onto the row - over a card already standing in the task with the same ask. What the agent means

@@ -681,7 +681,7 @@ def ask_markers(text: str) -> tuple:
         # the marker stands bare (ASK_LINE: asked in its own words), the paragraph above it. What follows on later lines is the answer's
         parts = [' '.join(p.split()) for p in _ASK_ONE.sub('', m.group(0), 1).split('|')]
         q = parts[0] or ' '.join((re.split(r'\n\s*\n', t[prev:m.start()].strip()) or [''])[-1].split())
-        if q: asks.append((q[:600], [p[:120] for p in parts[1:] if p]))
+        if q: asks.append((q, [p for p in parts[1:] if p]))          # ...whole: a cap cut it mid-word ("Can you send th", walk 13)
         prev = m.end()
     return re.sub(r'\n{3,}', '\n\n', _ASK_TAIL.sub('', t)).strip(), asks
 
@@ -711,8 +711,10 @@ def asked_inline(text: str) -> tuple:
     """(the answer with its questions as plain lines, [(question, choices)]). THE QUESTION STAYS IN THE ANSWER: the marker line IS the question,
     and cutting the marker cut the question with it - the chat showed "the laptop spend needs your yes first" and never what to say yes to (walk
     2026-10-21). Every chat's answer reads so: a coding turn's over ACP drew the bare marker (the audit, 2026-11-10)."""
+    # ...ITS CHOICES ARE NO WORDS OF IT (walk 13: written as "(a / b / c)" after the question, prose he could not press): they ride on its
+    # recorded ask, a button each, and his press is his answer (general._file)
     reply, asks = ask_markers(text)
-    said = '\n\n'.join(q + (f" ({' / '.join(c)})" if c else '') for q, c in asks if q not in reply)
+    said = '\n\n'.join(q for q, _c in asks if q not in reply)
     return '\n\n'.join(x for x in (reply, said) if x), asks
 
 
@@ -721,7 +723,7 @@ def ask_marker(text: str) -> tuple:
     m = _ASK_RE.search(text or '')
     if not m: return text, None, []
     parts = [' '.join(p.split()) for p in m.group(1).split('|')]
-    return text[:m.start()].rstrip(), (parts[0][:600] or None), [p[:120] for p in parts[1:] if p]
+    return text[:m.start()].rstrip(), (parts[0] or None), [p for p in parts[1:] if p]
 
 
 # WHAT A TOOL CALL SAYS FOR THE TURN'S END (the owner, 2026-11-23: "everything else the agent can do is a tool"): a turn's summary and its one

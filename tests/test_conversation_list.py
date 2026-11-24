@@ -573,7 +573,7 @@ class TheList(unittest.TestCase):
         t = ('[[TASKUARY-DONE]] Fixed the build\n[[TASKUARY-SHOW: C:/x/chart.png]]\n[[TASKUARY-TICK: 3]]\nHere it is.\n'
              '[[TASKUARY-REPLY]]Hi Ray - done.[[/TASKUARY-REPLY]]\nWhich branch?\n[[TASKUARY-ASK]]')
         self.assertEqual(conversation.clean(t), 'Here it is.\n\nWhich branch?')
-        self.assertEqual(conversation.clean('[[TASKUARY-ASK]] Which day? | Mon | Tue'), 'Which day? (Mon / Tue)')
+        self.assertEqual(conversation.clean('[[TASKUARY-ASK]] Which day? | Mon | Tue'), 'Which day?', 'its choices are its buttons, not its words')
 
     def test_a_command_sent_as_its_words_over_acp_is_kept_for_its_row(self):
         # codex-acp sends an exec's command as the words it runs ["powershell.exe", "-Command", "..."]: kept as a string only, the row read "Ran a command"

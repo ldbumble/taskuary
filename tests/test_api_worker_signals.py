@@ -91,19 +91,31 @@ class ApiWorkerSignals(unittest.TestCase):
         self.assertEqual(st['requests'], []); self.assertEqual(ws.events(self.s, self.tid, sess.sid)[-1]['Kind'], 'turn_end', 'and the turn is over, not going on')
         self.assertNotIn(st['state'], ('input_needed', 'working'))
 
-    def test_a_general_agents_question_carries_no_chips_on_the_desktop_or_the_phone(self):
-        """Chips are only a CLI question tool's or its on-screen chooser's (the owner, 2026-11-03): a general agent's question is
-        plain words, answered in the box under it - choices written on its line anyway stay in its text, never as presses."""
+    def test_the_choices_it_offers_are_its_asks_buttons_on_the_desktop_and_the_phone(self):
+        """Walk 13: the agent passed ask_owner its choices and the app wrote them into the answer as "(a / b / c)" - prose he could not press.
+        They ride on the recorded ask (a button each, desktop and phone); the answer keeps the question once and never the bracket list."""
         sess, reply = self.turn('Two options.\n[[TASKUARY-ASK]] Which vendor? | Acme | Globex')
-        req =ws.asking_of(self.s, sess)
-        self.assertEqual((req['text'], req['choices']), ('Which vendor?', []))
-        self.assertIn('Which vendor? (Acme / Globex)', reply, 'the words it offered are still read, as words')
+        req = ws.asking_of(self.s, sess)
+        self.assertEqual((req['text'], req['choices']), ('Which vendor?', ['Acme', 'Globex']))
+        self.assertIn('Which vendor?', reply); self.assertNotIn('(Acme / Globex)', reply)
         from taskuary import remote_assistant as ra
         item = {'kind': 'agent', 'lane': 'blocked', 'asking': True, 'tid': self.tid, 'ref': 'TQ-0001', 'title': 'Compare vendors',
                 'who': 'general', 'agent': 'general', 'choices': req['choices'], 'questions': [req]}
-        self.assertEqual(ra.agent_answers(item), [], 'no phone buttons for its words')
-        text = ra.turn_text({'say': 'general asked you something.', 'item': item, 'chips': []})
-        self.assertIn('Type your answer - it goes straight in.', text); self.assertNotIn('Pick an answer below', text)
+        self.assertEqual(ra.agent_answers(item), ['Acme', 'Globex'], 'the phone offers the same presses')
+        # ...and his press is his answer, heard once, as his next line
+        sent = []; sess.send_prompt = lambda t, **kw: sent.append(t)
+        from taskuary import terminal as term
+        saved = dict(term.SESSIONS); term.SESSIONS.clear(); term.SESSIONS[sess.sid] = sess
+        try: out = ws.answer(self.s, self.tid, req['request_id'], 'Globex', 'owner')
+        finally: term.SESSIONS.clear(); term.SESSIONS.update(saved)
+        self.assertTrue(out['delivered']); self.assertEqual(sent, ['Globex']); self.assertEqual(ws.status(self.s, self.tid)['requests'], [])
+
+    def test_a_long_question_is_never_cut_mid_word(self):
+        """Walk 13: a 700-character question stood as "... Can you send th" - a 600-character cap on the ask."""
+        q = 'Alex says the quote is 25 seats, but you told me 250 seats are in use. ' * 9 + 'Can you send the invoice?'
+        sess, reply = self.turn('I checked the sheet.\n[[TASKUARY-ASK]] ' + q + ' | Attach it | Ask Alex')
+        self.assertEqual(ws.asking_of(self.s, sess)['text'], q)
+        self.assertIn('Can you send the invoice?', reply)
 
     def test_the_question_stays_in_the_answer_the_chat_shows(self):
         """The marker line IS the question; cutting the marker cut the question, and with no question card in the chat any
@@ -111,7 +123,7 @@ class ApiWorkerSignals(unittest.TestCase):
         _, reply = self.turn('Prepared the checklist; the laptop needs your yes first.\n'
                              '[[TASKUARY-ASK]] The standard laptop is $1,850 - order it? | Order it | Use a spare')
         self.assertNotIn('TASKUARY-ASK', reply)
-        self.assertIn('The standard laptop is $1,850 - order it? (Order it / Use a spare)', reply)
+        self.assertIn('The standard laptop is $1,850 - order it?', reply); self.assertNotIn('(Order it / Use a spare)', reply)
         filed = [c['Body'] for c in self.s.list_comments(self.tid) if c['ActorType'] == general.ASSISTANT_TYPE][-1]
         self.assertTrue(filed.startswith('Prepared the checklist') and 'order it?' in filed)
         # ...said once: a question already written above its marker is not repeated

@@ -3400,12 +3400,13 @@ class GeneralSession:
                     if r['Kind'] == 'input_needed' and not str(r.get('RequestId') or '').startswith((_SIGNIN, _TURN)):
                         ws.record(self.store, self.task_id, self.sid, 'answered', request_id=r['RequestId'], text='no longer asked - nothing is left on the owner', source=src)
             ws.record(self.store, self.task_id, self.sid, 'turn_end', text=reply[:4000], source=src)
-            # ...each question of the reply as one group, so the owner answers them together (workerstate.answer_group). Plain
-            # questions, no choices (the owner, 2026-11-03): chips are a CLI question tool's or chooser's, answered in the box here
+            # ...each question of the reply as one group, so the owner answers them together (workerstate.answer_group) - WITH THE CHOICES THE
+            # AGENT OFFERED (walk 13: passed to ask_owner, written into the answer as prose and never pressable): a button each, his press his
+            # answer as his next line (workerstate.answer: a chat takes words); the box still answers in his own words
             g = ws.group_key(f'{self.sid}:' + '|'.join(q for q, _ in asks)) if len(asks) > 1 else None
-            for i, (q, _) in enumerate(asks, 1):
+            for i, (q, c) in enumerate(asks, 1):
                 ws.record(self.store, self.task_id, self.sid, 'input_needed', request_id=ws.question_id(g, i) if g else ws.request_id_for(q),
-                          text=q, source=src)
+                          text=q, choices=c, source=src)
         except Exception as e: logger.debug(f'api worker event skipped: {e}')
         # ...AND ONE IT ONLY SAID IN WORDS (the owner, 2026-11-05, an agent that wrote "the sign-in page is open" and ended its turn: the browser
         # shows only for an open sign-in ask, so nothing showed): a turn that ends with its browser on a page asking for a password raises the

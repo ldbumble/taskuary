@@ -1004,9 +1004,10 @@ def test_a_saved_sign_in_whose_site_emails_a_code_types_the_code_from_the_mail()
 # ── A SIGN-UP IS ONE COMMAND IN THE AGENT'S TURN (design round 4, 2026-11-19) ──────────────────────────────────────────────────────────
 class UpPage:
     """A vendor's sign-up as Taskuary's own DevTools connection sees it: its form (`pwbox` - a wizard's first step has none), then, sent, the
-    page the site answers with (go). `pw`: what its password box holds - typed by the agent itself."""
-    def __init__(self, href='https://www.rentscope.example/signup', user=USER, pw='', pwbox=True):
-        self.href, self.user, self.pw, self.pwbox, self.state, self.ran = href, user, pw, pwbox, 'form', []
+    page the site answers with (go; 'more': a next step that still asks a box). `pw`: what its password box holds - typed by the agent itself;
+    `new`: the form makes a password (typed twice, or marked new-password)."""
+    def __init__(self, href='https://www.rentscope.example/signup', user=USER, pw='', pwbox=True, new=False):
+        self.href, self.user, self.pw, self.pwbox, self.new, self.state, self.ran = href, user, pw, pwbox, new, 'form', []
         self.fields_ = [{'k': 'name', 't': 'text', 'v': 'Alex Doyle'}, {'k': 'email', 't': 'email', 'v': USER}, {'k': 'terms', 't': 'checkbox', 'v': 'yes'}]
     def go(self, state, href): self.state, self.href = state, href
     def form(self): return self.state == 'form' and self.pwbox
@@ -1014,7 +1015,8 @@ class UpPage:
         from taskuary import browsergate
         self.ran.append(expr)
         if expr == signin.FORM: return {'href': self.href, 'top': True, 'title': self.state.title(), 'user': self.user if self.state == 'form' else '',
-                                        'pw': bool(self.pw), 'password': self.form(), 'fields': self.fields_}
+                                        'pw': bool(self.pw), 'new': self.new, 'password': self.form(), 'fields': self.fields_}
+        if expr == signin.ASKS: return self.state == 'more'
         if expr == signin.FORM_PW: return self.pw
         if expr.startswith(signin.REFILL): self.user = USER; return 3
         if expr == 'location.href': return self.href
@@ -1155,11 +1157,7 @@ def test_a_password_the_agents_own_press_sends_is_kept_and_put_back_when_refused
     its password box held, and later it called them accounts that "already existed". A press of the agent's that sends a password seals it
     first, keeps it once the site takes it, and the command's output says so; refused, the row it replaced comes back."""
     s = MemoryStore(); tid = Factory(s).task('Market data')
-    # ...A NEW ACCOUNT'S PASSWORD IS NEVER THE AGENT'S (walk 10, 2026-11-23: told ten times to run signup, it typed its own into every form):
-    # its press is the sign-up's to make, and nothing it typed is kept
     page = UpPage(pw='typed-by-the-agent-1!')
-    assert signin.pressing(s, tid, 'sess1', 'rentscope.example', conn=page) == signin.UNSAVED
-    assert signin.saved(s, 'rentscope.example') is None and signin.settled(s, 'sess1', conn=page) == ''
     # ...on a site with a saved sign-in, what its press sent is kept as it was
     signin.save(s, 'rentscope.example', USER, PW)
     signin.pressing(s, tid, 'sess1', 'rentscope.example', conn=page)
@@ -1172,6 +1170,49 @@ def test_a_password_the_agents_own_press_sends_is_kept_and_put_back_when_refused
     signin.pressing(s, tid, 'sess1', 'vacancyiq.example', conn=page)
     with mock.patch.object(signin, 'REJECT_WAIT', 0): assert signin.settled(s, 'sess1', conn=page) == ''
     assert vault.unseal(signin.saved(s, 'vacancyiq.example')['Secret']) == PW, 'the sign-in that works is back'
+
+
+def test_a_sign_up_the_agent_types_itself_is_kept_as_one_the_command_makes():
+    """Walk 11: an agent signed up by typing into the page itself - its user name and password into the site's sign-in form first (refused),
+    then into the sign-up form beside it, and Create - and nothing was in the vault; the sign-in it typed first was answered by a sign-up run on
+    that form. The gate's own read of the form at the press keeps a NEW password (typed twice, or marked new-password) as the command keeps one:
+    the agent's, unconfirmed, on the record as made; a refused sign-in keeps nothing; a later signed-in page confirms it. The password goes
+    nowhere but the vault."""
+    from taskuary import browsergate, ledger
+    s = MemoryStore(); tid = Factory(s).task('Trial account for Erin'); typed, logs = 'Typed-by-the-agent-7!', []
+    hid = logger.add(lambda m: logs.append(str(m)), level='DEBUG')
+    try:
+        login = UpPage('https://www.trailhub.example/login', pw=typed)
+        signin.pressing(s, tid, 'sess1', 'trailhub.example', conn=login)
+        with mock.patch.object(signin, 'REJECT_WAIT', 0): assert signin.settled(s, 'sess1', conn=login) == ''
+        assert signin.saved(s, 'trailhub.example') is None and not ledger.rows(s, 'account'), 'a refused sign-in keeps nothing'
+        page = UpPage('https://www.trailhub.example/signup', pw=typed, new=True)
+        signin.pressing(s, tid, 'sess1', 'trailhub.example', conn=page)
+        page.go('more', 'https://www.trailhub.example/welcome')                      # ...the site took it and asks one more step
+        line = signin.settled(s, 'sess1', conn=page)
+        row = signin.saved(s, 'trailhub.example')
+        assert (vault.unseal(row['Secret']), vault.unseal(row['User']), row['SavedBy'], row['Task']) == (typed, USER, 'agent', tid)
+        assert [r['Act'] for r in ledger.rows(s, 'account')] == [signin.MADE]
+        [kept] = signin.listing(s)
+        assert kept['by'] == 'agent' and not kept['confirmed'] and 'kept' in line
+        page.go('data', 'https://www.trailhub.example/boards')                      # ...a later page of it, signed in
+        with mock.patch.object(signin, 'connect', return_value=page), mock.patch.object(browsergate, '_outcome', return_value=''):
+            browsergate.outcome('sess1', s)
+        assert signin.listing(s)[0]['confirmed'] and ledger.rows(s, 'account')[0]['Act'] == 'signed_in'
+    finally: logger.remove(hid)
+    trace = json.dumps([s._rows('SELECT * FROM audit'), s._rows('SELECT * FROM comment'), ledger.rows(s), line, logs], default=str)
+    assert typed not in trace
+
+
+def test_a_sign_in_with_the_saved_password_keeps_nothing_new():
+    from taskuary import ledger
+    s = MemoryStore(); tid = Factory(s).task('Market data'); signin.save(s, 'rentscope.example', USER, PW)
+    before = signin.saved(s, 'rentscope.example')
+    page = UpPage('https://www.rentscope.example/login', pw=PW)
+    signin.pressing(s, tid, 'sess1', 'rentscope.example', conn=page)
+    page.go('data', 'https://www.rentscope.example/data')
+    assert signin.settled(s, 'sess1', conn=page) == '' and signin.saved(s, 'rentscope.example') == before
+    assert [r['Act'] for r in ledger.rows(s, 'account')] == ['given'], 'no account made by the agent'
 
 
 def test_a_held_sign_up_is_sent_on_its_own_tab_only_never_the_tab_shown():

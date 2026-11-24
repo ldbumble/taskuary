@@ -8,7 +8,8 @@ was patched one door at a time. Here it is written ONCE, by the act that confirm
 A row: Kind (KINDS), Subject (whom or what it is about: an address, a site, a file, the recipients), Value (what it says: a subject line, the
 line he gave an address in, a link), Act (what wrote it), Ref (the act's own id - rv12, c40, t7), TaskId, Thread (the conversation it is on),
 At, Detail (JSON). Written only by a confirmed act: a send whose provider receipt came back, a sign-in or sign-up the site let past, a line he
-typed, a promise task the reading made. A sign-up that failed writes nothing. One row per (Kind, Subject, Act, Ref): an act told twice is one row.
+typed, a promise task the reading made. A sign-up that failed writes nothing; one whose form the site took but has not yet let in writes
+act 'made' (signin.MADE), which confirms no saved sign-in. One row per (Kind, Subject, Act, Ref): an act told twice is one row.
 """
 import json, re
 from .store import _now, task_ref

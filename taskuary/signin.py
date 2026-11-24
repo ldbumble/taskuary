@@ -193,12 +193,12 @@ def saved(store, site) -> dict | None:
 # and its password his to reveal. An account Taskuary has not yet signed in with is said so (confirmed): a sign-up the site seemed to take
 # is not proof it was made (walk 9: a row read "signed in" for an account stopped at its phone step). Whether a site took it is the ledger's
 # (ledger.account, written by the sign-in or sign-up the site let past) - the one record every task reads what exists from.
-MADE_BY = ('taskuary', 'agent')
+MADE_BY, MADE = ('taskuary', 'agent'), 'made'     # ...MADE: the ledger's act for a sign-up form a site took that has not reached a signed-in page
 def confirmed(row, known: dict) -> bool:
-    "The owner's own, or an account a site took since this row was saved (`known`: ledger.sites)."
+    "The owner's own, or an account a site let in since this row was saved (`known`: ledger.sites) - a form it only took (MADE) is not yet."
     if (row.get('SavedBy') or 'owner') not in MADE_BY: return True
     k = known.get(str(row.get('Site') or '').lower())
-    return bool(k) and str(k['At']) >= datetime.fromtimestamp(float(row.get('SavedAt') or 0)).isoformat(sep=' ', timespec='seconds')
+    return bool(k) and k.get('Act') != MADE and str(k['At']) >= datetime.fromtimestamp(float(row.get('SavedAt') or 0)).isoformat(sep=' ', timespec='seconds')
 
 
 def _user(row) -> str:
@@ -1392,16 +1392,19 @@ PASSBOX = r"""(i) => { """ + DEEP + r"""
   return { n: ps.length, top: window === window.top, href: location.href, focused: !!el && deepActive() === el }; }"""
 # ...and which of those boxes hold the password now, in their order - read on the page, the password never leaves it
 KEPT = PASSBOX.split('const ps =')[0] + r"""return deepAll('input[type=password]').filter(vis).map((e) => e.value === i); }"""
-# THE FORM AS IT STANDS: the user name a box names as the user's, whether a password box holds one, and the boxes the agent filled - by name, never a
-# password or a card's - so a held card can fill the page again. FORM_PW, the password itself, is read only to seal it (pressing), never kept elsewhere
+# THE FORM AS IT STANDS: the user name a box names as the user's, whether a password box holds one, whether that password is a NEW one (`new`: a
+# box the page marks autocomplete=new-password, or a password typed twice - its structure, never its words), and the boxes the agent filled - by
+# name, never a password or a card's - so a held card can fill the page again. FORM_PW, the password itself, is read only to seal it (pressing), never kept elsewhere
 FORM = "(() => { " + DEEP + r"""
   const vis = (e) => { const r = e.getBoundingClientRect(); return !e.disabled && r.width > 2 && r.height > 2; };
   const ins = deepAll('input, select, textarea').filter(vis), texty = (e) => ['text', 'email', 'tel', ''].includes(e.type);
   const user = ins.find((e) => texty(e) && e.value && """ + NAMED + r""".test([e.name, e.id, e.autocomplete, e.getAttribute('aria-label'), e.placeholder].join(' ')));
   const keep = ins.filter((e) => (e.name || e.id) && e.type !== 'password' && e.type !== 'hidden' && !/^cc-/.test(e.autocomplete || '')
     && (e.type === 'checkbox' || e.type === 'radio' ? e.checked : e.value));
+  const pv = deepAll('input[type=password]').filter((e) => !!e.value);
   return { href: location.href, top: window === window.top, title: document.title, user: user ? String(user.value).slice(0, 200) : '',
-           pw: deepAll('input[type=password]').some((e) => !!e.value), password: ins.some((e) => e.type === 'password'),
+           pw: pv.length > 0, password: ins.some((e) => e.type === 'password'),
+           new: pv.some((e) => e.autocomplete === 'new-password') || (pv.length > 1 && pv.every((e) => e.value === pv[0].value)),
            fields: keep.slice(0, 30).map((e) => ({ k: e.name || e.id, t: e.type,
              v: e.type === 'checkbox' || e.type === 'radio' ? (e.value || 'on') : String(e.value).slice(0, 300) })) }; })()"""
 FORM_PW = "(() => { " + DEEP + " const e = deepAll('input[type=password]').find((x) => !!x.value); return e ? e.value : ''; })()"
@@ -1414,6 +1417,34 @@ def asks_more(c) -> bool:
     "Does the page `c` is on ask for a box still to fill (ASKS)? True where it cannot be read: only a page seen through confirms an account."
     try: return bool(c.js(ASKS))
     except SignInError: return True
+def signed_in_page(c, site) -> bool:
+    "Is the page `c` is on a signed-in page of `site`: its top page, no password box, no code step, no box it still asks for?"
+    try: f = c.fields('')
+    except SignInError: return False
+    return bool(f.get('top') and on_site(f.get('href'), site) and not f.get('password') and not code_step(f)) and not asks_more(c)
+def took(store, tid, site, user, c) -> bool:
+    """A site took a sign-up form: on the record (ledger.account) as an account made - 'signed_up', confirmed, where the page after it is a signed-in
+    page; MADE, not yet, where it asks more (walk 11: Outlook's birth-date step counted as made, "confirmed" for an account Microsoft then refused)."""
+    from . import ledger
+    ok = signed_in_page(c, site)
+    ledger.account(store, site, user, 'signed_up' if ok else MADE, tid)
+    return ok
+def confirm_later(store, sid, conn=None) -> bool:
+    """After an act: the page is a signed-in page of a site whose agent-made sign-in is not confirmed yet - confirmed now (ledger.account 'signed_in').
+    Looked at only while one waits (the vault's own rows), one read of the page, no model."""
+    from . import ledger
+    if not any(r['by'] == 'agent' and not r['confirmed'] for r in listing(store)): return False
+    try:
+        c = conn or connect(sid)
+        try:
+            site = site_of(c.js('location.href'))
+            row = saved(store, site) if site else None
+            ok = bool(row) and not confirmed(row, ledger.sites(store)) and signed_in_page(c, site)
+        finally:
+            if conn is None: c.close()
+    except Exception: return False
+    if ok: ledger.account(store, site, _user(row), 'signed_in', row.get('Task'), by='agent')
+    return ok
 REFILL = "((fs) => { " + DEEP + r"""
   let n = 0; for (const f of fs) { const e = deepAll('input, select, textarea').find((x) => (x.name || x.id) === f.k && (f.t !== 'radio' || x.value === f.v));
     if (!e) continue; if (f.t === 'checkbox' || f.t === 'radio') e.checked = true; else e.value = f.v;
@@ -1707,10 +1738,7 @@ def _answered(store, tid, sid, site, c, user, kept) -> str:
     there = f'"{look.get("title") or ""}" ({look.get("href") or f.get("href") or ""})'
     if f.get('top') and on_site(f.get('href'), site) and not f.get('password') and (status or 200) < 400:
         _audit(store, tid, site, 'vault', True, 'signed up', saved=not kept, signup=True)
-        from . import ledger
-        # ...the account is on the record only where the page after it asks nothing more (walk 11: Outlook's birth-date step, the form's next
-        # page, counted as made - "confirmed" in his saved sign-ins for an account Microsoft then refused); one that asks more stays unconfirmed
-        if not asks_more(c): ledger.account(store, site, user, 'signed_up', tid)
+        took(store, tid, site, user, c)
         return (f"{site} took the sign-up{who}: the page shows {there} - look at it for whether the account is made or asks for more.{coded} "
                 f"Its password is kept with the owner's saved sign-ins - you never need it; to sign in again later, open its sign-in page and "
                 f'hand_over with site {site}.{kept}')
@@ -1762,17 +1790,14 @@ def send_held(store, tid, sid, p) -> dict:
 
 
 # ── the agent's own press that sends a password: sealed before it goes, kept once the site takes it ─────────────────────────────────
-# THE SIGN-UP IS THE ONE WAY A NEW ACCOUNT'S PASSWORD IS TYPED (walk 10, 2026-11-23: told ten times "next time run `agent-browser signup`",
-# an agent typed the same made-up password into every trial form): a press that would send a password the agent typed itself, on a site with
-# no saved sign-in, is not sent - the gate runs the sign-up on that form instead (browsergate), which makes, types and keeps the password
-UNSAVED = 'no saved sign-in'
-TYPED_REFUSED = "Not pressed: a new account's password is made and typed by Taskuary, never by an agent, so it ran `agent-browser signup` on this form -"
-
-
-def pressing(store, tid, sid, site, conn=None) -> str | None:
+# AN ACCOUNT THE AGENT MAKES BY TYPING IS KEPT AS ONE IT MAKES WITH THE COMMAND (the owner, 2026-11-23: "if the agent made a login it should save it
+# in the agent vault same as login I give it"; walk 11: a sign-up typed into the page by hand - fill, fill, click - left nothing in the vault, and
+# its sign-in typed first into the page's other form was answered by a sign-up run on it). The gate sees every press: one that sends a password
+# box's value seals what the box holds to the vault first (save, the sign-up's own writer); once the site answers, a refusal puts back what was
+# there, and a form it took is the agent's account - on the record (took), unconfirmed until a signed-in page (confirm_later).
+def pressing(store, tid, sid, site, conn=None) -> None:
     """An act of the agent's is about to press on `site`: remember a user name a box there names (a wizard's later step shows none), and seal a
-    password a box holds - the site is sent it now, and nothing else would ever keep it. -> UNSAVED where that password is one the agent typed for
-    an account the owner has no sign-in for: nothing is kept, and the press is the sign-up's to make."""
+    password a box holds - the site is sent it now, and nothing else would ever keep it. The saved sign-in itself, typed by Taskuary, stays as it is."""
     if not site or not str(tid or '').isdigit(): return
     try:
         c = conn or connect(sid)
@@ -1783,13 +1808,13 @@ def pressing(store, tid, sid, site, conn=None) -> str | None:
     if not (f.get('top') and on_site(f.get('href'), site)): return
     if f.get('user'): _USERS[(int(tid), site)] = f['user']
     if not pw: return
-    prev = _raw(store, site)
-    if not prev: return UNSAVED
     from . import vault
-    if prev.get('Secret') and vault.unseal(prev['Secret']) == pw: return     # ...the saved sign-in itself, typed by Taskuary: his row stays his
-    try: save(store, site, f.get('user') or _USERS.get((int(tid), site), ''), pw, by='agent', keep_old=True, task=tid)
+    prev = _raw(store, site)
+    if prev and prev.get('Secret') and vault.unseal(prev['Secret']) == pw: return     # ...the saved sign-in itself: his row stays his
+    user = f.get('user') or _USERS.get((int(tid), site), '')
+    try: save(store, site, user, pw, by='agent', keep_old=True, task=tid)
     except ValueError as e: return logger.info(f'signin: task {tid} pressed with a password on {site}, not kept - {e}')
-    _PRESSED[str(sid)] = (int(tid), site, prev)
+    _PRESSED[str(sid)] = (int(tid), site, prev, bool(f.get('new')), user)
 
 
 def form_fields(sid) -> list:
@@ -1806,17 +1831,22 @@ def form_state(sid) -> dict:
 
 def settled(store, sid, conn=None) -> str:
     "After that press: the site took it - kept, and said in one line; it kept its form up - the row put back as it was. '' when none was pressed."
+    from . import ledger
     t = _PRESSED.pop(str(sid), None)
     if not t: return ''
-    tid, site, prev = t
+    tid, site, prev, new, user = t
     try:
         c = conn or connect(sid)
-        try: ok = accepted(c, site)
+        try:
+            ok = accepted(c, site)
+            # ...a form that made a password (FORM's `new`) is an account made; a sign-in that let in a password the vault had none for, one signed in
+            if ok and new: took(store, tid, site, user, c)
+            elif ok and not prev: ledger.account(store, site, user, 'signed_in', tid)
         finally:
             if conn is None: c.close()
     except Exception: ok = True                          # ...unreadable: what the site was sent stays kept - a password lost is the worse
-    if not ok and prev: _restore(store, site, prev); return ''
-    _kept(prev, _raw(store, site)); made_line(store, tid, site, _user(_raw(store, site) or {}))
+    if not ok: _restore(store, site, prev); return ''    # ...refused (a wrong password, a form kept up): what was there comes back, or nothing
+    _kept(prev, _raw(store, site)); made_line(store, tid, site, user)
     _audit(store, tid, site, 'vault', True, 'kept from a press', saved=True)
     return f"TASKUARY: the password that form sent to {site} is kept with the owner's saved sign-ins."
 

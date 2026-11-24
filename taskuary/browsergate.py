@@ -258,6 +258,7 @@ def outcome(sid: str, store=None, seen: dict = None) -> str:
     password the act sent is kept or put back first (signin.settled), and said. `seen`: filled with the page it found ({url, title})."""
     from . import signin
     kept = signin.settled(store, sid) if store is not None else ''
+    if store is not None and not kept: signin.confirm_later(store, sid)       # ...an account made earlier, signed in on this page
     return '\n'.join(x for x in (kept, _outcome(sid, seen if seen is not None else {})) if x)
 
 
@@ -719,9 +720,7 @@ def _check(store, tid: int, sid: str, cmd: str, brain=None, cwd: str = '') -> di
     # password a box of the form holds is kept before the press sends it (signin.pressing) - nothing a site was sent is lost
     if any(not setting(a) and not a.get('read') for a in todo):
         signin.acting(store, tid, sid, (here := signin.site_of(pg.get('url'))))
-        if signin.pressing(store, tid, sid, here) == signin.UNSAVED:
-            _ok, line = signin.signup(store, tid, sid)
-            return _deny(f'{signin.TYPED_REFUSED} {line}')
+        signin.pressing(store, tid, sid, here)
     return {}
 
 

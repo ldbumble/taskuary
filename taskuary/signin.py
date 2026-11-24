@@ -1440,9 +1440,35 @@ PASSBOX = r"""(i) => { """ + DEEP + r"""
 # ...and which of those boxes hold the password now, in their order - read on the page, the password never leaves it
 KEPT = PASSBOX.split('const ps =')[0] + r"""return pws().map((e) => e.value === i); }"""
 # ...ON THE FORM THE AGENT WAS FILLING (walk 11: a page with a sign-in form and a sign-up form; the sign-up typed into both and sent the first): the
-# form whose password box holds what the agent typed is marked, and PASSBOX and KEPT read its boxes only - none typed in, every box as before
-SCOPE = "(() => { " + DEEP + r""" deepAll('form[data-tq-signup]').forEach((f) => f.removeAttribute('data-tq-signup'));
-  const t = deepAll('input[type=password]').find((e) => e.value && e.form); if (t) t.form.setAttribute('data-tq-signup', ''); return !!t; })()"""
+# form signup_form picks is marked, and PASSBOX and KEPT read its boxes only - no form holds a password box, every box as before. FORMS reads each
+# form by its structure only: its visible password boxes, whether one holds a value, how many other boxes hold one, whether the focus is in it,
+# whether it asks a NEW password (autocomplete=new-password, or two boxes) or the CURRENT one (autocomplete=current-password)
+FORMS = "(() => { " + DEEP + r""" const a = deepActive(), vis = (e) => { const r = e.getBoundingClientRect(); return !e.disabled && r.width > 2 && r.height > 2; };
+  const btn = ['hidden', 'submit', 'button', 'image', 'reset', 'checkbox', 'radio', 'file'];
+  return deepAll('form').map((f) => { const ins = [...f.elements].filter((e) => e.tagName === 'INPUT' && vis(e)), pw = ins.filter((e) => e.type === 'password');
+    return { pw: pw.length, typed: pw.some((e) => !!e.value), filled: ins.filter((e) => !btn.includes(e.type) && e.type !== 'password' && e.value).length,
+             active: !!a && (a.form === f || f.contains(a)), new: pw.some((e) => e.autocomplete === 'new-password') || pw.length > 1,
+             current: pw.some((e) => e.autocomplete === 'current-password') }; }); })()"""
+MARK = "((i) => { " + DEEP + r""" deepAll('form[data-tq-signup]').forEach((f) => f.removeAttribute('data-tq-signup'));
+  const f = i === null ? null : deepAll('form')[i]; if (f) f.setAttribute('data-tq-signup', ''); return !!f; })"""
+def signup_form(forms: list) -> int | None:
+    """Which form of the page (FORMS) a sign-up's password goes in - None where no form holds a password box (every box is the sign-up's).
+    Walk 13: a sign-in form beside a create-account form, each a user box and a password - the password went into both and Enter into the first.
+    Of the forms with a password box: the one the agent is in (its focus), then the one it typed a password or most boxes into, then the one the
+    page marks as asking a new password, then the one not marked as the sign-in's. Still two -> SignInError: nothing is typed into a guess."""
+    c = [i for i, f in enumerate(forms or []) if f.get('pw')]
+    for k in ('active', 'typed', 'filled', 'new', 'current'):
+        if len(c) < 2: break
+        v = {i: int(not forms[i].get(k)) if k == 'current' else int(forms[i].get(k) or 0) for i in c}
+        if (top := max(v.values())): c = [i for i in c if v[i] == top]
+    if len(c) > 1: raise SignInError('two forms on the page ask for a password and nothing shows which one makes the account - fill its own boxes '
+                                     '(its user name) first, then run `agent-browser signup` again')
+    return c[0] if c else None
+def scope(c) -> int | None:
+    "Mark the form of the page `c` is on that the sign-up fills (signup_form) - PASSBOX, KEPT and send_new act inside it only."
+    i = signup_form(c.js(FORMS) or [])
+    c.js(f'({MARK})({json.dumps(i)})')
+    return i
 # THE FORM AS IT STANDS: the user name a box names as the user's, whether a password box holds one, whether that password is a NEW one (`new`: a
 # box the page marks autocomplete=new-password, or a password typed twice - its structure, never its words), and the boxes the agent filled - by
 # name, never a password or a card's - so a held card can fill the page again. FORM_PW, the password itself, is read only to seal it (pressing), never kept elsewhere
@@ -1452,11 +1478,11 @@ FORM = "(() => { " + DEEP + r"""
   const user = ins.find((e) => texty(e) && e.value && """ + NAMED + r""".test([e.name, e.id, e.autocomplete, e.getAttribute('aria-label'), e.placeholder].join(' ')));
   const keep = ins.filter((e) => (e.name || e.id) && e.type !== 'password' && e.type !== 'hidden' && !/^cc-/.test(e.autocomplete || '')
     && (e.type === 'checkbox' || e.type === 'radio' ? e.checked : e.value));
-  const pv = deepAll('input[type=password]').filter((e) => !!e.value);
+  const pv = deepAll('input[type=password]').filter((e) => !!e.value), fs = deepAll('form');
   return { href: location.href, top: window === window.top, title: document.title, user: user ? String(user.value).slice(0, 200) : '',
            pw: pv.length > 0, password: ins.some((e) => e.type === 'password'), pay: ins.some((e) => /^cc-/.test(e.autocomplete || '')),
            new: pv.some((e) => e.autocomplete === 'new-password') || (pv.length > 1 && pv.every((e) => e.value === pv[0].value)),
-           fields: keep.slice(0, 30).map((e) => ({ k: e.name || e.id, t: e.type,
+           fields: keep.slice(0, 30).map((e) => ({ k: e.name || e.id, t: e.type, f: fs.indexOf(e.form),
              v: e.type === 'checkbox' || e.type === 'radio' ? (e.value || 'on') : String(e.value).slice(0, 300) })) }; })()"""
 FORM_PW = "(() => { " + DEEP + " const e = deepAll('input[type=password]').find((x) => !!x.value); return e ? e.value : ''; })()"
 # ...A PAGE THAT STILL ASKS: a box the page itself requires and nobody filled - the browser's own check (validity.valueMissing), or one marked
@@ -1497,7 +1523,9 @@ def confirm_later(store, sid, conn=None) -> bool:
     if ok: ledger.account(store, site, _user(row), 'signed_in', row.get('Task'), by='agent')
     return ok
 REFILL = "((fs) => { " + DEEP + r"""
-  let n = 0; for (const f of fs) { const e = deepAll('input, select, textarea').find((x) => (x.name || x.id) === f.k && (f.t !== 'radio' || x.value === f.v));
+  // ...in the form it was typed in (FORM's `f`): two forms of one page name their boxes alike (a sign-in's acct beside a sign-up's acct)
+  const forms = deepAll('form'), ins = deepAll('input, select, textarea'), is = (x, f) => (x.name || x.id) === f.k && (f.t !== 'radio' || x.value === f.v);
+  let n = 0; for (const f of fs) { const e = ins.find((x) => is(x, f) && (f.f == null || f.f < 0 || forms.indexOf(x.form) === f.f)) || ins.find((x) => is(x, f));
     if (!e) continue; if (f.t === 'checkbox' || f.t === 'radio') e.checked = true; else e.value = f.v;
     e.dispatchEvent(new Event('input', { bubbles: true })); e.dispatchEvent(new Event('change', { bubbles: true })); n++; } return n; })"""
 
@@ -1510,7 +1538,7 @@ def type_new(sid: str, site: str, pw: str, c=None) -> int:
         own = c is None; c = c or connect(sid)
         try:
             _guard(c, site, '')
-            c.js(SCOPE)
+            scope(c)
             n = (c.js(f'({PASSBOX})(-1)') or {}).get('n') or 0
             if not n: raise SignInError(f'there is no password box on the {site} page')
             def one(i):

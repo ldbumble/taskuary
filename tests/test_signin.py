@@ -1450,7 +1450,8 @@ def test_a_new_password_is_in_every_box_or_the_sign_up_says_which_did_not_keep_i
     class Page:
         def __init__(self, sticky): self.boxes, self.at, self.redraw, self.sticky = ['', ''], 0, True, sticky
         def js(self, code):
-            if code == signin.SCOPE: return False
+            if code == signin.FORMS: return []
+            if code.startswith(f'({signin.MARK})'): return False
             if code.startswith(f'({signin.KEPT})'): return [b == json.loads(code[len(signin.KEPT) + 3:-1]) for b in self.boxes]
             self.at = int(code[len(signin.PASSBOX) + 3:-1])
             return {'n': 2, 'top': True, 'href': 'https://mail.vendor.example/signup', 'focused': self.at >= 0}
@@ -1462,6 +1463,50 @@ def test_a_new_password_is_in_every_box_or_the_sign_up_says_which_did_not_keep_i
         p = Page(sticky=False)
         assert signin.type_new('s1', 'vendor.example', 'Pw-1a!', p) == 2 and p.boxes == ['Pw-1a!', 'Pw-1a!']
         with pytest.raises(signin.SignInError, match='1 of its 2 password boxes'): signin.type_new('s1', 'vendor.example', 'Pw-1a!', Page(sticky=True))
+
+
+class TwoForms:
+    """A page with a Login form above a Create Account form, each a user box and a password box, named alike (acct, pw) - the forms as FORMS
+    reads them off a real Chrome (checked on one), the agent's user name typed into the lower one and its focus left there."""
+    HREF = 'https://news.vendor.example/login'
+    def __init__(self, focus=1, auto=('', '')):
+        self.forms = [{'acct': '', 'pw': '', 'auto': auto[0]}, {'acct': 'nwfin_seats', 'pw': '', 'auto': auto[1]}]
+        self.focus, self.mark, self.at, self.sent = focus, None, None, None
+    def boxes(self): return [i for i in range(2) if self.mark is None or self.mark == i]
+    def js(self, code):
+        if code == signin.FORMS:
+            return [{'pw': 1, 'typed': bool(f['pw']), 'filled': int(bool(f['acct'])), 'active': self.focus == i, 'new': f['auto'] == 'new-password',
+                     'current': f['auto'] == 'current-password'} for i, f in enumerate(self.forms)]
+        if code.startswith(f'({signin.MARK})'): self.mark = json.loads(code[len(signin.MARK) + 3:-1]); return self.mark is not None
+        if code.startswith(f'({signin.KEPT})'): return [self.forms[i]['pw'] == json.loads(code[len(signin.KEPT) + 3:-1]) for i in self.boxes()]
+        if code.startswith(f'({signin.PASSBOX})'):
+            n, bs = int(code[len(signin.PASSBOX) + 3:-1]), self.boxes()
+            if 0 <= n < len(bs): self.at = bs[n]
+            return {'n': len(bs), 'top': True, 'href': self.HREF, 'focused': 0 <= n < len(bs)}
+        return ''
+    def type(self, pw): self.forms[self.at]['pw'] = pw
+    def enter(self): self.sent = self.at
+
+
+def test_a_sign_up_beside_a_sign_in_form_fills_and_sends_only_the_form_the_agent_was_filling():
+    """Walk 13: a page with a Login form and a Create Account form, each a user box and a password. Nothing was typed in either password box, so
+    no form was marked: the new password went into both, and Enter was pressed in the first - the Login - "Bad login" three times, and the
+    account was left for the owner to make by hand. Only the form the agent was filling gets the password, and Enter is pressed there."""
+    site = 'vendor.example'
+    with mock.patch.object(signin, '_guard', return_value={}), mock.patch.object(signin, 'accepted', return_value=True), \
+         mock.patch.object(signin, 'answered', return_value=200), mock.patch.object(signin, 'SETTLE', 0):
+        p = TwoForms()
+        assert signin.type_new('s1', site, 'Pw-1a!', p) == 1
+        assert [f['pw'] for f in p.forms] == ['', 'Pw-1a!'], 'the Login form is never typed into'
+        assert signin.send_new('s1', site, p)['ok'] and p.sent == 1, 'Enter goes into the Create Account form'
+        # ...the focus elsewhere: the boxes the agent filled say which; and where it filled none, the page's own marks
+        p = TwoForms(focus=None); signin.type_new('s1', site, 'Pw-1a!', p); assert [f['pw'] for f in p.forms] == ['', 'Pw-1a!']
+        p = TwoForms(focus=None, auto=('', 'current-password')); p.forms[1]['acct'] = ''
+        signin.type_new('s1', site, 'Pw-1a!', p); assert [f['pw'] for f in p.forms] == ['Pw-1a!', ''], 'the one not marked as the sign-in'
+        # ...and nothing to tell them apart: nothing is typed into a guess, and the agent is told what to do
+        p = TwoForms(focus=None); p.forms[1]['acct'] = ''
+        with pytest.raises(signin.SignInError, match='fill its own boxes'): signin.type_new('s1', site, 'Pw-1a!', p)
+        assert [f['pw'] for f in p.forms] == ['', '']
 
 
 def test_an_account_the_agent_made_is_one_vault_row_he_can_read_and_the_next_task_is_told():

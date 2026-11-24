@@ -32,6 +32,9 @@ DIGEST_AI_CHARS = 80000
 # places must agree on it: the composer writes it, and the routing judge cuts at it.
 RAW_MARK = '\n\n--- raw data ---\n'
 SUMMARY_TOKENS = 1500     # a report summary is prose, not a triage verdict - give it room
+# what a run's record keeps of what its model read: 30,000 cut the Advisor's look short once it moved to the normal model (the owner,
+# 2026-11-24) - four times that, as its ceiling rose (lookout.RUN_TOKENS)
+INPUTS_KEPT = 120_000
 
 
 def row_limit(cfg):
@@ -2196,7 +2199,7 @@ def run_report_source(store, src: dict, llm=None, trigger: str = 'schedule') -> 
     if out.get('flow'): return out
     rec.update({'ms': int((time.time() - t0) * 1000), 'subject': out.get('subject'), 'message_id': out.get('message_id'),
                 'failed': bool(out.get('failed', run_failed(out.get('subject')))), 'files': out.get('files'),
-                'said': out.get('said'), 'reviewed': out.get('reviewed'), 'inputs': str(out.get('inputs') or '')[:30000],
+                'said': out.get('said'), 'reviewed': out.get('reviewed'), 'inputs': str(out.get('inputs') or '')[:INPUTS_KEPT],
                 'lines': out.get('lines') or [], 'summary': str(out.get('summary') or '')[:2000]})
     # A run that fails by RETURNING a FAILED subject never raised, so the except branch above - the only
     # place that filled `error` - never ran, and the row was written Failed=1 with Error NULL. Everything

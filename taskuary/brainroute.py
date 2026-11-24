@@ -27,8 +27,11 @@ from .timewords import clock
 
 # What a call is FOR. Closed: a new call site picks one of these, and an AST test fails a build_llm without it.
 JOBS = ('triage', 'draft', 'summary', 'advisor', 'memory', 'rank', 'assistant', 'general', 'coding', 'judge', 'report', 'quick_work')
-# the one-message jobs: read, judge, write - none of them can act, so asking again cannot do anything twice
-ONE_SHOT = ('triage', 'draft', 'summary', 'advisor', 'memory', 'rank', 'judge', 'report')
+# the one-message jobs on triage's card: read, judge, write - none of them can act, so asking again cannot do anything twice
+ONE_SHOT = ('triage', 'draft', 'summary', 'memory', 'rank', 'judge', 'report')
+# ...and THE ADVISOR THINKS ON THE NORMAL MODEL (the owner, 2026-11-24): its look runs where general work does - the general agent's AI at
+# its normal gear, and in Auto the AI the owner set for normal work (by_level) - never triage's quick sorting model
+NORMAL = ('advisor',)
 # ...of which these may be asked again of a strong model (a report may research with tools, so it is not one of them)
 ESCALATES = ('triage', 'draft', 'summary', 'judge', 'advisor', 'rank', 'memory')
 JOB_WORDS = {'triage': 'triage', 'draft': 'a redraft', 'summary': 'a summary', 'advisor': 'the Advisor', 'memory': 'memory',
@@ -267,6 +270,7 @@ def session_chain(store, brain: str = None) -> list:
 def _fixed(store, job: str, task=None, want_pick=None, want_model=None, gear=None) -> tuple:
     "(pick, model, gear, chain) - today's answer for this job, asked of the resolver that has always given it."
     from . import agents, llm
+    if job in NORMAL: gear = 'main'
     # NO DRAFTING BRAIN (the owner, 2026-11-11: "drafting which the agent does now no more drafting ai"): the task's agent writes every
     # reply; the one-shot 'draft' left - a reply or message the owner presses for - is a one-message job like the rest of these
     if job in ONE_SHOT:
@@ -377,10 +381,11 @@ def _first(store, f: dict, use: str):
 # ── an AI per level (the owner, 2026-11-06: Auto choosing between their AIs by triage's difficulty - "not by default but you can
 # adjust in settings"). Off until set: each level is the card's AI. Set, quick, normal or hard work runs on the AI named for it,
 # when that AI can take the call - otherwise on the card, and the reason says why. Only the agents' work: triage, drafting and the
-# Assistant each have a card of their own that already IS the owner's choice of AI for that job, and coding takes only a CLI.
+# Assistant each have a card of their own that already IS the owner's choice of AI for that job, and coding takes only a CLI. The Advisor's
+# look (NORMAL) is general work's normal level too.
 LEVEL_KEY = 'ai_route_brain_by_level'
 LEVEL_OF = {'light': 'quick', 'standard': 'normal', 'strong': 'hard'}
-LEVEL_JOBS = ('general', 'quick_work', 'coding')
+LEVEL_JOBS = ('general', 'quick_work', 'coding', *NORMAL)
 
 
 def model_id(m) -> str:

@@ -95,7 +95,7 @@ def test_fixed_mode_is_todays_answer_for_every_job(real, home):
             r = brainroute.choose(s, job)
             assert (r.pick, r.model) == _today(s, job), (home, job)
             assert r.tier == 'fixed' and r.rule == 'fixed'
-            assert r.gear == ('main' if job in ('general', 'coding', 'quick_work') else 'light')
+            assert r.gear == ('main' if job in ('general', 'coding', 'quick_work', 'advisor') else 'light')
             # the reason names what runs, or says nothing does - never a vendor the home does not have
             assert r.why and (agents.NO_AI in r.why) == (not r.pick)
 
@@ -444,3 +444,23 @@ def test_a_level_model_saved_as_the_pickers_whole_object_reads_and_saves_as_its_
     assert brainroute.by_level(s)['quick']['model'] == 'gpt-6.2-sol'
     brainroute.save_by_level(s, {'quick': {'pick': 'cli:codex', 'model': {'id': 'gpt-6.2-astra', 'label': 'GPT-6.2-Astra'}}})
     assert brainroute.by_level(s)['quick']['model'] == 'gpt-6.2-astra'
+
+
+def test_the_advisor_thinks_on_the_normal_model_never_triages_quick_one(real):
+    """The owner, 2026-11-24: the twice-a-day Advisor look ran on triage's card at its light gear - the sorting model. It runs where general
+    work does: the general agent's AI on its normal gear, and in Auto the AI he set for normal work."""
+    real.add('claude')
+    s, cfg, cid = _home(('claude',), {'claude': True}, connector='anthropic')
+    p = f'connector:{cid}'
+    s.set_setting('triage_ai', p, 'owner'); s.set_setting('assistant_ai', 'cli:claude', 'owner')
+    with mock.patch.object(config, 'load', lambda: cfg):
+        clic.sync(cfg, s)
+        s.set_setting('ai_route_mode', 'fixed', 'owner')
+        r, g = brainroute.choose(s, 'advisor', gear='light'), brainroute.choose(s, 'general')
+        assert (r.pick, r.gear) == (g.pick, 'main') and r.pick != brainroute.choose(s, 'triage').pick, r.why
+        s.set_setting('ai_route_mode', 'auto', 'owner')
+        r = brainroute.choose(s, 'advisor', gear='light')
+        assert (r.tier, r.gear) == ('standard', 'main') and r.pick == brainroute.choose(s, 'general').pick, r.why
+        brainroute.save_by_level(s, {'normal': {'pick': p, 'model': 'claude-sonnet-5'}})
+        r = brainroute.choose(s, 'advisor')
+        assert (r.pick, r.model, r.level) == (p, 'claude-sonnet-5', 'normal'), r.why

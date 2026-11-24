@@ -568,7 +568,7 @@ def test_every_run_leaves_a_line_and_three_with_nothing_say_so_once_on_the_rail(
     # ...and as data for the Reports panel (AdvisorRuns.jsx): what it looked at, read, raised, held and why, and what it used
     run = got['items'][1]
     assert run['deep'][0][0] == 'source:email' and run['held'][0] == ['You paid 99 dollars for nothing', 'the number 99 is not in what it cites']
-    assert run['used'].startswith('about ') and 'tokens in 1 call(s) (ceiling 30,000)' in run['used']
+    assert run['used'].startswith('about ') and f'tokens in 1 call(s) (ceiling {lookout.RUN_TOKENS:,})' in run['used']
 
 
 def test_a_task_agent_has_a_note_lead_tool_whose_door_is_its_own_and_it_reaches_the_advisor():
@@ -654,7 +654,7 @@ def test_a_run_that_keeps_reading_never_passes_its_budget_or_its_reads():
     assert out['ran'] and len(r['reads']) <= lookout.MAX_READS and out['calls'] <= lookout.STEPS
     assert r['tokens']['in'] + r['tokens']['out'] <= lookout.RUN_TOKENS and sum(calls) <= lookout.RUN_TOKENS + lookout.PROPOSE_TOKENS, (r['tokens'], calls)
     assert len(lookout.window(s)[0]) <= lookout.WINDOW_CHARS, 'a big mailbox is a summary, never the mailbox'
-    assert 'tokens in 3 call(s) (ceiling 30,000)' in lookout.run_line(r)
+    assert f'tokens in 3 call(s) (ceiling {lookout.RUN_TOKENS:,})' in lookout.run_line(r)
 
 
 def test_the_advisor_post_carries_what_the_look_raised_once_and_no_idea_of_its_own():

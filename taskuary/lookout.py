@@ -63,12 +63,15 @@ EVERY_DAYS, RETRY_H = 1, 6           # a day between passes (setting lookout_eve
 # STEPS: the run's turns - reads, then its ideas; CALLS: those, and a re-ask or two of an answer that was not JSON
 DAYS, MAX_IDEAS, MAX_RAISE, MAX_OPEN, STEPS, CALLS, MORNING_H = 30, 5, 3, 6, 3, 5, 7
 GROUPS, OWN_GROUPS, PEOPLE, WEEKS = 30, 12, 10, 6
-TASKS_SHOWN, GIST, WINDOW_CHARS = 15, 120, 16000
+TASKS_SHOWN, GIST, WINDOW_CHARS = 15, 120, 64000
 PROPOSE_TOKENS = 2600
 # A RUN HAS A BUDGET (the owner, 2026-11-23: "make sure you are not using a billion tokens each time"): every turn sends the window again,
 # so the window is the cost - cut at WINDOW_CHARS, each read at READ_CHARS, MAX_READS in a run - and RUN_TOKENS is the ceiling on what one
 # run may send and get back (counted as characters / 4 before each call, the answer's room reserved): a turn that would pass it is the last
-RUN_TOKENS, MAX_READS = 30000, 8
+# ...ON THE NORMAL MODEL, FOUR TIMES THE ROOM (the owner, 2026-11-24): the look moved off the quick sorting model (brainroute.NORMAL), and
+# the window, each read and the ceiling rose together - 16,000/2,500 chars and 30,000 tokens became 64,000/10,000 and 120,000, a turn at
+# most ~40,000 tokens, well inside a normal model's context; the answer's room (PROPOSE_TOKENS) is the same answer
+RUN_TOKENS, MAX_READS = 120000, 8
 LAST_KEY, TRIED_KEY, HELD_KEY, HELD_CAP = 'lookout_last_run', 'lookout_tried_at', 'lookout_held', 20
 # ROTATION (the owner, 2026-11-23: "it can't take in all the data from every system ... it should rotate through them"): each pass reads
 # DEEP areas whole - the one looked at longest ago, and the one with the most new since its last look (NOTABLE or more) - and only a light
@@ -103,7 +106,7 @@ READS = {'search_mail': 'search_mail {q, sent, days}: messages in and out whose 
          'repeats': 'repeats {days}: what happens again and again, counted by code - what the owner sends by hand on a cadence, what keeps arriving '
                     'from one sender (a failure, a complaint, a question), the threads that drag (default 60 days)',
          'memory': "memory {q}: the lines of the owner's memory and JOB.md that hold any word of q"}
-READ_CHARS, READS_PER_STEP, HITS = 2500, 4, 12
+READ_CHARS, READS_PER_STEP, HITS = 10000, 4, 12
 SPEND_DAYS, SPEND_ROWS, SPEND_EACH, TWICE_DAYS, REPEAT_DAYS, REPEAT_MIN, REPEAT_ROWS, DRAG_N, DRAG_DAYS = 90, 20, 6, 10, 60, 3, 8, 4, 10
 # what a stake may multiply by beyond what it read: the calendar's own numbers, and a percent
 CONVERT = {'12', '52', '4', '7', '30', '365', '24', '60', '100'}

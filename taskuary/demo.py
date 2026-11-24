@@ -1032,7 +1032,6 @@ def seed(store) -> int:
     from . import origin, senders
     for r in store._rows("SELECT DISTINCT TaskId FROM review WHERE Status='pending' AND TaskId IS NOT NULL"):
         if origin.hold(store, r['TaskId']): senders.vouch(store, store.list_messages(r['TaskId']))
-    origin._HOLDS.clear()
     logger.info(f'demo: seeded {made} items of invented work')
     return made
 

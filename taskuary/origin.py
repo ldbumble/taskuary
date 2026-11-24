@@ -313,7 +313,6 @@ def _drop_stale_hold(store, t: dict, why: str):
 
 def raise_to(store, tid: int, to: str, actor: str):
     "The owner's say-so: everything on the task so far counts as `to`. A later message is judged on its own."
-    _HOLDS.pop((id(store), int(tid)), None)
     if to not in ('trusted', 'owner'): raise ValueError(f'cannot raise a task to {to!r}')
     ms = store.list_messages(tid); last = max((m['MessageId'] for m in ms), default=0)
     senders.vouch(store, ms, int((store.get_task(tid) or {}).get('TrustedThrough') or 0))          # a chat sender the owner vouched for here is trusted on their next task too
@@ -361,17 +360,26 @@ HELD_LINE = "You have not trusted {who} yet, so no agent works on this until you
 JOINED_LINE = "You have not trusted {who} yet, so the agent hears nothing more from this thread until you do."
 # ...and what the press does past this task, said under it: a trust is kept, and Settings is where it is taken back
 TRUST_AFTER = "Trusting them also lets their next messages start an agent by themselves - take it back any time in Settings, under Agent permissions."
-_HOLDS = {}                 # (store, task) -> (what it was judged on, when, the hold): a chat at work reads this twice a second
 def hold(store, tid) -> dict | None:
     "{line, person (the Trust action's label), org, who, mids (the untrusted messages)} while an untrusted sender's words stand on the task."
-    import time
-    if not tid or not (t := store.get_task(int(tid))) or t.get('Status') in ('done', 'dropped'): return None
-    # ...judged again when the thread or what he vouched for moved, else every few seconds (a trust given elsewhere - an organisation's -
-    # changes it with neither): a long group chat is not judged line by line on every read of its list
-    n = store._one('SELECT COUNT(*) AS n, MAX(MessageId) AS m FROM message WHERE TaskId=?', (int(tid),)) or {}
-    key, sig, now = (id(store), int(tid)), (n.get('n'), n.get('m'), t.get('TrustedThrough'), t.get('OriginBase')), time.time()
-    if (was := _HOLDS.get(key)) and was[0] == sig and now - was[1] < 5: return was[2]
-    _HOLDS[key] = (sig, now, got := _hold(store, int(tid), t))
+    return (_judged(store, tid) or {}).get('hold')
+# A TASK'S HOLD IS A STORED FACT (origin_hold), judged again only when what it was judged on moved: the task's thread (its count and newest
+# line), its TrustedThrough and OriginBase, and change_gen 'trust' - every write to what a sender's trust is read from (store.TRUST_INPUTS),
+# from any process. The cold rail after a restart judged every open task's senders afresh, ~4 s of its first pile (2026-11-24)
+_SIG = """SELECT t.Status, t.TrustedThrough, t.OriginBase, (SELECT COUNT(*) FROM message WHERE TaskId=t.TaskId) n,
+    (SELECT MAX(MessageId) FROM message WHERE TaskId=t.TaskId) m, (SELECT Gen FROM change_gen WHERE Tbl='trust') g,
+    h.Sig, h.HoldJson FROM task t LEFT JOIN origin_hold h ON h.TaskId=t.TaskId WHERE t.TaskId=?"""
+def _judged(store, tid) -> dict | None:
+    "{hold, own (his_own, read only where a hold stands)} for an open task, from origin_hold while it is current, else judged and kept."
+    if not tid or not (r := store._one(_SIG, (int(tid),))) or r['Status'] in ('done', 'dropped'): return None
+    sig = json.dumps([r['n'], r['m'], r['TrustedThrough'], r['OriginBase'], r['g']])
+    if r['Sig'] == sig:
+        try: return json.loads(r['HoldJson'])
+        except (TypeError, ValueError): pass
+    h = _hold(store, int(tid), store.get_task(int(tid)) or {})
+    got = {'hold': h, 'own': his_own(store, tid) if h else None}
+    # ...kept under what it was judged ON: a write meanwhile (its own lift, another process) leaves it stale, so it is judged again
+    store._exec('INSERT OR REPLACE INTO origin_hold (TaskId, Sig, HoldJson) VALUES (?,?,?)', (int(tid), sig, json.dumps(got)))
     return got
 # ...TRUST IS A PRESS ON A PERSON, NOT A TASK (the owner, 2026-11-11: "Trust starts the held agent"; the roads audit, 2026-11-19 #6): Omar
 # Keller held on two tasks, trusted on one, stayed held on the other until a second Trust. The press remembers him (senders.vouch, read by
@@ -382,8 +390,8 @@ def held_tasks(store, but=None) -> set:
     rows = store._rows("SELECT TaskId FROM task WHERE Status NOT IN ('done', 'dropped') AND (Origin='stranger' OR Tags LIKE ?)", (f'%{HOLD_TAG}%',))
     return {r['TaskId'] for r in rows if r['TaskId'] != but and hold(store, r['TaskId'])}
 def released(store, was: set) -> list:
-    "Of the tasks `was` (held_tasks before a Trust press), the ones no sender holds now - judged afresh, never from the hold's few-second memo."
-    for tid in was: _HOLDS.pop((id(store), int(tid)), None)
+    "Of the tasks `was` (held_tasks before a Trust press), the ones no sender holds now - judged afresh, never from the stored hold."
+    for tid in was: store._exec('DELETE FROM origin_hold WHERE TaskId=?', (int(tid),))
     return [tid for tid in sorted(was) if not hold(store, tid)]
 def _hold(store, tid: int, t: dict) -> dict | None:
     msgs = store.list_messages(tid)
@@ -423,7 +431,7 @@ def his_own(store, tid) -> bool:
 
 def keeps_him(store, tid) -> dict | None:
     "The hold when it keeps his own line too (a task a stranger's mail started), else None - what every road his line takes asks."
-    return h if (h := hold(store, tid)) and not his_own(store, tid) else None
+    return j['hold'] if (j := _judged(store, tid)) and j['hold'] and not j['own'] else None
 
 
 def launch_mode(store, tid, cli: str, cmd: str = '') -> str:

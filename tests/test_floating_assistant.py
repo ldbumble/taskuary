@@ -96,7 +96,7 @@ class FloatingAssistantTests(unittest.TestCase):
         store.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'reply', 'DraftText': 'Attached.',
                           'Status': 'pending'})
         from taskuary import origin, senders
-        senders.vouch(store, store.list_messages(tid)); origin._HOLDS.clear()      # ...a stranger's card waits behind Trust (origin.hold)
+        senders.vouch(store, store.list_messages(tid))      # ...a stranger's card waits behind Trust (origin.hold)
         store.add_comment(tid, 'coding', 'agent', 'AGENT REPORT\nCorrected the CSV escaping and added a regression test.')
         snapshot = general.dock_snapshot(store)
         self.assertIn('NEEDS THE OWNER NOW', snapshot)

@@ -865,6 +865,15 @@ PROCESSING_DIRTY_TABLES = (
     'funnel_state', 'comment', 'task_artifact', 'transcript',
     'batch_item',                # a batch row's progress line (batch.rail) moves as the agent reports each item
 )
+# WHAT A SENDER'S TRUST IS READ FROM (senders.known, origin.of_message, idea_rests_on): (table, the columns whose update moves it - '' every
+# column, 'blind' every setting a pile never reads stays out). A write to any of them moves change_gen 'trust', and every task's stored hold
+# is judged again on its next read (origin.hold). A table read by the trust rules and missing here serves a stale hold.
+TRUST_INPUTS = (
+    ('message', ''), ('review', ''), ('sender_trust', ''), ('idea', ''), ('memory_line', ''), ('doc', ''), ('agent', ''),
+    ('project_link', ''), ('setting', 'blind'),
+    ('source', 'Channel, Address, Owner, ConnectorId, Active, ConfigJson'), ('connector', 'Type, ConfigJson, Active, Roles, Scope'),
+    ('task', 'OriginBase, TrustedThrough, Source, SourceRef, Status, Kind'),
+)
 PROCESSING_DIRTY_SETTINGS = (
     'feed_days', 'funnel_hours', 'funnel_mutes', 'owner_email', 'team_domains', 'processing_membership_rules',
     'reply_channels',            # read into a reply card's display backing (funnel_presentation): a change must move the stamp
@@ -1544,6 +1553,18 @@ class SQLiteStore:
                           UPDATE processing_reconcile_state
                           SET DirtyGeneration=DirtyGeneration+1 WHERE Singleton=1;
                         END''')
+            # WHO IS TRUSTED moves with these writes, from any process (origin.hold keeps each task's judged hold under this generation)
+            self.cx.execute("INSERT OR IGNORE INTO change_gen (Tbl, Gen) VALUES ('trust', 0)")
+            self.cx.execute('CREATE TABLE IF NOT EXISTS origin_hold (TaskId INTEGER PRIMARY KEY, Sig TEXT, HoldJson TEXT)')
+            # ...a setting only where its value moved, and none a pile never reads (a stamp the store rewrites as it opens left every hold stale)
+            blind = lambda r: ' AND '.join(f"{r}.Name NOT LIKE '{k}%'" for k in PILE_BLIND_SETTINGS)
+            for table, cols in TRUST_INPUTS:
+                for action in ('INSERT', 'UPDATE', 'DELETE'):
+                    of = f' OF {cols}' if action == 'UPDATE' and cols not in ('', 'blind') else ''
+                    row = 'OLD' if action == 'DELETE' else 'NEW'
+                    cond = '' if cols != 'blind' else f' WHEN {blind(row)}' + (' AND OLD.Value IS NOT NEW.Value' if action == 'UPDATE' else '')
+                    self.cx.execute(f'''CREATE TRIGGER IF NOT EXISTS trust_gen_{table}_{action.lower()} AFTER {action}{of} ON {table}{cond}
+                        BEGIN UPDATE change_gen SET Gen=Gen+1 WHERE Tbl='trust'; END''')
             setting_names = ','.join("'" + name + "'" for name in PROCESSING_DIRTY_SETTINGS)
             self.cx.execute(f'''CREATE TRIGGER IF NOT EXISTS processing_dirty_setting_insert
                 AFTER INSERT ON setting WHEN NEW.Name IN ({setting_names}) BEGIN

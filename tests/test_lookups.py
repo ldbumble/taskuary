@@ -17,7 +17,7 @@ def world():
 def read(s, kind, **p): return concierge.read_op(s, kind, p)
 def trust(s, tid):
     from taskuary import origin, senders
-    senders.vouch(s, s.list_messages(tid)); origin._HOLDS.clear()
+    senders.vouch(s, s.list_messages(tid))
 
 
 class LookupTests(unittest.TestCase):

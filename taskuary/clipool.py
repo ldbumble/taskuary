@@ -286,7 +286,7 @@ def touch(prefix: str) -> int:
     n, now = 0, time.time()
     with _LOCK:
         for k, lv in _POOL.items():
-            if (k == prefix or k.startswith(prefix + ':')) and lv.alive(): lv.used = now; n += 1
+            if _under(k, prefix) and lv.alive(): lv.used = now; n += 1
     return n
 
 
@@ -471,10 +471,17 @@ def drop(key: str, lv) -> None:
     lv.close()
 
 
+def _under(k: str, prefix: str) -> bool:
+    """`k` is `prefix`'s conversation or one under it ('general:1', 'general:1:x'; 'concierge:' takes every concierge one; '' takes all) - by
+    whole parts: as a bare string prefix, task 1's agent idling out closed task 10's (walk 14, 2026-11-24: 'general:1' took 'general:10',
+    1.3 s into its first turn)."""
+    return not prefix or k == prefix or k.startswith(prefix.rstrip(':') + ':')
+
+
 def close(prefix: str) -> int:
-    """Close every live conversation whose key starts with `prefix` - New chat, a finished general task."""
+    """Close every live conversation that is `prefix`'s or under it (_under) - New chat, a finished general task."""
     with _LOCK:
-        keys = [k for k in _POOL if k.startswith(prefix)]
+        keys = [k for k in _POOL if _under(k, prefix)]
         gone = [_POOL.pop(k) for k in keys]
     for lv in gone: lv.close()
     return len(gone)

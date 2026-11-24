@@ -245,6 +245,25 @@ class _Conv:
     def close(self): self.closed = True
 
 
+def test_making_room_never_closes_another_tasks_conversation_whose_number_starts_the_same(monkeypatch):
+    """Walk 14, 2026-11-24: a full pool closed task 1's agent at rest to open task 10's; task 1's session then saw its CLI gone and idled
+    out, closing 'general:1' - as a bare prefix that took 'general:10' too, and the new agent "died mid-turn" 1.3 s into its first turn."""
+    monkeypatch.setattr(clipool, 'MAX_LIVE', 2)
+    try:
+        one, other = _Conv(), _Conv()
+        clipool._put('general:1', one); clipool._put('general:2', other)
+        one.used -= clipool.REST + 1
+        ten = _Conv(); clipool._put('general:10', ten)
+        assert one.closed and not ten.closed
+        ten.lock.acquire()                                         # its first turn is at work
+        assert clipool.close('general:1') == 0                     # task 1's idle-out, after the pool closed its CLI
+        assert not ten.closed and clipool._POOL.get('general:10') is ten
+        assert clipool.touch('general:1') == 0 and clipool.touch('general:10') == 1
+        ten.lock.release()
+        assert clipool.close('general:') == 2 and ten.closed and other.closed
+    finally: clipool.close('')
+
+
 def test_a_full_pool_never_closes_a_conversation_at_work_or_just_opened(monkeypatch):
     """Walk 9, 2026-11-23: three agents "died mid-turn" at once with 13 tasks open - the pool, full at 6, closed the oldest conversation
     with no turn LOCKED on it: one just opened, whose turn had not yet taken its lock. A start past the cap waits for room instead."""

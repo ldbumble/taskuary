@@ -508,6 +508,9 @@ async def run() -> None:
 
     config = uvicorn.Config(app, host=HOST, port=PORT, log_level="warning")
     server = uvicorn.Server(config)
+    # ...stoppable by the app's own Quit (POST /api/quit), as the desktop's server is: the harness asks it before any kill, so its shutdown runs
+    from taskuary import workerstate
+    workerstate.SERVER[0] = server
     await server.serve(sockets=[listener])
 
 

@@ -478,6 +478,9 @@ const agentWords = (e) => {
   if (ours.kind === "helper") return null;                 // ...a helper's row reads by the work it was given, its steps under it (tidy)
   // ...and a browser call by what it acted on (browserStep, then the gate's own `did`): its title is the command (walk 11: "agent-browser click '@e79'")
   if (ours.browser) return null;
+  // ...and a call whose title is its own command text said nothing of what it does (walk 16, Codex: rows read "$reply = @' Hi Erin ..."): ours
+  const cmd = flat([d.args?.command ?? d.args?.cmd ?? ""].flat().join(" ").replace(/`/g, "")), cut = title.replace(/(…|\.\.\.)$/, "").trim();
+  if (cmd && cut && cmd.startsWith(cut)) return null;
   const kind = ACP_KIND[d.tool_kind] || ours.kind || "tool", t = asCode(title), summary = t.length > 140 ? `${t.slice(0, 139)}…` : t;
   const chips = [...new Set((d.paths || []).map(baseName).filter(Boolean))].filter((b) => !summary.includes(b)).slice(0, 3);
   return { kind, summary, doing: summary, titled: true, file: (d.paths || [])[0] || "", ...(kind === "run" ? { code: summary } : {}), ...(chips.length ? { chips } : {}) };

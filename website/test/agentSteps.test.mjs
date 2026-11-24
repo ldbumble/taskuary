@@ -609,7 +609,14 @@ test("a browser call reads by what it did, a command names its files by name, an
     { id: "s:x:c3", k: "tool", name: "Bash", title: path, tool_kind: "execute", args: { command: path }, status: "completed" }]);
   assert.equal(click.summary, "Clicked on the page");
   assert.equal(ev.summary, "Ran a script on the page");
-  assert.equal(ps.summary, "$vendorFile = 'vendor-spend-2026.csv'");
+  assert.equal(ps.summary, "Ran $vendorFile = 'vendor-spend-2026.csv'");
+  // ...and a Codex script titled by its own text reads by what it is (walk 16: rows read "$reply = @' Hi Erin ...", "@' from reportlab ...")
+  const [here, py, said] = rows([
+    { id: "s:x:c4", k: "tool", name: "Bash", title: "$reply = @' Hi Erin, thanks '@ taskuary --reply $reply", tool_kind: "execute", args: { command: "$reply = @'\nHi Erin,\nthanks\n'@\ntaskuary --reply $reply" }, status: "completed" },
+    { id: "s:x:c5", k: "tool", name: "Bash", title: "@' from reportlab.lib import colors print(1) '@ | python -", tool_kind: "execute", args: { command: "@'\nfrom reportlab.lib import colors\nprint(1)\n'@ | python -" }, status: "completed" },
+    { id: "s:x:c6", k: "tool", name: "Bash", title: "taskuary --reply-not-needed 'She already answered'", tool_kind: "execute", args: { command: "taskuary --reply-not-needed 'She already answered'" }, status: "completed" }]);
+  assert.deepEqual([here.summary, py.summary, said.summary], ["Drafted the reply", "Ran a Python script (2 lines)", "Said no reply is needed"]);
+  for (const r of [here, py, said]) assert.doesNotMatch(r.summary, /@'|taskuary --/);
   assert.equal(describeCall("Bash", { command: `node -e ${blob}` }).summary, "Ran node -e …");
   assert.equal(describeCall("Bash", { command: "curl https://shop.example/home/plans" }).summary, "Read shop.example/home/plans", "an address is no local path");
 });

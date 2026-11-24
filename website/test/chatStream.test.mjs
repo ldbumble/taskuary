@@ -256,7 +256,8 @@ test("a titled call is the agent's title, kind and files; our own tools and an u
     { id: "s:x:c3", k: "tool", name: "Grep", title: "grep -n \"total\" src", tool_kind: "search", args: { pattern: "total" }, status: "completed" },
     { id: "s:x:c4", k: "tool", name: "mcp__taskuary__my_task", title: "mcp__taskuary__my_task", tool_kind: "other", args: {}, status: "completed" },
     { id: "s:x:c5", k: "tool", name: "Bash", args: { command: "ls -la vendors", description: "List vendors" }, status: "completed" }]);
-  assert.deepEqual([ls.summary, ls.kind, ls.code], ["ls -la vendors", "run", "ls -la vendors"], "its title, its back-ticks off, drawn as the command it is");
+  // ...a title that is only its own command text says nothing of what it does (walk 16): read by our words, as a road with no title is
+  assert.deepEqual([ls.summary, ls.kind], ["Listed the files in vendors", "list"], "a title that is its command reads by what the command did");
   assert.deepEqual([rd.summary, rd.kind, rd.chips], ["Read File", "read", ["budget.py"]], "the file it named beside a title that does not say it");
   assert.deepEqual([grep.summary, grep.kind], ['grep -n "total" src', "search"]);
   assert.notEqual(own.summary, "mcp__taskuary__my_task", "Taskuary's own tool in the product's words");

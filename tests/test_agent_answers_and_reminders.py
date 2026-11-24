@@ -64,7 +64,7 @@ class CheckBackSetOnceTests(unittest.TestCase):
         again = checkback.set_check(s, t, 'tomorrow 9am', '  Ray Colton sent   the bus quote', 'agent')
         self.assertEqual((again['at'], len(lines())), (first['at'], 1))
         self.assertTrue(again.get('already'))
-        self.assertTrue(hooks.checks_back(s, t, 'g1'), 'the turn that set it again is on the clock')
+        self.assertTrue(hooks.checks_back(s, t), 'the task is on the clock')
         # ...a new time or a new note is a new one, said as before
         checkback.set_check(s, t, 'in 2 days', 'Ray Colton sent the bus quote', 'agent')
         self.assertEqual(len(lines()), 2)

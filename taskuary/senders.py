@@ -281,9 +281,11 @@ def _known(store, msg: dict, exclude_mid=None, deep: bool = False, memo: dict = 
     # before any rule that reads the address: a forged From would otherwise borrow a colleague's trust, or the owner's own
     if auth(msg) == 'fail':
         return False, _said(f'{addr} failed sender verification (DMARC/DKIM), so the From address may be forged and no agent starts on it by itself.')
-    if addr in own_addresses(store): return True, _said('It came from your own address.')
+    # ...the owner's addresses and domains read once across a memo's lines, as its settings are
+    once = (lambda k, f: f()) if memo is None else (lambda k, f: memo[k] if k in memo else memo.setdefault(k, f()))
+    if addr in once('own', lambda: own_addresses(store)): return True, _said('It came from your own address.')
     # a public mail domain is everybody's: an owner on gmail.com made every stranger there 'your own domain'
-    if _domain(addr) in own_domains(store) - PUBLIC_MAIL:
+    if _domain(addr) in once('domains', lambda: own_domains(store)) - PUBLIC_MAIL:
         return (True, _said(f'{addr} is on your own domain.')) if on('trust_own_domain') else \
                (False, _said(f'{who} is on your own domain, but trusting your own domain is switched off in Settings, {NOBODY}.'))
     if (o := org_of(store, _domain(addr))):
@@ -558,12 +560,12 @@ def steers(m: dict) -> bool:
     "Did triage or ranking read this stored line as written to steer an AI (message.Danger aimed at the agent) - never a scam aimed at him."
     return bool(m.get('Danger')) and m.get('DangerAim') == 'agent'
 
-def whom(store, rows, through: int = 0) -> dict | None:
+def whom(store, rows, through: int = 0, memo: dict = None) -> dict | None:
     """THE HELD SENDER - who the hold's line, its Trust buttons and the press itself name (origin.hold, trust_offer, vouch, trust_org): the
     first line since `through`, on any channel, whose sender is not trusted, or - its sender trusted - the outsider it forwards or quotes
     (their address on the line, so vouch and trust_org act on THEM, never the colleague); else the opener."""
     from .ingest import is_ours
-    memo, first = {}, next((m for m in rows if not is_ours(m)), None)
+    memo, first = {} if memo is None else memo, next((m for m in rows if not is_ours(m)), None)
     for m in rows:
         if is_ours(m) or int(m.get('MessageId') or 0) <= through or not can_hold(m): continue
         # ...A LINE ON ANY OTHER CHANNEL IS ITS OWN SENDER'S, judged as the hold judges it (HIPAA walk 6, H8: a colleague's trusted chat line

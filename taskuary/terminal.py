@@ -3160,6 +3160,10 @@ def shutdown_sessions():
             _bv.close(sid, getattr(session, 'task_id', None))
         except Exception as e:
             SESSIONS.pop(sid, None); logger.debug(f'could not close session {sid} during shutdown: {e}')
+    # ...AND EVERY BROWSER STILL LISTED, a session's or not: one whose session had idled out or ended before the quit was left running
+    from . import browserview as _bv
+    try: _bv.close_orphans()
+    except Exception as e: logger.debug(f'the browsers left at shutdown were not closed: {e}')
     return len(sessions)
 
 

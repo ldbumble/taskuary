@@ -542,6 +542,22 @@ def switch_tab(sid: str, tab: str) -> bool:
     return ok
 
 
+# THE TABS A TURN LEFT ARE CLOSED WITH IT (walk 12: three sign-up providers' tabs stood open after the agent had moved on from each): when a turn
+# ends, every tab of its browser but the one it works and the ones a step waits on the owner in (browsergate.owner_tabs) is closed. Nothing is
+# closed while the browser cannot say which tab it works, while a held step names no tab, or while a sign-in is being typed
+def tidy(store, tid: int, sid: str) -> list:
+    "Close the tabs task `tid`'s agent left behind in session `sid`'s browser. -> the ids closed."
+    from . import browsergate
+    if sid in FILLING or not state(sid, fresh=True).get('open'): return []
+    ts, on = pages(sid), active_tab(sid)
+    owners = browsergate.owner_tabs(store, tid, sid)
+    if len(ts) < 2 or not on or '' in owners or not any(t.get('id') == on for t in ts): return []
+    gone = [str(t['id']) for t in ts if t.get('id') and t['id'] != on and t['id'] not in owners]
+    for i in gone: _devtools(sid, f'/json/close/{i}')
+    if gone: logger.info(f'browser {sid}: closed {len(gone)} tab(s) its turn left open')
+    return gone
+
+
 def active_tab(sid: str) -> str:
     "The DevTools target id of the tab this session's browser works now, from agent-browser's own word ('' when it has none)."
     try: return str((json.loads(_read(session_name(sid), 'target') or '{}') or {}).get('targetId') or '')
@@ -1320,7 +1336,8 @@ def _end_daemon(sid: str, pids: list = None) -> bool:
     return done
 
 def close_orphans() -> int:
-    """At start, before any session of this run exists: close every browser the last run listed and never closed. Returns how many."""
+    """Close every browser this data folder lists and nobody closed - at start, the ones the last run left; at quit, this run's own, whatever
+    became of the session that opened it (walk 12: 25 agent Chromes ran on after the apps had quit). Returns how many."""
     exe, n = program(), 0
     for sid, pid in _listed().items():
         done = False

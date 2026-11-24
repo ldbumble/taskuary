@@ -269,6 +269,32 @@ class ALeftOverBrowserIsClosedTests(unittest.TestCase):
         self.assertEqual([c.args[0] for c in run.call_args_list], [['agent-browser', '--session', 'tq-run-a', 'close']])
         self.assertEqual(browserview._listed(), {})
 
+    def test_quitting_closes_every_listed_browser_whose_session_is_gone_too(self):
+        """Walk 12: 25 agent Chromes ran on after the apps had quit - their sessions had idled out or ended, so the quit's close of each live
+        session never reached them. The quit closes every browser this folder lists."""
+        browserview.listed('run-a', True); (self.dir / 'tq-run-a.stream').write_text('9222')
+        with mock.patch.dict(terminal.SESSIONS, {}, clear=True), mock.patch.object(browserview, 'program', return_value='agent-browser'), \
+             mock.patch.object(browserview.spawn, 'run') as run:
+            try: terminal.shutdown_sessions()
+            finally: terminal.CLOSING.clear()
+        self.assertEqual([c.args[0] for c in run.call_args_list], [['agent-browser', '--session', 'tq-run-a', 'close']])
+        self.assertEqual(browserview._listed(), {})
+
+    def test_a_turn_closes_the_tabs_it_left_but_the_one_it_works_and_the_owners(self):
+        """Walk 12: three sign-up providers' tabs stood open after the agent had moved on from each. When a turn ends its browser keeps the tab
+        it works and any a step waits on the owner in; the rest close. Nothing closes where a held step names no tab."""
+        from taskuary import browsergate
+        tabs = [{'id': t, 'url': f'https://{t.lower()}.example/'} for t in ('T1', 'T2', 'T3', 'T4')]
+        def tidy(owners):
+            closed = []
+            with mock.patch.object(browserview, 'state', return_value={'open': True}), mock.patch.object(browserview, 'pages', return_value=tabs), \
+                 mock.patch.object(browserview, 'active_tab', return_value='T4'), mock.patch.object(browsergate, 'owner_tabs', return_value=owners), \
+                 mock.patch.object(browserview, '_devtools', lambda sid, path: closed.append(path)):
+                self.assertEqual(browserview.tidy(MemoryStore(), 1, 'run-a'), [p.rsplit('/', 1)[-1] for p in closed])
+            return closed
+        self.assertEqual(tidy({'T2': 'live.example'}), ['/json/close/T1', '/json/close/T3'])
+        self.assertEqual(tidy({'': 'proton.example'}), [])
+
     def test_the_helper_its_launch_started_ends_with_the_browser_and_only_that_one(self):
         """The browser audit, 2026-11-15: fourteen agent-browser helpers ran on with no Chrome under them a day after their browsers had
         gone - a Chrome that died, a killed Taskuary. The pid its launch recorded is ended on close and at the next start; a pid now running

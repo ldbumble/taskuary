@@ -2,6 +2,26 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.4.2.4 - 2026-11-23
+
+- A level set to an AI card whose agent runs on Codex here takes coding work on that harness
+- Settings: 'How mail is sorted' becomes 'Which AI does what' - each AI setting in one place, in plain words
+- Which AI does what: one page, one model picker from each AI's own list, and no fallback copy
+- One thread's arrivals are judged one at a time, and a reply goes to the task whose mail it answers
+- Step rows and what agents are handed say things in plain words, not the builder's
+- A message said twice is drawn once, and the reply his own answer greyed is the one "not needed" retires
+- An account counts as made only on a page past every step of its sign-up
+- The task card the chat draws live is the one on the table: one input on its screen
+- One raised frame for every card, file and view a turn sets down, inline with its words
+- A PDF in the chat shows its page fitted to the frame, without the viewer's page list beside it
+- A press says what it did on its button before the walk moves; one task toolbar for every state
+- Fix master CI: shipped defaults copy, a stand-in in a docstring, the Assistant's brain found again, a typed label, a 120s wait
+- A picture a card carries is drawn in the card, never again as a file of the turn
+- A post's picture stands as its feed shows it: the words' width, at its own shape
+- What Taskuary made on its own opens on the Agent tab as a chat: its ask, then its turn
+- An account the agent signs up for by typing is kept in the vault like one the sign-up command makes
+- Keep the walk-10 rule: only a form that makes a password is the sign-up's; a sign-in press stays a sign-in
+
 ## 0.4.2.3 - 2026-11-23
 
 - A running command is the same closed row it ends as: no black box opens and shuts under each command

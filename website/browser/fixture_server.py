@@ -510,6 +510,31 @@ def _install_fresh_routes(app, store):
         rv = proposals.queue(store, tid, {"action": "change_routine", "routine": cfg["title"], "prompt": body["now"], "why": body.get("why") or "Make future posts short"})
         return {"taskId": tid, "sourceId": sid, "review": rv}
 
+    @app.post("/api/fixture/filed-news")
+    def fixture_filed_news(body: dict = Body(None)):
+        """Two tasks of Erin Blake's, one open and one he closed, and a line triage read as nothing new filed onto each - Gail's onto the closed one,
+        Erin's onto the open one - as ingest's filed road leaves them (status, route, verdict, the chat's arrival). browser/filed-news.mjs"""
+        from taskuary import chatlog, processing_unread
+        store.set_setting("owner_name", "Alex Doyle", "owner"); store.set_setting("owner_email", "alex@northwind.example", "owner")
+        store.set_setting(processing_unread.FILED_SINCE, "2000-01-01 00:00:00", "fixture")
+        def task(title, ask, status):
+            tid = store.create_task({"Title": title, "Kind": "general", "Status": "open", "Summary": ask}, "owner")
+            store.add_message({"TaskId": tid, "ExternalId": f"fx-ask-{tid}", "Channel": "teams", "FromName": "Erin Blake", "FromEmail": "erin@northwind.example",
+                               "Subject": "", "SentAt": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(time.time() - 7200)), "BodyText": ask,
+                               "ConversationId": f"fx-room-{tid}", "Status": "routed"})
+            if status == "done": store.update_task(tid, {"Status": "done"}, "owner")
+            return tid
+        def filed(tid, who, addr, words):
+            mid = store.add_message({"TaskId": tid, "ExternalId": f"fx-filed-{tid}", "Channel": "teams", "FromName": who, "FromEmail": addr, "Subject": "",
+                                     "SentAt": time.strftime("%Y-%m-%d %H:%M:%S"), "BodyText": words, "ConversationId": f"fx-room-{tid}", "Status": "filed"})
+            store.add_route(mid, tid, "attach", None, "triage: fyi - nothing new to do · kept on it", [], "triage", verdict={"intent": "fyi", "why": "a thank-you"})
+            chatlog.came_in(store, tid)
+            return mid
+        open_t = task("Send Erin the August statement", "Can you send me the August statement?", "open")
+        shut_t = task("Fix the office printer queue", "The printer queue is stuck again", "done")
+        return {"open": open_t, "closed": shut_t, "filedOpen": filed(open_t, "Erin Blake", "erin@northwind.example", "fyi I am out on Friday"),
+                "filedClosed": filed(shut_t, "Gail Moreno", "gail@northwind.example", "Thanks - the printer works again!")}
+
     @app.get("/api/fixture/routine/{sid}")
     def fixture_routine(sid: int):
         import json

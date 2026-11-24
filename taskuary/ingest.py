@@ -1781,6 +1781,10 @@ def land_on(store, msg: dict, tid: int, v: dict | None, actor: str, how: str = '
         route, note = said(True)
         store.add_route(mid, tid, 'attach', score, route, [], 'triage', verdict=_stored_verdict(v))
         store.add_comment(tid, actor, 'agent', note)
+        # ...and it is IN the task's chat as it lands, an arrival like any other - not only once somebody opens the task (the owner, 2026-11-24:
+        # a line filed onto his closed task was in no chat he could see); a turn at work hears it at its end instead (chatlog.came_in)
+        from . import chatlog
+        chatlog.came_in(store, tid)
         logger.info(f"ingest: filed onto {ref} as {'a line on a closed task' if kept else 'fyi'} ({how}) - {msg.get('subject') or ''}")
         # ...and a WATCHED task's thread moved: maybe nothing for the owner to do, but the watch is over - it is back on the walk, and
         # triage's handled_elsewhere says whether it looks dealt with (watch.py)

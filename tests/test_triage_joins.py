@@ -175,6 +175,56 @@ class ChatReopensTests(unittest.TestCase):
         self.assertEqual(self.s.get_task(self.tid)['Status'], 'done')
 
 
+class FiledNewsSurfacesTests(unittest.TestCase):
+    """A LINE FILED ONTO A TASK STILL SHOWS (the owner, 2026-11-24): a colleague's Teams line read as nothing new was filed onto the task he had
+    closed that morning, and was on no rail, no FYI and no chat. It stands in the FYI lane, linked to its task, until he walks past it - and
+    it is an arrival in the task's chat. His own line filed there raises nothing."""
+    def setUp(self):
+        from taskuary import processing_unread
+        self.s = MemoryStore()
+        self.s.set_setting('owner_email', 'alex@northwind.example', 'test')
+        self.s.set_setting(processing_unread.FILED_SINCE, '2000-01-01 00:00:00', 'test')
+        self.chat = lambda ext, body, llm, frm='erin@northwind.example': mail(self.s, ext, llm, conv='room-1', subject='', body=body,
+                                                                             channel='teams', frm=frm)
+        first = self.chat('t1', 'Can you send me the August statement?', brain('task', title='Send Erin the August statement'))
+        self.tid, self.mid1 = first['task_id'], first['message_id']
+
+    def joins(self, title):
+        return lambda system, user, **k: json.dumps({'intent': 'fyi', 'why': 'scripted', 'title': title, 'summary': 's', 'relationship': 'answers',
+                                                       'related_message_ids': [self.mid1], 'existing_task_id': self.tid, 'same_problem': True})
+
+    def fyi(self):
+        from taskuary import funnel
+        return [i for i in funnel.build(self.s, live_state=[])['items'] if i.get('filed') and i.get('tid') == self.tid]
+
+    def test_a_line_filed_onto_a_closed_task_stands_in_fyi_and_in_its_chat_until_walked_past(self):
+        from taskuary import chatlog, funnel
+        self.s.update_task(self.tid, {'Status': 'done'}, 'owner')
+        back = self.chat('t2', 'thanks, got it - all good on my side', self.joins('Erin confirms she has it'))
+        self.assertEqual((back['status'], back['task_id']), ('filed', self.tid))
+        self.assertEqual(self.s.get_task(self.tid)['Status'], 'done')                    # news, not work: it stays closed
+        [row] = self.fyi()
+        self.assertEqual((row['lane'], row['mid'], row['closed']), ('fyi', back['message_id'], True))
+        self.assertIn('Erin Blake wrote on', row['title']); self.assertIn('(closed): thanks, got it', row['title'])
+        self.assertIn(f"m:{back['message_id']}", {r['Key'] for r in self.s._rows("SELECT Key FROM chatlog WHERE TaskId=? AND Kind='arrival'", (self.tid,))})
+        self.assertIn(row['key'], [i['key'] for i in funnel.pile(self.s, force=True, quiet=True)['items']])
+        funnel.settle(self.s, row['key'], 'surfaced', 'owner', read=True)                  # Next: walked past
+        self.assertEqual(self.fyi(), [])
+        again = self.chat('t3', 'and the printer works again', self.joins('Erin says the printer works'))
+        self.assertEqual([r['mid'] for r in self.fyi()], [again['message_id']])           # the next one is news again
+
+    def test_a_line_filed_onto_an_open_task_has_its_own_fyi_row(self):
+        back = self.chat('t2', 'fyi I am out on Friday', self.joins('Erin is out Friday'))
+        self.assertEqual((back['status'], back['task_id']), ('filed', self.tid))
+        [row] = self.fyi()
+        self.assertEqual((row['lane'], row['closed']), ('fyi', False))
+
+    def test_his_own_line_filed_onto_a_closed_task_raises_nothing(self):
+        self.s.update_task(self.tid, {'Status': 'done'}, 'owner')
+        self.chat('t2', 'sent it over just now', self.joins('Alex sent it'), frm='alex@northwind.example')
+        self.assertEqual(self.fyi(), [])
+
+
 class OwnChannelRepeatTests(unittest.TestCase):
     def test_the_advisor_and_a_report_on_one_event_make_one_task(self):
         s = MemoryStore()

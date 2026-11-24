@@ -38,7 +38,7 @@
    chat and its card grew 93 -> 397 px, everything above it moving up): its body - loading, a picture, a table, a page - is one fixed height,
    and what is taller scrolls inside it. A sound is its player's own fixed row; a video holds a 16:9 frame (PublishedPages MediaPlayer).
    A PICTURE WHOSE PIXELS ARE KNOWN DRAWS AT ITS OWN SHAPE (the owner, 2026-11-18): its room is its real size, reserved before it loads (taskOutputs.pictureFit) */
-.tq-published[data-tq-turn-files] .tq-published-page > :not(.tq-published-row):not(.tq-published-media):not([data-tq-natural]) { box-sizing: border-box; height: min(60vh, 360px); max-height: none; overflow: auto; }
+.tq-published[data-tq-turn-files] .tq-published-page > :not(.tq-published-row):not(.tq-published-list):not(.tq-published-media):not([data-tq-natural]) { box-sizing: border-box; height: min(60vh, 360px); max-height: none; overflow: auto; }
 .tq-published[data-tq-turn-files] .tq-published-picture:not([data-tq-natural]) { display: flex; align-items: center; justify-content: center; }
 .tq-published[data-tq-turn-files] .tq-published-picture:not([data-tq-natural]) img { max-height: 100% !important; max-width: 100%; object-fit: contain; }
 .tq-published[data-tq-turn-files] .tq-published-picture[data-tq-natural] img { display: inline-block; vertical-align: top; max-width: 100%; }

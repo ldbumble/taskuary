@@ -232,3 +232,13 @@ export const mediaFit = (f) => {
   return { media: { width: `min(100%, ${own})`, height: "auto", aspectRatio: `${w} / ${h}` },
     box: { width: `min(100%, var(--tq-turn-item), max(260px, ${own}))` } };
 };
+
+// WHAT A FILE IS, IN ONE WORD, AND WHAT A TURN'S FILES ARE TOGETHER (the owner, 2026-11-24: "it put in 9 files as cards? it should combine them"):
+// one word per kind, read off its name; the group's label a plain count - "9 workbooks" where all are one kind, "3 files" where they are not
+const KIND = { sheet: "workbook", table: "table", pdf: "PDF", picture: "picture", text: "text file", page: "page", document: "document", video: "video", audio: "recording" };
+export const fileKind = (f) => KIND[PREVIEW[ext(f?.name || f?.path)] || f?.preview] || "file";
+export const filesLabel = (files) => {
+  const fs = files || [], ks = new Set(fs.map(fileKind)), k = ks.size === 1 ? [...ks][0] : "file";
+  return `${fs.length} ${fs.length === 1 ? k : `${k}s`}`;
+};
+export const sizeWords = (b) => !(b >= 0) ? "" : b < 1024 ? `${b} B` : b < 1048576 ? `${Math.round(b / 1024)} KB` : `${(b / 1048576).toFixed(1)} MB`;

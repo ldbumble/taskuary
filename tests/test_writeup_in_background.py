@@ -147,13 +147,16 @@ def test_mark_done_on_a_chat_agents_task_answers_before_its_ending_asks_any_ai(w
     from taskuary import general
     make, _ = world
     s, _coding = make(); c = TestClient(server.app); tid = chat_task(s)
-    gate, asked = threading.Event(), threading.Event()
-    def slow(system, user, **kw): asked.set(); gate.wait(8); return brain(system, user, **kw)
-    with mock.patch('taskuary.llm.build_llm', return_value=slow):
+    # ...the ending held once its harvest is saved, not behind an AI: his own close drafts nothing new (wrapup.CLOSING, 2026-11-23), so an
+    # AI-held ending was not held at all, and a fast runner (macOS CI) had it done before the press's answer was read
+    gate, real = threading.Event(), wrapup.wrap
+    def held(store, tid_, **k):
+        def saved(h): k['on_harvest'](h); gate.wait(30)
+        return real(store, tid_, **{**k, 'on_harvest': saved})
+    with mock.patch.object(wrapup, 'wrap', held):
         c.post(f'/api/tasks/{tid}/wrap', json={'close': False, 'no_reply': True, 'background': True, 'then_close': True})
         assert writeup.running(tid) and not gate.is_set(), 'the press answered while the ending was still at work'
         assert json.loads(s.get_setting(writeup.PREFIX + str(tid))).get('harvest'), 'what a restart finishes it from is saved'
-        # ...his own close drafts nothing new (wrapup.CLOSING, 2026-11-23): whether the ending asks an AI at all is its business - never in front of the press
         gate.set(); assert writeup.wait_for(tid, 30)
     assert (s.get_task(tid) or {}).get('Status') == 'done'
     assert any(str(x.get('Body') or '').startswith(wrapup.REPORT) for x in s.list_comments(tid, internal=True))

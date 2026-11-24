@@ -73,7 +73,10 @@ class TheList(unittest.TestCase):
         "A turn is handed over and at work in its brain: what comes in now comes in mid-turn (busy alone is the floor taken, before the hand-over)."
         self.assertTrue(until(lambda: getattr(general.session_for(self.tid), 'busy', False) and self.brain.inside), self.kinds())
     def told(self, n): return self.brain.calls[n].split('SOURCE MATERIAL')[0]     # what turn n says it carries, above the task's own record
-    def rest(self): self.assertTrue(until(lambda: not self.list()['working'] and not general.waiting_lines(self.s, self.tid)), self.kinds())
+    def rest(self):
+        "At rest: nothing works, no line of his waits, and the session has let go - its answer filed is not yet rest (chatlog `ending`)."
+        self.assertTrue(until(lambda: not self.list()['working'] and not general.waiting_lines(self.s, self.tid)
+                              and not getattr(general._live_of(self.tid), 'busy', False)), self.kinds())
 
     def test_a_start_that_did_not_happen_says_why_in_the_chat_with_the_way_on(self):
         """Recorded on the real CLI, 2026-11-15: with "start an agent by itself" switched off, a new mail's task read "waiting to start" over

@@ -381,12 +381,23 @@ LEVEL_OF = {'light': 'quick', 'standard': 'normal', 'strong': 'hard'}
 LEVEL_JOBS = ('general', 'quick_work', 'coding')
 
 
+def model_id(m) -> str:
+    """A model as its id: the picker once saved a brain's whole {id, label} as text ("{'id': 'gpt-6.2-sol', ...}") - read either way."""
+    if isinstance(m, dict): return str(m.get('id') or '').strip()
+    s = str(m or '').strip()
+    if s.startswith('{'):
+        import ast
+        try: return model_id(ast.literal_eval(s))
+        except (ValueError, SyntaxError): return ''
+    return s
+
+
 def by_level(store) -> dict:
     "{level: {pick, model}} for each level the owner set an AI for - blank (the default) is none."
     import json
     try: d = json.loads(str(store.get_setting(LEVEL_KEY) or '').strip() or '{}')
     except ValueError: d = {}
-    return {l: {'pick': str(v.get('pick') or '').strip(), 'model': str(v.get('model') or '').strip()}
+    return {l: {'pick': str(v.get('pick') or '').strip(), 'model': model_id(v.get('model'))}
             for l, v in (d if isinstance(d, dict) else {}).items()
             if l in LEVEL_OF.values() and isinstance(v, dict) and str(v.get('pick') or '').strip()}
 
@@ -400,7 +411,7 @@ def save_by_level(store, d: dict, actor: str = 'owner') -> dict:
         p = str((v or {}).get('pick') or '').strip()
         if not p: continue
         if not p.startswith(('cli:', 'connector:')): raise ValueError("a level's AI is a connected CLI or AI card")
-        clean[l] = {'pick': p, 'model': str(v.get('model') or '').strip()}
+        clean[l] = {'pick': p, 'model': model_id(v.get('model'))}
     store.set_setting(LEVEL_KEY, json.dumps(clean) if clean else '', actor)
     return by_level(store)
 

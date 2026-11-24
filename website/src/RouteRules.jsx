@@ -26,10 +26,13 @@ const LEVELS = [["quick", "Quick"], ["normal", "Normal"], ["hard", "Hard"]];
 function LevelModel({ value, models, disabled, onSave, runs }) {
   const [v, setV] = useState(value || "");
   useEffect(() => setV(value || ""), [value]);
-  const commit = (next) => (next || "") !== (value || "") && onSave(next || "");
+  // ...a brain's models are {id, label}: what is saved is the id, never the object as text (the live setting held "{'id': 'gpt-6.2-sol', ...}")
+  const idOf = (x) => (typeof x === "string" ? x : x?.id || "");
+  const commit = (next) => idOf(next) !== (value || "") && onSave(idOf(next));
   return (
-    <Autocomplete freeSolo forcePopupIcon openOnFocus size="small" options={models || []} value={v} disabled={disabled}
-      onInputChange={(_e, next) => setV(next)} onChange={(_e, next) => { setV(next || ""); commit(next); }} onBlur={() => commit(v)}
+    <Autocomplete freeSolo forcePopupIcon openOnFocus size="small" options={(models || []).map(idOf)} value={v} disabled={disabled}
+      getOptionLabel={(o) => { const m = (models || []).find((x) => idOf(x) === o); return (typeof m === "object" && m?.label) || o || ""; }}
+      onInputChange={(_e, next) => setV(next)} onChange={(_e, next) => { setV(idOf(next)); commit(next); }} onBlur={() => commit(v)}
       sx={{ minWidth: 170 }} renderInput={(p) => <TextField {...p} placeholder={runs} sx={{ bgcolor: "var(--tq-panel, #fff)" }}
         inputProps={{ ...p.inputProps, style: { fontSize: 12.5 } }} />} />
   );

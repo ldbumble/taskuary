@@ -411,3 +411,15 @@ def test_an_ai_cards_quick_agent_work_is_its_own_model_thinking_less_and_its_lig
         assert brainroute.choose(s, 'general', difficulty='standard').model in ('', 'gem-hydrogen')
         assert 'gem-neon' in brainroute.choose(s, 'general', difficulty='hard').model or brainroute.choose(s, 'general', difficulty='hard').gear == 'strong'
         assert brainroute._words(s, p, cfg)['quick'] == 'gem-hydrogen, low effort'
+
+
+def test_a_level_model_saved_as_the_pickers_whole_object_reads_and_saves_as_its_id():
+    # the live setting, 2026-11-23: the quick level's model held "{'id': 'gpt-6.2-sol', 'label': ...}" - the check refused it and quick work
+    # ran on Codex's default, not the model he picked
+    import json
+    from taskuary.store import MemoryStore
+    s = MemoryStore()
+    s.set_setting(brainroute.LEVEL_KEY, json.dumps({'quick': {'pick': 'cli:codex', 'model': "{'id': 'gpt-6.2-sol', 'label': 'GPT-6.2-Sol'}"}}), 'owner')
+    assert brainroute.by_level(s)['quick']['model'] == 'gpt-6.2-sol'
+    brainroute.save_by_level(s, {'quick': {'pick': 'cli:codex', 'model': {'id': 'gpt-6.2-astra', 'label': 'GPT-6.2-Astra'}}})
+    assert brainroute.by_level(s)['quick']['model'] == 'gpt-6.2-astra'

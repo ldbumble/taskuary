@@ -3219,7 +3219,7 @@ class GeneralSession:
             from .ingest import held_start
             if not stopped and held_start(self.store, self.task_id, e):
                 if not is_dock(self.store.get_task(self.task_id)): self._end_soon(learn=False, report=False)
-                raise
+                e.filed = True; raise
             if timed is not None:
                 # ...and one that RAN OUT OF TIME paused: its run ends stopped, in words that say why, on the thread it was on - so Continue
                 # resumes it with what it made, and no start queue runs a long build again from the top
@@ -3235,7 +3235,7 @@ class GeneralSession:
                 from . import funnel
                 try:
                     kept, why = [x for x in self.trace if x.get('type') != 'error'], said if down else funnel.failure(said[:4000], self.task_id)['sentence']
-                    say_failure(self.store, self.task_id, kept, why, bool(down))
+                    say_failure(self.store, self.task_id, kept, why, bool(down)); e.filed = True       # ...said: a door behind it says nothing more
                 except Exception as skipped: logger.warning(f'task {self.task_id}: the failed turn was not filed - {skipped}')
             try:
                 from . import workerstate as ws
@@ -3885,9 +3885,22 @@ def take_line(store, tid: int, text: str, files=None, actor='owner', line_id=Non
         from . import workerstate as ws
         ws.line_answers(store, tid, text, actor)
     if not wait:
-        threading.Thread(target=lambda: _start_line(store, tid, t, text, files, actor, line_id, wid, kw), daemon=True, name=f'line-{tid}').start()
+        threading.Thread(target=lambda: _start_behind(store, tid, t, text, files, actor, line_id, wid, kw), daemon=True, name=f'line-{tid}').start()
         return {'kept': wid}
     return _start_line(store, tid, t, text, files, actor, line_id, wid, kw)
+
+
+def _start_behind(store, tid, t, *a):
+    """_start_line behind a door that answered at once (take_line's `wait=False`): a chat's start that failed before its turn could say so
+    (no AI connected, a start refused) is filed where it happened, as a failed turn says itself (say_failure) - the answer that would have
+    carried it has gone. One the turn filed itself, the hold's, or his stop says nothing more."""
+    try: _start_line(store, tid, t, *a)
+    except Exception as e:
+        logger.info(f'task {tid}: the line was kept, its turn did not answer - {e}')
+        if not handles(t) or isinstance(e, Stopped) or getattr(e, 'filed', False): return
+        from . import failures
+        try: say_failure(store, tid, [], failures.classify(e, act='assistant.message', tid=tid)['sentence'])
+        except Exception as x: logger.warning(f'task {tid}: the failed start was not filed - {x}')
 
 
 def _start_line(store, tid, t, text, files, actor, line_id, wid, kw):

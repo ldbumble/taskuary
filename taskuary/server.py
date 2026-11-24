@@ -2812,19 +2812,16 @@ def _demo_turn(task_id: int, text: str, line_id=None):
 @app.post('/api/tasks/{task_id}/assistant/messages')
 def assistant_message(task_id: int, body: AssistantMessageBody):
     """A LINE TYPED IN ANY TASK'S BOX, to whatever agent works it (general.take_line - the one road, the owner 2026-11-10: "coding and general
-    use the same code when it comes to interactions so there should be no difference"). A chat answers with its turn, as it always did; a
-    coding session's turn is its own, and this answers once the line is kept and handed on."""
-    from . import codingchat, general
+    use the same code when it comes to interactions so there should be no difference"). It answers once the line is kept and its turn begun;
+    the turn answers in the chat."""
     if (said := _demo_turn(task_id, body.text, _line_id(body))) is not None: return {'reply': said, **_assistant_payload(task_id)}
     # ...A LINE SENT WHILE A TURN WORKS IS KEPT, AND THIS ANSWERS (the flood, 2026-11-11: fifty lines held fifty requests open until the turn
     # ended): it waits by the box (conversation.items `pending`) and the turn that takes it is the one that answers for it
-    busy = general.at_work(task_id)
-    try: out = _say(task_id, body, wait=not busy)
+    # ...AND ONE SENT TO AN AGENT AT REST TOO (the load run, 2026-11-24: held until its turn ended, up to 242 s behind a full house, each a
+    # request thread borrowed): kept and heard, its turn begun behind the answer - the chat draws the reply as it comes, a failed start in place
+    try: _say(task_id, body, wait=False)
     except (ValueError, RuntimeError) as e: return _chat_failed(e)
-    if busy: return {'reply': '', 'kept': True}
-    if not general.handles(store.get_task(task_id)): return {'reply': '', 'handed': out, **codingchat.chat(store, task_id)}
-    session, reply = out
-    return {'reply': reply, **_assistant_payload(task_id, session)}
+    return {'reply': '', 'kept': True}
 
 @app.post('/api/tasks/{task_id}/waiting/{line_id}/drop')
 def waiting_drop(task_id: int, line_id: str):

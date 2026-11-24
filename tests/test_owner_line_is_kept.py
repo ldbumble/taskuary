@@ -142,6 +142,8 @@ class OwnerLineIsKept(unittest.TestCase):
             self.assertIsNone(general.session_for(self.tid))
             r = TestClient(server.app).post(f'/api/tasks/{self.tid}/assistant/messages', json={'text': 'Compare three tools.', 'line_id': 'l-sync'})
         self.assertEqual(r.status_code, 200, r.text)
+        end = time.time() + 15
+        while general.at_work(self.tid) and time.time() < end: time.sleep(0.05)       # ...its turn answers in the chat
         got = conversation.items(self.s, self.tid)['items']
         self.assertEqual([x['id'] for x in got if x['kind'] == 'line'], ['l-sync'])
         self.assertFalse(read.called)
@@ -149,9 +151,42 @@ class OwnerLineIsKept(unittest.TestCase):
         self.assertEqual([x['text'] for x in got if x['kind'] == 'turn'], ['Answer 1.'])
         self.assertNotIn('syncing', json.dumps(got))
 
+    def test_a_line_to_an_agent_at_rest_is_answered_once_kept_and_its_turn_answers_in_the_chat(self):
+        """The load run, 2026-11-24: a line typed to an agent at rest held its request until the turn ended - up to 242 s behind a full house,
+        each a request thread borrowed. It answers once the line is kept and heard, as one typed mid-turn does; the turn answers in the chat."""
+        from taskuary import conversation
+        hold = threading.Event()
+        self.brain.delay = 0
+        brain = self.brain.__call__
+        self.brain = lambda *a, **k: (hold.wait(15), brain(*a, **k))[1]
+        r = TestClient(server.app).post(f'/api/tasks/{self.tid}/assistant/messages', json={'text': 'Compare three tools.', 'line_id': 'l-rest'})
+        self.assertEqual((r.status_code, r.json().get('kept')), (200, True), r.text)
+        got = conversation.items(self.s, self.tid)
+        self.assertEqual([x['id'] for x in got['items'] if x['kind'] == 'line'], ['l-rest'])       # ...heard, its turn under it, before it answers
+        hold.set()
+        end = time.time() + 15
+        while (general.ASSISTANT_TYPE, 'Answer 1.') not in self.said() and time.time() < end: time.sleep(0.05)
+        self.assertIn((general.ASSISTANT_TYPE, 'Answer 1.'), self.said())
+
+    def test_a_start_that_fails_behind_the_answer_is_said_in_the_chat(self):
+        "No AI to answer: the page's answer has gone, so the failed start is filed where it happened - never a line with nothing under it."
+        from taskuary import conversation
+        with mock.patch.object(general, 'start_session', side_effect=ValueError('No AI is connected')):
+            r = TestClient(server.app).post(f'/api/tasks/{self.tid}/assistant/messages', json={'text': 'Compare three tools.', 'line_id': 'l-none'})
+            self.assertEqual(r.status_code, 200, r.text)
+            end = time.time() + 10
+            while not any(x.get('fail') or x.get('state') == 'failed' for x in conversation.items(self.s, self.tid)['items']) and time.time() < end: time.sleep(0.05)
+        turns = [x for x in conversation.items(self.s, self.tid)['items'] if x['kind'] == 'turn']
+        self.assertTrue(turns and turns[-1].get('state') == 'failed', turns)
+        self.assertIn('No AI', json.dumps(turns[-1]))
+
     def test_the_chats_door_takes_the_name_and_a_long_one_is_cut(self):
         self.brain.delay = 0
-        out = TestClient(server.app).post(f'/api/tasks/{self.tid}/assistant/messages', json={'text': 'Compare three tools.', 'line_id': 'h' * 200}).json()
+        TestClient(server.app).post(f'/api/tasks/{self.tid}/assistant/messages', json={'text': 'Compare three tools.', 'line_id': 'h' * 200})
+        end = time.time() + 15
+        while general.at_work(self.tid) and time.time() < end: time.sleep(0.05)
+        out = server._assistant_payload(self.tid)
+        out['messages'] += [{'role': 'user', 'line': w.get('line')} for w in out.get('waiting') or []]
         self.assertEqual([m.get('line') for m in out['messages'] if m['role'] == 'user'], ['h' * 80])
 
 

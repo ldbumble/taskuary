@@ -679,6 +679,7 @@ def test_the_work_after_his_allow_never_counts_from_before_his_press(world, monk
     monkeypatch.setenv('FAKE_ACP_ASK', 'git push origin main'); monkeypatch.setattr(shellgate, 'trusted', lambda *a, **k: '')
     monkeypatch.setenv('FAKE_ACP_AFTER', '3')
     t = open_(s, tid, repo, seed=''); assert until(lambda: t.client and not t.busy)
+    conversation.items(s, tid)                     # ...the task he has open: its chat is in the log before the turn, as live (chatlog.migrate_open)
     general.take_line(s, tid, 'Push it.', line_id='l-one')
     assert until(lambda: permissions.pending(tid, s))
     assert until(lambda: time.time() >= (t.turn_at or time.time()) + 2.5)       # ...he presses a while after the turn began
@@ -686,10 +687,15 @@ def test_the_work_after_his_allow_never_counts_from_before_his_press(world, monk
     permissions.answer(s, tid, permissions.pending(tid, s)[0]['id'], 'allow_once')
     bad = []
     while t.busy or t.turns < 1:
-        got = conversation.items(s, tid)['items']; i = max((k for k, x in enumerate(got) if x.get('perm')), default=-1)
+        # ...his answer stands on the row it was asked on (chatlog.asked_answered): what works after is under that row's part of the turn
+        got = conversation.items(s, tid)['items']
+        i = max((k for k, x in enumerate(got) if x['kind'] == 'turn' and any(y.get('answer') for y in x.get('steps') or [])), default=len(got))
         bad += [(x['state'], round(pressed - x['started'], 1)) for x in got[i + 1:] if x['kind'] == 'turn' and x.get('started') and x['started'] < pressed - 1.01]
         time.sleep(0.05)
     assert idle(t, 1)
+    got = conversation.items(s, tid)['items']
+    assert any(y.get('answer') == 'allow_once' for x in got if x['kind'] == 'turn' for y in x.get('steps') or []), 'his answer is on its row'
+    assert not [x for x in got if x['kind'] == 'press'], 'the row is the one record of his answer'
     assert not bad, f'work under his press counted from before it (seconds early): {bad[:5]}'
 
 

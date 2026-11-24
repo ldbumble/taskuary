@@ -94,8 +94,8 @@ def _goes_on(store, tid: int, below: int) -> None:
 def _goes_on_(store, tid: int, below: int) -> None:
     """WHAT IS APPENDED WHILE A TURN WORKS STANDS ABOVE THE REST OF IT (the turn at work is always the last thing): the part of the turn before
     it is over, and the turn goes on in a new row under it ({cont}) - its steps from then on go there. Under the store's lock."""
-    t = store.cx.execute("SELECT * FROM chatlog WHERE TaskId=? AND Kind='turn' AND Parent IS NULL AND State IN ('starting','working') AND Id<? "
-                         "ORDER BY Id DESC LIMIT 1", (int(tid), below)).fetchone()
+    t = store.cx.execute("SELECT * FROM chatlog WHERE TaskId=? AND Kind='turn' AND Parent IS NULL AND State IN ('starting','working') "
+                         "ORDER BY Id DESC LIMIT 1", (int(tid),)).fetchone()
     if not t: return
     b = json.loads(t['Body'] or '{}')
     store.cx.execute("UPDATE chatlog SET State='done', Rev=Rev+1 WHERE Id=?", (t['Id'],))
@@ -146,13 +146,20 @@ def open_turn(store, tid: int):
     return None if after else dict(t)
 
 
-def step(store, tid: int, sid: str, ref: str, step: dict, state=None) -> int:
+def step(store, tid: int, sid: str, ref: str, step: dict, state=None, turns: bool = False) -> int:
     """One tool, thought or said item of the turn at work, merged in place by its `ref` (a tool call updated as it runs). If his line, a
     message or a press was appended after that turn began, the rest of the turn is a NEW turn row under it ({cont: the turn it goes on from})
-    - so what the agent did after it heard him is below his line by construction. The files a step made ride on its own row."""
+    - so what the agent did after it heard him is below his line by construction. The files a step made ride on its own row.
+    `turns`: the row is the turn's that last updated it (a plan) - updated after his line, it is drawn anew below it, the old one left as it stood."""
     key = f's:{sid}:{ref}'
     with store.lock:
-        if (old := _row(store, tid, key)):
+        old = _row(store, tid, key)
+        if turns and old and (r := store.cx.execute('SELECT * FROM chatlog WHERE TaskId=? AND substr(Key, 1, ?)=? ORDER BY Id DESC LIMIT 1',
+                                                    (int(tid), len(key) + 1, f'{key}@')).fetchone()): old = dict(r)
+        if turns and old and store.cx.execute(f"SELECT 1 FROM chatlog WHERE TaskId=? AND Id>? AND Parent IS NULL AND Kind IN ({','.join('?' * len(INPUTS))}) LIMIT 1",
+                                              (int(tid), old['Id'], *INPUTS)).fetchone():
+            key, old, step = f"{key}@{old['Id']}", None, {k: v for k, v in step.items() if v is not None}
+        if old:
             _update(store, tid, old, state, step); store.cx.commit(); n = old['Id']
         else:
             last = store.cx.execute("SELECT * FROM chatlog WHERE TaskId=? AND Kind='turn' AND Parent IS NULL ORDER BY Id DESC LIMIT 1", (int(tid),)).fetchone()
@@ -532,6 +539,26 @@ def at_work(store, tid: int, sid: str = '') -> None:
     if (t := open_turn(store, tid)) and t['State'] == 'starting': update(store, tid, t['Key'], state='working', **({'sid': sid} if sid else {}))
 
 
+def asked_on_row(store, tid: int) -> set:
+    "The calls whose rows carry his answer to the permission asked on them (asked_answered): that row is the answer's one record."
+    with store.lock: return {r[0] for r in store.cx.execute("SELECT json_extract(Body, '$.call') FROM chatlog WHERE TaskId=? AND Kind='step' "
+                                                           "AND json_extract(Body, '$.answer') IS NOT NULL", (int(tid),))}
+@_safe
+def asked_answered(store, tid: int, call: str, answer: str) -> None:
+    """His answer to a permission asked on its call's row (permissions.ask) - written on that row, the one record of it: no press line besides.
+    The row is the call's however it was written: its key names it (s:<sid>:<call>, feed), or its body does (`call`, or the `id` a frozen or
+    older row kept). And HIS ANSWER CUTS THE TURN THERE, as his press line did (the owner's live app, 2026-11-18: the work after his Allow read
+    "working 15m" from the turn's start): what the agent does after it goes on in a new part, started at his press (_goes_on_)."""
+    if not call: return
+    c = str(call)
+    with store.lock:
+        r = store.cx.execute("SELECT * FROM chatlog WHERE TaskId=? AND Kind='step' AND (Key LIKE 's:%' AND substr(Key, -?)=? OR ? IN "
+                             "(json_extract(Body, '$.call'), json_extract(Body, '$.id'))) ORDER BY Id DESC LIMIT 1", (int(tid), len(c) + 1, f':{c}', c)).fetchone()
+        if not r: return
+        _update(store, tid, dict(r), None, {'call': c, 'answer': str(answer)}); _goes_on_(store, tid, r['Id']); store.cx.commit()
+    _poke(store, tid)
+
+
 ENDS = ('stopped_turn', 'close_from_assistant')      # ...his stop and his close end the turn they were pressed under, and never wait
 AT_ONCE = {'browser_act_pressed'}         # presses drawn where he made them even under a turn at work
 @_safe
@@ -703,7 +730,8 @@ def _put(store, tid: int, sid: str, f: dict, ref: str) -> None:
     if e.get('j') == (j := json.dumps(x, sort_keys=True, default=str)): return
     # ...the row IS the step as it now reads: what it no longer says (an ask answered) is cleared, never left from the read before
     was, e['j'], e['keys'] = e.get('keys') or (), j, set(x)
-    n = step(store, tid, sid, ref, {**{k: None for k in was if k not in x}, **x}, state=x.get('status'))
+    # ...a plan is the turn's that last updated it (the newest plan in the newest turn): one updated after his line never redraws above it
+    n = step(store, tid, sid, ref, {**{k: None for k in was if k not in x}, **x}, state=x.get('status'), turns=x.get('k') == 'plan')
     from . import live
     if live._clients and (p := pushed(store, tid, n)): live.emit(live.RUN, task_id=int(tid), steps=[p])     # ...the open chat patches this row
 

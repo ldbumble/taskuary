@@ -295,6 +295,23 @@ class ALeftOverBrowserIsClosedTests(unittest.TestCase):
         self.assertEqual(tidy({'T2': 'live.example'}), ['/json/close/T1', '/json/close/T3'])
         self.assertEqual(tidy({'': 'proton.example'}), [])
 
+    def test_the_tabs_a_turn_left_close_as_the_next_begins_never_under_its_last_words_and_that_turn_is_told(self):
+        """Walk 13: the turn ended "open the Trello sign-up tab in the browser pane" and that tab was closed a beat later, at the turn's end. A
+        turn's end closes nothing; the next turn's start puts them away, and that turn is told which tabs stand and which were closed."""
+        import threading
+        from taskuary import browsergate, workerstate as ws
+        s = MemoryStore(); tid = s.create_task({'Title': 'Trello board', 'Kind': 'general', 'Status': 'open'}, 'owner')
+        with mock.patch.object(browserview, 'tidy') as tidy:
+            ws.record(s, tid, 'run-a', 'turn_end', text='Open the Trello sign-up tab in the browser pane.')
+            for t in threading.enumerate():
+                if t.name.startswith('tidy-tabs'): t.join(2)
+        tidy.assert_not_called()
+        tabs = [{'id': 'T1', 'url': 'https://trello.example/signup'}, {'id': 'T2', 'url': 'https://mail.example/inbox'}]
+        def close(sid, path): tabs[:] = [t for t in tabs if not path.endswith('/' + t['id'])]
+        with mock.patch.object(browserview, 'state', return_value={'open': True}), mock.patch.object(browserview, 'pages', lambda sid: list(tabs)),              mock.patch.object(browserview, 'active_tab', return_value='T2'), mock.patch.object(browsergate, 'owner_tabs', return_value={}),              mock.patch.object(browserview, '_devtools', close):
+            said = browserview.tabs_now(s, tid, 'run-a')
+        self.assertEqual(said, 'ITS TABS NOW: https://mail.example/inbox (the one you work). Closed since your last turn: https://trello.example/signup.')
+
     def test_the_helper_its_launch_started_ends_with_the_browser_and_only_that_one(self):
         """The browser audit, 2026-11-15: fourteen agent-browser helpers ran on with no Chrome under them a day after their browsers had
         gone - a Chrome that died, a killed Taskuary. The pid its launch recorded is ended on close and at the next start; a pid now running

@@ -2880,7 +2880,7 @@ class GeneralSession:
                 # the next (a page opened, a set-up done), and in the system prompt each change reopened the warm conversation (2026-11-16)
                 if self.browser_wanted and (browserview.state(self.sid, fresh=True).get('open') or (last and browserview.start(self.sid, last))):
                     browser_tools = True
-                    late.append(browserview.brief())
+                    late.append(browserview.brief() + ((' ' + t) if (t := browserview.tabs_now(self.store, self.task_id, self.sid)) else ''))
                 elif self.browser_wanted and not last and browserview.installed():
                     browser_tools, browser_offer = True, True
                     late.append(browserview.offer()

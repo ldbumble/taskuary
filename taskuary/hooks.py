@@ -400,6 +400,8 @@ def _events(t, p: dict) -> None:
             # working again, not the owner speaking, so it must not overtake a question still open (open_requests)
             from .background import is_wake
             ws.record(st, tid, sid, 'working', text=ws.WAKE if is_wake(p.get('prompt')) else '', source='hook')
+            from . import browserview
+            browserview.tidy_soon(st, tid, sid)          # ...and the tabs its last turn left are put away as this one begins
             # ...AND ONLY HIS OWN WORDS MOVE THE CONVERSATION ON (recorded on the real CLI, 2026-11-15): every prompt did - a note another agent
             # left, a brief Taskuary typed - so his waiting reply greyed a second after a peer's note arrived and its agent was told "THE OWNER
             # MOVED ON". Whose a prompt is, by the record's one rule (sessionrecord.mark_briefs). Over ACP his line is heard as the turn

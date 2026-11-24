@@ -348,6 +348,9 @@ class Holding(unittest.TestCase):
         d = out['hookSpecificOutput']
         self.assertEqual(d['permissionDecision'], 'deny'); self.assertIn('hand_over', d['permissionDecisionReason'])
         self.assertEqual(self.pending(), [])
+        # ...and it says so: no card was raised (walk 13: told "held this for the owner", the agent said "Taskuary held that click as a payment
+        # ... please don't press it" over no card, and the step read "waits for your yes")
+        self.assertNotIn('held this for the owner', d['permissionDecisionReason']); self.assertIn('no card was raised', d['permissionDecisionReason'])
 
     def test_an_irreversible_act_is_refused_and_put_on_the_task(self):
         out = self.held()
@@ -638,7 +641,7 @@ class AtTheCommand(unittest.TestCase):
 
     def test_an_unreachable_taskuary_holds_a_press_and_lets_a_look_go(self):
         with mock.patch('urllib.request.urlopen', side_effect=OSError('connection refused')):
-            self.assertIn(bg.HELD, gate.ask('agent-browser', ['click', '@e7']))
+            self.assertIn(bg.NOT_RUN, gate.ask('agent-browser', ['click', '@e7']))
             self.assertEqual(gate.ask('agent-browser', ['open', 'https://x.example']), '')
 
     def test_an_agent_token_may_ask(self):

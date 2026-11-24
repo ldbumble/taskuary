@@ -106,6 +106,9 @@ def judge(store, tid: int, sid: str, cmd: str, cwd: str = '', brain=None) -> str
 
 
 HELD_SAID = 'Taskuary held this for the owner'
+# ...AND A REFUSAL THAT RAISES NO CARD SAYS SO (walk 13: a click refused as a payment was told "held this for the owner" - the agent said
+# "Taskuary held that click as a payment ... please don't press it" over no card, and the step read "waits for your yes"): only a card held
+NOT_RUN_SAID = 'Taskuary did not run this, and no card was raised for it'
 
 
 # ── THE ONE RULE every held step meets (was actrule.py) ──────────────────────────────────────────────────────────────────
@@ -472,7 +475,7 @@ def ask(name: str, args: list, after: bool = False, rc: int = 0) -> str:
     try: return str(post(cmd, after, rc=rc).get('why') or '')
     except Exception as e:
         if not act or after: return ''
-        return (f'{HELD_SAID}: it could not be asked whether this press may run ({str(e)[:120]}), so nothing was done. Run it again; if it is '
+        return (f'{NOT_RUN_SAID}: it could not be asked whether this press may run ({str(e)[:120]}), so nothing was done. Run it again; if it is '
                 'refused like this again, tell the owner in one line what you were about to do and go on with the rest of the job.')
 
 

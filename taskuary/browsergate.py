@@ -59,7 +59,7 @@ SETS = frozenset('check uncheck select'.split())
 FIND_LOOKS = frozenset('text hover'.split())
 SNAP_MAX = 6000                 # the page as the model reads it: the interactive elements, enough for a checkout or a settings page
 JUDGE_WAIT = 45.0
-from .gate import HELD_SAID as HELD          # ...one wording for every road's hold (gate.py)
+from .gate import HELD_SAID as HELD, NOT_RUN_SAID as NOT_RUN          # ...one wording for every road's hold (gate.py)
 AGAIN = 'Nothing on this card waits now: the agent opens the page again and holds the step anew.'     # ...its press is over (verdicts, the owner 2026-11-16)
 
 
@@ -363,9 +363,7 @@ def page(sid: str) -> dict:
 # WHEN THE PAGE CANNOT BE NAMED, the agent is told what that means and what to say - never "could not verify the current page address"
 # and nothing more, which is all the owner was left with (2026-10-28: "it failed, no explanation?")
 NO_PAGE = ('{held}: Taskuary could not read which page your browser is on, so it could not put this in front of the owner - nothing was '
-           'done. Run `agent-browser get url`. If that names the page, run your command again; if it fails too, the browser has stopped '
-           'answering: tell the owner in one line "The browser stopped answering, so I could not finish on <the site>.", set "retry": true '
-           'in your summary - a Try again button is drawn for the owner - and go on with the rest of the job.')
+           'done. `agent-browser get url` says which page it is on.')
 
 
 # THE OWNER'S RULE IS THE QUESTION (2026-11-19: "anything big like spending money or putting in private info should wait for user for now"): a
@@ -648,7 +646,7 @@ def check(store, tid: int, sid: str, cmd: str, brain=None, cwd: str = '') -> dic
     except Exception as e:
         if not acts(cmd): raise
         logger.warning(f'browsergate: task {tid} - the act was not filed for the owner - {e}')
-        return _deny(f"{HELD}: Taskuary could not put this in front of the owner ({str(e)[:160]}), so nothing was done. Run the command again "
+        return _deny(f"{NOT_RUN}: Taskuary could not put this in front of the owner ({str(e)[:160]}), so nothing was done. Run the command again "
                      "on its own line; if it is held like this again, tell the owner in one line what you were about to do and go on with the rest of the job.")
 
 
@@ -659,10 +657,10 @@ def _check(store, tid: int, sid: str, cmd: str, brain=None, cwd: str = '') -> di
     # three cards went off the chat): its next site opens in a new tab - the one road for every held step, a click's and a sign-up's
     # ...AND A TAB HANDED TO HIM IS HIS (owner_tabs): never moved, reloaded or closed under him - nor the browser it is in
     if (his := owner_tab(store, tid, sid)) and (to := goes_to(cmd)) is not None:
-        return _deny(f"{HELD}: this tab is the owner's - your step on {his} waits on him there, and moving it would drop that card. Open the next "
+        return _deny(f"{NOT_RUN}: this tab is the owner's - your step on {his} waits on him there, and moving it would drop that card. Open the next "
                      f"page in a new tab instead: `agent-browser tab new {to or '<address>'}`, and go on there.")
     if (shut := closes(cmd)) and (his := owner_tab(store, tid, sid) if shut == 'tab' else ', '.join(owner_tabs(store, tid, sid).values())):
-        return _deny(f"{HELD}: that would close the owner's tab - your step on {his} waits on him there. Leave it open and go on in another tab; "
+        return _deny(f"{NOT_RUN}: that would close the owner's tab - your step on {his} waits on him there. Leave it open and go on in another tab; "
                      "you are told when he is done.")
     todo = acts(cmd)
     if not todo or all(typing(a) for a in todo): return {}
@@ -671,17 +669,17 @@ def _check(store, tid: int, sid: str, cmd: str, brain=None, cwd: str = '') -> di
     _saw(sid, todo, pg)
     for i, a in enumerate(todo):
         if a['verb'] == 'batch':
-            return _deny(f"{HELD}: a batch that reads its steps from its input shows none of them. Pass each step as its own quoted argument "
+            return _deny(f"{NOT_RUN}: a batch that reads its steps from its input shows none of them. Pass each step as its own quoted argument "
                          '(agent-browser batch "fill @e2 ..." "click @e5"), or run them one per line.')
         if a.get('read'):           # a box's value is read only where the page shows it is no password box
             c = control(a, pg)
             if not c.get('role') or 'password' in f"{c.get('name')} {c.get('role')}".lower():
-                return _deny(f"{HELD}: reading what is typed in that box is refused - it is a password box, or the page does not say what it is.")
+                return _deny(f"{NOT_RUN}: reading what is typed in that box is refused - it is a password box, or the page does not say what it is.")
             continue
         # ...AND A SCRIPT reads any box (`eval "...input[type=password].value"`): judged only on whether it can be undone, a read passed - so
         # none runs while a password box of the page holds one (signin.holds_password), a sign-up's made password waiting for his press among them
         if a['verb'] == 'eval' and signin.holds_password(sid):
-            return _deny(f"{HELD}: running a script on this page is refused while a password box on it holds a password - the agent never reads one. "
+            return _deny(f"{NOT_RUN}: running a script on this page is refused while a password box on it holds a password - the agent never reads one. "
                          "Use snapshot, get text or click instead.")
         # ...PLAIN TYPING PASSES WITHOUT A VERDICT: nothing leaves the page until something is pressed, and a model call per box was six
         # seconds a box - four boxes a sign-up, thirteen sign-ups (the vendor walk, 2026-11-18)
@@ -690,13 +688,13 @@ def _check(store, tid: int, sid: str, cmd: str, brain=None, cwd: str = '') -> di
         v = next(vs)
         if not v['hold']: continue
         args = _own_args(a['args'])
-        if not args: return _deny(f"{HELD}: a browser command it could not read. Run each agent-browser command on its own line.")
-        if not pg['url']: return _deny(NO_PAGE.format(held=HELD))
+        if not args: return _deny(f"{NOT_RUN}: a browser command it could not read. Run each agent-browser command on its own line.")
+        if not pg['url']: return _deny(NO_PAGE.format(held=NOT_RUN))
         site = signin.site_name(pg['url']) or 'the page'
         # ...A PAYMENT IS HIS TO MAKE, ON THE PAGE - ONE ROAD (the owner, 2026-11-22: "you pay on the page"): the hand-over asked him to enter his
         # card and press Pay, and the gate then held the agent's own Pay on the empty form as an Approve card - two roads for one payment
         if v.get('kind') == 'money':
-            return _deny(f"{HELD}: {v['what']} spends the owner's money - a payment is his to make himself, on the page. Leave the page on it, "
+            return _deny(f"{NOT_RUN}: {v['what']} spends the owner's money - a payment is his to make himself, on the page. Leave the page on it, "
                          "hand_over what he enters and presses to pay, and go on with the rest; you are told when he is done.")
         # ...THE ONE RULE (gate.decide): the same press on the same site he already approved on this task runs; one he dismissed is his no
         from . import gate

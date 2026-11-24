@@ -121,7 +121,7 @@ TOOLS = {
                         "sentences - which conversation, who asked, for whom. did: the result first (path, link, figure), then what you did. "
                         "on_you: steps only the owner can take that no card or question carries, each with why. nothing_left: the goal is met "
                         "and checked. answer_is_result: your words are what was asked. after_press: send (a step of yours follows his press - "
-                        "it wakes you) or handoff. retry: another try may work (draws Try again). corrections: when he corrects you, [{kind: "
+                        "it wakes you) or handoff. retry: another try may work (draws Try again, unless you ask the owner something). corrections: when he corrects you, [{kind: "
                         "redraft|ask, review: draft id|null, said: his words}]. check_back: {when, what}.",
                  _S({'name': _STR, 'about': _STR, 'did': _STR, 'on_you': {'type': 'array', 'items': _STR}, 'nothing_left': {'type': 'boolean'},
                      'answer_is_result': {'type': 'boolean'}, 'after_press': {'type': 'string', 'enum': ['send', 'handoff']},

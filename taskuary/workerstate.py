@@ -148,9 +148,6 @@ def record(store, tid: int, sid: str, kind: str, request_id: str = None, text: s
             from . import batch
             batch.turn_ended(store, tid)
         except Exception as e: logger.debug(f'task {tid}: the turn end was not passed on - {e}')
-    if kind == 'turn_end':                        # ...and the tabs the turn left behind closed with it (browserview.tidy), off this thread
-        from . import browserview
-        threading.Thread(target=_tidy, args=(browserview, store, tid, sid), daemon=True, name=f'tidy-tabs-{tid}').start()
     if kind == 'turn_end' or kind in REQUESTS:    # ...and its answer, or what it waits on, to the chats bound to it (agentchannels.py)
         try:
             from . import agentchannels
@@ -162,11 +159,6 @@ def record(store, tid: int, sid: str, kind: str, request_id: str = None, text: s
             remote_assistant.turn_ended(store, tid)
         except Exception as e: logger.debug(f'task {tid}: the phone was not told its turn ended - {e}')
     return True
-
-
-def _tidy(bv, store, tid, sid):
-    try: bv.tidy(store, tid, sid)
-    except Exception as e: logger.debug(f'task {tid}: the tabs its turn left were not closed - {e}')
 
 
 def background_jobs(e: dict) -> list:

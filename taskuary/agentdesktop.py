@@ -40,7 +40,7 @@ VALUED = frozenset('--session --agent-id --trace --screenshot --wait-for --wait-
                    '--timeout --arg --env --cwd --surface --root --max-depth'.split())
 TYPES = frozenset('set-value type'.split())     # what passes when no AI is connected to judge: typing into a box
 JUDGE_WAIT = 45.0
-from .gate import HELD_SAID as HELD          # ...one wording for every road's hold (gate.py)
+from .gate import HELD_SAID as HELD, NOT_RUN_SAID as NOT_RUN          # ...one wording for every road's hold (gate.py)
 
 
 # ── is it here, and is it on ──────────────────────────────────────────────────────────────────────────────────────────────
@@ -294,7 +294,7 @@ def check(store, tid: int, sid: str, cmd: str, brain=None) -> dict:
     ctls = [control(a) for a in todo]
     for a, c, v in zip(todo, ctls, judge(store, todo, ctls, brain)):
         if not v['hold']: continue
-        if not a['args']: return _deny(f'{HELD}: a desktop command it could not read. Run each agent-desktop command on its own line.')
+        if not a['args']: return _deny(f'{NOT_RUN}: a desktop command it could not read. Run each agent-desktop command on its own line.')
         # ...THE ONE RULE (gate.decide), as the browser's: the same press on the same control of the same app he already approved on this
         # task runs; one he dismissed since his last line is his no, never a second card
         from . import gate

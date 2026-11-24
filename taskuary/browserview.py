@@ -542,9 +542,10 @@ def switch_tab(sid: str, tab: str) -> bool:
     return ok
 
 
-# THE TABS A TURN LEFT ARE CLOSED WITH IT (walk 12: three sign-up providers' tabs stood open after the agent had moved on from each): when a turn
-# ends, every tab of its browser but the one it works and the ones a step waits on the owner in (browsergate.owner_tabs) is closed. Nothing is
-# closed while the browser cannot say which tab it works, while a held step names no tab, or while a sign-in is being typed
+# THE TABS A TURN LEFT ARE CLOSED AS THE NEXT BEGINS (walk 12: three sign-up providers' tabs stood open after the agent had moved on from each):
+# every tab of its browser but the one it works and the ones a step waits on the owner in (browsergate.owner_tabs) is closed. Never at the turn's
+# end, under the words it ended on (walk 13: "open the Trello sign-up tab", closed a beat later) - and the turn that begins is told (tabs_now).
+# Nothing is closed while the browser cannot say which tab it works, while a held step names no tab, or while a sign-in is being typed
 def tidy(store, tid: int, sid: str) -> list:
     "Close the tabs task `tid`'s agent left behind in session `sid`'s browser. -> the ids closed."
     from . import browsergate
@@ -556,6 +557,25 @@ def tidy(store, tid: int, sid: str) -> list:
     for i in gone: _devtools(sid, f'/json/close/{i}')
     if gone: logger.info(f'browser {sid}: closed {len(gone)} tab(s) its turn left open')
     return gone
+
+
+def tidy_soon(store, tid: int, sid: str) -> None:
+    "tidy, off the caller's thread - a CLI's turn beginning (hooks: UserPromptSubmit)."
+    def go():
+        try: tidy(store, tid, sid)
+        except Exception as e: logger.debug(f'task {tid}: the tabs its last turn left were not closed - {e}')
+    threading.Thread(target=go, daemon=True, name=f'tidy-tabs-{tid}').start()
+
+
+def tabs_now(store, tid: int, sid: str) -> str:
+    """The tabs of session `sid`'s browser as a turn begins, after the last turn's are put away (tidy) - a fact of the turn, so what it says of
+    a tab is what stands: one a tidy closed is named as closed. '' when the browser lists none."""
+    gone = {t['id']: t.get('url') for t in pages(sid) if t.get('id')}
+    shut = [gone[i] for i in tidy(store, tid, sid) if i in gone]
+    ts, on = pages(sid), active_tab(sid)
+    if not ts: return ''
+    now = '; '.join(f"{t.get('url') or 'a blank tab'}{' (the one you work)' if t.get('id') == on else ''}" for t in ts)
+    return f'ITS TABS NOW: {now}.' + (f" Closed since your last turn: {'; '.join(map(str, shut))}." if shut else '')
 
 
 def active_tab(sid: str) -> str:

@@ -2082,9 +2082,11 @@ def prompt_parts(store, tid: int, turn: bool = False, upto: int = None) -> tuple
     # went to, the addresses behind its words, how each reached the task - facts about these very messages, so they ride in their file
     if stranger and (came := _ctx_came(store, tid)): sources.append(came)
     turns, said = [], chat_rows(store, tid, run=True)
+    from . import continuity       # ...a brief's news of mail SOURCE MATERIAL holds says it there once (continuity.unquoted)
+    line = lambda c: continuity.unquoted(prompt_line(c)) if sources and is_brief(c) else prompt_line(c)
     for c in said[-TURNS:]:
         role = 'ASSISTANT' if c.get('ActorType') == ASSISTANT_TYPE else 'USER'
-        turns.append(f"{role}: {_cut(c.get('Body') if role == 'ASSISTANT' else prompt_line(c), TURN_CHARS)}")
+        turns.append(f"{role}: {_cut(c.get('Body') if role == 'ASSISTANT' else line(c), TURN_CHARS)}")
     # ...a SECOND agent (new_run) has a conversation of its own, and is told where the earlier one got to: its last answer, not its chat
     before = next((c for c in reversed(_split(store, tid)[0]) if c.get('ActorType') == ASSISTANT_TYPE), None)
     prior = (f"WHERE THE EARLIER AGENT ON THIS TASK GOT TO - its last answer. You are a new agent on the task, with a conversation of "
@@ -2140,7 +2142,7 @@ def prompt_parts(store, tid: int, turn: bool = False, upto: int = None) -> tuple
     # as its material. The conversation still ends on the same words; this is where they are read FIRST.
     rows = chat_rows(store, tid, run=True)
     last = rows[-1] if rows else {}
-    ask = _cut(prompt_line(last), OWNER_ASK_CHARS) if sources and not dock and last.get('ActorType') == USER_TYPE else ''
+    ask = _cut(line(last), OWNER_ASK_CHARS) if sources and not dock and last.get('ActorType') == USER_TYPE else ''
     # ...and a turn Taskuary started - a sender's new line, a press, a check-back come due - is headed as Taskuary's, never the owner's (the
     # agent map, 2026-11-10: "THE OWNER'S ASK" stood over "These are their words, not the owner's")
     lead = ("TASKUARY'S WORDS ON THIS TURN - not the owner's" if is_brief(last) else "THE OWNER'S ASK - what they want done") + ' about the task and the material below'
@@ -3077,7 +3079,8 @@ class GeneralSession:
             if kept_conv and self.frozen is None: self.frozen = self._told()
             head, system, news = system, *freeze(self, system, [*late, unlearned(self.store, self.frozen)] if kept_conv else late, kept_conv, by_line=True)
             if self.cli_sid and news: self._remember_session()
-            if turn_said and not kept_conv: user = f'{turn_said}\n\n{user}'
+            from . import continuity             # ...a fresh conversation's SOURCE MATERIAL says the mail its news names (continuity.unquoted)
+            if turn_said and not kept_conv: user = f'{continuity.unquoted(turn_said)}\n\n{user}'
             # ...and a FRESH conversation after a cut turn hears what the task already made (made_line; round 3, 2026-11-22: "carry on" after a
             # restart redid every search) - the lines it was answering it reads in the history it is told
             whole = user                 # the conversation said in full: what a fresh one hears where this one cannot be picked back up
@@ -3086,7 +3089,7 @@ class GeneralSession:
                 # this turn carries (a brief, a wake) follow them
                 user = turn_events(self.store, self.task_id, upto, text if as_owner and not brief else '', mails)
                 if not as_owner or brief: user = '\n\n'.join(x for x in (user, text) if x)
-                if turn_said: user, whole = f'{turn_said}\n\n{user}', f'{turn_said}\n\n{whole}'
+                if turn_said: user, whole = f'{turn_said}\n\n{user}', f'{continuity.unquoted(turn_said)}\n\n{whole}'
                 if news: user = f'{news}\n\n{user}'
                 if is_dock(self.store.get_task(self.task_id)):
                     user += f'\n\n{dock_snapshot(self.store)}'

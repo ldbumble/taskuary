@@ -196,3 +196,10 @@ def news_block(store, tid) -> str:
             "the conversation you remember - it is from BEFORE them, and the task was reopened because of them. Read them first; "
             "what they ask is the work now, not what you finished last time.\n" + '\n'.join(one(m) for m in mail[-NEWS_SHOWN:])
             + (f'\n{s}' if (s := sent_block(store, tid)) else ''))     # ...unless the owner already answered them
+
+# ...AND IN A CONVERSATION SAID AFRESH ITS MAIL IS SAID ONCE (the CI fixer, 2026-11-24): that prompt's SOURCE MATERIAL carries every message, fenced
+# and by its id, and the brief's block quoted each new one again above it, unfenced. There the block keeps each mail's head line, never its words
+_NEWS = re.compile(r'^NEW SINCE YOUR LAST TURN \(.*?(?=\n\n|\Z)', re.S | re.M)
+def unquoted(text: str) -> str:
+    "A brief as a prompt said afresh says it: news_block without the words of the mail its SOURCE MATERIAL already holds."
+    return _NEWS.sub(lambda m: re.sub(r'\n  .*', '', m.group(0)), str(text or ''))

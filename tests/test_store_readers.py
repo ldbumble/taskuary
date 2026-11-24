@@ -176,17 +176,21 @@ def test_a_press_waits_for_one_turn_of_the_census_not_the_whole_pass(s):
     s.cx.executemany("INSERT INTO message(ExternalId, ConversationId, Channel, Subject, BodyText, Status, SentAt) "
                      "VALUES (?, ?, 'email', 'S', 'x', 'new', '2026-10-28 08:00:00')", [(f'r:{i}', f't:{i}') for i in range(3000)])
     s.cx.commit()
-    span, wait = [], []
-    def census(): s.reconcile_processing_membership(); span.append(time.perf_counter())
+    turns, wait, real = [], [], s._census_turn
+    def turn(run): r = real(run); turns.append(time.perf_counter()); return r      # each census turn, stamped as it lets the writer go
     def press():
         end = time.perf_counter() + 30
         while not s.cx.in_transaction and time.perf_counter() < end: pass      # the census has the writer
         t0 = time.perf_counter(); s.set_setting('pressed', 'yes', 't'); wait.append((t0, time.perf_counter()))
-    ts = [threading.Thread(target=census), threading.Thread(target=press)]
-    for t in ts: t.start()
-    for t in ts: t.join(60)
+    with mock.patch.object(s, '_census_turn', turn):
+        ts = [threading.Thread(target=s.reconcile_processing_membership), threading.Thread(target=press)]
+        for t in ts: t.start()
+        for t in ts: t.join(60)
     (t0, done), = wait
-    assert done < span[0] and done - t0 < (span[0] - t0) / 4, f'the press waited {done - t0:.2f}s of the census\'s {span[0] - t0:.2f}s'
+    # ...counted in turns, not seconds (Windows CI, 0.4.2.8: a ratio of tiny times failed on a slow runner): the press goes in after the turn
+    # it found holding the writer - one more at most, the lock not being fair - while the rest of the pass is still to come
+    n = sum(t0 < x < done for x in turns)
+    assert len(turns) > 3 and n <= 2 and done < turns[-1], f"the press waited {n} of the census's {len(turns)} turns"
     assert s.get_setting('pressed') == 'yes' and not s.processing_reconcile_status()['pending']
     assert s.cx.execute('SELECT COUNT(*) FROM processing_member WHERE RetiredAt IS NULL').fetchone()[0] == 3000
 

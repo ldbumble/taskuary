@@ -350,6 +350,8 @@ const OWN = {
   // ...AND EVERY OTHER TOOL OF ITS OWN, by what it did (design round 4, 2026-11-19): the rest fell to "Used <name> (taskuary) on ..."
   guide: () => ({ kind: "read", summary: "Read how Taskuary does it" }),
   remember: () => ({ kind: "data", summary: "Kept a fact you told it" }),
+  persontasks: (a) => ({ kind: "read", summary: a.who ? `Looked up ${clip(a.who, 40)}'s other tasks` : "Looked up their other tasks" }),
+  pastfigures: (a) => ({ kind: "read", summary: a.who || a.vendor_or_person ? `Looked up past figures for ${clip(a.who || a.vendor_or_person, 40)}` : "Looked up past figures" }),
   todos: () => ({ kind: "plan", summary: "Updated the to-do list" }),
   checkback: (a) => ({ kind: "task", summary: a.when ? `Set itself to look again ${clip(a.when, 30)}` : "Set itself to look again later" }),
   remind: (a) => ({ kind: "task", summary: a.when ? `Set a reminder for ${clip(a.when, 30)}` : "Set a reminder" }),

@@ -13,7 +13,14 @@ html[data-theme="dark"] ::selection { background: #526779; color: #eeeae3; }
 /* ...in the dark a step lighter than the chat it stands on - the same colour as the chat, it did not stand at all */
 html[data-theme="dark"] { --tq-frame-bg: color-mix(in srgb, var(--tq-panel, #2a2925) 90%, #fff); --tq-frame-shadow: 0 1px 3px rgb(0 0 0 / .45), 0 1px 2px -1px rgb(0 0 0 / .45); }
 .tq-turn-frame .tq-turn-frame { box-shadow: none; background: transparent; margin: 6px 0; }   /* ...one raised surface: a card inside a card (a bulk row opened) lies flat in it */
-.tq-turn-frame.tq-turn-frame { max-width: min(100%, var(--tq-turn-item)); }   /* ...over any `* { max-width: 100% }` of the surface it is on */
+.tq-turn-frame.tq-turn-frame { max-width: min(100%, max(var(--tq-turn-item), var(--tq-fit-w, 0px))); }   /* ...over any `* { max-width: 100% }` of the surface it is on */
+/* A TABLE NEVER WRAPS WHILE THERE IS ROOM (the owner, 2026-11-24: "I hate wrapped text"): its frame widens to it (--tq-fit-w), its font steps
+   down, and only then does it wrap - at words, never inside a word, a name, a slug or a link; a short or numeric column never (data-tq-short);
+   last, it scrolls in its frame. Measured by tableFit.js, one rule for every table */
+[data-tq-fit][data-tq-fit] { overflow-x: auto; }
+[data-tq-fit][data-tq-fit] table { width: auto; min-width: 100%; table-layout: auto; }
+[data-tq-fit][data-tq-fit] th, [data-tq-fit][data-tq-fit] td, [data-tq-fit][data-tq-fit] a { overflow-wrap: normal; word-break: normal; }
+[data-tq-fit][data-tq-fit] [data-tq-short] { white-space: nowrap; }
 /* ...but a dashboard, which is looked at: the chat's whole width (the owner, 2026-11-23: "Dashboards should take up most of the screen") */
 .tq-turn-frame.tq-turn-wide.tq-turn-wide { max-width: 100%; width: 100%; }
 .tq-turn-frame { box-sizing: border-box; margin: 8px 0; background: var(--tq-frame-bg);

@@ -13,9 +13,9 @@
   --v-warn: #8a5a12; --v-warn-bg: #fbf6ec; --v-warn-bd: #eedfc0;
   gap: var(--v-gap); margin: 8px 0;   /* a paragraph's room, as every frame of a turn (appTheme.css .tq-turn-frame) */
 }
-/* ...IN THE TURN'S READING COLUMN (--tq-turn-item, appTheme.css), left-aligned; one whose table needs more takes what it needs
-   (--tq-view-need, measured by ViewSpec's Table), up to the chat's width. Two classes: the chat's own `* { max-width: 100% }` never beats it */
-.tq-dash.tq-view.tq-turn-frame { max-width: min(100%, max(var(--tq-turn-item), var(--tq-view-need, 0px))); }
+/* ...IN THE TURN'S READING COLUMN (--tq-turn-item, appTheme.css), left-aligned; one whose table needs more takes what it needs (--tq-fit-w,
+   tableFit.js), up to the chat's width. Two classes: the chat's own `* { max-width: 100% }` never beats it */
+.tq-dash.tq-view.tq-turn-frame { max-width: min(100%, max(var(--tq-turn-item), var(--tq-fit-w, 0px))); }
 :root[data-theme="dark"] .tq-view {
   --v-info: #9cbbe0; --v-info-bg: rgba(79, 138, 203, .1); --v-info-bd: rgba(79, 138, 203, .28);
   --v-ok: #7cc482; --v-ok-bg: rgba(95, 184, 101, .1); --v-ok-bd: rgba(95, 184, 101, .28);

@@ -105,13 +105,34 @@ class Reading(unittest.TestCase):
         self.assertEqual(bg.acts('timeout 30 agent-browser snapshot -i'), [], 'a look behind a launcher is still a look')
         self.assertEqual(bg.acts('grep -rn agent-browser notes.md'), [], 'naming the tool to another program is no call of it')
 
-    def test_a_line_break_in_typed_text_is_never_plain_typing(self):
-        # _segments reads a newline as `;`, so a break inside quotes came back as " ; " and fill passed with no AI (2026-10-31)
+    def test_a_line_break_typed_as_keys_is_never_plain_typing(self):
+        # ...an Enter typed into a box sends its form (agent-browser 0.41: `type` "x<newline>y" into an input submitted it)
         self.assertTrue(bg.typing(bg.acts('agent-browser fill @e1 "Dear Erin"')[0]))
-        for cmd in ("agent-browser fill @e1 'line one\nline two'", 'agent-browser fill @e1 "line one`nline two"'):
-            a = bg.acts(cmd)
-            if a: self.assertFalse(bg.typing(a[0]), cmd)
+        for cmd in ("agent-browser type @e1 'line one\nline two'", 'agent-browser keyboard type "line one`nline two"',
+                    "agent-browser find label Body type 'a\nb'"):
+            [a] = bg.acts(cmd)
+            self.assertFalse(bg.typing(a), cmd)
         self.assertEqual(bg.acts('npx agent-browser@0.41.0 click @e12')[0]['verb'], 'click')      # a pinned version is the same tool
+
+    def test_a_post_body_with_line_breaks_is_the_agents_own_words_and_filling_it_is_no_card(self):
+        """Walk 14, 2026-11-24: an Ask HN body typed with `fill` came back with " ; " for each line break (every newline read as `;`, the quoted
+        ones too), and as "not plain typing" it was held as a "Submit the post" card beside the real Submit - two cards for one post, and his
+        press on the first ran the flattened text. A newline ends a command only outside quotes; fill sets the box and presses no key."""
+        body = 'Hi HN,\n\nWe run finance ops for a small team.\nWhat do you use?'
+        cmd = f"agent-browser fill @e2 '{body}'\nagent-browser click @e5"
+        self.assertEqual([a['args'] for a in bg.acts(cmd)], [['fill', '@e2', body], ['click', '@e5']])
+        self.assertEqual([a['args'] for a in bg.acts('agent-browser fill @e1 a \\\n  b')], [['fill', '@e1', 'a', 'b']])     # a continued line
+        for c in (f"agent-browser fill @e2 '{body}'", f"agent-browser keyboard inserttext '{body}'", f"agent-browser find label Text fill '{body}'"):
+            self.assertTrue(bg.typing(bg.acts(c)[0]), c)
+        s = MemoryStore(); tid = Factory(s).task('Write an Ask HN post')
+        post = {'url': 'https://news.example/submit', 'open': True, 'elements': '- textbox "title" [ref=e1]\n- textbox "text" [ref=e2]\n- button "submit" [ref=e5]'}
+        speaks = {'big': True, 'kind': 'speaks', 'sure': True, 'irreversible': True, 'what': 'Submit the Ask HN post'}
+        with mock.patch.object(bg, 'page', return_value=post), verdict(speaks):
+            self.assertEqual(bg.check(s, tid, 'run1', f"agent-browser fill @e2 '{body}'", Brain(None)), {}, 'filling the box is no card')
+            out = bg.check(s, tid, 'run1', f"agent-browser type @e2 '{body}'", Brain(None))
+        self.assertEqual(out['hookSpecificOutput']['permissionDecision'], 'deny', 'keys that press Enter are judged')
+        [r] = s._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action' AND Status='pending'", (tid,))
+        self.assertEqual(json.loads(r['DraftText'])['args'], ['type', '@e2', body], 'the held step is the command as the agent wrote it')
 
     def test_a_redirection_is_no_argument(self):
         """The real-CLI walk, 2026-11-16: `fill @e1 "Alex Doyle" 2>/dev/null` read as fill @e1 "Alex Doyle" 2, and run for the owner the

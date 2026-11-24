@@ -14,8 +14,9 @@ Where it is caught: at the command itself, whatever AI runs it - the `agent-brow
   be undone. Not a word list: "Submit" on a search box is nothing, "Continue" on a checkout's last step is a payment.
 - NO AI CONNECTED (the owner, 2026-10-25): plain typing into a box - agent-browser's fill, type, keyboard type/inserttext, and a
   find whose action is fill or type - passes, since nothing has left the page until something is pressed; every other act waits.
-  Typing is read from the command's verb (TYPES), agent-browser's fixed vocabulary, not judged over words. Text with a line break
-  in it is not plain typing: a newline typed into a form can be its Enter.
+  Typing is read from the command's verb (TYPES), agent-browser's fixed vocabulary, not judged over words. A line break TYPED as keys
+  (type, keyboard type) is not plain typing: its Enter sends a form. One that fill or inserttext puts in a box is text - they set the
+  box and press no key (agent-browser 0.41: fill "a<newline>b" leaves an input "a b" and a textarea its two lines, and sends nothing).
 - ONLY THE BIG STEP WAITS, ONE RULE ON EVERY AI (the owner, 2026-11-19: "anything big like spending money or putting in private info should
   wait for user for now"): a step that spends his money, sends his own private details, speaks for him to others or deletes something of
   his is one card for his press, asked or not (BIG); anything else runs - a free sign-up with made-up or vault details, a form, a search.
@@ -63,16 +64,33 @@ from .gate import HELD_SAID as HELD, NOT_RUN_SAID as NOT_RUN          # ...one w
 AGAIN = 'Nothing on this card waits now: the agent opens the page again and holds the step anew.'     # ...its press is over (verdicts, the owner 2026-11-16)
 
 
-# A LINE BREAK IN THE COMMAND may be inside the typed text: _segments reads every newline as `;`, so "a\nb" in quotes came back as
-# "a ; b" and passed as plain typing. Any newline, or PowerShell's `n / `r, makes no act of that line plain typing.
+# A LINE BREAK IN THE TYPED TEXT is the agent's own words (walk 14, 2026-11-24: a post's body typed with fill came back with " ; " for each
+# line break - every newline was read as `;`, the quoted ones too - and that flattened text was the card's, and what ran on his press). A
+# newline ends a command only outside quotes; inside them it stays in the argument. A newline, or PowerShell's `n / `r, in an act's own
+# words is its `nl`: typed as keys, it is an Enter (typing).
 _NL = re.compile(r'[\r\n]|`[nr]')
+def broke(args: list) -> bool: return any(_NL.search(str(t)) for t in args or ())
+
+
+def _unquoted_breaks(cmd: str) -> str:
+    "The line with each newline OUTSIDE quotes made a `;` (a backslash before one joins the lines, as the shell does); a quoted one is kept."
+    out, q, i, s = [], '', 0, str(cmd or '').replace('\r\n', '\n')
+    while i < len(s):
+        c = s[i]
+        if c == '\\' and q != "'" and i + 1 < len(s):
+            out.append(' ' if s[i + 1] == '\n' and not q else c + s[i + 1]); i += 2; continue
+        if q: q = '' if c == q else q
+        elif c in '"\'': q = c
+        elif c in '\r\n': c = ' ; ' if c == '\n' else ' '
+        out.append(c); i += 1
+    return ''.join(out)
 
 
 # ── which part of a shell command is a browser act ────────────────────────────────────────────────────────────────────────
 def _segments(cmd: str):
-    "The simple commands in a shell line, as argv lists - split on ; && || | and newlines. None when it cannot be read."
+    "The simple commands in a shell line, as argv lists - split on ; && || | and on newlines outside quotes. None when it cannot be read."
     try:
-        lx = shlex.shlex(str(cmd or '').replace('\r', ' ').replace('\n', ' ; '), posix=True, punctuation_chars=';&|()<>')
+        lx = shlex.shlex(_unquoted_breaks(cmd), posix=True, punctuation_chars=';&|()<>')
         lx.whitespace_split = True
         toks = list(lx)
     except ValueError: return None
@@ -180,7 +198,7 @@ def acts(cmd: str) -> list:
         if to is not None and carries(to): verb = 'navigate'
         elif verb == 'get' and nxt.lower() == 'value': out.append({'args': a, 'verb': 'get value', 'read': True}); continue
         elif verb in LOOKS or (verb == 'find' and _find_action(a[i:]) in FIND_LOOKS): continue
-        if verb: out.append({'args': a, 'verb': verb, **({'nl': True} if _NL.search(str(cmd)) else {})})
+        if verb: out.append({'args': a, 'verb': verb, **({'nl': True} if broke(a) else {})})
     return out
 
 
@@ -216,7 +234,8 @@ def opens(cmd: str) -> str:
 
 
 def typing(act: dict) -> bool:
-    "Is this act only typing into a box? By agent-browser's verb, never by its text - and text that breaks a line is not plain typing."
+    """Is this act only typing into a box? By agent-browser's verb, never by its text. A line break typed as KEYS (type, keyboard type, find ...
+    type) presses Enter, which sends a form: not plain typing. fill and inserttext set the box's text and press no key - its lines are text."""
     a, i = act.get('args') or [], 0
     while i < len(a) and a[i].startswith('-'): i += 2 if a[i] in VALUED and '=' not in a[i] else 1     # as acts() found the verb
     if i >= len(a) or a[i].lower() != act.get('verb'): return False
@@ -225,7 +244,8 @@ def typing(act: dict) -> bool:
     sub = lambda n: a[i + n].lower() if i + n < len(a) and not any(t.startswith('-') for t in a[i + 1:i + n + 1]) else ''
     v = act['verb']
     ok = v in TYPES or (v == 'keyboard' and sub(1) in KEY_TYPES) or (v == 'find' and sub(3) in TYPES)
-    return ok and not act.get('nl') and not any('\n' in t or '\r' in t for t in a)
+    keys = v == 'type' or (v == 'keyboard' and sub(1) == 'type') or (v == 'find' and sub(3) == 'type')
+    return ok and not (keys and (act.get('nl') or broke(a)))
 
 
 # ...AND A CLICK ON A FIELD OF THE FORM IS FILLING IT TOO, by the role the page's snapshot gives the control (the ZoningNow walk, 2026-11-22: the

@@ -169,7 +169,7 @@ def _verb_at(a: list) -> int:
 def acts(cmd: str) -> list:
     """Every agent-desktop call in a shell command that is not only a look: [{'args': [...], 'verb': 'click'}]. One that cannot be read
     is an act with verb '?' - judged like any other, never let through for being hard to read (browsergate.acts)."""
-    from .browsergate import _NL, _head, _segments, names
+    from .browsergate import _head, _segments, broke, names
     if not names(cmd, EXE): return []
     segs = _segments(cmd)
     if segs is None: return [{'args': [], 'verb': '?', 'raw': str(cmd)[:400]}]
@@ -182,7 +182,7 @@ def acts(cmd: str) -> list:
             continue
         i = _verb_at(a)
         verb = a[i].lower() if i < len(a) else ''
-        if verb and verb not in LOOKS: out.append({'args': a, 'verb': verb, **({'nl': True} if _NL.search(str(cmd)) else {})})
+        if verb and verb not in LOOKS: out.append({'args': a, 'verb': verb, **({'nl': True} if broke(a) else {})})
     return out
 
 

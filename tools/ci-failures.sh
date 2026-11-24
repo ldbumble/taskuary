@@ -42,7 +42,8 @@ if [ "$IDS" = 1 ]; then
 fi
 echo "run $RUN: $S"
 echo "$S" | grep -q " success" && exit 0
-gh run view "$RUN" --json jobs -q '.jobs[] | select(.conclusion=="cancelled") | "CANCELLED (ran past its time limit, or a cancel): \(.name)  \(.startedAt) -> \(.completedAt)"'
+# ...one with no steps never ran at all: GitHub found it no runner (2026-11-24: macOS arm64 capacity, three targeted runs "hung" 15 min)
+gh run view "$RUN" --json jobs -q '.jobs[] | select(.conclusion=="cancelled") | if (.steps|length)==0 then "NO RUNNER (GitHub never started it, nothing was tested - rerun it): \(.name)" else "CANCELLED (ran past its time limit, or a cancel): \(.name)  \(.startedAt) -> \(.completedAt)" end'
 for J in $(gh run view "$RUN" --json jobs -q '.jobs[] | select(.conclusion=="failure" and .name!="ci-required") | .databaseId'); do
   echo "FAILED: $(gh run view "$RUN" --json jobs -q ".jobs[] | select(.databaseId==$J) | .name")"
   gh run view "$RUN" --log --job "$J" 2>/dev/null | cut -c60- \

@@ -909,6 +909,7 @@ DEFAULT_SETTINGS = {'attach_threshold': '0.42',
                     'trust_own_domain': '1', 'trust_sent_history': '1', 'trust_non_email': '1', 'trust_trackers': '1',
                     'auto_sessions': '4',           # unattended agent sessions at once; the rest queue
                     'auto_sessions_light': '5',     # subagents that count as one of those (ingest.agent_load)
+                    'triage_lanes': '4',            # conversations triage judges at once; one conversation's mail stays in order (ingest.drain)
                     'triage_ai': '',      # '' = first active AI connector | connector:<id> | cli:<agent>
                     'startup_sync_days': '3',       # backfill window when the app starts: catch what arrived while it was shut
                     # minutes between background polls while the app is OPEN. The Timeline said
@@ -1176,7 +1177,7 @@ class SQLiteStore:
         self.cx.execute('PRAGMA busy_timeout=5000')
         self._poke_held = None       # one_poke(): a batch's wake-ups, held and sent once
         self._snap_hold = 0
-        self._snap_cache = None
+        self._snap_cache, self._snap_gen = None, 0     # the gen counts writes, so a picture read across one is not cached
         self._processing_display_cache = {}
         self._states_cache = None     # funnel_states(): (DirtyGeneration, newest dirty row) -> the rows read at that mark
         self._conn_cache = None       # list_connectors(): (the connectors' change_gen, the rows read at it)
@@ -2605,37 +2606,21 @@ class SQLiteStore:
         Tasks tab's columns, and in the one search box "open" listed every open task, ahead of the
         one that said it (the 2026-10-19 UI walk). That box asks for a status as `status:open`.
         """
+        # ONE FOLD PER ROW, NOT ONE PER FIELD (the load run, 2026-11-24): eighteen tq_fold calls a task and a message, each a hop into Python,
+        # made triage's found_tasks ~100 ms a mail on 150 open tasks. The fields are joined by char(31) - a word never holds it (split() cuts
+        # on it), so a word is found in the join exactly where it is found in one of the fields
+        cols = ['t.Title', 't.Summary', 't.Kind', *(() if shown else ('t.Status', 't.Priority')), 't.Assignee', 't.Source', 't.SourceRef', 't.Tags',
+                "printf('TQ-%04d', t.TaskId)", 'CAST(t.TaskId AS TEXT)']
+        mcols = ['m.Channel', 'm.SourceName', 'm.Subject', 'm.FromName', 'm.FromEmail', 'm.ExternalId', 'm.SourceLink']
+        join = lambda cs: "tq_fold(" + "||char(31)||".join(f"IFNULL({c},'')" for c in cs) + ")"
         where, p = [], []
-        hide = '' if shown else "OR tq_fold(t.Status) LIKE ? ESCAPE '\\' OR tq_fold(t.Priority) LIKE ? ESCAPE '\\'"
         for term in str(q or '').split():
             pat = self._like_pat(term)
-            where.append(f"""(
-                tq_fold(t.Title) LIKE ? ESCAPE '\\'
-                OR tq_fold(t.Summary) LIKE ? ESCAPE '\\'
-                OR tq_fold(t.Kind) LIKE ? ESCAPE '\\'
-                {hide}
-                OR tq_fold(t.Assignee) LIKE ? ESCAPE '\\'
-                OR tq_fold(t.Source) LIKE ? ESCAPE '\\'
-                OR tq_fold(t.SourceRef) LIKE ? ESCAPE '\\'
-                OR tq_fold(t.Tags) LIKE ? ESCAPE '\\'
-                OR tq_fold(printf('TQ-%04d', t.TaskId)) LIKE ? ESCAPE '\\'
-                OR CAST(t.TaskId AS TEXT) LIKE ? ESCAPE '\\'
-                OR ('tq-' || t.TaskId) LIKE ? ESCAPE '\\'
-                OR EXISTS (
-                    SELECT 1 FROM message m WHERE m.TaskId=t.TaskId AND (
-                        tq_fold(m.Channel) LIKE ? ESCAPE '\\'
-                        OR tq_fold(m.SourceName) LIKE ? ESCAPE '\\'
-                        OR tq_fold(m.Subject) LIKE ? ESCAPE '\\'
-                        OR tq_fold(m.FromName) LIKE ? ESCAPE '\\'
-                        OR tq_fold(m.FromEmail) LIKE ? ESCAPE '\\'
-                        OR tq_fold(m.ExternalId) LIKE ? ESCAPE '\\'
-                        OR tq_fold(m.SourceLink) LIKE ? ESCAPE '\\'
-                    )
-                )
-            )""")
+            where.append(f"""({join(cols)} LIKE ? ESCAPE '\\' OR ('tq-' || t.TaskId) LIKE ? ESCAPE '\\'
+                OR EXISTS (SELECT 1 FROM message m WHERE m.TaskId=t.TaskId AND {join(mcols)} LIKE ? ESCAPE '\\'))""")
             # "TQ-796" finds TQ-0796: the ref is matched with its padding zeros read as none
             ref = re.sub(r'^tq-?0*(?=\d)', 'tq-', _fold(term))
-            p.extend([pat] * (9 if shown else 11) + [self._like_pat(ref)] + [pat] * 7)
+            p.extend([pat, self._like_pat(ref), pat])
         return where, p
 
     def worked_today_task_ids(self) -> set:
@@ -2699,7 +2684,8 @@ class SQLiteStore:
                ) ms ON ms.TaskId=t.TaskId'''
         # ...A SEARCH READS ON A READER CONNECTION, NEVER UNDER THE WRITER'S LOCK (his live app, 2026-11-23: triage's found_tasks ran a search per
         # word and held the lock 3-4 s each, every other request - a press, the list - queued behind it for up to 10 s). Read only, so any snapshot serves
-        if q:
+        # ...and so does the plain list, whose WITH _rows never took for a read: triage's open_goals held the writer 80-200 ms a mail (load run, 11-24)
+        if q or self._off_writer():
             with self._snapshot_read() as cur: return [dict(r) for r in cur.execute(query + ' ORDER BY t.TaskId DESC', p).fetchall()]
         return self._rows(query + ' ORDER BY t.TaskId DESC', p)
     def delete_task(self, task_id):
@@ -2735,14 +2721,15 @@ class SQLiteStore:
                 self._snap_hold, self._snap_cache = 0, None
 
     def _bump_snapshots(self):
-        self._snap_cache = None
+        self._snap_gen += 1; self._snap_cache = None
 
     def snapshots(self):
-        if self._snap_hold and self._snap_cache is not None:
-            return self._snap_cache
+        if self._snap_hold and (c := self._snap_cache) is not None: return c
+        # ...kept only when no write landed while it was read: drain's lanes write beside each other, and a picture read before
+        # another lane opened a task, cached after, hid that task from the thread's next line
+        gen = self._snap_gen
         snaps = self._load_snapshots()
-        if self._snap_hold:
-            self._snap_cache = snaps
+        if self._snap_hold and gen == self._snap_gen: self._snap_cache = snaps
         return snaps
 
     def _load_snapshots(self):

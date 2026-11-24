@@ -553,9 +553,10 @@ def test_lifespan_starts_the_chat_clock_as_its_own_guarded_boundary(test_safety_
 
 class DrainOrderTests(unittest.TestCase):
     """drain() is the one place triage happens, in arrival order per conversation. Fresh chat
-    channels move to the front of the line; nothing else about the order changes."""
+    channels move to the front of the line; nothing else about the order changes. One lane, so the line's order is the order judged -
+    with more, it is the order lanes take rows in (test_async_triage.LaneTests)."""
     def setUp(self):
-        self.s = MemoryStore()
+        self.s = MemoryStore(); self.s.set_setting('triage_lanes', '1', 'test')
         self.order = []
         def judged(store, msg, llm=None, **k):
             self.order.append(msg['_mid']); store.place_message(msg['_mid'], None, 'filed')

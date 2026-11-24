@@ -86,10 +86,8 @@ class DeferredIngestTests(unittest.TestCase):
         with ingest.deferred():
             bad = ingest.ingest_message(self.s, mail(1))['message_id']
             good = ingest.ingest_message(self.s, mail(2))['message_id']
-        calls = []
-        def flaky(sys_, usr_, **kw):
-            calls.append(1)
-            if len(calls) == 1: raise RuntimeError('model down')
+        def flaky(sys_, usr_, **kw):          # by its words, not its turn: two threads are judged side by side (LaneTests)
+            if 'Question 1' in usr_: raise RuntimeError('model down')
             return '{"intent": "task", "why": "ok"}'
         ingest.drain(self.s, llm=flaky)
         self.assertEqual(self.s.get_message(bad)['Status'], 'error')      # PW-036: a failure is an error with a retry, not fyi
@@ -157,6 +155,74 @@ class DeferredIngestTests(unittest.TestCase):
         with ingest.deferred():
             t.start(); t.join(2)
         self.assertEqual(seen, {'parent': True, 'self': False})
+
+
+class LaneTests(unittest.TestCase):
+    """TRIAGE JUDGES CONVERSATIONS SIDE BY SIDE (the load run, 2026-11-24): one lane judged every mail of the app, so 100 mails took
+    15 minutes and the agents behind them starved. Order is kept within a conversation only: a thread's reply is judged after its
+    parent has landed and joins the parent's task; different threads are judged at once; no mail is judged twice."""
+    def setUp(self):
+        self.s = MemoryStore()
+        self.s.save_source({'Channel': 'email', 'Address': OWNER, 'Owner': 'me', 'Active': 1}, 'test')
+        ingest._PENDING.clear(); self.addCleanup(ingest._PENDING.clear)
+
+    def burst(self, convs=10, each=4):
+        "A poll's worth of mail: each of `convs` threads written `each` times, the threads interleaved as an inbox interleaves them."
+        with ingest.deferred():
+            for k in range(each):
+                for c in range(convs):
+                    ingest.ingest_message(self.s, mail(f'{c}-{k}', conversation_id=f'conv-{c}', subject=f'Ledger {c}', body=f'Please check it. [{c}-{k}]'))
+
+    def slow_brain(self, wait=1.0):
+        import re, threading, time
+        log, lk, live = [], threading.Lock(), {}
+        def f(sys_, usr_, **kw):
+            c, k = map(int, re.findall(r'\[(\d+)-(\d+)\]', usr_)[-1])
+            with lk:
+                self.assertNotIn(c, live, f'conversation {c} judged twice at once'); live[c] = k
+            time.sleep(wait)
+            with lk: live.pop(c); log.append((c, k))
+            return '{"intent": "task", "why": "a concrete ask", "title": "Check the ledger"}'
+        return f, log
+
+    def test_forty_mails_on_ten_threads_take_a_quarter_of_the_time_and_keep_each_threads_order(self):
+        import time
+        self.burst()
+        brain, log = self.slow_brain()
+        t = time.monotonic(); n = ingest.drain(self.s, llm=brain); took = time.monotonic() - t
+        self.assertEqual(n, 40)
+        self.assertLess(took, 25, f'40 one-second judgements took {took:.1f} s - one lane would be 40 s, four about 10')
+        self.assertEqual(sorted(log), sorted(set(log)), 'a mail was judged twice')
+        self.assertEqual(len(log), 40)
+        for c in range(10):                                   # ...each thread's mail judged in the order it came
+            self.assertEqual([k for x, k in log if x == c], [0, 1, 2, 3])
+        self.assertEqual(self.s.pending_triage(), [])
+        for c in range(10):                                   # ...and a reply landed on the task its thread's first mail opened
+            tids = {m['TaskId'] for m in self.s.scan_messages() if m['ConversationId'] == f'conv-{c}'}
+            self.assertEqual(len(tids), 1, f'conv-{c} landed on {tids}'); self.assertIsNotNone(next(iter(tids)))
+
+    def test_one_lane_setting_judges_one_mail_at_a_time(self):
+        import threading, time
+        self.s.set_setting('triage_lanes', '1', 'test')
+        self.burst(convs=3, each=1)
+        live, most, lk = [0], [0], threading.Lock()
+        def f(sys_, usr_, **kw):
+            with lk: live[0] += 1; most[0] = max(most[0], live[0])
+            time.sleep(0.2)
+            with lk: live[0] -= 1
+            return '{"intent": "fyi", "why": "nothing asked"}'
+        self.assertEqual(ingest.drain(self.s, llm=f), 3)
+        self.assertEqual(most[0], 1)
+
+    def test_a_provider_that_says_slow_down_narrows_the_pass_and_answers_widen_it_back(self):
+        lane = ingest._Lane(self.s, set(), False, 10, 4)
+        class Busy(RuntimeError): status_code = 429
+        def refuse(*a, **k): raise Busy('rate limited')
+        with self.assertRaises(Busy): ingest._paced(refuse, lane)('s', 'u')
+        self.assertEqual(lane.width, 2)
+        ok = ingest._paced(lambda *a, **k: '{}', lane)
+        for _ in range(20): ok('s', 'u')
+        self.assertEqual(lane.width, 4)
 
 
 class DayCountTests(unittest.TestCase):

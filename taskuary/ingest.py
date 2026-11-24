@@ -325,10 +325,19 @@ def _start_workflow(store, msg: dict, intent: dict, actor: str, note: str = '') 
     return {'status': 'attached' if out.get('busy') else 'created', 'task_id': tid, 'message_id': mid, 'workflow': intent['workflow']}
 
 
-# One drain at a time: a conversation's second line must find the task its first one opened.
-# Fresh chat channels go to the front of the line (the chat lane in server.py names them, and a
-# drain already running is told through mark_fresh); within a channel the order stays arrival.
+# One drain pass at a time, its rows judged by several lanes at once (triage_lanes): a conversation's second line must find the task
+# its first one opened, so ORDER IS KEPT WITHIN A CONVERSATION and nowhere else - one lane judged every mail of the app, and 100 mails
+# took 15 minutes while the agents behind them starved (the load run, 2026-11-24). Fresh chat channels go to the front of the line
+# (the chat lane in server.py names them, and a drain already running is told through mark_fresh); within a channel the order stays arrival.
 _DRAIN_LOCK = threading.Lock()
+TRIAGE_LANES = 4                 # the default: mails of different conversations judged at once; a 429 narrows it for the pass (_Lane.narrow)
+
+
+def triage_lanes(store) -> int:
+    "How many conversations triage judges at once (the 'triage_lanes' setting, 1..16)."
+    try: n = int(store.get_setting('triage_lanes') or TRIAGE_LANES)
+    except (ValueError, TypeError): return TRIAGE_LANES
+    return max(1, min(16, n))
 _FRESH, _FRESH_LOCK = set(), threading.Lock()
 _ALL = 1_000_000                 # pending_triage's LIMIT when the whole queue has to be seen to reorder it
 
@@ -346,11 +355,11 @@ class DrainTicket:
 
 
 class DrainWorker:
-    """One ordered, short-lived drain thread for one store.
+    """One short-lived drain thread for one store, running one drain pass at a time.
 
     Connector fetch clocks only enqueue here.  That leaves them free to fetch the next batch
-    while slow model triage continues, without allowing two conversations to be judged beside
-    each other.  The worker exits whenever its queue is empty; ``close`` makes its captured store
+    while slow model triage continues; the pass judges up to triage_lanes conversations beside
+    each other, each one's mail in order.  The worker exits whenever its queue is empty; ``close`` makes its captured store
     and model factory explicitly releasable by server shutdown and isolated tests.
     """
 
@@ -360,7 +369,7 @@ class DrainWorker:
         self._cv = threading.Condition()
         self._requests = []
         self._active_requests = []
-        self._active_channel = None
+        self._active = {}        # channel -> its rows being judged now (several lanes at once)
         self._thread = None
         self._closed = False
 
@@ -383,7 +392,7 @@ class DrainWorker:
                 raise RuntimeError('drain worker is closed')
             # A successful fetch which found nothing has nothing to wait behind.  Keep the
             # exception for a row of that channel whose final route writes are still running.
-            if only_fresh and not pending and self._active_channel not in channels:
+            if only_fresh and not pending and not any(ch in self._active for ch in channels):
                 ticket._done.set()
                 return ticket
             request = (ticket, channels, bool(only_fresh), progress)
@@ -433,7 +442,7 @@ class DrainWorker:
 
     def _message_start(self, row):
         with self._cv:
-            self._active_channel = row.get('Channel')
+            ch = row.get('Channel'); self._active[ch] = self._active.get(ch, 0) + 1
 
     def _message_complete(self, row):
         """Release quick tickets after their last fetched row's route/review writes finish.
@@ -444,7 +453,8 @@ class DrainWorker:
         """
         channel = row.get('Channel')
         with self._cv:
-            self._active_channel = None
+            if self._active.get(channel, 0) > 1: self._active[channel] -= 1
+            else: self._active.pop(channel, None)
             candidates = [r for r in self._active_requests + self._requests
                           if r[2] and channel in r[1] and not r[0]._done.is_set()]
         if not candidates: return
@@ -535,11 +545,91 @@ def await_quiet(store, channels, timeout: float) -> bool:
         time.sleep(0.2)
 
 
+class _Lane:
+    """One drain pass's queue, shared by its lanes. A row is claimed once, under the lane's lock; a conversation's next row only once
+    its last has landed (a reply judged beside its parent found no task and opened a second one); fresh channels jump the line."""
+    def __init__(self, store, first: set, only_first: bool, limit: int, width: int):
+        self.store, self.first, self.only_first, self.limit, self.width, self.top = store, first, only_first, limit, width, width
+        self.cv, self.done, self.busy, self.n, self.ok = threading.Condition(), set(), set(), 0, 0
+        self.rows = _queue(store, self.done, first, only_first, limit)
+
+    def take(self):
+        "The next row free to judge, claimed - None once nothing is left; waits while every row left is behind its conversation's."
+        with self.cv:
+            while True:
+                if (more := _take_fresh()):
+                    self.first |= more
+                    self.rows = _queue(self.store, self.done, self.first, self.only_first, self.limit - self.n)
+                if not self.rows: return None
+                if len(self.busy) < self.width:
+                    held = set()          # a conversation passed over keeps its later rows behind it
+                    for i, r in enumerate(self.rows):
+                        if (k := _conv_key(r)) in self.busy or k in held: held.add(k); continue
+                        self.busy.add(k); self.done.add(r['MessageId']); self.n += 1
+                        return self.rows.pop(i)
+                self.cv.wait(0.5)
+
+    def release(self, r):
+        with self.cv: self.busy.discard(_conv_key(r)); self.cv.notify_all()
+    def left(self) -> int:
+        with self.cv: return len(self.rows)
+
+    # A PROVIDER THAT SAYS SLOW DOWN IS HEARD BY THE WHOLE PASS: a 429 that outlived llm's own Retry-After retries, or a spent budget,
+    # halves the lanes; ten answers in a row give one back, up to the setting
+    def narrow(self):
+        with self.cv: self.width, self.ok = max(1, self.width // 2), 0
+    def answered(self):
+        with self.cv:
+            self.ok += 1
+            if self.ok >= 10 and self.width < self.top: self.width, self.ok = self.width + 1, 0; self.cv.notify_all()
+
+
+def _conv_key(r) -> str: return f"c:{r['ConversationId']}" if r.get('ConversationId') else f"m:{r['MessageId']}"
+
+
+def _throttled(e) -> bool:
+    from .llm import BudgetSpent
+    return isinstance(e, BudgetSpent) or getattr(e, 'status_code', None) == 429
+
+
+def _paced(llm, lane: _Lane):
+    "The pass's brain, telling its lane when the provider turned a call away on its rate (narrow) and when it answered."
+    if llm is None: return None
+    from .triage import takes_tokens
+    def f(*a, **kw):
+        try: out = llm(*a, **kw)
+        except Exception as e:
+            if _throttled(e): lane.narrow()
+            raise
+        lane.answered(); return out
+    f.takes_want, f.takes_tokens = getattr(llm, 'takes_want', None), takes_tokens(llm)
+    return f
+
+
+def _judge_one(store, r, llm):
+    "One claimed row, judged and landed. A row whose triage raises is filed with the error on its route rather than left spinning."
+    mid = r['MessageId']
+    with _PENDING_LOCK: held = _PENDING.pop(mid, None)
+    msg = {**(held or _from_row(r, store)), '_mid': mid}
+    before = (store.get_message(mid) or {}).get('TaskId')
+    try: ingest_message(store, msg, llm=llm)
+    except Exception as e:
+        logger.warning(f'deferred triage failed for message {mid}: {e}')
+        tid = (store.get_message(mid) or {}).get('TaskId')
+        if _judged_then_failed(store, mid, before, tid, e): return
+        # a row whose judgement blew up keeps whatever task the router gave it and says
+        # triage failed - an error with a retry, never a filed "nothing to do" (PW-036)
+        store.arrive(mid, tid, 'error', decided=True)
+        store.add_route(mid, tid, 'file', None, f'triage failed ({str(e)[:160]}) - unclassified; retry available', [], 'triage',
+                        parse_error=str(e)[:1000])
+        store.set_setting('triage_last_error', str(e)[:200], 'system')
+        store.set_setting('triage_last_error_at', _now(), 'system')   # the bell ages a failure out by this
+
+
 def drain(store, llm=None, progress=None, limit: int = 500, fresh=(), only_fresh: bool = False,
           wait: bool = True, on_start=None, on_complete=None) -> int:
-    """Judge what deferred() stored - oldest first, one at a time, because a thread's second
-    message must find the task its first one opened. A message whose triage raises is filed
-    with the error on its route rather than left spinning; the next one still gets judged.
+    """Judge what deferred() stored, oldest first: up to triage_lanes conversations at once, each conversation's rows one at a time
+    in arrival order, because a thread's second message must find the task its first one opened.
 
     `fresh` names channels whose lines just landed: they are judged first, and a drain that is
     already running takes them at its next row. only_fresh judges just those and leaves the
@@ -547,38 +637,24 @@ def drain(store, llm=None, progress=None, limit: int = 500, fresh=(), only_fresh
     mark_fresh(fresh)
     if not _DRAIN_LOCK.acquire(blocking=wait): return 0
     try:
-        done, first, n = set(), _take_fresh() | set(fresh), 0
-        rows = _queue(store, done, first, only_fresh, limit)
-        with store.freeze_snapshots():
-            while rows:
-                more = _take_fresh()
-                if more:
-                    first |= more
-                    rows = _queue(store, done, first, only_fresh, limit - n)
-                    if not rows: break
-                r = rows.pop(0)
-                mid = r['MessageId']
-                done.add(mid); n += 1
-                with _PENDING_LOCK: held = _PENDING.pop(mid, None)
-                msg = {**(held or _from_row(r, store)), '_mid': mid}
+        lane = _Lane(store, _take_fresh() | set(fresh), only_fresh, limit, triage_lanes(store))
+        brain = _paced(llm, lane)
+        def work():
+            while (r := lane.take()) is not None:
                 if on_start: on_start(r)
-                before = (store.get_message(mid) or {}).get('TaskId')
-                try:
-                    ingest_message(store, msg, llm=llm)
-                except Exception as e:
-                    logger.warning(f'deferred triage failed for message {mid}: {e}')
-                    tid = (store.get_message(mid) or {}).get('TaskId')
-                    if _judged_then_failed(store, mid, before, tid, e): continue
-                    # a row whose judgement blew up keeps whatever task the router gave it and says
-                    # triage failed - an error with a retry, never a filed "nothing to do" (PW-036)
-                    store.arrive(mid, tid, 'error', decided=True)
-                    store.add_route(mid, tid, 'file', None, f'triage failed ({str(e)[:160]}) - unclassified; retry available', [], 'triage',
-                                    parse_error=str(e)[:1000])
-                    store.set_setting('triage_last_error', str(e)[:200], 'system')
-                    store.set_setting('triage_last_error_at', _now(), 'system')   # the bell ages a failure out by this
+                try: _judge_one(store, r, brain)
+                finally: lane.release(r)
                 if on_complete: on_complete(r)
-                if progress: progress(len(rows))
-        return n
+                if progress: progress(lane.left())
+        with store.freeze_snapshots():
+            # each lane runs in its own copy of this thread's context (aiusage.asking, LANDING): one Context is entered by one thread at a time
+            more = [threading.Thread(target=contextvars.copy_context().run, args=(work,), name=f'taskuary-triage-{i}', daemon=True)
+                    for i in range(1, min(lane.top, len({_conv_key(r) for r in lane.rows})))]
+            for t in more: t.start()
+            try: work()
+            finally:
+                for t in more: t.join()
+        return lane.n
     finally:
         _DRAIN_LOCK.release()
 

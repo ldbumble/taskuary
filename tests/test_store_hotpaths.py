@@ -225,6 +225,34 @@ class SnapshotFreezeTests(unittest.TestCase):
         self.assertEqual(len(tasks), 1)
         self.assertEqual(len(s.list_messages(tasks[0]['TaskId'])), 2)
 
+    def test_a_picture_read_while_another_lane_opened_a_task_is_not_kept(self):
+        """Triage's lanes write beside each other (ingest.drain): a picture read before one opened a task and cached after it hid that
+        task from its thread's next line."""
+        s = MemoryStore()
+        real = s._load_snapshots
+        def slow():
+            got = real(); s.create_task({'Title': 'Opened by another lane', 'Status': 'open'}, 'router'); return got
+        with s.freeze_snapshots():
+            s._load_snapshots = slow; s.snapshots(); s._load_snapshots = real
+            self.assertEqual([t['title'] for t in s.snapshots()], ['Opened by another lane'])
+
+
+class ReadsOffWriterTests(unittest.TestCase):
+    def test_the_task_list_never_waits_for_the_writer(self):
+        """Triage reads the open goals off the task list on every mail; its WITH query went under the writer's lock, 80-200 ms a mail
+        while every press and request queued behind it (the load run, 2026-11-24)."""
+        import threading
+        s, _ = _file_store()
+        s.create_task({'Title': 'Renew the Trainly seats', 'Status': 'open'}, 'router')
+        held, out = threading.Event(), {}
+        def writer():
+            with s.lock: held.set(); done.wait(10)
+        done = threading.Event(); t = threading.Thread(target=writer); t.start(); held.wait(5)
+        try:
+            r = threading.Thread(target=lambda: out.setdefault('rows', s.list_tasks(active_only=True))); r.start(); r.join(3)
+            self.assertEqual([x['Title'] for x in out.get('rows') or []], ['Renew the Trainly seats'], 'the read waited for the writer')
+        finally: done.set(); t.join(5)
+
 
 class FeedJoinTests(unittest.TestCase):
     """The Timeline used eight correlated subqueries per row. Same chips, one pass."""

@@ -9,9 +9,9 @@ and his sign-off lived in two homes. Now there are three stores, told apart by W
   said      what HE said, in his words: his rules, his hours, who handles what now. One line per SUBJECT - a correction on the same
             subject replaces the line before it (the subject the model names, never a match of the words). In use at once, everywhere
   inferred  what was learned from what he DID - a verdict, a reflection over his episodes - with its evidence and how often it was seen.
-            Never shown or used as his word. It goes into use BY ITSELF once his own acts bear it out - AUTO_AT distinct episodes - and
-            never by asking him (the owner, 2026-11-23: "we don't want to have to confirm manually"). One press is one episode, whatever the
-            button: it acts once, and only a pattern of AUTO_AT becomes a line in use (the owner, 2026-11-24).
+            Never shown or used as his word. It goes into use BY ITSELF once his own acts bear it out - AUTO_AT distinct episodes, or a
+            press whose words say "from now on" (FOR_GOOD) - and never by asking him (the owner, 2026-11-23: "we don't want to have to
+            confirm manually"). A one-off press is one episode: it acts once (the owner, 2026-11-24: "one press is one press").
             Wrong or Forget takes it down at once; an act that goes against it weakens it (`weaken`)
 
 Memory is SHORT - conclusions (how he works, who handles what, his rules, his preferences), never records: those are the ledger's and
@@ -36,7 +36,7 @@ WHOLE_CAP = 60_000            # ~15k tokens: past it the learned lines about one
 TASK_CAP = 6_000              # the confirmed learned lines a task's context carries; what he said rides whole
 MIGRATED = 'memory_r10'       # the setting that says LEARNED.md was read into the stores
 IN_USE_FIX = 'memory_r10_in_use'   # ...and that the lines in use before r10 were put back in use (its first cut left them waiting on a press)
-ONE_PRESS_FIX = 'memory_one_press'  # ...and that the lines one press had put in use wait for AUTO_AT episodes like every other (one_press)
+ONE_PRESS_FIX = 'memory_one_press'  # ...and that the lines a one-off press had put in use wait for AUTO_AT episodes (one_press)
 AUTO_AT = 3                   # distinct episodes of his own acts that put a learned line in use - LEARNED.md's bar from the beginning
 CAP, LEARNING, PER_ABOUT = 60, 30, 6    # learned lines in use (about what LEARNED.md held), still being seen, and about one person or topic
 MAX_WORDS = 30                # a conclusion is one sentence; a longer line is a record, and records are the ledger's
@@ -229,7 +229,7 @@ def told(store, doc: str, text: str, actor: str = 'owner') -> dict:
 def infer(store, text: str, subject: str, ev=(), people=(), scope: str = 'global', key: str = '', source: str = 'learn',
           confirmed: bool = False) -> dict:
     """A line learned from what the owner did. The same subject learned again is the same line with more evidence - its newest words,
-    until it is in use. In use by itself at AUTO_AT distinct episodes, or at once when `confirmed` (a line read in as in use). Never over
+    until it is in use. In use by itself at AUTO_AT distinct episodes, or at once when `confirmed` (a "from now on" press). Never over
     what he said on that subject, never over a line he marked Wrong, never a record (past MAX_WORDS). {} when not written."""
     t = ' '.join(str(text or '').split()).lstrip('-* ').strip()
     sk, ev = subject_of(subject), [e for e in dict.fromkeys(str(e).strip() for e in ev or ()) if e]
@@ -615,6 +615,11 @@ _TAG = re.compile(r'^\s*[-*] (?P<text>.*?)\s*\[s:(?P<s>\d+) \| ev: (?P<ev>[^|\]]
 _ABOUT = re.compile(r'\s*\(about: (?P<a>[^()]+)\)\s*$')
 
 
+# THE PRESSES WHOSE OWN WORDS SAY "FROM NOW ON" - Ignore this sender / From now on, No more ideas like this: his standing order, in use at once.
+# Every other press acts once and is one episode (the owner, 2026-11-24: "one press is one press")
+FOR_GOOD = ('not_ours', 'idea_dismiss_kind')
+
+
 def _scope(text: str) -> tuple:
     "(text without its `(about: ...)`, scope, key) - the marker LEARNED.md's verdict lines were written with."
     m = _ABOUT.search(text)
@@ -658,7 +663,7 @@ def _old_lines(store, doc: str):
         v = taught.get(t)
         ppl, subj = names(text) | ({sk} if sc == 'sender' else set()), _key(text) + (f' · {sk}' if sk else '')
         if v: yield dict(kind=INFERRED, text=text, subject=subj, people=ppl, scope=sc, key=sk, ev=[v['Ev']] if v.get('Ev') else [],
-                         confirmed=not _waiting(head), source=v['Actor'])
+                         confirmed=not _waiting(head) or v['Actor'].split(':', 1)[1] in FOR_GOOD, source=v['Actor'])
         else: yield dict(kind=SAID, text=text, subject=subj, people=ppl, scope=sc, key=sk, ev=[], confirmed=False, source='owner')
 
 
@@ -706,12 +711,13 @@ def in_use_again(store) -> int:
 
 
 def one_press(store) -> int:
-    """ONE PRESS IS ONE PRESS (the owner, 2026-11-24): a single Make it a task or Not for me put the line it taught in use at once, read like
-    his word. Once: every learned line a press wrote that fewer than AUTO_AT episodes bear out goes back to being seen, and is in use again
-    when his acts bear it out (infer). Returns the lines set back. Never raises."""
+    """ONE PRESS IS ONE PRESS (the owner, 2026-11-24): a single Make it a task or Not a task put the line it taught in use at once, read like
+    his word. Once: every learned line a one-off press wrote (any but FOR_GOOD's) that fewer than AUTO_AT episodes bear out goes back to
+    being seen, and is in use again when his acts bear it out (infer). Returns the lines set back. Never raises."""
     if store.get_setting(ONE_PRESS_FIX): return 0
     try:
-        back = [r['Id'] for r in rows(store, INFERRED) if r['Confirmed'] and str(r.get('Source') or '').startswith('verdict:') and r['N'] < AUTO_AT]
+        back = [r['Id'] for r in rows(store, INFERRED) if r['Confirmed'] and str(r.get('Source') or '').startswith('verdict:')
+                and r['Source'].split(':', 1)[1] not in FOR_GOOD and r['N'] < AUTO_AT]
         for rid in back: store._exec('UPDATE memory_line SET Confirmed=0 WHERE Id=?', (rid,))
         store.set_setting(ONE_PRESS_FIX, _now(), 'migrate')
         if back: _trim(store); render(store); logger.info(f'memory: {len(back)} line(s) one press had put in use wait for {AUTO_AT} episodes')

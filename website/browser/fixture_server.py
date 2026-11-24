@@ -508,6 +508,10 @@ async def run() -> None:
         agents._fresh_path = lambda: os.environ.get("PATH", "")
     from taskuary.server import app, store
     if FRESH: _install_fresh_routes(app, store)
+    # ...the load harness (load-burst.mjs): its watching and its mail door, never set in CI
+    if FRESH and os.environ.get("TASKUARY_FIXTURE_LOAD") == "1":
+        from fixture_load import install as install_load
+        install_load(app, store)
     if not FRESH:
         from fixture_changes import install_processing_changes
         install_processing_changes(app, store)

@@ -2576,7 +2576,8 @@ class GeneralSession:
         # @northwind.example", then "What's Paula Vance's email address?") - once they stood out of order (CI, 2026-11-17); now neither waits
         return self.busy and not self.letting_go() and clipool.steerable(self.keep())
     def steer(self, said: str = None) -> bool:
-        "Words into the turn at work: `said`, or his kept lines - heard in the step they go in (take_kept). False where nothing can take them now."
+        """Words into the turn at work: `said`, or his kept lines and the messages that came since - heard in the step they go in (take_kept).
+        False where nothing can take them now."""
         from . import clipool
         if not self.can_steer(): return False
         # ...SAID AS THE SAME LINES ARE AT REST (send_prompt): his words under "the owner says" (_turn_only), then the one files block - steered in
@@ -2586,7 +2587,7 @@ class GeneralSession:
         # answered "promptRequired", and nothing ever answered it - a dead end): `lines(take=False)` makes the words from what waits, untaken;
         # the road that sent them takes exactly those (`lines(take=True)`) once the agent has them (clipool._took). Called with no look first
         # (an API loop's ear, at its next step) it takes and says them in one go
-        peeked = []
+        peeked, looked = [], []
         def lines(take=True):
             # ...THE EVENTS NOT YET TOLD, the messages and his lines among them (events.py), in the one shape every turn reads them in -
             # kept as told once they went in, so the turn after says none of them again
@@ -2598,13 +2599,15 @@ class GeneralSession:
                 # ...the trace marked where they go in, before they are heard: the turn under them is what it does from here (since_heard)
                 self.trace.append(mark := sessionrecord.heard_mark())
                 # ...one hand-over, in the order it came: what stood unheard (the mail) is heard with his lines (standing), before them
-                if not take_kept(self.store, self.task_id, ids=peeked or None, sid=self.sid, standing=bool(came)): self.trace = [e for e in self.trace if e is not mark]; return ''
-                rows = new(); events.commit(self.store, self.task_id, ids=[e['id'] for e in rows])
+                # ...or a message alone (ingest._pass_general): a colleague's new ask on a busy task waited for a turn that never ended (walk 14)
+                got = take_kept(self.store, self.task_id, ids=peeked if looked else None, sid=self.sid, standing=bool(came))
+                if not (rows := new()) and not got: self.trace = [e for e in self.trace if e is not mark]; return ''
+                events.commit(self.store, self.task_id, ids=[e['id'] for e in rows])
             else:
                 waiting = [r for r in self.store.list_comments(self.task_id, internal=True) if r.get('ActorType') == WAITING_TYPE]
-                peeked[:] = [r['CommentId'] for r in waiting]
-                if not waiting: return ''
+                peeked[:], looked[:] = [r['CommentId'] for r in waiting], [True]
                 rows = [e for e in new() if e['kind'] == 'message'] + [{'kind': 'said', 'at': time.time(), **line_said(r)} for r in waiting]
+                if not rows: return ''
             return events.render(rows, fresh=True)
         return clipool.steer(self.keep(), lines if said is None else said)
     def tail(self, n=3):

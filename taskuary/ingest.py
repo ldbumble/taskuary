@@ -2677,6 +2677,9 @@ def _pass_general(store, tid, msg: dict, turn: str = None):
         if joinable(store, tid, shut=False): general.OPENING.add(tid); _replan_general(store, tid, turn or _pass_turn(msg), mails=(msg.get('message_id'),)); return
         store.add_comment(tid, 'router', 'agent', f"{_who_said(msg)}'s new message could not be passed in: the assistant's session ended - {general.CARRY_ON}.")
         return
+    # ...AND ONE THAT COMES WHILE A TURN WORKS GOES INTO THAT TURN, as his own line does (steer), as its own event (walk 14: a colleague's new ask
+    # joined a busy task and waited, a chip by the box, behind a turn that never ended). Where the road takes no words mid-turn, it waits below
+    if mid and getattr(ses, 'can_steer', lambda: False)() and ses.steer() and conversation.heard(store, tid, 'mail', [mid]): return
     # A BURST IS ONE RE-THINK (the owner's stress run, 2026-11-05): five mails in a few seconds were five queued turns, the agent re-reading
     # one line at a time. A line that finds another already waiting for the session joins it; the one waiting goes in once the session is
     # free, with every line that joined - one turn

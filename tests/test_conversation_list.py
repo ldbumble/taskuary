@@ -171,6 +171,29 @@ class TheList(unittest.TestCase):
         self.assertNotIn('BEFORE', str(steps)); self.assertIn('AFTER', str(steps))
         self.assertEqual(sessionrecord.said([{'type': 'progress', 'name': 'text', 'detail': 'one'}, sessionrecord.heard_mark(), {'type': 'progress', 'name': 'text', 'detail': 'two'}]), 'two')
 
+    def test_another_persons_new_ask_on_a_busy_task_goes_into_the_turn_at_work_as_its_own_event(self):
+        """Walk 14 (NEW-b): a colleague's new question - a duplicate payment - joined a task whose agent was mid-turn, and sat as a chip by the
+        box behind a turn that never ended. A message that comes while a turn works goes into that turn as his own line does (steer), told as
+        the message it is, and stands in the chat where it was heard."""
+        from taskuary import clipool, ingest
+        self.brain.delay = HOLD
+        self.say('Sort out the renewal.', 'l-one', wait=False)
+        self.at_work()
+        next_second()
+        mid = self.s.add_message({'TaskId': self.tid, 'ExternalId': 'omar-1', 'ConversationId': 'conv-omar', 'Channel': 'email', 'Subject': 'Duplicate payment?',
+                                  'BodyText': 'We paid Trainly twice in October, $2,550 x2 - refund or credit?', 'FromName': 'Omar Keller',
+                                  'FromEmail': 'omar@northwind.example', 'Status': 'routed'})
+        steered = []
+        with mock.patch.object(clipool, 'steerable', return_value=True), \
+             mock.patch.object(clipool, 'steer', lambda key, said: steered.append(clipool._look(said)) or clipool._took(said) or True):
+            go = threading.Thread(target=ingest._pass_general, args=(self.s, self.tid, {'message_id': mid, 'from_name': 'Omar Keller'}), daemon=True); go.start()
+            self.assertTrue(until(lambda: steered and conversation.heard(self.s, self.tid, 'mail', [mid]), 10), 'his message went into the turn at work')
+            self.assertIn('refund or credit?', steered[0]); self.assertIn('Omar Keller', steered[0])
+            self.assertTrue(getattr(general.session_for(self.tid), 'busy', False), 'heard while the turn still works, not after it')
+            go.join(10); self.assertFalse(go.is_alive(), 'nothing waits behind the turn for it')
+            self.assertFalse([e for e in events.pending(self.s, self.tid) if e['kind'] == 'message' and e.get('mid') == mid], 'told once: no turn after says it again')
+        self.brain.delay = 0; self.rest()
+
     def test_a_turns_time_is_set_once_and_never_before_the_line_it_stands_under(self):
         """Design round 5, I3: a turn read 4:57 while it worked and 5:12 once done, and the turn under his 4:58 line, steered in mid-turn, read
         4:57. A turn's head time is when it began in the chat - never before the input above it - and the same on every read, at work and done."""

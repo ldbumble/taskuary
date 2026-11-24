@@ -249,6 +249,14 @@ def unsorted(store) -> int:
     return len(store.stranded_triage_failures(1000, since=since, tries_after=after, tries=ingest.RETRY_TRIES, failed_only=True))
 
 
+def sorting(store) -> str:
+    """WHAT IS STILL BEING SORTED, IN ONE LINE (the load run, 2026-11-24: 90-240 mails waited to be read and the rail said nothing but a
+    "triaging" badge on each row at its foot): stored and not yet judged (ingest.deferred's 'triaging'), counted - '' when none wait. The rail
+    and the Timeline's header say it in these words, whichever road brought the mail."""
+    n = (store._one("SELECT COUNT(*) AS n FROM message WHERE Status='triaging'") or {}).get('n') or 0
+    return f"Sorting {n} new {_plural(n, 'message', 'messages')}" if n else ''
+
+
 def thinking(store) -> dict | None:
     """The brain's state in one place: None when it is fine, else the line to say. Opening and closing the outage
     happen here too, so the bell, the Timeline caption and the sweep all see one story."""

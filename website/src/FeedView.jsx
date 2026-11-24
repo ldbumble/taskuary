@@ -385,7 +385,7 @@ export default function FeedView({ onOpenTask, active = true, top = null, stage 
   // the server's clock, as an offset from OUR clock: nextPollAt is its time, so the countdown
   // uses (next - serverNow) and never trusts the two machines to agree on the hour
   const [triageErr, setTriageErr] = useState("");    // the brain's last failure, until it answers again
-  const [thinking, setThinking] = useState("");      // ...and the line she reads about it, while anything is held
+  const [thinking, setThinking] = useState(""), [sorting, setSorting] = useState("");   // ...and what is still being sorted (problems.sorting)      // ...and the line she reads about it, while anything is held
   const [fade, setFade] = useState("normal");        // Settings > Display; height of the viewport's bottom fade
   // ...drawn only while something is actually BELOW it. The band means "rows are passing behind the
   // bottom edge" (timelineFade.js): true of the Timeline's endless history, and true of work only
@@ -411,7 +411,7 @@ export default function FeedView({ onOpenTask, active = true, top = null, stage 
     if (pollAt) seenPollAt.current = pollAt;
     nextAtRef.current = data.nextPollAt ? Date.now() + (data.nextPollAt - data.now) * 1000 : null;
     setTriageErr(data.triageError || "");
-    setThinking(data.thinking || "");
+    setThinking(data.thinking || ""); setSorting(data.sorting || "");
     if (data.timelineFade) setFade(data.timelineFade);
     // a coalesced feed-changed can fold running+idle into one idle payload, so lastPollAt
     // advancing is how a sub-second automatic poll still gets a visible receipt
@@ -649,6 +649,9 @@ export default function FeedView({ onOpenTask, active = true, top = null, stage 
             <Typography variant="caption" noWrap title={triageErr || thinking} sx={{ color: triageErr ? ALERT_INK : DIM, fontWeight: 600, fontSize: 10.5 }}>
               {thinking || "I'm having trouble thinking for a few minutes. Mail is still coming in and I'm holding all of it."}
             </Typography>
+          )}
+          {!setupMode && !(thinking || triageErr) && sorting && (
+            <Typography variant="caption" noWrap data-tq-sorting="" sx={{ color: DIM, fontWeight: 600, fontSize: 10.5 }}>{sorting}…</Typography>
           )}
           {err && (
             <Alert severity="error" variant="outlined" onClose={() => setErr("")}

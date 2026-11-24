@@ -6989,7 +6989,8 @@ def _pile_payload(force: bool = False, current: str = None, only: str = None,
     # desk a task's news is its rail row and the task itself, and the Assistant hears none of it (the owner, 2026-11-10: "the agents
     # don't tell the assistant anything unless you ask assistant questions")
     p = {**{k: v for k, v in cached.items() if k not in ('alerts', 'events')}, 'display_revision': None,
-         'generated_at': int(started * 1000), 'live_seq': cached.get('live_seq', seen)}
+         'generated_at': int(started * 1000), 'live_seq': cached.get('live_seq', seen),
+         'sorting': _sorting_line()}            # ...a backlog being read is said over the rail, never a silent wait
     # ...and what the page is HOLDING: an item whose review was decided (or whose task closed)
     # leaves the pile, and nothing told the page - so a sent reply sat on the table as
     # "reply pending" for as long as the tab stayed open (the owner, 2026-09-03). Looked up in the build the pile came from.
@@ -11583,6 +11584,11 @@ def _thinking_line() -> str:
     except Exception: return ''
     return f"{t['title']}. {t['detail']}" if t else ''
 
+def _sorting_line() -> str:
+    from . import problems
+    try: return problems.sorting(store)
+    except Exception: return ''
+
 @app.get('/api/ingest/status')
 def ingest_status():
     try: st = json.loads(store.get_setting('ingest_status') or '{"state": "idle"}')
@@ -11613,6 +11619,8 @@ def ingest_status():
             'triageError': store.get_setting('triage_last_error') or '',
             # ...and the same thing in the assistant's voice, while held mail keeps it true (problems.thinking)
             'thinking': _thinking_line(),
+            # ...and what is still being sorted, in the rail's words (problems.sorting) - whichever road brought it, a sync or a chat's lane
+            'sorting': _sorting_line(),
             'timelineFade': store.get_setting('timeline_fade') or 'normal'}  # how old rows dim (FeedView)
 
 # ── interactive terminals (real pty + websocket; the headless runs live on /api/runs) ──

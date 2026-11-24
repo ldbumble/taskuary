@@ -659,6 +659,8 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
     <div className="tq-pile" data-tq-keep ref={wrapRef} role="listbox" aria-label="Your list" onKeyDown={railKey} data-tq-left={left}
       onFocus={(e) => { if (!wrapRef.current?.contains(e.relatedTarget)) kbdBack.current = e.relatedTarget || null; }}>
       <BeforeCommit take={takeDrawn} />
+      {/* ...A BACKLOG BEING READ IS SAID (problems.sorting; the load run, 2026-11-24: 240 mails waited with only a badge on each row) */}
+      {pile?.sorting && <div className="tq-pile-sorting" role="status" data-tq-sorting="">{pile.sorting}…</div>}
       {!pile ? (error ? (
         /* A LOAD THAT FAILED IS NOT A LOAD IN PROGRESS. This spun on "Loading timeline" for as long
            as the tab stayed open while the server had answered 500 twenty minutes earlier - and the

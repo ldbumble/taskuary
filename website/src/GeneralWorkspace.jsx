@@ -40,7 +40,7 @@ import { LinkPopups, LocalFiles, Md } from "./md.jsx";
 import PublishedPages, { FileDialog } from "./PublishedPages.jsx";
 import { Attachments } from "./Attachments.jsx";
 import { placeShown } from "./shownPages.js";
-import { forTurn, outputRefs, outputRow, placeMade, shownOnce, turnFiles } from "./taskOutputs.js";
+import { carried, forTurn, outputRefs, outputRow, placeMade, shownOnce, turnFiles } from "./taskOutputs.js";
 import TurnFiles from "./TurnFiles.jsx";
 import ActionCard from "./ActionCard.jsx";
 import CopyCorner from "./CopyCorner.jsx";
@@ -418,15 +418,16 @@ const TurnTime = ({ t, secs }) => {
   const ran = secs > 0 ? turnStamp({ start: at, end: +at + secs * 1000 }) : "";
   return <span data-tq-ran="" style={{ textTransform: "none", letterSpacing: 0, fontWeight: 500, marginLeft: 8 }}>· {when(at)}{ran ? ` · ${ran}` : ""}</span>;
 };
+const NONE = new Set();
 // `later`: a turn after the chat's first - its agent starting again is the work going on, never "waiting for the agent" (workingLine)
-const ConvTurn = ({ t, more, ran = 0, cards, name, ask = null, later = false, owes = false, newest = false }) => {
+const ConvTurn = ({ t, more, ran = 0, cards, name, ask = null, later = false, owes = false, newest = false, skip = NONE }) => {
   const live = t.state === "working" || t.state === "starting";
   const parts = useMemo(() => turnParts(eventsOf(t.steps || [], live), { live }), [t.steps, live]);
   const key = t.answer || t.id, at = useTurnOutputs(key), shown = React.useContext(ShownCtx)[key];
   const sum = t.summary, words = t.text || (sum ? [sum.about, sum.did].map((x) => String(x || "").trim()).filter(Boolean).join("\n\n") : "");
-  const made = at ? turnFiles({ listed: at.listed, id: key, words, did: sum?.did, tid: at.tid, skip: [] }) : [];
+  const made = at ? turnFiles({ listed: at.listed, id: key, words, did: sum?.did, tid: at.tid, skip }) : [];
   const names = new Set(made.map((f) => f.name));
-  const rest = shownOnce(at ? outputRefs(words, at.tid, at.listed).files : [], shown).rest.filter((p) => !names.has(p.name));
+  const rest = shownOnce(at ? outputRefs(words, at.tid, at.listed).files : [], shown).rest.filter((p) => !names.has(p.name) && !skip.has(p.name));
   const quiet = !live && !hasParts(parts) && !words && !t.fail && !cards?.length && !made.length && !rest.length && !ask;
   // ...and never under the turn's own open question (the audit, 2026-11-15: "What is your plate number?" in its words, then "For you to do:
   // Tell me your plate number"): what it asks him IS what is left to him, said once. THE TURN'S OWN, KEPT (design round 5, I3): the list says
@@ -523,6 +524,8 @@ function Conversation({ items, nodes = [], posts = [], reviews = [], next = null
   // ...every review the list places, in whatever state: a card is drawn where the list has it and nowhere else
   const used = new Set(), listed = new Set(items.flatMap((x) => (x.kind === "card" ? [x] : x.kind === "turn" ? x.cards || [] : [])).map((c) => c.review));
   const stands = standing(items), owes = onYouTurn(items, { askAt, landAt: landIn });
+  // ...and what a card it draws carries - a post's picture, an email's attachment - is that card's alone, never a file of a turn again (carried)
+  const owned = carried([...posts, ...reviews].filter((r) => listed.has(r.ReviewId)));
   const rv = (id) => reviews.find((r) => r.ReviewId === id);
   const draw = (cs) => (cs || []).flatMap((c) => {
     // ...a draft no longer to press carries what it said (`was`); one he said no to says so. Either takes its review's node with it only where
@@ -551,7 +554,7 @@ function Conversation({ items, nodes = [], posts = [], reviews = [], next = null
     // ...AND NEVER INTO ONE THAT FAILED (the Continue round, 2026-11-18): Try again's turn stands under the failure it is past, and folded, its head
     // went the moment it answered - its words left under the failure's head, with no time of their own
     if (x.kind === "turn") return <ConvTurn key={x.id} t={x} more={folds(prev, x)} ran={ranUnder(items, i)} name={name} ask={x.id === askAt ? ask : null}
-      cards={cardsOf(x)} owes={x.id === owes} later={items.slice(0, i).some((y) => y.kind === "turn")} newest={!items.slice(i + 1).some((y) => y.kind === "turn")} />;
+      cards={cardsOf(x)} skip={owned} owes={x.id === owes} later={items.slice(0, i).some((y) => y.kind === "turn")} newest={!items.slice(i + 1).some((y) => y.kind === "turn")} />;
     if (x.kind === "line") return <ConvLine key={x.id} x={x} more={prev?.kind === "line"} />;
     if (x.kind === "arrival") return <div key={x.id} className="tq-aui-message tq-aui-brief" data-tq-item={x.id}><Arrived mail={[x]} prev={prev?.kind === "arrival" ? prev : null} /></div>;
     if (x.kind === "card") { const got = draw([x]); return got.length ? <div key={x.id} className="tq-aui-message tq-aui-agent" data-tq-item={x.id} data-tq-row-cards=""><div className="tq-aui-agent-body">{got}</div></div> : null; }

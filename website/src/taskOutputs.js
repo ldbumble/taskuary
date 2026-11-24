@@ -4,6 +4,8 @@
 // a bare path into THIS task's folder - becomes a file the owner can preview and download, through /api/task-outputs. A path into
 // anywhere else is left as plain text: never a link, never served.
 
+import { deliveryFiles } from "./replyDelivery.js";
+
 const CITE = /:{1,2}codex-file-citation\{([^}]*)\}/g;
 const LINK = /\[([^\]\n]*)\]\(\s*<?([^)\s>]+)>?(?:\s+"[^"]*")?\s*\)/g;
 const STOP = "[^\\s`'\"<>()\\[\\]]";
@@ -199,10 +201,10 @@ export const forTurn = (listed, versions, id) => {
 
 // WHAT A TURN MADE, IN THE TURN (the owner, 2026-11-05: "the post and images are as artifacts separate not inline???"): the files placed on this
 // answer by when they were made (the server's `after`, as a shown page's) and the ones its words or its summary name - each thing once, the
-// newest of a family, whatever its kind - less `skip` (a post's own picture, drawn on the post). A FILE ANOTHER TURN MADE IS DRAWN THERE, never
+// newest of a family, whatever its kind - less `skip` (what a card carries: `carried`). A FILE ANOTHER TURN MADE IS DRAWN THERE, never
 // again under every answer that names it (the walk, 2026-11-18: the posts file stood whole under three turns that only spoke of it)
 export const turnFiles = ({ listed = [], id, words = "", did = "", tid, skip = [] } = {}) => {
-  const no = new Set((skip || []).map(baseName)), by = new Map();
+  const no = new Set([...(skip || [])].map(baseName)), by = new Map();
   for (const r of (listed || []).filter((x) => x?.after != null && x.after === id)) by.set(r.path, r);
   for (const rel of outputRefs(`${words || ""}\n${did || ""}`, tid, listed).files) {
     const r = by.has(rel) ? null : outputRow(tid, rel, listed);
@@ -210,6 +212,12 @@ export const turnFiles = ({ listed = [], id, words = "", did = "", tid, skip = [
   }
   return deliverables([...by.values()].filter((r) => !no.has(baseName(r.path || r.name)) && !r.missing)).made;
 };
+
+// ONE THING, ONE PLACE (the owner, 2026-11-23: "images that are connected to text don't make it 2 artifacts but one"): a file an item the chat
+// sets down carries - a post's picture, an email's attachments - is drawn in that item only, never again as a file or a shown page of a turn.
+// The names the chat's cards own (`rows`: their review rows); turnFiles' `skip` and the shown pages read it. A file only words name stays a file
+export const carried = (rows) => new Set((rows || []).flatMap((r) => [r?.post?.image, ...deliveryFiles(r).map((f) => f.path || f.name)])
+  .filter(Boolean).map(baseName));
 
 // A PICTURE OR A VIDEO AT ITS OWN SHAPE (the owner, 2026-11-18: "images should be able to render however the agent wants it"; 2026-11-23: an
 // upright video stood in a 16:9 frame the chat's whole width): its pixels, read by the server off the file (outputs.pixels), reserve its room

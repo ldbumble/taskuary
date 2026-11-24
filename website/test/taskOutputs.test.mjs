@@ -3,7 +3,7 @@
 // else stays plain text.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { deliverables, family, forTurn, outputOf, outputRefs, outputRow, outputUrl, placeMade, plainCitations, shownOnce, turnFiles } from "../src/taskOutputs.js";
+import { carried, deliverables, family, forTurn, outputOf, outputRefs, outputRow, outputUrl, placeMade, plainCitations, shownOnce, turnFiles } from "../src/taskOutputs.js";
 
 test("a bare path to a name with spaces is that whole file, not a file called by its first word (stress test 2026-11-02)", () => {
   const listed = [{ path: "Open tasks 2026-11-02.xlsx", name: "Open tasks 2026-11-02.xlsx", kind: "output" }];
@@ -256,4 +256,18 @@ test("a file a turn only names, made by another turn, stays under the turn that 
   assert.deepEqual(turnFiles({ listed: [posts], id: "comment-9", words, tid: 8 }), []);
   // ...and one the listing does not place is still drawn where an answer names it
   assert.deepEqual(turnFiles({ listed: [{ ...posts, after: null }], id: "comment-9", words, tid: 8 }).map((f) => f.path), ["posts.txt"]);
+});
+
+// ONE THING, ONE PLACE (the owner, 2026-11-23, of a post card whose picture also stood above it as a file: "don't need both"; "images that
+// are connected to text don't make it 2 artifacts but one"): what a card carries is drawn in the card, never again as a file of a turn
+test("a file a card carries is the card's alone: a post's picture, an email's attachment; a file the words only name stays a file", () => {
+  const listed = ["hill.png", "rates.xlsx", "notes.md"].map((n) => ({ path: n, name: n, after: "t1" }));
+  const post = { ReviewId: 4, post: { type: "linkedin_post", text: "A walk up the hill", image: "hill.png" } };
+  const email = { ReviewId: 5, Deliver: JSON.stringify({ to: ["erin@northwind.example"], attachments: [{ name: "rates.xlsx", path: `${HOME}/TQ-0008/rates.xlsx` }] }) };
+  const made = (skip) => turnFiles({ listed, id: "t1", words: "Made hill.png, rates.xlsx and notes.md.", tid: 8, skip }).map((f) => f.name);
+  assert.deepEqual(made(carried([post])), ["rates.xlsx", "notes.md"]);
+  assert.deepEqual(made(carried([post, email])), ["notes.md"]);
+  assert.deepEqual(made([]), ["hill.png", "rates.xlsx", "notes.md"]);   // the old road: all three, two of them beside the cards that carry them
+  // ...a picture the words merely mention, with no card carrying it, is one file
+  assert.deepEqual(turnFiles({ listed: [listed[0]], id: "t1", words: "Here is hill.png.", tid: 8, skip: carried([]) }).map((f) => f.name), ["hill.png"]);
 });

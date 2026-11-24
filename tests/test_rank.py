@@ -241,7 +241,7 @@ class RankBeforeTriageTests(unittest.TestCase):
         self.assertEqual(len(judged), 6, 'clear mode drains the lot, untouched')
 
     def test_bulk_mode_judges_only_the_head_and_leaves_the_rest_waiting(self):
-        rank_mode(self.s); self.s.set_setting('triage_lanes', '1', 'test')     # ...the order across threads is what this pins: one lane
+        rank_mode(self.s)
         mids = [pending(self.s, f'b{i}') for i in range(10)]
         for i, m in enumerate(mids): self.s.set_message_rank(m, i / 10, 'floor', 'rank')
         judged = []

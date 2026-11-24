@@ -233,3 +233,19 @@ def test_the_card_names_its_harness_once(monkeypatch):
         s.save_connector({'ConnectorId': cid, 'Active': active}, 't')
         said = harness.line(s, _row(s, cid))['line']
         assert 'runs on' not in said and not any(v in said for v in harness.LABEL.values()), said
+
+
+def test_a_card_whose_harness_runs_here_takes_a_coding_level_and_says_so(here, monkeypatch):
+    """The owner, 2026-11-23: the level picker read "HIPAA AI · Codex - not for coding" for a card whose agent runs on Codex. A card with a
+    harness here does coding work on it - the level's coding run goes to that harness CLI; one with none says it has no shell."""
+    from taskuary import brainroute
+    s = MemoryStore(); cid = _card(s); p = f'connector:{cid}'
+    assert next(b for b in brainroute.brains(s) if b['pick'] == p)['coding'] is True
+    hands = lambda x: str(x or '').startswith('cli:')
+    monkeypatch.setattr(brainroute, '_not_ready', lambda st, x: '')
+    brainroute.save_by_level(s, {'hard': {'pick': p, 'model': 'neon'}})
+    assert brainroute._level(s, 'coding', 'strong', None, None, hands, None) == ((f'cli:card-{cid}', 'neon'), '')
+    assert brainroute._said(s, f'cli:card-{cid}') == 'HIPAA AI'
+    monkeypatch.setattr(harness, 'ON', False)                    # no harness can run here: the card has no shell for coding
+    assert next(b for b in brainroute.brains(s) if b['pick'] == p)['coding'] is False
+    assert 'has no shell' in brainroute._level(s, 'coding', 'strong', None, None, hands, None)[1]

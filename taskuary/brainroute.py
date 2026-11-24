@@ -151,6 +151,8 @@ def _said(store, pick: str) -> str:
     "The brain by the name the cards use - 'claude (CLI)', 'Azure OpenAI' - for the reason line."
     if not pick: return 'no AI'
     if pick == 'demo': return 'the demo'
+    from .harness import card_id
+    if (cid := card_id(pick)) is not None: return _said(store, f'connector:{cid}')          # an AI card's harness: the card, by its name
     if pick.startswith('cli:'):
         # the name its card and every picker say (clis.KNOWN: 'OpenAI Codex CLI'), never a second one ('codex (CLI)') for the same thing
         from . import agents
@@ -432,16 +434,23 @@ def _level(store, job: str, tier: str, want_pick, want_model, hands, only) -> tu
     s = by_level(store).get(LEVEL_OF.get(tier)) if job in LEVEL_JOBS else None
     if not s or (want_pick is not None and want_pick != s['pick']): return None, ''
     to, m = s['pick'], s['model']
+    run = _coder(store, to) if job == 'coding' else to
     # ...a general session started on the level's AI carries that AI's own model back each turn (general._selected): still the level's
     if want_model and want_model != m:
         from . import general
         if job != 'general' or want_model != general._selected(store, pick=to)[2]: return None, ''
     cold = cooldowns(store)
-    no = (_not_ready(store, to) or ('has no shell, and this work needs a CLI' if not hands(to) else '')
+    no = (_not_ready(store, to) or ('has no shell, and this work needs a CLI' if not hands(run) else '')
           or (f"is limited until {clock(cold[to])}" if to in cold else '') or ('has spent its budget' if spent(store, to) else '')
           or ('is not marked to read sensitive data' if only and not may_read_sensitive(store, to) else ''))
     if no: return None, f"; {LEVEL_OF[tier]} work is set to {_said(store, to)} in AI routing, but it {no}, so its card"
-    return (to, m), ''
+    return (run, m), ''
+
+
+def _coder(store, p: str) -> str:
+    "The CLI pick that does coding work on `p`: itself, an AI card's harness CLI where one runs here (harness.road), else '' - no shell."
+    from . import harness
+    return p if p.startswith('cli:') else r if (r := harness.road(store, p)).startswith('cli:') else ''
 
 
 def choose(store, job: str, task=None, want_pick=None, want_model=None, gear=None, difficulty: str = None) -> Route:
@@ -810,7 +819,7 @@ def brains(store, cfg=None) -> list:
     with `runs`, the model it runs a level on while that level's model box is blank."""
     from . import config, general
     cfg = config.load() if cfg is None else cfg
-    return [{'pick': o['pick'], 'label': o.get('label') or _said(store, o['pick']), 'cli': o['pick'].startswith('cli:'),
+    return [{'pick': o['pick'], 'label': o.get('label') or _said(store, o['pick']), 'coding': bool(_coder(store, o['pick'])),
              'models': list(o.get('models') or ([o['model']] if o.get('model') else [])), 'runs': _words(store, o['pick'], cfg)}
             for o in general.brain_options(store)]
 

@@ -510,6 +510,18 @@ test("a refused write the agent then made is one row, and the fold's line counts
   assert.match(ws, /p\.steps\.filter\(\(st\) => !\(chat && st\.status === "recovered"\)\)/, "the chat folds a try made good");
 });
 
+// WALK 18 (Codex): a turn whose one step was a PowerShell line read "1 step - ran $p = '..\..\..\attachments\…'; Add-Type -Assem…" on its fold -
+// the command quoted as the turn's summary. The row keeps its command; the fold's line counts it, as it counts two
+test("a fold's line counts a command row and never quotes its code", async () => {
+  const { eventsOf, turnParts, foldLine } = await import("../src/chatStream.js");
+  const run = (id, command, title) => ({ k: "tool", id, name: "Bash", ...(title ? { title, tool_kind: "execute" } : {}), args: { command }, status: "completed" });
+  const one = turnParts(eventsOf([run("c1", ["powershell.exe", "-Command", "$p = '..\\attachments\\3\\spend.xlsx'; Add-Type -AssemblyName System.IO.Compression"])], false));
+  assert.equal(foldLine(one), "1 step - ran 1 command");
+  assert.match(one.flatMap((p) => (p.type === "work" ? p.steps : []))[0].summary, /^Ran \$p = /, "the row itself still shows the command");
+  const titled = turnParts(eventsOf([run("c2", "Get-Command taskuary | Select-Object Source", "Get-Command taskuary | Select-Object Source")], false));
+  assert.equal(foldLine(titled), "1 step - ran 1 command");
+});
+
 test("the agent's own words for a shell line are its step - never a reading of a script cut short for the chat (walk 8, 2026-11-20)", () => {
   // ...the chat keeps a command cut at 300 characters (sessionrecord.ARG_N): the edit below, cut, read as 'Read f"Headcount {hc} (…'
   const command = `W=/work/scratch; sed -i -e 's/rev, cost, hc = 4820000, 3910000, 212/rev, cost, hc = 4820000, 3910000, 214/' \\n -e 's/f"Headcount {hc} (provisional - may be revised)"/f"Headcount {hc}"/' \\n -e 's/Headcount was {hc} (provisional - this figure may be revised)\./Headcount was {hc}./' $W/build.py`.slice(0, 299) + "…";

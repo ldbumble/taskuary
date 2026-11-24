@@ -184,8 +184,9 @@ export const foldLine = (parts) => {
   if (!n) return "";
   const kinds = [], by = new Map();
   for (const r of rows) { const k = r.type === "edit" ? "edit" : r.kind; if (!by.has(k)) { by.set(k, []); kinds.push(k); } by.get(k).push(r); }
+  // ...and a row that is its command (agentSteps `code`) is counted, never quoted: the line read "1 step - ran $p = '..\..\attachments…'" (walk 18)
   const words = kinds.flatMap((k) => { const rs = by.get(k), c = rs.reduce((t, r) => t + callsOf(r), 0);
-    return rs.length > 1 && KIND_SAID[k] ? [[KIND_SAID[k](c), c]] : rs.map((r) => [lower(r.summary), callsOf(r)]); }).filter(([w]) => w);
+    return (rs.length > 1 || rs.some((r) => r.code)) && KIND_SAID[k] ? [[KIND_SAID[k](c), c]] : rs.map((r) => [lower(r.summary), callsOf(r)]); }).filter(([w]) => w);
   const said = words.slice(0, words.length > FEW ? FEW - 1 : FEW), more = n - said.reduce((t, [, c]) => t + c, 0);
   return `${plural(n, "step")}${said.length ? ` - ${said.map(([w]) => w).join(", ")}${more > 0 && words.length > said.length ? `, and ${more} more` : ""}` : ""}`;
 };

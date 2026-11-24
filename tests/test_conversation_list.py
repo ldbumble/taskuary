@@ -1676,6 +1676,18 @@ def test_a_turn_says_each_messages_opener_once():
                                       {'k': 'said', 'text': 'No sentence end'}])] == [same, 'No sentence end']
 
 
+def test_a_message_said_again_with_more_after_a_call_is_drawn_once_with_no_fragment_and_no_answer_under_it():
+    """Walk 18, Codex: "I see you already told Erin that Friday at 2 p.m. works." / a call / the same sentence again with the rest. The opener
+    rule cut the second at "p.m." - "works. I marked the reply..." - and the answer, matching neither, was drawn whole under both: the turn
+    read three times. The second goes on from where the first ended, and the answer adds nothing under them."""
+    from taskuary.conversation import _said, unsaid
+    a = 'I see you already told Erin that Friday at 2 p.m. works.'
+    b = f'{a} I marked the reply as no longer needed and kept the draft under Not sent. Nothing else is needed.'
+    st = _said([{'k': 'said', 'text': a}, {'k': 'tool', 'name': 'mcp__taskuary__reply_not_needed'}, {'k': 'said', 'text': b}])
+    assert [x.get('text') for x in st] == [a, None, b[len(a) + 1:]]
+    assert unsaid(b, st) == ''
+
+
 def test_a_refusal_of_a_plumbing_call_reaches_the_agent_only():
     """The walk, 2026-11-19: after a press, a tick refused for a missing argument stood in the chat as "⚠ ``` `item` was not given Next: call
     tick again ... The input schema is: {...} select:mcp__taskuary__tick". The call is no step, and neither is what it was told back."""

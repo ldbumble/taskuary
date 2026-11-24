@@ -72,7 +72,8 @@ def machinery(s: dict) -> bool:
 # ...A SENTENCE A TURN ALREADY SAID IS NOT SAID AGAIN AS THE NEXT MESSAGE'S OPENER (design round 5, I3: on Codex every follow-up turn read
 # "Paula says the meeting moved up. I'll update the draft..." and then "Paula says the meeting moved up. The summary is ready." - the model
 # opens each message of a turn with the same sentence, and both were drawn). Structure, not meaning: the same first sentence, word for word
-_LEAD = re.compile(r'\s*(.+?[.!?])(?=\s|$)', re.S)
+# ...a sentence ends where the next begins with a capital or the text ends: "at 2 p.m. works." is one (walk 18: cut at "p.m.", its "works." was left)
+_LEAD = re.compile(r"""\s*(.+?[.!?])(?=\s+["'(\[*_]*[A-Z]|\s*$)""", re.S)
 def _lead(t: str) -> tuple:
     "(its first sentence with its spaces made one, where that sentence ends) - ('', 0) where it has none."
     m = _LEAD.match(t or '')
@@ -80,7 +81,10 @@ def _lead(t: str) -> tuple:
     # "1." was cut as said already, and the list drew as one run-on paragraph - Markdown starts no list at "2.")
     return (' '.join(m.group(1).split()), m.end()) if m and re.search(r'[^\W\d_]{2}', m.group(1)) else ('', 0)
 def said_once(t: str, seen: set) -> str:
-    "`t` without its opening sentence where `seen` holds it already - and that sentence added to `seen`."
+    """`t` without its opening sentence where `seen` holds it already - and that sentence added to `seen`. A message that opens with a whole
+    message said before it goes on from that one's end (walk 18, Codex: one sentence, a tool call, then that sentence again with the rest)."""
+    w = t.split()
+    if k := max((len(x) for x in map(str.split, seen) if len(x) < len(w) and w[:len(x)] == x), default=0): t = t[re.match(r'(?:\s*\S+){%d}' % k, t).end():].strip()
     lead, end = _lead(t)
     if not lead: return t
     if lead in seen and t[end:].strip(): return t[end:].strip()

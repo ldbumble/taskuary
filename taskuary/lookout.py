@@ -426,6 +426,42 @@ def spend(store, q: str = '', days: int = SPEND_DAYS) -> list:
     return out
 
 
+# ── PAST FIGURES, FOR A TASK'S AGENT (the owner, 2026-11-24): what the app already knows of a vendor or a person in numbers - the spend
+# table above, the figures their mail states, and what the record holds - so a renewal's agent reads last year's price and seat count here
+# instead of asking him. One reader for the Advisor's spend read and the agent's tool (agenttools past_figures)
+FIG_DAYS, FIG_MSGS, FIG_EACH = 365, 15, 3
+_CLAUSE = re.compile(r'(?<=[.!?;])\s+|\n+')
+
+
+def stated(store, q: str, days: int = FIG_DAYS) -> list:
+    """The figures the mail from or to `q` states - a seat count, a price, a total, a date - each sentence that holds a number, with its
+    message id and date, newest first. A number is structure; what it counts is the reader's. Nothing personal, none of the Advisor's own."""
+    from . import workstreams as W
+    ws, ps = _norm(q).split(), W.personal(store)
+    if not ws: return []
+    hay = "lower(IFNULL(FromName,'') || ' ' || IFNULL(FromEmail,'') || ' ' || IFNULL(RecipientsJson,'') || ' ' || IFNULL(Subject,'')) LIKE ?"
+    out = []
+    for m in store._rows("SELECT MessageId, Subject, FromName, FromEmail, Direction, SentAt, Workstream, substr(BodyText, 1, 6000) BodyText FROM message "
+                         f"WHERE SentAt>=? AND IFNULL(Channel,'') <> 'assistant' AND {' AND '.join([hay] * len(ws))} ORDER BY SentAt DESC LIMIT ?",
+                         (_ago(days=days), *[f'%{w}%' for w in ws], FIG_MSGS)):
+        if m.get('Workstream') and m['Workstream'] in ps: continue
+        cs = [c for c in (_one(x, 160) for x in _CLAUSE.split(f"{m.get('Subject') or ''}\n{m.get('BodyText') or ''}")) if re.search(r'\d', c)][:FIG_EACH]
+        who = 'the owner' if (m.get('Direction') or 'in') == 'out' else _payee(m)
+        out += [f"- msg{m['MessageId']} {str(m['SentAt'])[:10]} {who}: {c}" for c in cs]
+    return out
+
+
+def figures(store, who: str, days: int = FIG_DAYS) -> str:
+    "What the app knows of `who` in figures: its charges (spend), the figures its mail states (stated) and what the record holds (ledger.find)."
+    from . import ledger
+    q = _one(who, 80)
+    money, said, rec = spend(store, q, days), stated(store, q, days), ledger.find(store, q.split())
+    if not (money or said or rec): return f'Nothing in {days} days of saved mail or the record states a figure for "{q}" - try their address, or another name for them.'
+    return '\n\n'.join(x for x in (f'CHARGES ({days} days, counted from the amounts their mail states):\n' + '\n'.join(money) if money else '',
+                                   'FIGURES THEIR MAIL STATES (newest first):\n' + '\n'.join(said) if said else '',
+                                   'ON RECORD:\n' + '\n'.join(f'- {x}' for x in rec) if rec else '') if x)
+
+
 def repeats(store, days: int = REPEAT_DAYS, each: int = REPEAT_ROWS) -> list:
     """What happens again and again, counted: the same subject the owner SENDS on a cadence (a manual step he repeats), the same subject
     ARRIVING from one sender (a failure, a complaint, a question that comes back), and threads that DRAG - DRAG_N or more messages over

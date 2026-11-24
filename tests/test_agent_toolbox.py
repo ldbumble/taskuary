@@ -422,6 +422,24 @@ class TheServer(unittest.TestCase):
         text, _ = tool(self.tid, 'person_tasks', who='Nobody Atall')
         self.assertIn('try their address', text)
 
+    def test_past_figures_reads_what_the_app_already_knows_in_numbers(self):
+        """The owner, 2026-11-24: a renewal's agent asked him for last year's seat count while the signed renewal sat in his mail. The figures
+        the app already holds - a vendor's charges (the Advisor's own spend read, one road) and the numbers its mail states - with dates and ids."""
+        from taskuary import lookout
+        pw = ('Payworth Billing', 'billing@payworth.example')
+        for i, (at, amt) in enumerate((('2026-08-01', '1,450.00'), ('2026-09-01', '1,450.00'), ('2026-10-01', '1,600.00'))):
+            self._mail(None, f'pw{i}', f'Invoice INV-10{i}', f'Your Payworth invoice: ${amt} due in 30 days.', frm=pw, at=f'{at} 08:00:00')
+        tr = self._mail(None, 'tr1', 'Trainly renewal confirmed', 'Thanks for renewing. Your plan covers 180 seats at $42 a seat a year.\nRenews on 1 December.',
+                        frm=('Trainly Renewals', 'renewals@trainly.example'), at='2026-06-10 12:00:00')
+        text, err = tool(self.tid, 'past_figures', who='Payworth')
+        self.assertFalse(err, text)
+        for l in lookout.spend(self.s, 'Payworth', lookout.FIG_DAYS): self.assertIn(l, text)
+        self.assertIn('latest $1,600', text); self.assertIn('up $150', text)
+        text, _ = tool(self.tid, 'past_figures', who='Trainly')
+        self.assertIn(f'msg{tr} 2026-06-10 Trainly Renewals: Your plan covers 180 seats at $42 a seat a year.', text)
+        text, _ = tool(self.tid, 'past_figures', who='Spendly')
+        self.assertIn('try their address', text)
+
     def test_my_task_shows_the_checklist(self):
         text, _ = tool(self.tid, 'my_task')
         self.assertIn('Brief Alex before the renewal call', text)

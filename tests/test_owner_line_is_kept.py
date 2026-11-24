@@ -93,7 +93,10 @@ class OwnerLineIsKept(unittest.TestCase):
         self.brain.fail = {1}
         c = TestClient(server.app)
         first = threading.Thread(target=lambda: c.post(f'/api/tasks/{self.tid}/assistant/messages', json={'text': 'Compare three tools.'})); first.start()
-        time.sleep(0.3)
+        # waits for the first turn to be working, never a fixed sleep: on CI's Windows box 0.3s in it had not started, so both lines went
+        # into the one turn that failed and nothing was held behind it (2026-11-24)
+        end = time.time() + 10
+        while not getattr(general.session_for(self.tid), 'busy', False) and time.time() < end: time.sleep(0.02)
         r = c.post(f'/api/tasks/{self.tid}/assistant/messages', json={'text': 'Cheapest first, please.'})
         first.join(15)
         self.assertEqual(r.status_code, 200, r.text)

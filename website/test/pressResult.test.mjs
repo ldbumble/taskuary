@@ -19,7 +19,8 @@ const page = async () => {
   const f = join(mkdtempSync(join(tmpdir(), "tq-press-")), "page.mjs"); writeFileSync(f, out.outputFiles[0].text);
   return import(pathToFileURL(f).href);
 };
-const P = page();
+// ...built on first use inside a test, never at import: a build started before the runner's first test left its promise pending on Node 22
+let P_; const P = { then: (a, b) => (P_ ||= page()).then(a, b) };
 const words = { label: (k, s) => `${k}${s ? `:${s}` : ""}`, hint: () => "", doneHint: "", natTitle: "", repo: "Pick", repoHint: "" };
 const noop = () => {};
 const run = { reopen: noop, done: noop, note: noop, nat: noop, remind: noop, watch: noop, hand: noop, reshape: noop, kind: noop, priority: noop, repo: noop };

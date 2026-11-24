@@ -156,6 +156,31 @@ def test_a_saved_model_follows_the_brain_it_was_saved_for(real):
             assert brainroute.choose(s, 'general').model == 'claude-sonnet-5-5', 'and it is back with its brain'
 
 
+def test_a_saved_session_on_one_brain_with_anothers_model_shows_and_runs_that_brains_own(real, monkeypatch):
+    """The owner's live app, 2026-11-23 ("why does this say both claude and codex????"): a task's saved conversation was Codex with a Claude
+    model - its chip read "OpenAI Codex CLI · claude-sonnet", its menu ticked Codex's default, and every turn started Codex with the Claude
+    name ("not supported when using Codex with a ChatGPT account"). A pair that does not belong together is the brain's own default - in the
+    run, in what the task says ran it, and so on its chip; a model the brain offers is kept."""
+    from taskuary import climodels, server
+    real.update({'claude', 'codex'})
+    lists = {'claude': ['claude-sonnet-5-5'], 'codex': ['gpt-5.5']}
+    s, cfg, _ = _home(('claude', 'codex'), {'claude': True, 'codex': True}, {'default_brain': 'codex'})
+    with mock.patch.object(config, 'load', lambda: cfg), mock.patch.object(climodels, 'catalog', lambda cli: {'choices': lists.get(cli, [])}):
+        clic.sync(cfg, s)
+        monkeypatch.setattr(server, 'store', s)
+        tid = s.create_task({'Title': 'Quarterly close checklist', 'Kind': 'general', 'Status': 'open'}, 'router')
+        s.save_session(tid, 'cli:codex', 'claude-sonnet-5-5', '', 'ctx')
+        assert general.opening(s, s.get_task(tid))[:2] == ('cli:codex', 'claude-sonnet-5-5'), 'the live shape: the stored pair'
+        pick, _, model = general._selected(s, model='claude-sonnet-5-5', pick='cli:codex')
+        assert pick == 'cli:codex' and 'claude' not in model, model
+        assert server._ran_on(tid)['model'] == '', 'the chip: Codex at its default, as the menu ticks it'
+        sess = general.GeneralSession(s, tid)
+        assert sess.pick == 'cli:codex' and 'claude' not in sess.model, sess.model
+        assert s.saved_session(tid)['Model'] == sess.model, 'and the conversation is saved as it runs'
+        assert general._selected(s, model='gpt-5.5', pick='cli:codex')[2] == 'gpt-5.5', 'a model the brain offers is kept'
+        assert general._selected(s, model='claude-sonnet-5-5', pick='cli:claude')[2] == 'claude-sonnet-5-5'
+
+
 def test_a_cli_is_never_handed_a_model_it_does_not_run(real):
     """The live shape, 2026-11-13: "Quick general work -> standard on codex (CLI), claude-sonnet-5-5 (rule work)" - Codex exited 1, "not
     supported when using Codex with a ChatGPT account", on every quick call. The general card's model came along whatever it was saved for,

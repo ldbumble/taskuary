@@ -108,6 +108,14 @@ def fits(store, model: str, pick: str) -> bool:
     return not any(name in (climodels.catalog(c).get('choices') or []) for p, c in clis.items() if p != pick)
 
 
+def runs(store, pick: str, model) -> str:
+    """THE MODEL THIS BRAIN RUNS for `model` (the owner, 2026-11-23: "why does this say both claude and codex????" - a task saved on Codex with
+    a Claude model read "OpenAI Codex CLI · claude-sonnet" and Codex was started with it): `model` when `pick` offers it (fits), else '' - the
+    brain's own default. The one answer for the run (general._selected), the chip and the menu's tick (server._ran_on, the live session's)."""
+    m = str(model or '').strip()
+    return m if m and fits(store, m, pick) else ''
+
+
 def model_on(store, setting: str, pick: str, settings: dict = None) -> str:
     "The model saved in `setting`, when it was saved for `pick`; '' when it belongs to another brain."
     get = store.get_setting if settings is None else settings.get

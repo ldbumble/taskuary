@@ -2519,7 +2519,8 @@ def _ran_on(task_id: int, tr=None):
             c = store.get_connector(int(pick.split(':', 1)[1])) or {}
             name = c.get('Name') or c.get('Type') or 'AI connector'
         else: name = pick.split(':', 1)[-1] or pick
-        return {'brain': name, 'model': saved.get('Model') or '', 'pick': pick}
+        from .aidefaults import runs                 # ...the model as that brain runs it: a Claude name saved on Codex is Codex's own
+        return {'brain': name, 'model': runs(store, pick, saved.get('Model')), 'pick': pick}
     # ...with the pick it is in the AI pickers (`pick`), so the task's head marks the one at work (TaskPage's SwitchAi)
     if tr and tr['Brain']: return {'brain': tr['Brain'], 'model': '', 'pick': f"cli:{tr['Brain']}"}
     return None

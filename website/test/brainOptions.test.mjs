@@ -87,4 +87,7 @@ test("the task's AI switch lists every ready AI and its models, the one at work 
   assert.deepEqual(long.rows.filter((r) => !r.more).map((r) => r.model), ["", "m0", "m1", "m2", "m9", ""]);
   assert.equal(long.rows.filter((r) => r.more).length, 12);
   assert.match(switchChoices({ generalBrains: [] }).why, /No AI is connected/);
+  // the owner's live app, 2026-11-23: a task on Codex carrying a Claude model read "Codex CLI · claude-sonnet-5-5" with Codex's default ticked
+  const mixed = switchChoices({ generalBrains, current: "cli:codex", model: "claude-sonnet-5-5" });
+  assert.equal(mixed.said, "Codex CLI"); assert.deepEqual(mixed.rows.filter((r) => r.now).map((r) => r.pick + "/" + r.model), ["cli:codex/"]);
 });

@@ -720,7 +720,8 @@ def _selected(store, connector_id=None, model=None, pick=None) -> tuple[str, str
     from . import aidefaults
     # ...the card's saved model only on the brain it was saved for (aidefaults.model_on): a Claude name is never handed to Codex
     saved_model = aidefaults.model_on(store, 'assistant_model', choice['pick']) if not explicit else ''
-    return choice['pick'], choice['label'], model or saved_model or choice['model']
+    # ...and so is a model asked for, or a saved conversation's: a pair that does not belong together runs the brain's own (aidefaults.runs)
+    return choice['pick'], choice['label'], aidefaults.runs(store, choice['pick'], model) or saved_model or choice['model']
 
 
 # A MODEL IS CHOSEN ONLY WHEN THE OWNER PICKED IT (2026-11-06): a session carried its CLI's own default model ("default ·

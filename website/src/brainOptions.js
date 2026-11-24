@@ -60,7 +60,10 @@ export function switchChoices({ coding = false, codingOptions = [], generalBrain
   const rows = ais.flatMap((a) => [{ pick: a.pick, model: "", label: a.label, now: a === on && !named },
     ...a.models.map((m, i) => ({ pick: a.pick, model: m.id, label: m.label, ai: a.label, now: a === on && m.id === named,
       ...(i >= SHOWN && !(a === on && m.id === named) ? { more: true } : {}) }))]);
-  const said = on ? `${on.label}${model ? ` · ${model}` : ""}` : "";
+  // ...and THE PILL NAMES THE MODEL ITS TICK MARKS (the owner, 2026-11-23: "why does this say both claude and codex????" - Codex ticked at its
+  // default under a pill reading "Codex · claude-sonnet"): a model its AI does not list is that AI's default; with no list read, as given
+  const shown = on?.models.length ? named : model;
+  const said = on ? `${on.label}${shown ? ` · ${shown}` : ""}` : "";
   const why = !read ? "Reading which AIs are ready…" : !ais.length ? "No AI is connected - connect one under Connections."
     : rows.length === 1 || rows.every((r) => r.now) ? "Only one AI is ready - connect another under Connections to hand this to it." : "";
   return { rows, said, why };

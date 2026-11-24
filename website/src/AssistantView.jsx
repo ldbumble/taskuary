@@ -76,7 +76,7 @@ import CloseNote from "./CloseNote.jsx";
 import { AttachImage, ImageTray, usePromptImages, useSendWhenUp } from "./promptImages.jsx";
 import { handToItem } from "./ItemSections.jsx";
 import { afterCancel, afterConfirm, afterExecute, holdsProposal, markExecuted, proposalSay } from "./proposalCard.js";
-import { LEVEL_META, LEVEL_ROLE, arrivals, isUrgent, arrivedAt, asPressed, withOpened, stillLeaving, bandsOf, canAdvance as canWalkOn, cardFor, currentItemFromPile, displayRevision, drawOrder, fillCaps, followsItem, foldsAs, inOrder, interactiveCardIndex, drawnKey, tableCardIndex, keysOf, liveBrowseId, pastView, lastActIndex, chipsOf, receiptChips, CAPPED, FLOOR, FOOT_PX, levelLabel, nextMarkerKey, trimCaps, ROW_PX, refreshCurrentPresentation, refreshPilePresentation, rowMeta, tableItemOf, settledHistory, sinceOpener, walkOf, walkPlace } from "./funnelPile.js";
+import { LEVEL_META, LEVEL_ROLE, arrivals, isUrgent, arrivedAt, asPressed, withOpened, stillLeaving, bandsOf, canAdvance as canWalkOn, cardFor, currentItemFromPile, madeHere, displayRevision, drawOrder, fillCaps, followsItem, foldsAs, inOrder, interactiveCardIndex, drawnKey, tableCardIndex, keysOf, liveBrowseId, pastView, lastActIndex, chipsOf, receiptChips, CAPPED, FLOOR, FOOT_PX, levelLabel, nextMarkerKey, trimCaps, ROW_PX, refreshCurrentPresentation, refreshPilePresentation, rowMeta, tableItemOf, settledHistory, sinceOpener, walkOf, walkPlace } from "./funnelPile.js";
 import { FYI_PAGE, ageHover, subLine, answersTo, awayFromClear, closedElsewhere, coveredByReload, fyiHasRoom, fyiTail, heldSince, latestLine, pileRows, pinOf, rowKeys, sameRow, sentChips } from "./funnelPile.js";
 import { railStatus, rowWhy } from "./railStatus.js";
 import { UndoLine } from "./Removed.jsx";
@@ -3274,7 +3274,8 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true, r
   // ...ONE BOX ON A TASK (the owner, 2026-11-22: "yes" - every task page had the task's "Message the agent..." and this "Ask..." under it):
   // while a task is in view its own box is the only one; the Assistant's comes back on the rail, or over a page opened on top
   // ...by the item's own task, whatever row opened it ("review:5", "processing:…" - the walk, 2026-11-22: "task:N" alone missed every row)
-  const taskInView = !!(currentItem?.tid || drawn || /^task:\d+$/.test(table.key || "")) && !table.place && !table.folded;
+  // ...and what Taskuary made on its own, whose Agent tab has the box (madeHere)
+  const taskInView = !!(currentItem?.tid || drawn || /^task:\d+$/.test(table.key || "") || madeHere(currentItem)) && !table.place && !table.folded;
   const tableSays = tableWords(table, currentItem?.ref || (/^task:(\d+)$/.test(table.key || "") ? `TQ-${table.key.slice(5).padStart(4, "0")}` : ""));
   // THE ASSISTANT'S LIGHT OUTRANKS THE ADVISOR'S while its item is on the table: the owner asked for that act in words, and the Advisor's line
   // over it would name another button (assistantLight.js); it goes out at the next press or when the table moves on

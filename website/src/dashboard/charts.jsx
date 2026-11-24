@@ -46,7 +46,7 @@ export function Card({ c, w, children, table, stale, onPress, className = "" }) 
     <section className={`tq-dash-card w${w} ${stale ? "stale" : ""} ${className}`} data-tq-dash-kind={c.kind} aria-label={c.title} style={{ "--i": c.i ?? 0 }}
       onClick={onPress} onKeyDown={onPress ? (e) => { if (e.key === "Enter") onPress(e); } : undefined} tabIndex={onPress ? 0 : undefined}>
       <div className="tq-dash-h"><h3 title={c.title}>{c.title}</h3>
-        {/* ...no switch where the rows' own table stands beside the chart (a report, ReportRows): `twin: false` */}
+        {/* ...no switch where the rows' own table stands beside the chart (a report: madeView): `twin: false` */}
         {table && c.twin !== false && <button type="button" className="tq-dash-flip" aria-pressed={asTable} onClick={(e) => { e.stopPropagation(); setAsTable(!asTable); }}>
           {asTable ? DASH.chart : DASH.table}</button>}
       </div>

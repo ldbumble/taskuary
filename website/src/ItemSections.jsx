@@ -11,6 +11,7 @@
 // folded; the bar is Back and Next. A phone's stacked sections keep the row as it was
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Box, Typography } from "@mui/material";
+import BoltIcon from "@mui/icons-material/Bolt";
 import api from "./api.js";
 import { LinkPopups, Md } from "./md.jsx";
 import { label as btn } from "./buttons.js";
@@ -43,14 +44,29 @@ const SAYS = { says: "What this says", matters: "What matters to you" };
 const HANDS = new Map();
 export const handToItem = (key, hand) => { const f = key && HANDS.get(key); if (!f) return false; f(hand); return true; };
 const ASK_ONLY = "the answer here reads the item only";
-// `came`: what the item is, a chip on the box while nothing is handed on (the owner, 2026-11-06: Came-from rides the one box as a chip)
 // `draft`: { text, setText, pics } - his words and files, held by the item (ItemSections) so they stay his when Send to agent moves the box to the
 // Agent section: a box of its own lost what he had typed at the press (the stress round, 2026-11-18)
+// `agent`: it stands in the Agent section - the box is always there, as a task's chat has it (the owner, 2026-11-20: "chat box is only on the agent tab")
 const KIND_NOUN = { fyi: "notice", report: "report", dashboard: "dashboard", idea: "idea", review: "draft" };
 // ...his last line in an item's own box, by the item: the box Send to agent opens is drawn anew where the agent's section is, so it is kept here
 const ASKED = new Map();
-export function ItemAsk({ ask, hand = null, onHand = null, came = "", hint = "", draft, itemKey = "" }) {
-  const ls = hand ? [] : itemLines(readingOf(ask?.reading));
+// WHAT TASKUARY MADE ON ITS OWN IS A CHAT ON THE AGENT TAB (the owner, 2026-11-23: "Anything that comes in on the Agent tab shows the input prompt
+// that created it (even if automated: a report, routine, dashboard, Advisor) ... Same card as the other ones"): the ask that made it on the
+// asking side, marked as automated, then the turn that answered it - its content in the turn's one frame - in the task chat's own rows
+// (GeneralWorkspace ConvLine, ConvTurn: the same classes, generalWorkspace.css). `input`: { head, text }; ItemAsk's box stands under it.
+// ...a long ask (a brief's whole prompt) reads its first lines, the rest one press away, as what came in reads (GeneralWorkspace ArrivedWords)
+const LONG_ASK = 280;
+export function MadeTurn({ input, name = "Taskuary", children }) {
+  const [all, setAll] = useState(false), long = String(input.text || "").length > LONG_ASK;
+  return <div className="tq-aui-chat" data-tq-made="">
+    <div className="tq-aui-message tq-aui-user" data-tq-made-input="">
+      <div className="tq-aui-user-head"><BoltIcon aria-hidden sx={{ fontSize: 13, verticalAlign: "-2px", mr: 0.4 }} />{input.head}</div>
+      {!!input.text && <div className="tq-aui-user-bubble" dir="auto"><span className={long && !all ? "tq-made-clamp" : undefined}>{input.text}</span></div>}
+      {long && <button type="button" className="tq-aui-arrived-more-btn" aria-expanded={all} onClick={() => setAll((a) => !a)}>{all ? "Show less" : "Show all"}</button>}</div>
+    <div className="tq-aui-message tq-aui-agent"><div className="tq-aui-role">{name}</div><div className="tq-aui-agent-body">{children}</div></div></div>;
+}
+export function ItemAsk({ ask, hand = null, onHand = null, agent = false, hint = "", draft, itemKey = "" }) {
+  const ls = hand || agent ? [] : itemLines(readingOf(ask?.reading));
   const { text, setText, pics } = draft;
   const [busy, setBusy] = useState(false), [said, setSaid] = useState([]), [err, setErr] = useState(""), input = useRef(null);
   useEffect(() => { setSaid([]); setErr(""); }, [ask?.key]);
@@ -76,24 +92,27 @@ export function ItemAsk({ ask, hand = null, onHand = null, came = "", hint = "",
   // ...its Send lit by words only (2026-11-18): the item's box goes on his words, and a file alone lit a press that did nothing
   // ...THE SAME BOX IN THE SAME PLACE (the owner, 2026-11-05: "the box should be where it always is, not moved up. Don't have separate code"): the
   // task chat's own PromptBox, held at the foot of the pane whatever is above it; Send to agent puts the item on it as a chip - nothing moves
-  return <Box data-tq-item-ask={ask?.kind || (hand ? "agent" : "")} data-tq-item-hand={hand ? hand.items.length : undefined}
-    sx={{ display: "flex", flexDirection: "column", gap: 1, flex: "1 0 auto", minWidth: 0, px: { xs: 0.5, sm: 1 } }}>
+  // ...his line and its answer in the task chat's own rows (MadeTurn, ConvLine, ConvTurn), never a look of their own - laid straight in the
+  // section (`contents`), so the box under them holds the section's foot however long what is above it runs
+  return <Box className="tq-aui-chat" data-tq-item-ask={ask?.kind || (hand ? "agent" : "")} data-tq-item-hand={hand ? hand.items.length : undefined}
+    sx={{ display: "contents" }}>
     {ls.map((l) => <Typography key={l.k} data-tq-item-reading={l.k} title={SAYS[l.k]}
       sx={{ fontSize: 13.5, lineHeight: 1.55, color: INK, overflowWrap: "anywhere" }}>{l.text}</Typography>)}
     {said.map((t, i) => <React.Fragment key={i}>
-      <Typography data-tq-item-said="" sx={{ alignSelf: "flex-end", maxWidth: "75%", fontSize: 13.5, lineHeight: 1.48, color: INK, overflowWrap: "anywhere",
-        bgcolor: "var(--tq-inset, #e7efe6)", border: "1px solid var(--tq-border, #cfdccd)", borderRadius: "13px", px: 1.5, py: 1 }}>{t.q}</Typography>
-      <Box data-tq-item-answer="" sx={{ fontSize: 13.5, lineHeight: 1.55, color: INK, overflowWrap: "anywhere", "& p": { my: 0.25 } }}><LinkPopups><Md text={t.a} /></LinkPopups></Box>
+      <div className="tq-aui-message tq-aui-user" data-tq-item-said=""><div className="tq-aui-user-bubble" dir="auto">{t.q}</div></div>
+      <div className="tq-aui-message tq-aui-agent" data-tq-item-answer=""><div className="tq-aui-role">Taskuary</div>
+        <div className="tq-aui-agent-body"><LinkPopups><Md text={t.a} /></LinkPopups></div></div>
     </React.Fragment>)}
     {/* ...THE BOX IS THE AGENT TAB'S ALONE (the owner, 2026-11-20: "if you put prompt box on the bottom of Came from you are confusing the 2 tabs"):
-        never under the item's own content - it stands once Send to agent has put the item on it as a chip, in the Agent section */}
-    {hand && <><Box aria-hidden sx={{ flex: "1 1 auto" }} />
-    <Box sx={{ position: "sticky", bottom: 0, bgcolor: SHADE, pt: 0.5, mx: -0.5, px: 0.5 }}>
+        never under what came in - it stands in the Agent section: under what Taskuary made there, or once Send to agent has put the item on it */}
+    {(hand || agent) && <><Box aria-hidden sx={{ flex: "1 1 auto" }} />
+    {/* ...down over the section's own foot padding (TaskPage SECTION's 12px), or what scrolls under it shows through beneath it */}
+    <Box sx={{ position: "sticky", bottom: "-12px", mb: "-12px", pb: "12px", bgcolor: `var(--tq-item-ground, ${SHADE})`, pt: 0.5, mx: -0.5, px: 0.5 }}>
       <PromptBox text={text} setText={setText} pics={pics} busy={busy} onSend={send} inputRef={input} sendOff={!text.trim()} cannot={hand ? null : () => ASK_ONLY}
         placeholder={hint || MESSAGE}
         label={hand ? btn(hand.verb) : "Ask about this"} sendAttrs={{ "data-tq-item-send": hand ? "agent" : "ask" }}
         chips={hand?.items.length ? hand.items.map((i) => <AttachChip key={i.key} data-tq-item-chip={i.key} name={i.title} onRemove={busy ? null : () => drop(i.key)}
-          title={`${btn(hand.verb)} - it gets ${i.title}`} />) : came ? <AttachChip data-tq-came-chip="" name={came} icon={false} title={`Came from: ${came}`} /> : null} />
+          title={`${btn(hand.verb)} - it gets ${i.title}`} />) : null} />
       {err && <Typography role="alert" sx={{ fontSize: 12.5, color: "var(--tq-danger, #a33)", pt: 0.5 }}>{err}</Typography>}
     </Box></>}
   </Box>;
@@ -137,7 +156,7 @@ export default function ItemSections({ kind, label, title, aside, sections: all,
   }, [itemKey, takes, boxAt]);
   // ...opened where its box now is, the moment it is handed on - and back on the item once the chip is off and the section with it
   useEffect(() => { if (hand) setOpen(boxAt); else setOpen((o) => (sections.some((x) => x.key === o) ? o : about)); }, [hand, boxAt]);   // eslint-disable-line react-hooks/exhaustive-deps
-  const box = (ask || hand) && <ItemAsk ask={ask} hand={hand} onHand={setHand} draft={draft} itemKey={itemKey} came={typeof title === "string" ? title : label}
+  const box = (ask || hand) && <ItemAsk ask={ask} hand={hand} onHand={setHand} draft={draft} itemKey={itemKey} agent={boxAt === "agent"}
     hint={hand ? `What should the agent do with this ${noun}?` : ""} />;
   // ...and none once it is handed on: the press is made, the box is where it goes now
   const skip = (v) => (noAgent || !!hand) && AGENT_STARTS.has(String(v?.id || "").split(":").pop());

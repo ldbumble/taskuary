@@ -31,9 +31,8 @@ import { snapshotOf } from "./dashboard/slice.js";
 import { Md, looksMd } from "./md.jsx";
 import { jsonRows, nameAndRest } from "./reportRows.js";
 import DigestText from "./DigestText.jsx";
-import ReportRows from "./ReportRows.jsx";
-import ReportBrief from "./ReportBrief.jsx";
-import { briefOf } from "./reportBrief.js";
+import ViewSpec from "./ViewSpec.jsx";
+import { ideaView, reportView } from "./madeView.js";
 import TodayMeetingsStrip from "./TodayMeetingsStrip.jsx";
 import { useCalendarToday } from "./calendarToday.js";
 import { ROLES, ASSISTANT, ALERT, ALERT_INK } from "./theme.jsx";
@@ -61,7 +60,7 @@ import { READY } from "./taskLifecycle.js";
 import { connError, openBugReport } from "./bugReportOpen.js";
 import { dayLabel, fmtTime } from "./dates.js";
 import { useShare } from "./Share.jsx";
-import ItemSections, { ItemLay, ItemPart, handToItem } from "./ItemSections.jsx";
+import ItemSections, { ItemLay, ItemPart, MadeTurn, handToItem } from "./ItemSections.jsx";
 import { PaneMoves } from "./TaskRow.jsx";   // an FYI's Came from carries its pane's moves as a task's does
 import { TYPE_LABELS } from "./reportWords.js";
 import { SECTIONS as STEPS } from "./taskLayout.js";   // a task's sections, by name (ItemSections)
@@ -477,8 +476,8 @@ function RowsTable({ rows }) {
   );
 }
 
-// `report`: { name } - a report on the table: its rows drawn as a report (ReportRows), its words on the card without a box (reportRows.css)
-export function FullText({ mid, revision, report = null }) {
+// ...a report on the table is the Agent tab's turn instead (ReportTurn)
+export function FullText({ mid, revision }) {
   // a card with no mail behind it asks for nothing. A task whose only message a skip rule hid has no
   // mid, and fetching /api/messages/null painted FastAPI's own validation sentence ("path.mid: Input
   // should be a valid integer") into the card (the owner, 2026-09-15).
@@ -494,24 +493,35 @@ export function FullText({ mid, revision, report = null }) {
   const body = whole ? raw : read;
   const cut = body.indexOf("\n--- raw data ---");
   const text = noImages(cut >= 0 ? body.slice(0, cut) : body);
-  const morning = doc.SourceName === "Morning digest" || /^Morning digest\b/i.test(doc.Subject || "");
+  const morning = isMorning(doc);
   // ...a report's table sits in a panel its own width (the owner, 2026-10-28): full width, a two-column table left it 3/4 empty
   const rows = !morning && jsonRows(text);
-  if (report && rows) return <ReportRows rows={rows} name={report.name} mid={none ? null : mid} />;
-  // ...and a brief of the End of day checkup's shape - roll-ups, groups of bullets - is laid out as one, not a wall of markdown (ReportBrief)
-  const brief = report && !morning && !rows && briefOf(text);
-  if (brief) return <ReportBrief brief={brief} mid={none ? null : mid} />;
   // ...and a message with no words of its own (a picture-only mail) is said by its pictures and files, never "(empty)" (Attachments `bare`)
   const bare = !none && !morning && !text.trim() ? { remote: remotePicture(raw) } : null;
   return (
-    <div className={rows ? "tq-card-full fit" : report && !morning ? "tq-card-full report" : "tq-card-full"}>
-      {morning ? <DigestText text={text} sourceId={/^report:(\d+)/.exec(doc.ConversationId || "")?.[1] ?? null} /> : rows ? <RowsTable rows={rows} /> : looksMd(text) ? <Md text={text} /> : text.trim() ? <LinkedText text={text} links={doc.Links} /> : bare ? null : "(empty)"}
+    <div className={rows ? "tq-card-full fit" : "tq-card-full"}>
+      {morning ? <DigestText text={text} sourceId={digestOf(doc)} /> : rows ? <RowsTable rows={rows} /> : looksMd(text) ? <Md text={text} /> : text.trim() ? <LinkedText text={text} links={doc.Links} /> : bare ? null : "(empty)"}
       {/* ...and the pictures pasted into it, drawn - the screenshot is often the whole ask */}
       {!none && !morning && <Attachments messageId={mid} canFetch={String(doc.Channel || "") === "email" && mentionsPicture(doc.BodyText)} dense bare={bare} />}
       {read !== raw && <button type="button" className="tq-card-more" onClick={() => setWhole((v) => !v)}>{whole ? "Just what they wrote" : "Show the whole email"}</button>}
       {doc.SourceLink && <div className="tq-card-note"><a href={doc.SourceLink} target="_blank" rel="noreferrer" style={{ color: "var(--tq-link, #55697a)" }}>open the original</a></div>}
     </div>
   );
+}
+const isMorning = (doc) => doc.SourceName === "Morning digest" || /^Morning digest\b/i.test(doc.Subject || "");
+const digestOf = (doc) => /^report:(\d+)/.exec(doc.ConversationId || "")?.[1] ?? null;
+
+// A REPORT'S RUN, AS THE TURN THAT ANSWERED ITS ASK (MadeTurn): its words read once into a view (madeView.reportView) and drawn by the one view
+// renderer in the one frame - a data report's line, chart and table, a brief's roll-ups and groups, words as words - then the files its run
+// carries, less what the view already is (its chart's picture: ONE THING, ONE PLACE). A morning digest keeps its own way on (DigestText)
+function ReportTurn({ mid, revision, name }) {
+  const doc = useFetched(mid != null && mid !== "" ? `/api/messages/${mid}` : null, revision);
+  const raw = cleanText(doc?.BodyText || ""), cut = raw.indexOf("\n--- raw data ---"), text = noImages(cut >= 0 ? raw.slice(0, cut) : raw);
+  const v = useMemo(() => reportView(text, name), [text, name]);
+  if (!doc) return <div className="tq-card-excerpt">…</div>;
+  if (doc.error) return <div className="tq-card-err">{doc.error}</div>;
+  return <>{isMorning(doc) ? <div className="tq-turn-frame" style={{ padding: 16 }}><DigestText text={text} sourceId={digestOf(doc)} /></div> : <ViewSpec spec={v.spec} />}
+    <Attachments messageId={mid} dense skip={v.owns} /></>;
 }
 
 // A task is the grouping boundary after triage. Fetching `/thread` here would pull the whole Teams
@@ -885,15 +895,16 @@ export function MeetingCard({ card, table = null }) {
   );
 }
 
-// WHAT PRODUCED A REPORT, for its Came from (ItemSections): its source row - when it runs, what it reads, where a run goes, in the Reports
-// tab's own words (the server's ScheduleWords and RouteWords) - and its newest run's time and note. Read once per report and kept (useFetched)
-const typeWord = (t) => TYPE_LABELS[t] || capital(String(t || "").replace(/_/g, " "));
-function useReportSource(sid) {
-  const rows = useFetched(sid != null ? "/api/sources" : null), runs = useFetched(sid != null ? `/api/reports/${sid}/runs?limit=1` : null);
-  const row = (rows?.data || []).find((r) => r.SourceId === sid);
+// WHAT ASKED FOR IT, the line its Agent tab opens with (MadeTurn): a report's or a dashboard's own instruction (its AI prompt), else its run by
+// name, under "Automated · <name> · <when it runs>" - the Reports tab's words (the server's ScheduleWords) - and the way to change it. Its
+// source row, read once and kept (useFetched)
+function useMadeInput(card, edit) {
+  const rows = useFetched(card?.source_id != null ? "/api/sources" : null), row = (rows?.data || []).find((r) => r.SourceId === card?.source_id);
   let cfg = {};
   try { cfg = JSON.parse(row?.ConfigJson || "{}") || {}; } catch { cfg = {}; }
-  return { runs: row?.ScheduleWords || "", reads: !row ? "" : (cfg.sources || []).length > 1 ? cfg.sources.map((x) => x.label || typeWord(x.type)).join(", ") : typeWord(cfg.type), goes: row?.RouteWords || "", run: (runs?.data || [])[0] || null };
+  const [name] = nameAndRest(card?.title, card?.who);
+  return { head: <>{["Automated", name, row?.ScheduleWords].filter(Boolean).join(" · ")}{card?.source_id != null
+    && <> · <a className="tq-card-link" href={`#report=${card.source_id}`} data-tq-made-edit="">{edit} ↗</a></>}</>, text: String(cfg.ai_prompt || "").trim() || `Run ${name}` };
 }
 // WHAT AN ITEM SAYS AND THE BOX UNDER IT (ItemSections ItemAsk): triage's reading rides the message the item is drawn from - the very payload
 // FullText reads, so one fetch serves both. `card` false: not on the table, nothing asked
@@ -901,7 +912,6 @@ function useItemAsk(card, kind) {
   const doc = useFetched(card && card.mid ? `/api/messages/${card.mid}` : null, card ? card.presentation_revision : undefined);
   return card ? { key: card.key, kind, title: card.title, reading: doc?.reading || null } : null;
 }
-const secs = (ms) => (ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed(ms < 10000 ? 1 : 0)} s`);
 // a section's facts, a label and its value a row: only those that have something to say
 const Facts = ({ rows }) => <div className="tq-card-facts">{rows.filter(([, v]) => v).map(([k, v]) => <React.Fragment key={k}><div>{k}</div><div>{v}</div></React.Fragment>)}</div>;
 // WHAT HAPPENS NEXT, said in a Close out with nothing to send: the moves the row under the chat already holds for this item, each with what
@@ -920,6 +930,12 @@ export function RowMoves({ close = null, lead = "What happens next is on the row
   );
 }
 
+// WHAT TASKUARY MADE ON ITS OWN OPENS ON THE AGENT TAB (the owner, 2026-11-23: "Anything that comes in on the Agent tab shows the input prompt
+// that created it (even if automated: a report, routine, dashboard, Advisor)"): a report's run, a dashboard, an Advisor's idea - one section,
+// the agent's, a chat: what asked for it, the turn that answered with it in the one frame (MadeTurn), and the box under them (ItemAsk). What
+// came in from outside - a mail, a message, an FYI - stays on Came from
+const madeSection = (title, input, body) => [{ key: "agent", n: 1, name: STEPS[1].name, lines: [title], body: <MadeTurn input={input}>{body}</MadeTurn> }];
+
 // a report landed: read it here, or go to the row
 export function ReportCard({ card, onOpenTask, onTimeline, onDone, table = null }) {
   // Open, like the mail card: a digest behind a "Read it" is a digest nobody reads (the owner,
@@ -937,28 +953,17 @@ export function ReportCard({ card, onOpenTask, onTimeline, onDone, table = null 
   const share = useShare(`report:${card.key || card.mid}`, { kind: "report", title: card.title, message: card.mid }, !!(nav.table ?? nav.row) && !!card.mid && !card.bad,
     { onShared: (how, out) => { if (how === "email" && out?.task_id) onOpenTask?.(out.task_id); },
       summaryWhy: "a summary is written from a task's work - a report is its own result; Email the result sends it" });
-  // ON THE TABLE, IN A TASK'S THREE SECTIONS (ItemSections; the owner, 2026-10-28): the report itself open in the middle, what produced it
-  // and what happens next the slim tabs either side - its moves are the same ones, on the same row
-  const src = useReportSource(table != null ? card.source_id : null), ask = useItemAsk(table != null && card, "report");
+  // ON THE TABLE, ON THE AGENT TAB (madeSection): what asked for it, then the run as the turn that answered - its moves the same ones, on its pane
+  const input = useMadeInput(table != null && card, "Edit this report"), ask = useItemAsk(table != null && card, "report");
   if (table != null) {
-    const ran = [card.when && fmtDateTime(card.when), src.run?.ms && `took ${secs(src.run.ms)}`].filter(Boolean).join(" · ");
-    return <ItemSections kind="report" itemKey={card.key} label={card.bad ? "Report failed" : "Report"} height={table} about="report" lays ask={ask}
+    return <ItemSections kind="report" itemKey={card.key} label={card.bad ? "Report failed" : "Report"} height={table} about="agent" lays ask={ask}
       title={<>{name}<span style={{ fontWeight: 400 }} data-tq-report-day={day || undefined}>{day && ` · ${day}`}{rest}</span></>}
       aside={<><SourceMark item={card} size={13} />{card.when && ago(card.when)}</>}
-      sections={[
-        { key: "from", n: 1, name: STEPS[0].name, lines: [name, src.runs && `Runs ${src.runs}`].filter(Boolean), foot: card.when ? `✓ Ran ${fmtDateTime(card.when)}` : "",
-          body: <ItemPart data-tq-report-from="">
-            <Facts rows={[["Report", <b key="n">{name}</b>], ["Ran", ran], ["Runs", src.runs], ["Reads", src.reads], ["Goes", src.goes], ["Note", src.run?.error]]} />
-            {card.source_id != null && <div className="tq-card-actions"><Button size="small" component="a" href={`#report=${card.source_id}`} sx={faint}>Edit this report ↗</Button></div>}
-          </ItemPart> },
-        { key: "report", n: 2, name: "Report", icon: <InsertChartOutlinedIcon aria-hidden sx={{ fontSize: 18, color: "var(--tq-secondary, #746e64)" }} />,
-          lines: [card.title],
-          body: <ItemPart data-tq-report-body="">
-            {card.bad && <div className="tq-card-excerpt">The run failed — the cause is in the report.</div>}
-            {card.brief_today && <TodayMeetingsStrip />}
-            {card.mid && <FullText mid={card.mid} revision={card.presentation_revision} report={{ name }} />}
-            {share}
-          </ItemPart> }]}
+      sections={madeSection(card.title, input, <>
+        {card.bad && <div className="tq-card-excerpt">The run failed — the cause is in the report.</div>}
+        {card.brief_today && <TodayMeetingsStrip />}
+        {card.mid && <ReportTurn mid={card.mid} revision={card.presentation_revision} name={name} />}
+        {share}</>)}
         moves={<ItemPart data-tq-report-close="">
             <RowMoves close={card} on="at the top of the report" />
             <Foot close={card} onDone={onDone} promote={card.bad ? "rerun" : null}
@@ -1002,28 +1007,17 @@ export function DashboardCard({ card, onOpenTask, onDone, table = null }) {
     return () => { live = false; };
   }, [card.source_id, card.mid]);
   const [name] = nameAndRest(card.title, card.who), day = dayLabel(card.when), at = got?.data?.at ? fmtTime12(got.data.at) : "";
-  // ON THE TABLE, IN A TASK'S THREE SECTIONS, as a report is (ItemSections): the dashboard open in the middle, what produced it and what
-  // happens next the slim tabs either side, its moves the same ones on the same row
-  const src = useReportSource(table != null ? card.source_id : null), ask = useItemAsk(table != null && card, "dashboard");
-  const drawn = <div className="tq-dash-canvas" data-tq-dash-canvas="">
+  // ON THE TABLE, ON THE AGENT TAB as a report is (madeSection) - in the turn's frame at the chat's whole width: a dashboard is looked at, and
+  // room is what it needs (the owner, 2026-11-23: "Dashboards should take up most of the screen since real estate is paramount")
+  const input = useMadeInput(table != null && card, DASH.edit), ask = useItemAsk(table != null && card, "dashboard");
+  const drawn = <div className={table != null ? "tq-dash-canvas tq-turn-frame tq-turn-wide" : "tq-dash-canvas"} data-tq-dash-canvas="">
     {got?.data ? <Dashboard spec={got.config} data={got.data} /> : <div className="tq-card-excerpt">{err || (got ? DASH.never : DASH.loading)}</div>}
   </div>;
   if (table != null) {
-    const ran = [card.when && fmtDateTime(card.when), src.run?.ms && `took ${secs(src.run.ms)}`].filter(Boolean).join(" · ");
-    const edit = card.source_id != null && <div className="tq-card-actions"><Button size="small" component="a" href={`#report=${card.source_id}`} sx={faint}>{DASH.edit} ↗</Button></div>;
-    return <ItemSections kind="dashboard" itemKey={card.key} label="Dashboard" height={table} about="report" lays ask={ask}
+    return <ItemSections kind="dashboard" itemKey={card.key} label="Dashboard" height={table} about="agent" lays ask={ask}
       title={<>{name}<span style={{ fontWeight: 400 }} data-tq-report-day={day || undefined}>{day && ` · ${day}`}{at && ` · ${DASH.updated} ${at}`}</span></>}
       aside={<><SourceMark item={card} size={13} />{card.when && ago(card.when)}</>}
-      sections={[
-        { key: "from", n: 1, name: STEPS[0].name, lines: [name, src.runs && `Runs ${src.runs}`].filter(Boolean), foot: card.when ? `✓ Ran ${fmtDateTime(card.when)}` : "",
-          body: <ItemPart data-tq-dash-from="">
-            <Facts rows={[["Dashboard", <b key="n">{name}</b>], ["Ran", ran], ["Runs", src.runs], ["Reads", src.reads], ["Goes", src.goes], ["Note", src.run?.error]]} />
-            {edit}
-          </ItemPart> },
-        { key: "report", n: 2, name: "Dashboard", icon: <InsertChartOutlinedIcon aria-hidden sx={{ fontSize: 18, color: "var(--tq-secondary, #746e64)" }} />,
-          lines: [card.title],
-          // ...its white cards straight on the section's warm ground, as on the Dashboards page: no card around the cards
-          body: <div data-tq-dash-body="">{drawn}{share}</div> }]}
+      sections={madeSection(card.title, input, <>{drawn}{share}</>)}
         moves={<ItemPart data-tq-dash-close=""><RowMoves close={card} on="at the top of the dashboard" /><Foot close={card} onDone={onDone} /></ItemPart>} />;
   }
   return (
@@ -1113,19 +1107,14 @@ export function IdeaCard({ card, onOpenTask, onTimeline, onNavigate, onDone, tab
           // the buttons in the bar say what they do; the sentence that explained them is gone (2026-10-10)
           : null}
         where={<Where card={{ ...card, tid: a.tid || card.tid, mid: a.mid || card.mid }} onOpenTask={onOpenTask} onTimeline={onTimeline} />} />);
-  // ON THE TABLE, IN THE THREE SECTIONS EVERYTHING ELSE COMES IN (ItemSections; the owner, 2026-10-31: "it looks pretty dumb this idea ... it
-  // should go in the coming from tab like fyi's"): what the Advisor noticed opens in Came from - the idea, its suggestion and the mail it is
-  // based on - Agent and Close out beside it; its moves are the same ones, on its panes (ItemLay), and the bar is Back and Next
+  // ON THE TABLE, ON THE AGENT TAB (madeSection; the owner, 2026-11-23: "Right now the Advisor comes in the Came from tab but should be in the
+  // Agent tab since it's generated"): what its look was asked to find, then what it noticed, what to do and what it rests on, as a view - the
+  // mail it is based on one press away; its moves are the same ones, on its pane (ItemLay), and the bar is Back and Next
   if (table != null) return (
-    <ItemSections kind="idea" itemKey={card.key} label={look ? `Advisor · ${ideaWord(card.idea_kind)}` : "Advisor"} height={table} about="from" lays ask={ask} title={card.title} noAgent
+    <ItemSections kind="idea" itemKey={card.key} label={look ? `Advisor · ${ideaWord(card.idea_kind)}` : "Advisor"} height={table} about="agent" lays ask={ask} title={card.title} noAgent
       aside={<><SourceMark item={card} size={13} />{card.when && ago(card.when)}{card.workstream && <WorkstreamLabel slug={card.workstream} sx={{ ml: 0.75 }} />}</>}
-      sections={[
-        { key: "from", n: 1, name: STEPS[0].name, lines: [card.title, `${chip[0].toUpperCase()}${chip.slice(1)}`],
-          body: <><ItemPart data-tq-idea-from="">
-            <div className="tq-card-lead">{card.title}{suggest && <> {suggest}</>}</div>
-            {/* ...what it is based on, the mail itself one press away, whenever there is one - with or without the Advisor's reason */}
-            <Facts rows={rows} />
-          </ItemPart><CardErr err={err} /></> }]}
+      sections={madeSection(card.title, { head: `Automated · Advisor · ${ideaWord(card.idea_kind)}`, text: card.asked ? `Look out for ${card.asked}` : "" },
+        <><ViewSpec spec={ideaView(card)} /><CardErr err={err} /></>)}
         moves={<ItemPart data-tq-idea-close=""><RowMoves on="on its panes" />{foot}</ItemPart>} />);
   return (
     <CardShell card={card} kicker={<>{ideaWord(card.idea_kind)}<span className="tq-card-chip">{chip}</span></>} title={card.title}>

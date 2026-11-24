@@ -1,7 +1,7 @@
 // A BRIEF, READ AS ONE (the owner, 2026-11-07, of the End of day checkup: "This is terrible"): the model writes it to a fixed shape
 // (evening.PROMPT) - a line on any connection it could not read, two one-sentence roll-ups ("Done today: ...", "Tomorrow: ..."), then
 // groups of bullets "<src mark> <status mark> Who — what — gist", then one closing sentence. As markdown that was a wall of
-// double-spaced bullets with three emoji in front of each. This reads the shape back, so the card can lay it out (ReportBrief.jsx);
+// double-spaced bullets with three emoji in front of each. This reads the shape back, so the report reads as its view (madeView.reportView);
 // a text that does not have it (no roll-up, or no group of bullets) is null, and stays markdown.
 const MARKS = /^(?:[\p{Extended_Pictographic}\p{Emoji_Presentation}\uFE0F\u200D\u20E3]|\s)+/u;
 const STATUS = { "✅": "done", "🔍": "next", "📅": "meeting" };

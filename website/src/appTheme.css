@@ -14,5 +14,7 @@ html[data-theme="dark"] ::selection { background: #526779; color: #eeeae3; }
 html[data-theme="dark"] { --tq-frame-bg: color-mix(in srgb, var(--tq-panel, #2a2925) 90%, #fff); --tq-frame-shadow: 0 1px 3px rgb(0 0 0 / .45), 0 1px 2px -1px rgb(0 0 0 / .45); }
 .tq-turn-frame .tq-turn-frame { box-shadow: none; background: transparent; margin: 6px 0; }   /* ...one raised surface: a card inside a card (a bulk row opened) lies flat in it */
 .tq-turn-frame.tq-turn-frame { max-width: min(100%, var(--tq-turn-item)); }   /* ...over any `* { max-width: 100% }` of the surface it is on */
+/* ...but a dashboard, which is looked at: the chat's whole width (the owner, 2026-11-23: "Dashboards should take up most of the screen") */
+.tq-turn-frame.tq-turn-wide.tq-turn-wide { max-width: 100%; width: 100%; }
 .tq-turn-frame { box-sizing: border-box; margin: 8px 0; background: var(--tq-frame-bg);
   border: 1px solid var(--tq-border, #e4e0d9); border-radius: 12px; box-shadow: var(--tq-frame-shadow); overflow: hidden; color: var(--tq-text, #262521); }

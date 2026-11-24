@@ -307,6 +307,10 @@ const cardKind = (item) => {
 };
 
 export const cardFor = (item) => (item ? assistantFocus(item).card : null);
+// WHAT TASKUARY MADE ON ITS OWN (the owner, 2026-11-23: "Anything that comes in on the Agent tab shows the input prompt that created it (even if
+// automated: a report, routine, dashboard, Advisor)"): a report's run, a dashboard, an Advisor's line open on the Agent tab as a chat with its own
+// box (assistantCards madeSection) - so, like a task, it is the one box on screen; what came in from outside stays on Came from
+export const madeHere = (item) => ["report", "dashboard", "idea"].includes(cardFor(item));
 
 // HOW LONG IT HAS WAITED ON YOU, beside the item's ref on the action row: the rail's gutter says it per row, but the eye is on the
 // buttons when deciding, and an old ask looked the same there as a new one (the row-bot comparison, 2026-10-07). Only what is on

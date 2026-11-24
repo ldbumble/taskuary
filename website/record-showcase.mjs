@@ -133,7 +133,7 @@ try {
     if (i===2) {
       await row('badge printer'); assert.match(await body(),/no reply since Monday/);
       await delay(check?100:6000);
-      await click(await find('[data-tq-idea-from] a, [data-tq-idea-from] button',"Paula Vance"));
+      await click(await find('[data-tq-made] a, [data-tq-made] button',"Paula Vance"));
       await click(await find('.tq-item-msg-h','Paula Vance'));
       await frame.waitForFunction(()=>document.body.innerText.includes('valid until Friday'),{timeout:10000}).catch(async error=>{
         await page.screenshot({path:path.join(scratch,'source-failure.png')});

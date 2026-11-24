@@ -857,6 +857,13 @@ def investigate(store, llm, user: str, seen: dict) -> dict | None:
 
 
 # ── WHERE IT LANDS ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+def asked(action) -> str:
+    """What the look was asked to find when it raised this idea - its family's brief - the line its chat on the Agent tab opens with
+    (the owner, 2026-11-23: "anything that comes in on the Agent tab shows the input prompt that created it"); '' for any other line."""
+    a = action or {}
+    return FAMILIES.get(a.get('family'), '') if a.get('type') == 'lookout' else ''
+
+
 def key_of(x: dict) -> str:
     from .workstreams import slugify
     return KEY + slugify(x['title'])

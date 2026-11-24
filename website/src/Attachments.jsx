@@ -53,11 +53,11 @@ const titleOf = (a, original) => a.link ? `${a.kind} — ${a.note ? `not read: $
 // a mail whose body points at a picture it does not carry ([image: ...], cid:) - worth a "look for attachments" offer
 export const mentionsPicture = (body) => /\[(image|cid|inline image)|cid:/i.test(String(body || ""));
 
-// `asFiles`: the images the page already draws itself (a report's chart, drawn live from its rows - ReportRows) are chips, not pictures
+// `skip`: what the item already draws itself (a report's chart, drawn live from its rows - madeView.reportView `owns`): never drawn again
 // `bare`: { remote } when the message has no words of its own (mailLinks.bareLine) - a picture-only mail. Its pictures are the message, so
 // a small inline one is drawn, not chipped as a signature's logo; and the panel says what it is, never a blank
-export const Attachments = ({ messageId, canFetch, dense, original, asFiles = null, bare = null }) => {
-  const [items, setItems] = useState(null);
+export const Attachments = ({ messageId, canFetch, dense, original, skip = null, bare = null }) => {
+  const [got, setItems] = useState(null), items = got && skip ? got.filter((a) => !skip(a)) : got;
   const [big, setBig] = useState(null), [open, setOpen] = useState(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
@@ -89,7 +89,7 @@ export const Attachments = ({ messageId, canFetch, dense, original, asFiles = nu
       {err || "look for attachments on this mail"}
     </Typography>
   ) : null}</>;
-  const drawn = (a) => (bare ? !!a.is_image && ownImage(a.url) : drawable(a)) && !asFiles?.(a);
+  const drawn = (a) => (bare ? !!a.is_image && ownImage(a.url) : drawable(a));
   const imgs = items.filter(drawn);
   const clips = items.filter((a) => !drawn(a) && playable(a));
   const files = items.filter((a) => !drawn(a) && !playable(a));

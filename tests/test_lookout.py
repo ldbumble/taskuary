@@ -237,6 +237,8 @@ def test_an_idea_lands_under_the_advisor_never_in_fyi_and_says_its_family(canoni
                                                               'connection': 'joined up', 'new_idea': 'new idea'}
     assert all(lanes.idea_section(f) == 'ideas' for f in lookout.FAMILIES)
     assert json.loads(s.get_idea(iid)['ActionJson'])['suggest'].endswith('\nPitch: "I caught a double invoice"')
+    # ...and its chat on the Agent tab opens with what the look was asked to find (the owner, 2026-11-23: "shows the input prompt that created it")
+    if canonical: assert row['asked'] == lookout.FAMILIES['money']
 
 
 def test_a_daily_pass_never_says_yesterdays_idea_again_whatever_its_words():

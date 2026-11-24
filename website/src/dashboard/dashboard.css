@@ -164,10 +164,9 @@
 .tq-card:has(> .tq-dash-canvas) { display: flex; flex-direction: column; box-sizing: border-box;
   height: max(460px, calc(100cqh + 14px - var(--tq-dash-gap, 2px))); margin-top: 0; margin-bottom: 0; }
 :root[data-theme="dark"] .tq-dash-canvas { background: #121110; }
-/* ...and in a task's three sections (ItemSections) the section scrolls itself and the dashboard sits straight on it - on the clean light
-   page, not the task's warm ground (the owner, 2026-11-07); a brief (ReportBrief) sits on the same page */
-.tq-item-sec .tq-dash-canvas { margin: 0; padding: 0; background: transparent; border-radius: 0; overflow: visible; min-height: 0; flex: none; }
-.tq-item-sec:has(> [data-tq-dash-body]), .tq-item-sec:has([data-tq-report-brief]) { background: var(--tq-panel, #f7f7f5); }
+/* ...and on the Agent tab (ItemSections MadeTurn) it is the turn's one frame at the chat's whole width (appTheme.css .tq-turn-wide): the
+   section scrolls itself, the frame holds the dashboard's cards */
+.tq-item-sec .tq-dash-canvas.tq-turn-frame { margin: 8px 0; padding: 14px; background: var(--tq-frame-bg); border-radius: 12px; overflow: visible; min-height: 0; flex: none; }
 
 @media (prefers-reduced-motion: reduce) { .tq-dash-card { transition: none; } }
 

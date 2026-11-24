@@ -534,6 +534,15 @@ def left_note(store, tid: int, at_work: bool) -> None:
 
 
 @_safe
+def made_late(store, tid: int, text: str) -> None:
+    """WHAT TASKUARY DID FOR A TURN'S CALL THAT NEVER REACHED IT IS SAID UNDER THAT TURN (walk 18, L4b): restarted mid-turn, the agent wrote its
+    check-back was "not scheduled" while the chip beside it read "Checks back Thu 7 AM" - the call was made as the turn filed
+    (agenttools.made_late). The app's fact stands under the agent's words, once a turn - written once its answer has ended it."""
+    t = _newest_turn(store, tid)
+    put(store, tid, 'note', f"n:late:{t['Key'].split('+')[0] if t else 'run'}", {'text': text}, src='late')
+
+
+@_safe
 def at_work(store, tid: int, sid: str = '') -> None:
     "The turn the agent has the prompt of: starting until then, working from its first word on (its road's own `prompt`)."
     if (t := open_turn(store, tid)) and t['State'] == 'starting': update(store, tid, t['Key'], state='working', **({'sid': sid} if sid else {}))

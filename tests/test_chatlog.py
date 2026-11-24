@@ -743,3 +743,22 @@ def test_a_row_is_pushed_to_the_open_chat_as_it_is_written():
     turn = chatlog.read(s, tid, 'everything')['items'][-1]
     assert [(p['tid'], p['turn'], p['step']['id']) for p in got] == [(tid, turn['id'], 's:sid1:c1'), (tid, turn['id'], 's:sid1:m:m1')]
     assert got[0]['step']['line'] and got[1]['step']['text'] == 'Running the suite.', 'in the read\'s own shape'
+
+
+def test_a_check_back_made_as_the_turn_filed_is_said_under_that_turn():
+    """Walk 18 (L4b): restarted 5 s into its turn, the agent's check_back call never reached the app; the agent wrote the check-back was "not
+    scheduled", and the app made the call as the turn filed - the chip read "Checks back" beside words saying it did not. What the app did
+    stands under the turn as its own line, once, from the state it set (checkback.of_task) - below the answer that ended the turn."""
+    from taskuary import agenttools, checkback, remind
+    s, tid = world()
+    chatlog.put(s, tid, 'turn', 't:1', {'started': 101.0}, state='working')
+    call = [{'type': 'tool_call', 'name': 'mcp__taskuary__check_back',
+             'detail': {'args': {'when': '2026-11-26 07:00:00', 'what': 'Dana sent the corrected quote'}}}]
+    late = agenttools.made_late(s, tid, call, set())
+    chatlog.update(s, tid, 't:1', state='done', text='The Thursday check-back is therefore not scheduled.')      # ...its answer ends the turn (general._file)
+    chatlog.made_late(s, tid, late); chatlog.made_late(s, tid, late)
+    cb = checkback.of_task(s.get_task(tid))
+    got = chatlog.read(s, tid, 'everything')['items']
+    assert [x['kind'] for x in got] == ['turn', 'note'], 'one line, under the turn, never splitting it'
+    assert f"set for {remind.when(cb['at'])}: Dana sent the corrected quote" in got[1]['text']
+    assert agenttools.made_late(s, tid, [], set()) == ''

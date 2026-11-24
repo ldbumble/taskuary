@@ -3446,7 +3446,10 @@ class GeneralSession:
                 act('reading how the turn ended', hooks.judge_ended, self.store, self.task_id, self.sid, reply[:4000], then=self.wake, summ=summ,
                     jobs=background.left(self.trace, path))
         rid = self.store.add_comment(self.task_id, 'assistant', ASSISTANT_TYPE, reply)
-        if late: self.store.add_comment(self.task_id, 'taskuary', 'agent', late)
+        # ...and said in the chat under the turn its answer just ended, where its words may say otherwise (chatlog.made_late)
+        if late:
+            from . import chatlog
+            self.store.add_comment(self.task_id, 'taskuary', 'agent', late); chatlog.made_late(self.store, self.task_id, late)
         # ...and the files this turn wrote, as it left them: a later turn rewrites them in place (outputs.keep_turn, the owner 2026-11-07)
         from . import outputs, sharedfiles
         try: made = outputs.keep_turn(self.task_id, rid, t0)

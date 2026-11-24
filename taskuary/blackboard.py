@@ -448,6 +448,12 @@ def record_failure(store, tid: int, err, agent: str = '', label: str = 'The agen
     # ...and AN AI THAT COULD NOT ANSWER is the turn's own try again, queued and said where it failed (general.queue_retry) - never a second line
     from . import general
     if general.provider_down(err): return store.get_dispatch(tid)
+    # ...NOR A START WHOSE TURN RAN AND WAS CUT PART-WAY (clipool.Unfinished - it died mid-turn, ended early): that is no failed start. Its turn
+    # said so where it happened, "not run again" with Try again, and it is never run again by itself as part of it may have run (walk 14,
+    # 2026-11-24: under that line this one said "trying again at 02:57 (try 1 of 3)", and nothing ran in 17 minutes). Its start is no longer owed
+    if general._unfinished(err):
+        if not (store.get_dispatch(tid) or {}).get('Turn'): store.clear_dispatch(tid)
+        return None
     if not store.get_dispatch(tid): store.enqueue_dispatch(tid, None, agent, 'start failed - retrying')
     row = store.dispatch_failed(tid, str(err), is_permanent(err), BACKOFF, MAX_ATTEMPTS)
     if not row: return None

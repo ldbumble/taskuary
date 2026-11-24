@@ -1,8 +1,8 @@
 """WHAT TASKUARY LEARNS FROM WHAT THE OWNER DOES - the writers of memory's third store. His own acts are its confirmation.
 
   teach      one verdict (Not ours, Not a task, a routing correction, an Advisor idea...) -> at most one learned line, in words, keyed by
-             its subject, with the id of what it was given on as its evidence. A press that says "like this, from now on" is his
-             confirmation of that lesson (the owner, 2026-11-14: it "applies at once"); any other press is evidence only
+             its subject, with the id of what it was given on as its evidence. Every press is one episode of evidence - a single Make it
+             a task acts once, and the line goes into use only when memory.AUTO_AT of them bear it out (the owner, 2026-11-24)
   learn_from one correction he made in a chat, a review or a reclassification -> the same, as evidence
   reflect    a batch over his episodes (episodes.py: what he did and wrote) -> lines that two or more of his own acts support; and the
              weekday he puts a sender's mail off to, counted (usual.put_off_habits)
@@ -62,8 +62,6 @@ WORDS = {'not_ours': "Not ours - the owner said it is other people's work: no ta
          'idea_task': 'Took up an Advisor idea - made it a task', 'idea_agent': 'Took up an Advisor idea - sent it to an agent',
          'idea_done': 'Handled an Advisor idea some other way', 'idea_dismiss': 'Turned down an Advisor idea',
          'idea_dismiss_kind': 'Turned down an Advisor idea - and no more ideas like it'}
-FOR_GOOD = memory.FOR_GOOD
-PRESSED = FOR_GOOD[:4]                 # the sorting presses "for mail like this from now on"
 TEACH_SYSTEM = (
     "You keep what Taskuary has learned about the person it works for (the owner) from what they did. The owner just gave a verdict on one "
     'item. Say in ONE line what it teaches about the owner: what kind of work, mail or idea this is for them, and why - e.g. "You handle '
@@ -79,10 +77,6 @@ TEACH_SYSTEM = (
     '- `against`: the subject of an EXISTING line this verdict goes against, copied exactly, else "".\n'
     'Answer JSON only: {"line": "<the line>" or "", "subject": "<its subject>", "against": "", "only_this": true when it holds only for mail '
     'like this one (this sender or this topic), false when it is general}')
-# A SORTING VERDICT PRESSED FOR THE LIKE OF IT IS NEVER TAUGHT AS NOTHING, AND NEVER WIDER THAN WHAT WAS PRESSED (the owner, 2026-11-14)
-NARROW = ('\nThe owner pressed this for mail like this one from now on, so a line is owed unless an EXISTING line already says it: where nothing '
-          'general can be said, say what KIND of mail from this sender it was ("Their weekly sign-off sheets are not yours to act on") with '
-          'only_this true. Never wider than the item - not everything this sender sends: another kind of mail from them may be real work.')
 TEACH_FIT = 6000
 
 
@@ -110,7 +104,7 @@ def teach(store, kind: str, src: str, facts: str, scope: str = 'global', key: st
         _tick(store)
         if (llm := _llm(store, llm)) is None: return ''
         have = _existing(store, scope, key)
-        a = _answer(llm(TEACH_SYSTEM + (NARROW if kind in PRESSED and scope != 'global' else ''),
+        a = _answer(llm(TEACH_SYSTEM,
                         f'THE VERDICT: {WORDS.get(kind, kind)}\n\nTHE ITEM:\n{str(facts or "")[:2500]}\n\nEXISTING LINES:\n' + ('\n'.join(have) or '(none yet)'),
                         max_tokens=300))
         line = memory._ABOUT.sub('', str(a.get('line') or '')).strip().lstrip('-* ').strip()
@@ -120,7 +114,7 @@ def teach(store, kind: str, src: str, facts: str, scope: str = 'global', key: st
         only = a.get('only_this') is True and scope != 'global'
         subj = str(a.get('subject') or '').strip() or memory._key(line) + (f' · {key}' if only and key else '')
         got = memory.infer(store, line, subj, [src] if src else [], scope=scope if only else 'global', key=(key or '') if only else '',
-                           source=f'verdict:{kind}', confirmed=kind in FOR_GOOD)
+                           source=f'verdict:{kind}')
         return got.get('Text') or ''
     except Exception as e:
         logger.warning(f'the verdict taught no line: {e}'); return ''
@@ -128,10 +122,10 @@ def teach(store, kind: str, src: str, facts: str, scope: str = 'global', key: st
 
 def say(store, kind: str, src: str, text: str) -> str:
     """A verdict's line written AS GIVEN, where the verdict itself says the whole of what it teaches (a report's finding he put down for
-    good, server.report_not_for_me) - his press "from now on" confirms it. Returns the line, '' when it was there already."""
+    good, server.report_not_for_me) - one episode, as every press is. Returns the line, '' when it was there already."""
     t = ' '.join(str(text or '').split())
     if any(memory._same(r['Text'], t) for r in memory.rows(store, memory.INFERRED)): return ''
-    return memory.infer(store, t, memory._key(t), [src] if src else [], source=f'verdict:{kind}', confirmed=kind in FOR_GOOD).get('Text') or ''
+    return memory.infer(store, t, memory._key(t), [src] if src else [], source=f'verdict:{kind}').get('Text') or ''
 
 
 def teach_soon(store, *a, background=None, **kw):

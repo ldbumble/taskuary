@@ -1286,7 +1286,8 @@ class ApiTests(unittest.TestCase):
         made = [l for l in memory.lessons(server.store) if l['ev'] == f'msg{mid}']
         self.assertEqual([l['kind'] for l in made], ['made_task'])
         self.assertEqual(made[0]['text'], 'Failed bank imports are real work for you, even from a machine')
-        self.assertIn(made[0]['text'], server.store.get_doc('learned'))     # Make a task says "like this, from now on": it is in use
+        # ...one press acts once (the owner, 2026-11-24): an episode on the Memory page, not yet a line every reader takes
+        self.assertNotIn(made[0]['text'], server.store.get_doc('learned'))
         self.assertEqual(server.store.get_message(mid)['TaskId'], out['taskId'])
 
     def test_promoting_one_report_run_is_not_a_standing_order_for_the_report(self):

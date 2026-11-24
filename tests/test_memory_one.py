@@ -119,12 +119,18 @@ def test_the_memory_stays_short_conclusions_within_its_caps_never_a_record():
         'a record is the ledger\'s, never a memory line'
 
 
-def test_a_press_for_mail_like_this_from_now_on_is_his_confirmation_and_a_wrong_is_never_learned_again():
+def test_one_press_acts_once_three_make_a_line_and_a_wrong_is_never_learned_again():
+    """The owner, 2026-11-24: one Make it a task was taught as a rule for all mail like it, in use at once. One press is one episode, whatever
+    the button; the pattern repeated AUTO_AT times is the line in use."""
     s = _store()
     with mock.patch.object(learning, '_llm', lambda st, llm=None: teacher("Their weekly sign-off sheets are not yours to act on", 'sign-off sheets')):
-        learning.teach(s, 'not_ours', 'msg12', 'From: Ray', 'sender', RAY)
+        for kind, src in (('made_task', 'msg11'), ('not_ours', 'msg12')):
+            learning.teach(s, kind, src, 'From: Ray', 'sender', RAY)
+        line = memory.get(s, 'sign-off sheets')
+        assert not line['Confirmed'] and 'sign-off sheets' not in memory.whole(s, 'triage'), 'two presses are two episodes, not yet a rule'
+        learning.teach(s, 'not_ours', 'msg14', 'From: Ray', 'sender', RAY)
     line = memory.get(s, 'sign-off sheets')
-    assert line['Confirmed'] and line['Scope'] == 'sender' and RAY in memory.whole(s, 'triage')
+    assert line['Confirmed'] and line['Scope'] == 'sender' and RAY in memory.whole(s, 'triage'), 'the third is the pattern'
     s._exec('INSERT INTO correction (MessageId) VALUES (12)')
     memory.mark(s, line['key'], 'wrong')
     assert 'sign-off sheets' not in memory.whole(s, 'triage') and not s._rows('SELECT 1 FROM correction WHERE MessageId=12')
@@ -166,7 +172,7 @@ def test_learned_md_is_read_into_the_three_stores_once_without_loss():
     assert inferred['monday approvals']['ev'] == ['rv1', 'rv2'] and inferred['monday approvals']['Confirmed'], 'in use before r10: in use still'
     assert not inferred['gail matters']['Confirmed'], 'Watching was read by nobody: it waits for his acts, as before'
     v = next(r for r in inferred.values() if r['Source'] == 'verdict:not_ours')
-    assert v['Confirmed'] and v['Scope'] == 'sender' and v['ScopeKey'] == GAIL, 'a verdict his press made for good is a confirmed learned line'
+    assert not v['Confirmed'] and v['Scope'] == 'sender' and v['ScopeKey'] == GAIL, 'one press read in waits for its episodes like any other'
     assert 'gail matters' in inferred and 'stale guess' not in inferred, 'Watching is waiting; a Wrong stays down'
     assert s.get_doc(memory.BACKUP) == doc, 'the document as it stood is kept whole'
     assert 'No meetings before 10' in s.get_doc('learned') and '[s:' not in s.get_doc('learned'), 'LEARNED.md is now the stores\' face'
@@ -187,6 +193,24 @@ def test_an_install_r10s_first_cut_migrated_gets_its_lines_in_use_back_once():
     assert memory.migrate(s) == 1 and memory.migrate(s) == 0, 'once'
     assert memory.get(s, 'monday approvals')['Confirmed'] and 'approvals on Mondays' in memory.whole(s, 'triage')
     assert not memory.get(s, 'gail matters')['Confirmed']
+
+
+def test_a_line_one_press_put_in_use_waits_for_three_episodes_once_the_install_updates():
+    """The owner, 2026-11-24: lines learned from a single press were in use, read like his word. On an install that has them, once: a press's
+    line borne out fewer than AUTO_AT times goes back to being seen; one his acts bore out three times, and a reflected one, stay in use."""
+    s = _store()
+    s.set_setting(memory.MIGRATED, 'x', 't'); s.set_setting(memory.IN_USE_FIX, 'x', 't')
+    memory.infer(s, 'Facilities scheduling mail is real work for you', 'facilities scheduling', ['msg5'], source='verdict:made_task', confirmed=True)
+    memory.infer(s, 'Payworth billing notices are FYI for you', 'payworth notices', ['msg6', 'msg7', 'msg8'], source='verdict:not_a_task')
+    memory.infer(s, 'You approve spend on Mondays', 'monday spend', ['rv1'], source='reflect', confirmed=True)
+    assert 'Facilities scheduling' in memory.whole(s, 'triage')
+    memory.migrate(s)
+    assert not memory.get(s, 'facilities scheduling')['Confirmed'] and 'Facilities scheduling' not in memory.whole(s, 'triage')
+    assert memory.get(s, 'payworth notices')['Confirmed'] and memory.get(s, 'monday spend')['Confirmed']
+    memory.infer(s, 'Facilities scheduling mail is real work for you', 'facilities scheduling', ['msg9', 'msg10'], source='verdict:made_task')
+    assert memory.get(s, 'facilities scheduling')['Confirmed'], 'borne out three times, in use'
+    memory.migrate(s)
+    assert memory.get(s, 'facilities scheduling')['Confirmed'], 'once: never set back again'
 
 
 

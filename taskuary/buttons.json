@@ -17,7 +17,7 @@
     "unsubscribe":     {"label": "Unsubscribe", "hint": "Leaves this mailing list - at once where the list takes a one-click unsubscribe, else its own page or mail opens for you to finish", "row": []},
     "not_ours_kind":  {"label": "No more ideas like this", "hint": "The Advisor stops raising this kind of idea", "row": []},
     "mine":            {"label": "Make it a task", "hint": "A task on your own list - no agent starts", "row": [],
-                        "states": {"fyi": "Make it a task"}, "state_hints": {"fyi": "Triage filed this for your information - it becomes a task on your list with its ask and its To do list, and triage learns from it for mail like this"}},
+                        "states": {"fyi": "Make it a task"}, "state_hints": {"fyi": "Triage filed this for your information - it becomes a task on your list with its ask and its To do list; made a task three times for mail like this, triage learns it"}},
     "regular_agent":   {"label": "Send to agent", "hint": "Hand the work to an agent - the answer comes back here, and the card lets you change which agent", "row": ["start-agent", "send-general"]},
     "coding_agent":    {"label": "Send to coding agent", "hint": "Hand a change to code or a system to the coding agent", "row": [], "needs": "coding"},
     "stop_agent":      {"label": "Stop and save", "hint": "Writes up what was done, stops the work, and drafts the reply to whoever asked - the task stays open", "row": []},

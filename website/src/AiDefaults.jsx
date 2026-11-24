@@ -9,6 +9,7 @@ import { ACCENT2, BORDER, DIM, FAINT, INK, card, mono } from "./theme.jsx";
 import { RouteRules } from "./RouteRules.jsx";
 import ModelPick from "./ModelPick.jsx";
 import { repick, runsLine } from "./aiCards.js";
+import { label } from "./buttons.js";
 
 const link = { border: 0, background: "none", p: 0, font: "inherit", textAlign: "inherit", color: "var(--tq-link, #55697a)", cursor: "pointer",
   "&:hover": { textDecoration: "underline" } };
@@ -146,7 +147,7 @@ export default function AiDefaults({ brains, onGo }) {
       </Typography>
       {err && (
         <Alert severity="warning" sx={{ mb: 1.5, fontSize: 12.5 }} data-tq-ai-defaults-error=""
-          action={<Button size="small" onClick={() => { tries.current = 0; load(); }} sx={{ textTransform: "none" }}>Try again</Button>}>{err}</Alert>
+          action={<Button size="small" onClick={() => { tries.current = 0; load(); }} sx={{ textTransform: "none" }}>{label("try_again")}</Button>}>{err}</Alert>
       )}
       {say && <Alert severity="warning" sx={{ mb: 1.5, fontSize: 12.5 }}>{say}</Alert>}
       {/* the levels govern the agents' cards above them: each level's AI and model, Auto on or off, the strong cap (the router, 2026-10-25);

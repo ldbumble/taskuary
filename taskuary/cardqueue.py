@@ -162,7 +162,7 @@ IDS = r'\s*(?:rv)?\d+(?:\s*[,+]\s*(?:rv)?\d+)*\s*'      # 'rv12 + rv13': the ids
 
 
 def named(store, tid: int, which: str) -> list:
-    """[review id] of the one card on task `tid` that `which` names by what it is ('the reply to gail@northwind.example', 'gail') - a card of
+    """[review id] of the one card on task `tid` that `which` names by what it is (the reply to a sender's address, or their first name) - a card of
     one is named, never numbered (walk 11: the agent told him it drafted the reply "(rv2)"); [] when none or several match."""
     from .proposals import SET_ASIDE
     k = ' '.join(str(which or '').split()).casefold()

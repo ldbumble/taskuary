@@ -140,5 +140,7 @@ def test_a_start_given_its_own_port_never_asks_the_app_on_the_configured_one(mon
     monkeypatch.setattr(desktop, 'start_server', lambda port=None: (types.SimpleNamespace(), f'http://127.0.0.1:{port}'))
     monkeypatch.setattr(desktop, 'stop_server', lambda s: 'clean')
     monkeypatch.setattr(sys, 'argv', ['taskuary-desktop', '--port', '7899'])
+    # ...its window never opens, so nothing boots: the 120s wait for a boot hit faulthandler's 120s and the Windows shard died with it
+    monkeypatch.setattr(desktop, 'BOOT_WAIT', 0)
     desktop.main()
     assert asked == [7899]

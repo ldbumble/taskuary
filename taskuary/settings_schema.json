@@ -148,7 +148,7 @@
       "group": "Which AI does what",
       "label": "AI for Taskuary",
       "type": "brain",
-      "desc": "Which AI speaks in the chat here and on your phone."
+      "desc": "Which AI speaks in the chat here and on your phone - Taskuary's own brain."
     },
     "concierge_model": {
       "group": "Which AI does what",

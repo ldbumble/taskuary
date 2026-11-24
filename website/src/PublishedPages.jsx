@@ -153,7 +153,9 @@ export function Preview({ page }) {
   if (media) return <MediaPlayer key={page.url} page={page} />;
   if (err) return <div className="tq-published-note">{err}</div>;
   if (body == null) return <div className="tq-published-note"><CircularProgress size={12} /></div>;
-  if (pdf) return <iframe className="tq-published-frame" title={page.name} src={body} />;
+  // ...THE PAGE ITSELF, fitted to the frame's width - never the viewer's page list beside it (the owner, 2026-11-23: "show the full pdf not with
+  // the side bar"); its toolbar stays for zoom, print and download
+  if (pdf) return <iframe className="tq-published-frame" title={page.name} src={`${body}#navpanes=0&view=FitH`} />;
   if (picture) return <div className="tq-published-picture"><img src={body} alt={page.name} style={mediaFit(page)?.media} /></div>;
   if (text) return <pre className="tq-published-text">{body.length > 200000 ? `${body.slice(0, 200000)}\n…` : body}</pre>;
   if (page.preview === "table" || /csv/.test(type(page))) {

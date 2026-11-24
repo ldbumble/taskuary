@@ -36,6 +36,9 @@ export function useTableFit(ref, deps = []) {
       t.style.width = "max-content"; t.style.maxWidth = "none"; t.style.minWidth = "0"; const need = t.offsetWidth;
       t.style.width = "min-content"; const least = t.offsetWidth; t.style.width = t.style.maxWidth = t.style.minWidth = "";
       const pad = (frame ? frame.offsetWidth - frame.clientWidth : 0) + (wrap.offsetLeft || 0) * 2;
+      // ...the room is the frame's OWN width, never one this fit gave it (the owner's recording, 2026-11-24: the whole chat flickered - a frame
+      // widened to fit read as "it fits", went back, no longer fit, widened again). Measured with the fit taken off, in the same beat: no paint between
+      frame?.style.setProperty("--tq-fit-w", "0px");
       const room = wrap.clientWidth, f = fitTable({ need, least, room, chat: chat - pad, font });
       frame?.style.setProperty("--tq-fit-w", f.width ? `${f.width + pad}px` : "0px");
       if (f.font !== font) t.style.fontSize = `${f.font}px`;
@@ -46,9 +49,11 @@ export function useTableFit(ref, deps = []) {
     // it in the fallback face, too narrow, and three rows wrapped)
     let live = true; document.fonts?.ready?.then(() => { if (live) fit(); });
     if (typeof ResizeObserver === "undefined") return () => { live = false; };
-    const ro = new ResizeObserver(() => fit()), host = wrap.closest(".tq-turn-frame")?.parentElement || wrap.parentElement;
+    // ...only when the CHAT's width changes: never its own table or frame, which this fit itself resizes (watching those fed the flicker)
+    const host = wrap.closest(".tq-turn-frame")?.parentElement || wrap.parentElement;
+    let last = host?.clientWidth;
+    const ro = new ResizeObserver(() => { const w = host?.clientWidth; if (w !== last) { last = w; fit(); } });
     if (host) ro.observe(host);
-    ro.observe(t);
     return () => { live = false; ro.disconnect(); };
   }, deps);    // eslint-disable-line react-hooks/exhaustive-deps
 }

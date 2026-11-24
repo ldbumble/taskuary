@@ -190,6 +190,31 @@ class TheDayAsItWasTests(unittest.TestCase):
         self.assertIn('he turned down: post the Ask HN question', row)
         self.assertNotEqual(rulebook.agent_word(s, tid), 'on_you', 'nor the rail and header read it as on him')
 
+    def test_where_it_stands_is_the_cards_and_the_wait_never_the_agents_title(self):
+        """Walk 16: after Dismiss the brief was told "TQ-0003 Ask HN post, awaiting Submit - agent done" and trusted the title; and a task whose
+        sent reply asked Erin something read "agent done" the moment it went."""
+        from taskuary import asks, assistant, general
+        s = MemoryStore(); s.set_setting('owner_email', 'alex@northwind.example', 't')
+        tid = s.create_task({'Title': 'Ask HN post, awaiting Submit', 'Kind': 'general', 'Status': 'open',
+                             'ThreadJson': json.dumps({'asking': 'Post an Ask HN question about the launch'})}, 'owner')
+        s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'The post is set up.')
+        s.add_comment(tid, 'agent', general.SUMMARY_TYPE, json.dumps({'did': 'Set up the post', 'nothing_left': False, 'on_you': []}))
+        rv = s.add_review({'TaskId': tid, 'Kind': 'action', 'Status': 'pending', 'Reason': 'post the Ask HN question',
+                           'DraftText': json.dumps({'action': 'browser_act', 'what': 'post the Ask HN question'})})
+        s.decide_review(rv, 'rejected', None, 'owner')
+        line = next(l for l in assistant._open(s).splitlines() if 'TQ-0001' in l)
+        self.assertNotIn('awaiting Submit', line); self.assertIn('Post an Ask HN question', line)
+        self.assertIn('nothing waits for his press', line)
+        # ...and a reply that asked a person something: waiting on her answer, never "agent done"
+        m = s.add_message({'ExternalId': 'e1', 'ConversationId': 'th-1', 'Channel': 'email', 'Subject': 'Q4 vendor spend', 'FromName': 'Erin Blake',
+                           'FromEmail': 'erin@northwind.example', 'SentAt': _ago(2), 'BodyText': 'Spendly is up 40%.', 'Status': 'routed', 'TaskId': tid})
+        done = evening.owed(s, s.get_task(tid), _ago(8))
+        self.assertIn('agent done', done, 'with nothing on him and nobody asked, its agent is done')
+        asks._start_watch(s, tid, s.get_message(m))
+        row = evening.owed(s, s.get_task(tid), _ago(8))
+        self.assertIn("waiting on Erin Blake's answer", row); self.assertIn('Q4 vendor spend', row)
+        self.assertNotIn('agent done', row)
+
     def test_the_brief_says_what_went_as_what_it_was_never_a_view_file_and_never_an_unanswered_close_as_handled(self):
         """Walk 5, 2026-11-22: "Sent availability slot to Gail" over the week's total, the show tool's view-...json as work done, and a task
         closed with its question to him unanswered told as "confirmed"."""

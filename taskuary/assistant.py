@@ -1080,6 +1080,7 @@ def _open(store, cap: int = 20, brief: bool = False) -> str:
     """The open tasks, one line each; `brief` leaves out how each stands - for a reader that only needs to know they exist. How each stands is
     the brief's one reading (evening.owed: its cards, what went and was made, what is left on him), never the title the agent gave it early on
     (walk 14: "Send the vendor spend sheet" told as owed after it went)."""
+    from .context import asked
     from .evening import owed
     ts, since = [t for t in store.list_tasks(active_only=True) if t.get('Status') in ('open', 'in_progress', 'waiting')], _since(1)
     def line(t):
@@ -1088,7 +1089,7 @@ def _open(store, cap: int = 20, brief: bool = False) -> str:
         age = f"{int((datetime.now() - last).total_seconds() // 3600)}h since anything happened" if last else ''
         try: state = owed(store, t, since)
         except Exception as e: state = f"{t['Status']} (its state could not be read: {str(e)[:80]})"
-        return f"- {task_ref(t['TaskId'])} [{t.get('Kind')}] {_short(t.get('Title'), 80)} - {state}" + (f" - {age}" if age else '')
+        return f"- {task_ref(t['TaskId'])} [{t.get('Kind')}] asked: {_short(asked(t) or t.get('Title'), 80)} - {state}" + (f" - {age}" if age else '')
     return '\n'.join(line(t) for t in ts[:cap]) or '(nothing open)'
 
 

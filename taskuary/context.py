@@ -444,7 +444,7 @@ def _age(at) -> str:
     return ago(at)
 
 
-def _asks(t: dict) -> str:
+def asked(t: dict) -> str:
     """What the item asks: triage's own reading of its thread where it made one, else a batch's items by their own titles - its title and
     summary say only how many (2026-11-04: a chat line linking a pull request saw "1 pull request on <repo>" and could not tell it was that
     one) - else the task's summary."""
@@ -473,7 +473,7 @@ def _item(t: dict, *tail, waits: str = '') -> str:
     never which task or its state."""
     head, waits = f"{task_ref(t['TaskId'])} (tid {t['TaskId']}) {_short(t.get('Title'), 50)}", _short(waits, OPEN_WAITS_CHARS)
     tail = ' | '.join(x for x in (*tail, _age(t.get('CreatedAt'))) if x)
-    asks = _short(_asks(t), OPEN_ITEM_CHARS - len(head) - len(tail) - 6)
+    asks = _short(asked(t), OPEN_ITEM_CHARS - len(head) - len(tail) - 6)
     return ' | '.join(x for x in (head, asks, waits, tail) if x)[:OPEN_ITEM_CHARS + (len(waits) + 3 if waits else 0)]
 
 

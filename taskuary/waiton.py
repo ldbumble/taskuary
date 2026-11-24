@@ -57,16 +57,22 @@ def stands(store, t: dict) -> list:
     (`said`, the rail's own "waiting on them"), the answer a reply he sent asked them for (asks.py's watch, nothing from them on its thread
     since), and the question its agent asks him. What triage is shown of each open task (context.open_items) - walk 16: an answer on a new
     thread to the reply a task had sent was read as a notice, since nothing it was shown said that task waited on it. [] when nothing."""
-    from . import asks, taskstate
+    from . import taskstate
     t = store.get_task(int(t['TaskId'])) if t and t.get('TaskId') else None
+    if not t or t.get('Status') in ('done', 'dropped'): return []
+    q = taskstate.open_question(store, t['TaskId'])
+    return on_them(store, t) + ([f"its agent asks you: {' '.join(str(q['text']).split())[:120]}"] if q and q.get('text') else [])
+
+
+def on_them(store, t: dict) -> list:
+    "What an open task waits on SOMEBODY ELSE for (stands, less its agent's question to him): while one stands, its agent is not done"
+    from . import asks
     if not t or t.get('Status') in ('done', 'dropped'): return []
     out = [x for x in (said(waiting(t)),) if x]
     if t.get('AskedWatch') == 'reply' and (m := asks._waiting_on(store, t)) and \
             str((asks._answer(store, t['TaskId']) or {}).get('MessageId') or '') == str(t.get('AskedSeenMid') or ''):
         subj = ' '.join(str(m.get('Subject') or '').split())[:70]
-        out.append(f"waiting on {asks._who(m, first=False)}'s answer to the reply sent {str(t.get('AskedWatchAt') or '')[:10]}" + (f' re "{subj}"' if subj else ''))
-    if (q := taskstate.open_question(store, t['TaskId'])) and q.get('text'):
-        out.append(f"its agent asks you: {' '.join(str(q['text']).split())[:120]}")
+        out.append(f"waiting on {asks._who(m, first=False)}'s answer to the reply sent {str(t.get('AskedWatchAt') or '')[:16]}" + (f' re "{subj}"' if subj else ''))
     return out
 
 

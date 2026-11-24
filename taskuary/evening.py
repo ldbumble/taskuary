@@ -276,7 +276,7 @@ def collect(store, hours: int = HOURS) -> dict:
     # ...never the Assistant's own chat (general.DOCK_TAG), on either list: it is no work of his (walk 5: "Taskuary guide" stood as an open
     # task; round 3, 2026-11-22: "Completed the Taskuary guide task" stood as done)
     from .general import DOCK_TAG
-    done = store._rows("SELECT TaskId, Title, Priority FROM task WHERE Status='done' AND ClosedAt>=? AND IFNULL(SourceRef,'')<>? "
+    done = store._rows("SELECT TaskId, Title, Priority, ThreadJson, Summary FROM task WHERE Status='done' AND ClosedAt>=? AND IFNULL(SourceRef,'')<>? "
                        "ORDER BY ClosedAt DESC LIMIT 80", (since, DOCK_TAG))
     # ...and WHAT HIS AGENTS SENT AND MADE today, on any task (round 3: the chart, the sheet, two PDFs and Paula's email were missing - an agent's
     # work on a chat task leaves no run row): the cards he sent and the files its turns made
@@ -293,7 +293,7 @@ def collect(store, hours: int = HOURS) -> dict:
     from .session_artifacts import VIEW
     for a in store._rows("SELECT TaskId, Name FROM task_artifact WHERE CreatedAt>=? AND IFNULL(Kind,'')<>? ORDER BY ArtifactId DESC LIMIT 40", (since, VIEW)):
         accomplished.append(f"state=made | src=📄 | task={task_ref(a['TaskId']) if a.get('TaskId') else '-'} | file={_one_line(a.get('Name'), 120)}")
-    open_ = store._rows("SELECT TaskId, Title, Priority, Status FROM task WHERE Status IN ('open','in_progress','waiting') AND IFNULL(SourceRef,'')<>? "
+    open_ = store._rows("SELECT * FROM task WHERE Status IN ('open','in_progress','waiting') AND IFNULL(SourceRef,'')<>? "
                         "ORDER BY CASE Priority WHEN 'urgent' THEN 0 WHEN 'important' THEN 1 WHEN 'high' THEN 1 ELSE 2 END, COALESCE(UpdatedAt, CreatedAt) DESC "
                         "LIMIT 40", (DOCK_TAG,))
     runs = store._rows("SELECT r.AgentName, r.Status, r.LastError, r.TaskId, t.Title FROM run r LEFT JOIN task t ON t.TaskId=r.TaskId "
@@ -301,8 +301,11 @@ def collect(store, hours: int = HOURS) -> dict:
     # ...and a task he closed with its agent's question to him unanswered says so: read as handled, it was told as "confirmed" (walk 5)
     from .taskstate import open_question
     def closed(t): return 'closed, its question to him unanswered' if open_question(store, t['TaskId']) else 'closed'
+    # ...each task by what was ASKED of it, never the title its agent gave it early on - a label, which read "Ask HN post, awaiting Submit"
+    # after he had dismissed the post (walk 16)
+    from .context import asked
     def task_line(t, state):
-        return f"src=📌 | state={state} | task={task_ref(t['TaskId'])} | title={_one_line(t.get('Title'), 140)} | priority={level(t.get('Priority'))}"
+        return f"src=📌 | state={state} | task={task_ref(t['TaskId'])} | asked={_one_line(asked(t) or t.get('Title'), 140)} | priority={level(t.get('Priority'))}"
     def open_line(t): return task_line(t, owed(store, t, since))
     def run_line(r):
         bits = ['src=🤖', f"agent={_one_line(r.get('AgentName'), 60)}", f"status={r.get('Status') or 'running'}"]
@@ -317,9 +320,11 @@ def collect(store, hours: int = HOURS) -> dict:
 def owed(store, t: dict, since: str) -> str:
     """WHERE ONE OPEN TASK STANDS, from the facts every surface reads - never a rule of the brief's own: its status as the rail says it
     (taskstate.status), its to-dos not ticked, what its cards sent in the window, and what its agent's last summary left on him."""
-    from . import general, taskstate
+    from . import general, taskstate, waiton
     tid, bits = int(t['TaskId']), []
-    try: bits.append(taskstate.status(store, t)['word'])
+    # ...never "agent done" while it waits on somebody's answer (walk 16: "agent done" right after the send that asked Erin something)
+    them = waiton.on_them(store, store.get_task(tid) or t)
+    try: st = taskstate.status(store, t); bits.append('' if them and st['key'] in taskstate.CHAT_DONE else st['word'])
     except Exception: bits.append(str(t.get('Status') or 'open'))
     # ...the agent's own to-dos: a step its turn left ON HIM (`on_you`) is said below by the one reading of what still stands on him
     # (taskstate.left_on_him) - kept here too it outlived the card it named (walk 15: "to-dos left: Press the Publish card" after he declined it)
@@ -335,14 +340,16 @@ def owed(store, t: dict, since: str) -> str:
     # when you press the card" told after he had declined it): what waits for his press, what he turned down today, what the agent left
     from . import cardqueue
     from .conversation import _card
-    if (ws := cardqueue.state(store, tid)['units']): bits.append(f"waits for his press: {'; '.join(cardqueue.what(store, u) for u in ws[:3])}")
+    ws = cardqueue.state(store, tid)['units']
+    bits.append(f"waits for his press: {'; '.join(cardqueue.what(store, u) for u in ws[:3])}" if ws else 'nothing waits for his press')
     his = lambda r: (st := _card(r)['status']) == 'rejected' or st == 'closed_unsent' and r.get('DecidedBy') not in ('agent', 'assistant', 'taskuary')
     no = [r for r in store._rows("SELECT * FROM review WHERE TaskId=? AND DecidedAt>=? ORDER BY DecidedAt", (tid, since)) if his(r)]
     if no: bits.append(f"he turned down: {'; '.join(cardqueue.what(store, {'rids': [r['ReviewId']], 'rows': [r]}) for r in no[:3])}")
     s = general._last_said(store, tid)[1]
     if isinstance(s, dict) and s.get('nothing_left'): bits.append('its agent says nothing is left')
     elif (left := taskstate.left_on_him(store, tid)): bits.append(f"its agent left on him: {'; '.join(_one_line(x, 80) for x in left[:3])}")
-    return ' · '.join(bits)
+    bits += waiton.stands(store, t)           # ...and what it waits on now: whose answer, and its agent's question to him
+    return ' · '.join(b for b in bits if b)
 
 
 def has_any(ev: dict) -> bool: return any(ev[k] for k in ('accomplished', 'priorities', 'on_tasks', 'done', 'open', 'runs'))

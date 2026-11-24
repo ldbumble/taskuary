@@ -129,3 +129,29 @@ def test_the_owner_s_first_line_after_theirs_is_the_one_that_counts():
     assert senders.known(s, {'channel': 'whatsapp', 'from_name': 'Ray Colton', 'conversation_id': 'grp'})[0]
 
 
+def test_its_chat_reads_each_line_s_route_by_the_line(big):
+    """The chat's mail (general.JOINED) found each line's route through the task's index: every route of the task read for every line, the
+    square of the chat - 0.5 s a read at 2,000 lines, on every poll. By the line's own index it is one look a line."""
+    from taskuary import general
+    s, tid = big
+    with s.lock: plan = ' '.join(str(tuple(r)) for r in s.cx.execute('EXPLAIN QUERY PLAN ' + general.JOINED, (tid,)))
+    assert 'idx_route_message' in plan and 'idx_route_task' not in plan, plan
+
+
+def test_its_chat_is_built_with_the_writer_s_lock_free(big):
+    """The load run, 2026-11-24: the chat of a 2,000-line task was read and built under the writer's lock on every poll - 243 s of it in 13 min,
+    every triage write and press queued behind. Read on one reader snapshot, it is built with the lock free for any other thread."""
+    import threading
+    from taskuary import chatlog
+    s, tid = big
+    chatlog.serve(s, tid)
+    free, item = [], chatlog._item
+    def built(r):
+        if not free:
+            t = threading.Thread(target=lambda: free.append(s.lock.acquire(blocking=False) and (s.lock.release() or True))); t.start(); t.join()
+        return item(r)
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(chatlog, '_item', built); got = chatlog.serve(s, tid)
+    assert free == [True] and len(got['items']) >= LINES / 2
+
+

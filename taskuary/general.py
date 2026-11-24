@@ -790,7 +790,9 @@ def history(store, tid: int) -> list:
 # Joined, not stored: a mail read in while the agent worked waits for triage, and is put on the task after the turn it arrived during
 # ...the OWNER'S OWN reply on the thread too (Direction 'out', or a sent mail read as 'context'), marked `own`: the chat draws it as theirs, on
 # the right (the owner, 2026-11-05: "i saw you reply" - their answer sent outside Taskuary never showed in the chat at all)
-JOINED = ("SELECT m.*, MAX(m.CreatedAt, IFNULL((SELECT MAX(r.CreatedAt) FROM route r WHERE r.MessageId=m.MessageId AND r.TaskId=m.TaskId), '')) AS JoinedAt, "
+# ...its route looked up by the message (`+r.TaskId`: never by the task's index - SQLite took it, and a 2,000-line chat read every route of the
+# task for each of its messages, 0.5 s a read; the load run, 2026-11-24)
+JOINED = ("SELECT m.*, MAX(m.CreatedAt, IFNULL((SELECT MAX(r.CreatedAt) FROM route r WHERE r.MessageId=m.MessageId AND +r.TaskId=m.TaskId), '')) AS JoinedAt, "
           "(IFNULL(m.Direction,'in')='out' OR m.Status='context') AS Own "
           "FROM message m WHERE m.TaskId=? AND m.Status NOT IN ('history','skipped') "
           "AND IFNULL(m.Channel,'')<>'report' ORDER BY JoinedAt, m.MessageId")

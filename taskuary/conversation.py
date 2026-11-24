@@ -18,7 +18,7 @@ One item: {id, kind, at, ...}
   turn     t:<the input before it>:<n>   state starting|working|done|stopped|failed, steps, text, cards (last), started, ended, fail
   card     r:<ReviewId>             an action outside any turn
 Ids never change once given, so the page keys by them and a turn that ends, or a line that is heard, redraws in place."""
-import functools, json, re, time
+import contextlib, functools, json, re, threading, time
 from datetime import datetime
 from pathlib import Path
 
@@ -154,8 +154,25 @@ def _said(steps: list, body: str = '', seen: set = None) -> list:
 
 
 # ── the ledger ───────────────────────────────────────────────────────────────────────────────────
+_ONCE = threading.local()
+
+
+@contextlib.contextmanager
+def mail_once():
+    "Inside it, this thread reads a task's mail once (_mail): one read of the chat asked it twice, a 2,000-line chat's 2,000 rows each time."
+    was = getattr(_ONCE, 'got', None); _ONCE.got = {} if was is None else was
+    try: yield
+    finally: _ONCE.got = was
+
+
 def _mail(store, tid: int) -> list:
     "Every message on the task's thread the chat draws (general.JOINED, and his own lines filed elsewhere), each with `T`: when it joined."
+    if (got := getattr(_ONCE, 'got', None)) is None: return _mail_(store, tid)
+    if (k := (id(store), int(tid))) not in got: got[k] = _mail_(store, tid)
+    return [dict(x) for x in got[k]]
+
+
+def _mail_(store, tid: int) -> list:
     from . import general
     rows = [*store._rows(general.JOINED, (tid,)), *general.room_own(store, tid)]
     # ...BUT NEVER THE SENT-FOLDER COPY OF A LETTER TASKUARY SENT ON HIS PRESS (walk 13: every send drawn twice - the "Sent" card, then the

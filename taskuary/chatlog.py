@@ -246,7 +246,7 @@ def steps_of(store, tid: int, sid: str, steps: list) -> None:
         step(store, tid, sid, ref, x, state=x.get('status'))
 
 
-def read(store, tid: int, level: str = None, ending: bool = False) -> dict:
+def read(store, tid: int, level: str = None, ending: bool = False, also=None) -> dict:
     """`level`: how much of each turn's work is shown (detailed) - the task's own, else its kind's setting.
     The task's chat in its one order: top-level rows by their place, each turn with its steps, and its cards and failures once it is
     no longer at work (a card is a turn's last thing - the reader's one rule). `ending`: the turn's answer is filed and its session has not let
@@ -254,9 +254,12 @@ def read(store, tid: int, level: str = None, ending: bool = False) -> dict:
     reconcile(store, tid)
     if not ending: came_in(store, tid)
     advance(store, tid)
-    with store.lock:
-        rows = [dict(r) for r in store.cx.execute('SELECT * FROM chatlog WHERE TaskId=? ORDER BY Id', (int(tid),))]
-        n = rev(store, tid)
+    # ...read on one reader snapshot, and built after it, never under the writer's lock (store.pinned_read): `also`, what else must be read
+    # in the same view (serve: what waits by the box)
+    with store.pinned_read():
+        rows = store._rows('SELECT * FROM chatlog WHERE TaskId=? ORDER BY Id', (int(tid),))
+        n = (store._one('SELECT Rev FROM chatlog_task WHERE TaskId=?', (int(tid),)) or {}).get('Rev', 0)
+        side = also() if also else None
     kids, out = {}, []
     lit = any(r['Kind'] == 'card' and r['State'] == 'pending' for r in rows)
     for r in rows:
@@ -285,7 +288,7 @@ def read(store, tid: int, level: str = None, ending: bool = False) -> dict:
         out.append(x)
     moved_past(store, out, tid)
     lvl = level_of(store, store.get_task(int(tid)) or {}, level)
-    return {'rev': n, 'items': [detailed(x, lvl) for x in out], 'level': lvl}
+    return {'rev': n, 'items': [detailed(x, lvl) for x in out], 'level': lvl, **({'also': side} if also else {})}
 
 
 def run_of(turn: dict, kids: list) -> float:
@@ -1194,6 +1197,12 @@ def migrate_open(store, stop=None) -> int:
 
 # ── THE READER (stage 8): the page's chat is the log's - and what stands beside it, read here ──────────────────────────────────────────────
 def serve(store, tid: int, level: str = None) -> dict:
+    "The chat of task `tid` (_serve), its mail read once (conversation.mail_once)."
+    from .conversation import mail_once
+    with mail_once(): return _serve(store, tid, level)
+
+
+def _serve(store, tid: int, level: str = None) -> dict:
     """What the page draws for task `tid`: the log's items, in its one order, each turn at its level, and beside them what waits by the box,
     what the agent asks, the permissions it waits on, the line of cards and the hold. A task is frozen into the log at its first read
     (migrate); what waits is never also drawn (an input is in one place)."""
@@ -1225,7 +1234,7 @@ def serve(store, tid: int, level: str = None) -> dict:
         with store.lock: n = store.cx.execute('SELECT COUNT(*) FROM chatlog WHERE Parent=?', (t['Id'],)).fetchone()[0]
         if n or json.loads(t['Body'] or '{}').get('text'): update(store, tid, t['Key'], state='done')
     left_note(store, tid, at_work)
-    with store.lock: got, w = read(store, tid, level, ending), _waits_from(store, tid)      # ...one view of the hand-over, as above
+    got = read(store, tid, level, ending, also=lambda: _waits_from(store, tid)); w = got.pop('also')      # ...one view of the hand-over, as above
     # ...the same rule on what this read holds (its answer may be filed between the check above and the read): the newest thing a finished
     # turn with nothing heard under it and no line of his waiting - nothing works, no dots under a finished answer
     tail = next((x for x in reversed(got['items']) if x['kind'] in ('turn', 'line', 'arrival', 'press')), None)

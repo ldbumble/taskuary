@@ -226,7 +226,7 @@ class OneRoadIntoTheAgent(unittest.TestCase):
             end = time.time() + 5
             while len(told) < 2 and time.time() < end: time.sleep(.01)
         self.assertLess(time.time() - t0, 2, "heard at once - never on the waiting room's clock")
-        self.assertEqual([kw for _t, kw in told], [{'as_owner': False, 'pressed': True}] * 2, "one road: the same call for both - his press, never his line")
+        self.assertEqual([kw for _t, kw in told], [{'as_owner': False}] * 2, "one road: the same call for both, never the owner's line")
         self.assertIn('he approved it', told_with(self.s, self.tid, *[t for t, _ in told])); self.assertIn("I'm done", told_with(self.s, self.tid, *[t for t, _ in told]))
         self.assertEqual(self.s.waiting_notes(self.tid), [], 'nothing left for a clock to deliver')
 

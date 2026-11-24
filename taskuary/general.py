@@ -1009,10 +1009,12 @@ def follow_up(store, tid, press: str, actor: str = 'owner', said: str = None, he
         if said is None and (not isinstance(summ, dict) or summ.get('after_press') != press): return False
         _WOKEN.add(last['CommentId']); _STARTING[int(tid)] = [(said or FOLLOW_UP, heard)]
     def go():
+        from . import origin
+        origin.OWNER_SPEAKS.set(True)           # ...his press begins it, a turn of his (send_prompt) - on this thread alone
         try:
             ses = start_session(store, int(tid), actor=actor)
             with _WAKE_LOCK: got = _STARTING.pop(int(tid), None) or [(said or FOLLOW_UP, heard)]
-            ses.send_prompt('\n\n'.join(w for w, _h in got if w), as_owner=False, echo=False, pressed=True)
+            ses.send_prompt('\n\n'.join(w for w, _h in got if w), as_owner=False, echo=False)
         # ...a wake that never started woke nobody: the owner's next press on that answer starts it (it was once per answer even so, and
         # every later press was silent - the spine audit, 2026-11-09)
         except Exception as e:
@@ -1111,7 +1113,9 @@ def _next_turn(store, tid: int, sess, said: str, wait=None, pressed: bool = Fals
     here (the browser audit, 2026-11-15: until the told turn began, the chat said nothing was happening). Not told, the task says so."""
     hand(tid)
     def go():
-        try: sess.send_prompt(said, as_owner=False, **({'pressed': True} if pressed else {}))     # ...his press: a turn of his (send_prompt)
+        from . import origin
+        origin.OWNER_SPEAKS.set(pressed)              # ...his press, a turn of his (send_prompt) - on this thread alone
+        try: sess.send_prompt(said, as_owner=False)
         except Exception as e:
             from .say import said as said_                 # a failure written to the chat is said in his words (say.py)
             logger.warning(f'task {tid}: the agent was not told - {e}')
@@ -2697,7 +2701,7 @@ class GeneralSession:
     def send_prompt(self, text: str, attachments=None, connector_id=None, model=None, echo=True,
                     pick=None, trace=None, cancel=None, as_owner=True,
                     delivery_instructions: str = None, kept: bool = False, brief: bool = False, waiting: int = None, line_id: str = None, mails=(),
-                    since: float = None, pressed: bool = False) -> str:
+                    since: float = None) -> str:
         """`as_owner=False` is an instruction to the assistant that the OWNER did not say - used to
         make it open a conversation (the walk, a setup). It is not written to the history and
         not echoed, because putting words in the owner's mouth in their own transcript is a lie the
@@ -2721,6 +2725,7 @@ class GeneralSession:
         # and on his own task his line is never held (origin.keeps_him): its turn runs as the task's mode is
         # ...nor his PRESS (walk 17, K1): his Send on the agent's own card woke nobody, a stranger's line on the task holding Taskuary's word of it
         from . import origin
+        pressed = origin.OWNER_SPEAKS.get()               # ...set by the road his press took (to_agent, follow_up)
         if (h := origin.keeps_him(self.store, self.task_id) if mine or pressed else origin.hold(self.store, self.task_id)): raise origin.RefusedForStranger(h['line'])
         # ...and one sent while a turn works goes INTO it (steer): that turn answers for it, so this one has nothing more to say
         if mine and self.steer(): return ''

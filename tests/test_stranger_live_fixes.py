@@ -412,13 +412,16 @@ def test_his_press_on_the_agent_s_card_wakes_it_though_a_stranger_wrote_on_his_t
     rid = s.add_review({'TaskId': t, 'Kind': 'draft_reply', 'Status': 'pending', 'DraftText': 'Please send the order form.'})
     s.decide_review(rid, 'approved', 'Please send the order form.', 'owner')
     told = []
-    sess = SimpleNamespace(sid='run1', task_id=t, alive=True, waiting=lambda: False, send_prompt=lambda text, **kw: told.append(kw))
+    sess = SimpleNamespace(sid='run1', task_id=t, alive=True, waiting=lambda: False,
+                           send_prompt=lambda text, **kw: told.append(origin.OWNER_SPEAKS.get()))
     with mock.patch('taskuary.workerstate._live', return_value=sess):
         assert general.approved(s, t, 'Send', 'the reply was sent', review=rid) == 'told'
         end = time.time() + 5
         while not told and time.time() < end: time.sleep(.01)
-    assert told and told[0].get('pressed'), 'the wake is his press, a turn of his'
+    assert told == [True], 'the wake is his press, a turn of his'
     with pytest.raises(origin.RefusedForStranger): general.GeneralSession(s, t).send_prompt('The thread moved.', as_owner=False)
-    try: general.GeneralSession(s, t).send_prompt('', as_owner=False, pressed=True)
+    tok = origin.OWNER_SPEAKS.set(True)                                        # ...as the road his press took sets it
+    try: general.GeneralSession(s, t).send_prompt('', as_owner=False)
     except origin.RefusedForStranger: pytest.fail('his press is never held behind a Trust on his own task')
     except Exception: pass                                                     # ...it went on - to an AI this test has none of
+    finally: origin.OWNER_SPEAKS.reset(tok)

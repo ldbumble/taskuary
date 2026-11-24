@@ -245,6 +245,22 @@ class Asking(unittest.TestCase):
         self.assertEqual(signin.pending(self.s, self.tid)['site'], 'bank.example')
         self.assertEqual(signin.phone_line(self.s, self.tid), 'Sign in to bank.example on your PC to continue')
 
+    def test_a_page_that_makes_accounts_asks_for_one_where_none_is_saved(self):
+        """Walk 12: a hand-over on a page with a sign-in form beside a create-account form read "Sign in to ... to continue" - there was no
+        account. The ask says the step the page shows: an account to make where nothing is saved, the code where it asks a code."""
+        class Shape:
+            def __init__(self, f): self.f = f
+            def fields(self, want=''): return self.f
+            def close(self): pass
+        two_forms = {'top': True, 'password': True, 'user': True, 'fresh': True}
+        with on_page('https://news.example/login'), mock.patch.object(signin, 'connect', return_value=Shape(two_forms)):
+            signin.needs(self.s, self.tid, self.sid, 'news.example', watch=None)
+        self.assertEqual(signin.pending(self.s, self.tid)['text'], 'Make an account on news.example (or sign in, if you have one) to continue')
+        self.assertEqual(signin.phone_line(self.s, self.tid), 'Make an account on news.example (or sign in, if you have one) on your PC to continue')
+        self.assertEqual(signin.step_words(self.sid, 'news.example', conn=Shape({'top': True, 'otp': True})), 'Type the code news.example asks for to continue')
+        signin.save(self.s, 'news.example', 'alexd', PW)
+        self.assertEqual(signin.step_words(self.sid, 'news.example', signin.saved(self.s, 'news.example'), conn=Shape(two_forms)), 'Sign in to news.example to continue')
+
     def test_no_sign_in_page_no_fill_ever(self):
         with on_page('http://bank.example/'): out = signin.needs(self.s, self.tid, self.sid, 'bank.example')
         self.assertEqual(out['site'], '')

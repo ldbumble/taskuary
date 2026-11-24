@@ -398,7 +398,9 @@ def phone_line(store, tid: int) -> str:
     """What the phone says of a task waiting on a sign-in: where to do it. No fill link goes to the phone - the fill page is this
     computer's, and the phone is not on its network."""
     p = pending(store, tid)
-    return f"Sign in to {p['site']} on your PC to continue" if p else ''
+    if not p: return ''
+    t = str(p.get('text') or '') or f"Sign in to {p['site']} to continue"
+    return f'{t.removesuffix(CONTINUE)} on your PC{CONTINUE}' if t.endswith(CONTINUE) else f'{t} - on your PC'
 
 
 # ── the agent asked ──────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -511,6 +513,23 @@ def brand_of(title: str, href: str = '') -> str:
     return next((x for x in parts if len(k := re.sub(r'[^a-z0-9]', '', x.lower())) >= 3 and (k in at or any(w in at for w in re.findall(r'[a-z0-9]{4,}', x.lower()) if w == k[:len(w)]))), '')
 
 
+# ...AND THE STEP THE PAGE SHOWS, NOT ALWAYS "SIGN IN" (walk 12: "Sign in to ycombinator.com to continue" over a page with a sign-in form beside a
+# create-account form, for an account that did not exist): a code box asks the code; a page that makes accounts - a box marked new-password,
+# a password typed twice, a second form with a password box - asks for one where nothing is saved for the site. Read off the page's shape
+CONTINUE = ' to continue'
+def step_words(sid: str, name: str, saved_row=None, conn=None) -> str:
+    "What the owner is asked to do on the page session `sid` shows, by its shape - a sign-in where it cannot be read."
+    try:
+        c = conn or connect(sid)
+        try: f = c.fields('') or {}
+        finally:
+            if conn is None: c.close()
+    except Exception: f = {}
+    if f.get('top') and code_step(f) and not f.get('password'): return f'Type the code {name} asks for{CONTINUE}'
+    if f.get('top') and f.get('fresh') and not saved_row: return f'Make an account on {name} (or sign in, if you have one){CONTINUE}'
+    return f'Sign in to {name}{CONTINUE}'
+
+
 HANDED_ON = 6
 def needs(store, tid: int, sid: str, claimed: str = '', fill=None, watch=..., what: str = '', ended: bool = True) -> dict:
     """The agent ended its turn asking to be signed in. Record the ask on the existing road and, when the owner keeps a sign-in for
@@ -541,7 +560,7 @@ def needs(store, tid: int, sid: str, claimed: str = '', fill=None, watch=..., wh
     if signing_up(claimed): return new_account(store, tid, sid, site, rid, fill, watch)
     name = site_name(site, sid)
     what = ' '.join(str(what or '').split()).rstrip('.')
-    text = f'{ws.NAMED_STEP} on {name}: {what}' if what else f'Sign in to {name} to continue'      # ...named: the page says these words (workerstate)
+    text = f'{ws.NAMED_STEP} on {name}: {what}' if what else step_words(sid, name, saved(store, site))     # ...named: the page says these words (workerstate)
     # "Signed in" as a CHOICE only where an answer arrives as words (the chat's own agent): a pty's choices are a chooser, answered
     # by number (workerstate.answer). A pty's ask still has the press - the card draws it for every `signin:` ask, and its answer goes
     # through signed_in, never the chooser (2026-10-25)
@@ -1111,7 +1130,10 @@ FIELDS = r'''(want) => {
   const writable = deepAll('input, textarea, select, [contenteditable=""], [contenteditable="true"]').filter((e) => e.isContentEditable || vis(e))
     .filter((e) => e !== pw && e !== user && e !== otp && inA(e) && !['hidden', 'checkbox', 'radio', 'submit', 'button', 'image', 'reset', 'password'].includes(e.type));
   const loose = !anchor ? 0 : writable.filter((e) => pw ? (e.tagName === 'TEXTAREA' || e.isContentEditable) : e.tagName !== 'SELECT').length;
-  return { origin: location.origin, href: location.href, top: window === window.top, password: !!pw, user: !!user, otp: !!otp, frames, others, digits, loose,
+  // ...A PAGE THAT MAKES ACCOUNTS, by its shape: a box marked new-password, a password asked twice in one form, or password boxes in two forms
+  const pws = ins.filter((e) => e.type === 'password'), pwForms = new Set(pws.map(formOf));
+  const fresh = pws.some((e) => e.autocomplete === 'new-password') || pwForms.size > 1 || [...pwForms].some((f) => pws.filter((e) => formOf(e) === f).length > 1);
+  return { origin: location.origin, href: location.href, top: window === window.top, password: !!pw, user: !!user, otp: !!otp, frames, others, digits, loose, fresh,
            named: !!user && (named(user) || /username|email/.test(user.autocomplete || '')),
            focused: !!el && deepActive() === el };
 }'''

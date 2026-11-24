@@ -423,14 +423,15 @@ def on_signin_page(sid: str, conn=None) -> bool:
 
 
 def shows_signin(sid: str, conn=None):
-    "Does the page show a box a sign-in fills - a password, a user name, a code? None when it cannot be read."
+    """Does the page show a box only a sign-in has - a password or a one-time code? None when it cannot be read. A box that merely reads as a
+    user name is no sign-in (walk 11, 2026-11-23: a post's title box was, and the saved user name went into it and the post was sent)."""
     try:
         c = conn or connect(sid)
         try: f = c.fields('') or {}
         finally:
             if conn is None: c.close()
     except Exception: return None
-    return bool(f.get('top') and (f.get('password') or f.get('user') or code_step(f)))
+    return bool(f.get('top') and (f.get('password') or code_step(f)))
 
 
 def set_aside(store, tid: int, sid: str) -> bool:
@@ -1069,7 +1070,12 @@ FIELDS = r'''(want) => {
   const words = (e) => { const h = hostOf(e); return [e.name, e.id, e.autocomplete, e.getAttribute('aria-label'), e.placeholder,
     h && h.id, h && h.getAttribute('name'), h && h.getAttribute('label'), h && h.getAttribute('aria-label')].join(' '); };
   const named = (e) => ''' + NAMED + r'''.test(words(e));
-  const before = pw ? ins.slice(0, ins.indexOf(pw)).filter(texty) : [];
+  // ...ONLY THE SIGN-IN'S OWN FORM (walk 11, 2026-11-23: a post's submit page - title, address, text - read its title box as the user name,
+  // the saved one was typed into it and Enter sent the post): the boxes the fill may type into are the ones in the form of the password box
+  const formOf = (e) => e && (e.form || (e.closest && e.closest('form'))) || null;
+  const mates = (a) => { const f = formOf(a); return f ? (e) => formOf(e) === f : () => true; };
+  const inPw = mates(pw);
+  const before = pw ? ins.slice(0, ins.indexOf(pw)).filter((e) => texty(e) && inPw(e)) : [];
   // ...A BOX THE PAGE MARKS AS A CODE IS NEVER THE USER-NAME BOX (recorded 2026-11-14: a code page's one box, alone on it, read as "a user
   // box" - so the saved sign-in's code prompt was not seen, the agent was told "signed in" over it, and the ask that followed read "sign in")
   const isCode = (e) => e.autocomplete === 'one-time-code' || /otp|one.?time|totp|2fa|mfa|passcode|verif|auth.*code|security.?code|^code$/i.test(words(e).trim());
@@ -1091,18 +1097,26 @@ FIELDS = r'''(want) => {
   // vault fills the ones it keeps (`other:<label>`); one left empty is named when the form stays up, never the password blamed (2026-11-04)
   const labelOf = (e) => { const h = hostOf(e), l = e.labels && e.labels[0];
     return String((l && l.textContent) || e.getAttribute('aria-label') || e.placeholder || (h && (h.getAttribute('label') || h.getAttribute('aria-label'))) || e.name || '').trim().slice(0, 40); };
-  const otherEl = String(want).startsWith('other:') ? ins.find((e) => texty(e) && e !== user && labelOf(e).toLowerCase() === String(want).slice(6).toLowerCase()) : null;
+  const otherEl = String(want).startsWith('other:') ? ins.find((e) => texty(e) && inPw(e) && e !== user && labelOf(e).toLowerCase() === String(want).slice(6).toLowerCase()) : null;
   const el = want === 'password' ? pw : want === 'user' ? user : want === 'otp' ? otp : otherEl;
   if (el) { el.focus(); try { el.select(); } catch (_) { el.value = ''; } }
   if (el && want === 'otp') el.setAttribute('data-tq-code', '');
-  const others = pw ? ins.filter((e) => texty(e) && e !== user && e !== otp && !e.value).map(labelOf).filter(Boolean) : [];
-  return { origin: location.origin, href: location.href, top: window === window.top, password: !!pw, user: !!user, otp: !!otp, frames, others, digits,
+  const others = pw ? ins.filter((e) => texty(e) && inPw(e) && e !== user && e !== otp && !e.value).map(labelOf).filter(Boolean) : [];
+  // ...AND WHAT ELSE ITS FORM ASKS THAT NO SIGN-IN DOES - by the boxes' kinds: a text area or an editable block beside a password box, any
+  // other writable box beside a lone user name or code box (a title, an address, a message, an amount). A form with one is never sent by a fill
+  const anchor = pw || user || otp, inA = mates(anchor);
+  const writable = deepAll('input, textarea, select, [contenteditable=""], [contenteditable="true"]').filter((e) => e.isContentEditable || vis(e))
+    .filter((e) => e !== pw && e !== user && e !== otp && inA(e) && !['hidden', 'checkbox', 'radio', 'submit', 'button', 'image', 'reset', 'password'].includes(e.type));
+  const loose = !anchor ? 0 : writable.filter((e) => pw ? (e.tagName === 'TEXTAREA' || e.isContentEditable) : e.tagName !== 'SELECT').length;
+  return { origin: location.origin, href: location.href, top: window === window.top, password: !!pw, user: !!user, otp: !!otp, frames, others, digits, loose,
            named: !!user && (named(user) || /username|email/.test(user.autocomplete || '')),
            focused: !!el && deepActive() === el };
 }'''
 CLEAR = "(() => { " + DEEP + " deepAll('input[type=password], input[data-tq-code]').forEach((e) => { e.value = ''; }); })()"
 SETTLE = 2.0                    # after the submit, before the boxes are emptied and the agent hears: the page's own post goes first
-STILL = "(() => { " + DEEP + " const a = deepActive(); return { href: location.href, password: !!a && a.type === 'password' }; })()"
+# ...the last look before the press also reads the focused box's form: one holding a text area is never sent by a fill (FIELDS `loose`)
+STILL = ("(() => { " + DEEP + " const a = deepActive(), f = a && a.form; return { href: location.href, password: !!a && a.type === 'password', "
+         "loose: !!f && [...f.elements].some((e) => e.tagName === 'TEXTAREA') || !!f && !!f.querySelector('[contenteditable=\"\"], [contenteditable=true]') }; })()")
 
 
 class Cdp:
@@ -1205,11 +1219,14 @@ def connect(sid: str) -> Cdp:
     return Cdp(_cdp_url(sid), target)
 
 
+LOOSE = ('the {site} form asks for more than a sign-in (a box the agent or the owner writes) - Taskuary types a saved sign-in only into a '
+         'sign-in form, so nothing was typed or sent')
 def _guard(c: Cdp, site: str, want: str) -> dict:
     """Focus the `want` field - and refuse unless the TOP page is on the pinned site and the field is in it."""
     f = c.fields(want)
     if not f.get('top') or not on_site(f.get('href'), site):
         raise SignInError(f'the page is no longer on {site} - nothing was typed')
+    if f.get('loose'): raise SignInError(LOOSE.format(site=site))
     if want and not f.get('focused'):
         what = want[6:] if want.startswith('other:') else ({"password": "password", "otp": "code"}).get(want, "user name")
         raise SignInError(f'the {what} box on {site} could not be found')
@@ -1282,6 +1299,7 @@ def fill_page(c: Cdp, site: str, user: str, pw: str, wait: float = STEP_WAIT, co
         _guard(c, site, 'password')                          # ...and the password box focused again before its last look
     s = c.js(STILL) or {}                                    # the last look, with the box focused: still this site, still a password box
     if not s.get('password') or not on_site(s.get('href'), site): raise SignInError('the page changed under the sign-in - nothing was typed')
+    if s.get('loose'): raise SignInError(LOOSE.format(site=site))
     c.type(pw)
     c.enter()
     # ...and a user box left empty is said (refused): a sign-up whose user name no box named keeps its password alone (send_new)

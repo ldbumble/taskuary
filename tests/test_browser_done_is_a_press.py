@@ -182,10 +182,11 @@ class DoneIsAPress(unittest.TestCase):
         ws.answer(self.s, self.tid, rid[0], '', press=True)
         self.assertEqual(len(self.heard()), 1); self.assertIn("I'm done", self.told[0][0])
         # ...a sign-in Taskuary can do itself is done with no card; one it cannot is his card
-        with mock.patch.object(signin, 'saved', return_value={'Secret': 'x'}), mock.patch.object(signin, '_auto'):
+        with mock.patch.object(signin, 'saved', return_value={'Secret': 'x'}), mock.patch.object(signin, '_auto'), \
+                mock.patch.object(signin, 'shows_signin', return_value=True):
             got = browserview.hand_over(self.s, self.tid, 'sign in', 'vendor.example', 'run1', watch=None)
         self.assertTrue(got['ok'] and got.get('auto')); self.assertEqual(self.open(), [], 'the saved sign-in goes in: nothing asked of him')
-        with mock.patch.object(signin, 'saved', return_value=None):
+        with mock.patch.object(signin, 'saved', return_value=None), mock.patch.object(signin, 'shows_signin', return_value=True):
             got = browserview.hand_over(self.s, self.tid, 'sign in', 'vendor.example', 'run1', watch=None)
         self.assertTrue(got['ok'] and not got.get('auto')); self.assertEqual([ws.ask_of(r)['ask'] for r in self.open()], ['signin'])
 
@@ -220,6 +221,29 @@ class DoneIsAPress(unittest.TestCase):
         self.assertIn('Handed to the owner', got['says']); self.assertNotIn('signing in', got['says'])
         self.assertEqual([ws.ask_of(r)['ask'] for r in self.open()], ['turn']); self.assertEqual(typed, [], 'no saved sign-in typed into it')
 
+    def test_a_post_page_or_an_unreadable_one_handed_over_with_its_site_is_his_turn_and_nothing_is_typed_or_sent(self):
+        """Walk 11 (2026-11-23): the agent handed over the last step on a news site's submit page - title, address and text boxes, a user-name
+        box elsewhere, no password - and the app answered "Taskuary is signing in", typed the saved user name into the TITLE and sent the post.
+        A page is a sign-in only where it shows a password or a code box; one that cannot be read is never one. Both are his card."""
+        from taskuary import signin
+        class Page:
+            def __init__(self, f): self.f = f
+            def fields(self, want=''): return self.f
+            def close(self): pass
+        class Gone:
+            def fields(self, want=''): raise signin.SignInError('the page did not let Taskuary look at it')
+            def close(self): pass
+        post = {'top': True, 'href': 'https://news.example/submit', 'user': True, 'password': False, 'loose': 3}
+        for page in (Page(post), Gone()):
+            for r in self.open(): ws.answer(self.s, self.tid, r, '', press=True)
+            typed = []
+            with mock.patch.object(signin, 'saved', return_value={'User': 'u', 'Secret': 's'}), mock.patch.object(signin, 'connect', return_value=page), \
+                    mock.patch.object(signin, '_auto', side_effect=lambda *a: typed.append(a)), mock.patch.object(signin, 'type_in', side_effect=lambda *a, **k: typed.append(a)), \
+                    mock.patch.object(bg, 'page_error', return_value=''):
+                got = browserview.hand_over(self.s, self.tid, 'Press submit to post the story', 'news.example', 'run1', watch=None)
+            self.assertTrue(got['ok'] and not got.get('auto'), got); self.assertNotIn('signing in', got['says'].lower())
+            self.assertEqual([ws.ask_of(r)['ask'] for r in self.open()], ['turn']); self.assertEqual(typed, [], 'no saved sign-in typed or sent')
+
     def test_a_hand_over_is_the_page_of_the_tab_it_names_and_an_error_page_is_never_his(self):
         """Walk 9 (CLI 8, 4): three sites in three tabs - "Sign in to Reddit" was handed over as "Your turn in the browser on linkedin.com", the
         tab in front; and LinkedIn's own error page was handed to him as a "security check". The tab of the site named comes to the front first,
@@ -228,7 +252,8 @@ class DoneIsAPress(unittest.TestCase):
         switched = []
         with mock.patch.object(browserview, 'pages', return_value=tabs), mock.patch.object(browserview, 'active_tab', return_value='AAA1'), \
                 mock.patch.object(browserview, 'switch_tab', side_effect=lambda sid, t: switched.append(t) or True), \
-                mock.patch.object(bg, 'page_error', return_value=''), mock.patch('taskuary.signin.needs') as needs:
+                mock.patch.object(bg, 'page_error', return_value=''), mock.patch('taskuary.signin.shows_signin', return_value=True), \
+                mock.patch('taskuary.signin.needs') as needs:
             browserview.hand_over(self.s, self.tid, 'Sign in to Reddit so I can post the tip', 'reddit.example', 'run1', watch=None)
         self.assertEqual(switched, ['BBB2']); self.assertTrue(needs.called)
         bad = 'TASKUARY: https://www.linkedin.example/checkpoint answered with an error (HTTP 404). Decide the next step: ...'

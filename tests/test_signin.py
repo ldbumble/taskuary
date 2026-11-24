@@ -175,6 +175,43 @@ class Filling(unittest.TestCase):
         self.assertEqual(p.typed[:3], [('other:Account code', 'NW-0042'), ('user', USER), ('password', PW)])
         self.assertEqual(out['others'], [])
 
+    def test_a_post_form_is_never_typed_into_or_sent_by_the_saved_sign_in(self):
+        """Walk 11 (2026-11-23): on a news site's submit page - title, address and text boxes, a user-name box elsewhere, no password - the saved
+        user name went into the title and Enter sent the post. A form that asks more than a sign-in (FIELDS `loose`) gets nothing typed."""
+        p = FakePage(href='https://news.example/submit', password=False, user=True, two_step=True); f = p.fields
+        p.fields = lambda want='': {**f(want), 'loose': 3}
+        with mock.patch.object(signin.time, 'sleep'), self.assertRaises(signin.SignInError) as e: signin.fill_page(p, 'news.example', USER, PW, wait=1)
+        self.assertEqual(p.typed, []); self.assertIn('nothing was typed or sent', str(e.exception))
+
+    def test_a_password_form_that_also_holds_a_post_body_is_never_sent(self):
+        """A sign-in box and a post's body in ONE form: nothing typed. The last look before the press reads the focused box's form too - a body
+        that appears there under the fill stops it before Enter."""
+        p = FakePage(); f = p.fields
+        p.fields = lambda want='': {**f(want), 'loose': 1}
+        with self.assertRaises(signin.SignInError): signin.fill_page(p, 'bank.example', USER, PW)
+        self.assertEqual(p.typed, [])
+        p = FakePage(); js = p.js
+        p.js = lambda expr: {**js(expr), 'loose': True}
+        with self.assertRaises(signin.SignInError): signin.fill_page(p, 'bank.example', USER, PW)
+        self.assertNotIn(PW, [t for _, t in p.typed]); self.assertNotIn('<enter>', [t for _, t in p.typed])
+
+    def test_a_real_sign_in_form_still_fills_from_the_vault(self):
+        p = FakePage(); f = p.fields
+        p.fields = lambda want='': {**f(want), 'loose': 0}
+        signin.fill_page(p, 'bank.example', USER, PW)
+        self.assertEqual(p.typed, [('user', USER), ('password', PW), ('password', '<enter>')])
+
+    def test_only_a_password_or_a_code_box_makes_a_sign_in_page_and_an_unreadable_one_is_none(self):
+        class Page:
+            def __init__(self, f): self.f = f
+            def fields(self, want=''): return self.f
+        self.assertFalse(signin.shows_signin('s1', conn=Page({'top': True, 'user': True})), 'a box that reads as a user name is no sign-in')
+        self.assertTrue(signin.shows_signin('s1', conn=Page({'top': True, 'password': True})))
+        self.assertTrue(signin.shows_signin('s1', conn=Page({'top': True, 'otp': True})))
+        class Gone:
+            def fields(self, want=''): raise signin.SignInError('the page did not let Taskuary look at it')
+        self.assertIsNone(signin.shows_signin('s1', conn=Gone()))
+
     def test_a_form_inside_another_sites_frame_is_refused_and_said(self):
         p = FakePage(password=False, user=False, frames=['https://idp.evil.example/login'])
         with self.assertRaises(signin.SignInError) as e: signin.fill_page(p, 'bank.example', USER, PW)

@@ -22,7 +22,8 @@ FAST = 1.5 if CI else 0.5
 # ...and a desk running browser tests beside it took 2.6-3.4 s (2026-10-31): the per-root regression is caught exactly by the
 # statement count above, so the clock here only has to catch a held lock
 RAIL = 6.0 if CI else 4.0         # the rail alone, on a desk: 2.6-7.7 s before the bulk build, 0.8-1.9 s after (2026-10-21)
-BUILD = 10.0 if CI else 6.0       # the whole first pile: 4.5 s before, 2.3 s after
+BUILD = 30.0 if CI else 15.0      # the whole first pile: a held lock, not a busy machine - its work is STATEMENTS
+STATEMENTS = 60_000               # ...the first pile's statements: 167k with every hold judged afresh, ~38k with the stored hold
 TASKS, FYI = 600, 3000
 
 
@@ -132,17 +133,27 @@ def test_a_cold_rail_build_makes_no_query_per_root(restarted, monkeypatch):
     assert counts[0][0] < len(snap['items']) / 10, f'{counts[0][0]} statements for {len(snap["items"])} roots'
 
 
-def test_the_first_pile_after_a_restart_is_built_in_seconds(restarted):
+def test_the_first_pile_after_a_restart_is_built_in_seconds(restarted, monkeypatch):
     s, _ = restarted
     took = time.perf_counter()
     snap = s.processing_inventory_snapshot(fixed_now=datetime.now().isoformat(), live_state=[], display_only=True, history_days=60)
     rail = time.perf_counter() - took
     assert len(snap['items']) > 3000 and rail < RAIL, f'the cold rail took {rail:.1f}s'
     s._processing_display_cache = {}
+    # ...the pile's WORK is counted, not timed (2026-11-24): its clock failed on a loaded macOS runner at 11.7 s while the work had
+    # fallen to a quarter - every task's Trust hold judged afresh was 167k statements, the stored hold (origin_hold) ~38k
+    n, connect = [0], sqlite3.connect
+    tick = lambda _sql: n.__setitem__(0, n[0] + 1)
+    for cx in (s.cx, s._rail_cx, *s._readers):
+        if cx is not None: cx.set_trace_callback(tick)
+    def counted(*a, **k):
+        cx = connect(*a, **k); cx.set_trace_callback(tick); return cx
+    monkeypatch.setattr(sqlite3, 'connect', counted)
     took = time.perf_counter()
     pile = server._pile_payload(force=True, fyi=50)
     took = time.perf_counter() - took
-    assert pile['items'] and took < BUILD, f'the first pile took {took:.1f}s'
+    assert pile['items'] and n[0] < STATEMENTS, f'the first pile ran {n[0]} statements'
+    assert took < BUILD, f'the first pile took {took:.1f}s'      # ...the clock only catches a held lock
 
 
 def test_opening_a_task_never_waits_for_a_cold_pile(restarted, monkeypatch):

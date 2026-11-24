@@ -1077,14 +1077,18 @@ def just_handled(store, act: dict):
 
 
 def _open(store, cap: int = 20, brief: bool = False) -> str:
-    "The open tasks, one line each; `brief` leaves out how each stands - for a reader that only needs to know they exist."
-    ts = [t for t in store.list_tasks(active_only=True) if t.get('Status') in ('open', 'in_progress', 'waiting')]
+    """The open tasks, one line each; `brief` leaves out how each stands - for a reader that only needs to know they exist. How each stands is
+    the brief's one reading (evening.owed: its cards, what went and was made, what is left on him), never the title the agent gave it early on
+    (walk 14: "Send the vendor spend sheet" told as owed after it went)."""
+    from .evening import owed
+    ts, since = [t for t in store.list_tasks(active_only=True) if t.get('Status') in ('open', 'in_progress', 'waiting')], _since(1)
     def line(t):
         if brief: return f"- {task_ref(t['TaskId'])} {_short(t.get('Title'), 100)}"
         last = _dt(store.task_last_activity(t['TaskId']) or t.get('UpdatedAt') or t.get('CreatedAt'))
         age = f"{int((datetime.now() - last).total_seconds() // 3600)}h since anything happened" if last else ''
-        state = f"{task_kinds.SHOWN} is working it" if t.get('RunStatus') == 'running' else 'a draft waits for you on the task' if t.get('ReviewStatus') == 'pending' else age
-        return f"- {task_ref(t['TaskId'])} [{t['Status']}, {t.get('Kind')}] {_short(t.get('Title'), 80)}" + (f" - {state}" if state else '')
+        try: state = owed(store, t, since)
+        except Exception as e: state = f"{t['Status']} (its state could not be read: {str(e)[:80]})"
+        return f"- {task_ref(t['TaskId'])} [{t.get('Kind')}] {_short(t.get('Title'), 80)} - {state}" + (f" - {age}" if age else '')
     return '\n'.join(line(t) for t in ts[:cap]) or '(nothing open)'
 
 

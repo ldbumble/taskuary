@@ -324,8 +324,11 @@ def owed(store, t: dict, since: str) -> str:
     todo = store.task_checklist(tid); left = [i for i in todo if not i.get('done')]
     if todo: bits.append(f"to-dos left: {'; '.join(_one_line(i.get('text'), 80) for i in left[:4])}" if left else 'every to-do ticked')
     from . import ledger
+    # ...WHAT went and what was made, as the ledger says it (walk 14: "Tomorrow: send the vendor spend sheet" - sent at 2:26 - read off the
+    # task's title beside a bare count; "it first needs an account" after the agent had made one)
     sent = ledger.rows(store, ('sent', 'act'), task=tid, since=since)
-    if sent: bits.append(f"sent today: {len(sent)}")
+    if sent: bits.append(f"sent today ({len(sent)}): {'; '.join(ledger.said(r) for r in sent[:3])}")
+    if (made := ledger.rows(store, 'account', task=tid, since=since)): bits.append(f"made: {'; '.join(ledger.said(r) for r in made[:3])}")
     # ...and its cards as they stand NOW (cardqueue.state), never the words a turn wrote before his press (walk 13: "the post goes out only
     # when you press the card" told after he had declined it): what waits for his press, what he turned down today, what the agent left
     from . import cardqueue

@@ -123,8 +123,29 @@ class TheDayAsItWasTests(unittest.TestCase):
         ev = evening.collect(s, 8)
         assert not [p for p in ev['priorities'] if 'Headcount' in p], ev['priorities']
         row = next(r for r in ev['on_tasks'] if 'Headcount' in r)
-        for fact in ('every to-do ticked', 'sent today: 2', 'nothing is left'): assert fact in row, row
+        for fact in ('every to-do ticked', 'sent today (2)', 'nothing is left'): assert fact in row, row
         assert any('nothing is left' in r for r in ev['open']), ev['open']
+
+    def test_what_went_and_what_was_made_is_said_where_every_summary_reads_a_task_never_its_title(self):
+        """Walk 14 (R1): the End-of-day report said "Tomorrow: send the 2026 vendor spend sheet" - sent at 2:26 - and "the Ask HN post first
+        needs a Hacker News account" after its agent had made one and he had declined the post: each open task was told by the TITLE its agent
+        gave it early on. The brief's line and the Advisor's open work (assistant._open, the digest's too) read the task's one state."""
+        from taskuary import assistant, ledger
+        s = MemoryStore()
+        sheet = s.create_task({'Title': 'Send 2026 monthly vendor spend sheet', 'Kind': 'general', 'Status': 'open'}, 'owner')
+        rv = s.add_review({'TaskId': sheet, 'Kind': 'draft', 'Status': 'pending',
+                           'Deliver': json.dumps({'channel': 'email', 'to': ['erin@northwind.example'], 'subject': '2026 vendor spend sheet'})})
+        _sent(s, rv, 'Hi Erin, the sheet is attached.')
+        post = s.create_task({'Title': 'Ask HN post ready to submit', 'Kind': 'general', 'Status': 'open'}, 'owner')
+        ledger.account(s, 'news.ycombinator.example', 'alexdoyle', 'made', task=post)
+        card = s.add_review({'TaskId': post, 'Kind': 'action', 'Status': 'pending', 'Reason': 'post the Ask HN question',
+                             'DraftText': json.dumps({'action': 'browser_act', 'what': 'post the Ask HN question'})})
+        s.decide_review(card, 'rejected', None, 'owner')
+        txt = assistant._open(s)
+        line = lambda t: next(l for l in txt.splitlines() if f'TQ-{t:04d}' in l)
+        self.assertIn('sent "2026 vendor spend sheet" to erin@northwind.example', line(sheet))
+        self.assertIn('an account on news.ycombinator.example', line(post)); self.assertIn('he turned down: post the Ask HN question', line(post))
+        self.assertIn('sent "2026 vendor spend sheet"', evening.owed(s, s.get_task(sheet), _ago(8)))
 
     def test_a_card_he_declined_is_told_from_its_state_never_from_the_words_its_turn_wrote_before(self):
         """Walk 13: the agent's turn ended "the post goes out only when you press the card"; he declined the card, and the End-of-day report

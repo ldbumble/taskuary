@@ -3338,7 +3338,8 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true, r
     window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k);
   }, [active]);
   // ...and on a desk Back is ALWAYS on the bar, greyed where there is nowhere to go back to (the owner, 2026-10-29: the bar is Back and Next)
-  useVerbs("nav", [{ id: BACK, group: "back", label: backNav.label || btn("back"), title: btnHint("back"), disabled: backNav.disabled || moving, why: moving ? "" : backNav.why,
+  useVerbs("nav", [{ id: BACK, group: "back", label: backNav.label || btn("back"),
+    title: backNav.kind === "row" ? btnHint("back") : backNav.label || backNav.why, disabled: backNav.disabled || moving, why: moving ? "" : backNav.why,
     run: goBack }], !backNav.disabled || (deskChat && !firstRun));
   const atEnd = !!current && table.speaks && onWalk && !walkNow.below;
   useEffect(() => { navEnd(atEnd); }, [atEnd]);

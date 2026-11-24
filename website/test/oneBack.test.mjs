@@ -86,7 +86,7 @@ test("Settings over the second row goes back to it, and Back there steps up the 
   recordPlace("#task=1", "push"); recordPlace("#task=2", "push");
   recordPlace("#settings=config", "push");                                              // Settings opened from the second row
   const page = navTarget(onRow("task:2", rail("task:2", "task:1"), "settings"));
-  assert.deepEqual([page.to, page.label], ["place", "Back to TQ-0002"]);
+  assert.deepEqual([page.kind, page.to, page.label], ["page", "place", "Back to TQ-0002"]);
   navBack(); assert.equal(window.location.hash, "#task=2"); assert.deepEqual(opened, ["#task=2"]);
   const row = navTarget(onRow("task:2", rail("task:2", "task:1")));                    // ...landed on the row by the page's Back
   assert.deepEqual([row.to, row.key, row.label], ["above", "task:1", ""], "the row above, not the page he came from");

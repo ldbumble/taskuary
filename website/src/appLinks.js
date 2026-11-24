@@ -122,11 +122,12 @@ export const placeLabel = (h) => {
 //   a ROW of the walk (a rail row on the table, or the walk's end): plain Back, the row directly above (walk.above - the server's word, its
 //     move railwalk.back), greyed on the first row; it never goes to a page he came from
 //   a PAGE (Settings, Reports, Connections, an item that is no rail row): "Back to <where>", the place he came from (navBack), never out of the app
-// Every Back - the bar's, the narrow window's row, Alt+Left - reads this one answer: { to: "above" | "place" | null, key, label, disabled, why }
+// Every Back - the bar's, the narrow window's row, Alt+Left - reads this one answer: { kind, to: "above" | "place" | null, key, label, disabled, why }
+// (a row's label and hint are the button's own words, buttons.json "back")
 export const navTarget = ({ row = false, above = null, history = canGoBack(), from = PLACES[depth() - 1] } = {}) => {
-  if (row) return { to: above ? "above" : null, key: above || null, label: "", disabled: !above, why: "nothing above this one" };
+  if (row) return { kind: "row", to: above ? "above" : null, key: above || null, label: "", disabled: !above, why: "nothing above this one" };
   const name = history ? placeLabel(from) : "";
-  return { to: history ? "place" : null, key: null, label: name ? `Back to ${name}` : "", disabled: !history, why: "nothing to go back to" };
+  return { kind: "page", to: history ? "place" : null, key: null, label: name ? `Back to ${name}` : "", disabled: !history, why: "nothing to go back to" };
 };
 // ...AND A STEP THE ADDRESS MADE ITSELF IS OURS TOO (reproduced on a scratch app, 2026-11-19): a link or a typed address (location.hash = ...)
 // makes an entry with no count, and Back onto it read "nothing behind": the corner arrow went and the bar's Back greyed with places still

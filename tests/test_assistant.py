@@ -342,6 +342,23 @@ class PostTests(unittest.TestCase):
         self.assertEqual(out['said'], 0)
         self.assertEqual(s.list_ideas('open'), [])
 
+    def test_a_reply_on_one_thread_is_not_the_last_word_of_another_on_the_same_task(self):
+        """Walk 14 (NEW-c): a colleague's new question (a duplicate payment) joined a busy task on a thread of its own; the card's reply to the
+        vendor on that task was taken as the last word of HIS thread - "last word YOURS" - and no surface said he was owed an answer."""
+        s = _store()
+        tid = s.create_task({'Title': 'Trainly renewal', 'Kind': 'general', 'Status': 'open'}, 't')
+        dana = _mail(s, 'dana@vendor.example', 'Trainly quote', 'We can do $9.60 a seat - reply approved to accept.', hours=5, days=0,
+                     conv='c-dana', tid=tid, status='routed', name='Dana Holt')
+        rid = s.add_review({'TaskId': tid, 'MessageId': dana, 'Kind': 'draft_reply', 'DraftText': 'approved', 'Status': 'pending'})
+        s.decide_review(rid, 'approved', 'approved', 'owner')
+        omar = _mail(s, 'omar@northwind.example', 'Duplicate payment?', 'We paid Trainly twice in October, $2,550 x2 - refund or credit?',
+                     hours=4, days=0, conv='c-omar', tid=tid, status='routed', name='Omar Keller')
+        s.add_route(omar, tid, 'attach', None, 'the same job', [], 'triage', verdict={'intent': 'task', 'asks_owner': True})
+        txt = assistant._people(s)
+        self.assertIn('- Omar Keller [email] re "Duplicate payment?" - 1 new, last word THEIRS', txt)
+        self.assertIn('- Dana Holt [email] re "Trainly quote" - 1 new, last word YOURS', txt)      # ...her own thread still is answered
+        self.assertEqual([a['action']['mid'] for a in assistant.unanswered(s)], [omar])
+
     def test_a_promise_you_made_is_your_own_open_item_not_a_chase(self):
         s = _store()
         _mail(s, DANA, 'Contract', 'Can you send the signed copy?', days=4, conv='p1')

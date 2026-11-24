@@ -199,6 +199,31 @@ def _reply_text(review: dict | None) -> str:
     """The words that left through Review, never an unsent draft."""
     return str((review or {}).get('FinalText') or (review or {}).get('DraftText') or '').strip()
 
+
+def is_mine(store, me: str = None):
+    "A test for a message row: is it the owner's own - read back from Sent ('context'), sent from here ('out'), a note of his (`own`), or from his address?"
+    me = (me if me is not None else store.get_setting('owner_email') or '').lower()
+    return lambda c: (c.get('Status') == 'context' or c.get('Direction') == 'out' or c.get('Channel') == 'own'
+                      or bool(me) and (c.get('FromEmail') or '').lower() == me)
+
+
+def last_word(store, chain: list, mine=None) -> dict:
+    """WHO HAS THE LAST WORD ON ONE THREAD: its newest message, or a reply a card sent ON THIS THREAD (by the mail it answers) that is newer
+    and not yet read back from the Sent folder. Per conversation, never per task (walk 14: a colleague's new question joined a task whose
+    card had just answered somebody else, and that reply was taken as the last word of HIS thread - "last word YOURS" - so nothing ever said
+    he was owed an answer). {'mine', 'at', 'sent': the receipt standing in for the reply not yet read back, else None}."""
+    from .channels import _same_words
+    mine = mine or is_mine(store)
+    rows = [c for c in chain if c.get('Status') != 'skipped']
+    last = max(rows, key=lambda c: (_ts(c.get('SentAt')), c.get('MessageId') or 0)) if rows else None
+    cid = next((c.get('ConversationId') for c in rows if c.get('ConversationId')), None)
+    rv = next(iter(store.sent_replies(conversation_id=cid, limit=1) if cid else
+                   (r for c in reversed(rows) for r in store.sent_replies(message_id=c['MessageId'], limit=1))), None)
+    at, said = (rv or {}).get('DecidedAt') or (rv or {}).get('CreatedAt'), _reply_text(rv)
+    back = rv and any(mine(c) and (_same_words(c.get('OwnText') or c.get('BodyText') or '', said) or _ts(c.get('SentAt')) >= _ts(at)) for c in rows)
+    if said and not back and (not last or _ts(at) >= _ts(last.get('SentAt'))): return {'mine': True, 'at': at, 'sent': rv}
+    return {'mine': bool(last and mine(last)), 'at': (last or {}).get('SentAt'), 'sent': None}
+
 from .autoreply import is_auto as _ooo_row                 # the mail system's own auto-reply mark, never a subject (autoreply.py)
 from .counsel import is_invite as _cal_mail                # a calendar's own mail: its MIME part / Graph type, never a subject
 _UNTIL = re.compile(r'\b(until|through|returning( on)?|back (on|in the office on))\s+([A-Z][a-z]+day,?\s+)?([A-Z][a-z]+ \d{1,2}(st|nd|rd|th)?|\d{1,2}/\d{1,2}(/\d{2,4})?)', re.I)
@@ -381,8 +406,7 @@ def their_asks(store, days: float = 2, hours: int = 3) -> tuple:
     pend = {r['TaskId'] for r in store.waiting_reviews()}
     # a note the owner handed an agent (channel `own`) is their own word, not an ask of them - it put
     # "You asked ... no answer from you" under People want for two handoffs the agents had already done
-    mine = lambda c: (c.get('Status') == 'context' or c.get('Direction') == 'out' or c.get('Channel') == 'own'
-                      or (c.get('FromEmail') or '').lower() == me)
+    mine = is_mine(store, me)
     seen, out, blank, away = set(), [], [], None
     # 500 rows was two quiet days; the away window reaches back up to three weeks (welcome.away_days), so the page grows with it
     for r in store.recent_messages(_since(days), limit=max(500, min(5000, int(days * 250)))):
@@ -394,7 +418,7 @@ def their_asks(store, days: float = 2, hours: int = 3) -> tuple:
         if not chain: continue
         last = chain[-1]
         # the owner's own rule (ignore), a feed connection and an auto-reply were settled without triage on purpose
-        if mine(last) or _ts(last.get('SentAt')) > cut or last.get('Status') in ('ignored', 'feed', AUTO): continue
+        if last_word(store, chain, mine)['mine'] or _ts(last.get('SentAt')) > cut or last.get('Status') in ('ignored', 'feed', AUTO): continue
         v = store.message_verdict(last['MessageId'])
         body = strip_wrapper(own_words(str(last.get('BodyText') or '')), wrapper_of(v))    # what triage named its wrapper is not quoted
         if v is not None and v.get('intent') not in ASKING: continue
@@ -937,8 +961,7 @@ def _people_context(store, days: int = 2) -> tuple[str, list[int]]:
         if sender_class(r, team) != 'person': continue
         k = r.get('ConversationId') or norm_subject(_short(r.get('Subject'), 60))
         by.setdefault(k, []).append(r)
-    me = (store.get_setting('owner_email') or '').lower()
-    mine = lambda c: c.get('Status') == 'context' or c.get('Direction') == 'out' or (c.get('FromEmail') or '').lower() == me
+    mine = is_mine(store)
     def chain_of(rs):
         chain = store.thread_messages(conversation_id=rs[0].get('ConversationId'), subject=rs[0].get('Subject'), limit=12) if rs[0].get('ConversationId') else rs
         return sorted((c for c in chain if c.get('Status') != 'skipped'), key=lambda c: _ts(c.get('SentAt')))[-8:] or rs
@@ -951,7 +974,6 @@ def _people_context(store, days: int = 2) -> tuple[str, list[int]]:
     out, used, mids, shown, folded = [], 0, [], set(), {}
     for rs, chain in threads:
         if len(out) >= PEOPLE_THREADS: break
-        last = chain[-1]
         who = next((c.get('FromName') or c.get('FromEmail') for c in reversed(chain) if not mine(c)), rs[0].get('FromName') or '?')
         if who in shown and not any(mine(c) for c in chain):
             folded.setdefault(who, []).append(rs[0]); continue
@@ -961,21 +983,10 @@ def _people_context(store, days: int = 2) -> tuple[str, list[int]]:
         # ingest that outbound line back into `message` immediately. Without this virtual final
         # message, the Assistant saw the finished task and the inbound ask, then confidently
         # claimed "nobody told them" minutes after the owner had approved and sent the reply.
-        sent = store.sent_reply(task_id=tid) if tid else None
-        if not sent:
-            for c in reversed(chain):
-                sent = store.sent_reply(message_id=c['MessageId'])
-                if sent: break
-        sent_text = _reply_text(sent)
-        sent_at = (sent or {}).get('DecidedAt') or (sent or {}).get('CreatedAt')
-        # Do not print it twice once the channel has ingested the same outbound line as context.
-        sent_norm = ' '.join(sent_text.split()).casefold()
-        own_after = any(mine(c) and (
-            ' '.join(str(c.get('BodyText') or '').split()).casefold() == sent_norm
-            or (sent_at and _ts(c.get('SentAt')) >= _ts(sent_at))) for c in chain)
-        virtual_reply = bool(sent_text and not own_after)
-        last_mine = virtual_reply or mine(last)
-        last_at = sent_at if virtual_reply else last.get('SentAt')
+        # ...a reply on THIS thread only (last_word): another person's on the same task is no answer to this one
+        lw = last_word(store, chain, mine)
+        sent, last_mine, last_at = lw['sent'], lw['mine'], lw['at']
+        virtual_reply, sent_text, sent_at = bool(sent), _reply_text(sent), lw['at']
         # ...and what TRIAGE decided when the latest line arrived - the other brain's verdict, so
         # this one argues with it in the open ("triage filed this as fyi, but...") instead of
         # raising the thread as if nothing had judged it

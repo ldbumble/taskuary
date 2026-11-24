@@ -143,7 +143,9 @@ def _said(steps: list, body: str = '', seen: set = None) -> list:
         # answer joined them - each paragraph drawn twice, the answer's opener cut as "said already"): a paragraph of a step the answer holds
         # - one of its paragraphs, or a longer run of its words (a message cut mid-word by a line he typed) - is left out, and is no opener seen
         if not (w := '\n\n'.join(p for p in _PARA.split(clean(s.get('text'))) if (f := _flat(p)) and not (f in ps or len(f) >= _RUN and f in fb))): continue
-        out.append({**s, 'text': said_once(w, seen)})
+        # ...and a message the turn already said, word for word, is drawn once (walk 11: one sentence sent as two messages around end_turn)
+        if (f := ' '.join(w.split())) in seen: continue
+        out.append({**s, 'text': said_once(w, seen)}); seen.add(f)
     return out
 
 

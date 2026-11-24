@@ -1623,6 +1623,10 @@ def test_a_turn_says_each_messages_opener_once():
     assert said_once(f'{lead} The summary and deck are ready.', seen) == 'The summary and deck are ready.'
     assert said_once(lead, seen) == lead, 'nothing else to say: kept whole'
     assert said_once('No sentence end here', set()) == 'No sentence end here'
+    # ...and a message the turn already said whole is drawn once (walk 11: the same sentence sent twice around end_turn, drawn twice in a row)
+    same = 'Erin\'s reply only said "dict" and gave us nothing to act on.'
+    assert [x['text'] for x in _said([{'k': 'said', 'text': same}, {'k': 'said', 'text': same}, {'k': 'said', 'text': 'No sentence end'},
+                                      {'k': 'said', 'text': 'No sentence end'}])] == [same, 'No sentence end']
 
 
 def test_a_refusal_of_a_plumbing_call_reaches_the_agent_only():

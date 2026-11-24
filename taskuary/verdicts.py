@@ -473,10 +473,15 @@ def not_needed(store, tid: int, why: str, by: str) -> dict:
     from .wrapup import WITHDRAWN
     why = ' '.join(str(why or '').split())
     if not why: return {'ok': False, 'why': 'say why the reply is not needed - who answered it, or what changed'}
-    rv = store.pending_review(tid, kind='draft') or store.pending_review(tid, kind='draft_reply')
+    from .proposals import SET_ASIDE
+    # ...the reply his own answer greyed is the one it retires (walk 11: he answered outside the app, his mail set the draft aside, and the
+    # agent was told "no reply is waiting" - it said so to him, over the greyed letter that stood there)
+    rv = (store.pending_review(tid, kind='draft') or store.pending_review(tid, kind='draft_reply')
+          or store._one("SELECT * FROM review WHERE TaskId=? AND Kind IN ('draft','draft_reply') AND Status='superseded' AND DecideNote=? "
+                        "AND IFNULL(DraftText,'')<>'' ORDER BY ReviewId DESC LIMIT 1", (tid, SET_ASIDE)))
     if not rv: return {'ok': False, 'why': 'no reply is waiting on this task, so there is nothing to mark'}
     store.set_review_not_needed(rv['ReviewId'], why)
-    if not store.decide_review(rv['ReviewId'], 'closed_unsent', None, by, note=WITHDRAWN + why[:300]):
+    if not store.decide_review(rv['ReviewId'], 'closed_unsent', None, by, note=WITHDRAWN + why[:300], was=('pending', 'held', 'superseded')):
         return {'ok': False, 'why': 'that reply is being sent or already went - it cannot be put down'}
     store.add_comment(tid, by, 'agent', f"The drafted reply is not needed: {why.rstrip('.')}. It is kept under Not sent - Bring it back still sends it.")
     promotion_ended(store, tid, why)

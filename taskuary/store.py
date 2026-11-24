@@ -5791,11 +5791,12 @@ class SQLiteStore:
             except Exception as e: logger.warning(f'review {rid}: sent, and not written to the ledger - {e}')
         if changed: self._review_changed(rid)
         return changed
-    def decide_review(self, rid, status, final, by, note=None):
+    def decide_review(self, rid, status, final, by, note=None, was=('pending', 'held')):
+        "`was`: the states it may be decided from - a draft the chat set aside ('superseded') is still the agent's to retire (verdicts.not_needed)."
         with self.lock:
-            cur = self.cx.execute("UPDATE review SET Status=?, FinalText=?, DecidedBy=?, DecidedAt=?, DecideNote=? WHERE ReviewId=? "
-                                  "AND Status IN ('pending','held') AND DeliveryClaim IS NULL AND IFNULL(DeliveryState,'')<>'sent'",
-                                  (status, final, by, _now(), note, rid))
+            cur = self.cx.execute(f"UPDATE review SET Status=?, FinalText=?, DecidedBy=?, DecidedAt=?, DecideNote=? WHERE ReviewId=? "
+                                  f"AND Status IN ({','.join('?' * len(was))}) AND DeliveryClaim IS NULL AND IFNULL(DeliveryState,'')<>'sent'",
+                                  (status, final, by, _now(), note, rid, *was))
             self.cx.commit(); self._writes += 1
         if cur.rowcount: self._review_changed(rid)
         return bool(cur.rowcount)

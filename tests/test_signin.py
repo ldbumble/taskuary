@@ -1157,7 +1157,11 @@ def test_a_password_the_agents_own_press_sends_is_kept_and_put_back_when_refused
     its password box held, and later it called them accounts that "already existed". A press of the agent's that sends a password seals it
     first, keeps it once the site takes it, and the command's output says so; refused, the row it replaced comes back."""
     s = MemoryStore(); tid = Factory(s).task('Market data')
-    page = UpPage(pw='typed-by-the-agent-1!')
+    # ...A NEW ACCOUNT'S PASSWORD IS NEVER THE AGENT'S (walk 10, 2026-11-23: told ten times to run signup, it typed its own into every form):
+    # its press on a form that makes one is the sign-up's to make, and nothing it typed is kept
+    page = UpPage(pw='typed-by-the-agent-1!', new=True)
+    assert signin.pressing(s, tid, 'sess1', 'rentscope.example', conn=page) == signin.UNSAVED
+    assert signin.saved(s, 'rentscope.example') is None and signin.settled(s, 'sess1', conn=page) == ''
     # ...on a site with a saved sign-in, what its press sent is kept as it was
     signin.save(s, 'rentscope.example', USER, PW)
     signin.pressing(s, tid, 'sess1', 'rentscope.example', conn=page)
@@ -1172,36 +1176,61 @@ def test_a_password_the_agents_own_press_sends_is_kept_and_put_back_when_refused
     assert vault.unseal(signin.saved(s, 'vacancyiq.example')['Secret']) == PW, 'the sign-in that works is back'
 
 
-def test_a_sign_up_the_agent_types_itself_is_kept_as_one_the_command_makes():
-    """Walk 11: an agent signed up by typing into the page itself - its user name and password into the site's sign-in form first (refused),
-    then into the sign-up form beside it, and Create - and nothing was in the vault; the sign-in it typed first was answered by a sign-up run on
-    that form. The gate's own read of the form at the press keeps a NEW password (typed twice, or marked new-password) as the command keeps one:
-    the agent's, unconfirmed, on the record as made; a refused sign-in keeps nothing; a later signed-in page confirms it. The password goes
-    nowhere but the vault."""
+def test_an_agents_sign_in_on_a_site_with_nothing_saved_is_a_sign_in_never_a_sign_up():
+    """Walk 11: the agent typed a user name and password into a site's sign-in form - nothing saved for the site - and the gate ran Taskuary's
+    sign-up on that sign-in form. A sign-in press is a sign-in: it goes, a refusal keeps nothing, one the site lets in is kept as signed in."""
+    from taskuary import ledger
+    s = MemoryStore(); tid = Factory(s).task('Trial account for Erin')
+    login = UpPage('https://www.trailhub.example/login', pw='Typed-by-the-agent-7!')
+    assert signin.pressing(s, tid, 'sess1', 'trailhub.example', conn=login) is None, 'the press goes - no sign-up is run on it'
+    with mock.patch.object(signin, 'REJECT_WAIT', 0): assert signin.settled(s, 'sess1', conn=login) == ''
+    assert signin.saved(s, 'trailhub.example') is None and not ledger.rows(s, 'account'), 'a refused sign-in keeps nothing'
+    login = UpPage('https://www.trailhub.example/login', pw='Typed-by-the-agent-7!')
+    signin.pressing(s, tid, 'sess1', 'trailhub.example', conn=login)
+    login.go('data', 'https://www.trailhub.example/boards')
+    assert 'kept' in signin.settled(s, 'sess1', conn=login)
+    assert [r['Act'] for r in ledger.rows(s, 'account')] == ['signed_in'] and signin.listing(s)[0]['confirmed']
+
+
+def test_a_password_the_agent_types_into_a_sign_up_form_is_replaced_by_the_sign_ups_own_and_kept_unconfirmed():
+    """Walk 11: a sign-up typed into the page by hand (fill, fill, click Create) left nothing in the vault. A press on a form that MAKES a
+    password (typed twice, or marked new-password) is refused as before, and the sign-up runs on that form: a password of Taskuary's own, kept
+    for the agent, on the record as made - unconfirmed until a signed-in page, which a later act on the site confirms. The agent's password and
+    Taskuary's go nowhere but the vault."""
     from taskuary import browsergate, ledger
-    s = MemoryStore(); tid = Factory(s).task('Trial account for Erin'); typed, logs = 'Typed-by-the-agent-7!', []
+    s = MemoryStore(); tid = Factory(s).task('Trial account for Erin'); agents, logs, made = 'Typed-by-the-agent-7!', [], []
     hid = logger.add(lambda m: logs.append(str(m)), level='DEBUG')
     try:
-        login = UpPage('https://www.trailhub.example/login', pw=typed)
-        signin.pressing(s, tid, 'sess1', 'trailhub.example', conn=login)
-        with mock.patch.object(signin, 'REJECT_WAIT', 0): assert signin.settled(s, 'sess1', conn=login) == ''
-        assert signin.saved(s, 'trailhub.example') is None and not ledger.rows(s, 'account'), 'a refused sign-in keeps nothing'
-        page = UpPage('https://www.trailhub.example/signup', pw=typed, new=True)
-        signin.pressing(s, tid, 'sess1', 'trailhub.example', conn=page)
-        page.go('more', 'https://www.trailhub.example/welcome')                      # ...the site took it and asks one more step
-        line = signin.settled(s, 'sess1', conn=page)
+        page = UpPage('https://www.trailhub.example/signup', pw=agents, new=True)
+        assert signin.pressing(s, tid, 'sess1', 'trailhub.example', conn=page) == signin.UNSAVED and signin.saved(s, 'trailhub.example') is None
+        ok, said = signing_up(s, tid, page, lambda sid, site, c: c.go('more', 'https://www.trailhub.example/welcome') or {'ok': True, 'user': USER}, made)
         row = signin.saved(s, 'trailhub.example')
-        assert (vault.unseal(row['Secret']), vault.unseal(row['User']), row['SavedBy'], row['Task']) == (typed, USER, 'agent', tid)
-        assert [r['Act'] for r in ledger.rows(s, 'account')] == [signin.MADE]
-        [kept] = signin.listing(s)
-        assert kept['by'] == 'agent' and not kept['confirmed'] and 'kept' in line
+        assert (vault.unseal(row['Secret']), vault.unseal(row['User']), row['SavedBy'], row['Task']) == (made[0], USER, 'taskuary', tid)
+        assert made[0] != agents and [r['Act'] for r in ledger.rows(s, 'account')] == [signin.MADE]
+        assert signin.listing(s)[0]['by'] == 'agent' and not signin.listing(s)[0]['confirmed']
         page.go('data', 'https://www.trailhub.example/boards')                      # ...a later page of it, signed in
         with mock.patch.object(signin, 'connect', return_value=page), mock.patch.object(browsergate, '_outcome', return_value=''):
             browsergate.outcome('sess1', s)
         assert signin.listing(s)[0]['confirmed'] and ledger.rows(s, 'account')[0]['Act'] == 'signed_in'
     finally: logger.remove(hid)
-    trace = json.dumps([s._rows('SELECT * FROM audit'), s._rows('SELECT * FROM comment'), ledger.rows(s), line, logs], default=str)
-    assert typed not in trace
+    trace = json.dumps([s._rows('SELECT * FROM audit'), s._rows('SELECT * FROM comment'), ledger.rows(s), said, logs], default=str)
+    assert agents not in trace and made[0] not in trace
+
+
+def test_a_sign_up_whose_first_step_asks_only_the_email_is_made_on_its_password_step():
+    """An email-first sign-up: step one has no password box, so its press goes and only the email is remembered; on the password step the
+    agent's own password typed twice is the sign-up's to replace, and the account is kept under step one's email."""
+    s = MemoryStore(); tid = Factory(s).task('Trial account for Erin'); signin._USERS.clear(); made = []
+    step1 = UpPage('https://id.boardly.example/signup', pwbox=False)
+    assert signin.pressing(s, tid, 'sess1', 'boardly.example', conn=step1) is None and signin.saved(s, 'boardly.example') is None
+    step2 = UpPage('https://id.boardly.example/signup/password', user='', pw='Typed-by-the-agent-7!', new=True)
+    assert signin.pressing(s, tid, 'sess1', 'boardly.example', conn=step2) == signin.UNSAVED
+    with mock.patch.object(signin, 'CODE_INLINE', 0), mock.patch.object(signin, 'code_watch', lambda *a, **k: None):
+        ok, said = signing_up(s, tid, step2, lambda sid, site, c: c.go('code', 'https://id.boardly.example/verify') or {'ok': True, 'user': ''}, made)
+    from taskuary import ledger
+    assert [r['Act'] for r in ledger.rows(s, 'account')] == [signin.MADE], 'a code still asked: made, not confirmed'
+    row = signin.saved(s, 'boardly.example')
+    assert (vault.unseal(row['User']), vault.unseal(row['Secret'])) == (USER, made[0]) and said.startswith('Not an account yet')
 
 
 def test_a_sign_in_with_the_saved_password_keeps_nothing_new():
@@ -1362,6 +1391,7 @@ def test_a_new_password_is_in_every_box_or_the_sign_up_says_which_did_not_keep_i
     class Page:
         def __init__(self, sticky): self.boxes, self.at, self.redraw, self.sticky = ['', ''], 0, True, sticky
         def js(self, code):
+            if code == signin.SCOPE: return False
             if code.startswith(f'({signin.KEPT})'): return [b == json.loads(code[len(signin.KEPT) + 3:-1]) for b in self.boxes]
             self.at = int(code[len(signin.PASSBOX) + 3:-1])
             return {'n': 2, 'top': True, 'href': 'https://mail.vendor.example/signup', 'focused': self.at >= 0}

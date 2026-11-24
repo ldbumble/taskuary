@@ -1266,10 +1266,11 @@ def closed(store, tid: int, out: list) -> None:
     if (note := next((c['note'] for c in reversed(store.closeouts(tid)) if c['what'] == 'closed'), '')): x['text'] = f"{x['text'].rstrip('.')} - {note.rstrip('.')}."
 
 
-def missing(store, tid: int, got: dict) -> list:
+def missing(store, tid: int, got: dict, upto: int = None) -> list:
     """THE PERMANENT COMPARE (the owner's GO, 2026-11-19: "fix it once and for all"): what the store made for task `tid` against what the
     chat `got` shows - every answer filed has its turn, every line of his heard has its item, the card that waits on his press stands - each
-    gap one sentence naming the road that made the thing. Read at rest only (a turn at work shows its card and answer at its end). [] when whole."""
+    gap one sentence naming the road that made the thing. Read at rest only (a turn at work shows its card and answer at its end). [] when whole.
+    `upto`: the newest comment filed before `got` was read - one filed after it is no gap of that read."""
     from . import cardqueue, general, sessionrecord
     if got.get('working'): return []
     ids = {x['id'] for x in got.get('items') or []} | {p['id'] for p in got.get('pending') or []}
@@ -1277,6 +1278,7 @@ def missing(store, tid: int, got: dict) -> list:
     cards = {c['review'] for x in got.get('items') or [] for c in ([x] if x['kind'] == 'card' else x.get('cards') or [])}
     out = []
     for c in store.list_comments(int(tid), internal=True):
+        if upto is not None and c['CommentId'] > upto: continue
         if c.get('ActorType') == general.ASSISTANT_TYPE and f"comment-{c['CommentId']}" not in answers and f"n:c{c['CommentId']}" not in answers:
             out.append(f"i: answer comment-{c['CommentId']} filed by {c.get('Actor')!r} is in no turn")
         if c.get('ActorType') == general.USER_TYPE and c.get('Actor') != general.BRIEF_ACTOR and (k := c.get('LineId')) and k not in ids:

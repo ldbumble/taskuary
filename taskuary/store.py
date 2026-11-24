@@ -5312,7 +5312,11 @@ class SQLiteStore:
                 self.cx.execute('UPDATE comment SET Body=?, Files=? WHERE CommentId=?',
                                 (json.dumps({n: x for n, x in got.items() if n != 'files'}), files_json(got['files']), k))
     def add_comment(self, task_id, actor, actor_type, body, line_id=None, files=None):
-        "`files`: what he attached to this line of his - kept beside its words (files_json), never written into them."
+        """`files`: what he attached to this line of his - kept beside its words (files_json), never written into them. The comment and its
+        row in the chat's log are ONE STEP under the store's lock (Windows CI, 2026-11-24: an answer filed, its turn's row written a beat later -
+        a read at rest in that beat held an answer in no turn): a chat read (pinned_read) begins under the same lock, so it sees both or neither."""
+        with self.lock: return self._add_comment(task_id, actor, actor_type, body, line_id, files)
+    def _add_comment(self, task_id, actor, actor_type, body, line_id, files):
         cid = self._exec('INSERT INTO comment (TaskId,Actor,ActorType,Body,CreatedAt,LineId,Files) VALUES (?,?,?,?,?,?,?)',
                          (task_id, actor, actor_type, body, at := _now(), line_id, fj := files_json(files)))
         # ...a line of his is on the record (ledger.owner_line): the addresses he gave in it and the files he attached, known on every task

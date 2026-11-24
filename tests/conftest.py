@@ -850,13 +850,14 @@ def the_basic_flow(request):
     from taskuary import conversation
     real, prev, bad = conversation.items, weakref.WeakKeyDictionary(), []
     def items(store, tid, *a, **k):
+        key = int(tid)
+        upto = (store._one('SELECT MAX(CommentId) AS c FROM comment WHERE TaskId=?', (key,)) or {}).get('c') or 0     # ...what this read can hold
         got = real(store, tid, *a, **k)
         prev.setdefault(store, {})
-        key = int(tid)
         bad.extend(f'task {tid}: {b}' for b in conversation.flow_breaks(got, prev[store].get(key)) if f'task {tid}: {b}' not in bad)
         # ...AND NOTHING THE STORE MADE IS MISSING FROM IT (chatlog.missing: the permanent compare, naming the road that made it)
         from taskuary import chatlog
-        bad.extend(f'task {tid}: {b}' for b in chatlog.missing(store, key, got) if f'task {tid}: {b}' not in bad)
+        bad.extend(f'task {tid}: {b}' for b in chatlog.missing(store, key, got, upto) if f'task {tid}: {b}' not in bad)
         if os.environ.get('FLOW_DUMP'): print('LIST', tid, [(x['id'], x.get('state', ''), [(c['id'], c['status']) for c in x.get('cards') or []]) for x in got['items']], got.get('working'))
         prev[store][key] = got
         return got

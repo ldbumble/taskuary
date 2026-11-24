@@ -762,3 +762,23 @@ def test_a_check_back_made_as_the_turn_filed_is_said_under_that_turn():
     assert [x['kind'] for x in got] == ['turn', 'note'], 'one line, under the turn, never splitting it'
     assert f"set for {remind.when(cb['at'])}: Dana sent the corrected quote" in got[1]['text']
     assert agenttools.made_late(s, tid, [], set()) == ''
+
+
+def test_an_answer_filed_is_never_read_without_its_turn():
+    """Windows CI, 2026-11-24: an answer's comment was written, and its turn's row a beat later (chatlog.answered) - a read at rest in that
+    beat held an answer filed in no turn (chatlog.missing). Filing one is one step under the store's lock: a read waits for both."""
+    import threading
+    from unittest import mock
+    from taskuary import conversation, general
+    s, tid = world()
+    general.wait_line(s, tid, 'Send Erin the review', line_id='l-1'); conversation.hear(s, tid, ['l-1'], turn=True)
+    conversation.items(s, tid)                  # ...read once: its log is the record from here
+    real, between, go, gaps = chatlog.answered, threading.Event(), threading.Event(), []
+    def slow(*a, **k): between.set(); go.wait(5); return real(*a, **k)
+    def read(): gaps.extend(chatlog.missing(s, tid, conversation.items(s, tid)))
+    with mock.patch.object(chatlog, 'answered', slow):
+        w = threading.Thread(target=lambda: s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'Sent Erin the review.'), daemon=True); w.start()
+        assert between.wait(5)
+        r = threading.Thread(target=read, daemon=True); r.start(); r.join(0.5)
+        go.set(); w.join(5); r.join(5)
+    assert not r.is_alive() and gaps == [], gaps

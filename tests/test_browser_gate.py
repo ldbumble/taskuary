@@ -854,6 +854,27 @@ def test_an_answer_out_of_shape_is_asked_once_more_before_anything_waits_on_him(
     assert (v['hold'], len(calls)) == (False, 2), (v, calls)
 
 
+# ── walk 11, 2026-11-23 ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+def test_a_control_with_a_card_of_text_and_no_role_he_knows_is_named_by_its_first_words():
+    """'Clicked the "RevolutionaryMost popular?3.60per month20 GB storage..." generic': a plan card's whole text run together as its name,
+    the accessibility tree's 'generic' as its kind, and the euro sign lost on the way to the agent's shell."""
+    snap = '- generic "Revolutionary Most popular €3.60 per month 20 GB storage 15 calendars" [ref=e79]\n- button "Pay now" [ref=e80]'
+    pg = {'url': 'https://app.tuta.example/plans', 'elements': snap, 'name': 'tuta.example'}
+    assert bg.target(bg.acts("agent-browser click '@e79'")[0], pg) == 'click the "Revolutionary Most popular €3.60 per…" on tuta.example'
+    assert bg.target(bg.acts("agent-browser click '@e80'")[0], pg) == 'click the "Pay now" button on tuta.example'
+
+
+def test_the_gate_writes_its_own_lines_in_utf8_beside_the_programs_own():
+    import io, sys
+    out = io.TextIOWrapper(io.BytesIO(), encoding='cp1252', errors='replace')
+    with mock.patch.object(gate, 'real', return_value='agent-browser'), mock.patch.object(gate, 'own', return_value=''), \
+         mock.patch.object(gate, 'ask', side_effect=['', 'TASKUARY-DID: Clicked the "Plan €3.60 → yearly" button']), \
+         mock.patch('taskuary.spawn.run', return_value=SimpleNamespace(returncode=0)), mock.patch.object(sys, 'stderr', out):
+        gate.main(['gate', 'agent-browser', 'click', '@e79'])
+        out.flush()
+        assert out.buffer.getvalue().decode('utf-8').strip() == 'TASKUARY-DID: Clicked the "Plan €3.60 → yearly" button'
+
+
 # ── the walk, 2026-11-19 ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 def test_a_step_found_by_what_it_is_is_named_for_him_never_as_the_command():
     pg = {'url': 'https://pay.toll.example/checkout', 'elements': ''}

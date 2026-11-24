@@ -1,7 +1,7 @@
 """AN APPROVAL IS AN EVENT, AND THE AGENT GOES ON (the owner, 2026-11-09: "i hit approve why was this then an input on the right side?? ... once i
 approve it should say sent and what to do next, not a new prompt on right side"). Taskuary's note to the agent after the press is never
 recorded as the owner's line, on any transport; the press itself is an event with its result; every yes that went wakes the agent."""
-import json, threading, time, unittest
+import json, re, threading, time, unittest
 from types import SimpleNamespace
 from unittest import mock
 
@@ -759,7 +759,10 @@ class TheChatMovedOn(unittest.TestCase):
         conversation.hear(self.s, self.tid, ['l-deploy'])                                          # ...its agent takes the line
         r = self.s.get_review(rid)
         self.assertTrue(proposals.passed(r), 'set aside for good as the agent hears it')
-        self.assertIn(f'rv{rid}', cardqueue.screen(self.s, self.tid).split('Greyed, will not go')[1], 'and the agent is told, to raise it again')
+        # ...and the agent is told, by what it is (a card of one is named, never numbered - walk 11), and can raise it again by that name
+        said = cardqueue.screen(self.s, self.tid).split('Greyed, will not go')[1]
+        self.assertIn('finishing it', said); self.assertNotIn(f'rv{rid}', said)
+        self.assertEqual(cardqueue.named(self.s, self.tid, 'finishing it'), [rid])
 
     def reply_to_gail(self):
         """Gail asked on her thread, and her reply is ready."""
@@ -895,9 +898,10 @@ def test_the_screen_fact_says_what_waits_what_is_held_what_is_greyed_and_what_ha
     s._exec("UPDATE review SET DeliveryState='sent', DecidedAt='1999-12-31 09:00:00' WHERE ReviewId=?", (sent,))     # ...heard by the answer after it
     x, reddit = post('X', 'The portal launches Monday.'), post('Reddit', 'Northwind ledger portal: invoices in one place.')
     said = cardqueue.screen(s, tid)
-    assert f'rv{x}' in said.split('Waiting for his press now:')[1].split('\n')[0] and 'The portal launches Monday.' in said, said
-    assert f'rv{reddit}' in said.split('Not on his screen yet')[1].split('\n')[0], said
-    assert f'rv{sent}' in said.split('Sent')[1].split('\n')[0] and 'gail@northwind.example' in said, said
+    # ...each card of one by what it is, never its number (walk 11: the agent told him it drafted the reply "(rv2)")
+    assert 'post on X' in said.split('Waiting for his press now:')[1].split('\n')[0] and 'The portal launches Monday.' in said, said
+    assert 'post on Reddit' in said.split('Not on his screen yet')[1].split('\n')[0], said
+    assert 'the email to gail@northwind.example' in said.split('Sent')[1].split('\n')[0] and not re.search(r'\brv\d', said), said
     s._exec("UPDATE review SET CreatedAt='2000-01-01 00:00:01' WHERE ReviewId IN (?,?)", (x, reddit))
     general.wait_line(s, tid, 'Give me a button for each', line_id='l-each')                 # ...his line greys both, the moment it is sent
     said = cardqueue.screen(s, tid)

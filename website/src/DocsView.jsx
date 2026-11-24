@@ -27,7 +27,7 @@ import { fmtDate } from "./dates.js";
 
 const DOCS = {
   soul: { label: "SOUL.md", icon: <AutoStoriesIcon sx={{ fontSize: 19, color: "var(--tq-link, #55697a)" }} />,
-    blurb: "The funnel's constitution AND the base system prompt: what counts as a task, how we respond, escalation rules, the repository map. Injected into every triage and every draft." },
+    blurb: "What Taskuary always keeps to: what counts as a task, how you answer, when something is raised with you, the places your work lives. Every message it sorts and every draft it writes stands on it." },
   // EVERY AGENT'S INSTRUCTIONS ARE A FILE HE CAN EDIT (the owner, 2026-11-23): read by every agent on every AI at its next turn; security
   // stays in code and is not in it. The meter keeps it short (doclimits: selfclose.AGENTS_CHARS)
   agents: { label: "AGENTS.md", icon: <SmartToyIcon sx={{ fontSize: 19, color: "var(--tq-link, #55697a)" }} />,
@@ -35,7 +35,7 @@ const DOCS = {
   job: { label: "JOB.md", icon: <WorkOutlineIcon sx={{ fontSize: 19, color: "var(--tq-link, #55697a)" }} />,
     blurb: "What your job IS — the mission, the responsibilities, who you serve, the cadences the month runs on, the decisions that are yours and the ones you hand up. SOUL.md says how the funnel behaves; this is what it is protecting. Triage, the chat and the morning brief weigh what matters by it; working agents never see it. Write it yourself, or Generate from history reads it out of three months of your mail, both directions." },
   triage: { label: "TRIAGE.md", icon: <FilterAltIcon sx={{ fontSize: 19, color: "var(--tq-link, #55697a)" }} />,
-    blurb: "The triage brain's instructions — what makes a message a task, a question, or FYI, and which way to lean when torn. Ships as a sensible default; edit it to reshape every verdict. Keep the JSON answer line, or triage falls back to keyword heuristics. Blank it to restore the default." },
+    blurb: "How each message that comes in is sorted — a task, a question, or just for your information — and which way to lean when it is unclear. Edit it to change how every message is sorted; keep its last line, which is the form the answer takes. Blank it to restore the default." },
   style: { label: "STYLE.md", icon: <RateReviewIcon sx={{ fontSize: 19, color: "var(--tq-link, #55697a)" }} />,
     blurb: "How you write email — greeting, tone, length, phrasing, sign-off, and your recurring signature — layered onto SOUL.md for every draft. Write it yourself, or Generate from history distills it from your last three months of sent mail; your own lines outside the marked block always survive a regenerate." },
   counsel: { label: "COUNSEL.md", icon: <SupportAgentIcon sx={{ fontSize: 19, color: "var(--tq-link, #55697a)" }} />,

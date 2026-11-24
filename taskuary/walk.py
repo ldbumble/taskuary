@@ -75,7 +75,7 @@ STOPS = [
         _can('add an AI CLI agent', 'Connections', 'cli-agents'),
         _can('test any connection and see what it answered', 'Connections')]},
     {'key': 'docs', 'title': 'Docs', 'image': '/walk/docs.png',
-     'blurb': 'The documents the funnel runs on. SOUL.md is its constitution - what counts as a '
+     'blurb': 'The documents Taskuary works by. SOUL.md is what it always keeps to - what counts as a '
               'task, how you answer, what it must never do. STYLE.md is how you write. JOB.md is what '
               'your job is, read out of your own mail. Edit one and triage changes; blank one and the '
               'shipped default comes back, so nothing is lost by trying.',

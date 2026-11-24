@@ -482,6 +482,11 @@ def post(cmd: str, after: bool = False, wait: float = WAIT, rc: int = 0) -> dict
 
 def main(argv: list = None) -> int:
     gate, name, *args = sys.argv[1:] if argv is None else argv
+    # ...ITS OWN LINES IN UTF-8, as the program's beside them are: Windows wrote them in the console's code page, so a "€3.60" the page named came
+    # to the agent - and to his step row - as "?3.60" in the middle of agent-browser's own UTF-8 (walk 11)
+    for f in (sys.stdout, sys.stderr):
+        try: f.reconfigure(encoding='utf-8', errors='replace')
+        except (AttributeError, ValueError): pass
     exe = real(name, gate)
     if not exe: print(f'{name} is not installed on this computer.', file=sys.stderr); return 127
     if name == 'agent-browser' and (verb := own(shlex.join([name, *args]))):

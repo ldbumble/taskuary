@@ -196,15 +196,15 @@ TOOLS = {
                                 "one line. The draft is put down - kept under Not sent, never sent or deleted - and the page shows only "
                                 "your turn saying so; draft a new reply if something is still owed.", _S({'why': _STR}, ('why',)), ('POST', '/api/agent/not-needed')),
     'withdraw_draft': ('own', "Take back something you set up here that has not gone out - the reply, an email, a post, another "
-                              "proposal - when the goal changed or it no longer answers the newest message. `which`: its review id "
-                              "(each propose tool returns one; a card of many, all its ids: 'rv1 + rv2') or who it was to; none for the reply. `why`: one line on what changed."
+                              "proposal - when the goal changed or it no longer answers the newest message. `which`: what it is or who it "
+                              "was to, as the screen fact names it (a card of many: all its ids, 'rv1 + rv2'); none for the reply. `why`: one line on what changed."
                               " It is kept under Not sent with the owner's Bring it back; what already went is never touched. To "
                               "correct a reply, just propose the new one; an email IN PLACE of another is the new one's `replaces` - "
                               "one call, one Send left.",
                        _S({'why': _STR, 'which': _STR}, ('why',)), ('POST', '/api/agent/withdraw-draft')),
     'keep_card': ('own', "A card the owner's newest line or a new message greyed, that still stands as it is: it comes back under the "
-                         "newest line, the same words and envelope, for his press - no new proposal. `which`: its review id as the screen "
-                         "fact names it (a card of many: 'rv1 + rv2'). One the input changed: propose its new version instead. "
+                         "newest line, the same words and envelope, for his press - no new proposal. `which`: the card as the screen "
+                         "fact names it (a card of many: its ids, 'rv1 + rv2'). One the input changed: propose its new version instead. "
                          "One his press handed you that you cannot do (no account, the site refused): keep it with `why` - his card says it.",
                   _S({'which': _STR, 'why': _STR}, ('which',)), ('GET', '/api/tasks/1')),
     'hand_over': ('own', "A step on your browser's page only the owner can do - a sign-in or code you cannot type, an \"I'm not a robot\" "
@@ -768,7 +768,7 @@ def _call(store, tid: int, name: str, args: dict, doors: dict, skip=()) -> str:
         # ...A CARD THAT WAITED FOR ITS WORDS IS FILLED, NOT REPLACED (walk 8, 2026-11-20): told nothing, the agent took the reply raised empty for
         # "the earlier draft" and withdrew it - its own new letter, the same card
         if isinstance(out, dict) and out.get('ok') and (rid := out.get('review_id')) in {r['rid'] for r in was}:
-            out = {**out, 'filled': f'rv{rid} is the reply that waited for your words - it now holds this letter and is the card that stands. '
+            out = {**out, 'filled': 'This is the reply that waited for your words - it now holds this letter and is the card that stands. '
                                     'Nothing was replaced: withdraw nothing.'}
         return _j(card_roads(store, said_once(replaced(store, doors, tid, was, out, a.get('replaces'), f"the reply to {a.get('to') or 'the newest mail'} takes its place")), {}))
     if name == 'propose_email':

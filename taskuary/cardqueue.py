@@ -158,6 +158,21 @@ def unheard(store, tid: int) -> bool:
 KEEP = ('Kept: {ids} stand{s} again under the newest line, as {it} was - nothing was rewritten.')
 UNDONE = 'handed to its agent, which could not do it'
 LIKE, MORE = ('MessageId', 'RunId', 'Kind', 'DraftText', 'Reason', 'Deliver', 'Origin'), ('AnswersMid', 'Instructions', 'FilesPromised', 'DraftBy', 'DraftWhy')
+IDS = r'\s*(?:rv)?\d+(?:\s*[,+]\s*(?:rv)?\d+)*\s*'      # 'rv12 + rv13': the ids of a card of many, its one handle
+
+
+def named(store, tid: int, which: str) -> list:
+    """[review id] of the one card on task `tid` that `which` names by what it is ('the reply to gail@northwind.example', 'gail') - a card of
+    one is named, never numbered (walk 11: the agent told him it drafted the reply "(rv2)"); [] when none or several match."""
+    from .proposals import SET_ASIDE
+    k = ' '.join(str(which or '').split()).casefold()
+    if not k: return []
+    hit = [r['ReviewId'] for r in store._rows('SELECT * FROM review WHERE TaskId=? ORDER BY ReviewId DESC', (int(tid),))
+           if ((r['Status'] == 'superseded' and r.get('DecideNote') == SET_ASIDE) or handed(r))
+           and k in what(store, {'rids': [r['ReviewId']], 'rows': [r]}, True).casefold()]
+    return hit[:1] if len(hit) == 1 else []
+
+
 def keep(store, tid: int, which, by: str = 'agent', why: str = '') -> dict:
     """Raise again each greyed card `which` names ('rv12 + rv13') on task `tid` as a new card, the same words and envelope, drawn under the
     newest line - and an act his press handed to its agent that it could not do (handed), with `why`, which its failed press then says.
@@ -165,8 +180,9 @@ def keep(store, tid: int, which, by: str = 'agent', why: str = '') -> dict:
     import re
     from . import bulkcard
     from .proposals import HELD_ACTS, SET_ASIDE, _action
-    ids = list(dict.fromkeys(int(x) for x in re.findall(r'\d+', str(which or ''))))
-    if not ids: return {'ok': False, 'why': 'name the greyed card: `which` is its review id as the screen fact names it (rv12; a card of many: rv12 + rv13)'}
+    w = str(which or '')
+    ids = list(dict.fromkeys(int(x) for x in re.findall(r'\d+', w))) if re.fullmatch(IDS, w, re.I) else named(store, tid, w)
+    if not ids: return {'ok': False, 'why': 'name the greyed card as the screen fact names it (the reply to gail@northwind.example; a card of many: rv12 + rv13)'}
     kept, bad, batch = {}, [], {}
     for i in ids:
         r = store.get_review(i)
@@ -188,7 +204,9 @@ def keep(store, tid: int, which, by: str = 'agent', why: str = '') -> dict:
         store._review_changed(new); kept[i] = new
     if kept: store.audit('task', int(tid), 'cards_kept', by, 'agent', {'kept': {str(k): v for k, v in kept.items()}})
     one = len(kept) == 1
-    says = KEEP.format(ids=' + '.join(f'rv{v}' for v in kept.values()), s='s' if one else '', it='it' if one else 'they')
+    says = KEEP.format(ids=what(store, {'rids': [v], 'rows': [store.get_review(v)]}, True) if one and (v := next(iter(kept.values())))
+                       else ' + '.join(f'rv{v}' for v in kept.values()),
+                       s='s' if one else '', it='it' if one else 'they')
     return {'ok': bool(kept), **({'kept': {f'rv{k}': f'rv{v}' for k, v in kept.items()}, 'says': says} if kept else {}), **({'why': '; '.join(bad)} if bad else {})}
 
 
@@ -361,8 +379,9 @@ def screen(store, tid: int, skip=()) -> str:
     since = str(general._last_answer(store, int(tid)) or '')
     waiting, settled, seen = [], [], set()
     def name(u, r):
+        # ...a card of one by what it is, never its number (named); a card of many by the ids its tools take, its name beside them
         ids = [w['ReviewId'] for w in _waits(u)] or u['rids']
-        return (f"{' + '.join(f'rv{x}' for x in ids)}, {what(store, u, True)}" if u['rows'] else what(store, u, True)) + (f': {w}' if r and (w := _words(r)) else '')
+        return (f"{' + '.join(f'rv{x}' for x in ids)}, {what(store, u, True)}" if len(u['rows']) > 1 else what(store, u, True)) + (f': {w}' if r and (w := _words(r)) else '')
     def greyed(r, n): settled.append((r.get('DecidedAt') or r.get('CreatedAt') or '', f"Greyed, will not go{f' ({w})' if (w := passed_why(store, r)) else ''}: {n}"))
     for u in _units(store, tid, set()):
         seen.update(u['rids'])

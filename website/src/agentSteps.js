@@ -54,6 +54,10 @@ export const pageOf = (u) => {
 };
 const key = (name) => String(name || "").toLowerCase().replace(/[^a-z0-9]/g, "");
 const prog = (w) => String(w || "").split(/[\\/]/).pop().toLowerCase().replace(/\.(exe|cmd|bat|ps1)$/, "");
+// A COMMAND DRAWN AS ITSELF NAMES A FILE BY ITS NAME, AND A BLOB IT CARRIES AS "…" (walk 11: "$vendorFile = 'C:\Users\...\walk11\t..." and
+// "agent-browser eval -b QXJyYXku..." were the rows): a whole local path and an encoded script are no words of the step
+const ABS = /(?:\b[A-Za-z]:[\\/]|\\\\|~[\\/]|(?<![\w:/.-])\/(?:Users|home|tmp|var|private|mnt)\/)[^\s'"`;|,)]+/g, BLOB = /[A-Za-z0-9+/]{40,}={0,2}/g;
+export const asCode = (t) => String(t || "").replace(ABS, (p) => baseName(p) || p).replace(BLOB, "…");
 
 // ── a shell command, read the way a person skims it ─────────────────────────────────────────────
 // Split at the operators outside quotes; a segment after a pipe only filters what came before it.
@@ -175,7 +179,8 @@ const AB_ACTIONS = new Set(["click", "dblclick", "press", "fill", "type", "check
 const AB_SAID = { back: "Went back a page", forward: "Went forward a page", reload: "Reloaded the page", scroll: "Scrolled the page",
   scrollintoview: "Scrolled the page", close: "Closed the browser", click: "Clicked on the page", dblclick: "Clicked on the page",
   press: "Pressed a key on the page", fill: "Typed into a box", type: "Typed into a box", check: "Ticked a box", uncheck: "Unticked a box",
-  select: "Chose an option", upload: "Uploaded a file", keyboard: "Typed on the page", pdf: "Saved the page as a PDF" };
+  select: "Chose an option", upload: "Uploaded a file", keyboard: "Typed on the page", pdf: "Saved the page as a PDF",
+  eval: "Ran a script on the page", skills: "Read how to use the browser" };
 export const browserStep = (args) => {
   const a = [];
   for (let i = 0; i < args.length; i += 1) {
@@ -254,7 +259,7 @@ const commandStep = (cmd, depth = 0) => {
       continue;
     }
     // ...anything else it ran is shown as the command itself (ranCmd): here it only weighs against the line's other steps - a snippet least
-    found.push({ kind: "run", summary: `Ran ${seg.text}`, filler: !!SNIPPET[p] });
+    found.push({ kind: "run", summary: `Ran ${asCode(seg.text)}`, filler: !!SNIPPET[p] });
   }
   // ...the agent's own words for the line (a wall note) say what all of it was for
   const own = found.find((s) => s.own);
@@ -286,7 +291,7 @@ const unwrap = (cmd) => {
 const ranCmd = (cmd, tool) => {
   const { text, shell } = unwrap(cmd), t = text.replace(/\r/g, "").trim(), lines = t.split("\n").filter((l) => l.trim());
   if (!t) return { kind: "run", summary: "Ran a command it did not show" };
-  if (lines.length === 1) { const code = clip(t, 80); return { kind: "run", summary: `Ran ${code}`, code }; }
+  if (lines.length === 1) { const code = clip(asCode(t), 80); return { kind: "run", summary: `Ran ${code}`, code }; }
   // ...a script fed to a program (a heredoc, a here-string piped on, `python -c "..."`) is in that program's language, and only its body counts
   const fedTo = (/^['"]@\s*\|\s*(\S+)/m.exec(t) || [])[1], first = prog(words(lines[0])[0] || ""), body = t.match(HEREDOC) || t.match(HERESTRING);
   const lang = LANG[prog(fedTo || "")] || (SNIPPET[first] && LANG[first]) || LANG[shell] || LANG[first] || LANG[key(tool)];
@@ -471,7 +476,9 @@ const agentWords = (e) => {
   if (!title || ownTool(e.name)) return null;
   const ours = describeCall(e.name, d.args || {});
   if (ours.kind === "helper") return null;                 // ...a helper's row reads by the work it was given, its steps under it (tidy)
-  const kind = ACP_KIND[d.tool_kind] || ours.kind || "tool", summary = title.length > 140 ? `${title.slice(0, 139)}…` : title;
+  // ...and a browser call by what it acted on (browserStep, then the gate's own `did`): its title is the command (walk 11: "agent-browser click '@e79'")
+  if (ours.browser) return null;
+  const kind = ACP_KIND[d.tool_kind] || ours.kind || "tool", t = asCode(title), summary = t.length > 140 ? `${t.slice(0, 139)}…` : t;
   const chips = [...new Set((d.paths || []).map(baseName).filter(Boolean))].filter((b) => !summary.includes(b)).slice(0, 3);
   return { kind, summary, doing: summary, titled: true, file: (d.paths || [])[0] || "", ...(kind === "run" ? { code: summary } : {}), ...(chips.length ? { chips } : {}) };
 };

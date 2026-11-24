@@ -434,7 +434,17 @@ def target(act: dict, pg: dict) -> str:
     c = control(act, pg)
     if not c: return (f'{w}{on}' if (w := found(act, verb)) else '')
     if not c['role']: return f'{verb} an element the page no longer shows{on}'
-    return f'{verb} the "{c["name"]}" {c["role"]}{on}' if c['name'] else f'{verb} a {c["role"]}{on}'
+    # ...by its text cut at a word, and its role only where it is a control a person names (walk 11: 'Clicked the "RevolutionaryMost
+    # popular€3.60per month20 GB storage..." generic' - a whole card's text run together, and the accessibility tree's word for "nothing")
+    role, name = ' '.join(c['role'].replace('menuitem', 'menu item').split()) if c['role'] in _CONTROLS else '', _cut(c['name'])
+    if name: return f'{verb} the "{name}"{f" {role}" if role else ""}{on}'
+    return f'{verb} a {role or "part of the page"}{on}'
+
+
+_CONTROLS = {'button', 'link', 'checkbox', 'textbox', 'searchbox', 'combobox', 'radio', 'tab', 'menuitem', 'option', 'switch', 'slider'}
+def _cut(s: str, n: int = 40) -> str:
+    s = ' '.join(str(s or '').split())
+    return s if len(s) <= n else (s[:n].rsplit(' ', 1)[0] if ' ' in s[:n] else s[:n]).rstrip(' ,.;:') + '…'
 
 
 # ...AND A CONTROL FOUND BY WHAT IT IS, not by a ref (the walk, 2026-11-19: a card titled "Agent-browser find role button click --name

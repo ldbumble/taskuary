@@ -314,8 +314,8 @@ test("a wordless shell call says what it did, never a bare program, a number for
     "Looking into the history of the ledger totals.");
   assert.equal(said("taskuary --board"), "Read what earlier agents left on the wall");
   // ...a command with no words of its own is itself, cut at its width
-  assert.equal(said("git -c safe.directory=C:/work/ledger -C ledger fetch --no-tags origin master"), "Ran git -c safe.directory=C:/work/ledger -C ledger fetch --no-tags origin master");
-  assert.equal(said("git -C .wt-ledger -c safe.directory=C:/work/ledger push origin feat:refs/heads/deploy"), "Ran git -C .wt-ledger -c safe.directory=C:/work/ledger push origin feat:refs/heads/…");
+  assert.equal(said("git -c safe.directory=C:/work/ledger -C ledger fetch --no-tags origin master"), "Ran git -c safe.directory=ledger -C ledger fetch --no-tags origin master");
+  assert.equal(said("git -C .wt-ledger -c safe.directory=C:/work/ledger push origin feat:refs/heads/deploy"), "Ran git -C .wt-ledger -c safe.directory=ledger push origin feat:refs/heads/deploy");
   // ...a line count is no file
   assert.equal(said("Get-Content ledger/totals.py -TotalCount 290"), "Read totals.py");
   assert.equal(said("Get-Content ledger/totals.py -TotalCount 290\nGet-Content ledger/sql/notes.sql -TotalCount 60"), "Read totals.py and notes.sql");
@@ -324,7 +324,7 @@ test("a wordless shell call says what it did, never a bare program, a number for
   // ...a script handed to python, by a PowerShell here-string or a heredoc, is a script it ran - its lines are not commands
   assert.equal(said("@'\nfrom pathlib import Path\nimport json\nprint(1)\n'@ | python -", "PowerShell"), "Ran a Python script (3 lines)");
   assert.equal(said("python - <<'EOF'\nimport json\nprint(1)\nEOF"), "Ran a Python script (2 lines)");
-  assert.equal(said("..\\venv\\Scripts\\python.exe -u -m scripts.ledger.import_totals 'C:\\work\\totals.xlsx' --apply"), "Ran ..\\venv\\Scripts\\python.exe -u -m scripts.ledger.import_totals 'C:\\work\\totals.x…");
+  assert.equal(said("..\\venv\\Scripts\\python.exe -u -m scripts.ledger.import_totals 'C:\\work\\totals.xlsx' --apply"), "Ran ..\\venv\\Scripts\\python.exe -u -m scripts.ledger.import_totals 'totals.xlsx' --a…");
   assert.equal(said("python -u tools/check_totals.py --all"), "Ran python -u tools/check_totals.py --all");
   for (const c of ["git -c a=b -C x status", "python -u x.py", "git --no-pager log -5"]) assert.doesNotMatch(said(c), /^Ran (git|python)$/);
   // ...an ACP call named only by its title is the agent's own words; a helper it started, by its name
@@ -594,4 +594,22 @@ test("a running command's output waits behind its row, and its ending never open
   assert.match(html(working), /<pre data-tq-step-tail="">[^<]*test_11 PASSED<\/pre>/, "opened, a running row shows its newest output");
   assert.doesNotMatch(html(working), /test_3 PASSED/, "its newest lines, as a terminal shows them");
   assert.match(html(ended), /test_0 PASSED[\s\S]*test_11 PASSED/, "ended, the whole of it");
+});
+
+// A STEP ROW IS NO BUILDER WORDS (walk 11): a Codex call titled by its own command read "agent-browser click '@e79'", a base64 page script,
+// and a PowerShell line with the whole local path in it
+test("a browser call reads by what it did, a command names its files by name, and an encoded blob is no part of the row", async () => {
+  const { turnParts } = await import("../src/chatStream.js");
+  const rows = (steps) => turnParts(eventsOf(steps, false)).flatMap((p) => p.steps || []);
+  const blob = "QXJyYXkuZnJvbShkb2N1bWVudC5xdWVyeVNlbGVjdG9yQWxsKCdhJykp";
+  const path = "$vendorFile = 'C:\\Users\\alex\\AppData\\Local\\Temp\\walk\\vendor-spend-2026.csv'";
+  const [click, ev, ps] = rows([
+    { id: "s:x:c1", k: "tool", name: "Bash", title: "agent-browser click '@e79'", tool_kind: "execute", args: { command: "agent-browser click '@e79'" }, status: "completed" },
+    { id: "s:x:c2", k: "tool", name: "Bash", title: `agent-browser eval -b ${blob}`, tool_kind: "execute", args: { command: `agent-browser eval -b ${blob}` }, status: "completed" },
+    { id: "s:x:c3", k: "tool", name: "Bash", title: path, tool_kind: "execute", args: { command: path }, status: "completed" }]);
+  assert.equal(click.summary, "Clicked on the page");
+  assert.equal(ev.summary, "Ran a script on the page");
+  assert.equal(ps.summary, "$vendorFile = 'vendor-spend-2026.csv'");
+  assert.equal(describeCall("Bash", { command: `node -e ${blob}` }).summary, "Ran node -e …");
+  assert.equal(describeCall("Bash", { command: "curl https://shop.example/home/plans" }).summary, "Read shop.example/home/plans", "an address is no local path");
 });

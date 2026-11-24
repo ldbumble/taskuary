@@ -313,13 +313,13 @@ def test_a_post_handed_to_the_browser_is_pressed_not_done_for_the_agent_the_line
     li, x = post('linkedin_post', 'A good week at Northwind.'), post('x_post', 'A good week.')
     with mock.patch.object(general, 'to_agent', return_value='woke'): proposals.via_browser(s, li, '')
     said = cardqueue.screen(s, tid)
-    assert any('NOT done yet' in l and f'rv{li}' in l for l in said.splitlines()) and not any(l.startswith('- Done') for l in said.splitlines()), said
+    assert any('NOT done yet' in l and 'linkedin' in l for l in said.splitlines()) and not any(l.startswith('- Done') for l in said.splitlines()), said
     assert cardqueue.state(s, tid)['live'] == [li] and x in cardqueue.held(s, tid), 'the next post waits until this one has gone'
     assert any(i['rid'] == li and 'not done yet' in i['line'] for i in card.lines(s, tid))
     # ...its own final press ran on the site: done, and the line moves on
     assert cardqueue.done(s, tid, 'Post on linkedin.example') == [li]
     assert not cardqueue.handed(s.get_review(li)) and cardqueue.state(s, tid)['live'] == [x]
-    assert any(l.startswith('- Done') and f'rv{li}' in l for l in cardqueue.screen(s, tid).splitlines())
+    assert any(l.startswith('- Done') and 'linkedin' in l for l in cardqueue.screen(s, tid).splitlines())
 
 
 def test_an_action_that_is_none_is_refused_with_the_ones_that_are():
@@ -369,8 +369,9 @@ def test_a_handed_post_that_cannot_go_comes_back_for_his_press_or_is_dropped_and
     assert cardqueue.state(s, tid)['live'] == [x]
     refused = json.loads(agenttools.call(s, tid, 'keep_card', {'which': f'rv{x}'}, {}))
     assert not refused['ok'] and 'why' in refused['why'], 'kept without why: his card would not say what stopped it'
-    out = json.loads(agenttools.call(s, tid, 'keep_card', {'which': f'rv{x}', 'why': 'there is no X account to sign in with'}, {}))
-    assert out['ok'], out
+    # ...named as the screen fact names it, never by a number (walk 11)
+    out = json.loads(agenttools.call(s, tid, 'keep_card', {'which': 'post on x_post', 'why': 'there is no X account to sign in with'}, {}))
+    assert out['ok'] and 'rv' not in out['says'], out
     new = int(out['kept'][f'rv{x}'][2:]); old, n = s.get_review(x), s.get_review(new)
     assert conversation._card(old)['status'] == 'failed' and 'no X account' in old['ActError'], 'his press ends failed where he pressed it, saying why'
     assert n['Status'] == 'pending' and json.loads(n['DraftText'])['text'] == 'Rain, tea, and a quiet Monday.' and 'result' not in json.loads(n['DraftText'])

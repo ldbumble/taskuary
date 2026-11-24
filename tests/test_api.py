@@ -645,7 +645,8 @@ class ApiTests(unittest.TestCase):
                                  ('0.0.0.0', 'from-env'))
             disk = tomllib.loads(path.read_text(encoding='utf-8'))
             self.assertTrue(disk['server'].pop('agent_token', None))     # minted on load, belongs on disk
-            self.assertEqual(disk['server'], stored)
+            from taskuary import vault                    # ...the owner token sealed where this machine seals (config._owner_token)
+            self.assertEqual({**disk['server'], 'token': vault.unseal(disk['server']['token'])}, stored)
             self.assertEqual(disk['cli_connections']['overlay-cli']['cmd'], 'overlay-echo-cli')
         finally:
             server.cfg['server'] = old_server

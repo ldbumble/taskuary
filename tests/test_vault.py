@@ -112,3 +112,41 @@ class VaultTests(unittest.TestCase):
         s = SQLiteStore(path)                                                                           # ...and the one after leaves it be
         self.assertEqual(self.cfg_raw(s, cid), first)
         s.close()
+
+
+class OwnerTokenTests(unittest.TestCase):
+    """Red team F2: config.toml held the owner token as text, so a session that read it - by file://, or by loading this package - became
+    the owner. On disk it is sealed; the owner's own processes open it, a session's never does, and a task's proof makes it an agent's call."""
+    setUp = VaultTests.setUp
+
+    def home(self):
+        import os, tempfile
+        from pathlib import Path
+        from taskuary import config
+        d = Path(tempfile.mkdtemp()); p = mock.patch.object(config, 'home', return_value=d); p.start(); self.addCleanup(p.stop)
+        (d / 'config.toml').write_text('[server]\ntoken = "owner-plain-token"\nagent_token = "agent-tok"\n', encoding='utf-8')
+        e = mock.patch.dict(os.environ); e.start(); self.addCleanup(e.stop)
+        os.environ.pop('TASKUARY_TOKEN', None)
+        return d
+
+    def test_the_token_is_sealed_on_disk_and_opened_by_the_owners_process(self):
+        from taskuary import config
+        d = self.home()
+        self.assertEqual(config.load()['server']['token'], 'owner-plain-token')
+        disk = (d / 'config.toml').read_text(encoding='utf-8')
+        self.assertNotIn('owner-plain-token', disk); self.assertIn('vault:', disk)        # ...what file:// or a Read of it would show
+        self.assertEqual(config.load()['server']['token'], 'owner-plain-token')
+
+    def test_a_sessions_process_never_opens_it(self):
+        import os
+        from taskuary import config
+        self.home(); config.load()
+        os.environ['TASKUARY_TASK'] = '7'
+        self.assertNotEqual(config.load()['server']['token'], 'owner-plain-token')
+
+    def test_the_owners_token_with_a_tasks_proof_is_an_agents_call(self):
+        from taskuary import guard
+        srv = {'token': 'owner-plain-token', 'agent_token': 'agent-tok'}
+        self.assertEqual(guard.scope_of(srv, {'X-Taskuary-Token': 'owner-plain-token'}), guard.OWNER)
+        stolen = {'X-Taskuary-Token': 'owner-plain-token', guard.TASK_HDR: guard.task_proof(srv, 7)}
+        self.assertEqual(guard.scope_of(srv, stolen), guard.AGENT)

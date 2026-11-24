@@ -377,7 +377,10 @@ def scope_of(cfg: dict, headers) -> str:
     if stranger_tid(cfg, tok) is not None: return STRANGER   # before the open no-token case: a stranger is never the owner
     owner = str(cfg.get('token') or '')
     if not owner: return OWNER                     # no token configured: the old, open behaviour
-    return OWNER if token_matches(tok, owner) else ANON
+    # ...a call carrying a task's proof is a session's, whatever token rides with it: the owner's token in a session's hands opens no
+    # owner's door (red team F2) - only Taskuary hands that proof out, and only to a session (terminal.session_env)
+    if token_matches(tok, owner): return AGENT if headers.get(TASK_HDR) else OWNER
+    return ANON
 
 
 # ── WHO IS ON THE OTHER END OF THE SOCKET ──────────────────────────────────
@@ -470,7 +473,8 @@ def ensure_tokens(read, write, server: dict) -> dict:
     server.update(fresh)
     try:
         cur = read()
-        cur.setdefault('server', {}).update(fresh)
+        from .vault import seal                    # ...the owner's sealed on disk (config._owner_token); the agent's is in every session anyway
+        cur.setdefault('server', {}).update({k: seal(v) if k == 'token' else v for k, v in fresh.items()})
         write(cur)
         logger.info(f"wrote {' and '.join(sorted(fresh))} to config.toml"
                     + (' - the page this server hands out carries the owner token' if 'token' in fresh else '')

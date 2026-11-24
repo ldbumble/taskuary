@@ -214,8 +214,9 @@ test("a break-out card says the new task and what moves to it, and its result na
     moves: "Erin Blake: can we renew the Trainly seats before Friday?" };
   assert.equal(reviewText({ Kind: "action", DraftText: JSON.stringify(p) }),
     "Erin's ask about seats, apart from the invoice\n\nErin Blake: can we renew the Trainly seats before Friday?");
-  const card = proposalPresentation({ Kind: "action", DraftText: JSON.stringify(p), Reason: "the agent proposes to move 1 message to a task of its own" });
-  assert.deepEqual([card.title, card.destinationLabel, card.destination, card.readOnly], ["Move this part to a task of its own", "Its own task", "Renew the Trainly seats", true]);
+  // ...the new task named once, in its lead (proposals.break_out_words) - no row under it saying it again (the owner, 2026-11-24)
+  const card = proposalPresentation({ Kind: "action", DraftText: JSON.stringify(p), Reason: 'the agent proposes to move 1 message to a task of its own, "Renew the Trainly seats"' });
+  assert.deepEqual([card.lead, card.destination, card.readOnly], ['Move 1 message to a task of its own, "Renew the Trainly seats"', "", true]);
   const done = { ...p, result: { task: 9, ref: "TQ-0009", said: "TQ-0009 is the new task: Renew the Trainly seats" } };
   assert.deepEqual(resultOf({ Kind: "action", Status: "approved", FinalText: JSON.stringify(done) }),
     { said: "Approved · moved to its own task", what: "TQ-0009 is the new task: Renew the Trainly seats", url: "", command: "" });
@@ -233,7 +234,7 @@ test("a save-as-routine card shows the script whole and read-only, with when it 
   // ...SAID IN WORDS, the script folded (design round 4, 2026-11-19: an ops manager was asked to approve 60 lines of Python)
   const said = proposalPresentation({ ...rv, DraftText: JSON.stringify({ ...p, why: "lists the invoices that carry a late fee", steps: ["Read", "Run the script", "Read what it found"] }) });
   assert.deepEqual([said.lead, said.leadWhy, said.folded, said.foldWord], ["Lists the invoices that carry a late fee",
-    "Runs daily 07:00, on this computer: Read, then run the script, then read what it found. Nothing is saved or run until you approve.", true, "script"]);
+    "Runs daily 07:00, on this computer: Read, then run the script, then read what it found.", true, "script"]);
   const done = { ...p, result: { source: 7, link: "#report=7", said: 'Saved the routine "Late fees" - it runs daily 07:00.' } };
   assert.deepEqual(resultOf({ Kind: "action", Status: "approved", FinalText: JSON.stringify(done) }),
     { said: "Approved · saved the routine", what: 'Saved the routine "Late fees" - it runs daily 07:00.', url: "", command: "" });
@@ -251,15 +252,16 @@ test("an act whose press failed is a settled card with its error, never a waitin
 });
 
 // EVERY APPROVAL SAYS IN WORDS WHAT IT WILL DO (design round 5, 2026-11-19; round 4 did routines): a step in a connected system, a part moved to
-// a task of its own and a routine's change lead with what Approve does - the server's words for it - as a held step and a routine do
+// a task of its own and a routine's change lead with what Approve does - the server's words for it - as a held step and a routine do; said once,
+// never "nothing happens until you approve" under it (the owner, 2026-11-24: "we don't need it a bunch of times")
 test("every card leads with what its Approve does, in words", () => {
   const card = (p, Reason) => proposalPresentation({ Kind: "action", DraftText: JSON.stringify(p), Reason });
   const tool = card({ action: "run_tool", type: "sharepoint", path: "/Shared/Q3.xlsx" }, "the agent proposes to write the Q3 totals to Q3.xlsx on SharePoint");
-  assert.deepEqual([tool.lead, tool.leadWhy], ["Write the Q3 totals to Q3.xlsx on SharePoint", "Nothing runs until you approve."]);
+  assert.deepEqual([tool.lead, tool.leadWhy], ["Write the Q3 totals to Q3.xlsx on SharePoint", ""]);
   const out = card({ action: "break_out", title: "Book the caterer" }, 'the agent proposes to move the caterer emails to a task of its own, "Book the caterer"');
-  assert.deepEqual([out.lead, out.leadWhy], ['Move the caterer emails to a task of its own, "Book the caterer"', "Nothing moves until you approve."]);
+  assert.deepEqual([out.lead, out.leadWhy], ['Move the caterer emails to a task of its own, "Book the caterer"', ""]);
   const fix = card({ action: "repair_workflow", title: "Late fees" }, 'the agent proposes to change the routine "Late fees"');
-  assert.equal(fix.lead, 'Change the routine "Late fees"');
+  assert.equal(fix.lead, "Change routine: Late fees");
 });
 
 // THE HYDROGEN WALK, 2026-11-19: "Where x" under a post card - a post says its network as he knows it (proposals.queue's `network`)

@@ -1709,7 +1709,9 @@ export const DraftField = ({ value, onChange, sx, inputProps, marks = [], ...res
     sx={{ ...sx, "& textarea": { ...(sx?.["& textarea"] || {}), resize: "vertical" } }} />;
   const text = String(value ?? "");
   const pieces = [];
-  marks.reduce((at, [a, b], i) => { pieces.push(text.slice(at, a), <mark key={i} data-tq-blank="">{text.slice(a, b)}</mark>); return b; }, 0);
+  // ...a mark's kind (textDiff.changeMarks): "add" lights words a change brings, "del" a thin tick where words it takes out stood; none is a blank
+  marks.reduce((at, [a, b, k], i) => { pieces.push(text.slice(at, a), k === "del" ? <span key={i} data-tq-removed-at="" />
+    : <mark key={i} {...(k === "add" ? { "data-tq-added": "" } : { "data-tq-blank": "" })}>{text.slice(a, b)}</mark>); return b; }, 0);
   if (marked) pieces.push(text.slice(marks.at(-1)[1]), "​");
   return (
     <Box ref={wrap} sx={{ position: "relative" }}>
@@ -1717,7 +1719,10 @@ export const DraftField = ({ value, onChange, sx, inputProps, marks = [], ...res
       {box && <Box aria-hidden sx={{ position: "absolute", top: box.top, left: box.left, width: box.width, height: box.height, overflow: "hidden", pointerEvents: "none" }}>
         <Box sx={{ font: box.font, lineHeight: box.lineHeight, letterSpacing: box.letterSpacing, padding: box.padding, boxSizing: "border-box",
           whiteSpace: "pre-wrap", overflowWrap: "break-word", color: "transparent", transform: `translateY(${-top}px)`,
-          "& mark": { color: "transparent", bgcolor: "rgba(232, 168, 56, 0.38)", borderRadius: "2px", boxShadow: "0 1px 0 #c98a1e" } }}>
+          "& mark": { color: "transparent", bgcolor: "rgba(232, 168, 56, 0.38)", borderRadius: "2px", boxShadow: "0 1px 0 #c98a1e" },
+          "& mark[data-tq-added]": { bgcolor: "var(--tq-added, rgba(111, 158, 110, 0.28))", boxShadow: "none" },
+          "& [data-tq-removed-at]": { position: "relative", "&::before": { content: '""', position: "absolute", left: "-1px", top: "0.15em", height: "1.1em",
+            borderLeft: "2px solid var(--tq-removed, #b4495a)" } } }}>
           {pieces}</Box>
       </Box>}
     </Box>

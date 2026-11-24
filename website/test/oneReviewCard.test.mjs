@@ -105,3 +105,31 @@ test("nothing in the cards' files takes the press road's name", async () => {
   const { readFileSync } = await import("node:fs");
   for (const f of ["ReviewDecision.jsx", "BulkCard.jsx"]) assert.doesNotMatch(readFileSync(new URL(`../src/${f}`, import.meta.url), "utf8"), /\b(const|let|var)\s+press\b/, f);
 });
+
+// A CHANGE TO SOMETHING STORED IS THE SAME ONE CARD (the owner, 2026-11-24, over "prompt: <whole old> -> <whole new>" in the box: "to edit text it
+// should show the edited text?" ... "show also where it changed in the full text" ... "it says on top it changes 3 times"): its label once, why in
+// one line, the new words whole and his to change, marked in place where they change - never the old -> new dump, never a line saying it again
+const routineChange = () => act({ action: "repair_workflow", source_id: 3, title: "Social post drafts", why: "Make future posts short",
+  flow: [{ id: "s1", kind: "agent", label: "Agent works it", prompt: "Write three short posts." }], was: [{ id: "s1", kind: "agent", label: "Agent works it", prompt: "Write three long posts." }],
+  texts: [{ key: "flow.s1.prompt", label: "The routine will say", was: "Write three long posts.", now: "Write three short posts." }], rows: [],
+  changes: "The routine will say: Write three short posts." }, { Reason: 'the agent proposes to change the routine "Social post drafts" - Make future posts short' });
+test("a routine's change is the one card: its new words marked where they change, nothing said twice", async () => {
+  const { card } = await P, html = card(routineChange());
+  assert.equal(one(html), 1);
+  assert.match(html, /data-tq-review-label="">Change routine: Social post drafts</);
+  assert.match(html, /data-tq-held-lead="[^"]*"[^>]*>Make future posts short\.</, "why, once");
+  assert.match(html, /data-tq-change="flow.s1.prompt" data-tq-marks="on"/);
+  assert.match(html, /Write three <del data-tq-removed="">long <\/del><ins data-tq-added="">short <\/ins>posts\./, "where it changed, in the full text");
+  assert.match(html, /data-tq-change-label="">The routine will say</);
+  assert.match(html, /Hide what changed/);
+  assert.doesNotMatch(html, /-&gt;|→/, "no old -> new dump");
+  assert.doesNotMatch(html, /only if you approve|saved steps|Agent works it/, "no line that says it again");
+  assert.ok(press(html).includes("Approve"), press(html).join("|"));
+});
+
+test("a setting's change reads each switch as it is and as it will be, said once", async () => {
+  const { card } = await P, html = card(act({ action: "settings", why: "fewer polls", changes: [{ name: "poll_minutes", value: "15", was: "5" }] }));
+  assert.match(html, /data-tq-review-label="">Change a setting</);
+  assert.match(html, />5 → 15</);
+  assert.doesNotMatch(html, /until you approve|>Settings</);
+});

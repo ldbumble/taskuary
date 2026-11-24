@@ -201,6 +201,46 @@ def _edited(p: dict, final_text, fields: dict = None) -> dict:
     return cat.owner_edits(p, fields) if fields else p
 
 
+# A CHANGE TO SOMETHING STORED IS SHOWN AS WHAT IT WILL BE (the owner, 2026-11-24: "to edit text it should show the edited text?"): a routine's or
+# a report's new words each in a box of their own beside what they were (workflows.change_card), a setting's old value beside its new one, a
+# playbook page beside the page it replaces - so the card can mark where it changed
+CHANGES = ('repair_workflow', 'change_setup')
+def change_card(store, p: dict) -> dict:
+    a = p.get('action')
+    if a in CHANGES:
+        from . import workflows
+        return workflows.change_card(p)
+    if a == 'settings':
+        def was(c):
+            if not c.get('connector'): return store.get_setting(c['name'])
+            try: return json.loads((store.get_connector_by_type(c['connector']) or {}).get('ConfigJson') or '{}').get(c['name'])
+            except ValueError: return None
+        return {**p, 'changes': [{**c, 'was': was(c)} for c in setting_changes(p)[0]]}
+    if a in PLAYBOOKS and str(p.get('slug') or '').strip() not in ('', 'new'):
+        from . import playbooks
+        return {**p, 'was_text': playbooks.read(p['slug']) or ''}
+    return p
+
+
+def cards_waiting(store) -> int:
+    "A change card filed before change_card - waiting still - drawn the same way: its new words in their boxes, once at the start."
+    n = 0
+    for r in store._rows("SELECT ReviewId, DraftText FROM review WHERE Kind='action' AND Status='pending'"):
+        p = _draft(r)
+        if p.get('action') not in CHANGES or 'texts' in p: continue
+        try: store._exec("UPDATE review SET DraftText=? WHERE ReviewId=? AND Status='pending'", (json.dumps(change_card(store, p)), r['ReviewId'])); n += 1
+        except Exception as e: logger.warning(f"rv{r['ReviewId']}: its change card is drawn as filed - {e}")
+    return n
+
+
+def as_left(p: dict, final_text, fields: dict = None) -> dict:
+    "The proposal as he left its card at the press: a change's boxes (workflows.edit_change), else an act's words and choices (_edited)."
+    if p.get('action') in CHANGES:
+        from . import workflows
+        return workflows.edit_change(p, fields)
+    return _edited(p, final_text, fields)
+
+
 def _ran(res) -> dict:
     """An executor's answer as the card reads it: (headline, body), or the {rows, columns} a connector returns - its first row's
     link the place it landed. Unpacking that dict as a pair read its two KEYS: a LinkedIn post said "rows" / "columns"."""
@@ -219,7 +259,7 @@ def receipt(rv: dict, final_text, out: dict, fields: dict = None) -> str:
     try: p = json.loads(rv.get('DraftText') or '{}')
     except ValueError: return rv.get('DraftText')
     # ...every act keeps what it did, so its card reads as its result once pressed - "Approved · ran", its link (the owner, 2026-11-09)
-    return json.dumps({**(_edited(p, final_text, fields) if p.get('action') == 'run_tool' else p), 'result': out}, default=str)
+    return json.dumps({**(as_left(p, final_text, fields) if p.get('action') in ('run_tool', *CHANGES) else p), 'result': out}, default=str)
 
 # What a proposal may touch: routing and visibility only. Never a permission that lets anything OUT
 # (agent_push_enabled, github_replies_ok, reply channels), never a token, key, model or document.
@@ -506,6 +546,7 @@ def queue(store, task_id: int, p: dict, actor='agent', refused: list | None = No
     if ok and p.get('action') == 'break_out':
         p, miss = break_out(store, task_id, p)
         if miss: ok, why = False, miss
+    if ok: p = change_card(store, p)
     # ...ONE CARD PER ASK (the stress round, 2026-11-18): the same proposal again - a retried call - is the card already waiting, and a
     # break_out moving what a waiting one moves is refused: stood behind it, its press could only fail
     if ok:
@@ -991,7 +1032,7 @@ def execute(store, rv: dict, actor='owner', final_text: str = None, skip_checks:
     if p.get('action') == 'close_item' and final_text is not None and not str(final_text).lstrip().startswith('{'): p['text'] = str(final_text).strip()
     # ...a GitHub comment's box IS its words: what the owner left there is what is posted
     if edited and p.get('action') == 'comment_issue': p['body'] = final_text.strip()
-    p = _edited(p, final_text, fields)
+    p = as_left(p, final_text, fields)
     ok, why = validate(store, p)
     if not ok: raise RuntimeError(f'refused at execution: {why}')
     tid, a = rv.get('TaskId'), p['action']

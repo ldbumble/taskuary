@@ -496,6 +496,25 @@ def _install_fresh_routes(app, store):
                                 "DraftText": "Hi Gail, you're invited - the email from the portal is on its way. Alex"})
         return {"taskId": tid, "actId": act, "reviewId": rid}
 
+    @app.post("/api/fixture/change-card")
+    def fixture_change_card(body: dict = Body(...)):
+        """A routine of his and the agent's ask to change its instructions, queued as the agent's change_routine is (proposals.queue) - the change
+        card (browser/change-card.mjs). `was`/`now`: its instructions before and as proposed. GET /api/fixture/routine/<id> reads what was saved."""
+        import json
+        from taskuary import general, proposals
+        cfg = {"type": "agent", "access": "write", "title": body.get("title") or "Social post drafts", "prompt": body["was"], "cron": "0 9 * * 1"}
+        sid = store.save_source({"Channel": "report", "Address": cfg["title"], "Owner": "owner", "Active": 1, "ConfigJson": json.dumps(cfg)}, "owner")
+        tid = store.create_task({"Title": "Make the posts shorter", "Kind": "general", "Status": "open"}, "owner")
+        store.add_comment(tid, general.BRIEF_ACTOR, general.USER_TYPE, "Make future LinkedIn posts short.")
+        store.add_comment(tid, "assistant", general.ASSISTANT_TYPE, "I rewrote the routine's instructions - the card below changes it on your press.")
+        rv = proposals.queue(store, tid, {"action": "change_routine", "routine": cfg["title"], "prompt": body["now"], "why": body.get("why") or "Make future posts short"})
+        return {"taskId": tid, "sourceId": sid, "review": rv}
+
+    @app.get("/api/fixture/routine/{sid}")
+    def fixture_routine(sid: int):
+        import json
+        return json.loads((store.get_source(sid) or {}).get("ConfigJson") or "{}")
+
     @app.post("/api/fixture/no-readonly")
     def fixture_no_readonly(body: dict = Body(...)):
         """The stand-in CLI as one with no read-only mode Taskuary can hold it to (clis.READONLY): with a version too old for its reviewer

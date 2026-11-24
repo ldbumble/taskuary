@@ -1,11 +1,11 @@
 {
-  "_": "THE SHOW TOOL'S CATALOG (agenttools `show`, viewspec.py; website/src/viewSpec.js reads the same file). The only element types an agent may draw in its chat, each prop's kind ('!' = required, 'a|b' = one of those words), and the caps. `every` is the props every type also takes. A button names a buttons.json verb that has a row id (it lights that button) or an app link (#...) it opens - it never presses anything.",
-  "caps": { "elements": 40, "children": 20, "chars": 5000, "items": 50, "columns": 12, "short": 200, "long": 2000 },
+  "_": "THE SHOW TOOL'S CATALOG (agenttools `show`, viewspec.py; website/src/viewSpec.js reads the same file). The only element types an agent may draw in its chat, each prop's kind ('!' = required, 'a|b' = one of those words), and the caps. `every` is the props every type also takes. A button names a buttons.json verb that has a row id (it lights that button), an app link (#...) it opens, or an `on.press` action: answer (his pick goes to the agent once, as his press) or setState (a value of the view's own). Controls (slider, toggle, select, date) bind a value of the view's `state`; a value written {\"$expr\": \"seats * 12\"} or {\"$state\": \"/seats\"} is worked out on the page as they move (viewexpr). Nothing here sends or pays.",
+  "caps": { "state": 20, "elements": 40, "children": 20, "chars": 5000, "items": 50, "columns": 12, "short": 200, "long": 2000 },
   "every": { "title": "str", "description": "str" },
   "types": {
-    "table": { "columns": "cols!", "rows": "rows!" },
+    "table": { "columns": "cols", "rows": "rows!" },
     "stats": { "items": "tiles!" },
-    "chart": { "kind": "bar|line", "format": "currency|number|percent", "points": "points!" },
+    "chart": { "kind": "bar|line|pie", "format": "currency|number|percent", "points": "points", "rows": "records", "x": "str", "y": "str" },
     "list": { "items": "strs!" },
     "checklist": { "items": "checks!" },
     "steps": { "items": "strs!" },
@@ -13,6 +13,11 @@
     "grid": { "cols": "1|2|3|4" },
     "badge": { "text": "str!", "variant": "default|secondary|outline|success|warning" },
     "note": { "tone": "info|success|warning", "text": "md!" },
-    "button": { "label": "str!", "verb": "verb", "open": "link" }
+    "button": { "label": "str!", "verb": "verb", "open": "link" },
+    "slider": { "label": "str!", "value": "bind!", "min": "num!", "max": "num!", "step": "num", "format": "currency|number|percent" },
+    "toggle": { "label": "str!", "value": "bind!" },
+    "select": { "label": "str!", "value": "bind!", "options": "strs!" },
+    "date": { "label": "str!", "value": "bind!" },
+    "choice": { "label": "str!", "options": "strs!" }
   }
 }

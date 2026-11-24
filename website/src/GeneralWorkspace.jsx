@@ -241,7 +241,7 @@ const WorkFold = ({ k, quiet = false, parts, draw }) => { const n = workCount(pa
     : <>{parts.filter((p) => p.type !== "said").map((p, i) => draw(p, i, "everything"))}</>; };
 const TurnWorkView = ({ data, now, k }) => {
   const at = React.useContext(WorkCtx);
-  const key = foldKey(k), level = levelOf(data?.level, React.useContext(LevelCtx)), chat = React.useContext(ChatCtx);
+  const outs = React.useContext(OutputsCtx), key = foldKey(k), level = levelOf(data?.level, React.useContext(LevelCtx)), chat = React.useContext(ChatCtx);
   // ...AND A TURN THAT ENDED HAS NOTHING STILL AT WORK (the owner, 2026-11-05: a step kept its spinner under the answer): a call that never got
   // its result before the answer was filed is drawn done, never circling. IN A CHAT A STEP IS NEVER "FAILED" (the owner, 2026-11-05: "it's just a
   // internal thought failure, for the user the task is getting done. failure means nothing") - a TURN that failed says so in its own words
@@ -257,7 +257,7 @@ const TurnWorkView = ({ data, now, k }) => {
     : p.type === "edit" ? [{ id: p.id, kind: "edit", summary: p.summary, status: "done" }] : [])) }} />;
   const draw = (p, i, lvl) => p.type === "said" ? <Md key={p.id} text={p.text} /> : p.type === "edit" ? <EditRow key={p.id} p={p} />
     : p.type === "plan" ? <PlanRow key={p.id} p={p} />
-    : p.type === "view" ? <ViewSpec key={p.id} spec={p.spec} />
+    : p.type === "view" ? <ViewSpec key={p.id} spec={p.spec} taskId={outs?.tid} />
     // ...a file the agent showed (show `files`) is drawn by its kept copy, placed in its turn by the server for both chats (ShownCtx), never twice
     : p.type === "files" ? null
     : lvl === "everything" ? <AgentSteps key={p.id} data={{ steps: p.steps }} />

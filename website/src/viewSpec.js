@@ -16,7 +16,70 @@ const LINK = /^#[\w=&%.:/-]+$/;
 
 const isObj = (o) => !!o && typeof o === "object" && !Array.isArray(o);
 const text = (v, n = CAPS.short) => ((typeof v === "string" || (typeof v === "number" && Number.isFinite(v))) && String(v).trim().length <= n ? String(v).trim() : null);
-const cell = (v) => (v === null || v === undefined ? null : typeof v === "boolean" || (typeof v === "number" && Number.isFinite(v)) ? v : text(v));
+
+// ── A VALUE WORKED OUT ON THE PAGE (viewspec.py names_in reads the same grammar): {$expr: "seats * 12"} or {$state: "/seats"}, evaluated
+// against the view's state - and in a table's cell its row's columns - each time a control moves. Its own small parser, never eval: numbers,
+// 'words', true/false, names, + - * / %, comparisons, && || !, c ? a : b, and the few functions below. A bad one is {error}, said in the view
+export const exprOf = (v) => (isObj(v) && Object.keys(v).length === 1 ? (typeof v.$expr === "string" ? v.$expr.trim()
+  : typeof v.$state === "string" ? v.$state.trim().replace(/^\//, "") : null) : null);
+const FNS = { min: Math.min, max: Math.max, abs: Math.abs, floor: Math.floor, ceil: Math.ceil,
+  round: (x, p = 0) => { const k = 10 ** p; return Math.round(x * k) / k; } };
+const TOK = /\s*(?:(\d+(?:\.\d+)?|\.\d+)|('[^']*'|"[^"]*")|([A-Za-z_]\w*)|(==|!=|<=|>=|&&|\|\||[-+*/%<>!?:(),]))/y;
+const OPS = { "+": [4, (a, b) => a + b], "-": [4, (a, b) => a - b], "*": [5, (a, b) => a * b], "/": [5, (a, b) => a / b], "%": [5, (a, b) => a % b],
+  "==": [3, (a, b) => a === b], "!=": [3, (a, b) => a !== b], "<": [3, (a, b) => a < b], "<=": [3, (a, b) => a <= b], ">": [3, (a, b) => a > b],
+  ">=": [3, (a, b) => a >= b], "&&": [2, (a, b) => a && b], "||": [1, (a, b) => a || b] };
+const COMPILED = new Map();
+function compile(src) {
+  const toks = []; TOK.lastIndex = 0; const s = String(src).trimEnd();
+  while (TOK.lastIndex < s.length) { const at = TOK.lastIndex, m = TOK.exec(s);
+    if (!m) throw new Error(`cannot read "${s.slice(at).trim().slice(0, 20)}"`);
+    toks.push(m[1] != null ? { n: Number(m[1]) } : m[2] != null ? { s: m[2].slice(1, -1) } : m[3] != null ? { id: m[3] } : { op: m[4] }); }
+  let i = 0;
+  const peek = () => toks[i]?.op, eat = (op) => { if (toks[i]?.op !== op) throw new Error(`expected "${op}"`); i++; };
+  const atom = () => {
+    const t = toks[i++]; if (!t) throw new Error("it ends too soon");
+    if (t.op === "(") { const e = tern(); eat(")"); return e; }
+    if (t.op === "-") { const e = atom(); return (sc) => -e(sc); }
+    if (t.op === "!") { const e = atom(); return (sc) => !e(sc); }
+    if ("n" in t) return () => t.n;
+    if ("s" in t) return () => t.s;
+    if (t.id === "true" || t.id === "false") return () => t.id === "true";
+    if (!t.id) throw new Error(`"${t.op}" cannot start a value`);
+    if (peek() === "(") {
+      const f = Object.hasOwn(FNS, t.id) ? FNS[t.id] : null; if (!f) throw new Error(`${t.id}() is not one of ${Object.keys(FNS).join(", ")}`);
+      eat("("); const args = []; if (peek() !== ")") { args.push(tern()); while (peek() === ",") { eat(","); args.push(tern()); } } eat(")");
+      return (sc) => f(...args.map((a) => a(sc)));
+    }
+    return (sc) => { if (!Object.hasOwn(sc, t.id)) throw new Error(`no value named ${t.id}`); return sc[t.id]; };
+  };
+  const binary = (min) => { let l = atom();
+    while (OPS[peek()] && OPS[peek()][0] >= min) { const [p, f] = OPS[toks[i++].op], r = binary(p + 1), a = l; l = (sc) => f(a(sc), r(sc)); }
+    return l; };
+  const tern = () => { const c = binary(1); if (peek() !== "?") return c; eat("?"); const a = tern(); eat(":"); const b = tern(); return (sc) => (c(sc) ? a(sc) : b(sc)); };
+  if (!toks.length) throw new Error("it is empty");
+  const e = tern(); if (i < toks.length) throw new Error(`"${toks[i].op ?? toks[i].id ?? toks[i].n}" was not expected`);
+  return e;
+}
+// -> {value} or {error: plain words}. A number that is not one (1/0) is an error too: a tile never reads "Infinity"
+export function evalExpr(src, scope = {}) {
+  try {
+    let f = COMPILED.get(src); if (!f) { f = compile(src); COMPILED.set(src, f); }
+    const v = f(scope);
+    if (typeof v === "number" && !Number.isFinite(v)) throw new Error("it does not come to a number");
+    return { value: v };
+  } catch (e) { return { error: `"${src}" - ${e.message}` }; }
+}
+// a column's name as a cell's expression reads it: lower case, _ for a space (viewspec.col_name)
+export const colName = (l) => String(l).trim().toLowerCase().replace(/\W+/g, "_").replace(/^_+|_+$/g, "");
+// words with {expr} in them, worked out now (a button's answer: "Order {seats} seats") -> {value} or {error}
+export function fillIn(s, scope) {
+  let error = null;
+  const value = String(s).replace(/\{([^{}]+)\}/g, (_, src) => { const r = evalExpr(src, scope); if (r.error) error ||= r.error; return r.error ? "" : String(r.value); });
+  return error ? { error } : { value };
+}
+
+const cell = (v) => (v === null || v === undefined ? null : typeof v === "boolean" || (typeof v === "number" && Number.isFinite(v)) ? v
+  : exprOf(v) && exprOf(v).length <= CAPS.short ? { $expr: exprOf(v) } : text(v));
 const list = (v, n = CAPS.items) => (Array.isArray(v) && v.length && v.length <= n ? v : null);
 // every entry kept or the whole prop is bad: half a table drawn as if it were all of it would mislead
 const TILE = new Set(["label", "value", "note", "trend", "format"]);
@@ -47,8 +110,13 @@ const KIND = {
   }),
   checks: (v) => all(list(v), (o) => (typeof o === "string" ? (text(o) ? { text: text(o), done: false } : null)
     : isObj(o) && text(o.text) ? { text: text(o.text), done: o.done === true } : null)),
-  points: (v) => all(list(v), (o) => (isObj(o) && text(o.label) && typeof o.value === "number" && Number.isFinite(o.value)
-    ? { label: text(o.label), value: o.value, ...(o.highlight === true ? { highlight: true } : {}) } : null)),
+  points: (v) => all(list(v), (o) => (isObj(o) && text(o.label) && ((typeof o.value === "number" && Number.isFinite(o.value)) || exprOf(o.value))
+    ? { label: text(o.label), value: exprOf(o.value) ? { $expr: exprOf(o.value) } : o.value, ...(o.highlight === true ? { highlight: true } : {}) } : null)),
+  records: (v) => list(v),            // ...a chart's: made its points in element()
+  num: (v) => (typeof v === "number" && Number.isFinite(v) ? v : null),
+  // a control's value: the state name it moves - "seats", "/seats" or json-render's {$bindState: "/seats"}
+  bind: (v) => { const n = isObj(v) ? v.$bindState : v; const s = typeof n === "string" ? n.trim().replace(/^\//, "") : "";
+    return /^[A-Za-z_]\w{0,31}$/.test(s) ? s : null; },
   verb: (v) => verbOf(v),
   link: (v) => (typeof v === "string" && LINK.test(v) && v !== "#setup" ? v : null),
 };
@@ -57,10 +125,40 @@ const oneOf = (kind, v) => { const ws = kind.split("|");
   return ws.every((w) => /^\d+$/.test(w)) ? (typeof v !== "boolean" && ws.includes(String(v)) ? Number(v) : null) : ws.includes(v) ? v : null; };
 const prop = (kind, v, at, p) => (kind.includes("|") ? oneOf(kind, v) : KIND[kind]?.(v, at, p) ?? null);
 
+// a chart's records as its points, as viewspec._points: y the number column, x its label
+const NUMS = (rs, c) => rs.every((r) => typeof r[c] === "number" && Number.isFinite(r[c]));
+function pointsOf(p) {
+  const rs = list(p.rows); if (!rs || !rs.every(isObj)) return null;
+  const cols = [...new Set(rs.flatMap(Object.keys))], y = p.y ?? cols.find((c) => NUMS(rs, c));
+  if (!cols.includes(y) || !NUMS(rs, y)) return null;
+  const x = p.x ?? cols.find((c) => c !== y && !NUMS(rs, c));
+  if (x != null && !cols.includes(x)) return null;
+  return rs.map((r, i) => ({ label: x != null ? r[x] : `#${i + 1}`, value: r[y] }));
+}
+// a button's on.press (viewspec._on): answer {text} - his pick, to the agent - or setState {statePath, value} on the page; nothing else
+function onOf(v) {
+  const p = isObj(v) && Object.keys(v).length === 1 && isObj(v.press) ? v.press : null, ps = isObj(p?.params) ? p.params : {};
+  if (p?.action === "answer" && text(ps.text)) return { press: { action: "answer", params: { text: text(ps.text) } } };
+  if (p?.action === "setState" && KIND.bind(ps.statePath) && ps.value !== undefined && (ps.value === null || cell(ps.value) !== null))
+    return { press: { action: "setState", params: { statePath: KIND.bind(ps.statePath), value: cell(ps.value) } } };
+  return null;
+}
+
 function element(e) {
   if (!isObj(e) || !TYPES[e.type] || (e.props != null && !isObj(e.props))) return null;
-  const spec = TYPES[e.type], props = e.props || {}, out = {};
+  const spec = TYPES[e.type], out = {};
+  let props = e.props || {};
   if (Object.keys(props).some((k) => !spec[k])) return null;
+  // ...records stand as they come: a table's columns are their keys, a chart's points their label and number columns
+  if (e.type === "table" && props.columns == null) {
+    if (!Array.isArray(props.rows) || !props.rows.every(isObj)) return null;
+    props = { ...props, columns: [...new Set(props.rows.flatMap(Object.keys))].slice(0, CAPS.columns) };
+  }
+  if (e.type === "chart") {
+    if ((props.points == null) === (props.rows == null)) return null;
+    if (props.rows != null) { const pts = pointsOf(props); if (!pts) return null;
+      const { rows, x, y, ...rest } = props; props = { ...rest, points: pts }; }
+  }
   for (const [k, kind] of Object.entries(spec)) {
     const need = kind.endsWith("!"), v = props[k];
     if (v == null) { if (need) return null; continue; }
@@ -68,11 +166,30 @@ function element(e) {
     if (got === null) return null;
     out[k] = got;
   }
-  if (e.type === "button" && ("verb" in out) === ("open" in out)) return null;
+  const on = e.on == null ? null : onOf(e.on);
+  if (e.on != null && (!on || e.type !== "button")) return null;
+  if (e.type === "button" && ["verb" in out, "open" in out, !!on].filter(Boolean).length !== 1) return null;
+  if (e.type === "slider" && !(out.min < out.max)) return null;
   const kids = e.children ?? [];
   if (!Array.isArray(kids) || kids.length > CAPS.children || kids.some((k) => typeof k !== "string")) return null;
-  return { type: e.type, props: out, children: kids };
+  return { type: e.type, props: out, ...(on ? { on } : {}), children: kids };
 }
+
+// THE VIEW'S VALUES (viewspec._state): its `state` as given, and each bound name it lacks at its control's start
+export const CONTROLS = new Set(["slider", "toggle", "select", "date"]);
+function stateOf(st, els) {
+  if (st != null && !isObj(st)) return null;
+  const out = {};
+  for (const [k, v] of Object.entries(st || {})) { if (!/^[A-Za-z_]\w{0,31}$/.test(k) || isObj(v) || Array.isArray(v)) return null; out[k] = cell(v); }
+  if (Object.keys(out).length > CAPS.state) return null;
+  for (const e of Object.values(els)) if (CONTROLS.has(e.type) && !(e.props.value in out))
+    out[e.props.value] = { slider: e.props.min, toggle: false, select: e.props.options?.[0] ?? "", date: "" }[e.type];
+  return out;
+}
+// ...and A VIEW HE CAN ANSWER (a choice, a button's answer): the server gave it an id of its own (viewspec.shown); one written in words
+// has none, and is named by what it says - the same words drawn again are the same question
+export const asks = (els) => Object.values(els).some((e) => e.type === "choice" || e.on?.press?.action === "answer");
+const hash = (s) => { let h = 5381; for (let i = 0; i < s.length; i++) h = (h * 33 + s.charCodeAt(i)) >>> 0; return `w${h.toString(36)}`; };
 
 // the spec made safe, or null. Only what the root reaches is kept; a child that is missing or contains itself is a bad spec
 export function normalise(spec) {
@@ -88,8 +205,10 @@ export function normalise(spec) {
     const ok = e.children.every(walk); path.delete(id); return ok;
   };
   if (!walk(spec.root)) return null;
-  const title = spec.title == null ? "" : text(spec.title);
-  return title === null ? null : { title, root: spec.root, elements: out };
+  const title = spec.title == null ? "" : text(spec.title), state = stateOf(spec.state, out);
+  if (title === null || state === null) return null;
+  const id = !asks(out) ? "" : typeof spec.id === "string" && /^[\w-]{1,64}$/.test(spec.id) ? spec.id : hash(JSON.stringify({ title, root: spec.root, elements: out }));
+  return { title, root: spec.root, elements: out, ...(Object.keys(state).length ? { state } : {}), ...(id ? { id } : {}) };
 }
 
 // A VIEW WRITTEN IN AN ANSWER (the owner, 2026-11-15: "of course chart should be in chat"): a fenced block in an agent's or the Assistant's

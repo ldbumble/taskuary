@@ -4,9 +4,10 @@
 // Its buttons are never the page's own (data-tq-view-skip): the reader that lights one never finds this copy instead.
 // A VIEW IS DRAWN, NEVER ITS JSON (the owner, 2026-11-15): a spec the page cannot read is no view (viewSpec.viewOf - it stays a step), and one
 // that throws while drawing says so in a line - a view never takes the chat down with it.
-import React, { useMemo, useRef } from "react";
+import React, { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTableFit } from "./tableFit.js";
-import { Button } from "@mui/material";
+import { Button, MenuItem, Slider, Switch, TextField } from "@mui/material";
+import PickedIcon from "@mui/icons-material/CheckRounded";
 import PlanDone from "@mui/icons-material/CheckBoxRounded";
 import NowIcon from "@mui/icons-material/IndeterminateCheckBoxRounded";
 import PlanTodo from "@mui/icons-material/CheckBoxOutlineBlankRounded";
@@ -21,13 +22,24 @@ import WarnIcon from "@mui/icons-material/WarningAmberRounded";
 import "./dashboard/dashboard.css";
 import "./diffView.css";
 import "./viewSpec.css";
-import { Bars, Line, Stacked } from "./dashboard/charts.jsx";
+import { Bars, Line, Stacked, slotColor } from "./dashboard/charts.jsx";
 import { Md } from "./md.jsx";
 import { fmtNum, numOf, places, reportShape } from "./reportRows.js";
 import { run as pageRun } from "./pageView.js";
 import { openAppLink } from "./appLinks.js";
-import { buttonOf, columnsOf, fmtAs, labels, placesOf } from "./viewSpec.js";
+import api from "./api.js";
 import Artifact from "./Artifact.jsx";
+import { asks, buttonOf, colName, columnsOf, evalExpr, fillIn, fmtAs, labels, placesOf } from "./viewSpec.js";
+
+// ── A VIEW HE CAN WORK WITH (after json-render's state and actions): its values (the spec's `state`), moved by its controls on his screen
+// alone; every value written {$expr} is worked out from them as they move (viewSpec.evalExpr - no eval), and one that cannot be is said
+// in plain words where it stands. His pick on a choice, or a button's answer, goes to the agent once as his press (viewspec.answer) and
+// stays on what he pressed; nothing in a view sends or pays.
+const ViewCtx = createContext({ state: {}, set: () => {}, picks: {}, answer: null });
+const useView = () => useContext(ViewCtx);
+// a value as it stands now: {value}, or {error} where its expression cannot be worked out
+const now = (v, scope) => (v && typeof v === "object" && "$expr" in v ? evalExpr(v.$expr, scope) : { value: v });
+const Err = ({ e }) => (e ? <div className="tq-view-err" role="note" data-tq-view-err="">Could not work out {e}</div> : null);
 
 // A CHECKLIST: done ticked, the one being done marked, the rest open - the agent's plan (GeneralWorkspace) is drawn by the same row
 const PLAN_ICON = { done: PlanDone, now: NowIcon, todo: PlanTodo };
@@ -62,23 +74,58 @@ function Table({ columns, rows }) {
   </table></div>;
 }
 
+// ...its cells worked out against the view's values and their own row's columns (lower case, _ for a space: viewSpec.colName)
+function TableNow({ columns, rows }) {
+  const { state } = useView(), names = labels(columns);
+  let err = null;
+  const got = rows.map((r) => { const scope = { ...state };
+    names.forEach((c, i) => { if (!(r[i] && typeof r[i] === "object")) scope[colName(c)] = r[i]; });
+    return r.map((c) => { const x = now(c, scope); if (x.error) { err ||= x.error; return "—"; } return x.value; }); });
+  return <><Table columns={columns} rows={got} /><Err e={err} /></>;
+}
+
 // a tile: its label, the number large, and how it moved - the arrow and its colour say which way, the words say by how much
 const TREND = { up: UpIcon, down: DownIcon, neutral: FlatIcon };
 const tileValue = (t) => (typeof t.value !== "number" ? String(t.value) : t.format ? fmtAs(t.value, t.format) : fmtNum(t.value, (String(t.value).split(".")[1] || "").length));
-const Stats = ({ items }) => (
-  <div className="tq-view-tiles">{items.map((t, i) => { const Icon = t.trend && TREND[t.trend.dir];
+function Stats({ items }) {
+  const { state } = useView();
+  return <div className="tq-view-tiles">{items.map((t, i) => { const Icon = t.trend && TREND[t.trend.dir], v = now(t.value, state);
     return <div key={i} className="tq-view-card tq-view-tile">
       <div className="lbl">{t.label}</div>
-      <div className="val">{tileValue(t)}</div>
+      <div className="val" data-tq-view-value="">{v.error ? "—" : tileValue({ ...t, value: v.value })}</div>
+      <Err e={v.error} />
       {t.trend && <div className={`trend ${t.trend.dir}`}><Icon aria-hidden sx={{ fontSize: 16 }} /><span>{t.trend.text || t.trend.dir}</span></div>}
       {t.note && <div className="note">{t.note}</div>}
-    </div>; })}</div>);
+    </div>; })}</div>;
+}
 
 // a chart from its points alone: no rows behind a mark, so nothing to drill into, and no table twin (the points are the whole of it). The
 // dashboard's own bars and line, each value at its bar's end in the view's format, one point picked out where the agent highlighted it
 // ...and a run of short labels as columns (viewSpec.columnsOf), the chart's height whatever their count
+// ...a pie: each slice its share, its colour the dashboards' series, the legend its label and value
+const Pie = ({ points, nf = (n) => fmtNum(n, 0) }) => {
+  const sum = points.reduce((a, p) => a + Math.max(0, p.value), 0) || 1, R = 42, C = 2 * Math.PI * R;
+  let at = 0;
+  return <div className="tq-view-pie">
+    <svg viewBox="0 0 100 100" role="img" aria-label={points.map((p) => `${p.label} ${nf(p.value)}`).join(", ")}>
+      {points.map((p, i) => { const len = (Math.max(0, p.value) / sum) * C, off = at; at += len;
+        return <circle key={i} cx="50" cy="50" r={R} fill="none" stroke={slotColor(i)} strokeWidth="14" strokeDasharray={`${len} ${C - len}`}
+          strokeDashoffset={-off} transform="rotate(-90 50 50)" />; })}
+    </svg>
+    <ul>{points.map((p, i) => <li key={i}><i style={{ background: slotColor(i) }} /><span>{p.label}</span>
+      <b>{nf(p.value)}</b><em>{Math.round((Math.max(0, p.value) / sum) * 100)}%</em></li>)}</ul>
+  </div>;
+};
+function ChartNow(p) {
+  const { state } = useView();
+  let err = null;
+  const points = p.points.map((x) => { const v = now(x.value, state); if (v.error || typeof v.value !== "number") err ||= v.error || `"${x.value.$expr}" - it does not come to a number`;
+    return { ...x, value: typeof v.value === "number" ? v.value : 0 }; });
+  return <>{!err && <Chart {...p} points={points} />}<Err e={err} /></>;
+}
 const Chart = ({ kind, title = "", format, points }) => {
   const nf = format ? (n) => fmtAs(n, format, placesOf(points.map((x) => x.value), format)) : undefined;
+  if (kind === "pie") return <Pie points={points} nf={nf} />;
   const c = { kind: kind === "line" ? "line" : "bars", title, x: "label", y: "value", w: 2, twin: false, inline: true, fmt: nf, h: 160 };
   const marks = points.map((x, i) => ({ key: x.label || `#${i + 1}`, value: x.value, rows: [], on: !!x.highlight }));
   if (kind === "line") return <Line c={c} points={marks} onDrill={() => {}} />;
@@ -102,17 +149,59 @@ const Note = ({ p }) => { const tone = p.tone || "info", Icon = NOTE[tone];
   return <aside className={`tq-view-note ${tone}`} role="note"><Icon aria-hidden sx={{ fontSize: 18 }} />
     <div>{p.title && <h4>{p.title}</h4>}<Md text={p.text} />{p.description && <p>{p.description}</p>}</div></aside>; };
 
-function ViewButton({ p }) {
+function ViewButton({ p, on, id }) {
+  const v = useView(), act = on?.press;
+  if (act?.action === "answer") return <Answer id={id} asked={p.label} options={[p.label]} pickOf={() => fillIn(act.params.text, v.state)} one />;
+  if (act?.action === "setState") return <Button size="small" variant="outlined" className="tq-view-button" data-tq-view-button="setState"
+    onClick={() => { const x = now(act.params.value, v.state); if (!x.error) v.set(act.params.statePath, x.value); }}>{p.label}</Button>;
   const b = buttonOf(p);
   const press = () => (b.verb ? pageRun([{ op: "point", button: b.lights }]) : openAppLink(b.open));
   return <Button size="small" variant="outlined" className="tq-view-button" data-tq-view-button={b.verb || b.open}
     title={b.verb ? `Shows you ${b.lights} - you press it` : undefined} onClick={press}>{b.label}</Button>;
 }
 
+// HIS ANSWER: each option a button; pressed, the pick goes to the agent once (viewspec.answer) and stands here, the rest greyed. Pressed
+// again anywhere - a second tab - the server says the first pick, and that is what stands. Off a task (a report, the Assistant) there is
+// no agent to answer, and the buttons say so
+function Answer({ id, asked, options, pickOf = (o) => ({ value: o }), one }) {
+  const { picks, answer } = useView(), [going, setGoing] = useState(""), [err, setErr] = useState("");
+  const picked = picks[id];
+  const press = async (o) => {
+    const got = pickOf(o); if (got.error) return setErr(`Could not work out ${got.error}`);
+    setGoing(o); setErr("");
+    try { await answer(id, got.value, asked); } catch (e) { setErr(e?.response?.data?.detail || e?.message || "It did not reach the agent."); } finally { setGoing(""); }
+  };
+  const mine = (o) => picked != null && (one || picked === o);
+  return <div className="tq-view-answer" data-tq-view-answer={id}>
+    <div className="tq-view-buttons">{options.map((o) => <Button key={o} size="small" variant={mine(o) ? "contained" : "outlined"} disableElevation
+      className="tq-view-button" data-tq-view-pick={o} disabled={!answer || picked != null || !!going} aria-pressed={mine(o)}
+      title={!answer ? "Answer in the chat - this view is not on a task" : undefined} startIcon={mine(o) ? <PickedIcon /> : undefined}
+      onClick={() => press(o)}>{o}</Button>)}</div>
+    {picked != null && <div className="tq-view-said" role="status">{one ? "You answered" : "You picked"}: {picked}</div>}
+    {err && <div className="tq-view-err" role="alert">{err}</div>}
+  </div>;
+}
+
+// A CONTROL moves one of the view's values, on his screen alone - what is worked out from it changes as it moves
+function Control({ type, p }) {
+  const { state, set } = useView(), v = state[p.value];
+  if (type === "slider") return <div className="tq-view-control" data-tq-view-control={p.value}>
+    <div className="tq-view-control-head"><span>{p.label}</span><b data-tq-view-now="">{typeof v === "number" ? (p.format ? fmtAs(v, p.format) : fmtNum(v, (String(v).split(".")[1] || "").length)) : ""}</b></div>
+    <Slider size="small" value={typeof v === "number" ? v : p.min} min={p.min} max={p.max} step={p.step || (p.max - p.min > 20 ? 1 : (p.max - p.min) / 100)}
+      onChange={(_, x) => set(p.value, x)} aria-label={p.label} valueLabelDisplay="off" /></div>;
+  if (type === "toggle") return <label className="tq-view-control row" data-tq-view-control={p.value}>
+    <Switch size="small" checked={!!v} onChange={(e) => set(p.value, e.target.checked)} /><span>{p.label}</span></label>;
+  if (type === "select") return <TextField select size="small" label={p.label} value={p.options.includes(v) ? v : p.options[0]}
+    onChange={(e) => set(p.value, e.target.value)} className="tq-view-control" data-tq-view-control={p.value}>
+    {p.options.map((o) => <MenuItem key={o} value={o}>{o}</MenuItem>)}</TextField>;
+  return <TextField type="date" size="small" label={p.label} value={typeof v === "string" ? v : ""} onChange={(e) => set(p.value, e.target.value)}
+    className="tq-view-control" data-tq-view-control={p.value} InputLabelProps={{ shrink: true }} />;
+}
+
 const DRAW = {
-  table: (p) => <Block p={p} flush><Table columns={p.columns} rows={p.rows} /></Block>,
+  table: (p) => <Block p={p} flush><TableNow columns={p.columns} rows={p.rows} /></Block>,
   stats: (p) => <><Head p={p} /><Stats items={p.items} /></>,
-  chart: (p) => <Block p={p}><Chart {...p} /></Block>,
+  chart: (p) => <Block p={p}><ChartNow {...p} /></Block>,
   list: (p) => <Block p={p}><ul className="tq-view-list">{p.items.map((x, i) => <li key={i}>{x}</li>)}</ul></Block>,
   steps: (p) => <Block p={p}><ol className="tq-view-list steps">{p.items.map((x, i) => <li key={i}><b>{i + 1}</b><span>{x}</span></li>)}</ol></Block>,
   checklist: (p) => <Checklist p={p} />,
@@ -121,14 +210,17 @@ const DRAW = {
   grid: (p) => <Head p={p} />,
   badge: (p) => <span className={`tq-view-badge ${p.variant || "default"}`} title={p.title || p.description || undefined}>{p.text}</span>,
   note: (p) => <Note p={p} />,
-  button: (p) => <ViewButton p={p} />,
+  button: (p, e, id) => <ViewButton p={p} on={e.on} id={id} />,
+  slider: (p) => <Control type="slider" p={p} />, toggle: (p) => <Control type="toggle" p={p} />,
+  select: (p) => <Control type="select" p={p} />, date: (p) => <Control type="date" p={p} />,
+  choice: (p, e, id) => <Block p={{ ...p, title: p.title || p.label }}><Answer id={id} asked={p.label} options={p.options} /></Block>,
 };
 // an element, then its children: under it, side by side in a grid (stacking where the chat is narrow), and a run of badges and buttons on one line
 const INLINE = new Set(["button", "badge"]);
 const Node = ({ els, id }) => {
   const e = els[id], kids = e.children || [], cols = e.type === "grid" ? e.props.cols || Math.min(kids.length, 4) : 0;
   const cls = cols ? "tq-view-grid" : kids.every((k) => INLINE.has(els[k].type)) ? "tq-view-buttons" : "tq-view-kids";
-  return <div className="tq-view-el" data-tq-view-el={e.type}>{DRAW[e.type](e.props)}
+  return <div className="tq-view-el" data-tq-view-el={e.type}>{DRAW[e.type](e.props, e, id)}
     {!!kids.length && <div className={cls} data-cols={cols || undefined}>{kids.map((k) => <Node key={k} els={els} id={k} />)}</div>}</div>;
 };
 
@@ -139,10 +231,23 @@ class Guard extends React.Component {
   render() { return this.state.bad ? <p className="tq-aui-hint" data-tq-view-failed="">This view could not be drawn here.</p> : this.props.children; }
 }
 
-export default function ViewSpec({ spec }) {
+// `taskId`: the task whose agent showed it - where his answers go. A view off a task draws its answer buttons greyed
+export default function ViewSpec({ spec, taskId }) {
+  const [state, setState] = useState(() => ({ ...(spec?.state || {}) })), [picks, setPicks] = useState({});
+  const answering = !!(spec && taskId && spec.id && asks(spec.elements));
+  // ...what he answered already, so the view drawn again (a reload, the phone) shows his pick, never the buttons lit again
+  useEffect(() => { if (!answering) return undefined;
+    let on = true; api.get(`/api/tasks/${taskId}/view-answers`).then(({ data }) => on && setPicks((p) => ({ ...(data?.[spec.id] || {}), ...p }))).catch(() => {});
+    return () => { on = false; }; }, [answering, taskId, spec?.id]);
+  const ctx = useMemo(() => ({ state, picks, set: (k, v) => setState((s) => ({ ...s, [k]: v })),
+    answer: answering ? async (el, pick, asked) => {
+      try { await api.post(`/api/tasks/${taskId}/view-answer`, { view: spec.id, el, pick, asked }); setPicks((p) => ({ ...p, [el]: pick })); }
+      catch (e) { const d = String(e?.response?.data?.detail || "");      // ...answered already (a second tab): the first pick is what stands
+        if (e?.response?.status === 409) setPicks((p) => ({ ...p, [el]: d.replace(/^answered already:\s*/, "") })); else throw e; }
+    } : null }), [state, picks, answering, taskId, spec?.id]);
   if (!spec) return null;
-  return <Guard><Artifact as="section" className="tq-dash tq-view" data-tq-view="" data-tq-view-skip="" aria-label={spec.title || "A view from the agent"}>
+  return <Guard><ViewCtx.Provider value={ctx}><Artifact as="section" className="tq-dash tq-view" data-tq-view="" data-tq-view-skip="" aria-label={spec.title || "A view from the agent"}>
     {spec.title && <h3 className="tq-view-title">{spec.title}</h3>}
     <Node els={spec.elements} id={spec.root} />
-  </Artifact></Guard>;
+  </Artifact></ViewCtx.Provider></Guard>;
 }

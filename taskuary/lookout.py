@@ -387,7 +387,7 @@ def charges(store, days: int = SPEND_DAYS) -> dict:
     return dict(out)
 
 
-def payee_lines(store, who: str, cs: list) -> list:
+def payee_lines(store, who: str, cs: list, rows: list = None) -> list:
     """One payee as the run reads it: a head line with what code can say of it - how often, the latest against the one before, the same
     amount twice within TWICE_DAYS, what it comes to a year at its cadence - then its charges, each with its id."""
     ms, (last, a) = [m for m, _ in cs], cs[-1]
@@ -402,7 +402,10 @@ def payee_lines(store, who: str, cs: list) -> list:
     for (x, v), d in _twice(cs)[-2:]: head += f"; the same {_cash(v)} twice in {d} days (msg{x[0]['MessageId']}, msg{x[1]['MessageId']})"
     if every and 25 <= every <= 35: head += f"; at this rate {_cash(a * 12)} a year (12 x {_cash(a)})"
     files = [f"{x.get('Name')} (att{x['AttachmentId']})" for m in ms[-2:] for x in store.list_attachments(m['MessageId']) if not x.get('Inline')][:3]
-    each = [f"  - msg{m['MessageId']} {str(m['SentAt'])[:10]} {_cash(v)} \"{_one(m.get('Subject'), 70)}\"" for m, v in cs[-SPEND_EACH:]]
+    # ...or, given `rows`, each charge added there as a record (viewspec.records: the shape a view's table and chart take as they are)
+    if rows is not None: rows += [{'payee': who, 'date': str(m['SentAt'])[:10], 'amount': v, 'message': f"msg{m['MessageId']}",
+                                   'subject': _one(m.get('Subject'), 70)} for m, v in cs[-SPEND_EACH:]]
+    each = [] if rows is not None else [f"  - msg{m['MessageId']} {str(m['SentAt'])[:10]} {_cash(v)} \"{_one(m.get('Subject'), 70)}\"" for m, v in cs[-SPEND_EACH:]]
     return [head + (f"; attached: {', '.join(files)}" if files else '')] + each
 
 
@@ -416,12 +419,12 @@ def _signal(cs) -> bool:
     return len(cs) > 1 and (cs[-1][1] != cs[-2][1] or bool(_twice(cs)))
 
 
-def spend(store, q: str = '', days: int = SPEND_DAYS) -> list:
+def spend(store, q: str = '', days: int = SPEND_DAYS, rows: list = None) -> list:
     "The spend table: payees with a pointer first, then by what they took; `q` keeps the payees whose name, address or subjects hold every word of it."
     ws, out = _norm(q).split(), []
     for who, cs in sorted(charges(store, days).items(), key=lambda kv: (not _signal(kv[1]), -sum(v for _, v in kv[1]))):
         if ws and not all(w in _norm(' '.join([who, cs[-1][0].get('FromEmail') or ''] + [m.get('Subject') or '' for m, _ in cs])) for w in ws): continue
-        out += payee_lines(store, who, cs)
+        out += payee_lines(store, who, cs, rows)
         if len(out) > SPEND_ROWS * 4: break
     return out
 
@@ -455,9 +458,11 @@ def figures(store, who: str, days: int = FIG_DAYS) -> str:
     "What the app knows of `who` in figures: its charges (spend), the figures its mail states (stated) and what the record holds (ledger.find)."
     from . import ledger
     q = _one(who, 80)
-    money, said, rec = spend(store, q, days), stated(store, q, days), ledger.find(store, q.split())
+    rows = []
+    money, said, rec = spend(store, q, days, rows), stated(store, q, days), ledger.find(store, q.split())
     if not (money or said or rec): return f'Nothing in {days} days of saved mail or the record states a figure for "{q}" - try their address, or another name for them.'
     return '\n\n'.join(x for x in (f'CHARGES ({days} days, counted from the amounts their mail states):\n' + '\n'.join(money) if money else '',
+                                   'EACH CHARGE, AS ROWS:\n' + json.dumps(rows, ensure_ascii=False) if rows else '',
                                    'FIGURES THEIR MAIL STATES (newest first):\n' + '\n'.join(said) if said else '',
                                    'ON RECORD:\n' + '\n'.join(f'- {x}' for x in rec) if rec else '') if x)
 

@@ -56,6 +56,7 @@ DENIED = (
     (r'POST', r'^/api/tasks/\d+/(resume|continue-session)$', 'resuming previous work is the owner\'s choice'),
     # an agent never answers its own question - and an answer now lets a held ask go (hooks.ask, 2026-09-28)
     (r'POST', r'^/api/tasks/\d+/worker/(answer|answers|release)$', 'answering an agent\'s question is the owner\'s'),
+    (r'POST', r'^/api/tasks/\d+/view-answer$', "his pick on a view the agent showed is his press (viewspec.answer)"),
     (r'POST', r'^/api/tasks/\d+/permission$', "answering an agent's permission request is the owner's (permissions.py)"),
     # a chat bound to an agent is a door other people talk through, and the agent's words leave by it (agentchannels.py)
     (r'POST|DELETE', r'^/api/agent-channels(/\d+)?$', "which chats reach an agent - and hear it - is the owner's to open and close"),

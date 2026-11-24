@@ -2854,6 +2854,27 @@ def try_again(task_id: int):
     how = general.to_agent(store, task_id, general.AGAIN_PRESS + ' ' + general.made_line(task_id), ACTOR, start=True)
     return {'ok': bool(how), 'how': how} if how else {'ok': False, 'why': 'The agent could not be started - check that an AI is connected in Settings.'}
 
+class ViewAnswerBody(BaseModel):
+    view: str
+    el: str
+    pick: str
+    asked: str = ''
+@app.post('/api/tasks/{task_id}/view-answer')
+def view_answer(task_id: int, body: ViewAnswerBody):
+    "HIS PICK ON A VIEW THE AGENT SHOWED (viewspec.answer): heard by the agent once, as his press. 409 with the first pick where it was answered."
+    if not store.get_task(task_id): raise HTTPException(404, 'task not found')
+    from . import viewspec
+    try: out = viewspec.answer(store, task_id, body.view, body.el, body.pick, body.asked, ACTOR)
+    except ValueError as e: raise HTTPException(422, str(e))
+    if not out['ok']: raise HTTPException(409, f"answered already: {out['pick']}")
+    return out
+
+@app.get('/api/tasks/{task_id}/view-answers')
+def view_answers(task_id: int):
+    "{view id: {control id: his pick}} - what he answered on the task's views, so a view drawn again shows it."
+    from . import viewspec
+    return viewspec.answers(store, task_id)
+
 def _say(task_id: int, body, **kw):
     "A typed line on the one road (general.take_line), as the chat's doors send it - his words straight to the agent, nothing fetched first."
     from . import general

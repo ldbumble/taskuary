@@ -103,17 +103,19 @@ TOOLS = {
                    {'type': 'object', 'properties': {'type': _STR, 'connector_id': _INT}, 'required': ['type'],
                     'additionalProperties': True}, ('POST', '/api/tools/run')),
     # ...and a VIEW in its own chat (viewspec.py, after Vercel's json-render): changes nothing outside the chat, so its door is the task's own read
-    'show': ('read', "Draw a view in this chat - a table, a chart, tiles, a checklist, steps, a status - inline in your turn, where you say it: "
-                     "numbers, a comparison, a trend, a list or where things stand read there at a glance, sized to sit between your words. "
-                     "`elements` maps an id to {type, props, children?}; `root` is drawn "
-                     "first. Types: grid, stats, chart, table, checklist, list, steps, text, note, badge, button - their props and a "
-                     "worked example are the guide tool's `show` topic. A button only lights or opens"
-                     " - it never sends, pays or closes. A bad spec comes back saying what to fix. `files`: full paths of files you made - a picture,"
+    'show': ('read', "Draws in this chat, inline in your turn: bar, line and pie charts, tables, number tiles, checklists, lists, steps and "
+                     "notes - and controls: a slider, toggle, select or date that moves a value of the view's `state` and the charts, tiles "
+                     "and cells worked out from it ({\"$expr\": \"seats * 12\"}) change on his screen as he moves it; a choice or a button "
+                     "whose pick comes back to you once, as his press. `elements` maps an id to {type, props, children?, on?}; `root` is drawn "
+                     "first. Rows a Taskuary tool gave you as records ([{column: value}]) go into a table's or chart's `rows` as they are. "
+                     "Types: grid, stats, chart, table, checklist, list, steps, text, note, badge, button, slider, toggle, select, date, "
+                     "choice - their props and worked examples are the guide tool's `show` topic. A view never sends, pays or closes. "
+                     "A bad spec comes back saying what to fix. `files`: full paths of files you made - a picture,"
                      " a PDF, a page, or any file that is text - each is copied onto the task and drawn in this "
                      f"chat as it is, a picture as the picture. {SHOW_WHAT} It is the one road onto the owner's screen: a viewer, a browser or an app opened on the computer is not"
                      " on it, and its answer says what was shown.",
              _S({'title': _STR, 'root': _STR, 'elements': {'type': 'object', 'additionalProperties': __import__('taskuary.viewspec', fromlist=['x']).element_schema()},
-                 'files': {'type': 'array', 'items': _STR}}),
+                 'state': {'type': 'object'}, 'files': {'type': 'array', 'items': _STR}}),
              ('GET', '/api/tasks/1')),
     'tick': ('own', "Tick (done=true) or untick one of this task's to-dos: `item` is its id, the one in brackets after it.",
              _S({'item': _STR, 'done': {'type': 'boolean'}}, ('item',)), ('POST', '/api/agent/tick')),
@@ -343,8 +345,8 @@ SHORT = {
     'guide': "Read one of Taskuary's how-tos (browser, number, propose ...).",
     'run_system': "Run one tool on one of the owner's systems: {type, connector_id, ...its fields}.",
     'web_search': "Search the web through this task's AI card.",
-    'show': 'Draw a table, a chart, number tiles or a checklist inline in this chat - numbers, comparisons, trends, lists and status read at '
-            'a glance there - or show files you made.',
+    'show': 'Draws bar, line and pie charts, tables, number tiles and checklists inline in this chat, with sliders, toggles, selects and '
+            'dates that recompute them live and choices whose pick comes back to you - or shows files you made.',
     'tick': "Tick or untick a to-do: `item` is its id.",
     'todos': "Add, reword or merge this task's to-dos.",
     # end_turn and ask_owner are listed with their whole words: the fields ARE how they are used
@@ -759,7 +761,10 @@ def _call(store, tid: int, name: str, args: dict, doors: dict, skip=()) -> str:
         return _out('\n\n'.join(f'SEARCH: {q}\n{r}' for q, r in zip(qs, got)), fence_it=True)
     if name == 'run_system':
         r = doors['tool_run']({**a, 'task_id': tid})
-        return _out(_j(json.loads(r.body) if hasattr(r, 'body') else r), fence_it=True)     # a 202 (queued) comes back as a response
+        r = json.loads(r.body) if hasattr(r, 'body') else r                 # a 202 (queued) comes back as a response
+        # ...a report's rows come back as records, the shape a view's table and chart take as they are (viewspec.records)
+        if isinstance(r, dict) and (rs := __import__('taskuary.viewspec', fromlist=['x']).records(r.get('output'))): r = {**{k: v for k, v in r.items() if k != 'output'}, 'rows': rs}
+        return _out(_j(r), fence_it=True)
     if name == 'show':
         from . import viewspec
         if not a.get('files') and not a.get('elements'): raise ValueError('give `files` (full paths of pictures or pages you made) or a view (`root` and `elements`)')

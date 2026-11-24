@@ -154,6 +154,9 @@ def _mail(store, tid: int) -> list:
     "Every message on the task's thread the chat draws (general.JOINED, and his own lines filed elsewhere), each with `T`: when it joined."
     from . import general
     rows = [*store._rows(general.JOINED, (tid,)), *general.room_own(store, tid)]
+    # ...BUT NEVER THE SENT-FOLDER COPY OF A LETTER TASKUARY SENT ON HIS PRESS (walk 13: every send drawn twice - the "Sent" card, then the
+    # same mail again as "You · by email"): that copy IS the card's send, drawn once by the card, and no input to the agent either (events.py)
+    if any(x.get('Own') for x in rows): mine = general.went_from_here(store, tid); rows = [x for x in rows if not (x.get('Own') and mine(x))]
     return sorted(({**x, 'T': ep((x.get('SentAt') if x.get('Own') else None) or x.get('JoinedAt') or x.get('CreatedAt'))} for x in rows),
                   key=lambda x: (x['T'], x['MessageId']))
 
@@ -257,8 +260,7 @@ def hear(store, tid: int, lines=(), turn: bool = False, sid: str = '', standing:
     # ...and a letter Taskuary sent on his press, come back from his Sent folder, is no input at all (the owner, 2026-11-13: two letters
     # waited, he sent one, and its copy coming back set the other aside - "how am i supposed to send 2 messages then")
     # ...each message greying only the cards it bears on (proposals.bears: to its sender, or on its thread); his line, every card
-    mine = general.went_from_here(store, tid)
-    joined = {str(x['MessageId']): x for x in _mail(store, tid) if not (x.get('Own') and mine(x))} if any(k == 'mail' for k, _ in new) else {}
+    joined = {str(x['MessageId']): x for x in _mail(store, tid)} if any(k == 'mail' for k, _ in new) else {}
     mails = [(joined[r]['T'], joined[r]) for k, r in new if k == 'mail' and r in joined]
     if (line := any(k == 'line' for k, _ in new)) or mails:
         from . import proposals

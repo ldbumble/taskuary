@@ -799,7 +799,8 @@ JOINED = ("SELECT m.*, MAX(m.CreatedAt, IFNULL((SELECT MAX(r.CreatedAt) FROM rou
 def went_from_here(store, tid: int):
     "A test for a message on task `tid`: is it a reply Taskuary sent on the owner's press, come back from their Sent folder? (its opening words)"
     from .channels import _same_words
-    sent = [str(x.get('text') or '') for x in wrapup.sent_replies(store, tid)]
+    # ...by the receipts the copy is filed by (channels.ingest_own_message's `ours`): one record says what Taskuary sent
+    sent = [str(x.get('FinalText') or x.get('DraftText') or '') for x in store.sent_replies(task_id=int(tid))]
     return lambda x: any(_same_words(x.get('OwnText') or x.get('BodyText') or '', t) for t in sent)
 def _quote(x, n) -> str: return '"' + _cut(' '.join(str(x or '').split()), n) + '"'
 

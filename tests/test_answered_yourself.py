@@ -156,9 +156,13 @@ class TheReplyHasToSurviveTheTrip(unittest.TestCase):
         ingest_outbound_mail(s, 'me@x.com', copy)
         self.assertEqual(len(s.list_messages(tid)), 2)
         self.assertFalse([c for c in s.list_comments(tid) if 'You replied' in c['Body']])
+        # ...and the chat draws it once, as its card: the copy is no "You · by email" bubble under "Sent" (walk 13, every send on both roads)
+        from taskuary.conversation import _mail
+        self.assertEqual([x['FromName'] for x in _mail(s, tid)], ['Client'])
         # ...while the owner's own different words on the thread still are his reply
         ingest_outbound_mail(s, 'me@x.com', {**self._sent(i='sm2'), 'bodyPreview': 'March attached; June next week.'})
         self.assertTrue([c for c in s.list_comments(tid) if 'You replied' in c['Body']])
+        self.assertEqual(sorted(x['FromName'] for x in _mail(s, tid)), ['Client', 'You'], 'his own outside reply still draws as his line')
 
     def test_a_whatsapp_reply_retires_the_unused_draft_and_says_so(self):
         """Tess answered in WhatsApp after Taskuary drafted a reply. Read against the draft, the line covers it: never leave the old

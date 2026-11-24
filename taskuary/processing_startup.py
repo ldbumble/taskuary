@@ -7,6 +7,9 @@ import uuid
 
 
 def initialize(store, *, live_state=None):
+    from .processing_unread import FILED_SINCE
+    # what was filed onto a task before the FYI lane raised it is not news now (processing_unread.filed_news reads this, never writes it)
+    if not store.get_setting(FILED_SINCE): store.set_setting(FILED_SINCE, datetime.now().strftime('%Y-%m-%d %H:%M:%S'), 'system')
     if store.processing_reads_active():
         return {'status': 'already_active'}
     # SQLite's backup API includes committed WAL content. Never copy a live .db

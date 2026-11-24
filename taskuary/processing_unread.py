@@ -706,7 +706,8 @@ def fold_fyi_threads(cards: list) -> list:
 # that morning, showed nowhere - "he thought it never came in"; "if a message is FYI on a task it should show up in the FYI section, not
 # disappear"). The task's item keeps it, closed or open, and stays what it is; the rail gets one FYI row per task for what was filed onto it,
 # the newest line speaking, until he walks past it. `filed:<mid>` is that row's key: walked past (or put down) at a message, every line
-# filed onto its task up to it is read. Only what triage read is news - not his own lines, an auto-reply, or a notice come again unchanged.
+# filed onto its task up to it is read. Only what triage read is news - not his own lines, an auto-reply, a notice come again unchanged, or what Taskuary
+# wrote itself (a report's run, an Advisor line joined to its task: the task's row speaks for it).
 FILED = 'filed:'
 FILED_SINCE = 'fyi_filed_since'     # what was filed before this shipped is not raised now: 84 rows on the owner's rail at once
 
@@ -716,14 +717,15 @@ def filed_news(store, now, *, include_read=False, keys=None, days=14) -> list:
     from . import funnel
     from .autoreply import is_auto
     from .ingest import is_ours, own_addresses
-    since = store.get_setting(FILED_SINCE)
-    if not since: store.set_setting(FILED_SINCE, since := now.strftime('%Y-%m-%d %H:%M:%S'), 'system')
+    from .store import OWN_CHANNELS
+    # app start stamps it (processing_startup.initialize): a read writes nothing, and a home not started yet raises nothing older than now
+    since = store.get_setting(FILED_SINCE) or now.strftime('%Y-%m-%d %H:%M:%S')
     floor = max(str(since), (now - timedelta(days=days)).strftime('%Y-%m-%d %H:%M:%S'))
     rows = store._rows("""SELECT m.*, t.Title AS TaskTitle, t.Status AS TaskStatus,
             (SELECT r.VerdictJson FROM route r WHERE r.MessageId=m.MessageId AND r.VerdictJson IS NOT NULL ORDER BY r.RouteId DESC LIMIT 1) AS Verdict
         FROM message m JOIN task t ON t.TaskId=m.TaskId
-        WHERE m.Status='filed' AND IFNULL(m.Direction,'in')='in' AND IFNULL(m.Channel,'')<>'report' AND replace(m.CreatedAt,'T',' ')>=?
-        ORDER BY m.MessageId""", (floor,))
+        WHERE m.Status='filed' AND IFNULL(m.Direction,'in')='in' AND IFNULL(m.Channel,'') NOT IN (%s) AND replace(m.CreatedAt,'T',' ')>=?
+        ORDER BY m.MessageId""" % ','.join('?' * len(OWN_CHANNELS)), (*OWN_CHANNELS, floor))
     own = own_addresses(store)
     def news(r):
         "triage read it (its stored verdict) and it was not the same notice come again"

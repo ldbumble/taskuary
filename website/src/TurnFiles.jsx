@@ -15,7 +15,7 @@ export default function TurnFiles({ files }) {
   return (
     <div className="tq-published" data-tq-turn-files="">
       {files.map((f) => (
-        <div key={f.path} className="tq-published-page" data-tq-turn-file={f.path} style={mediaFit(f)?.box}>
+        <div key={f.path} className="tq-published-page tq-turn-frame" data-tq-turn-file={f.path} style={mediaFit(f)?.box}>
           <div className="tq-published-row">
             <button type="button" className="tq-published-name" onClick={() => setViewing(f)} title="Open it here">
               <b>{f.name}</b><span>{isPic(f) ? "picture" : f.preview || "file"} · open</span></button>

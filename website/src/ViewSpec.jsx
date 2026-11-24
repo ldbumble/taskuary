@@ -52,7 +52,7 @@ function Table({ columns, rows }) {
   const show = (r, c, i) => (r[c] == null ? "" : !nums.has(c) ? String(r[c]) : fmts[i] ? fmtAs(numOf(r[c]), fmts[i], p[c]) : withSym(r[c], fmtNum(numOf(r[c]), p[c])));
   // ...A TABLE WIDER THAN THE TURN'S COLUMN TAKES THE ROOM ITS COLUMNS NEED (the owner, 2026-11-23: "if it requires full page it can"): what it
   // would overflow by with every column at its own width, measured before it is painted, widens its view past --tq-turn-item
-  // (generalWorkspace.css), up to the chat's width. Measured here because the view is a size container (dashboard.css), and a container's own
+  // (appTheme.css), up to the chat's width. Measured here because the view is a size container (dashboard.css), and a container's own
   // width can never follow what is inside it
   const ref = useRef(null);
   useLayoutEffect(() => {

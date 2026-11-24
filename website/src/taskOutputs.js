@@ -214,9 +214,9 @@ export const turnFiles = ({ listed = [], id, words = "", did = "", tid, skip = [
 // A PICTURE OR A VIDEO AT ITS OWN SHAPE (the owner, 2026-11-18: "images should be able to render however the agent wants it"; 2026-11-23: an
 // upright video stood in a 16:9 frame the chat's whole width): its pixels, read by the server off the file (outputs.pixels), reserve its room
 // before it loads. `media`: as wide as it is, never wider than its card, never taller than MEDIA_H - its height follows its own ratio. `box`: the
-// card around it hugs it, in the turn's reading column (--tq-turn-item, generalWorkspace.css), and keeps room for its name and Download.
+// card around it hugs it, in the turn's reading column (--tq-turn-item, appTheme.css), and keeps room for its name and Download.
 // null where they are not known: that one keeps the fixed room (publishedPages.css)
-export const MEDIA_H = "60vh";
+export const MEDIA_H = "min(60vh, 560px)";   // ...the window's height, and never a whole tall monitor's
 export const mediaFit = (f) => {
   const [w, h] = Array.isArray(f?.dims) ? f.dims : [];
   if (!(w > 0 && h > 0)) return null;

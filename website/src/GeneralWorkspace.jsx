@@ -499,7 +499,7 @@ const ConvLine = ({ x, more }) => {
       data-tq-try-again="" onClick={() => retry(x)}>{btn("try_again")}</button></>}</div>}</div>;
 };
 /* A DRAFT HE SAID NO TO says what he pressed, with its words, in its own place (answered cards stay greyed saying what was pressed) */
-const NotSent = ({ c }) => <div className="tq-conv-past" data-tq-past-card={c.status} data-tq-past-review={c.review} role="note">
+const NotSent = ({ c }) => <div className="tq-conv-past tq-turn-frame" data-tq-past-card={c.status} data-tq-past-review={c.review} role="note">
   {/* ...a letter is not sent; a step he turned down (a read of a folder, a push) is a no, never a send (walk 5: "Not sent - you said don't send ·
       read the folder Users") */}
   <div className="tq-conv-past-head">{c.what === "action" ? "You said no to this" : "Not sent - you said don't send"}</div>

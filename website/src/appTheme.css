@@ -2,3 +2,17 @@ html { color-scheme: light; }
 html[data-theme="dark"] { color-scheme: dark; }
 /* Native controls and selection share the page's palette, including portals and crash screens. */
 html[data-theme="dark"] ::selection { background: #526779; color: #eeeae3; }
+
+/* ONE FRAME FOR WHAT AN AGENT SETS DOWN (the owner, 2026-11-23: "action cards and artifacts should have white border raised like it does after
+   you click send. make it pop"; "all action and artifacts should be in line with chat, look part of it"): every action card (an email, a post,
+   a bulk run, a held step - waiting, pressed and sent alike), every file it made or showed, and every block of a view it drew stand on the same
+   raised surface - white, a hairline, a soft shadow, 12px corners - as a sibling of its words: its left edge on the words' edge, a paragraph's
+   room above and below, never a full-width panel. ONE WIDTH, --tq-turn-item - a frame never runs past it unless what is in it needs more (a view
+   of a wide table; a picture or a video hugs its own shape, taskOutputs.mediaFit). Global, so it holds on every surface a card is drawn on */
+:root { --tq-turn-item: 640px; --tq-frame-bg: #fff; --tq-frame-shadow: 0 1px 3px rgb(38 37 33 / .08), 0 1px 2px -1px rgb(38 37 33 / .08); }
+/* ...in the dark a step lighter than the chat it stands on - the same colour as the chat, it did not stand at all */
+html[data-theme="dark"] { --tq-frame-bg: color-mix(in srgb, var(--tq-panel, #2a2925) 90%, #fff); --tq-frame-shadow: 0 1px 3px rgb(0 0 0 / .45), 0 1px 2px -1px rgb(0 0 0 / .45); }
+.tq-turn-frame .tq-turn-frame { box-shadow: none; background: transparent; margin: 6px 0; }   /* ...one raised surface: a card inside a card (a bulk row opened) lies flat in it */
+.tq-turn-frame.tq-turn-frame { max-width: min(100%, var(--tq-turn-item)); }   /* ...over any `* { max-width: 100% }` of the surface it is on */
+.tq-turn-frame { box-sizing: border-box; margin: 8px 0; background: var(--tq-frame-bg);
+  border: 1px solid var(--tq-border, #e4e0d9); border-radius: 12px; box-shadow: var(--tq-frame-shadow); overflow: hidden; color: var(--tq-text, #262521); }

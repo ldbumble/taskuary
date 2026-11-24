@@ -234,15 +234,17 @@ test("a turn's picture or video draws at its own shape, an upright one upright, 
   assert.doesNotMatch(src("PublishedPages.jsx"), /aspectRatio: "16 \/ 9"/, "no fixed 16:9 frame");
 });
 
-// ONE WIDTH FOR WHAT A TURN SETS DOWN (the owner, 2026-11-23: "make the card only use up the left side and a little more if it needs it"): the
-// cards of a turn, a card standing alone, a file a turn made and a view it showed all read --tq-turn-item, declared once
-test("every item of a turn reads the one turn width, declared once", async () => {
+// ONE FRAME, ONE WIDTH FOR WHAT A TURN SETS DOWN (the owner, 2026-11-23: "make the card only use up the left side"; "white border raised like it
+// does after you click send"): every card - waiting, sent, an act's result, a bulk run - and every file a turn made or showed stands in the one
+// global frame, which reads --tq-turn-item, declared once; a view reads it too. Held by the frame itself, on whatever surface it is drawn
+test("every card and file of a turn stands in the one frame, which reads the one turn width", async () => {
   const fs = await import("node:fs"), src = (f) => fs.readFileSync(new URL(`../src/${f}`, import.meta.url), "utf8");
   const all = fs.readdirSync(new URL("../src/", import.meta.url), { recursive: true }).filter((f) => /\.css$/.test(f)).map((f) => src(f)).join("\n");
   assert.equal((all.match(/--tq-turn-item:/g) || []).length, 1, "declared in one place");
-  const ws = src("generalWorkspace.css"), rule = ws.match(/([^{}]*)\{\s*max-width: min\(100%, var\(--tq-turn-item\)\); \}/);
-  assert.ok(rule, "the turn's items are capped at the token");
-  for (const sel of ["[data-tq-turn-cards]", "[data-tq-row-cards]", ".tq-published-page"]) assert.ok(rule[1].includes(sel), sel);
+  assert.match(src("appTheme.css"), /\.tq-turn-frame\.tq-turn-frame \{ max-width: min\(100%, var\(--tq-turn-item\)\); \}/, "the frame holds the width itself");
+  for (const f of ["ActionCard.jsx", "BulkCard.jsx", "SentCard.jsx", "ReviewDecision.jsx", "TurnFiles.jsx", "PublishedPages.jsx"])
+    assert.match(src(f), /tq-turn-frame/, `${f} draws its card in the one frame`);
+  assert.doesNotMatch(src("publishedPages.css"), /\.tq-published-page \{[^}]*border:/, "no frame of its own beside it");
   assert.match(src("viewSpec.css"), /\.tq-dash\.tq-view \{ max-width: min\(100%, max\(var\(--tq-turn-item\), var\(--tq-view-need, 0px\)\)\); \}/);
 });
 

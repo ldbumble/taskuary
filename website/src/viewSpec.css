@@ -7,17 +7,16 @@
    1366x768 the chat is 409px tall and a 12-bar chart stood 538px of it */
 .tq-view {
   --v-body: clamp(150px, calc((100svh - 360px) * .4), 300px);
-  --v-shadow: 0 1px 2px rgb(0 0 0 / .05); --v-pad: 18px; --v-gap: 12px;
+  --v-pad: 20px; --v-gap: 12px;
   --v-info: #3f6489; --v-info-bg: #f1f5f9; --v-info-bd: #d9e3ec;
   --v-ok: #2f6b34; --v-ok-bg: #f1f6f0; --v-ok-bd: #d6e5d4;
   --v-warn: #8a5a12; --v-warn-bg: #fbf6ec; --v-warn-bd: #eedfc0;
-  gap: var(--v-gap); margin: 6px 0 12px;
+  gap: var(--v-gap); margin: 8px 0;   /* a paragraph's room, as every frame of a turn (appTheme.css .tq-turn-frame) */
 }
-/* ...IN THE TURN'S READING COLUMN (--tq-turn-item, generalWorkspace.css), left-aligned; one whose table needs more takes what it needs
+/* ...IN THE TURN'S READING COLUMN (--tq-turn-item, appTheme.css), left-aligned; one whose table needs more takes what it needs
    (--tq-view-need, measured by ViewSpec's Table), up to the chat's width. Two classes: the chat's own `* { max-width: 100% }` never beats it */
 .tq-dash.tq-view { max-width: min(100%, max(var(--tq-turn-item), var(--tq-view-need, 0px))); }
 :root[data-theme="dark"] .tq-view {
-  --v-shadow: none;
   --v-info: #9cbbe0; --v-info-bg: rgba(79, 138, 203, .1); --v-info-bd: rgba(79, 138, 203, .28);
   --v-ok: #7cc482; --v-ok-bg: rgba(95, 184, 101, .1); --v-ok-bd: rgba(95, 184, 101, .28);
   --v-warn: #e2b766; --v-warn-bg: rgba(226, 183, 102, .1); --v-warn-bd: rgba(226, 183, 102, .28);
@@ -26,14 +25,13 @@
 .tq-view-el, .tq-view-kids { display: flex; flex-direction: column; gap: var(--v-gap); min-width: 0; }
 .tq-view-buttons { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 
-/* the card, and its heading: title over a muted line, anything aside (a checklist's progress) on the right */
-.tq-view-card { background: var(--d-surface); border: 1px solid var(--d-border); border-radius: 12px; box-shadow: var(--v-shadow);
-  padding: var(--v-pad); display: flex; flex-direction: column; gap: var(--v-gap); min-width: 0; box-sizing: border-box; }
+/* a block, and its heading: title over a muted line, anything aside (a checklist's progress) on the right - laid flat in the view's one frame (below) */
+.tq-view-card { display: flex; flex-direction: column; gap: var(--v-gap); min-width: 0; box-sizing: border-box; }
 .tq-view-card.flush { padding: 0; gap: 0; overflow: hidden; }
-.tq-view-card.flush > .tq-view-head { padding: 20px var(--v-pad) 12px; }
+.tq-view-card.flush > .tq-view-head { padding: 0 var(--v-pad) 12px; }
 .tq-view-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; min-width: 0; }
 .tq-view-head > div:first-child { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
-.tq-view-head h4 { margin: 0; font-size: 15px; line-height: 1.35; font-weight: 600; color: var(--d-ink); letter-spacing: -.005em; }
+.tq-view-head h4 { margin: 0; font-size: 16px; line-height: 1.25; font-weight: 600; color: var(--d-ink); letter-spacing: -.005em; }
 .tq-view-head p { margin: 0; font-size: 14px; line-height: 1.45; color: var(--d-muted); }
 /* ...a heading over tiles or a grid sits on the chat itself, with the cards under it */
 .tq-view-el > .tq-view-head { padding: 0 2px; }
@@ -142,6 +140,28 @@
 .tq-view-note h4 { margin: 0; font-size: 14px; font-weight: 600; }
 .tq-view-note p { margin: 0; }
 .tq-view-note > div > p:last-child:not(:first-child) { color: var(--d-muted); }
+
+/* ONE FRAME FOR THE WHOLE VIEW, after json-render's own card (the owner, 2026-11-23: "look at the original json render open source repo ... that
+   was fire good"): the view is ONE raised card - the frame every card and file of a turn stands on (appTheme.css .tq-turn-frame) - with its
+   title on top and its blocks laid flat inside it, a hairline between those stacked one under another; never a stack of separate boxes. A
+   number reads as theirs does: its label muted over it, the value large, how it moved small beside it */
+:root .tq-dash.tq-view { --d-surface: var(--tq-frame-bg); }   /* ...its surfaces (a sticky table head, a dot's ring) the frame's own, light and dark */
+.tq-dash.tq-view { --v-pad: 20px; padding: var(--v-pad); gap: 18px; box-sizing: border-box; background: var(--tq-frame-bg);
+  border: 1px solid var(--tq-border, #e4e0d9); border-radius: 12px; box-shadow: var(--tq-frame-shadow); }
+.tq-view .tq-view-card.flush { margin: 0 calc(-1 * var(--v-pad)); max-width: none; }   /* ...a table runs to the frame's edges */
+.tq-view .tq-view-card.flush:last-child { margin-bottom: calc(-1 * var(--v-pad)); }
+.tq-view .tq-view-grid[data-cols="1"] > .tq-view-el + .tq-view-el, .tq-view .tq-view-kids > .tq-view-el + .tq-view-el {
+  border-top: 1px solid var(--d-grid); padding-top: 18px; }
+.tq-view-el > .tq-view-head h4 { font-size: 16px; color: var(--d-ink); }
+.tq-view .tq-view-tiles { gap: 12px 28px; }
+.tq-view .tq-view-tile { display: flex; flex-flow: row wrap; align-items: baseline; align-content: flex-start; column-gap: 8px; row-gap: 4px; padding: 0; }
+.tq-view .tq-view-tile .lbl, .tq-view .tq-view-tile .note { flex-basis: 100%; font-size: 14px; }
+.tq-view .tq-view-tile .val { font-size: 28px; font-weight: 700; }
+.tq-view .tq-view-tile .trend { font-size: 12.5px; white-space: nowrap; }
+.tq-view .tq-view-title { font-size: 16px; font-weight: 600; letter-spacing: -.01em; }
+.tq-view .tq-dash-svg .grid { stroke-dasharray: none; opacity: .6; }
+.tq-view .tq-dash-svg .axis { stroke: var(--d-grid); }
+:root[data-theme="dark"] .tq-view .tq-dash-bars.hi .tq-dash-press:not(.pick) .bar { background: color-mix(in srgb, var(--d-s1) 42%, var(--d-surface)); }   /* ...still read as bars in the dark */
 
 /* a phone: the cards a little tighter */
 @container (max-width: 520px) {

@@ -11,15 +11,9 @@
 .tq-aui-agent-body { min-width: 0; max-width: 100%; padding: 5px 3px; overflow-wrap: anywhere; word-break: break-word; }
 .tq-aui-agent-body * { max-width: 100%; min-width: 0; box-sizing: border-box; }
 .tq-aui-agent-body p, .tq-aui-agent-body li { max-width: 110ch; }
-/* WHAT A TURN SETS DOWN SITS IN ITS READING COLUMN (the owner, 2026-11-23: "make the card only use up the left side and a little more if it needs
-   it ... It looks more part of the chat but a UI component"; "it should adapt to the size of the item ... in general keep it left aligned"):
-   ONE WIDTH, --tq-turn-item, for everything a turn holds - its cards, the views it showed, the files it made - left-aligned, never the pane's
-   width. A picture or a video hugs its own shape inside it (taskOutputs.mediaFit); only what is wider than it by its content - a wide table, a
-   sheet - takes more, up to the chat's width, and scrolls inside itself past that. A view reads it in viewSpec.css */
-:root { --tq-turn-item: 640px; }
-.tq-aui-agent-body > [data-tq-turn-cards], [data-tq-row-cards] > .tq-aui-agent-body, .tq-aui-agent-body .tq-published-page {
-  max-width: min(100%, var(--tq-turn-item)); }
-.tq-aui-agent-body .tq-published-page:has(.tq-published-table) { width: fit-content; min-width: min(100%, var(--tq-turn-item)); max-width: 100%; }
+/* WHAT A TURN SETS DOWN stands in the one raised frame, --tq-turn-item wide (appTheme.css .tq-turn-frame); a sheet grows to its table, up to
+   the chat's width (the owner, 2026-11-23: "if it requires full page it can") */
+.tq-turn-frame.tq-published-page:has(.tq-published-table) { width: fit-content; min-width: min(100%, var(--tq-turn-item)); max-width: 100%; }
 /* ...a view's table by its own layout, as a sheet's is (publishedPages.css): the chat's fixed one squeezed ten columns into the column, a vendor
    broken mid-word ("Payw / orth"), where it should grow to its words and scroll past the chat's width */
 .tq-aui-agent-body .tq-view-table table { width: auto; min-width: 100%; table-layout: auto; }
@@ -182,7 +176,8 @@
 /* the waiting room over the box (GeneralWorkspace PendingStrip): his queued lines on his side, slim, no box - as a chat app queues a message */
 .tq-conv-pending { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; margin: 0 0 10px; padding: 0 2px; }
 .tq-aui-viewport:has(> .tq-conv) { overflow-anchor: none; }      /* the chat pins its own end (GeneralWorkspace): the browser's anchoring moved it back as a turn's steps folded */
-.tq-conv-past { margin: 8px 0 2px; padding: 6px 10px; border: 1px dashed var(--tq-border, #d9d4cb); border-radius: 8px; color: var(--tq-muted, #8b877e); font-size: 12.5px; }
+/* ...a card he said no to stays a card, in the one frame, its words quieter (appTheme.css .tq-turn-frame) */
+.tq-conv-past { padding: 10px 14px; color: var(--tq-muted, #8b877e); font-size: 12.5px; }
 .tq-conv-past-head { font-weight: 600; }
 .tq-conv-past-words { margin-top: 4px; white-space: pre-wrap; max-height: 4.5em; overflow: hidden; }
 .tq-conv-pending-more { font-size: 11.5px; color: var(--tq-muted, #8b877e); }

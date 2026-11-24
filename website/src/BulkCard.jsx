@@ -39,7 +39,7 @@ export default function BulkCard({ rows = [], tid, onChanged, past: given = fals
   const flip = (set, id) => set((s) => { const x = new Set(s); if (x.has(id)) x.delete(id); else x.add(id); return x; });
   const shown = (r, i) => open.has(r.ReviewId) || (i < SAMPLE && rowState(r, run).waiting && !running(run) && !open.has(-r.ReviewId));
   return (<MovedPast on={past}>
-    <Box data-tq-bulk-card={key} sx={{ border: `1px solid ${BORDER}`, borderRadius: 1.5, p: 1.5, mt: 1, bgcolor: "var(--tq-panel, #fff)" }}>
+    <Box data-tq-bulk-card={key} className="tq-turn-frame" sx={{ p: 1.5 }}>
       <Box sx={{ display: "flex", alignItems: "baseline", gap: 1, mb: 0.75 }}>
         <Typography sx={{ fontWeight: 600, color: INK, fontSize: 14 }}>{countOf(rows)} - review a few, then do them all</Typography>
       </Box>

@@ -9,13 +9,14 @@
 //   (e) server time per polled endpoint, with the seeded store and a long chat
 // Invented people only. REPEATS (default 3) runs; medians are reported.
 import { execFileSync } from "node:child_process";
-import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
 
 import { startHarness } from "./harness.mjs";
+import { dropTemp, ownTemp } from "./tempdirs.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url)), repo = path.resolve(here, "..", "..");
 const REPEATS = +(process.env.REPEATS || 3), SEED = +(process.env.SEED_TASKS || 300), WINDOW = +(process.env.WINDOW_S || 30), TURNS = +(process.env.TURNS || 10);
@@ -32,7 +33,7 @@ const SCRIPT = [
 ];
 
 async function world() {
-  const bin = await mkdtemp(path.join(os.tmpdir(), "taskuary-fake-claude-"));
+  const bin = ownTemp("taskuary-fake-claude-");
   const win = process.platform === "win32";
   const py = execFileSync(win ? "python" : "python3", ["-c", "import sys; print(sys.executable)"], { encoding: "utf8" }).trim();
   const fake = path.join(repo, "tests", "fake_claude.py");
@@ -47,7 +48,7 @@ async function world() {
     headers: { "Content-Type": "application/json", "X-Taskuary-Token": h.token }, body: body && JSON.stringify(body) }).then((r) => r.json());
   await api("/api/setup/first-run/ai", { name: "claude" });
   await api("/api/setup/dismiss", { dismissed: true });
-  return { ...h, api, log, close: async () => { await h.close(); await rm(bin, { recursive: true, force: true }).catch(() => {}); } };
+  return { ...h, api, log, close: async () => { await h.close(); dropTemp(bin); } };
 }
 
 // every request the page makes, with its answer's size and a hash of the body, so "asked again, got the same bytes" can be counted

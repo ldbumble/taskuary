@@ -1,13 +1,13 @@
 import { execFileSync, spawn } from "node:child_process";
-import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { mkdir } from "node:fs/promises";
 import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import puppeteer from "puppeteer-core";
+import { dropTemp, ownTemp } from "./tempdirs.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const website = path.resolve(here, "..");
@@ -163,7 +163,7 @@ export async function startHarness({ fresh = false, bin = "", tour = false, clau
     throw new Error("fixture ports must be unique and must never use live Taskuary/bridge ports");
   }
 
-  const home = await mkdtemp(path.join(os.tmpdir(), "taskuary-phase0-browser-"));
+  const home = ownTemp("taskuary-phase0-browser-");      // ...gone at close, or swept by the next run when this one never got there
   const browserProfile = path.join(home, "browser-profile");
   const appData = path.join(home, "appdata");
   const localAppData = path.join(home, "localappdata");
@@ -191,8 +191,8 @@ export async function startHarness({ fresh = false, bin = "", tour = false, clau
     TASKUARY_PORT: String(backendPort),
     TASKUARY_API: fixtureApi,
     TASKUARY_TOKEN: "phase0-browser-owner-token",
-    // one dep cache per checkout, outside the node_modules junction worktrees share (vite.config.js)
-    TASKUARY_VITE_CACHE: path.join(os.tmpdir(), `taskuary-vite-${createHash("sha1").update(website).digest("hex").slice(0, 12)}`),
+    // one dep cache per checkout, outside the node_modules junction worktrees share (vite.config.js) - inside the checkout, so it goes with it
+    TASKUARY_VITE_CACHE: path.join(website, ".vite-cache"),
     APPDATA: appData,
     LOCALAPPDATA: localAppData,
     HOME: userHome,
@@ -340,8 +340,7 @@ export async function startHarness({ fresh = false, bin = "", tour = false, clau
       await browser?.close().catch(() => {});
       await stopProcess(frontend);
       await stopProcess(backend, quit);   // ...the one running now, after a restart
-      const prefix = path.join(os.tmpdir(), "taskuary-phase0-browser-");
-      if (path.resolve(home).startsWith(path.resolve(prefix))) await rm(home, { recursive: true, force: true }).catch(() => {});
+      dropTemp(home);
     };
 
     // the server stopped and started again on the same home and port - an update, a crash - while the page stays open (stress-mixed-reload)
@@ -358,7 +357,7 @@ export async function startHarness({ fresh = false, bin = "", tour = false, clau
     await browser?.close().catch(() => {});
     await stopProcess(frontend);
     await stopProcess(backend);
-    await rm(home, { recursive: true, force: true }).catch(() => {});
+    dropTemp(home);
     throw error;
   }
 }

@@ -10,14 +10,25 @@ import path from "node:path";
    a jump, a thing that appears and then moves, or a blank beat is a finding even where every assertion passed. */
 const ffmpeg = (() => { try { execFileSync("ffmpeg", ["-version"], { stdio: "ignore" }); return true; } catch { return false; } })();
 
-export async function record(page, dir) {
+// A RECORDING HAS A CEILING (2026-11-24: a JPEG per paint, and a spinner paints sixty times a second - a recording left running filled the
+// disk). At most `fps` frames a second are kept (a paint sooner than that after the last kept one is acked, not written), and the recording
+// stops keeping at `secs` seconds or `mb` megabytes, saying so once. TQ_RECORD_FPS / TQ_RECORD_SECS / TQ_RECORD_MB change the defaults.
+const LIMIT = { fps: +process.env.TQ_RECORD_FPS || 20, secs: +process.env.TQ_RECORD_SECS || 600, mb: +process.env.TQ_RECORD_MB || 300 };
+
+export async function record(page, dir, { fps = LIMIT.fps, secs = LIMIT.secs, mb = LIMIT.mb } = {}) {
   await rm(dir, { recursive: true, force: true }); await mkdir(dir, { recursive: true });
   const cdp = await page.createCDPSession(), frames = [], t0 = Date.now(), writes = [];
+  let bytes = 0, full = false;
   cdp.on("Page.screencastFrame", ({ data, sessionId, metadata }) => {
-    const n = frames.length, file = `${String(n).padStart(5, "0")}.jpg`;
-    frames.push({ file, ms: Math.round((metadata?.timestamp ? metadata.timestamp * 1000 : Date.now()) - t0) });
-    writes.push(writeFile(path.join(dir, file), Buffer.from(data, "base64")));
     cdp.send("Page.screencastFrameAck", { sessionId }).catch(() => {});
+    const ms = Math.round((metadata?.timestamp ? metadata.timestamp * 1000 : Date.now()) - t0);
+    if (full || (frames.length && ms - frames.at(-1).ms < 1000 / fps)) return;
+    if (ms > secs * 1000 || bytes > mb * 1e6) {
+      full = true; console.warn(`recorder: ${dir} stopped keeping frames at ${(ms / 1000).toFixed(0)} s, ${(bytes / 1e6).toFixed(0)} MB`); return;
+    }
+    const file = `${String(frames.length).padStart(5, "0")}.jpg`, jpg = Buffer.from(data, "base64");
+    bytes += jpg.length; frames.push({ file, ms });
+    writes.push(writeFile(path.join(dir, file), jpg));
   });
   await cdp.send("Page.startScreencast", { format: "jpeg", quality: 70, everyNthFrame: 1 });
   const stop = async ({ sheet = 12 } = {}) => {

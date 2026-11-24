@@ -20,8 +20,8 @@ const page_ = async () => {
     bundle: true, write: false, format: "esm", jsx: "automatic", platform: "node", logLevel: "silent", define: { "process.env.NODE_ENV": '"production"' },
     loader: { ".css": "empty", ".png": "empty", ".svg": "empty", ".jpg": "empty", ".woff2": "empty", ".json": "json" } });
   // ...written to a file of its own: a stack through a data: URL is the whole bundle, once per frame
-  const { mkdtempSync, writeFileSync } = await import("node:fs"), { tmpdir } = await import("node:os"), { join } = await import("node:path"), { pathToFileURL } = await import("node:url");
-  const f = join(mkdtempSync(join(tmpdir(), "tq-press-")), "page.mjs"); writeFileSync(f, out.outputFiles[0].text);
+  const { writeFileSync } = await import("node:fs"), { join } = await import("node:path"), { pathToFileURL } = await import("node:url");
+  const f = join((await import("../browser/tempdirs.mjs")).ownTemp("tq-press-"), "page.mjs"); writeFileSync(f, out.outputFiles[0].text);
   return import(pathToFileURL(f).href);
 };
 // ...built on first use inside a test, never at import: a build started before the runner's first test left its promise pending on Node 22

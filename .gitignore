@@ -9,6 +9,7 @@ venv/
 *.db
 .env
 website/node_modules/
+website/.vite-cache/
 website/ui.png
 .codex-tmp/
 site/taskuary/

@@ -66,11 +66,11 @@
 // on throwaway homes (never the owner's 7787).
 import { spawn, spawnSync } from "node:child_process";
 import { createServer } from "node:net";
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { readFileSync, writeFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { launch } from "./browser.mjs";
+import { ownTemp } from "./browser/tempdirs.mjs";
 import { JARGON_RES } from "./src/words.js";
 import { VERBS, ALL_LABELS, CHOICES, label, verbOfRow, choice } from "./src/buttons.js";
 import { LEVEL_ORDER as SECTION_KEYS } from "./src/lanes.js";
@@ -180,7 +180,7 @@ const coverOf = (verb, word) => {
 const verbOfId = (id) => { const last = String(id || "").split(":").pop(); return verbOfRow(id) || (VERBS[last] ? last : null); };
 const byLabel = Object.fromEntries(Object.entries(VERBS).flatMap(([k, v]) => [[v.label, k], ...Object.values(v.states || {}).map((w) => [w, k])]));
 
-const web = build && only.size ? mkdtempSync(join(tmpdir(), "tq-deadend-web-")) : "";
+const web = build && only.size ? ownTemp("tq-deadend-web-") : "";        // ownTemp: gone when the check ends
 if (web && spawnSync("npx", ["vite", "build", "--outDir", web, "--emptyOutDir"], { cwd: join(root, "website"), shell: true, stdio: "ignore" }).status) {
   console.error("the page did not build"); process.exit(2);
 }
@@ -201,7 +201,7 @@ async function serve(n, opts = {}) {
   }
 }
 async function serveOn(p, { faults = false, linking = false, plant = false } = {}) {
-  const home = mkdtempSync(join(tmpdir(), "tq-deadend-"));
+  const home = ownTemp("tq-deadend-");
   const launchPy = `
 import sys, pathlib
 from taskuary import server, cli

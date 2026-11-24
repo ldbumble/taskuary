@@ -216,11 +216,12 @@ def test_the_cards_models_are_in_codexs_own_catalogue_so_no_metadata_warning_fir
     assert prof['env']['CODEX_HOME'] == str(home)
 
 
-def test_the_chip_names_the_harness_that_runs_the_cards_agent(here):
+def test_the_chip_names_the_card_as_he_knows_it_and_keeps_its_harness_apart(here):
+    # the owner, 2026-11-24: "HIPAA AI · Codex · gemini-4-hy... - which one?" - the chip is the card and its model; the harness is kept apart
     from taskuary import general
     s = MemoryStore(); cid = _card(s)
     row = next(o for o in general.provider_options(s) if o['pick'] == f'connector:{cid}')
-    assert (row['label'], row['model']) == ('HIPAA AI · Codex', 'hydrogen')
+    assert (row['label'], row['model'], row['runs_on']) == ('HIPAA AI', 'hydrogen', 'Codex')
 
 
 def test_the_card_names_its_harness_once(monkeypatch):

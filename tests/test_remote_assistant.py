@@ -863,3 +863,17 @@ def test_a_turn_with_a_picture_that_says_nothing_says_so_and_logs_why():
          mock.patch.object(messengers, 'wa_send') as sent:
         remote_assistant._locked_respond(store, 'whatsapp', JID, 'What is this?', None, images=['badge.png'])
     assert sent.call_count == 1, 'a turn that answered is not added to'
+
+
+def test_a_photo_sent_from_the_phone_is_his_file_on_the_task_it_was_about():
+    """A picture the owner sent from the phone reached the Assistant and no record: a file attached on the desk is his file on its task
+    (ledger.his_line, by store.add_comment), and the same photo sent from WhatsApp about the task on the table was nowhere in it. His line
+    keeps what he attached - on the Assistant's chat and on the task that turn was about - by the desk's own writer."""
+    from taskuary import ledger, railwalk
+    store, c = armed_store()
+    tid = store.create_task({'Title': 'Badge for the new hire', 'Kind': 'general', 'Status': 'open'}, 'owner')
+    photo = 'C:/home/attachments/phone/202611/20261123-101500-a1b2c3-badge.jpg'
+    with railwalk.seated(f'whatsapp:{JID}'): railwalk.open(store, f'task:{tid}', actor='owner', record=False)
+    with mock.patch.object(remote_assistant, 'send'), mock.patch.object(concierge, 'brain', return_value=None):
+        remote_assistant.respond(store, 'whatsapp', JID, 'This is the badge for Erin', c['ConnectorId'], images=[photo])
+    assert [r['Subject'] for r in ledger.rows(store, 'file', task=tid)] == [photo], ledger.rows(store, 'file')

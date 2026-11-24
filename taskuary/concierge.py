@@ -2585,7 +2585,7 @@ def _ask(store, llm, tid: int, item: dict | None, instruction: str, pile_items: 
 PHONE_ACTOR = 'assistant-phone'
 
 
-def record(store, tid: int, role: str, text: str, card: dict = None, phone: bool = False):
+def record(store, tid: int, role: str, text: str, card: dict = None, phone: bool = False, files=None):
     # A presentation revision is transport freshness, not conversation meaning.  Persisting it
     # made the same adjacent card into a second durable turn when surfacing changed only its read
     # state.  Keep every semantic field, including nested FYI cards, and let the current HTTP
@@ -2608,7 +2608,8 @@ def record(store, tid: int, role: str, text: str, card: dict = None, phone: bool
     # them, so this only removes adjacent duplicates.
     add = getattr(store, 'add_comment_once', store.add_comment)
     # ...A STORE THAT REFUSES THE WRITE NEVER SWALLOWS WHAT IS SAID (a disk I/O error): the line is still answered, and the failure logged
-    try: return add(tid, actor, actor_type, body)
+    # ...and his line keeps what he attached to it, a field beside the words (store.add_comment: on the record, as a desk line's are)
+    try: return add(tid, actor, actor_type, body, **({'files': list(files)} if files else {}))
     except Exception as e:
         logger.warning(f"the Assistant's line was not kept on task {tid} - {e}"); return None
 
@@ -2697,12 +2698,12 @@ def record_related(store, dock_tid: int, item: dict | None, role: str, text: str
     turn = _TURN.get()
     if turn is not None and _same(item, turn.get('item')):
         if turn.get('aside'): return result                      # about something else: the chat keeps it, this item does not
-        if turn.get('said'): _mirror(store, dock_tid, item, 'user', turn.pop('said'))
+        if turn.get('said'): _mirror(store, dock_tid, item, 'user', turn.pop('said'), turn.get('files'))
     _mirror(store, dock_tid, item, role, text)
     return result
 
 
-def _mirror(store, dock_tid: int, item: dict | None, role: str, text: str):
+def _mirror(store, dock_tid: int, item: dict | None, role: str, text: str, files=None):
     candidates = list((item or {}).get('items') or []) if (item or {}).get('kind') == 'fyis' else [item or {}]
     tids = {int(i['tid']) for i in candidates if i.get('tid') and int(i['tid']) != int(dock_tid)}
     actor = 'owner' if role == 'user' else 'Taskuary'
@@ -2713,7 +2714,7 @@ def _mirror(store, dock_tid: int, item: dict | None, role: str, text: str):
         # our words about it are not news about it: the task keeps the read it had (store.processing_own_words)
         own = getattr(store, 'processing_own_words', None)
         with (own(task_tid, actor) if own else nullcontext()):
-            add(task_tid, actor, actor_type, redact(str(text or '')).strip())
+            add(task_tid, actor, actor_type, redact(str(text or '')).strip(), **({'files': list(files)} if files else {}))
     # ...and durably against the ITEM (PW-132): the dock conversation is retained on its own clock and the
     # browser's receipts were the only other record. One item's turn is kept on that item; a handful of fyi
     # share one line, so a batch turn is attributed to none of them rather than to all four.
@@ -6076,7 +6077,7 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
     so_far = _turns(store, tid, TURNS - 1) if llm else ''
     # the dock has the owner's words now; the item has them with the answer, once the turn knows it was about the item
     turn = _TURN.get()
-    record(store, tid, 'user', typed); turn['typed'] = typed      # ...and a start made this turn shows it as his (his_words)
+    record(store, tid, 'user', typed, files=images); turn['typed'] = typed      # ...and a start made this turn shows it as his (his_words)
     turn['files'] = list(images or [])                                                      # ...with what he attached to it
     if item: turn.update(item=item, said=typed)
     turn['trace'] = trace                           # the app's own trouble draws its steps as they happen (_trouble)

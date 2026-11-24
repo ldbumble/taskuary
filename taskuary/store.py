@@ -5292,7 +5292,7 @@ class SQLiteStore:
         cid = self._exec('INSERT INTO comment (TaskId,Actor,ActorType,Body,CreatedAt,LineId,Files) VALUES (?,?,?,?,?,?,?)',
                          (task_id, actor, actor_type, body, at := _now(), line_id, fj := files_json(files)))
         # ...a line of his is on the record (ledger.owner_line): the addresses he gave in it and the files he attached, known on every task
-        if task_id and str(actor_type).startswith('assistant_') and (files or '@' in str(body or '')):
+        if task_id and str(actor_type).startswith(('assistant_', 'concierge_')) and (files or '@' in str(body or '')):
             from . import ledger
             ledger.owner_line(self, task_id, actor, actor_type, body, files, at)
         # ...an answer filed ends its turn in the chat's log, in place (chatlog.answered: the one door every answer road goes through)
@@ -5309,7 +5309,7 @@ class SQLiteStore:
             from . import chatlog                    # ...a line of his filed with no name to hear it by: his line where it is filed
             chatlog.put(self, task_id, 'line', f'c:{cid}', {'at': at, **chatlog.his({'Body': body, 'Files': fj})}, src=f'comment:{cid}')
         return cid
-    def add_comment_once(self, task_id, actor, actor_type, body):
+    def add_comment_once(self, task_id, actor, actor_type, body, files=None):
         """Append a turn unless it is already the last turn on this task.
 
         Concierge auto-advance can be requested by more than one open browser or by a card and a
@@ -5323,7 +5323,7 @@ class SQLiteStore:
             if last and last['Actor'] == actor and last['ActorType'] == actor_type and last['Body'] == body:
                 return last['CommentId']
             # ...through add_comment's own door, so an answer filed this way is in the chat's log as one filed there (the demo's line after Send)
-            return self.add_comment(task_id, actor, actor_type, body)
+            return self.add_comment(task_id, actor, actor_type, body, files=files)
     def list_comments(self, task_id, internal: bool = False):
         """The task's comments, oldest first. PROMPT MACHINERY IS NOT A COMMENT (the owner, 2026-11-08): a brief Taskuary handed an agent ("THIS
         TASK IS A REPLY OWED..."), a turn's summary JSON, a line kept for a turn - each its own ActorType already (is_internal) - stays out of

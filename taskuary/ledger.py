@@ -129,11 +129,15 @@ def his_line(store, tid, body, files=None, at=None) -> None:
 
 
 def owner_line(store, tid, actor, actor_type, body, files=None, at=None) -> None:
-    "store.add_comment's door: a comment that is a line of HIS (never a brief Taskuary handed the agent in his voice) is his_line."
+    """store.add_comment's door: a comment that is a line of HIS (never a brief Taskuary handed the agent in his voice) is his_line - on the
+    Assistant's chat too, and on the task that chat's turn was about (concierge._mirror): a photo sent from the phone is his file there."""
     from .general import BRIEF_ACTOR, USER_TYPE, WAITING_TYPE, line_said
+    from .concierge import DISCUSSION_USER_TYPE
     # ...as he typed it (general.line_said): a line kept for a turn is its JSON, and its row read `{"text": ..., "after": 2}` (walk 10, 2026-11-23)
     if actor_type in (USER_TYPE, WAITING_TYPE) and not (actor_type == USER_TYPE and actor == BRIEF_ACTOR):
         his_line(store, tid, line_said({'ActorType': actor_type, 'Body': body})['text'], files, at)
+    # ...the mirror's line may be a press's label over the row's title, not his words: only what he attached is his there
+    elif actor_type == DISCUSSION_USER_TYPE and files: his_line(store, tid, '', files, at)
 
 
 def promise(store, tid, mid, what, due=None) -> bool:

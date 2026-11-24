@@ -2,6 +2,23 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.4.2.3 - 2026-11-23
+
+- A running command is the same closed row it ends as: no black box opens and shuts under each command
+- The Advisor's job-ideas run sees the money and the repeats in the whole mail, prices each idea in code, and stays inside a token ceiling
+- The Advisor's looks for ideas open from its report under Reports: what each looked at, read, raised, held and why, and what it used
+- The Advisor's twice-a-day post carries the ideas its job-ideas look raised and drops the ones its own answer wrote
+- The Advisor's post asks for no ideas of its own: its idea lines come from the job-ideas look, so the prompt drops what it would only throw away
+- The membership census lets go of the writer between short turns: a press waits one turn, not the whole pass
+- A plan is the turn's that last updated it, and his answer to a row's permission is that row's alone
+- A picture sent from the phone is his file on the task it was about, as a desk attachment is
+- Revert "A plan is the turn's that last updated it, and his answer to a row's permission is that row's alone"
+- A saved sign-in is typed only into a sign-in form, and a post page is never one
+- A plan is the turn's that last updated it; his answer to a permission is its row's, and cuts the turn there
+- A model belongs to its brain: a saved Codex conversation with a Claude model runs and reads as Codex's own
+- A level's model is saved and read as its id: the picker saved a brain's whole {id, label} as text, and quick work ran on the default
+- A view the agent showed on Codex reaches the chat: the chat's row reads every rawOutput shape
+
 ## 0.4.2.2 - 2026-11-23
 
 - A running command is the same closed row it ends as: no black box opens and shuts under each command

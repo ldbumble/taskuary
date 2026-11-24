@@ -4,7 +4,7 @@
 
 [![CI](https://github.com/ldbumble/taskuary/actions/workflows/ci.yml/badge.svg)](https://github.com/ldbumble/taskuary/actions/workflows/ci.yml)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/ldbumble/taskuary/badge)](https://scorecard.dev/viewer/?uri=github.com/ldbumble/taskuary)
-[![PyPI](https://img.shields.io/pypi/v/taskuary.svg?cacheSeconds=300&release=0.4.2.2&asof=0.4.2.2)](https://pypi.org/project/taskuary/)
+[![PyPI](https://img.shields.io/pypi/v/taskuary.svg?cacheSeconds=300&release=0.4.2.3&asof=0.4.2.3)](https://pypi.org/project/taskuary/)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-3776ab.svg)](https://github.com/ldbumble/taskuary)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
@@ -15,7 +15,7 @@ reply, builds the spreadsheet, fills the form - and hands you one button: **Send
 out until you press it.
 
 Runs on your computer. Free, open source, bring your own AI (Claude Code, Codex, Gemini, an API key, or a local
-model). Early: **v0.4.2.2**, breaking changes possible before 1.0.
+model). Early: **v0.4.2.3**, breaking changes possible before 1.0.
 
 <p align="center">
   <a href="https://taskuary.com/demo/"><img

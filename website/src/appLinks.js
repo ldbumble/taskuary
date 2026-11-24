@@ -3,7 +3,7 @@
 // intacct, #settings=policies, #report=new-agent - and the canvas already knows every one of them (canvasLinks.js). This is the
 // one reader: is a link one of ours, and open it.
 import { canvasRequestFromHash, placeOf } from "./canvasLinks.js";
-import { placeHref } from "./words.js";
+import { PLACES as NAMED, placeHref } from "./words.js";
 
 // SETUP IS A MODE, not a page the canvas opens: its link asks for it the way the top bar's Setup does (TaskHubPage's openSetup).
 // Without one, "set up taskuary" typed in the chat was answered with a link to Company Hub (2026-10-16)
@@ -99,12 +99,9 @@ export const openAppLink = (h) => {
 // one, so it never walks out of the app - a page opened cold from a link has nothing of ours behind it
 const depth = () => (typeof window === "undefined" ? 0 : Number(window.history.state?.tqDepth) || 0);
 export const canGoBack = () => depth() > 0;
-// ONE BACK OVER ONE LIST (the spec's part E, 2026-11-19): the corner arrow and the walk bar's Back landed in different places - the bar on the
-// rail's row above, the arrow skipping every task the walk's Next had moved through. Every move is a step (recordPlace "push"), and both
-// Backs, Alt+Left with them, step back over the one list - never out of the app
-// ...AND THE OPEN GOES FIRST, THE ADDRESS AFTER (the owner, 2026-11-20: every button opens the same): the place each step of ours holds is kept
-// here, so Back opens the place behind it by the open road a rail press takes (onBackTo) in the same moment, and the browser's step back
-// only writes the address after it - which then finds the table already there
+// THE PLACES BEHIND: each step of ours keeps the place it holds, so Back opens the place behind it by the open road a rail press takes
+// (onBackTo) in the same moment, and the browser's step back only writes the address after it - which then finds the table already there
+// (the owner, 2026-11-20: every button opens the same)
 const PLACES = [];
 let backTo = null;
 export const onBackTo = (fn) => { backTo = fn; return () => { if (backTo === fn) backTo = null; }; };
@@ -113,6 +110,23 @@ export const navBack = () => {
   const to = PLACES[depth() - 1];
   if (to != null && backTo) { try { backTo(to); } catch { /* the address's own road still opens it */ } }
   window.history.back();
+};
+// a place by name, as the Back that returns to it says it: "TQ-0012" for a task, the page's own name (words.json places) for a page
+export const placeLabel = (h) => {
+  const at = placeOf(h || ""), t = /^#task=(\d+)$/.exec(at);
+  if (t) return `TQ-${t[1].padStart(4, "0")}`;
+  return at ? Object.values(NAMED).find((p) => p.href && placeOf(p.href) === at)?.name || "" : "";
+};
+// WHAT BACK MEANS, DECIDED HERE ALONE (the owner, 2026-11-23: "why is there Back on the first item?? it should be grayed out" and "it can be
+// confusing because back can take you from settings to task"). Two kinds of place, by what the view on screen IS, never by how he got there:
+//   a ROW of the walk (a rail row on the table, or the walk's end): plain Back, the row directly above (walk.above - the server's word, its
+//     move railwalk.back), greyed on the first row; it never goes to a page he came from
+//   a PAGE (Settings, Reports, Connections, an item that is no rail row): "Back to <where>", the place he came from (navBack), never out of the app
+// Every Back - the bar's, the narrow window's row, Alt+Left - reads this one answer: { to: "above" | "place" | null, key, label, disabled, why }
+export const navTarget = ({ row = false, above = null, history = canGoBack(), from = PLACES[depth() - 1] } = {}) => {
+  if (row) return { to: above ? "above" : null, key: above || null, label: "", disabled: !above, why: "nothing above this one" };
+  const name = history ? placeLabel(from) : "";
+  return { to: history ? "place" : null, key: null, label: name ? `Back to ${name}` : "", disabled: !history, why: "nothing to go back to" };
 };
 // ...AND A STEP THE ADDRESS MADE ITSELF IS OURS TOO (reproduced on a scratch app, 2026-11-19): a link or a typed address (location.hash = ...)
 // makes an entry with no count, and Back onto it read "nothing behind": the corner arrow went and the bar's Back greyed with places still

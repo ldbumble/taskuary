@@ -85,6 +85,19 @@ export const refreshPilePresentation = (current, fresh) => {
 export const walkOf = (pile) => pile?.walk || null;
 export const nextMarkerKey = (pile) => { const b = walkOf(pile)?.below; return b ? (b.startsWith("fyis:") ? b.slice(5).split(",")[0] : b) : null; };
 // can Next go on from here: the walk says what is below; before any walk was read, anything on the rail
+// WHAT THE VIEW ON SCREEN IS, for Back (appLinks.navTarget): a ROW of the walk - the item on the table, in view, a row of the rail (an FYI batch by
+// its rows; below the top while the walk's word catches up, there is a row above and the server says which), or the walk's end with nothing on
+// the table (Back goes to the last row it walked, railwalk.back from its end) - and its row above; else a page, an item off the rail among them
+// (a closed task Search opened: the walk is on it, but it is no row). Read from the view, never from how he got there
+export const walkPlace = ({ table, item, pile, off = false }) => {
+  const walk = walkOf(pile), rail = pile?.items || [];
+  const onWalk = !!item && !!walk && (walk.on === item.key || (walk.members || []).includes(item.key));
+  const keys = item ? [item.key, ...(item.members || []), ...(onWalk ? walk.members || [] : [])] : [];
+  const onRail = keys.some((k) => rail.some((r) => answersTo(r, k))), underTop = onRail && !answersTo(rail[0], item.key);
+  const end = !item && !table?.key && !table?.place && !table?.folded && !!walk?.ended;
+  const row = !off && (table?.speaks ? onRail : end);
+  return { row, above: !row ? null : onWalk || end ? walk.above || null : underTop ? "above" : null, onWalk };
+};
 export const canAdvance = (pile, ready) => walkOf(pile) ? !!walkOf(pile).below : (ready || []).length > 0;
 
 // Until durable Current lands, reload restores the latest explicitly surfaced card. Passive

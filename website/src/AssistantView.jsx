@@ -75,7 +75,7 @@ import CloseNote from "./CloseNote.jsx";
 import { AttachImage, ImageTray, usePromptImages, useSendWhenUp } from "./promptImages.jsx";
 import { handToItem } from "./ItemSections.jsx";
 import { afterCancel, afterConfirm, afterExecute, holdsProposal, markExecuted, proposalSay } from "./proposalCard.js";
-import { LEVEL_META, LEVEL_ROLE, arrivals, isUrgent, arrivedAt, asPressed, withOpened, stillLeaving, bandsOf, canAdvance as canWalkOn, cardFor, currentItemFromPile, displayRevision, drawOrder, fillCaps, followsItem, foldsAs, inOrder, interactiveCardIndex, tableCardIndex, keysOf, liveBrowseId, pastView, lastActIndex, chipsOf, receiptChips, CAPPED, FLOOR, FOOT_PX, levelLabel, nextMarkerKey, trimCaps, ROW_PX, refreshCurrentPresentation, refreshPilePresentation, rowMeta, tableItemOf, settledHistory, sinceOpener, walkOf } from "./funnelPile.js";
+import { LEVEL_META, LEVEL_ROLE, arrivals, isUrgent, arrivedAt, asPressed, withOpened, stillLeaving, bandsOf, canAdvance as canWalkOn, cardFor, currentItemFromPile, displayRevision, drawOrder, fillCaps, followsItem, foldsAs, inOrder, interactiveCardIndex, tableCardIndex, keysOf, liveBrowseId, pastView, lastActIndex, chipsOf, receiptChips, CAPPED, FLOOR, FOOT_PX, levelLabel, nextMarkerKey, trimCaps, ROW_PX, refreshCurrentPresentation, refreshPilePresentation, rowMeta, tableItemOf, settledHistory, sinceOpener, walkOf, walkPlace } from "./funnelPile.js";
 import { FYI_PAGE, ageHover, subLine, answersTo, awayFromClear, closedElsewhere, coveredByReload, fyiHasRoom, fyiTail, heldSince, latestLine, pileRows, pinOf, rowKeys, sameRow, sentChips } from "./funnelPile.js";
 import { railStatus, rowWhy } from "./railStatus.js";
 import { UndoLine } from "./Removed.jsx";
@@ -85,7 +85,7 @@ import { actReceipt, lineKeys, mergeDurableTurns, nextBadge, pickLine, placeLine
 import { lightOf, litAfter, litOn, litPick, litPull } from "./assistantLight.js";
 import * as pageView from "./pageView.js";
 import DigestText from "./DigestText.jsx";
-import { canGoBack, firstAppLink, linkName, navBack, onBackTo, onStep, openAppLink, recordPlace } from "./appLinks.js";
+import { firstAppLink, linkName, navBack, navTarget, onBackTo, onStep, openAppLink, recordPlace } from "./appLinks.js";
 import { goStraight } from "./SetupWithAi.jsx";
 import { BOARD, hashFor, opensTask } from "./canvasLinks.js";
 import { canSend, cannotStart, useCapabilities } from "./capabilities.js";
@@ -3314,17 +3314,32 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true, r
   const hanging = !!state && !old && !walk && !browsing && shown.length > 0 && !busy && !starting && !nextComing && rowEmpty && (canNext || !!err || proposing);
   useVerbs("floor", [{ id: "floor:next", group: "next", label: btn("next"), tone: "p", title: btnHint("next"),
     run: () => { setErr(""); surface(null, null); } }], hanging);
-  // NAV: BACK BESIDE NEXT, NO NEXT ON THE LAST ONE (the owner, 2026-10-27: "on the first one no Back, like no Next on the last one"). Back
-  // stands while there is a place to go back to (appLinks.navBack); Next goes when it has nothing below it (walk.below)
-  const walkNow = walkOf(pile), onWalk = !!currentItem && !!walkNow && (walkNow.on === currentItem.key || (walkNow.members || []).includes(currentItem.key));
-  // ...BACK IS THE ONE LIST OF PLACES HE WAS ON (the spec's part E, 2026-11-19): the bar's Back walked the rail's row above, the corner arrow the
-  // address - two Backs, two answers. Both step back over the places he and the walk moved through (appLinks.navBack)
-  const [canBack, setCanBack] = useState(canGoBack);
-  useEffect(() => onStep(() => setCanBack(canGoBack())), []);
+  // NAV: BACK BESIDE NEXT, NO NEXT ON THE LAST ONE (the owner, 2026-10-27: "on the first one no Back, like no Next on the last one"). Next goes
+  // when the walk has nothing below (walk.below); what Back means is appLinks.navTarget's alone, from what the view IS (funnelPile.walkPlace)
+  const walkNow = walkOf(pile), viewIs = walkPlace({ table, item: currentItem, pile, off: firstRun || !!old || !!walk }), onWalk = viewIs.onWalk;
+  const [, setStepped] = useState(0);                 // ...a step of history moves what a page's Back returns to
+  useEffect(() => onStep(() => setStepped((n) => n + 1)), []);
+  const backNav = navTarget(viewIs);
   const moving = busy || deferring || resetting;
+  // ...greyed, and refused, while a move is out (the owner, 2026-11-03): a row's Back draws its row at its press as Next does; it reads nothing
+  // and passes nothing, the row it leaves stays exactly as it was
+  const goBack = () => {
+    if (backNav.disabled || moving || turnFlight.current) return undefined;
+    if (backNav.to === "place") return navBack();
+    if (deferredChat.current.size) return undefined;
+    setRailOpen(false); browseDown();
+    return surface(null, null, null, false, "back");
+  };
+  const goBackRef = useRef(goBack); goBackRef.current = goBack;
+  // ...Alt+Left is the same Back: the window's own history step went to the page he came from on a walk row
+  useEffect(() => {
+    if (!active) return undefined;
+    const k = (e) => { if (e.altKey && e.key === "ArrowLeft" && !e.ctrlKey && !e.metaKey && !e.shiftKey) { e.preventDefault(); goBackRef.current(); } };
+    window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k);
+  }, [active]);
   // ...and on a desk Back is ALWAYS on the bar, greyed where there is nowhere to go back to (the owner, 2026-10-29: the bar is Back and Next)
-  useVerbs("nav", [{ id: BACK, group: "back", label: btn("back"), title: btnHint("back"), disabled: !canBack || moving, why: moving ? "" : "nothing to go back to",
-    run: navBack }], canBack || (deskChat && !firstRun));
+  useVerbs("nav", [{ id: BACK, group: "back", label: backNav.label || btn("back"), title: btnHint("back"), disabled: backNav.disabled || moving, why: moving ? "" : backNav.why,
+    run: goBack }], !backNav.disabled || (deskChat && !firstRun));
   const atEnd = !!current && table.speaks && onWalk && !walkNow.below;
   useEffect(() => { navEnd(atEnd); }, [atEnd]);
   useEffect(() => () => navEnd(false), []);

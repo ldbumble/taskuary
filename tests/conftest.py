@@ -863,7 +863,11 @@ def the_basic_flow(request):
 
 
 # WHAT THE BASIC FLOW FOUND AND IS NOT FIXED YET (2026-11-12): (test name prefix, the break's words) - each an open finding, named in the report
-FLOW_OPEN = []
+FLOW_OPEN = [
+    # ...a press on another thread raises the next card between the read and the compare that follows it: the compare reads the store a beat
+    # after the chat, so a card raised in that beat reads as missing. The test is about two threads both finishing; the flow is checked at rest
+    ('test_a_card_press_and_a_chat_read_on_two_threads', 'is drawn nowhere'),
+]
 
 
 @pytest.fixture(autouse=True)

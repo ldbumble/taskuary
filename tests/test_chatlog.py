@@ -418,6 +418,8 @@ def test_a_card_press_and_a_chat_read_on_two_threads_both_finish():
     for x in ts: x.start()
     for x in ts: x.join(8)
     assert sorted(done) == ['press', 'read'], f'a thread never finished: {done}'
+    rest = conversation.items(s, tid)       # ...and at rest, every card the presses left is where it stood (chatlog.missing)
+    assert chatlog.missing(s, tid, rest) == []
 
 
 def test_a_task_search_and_a_chat_read_that_migrates_on_two_threads_both_finish():

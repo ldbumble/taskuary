@@ -18,6 +18,7 @@ from pathlib import Path
 
 from .gate import TABLE
 WHY, NEVER = TABLE['reads'].why, TABLE['never'].why          # said as the one table says them (gate.TABLE)
+NEVER_WRITE = TABLE['unwritable'].why
 ALLOWED = 'Allowed - this task may read that folder'      # a read's Approve, said as what it did: nothing "ran" (heldCard says the same)
 GRANT = 'read:'                                         # a folder the owner let this task read (store.set_perm_rule)
 READ_TOOLS = ('Read', 'Glob', 'Grep', 'LS', 'NotebookRead')
@@ -168,13 +169,16 @@ def grant(store, tid, folders) -> None:
     for f in folders or []: store.set_perm_rule(int(tid), GRANT + _n(f), 'allow')
 
 
-def judge(store, tid, paths, cwd: str = '') -> tuple:
+def judge(store, tid, paths, cwd: str = '', write: bool = False) -> tuple:
     """(held, never) for the paths a call reads: `held` one step per folder outside the work area ({'tool', 'what', 'why', 'where',
     'folder'} - shellgate's own shape), `never` the reason when one is Taskuary's own or a sign-in place ('' else). None in `paths` is a
-    path that could not be read, held as a step of its own."""
+    path that could not be read, held as a step of its own. `write`: the paths it writes - the same work area and never-places, and of
+    the open places only the temp folder: a program's own folder (Taskuary's package among them) is read freely, never written."""
     if not paths: return [], ''
     from . import floor
-    mine, nev, ok, sids = own(store, tid, cwd), [_n(p) for p in floor.kept_secret()], granted(store, tid) + _open(), _sids(store, tid)
+    mine, nev, sids = own(store, tid, cwd), [_n(p) for p in floor.kept_secret()], () if write else _sids(store, tid)
+    ok = granted(store, tid) + ([_n(tempfile.gettempdir())] if write else _open())
+    verb, why = ('write', TABLE['writes'].why) if write else ('read', WHY)
     held, blind = {}, False
     for raw in paths or []:
         if raw is None: blind = True; continue
@@ -183,13 +187,13 @@ def judge(store, tid, paths, cwd: str = '') -> tuple:
         # read there through - a checkout at the home folder does not open the sign-ins in it. A glob that can reach one is that one
         sec = [r for r in nev if _in(p, r) or (pat != p and _reaches(pat, r))]
         if any(_in(p, r) and (not sec or any(_in(r, n) for n in sec)) for r in mine) or (not sec and fetched(p, cwd, sids)): continue
-        if sec: return [], NEVER
+        if sec: return [], NEVER_WRITE if write else NEVER
         if any(_in(p, r) for r in ok): continue
         p = os.path.realpath(os.path.expanduser(_cut(str(raw))))     # ...said as the owner's own spelling of it, never case-folded
         folder = p if os.path.isdir(p) else os.path.dirname(p)
         held.setdefault(folder, []).append('' if folder == p else os.path.basename(p))
-    out = [{'tool': 'read', 'kind': 'reads', 'what': _said(f, ns), 'why': WHY, 'where': f, 'folder': f} for f, ns in held.items()]
-    if blind: out.append({'tool': 'read', 'kind': 'reads', 'what': 'read files at a path it builds from a variable', 'why': WHY, 'where': '', 'folder': ''})
+    out = [{'tool': verb, 'kind': 'reads', 'what': _said(f, ns, verb), 'why': why, 'where': f, 'folder': f} for f, ns in held.items()]
+    if blind: out.append({'tool': verb, 'kind': 'reads', 'what': f'{verb} files at a path it builds from a variable', 'why': why, 'where': '', 'folder': ''})
     return out, ''
 
 
@@ -206,9 +210,9 @@ def _reaches(pat: str, root: str) -> bool:
     return len(ps) > 1 and all(fnmatch.fnmatchcase(r, q) and (q == r or not r.startswith('.') or q.startswith('.')) for r, q in zip(rs, ps))
 
 
-def _said(folder: str, names: list) -> str:
+def _said(folder: str, names: list, verb: str = 'read') -> str:
     fs, place = [n for n in dict.fromkeys(names) if n], os.path.basename(folder.rstrip('\\/')) or folder
-    return f"read {', '.join(fs[:3])}{' and more' if len(fs) > 3 else ''} in {place}" if fs else f'read the folder {place}'
+    return f"{verb} {', '.join(fs[:3])}{' and more' if len(fs) > 3 else ''} in {place}" if fs else f'{verb} the folder {place}' if verb == 'read' else f'{verb} in the folder {place}'
 
 
 def _expand(t: str, cwd: str, env: dict) -> str | None:
@@ -260,16 +264,22 @@ def _segments(cmd: str) -> list:
     return out
 
 
-def command_paths(cmd: str, cwd: str = '', env: dict = None, made: list = None) -> list:
+# WHAT A LINE WRITES, BY ITS GRAMMAR (red team F2): a redirect's target, and the file a writing program is named on - its destination for a copy
+# or a move. Judged as writes (judge, write=True), never as reads: a program's own folder is free to read and never free to write
+_REDIRECT = re.compile(r'^\d?>>?&?$|^&>$')
+_WRITERS = {'tee', 'out-file', 'set-content', 'add-content', 'new-item', 'ni', 'sc', 'ac', 'touch', 'mkdir', 'md'}
+_COPIES = {'cp', 'mv', 'copy', 'move', 'copy-item', 'move-item', 'cpi', 'mi', 'xcopy', 'robocopy', 'rsync', 'install', 'ln'}
+def command_paths(cmd: str, cwd: str = '', env: dict = None, made: list = None, writes: list = None) -> list:
     """Every path a shell line names as an argument, through `cd`, `bash -c "..."` and `--opt=value` - None for one built from a variable
     it cannot read. The program itself, options, URLs and switches (`/s`) are not paths. `made` gets the files the line writes rather than
-    reads: a browser screenshot's picture (walk 16: the agent's own screenshot in Temp stood as a card asking to read it)."""
+    reads: a browser screenshot's picture (walk 16: the agent's own screenshot in Temp stood as a card asking to read it). `writes`, where
+    given, gets the paths it writes (_REDIRECT, _WRITERS, _COPIES) instead of the list it returns."""
     from .browsergate import _head, words
     from .shellgate import _OWN, shell_text, unwrap
     # ...a line that is a shell started on a script (Codex's every call) is read as that script, whole: cut at the `;` inside its quotes first,
     # `$outDir = "<its outputs folder>"; New-Item $outDir` lost its assignment and the task's own folder was held as a variable it could not
     # read (the HIPAA walk, 2026-11-21)
-    if (inner := unwrap(cmd))[0]: return command_paths(inner[1], cwd, env)
+    if (inner := unwrap(cmd))[0]: return command_paths(inner[1], cwd, env, made, writes)
     out, here, env = [], cwd, dict(env or {})
     for seg in _segments(shell_text(str(cmd or ''))):        # ...a heredoc's or a here-string's body is data, never a path read
         # ...a path kept in a variable is read where the variable is (`$p='C:/x.csv'; Get-Content $p` - the real-CLI walk, 2026-11-16)
@@ -286,7 +296,7 @@ def command_paths(cmd: str, cwd: str = '', env: dict = None, made: list = None) 
         tool = re.sub(r'\.(exe|cmd|ps1|bat)$', '', os.path.basename(w[0].replace('\\', '/')).lower())
         if tool in ('bash', 'sh', 'powershell', 'pwsh', 'cmd'):
             i = next((i for i, x in enumerate(w) if x.lower() in ('-c', '-command', '/c', '/k')), None)
-            if i is not None: out += command_paths(' '.join(w[i + 1:]), here, env)
+            if i is not None: out += command_paths(' '.join(w[i + 1:]), here, env, made, writes)
             continue
         cd, named = tool in ('cd', 'chdir', 'set-location', 'sl', 'pushd'), len(out)
         shot = (a := _head(w)) is not None and next((x.lower() for x in a if not x.startswith('-')), '') == 'screenshot'
@@ -294,7 +304,9 @@ def command_paths(cmd: str, cwd: str = '', env: dict = None, made: list = None) 
         # ...an inline script's text is read word by word for the paths in it: its words are mostly data, so one is a path only where one is
         # there (below) - `open('~/.ssh/id_rsa')` in it is read as ever
         if code: w = [w[0], *(t for x in w[1:] for t in re.split(r"[\s'\"(),;=+]+", x) if t and t not in ('-c', '-e'))]
-        for x in w[1:]:
+        dest = max((i for i, x in enumerate(w) if i and not x.startswith('-')), default=0) if tool in _COPIES else 0
+        for i, x in enumerate(w[1:], 1):
+            to = bool(_REDIRECT.match(w[i - 1])) or i == dest or tool in _WRITERS
             x = re.sub(r'^\d?[<>]+&?', '', x)
             if x.startswith('-'): x = x.split('=', 1)[1] if '=' in x else ''
             if (v := _VAR.fullmatch(x)) and (v[1] or v[2]).lower() in env: x = env[(v[1] or v[2]).lower()]
@@ -316,6 +328,7 @@ def command_paths(cmd: str, cwd: str = '', env: dict = None, made: list = None) 
             if code and not _WILD.search(e) and not os.path.lexists(e): continue
             if cd: here = _cut(e); break
             if shot and made is not None: made.append(e)
+            elif to and writes is not None: writes.append(e)
             else: out.append(e)
         else:
             if cd and len(w) == 1: here = os.path.expanduser('~')          # a bare `cd` goes home
@@ -345,7 +358,8 @@ def env_for(store, tid, cwd: str = '') -> dict:
 
 def of_command(store, tid, cmd: str, cwd: str = '') -> tuple:
     "(held, never) for a shell line."
-    made = []
-    ps = command_paths(cmd, cwd, env_for(store, tid, cwd), made)
+    made, ws = [], []
+    ps = command_paths(cmd, cwd, env_for(store, tid, cwd), made, ws)
     wrote(tid, made)                                  # ...the picture it takes is its own work, read back without asking (wrote)
-    return judge(store, tid, ps, cwd)
+    (held, never), (wheld, wnever) = judge(store, tid, ps, cwd), judge(store, tid, ws, cwd, write=True)
+    return held + wheld, never or wnever

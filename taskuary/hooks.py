@@ -895,13 +895,14 @@ def browser(payload: dict, sid: str = '', task: str = '') -> dict:
     cmd = str(inp.get('command') or '') if tool in ('Bash', 'PowerShell') else ''
     t = _pane(payload, 'claude') or _general(payload, sid, task)
     st, cwd = getattr(t, 'store', None) if t else None, str(payload.get('cwd') or getattr(t, 'cwd', '') or '')
-    if tool in readgate.WRITE_TOOLS:              # ...what it writes is its own work: reading it back is never asked (readgate.wrote)
-        if t: readgate.wrote(t.task_id, readgate.tool_paths(inp, cwd=cwd))
-        return {}
     if not t or not st: return {}
-    paths = readgate.tool_paths(inp, cwd=cwd) if tool in readgate.READ_TOOLS else None
+    w = tool in readgate.WRITE_TOOLS
+    paths = readgate.tool_paths(inp, cwd=cwd) if w or tool in readgate.READ_TOOLS else None
     # ...asked in the CLI's own prompt where the owner can answer it there, held for the task's Approve where nobody can (shellgate.asks)
-    return gate.check(st, t.task_id, t.sid, cmd, cwd, tool, shellgate.asks(st, t), about=str(inp.get('description') or ''), paths=paths)
+    # ...A WRITE PASSES THE SAME GATE AS A READ (red team F2): a Write to Taskuary's config, its package or a startup folder ran unasked
+    out = gate.check(st, t.task_id, t.sid, cmd, cwd, tool, shellgate.asks(st, t), about=str(inp.get('description') or ''), paths=paths, write=w)
+    if w and not out: readgate.wrote(t.task_id, paths)      # ...what it wrote is its own work: reading it back is never asked (readgate.wrote)
+    return out
 
 
 def run_sid(payload: dict, tid: int) -> str:

@@ -619,7 +619,7 @@ class TaskNowTests(unittest.TestCase):
         self.assertIn(f'TASK NOW: TQ-{t:04d} [waiting, coding] Export still broken - no agent on it right now', fx)
         self.assertIn(f"a reply waits for the owner's yes (rv{r})", fx); self.assertIn('the escaping is wrong on line 40', fx)
         s.decide_review(r, 'approved', 'Attached - sorry for the wait.', 'owner')
-        self.assertIn('YOU ALREADY REPLIED', concierge.task_now(s, t)); self.assertIn('sorry for the wait', concierge.task_now(s, t))
+        self.assertIn('a reply went from this task', concierge.task_now(s, t)); self.assertIn('sorry for the wait', concierge.task_now(s, t))
         working = [{'taskId': t, 'agent': 'codex', 'label': 'codex', 'started': ago(0), 'idle': 3, 'waiting': False, 'tail': ['editing']}]
         with mock.patch('taskuary.terminal.live_sessions', return_value=working):
             self.assertIn('Agent is WORKING right now', concierge.task_now(s, t))

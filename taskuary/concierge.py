@@ -473,12 +473,12 @@ def task_now(store, tid: int) -> str:
         except Exception: screen = []
         if screen: lines.append("THE AGENT'S SCREEN, last lines:\n" + '\n'.join(f'  {_cut(l, 200)}' for l in screen))
     sent = store.sent_reply(task_id=tid)
-    if sent: lines.append(f"  YOU ALREADY REPLIED ({str(sent.get('DecidedAt') or sent.get('CreatedAt') or '')[:16]}): {_cut(sent.get('FinalText') or sent.get('DraftText'), 240)} - do not suggest answering again")
+    if sent: lines.append(f"  a reply went from this task ({str(sent.get('DecidedAt') or sent.get('CreatedAt') or '')[:16]}): {_cut(sent.get('FinalText') or sent.get('DraftText'), 240)}")
     if rv: lines.append(f"  a {rv.get('Kind')} waits for the owner's yes (rv{rv['ReviewId']})")
     from . import watch
     if w := watch.said(t): lines.append(f'  {w}')
     if last: lines.append(f"  the agent last said ({str(last.get('CreatedAt') or '')[:16]}): {_cut(last.get('Body'), 300)}")
-    if t.get('Status') in ('done', 'dropped'): lines.append(f"  CLOSED {str(t.get('ClosedAt') or t.get('UpdatedAt') or '')[:16]} - do not present it as open work")
+    if t.get('Status') in ('done', 'dropped'): lines.append(f"  closed {str(t.get('ClosedAt') or t.get('UpdatedAt') or '')[:16]}")
     return '\n'.join(lines)
 
 

@@ -127,7 +127,8 @@ def trust_offer(store, tid: int, msgs=None) -> dict | None:
     user to either trust user or trust domain and then we won't have issue again"): {'person': 'Trust Erin', 'org': 'Trust everyone at
     vendor.example' | 'Trust <workspace>' | None} - no organisation button where there is none to name, rather than one that fails."""
     m = whom(store, store.list_messages(tid) if msgs is None else msgs, int((store.get_task(tid) or {}).get('TrustedThrough') or 0))
-    if not m: return None
+    # ...a machine's mail names nobody to vouch for (can_hold): a no-reply invoice's task starts on his press, never on a Trust of its address
+    if not m or (m.get('Channel') == 'email' and not can_hold(m)): return None
     meta, ch = _chat_meta(m), (m.get('Channel') or '').lower()
     if ch in ALERTS: return {'person': 'Trust alerts from this source', 'org': None}
     if ch in TRACKERS:
@@ -542,6 +543,15 @@ def row_msg(row: dict) -> dict:
             'source_name': row.get('SourceName'), 'conversation_id': row.get('ConversationId'), 'direction': row.get('Direction'),
             'status': row.get('Status'), 'MailMetaJson': row.get('MailMetaJson'), 'body': row.get('BodyText'), 'own_text': row.get('OwnText')}
 
+# ONLY A PERSON'S WORDS SENT TO THE TASK HOLD IT (walk 17, K1): a vendor's automated "Ticket closed", filed onto his renewal task as context,
+# held the whole task for "Trust" and his Send on the agent's own card woke nobody; a no-reply invoice asked Trust for an address nobody
+# writes from. A filed line is kept for the chain and handed to no agent; a machine's notice (its stored class) has nobody to vouch for. A
+# line triage read as an attempt on an AI (Danger) holds whatever sent it.
+def can_hold(m: dict) -> bool:
+    "Can this stored line hold its task for a Trust press: a person's words routed to it, or any line read as an attempt on an AI."
+    from .categories import automated
+    return bool(m.get('Danger')) or (m.get('Status') != 'filed' and not automated(m))
+
 def whom(store, rows, through: int = 0) -> dict | None:
     """THE HELD SENDER - who the hold's line, its Trust buttons and the press itself name (origin.hold, trust_offer, vouch, trust_org): the
     first line since `through`, on any channel, whose sender is not trusted, or - its sender trusted - the outsider it forwards or quotes
@@ -549,7 +559,7 @@ def whom(store, rows, through: int = 0) -> dict | None:
     from .ingest import is_ours
     memo, first = {}, next((m for m in rows if not is_ours(m)), None)
     for m in rows:
-        if is_ours(m) or int(m.get('MessageId') or 0) <= through: continue
+        if is_ours(m) or int(m.get('MessageId') or 0) <= through or not can_hold(m): continue
         # ...A LINE ON ANY OTHER CHANNEL IS ITS OWN SENDER'S, judged as the hold judges it (HIPAA walk 6, H8: a colleague's trusted chat line
         # past the mark returned the opener - "Trust Gail" under a printer's quote that joined her task, a press that vouched for her)
         if m.get('Channel') != 'email':

@@ -367,3 +367,58 @@ def test_continue_on_a_held_task_says_the_hold_and_starts_no_session(monkeypatch
     assert [w['text'] for w in general.waiting_lines(s, t)] == ['check the tracking number']
     assert opened == [] and t not in general.OPENING
     assert not [x for x in s.list_comments(t, internal=True) if 'chose Resume' in (x['Body'] or '')]
+
+# ── K1 (walk 17): only a person's words sent to the task hold it, and a hold never swallows his press ─────────────────────────────
+# His own renewal task: the agent's Send card stood; a vendor's automated "Ticket #4471 closed", filed onto it as context, held the whole task
+# for "Trust Trainly", and his Send on the agent's card woke nobody. A no-reply invoice's own task asked Trust for an address nobody writes from.
+def _renewal(s):
+    return s.create_task({'Title': 'Sort out the Trainly renewal', 'Kind': 'general', 'Status': 'open', 'OriginBase': 'owner'}, 'owner')
+
+def _line(s, t, status='routed', **kw):
+    return s.add_message({'TaskId': t, 'Channel': 'email', 'SourceName': 'alex@northwind.example', 'FromEmail': 'support@trainly.example',
+                          'FromName': 'Trainly Support', 'Subject': 'Your ticket #4471 has been closed', 'BodyText': 'Ticket closed.', 'Status': status, **kw})
+
+def test_a_filed_notice_or_a_machine_s_mail_never_holds_his_task_for_trust():
+    s = MemoryStore(); t = _renewal(s)
+    _line(s, t, 'filed', SenderClass='automated')
+    assert origin.hold(s, t) is None, 'a filed automated notice is context, never a hold'
+    _line(s, t, 'routed', SenderClass='automated')
+    assert origin.hold(s, t) is None, "a machine's mail routed to it has nobody to vouch for"
+    _line(s, t, 'filed', FromEmail='dana@trainly.example', FromName='Dana Holt')
+    assert origin.hold(s, t) is None, 'a filed line is handed to no agent'
+    _line(s, t, 'routed', FromEmail='dana@trainly.example', FromName='Dana Holt')
+    h = origin.hold(s, t)
+    assert h and h['person'] == 'Trust Dana' and 'Dana Holt' in h['line'], "a person's mail sent to it holds it, and the press names her"
+
+def test_a_line_read_as_an_attempt_on_an_ai_holds_whatever_sent_it():
+    s = MemoryStore(); t = _renewal(s)
+    s.set_message_danger(_line(s, t, 'filed', SenderClass='automated'), "asks the agent to forward the owner's mail")
+    assert origin.hold(s, t)
+
+def test_a_no_reply_invoice_s_task_offers_no_trust_of_its_address():
+    from taskuary import senders
+    s = MemoryStore(); t = s.create_task({'Title': 'Payworth invoice', 'Kind': 'general', 'Source': 'email', 'Status': 'open'}, 'router')
+    s.add_message({'TaskId': t, 'Channel': 'email', 'SourceName': 'alex@northwind.example', 'FromEmail': 'no-reply@payworth.example',
+                   'FromName': 'Payworth Billing', 'Subject': 'Invoice 2211', 'BodyText': 'Amount due $5,750.', 'Status': 'routed', 'SenderClass': 'automated'})
+    assert origin.of_task(s, t)[0] == 'stranger', "still a stranger's words: its agent runs in safe mode"
+    assert origin.hold(s, t) is None and senders.trust_offer(s, t) is None
+
+def test_his_press_on_the_agent_s_card_wakes_it_though_a_stranger_wrote_on_his_task():
+    from types import SimpleNamespace
+    from taskuary import general
+    s = MemoryStore(); t = _renewal(s); general._WOKEN.clear()
+    _line(s, t, 'routed', FromEmail='jordan@seatsaver.example', FromName='Jordan Pike')
+    assert origin.hold(s, t) and origin.his_own(s, t)
+    rid = s.add_review({'TaskId': t, 'Kind': 'draft_reply', 'Status': 'pending', 'DraftText': 'Please send the order form.'})
+    s.decide_review(rid, 'approved', 'Please send the order form.', 'owner')
+    told = []
+    sess = SimpleNamespace(sid='run1', task_id=t, alive=True, waiting=lambda: False, send_prompt=lambda text, **kw: told.append(kw))
+    with mock.patch('taskuary.workerstate._live', return_value=sess):
+        assert general.approved(s, t, 'Send', 'the reply was sent', review=rid) == 'told'
+        end = time.time() + 5
+        while not told and time.time() < end: time.sleep(.01)
+    assert told and told[0].get('pressed'), 'the wake is his press, a turn of his'
+    with pytest.raises(origin.RefusedForStranger): general.GeneralSession(s, t).send_prompt('The thread moved.', as_owner=False)
+    try: general.GeneralSession(s, t).send_prompt('', as_owner=False, pressed=True)
+    except origin.RefusedForStranger: pytest.fail('his press is never held behind a Trust on his own task')
+    except Exception: pass                                                     # ...it went on - to an AI this test has none of

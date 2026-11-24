@@ -126,7 +126,7 @@ class SignUp(unittest.TestCase):
     def setUp(self):
         self.s, self.tid, self.mid, _ = world()
         self.told = []
-        self.sess = SimpleNamespace(sid='run1', send_prompt=lambda text, as_owner=True: self.told.append(turn_told(self.s, self.tid, text)))
+        self.sess = SimpleNamespace(sid='run1', send_prompt=lambda text, as_owner=True, **kw: self.told.append(turn_told(self.s, self.tid, text)))
         self.noai = mock.patch('taskuary.llm.build_llm', return_value=None); self.noai.start()
 
     def tearDown(self): self.noai.stop()

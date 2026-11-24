@@ -1012,7 +1012,7 @@ def follow_up(store, tid, press: str, actor: str = 'owner', said: str = None, he
         try:
             ses = start_session(store, int(tid), actor=actor)
             with _WAKE_LOCK: got = _STARTING.pop(int(tid), None) or [(said or FOLLOW_UP, heard)]
-            ses.send_prompt('\n\n'.join(w for w, _h in got if w), as_owner=False, echo=False)
+            ses.send_prompt('\n\n'.join(w for w, _h in got if w), as_owner=False, echo=False, pressed=True)
         # ...a wake that never started woke nobody: the owner's next press on that answer starts it (it was once per answer even so, and
         # every later press was silent - the spine audit, 2026-11-09)
         except Exception as e:
@@ -1032,7 +1032,7 @@ def follow_up(store, tid, press: str, actor: str = 'owner', said: str = None, he
 # at once after another. Every input to a task's agent now goes through to_agent: who it is from, what it is, and whether to wake it now
 FROM = ('owner', 'taskuary', 'sender')
 def to_agent(store, tid: int, said: str, actor: str = 'owner', heard=None, *, frm: str = 'taskuary', files=None, wake: bool = True,
-             start: bool = False, request: str = None, owner: str = None, **line):
+             start: bool = False, request: str = None, owner: str = None, pressed: bool = False, **line):
     """THE ONE ROAD AN INPUT TAKES TO TASK `tid`'S AGENT. `frm` says who it is from:
     - 'owner': his words. `request` - an ask's id, or 'open' for the newest one - makes them its answer (workerstate.answer); else they are his
       line (take_line: kept, heard, its turn begun now - `line` is take_line's own: line_id, wait, a chat's pick); `wake=False` keeps them for
@@ -1068,7 +1068,7 @@ def to_agent(store, tid: int, said: str, actor: str = 'owner', heard=None, *, fr
     # ...a task a stranger STARTED keeps them by the box with the rest (waitroom: held_stranger), never in a turn it would refuse - on his own
     # task one who joined never holds back Taskuary's word of his own press (the Codex walk, 2026-11-19: Push's hand-back sat unheard)
     if sess is not None and hasattr(sess, 'send_prompt') and not _asking(store, sess) and not origin.keeps_him(store, tid):
-        _next_turn(store, tid, sess, '', line.get('wait'))
+        _next_turn(store, tid, sess, '', line.get('wait'), pressed=pressed)
         if heard: heard('told')
         return 'told'
     # ...A CODING AGENT WHOSE SESSION ENDED HEARS IT TOO (the north-star audit, 2026-11-10 - the owner: "it shoudl prompt you, should i deploy
@@ -1105,13 +1105,13 @@ def _deliver_soon(store, tid: int):
         try: waitroom.deliver(store, tid)
         except Exception as e: logger.warning(f'task {tid}: what waited for the turn did not go in - {e}')
     threading.Thread(target=go, daemon=True, name=f'deliver-{tid}').start()
-def _next_turn(store, tid: int, sess, said: str, wait=None):
+def _next_turn(store, tid: int, sess, said: str, wait=None, pressed: bool = False):
     """Taskuary's words as a live chat's next turn, AT ONCE: on their own thread - the chat's send_prompt is its whole next turn, so a press
     sat on "running..." for minutes (2026-10-25) - queued on the turn at work, never on the waiting room's clock. The task is at work from
     here (the browser audit, 2026-11-15: until the told turn began, the chat said nothing was happening). Not told, the task says so."""
     hand(tid)
     def go():
-        try: sess.send_prompt(said, as_owner=False)
+        try: sess.send_prompt(said, as_owner=False, **({'pressed': True} if pressed else {}))     # ...his press: a turn of his (send_prompt)
         except Exception as e:
             from .say import said as said_                 # a failure written to the chat is said in his words (say.py)
             logger.warning(f'task {tid}: the agent was not told - {e}')
@@ -1129,7 +1129,7 @@ def approved(store, tid: int, press: str, what: str, actor: str = 'owner', revie
     if not at_work(int(tid)) and not carries_on(store, tid): return ''
     # ...WHAT WENT IS ITS CARD'S EVENT (events.card, written as the store wrote the card): this only wakes the agent to hear it
     mark = review and (lambda how: store.audit('review', int(review), TOLD, actor, 'system', {'task': int(tid), 'how': how}))
-    return to_agent(store, tid, '', actor, heard=mark)
+    return to_agent(store, tid, '', actor, heard=mark, pressed=True)
 # A PRESS THAT FAILED IS HANDED BACK AT ONCE (the owner, 2026-11-16: "we can't have an agent asking to do something then it does nothing or
 # errors out, at least hand back to agent so we are not left hanging"): an approved INSERT failed on its card, the task sat on "waiting on you",
 # and its agent heard of it only with the owner's next line. Woken as a yes that went wakes it (approved), its card's event saying what failed
@@ -1138,7 +1138,7 @@ def failed(store, tid: int, review: int, actor: str = 'owner') -> str:
     "Hand task `tid`'s agent the press on `review` that failed: 'told', 'woke' or '' - said once, as `approved` marks it."
     r = store.get_review(int(review))
     if not r or not (failed_act(r) or r['Status'] == 'pending' and (r.get('ActError') or r.get('DeliveryState') in NOT_GONE)): return ''
-    got = to_agent(store, tid, '', actor, heard=lambda how: store.audit('review', int(review), TOLD, actor, 'system', {'task': int(tid), 'how': how, 'failed': True}))
+    got = to_agent(store, tid, '', actor, pressed=True, heard=lambda how: store.audit('review', int(review), TOLD, actor, 'system', {'task': int(tid), 'how': how, 'failed': True}))
     # ...and its card says so under the error, so the owner is not left wondering who moves next (an act's; a send's line is its own)
     if got and r.get('ActError') and 'The agent was told' not in str(r['ActError']): store.review_act_failed(r['ReviewId'], f"{str(r['ActError'])[:250].rstrip('. ')}. {AGENT_TOLD}", r.get('DecidedBy') or actor)
     return got
@@ -2697,7 +2697,7 @@ class GeneralSession:
     def send_prompt(self, text: str, attachments=None, connector_id=None, model=None, echo=True,
                     pick=None, trace=None, cancel=None, as_owner=True,
                     delivery_instructions: str = None, kept: bool = False, brief: bool = False, waiting: int = None, line_id: str = None, mails=(),
-                    since: float = None) -> str:
+                    since: float = None, pressed: bool = False) -> str:
         """`as_owner=False` is an instruction to the assistant that the OWNER did not say - used to
         make it open a conversation (the walk, a setup). It is not written to the history and
         not echoed, because putting words in the owner's mouth in their own transcript is a lie the
@@ -2719,8 +2719,9 @@ class GeneralSession:
         if mine and waiting is None: waiting = wait_line(self.store, self.task_id, text, attachments, line_id)
         # ...nothing a stranger's mail starts is handed over until Trust - but his line is kept first, so a refusal here never loses it (2026-11-17);
         # and on his own task his line is never held (origin.keeps_him): its turn runs as the task's mode is
+        # ...nor his PRESS (walk 17, K1): his Send on the agent's own card woke nobody, a stranger's line on the task holding Taskuary's word of it
         from . import origin
-        if (h := origin.keeps_him(self.store, self.task_id) if mine else origin.hold(self.store, self.task_id)): raise origin.RefusedForStranger(h['line'])
+        if (h := origin.keeps_him(self.store, self.task_id) if mine or pressed else origin.hold(self.store, self.task_id)): raise origin.RefusedForStranger(h['line'])
         # ...and one sent while a turn works goes INTO it (steer): that turn answers for it, so this one has nothing more to say
         if mine and self.steer(): return ''
         if not self._take(WAIT_TURN, cancel):
@@ -2773,7 +2774,7 @@ class GeneralSession:
             events.said(self.store, self.task_id, [{'id': f'{line_id or events._ns()}', 'text': text, 'files': list(attachments or [])}])
         if as_owner: self.woke = self.silent = False       # ...and a turn the owner's words began may be woken once again (wake)
         self.owned = as_owner and not brief
-        own_tok = origin.OWNER_SPEAKS.set(self.owned)
+        own_tok = origin.OWNER_SPEAKS.set(self.owned or pressed)
         # ...ON DISK FROM THE HAND-OVER (the timeline stress round, 2026-11-18): his lines are heard from the take above, and written only after
         # the provider was picked and the cards before moved on, a restart in between left them heard with nothing under them and no cut line
         from . import sessionrecord

@@ -383,7 +383,7 @@ def _hold(store, tid: int, t: dict) -> dict | None:
     if of_task(store, tid, msgs)[0] != 'stranger': return None
     through, memo, seen = int(t.get('TrustedThrough') or 0), {}, {}
     mids = [m['MessageId'] for m in msgs if m['MessageId'] > through and not _own(m) and (m.get('Channel') or '') not in OURS
-            and (r := of_message(store, m, memo, seen)) and r[0] == 'stranger']
+            and senders.can_hold(m) and (r := of_message(store, m, memo, seen)) and r[0] == 'stranger']
     if not mids or not (offer := senders.trust_offer(store, int(tid), msgs)): return None      # Taskuary's own words, a teammate chat: no sender to trust
     m = senders.whom(store, msgs, through) or {}
     who = ' '.join(str(m.get('FromName') or m.get('FromEmail') or 'this sender').split())        # ...mid-sentence: "You have not trusted this sender yet"

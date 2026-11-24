@@ -1106,7 +1106,7 @@ def _tell(store, tid: int, text: str, wait: bool = False, wake: bool = False, ne
             if sess is not None and callable(getattr(sess, 'steer', None)): sess.steer(text)
         except Exception as e: logger.debug(f'browsergate: task {tid} - the turn at work did not take the news - {e}')
         return None
-    try: how = general.to_agent(store, tid, text, **({'wait': True} if wait else {})) if sess is not None or wake else ''
+    try: how = general.to_agent(store, tid, text, pressed=wake, **({'wait': True} if wait else {})) if sess is not None or wake else ''
     except Exception as e: how = logger.warning(f'browsergate: task {tid} - its agent was not told - {e}')
     if not how: store.add_comment(tid, 'taskuary', 'agent', f'{text} (No agent is running on this task to tell.)')
 

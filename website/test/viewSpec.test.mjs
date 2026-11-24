@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
-import { MARK, buttonOf, columnsOf, fencedView, fmtAs, labels, normalise, placesOf, specIn, verbOf, viewOf } from "../src/viewSpec.js";
+import { MARK, buttonOf, colName, columnsOf, evalExpr, fencedView, fillIn, fmtAs, labels, normalise, placesOf, specIn, verbOf, viewOf } from "../src/viewSpec.js";
 import { eventsOf, turnParts } from "../src/chatStream.js";
 
 const SPEC = {
@@ -40,7 +40,7 @@ test("anything outside the catalog is null, never half drawn", () => {
   assert.equal(bad({ a: { type: "iframe", props: { src: "https://vendor.example" } } }), null);           // no such type
   assert.equal(bad({ a: { type: "text", props: { text: "hi", color: "red" } } }), null);                  // no such prop
   assert.equal(bad({ a: { type: "text", props: {} } }), null);                                            // a required prop missing
-  assert.equal(bad({ a: { type: "chart", props: { kind: "pie", points: [{ label: "x", value: 1 }] } } }), null);
+  assert.equal(bad({ a: { type: "chart", props: { kind: "radar", points: [{ label: "x", value: 1 }] } } }), null);
   assert.equal(bad({ a: { type: "chart", props: { points: [{ label: "x", value: "1" }] } } }), null);      // a point's value is a number
   assert.equal(bad({ a: { type: "table", props: { columns: ["a"], rows: [[1, 2]] } } }), null);            // wider than its columns
   assert.equal(bad({ a: { type: "button", props: { label: "Send", verb: "pay_now" } } }), null);           // no such button
@@ -181,4 +181,69 @@ test("a bar chart of many short labels is columns in the view's own figures; a f
   assert.match(h, /class="tq-dash-cols hi"/);
   assert.match(h, /aria-label="Dec: \$67,500"/, "each column says its value in the view's figures");
   assert.match(h, />\$100,000</, "the axis too");
+});
+
+// ── WHAT-IF AND ANSWERS (the owner, 2026-11-24, after json-render's state and actions) ─────────────────────────────────────────────
+const WHAT_IF = { title: "Payworth seats", state: { seats: 40 }, root: "g", elements: {
+  g: { type: "grid", props: { cols: 1 }, children: ["s", "k", "t", "go"] },
+  s: { type: "slider", props: { label: "Seats", value: { $bindState: "/seats" }, min: 5, max: 200, step: 5 } },
+  k: { type: "stats", props: { items: [{ label: "Per month", format: "currency", value: { $expr: "seats * 12" } }] } },
+  t: { type: "table", props: { rows: [{ Plan: "Basic", "Per seat": 12, Total: { $expr: "per_seat * seats" } }] } },
+  go: { type: "button", props: { label: "Go with this" }, on: { press: { action: "answer", params: { text: "{seats} seats" } } } } } };
+
+test("a slider's value is what the tile is worked out from: moved, the tile reads the new figure", () => {
+  const v = normalise(WHAT_IF), tile = v.elements.k.props.items[0].value;
+  assert.equal(v.elements.s.props.value, "seats");
+  assert.deepEqual(tile, { $expr: "seats * 12" });
+  assert.equal(evalExpr(tile.$expr, v.state).value, 480);
+  assert.equal(evalExpr(tile.$expr, { ...v.state, seats: 55 }).value, 660, "the slider moved to 55: the tile reads $660");
+  // ...a cell reads its own row's columns too, and the answer's words are filled in as he presses
+  assert.deepEqual(v.elements.t.props.columns, ["Plan", "Per seat", "Total"]);
+  assert.equal(evalExpr("per_seat * seats", { seats: 10, [colName("Per seat")]: 12 }).value, 120);
+  assert.deepEqual(fillIn(v.elements.go.on.press.params.text, { seats: 25 }), { value: "25 seats" });
+  assert.ok(v.id, "a view he can answer is named, so his pick is kept against it");
+});
+
+test("the grammar is small and safe: what it cannot work out is a plain error, never a throw and never eval", () => {
+  const ok = (src, scope, want) => assert.deepEqual(evalExpr(src, scope), { value: want }, src);
+  ok("1 + 2 * 3", {}, 7); ok("(1 + 2) * 3", {}, 9); ok("10 - 2 - 3", {}, 5); ok("-x + 1", { x: 4 }, -3);
+  ok("annual ? seats * 10 : seats * 12", { annual: true, seats: 3 }, 30); ok("plan == 'Pro' && n > 2", { plan: "Pro", n: 3 }, true);
+  ok("round(x / 3, 2)", { x: 10 }, 3.33); ok("max(a, b, 7)", { a: 1, b: 9 }, 9); ok("!on", { on: false }, true);
+  for (const bad of ["seats *", "seat * 2", "constructor", "alert(1)", "x.y", "1 +* 2", "", "1 / 0", "__proto__"]) {
+    const r = evalExpr(bad, { seats: 1, x: { y: 1 } });
+    assert.ok(r.error && !("value" in r), `${bad} -> ${JSON.stringify(r)}`);
+  }
+  assert.match(evalExpr("seat * 2", { seats: 1 }).error, /no value named seat/);
+  assert.match(fillIn("{nope} seats", {}).error, /no value named nope/);
+});
+
+test("controls, a choice and records pass; an action that is not answer or setState is no view", () => {
+  const bad = (els) => normalise({ root: "a", elements: els });
+  assert.ok(bad({ a: { type: "choice", props: { label: "Which plan?", options: ["Basic", "Pro"] } } }).id);
+  assert.deepEqual(bad({ a: { type: "toggle", props: { label: "Yearly", value: "annual" } } }).state, { annual: false });
+  assert.deepEqual(bad({ a: { type: "chart", props: { kind: "pie", rows: [{ plan: "Basic", n: 2 }, { plan: "Pro", n: 5 }] } } }).elements.a.props.points,
+    [{ label: "Basic", value: 2 }, { label: "Pro", value: 5 }]);
+  assert.equal(bad({ a: { type: "button", props: { label: "Pay" }, on: { press: { action: "pay" } } } }), null);
+  assert.equal(bad({ a: { type: "text", props: { text: "x" }, on: { press: { action: "answer", params: { text: "x" } } } } }), null);
+  assert.equal(bad({ a: { type: "slider", props: { label: "n", value: "n", min: 5, max: 5 } } }), null);
+  assert.equal(normalise({ ...WHAT_IF, id: "abc123" }).id, "abc123", "the server's own id is kept");
+});
+
+test("drawn, the tile reads the slider's value; a bad expression is a line in the view and the rest still draws", async () => {
+  const { build } = await import("esbuild");
+  const out = await build({ stdin: { resolveDir: new URL("..", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1"), loader: "jsx", contents: `
+    import React from "react"; import { renderToStaticMarkup } from "react-dom/server.browser"; import ViewSpec from "./src/ViewSpec.jsx";
+    export const html = (spec) => renderToStaticMarkup(<ViewSpec spec={spec} />);` }, loader: { ".css": "empty" },
+    bundle: true, write: false, format: "esm", jsx: "automatic", platform: "browser", conditions: ["worker"] /* Md's entity decoder reads `document` in its browser build */, logLevel: "silent", define: { "process.env.NODE_ENV": '"production"' } });
+  const { html } = await import(`data:text/javascript;base64,${Buffer.from(out.outputFiles[0].text).toString("base64")}`);
+  const at = (seats) => html(normalise({ ...WHAT_IF, state: { seats } }));
+  assert.match(at(40), /data-tq-view-value="">\$480</); assert.match(at(55), /data-tq-view-value="">\$660</);
+  assert.match(at(55), />55</, "the slider says where it stands");
+  const broken = html(normalise({ ...WHAT_IF, elements: { ...WHAT_IF.elements,
+    k: { type: "stats", props: { items: [{ label: "Per month", value: { $expr: "seats * pric" } }] } } } }));
+  assert.match(broken, /data-tq-view-err="">Could not work out &quot;seats \* pric&quot; - no value named pric</);
+  assert.match(broken, /Per seat/, "the table beside it still draws");
+  assert.doesNotMatch(broken, /data-tq-view-failed/, "never the whole view lost");
+  // ...off a task there is no agent to answer: its buttons are drawn, greyed
+  assert.match(at(40), /data-tq-view-pick="Go with this"[^>]*disabled|disabled[^>]*data-tq-view-pick="Go with this"/);
 });

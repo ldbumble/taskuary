@@ -1208,14 +1208,19 @@ LEAD_SCAN, _LEADS, NL = 3000, {}, chr(10)
 
 
 def _stamped(store, line: str) -> bool:
-    "Whether `line` opens the mail of LEAD_SENDERS different senders among the newest LEAD_SCAN messages (remembered per line)."
-    if line not in _LEADS:
-        if len(_LEADS) > 2048: _LEADS.clear()
-        try: r = store._one("SELECT COUNT(DISTINCT LOWER(IFNULL(FromEmail, FromName))) AS n FROM (SELECT FromEmail, FromName, BodyText FROM message "
-                            "ORDER BY MessageId DESC LIMIT ?) WHERE instr(substr(BodyText, 1, ?), ?) > 0", (LEAD_SCAN, len(line) + 600, line))
-        except Exception: r = None
-        _LEADS[line] = bool(r) and (r['n'] or 0) >= LEAD_SENDERS
-    return _LEADS[line]
+    """Whether `line` opens the mail of LEAD_SENDERS different senders among the newest LEAD_SCAN messages. A stamp, once counted, is remembered;
+    a "not yet" only until the next message lands - every arrival reads its own preview (events.arrived), so a "no" remembered for good was
+    counted at the first outside mail and kept the banner over every one after it."""
+    try: top = (store._one("SELECT MAX(MessageId) AS m FROM message") or {}).get('m')
+    except Exception: top = None
+    hit = _LEADS.get(line)
+    if hit is True or (hit is not None and hit == top): return hit is True
+    if len(_LEADS) > 2048: _LEADS.clear()
+    try: r = store._one("SELECT COUNT(DISTINCT LOWER(IFNULL(FromEmail, FromName))) AS n FROM (SELECT FromEmail, FromName, BodyText FROM message "
+                        "ORDER BY MessageId DESC LIMIT ?) WHERE instr(substr(BodyText, 1, ?), ?) > 0", (LEAD_SCAN, len(line) + 600, line))
+    except Exception: r = None
+    _LEADS[line] = True if r and (r['n'] or 0) >= LEAD_SENDERS else top
+    return _LEADS[line] is True
 
 
 def lead_wrapper(store, text: str) -> str:

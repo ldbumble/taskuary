@@ -57,6 +57,18 @@ class SinceTheSessionTests(unittest.TestCase):
         self.assertNotIn('waiting on you', said, 'no agent asked anything')
         self.assertTrue(said.startswith('TQ-0001: Gail Moreno and Paula Vance wrote again'), said)
 
+    def test_a_conversation_said_afresh_says_each_new_mail_once(self):
+        # the CI fixer (2026-11-24): the carried-on brief quoted the two new mails, and the fresh prompt's SOURCE MATERIAL said them again
+        from taskuary import ingest
+        s, tid = reopened()
+        s.add_comment(tid, general.BRIEF_ACTOR, general.USER_TYPE, ingest.carry_on_told(s, tid)[0])     # the brief, as send_prompt files it
+        with mock.patch('taskuary.general.handles', return_value=True): user = general.prompt_parts(s, tid, turn=True)[2]
+        for body in ('Can we just build something ourselves?', 'What would building it take, versus the vendor gateway?'):
+            self.assertEqual(user.count(body), 1, body)
+        self.assertIn('NEW SINCE YOUR LAST TURN', user)
+        self.assertIn('- Paula Vance <paula@northwind.example>', user.split('SOURCE MATERIAL')[0])    # still named as new, above its material
+        self.assertIn('versus the vendor gateway', continuity.news_block(s, tid), 'a conversation that goes on still hears the words')
+
     def test_with_nothing_new_the_card_only_says_it_is_saved(self):
         s, tid = reopened()
         s.cx.execute("UPDATE message SET CreatedAt='2026-10-13 10:00:00'"); s.cx.commit()

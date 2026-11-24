@@ -425,7 +425,8 @@ def isolated_runtime_boundaries():
         "spawn's own POSIX helpers: the one watchdog that ends tied children when we die, and the read of a process's start time (spawn._stamp)."
         from taskuary import spawn
         command = [str(x) for x in (argv if isinstance(argv, (list, tuple)) else [argv])]
-        return command == ['/bin/sh', '-c', spawn.WATCH_SH] or (command[:4] == ['ps', '-o', 'lstart=', '-p'] and len(command) == 5 and command[4].isdigit())
+        ps = command[:4] == ['ps', '-o', 'pid=,stat=,lstart=', '-p'] and len(command) == 5 and all(x.isdigit() for x in command[4].split(','))
+        return command == ['/bin/sh', '-c', spawn.WATCH_SH] or ps
 
     def allowed_process(argv, kwargs) -> bool:
         return (reviewed_python(argv) or git_allowed(argv, kwargs) or bool((g := shell_git(argv)) and git_allowed(g, kwargs))

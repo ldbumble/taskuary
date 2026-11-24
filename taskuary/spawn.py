@@ -227,25 +227,46 @@ def _popen(kw: dict):
 # ...AND WHAT A RUN THAT DIED LEFT, ITS NEXT START CLOSES: the long-lived children (popen, bare, a terminal's CLI) are listed in the home with
 # when they started and who started them. close_left ends those whose starter is gone and that are still the same process - a pid handed to
 # something else since does not match its start time and is left alone.
-def _stamp(pid: int) -> str:
-    "When process `pid` started, as the OS says it - '' when no such process runs."
+def _win_stamp(pid: int) -> str:
+    import ctypes, ctypes.wintypes as W
+    k = ctypes.WinDLL('kernel32', use_last_error=True); k.OpenProcess.restype = W.HANDLE
+    h = k.OpenProcess(0x1000, False, int(pid))
+    if not h: return ''
     try:
-        if WINDOWS:
-            import ctypes, ctypes.wintypes as W
-            k = ctypes.WinDLL('kernel32', use_last_error=True); k.OpenProcess.restype = W.HANDLE
-            h = k.OpenProcess(0x1000, False, int(pid))
-            if not h: return ''
-            try:
-                rc, t = W.DWORD(), [W.FILETIME() for _ in range(4)]
-                if not (k.GetExitCodeProcess(W.HANDLE(h), ctypes.byref(rc)) and rc.value == 259): return ''
-                if not k.GetProcessTimes(W.HANDLE(h), *(ctypes.byref(x) for x in t)): return ''
-                return str(t[0].dwHighDateTime << 32 | t[0].dwLowDateTime)
-            finally: k.CloseHandle(W.HANDLE(h))
-        if os.path.exists(f'/proc/{int(pid)}/stat'):
-            with open(f'/proc/{int(pid)}/stat') as f: st = f.read().rsplit(')', 1)[1].split()
-            return '' if st[0] in 'ZX' else st[19]
-        return subprocess.run(['ps', '-o', 'lstart=', '-p', str(int(pid))], capture_output=True, text=True, timeout=5).stdout.strip()
-    except (OSError, ValueError, IndexError, subprocess.SubprocessError): return ''
+        rc, t = W.DWORD(), [W.FILETIME() for _ in range(4)]
+        if not (k.GetExitCodeProcess(W.HANDLE(h), ctypes.byref(rc)) and rc.value == 259): return ''
+        if not k.GetProcessTimes(W.HANDLE(h), *(ctypes.byref(x) for x in t)): return ''
+        return str(t[0].dwHighDateTime << 32 | t[0].dwLowDateTime)
+    finally: k.CloseHandle(W.HANDLE(h))
+
+def _proc_stamp(pid: int) -> str:
+    with open(f'/proc/{int(pid)}/stat') as f: st = f.read().rsplit(')', 1)[1].split()
+    return '' if st[0] in 'ZX' else st[19]
+
+def _stamps(pids) -> dict:
+    """When each of `pids` started, as the OS says it - '' for one that does not run. A zombie (ended, its parent not yet told) does not run:
+    it holds its pid and its start time but nothing else, and a SIGKILLed child of a live parent stays one until that parent waits.
+    macOS has no /proc: ONE `ps` reads them all - a ps per pid made every start of a child cost a ps per child already listed."""
+    pids = sorted({int(p) for p in pids if int(p) > 0})
+    out = dict.fromkeys(pids, '')
+    if not pids: return out
+    try:
+        if WINDOWS or os.path.isdir('/proc'):
+            for p in pids:
+                try: out[p] = _win_stamp(p) if WINDOWS else _proc_stamp(p)
+                except (OSError, ValueError, IndexError): pass
+            return out
+        r = subprocess.run(['ps', '-o', 'pid=,stat=,lstart=', '-p', ','.join(map(str, pids))], capture_output=True, text=True, timeout=5)
+        for ln in r.stdout.splitlines():
+            pid, st, made = (ln.split(None, 2) + ['', ''])[:3]
+            if pid.isdigit() and int(pid) in out and st[:1] not in 'ZX': out[int(pid)] = made.strip()
+    except (OSError, ValueError, subprocess.SubprocessError): pass
+    return out
+
+def _stamp(pid: int) -> str:
+    "When process `pid` started, as the OS says it - '' when no such process runs (_stamps)."
+    try: return _stamps([pid]).get(int(pid), '')
+    except (TypeError, ValueError): return ''
 
 _ME = []
 def _list_file():
@@ -266,10 +287,11 @@ def _write_list(d: dict):
 def listed(pid: int):
     "List child `pid` in the home for the next start, should this process die without closing it; entries that ended since are dropped."
     with _TIE_LOCK:
-        if not _ME: _ME.extend([os.getpid(), _stamp(os.getpid())])
-        try: d = {k: v for k, v in _read_list().items() if isinstance(v, list) and v and _stamp(int(k)) == v[0]}
-        except (TypeError, ValueError): d = {}
-        d[str(int(pid))] = [_stamp(pid), *_ME]
+        d = {k: v for k, v in _read_list().items() if k.isdigit() and isinstance(v, list) and v}
+        now = _stamps([*map(int, d), pid, *([] if _ME else [os.getpid()])])
+        if not _ME: _ME.extend([os.getpid(), now.get(os.getpid(), '')])
+        d = {k: v for k, v in d.items() if now.get(int(k), '') == v[0]}
+        d[str(int(pid))] = [now.get(int(pid), ''), *_ME]
         _write_list(d)
 
 def adopt(pid: int) -> bool:
@@ -282,11 +304,14 @@ def close_left() -> int:
     import signal
     keep, gone = {}, []
     with _TIE_LOCK:
+        rows = []
         for k, v in _read_list().items():
-            try: pid, (made, by, by_made) = int(k), v
+            try: pid, (made, by, by_made) = int(k), v; rows.append((k, v, pid, made, int(by), by_made))
             except (TypeError, ValueError): continue
-            if not made or _stamp(pid) != made: continue
-            if by == os.getpid() or _stamp(by) == by_made: keep[k] = v
+        now = _stamps([p for r in rows for p in (r[2], r[4])])
+        for k, v, pid, made, by, by_made in rows:
+            if not made or now.get(pid, '') != made: continue
+            if by == os.getpid() or now.get(by, '') == by_made: keep[k] = v
             else: gone.append(pid)
         _write_list(keep)
     for pid in gone:

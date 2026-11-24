@@ -12001,6 +12001,9 @@ async def terminal_ws(ws: WebSocket, sid: str):
                 if snap: await ws.send_json({'type': 'out', 'replay': True, 'data': snap,
                                              'promptPending': hub_term.prompt_pending(t),
                                              'cli': hub_term.cli_of(t.argv)})
+        # A pty session that ended before this socket subscribed said its end to the panes there were, not to this one: it is said here,
+        # after the replay (a second marker, where the end raced the subscribe, lands after to_browser has returned)
+        if isinstance(t, hub_term.Term) and t.ended: q.put_nowait(None)
         first_resize = True
         while True:
             m = await ws.receive_json()

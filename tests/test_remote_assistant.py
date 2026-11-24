@@ -777,6 +777,25 @@ class BringUpTests(unittest.TestCase):
         self.assertEqual(sent[-1][1], ['Mark done', 'Next', 'Remind me'])   # nothing lit by the decision: the chips' own order, as the desk draws them
         self.assertEqual(remote_assistant.acts_for(store, 'whatsapp', JID)['Mark done'], {'t': 'verb', 'verb': 'close', 'key': 'task:35'})
 
+    def test_an_answer_naming_one_task_by_its_ref_brings_up_its_draft_with_its_own_buttons(self):
+        """Walk 16: "A reply to Omar is drafted and waiting for your approval" came with only Next / Ask under it. An answer that names the
+        one task by its ref is that task brought up - its draft's own Send under it, as a link's is; two refs name no one task."""
+        store, c = armed_store()
+        card = {'say': 'Omar Keller wrote about a duplicate payment.', 'item': {'key': 'task:12', 'kind': 'task', 'tid': 12, 'ref': 'TQ-0012', 'title': 'Duplicate payment', 'rid': 5},
+                'chips': [{'verb': 'approve', 'label': 'Send'}, {'verb': 'next', 'label': 'Next'}]}
+        def turn(said):
+            sent = []
+            with mock.patch.object(concierge, 'restore_current', return_value=None), \
+                 mock.patch.object(concierge, 'say', return_value={'say': said, 'options': [], 'chips': [], 'decision': None}), \
+                 mock.patch.object(concierge, 'surface', return_value=card) as surfaced, \
+                 mock.patch.object(messengers, 'wa_send', side_effect=lambda st, chat, body, connector_id=None, poll=None: sent.append((body, poll))):
+                remote_assistant.respond(store, 'whatsapp', JID, "did anyone deal with Omar's duplicate payment?", c['ConnectorId'])
+            return sent, surfaced
+        sent, surfaced = turn('A reply to Omar on TQ-0012 is drafted and waits for your Send.')
+        self.assertEqual(surfaced.call_args.args[1], 'task:12')
+        self.assertIn('Send', sent[-1][1])
+        self.assertIsNone(remote_assistant.named_task('TQ-0012 and TQ-0013 both wait.'), 'two tasks named: no one of them is brought up')
+
 
 class NoAITests(unittest.TestCase):
     """F10: with no AI connected, typed "next" answered "use the buttons" and the walk stopped; "7" over a list of six did the

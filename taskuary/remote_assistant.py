@@ -35,6 +35,18 @@ HANDOFF_KEY = 'assistant_handoff'      # {'channel','chat','connector_id','at'} 
 
 _TASK_LINK = re.compile(r'\[([^\]]+)\]\(#task=\d+\)')
 _TASK_ID = re.compile(r'\]\(#task=(\d+)\)')
+
+
+def named_task(say) -> int | None:
+    """The task an answer names: its first [..](#task=N) link, else the one TQ ref it names alone (store.TQ_REF) - a phone reads its words,
+    and an answer about one task that named it by its ref alone left only Next under it (walk 16). None where it names none, or several."""
+    from .store import TQ_REF
+    s = str(say or '')
+    if m := _TASK_ID.search(s): return int(m.group(1))
+    refs = {int(x) for x in TQ_REF.findall(s)}
+    return refs.pop() if len(refs) == 1 else None
+
+
 _locks, _locks_guard = {}, threading.Lock()
 _turns: dict = {}                            # chat -> the Event that cancels its turn in flight
 
@@ -1346,9 +1358,9 @@ def carry_out(store, out: dict, item: dict | None, actor: str = 'owner', lead: s
         return _on(store, actor, said, done_with=(item or {}).get('key'))   # Next leaves the table as the desktop's does
     # AN ANSWER THAT NAMES A TASK BRINGS IT UP (the router rule): the desk opens a [TQ-…](#task=N) link the moment the answer lands;
     # the phone stripped it to its words, so "bring up TQ-0035" was answered and nothing came up (F18). Its card and its choices
-    linked = _TASK_ID.search(str(out.get('say') or '')) if not out.get('item') and not prop and not verb else None
+    linked = named_task(out.get('say')) if not out.get('item') and not prop and not verb else None
     if linked:
-        nxt = concierge.surface(store, f'task:{int(linked.group(1))}', actor=actor)
+        nxt = concierge.surface(store, f'task:{linked}', actor=actor)
         if nxt.get('item'):
             from . import chatformat
             words = turn_text({**out, 'chips': [], 'options': []}, lead, store)

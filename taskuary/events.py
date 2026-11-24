@@ -262,6 +262,11 @@ def audited(store, et: str, eid, action: str, actor: str, detail) -> None:
     if action == 'proposal_refused' and d.get('unheard'):
         from .proposals import refusal_line
         return add(store, eid, 'note', text=f"what you proposed ({d.get('action') or 'the proposal'}) was not put on a card - {refusal_line(d.get('why') or '')}")
+    # ...A REOPEN NOT HIS - mail on its thread, a check-back, a failed check - IS A FACT IN ITS PLACE, after the close it undid (walk 15: a resend
+    # reopened a task he had just marked done, and its agent, the mail in its brief, was told only the close and said "I've closed this out")
+    if action == 'reopen' and actor not in OWNER_ACTORS:
+        by = f"{d['by']}'s message" + (f" (m{d['mid']})" if d.get('mid') else '') if d.get('by') else ''
+        return add(store, eid, 'note', text=f"The task was reopened{' by ' + by if by else ''}" + (f" - {d['why']}" if d.get('why') else '') + '.')
     # ...A REOPEN HIS TYPED LINE MADE IS SAID BY THAT LINE (general.QUIET's reopened_by_typing): the store's own `reopened` row, written by
     # the same write, right after it, is no press of his
     typed = lambda: [r['Action'] for r in store._rows("SELECT Action FROM audit WHERE EntityType='task' AND EntityId=? AND Action IN ('reopened','reopen','reopened_by_typing') "

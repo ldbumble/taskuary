@@ -133,6 +133,24 @@ class Events(unittest.TestCase):
         self.assertEqual([(e['mid'], e['own']) for e in got], [(mid, True)])
         self.assertIn("The owner's own message on the thread", events.render(got))
 
+    def test_the_mail_that_reopens_a_closed_task_is_told_after_its_close(self):
+        """Walk 15 (S2b): he marked the task done, and a resend on its thread reopened it a few seconds later - but its agent, said afresh
+        (the mail in its brief), was told only "The owner marked it done." as the newest fact, and answered "I've closed this out as you
+        asked" on an open task. The reopen is a fact in its place: after the close, naming whose mail brought it back."""
+        from taskuary import concierge, ingest
+        s = store(); tid = task(s)
+        concierge.close_task(s, tid, 'owner')
+        with mock.patch.object(ingest, '_spawn'):
+            out = ingest.ingest_message(s, {'external_id': 'x5', 'channel': 'email', 'from_email': 'gail@vendor.example', 'from_name': 'Gail Moreno',
+                                            'conversation_id': 'conv-pilot', 'subject': 'Re: pilot plan', 'sent_at': '2026-11-23 09:15',
+                                            'body': 'Resending in case it got lost - can you draft the pilot plan?'},
+                                        llm=lambda *a, **k: '{"intent": "task", "kind": "general", "why": "an ask"}')
+        self.assertEqual(out.get('task_id'), tid); self.assertNotIn(s.get_task(tid)['Status'], ('done', 'dropped'))
+        said = events.take(s, tid, fresh=True)[0]
+        self.assertIn('marked it done', said)
+        self.assertIn(f"Gail Moreno's message (m{out['message_id']})", said)
+        self.assertLess(said.index('marked it done'), said.index('Gail Moreno'), 'the reopen is the newest fact, under the close')
+
     def test_two_notes_in_one_tick_of_the_clock_are_two_events(self):
         # Windows' clock ticks in milliseconds: two presses told back in one tick made one key, and the second note was dropped unheard
         s = store(); tid = task(s)

@@ -1723,7 +1723,7 @@ def land_on(store, msg: dict, tid: int, v: dict | None, actor: str, how: str = '
                 _spawn(reply_to_agent, store, tid, rv['ReviewId'], msg)
         return {'status': 'filed', 'task_id': tid, 'message_id': mid}
     mid = _land(store, msg, tid, 'routed')
-    back = closed and _reopen(store, tid, msg, actor, v)
+    back = closed and _reopen(store, tid, msg, actor, v, mid)
     # THE VERDICT IS ON FILE BEFORE ANYTHING IT SETS GOING: an agent started ahead of it read no needs_browser and took the quick one-call
     # path, then found the verdict and opened a browser beside a call that never drives a page (2026-11-03). The thread's road wrote
     # its route last of all, after the carry-on below
@@ -3093,14 +3093,16 @@ def owed_reply(store, msg: dict, v: dict | None) -> dict | None:
            {**v, 'intent': 'task', 'kind': v['kind'] if v.get('kind') in task_kinds.AGENT else 'general'}
 
 
-def _reopen(store, tid, msg: dict, actor: str, intent: dict = None) -> bool:
+def _reopen(store, tid, msg: dict, actor: str, intent: dict = None, mid: int = None) -> bool:
     """New work on a closed task's thread, or a question to the owner, puts the task back in front of them (2026-09-25; only
-    that since 2026-10-15 - a comment is kept on it). Said on the task, so the history reads why it came back."""
+    that since 2026-10-15 - a comment is kept on it). Said on the task, so the history reads why it came back - and its agent is told
+    whose message `mid` brought it back (events.audited)."""
     from . import general
     if (store.get_task(tid) or {}).get('Status') not in ('done', 'dropped'): return False
     who = msg.get('from_name') or msg.get('from_email') or 'someone'
     asked = (intent or {}).get('intent') == 'reply_only'
-    general.reopen(store, tid, actor, 'reopen', {'why': 'a question to you on its thread' if asked else 'new work on its thread'})
+    general.reopen(store, tid, actor, 'reopen', {'why': 'a question to you on its thread' if asked else 'new work on its thread', 'by': who,
+                                                 **({'mid': mid} if mid else {})})
     store.add_comment(tid, actor, 'agent', f"Reopened - {who} {'has a question for you' if asked else 'asked for something new'}: "
                       f"{msg.get('subject') or (msg.get('body') or '')[:80]}")
     logger.info(f"ingest: {task_ref(tid)} reopened - {'a question to you' if asked else 'new work'} on its thread")

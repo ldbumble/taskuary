@@ -314,10 +314,11 @@ def _forget_live(site):
         except Exception as e: logger.debug(f'signin: {site} cookies not cleared from the live browser of {sid} - {e}')
 
 
-def _used(store, site, tid=None):
-    "The site took the saved sign-in: kept on its row, and the account on the record (ledger.account)."
+def _used(store, site, tid=None, confirm=True):
+    """The site took the saved sign-in: kept on its row, and - `confirm`, the page past every step - the account on the record (ledger.account)."""
     from . import ledger
     store._exec('UPDATE signin_vault SET LastUsed=? WHERE Site=?', (_now(), site))
+    if not confirm: return
     row = saved(store, site) or {}
     ledger.account(store, site, _user(row), 'signed_in', tid or row.get('Task'), by='agent' if row.get('SavedBy') in MADE_BY else 'owner')
 
@@ -610,7 +611,7 @@ def _auto(store, tid, sid, site, rid, fill, ask=None, ended=True):
         if ask and not code and asks_code(sid) and not on_password_page(sid): return _ready_code(store, tid, sid, site) or ask(CODE_ASK.format(site=site))
         typing(store, tid, site, sid)
         got = fill(sid, site, user, pw, **({'code': code} if code else {}), **({'extra': ex} if ex else {})) or {}
-        _used(store, site, tid)
+        _used(store, site, tid, confirm=False)
         # THE PASSWORD WENT IN AND THE SITE ASKS A CODE NOBODY KEEPS: that step is the owner's, on the page, and it is said in one line - the
         # agent is not told "signed in" over a code prompt (the recorded walk, 2026-11-11: it was, read the page, said so and ended; nothing
         # was asked of anyone)
@@ -618,6 +619,8 @@ def _auto(store, tid, sid, site, rid, fill, ask=None, ended=True):
             _audit(store, tid, site, 'vault', True, 'a code was asked')
             back(f'Typed the saved sign-in for {site} - it asks for a code next.')
             return _ready_code(store, tid, sid, site) or ask(CODE_ASK.format(site=site))
+        # ...and only a sign-in past every step confirms the account (walk 11): a code page after the password counted as signed in
+        _used(store, site, tid)
         _audit(store, tid, site, 'vault', True, code=bool(got.get('code')) if code else None)
         # ...and the answer that only handed the sign-in over ("once you have signed in...") is a step of the work: nobody was asked to
         back(f"Signed in to {site} with the saved sign-in{' and its authenticator code' if got.get('code') else ''}.")
@@ -1402,6 +1405,15 @@ FORM = "(() => { " + DEEP + r"""
            fields: keep.slice(0, 30).map((e) => ({ k: e.name || e.id, t: e.type,
              v: e.type === 'checkbox' || e.type === 'radio' ? (e.value || 'on') : String(e.value).slice(0, 300) })) }; })()"""
 FORM_PW = "(() => { " + DEEP + " const e = deepAll('input[type=password]').find((x) => !!x.value); return e ? e.value : ''; })()"
+# ...A PAGE THAT STILL ASKS: a box the page itself requires and nobody filled - the browser's own check (validity.valueMissing), or one marked
+# aria-required - read off its structure, never its words: a sign-up's next step (a birth date, a name) is no signed-in page
+ASKS = "(() => { " + DEEP + r""" const vis = (e) => { const r = e.getBoundingClientRect(); return !e.disabled && r.width > 2 && r.height > 2; };
+  return deepAll('input, select, textarea').filter(vis).some((e) => e.type !== 'hidden'
+    && ((e.willValidate && e.validity && e.validity.valueMissing) || (e.getAttribute('aria-required') === 'true' && !e.value))); })()"""
+def asks_more(c) -> bool:
+    "Does the page `c` is on ask for a box still to fill (ASKS)? True where it cannot be read: only a page seen through confirms an account."
+    try: return bool(c.js(ASKS))
+    except SignInError: return True
 REFILL = "((fs) => { " + DEEP + r"""
   let n = 0; for (const f of fs) { const e = deepAll('input, select, textarea').find((x) => (x.name || x.id) === f.k && (f.t !== 'radio' || x.value === f.v));
     if (!e) continue; if (f.t === 'checkbox' || f.t === 'radio') e.checked = true; else e.value = f.v;
@@ -1696,7 +1708,9 @@ def _answered(store, tid, sid, site, c, user, kept) -> str:
     if f.get('top') and on_site(f.get('href'), site) and not f.get('password') and (status or 200) < 400:
         _audit(store, tid, site, 'vault', True, 'signed up', saved=not kept, signup=True)
         from . import ledger
-        ledger.account(store, site, user, 'signed_up', tid)          # ...the site let it past: the account is on the record
+        # ...the account is on the record only where the page after it asks nothing more (walk 11: Outlook's birth-date step, the form's next
+        # page, counted as made - "confirmed" in his saved sign-ins for an account Microsoft then refused); one that asks more stays unconfirmed
+        if not asks_more(c): ledger.account(store, site, user, 'signed_up', tid)
         return (f"{site} took the sign-up{who}: the page shows {there} - look at it for whether the account is made or asks for more.{coded} "
                 f"Its password is kept with the owner's saved sign-ins - you never need it; to sign in again later, open its sign-in page and "
                 f'hand_over with site {site}.{kept}')

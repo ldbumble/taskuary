@@ -3052,7 +3052,7 @@ class GeneralSession:
                     from . import docsync
                     toolbox = '\n\n'.join(x for x in (apiagent.TOOLS_BRIEF, '' if stranger else docsync.agent_systems(self.store, True)) if x)
                     system = f'{system}\n\n{toolbox}\n\n{apiagent.where_line(self.store, self.task_id)}'
-                    # ...ONE WAY TO WRITE A REPLY, as on a CLI with the toolbox: propose_reply, not the marker line beside it - and its own
+                    # ...ONE WAY TO WRITE A REPLY, as on a CLI with the toolbox: propose, not the marker line beside it - and its own
                     # search and tick the same (for_toolbox), swapped where the turn is asked
                     api_box = tuple(apiagent.TOOLBOX.get((self.task_id, self.sid), ()))
                 if browser:
@@ -3070,7 +3070,7 @@ class GeneralSession:
                     late.append(capabilities.fact(self.store, ('all' if full_hands(self.store) else 'look') if looped else 'none', self.pick,
                                                   tools=[t['function']['name'] for t in api_tools or ()] if looped else ()))
             # ...a card whose toolbox has the reply and email tools acts by them; one without writes its acts as marks (marker_lines)
-            if api_hands and markers and not (looped and {'propose_reply', 'propose_email'} & set(api_box)): system = f'{system}\n\n{markers}'
+            if api_hands and markers and not (looped and 'propose' in api_box): system = f'{system}\n\n{markers}'
             kept_conv = bool(self.cli_sid or (looped and self.card_msgs))
             if kept_conv and self.frozen is None: self.frozen = self._told()
             head, system, news = system, *freeze(self, system, [*late, unlearned(self.store, self.frozen)] if kept_conv else late, kept_conv, by_line=True)

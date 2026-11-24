@@ -8,9 +8,9 @@ from taskuary.store import MemoryStore
 def test_a_card_with_tools_names_them():
     assert 'handbook_search' in docsync.not_a_tool(MemoryStore(), 'handbook')
 
-def test_a_mailbox_points_at_propose_email():
+def test_a_mailbox_points_at_the_email_review():
     w = docsync.not_a_tool(MemoryStore(), 'gmail')
-    assert 'mailbox' in w and 'propose_email' in w and 'unknown' not in w
+    assert 'mailbox' in w and 'propose (kind email)' in w and 'unknown' not in w
 
 def test_a_vendor_mcp_server_points_at_its_own_tools():
     from taskuary import connectorcatalog

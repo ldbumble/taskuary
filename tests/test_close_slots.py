@@ -240,9 +240,8 @@ def test_an_agent_email_never_goes_out_headed_with_the_task_title(s):
     assert 'Check the four tabs' not in {subj(slots.draft(s, tid, 'Hi.', to='gail@northwind.example'))}
     from taskuary import agenttools
     # ...whether one email or many in `items`: each carries its own subject (bulkcard.py)
-    one, many = agenttools.TOOLS['propose_email'][2]['anyOf']
-    assert {'to', 'subject', 'text'} <= set(one['required']) and many == {'required': ['items']}
-    assert {'to', 'subject', 'text'} <= set(agenttools.TOOLS['propose_email'][2]['properties']['items']['items']['required'])
+    props = agenttools.TOOLS['propose'][2]['properties']
+    assert {'to', 'subject', 'text', 'items'} <= set(props)
 
 
 def test_a_chats_checklist_names_the_slot_and_a_coding_sessions_the_command(s):

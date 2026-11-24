@@ -428,6 +428,8 @@ def no_tool(name) -> str:
 def run_tool(store, tid: int, sid: str, name: str, a: dict) -> str:
     "One tool call, run by the server. Raises ValueError with words the model can act on."
     from . import browserview as bv, browsergate as bg
+    from .agenttools import aliased
+    name, a = aliased(name, a)              # ...a kept conversation's call by an old name of the one review tool runs as it
     if (tid, sid) in OFFERED and name not in OFFERED[(tid, sid)]: raise ValueError(no_tool(name))
     if SLIMMED in json.dumps(a, ensure_ascii=False, default=str):
         raise ValueError('an argument is the line that stands for text you sent on an earlier call, not the text - nothing was done; '

@@ -106,11 +106,11 @@ def agent_systems(store, tooled: bool = True) -> str:
     # the TOOL types each card runs, by name: a card's own type is not one when its tools are named apart from it - the Hub card
     # is `handbook` and its tools handbook_search/..., so "type handbook" came back "unknown tool type" (2026-10-05). A card with
     # no tool at all is not listed as one: the Gmail card read "tools: gmail" and the agent sending from it got "unknown tool type:
-    # gmail" (TQ-1354) - a mailbox is sent FROM with propose_email, named below
+    # gmail" (TQ-1354) - a mailbox is sent FROM with propose (kind email), named below
     tools = tool_cards(store)
     boxes = mailboxes(store)
     # ...said by the one road the session has (the agent walk, 2026-11-10): the tool and the command stood side by side
-    how = 'propose_email with `from` set to one' if tooled else '`taskuary --draft "<text>" --to <address> --subject "<subject>" --from <one of them>`'
+    how = 'propose (kind email) with `from` set to one' if tooled else '`taskuary --draft "<text>" --to <address> --subject "<subject>" --from <one of them>`'
     mail = ('MAILBOXES you can send FROM (an email waits for the owner\'s Send): ' + ', '.join(f"{m['address']} ({m['kind']})" for m in boxes)
             + f' - {how}; they are not run_system tools.') if boxes else ''
     # ...AND THE ACCOUNTS ITS BROWSER CAN SIGN IN TO (ledger.accounts): one task's sign-up is the next task's inbox
@@ -174,12 +174,12 @@ def not_a_tool(store, t) -> str:
     if own: what, step = f'"{t}" is a connection, not a tool', f'call one of its tools: {", ".join(own)}.'
     elif t in MAILBOXES:
         boxes = ', '.join(m['address'] for m in mailboxes(store) if m['kind'] == t)
-        what, step = (f'"{t}" is a mailbox, not a tool', f'an email from it is propose_email with `from` set to its address'
+        what, step = (f'"{t}" is a mailbox, not a tool', f'an email from it is propose (kind email) with `from` set to its address'
                       f'{" (" + boxes + ")" if boxes else ""}; it waits for the owner\'s Send.')
     elif cat and cat.get('mcp'): what, step = f'"{t}" is {cat["title"]}\'s own MCP server in your CLI', 'call its MCP tools directly.'
     elif cat and cat.get('planned'): what, step = f'"{t}" ({cat["title"]}) is not built yet', 'say so to the owner instead of working round it.'
     elif cat: what, step = (f'"{t}" ({cat["title"]}) brings work in or sends replies, it is no tool',
-                            'an answer on it is a draft the owner sends (propose_reply / propose_email).')
+                            'an answer on it is a draft the owner sends (propose, kind reply or email).')
     elif not t: what, step = 'no `type` was given', 'call run_system again with the name of one tool on one of the systems.'
     else:
         near = difflib.get_close_matches(t, real, 3, 0.6)

@@ -272,6 +272,11 @@ test("a step says what it did: a seeded file by what is in it, a view by its tit
   // ...a post by its network's own card title
   assert.equal(said("mcp__taskuary__propose_post", { network: "linkedin", text: "We shipped." }), "Drafted a post for LinkedIn");
   assert.equal(said("propose_post", JSON.stringify({ network: "x", text: "We shipped." })), "Drafted a post for X");
+  // ...the one review tool reads as what its kind is
+  assert.equal(said("mcp__taskuary__propose", { kind: "post", network: "reddit", text: "We shipped." }), "Drafted a post for Reddit");
+  assert.equal(said("propose", JSON.stringify({ kind: "email", to: "erin@northwind.example" })), "Drafted an email");
+  assert.equal(said("mcp__taskuary__propose", { kind: "reply", text: "Hi" }), "Drafted a reply");
+  assert.equal(said("mcp__taskuary__propose", { kind: "act", action: "comment_issue" }), "Asked for your yes");
 });
 
 // A TICK IS NEVER NARRATED (the owner, 2026-11-18): the working line read "Ticking a to-do" - the checklist shows it ticked, and its call, by

@@ -76,7 +76,7 @@ def test_the_send_goes_to_the_chosen_people_threaded_on_the_mail_it_answers():
 def test_every_road_carries_the_choice_tool_endpoint_cli_and_the_marker():
     b = server.AgentReplyBody(task_id=1, only=True, cc=[RAY], why_to='w', answers=3)
     assert (b.only, b.cc, b.why_to, b.answers) == (True, [RAY], 'w', 3) and server.AgentReplyBody(task_id=1).cc is None
-    props = agenttools.TOOLS['propose_reply'][2]['properties']
+    props = agenttools.TOOLS['propose'][2]['properties']
     assert {'answers', 'only', 'cc', 'why_to'} <= set(props)
     import inspect, taskuary.cli as cli
     src = inspect.getsource(cli)

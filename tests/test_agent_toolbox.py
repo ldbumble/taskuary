@@ -57,15 +57,15 @@ class TheServer(unittest.TestCase):
                             'FromEmail': 'gail@northwind.example', 'Subject': 'Renewal terms', 'BodyText': 'Ready for the call?',
                             'SentAt': '2026-10-21 08:00:00', 'Status': 'routed'})
         tools = {t['name']: t for t in rpc(self.tid, 'tools/list').json()['result']['tools']}
-        self.assertIn('search_messages', tools); self.assertIn('propose_reply', tools)
+        self.assertIn('search_messages', tools); self.assertIn('propose', tools)
         self.assertTrue(tools['search_messages']['annotations']['readOnlyHint'])
-        self.assertFalse(tools['propose_reply']['annotations']['readOnlyHint'])
+        self.assertFalse(tools['propose']['annotations']['readOnlyHint'])
         # ...each by ONE LINE and its parameters' names (the owner, 2026-11-15: "MCP-style tools with simple JSON"); its whole words are find_tools'
-        self.assertLess(len(tools['propose_reply']['description']), 100); self.assertNotIn('description', json.dumps(tools['propose_reply']['inputSchema']))
-        said = rpc(self.tid, 'tools/call', {'name': 'find_tools', 'arguments': {'query': 'propose_reply'}}).json()['result']['content'][0]['text']
-        self.assertIn('nothing is sent', said)
-        # ...and the view and the acts load with the session, never a bare name it must search for (2026-11-13: no view in 8 sessions)
-        self.assertEqual({n for n, t in tools.items() if (t.get('_meta') or {}).get('anthropic/alwaysLoad')} - {'propose_email', 'propose_post', 'propose'}, {'show', 'propose_reply', 'hand_over', 'remember', 'tick', 'end_turn', 'ask_owner', 'person'})
+        self.assertLess(len(tools['propose']['description']), 400); self.assertNotIn('description', json.dumps(tools['propose']['inputSchema']))
+        said = rpc(self.tid, 'tools/call', {'name': 'find_tools', 'arguments': {'query': 'propose'}}).json()['result']['content'][0]['text']
+        self.assertIn('nothing happens until he presses it', said)
+        # ...and the view and the one review tool load with the session, never a bare name it must search for (2026-11-13: no view in 8 sessions)
+        self.assertEqual({n for n, t in tools.items() if (t.get('_meta') or {}).get('anthropic/alwaysLoad')}, {'show', 'propose', 'hand_over', 'remember', 'tick', 'end_turn', 'ask_owner', 'person'})
         self.assertNotIn('_meta', tools['search_messages'])
 
     def test_the_invoice_an_agent_made_rides_on_its_email_card(self):
@@ -638,12 +638,13 @@ class NewTaskTool(unittest.TestCase):
         "The owner's own ask has no reply tools: find_tools for a reply named propose_reply anyway, and calling it answered \"unknown tool\"."
         said, err = tool(self.tid, 'find_tools', query='reply to the sender')
         self.assertFalse(err); self.assertNotIn('propose_reply', said); self.assertNotIn('reply_not_needed', said)
-        said, _ = tool(self.tid, 'find_tools', query='propose_reply')
-        self.assertIn('not offered on this task', said)
         said, _ = tool(self.tid, 'find_tools', query='pick the git checkout')         # a coding agent's tool, on a general task
         self.assertNotIn('use_repo', said)
-        r = rpc(self.tid, 'tools/call', {'name': 'propose_reply', 'arguments': {'text': 'x'}}).json()
-        self.assertIn('tools/list names', r['error']['message'])
+        # ...and a reply asked for anyway, by the review tool or its old name, says who there is not and the way on - and files nothing
+        for name, a in (('propose', {'kind': 'reply', 'text': 'x'}), ('propose_reply', {'text': 'x'})):
+            r = rpc(self.tid, 'tools/call', {'name': name, 'arguments': a}).json()['result']
+            self.assertTrue(r['isError']); self.assertIn('nobody is behind this task', r['content'][0]['text']); self.assertIn('kind email', r['content'][0]['text'])
+        self.assertFalse(self.s._rows("SELECT 1 FROM review WHERE TaskId=? AND Status='pending'", (self.tid,)))
 
     # WORK NO TOOL OF TASKUARY'S DOES (the any-job round, 2026-11-18): "make me a spreadsheet of the plans" asked find_tools, which answered
     # "No tool fits - name one" and stopped: the agent read it as "Taskuary cannot", when its own shell makes the file
@@ -904,7 +905,7 @@ class NewTaskTool(unittest.TestCase):
             self.assertTrue(err); self.assertIn('no attachment 77', said)
             said, err = tool(self.tid, 'search_messages', limit='ten')
             self.assertTrue(err); self.assertIn('`limit` is a number', said)
-            for name, args, need in (('answer_invite', {}, '`answer`'), ('propose', {'why': 'x'}, '`action`'), ('person', {}, '`name`'),
+            for name, args, need in (('answer_invite', {}, '`answer`'), ('propose', {'why': 'x'}, '`kind`'), ('person', {}, '`name`'),
                                      ('set_up_meeting', {'title': 'Renewal'}, '`with`')):
                 said, err = tool(self.tid, name, **args)
                 self.assertTrue(err, said); self.assertIn(f'{need} was not given', said); self.assertIn(f'call {name} again', said); self.assertNotIn('pydantic', said)
@@ -917,10 +918,11 @@ def test_an_agent_is_told_to_offer_to_keep_code_it_wrote_as_a_routine():
     assert 'save_routine' in agenttools.SHORT['propose']
 
 
-class APostIsItsOwnTool(unittest.TestCase):
+class APostIsAKindOfTheOneReviewTool(unittest.TestCase):
     """The owner's live task, 2026-11-24: a routine asked for X, Reddit and LinkedIn drafts; the agent made the picture and wrote the three posts
     as prose - a post card was a run_tool shape inside propose's long words, and it never called it ("where is the post? just see image").
-    propose_post files the card the run_tool road files: his connected account on the press, else Post via the browser with the final Post held."""
+    Then (the owner, 2026-11-24: "anything that requires review should be a white artifact with editable text instead of hard coding post"):
+    propose with kind post files the card the run_tool road files: his connected account on the press, else Post via the browser."""
     PNG = b'\x89PNG\r\n\x1a\n' + b'\0' * 64
 
     def setUp(self):
@@ -937,18 +939,36 @@ class APostIsItsOwnTool(unittest.TestCase):
 
     def cards(self): return self.s._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action' AND Status='pending' ORDER BY ReviewId", (self.tid,))
 
-    def test_it_loads_with_the_first_turn_and_propose_no_longer_carries_the_post(self):
+    def test_one_review_tool_loads_with_the_first_turn_and_the_per_kind_tools_are_gone(self):
         listed = {t['name']: t for t in rpc(self.tid, 'tools/list').json()['result']['tools']}
-        self.assertTrue(listed['propose_post']['_meta']['anthropic/alwaysLoad'])
-        self.assertNotIn('propose_post', agenttools.deferred())
-        self.assertNotIn('post', agenttools.TOOLS['propose'][1].split('(a send')[1].split(')')[0])
+        self.assertTrue(listed['propose']['_meta']['anthropic/alwaysLoad']); self.assertNotIn('propose', agenttools.deferred())
+        self.assertFalse({'propose_post', 'propose_email', 'propose_reply'} & set(listed))
+        self.assertEqual(set(listed['propose']['inputSchema']['properties']['kind']['enum']), {'reply', 'email', 'post', 'act'})
+        for k in ('a reply', 'an email', 'a post', 'GitHub'): self.assertIn(k, agenttools.SHORT['propose'])
+
+    def test_every_kind_is_one_card_waiting_for_his_press_and_nothing_goes_before_it(self):
+        ran, PLAYBOOK = [], '# Renewals\nwhen: a renewal comes up\nCompare the uplift with last year.'
+        with mock.patch.dict(REGISTRY, {'linkedin_post': lambda cfg: ran.append(cfg) or ('Posted', '')}), \
+             mock.patch('taskuary.outbound.send_review', side_effect=lambda *a, **k: ran.append(a), create=True):
+            for a in ({'kind': 'email', 'to': 'erin@northwind.example', 'subject': 'Plans', 'text': 'The plans. Alex'},
+                      {'kind': 'post', 'network': 'linkedin', 'text': 'Three tools, compared.', 'picture': 'tools-compared.png'},
+                      {'kind': 'act', 'action': 'write_playbook', 'slug': 'renewals', 'text': PLAYBOOK, 'why': 'it comes again'}):
+                said, err = tool(self.tid, 'propose', **a); self.assertFalse(err, said)
+        got = self.s._rows("SELECT Kind, Status FROM review WHERE TaskId=? ORDER BY ReviewId", (self.tid,))
+        self.assertEqual(len(got), 3); self.assertTrue(all(r['Status'] == 'pending' for r in got), got); self.assertEqual(ran, [])
+        said, err = tool(self.tid, 'propose', text='Hi')
+        self.assertTrue(err); self.assertIn('`kind` was not given', said)
+
+    def test_a_call_by_an_old_name_runs_as_its_kind(self):
+        said, err = tool(self.tid, 'propose_post', network='linkedin', text='Three tools, compared.', picture='tools-compared.png')
+        self.assertFalse(err, said); rv, = self.cards(); self.assertEqual(json.loads(rv['DraftText'])['type'], 'linkedin_post')
 
     def test_on_a_connected_network_its_press_posts_through_the_connection_and_nothing_before(self):
         card = self.s.get_connector_by_type('linkedin')
         self.s.save_connector({'ConnectorId': card['ConnectorId'], 'Active': 1, 'Secret': 'tok'}, 'test')
         ran = []
         with mock.patch.dict(REGISTRY, {'linkedin_post': lambda cfg: ran.append(cfg) or ('Posted', '')}):
-            said, err = tool(self.tid, 'propose_post', network='linkedin', text='Three tools, compared.', picture='tools-compared.png')
+            said, err = tool(self.tid, 'propose', kind='post', network='linkedin', text='Three tools, compared.', picture='tools-compared.png')
             self.assertFalse(err, said); self.assertEqual(ran, [])
             self.assertIn('its press (Post to LinkedIn) runs it on his connected account', said)
             rv, = self.cards(); p = json.loads(rv['DraftText'])
@@ -961,7 +981,7 @@ class APostIsItsOwnTool(unittest.TestCase):
 
     def test_on_a_network_not_connected_it_is_the_browser_post_whose_final_post_waits(self):
         from taskuary import general, proposals
-        said, err = tool(self.tid, 'propose_post', network='x', text='Three tools, compared.', link='https://northwind.example/compare')
+        said, err = tool(self.tid, 'propose', kind='post', network='x', text='Three tools, compared.', link='https://northwind.example/compare')
         self.assertFalse(err, said); self.assertIn('the card shows Post via the browser', said)
         rv, = self.cards(); p = json.loads(rv['DraftText'])
         self.assertEqual(p['type'], 'x_post'); self.assertTrue(p['text'].endswith('https://northwind.example/compare'))
@@ -973,7 +993,7 @@ class APostIsItsOwnTool(unittest.TestCase):
         self.assertIn('Taskuary holds that press for his yes', ran[0]); self.assertIn('Three tools, compared.', ran[0])
 
     def test_its_picture_rides_on_the_card_once(self):
-        tool(self.tid, 'propose_post', network='linkedin', text='Three tools, compared.', picture='tools-compared.png')
+        tool(self.tid, 'propose', kind='post', network='linkedin', text='Three tools, compared.', picture='tools-compared.png')
         with mock.patch('taskuary.terminal.live_sessions', return_value=[]): got = server._assistant_payload(self.tid)
         self.assertEqual([o['name'] for o in got['outputs']], ['notes.txt'])
 
@@ -981,7 +1001,7 @@ class APostIsItsOwnTool(unittest.TestCase):
         from taskuary import cardqueue
         ran = []
         with mock.patch.dict(REGISTRY, {t: (lambda cfg: ran.append(cfg) or ('Posted', '')) for t in ('x_post', 'linkedin_post', 'reddit_post')}):
-            said, err = tool(self.tid, 'propose_post', picture='tools-compared.png', items=[
+            said, err = tool(self.tid, 'propose', kind='post', picture='tools-compared.png', items=[
                 {'network': 'x', 'text': 'Three tools, compared.'}, {'network': 'linkedin', 'text': 'We compared three tools.'},
                 {'network': 'reddit', 'subreddit': 'smallbusiness', 'title': 'Three tools compared', 'text': 'What we found.'}])
         self.assertFalse(err, said); self.assertEqual(ran, [])
@@ -992,7 +1012,7 @@ class APostIsItsOwnTool(unittest.TestCase):
         self.assertEqual(cardqueue.held(self.s, self.tid), {rvs[1]['ReviewId'], rvs[2]['ReviewId']})
 
     def test_a_network_with_no_post_card_says_which_there_are(self):
-        said, err = tool(self.tid, 'propose_post', network='myspace', text='Hi')
+        said, err = tool(self.tid, 'propose', kind='post', network='myspace', text='Hi')
         self.assertTrue(err); self.assertIn('no post card', said); self.assertIn('linkedin', said); self.assertFalse(self.cards())
-        said, err = tool(self.tid, 'propose_post', network='Twitter', text='Hi')
+        said, err = tool(self.tid, 'propose', kind='post', network='Twitter', text='Hi')
         self.assertFalse(err, said); self.assertEqual(json.loads(self.cards()[0]['DraftText'])['type'], 'x_post')

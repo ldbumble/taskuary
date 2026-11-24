@@ -6584,7 +6584,7 @@ def agent_sign_form(body: AgentSignBody, request: Request):
     store.audit('task', tid, 'sign_form', body.agent, detail={'file': out.name, 'page': did['page'], 'filled': did['filled']})
     return {'ok': True, 'file': out.name, 'path': str(out), 'artifact': art['ArtifactId'], **did,
             'says': f"Filled and signed {out.name} (the signature is on page {did['page']}) and showed it in the chat. Attach it to the reply - "
-                    f"propose_reply with attach: [\"{out.name}\"], or taskuary --reply ... --attach \"{out}\" - and ask the owner whether to send "
+                    f"propose (kind reply) with attach: [\"{out.name}\"], or taskuary --reply ... --attach \"{out}\" - and ask the owner whether to send "
                     "it; it goes only on their Send."}
 
 @app.post('/api/mcp')

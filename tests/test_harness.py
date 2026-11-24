@@ -157,7 +157,7 @@ def test_a_card_session_is_served_tool_schemas_its_model_takes():
     from taskuary import agenttools, apiagent
     raw = {t['name']: t['inputSchema'] for t in agenttools.listing()}
     fit = {t['name']: t['inputSchema'] for t in agenttools.listing(portable=True)}
-    assert 'anyOf' in raw['propose'] and apiagent.portable(raw['propose'])['type'] == 'object' and 'anyOf' not in apiagent.portable(raw['propose'])
+    assert apiagent.portable(raw['propose'])['type'] == 'object' and 'anyOf' not in apiagent.portable(raw['propose'])
     assert all(s['type'] == 'object' and 'anyOf' not in s for s in fit.values())
 
 
@@ -168,7 +168,7 @@ def test_a_card_session_is_listed_the_core_and_runs_the_rest_by_use_tool():
     from taskuary import agents, agenttools, apiagent
     whole, card = agenttools.listing(), agenttools.listing(portable=True)
     names = {t['name'] for t in card}
-    assert {'find_tools', 'use_tool', 'propose_reply', 'end_turn', 'ask_owner'} <= names and not names & apiagent.LATER
+    assert {'find_tools', 'use_tool', 'propose', 'end_turn', 'ask_owner'} <= names and not names & apiagent.LATER
     assert len(json.dumps(card)) < len(json.dumps(whole)) / 2
     assert 'use_tool' not in {t['name'] for t in whole}                           # ...a CLI that defers tools itself gets them all, as before
     ran = []
@@ -185,7 +185,7 @@ def test_every_act_that_raises_a_card_is_offered_on_every_road(monkeypatch):
     """Walk 10, 2026-11-23: on an AI card's harness propose and hand_over were deferred by apiagent.LATER while agenttools.ALWAYS_LOAD said they
     ride every turn - asked to post, the agent saw no tool that posts and said "I cannot publish directly"."""
     from taskuary import agenttools, apiagent
-    acts = {'propose', 'propose_reply', 'propose_email', 'hand_over', 'ask_owner', 'browser_signup'}
+    acts = {'propose', 'hand_over', 'ask_owner', 'browser_signup'}
     assert acts <= set(agenttools.ALWAYS_LOAD) and not acts & apiagent.LATER
     assert acts - {'browser_signup'} <= {t['name'] for t in agenttools.listing(portable=True)}
     listed = [apiagent._fn(t['name'], t['description'], t['inputSchema']) for t in agenttools.listing()]

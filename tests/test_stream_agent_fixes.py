@@ -27,10 +27,8 @@ def test_a_draft_this_call_superseded_reads_as_replaced():
     assert 'not_replaced' in agenttools.replaced(s, doors, tid, [], {'ok': True, 'review_id': old + 1}, '999', 'x')
 
 
-def test_propose_reply_offers_no_replaces():
-    d, schema = agenttools.TOOLS['propose_reply'][1:3]
-    assert 'replaces' not in schema['properties'] and 'replaces' not in d
-    assert 'replaces' in agenttools.TOOLS['propose_email'][2]['properties'] and 'replaces' in agenttools.TOOLS['propose'][1]
+def test_the_review_tool_says_replaces():
+    assert 'replaces' in agenttools.TOOLS['propose'][2]['properties'] and 'replaces' in agenttools.TOOLS['propose'][1]
 
 
 # ── F2, F9, F10: the turn's words ──────────────────────────────────────────────────────────────────────────────────────────────────

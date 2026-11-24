@@ -95,5 +95,5 @@ def test_the_reply_tools_are_not_offered_on_the_owners_own_ask():
     with mock.patch.object(server, 'store', s):
         assert not names(own) & set(agenttools.REPLY_TOOLS) and set(agenttools.REPLY_TOOLS) <= names(mailed)
         r = c.post(f'/api/mcp?task={own}', headers=hdr(own), json={'jsonrpc': '2.0', 'id': 2, 'method': 'tools/call',
-                                                                   'params': {'name': 'propose_reply', 'arguments': {'text': 'hi'}}}).json()
-        assert 'unknown tool' in r['error']['message']
+                                                                   'params': {'name': 'propose', 'arguments': {'kind': 'reply', 'text': 'hi'}}}).json()['result']
+        assert r['isError'] and 'nobody is behind this task' in r['content'][0]['text']

@@ -49,7 +49,7 @@ def test_the_guide_is_a_tool_and_the_coding_tools_stay_with_coding():
     assert 'guide' in agenttools.TOOLS and agenttools.TOOLS['guide'][0] == 'read'
     assert 'TEACHING YOU A NUMBER' in agenttools.call(MemoryStore(), 1, 'guide', {'topic': 'number'}, {})
     names = {t['name'] for t in agenttools.listing(agenttools.CODING_TOOLS)}
-    assert not names & set(agenttools.CODING_TOOLS) and {'guide', 'show', 'propose_reply'} <= names
+    assert not names & set(agenttools.CODING_TOOLS) and {'guide', 'show', 'propose'} <= names
 
 
 

@@ -405,7 +405,12 @@ def acp_steps(updates: list) -> list:
             cid = str(u.get('compactionId') if kind == 'compaction_update' else u.get('toolCallId'))
             if cid not in compacts: compacts[cid] = {'k': 'compact', 'id': cid, 'at': at}; out.append(compacts[cid])
             if u.get('status'): compacts[cid]['status'] = u['status']
-        elif kind == 'plan': out.append({'k': 'plan', 'at': at, 'items': [{'text': str(e.get('content') or ''), 'status': e.get('status') or 'pending'} for e in u.get('entries') or [] if isinstance(e, dict)]})
+        # ...one plan per turn, replaced whole where it stood in it (chatlog.step `turns`): after his line the newest is a row of the new turn
+        elif kind == 'plan':
+            p = {'k': 'plan', 'at': at, 'items': [{'text': str(e.get('content') or ''), 'status': e.get('status') or 'pending'} for e in u.get('entries') or [] if isinstance(e, dict)]}
+            was = next((i for i in range(len(out) - 1, -1, -1) if out[i]['k'] in ('plan', 'you')), None)
+            if was is not None and out[was]['k'] == 'plan': out[was] = {**out[was], 'items': p['items']}
+            else: out.append(p)
         elif kind in ('tool_call', 'tool_call_update'):
             s = by.get(u.get('toolCallId'))
             if not s:

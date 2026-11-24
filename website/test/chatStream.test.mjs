@@ -280,6 +280,15 @@ test("a permission waiting on him is drawn on its call's row with the agent's op
   assert.deepEqual(asksOff([p, { id: "p2", call: "toolu_8", options: [] }, { id: "p3", options: [] }], list).map((x) => x.id), ["p2", "p3"]);
 });
 
+test("his no on a call's row is the row's record of it: not run, in his name - never 'nobody allowed it'", async () => {
+  const { eventsOf } = await import("../src/chatStream.js");
+  const row = { id: "s:x:toolu_7", call: "toolu_7", k: "tool", name: "Bash", args: { command: "git push origin main" } };
+  const result = (s) => eventsOf([{ ...row, ...s }], false).find((e) => e.type === "tool_result").detail;
+  assert.deepEqual([result({ status: "pending", answer: "reject_once" }), result({ status: "failed", answer: "reject_once" })].map((d) => [d.result, d.state]),
+    [["Not run - you said no.", "refused"], ["Not run - you said no.", "refused"]]);
+  assert.equal(result({ status: "completed", answer: "allow_once", output: "pushed" }).result, "pushed", "allowed, it reads as it ran");
+});
+
 
 // THE CALL'S OWN DIFF, AND A COMMAND'S OUTPUT AS IT COMES (the owner, 2026-11-23: Zed draws the agent's `diff` and a live terminal)
 test("an edit row is the call's own diff, never one read off its arguments, and a running command shows its newest output", async () => {

@@ -282,3 +282,24 @@ def test_a_call_his_always_reject_refused_reads_not_run_too(s):
     s.set_perm_rule(tid, perm.pattern(perm.normal(perm.from_acp(ACP))), 'allow')
     assert perm.ask(s, tid, perm.from_acp({**ACP, 'toolCall': {**ACP['toolCall'], 'toolCallId': 'call-9'}}), wait=0.2) == 'allow_once'
     assert 'call-9' not in perm.calls(s, tid)
+
+
+def test_his_answer_on_the_row_it_was_asked_on_is_that_rows_and_no_press_line_besides(s):
+    """ONE RECORD OF HIS ANSWER: a request asked on its call's row (acp.asked_update) was answered there - and his answer ALSO stood as a press
+    line of its own under the turn. The row says it (its `answer`); no line besides. A request no row names keeps its line (its card)."""
+    from taskuary import acp, chatlog, conversation
+    tid = coding(s)
+    conversation.hear(s, tid, turn=True)
+    chatlog.feed(s, tid, 'sess-1', 'acp', {'sessionUpdate': 'tool_call', 'toolCallId': 'call-7', 'kind': 'execute', 'title': 'Run the money tests', 'status': 'pending'})
+    chatlog.feed(s, tid, 'sess-1', 'acp', acp.asked_update(ACP))
+    t, box = asking(s, tid, perm.from_acp(ACP))
+    perm.answer(s, tid, perm.pending(tid, s)[0]['id'], 'reject_once'); t.join(3)
+    items = chatlog.read(s, tid, 'everything')['items']
+    row = next(x for i in items if i['kind'] == 'turn' for x in i['steps'] if x.get('call') == 'call-7')
+    assert box == ['reject_once'] and row.get('answer') == 'reject_once', row
+    assert [i['kind'] for i in items if i['kind'] in ('press', 'note')] == [], 'the row is the record of his answer'
+    # ...one asked with no row in the chat is still his press line (its card, greyed)
+    other = {**ACP, 'toolCall': {**ACP['toolCall'], 'toolCallId': 'call-8'}}
+    t, box = asking(s, tid, perm.from_acp(other))
+    perm.answer(s, tid, perm.pending(tid, s)[0]['id'], 'allow_once'); t.join(3)
+    assert [i.get('perm', {}).get('answer') for i in chatlog.read(s, tid, 'everything')['items'] if i['kind'] == 'press'] == ['allow_once']

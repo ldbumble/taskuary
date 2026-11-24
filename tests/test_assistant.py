@@ -519,6 +519,17 @@ class ButtonTests(unittest.TestCase):
         assistant.think(s, [], lambda system, user, **k: seen.update(system=system) or '{"say": []}')
         self.assertIn('The portal is the vendor app.', seen['system'])                     # past the old 1500-char cut
 
+    def test_a_senders_new_thread_is_its_own_line_after_one_he_answered(self):
+        """Walk 16: Jordan's pricing thread ("20-30% unused seats") was folded to "1 more one-way thread(s) like the one above" because an
+        earlier Jordan thread, which Alex had answered, was shown - like nothing above, and the Advisor never read the pricing."""
+        s = _store()
+        _mail(s, 'jordan@vendor.example', 'Demo next week?', 'Could we show you Spendly next week?', days=1, conv='demo', name='Jordan Pike')
+        _mine(s, 'Demo next week?', 'Thursday works.', 1, 'demo')
+        _mail(s, 'jordan@vendor.example', 'Seat pricing', 'Most teams find 20-30% unused seats.', days=0, hours=2, conv='price', name='Jordan Pike')
+        txt, _ = assistant._people_context(s, 2)
+        self.assertIn('20-30% unused seats', txt)
+        self.assertFalse(any('more one-way thread' in l for l in txt.splitlines()), txt)
+
     def test_the_month_of_counts_is_read_once_a_week_and_only_a_real_run_starts_the_week(self):
         """Automation ideas, folded into the Advisor (the owner, 2026-09-25): its evidence rides in the Advisor's payload
         as the Automation card - once a week, because it is ~17k characters and the check runs every 30 minutes."""

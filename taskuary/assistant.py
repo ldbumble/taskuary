@@ -1006,7 +1006,10 @@ def _people_context(store, days: int = 2) -> tuple[str, list[int]]:
             quotes.append(f"    you {_when(sent_at)[:6]}: \"{_gist(sent_text, 150)}\" [reply sent from Review]")
         block = '\n'.join([head] + [q for q in quotes if not q.endswith(': ""')])
         if used + len(block) > PEOPLE_CHARS: continue          # a long one is skipped, not the end of the list
-        out.append(block); used += len(block); mids += [c['MessageId'] for c in chain]; shown.add(who)
+        out.append(block); used += len(block); mids += [c['MessageId'] for c in chain]
+        # ...only a ONE-WAY thread folds the sender's later ones (walk 16: a thread he had answered folded Jordan's new pricing thread to
+        # "1 more one-way thread like the one above" - like nothing above)
+        if not (virtual_reply or any(mine(c) for c in chain)): shown.add(who)
     for who, rs in folded.items():
         subj = '; '.join(dict.fromkeys(_short(r.get('Subject'), 50) for r in rs[:4]))
         out.append(f"- {who}: {len(rs)} more one-way thread(s) like the one above - re \"{subj}\""

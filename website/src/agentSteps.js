@@ -631,7 +631,7 @@ const statusOf = (run) => run.some((s) => s.status === "running") ? "running" : 
   : run.some((s) => s.status === "held") ? "held" : run.some((s) => s.status === "refused") ? "refused" : run.some((s) => s.status === "recovered") ? "recovered" : run.every((s) => s.status === "none") ? "none" : "done";
 const detailOf = (s) => [s.raw, s.output && `→ ${s.output.length > 1500 ? `${s.output.slice(0, 1500)}…` : s.output}`].filter(Boolean).join("\n");
 // A COMMAND AT WORK SHOWS ITS OUTPUT AS IT COMES (the owner, 2026-11-23: Zed and Toad draw a running command's terminal): its newest lines,
-// open under its row while it runs; once it has ended they go back behind the row's own disclosure
+// behind its row's own disclosure while it runs (AgentStepRows: the same row it will be, never a block that opens and shuts by itself)
 export const TAIL_LINES = 8;
 export const tailOf = (out, n = TAIL_LINES) => String(out || "").replace(/\r\n?/g, "\n").replace(/\x1b\[[0-9;?]*[A-Za-z]/g, "").trimEnd().split("\n").slice(-n).join("\n");
 const withCount = (summary, run) => run[0].kind === "mail" && run.every((s) => s.count !== undefined)

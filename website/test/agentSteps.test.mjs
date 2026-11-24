@@ -561,3 +561,37 @@ test("a step's line is written from what it gave back: a refused show never read
   assert.deepEqual(steps.map((s) => [s.status, s.summary]), [["error", "Could not show you 'Print Run Cost Comparison'"],
     ["error", "Could not mark the reply as not needed"], ["done", "Showed you 'Run sheet'"]]);
 });
+
+// A COMMAND AT WORK IS THE ROW IT WILL BE (the owner, 2026-11-23: "on everything mode on agent it flashes black for the commands then closes
+// quickly"): its output stood open in a dark block under its row while it ran and went as it ended - every quick command a flash. It waits
+// behind the row's own disclosure all its life: one <details>, shut until he opens it, so its ending opens, shuts and swaps nothing
+test("a running command's output waits behind its row, and its ending never opens, shuts or swaps that row", async () => {
+  const { build } = await import("esbuild"), resolveDir = new URL("..", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1");
+  const out = await build({ stdin: { resolveDir, loader: "jsx", contents: `
+    import React from "react"; import { renderToStaticMarkup } from "react-dom/server.browser"; import { StepRow } from "./src/AgentStepRows.jsx";
+    export const html = (step) => renderToStaticMarkup(<StepRow step={step} />);` }, loader: { ".css": "empty" },
+    // ...the answer's markdown (md.jsx) and MUI's styled spinner and marks need a page's document; a row's shape needs neither
+    plugins: [{ name: "stubs", setup: (b) => {
+      b.onResolve({ filter: /\/md\.jsx$|^@mui\// }, (a) => ({ path: a.path, namespace: "stub" }));
+      b.onLoad({ filter: /.*/, namespace: "stub" }, (a) => ({ loader: "js", contents: a.path.endsWith("md.jsx") ? "export const Md = () => null;"
+        : `import React from "react"; const I = () => React.createElement("i"); export default I; export const CircularProgress = I;`, resolveDir })); } }],
+    bundle: true, write: false, format: "esm", jsx: "automatic", platform: "browser", logLevel: "silent", define: { "process.env.NODE_ENV": '"production"' } });
+  const { html } = await import(`data:text/javascript;base64,${Buffer.from(out.outputFiles[0].text).toString("base64")}`);
+  const call = { type: "tool_call", name: "Bash", detail: { tool_call_id: "c1", args: { command: "pytest -q" } } };
+  const lines = Array.from({ length: 12 }, (_, i) => `test_${i} PASSED`).join("\n");
+  const row = (events) => stepsOf(events).find((s) => s.id === "c1");
+  const fresh = row([call]), working = row([{ ...call, detail: { ...call.detail, output: lines } }]);
+  const ended = row([call, { type: "tool_result", name: "c1", detail: { tool_call_id: "c1", result: lines } }]);
+  assert.deepEqual([fresh.status, working.status, ended.status], ["running", "running", "done"]);
+  // ...the markup's shape, its words, classes and the spinner's own spans aside: a row, and its output inside it
+  const shape = (h) => h.replace(/>[^<]*</g, "><").replace(/ (class|style|role|aria-[a-z]+|viewBox|data-tq-step-tail)="[^"]*"/g, "")
+    .replace(/<summary>[\s\S]*<\/summary>/, "<summary></summary>");
+  for (const [h, was] of [[html(fresh), "fresh"], [html(working), "working"], [html(ended), "ended"]]) {
+    assert.match(h, /^<details class="tq-aui-step tq-aui-step-run [^"]*"><summary>/, `${was}: one disclosure row`);
+    assert.doesNotMatch(h, /<details[^>]*\bopen\b/, `${was}: shut until he opens it`);
+    assert.equal(shape(h), "<details><summary></summary><pre></pre></details>", `${was}: its output inside the row, nothing beside it`);
+  }
+  assert.match(html(working), /<pre data-tq-step-tail="">[^<]*test_11 PASSED<\/pre>/, "opened, a running row shows its newest output");
+  assert.doesNotMatch(html(working), /test_3 PASSED/, "its newest lines, as a terminal shows them");
+  assert.match(html(ended), /test_0 PASSED[\s\S]*test_11 PASSED/, "ended, the whole of it");
+});

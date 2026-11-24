@@ -35,15 +35,13 @@
 .tq-aui-step.tq-aui-tool-recovered em, .tq-aui-step.tq-aui-tool-none em { color: var(--tq-muted, #858078); }
 .tq-aui-step-thought summary, .tq-aui-step-thought .tq-aui-step-line { font-style: italic; color: var(--tq-muted, #858078); }
 .tq-aui-step pre { margin: 2px 0 6px 21px; padding: 8px 10px; max-height: 220px; overflow-x: hidden; overflow-y: auto; border-radius: 7px;
-  background: #22231f; color: var(--tq-muted, #e8e4dc); font: 10.5px/1.45 'Cascadia Mono', Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; }
+  background: var(--tq-inset, #f1ede5); color: var(--tq-text, #3f423c); font: 10.5px/1.45 'Cascadia Mono', Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; }
 .tq-aui-note { margin: 0 0 4px; padding: 2px 6px; color: var(--tq-muted, #858078); font-size: 11.5px; }
 .tq-aui-note-error { color: var(--tq-danger, #9a4e53); }
 @keyframes tqAuiPulse { 50% { opacity: .3; } }
 /* a helper's own steps, under its row (agentSteps kids) */
 .tq-aui-helper-steps { margin: 2px 0 4px 18px; padding-left: 8px; border-left: 2px solid var(--tq-border, #e6e0d4); }
 [data-tq-step-alongside] { margin-right: 6px; }
-/* a command at work: its newest output under its row, as a terminal shows it (agentSteps.tailOf) - its last lines, never a scroll to keep up */
-.tq-aui-step pre.tq-aui-step-tail { max-height: 9.5em; overflow: hidden; opacity: .85; }
 /* a file the agent named for a call that its title does not say (agentSteps.agentWords) */
 .tq-aui-step-chip { margin-left: 6px; padding: 0 5px; border-radius: 4px; background: var(--tq-inset, #f1ede5); color: var(--tq-muted, #858078); font-size: 11px; }
 /* a permission the agent waits on, on its call's row (AgentStepRows AskBar): the question, then the agent's own options */

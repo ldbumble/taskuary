@@ -39,7 +39,8 @@
 /* A finished tool call is history. Six of them, each ending in the word COMPLETE - wrapped mid-word
    to COMPLET/E and WebFetc/h - were the loudest thing on a working page (the owner's screenshots,
    2026-09-08). The word goes; what is still RUNNING keeps its say. */
-.tq-aui-tool-complete summary { min-height: 26px; }
+/* ...one height at work and done (the owner, 2026-11-23: rows that move as commands end): a row's end never nudges the chat under it */
+.tq-aui-step summary { min-height: 26px; }
 .tq-aui-tool-complete summary em { display: none; }
 .tq-aui-tool-running summary em { color: var(--tq-warning, #8a6d1f); white-space: nowrap; }
 .tq-aui-thinking { display: flex; align-items: center; gap: 5px; margin: 0 0 10px; }

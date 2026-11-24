@@ -79,13 +79,15 @@ export const StepRow = ({ step }) => {
   // ...A PERMISSION IT WAITS ON IS ON ITS ROW, open, the agent's options as buttons (chatStream.askOn) - answered, the row reads how it went
   const asked = askOn(step, React.useContext(PermitCtx)?.byCall);
   if (asked) return <div className={cls}><div className="tq-aui-step-line">{head}</div><AskBar asked={asked} /></div>;
-  // ...a command at work shows its newest output open under it, as a terminal does (agentSteps.tailOf) - behind its row again once it ends
-  if (step.status === "running" && step.tail) return <div className={cls}><div className="tq-aui-step-line">{head}</div>
-    <pre className="tq-aui-step-tail" data-tq-step-tail="">{step.tail}</pre></div>;
-  return step.detail
+  // ...A COMMAND AT WORK IS THE ROW IT WILL BE WHEN DONE (the owner, 2026-11-23: "on everything mode it flashes black for the commands then closes
+  // quickly"): its newest output (agentSteps.tailOf) waits behind the row's own disclosure, as the whole of it does once it ends - one <details>
+  // all its life, so nothing opens or shuts by itself and a row he opened stays open as it finishes
+  const body = step.tail ? [step.raw, `→ ${step.tail}`].filter(Boolean).join("\n") : step.detail;
+  return body
     ? <details className={cls}><summary>{head}</summary>
       {failed && <div className="tq-aui-step-why" data-tq-step-why="">{step.why || whyFailed(step.detail, step.own)}{step.status === "recovered" ? " It tried again another way, and that worked." : ""}</div>}
-      {failed ? <details className="tq-aui-step-raw"><summary>Raw output</summary><pre>{step.detail}</pre></details> : <pre>{step.detail}</pre>}</details>
+      {failed ? <details className="tq-aui-step-raw"><summary>Raw output</summary><pre>{body}</pre></details>
+        : <pre {...(step.tail ? { "data-tq-step-tail": "" } : {})}>{body}</pre>}</details>
     : <div className={cls}><div className="tq-aui-step-line">{head}</div></div>;
 };
 export const AgentSteps = ({ data }) => (

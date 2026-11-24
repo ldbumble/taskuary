@@ -294,7 +294,7 @@ test("an edit row is the call's own diff, never one read off its arguments, and 
   const run = { id: "s:x:c3", k: "tool", name: "Bash", args: { command: "pytest -q" }, status: "in_progress", output: out };
   const [step] = parts([run], true)[0].steps;
   assert.equal(step.status, "running");
-  assert.deepEqual(step.tail.split("\n"), Array.from({ length: 8 }, (_, i) => `test_${22 + i} PASSED`), "its newest lines, open under it");
+  assert.deepEqual(step.tail.split("\n"), Array.from({ length: 8 }, (_, i) => `test_${22 + i} PASSED`), "its newest lines, behind its row (AgentStepRows)");
   const [ended] = parts([{ ...run, status: "completed" }])[0].steps;
-  assert.ok(!ended.tail && ended.detail.includes("test_29 PASSED"), "once it ends, behind its row again");
+  assert.ok(!ended.tail && ended.detail.includes("test_29 PASSED"), "once it ends, the whole of it, behind the same row");
 });

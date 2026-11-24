@@ -591,6 +591,7 @@ class DecideBody(BaseModel):
     fields: dict | None = None       # an action card's choices the owner changed (who sees a post, now or a draft): connectorcatalog.owner_edits
     closes: bool = False             # Send and close: the task's close as the send goes, before its agent is told (verdicts.decide)
     steps: list[int] | None = None   # a turn's held steps pressed as one card: this one first, the rest in order (shellgate.approve_steps)
+    shown: dict | None = None        # an action card's proposal as the page drew it: the press runs only that (press_review)
 class CodeBody(BaseModel):
     repo: str | None = None; agent: str | None = None
     model: str | None = None; instruction: str | None = None
@@ -4073,18 +4074,25 @@ def _att_row(a: dict, mail: bool = True) -> dict:
             'size': a['Size'], 'inline': bool(a['Inline']), 'saved': bool(a['Path']), 'mail': mail,
             # opened in place by the viewer an agent's file opens in (PublishedPages.Preview), told how here as that file is (outputs.preview_of)
             'preview': outputs.preview_of(path, a['Name']) if path else None,
-            'is_image': str(a['ContentType'] or '').startswith('image/'),
+            'is_image': _att_type(a).startswith('image/'),
             # a voice note is meant to be PLAYED where you are reading it, not downloaded and
             # opened in something else - the panel draws a player for these (Attachments.jsx)
-            'is_audio': str(a['ContentType'] or '').startswith('audio/'),
+            'is_audio': _att_type(a).startswith('audio/'),
             'url': f"/api/attachments/{a['AttachmentId']}" if a['Path'] else None}
 
 
-def _att_type(a: dict) -> str:
-    "An attachment's type - the mail's word for it, or where that is a shrug (none, octet-stream) what its name says (outputs.content_type)."
+def _att_type(a: dict) -> str: return served_type(a.get('ContentType'), a.get('Name'))
+
+
+# A FILE IS SERVED AS ONE TYPE WE NAME, NEVER A STORED STRING (red team F4): a mail's "image/png, text/html" went out verbatim, a browser
+# read the last of the two and ran the attachment as a page on this origin - where the owner token is - and a CR/LF in it broke the response.
+# What its name says leads (outputs.content_type); a name that says nothing takes the stored word only where it is one well-formed type
+_MIME = re.compile(r'[a-z0-9][a-z0-9!#$&^_.+-]{0,63}/[a-z0-9][a-z0-9!#$&^_.+-]{0,63}')
+def served_type(stored, name) -> str:
     from . import outputs
-    ct = str(a.get('ContentType') or '').split(';')[0].strip()
-    return ct if ct and ct.lower() != 'application/octet-stream' else outputs.content_type(a.get('Name') or '')
+    if (by := outputs.content_type(str(name or ''))) != 'application/octet-stream': return by
+    t = str(stored or '').split(';')[0].strip().lower()
+    return t if _MIME.fullmatch(t) else 'application/octet-stream'
 
 
 
@@ -4212,21 +4220,18 @@ def task_artifact(aid: int, download: bool = False):
     # a picture the chat SHOWED (session_artifacts.shown) is drawn by <img> as itself, and a PDF by the browser's viewer (application/pdf
     # inline, as the outputs route serves one); anything that could run - SVG, a page - comes back as text like a Claude page below, for
     # the sandboxed frame or the reader to draw (_NOSCRIPT)
-    kind = str(artifact.get('ContentType') or '')
     name = _att_filename(artifact.get('Name'))
+    kind = served_type(artifact.get('ContentType'), name if Path(name).suffix else path.name)
     if artifact.get('Kind') == 'shown' and (kind.startswith('image/') or kind == 'application/pdf') and kind not in _NOSCRIPT:
         response = Response(path.read_bytes(), media_type=kind)
         response.headers['Content-Disposition'] = _disposition('attachment' if download else 'inline', name)
-        response.headers['X-Content-Type-Options'], response.headers['Cache-Control'] = 'nosniff', 'no-cache'
-        return response
+        return _sealed(response, kind)
     # SAVED, a page the agent published or showed is the file itself - its own type and its own extension: a published page is
     # titled ("Budget coverage"), and the download was a text file with no extension that opened in nothing. An attachment is
     # never drawn on this origin, so its script cannot run as Taskuary.
     if download and artifact.get('Kind') in ('claude_artifact', 'shown'):
         if not Path(name).suffix and path.suffix: name = f'{name}{path.suffix}'
-        resp = FileResponse(path, media_type=kind or 'application/octet-stream', filename=name, content_disposition_type='attachment')
-        resp.headers['X-Content-Type-Options'], resp.headers['Cache-Control'] = 'nosniff', 'no-cache'
-        return resp
+        return _sealed(FileResponse(path, media_type=kind, filename=name, content_disposition_type='attachment'), kind)
     text = path.read_text(encoding='utf-8', errors='replace')
     # a page a Claude session published: the task page draws it in a sandboxed frame from this TEXT -
     # served as plain text, so opening the url itself never runs the page as Taskuary (_NOSCRIPT)
@@ -4237,8 +4242,7 @@ def task_artifact(aid: int, download: bool = False):
         text, media = text.split('\n## Full session transcript', 1)[0].rstrip() + '\n', 'text/markdown; charset=utf-8'
     response = Response(text, media_type=media)
     response.headers['Content-Disposition'] = _disposition('attachment' if download else 'inline', name)
-    response.headers['X-Content-Type-Options'], response.headers['Cache-Control'] = 'nosniff', 'no-cache'
-    return response
+    return _sealed(response, media)
 
 @app.get('/api/task-outputs/{tid}')
 def task_outputs(tid: int):
@@ -4292,7 +4296,7 @@ def _serve_file(path: Path, name: str, ct: str, download: bool, preview: bool, s
         except Exception as e:
             logger.info(f'{what} {_att_filename(name)} not previewed - {e}')
             raise HTTPException(422, f'This {"document" if how == "document" else "workbook"} could not be read for a preview - Download it to open it.')
-    low = ct.lower()
+    ct = served_type(ct, name or path.name); low = ct
     # ...an SVG keeps its type so an <img> draws it (a report's chart), as a download - never a page on this origin
     svg = low in _NOSCRIPT and low.startswith('image/')
     if download or svg or not (low.startswith(('image/', 'text/', 'video/', 'audio/')) or low in ('application/json', 'application/pdf')):
@@ -4303,7 +4307,14 @@ def _serve_file(path: Path, name: str, ct: str, download: bool, preview: bool, s
         media = ct if low.startswith(('image/', 'video/', 'audio/')) or low == 'application/pdf' else 'text/plain; charset=utf-8'
         if low in _NOSCRIPT: media = 'text/plain; charset=utf-8'
         resp = FileResponse(path, media_type=media, filename=_att_filename(name), content_disposition_type='inline')
+    return _sealed(resp, ct)
+
+
+def _sealed(resp, ct: str):
+    """Every file response's own headers: never sniffed, asked for afresh, and - opened as a page itself - a sandbox with no script and no
+    origin of ours (CSP sandbox), so nothing a file holds runs as Taskuary. A PDF is left out: the browser's viewer will not draw one sandboxed."""
     resp.headers['X-Content-Type-Options'], resp.headers['Cache-Control'] = 'nosniff', 'no-cache'
+    if not str(ct).lower().startswith('application/pdf'): resp.headers['Content-Security-Policy'] = 'sandbox'
     return resp
 
 @app.post('/api/messages/{mid}/attachments/fetch')
@@ -5449,6 +5460,8 @@ def press_review(st, rid: int, body: DecideBody, background: BackgroundTasks = N
     if not rv: raise HTTPException(404, 'review not found')
     from .verdicts import VERB2STATUS, context_moved, decide as land
     if body.verb not in VERB2STATUS: raise HTTPException(422, 'bad verb')
+    from .proposals import unlike_shown
+    if (changed := unlike_shown(rv, body.shown, body.verb)): return changed
     # ...ONE PRESS ROAD FOR EVERY CARD (walk 8, 2026-11-20): a turn's held steps are one card whose press runs each step through this same door,
     # in order, stopping at the first that fails - never a road of its own (it was /api/reviews/steps)
     if body.steps:
@@ -9504,9 +9517,11 @@ def quickbooks_status(cid: int):
             'realm_id': conf.get('realm_id') or '', 'env': conf.get('env') or 'production', 'has_app': bool(conf.get('client_id') and conf.get('client_secret'))}
 
 @app.get('/api/connectors/{cid}/quickbooks/authorize')
-def quickbooks_authorize(cid: int):
-    """Where the browser goes to say yes. The state carries the connector id back."""
+def quickbooks_authorize(request: Request, cid: int):
+    """Where the browser goes to say yes. The state carries the connector id back - and only the owner is handed it: an agent holding one
+    signed in to a company of its own choosing through its own browser, and the card posted his bills there (red team F6)."""
     from . import quickbooks as qb
+    _owner_only(request, OAUTH_OWNER)
     c = store.get_connector(cid)
     if not c or c['Type'] != 'quickbooks': raise HTTPException(404, 'not a QuickBooks connector')
     nonce = secrets.token_urlsafe(16); _QB_STATES[cid] = (nonce, time.time())
@@ -9514,6 +9529,7 @@ def quickbooks_authorize(cid: int):
     except qb.QuickBooksError as e: raise HTTPException(409, str(e))
 
 _QB_STATES = {}      # connector id -> (nonce, issued at): a callback must answer a Connect we actually started
+OAUTH_OWNER = "connecting an account is the owner's own sign-in - an agent is never handed its link (the state in it re-points the card)"
 
 @app.get('/api/quickbooks/callback', response_class=HTMLResponse)
 def quickbooks_callback(code: str = None, state: str = '', realmId: str = None, error: str = None):
@@ -9559,8 +9575,9 @@ def zoho_status(cid: int):
             'has_app': bool(conf.get('client_id') and conf.get('client_secret'))}
 
 @app.get('/api/connectors/{cid}/zoho/authorize')
-def zoho_authorize(cid: int):
+def zoho_authorize(request: Request, cid: int):
     from . import zoho
+    _owner_only(request, OAUTH_OWNER)
     c = store.get_connector(cid)
     if not c or c['Type'] != 'zoho_invoice': raise HTTPException(404, 'not a Zoho Invoice connector')
     nonce = secrets.token_urlsafe(16); _ZOHO_STATES[cid] = (nonce, time.time())
@@ -9611,8 +9628,9 @@ def linkedin_status(cid: int):
             'member': conf.get('member_name') or '', 'days_left': linkedin.days_left(conf)}
 
 @app.get('/api/connectors/{cid}/linkedin/authorize')
-def linkedin_authorize(cid: int):
+def linkedin_authorize(request: Request, cid: int):
     from . import linkedin
+    _owner_only(request, OAUTH_OWNER)
     c = store.get_connector(cid)
     if not c or c['Type'] != 'linkedin': raise HTTPException(404, 'not a LinkedIn connector')
     nonce = secrets.token_urlsafe(16); _LI_STATES[cid] = (nonce, time.time())

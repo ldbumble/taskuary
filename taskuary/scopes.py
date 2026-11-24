@@ -186,6 +186,9 @@ QUIET_WRITES = frozenset({
     'agent', 'assistant', 'taskuary', 'calendar', 'google_sheets', 'sharepoint_list', 'sharepoint_file',
     # named in the catalogue, not built (reports.PLANNED): they run nothing yet
     'netsuite', 'sap', 'workday', 'adp', 'epic', 'cerner', 'pointclickcare', 'stooq'})
+# ...and what NO agent's call reaches at all, its press included: code on THIS machine. A script is the owner's, saved by him into a report or a
+# routine (flow_run marks a routine's own step); an agent's proposal of one would put arbitrary code behind a card's words (red team F1)
+NEVER_AGENT = frozenset({'python_script'})
 
 
 def _gql_op(query) -> str:

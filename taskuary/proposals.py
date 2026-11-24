@@ -362,6 +362,27 @@ def unknown_tool(t) -> str:
             f"connected still stands as its card, posted through the browser at his press); a tool of one of his systems is list_systems'")
 
 
+# WHAT A CARD SHOWS IS WHAT ITS PRESS RUNS (red team F1): a card its connector declares (connectorcatalog `actions`) draws only its declared
+# fields and its picture, so a key beside them - a `script`, a `query` - would run unseen under the card's words. Only these ride beside them
+SHOWN_BESIDE = ('action', 'type', 'connector_id', 'why', 'network', 'flow_run', 'closeout', 'image', 'image_path', 'result')   # the last two never run (_run)
+def unshown(p: dict) -> str:
+    "'' when every field of a run_tool on a declared act is one its card draws, else what to drop: nothing runs that the card does not show."
+    from .connectorcatalog import action_for
+    if not (act := action_for((p or {}).get('type'))): return ''
+    fs = [f['key'] for f in act.get('fields') or []]
+    hid = sorted(k for k in p if k not in SHOWN_BESIDE and k not in fs)
+    return f"{p['type']}'s card shows only {', '.join(fs)} - {', '.join(hid)} would run unseen under it; propose it without them" if hid else ''
+
+
+CHANGED = 'This card changed after it was shown to you - nothing ran. It is shown again as it stands now; read it and press again.'
+def unlike_shown(rv: dict, shown, verb: str) -> dict | None:
+    """The press's refusal when the card the page drew (`shown`: its proposal, as drawn) is not the proposal on file - a field changed after
+    it was shown never runs under the words he read (red team F1). None to go on: no card shown (a phone's typed yes), or the same one."""
+    if shown is None or (rv or {}).get('Kind') != 'action' or verb not in ('approve', 'edit', 'merge_anyway'): return None
+    if _draft(rv) == shown: return None
+    return {'ok': False, 'status': rv.get('Status') or 'pending', 'sent': None, 'changed': True, 'send_error': CHANGED}
+
+
 def validate(store, p: dict) -> tuple:
     """(ok, reason). The whole gate: known action, required fields present, switch on."""
     a = p.get('action')
@@ -381,6 +402,10 @@ def validate(store, p: dict) -> tuple:
     # ...A TOOL THAT IS NOT ONE IS REFUSED TO ITS AGENT NOW, NEVER AT HIS PRESS (the Hydrogen walk, 2026-11-19: a card for a tool named
     # "linkedin" raised, its Approve answered "Failed 'linkedin'" - and nothing before the press said LinkedIn was not connected)
     if a == 'run_tool' and (bad := unknown_tool(p.get('type'))): return False, bad
+    from .scopes import NEVER_AGENT
+    if a == 'run_tool' and p.get('type') in NEVER_AGENT and not isinstance(p.get('flow_run'), dict):
+        return False, f"{p['type']} is never an agent's to run - code on this computer runs only from a report or routine the owner saved"
+    if a == 'run_tool' and (hid := unshown(p)): return False, hid
     # NOTHING EMPTY IS PUT IN FRONT OF THE OWNER: a playbook that could not be filed, or says nothing of how the job is done, is refused at
     # this one gate - the tool, a marker in the agent's words, the on-close question - and its writer is told what it lacks
     if a == PLAYBOOK:

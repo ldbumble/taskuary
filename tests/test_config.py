@@ -84,7 +84,8 @@ class TomlTests(unittest.TestCase):
             # does not recognise. Everything else must still match what was stored.
             got = tomllib.loads(raw)['server']
             self.assertTrue(got.pop('agent_token', None))
-            self.assertEqual(got, stored)
+            from taskuary import vault                   # ...the owner token as stored, sealed where this machine seals (config._owner_token)
+            self.assertEqual({**got, 'token': vault.unseal(got['token'])}, stored)
             self.assertNotIn('0.0.0.0', raw)
             self.assertNotIn('None', raw)
             self.assertEqual(tomllib.loads(raw)['agents']['overlay']['cmd'], 'echo')
@@ -97,7 +98,7 @@ class TomlTests(unittest.TestCase):
                 self.assertEqual(runtime['server']['token'], 'from-env')  # still the overlay
             disk = tomllib.loads(path.read_text(encoding='utf-8'))
             self.assertTrue(disk['server'].pop('agent_token', None))     # minted on load, belongs on disk
-            self.assertEqual(disk['server'], stored)
+            self.assertEqual({**disk['server'], 'token': vault.unseal(disk['server']['token'])}, stored)
             self.assertEqual(disk['agents']['overlay2']['cmd'], 'true')
         finally:
             if previous is None: path.unlink(missing_ok=True)

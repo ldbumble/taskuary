@@ -44,6 +44,9 @@ TABLE = {
     'reads':   Row(True, "it is outside this task's own folders", 'READS', "outside this task's own folders"),
     'never':   Row(None, "Taskuary's own data and the places sign-ins are kept are never read by an agent - not even with the owner's yes. Go on "
                    'without it, and say what you needed if it matters', 'READS', "Taskuary's own data or where sign-ins are kept"),
+    'writes':  Row(True, "it is outside this task's own folders", 'WRITES', "outside this task's own folders"),
+    'unwritable': Row(None, "Taskuary's own data and settings, and the places sign-ins are kept, are never changed by an agent - not even with the "
+                      "owner's yes. Write in this task's own folders instead", 'WRITES', "to Taskuary's own data or where sign-ins are kept"),
     'fills':   Row(False, '', 'FILLS', 'a form - types, ticks or chooses in its boxes (the press that sends it is judged on its own)'),
     'looks':   Row(False, '', 'LOOKS', '- a snapshot, a read, a page opened'),
 }
@@ -77,7 +80,7 @@ def reason(out: dict) -> str: return ((out or {}).get('hookSpecificOutput') or {
 
 # ── THE ONE CHECK POINT ──────────────────────────────────────────────────────────────────────────────────────────────────
 def check(store, tid: int, sid: str, cmd: str = '', cwd: str = '', shell: str = 'Bash', ask='', about: str = '', argv: list = None,
-          paths: list = None, run: bool = False, brain=None) -> dict:
+          paths: list = None, run: bool = False, brain=None, write: bool = False) -> dict:
     """{} lets the call run; else it is held (its card filed on the task) or refused, said in permissionDecisionReason - or `ask`, a CLI's
     own prompt where the owner sits at it (shellgate.asks). Every road calls this:
       - before a shell line runs (a hook, ACP, the API agent): what it does by the shell's grammar - a step out of this computer, a delete
@@ -88,7 +91,7 @@ def check(store, tid: int, sid: str, cmd: str = '', cwd: str = '', shell: str = 
     if run:
         if browsergate.names(cmd, agentdesktop.EXE): return agentdesktop.check(store, tid, sid, cmd, brain)
         return browsergate.check(store, tid, sid, cmd, brain, cwd)
-    reads, never = readgate.judge(store, tid, paths, cwd) if paths is not None else readgate.of_command(store, tid, cmd, cwd)
+    reads, never = readgate.judge(store, tid, paths, cwd, write) if paths is not None else readgate.of_command(store, tid, cmd, cwd)
     if never: return deny(never)
     if not reads and not (cmd and shellgate.acts(cmd, cwd)): return {}
     return shellgate.check(store, tid, sid, cmd, shell, cwd, ask, about=about, reads=reads, argv=argv)
@@ -260,11 +263,16 @@ def _mcp(store, cli: str, server: str, tool: str) -> tuple:
 
 
 def _raw(tc: dict) -> dict: return tc.get('rawInput') if isinstance(tc.get('rawInput'), dict) else {}
-def _paths(tc: dict, cwd: str):
-    "A file tool's own read paths (readgate.tool_paths), else None - a shell line, or a tool that reads nothing."
+def _writes(tc: dict) -> bool:
+    "Is this ACP toolCall a file tool that writes (an edit, a delete, a move - by its kind or its name)?"
     from . import readgate
     t = tool_of(tc)
-    if t['command'] or (t['kind'] not in ('read', 'search') and t['name'] not in readgate.READ_TOOLS): return None
+    return not t['command'] and (t['kind'] in ('edit', 'delete', 'move') or t['name'] in readgate.WRITE_TOOLS)
+def _paths(tc: dict, cwd: str):
+    "A file tool's own paths - what it reads, or what it writes (_writes) - else None: a shell line, or a tool that touches no file."
+    from . import readgate
+    t = tool_of(tc)
+    if t['command'] or (t['kind'] not in ('read', 'search') and t['name'] not in readgate.READ_TOOLS and not _writes(tc)): return None
     return readgate.tool_paths(_raw(tc), tc.get('locations'), cwd)
 
 
@@ -275,9 +283,9 @@ def tool_call(tc: dict, ctx: dict) -> tuple:
     from . import readgate, shellgate
     raw = _raw(tc)
     cwd, tid = str(raw.get('cwd') or ctx.get('cwd') or ''), ctx.get('task_id')
-    paths = _paths(tc, cwd)
+    paths, w = _paths(tc, cwd), _writes(tc)
     if not t['command'] and paths is None: return ALLOWED, ''          # ...a press in the browser or on the desktop is held where it runs
-    reads, never = readgate.judge(store, tid, paths, cwd) if paths is not None else readgate.of_command(store, tid, t['command'], cwd)
+    reads, never = readgate.judge(store, tid, paths, cwd, w) if paths is not None else readgate.of_command(store, tid, t['command'], cwd)
     if never: return REFUSED, never
     todo = (shellgate.acts(t['command'], cwd) if t['command'] else []) + reads
     if not todo: return ALLOWED, ''
@@ -290,7 +298,7 @@ def tool_call(tc: dict, ctx: dict) -> tuple:
         if t['command'] and (lands := landing.push_asked(store, int(tid), t['command'], cwd, str(raw.get('description') or ''))): return (CARD if lands[0] else REFUSED), lands[1]
         # ...put to the owner as buttons (answerer): the Approve card is filed only if they do not answer, so nothing waits twice
         if ctx.get('owner_asks'): return HELD, '; '.join(dict.fromkeys(a['what'] for a in todo)) + ' - it waits for your answer'
-    out = check(store, int(tid), str(ctx.get('sid') or ''), t['command'], cwd, t['shell'], about=str(raw.get('description') or ''), argv=t['argv'], paths=paths)
+    out = check(store, int(tid), str(ctx.get('sid') or ''), t['command'], cwd, t['shell'], about=str(raw.get('description') or ''), argv=t['argv'], paths=paths, write=w)
     if not out: return ALLOWED, 'a repo the owner trusts to act on its own' if how == 'trusted' else 'the owner approved the same earlier in this task'
     return HELD, reason(out)
 
@@ -323,7 +331,7 @@ def put_to_owner(ctx: dict, params: dict, why: str) -> tuple:
     tc = (params or {}).get('toolCall') or {}
     t, cwd = tool_of(tc), str(_raw(tc).get('cwd') or ctx.get('cwd') or '')
     paths = _paths(tc, cwd)
-    reads = (readgate.judge(store, tid, paths, cwd) if paths is not None else readgate.of_command(store, tid, t['command'], cwd))[0]
+    reads = (readgate.judge(store, tid, paths, cwd, _writes(tc)) if paths is not None else readgate.of_command(store, tid, t['command'], cwd))[0]
     ks = keys(shellgate.acts(t['command'], cwd), cwd) if t['command'] else []
     if not late: remember(store, tid, ks, 'approved' if got.startswith('allow') else 'dismissed')     # his answer stands for the task
     if got.startswith('allow'):

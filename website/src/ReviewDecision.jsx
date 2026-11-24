@@ -9,7 +9,7 @@ import api from "./api";
 import ReplyFiles from "./ReplyFiles.jsx";
 import { holdInView } from "./inView.js";
 import { filesPromised, filesShort } from "./replyFiles.js";
-import { proposalPresentation, receiptOf, resultOf, reviewStatusLabel, reviewText } from "./reviewProposal.js";
+import { proposalFrom, proposalPresentation, receiptOf, resultOf, reviewStatusLabel, reviewText } from "./reviewProposal.js";
 import { actionFor, cardOf, changed, faceOf, fieldsOf, pressable as actPressable, stateOf, textKey, valuesOf, viaBrowserSaid, wordsOf } from "./actionCard.js";
 import { asLive, MovedPast } from "./PassedCard.jsx";
 import { FileDialog } from "./PublishedPages.jsx";
@@ -390,7 +390,7 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
     setBusy(true); setErr(""); setSendErr("");
     try {
       const out = await press(api, r.ReviewId,
-        { verb, final_text: verb === "approve" && !delivery.frozen ? value : null,
+        { verb, final_text: verb === "approve" && !delivery.frozen ? value : null, ...(r.Kind === "action" ? { shown: proposalFrom(r) } : {}),
           // only on the send: rejecting or "no reply needed" copies nobody on nothing
           cc: verb === "approve" && !proposal && !delivery.frozen ? ccNow : null, anyway, blanks_ok: blanksOk, ...envelopeEdits(verb),
           // ...Send and close says so WITH the send: the server closes as it goes, before the task's agent is told it went - told first, a
@@ -804,7 +804,7 @@ export function ActReview({ row: was, tid, live = true, onChanged, past = false 
   const moved = changed(act, p, vals), edits = Object.keys(moved).length ? { fields: moved } : {};
   const decide = async (verb) => {
     setBusy(verb); setErr("");
-    const o = await press(api, row.ReviewId, { verb, final_text: verb === "approve" ? text : null, ...(verb === "approve" ? edits : {}) }, 2);
+    const o = await press(api, row.ReviewId, { verb, final_text: verb === "approve" ? text : null, shown: p, ...(verb === "approve" ? edits : {}) }, 2);
     const line = landed(o) || o.kind === "already" ? "" : failLine(o, post ? "posted" : "sent"), status = o.data?.status;
     if (status && status !== "pending") setSettled({ Status: status, ActError: line, url: o.data.result?.url || "", mine: o.kind !== "already" });
     else setErr(line);

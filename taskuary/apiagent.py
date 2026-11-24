@@ -338,6 +338,12 @@ def _hands(store, tid: int, sid: str, name: str, a: dict) -> str:
             return _part(got.get('text') or f"{p.name}: {got.get('note') or 'nothing in it to read'}", a)
         return _part(p.read_text(encoding='utf-8', errors='replace'), a)
     if name in ('file_write', 'file_edit'):
+        # ...and a write outside them waits as a read does - Taskuary's own data and settings never (red team F2, readgate.judge write=True)
+        from . import gate, readgate
+        cwd, ps = workdir(store, tid), [str(_path(store, tid, x)) for x in (a.get('path'), a.get('save_as')) if x]
+        held, never = readgate.judge(store, tid, ps, cwd, write=True)
+        if never: raise ValueError(never)
+        if held: return gate.reason(gate.check(store, tid, sid, cwd=cwd, paths=ps, write=True)) or gate.HELD_SAID
         # A WORD OR EXCEL FILE IS MADE, NOT SPELLED OUT (officefiles): written as text it was a file no one could open, and the agent went on
         # to build one by hand in PowerShell - a script of output a step, for as long as it took. A PDF and a deck the same (design round 5)
         from . import officefiles as of

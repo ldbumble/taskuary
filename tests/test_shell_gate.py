@@ -624,6 +624,30 @@ class ReadingOutside(unittest.TestCase):
         self.assertEqual(len(self.pending()), 1)
         self.assertIn('Read', hooks.BROWSER_MATCH.split('|'))
 
+    def test_a_write_meets_the_gate_a_read_does_and_taskuarys_own_files_never(self):
+        """Red team F2: Write, Edit and NotebookEdit passed the hook with no path check, so a hijacked agent rewrote config.toml (the owner's
+        token lives there) or Taskuary's own package. A write in the task's folders runs; one outside them is the held card; Taskuary's home
+        is never written, not even on a yes - on the hook road, the ACP road, the API road's file tools, and a shell's redirect."""
+        from taskuary import apiagent, gate, readgate
+        t = SimpleNamespace(store=self.s, task_id=self.tid, sid='run1', cwd=self.work)
+        call = lambda tool, p: hooks.browser({'tool_name': tool, 'tool_input': {'file_path': p, 'content': 'x'}, 'cwd': self.work})
+        with mock.patch.object(hooks, '_pane', return_value=t), mock.patch.object(sg, 'asks', return_value=''):
+            self.assertEqual(call('Write', os.path.join(self.work, 'a.md')), {})
+            self.assertEqual(gate.reason(call('Write', self.secret)), readgate.NEVER_WRITE)
+            self.assertEqual(gate.reason(call('Edit', self.secret)), readgate.NEVER_WRITE)
+            self.assertIn('held this for the owner', gate.reason(call('Write', os.path.join(self.docs, 'planted.py'))))
+        [rv] = self.pending(); self.assertIn('write planted.py', json.loads(rv['DraftText'])['what'])
+        edit = {'toolCallId': 'e', 'kind': 'edit', '_meta': {'claudeCode': {'toolName': 'Write'}}, 'rawInput': {'file_path': self.secret}}
+        self.assertEqual(gate.tool_call(edit, self.ctx), (gate.REFUSED, readgate.NEVER_WRITE))
+        with mock.patch.object(apiagent, 'workdir', return_value=self.work):
+            self.assertRaisesRegex(ValueError, 'never changed by an agent', apiagent._hands, self.s, self.tid, 'run1', 'file_write', {'path': self.secret, 'content': 'x'})
+        self.assertEqual(readgate.of_command(self.s, self.tid, f'echo pwned > "{self.secret}"', self.work)[1], readgate.NEVER_WRITE)
+        # ...a program's own folder is read freely and never written: Taskuary's package is one
+        pkg = os.path.dirname(gate.__file__)
+        with mock.patch.object(readgate, '_open', return_value=[readgate._n(pkg)]):
+            self.assertEqual(readgate.of_command(self.s, self.tid, f'cat "{pkg}/server.py"', self.work), ([], ''))
+            self.assertTrue(readgate.of_command(self.s, self.tid, f'echo x >> "{pkg}/server.py"', self.work)[0])
+
 
 class TwoGatesAtOnce(unittest.TestCase):
     def test_one_call_held_by_two_gates_at_the_same_moment_is_one_card(self):

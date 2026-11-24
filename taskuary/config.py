@@ -132,6 +132,7 @@ def _load() -> dict:
     # to act on. It is written back to config.toml so it survives a restart.
     from . import guard
     guard.ensure_tokens(_read, _write, cfg['server'])
+    _owner_token(cfg['server'])
     # A FRESH INSTALL NAMES NO AI (the owner, 2026-10-20: "the advisor says claude is installed, set it up?? ... it was not, and
     # stop assuming that"): this default carried `cmd = "claude"`, cli_connections.migrate split it into a `claude` connection on
     # the first start, and setup drew Claude as "Connected" and lit it on a machine with no Claude Code. The coding profile is
@@ -140,6 +141,28 @@ def _load() -> dict:
     cfg.setdefault('github', {})
     cfg['server'].update(_env_server())
     return cfg
+
+def _owner_token(srv: dict):
+    """THE OWNER TOKEN IS SEALED ON DISK AND NEVER OPENED IN AN AGENT'S SESSION (red team F2): config.toml held it as text, so a session that
+    read the file - by file://, or by loading this package - became the owner. On disk it is sealed by the OS (vault: DPAPI, the keychain);
+    the server and the owner's own CLI open it, and a process carrying a session's marks (launchkey.in_session) holds a random one instead,
+    never written. A plain one from before is sealed in place; one this machine cannot open is minted again, so the door never stands open."""
+    from . import guard, launchkey, vault
+    tok = srv.get('token')
+    if launchkey.in_session(): srv['token'] = __import__('secrets').token_urlsafe(24); return
+    if vault.sealed(tok):
+        if tok not in _OPENED: _OPENED[tok] = vault.unseal(tok)      # ...once: config is read many times a page
+        srv['token'] = _OPENED[tok]
+        if not srv['token']: srv.pop('token'); guard.ensure_tokens(_read, _write, srv)
+        return
+    if not tok or vault.mode() == 'plain': return
+    try:
+        cur = _read()
+        if (cur.get('server') or {}).get('token') == tok and vault.sealed(s := vault.seal(tok)):
+            cur['server']['token'] = s; _write(cur)
+    except Exception as e: logger.warning(f'the owner token stays as it was on disk ({e})')
+_OPENED: dict = {}
+
 
 def db_path() -> str:
     return str(home() / 'taskuary.db')

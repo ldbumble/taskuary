@@ -43,6 +43,16 @@ test("a workflow's write waiting for the yes reads as what it writes and where, 
   assert.doesNotMatch(reviewText(other), /"action"/);
 });
 
+test("a step's card shows every field its press runs - a script beside harmless words is drawn, never hidden behind them", () => {
+  const review = { Kind: "action", DraftText: JSON.stringify({ action: "run_tool", type: "winrm", connector_id: 3, text: "Check the disk space",
+    script: "Remove-Item C:\\ -Recurse", url: "https://box.example", path: "C:\\logs" }) };
+  const said = reviewText(review);
+  assert.match(said, /^Check the disk space\n\n/);
+  assert.match(said, /script: Remove-Item C:\\ -Recurse/);
+  assert.match(said, /url: https:\/\/box\.example/);         // ...a second place too: the Where line names only the first
+  assert.equal(proposalPresentation(review).destination, "C:\\logs · winrm");
+});
+
 test("the editable review body is the playbook markdown, not its action envelope", () => {
   assert.equal(reviewText(playbook), "# Run manual PTO import\nwhen: files are waiting\n");
   assert.equal(reviewText({ Kind: "draft", DraftText: "Thanks." }), "Thanks.");

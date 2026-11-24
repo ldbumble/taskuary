@@ -150,3 +150,14 @@ class TheLadder(unittest.TestCase):
         # a callback nobody started is refused, whatever it carries
         r = c.get('/api/quickbooks/callback', params={'code': 'x', 'state': f"tq-{card['ConnectorId']}-nonce", 'realmId': '123'})
         self.assertIn('not one Taskuary issued', r.text)
+
+    def test_an_agent_is_never_handed_a_connect_link(self):
+        """Red team F6: authorize was a GET any session could read, so an agent took the state, signed in to a company of its own through its
+        own browser, and the callback re-pointed the card - the owner's bills posted there. Only the owner is handed a Connect link."""
+        s = server.store; card = _card(s); owner = {'X-Taskuary-Token': config.load()['server']['token']}
+        for kind in ('quickbooks', 'zoho', 'linkedin'):
+            cid = card['ConnectorId'] if kind == 'quickbooks' else s.get_connector_by_type('zoho_invoice' if kind == 'zoho' else kind)['ConnectorId']
+            r = c.get(f'/api/connectors/{cid}/{kind}/authorize', headers=AGENT)
+            self.assertEqual(r.status_code, 403, (kind, r.text)); self.assertNotIn('tq-', r.text)
+        r = c.get(f"/api/connectors/{card['ConnectorId']}/quickbooks/authorize", headers=owner)
+        self.assertEqual(r.status_code, 200, r.text); self.assertIn('state=tq-', r.json()['url'])

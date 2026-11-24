@@ -601,6 +601,27 @@ class TheOwnerSignsInOnThePage(Asking):
             self.assertTrue(signin.watch(self.s, self.tid, 'sess1', 'bank.example', p['request_id'], conn=page, every=0))
         self.assertIn(None, woke)
 
+    def test_a_sign_in_typed_on_the_page_is_kept_under_the_name_the_site_kept(self):
+        """Walk 12: a create-account box that already held a name was typed into; "northwind_finonorthwind_finopsps" was kept as the user,
+        the site's own top bar named the account "northwind_finon". Kept under the name the signed-in page shows; one it shows is kept as typed."""
+        for typed, bar, kept in (('northwind_finonorthwind_finopsps', 'news | northwind_finon (1) | logout', 'northwind_finon'),
+                                 ('alexdoyle', 'Hacker News | alexdoyle (1) | logout', 'alexdoyle'), (USER, 'Welcome, Alex', USER)):
+            sess = self.chat(); p = self.ask(sess)
+            page = WatchPage([form('https://login.bank.example/signin')] + [form('https://app.bank.example/home', False, False)] * signin.PAST_STEADY,
+                             sent=[{'u': typed, 'p': PW, 'href': 'https://login.bank.example/signin'}])
+            page.js = lambda expr, bar=bar: bar if expr == signin.PAGE_TEXT else None
+            with mock.patch.dict('taskuary.terminal.SESSIONS', {'sess1': sess}):
+                self.assertTrue(signin.watch(self.s, self.tid, 'sess1', 'bank.example', p['request_id'], conn=page, every=0))
+            self.assertEqual(vault.unseal(signin.saved(self.s, 'bank.example')['User']), kept); signin.remove(self.s, 'bank.example')
+
+    def test_taskuary_types_into_a_box_in_place_of_what_it_holds(self):
+        "...and Taskuary's own typing never lands at the caret of a box that holds text: the box is taken whole first."
+        c = signin.Cdp.__new__(signin.Cdp); did = []
+        c.js = lambda expr: did.append('empty' if expr == signin.EMPTY else expr)
+        c.call = lambda method, params=None, **k: did.append((method, (params or {}).get('text')))
+        c.type('northwind_ops')
+        self.assertEqual(did, ['empty', ('Input.insertText', 'northwind_ops')])
+
     def test_a_two_step_sign_in_typed_on_the_page_is_seen_saved_and_used_next_time(self):
         sess = self.chat(); p = self.ask(sess)
         self.assertEqual((p['text'], ws.status(self.s, self.tid)['requests'][-1]['choices']), ('Sign in to bank.example to continue', []))

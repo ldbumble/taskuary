@@ -821,7 +821,9 @@ CAPTURE = r'''(() => {
     const labelOf = (e) => { const r = e.getRootNode(), h = r && r.host, l = e.labels && e.labels[0];
       return String((l && l.textContent) || e.getAttribute('aria-label') || e.placeholder || (h && (h.getAttribute('label') || h.getAttribute('aria-label'))) || e.name || '').trim().slice(0, 40); };
     const o = {}; for (const e of before) if (texty(e) && e !== user && e.value && labelOf(e)) o[labelOf(e)] = e.value;
-    try { __tqSignin(JSON.stringify({ u: user ? user.value : '', n: named, p: pw ? pw.value : '', o, href: location.href })); } catch (_) {}
+    // ...as long as its box keeps it: a value set past the box's own limit is not what the site is sent
+    const u = user ? (user.maxLength > 0 ? user.value.slice(0, user.maxLength) : user.value) : '';
+    try { __tqSignin(JSON.stringify({ u, n: named, p: pw ? pw.value : '', o, href: location.href })); } catch (_) {}
   };
   document.addEventListener('submit', grab, true);
   // ...AND AS IT IS TYPED, not only as the form is sent (the owner's own sign-ins, 2026-11: seen through, and nothing kept). A page sends
@@ -875,11 +877,26 @@ def past(f: dict, site: str, start: str) -> bool:
     return not f.get('password') and not code_step(f) and not f.get('named') and str(f.get('href') or '') != str(start or '')
 
 
-def keep_typed(store, tid, site) -> bool:
+# ...UNDER THE NAME THE SITE KEPT (walk 12: a create-account box that already held a name was typed into, "northwind_finonorthwind_finopsps" was
+# saved as the user, and the site's own top bar named the account "northwind_finon"): a user name the signed-in page does not show, where it
+# shows a word that starts it, is kept as that word - the site cut it. A name it shows, an address, or none on the page, is kept as typed
+PAGE_TEXT = "document.body ? document.body.innerText.slice(0, 20000) : ''"
+SHOWN_MIN = 8
+def shown_user(user: str, text: str) -> str:
+    "`user` as the signed-in page's `text` names it: `user`, or the longest word on the page that starts it (SHOWN_MIN or longer)."
+    if not user or '@' in user: return user
+    words = set(re.findall(r'[\w.+-]+', str(text or '')))
+    if user in words: return user
+    return max((w for w in words if len(w) >= SHOWN_MIN and len(w) < len(user) and user.startswith(w)), key=len, default=user)
+
+
+def keep_typed(store, tid, site, conn=None) -> bool:
     "The sign-in is past: seal what the owner typed for the site, and say so in one line. False when no password was typed."
     t = _TYPED.pop(tid, None) or {}
     if t.get('site') != site or not t.get('pw'): return False
-    try: save(store, site, t.get('user') or '', t['pw'], by='owner', extra=t.get('extra') or None)
+    try: text = conn.js(PAGE_TEXT) if conn is not None else ''
+    except Exception: text = ''
+    try: save(store, site, shown_user(t.get('user') or '', text), t['pw'], by='owner', extra=t.get('extra') or None)
     except ValueError as e:
         store.add_comment(tid, 'taskuary', 'agent', f'Your {site} sign-in was not saved: {_said(e)}.'); return False
     store.add_comment(tid, 'taskuary', 'agent', SAVED_LINE.format(site=site, where=words.name('signins')))
@@ -1026,10 +1043,10 @@ def _code_from_mail(store, tid, site, c, mid, code) -> bool:
     return True
 
 
-def _through(store, tid, rid, site, seen=True):
+def _through(store, tid, rid, site, seen=True, conn=None):
     """The sign-in is past - seen on the page (watch), or the owner said so (`seen` False, signed_in): keep what was typed for it, and tell the
-    agent once, in words that say who did it."""
-    kept = keep_typed(store, tid, site)
+    agent once, in words that say who did it. `conn`: the page past it, to read the user name it shows."""
+    kept = keep_typed(store, tid, site, conn)
     if seen: _audit(store, tid, site, 'page', True, saved=kept)
     # ...AND HIS PRESS IS SAID AS A PRESS (round 3, 2026-11-22: "I'm done" on a sign-up page, nothing typed, told the agent "the owner signed in
     # on the page themselves"): seen on the page, he signed in; only pressed, the agent looks at the page before it goes on
@@ -1062,7 +1079,7 @@ def watch(store, tid: int, sid: str, site: str, rid: str, conn=None, every: floa
             except SignInError: continue                         # mid-navigation: the page cannot be read for a moment
             if not coded and code_step(f) and (got := mailed_code(store, site, after)): coded = _code_from_mail(store, tid, site, c, *got)
             steady = steady + 1 if past(f, site, start) else 0
-            if steady >= PAST_STEADY and _asked(store, tid, rid): _through(store, tid, rid, site); return True
+            if steady >= PAST_STEADY and _asked(store, tid, rid): _through(store, tid, rid, site, conn=c); return True
         return False
     finally:
         _TYPED.pop(tid, None)
@@ -1140,6 +1157,9 @@ FIELDS = r'''(want) => {
 CLEAR = "(() => { " + DEEP + " deepAll('input[type=password], input[data-tq-code]').forEach((e) => { e.value = ''; }); })()"
 SETTLE = 2.0                    # after the submit, before the boxes are emptied and the agent hears: the page's own post goes first
 # ...the last look before the press also reads the focused box's form: one holding a text area is never sent by a fill (FIELDS `loose`)
+# ...the focused box's text selected whole, so what is typed replaces it - emptied where it cannot be selected (an email box has no selection)
+EMPTY = ("(() => { " + DEEP + " const a = deepActive(); if (!a || !a.value) return; try { a.select(); } catch (_) {} "
+         "try { if (a.selectionStart === 0 && a.selectionEnd === a.value.length) return; } catch (_) {} a.value = ''; })()")
 STILL = ("(() => { " + DEEP + " const a = deepActive(), f = a && a.form; return { href: location.href, password: !!a && a.type === 'password', "
          "loose: !!f && [...f.elements].some((e) => e.tagName === 'TEXTAREA') || !!f && !!f.querySelector('[contenteditable=\"\"], [contenteditable=true]') }; })()")
 
@@ -1200,7 +1220,10 @@ class Cdp:
             if r.get('method') == 'Runtime.bindingCalled' and len(self.events) < 200: self.events.append(r)
         out, self.events = self.events, []
         return out
-    def type(self, text: str): self.call('Input.insertText', {'text': text})
+    def type(self, text: str):
+        "Type `text` into the focused box IN PLACE OF what it holds (walk 12: typed at the caret of a box that held a name, two ran together)."
+        self.js(EMPTY)
+        self.call('Input.insertText', {'text': text})
     def forget(self, site: str) -> int:
         """Delete the site's cookies from this LIVE browser - its kept file is cleaned on disk, but a running browser writes its own
         jar back when it closes."""

@@ -156,7 +156,14 @@ targeted() {
   for i in $(seq 1 40); do TRUN=$(gh run list --workflow ci-targeted.yml --commit "$SHA" --json databaseId,createdAt -q "[.[] | select(.createdAt >= \"$T0\")][0].databaseId // empty"); [ -n "$TRUN" ] && break; sleep 5; done
   [ -n "$TRUN" ] || die "no ci-targeted.yml run appeared for $SHA"
   echo "targeted run $TRUN"
-  "$ROOT/tools/ci-failures.sh" --wait "$TRUN" >/dev/null && R=0 || R=1
+  # a job GitHub never gave a runner tested nothing, so it is run again, twice at most (2026-11-24: macOS arm64 capacity - "the job
+  # was not acquired by Runner" cancelled the macOS job of three runs in a row after 15 min, and it read as a hang)
+  local a NR; for a in 1 2 3; do
+    "$ROOT/tools/ci-failures.sh" --wait "$TRUN" >/dev/null && { R=0; break; } || R=1
+    NR=$(gh run view "$TRUN" --json jobs -q '[.jobs[] | select(.conclusion!="success" and .conclusion!="skipped")] | if length>0 and all(.steps|length==0) then "y" else "" end')
+    [ -n "$NR" ] && [ "$a" -lt 3 ] || break
+    say "a job got no runner - running it again"; gh run rerun "$TRUN" --failed; sleep 20
+  done
   git push -q --delete origin "$BR" || true
   [ "$R" = 0 ] || stop_red "$TRUN"
   publish_tail "$SHA"

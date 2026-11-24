@@ -1342,9 +1342,13 @@ def beside(store, tid: int, out: list, at_work: bool, hold_, ending: bool = Fals
         taken = c.get('ActorType') == general.USER_TYPE and c.get('LineId') and c.get('Actor') != general.BRIEF_ACTOR
         if k in drawn or not (c.get('ActorType') == WAITING_TYPE and ('line', c.get('LineId') or '') not in led or taken): continue
         pend.append({'id': k, 'kind': 'line', 'at': c['CreatedAt'], **general.his_line(c), '_k': came(c)})
+    # ...AND A MESSAGE THE HAND-OVER HAS HEARD BUT NOT YET WRITTEN INTO THE CHAT, as his line taken (above): still by the box - heard between this
+    # read's chat and this, it was in neither (Windows CI: "m:N left the waiting room and is nowhere", the flood and the delayed mail)
+    drawn |= {f'm:{m}' for x in out if x.get('kind') == 'arrival' for m in (x.get('thread') or {}).get('mids') or []}
     for x in _mail(store, tid):
         k = f"m:{x['MessageId']}"
-        if (x.get('Channel') or '') == OWN or k in drawn or ('mail', str(x['MessageId'])) in led or not (at_work or ending or x['MessageId'] in held or waits): continue
+        if (x.get('Channel') or '') == OWN or k in drawn: continue
+        if ('mail', str(x['MessageId'])) not in led and not (at_work or ending or x['MessageId'] in held or waits): continue
         pend.append({'id': k, 'kind': 'arrival', **general.mail_row(store, x), 'joined': stamp(x['T']), '_k': came(x)})
     if at_work or ending:
         for m in general.press_lines(store, tid):

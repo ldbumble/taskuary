@@ -253,6 +253,25 @@ class TheList(unittest.TestCase):
         ids = [x['id'] for x in self.list()['items']]
         self.assertLess(ids.index('l1'), ids.index(f'm:{late}'), ids)
 
+    def test_a_mail_heard_between_a_reads_chat_and_its_waiting_room_is_still_by_the_box(self):
+        """Windows CI, the flood and the delayed mail: "m:N left the waiting room and is nowhere". The hand-over marks a mail heard, then writes
+        it into the chat; a read whose chat was taken before that and whose waiting room after it had the mail in neither. Heard and not yet
+        written, it is still by the box - in the read where it lands, the hand-over's order (the flow check compares every read here)."""
+        from taskuary import chatlog
+        self.brain.delay = HOLD
+        self.say('Suggest two.', 'l0', wait=False)
+        self.at_work()
+        m = f"m:{self.mail('MAIL that comes in mid-turn.')}"
+        self.assertIn(m, [p['id'] for p in self.list()['pending']])
+        real = chatlog.beside
+        def landing(store, tid, out, *a, **k):          # ...the hand-over lands in the beat between this read's chat and its waiting room
+            conversation.hear(store, tid, standing=True)
+            return real(store, tid, out, *a, **k)
+        with mock.patch.object(chatlog, 'beside', landing): got = self.list()
+        self.assertIn(m, [p['id'] for p in got['pending']] + [x['id'] for x in got['items']], 'in one place, never in none')
+        self.assertIn(m, [x['id'] for x in self.list()['items']], 'and on the canvas once the next read has it')
+        self.brain.delay = 0; self.rest()
+
     def test_a_flood_is_one_hand_over_and_every_input_is_heard_once_told_once_and_stands_in_the_order_it_came(self):
         """The recorded flood, 2026-11-11: fifty inputs heard together stood as his sixteen lines, then his own replies, then the sender's
         mail - "34, 31, 46". One hand-over, written once: each stands where it came, a line and a message of one second too."""

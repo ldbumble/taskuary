@@ -167,6 +167,29 @@ class TheDayAsItWasTests(unittest.TestCase):
         self.assertEqual(taskstate.left_on_him(s, tid), [])
         self.assertEqual(taskstate.turn_outcome(s, tid), 'agentdone', 'the header no longer reads "agent waiting on you"')
 
+    def test_a_step_the_agent_left_on_him_goes_with_the_card_it_names_never_kept_as_a_to_do(self):
+        """Walk 15 (R1): the turn's `on_you` is also written to the task's to-dos (general -> store.set_on_you); he dismissed the Publish card,
+        and the End-of-day report still read "to-dos left: Press the Publish card" beside "he turned down: Publish" - "still waiting on you".
+        What is left on him is one reading (taskstate.left_on_him), and the to-dos say only the agent's own."""
+        from taskuary import general, rulebook, taskstate
+        s = MemoryStore()
+        tid = s.create_task({'Title': 'Ask HN post', 'Kind': 'general', 'Status': 'open'}, 'owner')
+        s.set_task_checklist(tid, ['Make the account'], 'agent')
+        s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'The post is set up.')
+        on = ['Press the Publish card to post the Ask HN']
+        s.add_comment(tid, 'agent', general.SUMMARY_TYPE, json.dumps({'did': 'Set up the post', 'nothing_left': False, 'on_you': on}))
+        s.set_on_you(tid, on, 'assistant')
+        rv = s.add_review({'TaskId': tid, 'Kind': 'action', 'Status': 'pending', 'Reason': 'post the Ask HN question',
+                           'DraftText': json.dumps({'action': 'browser_act', 'what': 'post the Ask HN question'})})
+        self.assertIn('its agent left on him: Press the Publish card', evening.owed(s, s.get_task(tid), _ago(8)))
+        self.assertEqual(rulebook.agent_word(s, tid), 'on_you')
+        s.decide_review(rv, 'rejected', None, 'owner')
+        row = evening.owed(s, s.get_task(tid), _ago(8))
+        self.assertNotIn('Press the Publish card', row)
+        self.assertIn('to-dos left: Make the account', row)
+        self.assertIn('he turned down: post the Ask HN question', row)
+        self.assertNotEqual(rulebook.agent_word(s, tid), 'on_you', 'nor the rail and header read it as on him')
+
     def test_the_brief_says_what_went_as_what_it_was_never_a_view_file_and_never_an_unanswered_close_as_handled(self):
         """Walk 5, 2026-11-22: "Sent availability slot to Gail" over the week's total, the show tool's view-...json as work done, and a task
         closed with its question to him unanswered told as "confirmed"."""

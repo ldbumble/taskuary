@@ -425,7 +425,9 @@ def agent_word(store, tid) -> str | None:
         summ = json.loads(last['Body']) if last else None
     except (TypeError, ValueError, KeyError): summ = None
     if not isinstance(summ, dict): return None
-    if any(c.get('on_you') and not c.get('done') and c.get('text') for c in _checklist(store.get_task(int(tid)))): return 'on_you'
+    # ...a step he has not ticked, while it still stands (taskstate.left_on_him: a press of his on a card since the turn settles it - walk 15)
+    from .taskstate import left_on_him
+    if any(c.get('on_you') and not c.get('done') and c.get('text') for c in _checklist(store.get_task(int(tid)))) and left_on_him(store, tid): return 'on_you'
     return 'nothing_left' if summ.get('nothing_left') else ''
 
 

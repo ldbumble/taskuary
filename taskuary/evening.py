@@ -321,7 +321,9 @@ def owed(store, t: dict, since: str) -> str:
     tid, bits = int(t['TaskId']), []
     try: bits.append(taskstate.status(store, t)['word'])
     except Exception: bits.append(str(t.get('Status') or 'open'))
-    todo = store.task_checklist(tid); left = [i for i in todo if not i.get('done')]
+    # ...the agent's own to-dos: a step its turn left ON HIM (`on_you`) is said below by the one reading of what still stands on him
+    # (taskstate.left_on_him) - kept here too it outlived the card it named (walk 15: "to-dos left: Press the Publish card" after he declined it)
+    todo = [i for i in store.task_checklist(tid) if not i.get('on_you')]; left = [i for i in todo if not i.get('done')]
     if todo: bits.append(f"to-dos left: {'; '.join(_one_line(i.get('text'), 80) for i in left[:4])}" if left else 'every to-do ticked')
     from . import ledger
     # ...WHAT went and what was made, as the ledger says it (walk 14: "Tomorrow: send the vendor spend sheet" - sent at 2:26 - read off the

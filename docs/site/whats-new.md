@@ -2,6 +2,17 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.4.2.8 - 2026-11-24
+
+- A card's send is drawn once and names the mailbox it left from
+- A task reopened by mail tells its agent so, after the close it undid
+- A held task's Trust stands first on the row, filled - not in More
+- A step the agent left on him goes with the card it named
+- His answer given outside answers the agent's question to him
+- A failed agent's line says its words without the CLI's colour codes
+- A held press that sends a form shows the post it sends
+- A held task's Trust stands first on the phone's row too
+
 ## 0.4.2.7 - 2026-11-24
 
 - A check-back standing on the task keeps its agent on the clock, whichever turn set it

@@ -801,9 +801,13 @@ def stake(s, backed: set) -> tuple:
     unit = _one(s.get('unit'), 30) or ''
     money = '$' in unit
     show = (_cash(round(v)) if money else _shown(v)) + (f" {unit.replace('$', '').strip()}" if unit.replace('$', '').strip() else '')
-    line = f"{show} = {expr}" + (f" ({'; '.join(f'{n}: {w}' for n, w in mine.items())} - an estimate)" if mine else '')
+    est = f" ({'; '.join(f'{n}: {w}' for n, w in mine.items())} - an estimate)" if mine else ''
+    # ...ITS WORDS ARE THE RESULT, THE FORMULA IS THE WORKING (walk 17, K7: "$2,550 recoverable if the duplicate = 2550" on his card): `said` is
+    # what the card and the Advisor's line say; `line`, with the arithmetic, what the agent it is handed to reads (brief)
+    said, line = f'{show}{est}', f'{show} = {expr}{est}'
     backs = numbers(f'{v:.2f} {round(v)} {_shown(v)}') | {str(int(round(v, -k))) for k in (1, 2, 3) if abs(v) >= 10 ** k} | set(mine)
-    return {'expr': expr, 'value': round(v, 2), 'unit': unit, 'assume': [{'n': n, 'what': w} for n, w in mine.items()], 'line': line, 'backs': backs}, None
+    return {'expr': expr, 'value': round(v, 2), 'unit': unit, 'assume': [{'n': n, 'what': w} for n, w in mine.items()], 'said': said, 'line': line,
+            'backs': backs}, None
 
 
 # ── IDENTITY: THE SAME SUBJECTS IN THE SAME FAMILY ARE ONE IDEA ─────────────────────────────────────────────────────────────────────────
@@ -919,7 +923,7 @@ def _said(x: dict) -> dict:
     "What the card says of a checked idea: the title, the next step and the pitch apart, why - with the stake the code worked out."
     st = x.get('stake')
     return {'title': x['title'], 'suggest': f"{x['next_step']}\nPitch: \"{x['pitch']}\"", 'next_step': x['next_step'], 'pitch': x['pitch'],
-            'why': f"{x['evidence']} {x['why']}" + (f"\nWhat it comes to: {st['line']}" if st else ''), **({'stake': st} if st else {})}
+            'why': f"{x['evidence']} {x['why']}" + (f"\nWhat it comes to: {st.get('said') or st['line']}" if st else ''), **({'stake': st} if st else {})}
 
 
 def land(store, x: dict, window: str = '') -> tuple:

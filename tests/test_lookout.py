@@ -633,7 +633,9 @@ def test_a_month_with_two_expense_tools_a_price_rise_a_double_charge_and_a_weekl
     acts = [json.loads(s.get_idea(i)['ActionJson']) for i in out['raised']]
     assert [a['stake']['line'] for a in acts] == ['$17,400 a year = 1450 * 12', '$380 once = 380',
                                                   '6 hours over 8 weeks = 8 * 45 / 60 (45: minutes to build one sheet - an estimate)'], 'worked out in code'
-    assert 'What it comes to: $17,400 a year = 1450 * 12' in acts[0]['why'] and 'as the code worked it out: $17,400' in lookout.brief(acts[0])
+    # ...his card says the result; the formula is the working, read by the agent it is handed to (walk 17, K7)
+    assert [a['stake']['said'] for a in acts] == ['$17,400 a year', '$380 once', '6 hours over 8 weeks (45: minutes to build one sheet - an estimate)']
+    assert acts[0]['why'].endswith('What it comes to: $17,400 a year') and 'as the code worked it out: $17,400 a year = 1450 * 12' in lookout.brief(acts[0])
     r = lookout.runs(s)[0]
     assert r['reads'][:2] == ['spend', 'repeats'] and r['tokens']['calls'] == 2 and r['tokens']['in'] + r['tokens']['out'] <= lookout.RUN_TOKENS
 
@@ -689,6 +691,7 @@ def test_the_advisor_post_carries_what_the_look_raised_once_and_no_idea_of_its_o
                                    {'key': 'idea:erin-column', 'text': 'Erin asked for the vendor column again', 'section': 'people', 'mid': None}]})
     out = assistant.run(s, llm=post, force=True)
     assert [l['key'] for l in out['lines']] == ['idea:erin-column', s.get_idea(raised[0])['Key']], "its own idea dropped; the look's carried"
-    assert s.get_idea(raised[0])['MessageId'] == out['message_id'] and 'What it comes to: $380 once = 380' in s.get_message(out['message_id'])['BodyText']
+    assert s.get_idea(raised[0])['MessageId'] == out['message_id'] and 'What it comes to: $380 once' in s.get_message(out['message_id'])['BodyText'] \
+        and '= 380' not in s.get_message(out['message_id'])['BodyText'], 'the Advisor says the result, not its formula'
     again = assistant.run(s, llm=post, force=True)
     assert s.get_idea(raised[0])['Key'] not in [l['key'] for l in again.get('lines') or []], 'carried once'

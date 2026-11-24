@@ -1186,11 +1186,15 @@ def test_a_failed_sign_up_card_a_later_sign_up_made_good_reads_done_not_a_red_fa
     other = s.add_review({'TaskId': tid, 'Kind': 'action', 'Status': 'pending', 'Reason': 'Pay on DealFlow',
                           'DraftText': json.dumps({'action': 'browser_act', 'sid': 'sess1', 'args': ['click', '@e4'], 'site': 'dealflow.example', 'what': 'Pay $49'})})
     s.review_act_failed(other, 'the page covers that control', 'owner')
+    # ...WALK 13: and only once the account exists - a form the site took that still asks a box (the next step) is no account, and the card
+    # stood "Done on a later try: the account was made" before the page after the form was ever read
+    ok, _ = signing_up(s, tid, UpPage(), lambda sid, site, c: c.go('more', 'https://www.rentscope.example/step2') or {'ok': True, 'user': USER})
+    assert ok and s.get_review(rid)['ActError'], 'a form taken that asks more overcomes nothing'
     ok, _ = signing_up(s, tid, UpPage(), lambda sid, site, c: c.go('data', 'https://www.rentscope.example/data') or {'ok': True, 'user': USER})
     assert ok
     r = s.get_review(rid)
     assert (r['Status'], r['ActError']) == ('approved', None) and conversation._card(r)['status'] == 'approved'
-    assert 'the account on rentscope.example was made' in json.loads(r['FinalText'])['result']['performed']
+    assert json.loads(r['FinalText'])['result']['performed'] == f"Done on a later try: {signin.made_words('rentscope.example', USER)}"
     assert s.get_review(other)['ActError'], 'a failure on another site is not overcome by this one'
 
 

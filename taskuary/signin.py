@@ -858,16 +858,23 @@ MADE_LINE = 'Kept the {site} account{who} the agent made in {where} - its passwo
 TAKEN_LINE = 'Kept the password of the {site} sign-up{who} in {where} - {site} took the form and asks more before the account is made.'
 # ...WRITTEN FROM THE LEDGER'S ACT ONLY (walk 13: written at the attempt, it said "the account the agent made" of a sign-up the site never took,
 # and the phone repeated "The account was created"): `act` is what the site let past - a signed-in page (made), or a form it took that asks more
+def made_words(site: str, user: str = '', act: str = 'signed_up') -> str:
+    "What is true of an account its agent made, by the ledger's act - the one wording the task's line and a card it settles both say."
+    from . import words
+    return (TAKEN_LINE if act == MADE else MADE_LINE).format(site=site, who=f' ({user})' if user else '', where=words.name('signins'))
 def made_line(store, tid, site: str, user: str = '', act: str = 'signed_up') -> None:
     "The task says, once, that an account its agent made is kept and where he reads its password (one vault - listing)."
-    from . import words
-    store.add_comment_once(int(tid), 'taskuary', 'agent', (TAKEN_LINE if act == MADE else MADE_LINE).format(
-        site=site, who=f' ({user})' if user else '', where=words.name('signins')))
+    store.add_comment_once(int(tid), 'taskuary', 'agent', made_words(site, user, act))
 def account(store, site, user, act, tid, by='agent') -> None:
-    "A site let an account's sign-in or sign-up past: on the record (ledger.account) and, an agent's, said once on the task that made it (made_line)."
+    """A site let an account's sign-in or sign-up past: on the record (ledger.account) and, an agent's, said once on the task that made it
+    (made_line) - and, once the account exists (not a form taken that asks more), the failed sign-up cards it made good read done (overcome)."""
     from . import ledger
     ledger.account(store, site, user, act, tid, by=by)
-    if by == 'agent' and str(tid or '').isdigit(): made_line(store, tid, site, user, act)
+    if by != 'agent' or not str(tid or '').isdigit(): return
+    made_line(store, tid, site, user, act)
+    if act != MADE:
+        from .browsergate import overcome
+        overcome(store, tid, site, f'Done on a later try: {made_words(site, user, act)}', signup=True)
 
 
 def heard(tid, site: str, raw) -> bool:
@@ -1810,8 +1817,6 @@ def _make(store, tid, sid, site, c, fill=None, send=None, said: dict = None) -> 
                         'not signed in with yet. ') + 'Fix what it asks for and run `agent-browser signup` again; a box only the owner can fill is theirs.')
     if (u := got.get('user')) and u != user and not kept: user = u; save(store, site, user, pw, by='taskuary', keep_old=True, task=tid)
     if not kept: _kept(prev, _raw(store, site))
-    from .browsergate import overcome
-    overcome(store, tid, site, f'Done on a later try: the account on {site} was made', signup=True)
     return True, _answered(store, tid, sid, site, c, user, kept)
 
 

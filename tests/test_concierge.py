@@ -1104,6 +1104,19 @@ class ApiTests(unittest.TestCase):
             self.assertEqual(c.get('/api/concierge/chats/999').status_code, 404)
             self.assertEqual(c.post('/api/funnel/settle', json={'key': 'x', 'verb': 'burn'}).status_code, 422)
 
+    def test_mark_done_answers_without_building_the_rail(self):
+        # 300 mails in, Mark done waited out a whole rebuild of the rail its own write had made stale (48 s); it answers now, the page reads behind
+        s = store()
+        t, m, r = drafted(s)
+        with mock.patch.object(server, 'store', s), mock.patch.dict(terminal.SESSIONS, {}, clear=True):
+            c = TestClient(server.app)
+            key = c.get('/api/funnel/pile?force=1').json()['items'][0]['key']
+            with mock.patch.object(funnel, 'build', wraps=funnel.build) as built:
+                out = c.post('/api/funnel/settle', json={'key': key, 'verb': 'done'}).json()
+            self.assertEqual((out['verb'], out['pile'], built.call_count), ('done', None, 0))
+            with mock.patch.object(funnel, 'build', wraps=funnel.build) as built: c.get('/api/funnel/pile')
+            self.assertEqual(built.call_count, 1)                    # ...and the rail the page reads behind it is built with the press in it
+
     def test_a_new_chat_archives_the_old_one_and_read_stays_read(self):
         s = store()
         t, m, r = drafted(s)

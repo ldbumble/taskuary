@@ -7011,7 +7011,9 @@ def funnel_settle(body: SettleBody):
         # its badge on the page and lost it on the next read - this road, not Next's, is the one its button takes (concierge._stamp_next)
         # ...a button's own word, never free text: anything else is not a press of this app's
         if body.pressed and body.pressed in buttons.labels(): concierge._stamp_next(store, dock, body.key, body.pressed)
-        out = {**out, 'pile': _pile_along(only=body.only, fyi=body.fyi)}
+        # ...answered with the rail it can have at once, as the walk's light answer is: forced, Mark done waited out a whole rebuild of a
+        # rail its own write had just made stale (6 s p50, 48 s at 300 mails, 2026-11-24). Nothing warm, nothing rides: the page reads it behind
+        out = {**out, 'pile': _pile_along(only=body.only, fyi=body.fyi, force=False) if funnel.warm(store) else None}
     return _encoded(out)
 
 def _warm_assistant():

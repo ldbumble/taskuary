@@ -2,6 +2,21 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.4.3.1 - 2026-11-24
+
+- A check-back set with an ISO time and offset stands at that time, not at the offset's hour
+- Settings names the Advisor under Task agents, where its look runs
+- Send and close is not offered under the agent's standing question
+- A scam warning for the owner holds no start and asks for no Trust
+- The answer a task waits on reaches its agent whatever triage read it as
+- Triage sees a closed task as closed, with nothing owed or awaited on it
+- A check-back the app made as the turn filed is said in the chat under that turn
+- Sign-ups use puts his mailbox only into a box that asks an email, never the account name being made
+- The phone brings up the waiting draft an answer names by its person, and a list keeps its refs
+- A Codex turn's words are drawn once, and a fold's line counts a command instead of quoting it
+- The Advisor's Run now runs its job-ideas look first, as the morning's does
+- person says who someone is and every task the owner has had with them; it loads with the first turn
+
 ## 0.4.3.0 - 2026-11-24
 
 - Sign-ups use his own mailbox and company details, on his press

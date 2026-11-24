@@ -563,6 +563,10 @@ def test_every_run_leaves_a_line_and_three_with_nothing_say_so_once_on_the_rail(
         m.setattr(server, 'store', s)
         got = TestClient(server.app).get('/api/advisor/lookout').json()
     assert len(got['runs']) == 5 and 'raised 1' in got['runs'][0] and 'the number 99 is not in what it cites' in got['runs'][1]
+    # ...and as data for the Reports panel (AdvisorRuns.jsx): what it looked at, read, raised, held and why, and what it used
+    run = got['items'][1]
+    assert run['deep'][0][0] == 'source:email' and run['held'][0] == ['You paid 99 dollars for nothing', 'the number 99 is not in what it cites']
+    assert run['used'].startswith('about ') and 'tokens in 1 call(s) (ceiling 30,000)' in run['used']
 
 
 def test_a_task_agent_has_a_note_lead_tool_whose_door_is_its_own_and_it_reaches_the_advisor():

@@ -31,6 +31,7 @@ import { ChannelIcon, StatusDot, timeAgo, Crumb, Empty, FilterPills, SideRail } 
 import { RecentlyDeleted, UndoLine, removeNow } from "./Removed.jsx";
 import WorkflowEditor, { SchedulePicker, scheduleOf, withSchedule } from "./WorkflowEditor.jsx";
 import RunSteps from "./RunSteps.jsx";
+import AdvisorRuns from "./AdvisorRuns.jsx";
 import { TYPE_LABELS, useScheduleWords } from "./reportWords.js";
 import { asSteps, runWords } from "./workflowFlow.js";
 import { onDraftHanded, takeDraft } from "./draftHandoff.js";
@@ -2212,6 +2213,7 @@ function LastRun({ r, sid, embedded, flush, onFix, fixing, onChanged }) {
   const [open, setOpen] = useState(!!embedded || !!(r.steps?.length && r.failed));
   const [showInputs, setShowInputs] = useState(false);
   const [hist, setHist] = useState(false);
+  const [looks, setLooks] = useState(false);
   const rv = r.reviewed || null;
   const outcome = r.steps?.length ? (r.failed || r.steps.some((x) => x.status === "waiting") ? runWords(r.steps, true) : r.summary || runWords(r.steps))
     : r.failed ? `failed${r.error ? ` — ${r.error}` : ""}`
@@ -2236,8 +2238,14 @@ function LastRun({ r, sid, embedded, flush, onFix, fixing, onChanged }) {
           <Box component="span" onClick={(e) => { e.stopPropagation(); setHist(true); }}
             sx={{ ml: 1, color: "var(--tq-link, #55697a)", cursor: "pointer", fontWeight: 600, "&:hover": { textDecoration: "underline" } }}>history ↗</Box>
         )}
+        {/* ...and the Advisor's own looks for ideas about his job, which run apart from its posts (lookout.py, AdvisorRuns.jsx) */}
+        {r.type === "assistant" && rv?.scope !== "sources" && (
+          <Box component="span" onClick={(e) => { e.stopPropagation(); setLooks(true); }}
+            sx={{ ml: 1, color: "var(--tq-link, #55697a)", cursor: "pointer", fontWeight: 600, "&:hover": { textDecoration: "underline" } }}>ideas runs ↗</Box>
+        )}
       </Typography>
       )}
+      {looks && <AdvisorRuns onClose={() => setLooks(false)} />}
       {hist && <RunHistory sid={sid} title={r.title} onClose={() => setHist(false)}
         onFix={onFix ? (runId) => { setHist(false); onFix(runId); } : null} />}
       {/* a workflow run as steps: the same top-to-bottom list as its editor, each step's status, time and output */}

@@ -6268,12 +6268,14 @@ def agent_note_lead(body: AgentLeadBody, request: Request):
 @app.get('/api/advisor/lookout')
 def advisor_lookout_runs():
     """The Advisor's runs for ideas about the owner's job, newest first, each in one line: what it looked at closely and read, what it
-    raised, and what it held and why (lookout.run_line) - and the last skip, with its reason."""
+    raised, and what it held and why (lookout.run_line) - and the last skip, with its reason. `items`: the same runs as data, for the
+    Reports panel (AdvisorRuns.jsx), each with what it used in words."""
     from . import lookout
     try: skip = json.loads(store.get_setting(lookout.SKIP_KEY) or '{}') or {}
     except ValueError: skip = {}
-    return {'runs': [lookout.run_line(r) for r in lookout.runs(store)], 'skipped': skip,
-            'leads': len(lookout.leads(store))}
+    rs = lookout.runs(store)
+    return {'runs': [lookout.run_line(r) for r in rs], 'skipped': skip, 'leads': len(lookout.leads(store)),
+            'items': [r | {'used': lookout.tokens_line(r['tokens']) if r.get('tokens') else ''} for r in rs]}
 
 class AgentUseRepoBody(BaseModel): task_id: int; path_or_name: str; why: str = ''
 

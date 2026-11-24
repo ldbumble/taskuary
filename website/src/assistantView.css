@@ -324,6 +324,14 @@
 .tq-welcome .tq-day-row .who { font-size: 12.5px; color: var(--tq-secondary, #4d4a43); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tq-day-row .n { font: 600 16px/1 'IBM Plex Sans', system-ui, sans-serif; font-variant-numeric: tabular-nums; text-align: right; min-width: 24px; }
 .tq-day-row.lvl-task .dot { background: #5f7a5f; }
+/* the open tasks by name, under the Tasks row: one line each - its title, then where it stands - a link that opens it */
+.tq-day-named { display: flex; flex-direction: column; padding: 2px 4px 6px 22px; border-bottom: 1px solid var(--tq-border, #f0ebe3); }
+.tq-day-task { display: block; width: 100%; min-height: 24px; padding: 0; border: 0; background: none; text-align: left; font: inherit; font-size: 12.5px; line-height: 24px;
+  color: var(--tq-text, #262521); cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tq-day-task:hover .t, .tq-day-task.more:hover { text-decoration: underline; }
+.tq-day-task:focus-visible { outline: 2px solid var(--tq-success, #7d9a7c); outline-offset: 2px; }
+.tq-day-task .st, .tq-day-task.more { color: var(--tq-secondary, #6e685f); }
+.tq-day-row:has(+ .tq-day-named), .tq-day-named:last-child { border-bottom: 0; }
 .tq-day-row.lvl-reports .dot, .tq-day-row.lvl-ideas .dot { background: #827356; }
 .tq-day-row.lvl-fyi .dot { background: #7b7366; }
 .tq-day-row.lvl-later .dot, .tq-day-row.lvl-watching .dot { background: transparent; border: 1px dashed #7b7366; }

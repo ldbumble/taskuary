@@ -1387,7 +1387,12 @@ const firstNames = (who = []) => who.slice(0, 2).map((w) => String(w).split(/[ @
 // whether the opener's Walk has anything to walk (AssistantView welcome); the card's headline is the rail's Tasks count (DayOpener)
 export const onYouCount = (groups = []) => groups.reduce((n, g) => n + (g.you ?? (SECTION[g.key]?.on_you ? g.n ?? g.rows.length : 0)), 0);
 // `loading`: the launch is still reading the mail, so the counts are not the day's yet - they say so instead of growing under you
-export function DayOpener({ groups = [], onSection, top = null, loading = false }) {
+// THE OPEN TASKS BY NAME (the owner, 2026-11-24: the card read "Tasks · you · 1" and named nothing): under the Tasks row, each of its first
+// NAMED rows as the rail draws it - its title and where it stands (the row's own state word, funnel_presentation.shows) - a link that opens it as
+// a rail press does; the rest "+N more", which walks the section
+const NAMED = 3;
+export const namedTasks = (g) => (g?.key === "task" ? { rows: g.rows.slice(0, NAMED), more: Math.max(0, (g.n ?? g.rows.length) - Math.min(NAMED, g.rows.length)) } : null);
+export function DayOpener({ groups = [], onSection, onOpen, top = null, loading = false }) {
   const today = useCalendarToday();
   const [, tick] = useState(0);
   useEffect(() => { const id = setInterval(() => tick((v) => v + 1), 60000); return () => clearInterval(id); }, []);
@@ -1413,11 +1418,18 @@ export function DayOpener({ groups = [], onSection, top = null, loading = false 
   // band count every row the rail draws under it (summarize's `n`, the rail's own count), so the opener and the rail say one number
   const tasks = act.reduce((n, g) => n + (SECTION[g.key]?.on_you ? g.n ?? g.rows.length : 0), 0);
   const bandN = (g) => g.n ?? g.rows.length;
-  const row = (g) => (
-    <button key={g.key} type="button" className={`tq-day-row lvl-${g.key}`} onClick={() => onSection?.(g.key)} title={`Walk me through ${g.word}`}>
-      <i className="dot" /><b className="lbl">{g.word}</b><span className="who">{g.urgent ? `${g.urgent} urgent · ` : ""}{gistOf(g)}</span><b className="n">{loading ? "…" : bandN(g)}</b>
-    </button>
-  );
+  const row = (g) => { const named = namedTasks(g); return (
+    <React.Fragment key={g.key}>
+      <button type="button" className={`tq-day-row lvl-${g.key}`} onClick={() => onSection?.(g.key)} title={`Walk me through ${g.word}`}>
+        <i className="dot" /><b className="lbl">{g.word}</b><span className="who">{g.urgent ? `${g.urgent} urgent · ` : ""}{named ? "" : gistOf(g)}</span><b className="n">{loading ? "…" : bandN(g)}</b>
+      </button>
+      {named && !loading && !!named.rows.length && <div className="tq-day-named" data-tq-day-named="">
+        {named.rows.map((i) => <button key={i.key} type="button" className="tq-day-task" onClick={() => onOpen?.(i.key)} title={`Open ${refOf(i) || "it"}`}>
+          <span className="t">{i.title}</span><span className="st"> - {stateOf(i, laneMeta(i.lane).word)}</span></button>)}
+        {!!named.more && <button type="button" className="tq-day-task more" onClick={() => onSection?.(g.key)}>+{named.more} more</button>}
+      </div>}
+    </React.Fragment>
+  ); };
   // THE WHOLE CARD FROM THE FIRST DAY (the owner, 2026-10-15: "on first startup it should show the full card - say calendar missing if
   // not available"): the calendar side says what it is - none connected, unreadable, or a day with no meetings - instead of vanishing.
   // `sources` is what calendar.today could reach; an answer from before it was sent says nothing, so the side stays as it was.

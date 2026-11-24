@@ -3182,7 +3182,7 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true, r
       {/* the start of the walk: the day's meetings, then who wants what - the best of the Morning
           digest, on the screen the day opens on (2026-09-23) */}
       <DayHold loading={pileLoading || mailReading}>
-      <DayOpener groups={items.length ? summarize(railPile ? pileRows(railPile) : items).groups : []} onSection={walkSection}
+      <DayOpener groups={items.length ? summarize(railPile ? pileRows(railPile) : items).groups : []} onSection={walkSection} onOpen={(k) => pull(k, null)}
         loading={mailReading || pileLoading} top={<SinceBlock onOpen={(k) => pull(k, null)} onReading={setMailReading} />} />
       {/* no "Nothing is waiting on you - ask me anything" line when the day is empty: the card above says it and the buttons below
           are the choices (the owner, 2026-10-22: "what is this blank text?? buttons do the talking.." / "I hate free text") */}

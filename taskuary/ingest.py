@@ -1890,6 +1890,9 @@ def identity_route(store, msg: dict) -> dict:
     return {'decision': 'attach', 'task_id': home, 'score': 1.0, 'candidates': [], 'reason': 'attached: same conversation thread'}
 
 
+OWED = ('your_part', 'on_you')        # what a thread's reading says is owed - let go of when its task closes (thread_task)
+
+
 def thread_task(store, tid) -> dict | None:
     """The task a mail's thread already belongs to, as triage is shown it (`thread_task`): the join is the default, and this is
     what triage measures the mail against when it says it is a different job (new_job, 2026-10-26). The thread's last lines are
@@ -1899,10 +1902,17 @@ def thread_task(store, tid) -> dict | None:
     rep = next((wrapup.report_body(c['Body']) for c in reversed(store.list_comments(tid)) if wrapup.is_report(c['Body'])), '')
     # a batch's title and summary say only how many it holds: its items' own titles are what a line about one of them matches
     items = ' ; '.join(b.get('Title') or '' for b in store.batch_items(tid))
+    from . import taskstate
+    shut = t.get('Status') == 'done'
+    # ...A CLOSED TASK OWES NOTHING AND IS OWED NOTHING (walk 18: after Mark done his resend was filed "TQ-0001 already waits on Erin's answer"
+    # - a question the close let go): where it stands rides with it, and of what triage last made of the thread only what it was about
+    r = {k: v for k, v in (store.task_thread(tid) or {}).items() if not shut or k not in OWED}
+    try: stands = taskstate.said(taskstate.standing(store, tid))
+    except Exception as e: stands = ''; logger.debug(f'thread_task: where {task_ref(tid)} stands was not read - {e}')
     return with_agent(store, {'tid': tid, 'ref': task_ref(tid), 'title': t.get('Title') or '', 'ask': ' '.join(str(items or t.get('Summary') or '').split())[:300],
-            'status': 'closed' if t.get('Status') == 'done' else 'open',
+            'status': 'closed' if shut else 'open', **({'stands': stands} if stands else {}),
             # what triage last made of the whole thread, and what the agent last said it did: a new mail is measured against both
-            **({'reading': r} if (r := store.task_thread(tid)) else {}), **({'agent_said': rep[:600]} if rep else {}),
+            **({'reading': r} if r else {}), **({'agent_said': rep[:600]} if rep else {}),
             # ...and the owner WATCHING it for somebody else to handle (watch.py): triage says whether this message shows it handled
             **({'watching': True} if watch.watching(t) else {})})
 
@@ -1944,7 +1954,7 @@ def with_agent(store, w: dict) -> dict:
     """A task triage may join `w` ({tid, ...}), with the agent on it (agent_on) and its open to-dos: what tells a follow-up to that
     exact work from a different ask that gets its own task and agent. A brief that is the task's own ask is not said twice."""
     tid = w.get('tid')
-    todos = [{'n': n, 'text': i['text'][:160]} for n, i in enumerate(open_todos(store, tid), 1)]
+    todos = [{'n': n, 'text': i['text'][:160]} for n, i in enumerate(open_todos(store, tid), 1)] if w.get('status') != 'closed' else []
     ag = agent_on(store, tid) if tid and w.get('status') != 'closed' else None
     if ag and w.get('ask') and ag.get('brief') and w['ask'].startswith(ag['brief'][:120]): ag = {k: v for k, v in ag.items() if k != 'brief'}
     return {**w, **({'agent_on_it': ag} if ag else {}), **({'open_todos': todos} if todos else {})}

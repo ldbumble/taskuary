@@ -152,7 +152,7 @@ def said(st: dict) -> str:
     """Where it stands in one line, for a reader that reads words (the brief, the Advisor, the Assistant, triage): "waiting for Erin's input:
     an answer from Erin Blake (since 11-24 10:02) · checks back Fri 9 AM"."""
     from . import remind, waiton
-    if st['closed']: return 'closed'
+    if st['closed']: return 'closed - no input awaited from anyone'       # ...its questions and waits let go with the close
     head = waiton.word(st['waits_on'], st['who']) or ('with its agent' if st['waits_on'] == 'agent' else 'no input awaited from anyone')
     what = '; '.join(' '.join(str(x).split())[:120] for x in st['what'][:3])
     # ...and an answer awaited from somebody else while his comes first, so their reply is known for the one it answers (triage's same_as)

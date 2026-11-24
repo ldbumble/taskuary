@@ -77,3 +77,22 @@ def test_a_filed_mail_keeps_its_reading():
     assert th['asking'] == 'Erin shares the newsletter' and th['aside'][0]['mid'] == mid and s.message_thread(mid) == th
     s.add_route(mid, None, 'file', None, 'retriaged', [], 'triage', verdict={'intent': 'fyi'})   # a newer verdict with no reading: the last one stands
     assert s.message_thread(mid)['asking'] == 'Erin shares the newsletter'
+
+
+def test_a_closed_thread_task_is_shown_closed_with_nothing_awaited():
+    """Walk 18 (L2): Erin's agent asked her where the data lives; she pressed Mark done; Alex sent the ask again and triage filed it - "TQ-0001
+    already waits on Erin's answer". The close let that question go: triage is shown the task closed, nothing owed or awaited on it, and
+    of its last reading only what the thread was about."""
+    from taskuary import concierge, ingest, workerstate as ws
+    from taskuary.store import MemoryStore
+    s = MemoryStore(); tid = _task(s)
+    s._exec('UPDATE task SET ThreadJson=? WHERE TaskId=?', (json.dumps({'asking': 'Alex wants the vendor sheet', 'your_part': 'say where the data lives',
+                                                                       'asks': [], 'aside': [], 'on_you': ['Answer where the data lives']}), tid))
+    s.set_task_checklist(tid, ['Build the sheet'], 'agent')
+    ws.record(s, tid, 'sid1', 'input_needed', text='Where does the vendor data live?', source='api')
+    assert 'waiting for your input' in ingest.thread_task(s, tid)['stands']
+    concierge.close_task(s, tid)
+    ht = ingest.thread_task(s, tid)
+    assert (ht['status'], ht['stands']) == ('closed', 'closed - no input awaited from anyone')
+    assert ht['reading'] == {'asking': 'Alex wants the vendor sheet', 'asks': [], 'aside': []}
+    assert 'open_todos' not in ht and 'data live' not in json.dumps(ht)

@@ -1598,12 +1598,17 @@ def his_mailbox(s, **d):
 
 
 class WhoPage(UpPage):
-    "A sign-up form whose email, company and name boxes Taskuary fills from what sign-ups use (signin.WHO): what it was asked to fill, kept."
+    """A sign-up form whose email (the agent's throwaway in it), company and name boxes Taskuary fills from what sign-ups use, as BOXES reads
+    them off a real Chrome: what SET wrote into each box, kept."""
+    BOXES = [{'k': 'email|email|', 'a': '', 't': 'email', 'n': 'email ', 'v': True, 'at': True},
+             {'k': 'text|company|', 'a': 'organization', 't': 'text', 'n': 'company ', 'v': False, 'at': False},
+             {'k': 'text|fullname|', 'a': 'name', 't': 'text', 'n': 'fullname ', 'v': False, 'at': False}]
     def __init__(self, *a, **k): super().__init__(*a, **k); self.who = []
     def js(self, expr):
-        if expr.startswith(signin.WHO):
-            self.who.append(json.loads(expr[len(signin.WHO) + 1:-1])); self.user = self.who[-1].get('mailbox') or self.user
-            return [k for k in ('mailbox', 'company', 'name') if self.who[-1].get(k)]
+        if expr == signin.BOXES: return self.BOXES
+        if expr.startswith(f'({signin.SET})'):
+            self.who.append({k: v for _i, k, v in json.loads(expr[len(signin.SET) + 3:-1])}); self.user = self.who[-1].get('email|email|') or self.user
+            return len(self.who[-1])
         return super().js(expr)
 
 
@@ -1638,7 +1643,7 @@ def test_a_sign_up_uses_his_mailbox_and_details_on_his_press_and_its_code_comes_
          mock.patch.object(signin, 'send_new', send), mock.patch.object(signin, '_type_code', code), mock.patch.object(signin, 'SETTLE', 0), \
          mock.patch.object(browsergate, '_tell', lambda s_, t, text, **k: told.append(text)):
         browsergate.perform(s, tid, p)
-    assert again.who == [p['as']] and codes == ['552019'], (again.who, codes)
+    assert again.who == [{'email|email|': MAILBOX, 'text|company|': 'Northwind', 'text|fullname|': 'Alex Doyle'}] and codes == ['552019'], (again.who, codes)
     assert vault.unseal(signin.saved(s, 'rentscope.example')['User']) == MAILBOX
     assert told[0].startswith(f'The owner approved the sign-up on rentscope.example. rentscope.example took the sign-up as {MAILBOX}'), told
 
@@ -1671,3 +1676,29 @@ def test_the_owner_alone_reads_and_sets_what_sign_ups_use():
         assert c.get('/api/signins/as', headers=AGENT).status_code == 403
         assert c.post('/api/signins/as', json={'mailbox': ''}, headers=AGENT).status_code == 403
     finally: signin.set_identity(s, {})
+
+
+def test_his_mailbox_goes_only_into_a_box_that_asks_an_email_never_the_account_name_a_sign_up_makes():
+    """Walk 18: on Proton the account name box - named "email", marked autocomplete=username, "@proton.me" beside it - IS the new address. Sign-ups
+    use wrote his mailbox over the username the agent had typed there; the site emptied it and the sign-up failed. His mailbox goes into the box
+    the page marks as an email (the recovery address), the agent's username is kept, and a box already filled stays as it was. The boxes are as
+    BOXES reads them off a real Chrome on a Proton-shaped form."""
+    boxes = [{'k': 'text|email|email', 'a': 'username', 't': 'text', 'n': 'email email', 'v': True, 'at': False},
+             {'k': 'email|recoveryEmail|recovery', 'a': 'email', 't': 'email', 'n': 'recoveryEmail recovery', 'v': False, 'at': False},
+             {'k': 'text|company|', 'a': '', 't': 'text', 'n': 'company ', 'v': False, 'at': False},
+             {'k': 'text|fname|', 'a': 'given-name', 't': 'text', 'n': 'fname ', 'v': True, 'at': False}]
+    who = {'mailbox': MAILBOX, 'company': 'Northwind', 'name': 'Alex Doyle'}
+    assert signin.who_fills(boxes, who) == [[1, 'email|recoveryEmail|recovery', MAILBOX, 'mailbox'], [2, 'text|company|', 'Northwind', 'company']]
+    # ...the username box still empty is no box of his either; a box named email that holds the agent's throwaway address takes his mailbox
+    assert signin.who_fills([{**boxes[0], 'v': False}], who) == []
+    assert signin.who_fills([{'k': 'text|email|', 'a': '', 't': 'text', 'n': 'email ', 'v': True, 'at': True}], who) == [[0, 'text|email|', MAILBOX, 'mailbox']]
+
+
+def test_a_sign_up_whose_password_boxes_no_longer_match_is_not_sent():
+    """Walk 18: Proton's confirm box read "Passwords do not match" after the press. The boxes are read again just before Enter; two that no longer
+    hold one password are not sent, and the agent is told why."""
+    class Redrawn(TwoForms):
+        def js(self, code): return False if code == signin.SAME else super().js(code)
+    with mock.patch.object(signin, '_guard', return_value={}), mock.patch.object(signin, 'SETTLE', 0):
+        p = Redrawn(); got = signin.send_new('s1', 'vendor.example', p)
+    assert not got['ok'] and 'no longer held the same password' in got['why'] and p.sent is None, got

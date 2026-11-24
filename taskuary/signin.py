@@ -1465,6 +1465,9 @@ PASSBOX = r"""(i) => { """ + DEEP + r"""
   return { n: ps.length, top: window === window.top, href: location.href, focused: !!el && deepActive() === el }; }"""
 # ...and which of those boxes hold the password now, in their order - read on the page, the password never leaves it
 KEPT = PASSBOX.split('const ps =')[0] + r"""return pws().map((e) => e.value === i); }"""
+# ...and whether they still hold ONE password, read again just before the form goes (walk 18: a site re-drew its form between the typing and the
+# Enter, and its confirm box read "Passwords do not match") - true / false, the password never leaving the page
+SAME = '(' + PASSBOX.split('const ps =')[0] + r"""const v = pws().map((e) => e.value); return !!v.length && !!v[0] && v.every((x) => x === v[0]); })(0)"""
 # ...ON THE FORM THE AGENT WAS FILLING (walk 11: a page with a sign-in form and a sign-up form; the sign-up typed into both and sent the first): the
 # form signup_form picks is marked, and PASSBOX and KEPT read its boxes only - no form holds a password box, every box as before. FORMS reads each
 # form by its structure only: its visible password boxes, whether one holds a value, how many other boxes hold one, whether the focus is in it,
@@ -1604,6 +1607,7 @@ def send_new(sid: str, site: str, c=None) -> dict:
             # ...the user box only where the page NAMES it so (FIELDS `named`): a wizard's last step shows a Company box over the password, and
             # read as the user box the account was kept as the company - and the next sign-in typed it into the email box
             if f.get('user') and f.get('named'): _guard(c, site, 'user'); user = str(c.js(USER) or '')
+            if c.js(SAME) is False: return {'ok': False, 'user': user, 'why': 'its password boxes no longer held the same password, so it was not sent'}
             if not (c.js(f'({PASSBOX})(0)') or {}).get('focused'): raise SignInError(f'the password box on {site} could not be found')
             try: c.js(LEAVING)
             except SignInError: pass
@@ -1777,32 +1781,47 @@ def identity_words(who: dict) -> str:
     return f'with {m}' + (f' and {rest}' if rest else '') if m else f'with {rest}' if rest else ''
 
 
-# ...each box read by its structure only: the autocomplete token the page gives it, its type, then its name and id. The email box is always
-# his mailbox (the agent's throwaway replaced); the others are filled only where empty. -> the kinds filled
-WHO = "((who) => { " + DEEP + r"""
+# ...each box read by its structure only (BOXES): the autocomplete token the page gives it, its type, its name and id, whether it holds text and
+# whether that text is an address - and which kind it is, and what goes in, decided here (box_kind, who_fills); SET writes them, each box checked
+# to be the one read
+WHO_INS = DEEP + r"""
   const vis = (e) => { const r = e.getBoundingClientRect(); return !e.disabled && !e.readOnly && r.width > 2 && r.height > 2; };
   const marked = deepAll('form[data-tq-signup]')[0], ins = deepAll('input, textarea').filter(vis)
     .filter((e) => !['hidden', 'password', 'checkbox', 'radio', 'submit', 'button', 'image', 'reset', 'file'].includes(e.type) && (!marked || marked.contains(e)));
-  const ac = (e) => String(e.autocomplete || '').toLowerCase(), nm = (e) => [e.name, e.id].join(' ');
-  const kind = (e) => { const a = ac(e), n = nm(e);
-    if (a.includes('email') || e.type === 'email' || /e-?mail/i.test(n)) return 'mailbox';
-    if (a.startsWith('tel') || a.includes(' tel') || e.type === 'tel' || /phone|mobile/i.test(n)) return 'phone';
-    if (a.includes('organization') || /company|organi[sz]ation|business/i.test(n)) return 'company';
-    if (a.includes('given-name') || /first.?name|given|fname/i.test(n)) return 'first';
-    if (a.includes('family-name') || /last.?name|family|surname|lname/i.test(n)) return 'last';
-    if (/(^| )name$/.test(a) || /full.?name|^name$|your.?name/i.test(n.trim())) return 'name';
-    if (a.includes('street-address') || a.includes('address-line1') || /street|address/i.test(n)) return 'address';
-    return ''; };
-  const parts = String(who.name || '').trim().split(/\s+/), val = { ...who, first: parts[0] || '', last: parts.length > 1 ? parts.slice(1).join(' ') : '' };
+  const key = (e) => [e.type, e.name, e.id].join('|');"""
+BOXES = "(() => { " + WHO_INS + r"""
+  return ins.map((e) => ({ k: key(e), a: String(e.autocomplete || '').toLowerCase(), t: e.type, n: [e.name, e.id].join(' '), v: !!e.value,
+                           at: String(e.value || '').includes('@') })); })()"""
+SET = "((vs) => { " + WHO_INS + r"""
   const set = (e, v) => { const p = Object.getOwnPropertyDescriptor(e.tagName === 'TEXTAREA' ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype, 'value');
     p.set.call(e, v); e.dispatchEvent(new Event('input', { bubbles: true })); e.dispatchEvent(new Event('change', { bubbles: true })); };
-  const did = []; for (const e of ins) { const k = kind(e), v = val[k];
-    if (!k || !v || (k !== 'mailbox' && e.value)) continue; set(e, v); if (!did.includes(k)) did.push(k); } return did; })"""
+  let n = 0; for (const [i, k, v] of vs) { const e = ins[i]; if (e && key(e) === k) { set(e, v); n++; } } return n; })"""
+def box_kind(b: dict) -> str:
+    """Which of his details a sign-up box takes, by its structure. HIS MAILBOX GOES ONLY INTO A BOX THE PAGE MARKS AS AN EMAIL (type=email, an
+    email autocomplete) or one named so that already holds an address (the agent's throwaway) - walk 18: Proton's account-name box, named "email"
+    and marked autocomplete=username, is the new address being made; his mailbox written there was cleared by the site and the sign-up failed."""
+    a, t, n = b.get('a') or '', b.get('t'), b.get('n') or ''
+    if t == 'email' or 'email' in a or (re.search(r'e-?mail', n, re.I) and b.get('at')): return 'mailbox'
+    if 'username' in a or re.search(r'e-?mail', n, re.I): return ''
+    if a.startswith('tel') or ' tel' in a or t == 'tel' or re.search(r'phone|mobile', n, re.I): return 'phone'
+    if 'organization' in a or re.search(r'company|organi[sz]ation|business', n, re.I): return 'company'
+    if re.search(r'(^| )name$', a) or re.search(r'full.?name|^name$|your.?name', n.strip(), re.I): return 'name'
+    if 'given-name' in a or re.search(r'first.?name|given|fname', n, re.I): return 'first'
+    if 'family-name' in a or re.search(r'last.?name|family|surname|lname', n, re.I): return 'last'
+    if 'street-address' in a or 'address-line1' in a or re.search(r'street|address', n, re.I): return 'address'
+    return ''
+def who_fills(boxes: list, who: dict) -> list:
+    "[[index, key, value, kind]] for the boxes (BOXES) his details go into: a box the agent already filled is kept, but an address in his mailbox's box."
+    parts = str(who.get('name') or '').split()
+    val = {**who, 'first': parts[0] if parts else '', 'last': ' '.join(parts[1:])}
+    return [[i, b.get('k'), val[k], k] for i, b in enumerate(boxes) if (k := box_kind(b)) and val.get(k) and (not b.get('v') or (k == 'mailbox' and b.get('at')))]
 def fill_identity(c, site: str, who: dict) -> list:
-    "Fill the sign-up form's boxes on the pinned site from what sign-ups use (WHO). -> the kinds filled."
+    "Fill the sign-up form's boxes on the pinned site from what sign-ups use (box_kind, who_fills). -> the kinds filled."
     _guard(c, site, '')
     scope(c)
-    return c.js(f'{WHO}({json.dumps(who)})') or []
+    vs = who_fills(c.js(BOXES) or [], who)
+    if vs: c.js(f'({SET})({json.dumps([v[:3] for v in vs])})')
+    return list(dict.fromkeys(v[3] for v in vs))
 
 
 def signup(store, tid, sid) -> tuple[bool, str]:

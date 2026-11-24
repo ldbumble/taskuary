@@ -349,3 +349,12 @@ class CodingPickerTests(unittest.TestCase):
         aidefaults.apply(self.s, self.cfg, 'default_brain', value='cli:claude')
         self.assertEqual(self.s.get_setting('default_brain'), 'claude')
         self.assertEqual(self.agents.resolve_brain(self.s, 'coding'), 'cli:claude')
+
+
+def test_settings_name_the_advisor_on_the_card_whose_ai_runs_it():
+    """Walk 18 (L4c): Settings said sorting "also runs the Advisor" after its look moved to the normal model (brainroute.NORMAL) - general work's
+    AI, the Task agents card. The card that names it is the one the route takes."""
+    from taskuary import brainroute
+    assert 'advisor' in brainroute.NORMAL and 'advisor' not in brainroute.ONE_SHOT
+    assert 'Advisor' not in aidefaults.SLOT['triage_ai']['desc']
+    assert 'Advisor' in aidefaults.SLOT['assistant_ai']['desc']

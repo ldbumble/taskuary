@@ -29,7 +29,7 @@ from .kinds import ASSISTANT
 SLOTS = [
     {'key': 'triage_ai', 'label': 'Sorting new mail', 'pick': 'brain', 'gear': 'light',
      'desc': 'Reads each new message and decides: a task to do, a question to answer, or something to file. '
-             'It also runs the Advisor, writes what Taskuary remembers, and rewrites a reply when you press Redraft.',
+             'It also writes what Taskuary remembers, and rewrites a reply when you press Redraft.',
      'why': 'One message in, one short answer out - a quick, cheap model does this well.'},
     # The fourth worker had no row here, so the page that exists to say "what will actually run"
     # was silent about half the tasks on the board. `assistant_ai` was buried on the Assistant tab
@@ -41,8 +41,9 @@ SLOTS = [
     # reply, so Drafting has no card. The one-shot writer left (a press of Draft with AI or Redraft) is a quick job on triage's AI
     {'key': 'assistant_ai', 'label': 'Task agents', 'pick': 'brain', 'gear': 'main',
      'model_setting': 'assistant_model',
+     # ...and THE ADVISOR thinks here (brainroute.NORMAL, the owner 2026-11-24): Settings said triage's quick model ran it after it moved
      'desc': 'Work every task that is not coding - research, planning, a job in one of your systems - and write the replies '
-             'you approve.',
+             'you approve. The Advisor thinks on this AI too.',
      'why': 'An AI on this computer can run tools and drive a browser; an AI card with no agent of its own can only read and write.'},
     # the CLI tool itself, never a profile (the owner, 2026-10-15: "it's models or cli tools only") - it held `default_agent`,
     # a profile name, which is how a profile came to be read as a brain

@@ -16,7 +16,7 @@ test("folded by its X or under a page, the item stays on the table and the Advis
   assert.equal(tableOf({ cardKey: "task:7", setup: true, over: true }).speaks, true);
   assert.equal(tableOf({ cardKey: "task:7", setup: true, over: true, browsing: "b1" }).speaks, false);
   assert.equal(tableOf({ cardKey: "task:7", foldedKey: "task:7", setup: true, over: true }).speaks, false);
-  assert.match(src, /tableOf\(\{ current, cardKey, foldedKey, browsing, setup: setupOn\.current, over: !!setupCard \}\)/, "the page says what is over setup");
+  assert.match(src, /tableOf\(\{ current, cardKey, drawn, foldedKey, browsing, setup: setupOn\.current, over: !!setupCard \}\)/, "the page says what is over setup");
   assert.equal(tableOf({}).key, null);
 });
 

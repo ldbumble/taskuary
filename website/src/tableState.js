@@ -8,8 +8,10 @@ import { unlitWhy } from "./railStatus.js";
 // ...SETUP IS QUIET ONLY WHILE IT IS IN VIEW: a task opened over it by its link or by Search (`over`, AssistantView's setupCard) is the
 // item in front of the owner, and it drew its row with nothing lit and no line while the same task in the walk had both (the memory
 // A/B's UI pass, 2026-10-26: "make the opened task get its advice too")
-export function tableOf({ current = null, cardKey = null, foldedKey = null, browsing = null, setup = false, over = false } = {}) {
-  const key = current || cardKey || null;
+// ...AND WITH NOTHING PUT ON IT, THE CARD THE CHAT DRAWS LIVE (`drawn`, funnelPile.drawnKey - walk 11): after a restart the record was empty while
+// the chat's newest task card drew live, so the task stood inside the home with the home's own box under its own and the home's icons in its head
+export function tableOf({ current = null, cardKey = null, drawn = null, foldedKey = null, browsing = null, setup = false, over = false } = {}) {
+  const key = current || cardKey || drawn || null;
   const folded = foldsAs(foldedKey, key), place = !!browsing;
   return { key, folded, place, speaks: !!key && !folded && !place && (!setup || !!over) };
 }

@@ -34,7 +34,7 @@ test("setup mode: the steps for a rail, setup alone on the canvas, no chat box, 
   assert.match(av, /\{!firstRun && shown\.map/);
   assert.match(av, /className="tq-compose-box" style=\{firstRun \|\| /);
   // ...no Advisor line over setup itself - but a task opened over it is the item in view, and speaks (2026-10-26)
-  assert.match(av, /tableOf\(\{ current, cardKey, foldedKey, browsing, setup: setupOn\.current, over: !!setupCard \}\)/);
+  assert.match(av, /tableOf\(\{ current, cardKey, drawn, foldedKey, browsing, setup: setupOn\.current, over: !!setupCard \}\)/);
   assert.doesNotMatch(av, /SetupLine/, "setup says its own on the page");
   assert.match(av, /const shownAdvice = table\.speaks && !litNow \? adviceShown/);
   assert.match(read("FeedView.jsx"), /display: setupMode \? "none" : "flex"/);

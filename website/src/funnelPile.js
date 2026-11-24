@@ -184,6 +184,9 @@ export const interactiveCardIndex = (messages) => {
 // put the item's own durable line back above the one before it. The newest card still leads, unless it is another ITEM while the table's
 // own line is in the chat and not put down; a proposal, the walk or the brief after it lead as before.
 const keyed = (c, key) => c?.key === key || (c?.aliases || []).includes(key);
+// ...the key of the card tableCardIndex draws live when nothing was put on the table - an item `shows` draws as itself (CanvasItem.showsTask) - or null
+export const drawnKey = (messages, shows) => { const i = interactiveCardIndex(messages), m = i >= 0 ? messages[i] : null;
+  return m && !m.proposal && !NOT_ITEMS.has(m.card.kind) && shows(m.card) ? m.card.key || null : null; };
 export const tableCardIndex = (messages, key) => {
   const at = interactiveCardIndex(messages), top = at >= 0 ? messages[at] : null;
   if (!key || !top || top.proposal || NOT_ITEMS.has(top.card.kind) || keyed(top.card, key)) return at;

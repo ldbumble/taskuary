@@ -3,7 +3,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { tableCardIndex } from "../src/funnelPile.js";
+import { drawnKey, tableCardIndex } from "../src/funnelPile.js";
+import { tableOf } from "../src/tableState.js";
 
 const item = (id, key, extra = {}) => ({ id, role: "assistant", text: id, card: { kind: "todo", key, ...extra } });
 
@@ -22,4 +23,17 @@ test("otherwise the newest card leads, as before", () => {
   assert.equal(tableCardIndex([{ ...item(1, "p:5"), done: true }, item(2, "p:1")], "p:5"), 1, "the table's line put down is not brought back");
   const prop = { id: 3, role: "assistant", text: "?", proposal: { kind: "x" }, card: { kind: "proposal", key: "op:1" } };
   assert.equal(tableCardIndex([item(1, "p:5"), prop], "p:5"), 1, "a proposal after the item still leads");
+});
+
+// WALK 11: after a restart the table's record was empty while the chat's newest task card drew live - the task stood inside the home, the
+// home's "Ask…" box under its own and the home's icons in its head. The card drawn live is what the table holds, one record for both
+test("with nothing put on the table, the task card the chat draws live is on it", () => {
+  const task = (c) => !!c.tid, ms = [item(1, "p:5", { tid: 5 }), item(2, "p:1", { tid: 1 })];
+  assert.equal(drawnKey(ms, task), "p:1", "the one tableCardIndex draws live");
+  assert.equal(ms[tableCardIndex(ms, null)].card.key, drawnKey(ms, task));
+  assert.deepEqual(tableOf({ drawn: drawnKey(ms, task) }), { key: "p:1", folded: false, place: false, speaks: true });
+  assert.equal(tableOf({ drawn: "p:1", foldedKey: "p:1" }).folded, true, "folded by its X, it is no longer in view");
+  assert.equal(drawnKey([item(1, "p:5", { tid: 5 }), { ...item(2, "p:1", { tid: 1 }), done: true }], task), null, "put down: nothing");
+  assert.equal(drawnKey([item(1, "n:1")], task), null, "an item that is no task is not one");
+  assert.equal(tableOf({ current: "p:9", drawn: "p:1" }).key, "p:9", "what was put on the table leads");
 });

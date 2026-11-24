@@ -31,13 +31,13 @@ def armed_store(channel='whatsapp', chat=JID, on='1', talking=True):
     return store, store.get_connector(cid, with_secret=True)
 
 
-def waiting(store, subject='Export still broken'):
+def waiting(store, subject='Export still broken', who='Dana'):
     """One thing in the pipe: a drafted reply, the kind the walk opens with."""
     from datetime import datetime
     now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     t = store.create_task({'Title': subject, 'Kind': 'coding', 'Status': 'waiting'}, 'o')
     m = store.add_message({'TaskId': t, 'ExternalId': f'x:{subject}', 'ConversationId': f'c:{subject}',
-                           'Channel': 'email', 'Subject': subject, 'FromName': 'Dana',
+                           'Channel': 'email', 'Subject': subject, 'FromName': who,
                            'FromEmail': 'dana@vendor.com', 'SentAt': now, 'BodyText': 'Send the corrected file?',
                            'Status': 'routed'})
     r = store.add_review({'TaskId': t, 'MessageId': m, 'Kind': 'reply', 'DraftText': 'Attached.', 'Status': 'pending'})
@@ -383,8 +383,9 @@ class SameWalkTests(unittest.TestCase):
         self.assertNotIn('Assistant tab', seen['system'])
         # ...and it is the SAME conversation the tab reads
         rows = general.chat_rows(store, general.dock_task(store)[0]['TaskId'])
-        self.assertEqual([r['ActorType'] for r in rows], [general.USER_TYPE, general.ASSISTANT_TYPE])
-        self.assertIn('Dana is waiting on the corrected file.', send.call_args.args[2])
+        # ...the answer, then Dana's waiting draft it names brought up under it (named_drafts)
+        self.assertEqual([r['ActorType'] for r in rows], [general.USER_TYPE, general.ASSISTANT_TYPE, general.ASSISTANT_TYPE])
+        self.assertIn('Dana is waiting on the corrected file.', ''.join(c.args[2] for c in send.call_args_list))
 
     def test_next_moves_the_walk_and_the_next_item_comes_with_it(self):
         """The tab's own JavaScript surfaces the next card; a chat has no page, so this must."""
@@ -795,6 +796,31 @@ class BringUpTests(unittest.TestCase):
         self.assertEqual(surfaced.call_args.args[1], 'task:12')
         self.assertIn('Send', sent[-1][1])
         self.assertIsNone(remote_assistant.named_task('TQ-0012 and TQ-0013 both wait.'), 'two tasks named: no one of them is brought up')
+
+    def test_an_answer_naming_a_waiting_draft_by_its_person_brings_it_up_and_a_list_keeps_its_refs(self):
+        """Walk 18: "A reply to Omar is drafted and waiting for your approval" - no ref, no link - came with only Next / Ask, and "list them
+        all" named its tasks by linked labels the phone cut to words, so none of them could be reached. The one draft whose person the
+        answer names is brought up with its own Send; a linked label keeps its ref; two drafts named are each one tap away."""
+        store, c = armed_store()
+        omar, gail = waiting(store, 'Duplicate Trainly payment', who='Omar Keller')[0], waiting(store, 'Payworth accrual', who='Gail Moreno')[0]
+        card = {'say': 'Omar Keller wrote about a duplicate payment.', 'item': {'key': f'task:{omar}', 'kind': 'task', 'tid': omar, 'ref': f'TQ-{omar:04d}',
+                'title': 'Duplicate payment'}, 'chips': [{'verb': 'approve', 'label': 'Send'}, {'verb': 'next', 'label': 'Next'}]}
+        def turn(said):
+            sent = []
+            with mock.patch.object(concierge, 'restore_current', return_value=None), \
+                 mock.patch.object(concierge, 'say', return_value={'say': said, 'options': [], 'chips': [], 'decision': None}), \
+                 mock.patch.object(concierge, 'surface', return_value=card) as surfaced, \
+                 mock.patch.object(messengers, 'wa_send', side_effect=lambda st, chat, body, connector_id=None, poll=None: sent.append((body, poll))):
+                remote_assistant.respond(store, 'whatsapp', JID, "did anyone deal with Omar's duplicate payment?", c['ConnectorId'])
+            return sent, surfaced
+        sent, surfaced = turn('A reply to Omar is drafted and waiting for your approval.')
+        self.assertEqual(surfaced.call_args.args[1], f'task:{omar}')
+        self.assertIn('Send', sent[-1][1])
+        sent, surfaced = turn("Waiting on you: Gail's Payworth accrual and Omar's draft.")
+        self.assertFalse(surfaced.called, 'two drafts named: neither is guessed')
+        self.assertEqual(remote_assistant.unlinked(f"[Gail's Payworth accrual](#task={gail}) and [TQ-0003](#task=3)"),
+                         f"Gail's Payworth accrual (TQ-{gail:04d}) and TQ-0003")
+        self.assertTrue({f'Open TQ-{omar:04d}', f'Open TQ-{gail:04d}'} <= set(sent[-1][1]), sent[-1][1])
 
 
 class NoAITests(unittest.TestCase):

@@ -33,7 +33,7 @@ CHANNELS = ('whatsapp', 'telegram')
 LABELS = {'whatsapp': 'WhatsApp', 'telegram': 'Telegram'}
 HANDOFF_KEY = 'assistant_handoff'      # {'channel','chat','connector_id','at'} while the walk is on the phone
 
-_TASK_LINK = re.compile(r'\[([^\]]+)\]\(#task=\d+\)')
+_TASK_LINK = re.compile(r'\[([^\]]+)\]\(#task=(\d+)\)')
 _TASK_ID = re.compile(r'\]\(#task=(\d+)\)')
 
 
@@ -45,6 +45,25 @@ def named_task(say) -> int | None:
     if m := _TASK_ID.search(s): return int(m.group(1))
     refs = {int(x) for x in TQ_REF.findall(s)}
     return refs.pop() if len(refs) == 1 else None
+
+
+def unlinked(say) -> str:
+    """An answer's [label](#task=N) links said in words, each with its ref - a phone opens no link, and the label alone ("Gail's Payworth
+    accrual") lost which task it was, so a list of them reached nothing (walk 18)."""
+    from .store import TQ_REF, task_ref
+    return _TASK_LINK.sub(lambda m: m.group(1) if TQ_REF.search(m.group(1)) else f'{m.group(1)} ({task_ref(int(m.group(2)))})', str(say or ''))
+
+
+def named_drafts(store, say) -> list:
+    """The tasks whose card waits on his press (waiting_reviews: a reply draft first) and whom an answer names by that card's person - the
+    stored name of the one it answers, whole or its first name, as a word. Walk 18: "a reply to Omar is drafted and waiting for your
+    approval" offered only Next and Ask, the draft's Send nowhere on the phone. Stored names matched as names, never a reading of the words."""
+    from .triage import person_name
+    s, out = unlinked(say), []
+    for r in store.waiting_reviews():
+        n = person_name(r.get('FromName')) if r.get('TaskId') else ''
+        if n and re.search(rf"\b(?:{re.escape(n)}|{re.escape(n.split()[0])})\b", s) and int(r['TaskId']) not in out: out.append(int(r['TaskId']))
+    return out
 
 
 _locks, _locks_guard = {}, threading.Lock()
@@ -1358,13 +1377,19 @@ def carry_out(store, out: dict, item: dict | None, actor: str = 'owner', lead: s
         return _on(store, actor, said, done_with=(item or {}).get('key'))   # Next leaves the table as the desktop's does
     # AN ANSWER THAT NAMES A TASK BRINGS IT UP (the router rule): the desk opens a [TQ-…](#task=N) link the moment the answer lands;
     # the phone stripped it to its words, so "bring up TQ-0035" was answered and nothing came up (F18). Its card and its choices
-    linked = named_task(out.get('say')) if not out.get('item') and not prop and not verb else None
+    # ...and so does one that names a waiting draft by its person, with no link (named_drafts); several are each one tap away
+    bare = not out.get('item') and not prop and not verb
+    linked, named = (named_task(out.get('say')), []) if bare else (None, [])
+    if bare and not linked and len(named := named_drafts(store, out.get('say'))) == 1: linked = named[0]
     if linked:
         nxt = concierge.surface(store, f'task:{linked}', actor=actor)
         if nxt.get('item'):
             from . import chatformat
             words = turn_text({**out, 'chips': [], 'options': []}, lead, store)
             return chatformat.BREAK.join(x for x in (words, turn_text(nxt, store=store)) if x)
+    if len(named) > 1:
+        from .store import task_ref
+        said = [turn_text(out, lead, store, table=item, extra=(extra or []) + [(f'Open {task_ref(t)}', {'t': 'open', 'key': f'task:{t}'}) for t in named[:4]])]
     return '\n\n'.join(x for x in said if x)
 
 
@@ -2958,7 +2983,7 @@ def turn_text(out: dict, lead: str = '', store=None, extra: list = None, full: b
     if held_on: out = _recast(out, drop=set(_HAND))
     out, leads = _after_the_run(store, out, item)
     said = decision(store, item) if item else {}             # the one decision: the desk's lit button and line, here too
-    say = _TASK_LINK.sub(r'\1', str(out.get('say') or '')).strip()
+    say = unlinked(out.get('say')).strip()
     mark = funnel.mark_for(item)
     if say and mark: say = f'{mark} {say}'
     state = status_line(item)
@@ -2976,7 +3001,7 @@ def turn_text(out: dict, lead: str = '', store=None, extra: list = None, full: b
         head = '\n'.join(x for x in (task, say, why) if x)
     story = bool(item) and item.get('kind') in STORY_KINDS
     draft = _draft_text(store, item) if story and store is not None else ''
-    if story: head = story_block(store, item, draft, _TASK_LINK.sub(r'\1', str(out.get('say') or '')).strip(), full=full)
+    if story: head = story_block(store, item, draft, unlinked(out.get('say')).strip(), full=full)
     if item.get('kind') == 'fyis':
         # THE ITEMS, one per line, and nothing else: the say line restated them as one run-on sentence and
         # the status line added "fyi - people told you things" under it, and on a phone that read as

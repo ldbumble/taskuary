@@ -3460,9 +3460,9 @@ def light_per_agent(store) -> int:
     return max(1, min(20, n))
 
 def agent_load(store) -> float:
-    "Live agent sessions, plus live subagents at 1/light_per_agent each - the one number the cap is read against."
+    "Live agent sessions and queued starts coming up (blackboard.starting_count), plus live subagents at 1/light_per_agent each - the one number the cap is read against."
     from . import blackboard as bb
-    return bb.live_count() + bb.subagent_count() / light_per_agent(store)
+    return bb.live_count() + bb.starting_count() + bb.subagent_count() / light_per_agent(store)
 
 def has_room(store, need: float = 1.0) -> bool:
     "True when `need` more (1 for a session) still fits under auto_sessions."

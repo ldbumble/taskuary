@@ -59,8 +59,7 @@ def test_the_rarer_proposal_shapes_are_a_guide_away_not_in_every_tools_list():
     d = agenttools.TOOLS['propose'][1]
     assert '`propose` topic' in d and 'jira_move' not in d
     got = agenttools.call(MemoryStore(), 1, 'guide', {'topic': 'propose'}, {})
-    for want in ('github_issue', 'jira_move', 'monday_'): assert want in got, want
-    assert 'linkedin_post' not in got, 'a post is propose_post, a tool of its own'
+    for want in ('linkedin_post', 'github_issue', 'jira_move', 'monday_', 'Post button'): assert want in got, want
 
 
 # A STEP THAT WAITS ON THE OWNER IS A CARD, AND ITS PRESS IS WHAT THE AGENT PLANS ON (the owner, 2026-11-10: "it shoudl prompt you, should i

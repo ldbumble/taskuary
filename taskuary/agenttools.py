@@ -17,7 +17,6 @@ import json, re, time
 from loguru import logger
 
 from . import words
-from .proposals import NETWORKS
 from .selfclose import SHOW_WHAT
 
 SERVER = 'taskuary'
@@ -237,15 +236,6 @@ TOOLS = {
                           'guessed': {'type': 'array', 'items': _STR}},
                          ('to', 'subject', 'text')),
                       ('POST', '/api/agent/draft')),
-    # A POST HAS A TOOL OF ITS OWN (the owner's live task, 2026-11-24: asked for X, Reddit and LinkedIn drafts, a Codex agent wrote all three as prose
-    # beside its picture - the post card was a run_tool shape inside propose's long description, and it never found it). The same card the
-    # run_tool road files (proposals.post_of): his connected account on the press, else Post via the browser with the site's final Post held
-    'propose_post': ('propose', "A post for the owner's press: one card per network with its words and picture; on the press it is published - "
-                                "through the network's connection where there is one, else in the browser with the final Post waiting for his "
-                                "press. `picture`: a file in your task folder. `link`, and on Reddit `subreddit` and `title`, where the network "
-                                "takes them. `replaces`: as on propose_email.",
-                     _S({'network': {'type': 'string', 'enum': list(NETWORKS)}, 'text': _STR, 'picture': _STR, 'link': _STR, 'subreddit': _STR,
-                         'title': _STR, 'replaces': _STR}, ('network', 'text')), ('POST', '/api/agent/propose')),
     # THE FORM A MAIL BRINGS (the owner, 2026-11-04: a permission slip to sign for their kid - "the agent should sign it and say 'do you
     # want me to send it out'"): signed with the picture the owner saved, which the agent never sees (handsign)
     'sign_form': ('own', "Fill and sign a PDF form with the owner's saved signature: `attachment` (an id on this task) or `file` (a "
@@ -284,8 +274,8 @@ TOOLS = {
               ('POST', '/api/agent/share')),
     'propose': ('propose', "Ask the owner to approve one act Taskuary runs on their press: comment_issue {body} (a public GitHub "
                            "comment), close_issue, open_pr, land, push {cwd?: the checkout, deploy?: the branch that deploys it} (where the "
-                           "work is in a checkout - one the owner named counts - these three are its Push / Push & deploy / PR buttons), run_tool {type, connector_id, ...} (a send or order on one of"
-                           " their systems - a new GitHub issue and a Jira, Monday or Linear write are the guide tool's "
+                           "work is in a checkout - one the owner named counts - these three are its Push / Push & deploy / PR buttons), run_tool {type, connector_id, ...} (a send, post or order on one of"
+                           " their systems - a post, a new GitHub issue and a Jira, Monday or Linear write are the guide tool's "
                            "`propose` topic), write_playbook {slug, text}, settings {changes}, break_out {title, summary, messages: [m-ids], items: "
                            "[to-do ids]} (a part of this task that is another matter, to a task of its own), save_routine {title, script: whole standard-library Python, "
                            "rows on stdin and JSON rows out, reads?: {a source type and its keys}, prompt?: an AI step on its output, daily_at?: "
@@ -326,7 +316,7 @@ CODING_TOOLS = ('note_peers', 'use_repo', 'find_repos', 'propose_land')
 # the sign-up, the one way a password is typed - is here, and nothing here is ever deferred (apiagent.LATER is built without them)
 # ...and WHO A PERSON IS (walk 18, 2026-11-24): deferred, `person_tasks` was never once loaded, and an agent on one of a person's asks never
 # saw the two others the same mail answered - `person` now holds their tasks too and rides with the first turn
-ALWAYS_LOAD = ('show', 'propose_reply', 'propose_email', 'propose_post', 'propose', 'hand_over', 'browser_signup', 'remember', 'tick', 'end_turn', 'ask_owner', 'person')
+ALWAYS_LOAD = ('show', 'propose_reply', 'propose_email', 'propose', 'hand_over', 'browser_signup', 'remember', 'tick', 'end_turn', 'ask_owner', 'person')
 # ONE LINE A TOOL, FOR EVERY BRAIN (the owner, 2026-11-15: "They should be MCP-style tools with simple JSON: what they do and descriptions.
 # All methods can be searched later"): the whole description of every tool rode on every call - ~15,000 characters, ~650 a tool. A tool is
 # listed by its name, this line and its parameters' names and types (lean); its full words, rules and examples are find_tools' answer
@@ -367,7 +357,6 @@ SHORT = {
     'keep_card': 'Bring back a card greyed by the newest input, as it was, under that input.',
     'hand_over': 'Hand the owner a step on the page only he can do (a sign-in, a robot check, paying) - one card; go on with the job.',
     'propose_email': "Draft an email for the owner's Send - several at once in `items`.",
-    'propose_post': "A post for the owner's press, one card per network - several at once in `items`.",
     'sign_form': "Fill and sign a PDF form with the owner's saved signature.",
     'answer_invite': "Answer this task's meeting invite: accept, decline or propose.",
     'set_up_meeting': "Set up a meeting for the owner's press.",
@@ -557,7 +546,7 @@ ITEMS = {'type': 'array', 'items': {'type': 'object'},
 # ...the two every act goes by: an email, and any other act (`propose`: a close, a post, a SQL write, an API call) - a reply answers one
 # message, an invite one meeting, and the landing question is one per checkout
 for _n, (_c, _d, _s, _door) in TOOLS.items():
-    if _n in ('propose_email', 'propose_post', 'propose'):
+    if _n in ('propose_email', 'propose'):
         need = _s.get('required') or []
         # ...what one card needs, each item needs - or the call carries it whole: one or the other, never neither
         _s['properties']['items'] = {**ITEMS, 'items': {**ITEMS['items'], **({'required': need} if need else {})}}
@@ -593,7 +582,7 @@ def _many(store, tid: int, name: str, args: dict, doors: dict) -> str:
                                                (int(tid), top, *mine))] if mine else []
     # ...and only MANY OF THE SAME THING is one card (the owner, 2026-11-20): posts for different networks are different things - each its own
     # card in the row, with its own picture - however many there are
-    bulk = len(mine) >= bulkcard.MANY and len({str({**base, **it}.get('type') or {**base, **it}.get('network') or '') for it in items}) <= 1
+    bulk = len(mine) >= bulkcard.MANY and len({str({**base, **it}.get('type') or '') for it in items}) <= 1
     if bulk: store._exec(f"UPDATE review SET Batch=? WHERE ReviewId IN ({','.join('?' * len(mine))})", (key, *mine))
     n = len(mine)
     card = ('They stand as ONE card: the owner reviews a few and does them all with one press; you hear the whole run once.' if bulk
@@ -850,14 +839,10 @@ def _call(store, tid: int, name: str, args: dict, doors: dict, skip=()) -> str:
     if name == 'answer_invite': return _j(doors['answer_invite'](tid, a))
     if name == 'set_up_meeting': return _j(doors['meeting'](tid, a))
     if name == 'share': return _j(doors['share'](tid, a))
-    if name in ('propose', 'propose_post'):
-        from .proposals import post_of, post_type
-        if name == 'propose_post' and not post_type(a.get('network')):
-            raise ValueError(refusal(f"there is no post card for {echo(a.get('network'))!r}", f"call propose_post with `network` one of {', '.join(NETWORKS)}; "
-                                     "anywhere else, put it up in your browser - its final Post waits for his press"))
-        old, was, p = a.get('replaces'), verdicts.unsent(store, tid), post_of(a) if name == 'propose_post' else {k: v for k, v in a.items() if k != 'replaces'}
-        out = doors['propose'](tid, p)
-        return _j(card_roads(store, replaced(store, doors, tid, was, out, old, 'a new proposal takes its place'), p))
+    if name == 'propose':
+        old, was = a.get('replaces'), verdicts.unsent(store, tid)
+        out = doors['propose'](tid, {k: v for k, v in a.items() if k != 'replaces'})
+        return _j(card_roads(store, replaced(store, doors, tid, was, out, old, 'a new proposal takes its place'), a))
     raise ValueError(f'no tool {name!r} - tools/list names them; use one of those')
 
 

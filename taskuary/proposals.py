@@ -129,24 +129,6 @@ MEDIA = {'linkedin_post', 'x_post'}
 
 
 def is_post(p: dict) -> bool: return (p or {}).get('action') == 'run_tool' and (p or {}).get('type') in POSTS
-NETWORKS = {t.removesuffix('_post'): t for t in POSTS}         # ...propose_post's `network`: the card's own type (linkedin, x, reddit ...)
-def post_type(network) -> str | None:
-    "The run_tool type a post on `network` is - by its card's type, its name or a word of its card's title (\"X (Twitter)\"); None for none."
-    from .connectorcatalog import by_type
-    n = str(network or '').strip().lower().removesuffix('_post')
-    return next((t for k, t in NETWORKS.items() if n in (k, POSTS[t].lower(), *re.findall(r'[a-z0-9]+', ((by_type(k) or {}).get('title') or '').lower()))), None)
-def post_of(a: dict) -> dict:
-    """propose_post's call as the run_tool proposal the post road files (queue, card_roads, via_browser): `picture` is its `image`, and a
-    `link` where the network has no field of its own for one goes at the end of its words. ValueError names the networks there are."""
-    from .connectorcatalog import action_for, field
-    t = post_type(a.get('network'))
-    if not t: raise ValueError(f"no post card for {a.get('network')!r} - one of: {', '.join(NETWORKS)}")
-    text, link = str(a.get('text') or '').strip(), str(a.get('link') or '').strip()
-    own = field(action_for(t), 'link')
-    if link and not own and link not in text: text = f'{text}\n\n{link}'.strip()
-    keep = {k: a[k] for k in ('subreddit', 'title', 'why') if str(a.get(k) or '').strip()}
-    return {'action': 'run_tool', 'type': t, 'text': text, **keep, **({'image': a['picture']} if a.get('picture') else {}),
-            **({'link': link} if link and own else {})}
 # A POST ON A NETWORK NOT CONNECTED IS STILL ITS CARD, AND ITS PRESS HANDS IT TO THE AGENT FOR THE SITE (the owner, 2026-11-22: "card first,
 # sign-in at the press"): the agent went to LinkedIn's sign-in before writing a word, then gave the posts back as prose. The card stands with
 # the words and picture; Post via the browser saves them as he left them, once (decide_review takes one press), and hands them to its agent,

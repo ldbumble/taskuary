@@ -46,11 +46,11 @@ test("a workflow's write waiting for the yes reads as what it writes and where, 
 test("a step's card shows every field its press runs - a script beside harmless words is drawn, never hidden behind them", () => {
   const review = { Kind: "action", DraftText: JSON.stringify({ action: "run_tool", type: "winrm", connector_id: 3, text: "Check the disk space",
     script: "Remove-Item C:\\ -Recurse", url: "https://box.example", path: "C:\\logs" }) };
-  const said = reviewText(review);
-  assert.match(said, /^Check the disk space\n\n/);
-  assert.match(said, /script: Remove-Item C:\\ -Recurse/);
-  assert.match(said, /url: https:\/\/box\.example/);         // ...a second place too: the Where line names only the first
-  assert.equal(proposalPresentation(review).destination, "C:\\logs · winrm");
+  const shown = proposalPresentation(review), rows = Object.fromEntries(shown.rows.map((r) => [r.label, r.now]));
+  assert.equal(reviewText(review), "Check the disk space");     // ...the box holds the words alone: an edit sends them, never a field's line
+  assert.equal(rows.Script, "Remove-Item C:\\ -Recurse");       // ...the script it runs stands beside them, read off
+  assert.equal(rows.Url, "https://box.example");                 // ...a second place too: the Where line names only the first
+  assert.equal(shown.destination, "C:\\logs · winrm");
 });
 
 test("the editable review body is the playbook markdown, not its action envelope", () => {

@@ -46,15 +46,16 @@ export const toolWhere = (p) => {
   const sys = String(p?.type || "").replace(/_/g, " ");
   return k ? `${String(p[k])} · ${sys}` : sys || "a connected system";
 };
-// ...EVERY FIELD THE PRESS RUNS IS ON THE CARD (red team F1): its words first, then each other field it carries - a `script` beside harmless
-// `text` was never drawn and ran at the press. Only the plumbing, and the place the "Where" line already names, are left out
+// ...EVERY FIELD THE PRESS RUNS IS ON THE CARD (red team F1): a `script` beside harmless `text` was never drawn and ran at the press. The box
+// holds the words alone - the words are what an edit sends - and every other field it runs stands beside them as a read-only row (toolFacts).
+// Only the plumbing, and the place the "Where" line already names, are left out
 const BODY_KEYS = ["text", "body", "message", "query", "script"];
-export const toolBody = (p) => {
-  const k = BODY_KEYS.find((x) => p?.[x] != null && p[x] !== ""), w = whereKey(p);
-  const rest = Object.entries(p || {}).filter(([x, v]) => x !== k && x !== w && !PLUMBING.has(x) && v !== "" && v != null)
-    .map(([x, v]) => `${x.replace(/_/g, " ")}: ${typeof v === "string" ? v : JSON.stringify(v)}`);
-  return [k ? String(p[k]) : "", rest.join("\n")].filter(Boolean).join("\n\n");
-};
+const bodyKey = (p) => BODY_KEYS.find((x) => p?.[x] != null && p[x] !== "");
+const facts = (p) => { const k = bodyKey(p), w = whereKey(p);
+  return Object.entries(p || {}).filter(([x, v]) => x !== k && x !== w && !PLUMBING.has(x) && v !== "" && v != null)
+    .map(([x, v]) => ({ label: upFirst(x.replace(/_/g, " ")), now: typeof v === "string" ? v : JSON.stringify(v) })); };
+export const toolFacts = (p) => (bodyKey(p) ? facts(p) : []);
+export const toolBody = (p) => { const k = bodyKey(p); return k ? String(p[k]) : facts(p).map((f) => `${f.label.toLowerCase()}: ${f.now}`).join("\n"); };
 
 // A CHANGE'S CARD (workflows.change_card): its new words to edit ({key, label, was, now}) and the facts it changes besides ({label, was, now}),
 // led by the title and why it changes in one line
@@ -204,6 +205,7 @@ export const proposalPresentation = (review) => {
     ...leadOf(review),
     destinationLabel: "Where",
     destination: toolWhere(proposal),
+    rows: toolFacts(proposal),
     approveLabel: APPROVE,
     busyLabel: "running…",
     rejectLabel: "Dismiss",

@@ -4,6 +4,7 @@
 import React from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { findAndReplace } from "mdast-util-find-and-replace";
 import { Box, Button, Dialog, DialogContent, DialogTitle, IconButton } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
 import { BORDER, DIM, INK, PANEL, mono } from "./theme.jsx";
@@ -159,9 +160,14 @@ const Pre = ({ children, node, ...rest }) => { const box = React.useRef(null), s
   if (view) return <ViewSpec spec={view} />;
   return <div className="tq-copy-host"><pre ref={box} {...rest}>{children}</pre><CopyCorner text={() => box.current?.innerText || ""} /></div>; };
 
+// ...A LINE BREAK IS A LINE BREAK (the owner, 2026-11-24: an end-of-day brief's five items, one a line, ran together as one paragraph): Markdown
+// reads a single newline as a space, a chat never does - every line written stands as written, in an answer, a report and a brief alike
+const remarkBreaks = () => (tree) => findAndReplace(tree, [/\r?\n|\r/g, () => ({ type: "break" })]);
+const PLUGINS = [remarkGfm, remarkBreaks];
+
 // ...and one line of it, inline: a brief's bullet keeps its bold and its links without a paragraph around them
 export const MdLine = ({ text }) => (
-  <ReactMarkdown remarkPlugins={[remarkGfm]} components={{ a: A, img: Img, p: ({ children }) => <>{children}</> }}>{plainCitations(text || "")}</ReactMarkdown>
+  <ReactMarkdown remarkPlugins={PLUGINS} components={{ a: A, img: Img, p: ({ children }) => <>{children}</> }}>{plainCitations(text || "")}</ReactMarkdown>
 );
 // ...every table fits by the one rule (tableFit.js): its frame widens, then its font steps down, then it wraps at words, then it scrolls
 const FitTable = ({ children }) => { const ref = React.useRef(null); useTableFit(ref, [children]); return <div className="tbl" ref={ref}><table>{children}</table></div>; };
@@ -169,7 +175,7 @@ export const Md = ({ text, onTask = null }) => {
   const at = React.useContext(LocalFiles), words = at ? codeLocalPaths(plainCitations(text || ""), at.tid) : plainCitations(text || "");
   return (
   <Box sx={sx} className="tq-md">
-    <ReactMarkdown remarkPlugins={[remarkGfm]}
+    <ReactMarkdown remarkPlugins={PLUGINS}
       components={{ a: onTask ? (p) => <A {...p} onTask={onTask} /> : A, img: Img, td: Td, pre: Pre, code: Code, table: FitTable }}>
       {/* a Codex citation marker reads as the file's name wherever an answer is shown; the chat makes it a file (taskOutputs.js) */}
       {/* ...and in the chat a task it names is a link that opens it (linkRefs); a path into the task's own folder, the file (Code) */}

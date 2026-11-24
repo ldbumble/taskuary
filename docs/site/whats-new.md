@@ -2,6 +2,25 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.4.3.5 - 2026-11-24
+
+- The FYI lane's filed news: a read writes nothing, and Taskuary's own lines are not news
+- A woken turn's "his press" never outlives its thread
+- The cold rail judges each correspondent once, not once per task
+- A table's fit is one function the chat and a test both run: run again on the frame it widened, it gives the same width
+- The files one turn made are one artifact: a count, the bulk card's rows, one preview
+- A task's Trust hold is a stored fact, judged again only when what it rests on moved
+- A card runs what it shows: no agent's python_script, no field its card hides, no press on a card changed since it was drawn
+- An AI that is off takes no work: the next connected, ready AI does, on its own model, and every surface says so
+- A write meets the gate a read does: Taskuary's own files never, outside the task's folders the held card
+- The owner token is sealed on disk, never opened in a session, and a task's proof beside it makes the call an agent's
+- A file is served as a type we name, never a stored string: sandboxed when opened as a page, never sniffed
+- Only the owner is handed a Connect link: an agent's GET of QuickBooks, Zoho or LinkedIn authorize is refused
+- A card's words stay the words: every other field its press runs is a read-only row beside them
+- His own domain and his own systems are his only on the receiving server's proof
+- A line held for his Trust reaches no agent until he gives it, then once
+- GitHub's verified notice about one of his repositories is his system again
+
 ## 0.4.3.4 - 2026-11-24
 
 - Anything for the owner's review is one tool: propose, its kind the road the press takes

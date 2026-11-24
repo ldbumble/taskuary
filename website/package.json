@@ -25,6 +25,7 @@
     "axios": "^1.7.0",
     "react": "^18.3.0",
     "react-dom": "^18.3.0",
+    "mdast-util-find-and-replace": "^3.0.2",
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1",
     "three": "^0.180.0"

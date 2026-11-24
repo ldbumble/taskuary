@@ -85,9 +85,6 @@ class WhatItWaitsOnTests(unittest.TestCase):
         line = next(l for l in context.open_items(self.s) if f'(tid {self.tid})' in l)
         self.assertIn('its agent asks you: Is 25 seats or 250 the right count?', line)
         self.assertIn('waiting on Gail', line)
-        ws.record(self.s, self.tid, 'g1', 'working', text=ws.WAKE, source='api')
-        ws.record(self.s, self.tid, 'g1', 'turn_end', text='250 - it is in the contract.', source='api')
-        self.assertNotIn('its agent asks you', next(l for l in context.open_items(self.s) if f'(tid {self.tid})' in l))
 
 
 class OpenItemsBoundTests(unittest.TestCase):

@@ -26,8 +26,8 @@ DONE THIS WEEK (my own work, with the agent's summary):
 - TQ-0003 [coding] Ship the invoice importer - closed <day> <mon> <time>: imported the March invoices and closed the run.
 
 OPEN WORK:
-- TQ-0002 [writing] Draft the audit answers - on you - <h> since anything happened
-- TQ-0001 [coding] Reconcile the Q3 ledger - on you - <h> since anything happened
+- TQ-0002 [writing] asked: Draft the audit answers - on you · nothing waits for his press - <h> since anything happened
+- TQ-0001 [coding] asked: Reconcile the Q3 ledger - on you · nothing waits for his press - <h> since anything happened
 
 WORTH AUTOMATING (read once a week: the last 30 days of my traffic counted - who sends what and what became of it, drafts I approved untouched, and the rules that already exist):
 INBOUND BY SENDER (last 30 days; senders with 3+ messages):
@@ -427,8 +427,8 @@ DONE THIS WEEK (my own work, with the agent's summary):
 - TQ-0003 [coding] Ship the invoice importer - closed <day> <mon> <time>: imported the March invoices and closed the run.
 
 OPEN WORK:
-- TQ-0002 [writing] Draft the audit answers - on you - <h> since anything happened
-- TQ-0001 [coding] Reconcile the Q3 ledger - on you - <h> since anything happened
+- TQ-0002 [writing] asked: Draft the audit answers - on you · nothing waits for his press - <h> since anything happened
+- TQ-0001 [coding] asked: Reconcile the Q3 ledger - on you · nothing waits for his press - <h> since anything happened
 
 WORTH AUTOMATING (read once a week: the last 30 days of my traffic counted - who sends what and what became of it, drafts I approved untouched, and the rules that already exist):
 INBOUND BY SENDER (last 30 days; senders with 3+ messages):

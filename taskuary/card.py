@@ -121,10 +121,14 @@ def waiting(store, tid, asks: bool = True, trust: bool = True) -> list:
 def _waiting(store, tid: int, asks: bool, trust: bool = True) -> list:
     from . import origin
     from .conversation import unwritten
-    h = origin.keeps_him(store, tid) if trust else None
-    out = [{'id': f'trust:{tid}', 'task': tid, 'kind': TRUST, 'sort': 'trust', 'state': 'pending', 'verb': None, 'what': cq._flat(h.get('line')),
-            'rids': [], 'at': None, 'decided': None, 'by': None, 'error': '', 'front': True}] if h else []
-    st = cq.state(store, tid)
+    # ...the line itself read once whatever is asked beside it (the Trust, the agent's question): Send and close and where it stands each ask -
+    # and before the hold, whose first judging of the task's origin writes it down (origin.of_task), which a line kept would not outlive
+    if asks or trust:
+        line, h = waiting(store, tid, asks=False, trust=False), origin.keeps_him(store, tid) if trust else None
+        out = [{'id': f'trust:{tid}', 'task': tid, 'kind': TRUST, 'sort': 'trust', 'state': 'pending', 'verb': None, 'what': cq._flat(h.get('line')),
+                'rids': [], 'at': None, 'decided': None, 'by': None, 'error': '', 'front': True}] if h else []
+        return out + line + (_asks(store, tid) if asks else [])
+    out, st = [], cq.state(store, tid)
     for i, u in enumerate(st['units']):
         out.append(_land(store, tid, u) if u['rids'] == [cq.LAND] else _of(store, cq._waits(u) or u['rows']))
         out[-1]['front'] = i == 0
@@ -132,8 +136,7 @@ def _waiting(store, tid: int, asks: bool, trust: bool = True) -> list:
     for r in store._rows("SELECT * FROM review WHERE TaskId=? AND Status IN ('pending','held') ORDER BY ReviewId", (tid,)):
         if r['ReviewId'] in seen or unwritten(r) or cq.obsolete_read(store, tid, r): continue
         by.setdefault(cq._turn(r), []).append(r)
-    out += [_of(store, rs) for rs in by.values()]
-    return out + (_asks(store, tid) if asks else [])
+    return out + [_of(store, rs) for rs in by.values()]
 
 
 def front(store, tid, trust: bool = True, asks: bool = True) -> dict | None:

@@ -24,7 +24,8 @@ def fresh(store, key, fn):
     # ...and only for this very store: a store gone and a new one at its address (a test's) is another store
     if (got := _SEEN.get(k)) and got[3]() is store and got[0] == w and now - got[1] < FRESH: return got[2]
     if len(_SEEN) > 512: _SEEN.clear()
-    v = fn(); _SEEN[k] = (w, now, v, weakref.ref(store)); return v
+    # ...kept from when it was READ, not asked: a read longer than FRESH (a 1,500-line chat) was stale as it landed and read again by every caller
+    v = fn(); _SEEN[k] = (w, time.monotonic(), v, weakref.ref(store)); return v
 
 
 def _p(r) -> dict:

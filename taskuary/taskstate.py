@@ -119,7 +119,11 @@ def standing(store, tid, key: str = None) -> dict:
     """{waits_on: 'you'|'them'|'agent'|None, who, what: [...], since, next, closed, them, check} for task `tid` - `who` the person it waits on
     ('them'), `what` what is awaited (the cards, the question, the mail), `since` from when, `next` the check-back's time or None; `them` every
     answer awaited from others, and `check` the check-back {at, what}, whoever's move it is now. `key`: the task's state already read
-    (TaskState.base), else it is read here."""
+    (TaskState.base), else it is read here. ONE READ OF A PAGE ASKS IT ONCE (cardqueue.fresh): the rail, the header, Send and close and the
+    rulebook each ask it of the same task within one read (tests/test_big_task_opens_fast)."""
+    from . import cardqueue
+    return cardqueue.fresh(store, ('standing', int(tid), key), lambda: _standing(store, tid, key))
+def _standing(store, tid, key: str = None) -> dict:
     from datetime import datetime
     from . import card, checkback, waiton
     t = store.get_task(int(tid)) or {}

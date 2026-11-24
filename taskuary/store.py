@@ -2394,7 +2394,14 @@ class SQLiteStore:
         self._bump_snapshots()
         # Timeline rows carry task/review state too, so a task transition changes both views.
         self._poke('feed-changed', 'task-changed', task_id=task_id)
-    def get_task(self, task_id): return self._one('SELECT * FROM task WHERE TaskId=?', (task_id,))
+    def get_task(self, task_id):
+        """One task's row. While a build holds its settings (held_settings) the row is read once until this store writes - a task's page
+        read asked it ~30 times (tests/test_big_task_opens_fast) - and each caller gets its own copy to change."""
+        held, w = getattr(_HELD, 'settings', None), getattr(self, '_writes', None)
+        if held is None or held[0] is not self or w is None: return self._one('SELECT * FROM task WHERE TaskId=?', (task_id,))
+        k = ('task', task_id, w)
+        if k not in held[1]: held[1][k] = self._one('SELECT * FROM task WHERE TaskId=?', (task_id,))
+        return dict(held[1][k]) if held[1][k] else held[1][k]
     # ── the checklist: what the message actually asked for, as boxes (PW-074..077) ───────────
     # Items carry a stable id derived from their words, so a re-triage or an owner edit that
     # keeps an item's text keeps its box; progress is never task completion.

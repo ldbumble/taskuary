@@ -883,9 +883,11 @@ class TerminalTests(unittest.TestCase):
         # directory, not of the prompt, so it is not what this budget is about.
         # the browser line rides only on a machine with agent-browser installed, so it is the machine's, not the prompt's, too
         # ...and the fence and tick lines every seed carries (the owner, 2026-11-23: no rule blocks, so they ride on their own): the same
-        # words on every seed, and this test is about a whole line reaching the TUI, not about them
+        # words on every seed, and this test is about a whole line reaching the TUI, not about them - nor about AGENTS.md, the owner's own
+        # file read at every turn (selfclose.guidance), whose length is his
         with mock.patch('taskuary.context.write', return_value=None), mock.patch('taskuary.browserview.hint', return_value=''), \
-                mock.patch.object(terminal, 'FENCE_LINE', ''), mock.patch.object(terminal, 'TICK_LINE', ''):
+                mock.patch.object(terminal, 'FENCE_LINE', ''), mock.patch.object(terminal, 'TICK_LINE', ''), \
+                mock.patch('taskuary.selfclose.guidance', return_value=''):
             seed = terminal.seed_text(server.store, tid)
         # Back to 1000. Switching the handbook on briefly pushed this to 1100 by adding a line
         # about how to write an entry - and a longer seed takes longer to type into a real TUI,

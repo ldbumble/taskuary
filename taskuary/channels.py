@@ -1323,6 +1323,11 @@ def ingest_own_message(store, msg: dict, why: str, keep_unmatched: bool = True) 
         # ...and the task's assistant hears that you already answered, wherever you did (Task 4.5): what is left is its to re-plan.
         # Never Taskuary's own acknowledgement, which promises an answer and is not one
         from . import ingest
+        # ...HIS ANSWER GIVEN OUTSIDE IS HIM SPEAKING (walk 15, S7): it answers the question the task's agent asked him by the road his typed line
+        # takes (workerstate.line_answers) - heard before the agent wakes on it; its choices grey, and the header, rail and phone read that state
+        if not ingest.is_ack(store, sent):
+            from . import workerstate
+            workerstate.line_answers(store, tid, body, 'owner')
         # ...but A LINE THE OWNER SAID IN A CHAT is context, never a turn (the owner, 2026-11-08: "it should show what i sent ... even if it
         # does not trigger as a prompt"): it stands in the task's chat as theirs, and the agent hears it on its next turn (events.py)
         # - at once where its draft waits or it is at work (owner_line)

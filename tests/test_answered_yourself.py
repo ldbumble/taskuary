@@ -427,3 +427,28 @@ def test_his_own_mail_that_is_the_drafted_letter_joins_its_task_and_stands_the_d
     sent = next(m for m in s.list_messages(tid) if m.get('ExternalId') == 'sent-1')
     assert sent['TaskId'] == tid
     assert s.get_review(rid)['Status'] != 'pending' and s.get_review(other)['Status'] == 'pending'
+
+
+def test_his_answer_given_outside_answers_the_agents_question_as_his_typed_line_does():
+    """Walk 15 (S7, invented people): Erin asked to move Friday's review; the task's agent asked him "Move to 2 p.m. / Keep 10 a.m.?" and he
+    answered Erin from his mailbox instead. The waiting draft went grey, but the agent's question stood open - its choices live, the header
+    "agent waiting on you", the rail's wave and the phone's list of questions. His own answer is him speaking: it answers the question the
+    task's agent asked him, by the road his typed line takes (workerstate.line_answers) - every surface reads that one state."""
+    from taskuary import taskstate, workerstate as ws
+    from taskuary.channels import ingest_outbound_mail
+    s = MemoryStore()
+    mid = s.add_message({'ExternalId': 'in-erin3', 'ConversationId': 'c-erin3', 'Channel': 'email', 'SourceName': 'alex@northwind.example',
+                         'Subject': 'Friday review', 'FromName': 'Erin Blake', 'FromEmail': 'erin@northwind.example',
+                         'SentAt': '2026-11-24 08:00:00', 'BodyText': 'Can we move Friday to 2 p.m.?', 'Status': 'routed'})
+    tid = s.create_task({'Title': 'Erin asks to move Friday', 'Kind': 'general', 'Status': 'open'}, 'router')
+    s.attach_message(mid, tid)
+    rid = s.add_review({'MessageId': mid, 'TaskId': tid, 'Kind': 'draft_reply', 'Status': 'pending', 'DraftText': 'Hi Erin, 2 p.m. is fine.'})
+    ws.record(s, tid, 'run-1', 'working', text='Erin asks to move Friday')
+    ws.record(s, tid, 'run-1', 'input_needed', request_id='q:0123456789:1', text='Move Friday to 2 p.m.?', choices=['Move to 2 p.m.', 'Keep 10 a.m.'])
+    ws.record(s, tid, 'run-1', 'turn_end', text='I asked you about Friday.')
+    assert taskstate.open_question(s, tid), 'asked'
+    ingest_outbound_mail(s, 'alex@northwind.example', {'id': 'out-3', 'subject': 'RE: Friday review', 'conversationId': 'c-erin3',
+                                                        'bodyPreview': '2 p.m. works - see you then.', 'sentDateTime': '2026-11-24T09:00:00'})
+    assert s.get_review(rid)['Status'] == 'superseded', 'the draft went grey, as before'
+    assert taskstate.open_question(s, tid) is None, 'and the question he answered is answered'
+    assert not ws.status(s, tid)['requests']

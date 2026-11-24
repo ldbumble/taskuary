@@ -999,6 +999,9 @@ def carries_on(store, tid) -> bool:
     return not isinstance(s := _last_said(store, tid)[1], dict) or s.get('after_press') == 'send'
 
 
+# a thread's body run in a context of its own: what it sets (origin.OWNER_SPEAKS) never outlives it where a road runs it in place (Windows CI,
+# 2026-11-24: an inline thread left "his press" set, and a later turn Taskuary began on a stranger's task was not held)
+def _own_context(f): return lambda: contextvars.copy_context().run(f)
 def follow_up(store, tid, press: str, actor: str = 'owner', said: str = None, heard=None) -> bool:
     """Start one turn on task `tid` when its agent's newest summary waits on `press` ('send', 'handoff') - or, with `said` (approved), after
     any answer of its own, `said` its prompt. True when one was started, or `said` joined one starting. `heard()` runs once the prompt is in -
@@ -1011,6 +1014,7 @@ def follow_up(store, tid, press: str, actor: str = 'owner', said: str = None, he
             return False
         if said is None and (not isinstance(summ, dict) or summ.get('after_press') != press): return False
         _WOKEN.add(last['CommentId']); _STARTING[int(tid)] = [(said or FOLLOW_UP, heard)]
+    @_own_context
     def go():
         from . import origin
         origin.OWNER_SPEAKS.set(True)           # ...his press begins it, a turn of his (send_prompt) - on this thread alone
@@ -1115,6 +1119,7 @@ def _next_turn(store, tid: int, sess, said: str, wait=None, pressed: bool = Fals
     sat on "running..." for minutes (2026-10-25) - queued on the turn at work, never on the waiting room's clock. The task is at work from
     here (the browser audit, 2026-11-15: until the told turn began, the chat said nothing was happening). Not told, the task says so."""
     hand(tid)
+    @_own_context
     def go():
         from . import origin
         origin.OWNER_SPEAKS.set(pressed)              # ...his press, a turn of his (send_prompt) - on this thread alone

@@ -404,7 +404,7 @@ class TheServer(unittest.TestCase):
         task, a closed one, or someone else's."""
         from taskuary import taskstate
         from taskuary.store import task_ref
-        mk = lambda title, status='open': self.s.create_task({'Title': title, 'Kind': 'general', 'Status': status, 'OriginBase': 'mail'}, 'owner')
+        mk = lambda title, status='open': self.s.create_task({'Title': title, 'Kind': 'general', 'Status': status}, 'owner')
         self.s.set_setting('owner_email', 'alex@northwind.example', 'owner')           # ...Gail is a colleague, never a stranger
         accr, sent, done, rays = mk('Close Q4 accruals'), mk('Offsite venue shortlist'), mk('Old expense query', 'done'), mk('Badge printer')
         self._mail(self.tid, 'g0', 'Ready for the renewal call?')

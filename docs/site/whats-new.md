@@ -2,6 +2,24 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.4.3.0 - 2026-11-24
+
+- Sign-ups use his own mailbox and company details, on his press
+- The Advisor's look runs on the normal model, with four times the room
+- One press is one press: a learned line needs three episodes, whatever the button
+- A from-now-on press stays a standing order; only one-off presses wait for three
+- Agent tool person_tasks: a person's other open tasks and where each stands
+- Agent tool past_figures: what the app already knows of a vendor or person in numbers
+- What Taskuary made has one way in, and opens on the whole prompt that made it
+- Where a task stands is said once: taskstate.standing
+- Only a person's words sent to a task hold it for Trust, and a hold never swallows his press
+- A check-back whose call never reached Taskuary is set as its turn files
+- His press rides the existing OWNER_SPEAKS mark, not a new send_prompt argument
+- The agent is never told of a Try again button its page may not draw
+- An Advisor idea's card says what its stake comes to, never the formula
+- At its end the chat holds its height a beat when a card folds, so a press is one move
+- person_tasks and past_figures read as what they did on the chat's rows
+
 ## 0.4.2.9 - 2026-11-24
 
 - Triage sees what each open task waits on now

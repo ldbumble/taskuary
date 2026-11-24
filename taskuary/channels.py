@@ -23,7 +23,7 @@ BOOT = datetime.now().isoformat(sep=' ', timespec='seconds')
 
 GRAPH = 'https://graph.microsoft.com/v1.0'
 MAIL_SELECT = ('id,subject,from,replyTo,toRecipients,ccRecipients,receivedDateTime,sentDateTime,bodyPreview,body,'
-               'conversationId,webLink,hasAttachments,isRead,inferenceClassification,flag')
+               'conversationId,webLink,hasAttachments,isRead,inferenceClassification,flag,internetMessageId')
 # ...and the same thing without the one field that carries the weight. A folder page LISTS; the
 # bodies come back afterwards (_mail_bodies) for the mail that survives the policy, so a flood
 # sender's twenty thousand characters are never pulled across the wire for a row nobody opens.
@@ -651,6 +651,13 @@ def _header_marks(m: dict) -> dict:
             **({'auth': v} if v != 'none' else {}), **({'unsub': u} if (u := unsub(h)) else {})}
 
 
+def _mail_ids(m: dict) -> dict:
+    """A Graph mail's own id and what it answers, kept as an IMAP mail's are (imapmail.mail_ids): a reply finds the task of the mail it answers."""
+    from .autoreply import headers
+    from .imapmail import ancestry
+    return {**({'mid': i[:200]} if (i := (m or {}).get('internetMessageId')) else {}), **({'refs': r[-20:]} if (r := ancestry(headers(m))) else {})}
+
+
 # Graph's bodyPreview is capped at 255 chars - reading it FIRST truncated every stored mail,
 # so the panel (and the agents) only ever saw the opening sentence. Full body wins.
 def _body(m): return (_clean((m.get('body') or {}).get('content')) or m.get('bodyPreview') or '')[:20000]
@@ -1276,7 +1283,7 @@ def ingest_outbound_mail(store, mailbox: str, m: dict) -> int:
         'to': _addrs(m.get('toRecipients')), 'cc': _addrs(m.get('ccRecipients')), 'conversation_id': m.get('conversationId'), 'source_link': m.get('webLink'),
         'sent_at': _local(m.get('receivedDateTime') or m.get('sentDateTime') or ''),
         'mail_meta': {'folder': 'sentitems', 'focus': m.get('inferenceClassification'),
-                      'flag': (m.get('flag') or {}).get('flagStatus'), 'invite': is_invite(m)}},
+                      'flag': (m.get('flag') or {}).get('flagStatus'), 'invite': is_invite(m), **_mail_ids(m)}},
         'your reply on this thread - kept for context')
 
 
@@ -2374,7 +2381,7 @@ def _poll_one(store, c, file_only, backfill_hours, llm) -> int:
                             'mail_meta': {'folder': folder, 'focus': m.get('inferenceClassification'),
                                           **({'reply_to': rt} if (rt := _addrs(m.get('replyTo'))) else {}),
                                           'flag': (m.get('flag') or {}).get('flagStatus'),
-                                          'invite': inv, **({'cal': cal_} if cal_ else {}), **att_marks(atts),
+                                          'invite': inv, **({'cal': cal_} if cal_ else {}), **att_marks(atts), **_mail_ids(m),
                                           **links_meta((m.get('body') or {}).get('content'))}}, llm=llm)
                         if atts and out.get('message_id') and out['status'] != 'duplicate':
                             try: save_attachments(store, out['message_id'], atts, f"graph:{m['id']}")

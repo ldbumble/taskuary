@@ -112,6 +112,42 @@ class IdentityTests(unittest.TestCase):
         self.assertEqual((b['status'], b['task_id']), ('attached', a['task_id']))
         self.assertEqual(c['status'], 'created'); self.assertNotEqual(c['task_id'], a['task_id'])
 
+    def test_two_copies_of_one_mail_in_flight_at_once_make_one_task(self):
+        """Two copies of one mail 3 s apart (walk 11): each was judged while the other was still being judged, each found no task on
+        the thread, and each made one - two tasks and two agents asking the same question."""
+        import threading, time
+        s, out = MemoryStore(), []
+        def slow(*a, **k): time.sleep(0.3); return TASK()
+        def one(ext): out.append(ingest.ingest_message(s, {'external_id': ext, 'channel': 'email', 'from_email': 'alex@northwind.example',
+                                                            'from_name': 'Alex Doyle', 'conversation_id': 'bridge-monthly spend',
+                                                            'subject': 'Monthly spend', 'body': 'Erin - the monthly spend by vendor, please?'}, llm=slow))
+        with mock.patch.object(ingest, '_spawn'):
+            ts = [threading.Thread(target=one, args=(e,)) for e in ('api:1', 'api:2')]
+            for t in ts: t.start()
+            for t in ts: t.join()
+        self.assertEqual(len({o['task_id'] for o in out}), 1, out)
+
+    def test_a_reply_lands_on_the_task_whose_mail_it_answers(self):
+        """A thread with two tasks (walk 11): the owner's question went out on the first; the sender then wrote a new ask on the thread,
+        which triage made a second task. Her answer to the question joined the newest task of the thread - the one that asked never heard it."""
+        import json
+        s = MemoryStore()
+        first = s.create_task({'Title': 'Monthly spend by vendor', 'Kind': 'task', 'Status': 'open'}, 'owner')
+        second = s.create_task({'Title': 'Trainly quote', 'Kind': 'task', 'Status': 'open'}, 'owner')
+        conv = 'AAQk-spend'
+        s.add_message({'ExternalId': 'sent-q', 'ConversationId': conv, 'Channel': 'email', 'TaskId': first, 'Status': 'context', 'Direction': 'out',
+                       'FromEmail': 'alex@northwind.example', 'Subject': 'Monthly spend', 'BodyText': 'Which vendor grew fastest?',
+                       'MailMetaJson': json.dumps({'mid': '<q1@northwind.example>'})})
+        s.add_message({'ExternalId': 'in-quote', 'ConversationId': conv, 'Channel': 'email', 'TaskId': second, 'Status': 'routed',
+                       'FromEmail': 'erin@northwind.example', 'Subject': 'Re: Monthly spend', 'BodyText': 'Also - here is the Trainly quote.',
+                       'MailMetaJson': json.dumps({'mid': '<e2@northwind.example>', 'refs': ['<q1@northwind.example>']})})
+        answer = {'conversation_id': conv, 'channel': 'email', 'from_email': 'erin@northwind.example', 'subject': 'Re: Monthly spend',
+                  'mail_meta': {'refs': ['<q1@northwind.example>']}}
+        self.assertEqual(ingest.identity_route(s, answer)['task_id'], first)
+        # ...and a mail answering her own quote mail, or naming nothing of ours, stays where the thread is
+        self.assertEqual(ingest.identity_route(s, {**answer, 'mail_meta': {'refs': ['<q1@northwind.example>', '<e2@northwind.example>']}})['task_id'], second)
+        self.assertEqual(ingest.identity_route(s, {**answer, 'mail_meta': {}})['task_id'], second)
+
 
 if __name__ == '__main__':
     unittest.main()

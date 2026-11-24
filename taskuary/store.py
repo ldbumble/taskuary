@@ -3082,11 +3082,15 @@ class SQLiteStore:
                           'ORDER BY SentAt DESC, MessageId DESC LIMIT 1', (m[col],))
             if r: return r['MessageId']
         return None
-    def task_for_conversation(self, conversation_id, subject=None):
+    def task_for_conversation(self, conversation_id, subject=None, parent=None):
         """The task this thread already belongs to - OPEN OR CLOSED. The router matches a reply
         against open tasks only (snapshots), which is right for inbound work and wrong for the
         owner's own reply: answer a thread the day after its task closed and the reply had
-        nowhere to land, so the chain lost the last thing said on it."""
+        nowhere to land, so the chain lost the last thing said on it. `parent` is the Message-ID
+        the mail answers: on a thread with two tasks, the task of that mail is this one's."""
+        if conversation_id and parent and (r := self._one(f"SELECT TaskId FROM message WHERE ConversationId=? AND {meta_expr('mid')}=? "
+                                                          'AND TaskId IS NOT NULL ORDER BY MessageId DESC LIMIT 1', (conversation_id, parent))):
+            return r['TaskId']
         if conversation_id:
             r = self._one('SELECT TaskId FROM message WHERE ConversationId=? AND TaskId IS NOT NULL '
                           'ORDER BY MessageId DESC LIMIT 1', (conversation_id,))

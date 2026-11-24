@@ -90,6 +90,9 @@ _DEFER_LOCK = threading.Lock()
 _PENDING = {}        # MessageId -> the message as it arrived (images, no_auto...), for drain in this process
 _PENDING_LOCK = threading.Lock()
 LANDING = contextvars.ContextVar('landing', default=None)     # set by a poll reader's thread: called once per message it brings in
+# ONE CONVERSATION'S ARRIVALS ARE JUDGED ONE AT A TIME: two copies of one mail 3 s apart each found no task on the thread and each made
+# one - two tasks, two agents, one question asked twice (walk 11). Striped, so the locks stay few however many threads there are.
+_CONV_LOCKS = [threading.RLock() for _ in range(64)]
 
 
 @contextlib.contextmanager
@@ -890,6 +893,13 @@ def ingest_tracker(store, msg: dict, llm=None, file_only: bool = False) -> int:
 
 
 def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only: bool = False) -> dict:
+    "One arrival, routed and judged - after any other arrival of its conversation has landed (_CONV_LOCKS)."
+    conv = msg.get('conversation_id')
+    if not conv: return _ingest(store, msg, actor, llm, file_only)
+    with _CONV_LOCKS[hash(conv) % len(_CONV_LOCKS)]: return _ingest(store, msg, actor, llm, file_only)
+
+
+def _ingest(store, msg: dict, actor: str, llm, file_only: bool) -> dict:
     """file_only = this connection is a FEED, not a trigger: the item is shown on the
     timeline and nothing else happens to it - no triage, no AI call, no task. It is a
     cheaper and quieter path than 'ignore', which is a verdict about the message.
@@ -1829,7 +1839,9 @@ def identity_route(store, msg: dict) -> dict:
     if not conv:
         return {'decision': 'create', 'task_id': None, 'score': 0.0, 'candidates': [],
                 'reason': 'new task - no conversation identity to join on, and resemblance never decides'}
-    home = store.task_for_conversation(conv)
+    # a reply goes to the task of the mail it answers (In-Reply-To, the last of its refs): on a thread with two tasks the answer to the
+    # first one's question joined the newer one, and the task that asked never heard it (walk 11)
+    home = store.task_for_conversation(conv, parent=next(reversed((msg.get('mail_meta') or {}).get('refs') or []), None))
     if not home:
         return {'decision': 'create', 'task_id': None, 'score': 0.0, 'candidates': [], 'reason': 'new task - no open task on this conversation'}
     t = store.get_task(home) or {}

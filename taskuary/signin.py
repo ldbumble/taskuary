@@ -1509,7 +1509,8 @@ FORM = "(() => { " + DEEP + r"""
            pw: pv.length > 0, password: ins.some((e) => e.type === 'password'), pay: ins.some((e) => /^cc-/.test(e.autocomplete || '')),
            new: pv.some((e) => e.autocomplete === 'new-password') || (pv.length > 1 && pv.every((e) => e.value === pv[0].value)),
            fields: keep.slice(0, 30).map((e) => ({ k: e.name || e.id, t: e.type, f: fs.indexOf(e.form),
-             v: e.type === 'checkbox' || e.type === 'radio' ? (e.value || 'on') : String(e.value).slice(0, 300) })) }; })()"""
+             v: e.type === 'checkbox' || e.type === 'radio' ? (e.value || 'on') : String(e.value).slice(0, e.type === 'textarea' ? 4000 : 300) })) }; })()"""
+# ...a long box (a post's words) is kept whole enough to read back on the card its press waits on (walk 15: cut at 300, the post was its first lines)
 FORM_PW = "(() => { " + DEEP + " const e = deepAll('input[type=password]').find((x) => !!x.value); return e ? e.value : ''; })()"
 # ...A PAGE THAT STILL ASKS: a box the page itself requires and nobody filled - the browser's own check (validity.valueMissing), or one marked
 # aria-required - read off its structure, never its words: a sign-up's next step (a birth date, a name) is no signed-in page

@@ -170,6 +170,20 @@ test("a held shell step leads with what it does and why, its command folded", ()
   assert.match(card, /\.\.\.\(\(proposal\?\.folded && !cmdOpen\) \|\| proposal\?\.bare \? \{ display: "none" \} : \{\}\)/, "the command's box stays folded until asked for");
 });
 
+// WALK 15 (S12): a held Submit on a post's form was "Publish your Ask HN post ..." over `agent-browser click @e12` - the agent said "check it on
+// the card before you press" and the card had no words of the post. It carries what the press sends: the boxes the agent filled (`fields`)
+test("a held press that sends a form shows the post it sends - title, words, picture - and keeps the command folded", () => {
+  const p = { action: "browser_act", sid: "s1", args: ["click", "@e12"], command: "agent-browser click @e12", what: "publish your Ask HN post",
+    fields: [{ k: "title", t: "text", v: "Ask HN: How do small finance teams track seat usage?" }, { k: "url", t: "text", v: "" },
+      { k: "text", t: "textarea", v: "Invoices bill for a number of seats.\n\nHow do you count the ones in use?" },
+      { k: "pic", t: "file", v: "C:\\fakepath\\seats.png" }, { k: "agree", t: "checkbox", v: "on" }] };
+  const b = proposalPresentation({ Kind: "action", DraftText: JSON.stringify(p) });
+  assert.deepEqual(b.post, { title: "Ask HN: How do small finance teams track seat usage?", lines: [],
+    body: "Invoices bill for a number of seats.\n\nHow do you count the ones in use?", picture: "seats.png" });
+  assert.equal(b.folded, true, "the command stays in its fold");
+  assert.equal(proposalPresentation({ Kind: "action", DraftText: JSON.stringify({ ...p, fields: [] }) }).post, null, "a press with no form: no post");
+});
+
 // THE CARD ROUND, 2026-11-12 (every card kind drawn in the chat and read): the chat draws no reason line, so a held press in the agent's
 // browser stood as "On the agent's browser" over `Approve runs: agent-browser click @e12`; a setting's change and any proposal with no look
 // of its own stood as "Action settings" over its own JSON, in a box he could type into

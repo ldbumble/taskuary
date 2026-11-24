@@ -33,6 +33,20 @@ import { FOCUS_RING, pressable } from "./pressable.js";
 import { runOperation } from "./taskOps.js";
 import { draftCanSend, useCapabilities } from "./capabilities.js";
 import { blankAsk, blankRefusal, blankSpans } from "./blanks.js";
+import { attUrl } from "./fileSave.js";
+import { outputRow } from "./taskOutputs.js";
+import { POST_PICTURE } from "./actionCard.js";
+
+// what a held form press sends, read-only: its title, its other short lines, its words, its picture where the task made it
+function HeldPost({ post, tid }) {
+  const pic = post.picture ? outputRow(tid, post.picture) : null;
+  return <Box data-tq-held-post="" sx={{ border: `1px solid ${BORDER}`, borderRadius: 1.5, px: 1.25, py: 1, mb: 0.75, minWidth: 0 }}>
+    {post.title && <Typography sx={{ fontSize: 13.5, fontWeight: 700, color: INK, overflowWrap: "anywhere" }}>{post.title}</Typography>}
+    {post.lines.map((l, i) => <Typography key={i} sx={{ fontSize: 12, color: DIM, overflowWrap: "anywhere" }}>{l}</Typography>)}
+    {post.body && <Typography sx={{ fontSize: 13, lineHeight: 1.5, color: INK, whiteSpace: "pre-wrap", overflowWrap: "anywhere", mt: 0.5 }}>{post.body}</Typography>}
+    {pic && <Box component="img" data-tq-held-post-image={pic.name} src={attUrl(pic)} alt={pic.name} sx={{ ...POST_PICTURE, width: "100%", mx: 0, cursor: "default" }} />}
+  </Box>;
+}
 
 // What they wrote, above what we would say back. The queue used to show only the draft: you
 // approved an answer without the question in front of you, or opened the task to find it. Four
@@ -732,6 +746,9 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
           <Typography variant="caption" sx={{ color: FAINT }} noWrap>· first, then the reply goes out</Typography>
         </Box>
       )}
+      {/* ...A HELD PRESS THAT SENDS A FORM IS THE POST AS IT WILL GO (walk 15 S12, reviewProposal.heldPost): its words and picture on the card he
+          presses - the command stays folded under Show the command */}
+      {proposal?.post && <HeldPost post={proposal.post} tid={r.TaskId} />}
       {/* THE ONE EMAIL CARD (the owner, 2026-11-08): the reply and the agent's email alike - To, CC, BCC folded until asked for, Subject, files */}
       {isEmail && !proposal && !isCal && (sent || delivery.frozen ? (
         <Typography variant="caption" data-tq-delivery-cc sx={{ display: "block", color: DIM, mb: 0.75 }}>

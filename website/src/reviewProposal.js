@@ -109,6 +109,17 @@ export const heldLead = (p) => {
     leadWhy: `Held before it ran - ${p?.why || why}${about && what ? `: it would ${what}` : ""}.`, folded: !!p?.command };
 };
 
+// ...AND A HELD PRESS THAT SENDS A FORM SHOWS WHAT IT SENDS (walk 15 S12: "check it on the card before you press" over a card that showed only
+// `agent-browser click @e12`): the boxes the agent filled on that page, kept with the card (browsergate `fields`) - its short lines first, the
+// first as the title, then its long words, and the picture a file box holds where the task made it. Null when the form holds nothing to read
+const FAKE = /^.*[\\/]/;
+export const heldPost = (p) => {
+  const fs = (Array.isArray(p?.fields) ? p.fields : []).filter((f) => f && !["checkbox", "radio", "hidden", "password"].includes(f.t) && String(f.v ?? "").trim());
+  const lines = fs.filter((f) => f.t !== "textarea" && f.t !== "file").map((f) => String(f.v).trim()), body = fs.filter((f) => f.t === "textarea").map((f) => String(f.v)).join("\n\n");
+  const picture = String(fs.find((f) => f.t === "file")?.v || "").replace(FAKE, "");
+  return lines.length || body || picture ? { title: lines[0] || "", lines: lines.slice(1), body, picture } : null;
+};
+
 export const proposalPresentation = (review) => {
   if (review?.Kind !== "action") return null;
   const proposal = proposalFrom(review);
@@ -194,6 +205,7 @@ export const proposalPresentation = (review) => {
     // ...the SITE, never its raw address (the owner's live app, 2026-11-19: "On https://app.box.example/folder/..." under the step)
     // ...by the name the server gives it (its `name`: signin.site_name - a bare address by its page's title), never "127.0.0.4"
     destination: proposal.name || proposal.site || proposal.url || "the agent's browser",
+    post: heldPost(proposal),
     approveLabel: APPROVE,
     busyLabel: "running…",
     rejectLabel: "Dismiss",

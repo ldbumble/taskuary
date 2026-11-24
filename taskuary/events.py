@@ -10,7 +10,7 @@ in it - and the rest of what is past the cursor (cards, presses, notes) with it.
 
 A card is the answer to the call that raised it: the call's own result says it is up, so a conversation that made the call hears only what
 became of it - pressed, sent, failed, greyed - by the card's id, once (`render`, `own`)."""
-import json, logging, time
+import json, logging, threading, time
 
 logger = logging.getLogger(__name__)
 
@@ -19,10 +19,16 @@ IN_BRIEF = ('message', 'said')        # ...what a fresh conversation's brief alr
 HEAD = 'NEW ON THIS TASK, OLDEST FIRST:'
 
 
+_NS, _NS_LOCK = [0], threading.Lock()
+def _ns() -> int:
+    "A clock-made key never made twice: Windows' clock ticks in milliseconds, and two notes in one tick were one key - the second dropped."
+    with _NS_LOCK: _NS[0] = max(time.time_ns(), _NS[0] + 1); return _NS[0]
+
+
 def add(store, tid: int, kind: str, key: str = None, **body) -> int | None:
     "Write one event on task `tid` -> its id, or None where `key` was written already (each fact once)."
     if kind not in KINDS: raise ValueError(f'not an event kind: {kind!r}')
-    key = key or f'{kind}:{time.time_ns()}'
+    key = key or f'{kind}:{_ns()}'
     with store.lock:
         cur = store.cx.execute('INSERT OR IGNORE INTO event (TaskId, At, Kind, Key, Body) VALUES (?,?,?,?,?)',
                                (int(tid), time.time(), kind, key, json.dumps(body, default=str)))
@@ -199,7 +205,7 @@ def said(store, tid: int, lines) -> None:
     "His lines a turn takes (general.take_kept): each one event, by the line's own comment id."
     for x in lines:
         if str(x.get('text') or '').strip() or x.get('files'):
-            add(store, tid, 'said', f"said:{x.get('id') or x.get('CommentId') or time.time_ns()}", text=str(x.get('text') or ''), files=list(x.get('files') or []))
+            add(store, tid, 'said', f"said:{x.get('id') or x.get('CommentId') or _ns()}", text=str(x.get('text') or ''), files=list(x.get('files') or []))
 
 
 @_safe

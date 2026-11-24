@@ -2761,7 +2761,7 @@ class GeneralSession:
         # ...HIS WORDS A DOOR FILED ITSELF are his line too, an event as a taken one is (events.said): the turn is told them there
         elif as_owner and not brief and text:
             from . import events
-            events.said(self.store, self.task_id, [{'id': f'{line_id or time.time_ns()}', 'text': text, 'files': list(attachments or [])}])
+            events.said(self.store, self.task_id, [{'id': f'{line_id or events._ns()}', 'text': text, 'files': list(attachments or [])}])
         if as_owner: self.woke = self.silent = False       # ...and a turn the owner's words began may be woken once again (wake)
         self.owned = as_owner and not brief
         own_tok = origin.OWNER_SPEAKS.set(self.owned)

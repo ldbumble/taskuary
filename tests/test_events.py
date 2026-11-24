@@ -132,3 +132,11 @@ class Events(unittest.TestCase):
         got = [e for e in events.pending(s, tid) if e['kind'] == 'message']
         self.assertEqual([(e['mid'], e['own']) for e in got], [(mid, True)])
         self.assertIn("The owner's own message on the thread", events.render(got))
+
+    def test_two_notes_in_one_tick_of_the_clock_are_two_events(self):
+        # Windows' clock ticks in milliseconds: two presses told back in one tick made one key, and the second note was dropped unheard
+        s = store(); tid = task(s)
+        with mock.patch('taskuary.events.time.time_ns', return_value=1_700_000_000_000_000_000):
+            events.note(s, tid, 'Taskuary ran `git push origin deploy`.'); events.note(s, tid, 'Taskuary ran `git push origin --tags`.')
+        said = events.take(s, tid)[0]
+        self.assertIn('origin deploy', said); self.assertIn('origin --tags', said)

@@ -139,3 +139,17 @@ def test_his_own_domain_is_his_only_where_the_receiving_server_verified_it():
     origin.raise_to(s, t, 'trusted', 'owner')
     t = _opened_by(s, FromEmail='pvance@northwind.example', FromName='Paula Vance', ExternalId='again')
     assert origin.of_task(s, t)[0] == 'trusted'
+
+
+def test_the_code_hosts_verified_notice_about_his_repository_is_his_and_a_forged_or_foreign_one_is_not():
+    """The owner, 2026-11-24 ("verified GitHub = mine"): GitHub's own notice about one of his repositories - verified as sent by github.com -
+    is his system, full power, as his 11-19 ruling had it. The same notice unverified (a From typed as github.com), or about a repository
+    that is not his, is a stranger's: the [owner/repo] marker counts only on mail the host itself verifiably sent."""
+    s = _his(); s.save_source({'Channel': 'github', 'Address': 'northwind/ledger', 'Active': 1, 'Owner': 'discovered'}, 'github')
+    note = dict(FromEmail='notifications@github.com', SenderClass='automated', Subject='[northwind/ledger] Build failed on main')
+    t = _opened_by(s, **note, MailMetaJson=PASS)
+    assert 'northwind/ledger' in origin.own_system(s, s.list_messages(t)[0]) and origin.of_task(s, t)[0] != 'stranger' and _mode(s, t) == 'full'
+    for forged in ({'MailMetaJson': None}, {'MailMetaJson': json.dumps({'auth': 'fail'})},
+                   {'MailMetaJson': PASS, 'Subject': '[someone-else/tool] Build failed'}):
+        t = _opened_by(s, **{**note, **forged})
+        assert origin.own_system(s, s.list_messages(t)[0]) == '' and origin.of_task(s, t)[0] == 'stranger' and _mode(s, t) != 'full', forged

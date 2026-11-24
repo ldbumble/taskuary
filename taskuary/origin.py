@@ -19,15 +19,25 @@ def _own(row):
 
 # HIS OWN SYSTEMS ARE HIS (the owner, 2026-11-19): his CI's "Build failed on main" from ci.northwind.example, his connected systems' automated
 # mail never put his task in safe mode - a real stranger's mail still does, until Trust. Read from stored facts, never words: a machine's mail
-# (its SenderClass, the verdict's else the headers') from his own domain or one under it - and only where the receiving server verified
-# that domain sent it (mailauth 'pass', the red team 2026-11-24, F3: an automated header and a From typed as his domain, or an
-# "[northwind/ledger]" subject from anyone's, ran with his full power). A subject's repository name is the sender's to type: never proof.
+# (its SenderClass, the verdict's else the headers') that the receiving server VERIFIED (mailauth 'pass' - the red team 2026-11-24, F3: an
+# automated header and a From typed as his domain, or an "[northwind/ledger]" subject from anyone's, ran with his full power) and that is
+# either from his own domain or one under it, or the code host's own notice about one of HIS repositories (the owner, 2026-11-24: "verified
+# GitHub = mine") - the [owner/repo] marker counts only on mail the host itself verifiably sent, never on an outsider's
+REPO_MARK = re.compile(r'^\s*(?:(?:re|fwd?):\s*)*\[([\w.-]+/[\w.-]+)\]', re.I)
+REPO_HOSTS = {'github': 'github.com'}          # a code connection's channel -> the domain its notices are sent from
 def own_system(store, row: dict) -> str:
     "Why this message is a verified notice from one of his own systems, else ''."
     if str(row.get('SenderClass') or row.get('HeaderClass') or '').lower() != 'automated' or _own(row) or senders.auth(row) != 'pass': return ''
     dom = senders._domain(str(row.get('FromEmail') or ''))
-    own = senders.own_domains(store) - senders.PUBLIC_MAIL
-    return f'an automated notice from your own domain, {dom}' if dom and any(dom == d or dom.endswith('.' + d) for d in own) else ''
+    if not dom: return ''
+    under = lambda d: dom == d or dom.endswith('.' + d)
+    if any(under(d) for d in senders.own_domains(store) - senders.PUBLIC_MAIL): return f'an automated notice from your own domain, {dom}'
+    if (m := REPO_MARK.match(str(row.get('Subject') or ''))) and any(under(h) for h in REPO_HOSTS.values()):
+        # ...his repositories: the SOUL.md map, the coding checkouts and the ones his GitHub card reaches (its sources, channels.github_sync)
+        from .terminal import known_repos
+        mine = {*known_repos(store), *(s['Address'] for s in store.list_sources(active_only=False) if s.get('Channel') in REPO_HOSTS and s.get('Address'))}
+        if m.group(1).lower() in {str(r).lower() for r in mine}: return f'a verified notice about your repository {m.group(1)}'
+    return ''
 
 
 def of_message(store, row: dict, memo: dict = None, seen: dict = None) -> tuple:
@@ -365,7 +375,7 @@ def hold(store, tid) -> dict | None:
 # from any process. The cold rail after a restart judged every open task's senders afresh, ~4 s of its first pile (2026-11-24)
 # ...and the rules it was judged BY: a stored hold outlives an update, so a change to who counts as trusted (the mail-proof rule, 2026-11-24)
 # moves this and every task is judged again on its next read
-RULES = 2
+RULES = 3
 _SIG = """SELECT t.Status, t.TrustedThrough, t.OriginBase, (SELECT COUNT(*) FROM message WHERE TaskId=t.TaskId) n,
     (SELECT MAX(MessageId) FROM message WHERE TaskId=t.TaskId) m, (SELECT Gen FROM change_gen WHERE Tbl='trust') g,
     h.Sig, h.HoldJson FROM task t LEFT JOIN origin_hold h ON h.TaskId=t.TaskId WHERE t.TaskId=?"""

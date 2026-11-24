@@ -2,6 +2,21 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.4.2.7 - 2026-11-24
+
+- A check-back standing on the task keeps its agent on the clock, whichever turn set it
+- end_turn sets its check-back as it is called, and a day written with its month is a day
+- A start whose turn ran and was cut part-way promises no retry
+- Closing one task's agent no longer closes every task whose number starts the same
+- A held browser step is the command the agent wrote: quoted line breaks stay, and fill is no card
+- A letter that is only its greeting and sign-off is no card: the tool says there is no message yet
+- A task held for a sender he has not trusted carries its Trust on the row, not only in a folded pane
+- The app's own sent email is on its task as it goes: whom it reached, its thread, its Message-ID
+- Who has the last word is read per thread, never per task
+- Summaries read each open task's state, never the title its agent gave it
+- A message that comes while a turn works goes into that turn, as its own event
+- The Assistant is told what happened on a task - a reply went, it closed - not what to do about it
+
 ## 0.4.2.6 - 2026-11-24
 
 - A sign-up fills and sends only the form the agent was filling

@@ -194,11 +194,21 @@ def saved(store, site) -> dict | None:
 # is not proof it was made (walk 9: a row read "signed in" for an account stopped at its phone step). Whether a site took it is the ledger's
 # (ledger.account, written by the sign-in or sign-up the site let past) - the one record every task reads what exists from.
 MADE_BY, MADE = ('taskuary', 'agent'), 'made'     # ...MADE: the ledger's act for a sign-up form a site took that has not reached a signed-in page
+def _taken(row, known: dict) -> dict | None:
+    "The ledger's account row for this row's site written since it was saved - a site let it past (a sign-in, or a sign-up form it took)."
+    k = known.get(str(row.get('Site') or '').lower())
+    return k if k and str(k['At']) >= datetime.fromtimestamp(float(row.get('SavedAt') or 0)).isoformat(sep=' ', timespec='seconds') else None
 def confirmed(row, known: dict) -> bool:
     "The owner's own, or an account a site let in since this row was saved (`known`: ledger.sites) - a form it only took (MADE) is not yet."
     if (row.get('SavedBy') or 'owner') not in MADE_BY: return True
-    k = known.get(str(row.get('Site') or '').lower())
-    return bool(k) and k.get('Act') != MADE and str(k['At']) >= datetime.fromtimestamp(float(row.get('SavedAt') or 0)).isoformat(sep=' ', timespec='seconds')
+    return bool(k := _taken(row, known)) and k.get('Act') != MADE
+# ...AND ONLY THOSE ARE SIGNED IN WITH (walk 13): a password a sign-up only sent, to a site that never took the form, was kept unconfirmed - and the
+# next hand-over typed it as the saved sign-in, for an account that did not exist, the band reading "Sign in" over the agent's "Create the account"
+def usable(store, site) -> dict | None:
+    "The saved sign-in a sign-in types: the owner's own, or an agent's whose site let it past since it was saved (a sign-in, or its sign-up form taken)."
+    from . import ledger
+    row = saved(store, site)
+    return row if row and ((row.get('SavedBy') or 'owner') not in MADE_BY or _taken(row, ledger.sites(store))) else None
 
 
 def _user(row) -> str:
@@ -560,14 +570,15 @@ def needs(store, tid: int, sid: str, claimed: str = '', fill=None, watch=..., wh
     if signing_up(claimed): return new_account(store, tid, sid, site, rid, fill, watch)
     name = site_name(site, sid)
     what = ' '.join(str(what or '').split()).rstrip('.')
-    text = f'{ws.NAMED_STEP} on {name}: {what}' if what else step_words(sid, name, saved(store, site))     # ...named: the page says these words (workerstate)
+    text = f'{ws.NAMED_STEP} on {name}: {what}' if what else step_words(sid, name, usable(store, site))     # ...named: the page says these words (workerstate)
     # "Signed in" as a CHOICE only where an answer arrives as words (the chat's own agent): a pty's choices are a chooser, answered
     # by number (workerstate.answer). A pty's ask still has the press - the card draws it for every `signin:` ask, and its answer goes
     # through signed_in, never the chooser (2026-10-25)
     # NO PRESSES ON IT (the owner, 2026-11-03: "remove that stupid box again ... just have the question and link to fill it out securely"):
     # the ask is its words; Taskuary sees the sign-in happen on the page itself (watch), and "done" typed in the chat's box still tells it
     def ask(said=None): _ask(store, tid, sid, site, rid, said or text, watch)
-    row, last = saved(store, site), _TRIED.get((tid, site), 0)
+    # ...ONLY A SIGN-IN THAT CAN GO IN (usable): a password a sign-up only sent is no sign-in, and the agent's own named step stands
+    row, last = usable(store, site), _TRIED.get((tid, site), 0)
     # ...A PAGE THAT ASKS ONLY THE CODE is his step at once, however lately the saved sign-in was typed (its agent made it ready, READY_CODE):
     # not a sign-in "asked again within minutes"
     if row and last and _now() - last < AGAIN and not _code_of(row.get('Totp')) and asks_code(sid) and not on_password_page(sid):

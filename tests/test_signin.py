@@ -261,6 +261,25 @@ class Asking(unittest.TestCase):
         signin.save(self.s, 'news.example', 'alexd', PW)
         self.assertEqual(signin.step_words(self.sid, 'news.example', signin.saved(self.s, 'news.example'), conn=Shape(two_forms)), 'Sign in to news.example to continue')
 
+    def test_a_password_a_sign_up_only_sent_is_never_typed_as_a_sign_in(self):
+        """Walk 13: a sign-up the site never took left the password it was sent kept, unconfirmed; the agent then handed over "Create the account"
+        on the same page, and the app typed that password as the saved sign-in - for an account that did not exist - the band reading "Taskuary
+        is signing in". Only a sign-in a site has let past is typed; once the site takes the form it is one."""
+        from taskuary import ledger
+        class Shape:
+            def fields(self, want=''): return {'top': True, 'password': True, 'user': True, 'fresh': True}
+            def close(self): pass
+        signin.save(self.s, 'news.example', 'nwfin_seats', PW, by='taskuary', task=self.tid)
+        typed = []
+        with on_page('https://news.example/login'), mock.patch.object(signin, 'connect', return_value=Shape()):
+            out = signin.needs(self.s, self.tid, self.sid, 'news.example', fill=lambda *a: typed.append(a), what='Create the account', watch=None)
+            self.assertFalse(out['auto']); self.assertEqual(typed, [])
+            self.assertEqual(signin.pending(self.s, self.tid)['text'], f'{ws.NAMED_STEP} on news.example: Create the account')
+            self.assertIsNone(signin.usable(self.s, 'news.example'))
+            self.assertTrue(signin.step_words(self.sid, 'news.example', signin.usable(self.s, 'news.example'), conn=Shape()).startswith('Make an account'))
+        ledger.account(self.s, 'news.example', 'nwfin_seats', signin.MADE, self.tid)
+        self.assertIsNotNone(signin.usable(self.s, 'news.example'), 'a sign-up form the site took is a sign-in to try')
+
     def test_no_sign_in_page_no_fill_ever(self):
         with on_page('http://bank.example/'): out = signin.needs(self.s, self.tid, self.sid, 'bank.example')
         self.assertEqual(out['site'], '')

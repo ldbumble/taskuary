@@ -5338,7 +5338,7 @@ def _walkthrough(store, tid: int, ask: str, item: dict | None, actor: str, lead:
 def signin_lead(store, signs_in) -> str:
     from . import signin
     if not (site := signin.site_from(str(signs_in or '').strip())): return ''
-    if signin.saved(store, site): return f"Its sign-in to {site} is in Saved sign-ins, so the browser fills it."
+    if signin.usable(store, site): return f"Its sign-in to {site} is in Saved sign-ins, so the browser fills it."
     return (f"No sign-in to {site} is saved yet: when the browser reaches its login it asks you for it, "
             f"and Save keeps it in Saved sign-ins for every run after.")
 

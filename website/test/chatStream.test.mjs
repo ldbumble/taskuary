@@ -341,3 +341,28 @@ test("a change of width keeps the row he was reading where it stood", async () =
   const gw = fs.readFileSync(new URL("../src/GeneralWorkspace.jsx", import.meta.url), "utf8");
   assert.match(gw, /else \{ const d = anchorShift\(v, mark\); if \(Math\.abs\(d\) > 1\) v\.scrollTop \+= d; \}/);
 });
+
+// A CHAT OPENS AT THE START OF ITS NEWEST REPLY (the owner, 2026-11-24): opened at its very bottom, a long answer was read from its last lines up
+test("a chat opens with the top of its newest reply at the top of the view, unless that is past the end", async () => {
+  const { openAt } = await import("../src/chatStream.js");
+  // rows laid out top to bottom at the given heights, in a view 400 tall scrolled to `scrollTop`; `cards`: a turn's trailing card row
+  const chat = (hs, cards = []) => {
+    const view = { scrollTop: 0, clientHeight: 400, scrollHeight: hs.reduce((a, b) => a + b, 0), getBoundingClientRect: () => ({ top: 60 }) };
+    const tops = hs.map((_, i) => hs.slice(0, i).reduce((a, b) => a + b, 0));
+    const rows = hs.map((_, i) => ({ name: i, parentElement: { closest: () => null }, hasAttribute: (n) => n === "data-tq-row-cards" && cards.includes(i),
+      getBoundingClientRect: () => ({ top: 60 + tops[i] - view.scrollTop }) }));
+    return { view, root: { querySelectorAll: () => rows }, tops };
+  };
+  const long = chat([120, 80, 120, 900]);                       // his line, a reply, his line, a reply taller than the view
+  long.view.scrollTop = long.view.scrollHeight - 400;           // ...wherever it stood before: the answer does not depend on it
+  assert.equal(openAt(long.view, long.root), long.tops[3], "the newest reply's top, not the bottom");
+  const short = chat([600, 300, 80]);                           // a short last reply: its top is past the end, so the end
+  assert.equal(openAt(short.view, short.root), short.view.scrollHeight - 400);
+  const fits = chat([100, 120]);
+  assert.equal(openAt(fits.view, fits.root), 0, "a chat that fits does not move");
+  const carded = chat([120, 700, 260], [2]);                    // a reply and the cards it set up under it
+  assert.equal(openAt(carded.view, carded.root), carded.tops[1], "the reply's top, its cards under it");
+  const nested = chat([120, 700]), inner = { parentElement: { closest: () => ({}) }, hasAttribute: () => false, getBoundingClientRect: () => ({ top: 9999 }) };
+  nested.root.querySelectorAll = ((all) => () => [...all, inner])(nested.root.querySelectorAll());
+  assert.equal(openAt(nested.view, nested.root), nested.tops[1], "a row inside a row is not the chat's newest");
+});

@@ -18,7 +18,7 @@ import { holdUnsent } from "./unsent.js";
 import { howToOpen } from "./bugReportOpen.js";
 import { baseName } from "./agentSteps.js";
 import { AgentSteps, PermitCtx } from "./AgentStepRows.jsx";
-import { chatSource, checkBackDue, waitingShown, eventsOf, hasParts, isPastCard, standing, heldAtEnd, anchorOf, anchorShift, shrinkHeld, SHRINK_HOLD, turnParts, workCount, folds, ranUnder, foldLine, paintable, withMine, waitingChips, workingLine, waitingOn, askTurn, onYouTurn, askedFirst, runsOf, patchSteps, askOn, asksOff } from "./chatStream.js";
+import { chatSource, checkBackDue, waitingShown, eventsOf, hasParts, isPastCard, standing, heldAtEnd, AT_END, anchorOf, anchorShift, openAt, OPEN_HOLD, shrinkHeld, SHRINK_HOLD, turnParts, workCount, folds, ranUnder, foldLine, paintable, withMine, waitingChips, workingLine, waitingOn, askTurn, onYouTurn, askedFirst, runsOf, patchSteps, askOn, asksOff } from "./chatStream.js";
 import { stepLabel } from "./agentSteps.js";
 export { checkBackDue };
 import { detailFor, ownDetail, useOwnDetail } from "./chatDetail.js";
@@ -610,7 +610,7 @@ function AssistantThread({ task, onAsked, onStop, selectionRef, attachmentsRef, 
   // ...let go of a line he sent only once the server's copy carries its words (chatStream.withMine `said`): placed before it is filed, it has none
   useEffect(() => { if (!list) return; const known = new Set([...list.items, ...list.pending].filter((x) => x.kind !== "line" || String(x.text || "").trim() || (x.files || []).length).map((x) => x.id));
     setMine((m) => (m.some((l) => known.has(l.id) && !l.err) ? m.filter((l) => !known.has(l.id) || l.err) : m)); }, [list]);
-  const stick = useRef(true), inner = useRef(null), viewport = useRef(null), listNow = useRef(list); listNow.current = list;
+  const stick = useRef(true), opening = useRef(false), inner = useRef(null), viewport = useRef(null), listNow = useRef(list); listNow.current = list;
   const nextAt = React.useContext(WorkCtx);
   // ...the box is assistant-ui's composer (its text, its Enter, its files): the runtime under it answers nothing - a line goes by sendLine
   const runtime = useLocalRuntime(useMemo(() => ({ async *run() { /* the server's list is the conversation */ } }), []));
@@ -625,7 +625,7 @@ function AssistantThread({ task, onAsked, onStop, selectionRef, attachmentsRef, 
     if (files.length) onClearAttachments(null);
     const id = `l${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`, sel = selectionRef.current || {};
     setMine((m) => [...m, { id, kind: "line", text: w, files: files.map((a) => a.path), at: new Date(), rest: !listNow.current?.working && !listNow.current?.hold && !listNow.current?.permissions?.length }]);      // ...on an untrusted sender's task it waits by the box at once (the list's `hold`), and under a step that waits on his Allow (`permissions`)
-    stick.current = true;
+    stick.current = true; opening.current = false;
     // ...on an item Taskuary made (`start`, madeTask) the line starts its agent: the item its Came from, his words the ask (AssistantView.startOnItem)
     (start ? start({ text: w, files: files.map((a) => a.path) }).then(() => ({}))
       : api.post(`/api/tasks/${task.TaskId}/assistant/messages`, { text: w, attachments: files.map((a) => a.path), line_id: id, pick: sel.connectorId || null, model: sel.model || null }, { timeout: 0 }))
@@ -654,9 +654,11 @@ function AssistantThread({ task, onAsked, onStop, selectionRef, attachmentsRef, 
     if (!v || !el) return undefined;
     // ...HIS scroll, not the chat's own growth (chatStream.heldAtEnd): a wheel, a finger, a key, or a press still down (the scrollbar's drag)
     let was = v.scrollTop, used = -Infinity, mark = null;
-    const mine = () => { used = performance.now(); }, down = () => { used = Infinity; };
+    const mine = () => { used = performance.now(); opening.current = false; }, down = () => { used = Infinity; opening.current = false; };
     // ...and away from the end, the row he was reading (chatStream.anchorOf): kept where it stood through a change of size
     const hold = () => { mark = stick.current ? null : anchorOf(v, el); };
+    // ...OPENED AT THE START OF THE NEWEST REPLY (chatStream.openAt), held at the end only where that is the end
+    const place = () => { v.scrollTop = openAt(v, el); stick.current = v.scrollHeight - v.scrollTop - v.clientHeight < AT_END; was = v.scrollTop; };
     const on = () => { stick.current = heldAtEnd(stick.current, { top: v.scrollTop, was, gap: v.scrollHeight - v.scrollTop - v.clientHeight, own: performance.now() - used < 1500 }); was = v.scrollTop; hold(); };
     // ...and at the end a fold waits a beat for what comes under it (chatStream.shrinkHeld): one move, never up and back down
     let tall = 0, free = null;
@@ -665,6 +667,7 @@ function AssistantThread({ task, onAsked, onStop, selectionRef, attachmentsRef, 
       const h = own(), keep = shrinkHeld(stick.current, tall, h);
       if (keep) { el.style.minHeight = `${keep}px`; clearTimeout(free); free = setTimeout(() => { tall = own(); el.style.minHeight = ""; }, SHRINK_HOLD); }
       else { if (el.style.minHeight) { clearTimeout(free); el.style.minHeight = ""; } tall = h; }
+      if (opening.current) { place(); hold(); return; }
       if (stick.current) v.scrollTop = v.scrollHeight;
       else { const d = anchorShift(v, mark); if (Math.abs(d) > 1) v.scrollTop += d; }
       hold();
@@ -674,11 +677,13 @@ function AssistantThread({ task, onAsked, onStop, selectionRef, attachmentsRef, 
     v.addEventListener("scroll", on, { passive: true }); ro.observe(el); ro.observe(v);
     const off = [[v, "wheel", mine], [v, "touchmove", mine], [v, "pointerdown", down], [window, "pointerup", mine], [window, "pointercancel", mine], [document, "keydown", mine]];
     off.forEach(([t, n, f]) => t.addEventListener(n, f, { passive: true, capture: true }));
-    return () => { clearTimeout(free); v.removeEventListener("scroll", on); ro.disconnect(); off.forEach(([t, n, f]) => t.removeEventListener(n, f, { capture: true })); };
+    opening.current = true; place(); hold();
+    const settle = setTimeout(() => { opening.current = false; }, OPEN_HOLD);
+    return () => { clearTimeout(free); clearTimeout(settle); v.removeEventListener("scroll", on); ro.disconnect(); off.forEach(([t, n, f]) => t.removeEventListener(n, f, { capture: true })); };
   }, [!!list]);   // eslint-disable-line react-hooks/exhaustive-deps
   // ...after EVERY draw, not only the list's: a card's own words (the page's node) grow the chat too - and once more when the draw is whole
   // (a microtask: after the rows that measured themselves in this same draw have grown), still before anything is painted
-  React.useLayoutEffect(() => { const pin = () => { const v = viewport.current; if (v && stick.current && v.scrollTop + v.clientHeight < v.scrollHeight) v.scrollTop = v.scrollHeight; };
+  React.useLayoutEffect(() => { const pin = () => { const v = viewport.current; if (v && stick.current && !opening.current && v.scrollTop + v.clientHeight < v.scrollHeight) v.scrollTop = v.scrollHeight; };
     pin(); queueMicrotask(pin); });
   // WORDS ANOTHER DOOR HANDS THIS CHAT (`prompt`: an answer picked on the question's card): his next line, once
   const prompted = useRef(null);

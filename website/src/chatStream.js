@@ -255,6 +255,20 @@ export const anchorOf = (view, root, depth = 5) => {
 export const SHRINK_HOLD = 500;
 export const shrinkHeld = (held, tall, now) => (held && now < tall - 1 ? tall : 0);
 export const anchorShift = (view, a) => (a?.el?.isConnected ? a.el.getBoundingClientRect().top - view.getBoundingClientRect().top - a.off : 0);
+/* A CHAT OPENS AT THE START OF ITS NEWEST REPLY (the owner, 2026-11-24): opened at its very bottom, a long answer was read from its last lines up.
+   The top of the newest row - the turn its trailing cards belong to - goes to the top of the view, or the end where that is nearer (a short
+   reply, a chat that fits). -> the scrollTop to open at. Held there for OPEN_HOLD ms while rows measure themselves in, unless he moves first */
+export const OPEN_HOLD = 1000;
+export const openAt = (view, root) => {
+  const end = view.scrollHeight - view.clientHeight;
+  if (end <= 0 || !root) return Math.max(0, end);
+  const rows = [...root.querySelectorAll("[data-tq-item]")].filter((r) => !r.parentElement?.closest("[data-tq-item]"));
+  let i = rows.length - 1;
+  while (i > 0 && rows[i].hasAttribute("data-tq-row-cards")) i -= 1;
+  if (i < 0) return end;
+  const top = rows[i].getBoundingClientRect().top - view.getBoundingClientRect().top + view.scrollTop;
+  return Math.max(0, Math.min(end, Math.round(top)));
+};
 
 // THE CHAT'S OWN LIST ON THE PAGE (GeneralWorkspace): what is drawn is the server's list (conversation.items), with two things of the page's -
 // THE LIST ASKED LAST: the one this view last read, or one read ahead with its task as he came back to it (taskDetail.prefetchTask) - an older

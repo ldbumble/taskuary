@@ -5,7 +5,7 @@ on the session's OWN task; propose tools light a button and send nothing.
 import json, re, unittest
 from unittest import mock
 from fastapi.testclient import TestClient
-from taskuary import agenttools, config, guard, server
+from taskuary import agenttools, config, guard, server, viewspec
 from taskuary.reports import REGISTRY
 from taskuary.store import MemoryStore
 
@@ -445,8 +445,13 @@ class TheServer(unittest.TestCase):
                         frm=('Trainly Renewals', 'renewals@trainly.example'), at='2026-06-10 12:00:00')
         text, err = tool(self.tid, 'past_figures', who='Payworth')
         self.assertFalse(err, text)
-        for l in lookout.spend(self.s, 'Payworth', lookout.FIG_DAYS): self.assertIn(l, text)
+        for l in lookout.spend(self.s, 'Payworth', lookout.FIG_DAYS, rows := []): self.assertIn(l, text)
         self.assertIn('latest $1,600', text); self.assertIn('up $150', text)
+        # ...each charge as records, the rows a view's table or chart takes as they are (2026-11-24: showing is one step)
+        got = viewspec.records(text.split('EACH CHARGE, AS ROWS:\n')[1].split('\n')[0])
+        self.assertEqual(got, rows); self.assertEqual([r['amount'] for r in got], [1450.0, 1450.0, 1600.0])
+        self.assertEqual(viewspec.check({'elements': {'c': {'type': 'chart', 'props': {'rows': got, 'x': 'date', 'y': 'amount'}}}})['elements']['c']['props']['points'][2],
+                         {'label': '2026-10-01', 'value': 1600.0})
         text, _ = tool(self.tid, 'past_figures', who='Trainly')
         self.assertIn(f'msg{tr} 2026-06-10 Trainly Renewals: Your plan covers 180 seats at $42 a seat a year.', text)
         text, _ = tool(self.tid, 'past_figures', who='Spendly')

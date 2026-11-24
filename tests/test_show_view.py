@@ -40,12 +40,12 @@ class TheCheck(unittest.TestCase):
         bad(one('iframe', {'src': 'https://vendor.example'}), r"type 'iframe' is not one of table, stats")
         bad(one('text', {'text': 'hi', 'color': 'red'}), 'props has color - a text takes text')
         bad(one('text', {}), 'props needs text')
-        bad(one('chart', {'kind': 'pie', 'points': [{'label': 'x', 'value': 1}]}), 'must be one of bar, line')
+        bad(one('chart', {'kind': 'radar', 'points': [{'label': 'x', 'value': 1}]}), 'must be one of bar, line, pie')
         bad(one('chart', {'points': [{'label': 'x', 'value': '1'}]}), r'points\[0\]\.value must be a number')
         bad(one('table', {'columns': ['a'], 'rows': [[1, 2]]}), 'at most 1 cells')
         bad(one('table', {'columns': ['a'], 'rows': [{'b': 1}]}), 'not among the columns')
         bad(one('button', {'label': 'Pay', 'verb': 'pay_now'}), r"'pay_now' is no button on the task page - one of .*close")
-        bad(one('button', {'label': 'Go'}), 'one of verb')
+        bad(one('button', {'label': 'Go'}), r'one of props.verb')
         bad(one('button', {'label': 'Go', 'open': 'https://vendor.example'}), 'app page link')
         bad(one('button', {'label': 'Go', 'open': '#setup'}), 'app page link')
         bad(one('text', {'text': 'x'}, children=['a']), 'contains itself')
@@ -372,3 +372,65 @@ def test_a_deck_that_cannot_be_drawn_is_still_read_back():
     deck(out / 'board-deck.pptx', 'Q3 board pack', 'Strong operating margin at 18.9% with 212 headcount')
     said = agenttools.show_files(s, tid, [str(out / 'board-deck.pptx')])
     assert agenttools.SHOWN_SAY in said and '212 headcount' in said, said
+
+
+# ── WHAT-IF AND ANSWERS (the owner, 2026-11-24, after json-render's state and actions): controls move a value of the view's state on his
+# screen alone, values worked out from it are checked here and evaluated on the page; his pick on a choice reaches the agent once
+WHAT_IF = {'title': 'Payworth seats', 'state': {'seats': 40}, 'root': 'g', 'elements': {
+    'g': {'type': 'grid', 'props': {'cols': 1}, 'children': ['s', 'k', 't', 'go']},
+    's': {'type': 'slider', 'props': {'label': 'Seats', 'value': {'$bindState': '/seats'}, 'min': 5, 'max': 200, 'step': 5}},
+    'k': {'type': 'stats', 'props': {'items': [{'label': 'Per month', 'format': 'currency', 'value': {'$expr': 'seats * 12'}}]}},
+    't': {'type': 'table', 'props': {'rows': [{'Plan': 'Basic', 'Per seat': 12, 'Total': {'$expr': 'per_seat * seats'}}]}},
+    'go': {'type': 'button', 'props': {'label': 'Go with this'}, 'on': {'press': {'action': 'answer', 'params': {'text': '{seats} seats'}}}}}}
+
+
+class TheWhatIf(unittest.TestCase):
+    def test_controls_and_worked_out_values_pass_and_say_what_is_wrong(self):
+        v = viewspec.check(WHAT_IF)
+        self.assertEqual(v['state'], {'seats': 40})
+        self.assertEqual(v['elements']['s']['props']['value'], 'seats')
+        self.assertEqual(v['elements']['t']['props']['columns'], ['Plan', 'Per seat', 'Total'])      # records stand as they came
+        self.assertEqual(viewspec.check(v), v)
+        # ...a control's value with no state behind it starts where its control does
+        self.assertEqual(viewspec.check(one('toggle', {'label': 'Yearly', 'value': 'annual'}))['state'], {'annual': False})
+        bad = lambda spec, says: self.assertRaisesRegex(ValueError, says, viewspec.check, spec)
+        tile = lambda src: {**WHAT_IF, 'elements': {**WHAT_IF['elements'], 'k': {'type': 'stats', 'props': {'items': [{'label': 'x', 'value': {'$expr': src}}]}}}}
+        bad(tile('seat * 12'), "reads seat, which the view has no value for - its state has seats")
+        bad(tile('seats *'), 'it ends too soon')
+        bad(tile('__import__("os")'), r"__import__\(\) is not one of min, max")
+        bad({**WHAT_IF, 'elements': {**WHAT_IF['elements'], 'go': {'type': 'button', 'props': {'label': 'Pay'}, 'on': {'press': {'action': 'pay'}}}}},
+            "must be answer .* or setState")
+        bad(one('slider', {'label': 'x', 'value': 'n', 'min': 5, 'max': 5}), 'min must be under max')
+
+    def test_only_a_view_he_can_answer_has_an_id_of_its_own(self):
+        said = lambda spec: json.loads(viewspec.shown(spec).partition(viewspec.MARK)[2].split(' His pick')[0])
+        self.assertNotIn('id', said(SPEC))
+        a, b = said(WHAT_IF), said(WHAT_IF)
+        self.assertNotEqual(a['id'], b['id'])                # ...the same choice shown twice is two questions
+
+
+class TheAnswer(unittest.TestCase):
+    def setUp(self):
+        from fastapi.testclient import TestClient
+        self.s = MemoryStore()
+        self.p = mock.patch.object(server, 'store', self.s); self.p.start()
+        self.tid = self.s.create_task({'Title': 'Renew Payworth', 'Kind': 'general', 'Status': 'open', 'OriginBase': 'owner'}, 'owner')
+        self.c = TestClient(server.app, base_url='http://127.0.0.1', headers={'X-Taskuary-Token': server.cfg['server'].get('token') or ''})
+
+    def tearDown(self): self.p.stop()
+
+    def test_his_pick_reaches_the_agent_once_as_his_press(self):
+        from taskuary import events, general
+        told = []
+        with mock.patch.object(general, 'to_agent', lambda *a, **k: told.append((a, k)) or 'told'):
+            r = self.c.post(f'/api/tasks/{self.tid}/view-answer', json={'view': 'v1', 'el': 'c', 'pick': 'Pro - $540/mo', 'asked': 'Which plan?'})
+            self.assertEqual(r.status_code, 200, r.text); self.assertEqual(r.json()['told'], 'told')
+            # ...pressed twice - a double click, a second tab - it is still one answer, and the second says the first
+            again = self.c.post(f'/api/tasks/{self.tid}/view-answer', json={'view': 'v1', 'el': 'c', 'pick': 'Basic - $200/mo'})
+        self.assertEqual(again.status_code, 409); self.assertIn('Pro - $540/mo', again.json()['detail'])
+        self.assertEqual(len(told), 1); self.assertEqual(told[0][1]['frm'], 'taskuary')
+        said, _ = events.take(self.s, self.tid)
+        self.assertEqual(said.count('Pro - $540/mo'), 1, said); self.assertIn('Which plan?', said)
+        self.assertEqual(self.c.get(f'/api/tasks/{self.tid}/view-answers').json(), {'v1': {'c': 'Pro - $540/mo'}})
+        # ...and no chat line besides: the view he pressed shows it (general.press_lines)
+        self.assertFalse([m for m in general.press_lines(self.s, self.tid) if 'Pro' in m['content'][0]['text']])

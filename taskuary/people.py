@@ -130,3 +130,33 @@ def keys(store, name: str = '', address: str = '') -> set:
     if not a and (m := _ADDR.search(raw)): a, raw = m.group(0).lower(), raw.replace(m.group(0), '').strip(' <>"')
     if not a and raw: a = str(resolve(store, raw).get('address') or '').lower()
     return {k for k in (raw.lower(), a) if k}
+
+
+OPEN = ('open', 'in_progress', 'waiting')
+
+
+def tasks_of(store, address: str, skip=None) -> list:
+    """A PERSON'S OPEN TASKS (the owner, 2026-11-24: an agent on one of Gail's asks could not see her other three): every open task with a
+    message from them or to them, newest message first - [{ref, title, asked, stands, last}]: `asked` the subject they asked it under,
+    `stands` where it stands in the words every surface says it in (taskstate.status), `last` its newest message's date. `skip`: a task id
+    left out (the one asking)."""
+    from . import memory, taskstate
+    from .store import task_ref
+    a = str(address or '').strip().lower()
+    if '@' not in a: return []
+    ms = store._rows("SELECT m.TaskId, m.Subject, m.SentAt, m.FromEmail, m.RecipientsJson FROM message m JOIN task t ON t.TaskId=m.TaskId "
+                     f"WHERE t.Status IN ({','.join('?' * len(OPEN))}) AND (lower(IFNULL(m.FromEmail,''))=? OR lower(IFNULL(m.RecipientsJson,'')) LIKE ?) "
+                     "ORDER BY m.SentAt", (*OPEN, a, f'%{a}%'))
+    on = {}
+    for m in ms:
+        if m['TaskId'] == skip or a not in memory.people_of(m): continue
+        o = on.setdefault(m['TaskId'], {'asked': ''})
+        if not o['asked'] and str(m.get('FromEmail') or '').lower() == a: o['asked'] = str(m.get('Subject') or '')
+    out = []
+    for tid in on:
+        t = store.get_task(tid) or {}
+        last = store._one('SELECT MAX(SentAt) At FROM message WHERE TaskId=?', (tid,)) or {}
+        try: stands = taskstate.status(store, t)['word']
+        except Exception: stands = t.get('Status') or ''
+        out.append({'ref': task_ref(tid), 'title': t.get('Title') or '', 'asked': on[tid]['asked'], 'stands': stands, 'last': str(last.get('At') or '')[:10]})
+    return sorted(out, key=lambda o: o['last'], reverse=True)

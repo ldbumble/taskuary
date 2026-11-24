@@ -391,6 +391,37 @@ class TheServer(unittest.TestCase):
         text, err = tool(self.tid, 'calendar', days=3)
         self.assertFalse(err, text)
 
+    def _mail(self, tid, ext, subject, body='', frm=('Gail Moreno', 'gail@northwind.example'), at='2026-11-02 09:00:00', **kw):
+        return self.s.add_message({'TaskId': tid, 'ExternalId': ext, 'Channel': 'email', 'FromName': frm[0], 'FromEmail': frm[1], 'Subject': subject,
+                                   'BodyText': body, 'SentAt': at, 'Status': 'routed', **kw})
+
+    def test_person_tasks_lists_their_other_open_tasks_and_where_each_stands(self):
+        """The owner, 2026-11-24: an agent on one of Gail's asks could not see her other open work. Her other open tasks - the ones she wrote
+        on and the ones the owner wrote to her on - each with its ref, title, what she asked, where it stands and its last message; never this
+        task, a closed one, or someone else's."""
+        from taskuary import taskstate
+        from taskuary.store import task_ref
+        mk = lambda title, status='open': self.s.create_task({'Title': title, 'Kind': 'general', 'Status': status, 'OriginBase': 'mail'}, 'owner')
+        self.s.set_setting('owner_email', 'alex@northwind.example', 'owner')           # ...Gail is a colleague, never a stranger
+        accr, sent, done, rays = mk('Close Q4 accruals'), mk('Offsite venue shortlist'), mk('Old expense query', 'done'), mk('Badge printer')
+        self._mail(self.tid, 'g0', 'Ready for the renewal call?')
+        self._mail(accr, 'g1', 'Can we close Q4 accruals this week?', at='2026-11-03 10:00:00')
+        self._mail(sent, 'g2', 'Offsite venues', frm=('Alex Doyle', 'alex@northwind.example'), at='2026-11-05 16:00:00', Direction='out',
+                   RecipientsJson=json.dumps({'to': ['gail@northwind.example']}))
+        self._mail(done, 'g3', 'Expense query')
+        self._mail(rays, 'r1x', 'Badge printer is jammed', frm=('Ray Colton', 'ray@northwind.example'))
+        text, err = tool(self.tid, 'person_tasks', who='Gail Moreno')
+        self.assertFalse(err, text)
+        lines = [l for l in text.splitlines() if l.startswith('- TQ-')]
+        self.assertEqual([l.split()[1] for l in lines], [task_ref(sent), task_ref(accr)], 'newest message first; not this task, a closed one or Ray\'s')
+        self.assertIn('Close Q4 accruals (asked as "Can we close Q4 accruals this week?")', lines[1])
+        self.assertIn(f"- {taskstate.status(self.s, self.s.get_task(accr))['word']}; last message 2026-11-03", lines[1])
+        self.assertIn('last message 2026-11-05', lines[0])
+        text, _ = tool(self.tid, 'person_tasks', who='ray@northwind.example')
+        self.assertIn(task_ref(rays), text)
+        text, _ = tool(self.tid, 'person_tasks', who='Nobody Atall')
+        self.assertIn('try their address', text)
+
     def test_my_task_shows_the_checklist(self):
         text, _ = tool(self.tid, 'my_task')
         self.assertIn('Brief Alex before the renewal call', text)

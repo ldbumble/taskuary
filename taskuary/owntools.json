@@ -19,6 +19,7 @@
   "note_peers",
   "owner_memory",
   "person",
+  "person_tasks",
   "playbooks",
   "propose",
   "propose_email",

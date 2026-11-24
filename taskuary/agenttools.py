@@ -56,6 +56,9 @@ TOOLS = {
                              "earlier tasks SETTLED - the id found, the route that worked, the account used. Read-only.", _S({'words': _STR}, ('words',)), ('GET', '/api/search')),
     'person': ('read', "Who a name or address is in the owner's mail, and their latest messages. Read-only.",
                _S({'name': _STR}, ('name',)), ('GET', '/api/agent/messages')),
+    'person_tasks': ('read', "A person's other open tasks with the owner, newest message first: each task's ref (TQ-0123), its title, the "
+                             "subject they asked it under, where it stands, and the date of its last message. `who`: a name or address. "
+                             "Read-only.", _S({'who': _STR}, ('who',)), ('GET', '/api/agent/messages')),
     'search_knowledge': ('read', "Search the owner's knowledge base (indexed folders, SharePoint libraries). Read-only.",
                          _S({'text': _STR}, ('text',)), ('GET', '/api/knowledge/search')),
     'owner_memory': ('read', "Look up the owner's memory: what they said (their rules, their hours, who handles what - each with the subject "
@@ -317,6 +320,7 @@ SHORT = {
     'my_task': "This task's brief and to-dos with their ids.",
     'search_tasks': "Search the owner's tasks, mail, chats and pull requests, and what earlier tasks settled.",
     'person': "Who a name or address is in the owner's mail, and their latest messages.",
+    'person_tasks': "A person's other open tasks: ref, title, what they asked, where it stands, last message date.",
     'search_knowledge': "Search the owner's knowledge base (indexed folders, SharePoint).",
     'owner_memory': "Look up the owner's memory: what they said, their people, what they confirmed.",
     'remember': 'Keep what the owner tells you.',
@@ -668,6 +672,16 @@ def _call(store, tid: int, name: str, args: dict, doors: dict, skip=()) -> str:
         from . import ledger
         rec = ledger.person(store, who['address'])
         return _out(f"{who['address']}\n\n" + (f"ON RECORD:\n" + '\n'.join(f'- {x}' for x in rec) + '\n\n' if rec else '') + mailsearch.says(hits), fence_it=True)
+    if name == 'person_tasks':
+        from . import people
+        who = people.resolve(store, a.get('who', ''))
+        if not who: return f"nobody in the owner's mail matches {echo(a.get('who'))} - try their address, or person to find who they are"
+        if 'candidates' in who: return 'several people match - ask again with one of: ' + ', '.join(who['candidates'])
+        ts = people.tasks_of(store, who['address'], skip=tid)
+        if not ts: return f"{who['address']} has no other open task with the owner"
+        return _out(f"{who['address']} - {len(ts)} other open task(s):\n" + '\n'.join(
+            f"- {t['ref']} {t['title']}" + (f" (asked as \"{t['asked']}\")" if t['asked'] and t['asked'] != t['title'] else '')
+            + f" - {t['stands'] or 'open'}; last message {t['last'] or 'none'}" for t in ts), fence_it=True)
     if name == 'search_knowledge':
         from . import knowledge
         hits = knowledge.search(store, a.get('text', ''))

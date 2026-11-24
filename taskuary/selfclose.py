@@ -345,8 +345,6 @@ REPLY_LINE = (f'REPLYING FOR THE OWNER: the answer the person who asked will get
 # is Task 3.5's). Not `SUMMARY:`, which the brief already uses as the task-summary label.
 SUMMARY_OPEN, SUMMARY_CLOSE = '[[TASKUARY-SUMMARY]]', '[[/TASKUARY-SUMMARY]]'
 AFTER_PRESS = ('send', 'handoff')
-from .buttons import label as _label
-RETRY_LABEL = _label('try_again')          # the button a summary's `retry` draws
 SUMMARY_LINE = (f'ENDING EVERY TURN: close with {SUMMARY_OPEN}{{"name": "<the task in three to six words, as a to-do list names it>", "about": "<two or three plain sentences from the whole thread: which '
                 f'conversation, what about, who asked, for whom, why - naming only people it shows in that role>", "did": "<the RESULT ITSELF '
                 f'first (the path, link, figure or name), then what you did; any part unmet or unchecked>", "on_you": ["<a step for what they '
@@ -354,8 +352,7 @@ SUMMARY_LINE = (f'ENDING EVERY TURN: close with {SUMMARY_OPEN}{{"name": "<the ta
                 f'is met and you checked it>, "answer_is_result": <true when your words above ARE what was asked>, "after_press": <"send" only if a step of '
                 f'your own is left after the owner presses what you set up (deploy once he approves the merge; his Send finishing the job is not one) - that press wakes you once; "handoff" '
                 f'only if you carry on once he hands this to a person; else leave it out: a press with nothing after it never wakes you>, "retry": <true when what '
-                f'stopped you may work on another try (a page that did not load, a site that did not answer): Taskuary puts a {RETRY_LABEL} button under '
-                f'your turn - never ask the owner to send a message to try again>}}'
+                f'stopped you may work on another try (a page that did not load, a site that did not answer) - never ask the owner to send a message to try again>}}'
                 f'{SUMMARY_CLOSE} - valid JSON, plain words, no secret, "you" to the owner. A fact only they have (a phone number, a choice) is your one question, and a payment or other press of theirs is set up to its last press as a card: these are never an on_you step. When their newest message CORRECTS you, add "corrections": '
                 f'[{{"kind": "redraft" (their words for the draft) or "ask" (you misread the task), "review": <the draft\'s id or null>, '
                 f'"said": "<the correction, in their words>"}}], never shown. When what came in needs nothing from you or them - judged from '

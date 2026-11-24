@@ -359,7 +359,13 @@ def _install_fresh_routes(app, store):
         import json
         from taskuary import outbound, server
         from taskuary import store as store_mod
-        store_mod.set_owner(store, "Alex Doyle", "alex@northwind.example", "owner")     # ...the one door: the agents' documents name him too
+        me = "alex@northwind.example"
+        store_mod.set_owner(store, "Alex Doyle", me, "owner")     # ...the one door: the agents' documents name him too
+        # ...AND A MAILBOX STANDS BEHIND IT, as a connected one does (walks 15-16: with none, a new email's sent row named no mailbox, so
+        # store.wrote_to_locally - scoped by mailbox - never saw it, and the person written to stood as a stranger 30 s later): an email
+        # source of his address, with no connector to poll it, and every receipt naming the mailbox it left from
+        if not any(s.get("Channel") == "email" for s in store.list_sources(active_only=False)):
+            store.save_source({"Channel": "email", "Address": me, "Owner": "me", "Active": 1}, "fixture")
         box = Path(os.environ["TASKUARY_HOME"]) / "outbox.jsonl"
         def out(*a, **k):
             if body.get("fail"): raise RuntimeError(body["fail"])         # ...a mailbox that refuses: a press whose act fails (`fail` its words)
@@ -369,7 +375,7 @@ def _install_fresh_routes(app, store):
             # ...whom it went to as the send was given it: send_out takes `to` third in line, a reply by name - "gail@" for every new email told
             # its agent both went to the wrong person (the real-CLI card walk, 2026-11-18)
             to = k.get("to") or (a[2] if len(a) > 2 and isinstance(a[2], (list, str)) and a[0] is not None and isinstance(a[1], str) else None)
-            return {"channel": "email", "to": ([to] if isinstance(to, str) else to) or ["gail@northwind.example"], "cc": k.get("cc") or []}
+            return {"channel": "email", "to": ([to] if isinstance(to, str) else to) or ["gail@northwind.example"], "cc": k.get("cc") or [], "mailbox": me}
         outbound.send_out = outbound.reply_to_message = out
         # ...the MAILBOX is the fixture's, so a letter's card needs no Connect - but a post's network is not: its card reads its own connection
         # (walk 8, 2026-11-20: stubbed for every card, the walk drew "Post to LinkedIn" over a network never connected and read it as the app's)

@@ -17,7 +17,7 @@ import TerminalIcon from "@mui/icons-material/Terminal";
 import OutlinedFlagIcon from "@mui/icons-material/OutlinedFlag";
 import InsertChartOutlinedIcon from "@mui/icons-material/InsertChartOutlined";
 import api from "./api.js";
-import { gistFor } from "./fyiRow.js";
+import { gistFor, sortedSays } from "./fyiRow.js";
 import { dangerLine } from "./strangerLine.js";
 import { canUnsubscribe, unsubscribeFrom } from "./unsubscribe.js";
 import { runOperation } from "./taskOps.js";
@@ -1314,7 +1314,7 @@ export function MessageCard({ card, onDone, onOpenTask, onTimeline, onSurface, o
         where={<Where card={card} onOpenTask={onOpenTask} onTimeline={onTimeline} />} />} />
   );
   return (
-    <CardShell card={card} kicker={card.kind === "fyi" ? "fyi" : reported ? "agent reported" : suggestedKind === "coding" ? "coding · nobody on it" : own || mineAlone ? kindLabel("task") : WORD.asked}
+    <CardShell card={card} kicker={card.kind === "fyi" ? sortedSays(card).label : reported ? "agent reported" : suggestedKind === "coding" ? "coding · nobody on it" : own || mineAlone ? kindLabel("task") : WORD.asked}
       lead={<Story card={card} agent={own || mineAlone ? true : false} words={words} tail={!!verb || reported}
         fallback={card.channel === "own" ? card.preview : card.title} />} err={err}>
       {reported ? (
@@ -1326,7 +1326,7 @@ export function MessageCard({ card, onDone, onOpenTask, onTimeline, onSurface, o
         <YourMove title={own || mineAlone ? "who should take it?" : `reply to ${asker}`} go={verb}
           then={own || mineAlone ? `starts ${suggestedKind === "coding" ? "a coding agent" : "an agent"} on it; it comes back here when it stops.`
             : "writes one for you to approve here - nothing is sent."} />
-      ) : card.kind === "fyi" && <><DangerNote danger={card.danger} aim={card.danger_aim} /><div className="tq-card-note">Nothing to decide - it only wants you to know.</div></>}
+      ) : card.kind === "fyi" && <><DangerNote danger={card.danger} aim={card.danger_aim} /><div className="tq-card-note">{sortedSays(card).note || "Nothing to decide - it only wants you to know."}</div></>}
       <Foot openTask={onOpenTask} close={card} onDone={onDone} tuck={dangerTuck(card)}
         extra={card.kind === "fyi" && canUnsubscribe(card) ? [{ verb: "unsubscribe", label: btn("unsubscribe"), title: btnHint("unsubscribe"), onClick: unsub, disabled: !!busy }] : []}
         covers={[...(own || mineAlone ? (suggestedKind === "coding" ? ["coding_agent", "coder"] : ["regular_agent"]) : ["reply"]), ...(mineAlone ? ["reply", "not_ours"] : [])]}
@@ -1553,19 +1553,19 @@ export function FyiMessage({ item, onHead = null, open: held = null, moved = nul
 function FyiSections({ card, table, items, msgs, foot, err, next }) {
   const nav = React.useContext(CardNav), n = items.length, batch = card.kind === "fyis";
   // ...A HANDFUL GETS THE SAME BOX A SINGLE ONE DOES, by the same road (the owner, 2026-11-06): its ask, under Came from
-  const ask = useItemAsk(card, "fyi");
-  return <ItemSections kind={batch ? "fyis" : "fyi"} itemKey={card.key} label="FYI" height={table} about="from" lays={!batch} ask={ask} hands={batch}
+  const ask = useItemAsk(card, "fyi"), says = sortedSays(card);
+  return <ItemSections kind={batch ? "fyis" : "fyi"} itemKey={card.key} label={says.label} height={table} about="from" lays={!batch} ask={ask} hands={batch}
     title={batch ? plural(n, "message") : card.title}
     aside={<><SourceMark item={card} size={13} />{card.when && ago(card.when)}</>}
     sections={[
       { key: "from", n: 1, name: STEPS[0].name, lines: [plural(n, "message"), ...items.slice(0, 3).map((i) => `${whoName(i.who)}: “${i.title || ""}”`)],
-        foot: "✓ Sorted: FYI",
+        foot: says.foot,
         // ...and triage's miss said where a task's Not a task is (the owner, 2026-10-29): Should be a task, from the row's own verbs
         ...(batch ? {} : { moves: <PaneMoves sec="from" /> }),
         // ...the handful as ONE list in one card (the owner, 2026-10-28: "too much space in fyi"): a hairline between messages, not a card each
         body: <><ItemPart className="tq-item-msgs" sx={{ py: 0.25 }}>{msgs}</ItemPart><CardErr err={err} /></> }]}
       moves={<ItemPart data-tq-fyi-close="">
-          <div className="tq-card-note">Nothing to decide - {n === 1 ? "it only wants" : "they only want"} you to know.</div>
+          <div className="tq-card-note">{says.note || `Nothing to decide - ${n === 1 ? "it only wants" : "they only want"} you to know.`}</div>
           <RowMoves next={next} on={batch ? "" : "on its panes"} />
           {foot}
         </ItemPart>} />;

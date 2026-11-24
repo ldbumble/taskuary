@@ -6,6 +6,7 @@
 // at two different points, and the eye had nowhere to land (the owner, 2026-09-14: "they eyes don't
 // focus on one thing").
 import { pictureWords } from "./mailLinks.js";
+import { LANE, WORD } from "./lanes.js";
 
 export const norm = (s) => String(s || "").replace(/\s+/g, " ").trim().toLowerCase();
 
@@ -20,3 +21,10 @@ export const gistFor = (item, n = 48) => {
   const head = Math.min(n, a.length, b.length);
   return a.slice(0, head) === b.slice(0, head) ? "" : gist;
 };
+
+// WHAT ITS PAGE SAYS IT WAS SORTED AS (walk 12, 2026-11-23): a mail the AI could not sort rides the FYI card, and its page read "FYI",
+// "✓ Sorted: FYI" and "Nothing to decide" with its reason only on the rail. It names its lane and the reason the row carries (funnel's
+// unjudged row); Sort it again is on it as on every unsorted row (RetryVerbs). `note`: null - the card's own "Nothing to decide" stands
+export const sortedSays = (card) => card?.lane === "unjudged"
+  ? { label: WORD.unjudged, foot: `⚠ ${WORD.unjudged}`, note: card.why || LANE.unjudged.hint }
+  : { label: "FYI", foot: "✓ Sorted: FYI", note: null };

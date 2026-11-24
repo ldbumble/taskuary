@@ -284,6 +284,18 @@ class TheAdaptersOwnLinesTests(unittest.TestCase):
         self.assertTrue(line.startswith('The AI provider refused the request'), line)
         self.assertNotIn('{', line); self.assertNotIn('litellm', line)
 
+    def test_an_error_that_ends_a_turn_fails_it_whatever_was_said_before(self):
+        """Walk 12, 2026-11-23 (gateway budget out mid-turn): the agent said "I'll check the workspace...", made a call, and the adapter's
+        own 422 ended the turn - dropped because words stood before it, so the task read "agent done" with Mark done lit. An adapter line
+        that is the turn's LAST word fails it; one the model went on past (a warning at the start) does not."""
+        c = _stub_turn([_chunk('Warning: Model metadata for `m` not found.'), _chunk("I'll check the workspace for the seat count.", 'item_1'), {'sessionUpdate': 'tool_call', 'toolCallId': 'c1'},
+                        _chunk('unexpected status 422 Unprocessable Entity: Budget has been exceeded! Max budget: 50.0')])
+        with self.assertRaises(acp.ACPAgentError) as e: c.prompt('q')
+        self.assertIn('Budget has been exceeded', str(e.exception)); self.assertNotIn('Warning', str(e.exception))
+        c = _stub_turn([_chunk('Warning: Model metadata for `m` not found.\n\n'), _chunk('Looking.', 'item_1'),
+                        {'sessionUpdate': 'tool_call', 'toolCallId': 'c1'}, _chunk('Done - 212 seats.', 'item_2')])
+        self.assertEqual(c.prompt('q'), ('end_turn', 'Done - 212 seats.'))
+
     def test_another_adapter_keeps_its_unnamed_words(self):
         self.assertEqual(_stub_turn([_chunk('Hello.')], unnamed_own=False).prompt('q'), ('end_turn', 'Hello.'))
 

@@ -114,7 +114,8 @@ def warm(store, tid: int) -> None:
 
 def brief_messages(store, tid: int) -> list:
     "The messages the brief reads (build): a message kept only as context is not the task's."
-    return [m for m in store.list_messages(tid) if m.get('Status') != 'context']
+    from .origin import heard
+    return [m for m in heard(store, tid, store.list_messages(tid)) if m.get('Status') != 'context']     # ...never a line held for his Trust
 
 
 def _judgement(store, tid, msgs, repo, now: bool, behind: bool = False) -> Future:
@@ -711,8 +712,9 @@ def joins(store, tid: int) -> list:
     from .routing import norm_subject
     from .outbox import asked
     road = {r['MessageId']: r for r in store.list_routes(tid)}          # the last word on each message's place here
+    from .origin import heard
     out = []
-    for m in store.list_messages(tid):
+    for m in heard(store, tid, store.list_messages(tid)):
         if m.get('Status') == 'context': continue                       # the owner's own replies: the SENT section and the thread carry them
         r = road.get(m['MessageId']) or {}
         try: v = json.loads(r.get('VerdictJson') or 'null') or {}
@@ -838,7 +840,8 @@ def build(store, tid: int, msgs: list = None, repo: str = None, general: bool = 
     if sent := ledger.sent_here(store, tid, 3): parts.append(f'{SENT_HEAD} (newest first - these went out; none of them is waiting)\n' + '\n\n'.join(map(went, sent)))
     if general: return '\n\n'.join(parts) if len(parts) > 1 else ''
     if docs := documents(store, tid): parts.append(docs)
-    allm = store.list_messages(tid)
+    from .origin import heard
+    allm = heard(store, tid, store.list_messages(tid))
     if len(allm) > 1:
         # NEWEST FIRST, and what came after the agent's last run is never the part cut. Oldest-first under the cap kept the three
         # first mails of an eight-mail thread and dropped the five after them - the very ones a reopened task is about - while the

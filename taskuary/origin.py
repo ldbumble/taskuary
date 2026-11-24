@@ -11,7 +11,11 @@ ORDER = ('stranger', 'trusted', 'owner')
 OURS = ('assistant', 'report')       # Taskuary's own voice
 def worse(a, b): return a if ORDER.index(a) <= ORDER.index(b) else b
 
-def _own(row): return row.get('Direction') == 'out' or row.get('Status') == 'context'
+def _own(row):
+    "His own words: what he sent, kept as context, or his ask from New filed on the task (outbox.is_ask, ownwork.is_own) - Taskuary's row, never a From."
+    from .outbox import is_ask
+    from .ownwork import is_own
+    return row.get('Direction') == 'out' or row.get('Status') == 'context' or is_ask(row) or is_own(row)
 
 # HIS OWN SYSTEMS ARE HIS (the owner, 2026-11-19): his CI's "Build failed on main" from ci.northwind.example, his connected systems' automated
 # mail never put his task in safe mode - a real stranger's mail still does, until Trust. Read from stored facts, never words: a machine's mail
@@ -350,8 +354,20 @@ TRUST_AFTER = "Trusting them also lets their next messages start an agent by the
 _HOLDS = {}                 # (store, task) -> (what it was judged on, when, the hold): a chat at work reads this twice a second
 def hold(store, tid) -> dict | None:
     "{line, person (the Trust action's label), org, who, mids (the untrusted messages)} while an untrusted sender's words stand on the task."
-    import time
     if not tid or not (t := store.get_task(int(tid))) or t.get('Status') in ('done', 'dropped'): return None
+    return _held(store, t)
+# ...AND WHAT THE HOLD NAMES IS HANDED TO NO AGENT (the red team, 2026-11-24, F5: a stranger's reply on his trusted thread rode his full-power
+# agent's next turn as an event, under a page that said "the agent hears nothing more"): every road that hands a task's messages to its agent -
+# its events, its brief, its context file, a coding seed - leaves these out until his Trust, and then hands them once (events.commit)
+def withheld(store, tid) -> set:
+    "The messages on the task no agent is handed until he trusts their senders - whatever the task's status."
+    return set((_held(store, t) or {}).get('mids') or ()) if tid and (t := store.get_task(int(tid))) else set()
+def heard(store, tid, msgs) -> list:
+    "`msgs` of task `tid` less what is withheld from its agent."
+    return [m for m in msgs if m.get('MessageId') not in w] if (w := withheld(store, tid)) else list(msgs)
+def _held(store, t: dict) -> dict | None:
+    import time
+    tid = int(t['TaskId'])
     # ...judged again when the thread or what he vouched for moved, else every few seconds (a trust given elsewhere - an organisation's -
     # changes it with neither): a long group chat is not judged line by line on every read of its list
     n = store._one('SELECT COUNT(*) AS n, MAX(MessageId) AS m FROM message WHERE TaskId=?', (int(tid),)) or {}

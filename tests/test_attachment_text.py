@@ -198,6 +198,7 @@ def test_a_held_message_read_back_later_brings_its_file_text():
 
 def _task(s, files):
     tid = s.create_task({'Title': 'Vendor contract renewal', 'Summary': 's', 'Kind': 'reply', 'Source': 'email'}, 'router')
+    s.remember_trust('', 'gail@vendor.example', 'in your Sent Items')         # ...someone he writes to: a held line reaches no agent (origin.withheld)
     mid = s.add_message({'TaskId': tid, 'Channel': 'email', 'FromName': 'Gail Moreno', 'FromEmail': 'gail@vendor.example', 'ConversationId': 'c-1',
                          'Subject': 'Renewal', 'SentAt': '2026-10-19 10:00:00', 'BodyText': 'Can we end this early? See the contract.', 'Status': 'routed'})
     channels.save_attachments(s, mid, files, f'graph:{tid}')

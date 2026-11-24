@@ -53,22 +53,35 @@ def _cursor(store, tid: int) -> tuple[int, set]:
     return (r['Upto'], set(json.loads(r['Told'] or '[]'))) if r else (0, set())
 
 
-def _row(r: dict) -> dict:
+def _body(r: dict) -> dict:
     try: b = json.loads(r.get('Body') or '{}')
     except ValueError: b = {}
-    return {**b, 'id': r['Id'], 'at': r['At'], 'kind': r['Kind']}
+    return b if isinstance(b, dict) else {}
+def _row(r: dict) -> dict: return {**_body(r), 'id': r['Id'], 'at': r['At'], 'kind': r['Kind']}
 
 
 def pending(store, tid: int, upto: int = None) -> list:
     "The events on task `tid` past its cursor (and up to `upto`) that no turn was handed yet, oldest first."
     at, told = _cursor(store, tid)
     rows = store._rows('SELECT * FROM event WHERE TaskId=? AND Id>? AND Id<=? ORDER BY Id', (int(tid), at, upto if upto is not None else 2 ** 62))
-    return [_row(r) for r in rows if r['Id'] not in told]
+    held = _held(store, tid, rows)
+    return [_row(r) for r in rows if r['Id'] not in told and r['Id'] not in held]
+
+
+def _held(store, tid: int, rows) -> set:
+    "The ids of the message events among `rows` whose message no agent is handed until he trusts its sender (origin.withheld)."
+    from .origin import withheld
+    if not (w := withheld(store, tid) if any(r['Kind'] == 'message' for r in rows) else None): return set()
+    return {r['Id'] for r in rows if r['Kind'] == 'message' and _body(r).get('mid') in w}
 
 
 def commit(store, tid: int, upto: int = None, ids=()) -> None:
     """The agent has them: the cursor moves to `upto`, and `ids` past it - handed to a turn at work (steer) - are kept as told."""
     at, told = _cursor(store, tid)
+    # ...A HELD LINE KEEPS ITS PLACE (origin.withheld): the cursor stops before it and what the turn was handed past it is kept as told, so his
+    # Trust hands it to the next turn, once
+    if upto and upto > at and (held := _held(store, tid, rows := store._rows('SELECT Id, Kind, Body FROM event WHERE TaskId=? AND Id>? AND Id<=?', (int(tid), at, upto)))):
+        ids, upto = {*ids, *(r['Id'] for r in rows if r['Id'] not in held)}, min(held) - 1
     at = max(at, upto or 0); told = {i for i in told | set(ids) if i > at}
     with store.lock:
         store.cx.execute('INSERT INTO event_cursor (TaskId, Upto, Told) VALUES (?,?,?) ON CONFLICT(TaskId) DO UPDATE SET Upto=excluded.Upto, Told=excluded.Told',

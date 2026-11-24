@@ -2,6 +2,19 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.4.2.6 - 2026-11-24
+
+- A sign-up fills and sends only the form the agent was filling
+- A password a sign-up only sent is never typed as a sign-in
+- "The account the agent made" is said only once a site let it past
+- A failed sign-up card reads done only once the account exists
+- The agent's choices are its question's buttons, and its question is never cut
+- A letter Taskuary sent is drawn once: its card, never its sent-folder copy too
+- A report's own box takes his line by a task chat's road, not the home Assistant's
+- What a turn left on him stands only until his press: reports and the header read the cards' state
+- The agent is handed what is true: a refusal raises no card, a tab closes only as the next turn begins
+- A mail heard but not yet written into the chat stays by the box: one read never loses it
+
 ## 0.4.2.5 - 2026-11-24
 
 - A turn the AI cut short fails, and an unsorted arrival says so on its page

@@ -1015,7 +1015,7 @@ class UpPage:
         from taskuary import browsergate
         self.ran.append(expr)
         if expr == signin.FORM: return {'href': self.href, 'top': True, 'title': self.state.title(), 'user': self.user if self.state == 'form' else '',
-                                        'pw': bool(self.pw), 'new': self.new, 'password': self.form(), 'fields': self.fields_}
+                                        'pw': bool(self.pw), 'new': self.new, 'password': self.form(), 'fields': self.fields_, 'pay': getattr(self, 'pay', False)}
         if expr == signin.ASKS: return self.state == 'more'
         if expr == signin.FORM_PW: return self.pw
         if expr.startswith(signin.REFILL): self.user = USER; return 3
@@ -1082,6 +1082,28 @@ def test_a_sign_up_never_sends_a_code_to_an_inbox_nobody_reads():
     page.fields_ = [{'k': 'email', 't': 'email', 'v': 'alex+canvas@northwind.example'}]; page.user = 'alex+canvas@northwind.example'
     ok, said = signing_up(s, tid, page, lambda sid, site, c: c.go('data', 'https://www.canvas.example/home') or {'ok': True}, typed)
     assert ok and typed, said                                                        # a mailbox it reads: the form goes
+
+
+def test_a_sign_up_is_held_for_what_it_does_and_its_card_says_only_that():
+    """Walk 12: the judge held a free sign-up as "through checkout (it spends your money)", and another's card read "creates an account under
+    your name and email. You asked to see this Submit first" over a form that asked neither. The sign-up sends a password Taskuary makes with the
+    boxes the agent filled: money only where a box of the form takes a card, and the card names the act - nothing the judge made up."""
+    from taskuary import browsergate
+    s = MemoryStore(); tid = Factory(s).task('Hacker News account'); seen = []
+    money = [{'hold': True, 'kind': 'money', 'what': 'Submit your sign-up through checkout', 'why': 'it spends your money, so it waits for your press'}]
+    def judge(store, todo, pg, said=''): seen.append(pg); return money
+    page = UpPage('https://news.example/login'); page.fields_ = [{'k': 'acct', 't': 'text', 'v': 'northwind_ops'}]
+    sent = lambda sid, site, c: c.go('data', 'https://news.example/news') or {'ok': True}
+    with gate(True), mock.patch.object(browsergate, 'judge', judge), on_page(page.href), mock.patch.object(signin, 'connect', return_value=page), \
+         mock.patch.object(signin, 'type_new', lambda *a: 1), mock.patch.object(signin, 'send_new', sent):
+        ok, said = signin.signup(s, tid, 'sess1')
+    assert ok and not said.startswith('HELD'), said                                        # ...no card box on it: it spends nothing
+    assert seen[0]['pw'], 'the judge reads an account form that sends a password, never a message'
+    page = UpPage('https://news.example/login'); page.pay = True
+    with gate(True), mock.patch.object(browsergate, 'judge', judge), on_page(page.href), mock.patch.object(signin, 'connect', return_value=page):
+        ok, said = signin.signup(s, tid, 'sess1')
+    [rv] = s._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action' AND Status='pending'", (tid,))
+    assert json.loads(rv['DraftText'])['what'] == 'Make an account on news.example' and said.startswith('HELD for the owner: Make an account on')
 
 
 def test_a_sign_up_the_site_turned_down_puts_back_the_sign_in_it_replaced():

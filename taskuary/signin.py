@@ -1409,7 +1409,7 @@ FORM = "(() => { " + DEEP + r"""
     && (e.type === 'checkbox' || e.type === 'radio' ? e.checked : e.value));
   const pv = deepAll('input[type=password]').filter((e) => !!e.value);
   return { href: location.href, top: window === window.top, title: document.title, user: user ? String(user.value).slice(0, 200) : '',
-           pw: pv.length > 0, password: ins.some((e) => e.type === 'password'),
+           pw: pv.length > 0, password: ins.some((e) => e.type === 'password'), pay: ins.some((e) => /^cc-/.test(e.autocomplete || '')),
            new: pv.some((e) => e.autocomplete === 'new-password') || (pv.length > 1 && pv.every((e) => e.value === pv[0].value)),
            fields: keep.slice(0, 30).map((e) => ({ k: e.name || e.id, t: e.type,
              v: e.type === 'checkbox' || e.type === 'radio' ? (e.value || 'on') : String(e.value).slice(0, 300) })) }; })()"""
@@ -1647,7 +1647,7 @@ def _dead_inbox(store, tid, site: str, addr: str) -> str:
 
 def signup(store, tid, sid) -> tuple[bool, str]:
     """`agent-browser signup`: the agent filled a sign-up form but its password. -> (made or held, what the command prints)."""
-    from . import browsergate, browserview, proposals
+    from . import browsergate, browserview, proposals, say
     st = browserview.state(sid, fresh=True)
     url = str(st.get('url') or '') if st.get('open') else ''
     site = site_of(url)
@@ -1660,18 +1660,25 @@ def signup(store, tid, sid) -> tuple[bool, str]:
         # the address read was another tab's) - the card names that tab, and his press runs there only (browsergate.held_tab)
         here = str(c.js('location.href') or '')
         if site_of(here) and site_of(here) != site: url, site = here, site_of(here)
-        if dead := unread_inbox(store, c.js(FORM) or {}): return False, _dead_inbox(store, tid, site, dead)
-        pg = browsergate.page(sid)
+        if dead := unread_inbox(store, f := c.js(FORM) or {}): return False, _dead_inbox(store, tid, site, dead)
+        # ...WHAT THIS ACT DOES IS KNOWN, so the page is read as it (walk 12): it sends a password Taskuary makes with the boxes the agent filled -
+        # an account's form, never a message (pw) - and spends money only where a box of the form takes a card (`pay`: the page's own cc-
+        # marks). Neither "it spends your money" over a free sign-up nor "speaks for you" over a user name is the judge's to say
+        pg = {**browsergate.page(sid), 'pw': True}
         name = site_name(url, sid) or site
         v = browsergate.judge(store, [{'verb': 'press', 'args': [], 'raw': f'send the filled sign-up form on {name}, creating an account there'}], pg,
                               said=browsergate.asked(store, tid))[0]
+        if v.get('kind') == 'money' and not f.get('pay'): v = {'hold': False}
         if not v['hold']: return _make(store, tid, sid, site, c)
         f = c.js(FORM) or {}
         if not f.get('password'): return False, _no_box(site)
+        # ...and the card says only what is true of it, from these facts (say.owner): the judge's "under your name and email" over a form
+        # that asked neither, "you asked to see this Submit first" of a Submit he never named (walk 12)
+        what = say.owner({'kind': 'signup_held', 'site': name})
         proposals.queue(store, tid, {'action': 'browser_act', 'sid': str(sid), 'args': ['signup'], 'signup': site, 'url': here or url, 'site': site,
                                      'name': name, **({'tab': t} if (t := getattr(c, 'target', '')) else {}), 'fields': f.get('fields') or [], 'command': f'send the sign-up form on {name}',
-                                     'what': v['what'], 'why': v['why']}, 'agent')
-        return True, (f'HELD for the owner: {v["what"]} ({v["why"]}). It stands as one card in the chat; their press fills this form again as you '
+                                     'what': what, 'why': v['why']}, 'agent')
+        return True, (f'HELD for the owner: {what} ({v["why"]}). It stands as one card in the chat; their press fills this form again as you '
                       'left it, makes and keeps the password and sends it - even after you have moved on - and you are told what the site '
                       'answered. Do not ask them in words; go on with the rest of the work.' + browsergate.stands(store, tid))
     finally: c.close()

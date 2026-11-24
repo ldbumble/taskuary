@@ -184,6 +184,11 @@ def acts(cmd: str) -> list:
     return out
 
 
+def helps(args: list) -> bool:
+    "Does Taskuary's own verb ask only for its usage (`--help`, `-h`)? Never read so of the real program's: whether it then acts is its own."
+    return any(str(t) in ('--help', '-h') for t in args or ())
+
+
 def _find_action(a: list) -> str:
     "The action word of `find <locator> <value...> [action]` ('click' when none is given), read only where its words stand bare: '' else."
     n = 4 if len(a) > 1 and a[1].lower() == 'nth' else 3          # nth takes an index and a selector, every other locator one value

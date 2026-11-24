@@ -843,6 +843,15 @@ def test_signup_is_taskuarys_own_verb_answered_by_the_server_never_the_real_prog
     assert ran == [] and posted == ['agent-browser signup']
 
 
+def test_a_verb_asked_for_its_usage_is_no_act():
+    """Walk 12: `agent-browser signup --help`, run as the agent read up on its tools, was taken for the sign-up - the form judged and a card
+    "Submit your Proton Mail sign-up through checkout (it spends your money)" put to the owner. Its usage is printed; nothing is judged or sent."""
+    with mock.patch('taskuary.signin.signup', side_effect=AssertionError('no sign-up was asked for')):
+        ok, said = gate.run_own(MemoryStore(), 1, 'sess1', 'signup', 'agent-browser signup --help')
+    assert ok and said.startswith('Usage: agent-browser signup') and 'fill every box but the password' in said, said
+    assert [a['verb'] for a in bg.acts('agent-browser click @e3 -h')] == ['click'], "the real program's own flags are its own: still judged"
+
+
 def test_an_answer_out_of_shape_is_asked_once_more_before_anything_waits_on_him():
     """The owner's live app, 2026-11-19: a click to the second page of a file list was held - "the AI could not tell" - because the judge's
     entry came back out of shape. It is asked once more; only what it still cannot read waits on him."""

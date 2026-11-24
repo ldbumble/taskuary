@@ -6445,7 +6445,7 @@ async def agent_gate(body: dict, request: Request):
     sid, cmd = str(body.get('sid') or ''), str(body.get('cmd') or '')
     # ...TASKUARY'S OWN VERB (`agent-browser signup`): done here, its result the command's own output (gate.own)
     if not body.get('after') and (own := gate.own(cmd)):
-        ok, said = await asyncio.get_running_loop().run_in_executor(_PERMIT_POOL, lambda: gate.run_own(store, tid, sid, own))
+        ok, said = await asyncio.get_running_loop().run_in_executor(_PERMIT_POOL, lambda: gate.run_own(store, tid, sid, own, cmd))
         return {'why': '', 'own': True, 'ok': ok, 'said': said}
     try: rc = int(body.get('rc') or 0)
     except (TypeError, ValueError): rc = 1

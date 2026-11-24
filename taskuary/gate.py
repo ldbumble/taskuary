@@ -438,18 +438,27 @@ def asks(name: str, cmd: str) -> tuple:
     return act, act or bool(browsergate.opens(cmd))
 
 
-def own(cmd: str) -> str:
-    "Taskuary's own verb this agent-browser line asks for (OWN_VERBS), else ''. Its grammar is the line's first word past agent-browser's options."
+def _own(cmd: str) -> list:
+    "The arguments of Taskuary's own verb this agent-browser line asks for (OWN_VERBS), past agent-browser's options - [] for none."
     from . import browsergate
     for argv in browsergate._segments(cmd) or []:
         a = browsergate._own_args(browsergate._head(argv) or [])
-        if a and a[0].lower() in OWN_VERBS: return a[0].lower()
-    return ''
+        if a and a[0].lower() in OWN_VERBS: return a
+    return []
+def own(cmd: str) -> str: return a[0].lower() if (a := _own(cmd)) else ''
 
 
-def run_own(store, tid: int, sid: str, verb: str) -> tuple:
-    "(done, what the command prints) of Taskuary's own verb."
-    from . import signin
+# ...ITS USAGE ASKED IS NO ACT (walk 12: `agent-browser signup --help`, run while the agent read up on its tools, was taken for the sign-up
+# itself - the form judged, and a card "Submit your Proton Mail sign-up through checkout (it spends your money)" put to the owner)
+def usage(verb: str) -> str:
+    from .browserview import SIGNUP_LINE
+    return {'signup': f'Usage: agent-browser signup (no arguments). {SIGNUP_LINE.strip()}'}.get(verb, f'agent-browser {verb} is not a command')
+
+
+def run_own(store, tid: int, sid: str, verb: str, cmd: str = '') -> tuple:
+    "(done, what the command prints) of Taskuary's own verb - its usage where the line asks for help."
+    from . import browsergate, signin
+    if browsergate.helps(_own(cmd)[1:]): return True, usage(verb)
     if verb == 'signup': return signin.signup(store, tid, sid)
     return False, f'agent-browser {verb} is not a command'
 

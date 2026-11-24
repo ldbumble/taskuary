@@ -101,6 +101,7 @@ def owner(e: dict) -> str:
         # ...a status code is no words of the site's (walk 10, 2026-11-23: 'it said "the site answered with an error (HTTP 400)"'): said by its kind
         if raw(why): return f"No account was made on {e.get('site') or 'the site'}: the site answered the sign-up with an error."
         return f"No account was made on {e.get('site') or 'the site'}" + (f': it said "{why[:200]}"' if why else ': it kept its sign-up form up') + '.'
+    if k == 'signup_held': return f"Make an account on {e.get('site') or 'the site'}"
     if k == 'held':
         return held_why(e.get('why'))
     if k == 'turn_failed': return turn_failed(e.get('raw'))

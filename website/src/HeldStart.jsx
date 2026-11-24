@@ -8,6 +8,8 @@ import React, { useState } from "react";
 import { Box, Button, CircularProgress, Typography } from "@mui/material";
 import api from "./api";
 
+// ...and where the press is the row's, the line says where it stands (walk 15 H2: "until you do" with no button in sight)
+export const heldPointer = (hold) => `Press ${hold.person || "Trust them"}, first on the task's row.`;
 export default function HeldStart({ taskId, hold, onChanged, onRow = false }) {
   const [busy, setBusy] = useState(false), [err, setErr] = useState("");
   const trust = async () => {
@@ -17,7 +19,7 @@ export default function HeldStart({ taskId, hold, onChanged, onRow = false }) {
   };
   return (
     <Box data-tq-held-start="" className="tq-aui-summary" sx={{ mt: 1, mx: { xs: 1, sm: 2 } }}>
-      <Typography sx={{ fontSize: 13.5, color: "var(--tq-text, #292824)" }}>{hold.line}</Typography>
+      <Typography sx={{ fontSize: 13.5, color: "var(--tq-text, #292824)" }}>{hold.line}{onRow ? ` ${heldPointer(hold)}` : ""}</Typography>
       {!onRow && <Box sx={{ display: "flex", gap: 1, mt: 0.75, flexWrap: "wrap" }}>
         <Button size="small" variant="contained" disableElevation disabled={busy} onClick={trust} data-tq-trust-sender=""
           startIcon={busy ? <CircularProgress size={12} color="inherit" /> : null} sx={{ fontSize: 12.5, minHeight: 30, textTransform: "none" }}>

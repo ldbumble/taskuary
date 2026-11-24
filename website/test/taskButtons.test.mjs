@@ -86,3 +86,22 @@ test("every dialog's actions are the one ButtonBar: one button size, left, no ba
   // ...and the Assistant's box steps aside while New is the page: one input on a screen
   assert.match(read("AssistantView.jsx"), /\{!chatApart && !newOpen && composeBox\}/);
 });
+
+// A HELD TASK'S ONE WAY ON IS THE ROW'S FIRST MOVE, FILLED (walk 15 H2): Trust went through the row as an unlisted verb, lost its fill and
+// sat in More ▾ while the chat said "no agent works on this until you do"
+test("held for a sender: Trust stands first on the row, filled, and never folds - on the desk's strip and the phone's row alike", async () => {
+  const { taskMoves } = await import("../src/taskMoves.js"), { rowOf, splitRow, pillsOf, phoneRow } = await import("../src/actionRow.js");
+  const w = { label: (k) => k, hint: () => "", doneHint: "", natTitle: "", repo: "Choose where the code is", repoHint: "" }, run = new Proxy({}, { get: () => () => {} });
+  const verbs = taskMoves({ trust: { label: "Trust PhishGuard" }, repo: {} }, run, w);
+  const row = taskButtons(splitRow(rowOf({ list: verbs, ref: "" }), { open: "agent" }).by), first = row[0];
+  assert.equal(first.v.id, "trust");
+  assert.equal(first.v.tone, "p", "filled");
+  assert.equal(first.grp, "finish");
+  assert.ok(foldRow(row, 99).shown.some((x) => x.v?.id === "trust"), "never folded into More");
+  const phone = rowOf({ list: verbs, ref: "" });
+  assert.equal(pillsOf(phone).lead?.id, "trust", "the phone's lead");
+  assert.ok(phoneRow(phone).shown.some((v) => v.id === "trust"));
+  // ...a start held for its repository is the same: the task's one way on
+  const held = taskMoves({ repo: { held: true, can: true } }, run, w), r2 = taskButtons(splitRow(rowOf({ list: held, ref: "" }), { open: "agent" }).by);
+  assert.deepEqual([r2[0].v.id, r2[0].v.tone], ["repo", "p"]);
+});

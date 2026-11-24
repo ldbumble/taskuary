@@ -13,7 +13,7 @@ const live = new Map();          // id -> the latest verb (its run closes over t
 const ofs = new Map();           // id -> the card that registered it: the item a button drawn from it was drawn for (press)
 const owners = new Map();        // owner -> { verbs, ref, at }
 const subs = new Set();
-const view = (v) => ({ id: v.id, label: v.label, group: v.group, tone: v.tone || "s", title: v.title || "", disabled: !!v.disabled, why: v.why || "", ...(v.blank ? { blank: v.blank } : {}), promote: v.promote !== false, lead: !!v.lead, ...(v.closes ? { closes: true } : {}), ...(v.fill ? { fill: true } : {}), ...(v.beside ? { beside: true } : {}), ...(v.onCard ? { onCard: true } : {}), ...(v.card ? { card: true } : {}), ...(v.tucked ? { tucked: true } : {}), ...(v.spine ? { spine: v.spine } : {}), ...(v.stage ? { stage: v.stage } : {}), ...(v.laid ? { laid: v.laid } : {}), ...(v.bar ? { bar: true } : {}) });
+const view = (v) => ({ id: v.id, label: v.label, group: v.group, tone: v.tone || "s", title: v.title || "", disabled: !!v.disabled, why: v.why || "", ...(v.blank ? { blank: v.blank } : {}), promote: v.promote !== false, lead: !!v.lead, ...(v.closes ? { closes: true } : {}), ...(v.fill ? { fill: true } : {}), ...(v.beside ? { beside: true } : {}), ...(v.onCard ? { onCard: true } : {}), ...(v.card ? { card: true } : {}), ...(v.tucked ? { tucked: true } : {}), ...(v.spine ? { spine: v.spine } : {}), ...(v.stage ? { stage: v.stage } : {}), ...(v.laid ? { laid: v.laid } : {}), ...(v.bar ? { bar: true } : {}), ...(v.unblocks ? { unblocks: true } : {}) });
 let snap = { list: [], ref: "" }, sig = "";
 // THE WALK'S TWO WAYS, ONE PILL (the owner, 2026-10-27: "We have a Next button - let's have a Back button that goes up the line as well ...
 // on the first one no Back, like no Next on the last one. Combine Next/Back into one big pill called Nav"): Back is the walk's step up the
@@ -299,7 +299,9 @@ export function rowOf({ list, ref, end: last = false }, pick = null) {
   const by = (g) => list.filter((v) => v.group === g && !v.card);
   // the card's own idea of its move (its filled tone) only says which greyed button the row explains - it never fills one
   const head = by("decide").find((v) => v.tone === "p") || null;
-  const plain = (xs) => xs.map((v) => (v.tone === "p" ? { ...v, tone: "s" } : v));
+  // ...save the press the task waits on (`unblocks`: Trust for a held sender, the repository a start is held for) - no card's idea but the
+  // task's one way on, it stays filled (walk 15 H2: unfilled, Trust fell into More ▾ under "no agent works on this until you do")
+  const plain = (xs) => xs.map((v) => (v.tone === "p" && !v.unblocks ? { ...v, tone: "s" } : v));
   // THE CARD'S MAIN MOVE LIVES UNDER THE DRAFT ONLY (the owner, 2026-10-22: Send under the draft, never the same press twice on
   // screen) - the bar's copy of it (2026-10-19) is gone, and so is the empty slot that kept its width (the owner, 2026-10-25: "we should
   // not have empty space here"). The row does not reshuffle without it: the bar is the same with and without advice, which only tints.
@@ -381,7 +383,7 @@ const TYPE_OF = {
   // a result's Share (Share.jsx) stands in a band of its own at the row's end: it acts on the whole result, never on a reply or the task
   share: "share",
 };
-export const typeOf = (v) => TYPE_OF[String(v?.id || "").split(":").pop()] || "act";
+export const typeOf = (v) => (v?.unblocks ? "act" : TYPE_OF[String(v?.id || "").split(":").pop()] || "act");
 // THE ROW'S LEAD: the lit move, else its first decision, else its first session verb - in view at every width.
 // `pressable`: on the narrowest row the lead is never a greyed one (the owner, 2026-10-28: a phone's one move was a disabled "Send to agent") -
 // the lit move stays (its busy word is its state), any other is the first pressable one, and with none it is the ▾ alone.
@@ -560,9 +562,10 @@ export const TASK_GROUPS = [
 ];
 const GROUP_BY_TYPE = { agent: "agent", reply: "agent", close: "finish" };
 const verbKey = (v) => String(v?.id || "").split(":").pop();
-export const groupOf = (v) => (v === "change" ? "more" : TASK_GROUPS.find(([, , ks]) => ks.includes(verbKey(v)))?.[0] || GROUP_BY_TYPE[typeOf(v)] || "more");
+// ...and the press the task waits on (`unblocks`) stands first of all, in Finish: the row's one way on is never in More nor folded
+export const groupOf = (v) => (v === "change" ? "more" : v?.unblocks ? "finish" : TASK_GROUPS.find(([, , ks]) => ks.includes(verbKey(v)))?.[0] || GROUP_BY_TYPE[typeOf(v)] || "more");
 const rankIn = (x) => { const k = x.change ? "change" : verbKey(x.v), gi = TASK_GROUPS.findIndex(([g]) => g === x.grp), ks = TASK_GROUPS[gi][2], i = ks.indexOf(k);
-  return [gi, i < 0 ? ks.length : i]; };
+  return [gi, x.v?.unblocks ? -1 : i < 0 ? ks.length : i]; };
 const TASK_PANES = ["head", "from", "agent", "share"];
 // the order, pure: each entry { v, head, grp } or { change, grp: "more" }, by group, then the group's list, then as they came
 export const taskButtons = (by, skip = () => false) => {

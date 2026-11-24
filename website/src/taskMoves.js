@@ -13,7 +13,7 @@ export function taskMoves(s, run, w) {
   return [
     // A TASK HELD FOR A SENDER HE HAS NOT TRUSTED IS UNBLOCKED BY ONE PRESS, LIT ON THE ROW (walk 14, 2026-11-24: opened from the rail its Trust sat in
     // the folded Agent pane, "Agent not started", and nothing on screen moved it) - the row's own move, as a start held for a repository is
-    ...(s.trust && !s.closed ? [{ id: "trust", group: "decide", tone: "p", label: s.trust.busy ? "Starting…" : s.trust.label, run: run.trust,
+    ...(s.trust && !s.closed ? [{ id: "trust", group: "decide", tone: "p", unblocks: true, label: s.trust.busy ? "Starting…" : s.trust.label, run: run.trust,
       ...off(s.trust.busy ? "it is starting" : ""), title: s.trust.hint }] : []),
     s.closed
       ? { id: "reopen", group: "decide", tone: "s", label: s.reopening ? "Reopening…" : w.label("reopen"), run: run.reopen, ...off(s.reopening ? "it is reopening" : ""), title: w.hint("reopen") }
@@ -32,7 +32,7 @@ export function taskMoves(s, run, w) {
     { id: "kind", group: "more", label: w.label("kind"), run: run.kind, title: w.hint("kind"), ...shut },
     { id: "priority", group: "more", label: w.label("priority"), run: run.priority, title: w.hint("priority"), ...shut },
     // ...a repository is a coding tool's question; a start HELD for it is the row's own move, not a More item
-    ...(s.repo?.held || s.repo?.can ? [{ id: "repo", group: s.repo.held && !s.closed ? "decide" : "more", tone: s.repo.held && !s.closed ? "p" : undefined,
+    ...(s.repo?.held || s.repo?.can ? [{ id: "repo", group: s.repo.held && !s.closed ? "decide" : "more", tone: s.repo.held && !s.closed ? "p" : undefined, unblocks: !!s.repo.held && !s.closed,
       label: w.repo, run: run.repo, title: w.repoHint, ...shut }] : []),
   ];
 }

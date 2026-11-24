@@ -28,6 +28,17 @@ class TomlTests(unittest.TestCase):
         again = config.load()
         self.assertEqual(again['agents']['t2'], {'cmd': 'echo', 'args': ['hi'], 'timeout': 5})
 
+    def test_a_load_while_it_is_written_reads_the_same_tokens(self):
+        # a write in place truncated the file first: a load() in that moment read no tokens and minted new ones, so a request checked
+        # against them refused the token every page and agent held (CI: the floor door's 401)
+        from pathlib import Path
+        before, seen, real = config.load()['server']['agent_token'], [], Path.write_text
+        def torn(p, text, **k):
+            if p.name == 'config.toml' and not seen: real(p, '', **k); seen.append(config.load()['server']['agent_token'])
+            return real(p, text, **k)
+        with mock.patch.object(Path, 'write_text', torn): config.save(config.load())
+        self.assertEqual(seen or [before], [before]); self.assertEqual(config.load()['server']['agent_token'], before)
+
     def test_env_overrides_server_bind(self):
         # Docker sets these so the process listens on 0.0.0.0 without rewriting config.toml
         with mock.patch.dict(os.environ, {'TASKUARY_HOST': '0.0.0.0', 'TASKUARY_PORT': '9000',

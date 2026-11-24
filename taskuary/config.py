@@ -67,9 +67,20 @@ def _read() -> dict:
     f = home() / 'config.toml'
     return tomllib.loads(f.read_text(encoding='utf-8')) if f.exists() else {}
 
+def _put(text: str):
+    """config.toml in one step: a write in place truncates it first, and a load() in that moment read no tokens, minted new ones and wrote
+    them over the owner's - every open page and agent then refused as out of date (CI: the floor door answered 401 to its own token)."""
+    import time, uuid
+    p = home() / 'config.toml'; tmp = p.with_name(f'.config.{uuid.uuid4().hex}.tmp'); tmp.write_text(text, encoding='utf-8')
+    for i in range(50):                       # ...Windows refuses a replace while a reader holds the file open: a moment later it goes
+        try: return os.replace(tmp, p)
+        except PermissionError:
+            if i == 49: tmp.unlink(missing_ok=True); raise
+            time.sleep(.02)
+
 def _write(d: dict):
     p = home() / 'config.toml'
-    p.write_text(dumps_toml(d) + '\n', encoding='utf-8')
+    _put(dumps_toml(d) + '\n')
     if os.name != 'nt':
         try: p.chmod(0o600)
         except OSError: pass
@@ -167,4 +178,4 @@ def save(cfg: dict):
     else:
         srv = {k: v for k, v in (cfg.get('server') or {}).items() if v is not None and k not in env}
         if srv: out['server'] = srv
-    (home() / 'config.toml').write_text(dumps_toml(out) + '\n', encoding='utf-8')
+    _put(dumps_toml(out) + '\n')

@@ -1135,6 +1135,14 @@ def _snapcopy(o):
     return copy.deepcopy(o)
 
 
+def _units_of(picture):
+    """A picture's read-bearing units (processing_reads.units), worked out once per picture: 2,000 fingerprints on a long chat."""
+    if '_units' not in picture:
+        from . import processing_reads
+        picture['_units'] = processing_reads.units(picture['view'])
+    return picture['_units']
+
+
 class SQLiteStore:
     """The local-first binding. One connection, a lock (sqlite + threads), rows as dicts."""
 
@@ -3314,11 +3322,39 @@ class SQLiteStore:
         drawn - never what landed after it was drawn. A card never drawn here is the item as it stands."""
         from . import processing_reads
         rev = shown.get(key) or shown.get('processing:' + iid) if isinstance(shown, dict) else shown
-        got, now = processing_reads.shown_units(self, iid, rev), processing_reads.units(picture['view'])
+        got, now = processing_reads.shown_units(self, iid, rev), _units_of(picture)
         return now if got is None else [u for u in now if (u['entity_kind'], u['local_id']) in got]
+    # A PICTURE IS READ BEFORE THE WRITER'S LOCK, NOT UNDER IT (the load run, 2026-11-24): a read receipt projects its whole item first,
+    # and a 2,000-line chat's projection - 0.4 s idle, up to 8 s on a busy home - was read under the lock on every open of the row and
+    # every line the Assistant mirrored onto it (101 s and 76 s of lock in one run): every press and every triage write queued behind it.
+    # It is read on a reader snapshot first, and the write takes it while nothing it reads was written since - the rail's own test.
+    def _ahead(self, find):
+        """(dirty mark, item id, picture) for the item `find(cur)` names, read on a reader snapshot - None where there is no reader
+        (a memory database, a thread already inside the lock) or no item: the write reads it under the lock as it always did."""
+        if not self._off_writer(): return None
+        from .processing_projection import processing_projection
+        with self._snapshot_read() as cur:
+            mark, iid = cur.execute('SELECT COALESCE(MAX(Id),0) FROM processing_dirty_row').fetchone()[0], find(cur)
+            if not iid: return None
+            picture = processing_projection(cur, iid); _units_of(picture)
+            return mark, iid, picture
+    def _picture(self, cur, iid, ahead=None):
+        """The item's picture inside the writer's transaction: the one read ahead while no row it reads has been written since
+        (processing_rail.touched names no change to it), else read now."""
+        from . import processing_rail
+        from .processing_projection import processing_projection
+        if ahead and ahead[1] == iid:
+            rows = processing_rail.dirty_since(cur, ahead[0])[1]
+            if rows == (): return ahead[2]
+            roots = None if rows is None else processing_rail.touched(cur, rows, lambda i: self._processing_follow(cur, i))[0]
+            if roots is not None and iid not in roots: return ahead[2]
+        return processing_projection(cur, iid)
     def set_funnel_state(self, key, status, by='owner', until=None, note=None, *, expected_context=None, read=False, shown=None):
         from . import processing_reads
         stamp = _now()
+        # ...read ahead only for a write that reads the picture: Done, and a Surfaced that is a read or carries a note
+        ahead = (self._ahead(lambda cur: processing_reads.active_version(cur) and (self._processing_read_target(cur, key) or (None,))[0])
+                 if (status == 'done' or status == 'surfaced' and (read or note)) and not str(key).startswith('meeting:') else None)
         with self.lock:
             self._clear_stale(); cur = self.cx.cursor()
             cur.execute('BEGIN IMMEDIATE')
@@ -3331,14 +3367,14 @@ class SQLiteStore:
                     if target is None and str(key).split(':', 1)[0] in (
                             'processing', 'msg', 'report', 'review', 'idea', 'agent', 'wrap', 'task'):
                         raise ValueError('processing target is unavailable')
+                    # ...AND THE PRESS IS NOT BEHIND THE CENSUS (the load run, 2026-11-24: Mark done waited up to 4.75 s on a whole-home
+                    # census run inside it while mail kept landing). It puts down what its card showed (_units_shown) on the item as filed
+                    # now; whatever the census moves is the membership worker's, behind it - mail filed onto the item since is unread news
                     if target is not None:
-                        if not calendar and not clean:
-                            clean = self._processing_validate_settlement_census(cur, stamp, key, target)
                         iid, kind, local_id = target
                         verified_picture = None
                         if not calendar and expected_context is not None:
-                            from .processing_projection import processing_projection
-                            verified_picture = processing_projection(cur, iid)
+                            verified_picture = self._picture(cur, iid, ahead)
                             if (not isinstance(expected_context, dict)
                                     or expected_context.get(iid) != verified_picture['context_revision']):
                                 raise ValueError('processing context changed since confirmation was proposed')
@@ -3347,8 +3383,7 @@ class SQLiteStore:
                                 current_units = [dict(entity_kind='calendar', local_id=key, fingerprint='identity-v1')]
                                 deferred_keys = [key]
                             else:
-                                from .processing_projection import processing_projection
-                                picture = verified_picture or processing_projection(cur, iid)
+                                picture = verified_picture or self._picture(cur, iid, ahead)
                                 current_units = self._units_shown(key, iid, picture, shown)
                                 deferred_keys = [d['key'] for d in picture['view']['processing_read']['deferrals']]
                             processing_reads.record(cur, current_units,
@@ -3357,23 +3392,19 @@ class SQLiteStore:
                                 cur.execute('DELETE FROM processing_read_defer WHERE Key=?', (deferred_key,))
                         else:
                             self._processing_write_defer(cur, key, target, status, until, stamp, by)
-                if version and status == 'surfaced' and read:
+                # ...one picture for the read and the note, taken before the receipts: they change no context, which is all the note keeps
+                target = self._processing_read_target(cur, key) if version and status == 'surfaced' and (read or note) else None
+                picture = self._picture(cur, target[0], ahead) if target else None
+                if target and read:
                     # shown in the chat IS read (the owner, 2026-09-06): the receipt is the same one an
                     # explicit done writes, minus lifting a deferral - later/skip still hold it back
-                    target = self._processing_read_target(cur, key)
-                    if target:
-                        from .processing_projection import processing_projection
-                        processing_reads.record(cur, self._units_shown(key, target[0], processing_projection(cur, target[0]), shown),
-                                                version=version, at=stamp, by=by, origin='surfaced')
-                if version and status == 'surfaced' and note:
-                    target = self._processing_read_target(cur, key)
-                    if target:
-                        from .processing_projection import processing_projection
-                        picture = processing_projection(cur, target[0])
-                        cur.execute('''INSERT INTO processing_display_summary (Key,ContextRevision,Summary)
-                            VALUES (?,?,?) ON CONFLICT(Key) DO UPDATE SET
-                            ContextRevision=excluded.ContextRevision,Summary=excluded.Summary''',
-                            (key, picture['context_revision'], str(note)))
+                    processing_reads.record(cur, self._units_shown(key, target[0], picture, shown),
+                                            version=version, at=stamp, by=by, origin='surfaced')
+                if target and note:
+                    cur.execute('''INSERT INTO processing_display_summary (Key,ContextRevision,Summary)
+                        VALUES (?,?,?) ON CONFLICT(Key) DO UPDATE SET
+                        ContextRevision=excluded.ContextRevision,Summary=excluded.Summary''',
+                        (key, picture['context_revision'], str(note)))
                 cur.execute('INSERT INTO funnel_state (Key,Status,Until,Note,By,At) VALUES (?,?,?,?,?,?) '
                     'ON CONFLICT(Key) DO UPDATE SET Status=excluded.Status, Until=excluded.Until, Note=excluded.Note, By=excluded.By, At=excluded.At',
                     (key, status, until, note, by, stamp))
@@ -3393,22 +3424,23 @@ class SQLiteStore:
         own introduction changed its fingerprint one second later (the owner, 2026-09-06)."""
         from . import processing_reads
         from .processing_projection import processing_projection
-        def picture(cur):
+        def item(cur):
             row = cur.execute('''SELECT ItemId FROM processing_member WHERE EntityKind='task' AND LocalId=?
                 AND RetiredAt IS NULL''', (str(tid),)).fetchone()
-            return processing_projection(cur, self._processing_follow(cur, row['ItemId'])) if row else None
+            return self._processing_follow(cur, row['ItemId']) if row else None
         with self._processing_read() as cur:
             version = processing_reads.active_version(cur)
-            before = picture(cur) if version else None
+            before = processing_projection(cur, iid) if version and (iid := item(cur)) else None
             units_before = before['view']['processing_read']['units'] if before else []
             was_read = bool(units_before) and all(u['read'] for u in units_before)
         yield
         if not was_read: return
+        ahead = self._ahead(item)                  # ...the words' picture read off the writer (_ahead), taken under it unless moved since
         with self.lock:
             self._clear_stale(); cur = self.cx.cursor(); cur.execute('BEGIN IMMEDIATE')
             try:
-                after = picture(cur)
-                if after: processing_reads.record(cur, processing_reads.units(after['view']), version=version, at=_now(), by=by, origin='own_words')
+                after = self._picture(cur, iid, ahead) if (iid := item(cur)) else None
+                if after: processing_reads.record(cur, _units_of(after), version=version, at=_now(), by=by, origin='own_words')
                 self.cx.commit(); self._writes += 1
             except BaseException: self.cx.rollback(); raise
             finally: cur.close()
@@ -3433,52 +3465,6 @@ class SQLiteStore:
             cur.execute('''UPDATE processing_reconcile_state
                 SET AttemptedGeneration=DirtyGeneration, ReconciledGeneration=DirtyGeneration
                 WHERE Singleton=1''')
-
-    def _processing_validate_settlement_census(self, cur, stamp, key, target):
-        """Bring the census current before a settle, and refuse only what it says about THIS row. Returns whether it came out clean.
-
-        This is an explicit writer, never a GET. A conflict ANYWHERE used to refuse every settle on every row, for good: a conflicted
-        census never advances ReconciledGeneration, so each press re-ran it, met the same unrelated conflict and raised - "All read,
-        next" on a pile of FYI failed every time (2026-11-02: one reply draft whose mail had been refiled under another task). Now what
-        the census changes on OTHER items is applied here, as the background reconcile would. A settle is refused only when the row's
-        own item moved (the savepoint keeps it from accepting members the card never showed) or a conflict touches it.
-        Done still covers current substantive versions; this is not a content-CAS API.
-        """
-        from .processing_membership import reconcile_membership, census_current, mark_census
-        if census_current(cur):         # nothing the census reads moved since a clean one: it would change nothing
-            cur.execute('''UPDATE processing_reconcile_state SET AttemptedGeneration=DirtyGeneration,
-                ReconciledGeneration=DirtyGeneration, LastAttemptAt=? WHERE Singleton=1''', (stamp,))
-            return True
-        def members(i): return {tuple(r) for r in cur.execute(
-            'SELECT EntityKind,LocalId FROM processing_member WHERE ItemId=? AND RetiredAt IS NULL', (i,))}
-        def item_of(c):
-            r = cur.execute('SELECT ItemId FROM processing_member WHERE EntityKind=? AND LocalId=? AND RetiredAt IS NULL',
-                            (c['entity_kind'], c['local_id'])).fetchone()
-            return self._processing_follow(cur, r[0]) if r else None
-        iid = target[0]; before = members(iid)
-        cur.execute('SAVEPOINT processing_settlement_census')
-        try:
-            result = reconcile_membership(cur, stamp=stamp, new_item_id=self._processing_item_id)
-            now = self._processing_read_target(cur, key)
-            if now is None or now[0] != iid or members(iid) != before:
-                raise ValueError('processing membership must be reconciled before settlement')
-            if any((c['entity_kind'], c['local_id']) in before or item_of(c) == iid for c in result['conflicts']):
-                raise ValueError('processing membership conflicts on this item')
-            clean = not result['conflicts']
-            mark_census(cur, clean)
-            # ...a conflict elsewhere stays pending, recorded, for the reconcile that can see it resolved
-            cur.execute('''UPDATE processing_reconcile_state
-                SET AttemptedGeneration=DirtyGeneration,
-                    ReconciledGeneration=CASE WHEN ? THEN DirtyGeneration ELSE ReconciledGeneration END,
-                    LastAttemptAt=?,ConflictsJson=?,DiagnosticsJson=? WHERE Singleton=1''',
-                (int(clean), stamp, json.dumps(result['conflicts'], sort_keys=True),
-                 json.dumps(result['diagnostics'], sort_keys=True)))
-            cur.execute('RELEASE processing_settlement_census')
-            return clean
-        except BaseException:
-            cur.execute('ROLLBACK TO processing_settlement_census')
-            cur.execute('RELEASE processing_settlement_census')
-            raise
 
     def _clear_funnel_compat(self, where, params):
         from .processing_reads import active_version
@@ -4187,6 +4173,24 @@ class SQLiteStore:
                 if first is None or first > low + 1: return None
                 return {(str(k), str(i)) for k, i in cx.execute(sql[1], (low, high))}
         except sqlite3.OperationalError: return None
+
+    def rail_touched_tasks(self, low, high):
+        """The tasks a write in (low, high] can have moved, by the rail's own reading of its dirty rows (processing_rail.touched): its own
+        rows and every item it sits in - None when that cannot be told (rows trimmed, a setting or a connector every card reads)."""
+        from . import processing_rail
+        rows = self.rail_written(low, high)
+        if rows is None or any(k in ('setting', 'connector') for k, _ in rows): return None
+        with self._processing_read() as cur:
+            roots = processing_rail.touched(cur, rows, lambda i: self._processing_follow(cur, i))[0]
+            if roots is None: return None
+            tids = {int(i) for k, i in rows if k == 'task' and i.isdigit()}
+            mids = [int(i) for k, i in rows if k == 'message' and i.isdigit()]
+            for part in (sorted(roots)[o:o + 400] for o in range(0, len(roots), 400)):
+                tids |= {int(r[0]) for r in cur.execute("SELECT LocalId FROM processing_member WHERE EntityKind='task' AND RetiredAt IS NULL "
+                                                        f"AND ItemId IN ({','.join('?' * len(part))})", part)}
+            for part in (mids[o:o + 400] for o in range(0, len(mids), 400)):
+                tids |= {r[0] for r in cur.execute(f"SELECT TaskId FROM message WHERE TaskId IS NOT NULL AND MessageId IN ({','.join('?' * len(part))})", part)}
+        return tids
 
     def rail_cold_building(self) -> bool:
         """A first rail build is running - a restart's - and there is no rail yet: a read of it would wait for that build."""

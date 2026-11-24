@@ -313,10 +313,11 @@ def test_own_display_clear_and_done_keep_clean_census_but_never_clear_peer_dirt(
         db.set_funnel_state(key, 'surfaced')
         db.clear_funnel_state(key)
         assert db.processing_reconcile_status()['pending']
-        # the peer's newcomer is another row: the settle reconciles it in (2026-11-02 - refusing here failed every press on a
-        # busy mailbox), and it stays unread - this done covers only its own item
+        # the peer's newcomer is another row: the settle neither refuses (2026-11-02 - that failed every press on a busy mailbox) nor
+        # runs the census inside itself (the load run, 2026-11-24) - the worker files it, and it stays unread: this done covers its own item
         db.set_funnel_state(key, 'done')
-        assert not db.processing_reconcile_status()['pending']
+        assert db.processing_reconcile_status()['pending']
+        db.reconcile_processing_membership()
         got = db.resolve_processing_target('legacy_funnel', f'msg:{newcomer}')
         assert got and got['item_id'] != item_id(db, mid)
         assert not processing_reads.state(picture(db, mid), NOW)['unread']
@@ -374,7 +375,7 @@ def test_active_concierge_done_accepts_its_own_discussion_without_expanding_memb
         funnel.invalidate()
 
 
-def test_settlement_savepoint_rejects_peer_move_and_rolls_back_identity_attempt(db):
+def test_a_done_under_a_peer_move_puts_down_its_item_as_filed_and_leaves_the_move_to_the_census(db):
     first_task = db.create_task({'Title': 'A'}, 'fixture')
     other_task = db.create_task({'Title': 'B'}, 'fixture')
     mid = message(db, task=first_task)
@@ -382,12 +383,11 @@ def test_settlement_savepoint_rejects_peer_move_and_rolls_back_identity_attempt(
     old = item_id(db, mid)
     members = [tuple(r) for r in db.cx.execute('SELECT * FROM processing_member')]
     db._exec('UPDATE message SET TaskId=? WHERE MessageId=?', (other_task, mid))
-    with pytest.raises(ValueError, match='reconciled'):
-        db.set_funnel_state('processing:' + old, 'done')
-    assert [tuple(r) for r in db.cx.execute('SELECT * FROM processing_member')] == members
+    db.set_funnel_state('processing:' + old, 'done')
+    assert [tuple(r) for r in db.cx.execute('SELECT * FROM processing_member')] == members, 'no census inside the press'
     assert db.processing_reconcile_status()['pending']
     assert db.get_message(mid)['TaskId'] == other_task
-    assert not db.cx.execute('SELECT 1 FROM processing_read_receipt').fetchone()
+    assert {r[0] for r in db.cx.execute('SELECT EntityKind FROM processing_read_receipt')} <= {'message', 'task'}
 
 
 def test_calendar_historical_and_explicit_receipts_ignore_later_display(db):

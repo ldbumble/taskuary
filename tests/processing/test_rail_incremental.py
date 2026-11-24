@@ -297,3 +297,24 @@ def test_threads_reading_the_rail_at_once_each_get_an_answer(db):
     go.set()
     for t in ts: t.join()
     assert not errs, errs[:3]
+
+
+def test_a_change_to_one_task_re_presents_only_that_task_and_equals_a_full_rebuild(db, monkeypatch):
+    """Every write anywhere re-read every task's state for the rail - a 2,000-line chat's alone ~1 s - and a busy home's rail took 35 s at
+    p95 (the load run, 2026-11-24). A comment on one task re-presents that one; the rail is the one a build from nothing makes."""
+    from taskuary import taskstate
+    tids = [db.create_task({'Title': f'Rail task {n}', 'Kind': 'reply', 'Status': 'open'}, 'fixture') for n in range(6)]
+    for n, tid in enumerate(tids): mail(db, n, tid=tid)
+    db.reconcile_processing_membership()
+    asked, real = [], taskstate.status
+    monkeypatch.setattr(taskstate, 'status', lambda s, t, *a, **k: asked.append(t['TaskId']) or real(s, t, *a, **k))
+    shown = lambda p: [(i['key'], i['lane'], i.get('status')) for i in p['items']]
+    funnel.pile(db, force=True)
+    assert set(asked) == set(tids)
+    funnel.pile(db)                                  # ...the first read of each task's state keeps who started it (origin.of_task): a write
+    asked.clear()
+    db.add_comment(tids[2], 'coding', 'agent', 'Working on it.')
+    got = funnel.pile(db)
+    assert asked == [tids[2]], 'only the task written to is presented again'
+    funnel._STATES.clear(); funnel.invalidate()
+    assert shown(got) == shown(funnel.pile(db, force=True))

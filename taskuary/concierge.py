@@ -3022,9 +3022,7 @@ def clear_refused(e) -> str:
     """Why an item would not clear, in the owner's words. "28 items would not clear" said nothing, "why not?" had no answer to give,
     and the Assistant sent an agent to find out (TQ-1251)."""
     t = str(e)
-    if 'reconciled before settlement' in t: return 'new mail kept landing while they were being marked - ask again in a minute'
     if 'target is unavailable' in t: return 'they are still being filed - ask again in a minute'
-    if 'membership conflicts' in t: return 'part of it is filed under two tasks at once, so it cannot be marked yet'
     if 'context changed' in t: return 'they changed after you saw them - look again and ask'
     return t[:160] or type(e).__name__
 

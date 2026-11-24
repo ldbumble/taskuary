@@ -5,7 +5,7 @@ from unittest import mock
 
 from taskuary import funnel, processing_all
 
-LAG = 'processing membership must be reconciled before settlement'
+LAG = 'processing target is unavailable'
 
 
 class Lagging:
@@ -31,7 +31,7 @@ class SettleThroughTheLag(unittest.TestCase):
 
     def test_a_census_that_never_settles_still_says_so(self):
         s = Lagging(refusals=funnel.SETTLE_TRIES)
-        with self.assertRaisesRegex(ValueError, 'reconciled before settlement'): self.settle(s)
+        with self.assertRaisesRegex(ValueError, 'target is unavailable'): self.settle(s)
         self.assertEqual(s.tries, funnel.SETTLE_TRIES)
 
     def test_any_other_refusal_is_not_retried(self):

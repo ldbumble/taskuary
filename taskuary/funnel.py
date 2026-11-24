@@ -8,7 +8,7 @@ Presentation lanes remain available for their existing controls and status copy.
 This ordering activation preserves the existing read, age, mute and capacity rules
 until the separate canonical Unread/read-state cutover. All remains chronological.
 """
-import contextlib, contextvars, hashlib, json, re, threading, time
+import contextlib, contextvars, hashlib, json, re, threading, time, weakref
 from datetime import datetime, timedelta
 from loguru import logger
 
@@ -1541,20 +1541,58 @@ def present(store, payload: dict) -> dict:
 # its lane is what it says about that, never the task's state (the release CI: a chase on a slipped thread was refused as "not slipped")
 ARRIVAL_WORDS = ('asked', 'time', 'report', 'fyi', 'broken', 'unjudged')
 OWN_WORDS = ('forgotten', 'goal', 'goal_slipped', 'goal_fresh', 'mine', 'withdrawn', 'answered')
-def one_state(store, payload: dict) -> dict:
+_STATES = weakref.WeakKeyDictionary()    # store -> {'mark': dirty-row top, 'by': {tid: (its session's signature, when, its status)}}
+
+
+def _kept_states(store) -> dict:
+    """The task states read before that no write since can have moved (store.rail_touched_tasks), each for PILE_EVERY at most - the age
+    a cached pile may already have. ONE TASK RE-PRESENTED PER CHANGE (the load run, 2026-11-24): every write anywhere re-read every task's
+    state for the rail, a 2,000-line chat's alone ~1 s, and a busy home's rail took 35 s at p95."""
+    top, touched = _rail_top(store), getattr(store, 'rail_touched_tasks', None)
+    if top is None or not callable(touched): return {}, None
+    was = _STATES.setdefault(store, {'mark': top, 'by': {}})
+    if top != was['mark']:
+        try: gone = touched(was['mark'], top)
+        except Exception as e: logger.debug(f'funnel: what the writes touched was not read - {e}'); gone = None
+        if gone is None: was['by'] = {}
+        else:
+            for tid in gone: was['by'].pop(int(tid), None)
+        was['mark'] = top
+    old = time.time() - PILE_EVERY
+    for tid in [k for k, v in was['by'].items() if v[1] < old]: was['by'].pop(tid, None)
+    return was['by'], top
+
+
+def _kept_at(store): return (_STATES.get(store) or {}).get('mark')
+
+
+def _session_sig(observed, tid) -> str:
+    return json.dumps(sorted((json.dumps(_attention(t), sort_keys=True, default=str) for t in observed or () if t.get('taskId') == tid)))
+
+
+def one_state(store, payload: dict, observed=_OBSERVE) -> dict:
     from . import taskstate
     payload = {**payload, 'items': [dict(i) for i in payload.get('items') or []],                  # ...the cached build is never written to
                **({'current': dict(payload['current'])} if isinstance(payload.get('current'), dict) else {})}
     rows = [*payload['items'], *([payload['current']] if 'current' in payload and payload['current'] is not None else [])]
-    seen = {}
+    seen, (kept, top) = {}, _kept_states(store)
+    if top is None or not rows: observed = ()
+    elif observed is _OBSERVE:
+        try: observed = observe()
+        except Exception: observed, kept = (), {}                     # unobservable: every state is read afresh
     for i in rows:
         tid = i.get('tid') or (int(str(i.get('key'))[6:]) if str(i.get('key') or '').startswith('agent:') and str(i['key'])[6:].isdigit() else None)
         # ...an agent's own row is read off the live session it shows (observe) - the same facts taskstate reads, already in hand
         if not tid or i.get('kind') in ('agent', 'idea', 'followup') or i.get('idea'): continue
         if tid not in seen:
-            t = store.get_task(int(tid))
-            try: seen[tid] = taskstate.status(store, t) if t and t.get('Status') not in ('done', 'dropped') else None
-            except Exception as e: logger.debug(f'funnel: the state of task {tid} was not read - {e}'); seen[tid] = None
+            sig = _session_sig(observed, int(tid))
+            if (got := kept.get(int(tid))) and got[0] == sig: seen[tid] = dict(got[2]) if got[2] else None
+            else:
+                at, t = time.time(), store.get_task(int(tid))
+                try: seen[tid] = taskstate.status(store, t) if t and t.get('Status') not in ('done', 'dropped') else None
+                except Exception as e: logger.debug(f'funnel: the state of task {tid} was not read - {e}'); seen[tid] = None; at = 0
+                # ...kept only while no write landed since the mark it was read at: one that did may have been missed by it
+                if _kept_at(store) == top: kept[int(tid)] = (sig, at, dict(seen[tid]) if seen[tid] else None)
         st = seen[tid]
         if not st or st['key'] not in LANES or i.get('lane') in OWN_WORDS or (st['key'] == 'yours' and i.get('lane') in ARRIVAL_WORDS): continue
         i['lane'], i['status'] = st['key'], st
@@ -1863,7 +1901,7 @@ def showing(revisions):
     finally: _SHOWING.reset(tok)
 
 
-SETTLE_TRIES = 3          # a settle the census lag refused, reconciled and tried again - mail can land between each
+SETTLE_TRIES = 3          # a settle of a row not filed yet, reconciled and tried again - mail can land between each
 
 
 def settle(store, key: str, verb: str, by: str = 'owner', hours: float = None, note: str = None, *, expected_context=None, read: bool = False,
@@ -1902,15 +1940,11 @@ def settle(store, key: str, verb: str, by: str = 'owner', hours: float = None, n
         try:
             store.set_funnel_state(key, verb, by, until, note, **kw); break
         except ValueError as e:
-            # Mail landing mid-settle moves the membership census, and the owner was handed that sentence
-            # verbatim while nothing moved - 27 items stayed in the pipe (the owner, 2026-09-07: "what does
-            # this mean as well when I got it to clear the rest of what was left?"). It is the worker's lag,
-            # not a refusal: do the very thing the message asks for, and settle again. A row that only just
-            # landed is the same lag - its item is not built yet ("processing target is unavailable"): a report the
-            # AI judge turned down stayed on the rail and its run was logged as failed (2026-10-01).
-            # ...and AGAIN while it keeps landing: on a busy mailbox more mail arrived between the reconcile and the one retry, and the
-            # morning digest - written and saved four minutes earlier - was logged as failed for its own row's settle (TQ-1251)
-            if ('reconciled before settlement' not in str(e) and 'processing target is unavailable' not in str(e)) or tries == SETTLE_TRIES - 1: raise
+            # A row that only just landed is the worker's lag, not a refusal - its item is not built yet: a report the AI judge turned
+            # down stayed on the rail and its run was logged as failed (2026-10-01). Reconcile and settle again, and AGAIN while mail keeps
+            # landing: the morning digest was logged as failed for its own row's settle (TQ-1251). The census moving under any other row
+            # no longer refuses the press at all (store.set_funnel_state).
+            if 'processing target is unavailable' not in str(e) or tries == SETTLE_TRIES - 1: raise
             from . import processing_all
             processing_all.wait_settled(store)
             store.reconcile_processing_membership()

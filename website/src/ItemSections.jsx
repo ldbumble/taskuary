@@ -12,8 +12,6 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Box, Typography } from "@mui/material";
 import BoltIcon from "@mui/icons-material/Bolt";
-import api from "./api.js";
-import { LinkPopups, Md } from "./md.jsx";
 import { label as btn } from "./buttons.js";
 import { AttachChip, usePromptImages } from "./promptImages.jsx";
 import { PromptBox } from "./AgentSummary.jsx";
@@ -33,8 +31,9 @@ export const ItemLay = React.createContext(null);
 // WHAT AN ITEM SAYS, AS TRIAGE READ IT, AND A BOX TO ASK ABOUT IT (the Close-out spec, 2026-11-04 section 8): a report, an FYI or a dashboard
 // gets the column a task's chat opens with - "What this says", "What matters to you" - atop its middle section, and a box under it.
 // `ask`: { key, kind, title, reading } (reading: the message payload's `reading`, store.message_thread - optional, so none draws no lines)
-// ...THE BOX ONLY ANSWERS (the owner, 2026-11-04: "question on report should not start task"): it is the dock's own door (concierge.say)
-// with the item in the turn's view, area 'item', which the server answers from the item and nothing more (concierge.asked_on_item)
+// ...THE BOX IS A TASK CHAT'S ROAD (the owner, 2026-11-23: "same input box"; walk 13: it went to the home Assistant, its answer kept only in the
+// page and gone, and what it said was false): his line starts the agent on the item, as Send to agent does - his line and its answer are that
+// task's chat, stored and drawn there. `startsItems` is the start AssistantView gives every item box (its startOnItem)
 const SAYS = { says: "What this says", matters: "What matters to you" };
 // ...AND SEND TO AGENT IS THIS BOX, ONE ROAD (the owner, 2026-11-05: "maybe attach the report or fyi list to the prompt box on bottom and make them
 // type in when they hit send to agent?"): the press opens the Agent tab with the item ON the box as a chip - an FYI handful's every line, each
@@ -43,13 +42,13 @@ const SAYS = { says: "What this says", matters: "What matters to you" };
 // `hand`: { verb, items: [{ key, title }], start({ verb, text, files, items }) } - set by handToItem, through the item's own ItemSections
 const HANDS = new Map();
 export const handToItem = (key, hand) => { const f = key && HANDS.get(key); if (!f) return false; f(hand); return true; };
-const ASK_ONLY = "the answer here reads the item only";
+let START = null;
+export const startsItems = (f) => { START = f; };
 // `draft`: { text, setText, pics } - his words and files, held by the item (ItemSections) so they stay his when Send to agent moves the box to the
 // Agent section: a box of its own lost what he had typed at the press (the stress round, 2026-11-18)
 // `agent`: it stands in the Agent section - the box is always there, as a task's chat has it (the owner, 2026-11-20: "chat box is only on the agent tab")
+const AGENT = "regular_agent";
 const KIND_NOUN = { fyi: "notice", report: "report", dashboard: "dashboard", idea: "idea", review: "draft" };
-// ...his last line in an item's own box, by the item: the box Send to agent opens is drawn anew where the agent's section is, so it is kept here
-const ASKED = new Map();
 // WHAT TASKUARY MADE ON ITS OWN IS A CHAT ON THE AGENT TAB (the owner, 2026-11-23: "Anything that comes in on the Agent tab shows the input prompt
 // that created it (even if automated: a report, routine, dashboard, Advisor) ... Same card as the other ones"): the ask that made it on the
 // asking side, marked as automated, then the turn that answered it - its content in the turn's one frame - in the task chat's own rows
@@ -65,14 +64,12 @@ export function MadeTurn({ input, name = "Taskuary", children }) {
       {long && <button type="button" className="tq-aui-arrived-more-btn" aria-expanded={all} onClick={() => setAll((a) => !a)}>{all ? "Show less" : "Show all"}</button>}</div>
     <div className="tq-aui-message tq-aui-agent"><div className="tq-aui-role">{name}</div><div className="tq-aui-agent-body">{children}</div></div></div>;
 }
-export function ItemAsk({ ask, hand = null, onHand = null, agent = false, hint = "", draft, itemKey = "" }) {
+export function ItemAsk({ ask, hand = null, onHand = null, agent = false, hint = "", draft }) {
   const ls = hand || agent ? [] : itemLines(readingOf(ask?.reading));
   const { text, setText, pics } = draft;
-  const [busy, setBusy] = useState(false), [said, setSaid] = useState([]), [err, setErr] = useState(""), input = useRef(null);
-  useEffect(() => { setSaid([]); setErr(""); }, [ask?.key]);
-  // ...AND SEND TO AGENT STARTS ON WHAT HE ALREADY WROTE HERE (the judge's walk, 2026-11-19: he asked this box for a fix, was told to press Send to
-  // agent, and the box it opened was empty - his words were gone): his last line in this box stands in it, his to send or change
-  useEffect(() => { if (hand) { const last = ASKED.get(itemKey); if (!text.trim() && last) setText(last); setTimeout(() => input.current?.focus(), 0); } }, [hand]);   // eslint-disable-line react-hooks/exhaustive-deps
+  const [busy, setBusy] = useState(false), [err, setErr] = useState(""), input = useRef(null);
+  useEffect(() => { setErr(""); }, [ask?.key]);
+  useEffect(() => { if (hand) setTimeout(() => input.current?.focus(), 0); }, [hand]);
   const title = typeof ask?.title === "string" ? ask.title : "";
   const drop = (k) => { const left = hand.items.filter((i) => i.key !== k); onHand?.(left.length ? { ...hand, items: left } : null); };
   const send = async () => {
@@ -80,11 +77,11 @@ export function ItemAsk({ ask, hand = null, onHand = null, agent = false, hint =
     if (!q || busy || pics.busy) return;
     setBusy(true); setErr("");
     try {
-      if (hand) { await hand.start({ verb: hand.verb, text: q, files: pics.paths, items: hand.items }); setText(""); pics.clear(); ASKED.delete(itemKey); onHand?.(null); return; }
-      const { data } = await api.post("/api/concierge/say", { text: q, key: ask.key,
-        view: { area: "item", title, item: { kind: ask.kind, id: ask.key, title, section: "ask" } } });
-      setSaid((w) => [...w, { q, a: String(data?.say || "") }]); setText(""); if (itemKey) ASKED.set(itemKey, q);
-    } catch (e) { setErr(e?.response?.data?.detail || e?.message || (hand ? "It did not start - press Send again." : "That did not go through - try again.")); }
+      if (hand) await hand.start({ verb: hand.verb, text: q, files: pics.paths, items: hand.items });
+      else if (START) await START({ key: ask.key, title }, { verb: AGENT, text: q, files: pics.paths });
+      else throw new Error("It did not start - press Send again.");
+      setText(""); pics.clear(); onHand?.(null);
+    } catch (e) { setErr(e?.response?.data?.detail || e?.message || "It did not start - press Send again."); }
     finally { setBusy(false); }
   };
   // ...A CHAT, as a task's is (the owner, 2026-11-05: "add the reports/advisor/fyi to chat thing as well without close out"): what it says and what
@@ -98,19 +95,14 @@ export function ItemAsk({ ask, hand = null, onHand = null, agent = false, hint =
     sx={{ display: "contents" }}>
     {ls.map((l) => <Typography key={l.k} data-tq-item-reading={l.k} title={SAYS[l.k]}
       sx={{ fontSize: 13.5, lineHeight: 1.55, color: INK, overflowWrap: "anywhere" }}>{l.text}</Typography>)}
-    {said.map((t, i) => <React.Fragment key={i}>
-      <div className="tq-aui-message tq-aui-user" data-tq-item-said=""><div className="tq-aui-user-bubble" dir="auto">{t.q}</div></div>
-      <div className="tq-aui-message tq-aui-agent" data-tq-item-answer=""><div className="tq-aui-role">Taskuary</div>
-        <div className="tq-aui-agent-body"><LinkPopups><Md text={t.a} /></LinkPopups></div></div>
-    </React.Fragment>)}
     {/* ...THE BOX IS THE AGENT TAB'S ALONE (the owner, 2026-11-20: "if you put prompt box on the bottom of Came from you are confusing the 2 tabs"):
         never under what came in - it stands in the Agent section: under what Taskuary made there, or once Send to agent has put the item on it */}
     {(hand || agent) && <><Box aria-hidden sx={{ flex: "1 1 auto" }} />
     {/* ...down over the section's own foot padding (TaskPage SECTION's 12px), or what scrolls under it shows through beneath it */}
     <Box sx={{ position: "sticky", bottom: "-12px", mb: "-12px", pb: "12px", bgcolor: `var(--tq-item-ground, ${SHADE})`, pt: 0.5, mx: -0.5, px: 0.5 }}>
-      <PromptBox text={text} setText={setText} pics={pics} busy={busy} onSend={send} inputRef={input} sendOff={!text.trim()} cannot={hand ? null : () => ASK_ONLY}
+      <PromptBox text={text} setText={setText} pics={pics} busy={busy} onSend={send} inputRef={input} sendOff={!text.trim()}
         placeholder={hint || MESSAGE}
-        label={hand ? btn(hand.verb) : "Ask about this"} sendAttrs={{ "data-tq-item-send": hand ? "agent" : "ask" }}
+        label={btn(hand ? hand.verb : AGENT)} sendAttrs={{ "data-tq-item-send": "agent" }}
         chips={hand?.items.length ? hand.items.map((i) => <AttachChip key={i.key} data-tq-item-chip={i.key} name={i.title} onRemove={busy ? null : () => drop(i.key)}
           title={`${btn(hand.verb)} - it gets ${i.title}`} />) : null} />
       {err && <Typography role="alert" sx={{ fontSize: 12.5, color: "var(--tq-danger, #a33)", pt: 0.5 }}>{err}</Typography>}
@@ -156,7 +148,7 @@ export default function ItemSections({ kind, label, title, aside, sections: all,
   }, [itemKey, takes, boxAt]);
   // ...opened where its box now is, the moment it is handed on - and back on the item once the chip is off and the section with it
   useEffect(() => { if (hand) setOpen(boxAt); else setOpen((o) => (sections.some((x) => x.key === o) ? o : about)); }, [hand, boxAt]);   // eslint-disable-line react-hooks/exhaustive-deps
-  const box = (ask || hand) && <ItemAsk ask={ask} hand={hand} onHand={setHand} draft={draft} itemKey={itemKey} agent={boxAt === "agent"}
+  const box = (ask || hand) && <ItemAsk ask={ask} hand={hand} onHand={setHand} draft={draft} agent={boxAt === "agent"}
     hint={hand ? `What should the agent do with this ${noun}?` : ""} />;
   // ...and none once it is handed on: the press is made, the box is where it goes now
   const skip = (v) => (noAgent || !!hand) && AGENT_STARTS.has(String(v?.id || "").split(":").pop());

@@ -77,3 +77,14 @@ test("the item's box keeps his words and files when Send to agent moves it to th
   assert.match(src, /const \[text, setText\] = useState\(""\), pics = usePromptImages\(\{ files: true \}\), draft = \{ text, setText, pics \};/);
   assert.match(src, /useEffect\(\(\) => \{ setText\(""\); pics\.clear\(\); \}, \[itemKey\]\);/, "...a new item starts them empty");
 });
+
+// THE ITEM'S BOX IS A TASK CHAT'S ROAD (walk 13: a question typed on a report went to the home Assistant, the box emptied, and the answer was kept
+// only in the page - nothing ever stood on the report): his line starts the agent on the item, the one start Send to agent takes, so his line and
+// its answer are that task's chat, stored and drawn there - no second door to the Assistant, no answer held in the page
+test("a line in a report's own box starts the agent on it by the one start, never the Assistant's door", () => {
+  const src = read("ItemSections.jsx"), ask = src.slice(src.indexOf("export function ItemAsk"), src.indexOf("export default function ItemSections"));
+  assert.doesNotMatch(src, /\/api\/concierge\/say/, "no second road to the home Assistant");
+  assert.doesNotMatch(ask, /useState\(\[\]\)/, "no answer kept in page state");
+  assert.match(ask, /else if \(START\) await START\(\{ key: ask\.key, title \}, \{ verb: AGENT, text: q, files: pics\.paths \}\);/);
+  assert.match(read("AssistantView.jsx"), /startsItems\(startOnItem\);/, "the start is the one Send to agent takes");
+});

@@ -74,7 +74,7 @@ import ContinueBox from "./ContinueBox.jsx";
 import { AgentAsk } from "./RunForm.jsx";
 import CloseNote from "./CloseNote.jsx";
 import { AttachImage, ImageTray, usePromptImages, useSendWhenUp } from "./promptImages.jsx";
-import { handToItem } from "./ItemSections.jsx";
+import { handToItem, startsItems } from "./ItemSections.jsx";
 import { afterCancel, afterConfirm, afterExecute, holdsProposal, markExecuted, proposalSay } from "./proposalCard.js";
 import { LEVEL_META, LEVEL_ROLE, arrivals, isUrgent, arrivedAt, asPressed, withOpened, stillLeaving, bandsOf, canAdvance as canWalkOn, cardFor, currentItemFromPile, madeHere, displayRevision, drawOrder, fillCaps, followsItem, foldsAs, inOrder, interactiveCardIndex, drawnKey, tableCardIndex, keysOf, liveBrowseId, pastView, lastActIndex, chipsOf, receiptChips, CAPPED, FLOOR, FOOT_PX, levelLabel, nextMarkerKey, trimCaps, ROW_PX, refreshCurrentPresentation, refreshPilePresentation, rowMeta, tableItemOf, settledHistory, sinceOpener, walkOf, walkPlace } from "./funnelPile.js";
 import { FYI_PAGE, ageHover, subLine, answersTo, awayFromClear, closedElsewhere, coveredByReload, fyiHasRoom, fyiTail, heldSince, latestLine, pileRows, pinOf, rowKeys, sameRow, sentChips } from "./funnelPile.js";
@@ -2673,6 +2673,8 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true, r
     setAgentOn(null);
     await runProposal({ ...data, key: data.key || item.key });
   };
+  // ...and the start every item's own box takes his line by (ItemSections.startsItems): the box is this road, never a second one
+  startsItems(startOnItem);
   // THE CALENDAR'S ANSWERS (calwrite.py): Accept and Decline draft at once; Propose a new time and Find a time open the free times
   // first (SlotPicker). Each lands on the table as a draft with Send lit, as a reply does - nothing reaches the calendar before the
   // owner's Send. A card that may not write says so in one line, with its sign-in as the way out (failures.py's fix).

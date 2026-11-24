@@ -289,6 +289,19 @@ def failure_of(name: str, said: str, cmd0: str = '', resume=None, raw=None, err:
     return None
 
 
+def prompt_failure(name: str, e, cmd0: str = '', sid=None) -> Exception | None:
+    """WHAT AN ACP TURN'S ERROR IS, on the chat and the coding road alike: what failure_of reads (a limit, a sign-in) - else, where its agent
+    answered the prompt itself with an error that names no provider's status or refusal, the turn stopped part-way (MID_TURN), its text the
+    log's. Walk 16: a Codex adapter whose app-server died answered with that server's stderr, and its first line - a deprecation warning the
+    run had gone on past - stood on the rail as the cause. None: none of these."""
+    from . import say
+    from .failures import refused
+    if f := failure_of(name, str(e), cmd0): return f
+    if getattr(e, 'method', '') != 'session/prompt' or say.provider_said(str(e)) or refused(str(e)): return None
+    logger.warning(f'acp: {name} answered its turn with an error - {str(e)[:600]}')
+    return acp_mod.DiedMidTurn(MID_TURN, sid)
+
+
 def raise_failure(name: str, said: str, cmd0: str = '', resume=None, raw=None, part_way=None):
     """THE ONE WAY A TURN THAT DID NOT FINISH IS REPORTED, on every road that reads a CLI's own account of it (the kept conversation, ACP,
     the one-shot run's death with no words): what it is (failure_of) - else its own words. `part_way` is (sentence, conversation id) where the
@@ -1846,7 +1859,7 @@ def run_acp(profile: dict, prompt: str, trace, resume: str = None, cancel=None, 
         # ...AND A TURN THAT FAILED KEEPS THE CONVERSATION IT WAS ON (the HIPAA walk, 2026-11-21): a gateway's 429 ended a first turn, and its
         # try again opened a fresh Codex thread that learned it all again and wrote the workbook a second time. The try resumes this one
         kept = Unfinished(str(e), client.session_id); kept.__cause__ = e
-        if f := failure_of(name, str(e), launch['cmd'][0]): raise f from kept
+        if f := prompt_failure(name, e, launch['cmd'][0], client.session_id): raise f from kept
         raise e from kept
     finally:
         over.set(); asked.set()

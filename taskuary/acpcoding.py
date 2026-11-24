@@ -452,7 +452,8 @@ class ACPCoding:
             else:
                 logger.warning(f'acp coding {self.sid}: the turn failed - {e}')
                 # ...a sentence that already says how to carry on is said as it is (acp's mid-turn death)
-                f = agents.failure_of(self.cli, str(e))          # what it is, read as every road reads it
+                f = agents.prompt_failure(self.cli, e, sid=self.client.session_id)     # what it is, read as every road reads it
+                if isinstance(f, acp_mod.DiedMidTurn): e, f = f, None
                 quota = str(f) if isinstance(f, agents.RateLimited) else ''
                 if quota:
                     self.busy = False

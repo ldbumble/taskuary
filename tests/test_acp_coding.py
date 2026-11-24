@@ -217,6 +217,32 @@ def test_an_agent_that_dies_mid_turn_is_said_as_a_chat_cli_that_did(world, monke
     assert e['content']['text'] == f'{MID_TURN}.', e['content']['text']
 
 
+# THE SAME DEATH ONE LAYER DOWN (walk 16): a Codex adapter outlives its app-server and answers the prompt with an error carrying the server's
+# stderr - and the first line of it, a deprecation warning the run had gone on past, stood on his screen as the cause
+DEAD_SERVER = ('The Codex app-server exited with code 4294967295. The agent starts it again on the next request. 2026-11-24T10:37:48Z ERROR '
+               'codex_app_server: `[features].multi_agent` is deprecated. It still controls the V1 fallback.')
+
+
+def test_an_adapter_that_answers_its_turn_with_its_servers_death_is_said_as_the_death(world, monkeypatch, tmp_path):
+    from taskuary.clipool import MID_TURN
+    s, tid, repo = world
+    (script := tmp_path / 'script.json').write_text(json.dumps([{'when': 'break now', 'error': DEAD_SERVER}]))
+    monkeypatch.setenv('FAKE_ACP_SCRIPT', str(script))
+    t = open_(s, tid, repo, seed='break now')
+    assert until(lambda: any(u['sessionUpdate'] == 'error' for u in codingchat.acp_updates(tid, t.sid)))
+    [e] = [u for u in codingchat.acp_updates(tid, t.sid) if u['sessionUpdate'] == 'error']
+    assert e['content']['text'] == f'{MID_TURN}.', e['content']['text']
+
+
+def test_a_turn_error_reads_as_the_death_only_where_it_names_no_provider_status():
+    from taskuary import acp, agents
+    from taskuary.clipool import MID_TURN
+    def err(msg, method='session/prompt'): e = acp.ACPAgentError(f'{method}: {msg}'); e.method = method; return e
+    assert str(agents.prompt_failure('codex', err(DEAD_SERVER), sid='s1')) == MID_TURN
+    assert agents.prompt_failure('claude', err('Internal error: API Error: 529 Overloaded')) is None, "a provider's status is the provider's"
+    assert agents.prompt_failure('codex', err(DEAD_SERVER, 'session/new')) is None, 'no turn was on'
+
+
 def test_a_line_typed_after_the_agent_died_reopens_its_conversation_without_saying_he_pressed_resume(world, monkeypatch, tmp_path):
     """TELL THE TRUTH (rules part 3; the coding hammer, 2026-11-18): a coding agent died mid-turn and the owner typed "carry on please" - the
     line reopened its own conversation (waitroom.reopen_coding) and the agent was told "The owner chose Resume for this task ... restate that

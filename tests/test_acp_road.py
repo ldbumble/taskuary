@@ -537,6 +537,17 @@ def test_a_turn_that_says_words_then_hits_a_limit_or_a_refusal_ended_part_way_it
     assert out[0] == 'Half of it.'
 
 
+def test_an_adapter_that_answers_its_turn_with_its_servers_death_died_mid_turn(tmp_path):
+    """Walk 16: a Codex adapter outlived its app-server and answered the prompt with an error carrying that server's stderr; the rail said its
+    first line - a deprecation warning - as the cause. The same death as the adapter's own: MID_TURN, its conversation kept for the try."""
+    msg = ('The Codex app-server exited with code 4294967295. The agent starts it again on the next request. 2026-11-24T10:37:48Z ERROR '
+           'codex_app_server: `[features].multi_agent` is deprecated.')
+    rules = tmp_path / 'r.json'; rules.write_text(json.dumps([{'when': '.', 'error': msg}]))
+    with pytest.raises(clipool.PartWay) as e:
+        run(profile(), 'go', env={'FAKE_ACP_SCRIPT': str(rules)})
+    assert str(e.value) == clipool.MID_TURN and e.value.session_id
+
+
 # ── ONE FAILURE ROAD: a usage limit reads the same whatever the AI and the road (the design round, 2026-11-18) ──────────────────────
 def test_a_usage_limit_over_acp_is_the_limit_every_road_raises():
     """Over ACP the adapter says its limit in words, and the chat's road raised them raw - never RateLimited, so the router went on handing

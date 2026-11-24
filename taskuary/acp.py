@@ -176,7 +176,8 @@ class ACPClient:
                 # ...and nothing of the process after it, which the chat drew as "(the agent exited)" - that detail is the log's
                 if method == 'session/prompt': logger.warning(f"acp: died mid-turn - {err or 'the agent exited'}"); raise DiedMidTurn(MID_TURN, self.session_id)
                 raise ACPAgentError(f'the agent stopped during {method}' + (f': {err[-300:]}' if err else ''))
-            if 'error' in m: raise ACPAgentError(f"{method}: {m['error'].get('message', m['error'])}")
+            if 'error' in m:
+                e = ACPAgentError(f"{method}: {m['error'].get('message', m['error'])}"); e.method = method; raise e   # ...read by agents.prompt_failure
             return m.get('result')
         finally: self._waiters.pop(mine, None)            # a reply to a request we gave up on is dropped by the pump
 

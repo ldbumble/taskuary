@@ -31,7 +31,8 @@ Set in its environment, for the tests that need more:
   FAKE_DIRECTOR=<folder> each turn's words come from a scenario (fake_director.py), no permission asked; a session/cancel ends it meanwhile
   FAKE_ACP_SCRIPT=<file>  fake_claude's script: the first rule whose `when` the owner's words match answers `first`, after its `post`s ran
                          as the agent's own `taskuary --reply` would (fake_director.post) - a coding agent filing a reply, no permission asked;
-                         `wait` seconds before it answers, `exit` a code it dies with mid-turn (after its `updates`),
+                         `wait` seconds before it answers, `exit` a code it dies with mid-turn (after its `updates`), `error` the message its
+                         adapter answers the prompt with instead (a Codex adapter whose app-server died),
                          `updates` raw session updates said first, `silent` it says no words at all and ends the turn, `stop` the stopReason its turn ends with,
                          `ask` a shell command it then asks permission to run (FAKE_ACP_ASK's card), the turn ending at his answer
 It offers config options (mode, model, effort) the way claude-agent-acp and codex-acp do, and says what they were set to.
@@ -157,6 +158,7 @@ for line in sys.stdin:
             for u in rule.get('updates') or []:
                 u = dict(u); __import__('time').sleep(float(u.pop('_sleep', 0) or 0)); update(u.pop('sessionUpdate'), **u)
             if rule.get('exit') is not None: sys.exit(rule['exit'])   # an agent that dies mid-turn, as fake_claude's `exit` - after what it said
+            if rule.get('error'): send({'jsonrpc': '2.0', 'id': mid, 'error': {'code': -32603, 'message': rule['error']}}); continue   # ...or lives and answers it so
             # ...`ask`: then it asks to run that shell command, as FAKE_ACP_ASK does - the turn ends at his answer (browser/step-words)
             if (ask := rule.get('ask')):
                 tc = {'toolCallId': f'call_{STARTS}', 'title': ask, 'kind': 'execute', 'rawInput': {'command': ask}}

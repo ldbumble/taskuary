@@ -1,6 +1,7 @@
 """THE GENERAL CHAT'S ACP ROAD KEEPS ARRIVAL ORDER (the owner, 2026-11-06: "the quick update was put above the spinning stuff ... never write above
 what was written already"). The chat draws the agent's own updates in the order they came (chatlog.feed); agents.ACPSteps writes the run's
 trace for what else reads it, each call once it has ended."""
+import json, pytest
 from taskuary import agents
 
 
@@ -81,3 +82,44 @@ def test_a_taskuary_tools_answer_on_codex_is_its_steps_result():
     s.flush('end_turn')
     res = {n: d for k, n, d in out if k == 'tool_result'}
     assert res['m1']['result'] == view and res['m2'] == {'result': 'no such to-do', 'is_error': True}
+
+
+SPEC = {'title': 'Vendor spend', 'root': 't', 'elements': {'t': {'type': 'table', 'props': {'columns': ['Vendor', 'Total'], 'rows': [['Payworth', '$4,200']]}}}}
+SHOWN = "Shown in the owner's chat. TASKUARY-VIEW " + json.dumps(SPEC)
+SHOW_ROADS = {
+    # claude-agent-acp: the MCP answer as the call's content blocks
+    'claude': ('acp', [{'sessionUpdate': 'tool_call', 'toolCallId': 'c1', 'kind': 'other', 'title': 'show', 'status': 'pending', 'rawInput': SPEC,
+                        '_meta': {'claudeCode': {'toolName': 'mcp__taskuary__show'}}},
+                       {'sessionUpdate': 'tool_call_update', 'toolCallId': 'c1', 'status': 'completed',
+                        'content': [{'type': 'content', 'content': {'type': 'text', 'text': SHOWN}}]}]),
+    # codex-acp (Codex CLI and HIPAA AI): no content - the answer is rawOutput {result: CallToolResult, error}
+    'codex': ('acp', [{'sessionUpdate': 'tool_call', 'toolCallId': 'm1', 'kind': 'execute', 'title': 'mcp.taskuary.show', 'status': 'in_progress',
+                       'rawInput': {'server': 'taskuary', 'tool': 'show', 'arguments': SPEC}},
+                      {'sessionUpdate': 'tool_call_update', 'toolCallId': 'm1', 'status': 'completed',
+                       'rawOutput': {'result': {'content': [{'type': 'text', 'text': SHOWN}], 'structuredContent': None}, 'error': None}}]),
+    # the API agent's loop: its trace
+    'api': ('trace', [{'type': 'tool_call', 'name': 'show', 'detail': {'tool_call_id': 'tool-0', 'args': SPEC}},
+                      {'type': 'tool_result', 'name': 'tool-0', 'detail': {'tool_call_id': 'tool-0', 'result': SHOWN}}]),
+}
+
+
+@pytest.mark.parametrize('road', SHOW_ROADS)
+def test_a_view_the_agent_showed_rides_on_its_step_to_the_page_live_and_after_a_reload(road):
+    # walk 11, 2026-11-23: show answered "Shown in the owner's chat" on Codex and HIPAA AI, yet the chat's step came with no answer - 0 of 5
+    # drawn, not after a reload either: the chat's row read codex-acp's rawOutput {result} as nothing, and only the old build put kept views back
+    from taskuary import chatlog, conversation, general
+    from taskuary.store import MemoryStore
+    from taskuary.viewspec import MARK
+    s = MemoryStore(); tid = s.create_task({'Title': 'Vendor spend', 'Kind': 'general', 'Status': 'open'}, 'owner')
+    conversation.items(s, tid); conversation.hear(s, tid, turn=True)          # ...the page has the task open: its chat is the log
+    road_, ups = SHOW_ROADS[road]
+    def spec(read):
+        st = [x for t in read(s, tid)['items'] if t['kind'] == 'turn' for x in t.get('steps') or [] if 'show' in str(x.get('name'))]
+        assert len(st) == 1 and MARK in str(st[0].get('output') or ''), st
+        return json.loads(st[0]['output'].split(MARK, 1)[1])
+    for u in ups: chatlog.feed(s, tid, 'sid1', road_, u)
+    assert spec(lambda s, tid: chatlog.read(s, tid, 'summary')) == SPEC, 'live, as the turn works'
+    s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'The table is above.')
+    assert spec(conversation.items) == SPEC, 'its answer filed'
+    chatlog._FEEDS.clear()
+    assert spec(conversation.items) == SPEC, 'a fresh read'

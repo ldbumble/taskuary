@@ -364,10 +364,12 @@ def _text(c) -> str:
 def _unfence(s: str) -> str:
     s = str(s or ''); b = s.strip()
     return b.split('\n', 1)[1].rsplit('```', 1)[0].rstrip('\n') if b.startswith('```') and b.endswith('```') and '\n' in b else s
+# ...ITS rawOutput BY THE ONE READER OF EVERY SHAPE (agents.result_text - walk 11, 2026-11-23): this kept its own, which knew no codex-acp
+# {result: CallToolResult}, so on Codex and HIPAA AI each `show` reached the page with no answer and no view was ever drawn, live or reloaded
 def _out(u) -> str:
+    from .agents import result_text
     got = '\n'.join(_unfence(_text(c.get('content'))) for c in u.get('content') or [] if isinstance(c, dict) and c.get('type') == 'content')
-    raw = u.get('rawOutput')
-    return got or (raw if isinstance(raw, str) else next((raw[k] for k in ('formatted_output', 'output', 'stdout') if raw.get(k)), '') if isinstance(raw, dict) else '')
+    return got or result_text(u.get('rawOutput'))
 def _meta(u, *ks):
     m = u.get('_meta') or {}
     for k in ks: m = m.get(k) if isinstance(m, dict) else None

@@ -72,13 +72,13 @@ class RulesTests(unittest.TestCase):
             ok, why = senders.known(s, msg(), deep=True)
         wrote.assert_not_called(); self.assertEqual(ok, False); self.assertIn('Settings', why)
         s = store(trust_own_domain='0')
-        ok, why = senders.known(s, msg(frm='sam@northwind.example'))
+        ok, why = senders.known(s, msg(frm='sam@northwind.example', auth='pass'))
         self.assertEqual(ok, False); self.assertIn('Settings', why)
         s = store(trust_non_email='0')
         ok, why = senders.known(s, msg(channel='teams', frm=None))
         self.assertEqual(ok, False); self.assertIn('Settings', why)
         s = store()
-        self.assertEqual(senders.known(s, msg(frm='sam@northwind.example'))[1], 'sam@northwind.example is on your own domain.')
+        self.assertEqual(senders.known(s, msg(frm='sam@northwind.example', auth='pass'))[1], 'sam@northwind.example is on your own domain.')
         self.assertIn('one-to-one', senders.known(s, msg(channel='teams', frm=None))[1])         # a room is not a person (test_chat_trust)
 
     def test_a_public_mail_domain_is_nobodys_own_domain(self):
@@ -86,8 +86,8 @@ class RulesTests(unittest.TestCase):
         s = store(owner_email='alex.doyle@gmail.com')
         ok, why = senders.known(s, msg(frm='stranger@gmail.com'))
         self.assertEqual((ok, why.stranger), (False, True)); self.assertIn('Rita (stranger@gmail.com) is not on your domain', why)
-        self.assertEqual(senders.known(s, msg(frm='Alex.Doyle@gmail.com')), (True, 'It came from your own address.'))
-        self.assertEqual(senders.known(store(), msg(frm='sam@northwind.example'))[1], 'sam@northwind.example is on your own domain.')   # a company domain still is
+        self.assertEqual(senders.known(s, msg(frm='Alex.Doyle@gmail.com', auth='pass')), (True, 'It came from your own address.'))
+        self.assertEqual(senders.known(store(), msg(frm='sam@northwind.example', auth='pass'))[1], 'sam@northwind.example is on your own domain.')   # a company domain still is
 
     def test_the_lookup_is_scoped_to_the_receiving_mailbox(self):
         s = store()

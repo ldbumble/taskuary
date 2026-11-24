@@ -181,7 +181,7 @@ def test_a_stranger_s_seed_keeps_the_owner_s_notes_and_drops_the_quoted_subject(
 def test_an_owner_s_seed_still_carries_every_note():
     s = MemoryStore(); s.set_setting('owner_email', 'alex@northwind.example', 't')
     t = s.create_task({'Title': 'x', 'Kind': 'coding', 'Source': 'email'}, 'router')
-    s.add_message({'TaskId': t, 'Channel': 'email', 'FromEmail': 'erin@northwind.example', 'Subject': MARK, 'BodyText': 'b', 'Status': 'routed'})
+    s.add_message({'TaskId': t, 'Channel': 'email', 'FromEmail': 'erin@northwind.example', 'Subject': MARK, 'BodyText': 'b', 'Status': 'routed', 'MailMetaJson': '{"auth": "pass"}'})
     _notes(s, 'erin@northwind.example')
     seed = terminal.seed_text(s, t)
     assert seed.count(MARK) >= 2 and 'OWNERNOTE' in seed                         # the subject line and the note both

@@ -13,24 +13,17 @@ def worse(a, b): return a if ORDER.index(a) <= ORDER.index(b) else b
 
 def _own(row): return row.get('Direction') == 'out' or row.get('Status') == 'context'
 
-# HIS OWN SYSTEMS ARE HIS (the owner, 2026-11-19): his CI's "[northwind/ledger] Build failed on main", his repositories' bots, his
-# connected systems' automated mail never put his task in safe mode - a real stranger's mail still does, until Trust. Read from stored
-# facts, never words: a machine's mail (its SenderClass, the verdict's else the headers') on his own domain, or naming one of his
-# repositories (the SOUL.md map, the coding checkouts) in the [owner/repo] marker a repository's notices head their subject with.
-REPO_MARK = re.compile(r'^\s*(?:(?:re|fwd?):\s*)*\[([\w.-]+/[\w.-]+)\]', re.I)
+# HIS OWN SYSTEMS ARE HIS (the owner, 2026-11-19): his CI's "Build failed on main" from ci.northwind.example, his connected systems' automated
+# mail never put his task in safe mode - a real stranger's mail still does, until Trust. Read from stored facts, never words: a machine's mail
+# (its SenderClass, the verdict's else the headers') from his own domain or one under it - and only where the receiving server verified
+# that domain sent it (mailauth 'pass', the red team 2026-11-24, F3: an automated header and a From typed as his domain, or an
+# "[northwind/ledger]" subject from anyone's, ran with his full power). A subject's repository name is the sender's to type: never proof.
 def own_system(store, row: dict) -> str:
-    "Why this message is a notice from one of his own systems, else ''."
-    if str(row.get('SenderClass') or row.get('HeaderClass') or '').lower() != 'automated' or _own(row): return ''
-    dom = str(row.get('FromEmail') or '').rsplit('@', 1)[-1].lower() if '@' in str(row.get('FromEmail') or '') else ''
-    # ...his domain or one under it: his CI mails from ci.northwind.example (the Codex walk, 2026-11-19: it joined his ledger task as a stranger)
+    "Why this message is a verified notice from one of his own systems, else ''."
+    if str(row.get('SenderClass') or row.get('HeaderClass') or '').lower() != 'automated' or _own(row) or senders.auth(row) != 'pass': return ''
+    dom = senders._domain(str(row.get('FromEmail') or ''))
     own = senders.own_domains(store) - senders.PUBLIC_MAIL
-    if dom and any(dom == d or dom.endswith('.' + d) for d in own): return f'an automated notice from your own domain, {dom}'
-    if (m := REPO_MARK.match(str(row.get('Subject') or ''))):
-        # ...his repositories: the SOUL.md map, the coding checkouts and the ones his GitHub card reaches (its sources, channels.github_sync)
-        from .terminal import known_repos
-        mine = {*known_repos(store), *(s['Address'] for s in store.list_sources(active_only=False) if s.get('Channel') == 'github' and s.get('Address'))}
-        if m.group(1).lower() in {str(r).lower() for r in mine}: return f'a notice from your repository {m.group(1)}'
-    return ''
+    return f'an automated notice from your own domain, {dom}' if dom and any(dom == d or dom.endswith('.' + d) for d in own) else ''
 
 
 def of_message(store, row: dict, memo: dict = None, seen: dict = None) -> tuple:

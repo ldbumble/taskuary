@@ -591,6 +591,7 @@ class DecideBody(BaseModel):
     fields: dict | None = None       # an action card's choices the owner changed (who sees a post, now or a draft): connectorcatalog.owner_edits
     closes: bool = False             # Send and close: the task's close as the send goes, before its agent is told (verdicts.decide)
     steps: list[int] | None = None   # a turn's held steps pressed as one card: this one first, the rest in order (shellgate.approve_steps)
+    shown: dict | None = None        # an action card's proposal as the page drew it: the press runs only that (press_review)
 class CodeBody(BaseModel):
     repo: str | None = None; agent: str | None = None
     model: str | None = None; instruction: str | None = None
@@ -5439,6 +5440,8 @@ def press_review(st, rid: int, body: DecideBody, background: BackgroundTasks = N
     if not rv: raise HTTPException(404, 'review not found')
     from .verdicts import VERB2STATUS, context_moved, decide as land
     if body.verb not in VERB2STATUS: raise HTTPException(422, 'bad verb')
+    from .proposals import unlike_shown
+    if (changed := unlike_shown(rv, body.shown, body.verb)): return changed
     # ...ONE PRESS ROAD FOR EVERY CARD (walk 8, 2026-11-20): a turn's held steps are one card whose press runs each step through this same door,
     # in order, stopping at the first that fails - never a road of its own (it was /api/reviews/steps)
     if body.steps:

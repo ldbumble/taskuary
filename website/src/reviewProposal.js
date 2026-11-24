@@ -38,18 +38,22 @@ export const PAGES = new Set(["write_playbook", "amend_playbook"]);
 // a tool run's place (proposals.WHERE_KEYS, the same order) and what it carries: the text it writes, the query or script it runs,
 // else its other settings one per line - the plumbing (the action, the run it belongs to, the connection id) left out
 const WHERE_KEYS = ["path", "to", "folder", "table", "url", "bucket", "key", "container", "blob", "channel", "list", "database", "item"];
-const PLUMBING = new Set(["action", "type", "flow_run", "connector_id", "why", "network", ...WHERE_KEYS]);
+const PLUMBING = new Set(["action", "type", "flow_run", "connector_id", "why", "network"]);
+const whereKey = (p) => (p?.network ? "" : WHERE_KEYS.find((x) => p?.[x]) || "");
 export const toolWhere = (p) => {
   if (p?.network) return String(p.network);            // ...a post says its network as he knows it (proposals.queue), never "x post"
-  const k = WHERE_KEYS.find((x) => p?.[x]);
+  const k = whereKey(p);
   const sys = String(p?.type || "").replace(/_/g, " ");
   return k ? `${String(p[k])} · ${sys}` : sys || "a connected system";
 };
+// ...EVERY FIELD THE PRESS RUNS IS ON THE CARD (red team F1): its words first, then each other field it carries - a `script` beside harmless
+// `text` was never drawn and ran at the press. Only the plumbing, and the place the "Where" line already names, are left out
+const BODY_KEYS = ["text", "body", "message", "query", "script"];
 export const toolBody = (p) => {
-  const body = p?.text ?? p?.body ?? p?.message ?? p?.query ?? p?.script;
-  if (body != null && body !== "") return String(body);
-  return Object.entries(p || {}).filter(([k, v]) => !PLUMBING.has(k) && v !== "" && v != null)
-    .map(([k, v]) => `${k.replace(/_/g, " ")}: ${typeof v === "string" ? v : JSON.stringify(v)}`).join("\n");
+  const k = BODY_KEYS.find((x) => p?.[x] != null && p[x] !== ""), w = whereKey(p);
+  const rest = Object.entries(p || {}).filter(([x, v]) => x !== k && x !== w && !PLUMBING.has(x) && v !== "" && v != null)
+    .map(([x, v]) => `${x.replace(/_/g, " ")}: ${typeof v === "string" ? v : JSON.stringify(v)}`);
+  return [k ? String(p[k]) : "", rest.join("\n")].filter(Boolean).join("\n\n");
 };
 
 // A CHANGE'S CARD (workflows.change_card): its new words to edit ({key, label, was, now}) and the facts it changes besides ({label, was, now}),

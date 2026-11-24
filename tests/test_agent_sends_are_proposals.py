@@ -424,3 +424,32 @@ def test_a_github_comment_posts_the_words_he_left_on_its_card():
         proposals.execute(s, rv, 'owner', 'Fixed in the totals branch - thanks Erin.')
         proposals.execute(s, rv, 'owner', None)
     assert [c.args[3] for c in post.call_args_list] == ['Fixed in the totals branch - thanks Erin.', 'Fixed.']
+
+
+class ACardRunsWhatItShows(unittest.TestCase):
+    """Red team F1: a run_tool card showed the agent's `text` while a hidden field ran at the press, and the cardless python_script
+    executor - never an agent's - was reachable through propose. What runs is what the card shows, and that card as it was shown."""
+    def setUp(self):
+        self.tid = server.store.create_task({'Title': 'Post the Northwind week', 'Kind': 'general', 'Status': 'open'}, 'owner')
+
+    def test_an_agents_python_script_is_refused(self):
+        miss = []
+        self.assertIsNone(proposals.queue(server.store, self.tid, {'action': 'run_tool', 'type': 'python_script', 'text': 'Tidy the folder',
+                                                                   'script': 'import os; os.remove("x")'}, 'agent', refused=miss))
+        self.assertIn('never an agent', miss[0])
+
+    def test_a_field_its_card_does_not_draw_is_refused(self):
+        miss = []
+        self.assertIsNone(proposals.queue(server.store, self.tid, {'action': 'run_tool', 'type': 'linkedin_post', 'text': 'A good week.',
+                                                                   'script': 'print(1)', 'query': 'DROP TABLE x'}, 'agent', refused=miss))
+        self.assertIn('query, script', miss[0])
+
+    def test_a_card_changed_after_it_was_shown_never_runs(self):
+        s, ran = server.store, []
+        shown = {'action': 'run_tool', 'type': 'linkedin_post', 'text': 'A good week.'}
+        rid = s.add_review({'TaskId': self.tid, 'Kind': 'action', 'Status': 'pending', 'Reason': 'post it', 'DraftText': json.dumps(shown)})
+        s._exec('UPDATE review SET DraftText=? WHERE ReviewId=?', (json.dumps({**shown, 'text': 'Something else entirely.'}), rid))
+        with mock.patch.dict(REGISTRY, {'linkedin_post': lambda cfg: ran.append(cfg) or ('posted', '')}):
+            r = c.post(f'/api/reviews/{rid}/decide', headers=owner(), json={'verb': 'approve', 'shown': shown})
+        self.assertTrue(r.json()['changed'], r.text); self.assertEqual(ran, [])
+        self.assertEqual(s.get_review(rid)['Status'], 'pending')

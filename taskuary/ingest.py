@@ -1827,6 +1827,11 @@ def _serve_step(store, msg: dict, sv: dict, intent: dict, actor: str, notes_note
     return res
 
 
+def answers(msg: dict):
+    "The Message-ID a mail answers - In-Reply-To, the last of its refs - for arrivals and the owner's own mail alike (store.task_of_parent)."
+    return next(reversed((msg.get('mail_meta') or {}).get('refs') or []), None)
+
+
 def identity_route(store, msg: dict) -> dict:
     """Where a mail or tracker item goes: the OPEN task its own conversation already belongs to, else
     new work. The router used to score subject words, sender and body cosine against every open
@@ -1841,7 +1846,7 @@ def identity_route(store, msg: dict) -> dict:
                 'reason': 'new task - no conversation identity to join on, and resemblance never decides'}
     # a reply goes to the task of the mail it answers (In-Reply-To, the last of its refs): on a thread with two tasks the answer to the
     # first one's question joined the newer one, and the task that asked never heard it (walk 11)
-    home = store.task_for_conversation(conv, parent=next(reversed((msg.get('mail_meta') or {}).get('refs') or []), None))
+    home = store.task_for_conversation(conv, parent=answers(msg))
     if not home:
         return {'decision': 'create', 'task_id': None, 'score': 0.0, 'candidates': [], 'reason': 'new task - no open task on this conversation'}
     t = store.get_task(home) or {}

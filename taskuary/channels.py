@@ -1223,11 +1223,17 @@ def ingest_own_message(store, msg: dict, why: str, keep_unmatched: bool = True) 
     if store.message_exists(msg['external_id']): return 0
     from . import agentchannels
     if agentchannels.swallows(store, msg): return 0          # a chat bound to an agent: the owner's line there was the agent's (heard)
-    conv = msg.get('conversation_id')
+    conv, body = msg.get('conversation_id'), (msg.get('body') or '').strip()
     on = [s['task_id'] for s in store.snapshots() if conv and conv in s['conversation_ids']]
+    # TASKUARY READING BACK ITS OWN SEND is filed on the task whose card sent it, by the card's own record (walk 12, 2026-11-23): filed by
+    # thread, TQ-0001's reply landed on TQ-0002 beside it - "You answered Erin Blake yourself" over TQ-0002's live draft, its agent woken
+    ours = next((rv for rv in store.sent_replies(conversation_id=conv) if _same_words(body, rv.get('FinalText') or rv.get('DraftText') or '')), None) if conv else None
+    # ...then by WHAT IT ANSWERS, the one lookup an arrival takes (ingest.identity_route): his reply to the first mail is the first task's
     # TWO OPEN TASKS IN ONE ROOM: the first snapshot was arbitrary, and a group's answer to a new voice note was filed on the
     # older ask beside it. The owner answers what was last said to them - or what their line quotes, when it quotes one.
-    tid = ((_answered_task(store, conv, msg.get('sent_at'), msg.get('quoted'), set(on)) if len(set(on)) > 1 else None)
+    from .ingest import answers
+    tid = ((ours or {}).get('TaskId') or store.task_of_parent(conv, answers(msg))
+           or (_answered_task(store, conv, msg.get('sent_at'), msg.get('quoted'), set(on)) if len(set(on)) > 1 else None)
            or (on[0] if on else None) or store.task_for_conversation(conv, msg.get('subject'))
            or drafted_letter(store, {'Subject': msg.get('subject'), 'RecipientsJson': json.dumps({'to': list(msg.get('to') or []), 'cc': list(msg.get('cc') or [])})}))
     if not tid and not keep_unmatched: return 0
@@ -1242,15 +1248,13 @@ def ingest_own_message(store, msg: dict, why: str, keep_unmatched: bool = True) 
                              'SourceLink': msg.get('source_link'), 'Status': 'context', 'Direction': 'out',   # yours: outgoing (X1)
                              'MailMetaJson': json.dumps(msg.get('mail_meta')) if msg.get('mail_meta') else None})
     sent = store.get_message(mid) or {}
-    retire_draft_answered_elsewhere(store, tid, sent)
+    if not ours: retire_draft_answered_elsewhere(store, tid, sent)
     if not tid: return 1
     store.add_route(mid, tid, 'attach', None, why, [], 'router')
     # ...unless Taskuary is reading back its OWN send. That reply already has its line on the
     # timeline ("Sent by email to ..."), and a second entry under it saying "You replied" read as
     # the owner having answered twice.
-    rv = store.sent_reply(task_id=tid) or {}
-    body = (msg.get('body') or '').strip()
-    if not _same_words(body, rv.get('FinalText') or rv.get('DraftText') or ''):
+    if not ours:
         store.add_comment(tid, 'you', 'human',
                           f"You replied {SENT_FROM.get(msg['channel'], 'outside Taskuary')}: {body[:300]}")
         # ...and the task's assistant hears that you already answered, wherever you did (Task 4.5): what is left is its to re-plan.

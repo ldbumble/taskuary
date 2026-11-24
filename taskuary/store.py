@@ -3088,15 +3088,18 @@ class SQLiteStore:
         owner's own reply: answer a thread the day after its task closed and the reply had
         nowhere to land, so the chain lost the last thing said on it. `parent` is the Message-ID
         the mail answers: on a thread with two tasks, the task of that mail is this one's."""
-        if conversation_id and parent and (r := self._one(f"SELECT TaskId FROM message WHERE ConversationId=? AND {meta_expr('mid')}=? "
-                                                          'AND TaskId IS NOT NULL ORDER BY MessageId DESC LIMIT 1', (conversation_id, parent))):
-            return r['TaskId']
+        if tid := self.task_of_parent(conversation_id, parent): return tid
         if conversation_id:
             r = self._one('SELECT TaskId FROM message WHERE ConversationId=? AND TaskId IS NOT NULL '
                           'ORDER BY MessageId DESC LIMIT 1', (conversation_id,))
             if r: return r['TaskId']
         # channels without a conversation id (and mail whose References header was rewritten)
         return next((m['TaskId'] for m in reversed(self.thread_messages(None, subject)) if m['TaskId']), None) if subject else None
+    def task_of_parent(self, conversation_id, parent):
+        "The task of the stored mail on this thread whose Message-ID is `parent` (what a mail answers - ingest.answers), else None."
+        r = conversation_id and parent and self._one(f"SELECT TaskId FROM message WHERE ConversationId=? AND {meta_expr('mid')}=? "
+                                                      'AND TaskId IS NOT NULL ORDER BY MessageId DESC LIMIT 1', (conversation_id, parent))
+        return r['TaskId'] if r else None
     def conversation_of_mail(self, ids=(), gm_thread=None, mailbox=None):
         """The conversation a mail already stored here files under, found through the mail's own ids (TQ-1214,
         2026-10-26): Gmail's thread id when the server gave one, else the first of `ids` - root first - that is a
@@ -5832,16 +5835,17 @@ class SQLiteStore:
         are not necessarily ingested back from the external channel before the Assistant's next
         check, so message history alone can briefly (and falsely) look unanswered.
         """
+        return next(iter(self.sent_replies(message_id=message_id, task_id=task_id, limit=1)), None)
+    def sent_replies(self, message_id=None, task_id=None, conversation_id=None, limit=50) -> list:
+        "sent_reply's receipts, newest first - for a message, a task, or every task on a conversation (by the mail each answers)."
         where, values = ["(rv.DeliveryState='sent' OR (rv.DeliveryState IS NULL AND rv.Status IN ('approved','edited','sent')))", "rv.Kind<>'action'", "rv.Kind<>'slot'",
                          "COALESCE(NULLIF(rv.FinalText,''), rv.DraftText, '')<>''"], []
-        if message_id is not None:
-            where.append('rv.MessageId=?'); values.append(message_id)
-        elif task_id is not None:
-            where.append('rv.TaskId=?'); values.append(task_id)
-        else:
-            return None
-        return self._one('SELECT rv.* FROM review rv WHERE ' + ' AND '.join(where)
-                         + ' ORDER BY IFNULL(rv.DecidedAt, rv.CreatedAt) DESC, rv.ReviewId DESC LIMIT 1', values)
+        if message_id is not None: where.append('rv.MessageId=?'); values.append(message_id)
+        elif task_id is not None: where.append('rv.TaskId=?'); values.append(task_id)
+        elif conversation_id: where.append('m.ConversationId=?'); values.append(conversation_id)
+        else: return []
+        return self._rows('SELECT rv.* FROM review rv LEFT JOIN message m ON m.MessageId=COALESCE(rv.AnswersMid, rv.MessageId) WHERE ' + ' AND '.join(where)
+                          + ' ORDER BY IFNULL(rv.DecidedAt, rv.CreatedAt) DESC, rv.ReviewId DESC LIMIT ?', (*values, limit))
     def hold_reviews(self, task_id, reason=None):
         """Park this task's pending reply drafts while an agent works it. A draft written from the
         mail alone promises what the session has not found yet - and it sat on the task as if it

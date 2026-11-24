@@ -148,6 +148,65 @@ class IdentityTests(unittest.TestCase):
         self.assertEqual(ingest.identity_route(s, {**answer, 'mail_meta': {'refs': ['<q1@northwind.example>', '<e2@northwind.example>']}})['task_id'], second)
         self.assertEqual(ingest.identity_route(s, {**answer, 'mail_meta': {}})['task_id'], second)
 
+    def _two_tasks(self):
+        """Walk 12's thread: Erin's first mail is TQ-A's; her later new ask on the same thread is TQ-B's, its reply drafted and waiting."""
+        import json
+        s, conv = MemoryStore(), 'AAQk-spend'
+        a = s.create_task({'Title': 'Monthly spend by vendor', 'Kind': 'task', 'Status': 'open'}, 'owner')
+        b = s.create_task({'Title': 'Trainly seat quote', 'Kind': 'task', 'Status': 'open'}, 'owner')
+        e1 = s.add_message({'ExternalId': 'in-e1', 'ConversationId': conv, 'Channel': 'email', 'TaskId': a, 'Status': 'routed', 'FromName': 'Erin Blake',
+                            'FromEmail': 'erin@northwind.example', 'Subject': 'Monthly spend', 'BodyText': 'Here is the sheet - which vendor grew fastest?',
+                            'SentAt': '2026-11-23 08:00:00', 'MailMetaJson': json.dumps({'mid': '<e1@northwind.example>'})})
+        e2 = s.add_message({'ExternalId': 'in-e2', 'ConversationId': conv, 'Channel': 'email', 'TaskId': b, 'Status': 'routed', 'FromName': 'Erin Blake',
+                            'FromEmail': 'erin@northwind.example', 'Subject': 'Re: Monthly spend', 'BodyText': 'Also - a picture of the Trainly quote.',
+                            'SentAt': '2026-11-23 08:10:00', 'MailMetaJson': json.dumps({'mid': '<e2@northwind.example>', 'refs': ['<e1@northwind.example>']})})
+        waits = s.add_review({'MessageId': e2, 'TaskId': b, 'Kind': 'draft_reply', 'Status': 'pending', 'DraftText': 'The quote is for 25 seats; we use 212.'})
+        return s, conv, a, b, e1, waits
+
+    def _copy(self, conv, body, i='sent-a1'):
+        "The sent-folder copy of a reply to Erin's first mail, as Graph's sent-items sync hands it back (In-Reply-To her mail)."
+        return {'id': i, 'subject': 'RE: Monthly spend', 'conversationId': conv, 'internetMessageId': f'<{i}@northwind.example>',
+                'internetMessageHeaders': [{'name': 'In-Reply-To', 'value': '<e1@northwind.example>'}],
+                'toRecipients': [{'emailAddress': {'address': 'erin@northwind.example'}}], 'bodyPreview': body, 'sentDateTime': '2026-11-23T22:20:00Z'}
+
+    def test_the_apps_own_send_is_filed_on_the_task_whose_card_sent_it(self):
+        """Walk 12 (S7, S6b): TQ-A's reply, sent from its card, came back from the sent folder and was filed by thread on TQ-B - "You answered
+        Erin Blake yourself" greyed TQ-B's live draft and woke its agent - and Erin's answer to it, naming that copy, followed it to TQ-B."""
+        from taskuary.channels import ingest_outbound_mail
+        s, conv, a, b, e1, waits = self._two_tasks()
+        rid = s.add_review({'MessageId': e1, 'TaskId': a, 'Kind': 'draft_reply', 'Status': 'pending', 'DraftText': 'Spendly grew fastest - Trainly splits in two.'})
+        s.decide_review(rid, 'sent', 'Spendly grew fastest - Trainly splits in two.', 'owner')
+        with mock.patch.object(ingest, '_spawn'), mock.patch.object(ingest, 'thread_moved') as moved:
+            ingest_outbound_mail(s, 'alex@northwind.example', self._copy(conv, 'Spendly grew fastest - Trainly splits in two.'))
+        self.assertIn('graph:sent-a1', [m['ExternalId'] for m in s.list_messages(a)]); self.assertNotIn('graph:sent-a1', [m['ExternalId'] for m in s.list_messages(b)])
+        self.assertEqual(s.get_review(waits)['Status'], 'pending')
+        self.assertFalse([c for t in (a, b) for c in s.list_comments(t) if 'You replied' in c['Body'] or 'yourself' in c['Body']])
+        moved.assert_not_called()
+        answer = {'conversation_id': conv, 'channel': 'email', 'from_email': 'erin@northwind.example', 'subject': 'Re: Monthly spend',
+                  'mail_meta': {'refs': ['<e1@northwind.example>', '<sent-a1@northwind.example>']}}
+        self.assertEqual(ingest.identity_route(s, answer)['task_id'], a)
+
+    def test_the_apps_own_send_with_no_parent_header_is_still_its_cards(self):
+        "...by the card's own record first: a copy whose headers name nothing it answers is still the task's whose card sent those words."
+        from taskuary.channels import ingest_outbound_mail
+        s, conv, a, b, e1, waits = self._two_tasks()
+        rid = s.add_review({'MessageId': e1, 'TaskId': a, 'Kind': 'draft_reply', 'Status': 'pending', 'DraftText': 'Spendly grew fastest.'})
+        s.decide_review(rid, 'sent', 'Spendly grew fastest.', 'owner')
+        with mock.patch.object(ingest, '_spawn'), mock.patch.object(ingest, 'thread_moved'):
+            ingest_outbound_mail(s, 'alex@northwind.example', {**self._copy(conv, 'Spendly grew fastest.'), 'internetMessageHeaders': []})
+        self.assertIn('graph:sent-a1', [m['ExternalId'] for m in s.list_messages(a)])
+        self.assertEqual(s.get_review(waits)['Status'], 'pending')
+
+    def test_his_own_answer_from_his_mailbox_goes_to_the_task_whose_mail_it_answers(self):
+        "...and the owner's own reply to Erin's first mail, written in his mailbox, is TQ-A's by its In-Reply-To - the same lookup an arrival takes."
+        from taskuary.channels import ingest_outbound_mail
+        s, conv, a, b, e1, waits = self._two_tasks()
+        with mock.patch.object(ingest, '_spawn'), mock.patch.object(ingest, 'thread_moved'):
+            ingest_outbound_mail(s, 'alex@northwind.example', self._copy(conv, 'Spendly, by a mile. More tomorrow.', i='sent-o1'))
+        self.assertIn('graph:sent-o1', [m['ExternalId'] for m in s.list_messages(a)]); self.assertNotIn('graph:sent-o1', [m['ExternalId'] for m in s.list_messages(b)])
+        self.assertTrue([c for c in s.list_comments(a) if 'You replied' in c['Body']])
+        self.assertEqual(s.get_review(waits)['Status'], 'pending')
+
 
 if __name__ == '__main__':
     unittest.main()

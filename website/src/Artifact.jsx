@@ -161,19 +161,23 @@ function Field({ f, onView }) {
 }
 
 // ...A BULK JOB IS THE SAME CARD WITH ITS ROWS (taskuary/bulkcard.py): whom or what each goes to, its one line, what to check, its tick box, and
-// the first few open in their own card to review
-const Items = ({ items }) => (
+// the first few open in their own card to review. THE FILES A TURN MADE ARE THE SAME ROWS (TurnFiles): its name a press that shows it in the one
+// preview under them (`onPick`, `picked`), its kind and size the line, its Download the row's `tail`
+export const Items = ({ items }) => (
   <Box component="ul" data-tq-review-items="" sx={{ listStyle: "none", m: 0, p: 0, maxHeight: 420, overflowY: "auto" }}>
-    {items.map((x, i) => <Box component="li" key={x.id} data-tq-bulk-row={x.id} sx={{ borderTop: i ? `1px solid ${BORDER}` : "none", py: 0.5 }}>
+    {items.map((x, i) => <Box component="li" key={x.id} data-tq-bulk-row={x.id} {...(x.picked ? { "data-tq-picked": "" } : {})}
+      sx={{ borderTop: i ? `1px solid ${BORDER}` : "none", py: 0.5, ...(x.onPick ? { px: 0.75, borderRadius: "4px", bgcolor: x.picked ? "var(--tq-inset, #eef2f5)" : "transparent" } : {}) }}>
       <Box sx={{ display: "flex", alignItems: "center", gap: 1, minWidth: 0 }}>
         {x.onCheck ? <Checkbox size="small" checked={!!x.checked} disabled={!!x.locked} onChange={x.onCheck} sx={{ p: 0.25 }} inputProps={{ "aria-label": `Include ${x.target}` }} />
-          : <Box component="span" sx={{ width: 26, textAlign: "center", color: x.mark === "✓" ? "var(--tq-ok, #3d7a4f)" : FAINT }}>{x.mark}</Box>}
-        <Typography sx={{ fontSize: 13, color: INK, flexShrink: 0, maxWidth: 260, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-          textDecoration: x.struck ? "line-through" : "none" }}>{x.target}</Typography>
+          : x.mark != null && <Box component="span" sx={{ width: 26, textAlign: "center", color: x.mark === "✓" ? "var(--tq-ok, #3d7a4f)" : FAINT }}>{x.mark}</Box>}
+        <Typography {...(x.onPick ? { ...pressable(x.onPick), "aria-current": x.picked ? "true" : undefined, "data-tq-pick": x.id } : {})} sx={{ fontSize: 13, color: INK,
+          flexShrink: 0, maxWidth: 260, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", textDecoration: x.struck ? "line-through" : "none",
+          ...(x.onPick ? { ...FOCUS_RING, cursor: "pointer", fontWeight: x.picked ? 700 : 400, "&:hover": { textDecoration: "underline" } } : {}) }}>{x.target}</Typography>
         <Typography sx={{ fontSize: 13, color: DIM, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{x.line}</Typography>
         {(x.flags || []).map((f) => <Typography key={f} variant="caption" sx={{ color: "var(--tq-warn, #8a4b1c)" }}>{f}</Typography>)}
         {x.failed && <Typography variant="caption" title={x.failed} sx={{ color: "var(--tq-danger, #7a2f3c)", maxWidth: 260, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{x.failed}</Typography>}
         {x.onOpen && <Button size="small" onClick={x.onOpen} sx={{ minWidth: 0 }}>{x.open ? "Hide" : "Open"}</Button>}
+        {x.tail}
       </Box>
       {x.open && x.body && <Box sx={{ pl: 4, pb: 1 }}>{x.body}</Box>}
     </Box>)}

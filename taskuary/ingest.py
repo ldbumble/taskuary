@@ -246,10 +246,13 @@ def _playbook_menu(store=None) -> str:
 
 def danger(store, msg: dict, mid=None, verdict: dict = None) -> str:
     """What this message reads as trying to make an AI do - the verdict's own `danger`, the one triage gave it on its way in (msg
-    `_danger`), else the reading kept on the message (triage or ranking) - or '' for none."""
-    try: kept = (store.get_message(int(mid)) or {}).get('Danger') if mid else None
-    except (TypeError, ValueError): kept = None
-    for v in ((verdict or {}).get('danger') if isinstance(verdict, dict) else None, (msg or {}).get('_danger'), kept):
+    `_danger`), else the reading kept on the message (triage or ranking) - or '' for none. Only text aimed at the AI: a scam on the owner
+    holds nothing from his agent, it is a warning on the page (senders.steers - walk 18)."""
+    try: row = (store.get_message(int(mid)) or {}) if mid else {}
+    except (TypeError, ValueError): row = {}
+    kept = row.get('Danger') if senders.steers(row) else None
+    said = (verdict or {}).get('danger') if isinstance(verdict, dict) and (verdict or {}).get('danger_aim', 'agent') == 'agent' else None
+    for v in (said, (msg or {}).get('_danger'), kept):
         s = ' '.join(str(v or '').split())
         if s and s.lower() not in ('null', 'none', 'no', 'false'): return s[:160]
     return ''

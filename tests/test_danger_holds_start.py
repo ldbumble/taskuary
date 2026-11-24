@@ -40,6 +40,22 @@ class DangerHoldsTests(unittest.TestCase):
         self.assertEqual(spawned, ['_auto_general'])
         self.assertIsNone(s.list_messages(out['task_id'])[-1]['Danger'])
 
+    def test_a_scam_warning_for_him_holds_nothing_and_is_kept_on_the_page(self):
+        """Walk 18 (L8): a no-reply invoice came with triage's fraud caution ("verify it on Payworth's known site and warn anyone who might
+        pay" - a scam aimed at the owner) and the task asked him to "Trust Payworth", the opposite of the caution. Only text aimed at an AI
+        holds a start or a Trust; a warning for him is said where the page shows it, and the agent starts."""
+        from taskuary import senders
+        s = store()
+        warn = "Verify the invoice on Payworth's known site and warn anyone who might pay."
+        out, spawned = ingested(s, mail(), danger={'kind': 'scam', 'says': warn})
+        self.assertEqual(spawned, ['_auto_general'])
+        m = s.list_messages(out['task_id'])[-1]
+        self.assertEqual((m['Danger'], m['DangerAim']), (warn, 'owner'), 'the warning stays on the message for the page')
+        self.assertEqual(ingest.danger(s, {}, m['MessageId']), '')
+        bill = {'Channel': 'email', 'Status': 'routed', 'SenderClass': 'automated', 'Danger': warn, 'DangerAim': 'owner'}
+        self.assertFalse(senders.can_hold(bill), "a machine's notice with a warning for him has nobody to trust")
+        self.assertTrue(senders.can_hold({**bill, 'DangerAim': 'agent'}), 'text written to steer an AI holds whatever sent it')
+
     def test_the_same_mail_without_it_starts_as_before(self):
         _out, spawned = ingested(store(), mail(), danger=None)
         self.assertEqual(spawned, ['_auto_general'])

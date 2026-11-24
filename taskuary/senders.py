@@ -546,11 +546,17 @@ def row_msg(row: dict) -> dict:
 # ONLY A PERSON'S WORDS SENT TO THE TASK HOLD IT (walk 17, K1): a vendor's automated "Ticket closed", filed onto his renewal task as context,
 # held the whole task for "Trust" and his Send on the agent's own card woke nobody; a no-reply invoice asked Trust for an address nobody
 # writes from. A filed line is kept for the chain and handed to no agent; a machine's notice (its stored class) has nobody to vouch for. A
-# line triage read as an attempt on an AI (Danger) holds whatever sent it.
+# line triage read as an attempt on an AI (Danger aimed at the agent) holds whatever sent it - a scam on HIM is a warning on the page, never
+# a Trust press (walk 18: a no-reply invoice whose fraud caution asked him to "Trust Payworth", the opposite of the caution)
 def can_hold(m: dict) -> bool:
     "Can this stored line hold its task for a Trust press: a person's words routed to it, or any line read as an attempt on an AI."
     from .categories import automated
-    return bool(m.get('Danger')) or (m.get('Status') != 'filed' and not automated(m))
+    return steers(m) or (m.get('Status') != 'filed' and not automated(m))
+
+
+def steers(m: dict) -> bool:
+    "Did triage or ranking read this stored line as written to steer an AI (message.Danger aimed at the agent) - never a scam aimed at him."
+    return bool(m.get('Danger')) and m.get('DangerAim') == 'agent'
 
 def whom(store, rows, through: int = 0) -> dict | None:
     """THE HELD SENDER - who the hold's line, its Trust buttons and the press itself name (origin.hold, trust_offer, vouch, trust_org): the

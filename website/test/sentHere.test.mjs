@@ -11,6 +11,11 @@ test("a reply that went says where, and that the task is closing or why it stays
   assert.equal(sentLine({ channel: "email", closing: true }), "Sent by email - closing the task");
   assert.equal(sentLine({ channel: "teams", closing: false, kept: "an agent is still working" }), "Sent on Teams. The task stays open: an agent is still working");
   assert.equal(sentLine({ channel: "", to: "Ray Colton", closing: false }), "Sent to Ray Colton");
+  // ...ONE SEND, ONE SENTENCE (walk 12: "Sent to erin@...", "Sent by email", "Sent · closed by email"): whom and how, both where both are known
+  assert.equal(sentLine({ channel: "email", to: "Erin Blake" }), "Sent to Erin Blake by email");
+  assert.equal(sentLine({ channel: "", to: "erin@northwind.example" }), "Sent to erin@northwind.example");
+  assert.equal(sentSaid({ channel: "email", to: "Erin Blake", closing: true }), "to Erin Blake by email");
+  assert.doesNotMatch(read("SentCard.jsx"), />To \{p\.to\}</, "the line beside the mark says whom - no second To over it");
   const page = read("TaskPage.jsx");
   assert.match(page, /const chatCards = sentBox \? <SentCard \{\.\.\.sentBox\} \/> :/);
   assert.match(read("ReviewDecision.jsx"), /said: verb === "approve" \? \{ text: value, channel: r\.Channel \|\| "", to: sentTo\(r\), subject: deliverySubject\(r\), id: r\.ReviewId, done: pw\.sentAs \} : null/);

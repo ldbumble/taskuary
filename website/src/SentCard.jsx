@@ -8,7 +8,7 @@ import { PressedButton } from "./PassedCard.jsx";
 import { sentMark, sentSaid, sentTitle } from "./sentLine.js";
 import { fmtDateTime } from "./dates.js";
 import { FOCUS_RING, pressable } from "./pressable.js";
-import { DIM, FAINT, INK } from "./theme.jsx";
+import { DIM, INK } from "./theme.jsx";
 
 
 export default function SentCard(p) {
@@ -16,7 +16,6 @@ export default function SentCard(p) {
   return (
     <Box data-tq-sent-here={p.id || ""} data-tq-act-state="sent" className="tq-turn-frame" sx={{ px: 1.5, py: 1.25 }}>
       <Typography sx={{ fontSize: 13.5, fontWeight: 700, color: INK, lineHeight: 1.3, overflowWrap: "anywhere" }}>{sentTitle(p)}</Typography>
-      {p.to && p.subject && <Typography noWrap sx={{ fontSize: 11.5, color: FAINT }}>To {p.to}</Typography>}
       <Typography data-tq-sent-text="" sx={{ mt: 0.4, fontSize: 13, lineHeight: 1.5, color: DIM, whiteSpace: "pre-wrap", overflowWrap: "anywhere",
         ...(open ? {} : { display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }) }}>{p.text}</Typography>
       {long && <Typography {...pressable(() => setOpen((o) => !o))} aria-expanded={open} sx={{ ...FOCUS_RING, display: "inline-block", fontSize: 11.5, color: "var(--tq-link, #55697a)",

@@ -872,7 +872,7 @@ def test_a_photo_sent_from_the_phone_is_his_file_on_the_task_it_was_about():
     from taskuary import ledger, railwalk
     store, c = armed_store()
     tid = store.create_task({'Title': 'Badge for the new hire', 'Kind': 'general', 'Status': 'open'}, 'owner')
-    photo = 'C:/home/attachments/phone/202611/20261123-101500-a1b2c3-badge.jpg'
+    photo = 'C:/data/attachments/phone/202611/20261123-101500-a1b2c3-badge.jpg'
     with railwalk.seated(f'whatsapp:{JID}'): railwalk.open(store, f'task:{tid}', actor='owner', record=False)
     with mock.patch.object(remote_assistant, 'send'), mock.patch.object(concierge, 'brain', return_value=None):
         remote_assistant.respond(store, 'whatsapp', JID, 'This is the badge for Erin', c['ConnectorId'], images=[photo])

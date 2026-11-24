@@ -326,10 +326,17 @@ def owed(store, t: dict, since: str) -> str:
     from . import ledger
     sent = ledger.rows(store, ('sent', 'act'), task=tid, since=since)
     if sent: bits.append(f"sent today: {len(sent)}")
+    # ...and its cards as they stand NOW (cardqueue.state), never the words a turn wrote before his press (walk 13: "the post goes out only
+    # when you press the card" told after he had declined it): what waits for his press, what he turned down today, what the agent left
+    from . import cardqueue
+    from .conversation import _card
+    if (ws := cardqueue.state(store, tid)['units']): bits.append(f"waits for his press: {'; '.join(cardqueue.what(store, u) for u in ws[:3])}")
+    his = lambda r: (st := _card(r)['status']) == 'rejected' or st == 'closed_unsent' and r.get('DecidedBy') not in ('agent', 'assistant', 'taskuary')
+    no = [r for r in store._rows("SELECT * FROM review WHERE TaskId=? AND DecidedAt>=? ORDER BY DecidedAt", (tid, since)) if his(r)]
+    if no: bits.append(f"he turned down: {'; '.join(cardqueue.what(store, {'rids': [r['ReviewId']], 'rows': [r]}) for r in no[:3])}")
     s = general._last_said(store, tid)[1]
-    if isinstance(s, dict):
-        if s.get('nothing_left'): bits.append('its agent says nothing is left')
-        elif s.get('on_you'): bits.append(f"its agent left on him: {'; '.join(_one_line(x, 80) for x in s['on_you'][:3])}")
+    if isinstance(s, dict) and s.get('nothing_left'): bits.append('its agent says nothing is left')
+    elif (left := taskstate.left_on_him(store, tid)): bits.append(f"its agent left on him: {'; '.join(_one_line(x, 80) for x in left[:3])}")
     return ' · '.join(bits)
 
 

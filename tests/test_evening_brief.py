@@ -126,6 +126,26 @@ class TheDayAsItWasTests(unittest.TestCase):
         for fact in ('every to-do ticked', 'sent today: 2', 'nothing is left'): assert fact in row, row
         assert any('nothing is left' in r for r in ev['open']), ev['open']
 
+    def test_a_card_he_declined_is_told_from_its_state_never_from_the_words_its_turn_wrote_before(self):
+        """Walk 13: the agent's turn ended "the post goes out only when you press the card"; he declined the card, and the End-of-day report
+        and the Assistant both still said it waited for his press - and the header read "agent waiting on you". What stands is the card's
+        own state: he turned it down, nothing waits."""
+        from taskuary import general, taskstate
+        s = MemoryStore()
+        tid = s.create_task({'Title': 'Ask HN post', 'Kind': 'general', 'Status': 'open'}, 'owner')
+        s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'The post is set up.')
+        s.add_comment(tid, 'agent', general.SUMMARY_TYPE, json.dumps({'did': 'Set up the post', 'nothing_left': False,
+                                                                        'on_you': ['The post goes out only when you press the card']}))
+        rv = s.add_review({'TaskId': tid, 'Kind': 'action', 'Status': 'pending', 'Reason': 'the agent proposes to post the Ask HN question',
+                           'DraftText': json.dumps({'action': 'browser_act', 'what': 'post the Ask HN question'})})
+        self.assertEqual(taskstate.turn_outcome(s, tid), 'blocked', 'while the card waits, the turn left it on him')
+        s.decide_review(rv, 'rejected', None, 'owner')
+        row = evening.owed(s, s.get_task(tid), _ago(8))
+        self.assertNotIn('goes out only when you press', row)
+        self.assertIn('he turned down: post the Ask HN question', row)
+        self.assertEqual(taskstate.left_on_him(s, tid), [])
+        self.assertEqual(taskstate.turn_outcome(s, tid), 'agentdone', 'the header no longer reads "agent waiting on you"')
+
     def test_the_brief_says_what_went_as_what_it_was_never_a_view_file_and_never_an_unanswered_close_as_handled(self):
         """Walk 5, 2026-11-22: "Sent availability slot to Gail" over the week's total, the show tool's view-...json as work done, and a task
         closed with its question to him unanswered told as "confirmed"."""

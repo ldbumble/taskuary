@@ -241,7 +241,8 @@ def agent_result(store, tid) -> tuple[str, list]:
     summ = list(general.turn_summaries(store, tid).values())
     s = summ[-1] if summ and isinstance(summ[-1], dict) else None
     if s:
-        left = '; '.join(str(o) for o in s.get('on_you') or [] if isinstance(o, str))
+        from .taskstate import left_on_him
+        left = '; '.join(left_on_him(store, tid))          # ...while it stands: a press of his since is newer than those words
         result = ' '.join(x for x in [str(s.get('did') or ''), f'Left on the owner: {left}.' if left else ''] if x)
     else:
         last = next((c for c in reversed(store.list_comments(tid, internal=True)) if c.get('ActorType') == general.ASSISTANT_TYPE), None)

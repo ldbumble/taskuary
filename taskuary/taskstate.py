@@ -96,18 +96,30 @@ def _chat_resting(store, t: dict) -> str | None:
     return turn_outcome(store, t['TaskId'])
 
 
+def left_on_him(store, tid: int) -> list:
+    """WHAT THE AGENT'S LAST TURN LEFT ON HIM, WHILE IT STILL STANDS - the one reading every surface takes (the header, the rail, a report, the
+    Assistant). Its summary's `on_you` is words written at that turn's end; a press of his on a card since then is newer than them (walk 13: the
+    End-of-day report said the post "goes out only when you press the card" after he had declined it, and the header read "agent waiting on
+    you" after his Send). From then on what stands is the cards' own state (cardqueue.state), never those words. [] when nothing stands."""
+    from .general import _last_said
+    c, s = _last_said(store, int(tid))
+    if not isinstance(s, dict) or s.get('nothing_left'): return []
+    left = [t for x in s.get('on_you') or [] if (t := str(x.get('text') if isinstance(x, dict) else x or '').strip())]
+    if left and store._one("SELECT 1 AS x FROM review WHERE TaskId=? AND DecidedAt>=? AND IFNULL(DecidedBy,'') NOT IN ('agent','assistant','taskuary') "
+                           "LIMIT 1", (int(tid), str(c.get('CreatedAt') or ''))): return []
+    return left
+
+
 def turn_outcome(store, tid: int) -> str | None:
     """HOW THE LAST TURN ENDED, off the stored turn - one reading for a chat at rest and one whose session is still up: 'agentdone' only for a
     turn that did the work (the Neon walk, 2026-11-19: a green "agent done" and "Finished at 11:53 PM" over a turn that failed, and over one
     that refused and left him "Enable local shell access"). A failed turn is 'stopped', its reason on it; one whose own summary left
     something on him is 'blocked'. None: it never answered."""
-    from .general import ASSISTANT_TYPE, failed_line, turn_summaries
+    from .general import ASSISTANT_TYPE, failed_line
     last = store._one('SELECT CommentId, Body FROM comment WHERE TaskId=? AND ActorType=? ORDER BY CommentId DESC LIMIT 1', (int(tid), ASSISTANT_TYPE))
     if not last: return None
     if failed_line(last['Body'])[1]: return 'stopped'
-    sm = turn_summaries(store, int(tid)).get(last['CommentId']) or {}
-    if not sm.get('nothing_left') and any(str(s).strip() for s in sm.get('on_you') or []): return 'blocked'
-    return 'agentdone'
+    return 'blocked' if left_on_him(store, tid) else 'agentdone'
 
 
 class TaskState:

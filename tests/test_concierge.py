@@ -631,7 +631,7 @@ class TaskNowTests(unittest.TestCase):
             self.assertIn('Agent is PARKED and ASKING you: Should I also fix the header?', concierge.task_now(s, t))
         s.update_task(t, {'Status': 'done'}, 'o')
         with mock.patch('taskuary.terminal.live_sessions', return_value=[]):
-            self.assertIn('CLOSED', concierge.task_now(s, t))
+            self.assertIn('closed 20', concierge.task_now(s, t))
         self.assertEqual(concierge.task_now(s, 999), '')
 
 

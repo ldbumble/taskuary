@@ -61,7 +61,7 @@ class SessionOutlivesTaskTests(unittest.TestCase):
         with mock.patch.object(server.hub_term, 'for_task', return_value={'sid': 'S1'}), \
              mock.patch.object(server.hub_term, 'close', return_value=True) as close:
             c.post(f'/api/tasks/{tid}/not-a-task', json={'learn': False})
-        close.assert_called_once_with('S1')
+        self.assertEqual([c.args for c in close.call_args_list], [('S1',)])
         self.assertIsNone(server.store.get_task(tid))
 
     def test_not_our_task_closes_it_too(self):
@@ -73,7 +73,7 @@ class SessionOutlivesTaskTests(unittest.TestCase):
              mock.patch.object(server.hub_term, 'session_for', return_value=mock.Mock(sid='S2', alive=True)), \
              mock.patch.object(server.hub_term, 'close', return_value=True) as close:
             c.post(f'/api/messages/{mid}/not-mine', json={'scope': 'sender'})
-        close.assert_called_once_with('S2')
+        self.assertEqual([c.args for c in close.call_args_list], [('S2',)])
 
     def test_nothing_to_do_here_closes_it_too(self):
         c, server = self._client()
@@ -84,7 +84,7 @@ class SessionOutlivesTaskTests(unittest.TestCase):
              mock.patch.object(server.hub_term, 'session_for', return_value=mock.Mock(sid='S3', alive=True)), \
              mock.patch.object(server.hub_term, 'close', return_value=True) as close:
             c.post(f'/api/messages/{mid}/file')
-        close.assert_called_once_with('S3')
+        self.assertEqual([c.args for c in close.call_args_list], [('S3',)])
 
     def test_a_session_that_refuses_to_die_never_blocks_the_delete(self):
         """The task going away is the owner's decision; a stuck pty does not get a veto."""
@@ -95,6 +95,28 @@ class SessionOutlivesTaskTests(unittest.TestCase):
             r = c.post(f'/api/tasks/{tid}/not-a-task', json={'learn': False})
         self.assertEqual(r.status_code, 200)
         self.assertIsNone(server.store.get_task(tid))
+
+    def test_not_a_task_answers_before_its_agent_has_let_go(self):
+        """The load run, 2026-11-24: Not a task waited 2.4 s at rest and 7.3 s under load for the agent's process to end. The task is gone and the
+        press answered while it ends; nothing finds it working from the press, and what it writes for the task as it goes is deleted after."""
+        import threading
+        c, server = self._client()
+        tid = server.store.create_task({'Title': 'refund thread', 'Kind': 'general'}, 'o')
+        let_go, ended = threading.Event(), threading.Event()
+        class Slow:
+            task_id, alive, sid, on_purpose = tid, True, 'S6', False
+            def close(self):
+                let_go.wait(10); server.store.add_comment(tid, 'agent', 'agent', 'session ended'); ended.set()
+        with mock.patch.dict(server.hub_term.SESSIONS, {'S6': Slow()}), mock.patch.object(server.hub_term, '_info', lambda t, *a: {'sid': t.sid}):
+            r = c.post(f'/api/tasks/{tid}/not-a-task', json={'learn': False})
+            self.assertEqual(r.status_code, 200)
+            self.assertIsNone(server.store.get_task(tid)); self.assertIsNone(server.hub_term.for_task(tid))
+            self.assertFalse(ended.is_set(), 'answered while its process was still letting go')
+            let_go.set(); self.assertTrue(ended.wait(10))
+        for _ in range(200):
+            if not server.store.list_comments(tid, internal=True): break
+            threading.Event().wait(0.05)
+        self.assertEqual(server.store.list_comments(tid, internal=True), [])
 
     def test_a_task_with_no_session_deletes_exactly_as_before(self):
         c, server = self._client()

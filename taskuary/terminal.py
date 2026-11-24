@@ -2957,11 +2957,19 @@ def live_sessions(tail=3, details=True):
     return [_info(t, tail, details) for t in list(SESSIONS.values()) if t.alive]
 
 
-def close(sid):
+def close(sid, behind: bool = False, then=None):
+    """End session `sid`: out of SESSIONS at once, so nothing finds it working any more. `behind`: its process let go of on a thread of its
+    own (2-7 s, the load run 2026-11-24: Not a task waited it out inside the press), then `then()`."""
     t = SESSIONS.pop(sid, None)
     if t:
         t.on_purpose = True                   # the pump's end must not release the task under whoever closed it
-        t.close()
+        if not behind: t.close()
+        else:
+            def go():
+                try: t.close()
+                except Exception as e: logger.warning(f'session {sid} did not close cleanly: {e}')
+                if then: then()
+            threading.Thread(target=go, daemon=True, name=f'close-{sid}').start()
     return bool(t)
 
 

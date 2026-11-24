@@ -3998,12 +3998,15 @@ def _drop_task(tid: int):
     """Deleting a task must also stop the agent working it. "Not a task" read as a kill - it
     was not: the pty kept running, kept editing files, and kept holding the task id, so when
     SQLite handed that id to the NEXT task the orphan showed up as the agent working it. A
-    task that no longer exists has nobody working it, by definition."""
+    task that no longer exists has nobody working it, by definition. Its process is let go of behind the answer (terminal.close `behind`);
+    what it writes for the task as it ends is deleted with it once it has, unless the id is another task's by then."""
+    def after():
+        if not store.get_task(tid): store.delete_task(tid)
     try:
         live = hub_term.for_task(tid)
         if live:
-            hub_term.close(live['sid'])
-            logger.info(f'closed the session on task {tid} - the task was deleted')
+            hub_term.close(live['sid'], behind=True, then=after)
+            logger.info(f'closing the session on task {tid} - the task was deleted')
     except Exception as e:
         logger.warning(f'could not close the session on deleted task {tid}: {e}')
     store.delete_task(tid)

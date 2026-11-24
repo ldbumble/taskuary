@@ -892,6 +892,9 @@
 .tq-arow-verbs.tight > .tq-cl:not(.tq-cl-next) { flex-shrink: 1; }
 /* ...and there MARK DONE KEEPS ITS WORDS (the owner, 2026-11-15: a phone's bar read "Mark d…"): only the lit move beside it is shortened */
 .tq-arow-verbs.tight .tq-ab[data-tq-verb="done"], .tq-arow-verbs.tight .tq-ab[data-tq-verb$=":done"], .tq-arow-verbs.tight .tq-cl-more { flex-shrink: 0; }
+/* ...AND THE LIT MOVE KEEPS ITS WORDS TOO (walk 16: a phone's held task read "T…" for Trust Paula): the others give up their padding first, and only a move still too long for the line is cut */
+.tq-arow-verbs.tight .tq-cl .tq-ab:not(.p) { padding: 0 9px; min-width: 0; }
+.tq-arow-verbs.tight .tq-ab.p { flex-shrink: 0; max-width: calc(100vw - 180px); }
 /* the unseen copy ActionRow measures: every part in the row's own classes, at its natural width, taking no room */
 .tq-arow-ghost { position: absolute; left: 0; top: 0; width: 0; height: 0; overflow: hidden; visibility: hidden; pointer-events: none; }
 .tq-arow-ghost .tq-cl { width: max-content; max-width: none; }

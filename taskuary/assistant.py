@@ -1926,14 +1926,15 @@ def clock(store):
     job_ideas(store)
 
 
-def job_ideas(store, wait: bool = False) -> dict:
+def job_ideas(store, wait: bool = False, asked: bool = False) -> dict:
     """LOOKING OUT FOR THE OWNER'S JOB, once a day (the owner, 2026-11-02/03): credit they are owed, a pain of others they could fix, money
     left on the table, a problem developing - each past a second look (lookout.py). The clock's tick, and the scheduled Advisor look's first
     step (reports._run_report_source, `wait`): an app opened at 09:00 fires the missed 07:30 look before the clock's first tick, and the
-    morning look is the one that carries the day's ideas. Its own once-a-day rule decides; past the day's ceiling it waits like the clock."""
+    morning look is the one that carries the day's ideas. Its own once-a-day rule decides; past the day's ceiling it waits like the clock.
+    `asked`: the owner's Run now - the look runs whatever the day's rule says, as his ask for ideas does (lookout.start), while room is left."""
     from . import brainroute, lookout
-    if not lookout.CLOCK or brainroute.auto_held(store): return {}
-    return lookout.tick(store, wait=wait)
+    if not lookout.CLOCK or (not asked and brainroute.auto_held(store)): return {}
+    return lookout.tick(store, wait=wait, force=asked and len(lookout.waiting(store)) < lookout.MAX_OPEN)
 
 
 def seeded_source(store) -> dict | None:

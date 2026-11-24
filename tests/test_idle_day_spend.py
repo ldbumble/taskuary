@@ -208,6 +208,15 @@ def test_both_looks_read_whole_even_when_nothing_changed_and_the_days_job_ideas_
     assert run('2026-11-12T09:00:00') == 'Model: asked.' and order == ['job ideas', 'look']
     assert run('2026-11-12T16:30:00') == 'Model: asked.' and order == ['job ideas', 'look', 'look'], 'nothing moved, and it read whole'
     assert run('2026-11-13T07:30:00') == 'Model: asked.' and order[3:] == ['job ideas', 'look']
+    # ...AND RUN NOW IS THE FULL RUN TOO (walk 18): the post's ideas come only from the job-ideas look, and an hour after the morning's a
+    # Run now posted "nothing new" - its look never ran. Asked, it runs whatever the day's rule says
+    def now(stamp):
+        clock = _at(stamp)
+        with mock.patch.object(assistant, 'datetime', clock), mock.patch.object(lookout, '_now', clock.now), \
+             mock.patch.object(assistant, 'candidates', return_value=cand):
+            reports.run_one(s, s.get_source(src['SourceId']), brain, 'manual')
+    now('2026-11-13T08:30:00')
+    assert order[5:] == ['job ideas', 'look'], order
 
 
 def test_a_clocked_question_is_asked_whole_only_when_much_changed_and_never_drifts():

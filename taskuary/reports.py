@@ -2253,8 +2253,10 @@ def _run_report_source(store, src: dict, cfg: dict, llm=None, trigger: str = 'sc
         from . import assistant
         from . import assistantblocks as blk
         chosen = blk.resolve(store, cfg)
-        # the day's job ideas land BEFORE the clock's look, which carries them (assistant.job_ideas: once a day, by its own rule)
-        if trigger == 'schedule': assistant.job_ideas(store, wait=True)
+        # the day's job ideas land BEFORE the clock's look, which carries them (assistant.job_ideas: once a day, by its own rule) - and before
+        # Run now, asked whole: the post's ideas come only from that look, and Run now never ran it (walk 18: "nothing new to post" all walk,
+        # while the post's own notes saw a price read ten times too high)
+        assistant.job_ideas(store, wait=True, asked=trigger != 'schedule')
         out = assistant.run(store, report_llm(store, cfg, llm), force=True, instruction=cfg.get('ai_prompt'),
                             watch_source_ids=cfg.get('watch_source_ids') or [], watch_sources=cfg.get('watch_sources') or [],
                             systems_only=not blk.reads_taskuary(chosen), blocks=chosen,

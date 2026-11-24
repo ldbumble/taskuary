@@ -8,6 +8,7 @@ import pytest
 from taskuary import assistant, ideagrade, lookout
 from taskuary.store import MemoryStore
 from taskuary.testing import Factory
+import lookout_world
 
 ALEX, GAIL, PAULA, AP = 'alex@northwind.example', 'gail@northwind.example', 'paula@northwind.example', 'billing@vendor.example'
 JOB = "## The job\n- I run finance systems at Northwind: the invoice approvals, the vendor master and the month-end reports."
@@ -59,6 +60,8 @@ def idea(family, title, refs, **k):
     return {'family': family, 'title': title, 'evidence': k.get('evidence', 'seen four Mondays running'), 'refs': refs,
             'why': k.get('why', 'it costs real money'), 'next_step': k.get('next_step', 'Draft the per-approver list'),
             'pitch': k.get('pitch', 'I noticed X and propose Y'), **({'quotes': k['quotes']} if 'quotes' in k else {}),
+            # ...a money idea states its stake; unless the test is about it, the count of what it cites (a number the run always holds)
+            **({'stake': k['stake']} if 'stake' in k else {'stake': {'expr': str(len(refs)), 'unit': 'charges', 'assume': []}} if family == 'money' else {}),
             **({'counts': k['counts']} if 'counts' in k else {})}
 
 
@@ -101,7 +104,7 @@ def test_a_quote_not_in_what_it_read_or_a_number_it_cannot_back_drops_the_idea_a
     act = json.loads(i['ActionJson'])
     assert i['Key'].startswith('idea:lookout-vendor-billing') and i['Kind'] == 'money' and i['Status'] == 'open'
     assert [e['ref'] for e in act['evidence']] == [f'msg{a}', f'msg{b}'] and 'Vendor billing: Invoice 4471' in act['evidence'][0]['label']
-    assert act['evidence'][0]['quote'] == 'Invoice 4471', 'the words it rests on travel with it'
+    assert act['evidence'][0]['quote'] == quoted(llm.seen[0][1], f'msg{a}'), 'the words it rests on travel with it'
     assert 'Pitch: "I caught a $1,200 double invoice' in act['suggest'] and act['why'].startswith('seen four Mondays')
     # ...and it is on the rail as the Advisor's idea, with the verbs every idea has
     from taskuary import funnel
@@ -358,6 +361,7 @@ def test_four_ideas_the_owner_read_leave_room_for_the_next_days_pass():
     assert rail() == [] and len(lookout.open_ideas(s)) == 4, 'read: off the rail, still open'
     assert [i['IdeaId'] for i in lookout.waiting(s)] == [first['idea']], 'the one put away till Saturday still waits'
     s.set_setting(lookout.LAST_KEY, ago(days=2), 't'); s.set_setting(lookout.TRIED_KEY, ago(days=2), 't')
+    Factory(s).message(from_email=GAIL, from_name='Gail Moreno', subject='Ledger sync', body='Any news?', sent_at=ago(hours=1))     # the day's mail
     assert lookout.due(s) is True
     out = lookout.tick(s, brain({'ideas': [idea('leverage', 'Vendor billing would fix the double invoices for one ask', [f'msg{a}', f'msg{b}'])]}))
     assert len(out['raised']) == 1 and [x['title'] for x in rail()] == ['Vendor billing would fix the double invoices for one ask']
@@ -570,3 +574,78 @@ def test_a_task_agent_has_a_note_lead_tool_whose_door_is_its_own_and_it_reaches_
     doors = {'note_lead': lambda tid, text, refs: lookout.note_lead(s, tid, text, refs)}
     agenttools.call(s, t, 'note_lead', {'text': 'Vendor billing sent invoice 4471 twice this month', 'refs': [f"msg{ids['dup'][0]}"]}, doors)
     assert [l['text'] for l in lookout.leads(s)] == ['Vendor billing sent invoice 4471 twice this month']
+
+
+# ── MONEY AND PAIN, SEEN AND PRICED IN CODE; A RUN WITHIN ITS BUDGET (the owner, 2026-11-23: "make sure you are not using a billion tokens
+# each time but I want it really useful and good - especially giving ideas to save money or pain points") ─────────────────────────────
+
+
+def test_a_month_with_two_expense_tools_a_price_rise_a_double_charge_and_a_weekly_sheet_by_hand_raises_money_and_pain_priced_by_code():
+    s, ids = lookout_world.busy()
+    pw, sp, ph, ag = (f"msg{ids['payworth'][-1]}", f"msg{ids['spendly'][-1]}", f"msg{ids['phish'][-1]}", f"msg{ids['aging'][0]}")
+    user, _, _ = lookout.window(s)
+    money = user[user.index('MONEY AND WHAT REPEATS'):user.index('THE DEEP LOOK')]
+    assert 'Spendly (billing@spendly.example): 2 charge(s)' in money and 'up $150 (10.3%)' in money, 'a price that rose, counted'
+    assert f"the same $380 twice in 5 days (msg{ids['phish'][0]}, {ph})" in money, 'the same charge twice, counted'
+    assert '"AP aging - this week": he sent it 8 times' in money and 'about every 7 days' in money, 'the step he repeats by hand'
+    assert '"Vendor master clean-up": 7 messages over 24 days' in money, 'the thread that drags'
+    llm = brain({'reads': [rd('spend'), rd('repeats'), rd('read_message', id=pw), rd('read_message', id=sp)]}, {'ideas': [
+        idea('money', 'Spendly and Payworth Expenses both bill 40 seats for expenses - one of them costs $17,400 a year', [pw, sp],
+             quotes=[{'ref': pw, 'quote': 'at this rate $17,400 a year'}, {'ref': sp, 'quote': 'Spendly Team plan, 40 seats'}],
+             stake={'expr': '1450 * 12', 'unit': '$ a year', 'assume': []}),
+        idea('money', 'PhishGuard charged invoice INV-2207 twice in 5 days - $380 to claim back', [ph],
+             quotes=[{'ref': ph, 'quote': 'the same $380 twice in 5 days'}], stake={'expr': '380', 'unit': '$ once', 'assume': []}),
+        idea('new_idea', 'The AP aging you build by hand went out 8 times in 8 weeks - about 6 hours a reportable job could do', [ag],
+             quotes=[{'ref': ag, 'quote': 'he sent it 8 times'}],
+             stake={'expr': '8 * 45 / 60', 'unit': 'hours over 8 weeks', 'assume': [{'n': 45, 'what': 'minutes to build one sheet'}]}),
+        idea('money', 'Spendly rose $150 a month - $1,950 a year', [sp], quotes=[{'ref': sp, 'quote': 'up $150 (10.3%)'}],
+             stake={'expr': '150 * 13', 'unit': '$ a year', 'assume': []}),
+        idea('money', 'Payworth costs $20,000 a year', [pw], quotes=[{'ref': pw, 'quote': 'at this rate $17,400 a year'}],
+             stake={'expr': '1450 * 12', 'unit': '$ a year', 'assume': []}),
+        idea('money', 'Trainly renews for $4,800', [f"msg{ids['trainly']}"], stake={'expr': '', 'unit': '', 'assume': []})]})
+    out = lookout.tick(s, llm, force=True)
+    assert [s.get_idea(i)['Kind'] for i in out['raised']] == ['money', 'money', 'new_idea'], 'two kinds of money and a pain, with numbers'
+    held = {h['title']: h['why'] for h in json.loads(s.get_setting(lookout.HELD_KEY))}
+    assert held['Spendly rose $150 a month - $1,950 a year'] == 'the number 13 in its stake is not in what it cites', 'arithmetic on a number it never read'
+    assert held['Payworth costs $20,000 a year'] == 'the number 20000 is not in what it cites', "the stake is the code's, not the title's"
+    assert held['Trainly renews for $4,800'] == 'a money idea says what it saves or costs, as arithmetic on what it read'
+    acts = [json.loads(s.get_idea(i)['ActionJson']) for i in out['raised']]
+    assert [a['stake']['line'] for a in acts] == ['$17,400 a year = 1450 * 12', '$380 once = 380',
+                                                  '6 hours over 8 weeks = 8 * 45 / 60 (45: minutes to build one sheet - an estimate)'], 'worked out in code'
+    assert 'What it comes to: $17,400 a year = 1450 * 12' in acts[0]['why'] and 'as the code worked it out: $17,400' in lookout.brief(acts[0])
+    r = lookout.runs(s)[0]
+    assert r['reads'][:2] == ['spend', 'repeats'] and r['tokens']['calls'] == 2 and r['tokens']['in'] + r['tokens']['out'] <= lookout.RUN_TOKENS
+
+
+def test_a_quiet_world_raises_nothing_costs_little_and_the_next_day_with_nothing_new_asks_nothing(monkeypatch):
+    s = lookout_world.quiet()
+    out = lookout.tick(s, brain({'ideas': []}), force=True)
+    t = lookout.runs(s)[0]['tokens']
+    assert out['raised'] == [] and out['calls'] == 1 and t['in'] + t['out'] < lookout.RUN_TOKENS // 5, t
+    later = datetime.now() + timedelta(days=1, hours=2)
+    monkeypatch.setattr(lookout, '_now', lambda: later)
+    assert lookout.due(s), 'a new day is due ...'
+    never = brain()
+    out = lookout.tick(s, never)
+    assert out['skipped'].startswith('nothing new since the last pass') and not never.seen, '... and with nothing new and nothing due, nothing is asked'
+    assert lookout.due(s) is False, 'and the day is done'
+    Factory(s).message(from_email=GAIL, from_name='Gail Moreno', subject='Q4 accruals', body='Can we close this week?',
+                       sent_at=(later - timedelta(hours=1)).strftime('%Y-%m-%d %H:%M:%S'))
+    s.set_setting(lookout.LAST_KEY, (later - timedelta(days=1)).strftime('%Y-%m-%d %H:%M:%S'), 't')
+    assert lookout.tick(s, brain({'ideas': []}))['calls'] == 1, 'one new mail: the area it came to is read again'
+    monkeypatch.setattr(lookout, '_now', lambda: later + timedelta(days=lookout.REVISIT_DAYS + 1))
+    assert lookout.tick(s, brain({'ideas': []}))['calls'] == 1, 'a week on, old data gets another angle'
+
+
+def test_a_run_that_keeps_reading_never_passes_its_budget_or_its_reads():
+    s, ids = lookout_world.busy(noise=6)
+    greedy = {'reads': [rd('search_mail', q=w) for w in ('the', 'line', 'check', 'invoice')] + [rd('spend'), rd('repeats')], 'ideas': []}
+    calls, llm = [], brain(*[greedy] * 6)
+    def metered(system, user, **kw):
+        calls.append((len(system) + len(user)) // 4 + kw['max_tokens']); return llm(system, user, **kw)
+    out = lookout.tick(s, metered, force=True)
+    r = lookout.runs(s)[0]
+    assert out['ran'] and len(r['reads']) <= lookout.MAX_READS and out['calls'] <= lookout.STEPS
+    assert r['tokens']['in'] + r['tokens']['out'] <= lookout.RUN_TOKENS and sum(calls) <= lookout.RUN_TOKENS + lookout.PROPOSE_TOKENS, (r['tokens'], calls)
+    assert len(lookout.window(s)[0]) <= lookout.WINDOW_CHARS, 'a big mailbox is a summary, never the mailbox'
+    assert 'tokens in 3 call(s) (ceiling 30,000)' in lookout.run_line(r)

@@ -231,6 +231,24 @@ export const continues = (messages, i) => { for (let j = i - 1; j >= 0; j--) { c
    short of its end, never to follow again. */
 export const AT_END = 56;
 export const heldAtEnd = (held, { top, was, gap, own }) => gap < AT_END || (held && !(own && top < was - 1));
+// ...AND AWAY FROM ITS END, WHAT HE WAS READING STAYS WHERE IT WAS (walk 12, recorded: the browser pane opened and shut beside the chat, every line
+// re-wrapped to the new width, the chat grew from 997 to 1502 px and back, and what he read jumped ~500 px each time). The row at the top of the
+// view - the deepest one still taller than the view gives way to its child - is marked with its offset, and after a change of size the view is
+// moved by however far that row went
+export const anchorOf = (view, root, depth = 5) => {
+  if (!view || !root) return null;
+  const top = view.getBoundingClientRect().top, h = view.clientHeight;
+  let el = null, rows = [...root.children];
+  for (let d = 0; d < depth && rows.length; d += 1) {
+    const hit = rows.find((r) => r.getBoundingClientRect().bottom > top);
+    if (!hit) break;
+    el = hit;
+    if (hit.getBoundingClientRect().height <= h) break;
+    rows = [...hit.children];
+  }
+  return el ? { el, off: el.getBoundingClientRect().top - top } : null;
+};
+export const anchorShift = (view, a) => (a?.el?.isConnected ? a.el.getBoundingClientRect().top - view.getBoundingClientRect().top - a.off : 0);
 
 // THE CHAT'S OWN LIST ON THE PAGE (GeneralWorkspace): what is drawn is the server's list (conversation.items), with two things of the page's -
 // THE LIST ASKED LAST: the one this view last read, or one read ahead with its task as he came back to it (taskDetail.prefetchTask) - an older

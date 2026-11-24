@@ -104,7 +104,7 @@ test("the chat lets go of its end only for the owner's own scroll up, never for 
   let moved = 0; const chat = { hasAttribute: (n) => n === "data-tq-follows-end", getBoundingClientRect: () => ({ top: 0, left: 0, width: 400, height: 300, bottom: 300 }), scrollTo: () => { moved += 1; }, scrollTop: 72 };
   unclip(chat, { getBoundingClientRect: () => ({ top: 200, bottom: 230 }) });
   assert.equal(moved, 0, "a scroller that follows its own end is never unclipped");
-  assert.match(view, /const ro = new ResizeObserver\(\(\) => \{ if \(stick\.current\) v\.scrollTop = v\.scrollHeight; \}\);/, "and any resize while held pins it");
+  assert.match(view, /const ro = new ResizeObserver\(\(\) => \{\s*if \(stick\.current\) v\.scrollTop = v\.scrollHeight;/, "and any resize while held pins it");
   assert.doesNotMatch(view, /stick\.current = v\.scrollHeight - v\.scrollTop - v\.clientHeight < 56/, "where it stands alone no longer decides");
 });
 
@@ -306,4 +306,24 @@ test("an edit row is the call's own diff, never one read off its arguments, and 
   assert.deepEqual(step.tail.split("\n"), Array.from({ length: 8 }, (_, i) => `test_${22 + i} PASSED`), "its newest lines, behind its row (AgentStepRows)");
   const [ended] = parts([{ ...run, status: "completed" }])[0].steps;
   assert.ok(!ended.tail && ended.detail.includes("test_29 PASSED"), "once it ends, the whole of it, behind the same row");
+});
+
+// THE BROWSER PANE OPENS BESIDE THE CHAT (walk 12, recorded): the chat went from full width to a column, every line re-wrapped, the chat grew from
+// 997 to 1502 px and what he was reading moved ~500 px down the screen, three times in one task. Away from its end, the row he reads stays put
+test("a change of width keeps the row he was reading where it stood", async () => {
+  const { anchorOf, anchorShift } = await import("../src/chatStream.js");
+  let narrow = false;
+  const view = { scrollTop: 450, clientHeight: 400, getBoundingClientRect: () => ({ top: 100 }) };
+  const hs = [100, 100, 100, 100, 100, 100, 100, 100], h = () => (narrow ? 200 : 100);
+  const rows = hs.map((_, i) => ({ isConnected: true, children: [], name: i,
+    getBoundingClientRect: () => { const y = i * h(); return { top: 100 + y - view.scrollTop, bottom: 100 + y + h() - view.scrollTop, height: h() }; } }));
+  const at = () => rows[4].getBoundingClientRect().top;
+  const mark = anchorOf(view, { children: rows }), was = at();
+  assert.equal(mark.el.name, 4, "the row at the top of the view");
+  narrow = true;                                                              // ...the pane opens: every row twice as tall
+  assert.notEqual(at(), was, "unheld, the row he read moves");
+  view.scrollTop += anchorShift(view, mark);
+  assert.equal(at(), was, "held, it stands where it stood");
+  const gw = fs.readFileSync(new URL("../src/GeneralWorkspace.jsx", import.meta.url), "utf8");
+  assert.match(gw, /else \{ const d = anchorShift\(v, mark\); if \(Math\.abs\(d\) > 1\) v\.scrollTop \+= d; \}/);
 });

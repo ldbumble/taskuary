@@ -18,7 +18,7 @@ import { holdUnsent } from "./unsent.js";
 import { howToOpen } from "./bugReportOpen.js";
 import { baseName } from "./agentSteps.js";
 import { AgentSteps, PermitCtx } from "./AgentStepRows.jsx";
-import { chatSource, checkBackDue, waitingShown, eventsOf, hasParts, isPastCard, standing, heldAtEnd, turnParts, workCount, folds, ranUnder, foldLine, paintable, withMine, waitingChips, workingLine, waitingOn, askTurn, onYouTurn, askedFirst, runsOf, patchSteps, askOn, asksOff } from "./chatStream.js";
+import { chatSource, checkBackDue, waitingShown, eventsOf, hasParts, isPastCard, standing, heldAtEnd, anchorOf, anchorShift, turnParts, workCount, folds, ranUnder, foldLine, paintable, withMine, waitingChips, workingLine, waitingOn, askTurn, onYouTurn, askedFirst, runsOf, patchSteps, askOn, asksOff } from "./chatStream.js";
 import { stepLabel } from "./agentSteps.js";
 export { checkBackDue };
 import { detailFor, ownDetail, useOwnDetail } from "./chatDetail.js";
@@ -648,10 +648,16 @@ function AssistantThread({ task, onAsked, onStop, selectionRef, attachmentsRef, 
     const v = viewport.current, el = inner.current;
     if (!v || !el) return undefined;
     // ...HIS scroll, not the chat's own growth (chatStream.heldAtEnd): a wheel, a finger, a key, or a press still down (the scrollbar's drag)
-    let was = v.scrollTop, used = -Infinity;
+    let was = v.scrollTop, used = -Infinity, mark = null;
     const mine = () => { used = performance.now(); }, down = () => { used = Infinity; };
-    const on = () => { stick.current = heldAtEnd(stick.current, { top: v.scrollTop, was, gap: v.scrollHeight - v.scrollTop - v.clientHeight, own: performance.now() - used < 1500 }); was = v.scrollTop; };
-    const ro = new ResizeObserver(() => { if (stick.current) v.scrollTop = v.scrollHeight; });
+    // ...and away from the end, the row he was reading (chatStream.anchorOf): kept where it stood through a change of size
+    const hold = () => { mark = stick.current ? null : anchorOf(v, el); };
+    const on = () => { stick.current = heldAtEnd(stick.current, { top: v.scrollTop, was, gap: v.scrollHeight - v.scrollTop - v.clientHeight, own: performance.now() - used < 1500 }); was = v.scrollTop; hold(); };
+    const ro = new ResizeObserver(() => {
+      if (stick.current) v.scrollTop = v.scrollHeight;
+      else { const d = anchorShift(v, mark); if (Math.abs(d) > 1) v.scrollTop += d; }
+      hold();
+    });
     // ...and when the VIEW itself gets shorter - the box under it grew a line as he typed - as when the chat gets longer (the recorded walks,
     // 2026-11-11: 14 px behind its end for a beat each time)
     v.addEventListener("scroll", on, { passive: true }); ro.observe(el); ro.observe(v);

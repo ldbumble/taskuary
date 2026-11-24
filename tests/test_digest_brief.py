@@ -56,7 +56,7 @@ class UnansweredTests(unittest.TestCase):
         s._exec('UPDATE message SET TaskId=? WHERE MessageId=?', (tid, mid))
         s.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft', 'Status': 'pending'})
         from taskuary import origin, senders
-        senders.vouch(s, s.list_messages(tid)); origin._HOLDS.clear()       # ...a stranger's task offers no draft until Trust (origin.hold)
+        senders.vouch(s, s.list_messages(tid))       # ...a stranger's task offers no draft until Trust (origin.hold)
         got = assistant.unanswered(s, days=3)
         self.assertEqual(len(got), 1)
         self.assertIn('a draft waits for you on the task', got[0]['facts'])

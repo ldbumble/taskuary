@@ -68,6 +68,9 @@ def _seed(s):
     for k in range(1, 300, 13): s.set_funnel_state(f'msg:{fyi[k]}', 'later', 'owner', until=ago(-48))
     for k in range(2, 300, 17): s.set_funnel_state(f'msg:{fyi[k]}', 'done', 'owner')
     s.reconcile_processing_membership()
+    # ...and what the run before the restart judged and kept: each open task's hold (origin_hold), stored facts a restart does not lose
+    from taskuary import origin
+    for tid in tids: origin.hold(s, tid)
     return tids
 
 

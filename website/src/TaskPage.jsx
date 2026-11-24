@@ -2657,9 +2657,10 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     at: r.CreatedAt || "", rid: r.ReviewId, byRow: true, record: true, node: <ReviewDecision review={r} past /> }));
   // ...AND THE REPLY THAT WAITS IS A CARD OF ITS TURN like every other (the one log, stage 8: the log places it - chatlog.advance - and the
   // page's own placing of it, under a turn it guessed or loose at the foot, is gone): drawn where its row stands, by its review
+  // ...its Send and close only where nothing else holds the close (card.may_close: another card, or the check-back its agent set - walk 16)
   const replyNode = inTurns && pendingReview && replyCardShown(pendingReview) ? [{ key: `reply:${pendingReview.ReviewId}`, at: pendingReview.CreatedAt || "",
     rid: pendingReview.ReviewId, waits: true, node: <Box data-tq-review={pendingReview.ReviewId}><ReviewDecision review={pendingReview} closeout={closeoutRv}
-      went={sentHere?.id === pendingReview.ReviewId ? sentHere : null} toRow={inRow} onMarkDone={askFinish} onSent={sent} closeOnSend onRemind={(e, a) => remindHere(steady(a || e?.currentTarget))}
+      went={sentHere?.id === pendingReview.ReviewId ? sentHere : null} toRow={inRow} onMarkDone={askFinish} onSent={sent} closeOnSend={!detail?.queue?.closes} onRemind={(e, a) => remindHere(steady(a || e?.currentTarget))}
       why={rec?.state === "draft_ready" ? rec.why || "" : ""}
       onChanged={() => { loadDetail(selected); loadTasks(); onChanged?.(); }} /></Box> }] : [];
   const turnCards = [...replyNode, ...passedCards, ...batches.map((rs) => ({ key: `batch:${rs[0].Batch}`, at: rs[0].CreatedAt || "", rid: rs[0].ReviewId, waits: true,
@@ -2743,7 +2744,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
               queue mounts, so two surfaces cannot say different things about one draft. */}
           {pendingReview ? (<>
             <Box data-tq-review={pendingReview.ReviewId}>
-            <ReviewDecision review={pendingReview} closeout={closeoutRv} toRow={inRow} onMarkDone={askFinish} onSent={sent} closeOnSend onRemind={(e, a) => remindHere(steady(a || e?.currentTarget))}
+            <ReviewDecision review={pendingReview} closeout={closeoutRv} toRow={inRow} onMarkDone={askFinish} onSent={sent} closeOnSend={!detail?.queue?.closes} onRemind={(e, a) => remindHere(steady(a || e?.currentTarget))}
               why={rec?.state === "draft_ready" ? rec.why || "" : ""}
               onChanged={() => { loadDetail(selected); loadTasks(); onChanged?.(); }} /></Box>   {/* the list's row moves too (T19) */}
           </>) : (

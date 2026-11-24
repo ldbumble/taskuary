@@ -1327,7 +1327,7 @@ def beside(store, tid: int, out: list, at_work: bool, hold_, ending: bool = Fals
     `asking` (in the turn that asked), `permissions`, `queue` (the line of cards), `hold`, `letters` (the turn whose letter waits), `idle`
     (why nothing started), the pages it published, and the CLI that runs. `ending`: a turn whose answer is filed while its session lets go -
     what came in under it still waits by the box (came_in writes it at the foot once nothing works)."""
-    from . import card, cardqueue, codingchat, general, origin, outputs, permissions, taskstate
+    from . import cardqueue, codingchat, general, origin, outputs, permissions, taskstate
     from .conversation import LATER, START_BY_WRITING, came, ep, stamp, _mail
     from .general import WAITING_TYPE
     task = store.get_task(tid) or {'TaskId': tid}
@@ -1418,7 +1418,7 @@ def beside(store, tid: int, out: list, at_work: bool, hold_, ending: bool = Fals
     sid = getattr(lv, 'sid', '') or getattr(live, 'sid', '') or ''
     return {'pending': pend, 'needsOwner': taskstate.needs_owner(ask, taskstate.browser_acts(store, tid), sid), 'now': now, 'later': later, 'dropped': [d for d in dropped if d], 'working': at_work,
             'started': general.turn_started(tid) if at_work else None, 'asking': ask, 'permissions': perms, 'live': codingchat.live_of(lv),
-            'letters': letters, 'idle': idle, 'queue': {'live': q['live'], 'held': q['held'], 'line': cardqueue.line(q), 'closes': card.may_close(store, tid)},
+            'letters': letters, 'idle': idle, 'queue': {'live': q['live'], 'held': q['held'], 'line': cardqueue.line(q)},
             'hold': hold_ and {**{k: hold_[k] for k in ('line', 'person', 'org')},
                                **({'line': origin.JOINED_LINE.format(who=hold_['who'])} if turns else {})},
             'published': published, 'ran': bool(turns)}

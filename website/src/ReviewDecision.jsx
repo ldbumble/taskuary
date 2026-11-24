@@ -9,7 +9,7 @@ import api from "./api";
 import ReplyFiles from "./ReplyFiles.jsx";
 import { holdInView } from "./inView.js";
 import { filesPromised, filesShort } from "./replyFiles.js";
-import { proposalPresentation, resultOf, reviewStatusLabel, reviewText } from "./reviewProposal.js";
+import { proposalPresentation, receiptOf, resultOf, reviewStatusLabel, reviewText } from "./reviewProposal.js";
 import { actionFor, cardOf, changed, faceOf, fieldsOf, pressable as actPressable, stateOf, textKey, valuesOf, viaBrowserSaid, wordsOf } from "./actionCard.js";
 import { asLive, MovedPast } from "./PassedCard.jsx";
 import { FileDialog } from "./PublishedPages.jsx";
@@ -166,6 +166,8 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
   const setBcc = (v) => { hold(r, { bcc: v ?? null }); setBccNow(v); };
   const setSubj = (v) => { hold(r, { subject: v ?? null }); setSubjNow(v); };
   const [ccOpen, setCcOpen] = useState(false), [bccOpen, setBccOpen] = useState(false), [cmdOpen, setCmdOpen] = useState(false);
+  // ...a change's new words as he leaves them, box by box (proposals.as_left saves exactly these), and its marks of where they change on or off
+  const [words2, setWords2] = useState({}), [marksOn, setMarksOn] = useState(true);
   const rNow = useRef(r); rNow.current = r;
   useEffect(() => { const f = (id) => { if (id !== rNow.current.ReviewId) return; const e = heldOf(rNow.current); setTextNow(e?.text ?? null); setCcNow(e?.cc ?? null);
     setBccNow(e?.bcc ?? null); setSubjNow(e?.subject ?? null); };
@@ -216,6 +218,7 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
   const delivery = reviewDeliveryState(r);
   const filedDelivery = delivery.frozen ? { ...r, Deliver: JSON.stringify(delivery.envelope) } : r;
   const proposal = proposalPresentation(r);
+  const changedWords = Object.fromEntries((proposal?.texts || []).filter((t) => words2[t.key] != null && words2[t.key] !== t.now).map((t) => [t.key, words2[t.key]]));
   // A REPLY OPENED AT ONCE is drawn before its draft exists (replyDraft.js, 2026-10-01): "Drafting…" until the model is done,
   // then the task is read again and the draft is in the box; one that could not be written says why here
   const jobNow = useDraftJob(r.ReviewId), job = past ? null : jobNow;
@@ -392,7 +395,9 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
           cc: verb === "approve" && !proposal && !delivery.frozen ? ccNow : null, anyway, blanks_ok: blanksOk, ...envelopeEdits(verb),
           // ...Send and close says so WITH the send: the server closes as it goes, before the task's agent is told it went - told first, a
           // parked agent was working again by the time the page asked for the close, and the task stayed open (the agent walk, 2026-11-10)
-          ...(closesIt && shut && verb === "approve" ? { closes: true } : {}) }), data = out.data;
+          ...(closesIt && shut && verb === "approve" ? { closes: true } : {}),
+          // ...a change card's boxes he changed, by their keys (workflows.edit_change): what he edited is what is saved
+          ...(verb === "approve" && Object.keys(changedWords).length ? { fields: changedWords } : {}) }), data = out.data;
       // NO ANSWER IN A MINUTE is not "nothing was sent": the server may be sending still. The card reads the review again and its
       // DeliveryState draws Sending… or Check delivery (reviewDeliveryState) - the check it already has, not a line of ours
       if (!data) { if (out.kind === "unknown") onChanged?.(); else setErr(out.why || "That didn't go through - nothing was sent. Try the button again."); setBusy(false); return; }
@@ -613,6 +618,8 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
   // read-only once it went and its press row turned to what the press did. Never a second card swapped in at the press (the owner, 2026-11-17:
   // "when you click buttons on card it flickers then presses"; 2026-11-24: one card, the after-state on it)
   const done = resultOf(r), wentNow = look === "sent" && !proposal && !co;
+  // ...its words as saved once pressed (the receipt: proposals.receipt keeps his edit), else as proposed
+  const changeTexts = (done && receiptOf(r)?.texts) || proposal?.texts || [];
   const sp = wentNow ? { ...sentCardOf(r, WENT.includes(r.Status) ? "" : value), ...(went || {}) } : null;
   const over = !wentNow && !done && r.Status !== "pending";
   const shut = wentNow || !!done || over;                 // its words stand as they went: nothing to edit
@@ -642,7 +649,13 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
         ...(bccOpen || bccNow.length ? [{ key: "bcc", type: "people", label: "BCC", value: bccNow, editable: true, onChange: setBcc, autoOpen: bccOpen && !bccNow.length, onClose: () => setBccOpen(false) }] : [])]
         : [...(ccNow.length ? [{ key: "cc", type: "people", label: "CC", value: ccNow }] : []), ...(bccNow.length ? [{ key: "bcc", type: "people", label: "BCC", value: bccNow }] : [])]),
       { key: "subject", type: "line", label: "Subject", value: subjNow, editable: editing && !off, onChange: setSubj, placeholder: "(no subject)" }]
-    : [{ key: "to", type: "read", label: proposal?.destinationLabel || "To", value: proposal?.destination || replyContext(filedDelivery) }]),
+    : proposal?.destination === "" ? [] : [{ key: "to", type: "read", label: proposal?.destinationLabel || "To", value: proposal?.destination || replyContext(filedDelivery) }]),
+    // ...A CHANGE TO SOMETHING STORED (reviewProposal.changeOf): what else it changes as facts, then its new words whole, each its own box, marked
+    // where they change - and the switch for the marks, where there is a before to mark against
+    ...(proposal?.rows || []).map((x, i) => ({ key: `row-${i}`, type: "read", label: x.label, value: x.was ? `${x.was} → ${x.now}` : x.now })),
+    ...changeTexts.map((t) => ({ key: t.key, type: "change", label: t.label, was: t.was, value: words2[t.key] ?? t.now, marks: marksOn, editable: !(off || shut),
+      onChange: (v) => setWords2((w) => ({ ...w, [t.key]: v })) })),
+    ...(changeTexts.some((t) => t.was) || proposal?.was ? [{ key: "marks", type: "fold", label: marksOn ? "Hide what changed" : "Show what changed", open: marksOn, onToggle: () => setMarksOn((o) => !o) }] : []),
     ...(co ? [{ key: "closes", type: "read", label: co.destinationLabel, value: co.destination, note: "· first, then the reply goes out" }] : []),
     // ...A HELD PRESS THAT SENDS A FORM IS THE POST AS IT WILL GO (walk 15 S12, reviewProposal.heldPost): its words and picture, read-only
     ...(post ? [...(post.title ? [{ key: "post-title", type: "heading", value: post.title }] : []), ...post.lines.map((l, i) => ({ key: `post-line-${i}`, type: "read", value: l })),
@@ -651,7 +664,7 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
     ...(proposal?.folded && !shut ? [{ key: "fold", type: "fold", label: `${cmdOpen ? "Hide" : "Show"} the ${proposal.foldWord || "command"}`, open: cmdOpen, onToggle: () => setCmdOpen((o) => !o) }] : []),
     // ...the words, the card's own box: while the AI writes it, its spinner IN the box (the owner, 2026-10-30: "spin in the box of drafting")
     ...(shut ? (sp?.text || (over && (r.FinalText || r.DraftText)) ? [{ key: "draft", type: "text", value: sp?.text || String(r.FinalText || r.DraftText).slice(0, 500), clamp: true, dim: over }] : [])
-      : [{ key: "draft", type: "text", box: true, label: "Reply draft", value, editable: !(off || delivery.frozen || proposal?.readOnly), onChange: (v) => setText(v), marks: blanks,
+      : [{ key: "draft", type: "text", box: true, label: "Reply draft", value, ...(proposal?.was ? { type: "change", label: "The playbook will say", was: proposal.was, marks: marksOn } : {}), editable: !(off || delivery.frozen || proposal?.readOnly), onChange: (v) => setText(v), marks: blanks,
         spin: drafting, boxRef: draftRef, hidden: (proposal?.folded && !cmdOpen) || proposal?.bare,
         placeholder: proposal?.kind === "closeout" ? proposal.placeholder : isCal ? "A note with your answer - or leave it empty" : drafting ? "Drafting…" : r.DraftText ? "" : proposal ? "Proposal details unavailable" : "No draft yet — write the reply here" }]),
   ];

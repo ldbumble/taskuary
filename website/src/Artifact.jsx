@@ -3,7 +3,7 @@
 // email, a reply, a post, a GitHub comment, a held step, sent or waiting - stand in this one raised frame (appTheme.css .tq-turn-frame).
 // `label` is what it is in plain words, over its content; `press` is the row under it - none for a thing made, the press named by what it does
 // for a thing to review. What is inside (a picture, a preview, a view's blocks, editable words) is the content's own renderer.
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { Box, Button, Checkbox, CircularProgress, Typography } from "@mui/material";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import { PressedButton } from "./PassedCard.jsx";
@@ -11,6 +11,7 @@ import { CcRow, DraftField, ToRow } from "./ui.jsx";
 import { attUrl } from "./fileSave.js";
 import { FOCUS_RING, pressable } from "./pressable.js";
 import { MdLine } from "./md.jsx";
+import { changeMarks, hasChange, wordDiff } from "./textDiff.js";
 import { ACCENT, ALERT_INK, BORDER, DIM, FAINT, INK, label as LABEL } from "./theme.jsx";
 
 export default function Artifact({ as = "div", label = null, press = null, wide = false, className = "", sx, children, ...rest }) {
@@ -29,7 +30,8 @@ export default function Artifact({ as = "div", label = null, press = null, wide 
 // server's. Its after-state - sent, posted, failed, dismissed - is drawn here, on the same card, in place of its press row.
 // `fields`: [{key, type, label, value, editable, onChange, ...}] in the order they read; type `line` (a line of words: a subject, a title),
 // `heading` (a bold title line), `text` (the words: a body, a post, a comment), `choice` (a pick, on the line under the label), `to` and `people`
-// (an email's recipients), `read` (a fact it goes by: where it goes), `picture` (one picture, once - the one-item rule).
+// (an email's recipients), `read` (a fact it goes by: where it goes), `picture` (one picture, once - the one-item rule), `change` (new words for
+// old: the new text whole, marked where it changes against `was`).
 // `press`: [{id, label, tone: p | s | q | x, run, disabled, title, spin, hidden, attrs}] - p the press named by what it does, s the others, q a
 // quiet one (Dismiss), x a no in red. `after`: {mark, label, line, link: {href, text}} - what the press did. `items`: a bulk card's rows.
 export function ReviewCard({ id = "", kind = "", state = "waiting", label: title = null, face = "", fields = [], files = null, before = null, press = [],
@@ -96,8 +98,30 @@ const Choice = ({ f }) => f.editable
       {(f.choices || []).map((c) => <option key={String(c.value)} value={String(c.value)}>{c.label}</option>)}</Box>
   : <span data-tq-act-choice={f.key}>{(f.choices || []).find((c) => String(c.value) === String(f.value))?.label || String(f.value ?? "")}</span>;
 
+// ...NEW WORDS FOR OLD (the owner, 2026-11-24: "to edit text it should show the edited text?" ... "show also where it changed in the full text"):
+// a routine's instructions, a report's question, a playbook page - the new text whole, read as tracked changes: what it adds lit, what it takes
+// out struck where it stood. A click puts him in the plain words to change, and he stays there - what it adds still lit as he types, a tick where
+// words went - so nothing under the pointer moves on the way to Approve. `was`: the words before; `marks`: false shows the new words bare
+const MARKED = { "& ins": { textDecoration: "none", bgcolor: "var(--tq-added, rgba(111, 158, 110, 0.28))", borderRadius: "2px" },
+  "& del": { color: "var(--tq-removed, #b4495a)", fontSize: "0.92em", opacity: 0.85 } };
+function Change({ f }) {
+  const [typing, setTyping] = useState(false);
+  const parts = useMemo(() => wordDiff(f.was, f.value), [f.was, f.value]), on = f.marks !== false && hasChange(parts);
+  const read = !f.editable || (on && !typing);
+  return <Box data-tq-change={f.key} data-tq-marks={on ? "on" : "off"} sx={{ mb: 0.75 }}>
+    {f.label && <Typography data-tq-change-label="" sx={{ ...LABEL, mb: 0.375 }}>{f.label}</Typography>}
+    {read ? <Box data-tq-change-text="" {...(f.editable ? { role: "textbox", tabIndex: 0, "aria-label": f.label, onClick: () => setTyping(true), onFocus: () => setTyping(true) } : {})}
+        sx={{ ...FOCUS_RING, ...MARKED, fontSize: 13, lineHeight: 1.5, color: INK, whiteSpace: "pre-wrap", overflowWrap: "anywhere", cursor: f.editable ? "text" : "default",
+          ...(f.editable ? { border: `1px solid ${BORDER}`, borderRadius: "4px", px: 1.75, py: 1.0625 } : {}) }}>
+        {on ? parts.map((p, i) => p.t === "add" ? <ins key={i} data-tq-added="">{p.s}</ins> : p.t === "del" ? <del key={i} data-tq-removed="">{p.s}</del> : p.s) : f.value}</Box>
+      : <DraftField value={f.value} onChange={(e) => f.onChange?.(e.target.value)} marks={on ? changeMarks(parts) : []} autoFocus={typing}
+          inputProps={{ "aria-label": f.label, "data-tq-change-box": f.key, style: { fontSize: 13, lineHeight: 1.5 } }} />}
+  </Box>;
+}
+
 function Field({ f, onView }) {
   const [open, setOpen] = useState(false);
+  if (f.type === "change") return <Change f={f} />;
   if (f.type === "to") return <Box data-tq-to-line="" sx={{ display: "flex", alignItems: "baseline", columnGap: 2, flexWrap: "wrap" }}>
     <ToRow to={f.value} disabled={!f.editable} needs={!!f.needs} who={f.who || ""} onSave={f.onSave} />{f.trail}</Box>;
   if (f.type === "people") return f.editable ? <CcRow cc={f.value} setCc={f.onChange} channel="email" label={f.label} autoOpen={!!f.autoOpen} onClose={f.onClose} />

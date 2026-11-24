@@ -294,6 +294,10 @@ async def _lifespan(_app):
         if (n := dashboards.migrate_ai_tiles(store)): logger.info(f'AI-use tiles added to {n} dashboard(s)')
         if (n := dashboards.migrate_ai_tiles_up(store)): logger.info(f'AI-use tiles moved up in {n} dashboard(s)')   # ...and up top (2026-11-07)
     except Exception as e: logger.warning(f'AI-use tiles not added: {e}')
+    try:                           # ...and a change card waiting from before, drawn as its new words (2026-11-24)
+        from . import proposals
+        if (n := proposals.cards_waiting(store)): logger.info(f'{n} waiting change card(s) now show their new words')
+    except Exception as e: logger.warning(f'waiting change cards drawn as filed: {e}')
     _fold_habits()                 # the habits row of before closed: his own acts confirm a learned line now (learning.close_habits_row)
     try: blackboard.schedule_due(store, startup=True)   # a retry backing off when the app closed is re-armed, not reset (PW-085), and a slot wait runs
     except Exception as e: logger.warning(f'retry scheduling skipped: {e}')

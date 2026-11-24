@@ -1449,6 +1449,15 @@ class SettingProposalTests(unittest.TestCase):
         ok, _ = proposals.validate(s, {'action': 'settings', 'changes': [{'name': 'coding_auto_enabled', 'value': False}]})
         self.assertTrue(ok)
 
+    def test_a_setting_card_reads_each_switch_as_it_is_and_as_it_will_be(self):
+        # the owner, 2026-11-24: a change card shows what it will be beside what it was - a setting as "Name: old -> new", read off
+        from taskuary import proposals
+        s = store(); s.set_setting('poll_minutes', '5', 'o')
+        tid = s.create_task({'Title': 'Read the mail less often', 'Kind': 'general', 'Status': 'open'}, 'o')
+        rv = proposals.queue(s, tid, {'action': 'settings', 'changes': {'poll_minutes': 15}, 'why': 'fewer polls'})
+        p = json.loads(s.get_review(rv['reviewId'])['DraftText'])
+        self.assertEqual([(c['name'], c['was'], c['value']) for c in p['changes']], [('poll_minutes', '5', '15')])
+
 
 # ── the buttons the assistant points at: every one of them, through the API ──────────────────
 class ApiActionsTests(unittest.TestCase):

@@ -379,13 +379,59 @@ def change_of(store, tid: int, p: dict) -> tuple:
     if not isinstance(new, list) or not new: return {}, "change_routine needs `prompt` (its agent step's new instructions), `flow` (its steps whole), or a schedule (daily_at, cron, every_minutes) or title"
     ok, why = flow.validate(store, new)
     if not ok: return {}, f'the changed steps do not hold: {why}'
-    d = flow.diff(was, new)
     clock = {k: patch.get(k) for k in CLOCK} if set(patch) & set(CLOCK) else {}
-    said = ([f"Runs: {runs_words(cfg)} -> {runs_words({**cfg, **clock})}"] if clock and runs_words({**cfg, **clock}) != runs_words(cfg) else []) +            ([f"Name: {cfg.get('title') or src.get('Address')} -> {patch['title']}"] if patch.get('title') and patch['title'] != cfg.get('title') else []) +            [f"{w}: {cfg.get(k) or '(none)'} -> {patch[k]}" for k, w in (('goal', 'Goal'), ('done_when', 'Done when')) if patch.get(k) and patch[k] != cfg.get(k)]
-    if not d and not said: return {}, 'that is the routine as it already is'
-    return {'action': 'repair_workflow', 'source_id': src['SourceId'], 'title': cfg.get('title') or src.get('Address') or '', 'flow': new,
-            'was': was, 'changes': '\n'.join([*said, *([flow.diff_text(d)] if d else [])]), 'why': ' '.join(str(p.get('why') or '').split())[:300],
-            **({'patch': {**clock, **{k: patch[k] for k in ('title', 'goal', 'done_when') if patch.get(k)}}} if said else {})}, ''
+    rows = ([{'label': 'Runs', 'was': runs_words(cfg), 'now': runs_words({**cfg, **clock})}] if clock and runs_words({**cfg, **clock}) != runs_words(cfg) else []) + (
+        [{'label': 'Name', 'was': cfg.get('title') or src.get('Address') or '', 'now': patch['title']}] if patch.get('title') and patch['title'] != cfg.get('title') else [])
+    words = {k: patch[k] for k in ('goal', 'done_when') if patch.get(k) and patch[k] != cfg.get(k)}
+    if not flow.diff(was, new) and not rows and not words: return {}, 'that is the routine as it already is'
+    return change_card({'action': 'repair_workflow', 'source_id': src['SourceId'], 'title': cfg.get('title') or src.get('Address') or '', 'flow': new,
+            'was': was, 'rows': rows, 'why': ' '.join(str(p.get('why') or '').split())[:300],
+            **({'patch': {**clock, **{k: patch[k] for k in ('title', *words) if patch.get(k)}}, 'before': {k: cfg.get(k) or '' for k in words}} if rows or words else {})}), ''
+
+
+# A CHANGE TO SOMETHING STORED SHOWS WHAT IT WILL SAY (the owner, 2026-11-24, over a card whose box held "prompt: <whole old> -> <whole new>":
+# "to edit text it should show the edited text?"): each set of words it rewrites is a box of its own holding the NEW words, beside what they were
+# (texts: {key, label, was, now}), and what else it changes is a fact read off (rows: {label, was, now}). One place for the card, the press that
+# saves what he left in the boxes (edit_change) and the line its agent is told (changes).
+TEXTS = ('prompt', 'ai_prompt', 'query', 'script', 'text', 'body', 'message')
+WILL = {'routine': 'The routine will say', 'report': 'The report will ask', 'dashboard': 'The dashboard will ask'}
+WORDS = {'goal': 'Goal', 'done_when': 'Done when', 'query': 'Query'}
+def change_card(p: dict) -> dict:
+    from . import flow
+    rows, texts = [r for r in p.get('rows') or [] if r.get('label') not in ('Adds', 'Removes', 'Step')], []
+    if p.get('action') == 'change_setup':
+        texts = [{'key': k, 'label': WILL.get(p.get('kind') or 'report') if k in ('prompt', 'ai_prompt') else WORDS.get(k, k), 'was': str((p.get('was') or {}).get(k) or ''),
+                  'now': str(v)} for k, v in (p.get('patch') or {}).items() if k in TEXTS]
+    else:
+        new, d = p.get('flow') or [], flow.diff(p.get('was') or [], p.get('flow') or [])
+        one = sum(s.get('kind') == 'agent' for s in new) == 1
+        for x in d:
+            if x['change'] != 'changed': rows.append({'label': 'Adds' if x['change'] == 'added' else 'Removes', 'was': '', 'now': f"the step {x['label'] or x['id']}"}); continue
+            for k in x['keys']:
+                if k['key'] in TEXTS and isinstance(k['now'], str):
+                    texts.append({'key': f"flow.{x['id']}.{k['key']}", 'was': str(k['was'] or ''), 'now': k['now'],
+                                  'label': WILL['routine'] if one and k['key'] == 'prompt' else f"{x['label'] or x['id']} · {WORDS.get(k['key'], k['key'])}"})
+                else: rows.append({'label': 'Step', 'was': '', 'now': f"{x['label'] or x['id']}: its {k['key'].replace('_', ' ')} changes"})
+        texts += [{'key': k, 'label': WORDS[k], 'was': str((p.get('before') or {}).get(k) or ''), 'now': str((p.get('patch') or {})[k])}
+                  for k in ('goal', 'done_when') if (p.get('patch') or {}).get(k)]
+    said = [f"{r['label']}: {r['was']} -> {r['now']}" if r.get('was') else f"{r['label']} {r['now']}" for r in rows] + [f"{t['label']}: {t['now']}" for t in texts]
+    return {**p, 'rows': rows, 'texts': texts, 'changes': chr(10).join(said)}
+
+
+def edit_change(p: dict, fields: dict) -> dict:
+    """The change as he left its boxes at the press (fields: {key: words}) - only a box the card drew (texts), never emptied."""
+    if not fields: return p
+    keys = {t['key'] for t in p.get('texts') or []}
+    flow_, patch = [dict(s) for s in p.get('flow') or []], dict(p.get('patch') or {})
+    for k, v in fields.items():
+        if k not in keys: raise ValueError(f'{k} cannot be changed on this card')
+        if not (v := str(v or '').strip()): raise ValueError('a box on this card cannot be left empty - Dismiss it instead')
+        if k.startswith('flow.'):
+            sid, key = k[5:].rsplit('.', 1)
+            for s in flow_:
+                if str(s.get('id')) == sid: s[key] = v
+        else: patch[k] = v
+    return change_card({**p, **({'flow': flow_} if p.get('flow') is not None else {}), **({'patch': patch} if patch else {})})
 
 
 # A REPORT OR A DASHBOARD IS CHANGED THE SAME WAY (the owner, 2026-11-20): its question, its schedule, its name - one card showing each old ->
@@ -400,12 +446,12 @@ def setup_change(src, cfg: dict, p: dict) -> tuple:
     clock = {k: want.get(k) for k in CLOCK} if set(want) & set(CLOCK) else {}
     if clock and (why := schedule_error(clock)): return {}, f'that schedule does not hold: {why}'
     patch = {**{k: v for k, v in want.items() if k in SETUP_KEYS and v != cfg.get(k)}, **clock}
-    said = [f"{SETUP_KEYS[k]}: {cfg.get(k) or '(none)'} -> {v}" for k, v in patch.items() if k in SETUP_KEYS]
-    if clock and runs_words({**cfg, **clock}) != runs_words(cfg): said.insert(0, f"Runs: {runs_words(cfg)} -> {runs_words({**cfg, **clock})}")
-    if not said: return {}, 'that is the setup as it already is - give its new question (prompt), schedule (daily_at, cron, every_minutes) or title'
+    rows = [{'label': SETUP_KEYS[k], 'was': cfg.get(k) or '', 'now': v} for k, v in patch.items() if k in SETUP_KEYS and k not in TEXTS]
+    if clock and runs_words({**cfg, **clock}) != runs_words(cfg): rows.insert(0, {'label': 'Runs', 'was': runs_words(cfg), 'now': runs_words({**cfg, **clock})})
+    if not rows and not set(patch) & set(TEXTS): return {}, 'that is the setup as it already is - give its new question (prompt), schedule (daily_at, cron, every_minutes) or title'
     kind = 'dashboard' if cfg.get('type') == 'dashboard' else 'report'
-    return {'action': 'change_setup', 'source_id': src['SourceId'], 'kind': kind, 'title': cfg.get('title') or src.get('Address') or '',
-            'patch': patch, 'was': {k: cfg.get(k) for k in patch}, 'changes': '\n'.join(said), 'why': ' '.join(str(p.get('why') or '').split())[:300]}, ''
+    return change_card({'action': 'change_setup', 'source_id': src['SourceId'], 'kind': kind, 'title': cfg.get('title') or src.get('Address') or '',
+            'patch': patch, 'was': {k: cfg.get(k) for k in patch}, 'rows': rows, 'why': ' '.join(str(p.get('why') or '').split())[:300]}), ''
 
 
 def named_setup(store, name):

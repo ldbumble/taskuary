@@ -127,6 +127,32 @@ class ChangeTests(unittest.TestCase):
         self.assertEqual(cfg['flow'][0]['prompt'], cfg['prompt'])
         synced.assert_called()                    # ...by the editor's own save (workflows.save), its tail and all
 
+    def test_the_card_holds_the_new_words_and_his_edit_of_them_is_what_is_saved(self):
+        # the owner's live card, 2026-11-24: its box held "Agent works it: changed / prompt: <whole old> -> <whole new>" - "to edit text it should
+        # show the edited text?". The card's box is the new words, beside what they were; what he leaves in it is what the press saves
+        from taskuary import proposals
+        rv = proposals.queue(self.s, self.tid, {'action': 'change_routine', 'prompt': 'Keep each post short.', 'why': 'he wants short posts'})
+        row = self.s.get_review(rv['reviewId']); p = json.loads(row['DraftText'])
+        self.assertEqual(p['texts'], [{'key': 'flow.s1.prompt', 'label': 'The routine will say', 'was': 'Review the open pull requests.', 'now': 'Keep each post short.'}])
+        self.assertNotIn('->', p['texts'][0]['now'])
+        with self.assertRaises(ValueError): proposals.execute(self.s, row, 'owner', fields={'flow.s1.agent': 'other'})       # only a box the card drew
+        with self.assertRaises(ValueError): proposals.execute(self.s, row, 'owner', fields={'flow.s1.prompt': '  '})
+        with mock.patch('taskuary.docsync.sync_connections'):
+            out = proposals.execute(self.s, row, 'owner', fields={'flow.s1.prompt': 'Keep each post under 80 words.'})
+        self.assertEqual(json.loads(self.s.get_source(self.sid)['ConfigJson'])['flow'][0]['prompt'], 'Keep each post under 80 words.')
+        self.assertEqual(out['changed'], 'The routine will say: Keep each post under 80 words.', 'its agent is told what was saved, his edit')
+        self.assertEqual(json.loads(proposals.receipt(row, None, out, {'flow.s1.prompt': 'Keep each post under 80 words.'}))['texts'][0]['now'],
+                         'Keep each post under 80 words.')
+
+    def test_a_change_card_waiting_from_before_is_drawn_as_its_new_words(self):
+        from taskuary import flow, proposals
+        was = flow.steps_of(json.loads(self.s.get_source(self.sid)['ConfigJson'])); new = [{**was[0], 'prompt': 'Keep each post short.'}]
+        rid = self.s.add_review({'TaskId': self.tid, 'Kind': 'action', 'Status': 'pending', 'Reason': 'x', 'DraftText': json.dumps(
+            {'action': 'repair_workflow', 'source_id': self.sid, 'title': 'Weekly review', 'flow': new, 'was': was, 'changes': 'Agent works it: changed\n  prompt: a -> b'})})
+        self.assertEqual(proposals.cards_waiting(self.s), 1)
+        self.assertEqual(json.loads(self.s.get_review(rid)['DraftText'])['texts'][0]['now'], 'Keep each post short.')
+        self.assertEqual(proposals.cards_waiting(self.s), 0, 'once')
+
     def test_a_task_that_is_no_run_of_a_routine_is_told_so(self):
         from taskuary import proposals
         own = self.s.create_task({'Title': 'Something else', 'Kind': 'general', 'Status': 'open'}, 'o')
@@ -163,7 +189,7 @@ class ChangeTests(unittest.TestCase):
         self.assertTrue(rv)
         row = self.s.get_review(rv['reviewId']); p = json.loads(row['DraftText'])
         self.assertEqual(p['action'], 'change_setup'); self.assertIn('change the report "Cash on hand"', row['Reason'])
-        self.assertIn('Question: Sum the bank balances. -> Sum the bank balances by account.', p['changes']); self.assertIn('Runs:', p['changes'])
+        self.assertEqual([(t['key'], t['was'], t['now']) for t in p['texts']], [('ai_prompt', 'Sum the bank balances.', 'Sum the bank balances by account.')]); self.assertIn('Runs:', p['changes'])
         with mock.patch('taskuary.docsync.sync_connections'): proposals.execute(self.s, row, 'owner')
         cfg = json.loads(self.s.get_source(rep)['ConfigJson'])
         self.assertEqual((cfg['ai_prompt'], cfg['daily_at'], cfg['type']), ('Sum the bank balances by account.', '07:00', 'quickbooks'))
@@ -190,7 +216,7 @@ class ChangeTests(unittest.TestCase):
         rv = proposals.queue(self.s, self.tid, {'action': 'change_routine', 'goal': 'One post card per network, each with its own picture.',
                                                 'done_when': 'Each network has its post card waiting for his press.', 'why': 'posts, not files'})
         self.assertTrue(rv); p = json.loads(self.s.get_review(rv['reviewId'])['DraftText'])
-        self.assertIn('Goal: (none) -> One post card per network', p['changes']); self.assertIn('Done when:', p['changes'])
+        self.assertIn(('goal', '', 'One post card per network, each with its own picture.'), [(t['key'], t['was'], t['now']) for t in p['texts']]); self.assertIn('Done when:', p['changes'])
         with mock.patch('taskuary.docsync.sync_connections'): proposals.execute(self.s, self.s.get_review(rv['reviewId']), 'owner')
         cfg = json.loads(self.s.get_source(self.sid)['ConfigJson'])
         self.assertEqual(cfg['done_when'], 'Each network has its post card waiting for his press.')

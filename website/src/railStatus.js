@@ -56,7 +56,9 @@ const railStatus_ = (item, cantSend = false, page = null) => {
   const done = item.finished && item.lane === "yours" && !KIND_META[item.kind];
   const key = copy ? UNSENDABLE : item.not_sent ? "not_sent" : item.hold ? "held" : done ? "agentdone" : KIND_META[item.kind] ? item.kind : item.lane;
   const spins = item.lane === "working" && !item.settling;
-  return said(key, copy ? { ...rowMeta(item), ...KIND_META[UNSENDABLE] } : done ? { ...rowMeta(item), ...KIND_META.agentdone } : rowMeta(item), spins);
+  // ...and the server's words for the very state it read (funnel.one_state: taskstate.status) - whose input it waits for, by name
+  const own = item.status?.key === key && item.status.word ? { word: item.status.word } : {};
+  return said(key, copy ? { ...rowMeta(item), ...KIND_META[UNSENDABLE] } : done ? { ...rowMeta(item), ...KIND_META.agentdone } : { ...rowMeta(item), ...own }, spins);
 
 };
 // ...and the line under the row on the table: the rail's `why` ("An agent is working on this ...") goes with the lane it explains

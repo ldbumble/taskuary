@@ -417,18 +417,18 @@ NOTHING_LEFT = 'Its agent said nothing is left to do'
 
 
 def agent_word(store, tid) -> str | None:
-    """What the agent's newest turn summary (general.SUMMARY_TYPE) leaves the owner: 'on_you' while a step of its list is theirs,
-    'nothing_left' where it said so, '' where it said neither - and None with no summary (no agent ran, or one that writes none)."""
+    """What the agent's newest turn summary (general.SUMMARY_TYPE) leaves the owner: 'on_you' while the task waits for his input, 'nothing_left'
+    where it said so and nobody's input is awaited, '' otherwise - and None with no summary (no agent ran, or one that writes none). Where it
+    stands is the task's one reading (taskstate.standing): Mark done is never lit over an answer still awaited (walks 14-16)."""
     from . import general
+    from .taskstate import standing
     try:
         last = next((c for c in reversed(store.list_comments(int(tid), internal=True)) if c.get('ActorType') == general.SUMMARY_TYPE), None)
         summ = json.loads(last['Body']) if last else None
     except (TypeError, ValueError, KeyError): summ = None
     if not isinstance(summ, dict): return None
-    # ...a step he has not ticked, while it still stands (taskstate.left_on_him: a press of his on a card since the turn settles it - walk 15)
-    from .taskstate import left_on_him
-    if any(c.get('on_you') and not c.get('done') and c.get('text') for c in _checklist(store.get_task(int(tid)))) and left_on_him(store, tid): return 'on_you'
-    return 'nothing_left' if summ.get('nothing_left') else ''
+    waits = standing(store, tid)['waits_on']
+    return 'on_you' if waits == 'you' else 'nothing_left' if summ.get('nothing_left') and waits is None else ''
 
 
 def _recommended(store, it: dict, verbs: list | None, f: dict | None, unlit: bool = False) -> dict | None:

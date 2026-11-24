@@ -49,31 +49,51 @@ def name_of(key: str) -> str:
     return holder_name('person:' + key) if '@' in key else key.title()
 
 
-def said(key: str) -> str: return f'waiting on {name_of(key)}' if key else ''
+def word(waits_on: str, who: str = '') -> str:
+    """THE ONE WORDING OF "WAITING FOR INPUT" (the owner, 2026-11-24): 'waiting for your input' while a task waits on him, "waiting for Erin's
+    input" while it waits on somebody else - the rail, the header, the phone and the brief say it here (taskstate.standing). '' otherwise."""
+    from . import lanes
+    if waits_on == 'you': return lanes.word('blocked')
+    if waits_on != 'them': return ''
+    first = (str(who or '').split() or [''])[0]
+    return lanes.word('theirs').replace('their', f"{first}'s", 1) if first and '@' not in first else lanes.word('theirs')
 
 
-def stands(store, t: dict) -> list:
-    """WHAT AN OPEN TASK WAITS ON NOW, as stored - never its title or the ask that opened it: the person an agent said only they can answer
-    (`said`, the rail's own "waiting on them"), the answer a reply he sent asked them for (asks.py's watch, nothing from them on its thread
-    since), and the question its agent asks him. What triage is shown of each open task (context.open_items) - walk 16: an answer on a new
-    thread to the reply a task had sent was read as a notice, since nothing it was shown said that task waited on it. [] when nothing."""
-    from . import taskstate
-    t = store.get_task(int(t['TaskId'])) if t and t.get('TaskId') else None
-    if not t or t.get('Status') in ('done', 'dropped'): return []
-    q = taskstate.open_question(store, t['TaskId'])
-    return on_them(store, t) + ([f"its agent asks you: {' '.join(str(q['text']).split())[:120]}"] if q and q.get('text') else [])
+def said(key: str) -> str: return word('them', name_of(key)) if key else ''
 
 
 def on_them(store, t: dict) -> list:
-    "What an open task waits on SOMEBODY ELSE for (stands, less its agent's question to him): while one stands, its agent is not done"
+    """Whose answer an open task waits for, as stored: [{who, what, since}] - the person an agent said only they can answer, or a mail he sent
+    asked something (WaitingOn: declare, asks.watch_reply), and the answer a reply he sent asked for (asks.py's watch, nothing from them on its
+    thread since). [] when nobody's. What taskstate.standing reads for 'them'. `answered`: the line they wrote since, which its agent has
+    not yet read through to a turn's end (settle) - a holding "still working on it" is no end of the wait (walk 17, K2)."""
     from . import asks
     if not t or t.get('Status') in ('done', 'dropped'): return []
-    out = [x for x in (said(waiting(t)),) if x]
-    if t.get('AskedWatch') == 'reply' and (m := asks._waiting_on(store, t)) and \
-            str((asks._answer(store, t['TaskId']) or {}).get('MessageId') or '') == str(t.get('AskedSeenMid') or ''):
-        subj = ' '.join(str(m.get('Subject') or '').split())[:70]
-        out.append(f"waiting on {asks._who(m, first=False)}'s answer to the reply sent {str(t.get('AskedWatchAt') or '')[:16]}" + (f' re "{subj}"' if subj else ''))
+    out = [{'who': name_of(k), 'what': f'an answer from {name_of(k)}', 'since': t.get('WaitingSince'), 'field': 'WaitingOn',
+            'answered': _wrote_since(store, t['TaskId'], t.get('WaitingSince'), lambda m: is_them(k, m))} for k in (waiting(t),) if k]
+    if t.get('AskedWatch') == 'reply' and (m := asks._waiting_on(store, t)):
+        subj, who, a = ' '.join(str(m.get('Subject') or '').split())[:70], asks._who(m, first=False), asks._answer(store, t['TaskId'])
+        out.append({'who': who, 'what': f"{who}'s answer to the reply sent {str(t.get('AskedWatchAt') or '')[:16]}" + (f' re "{subj}"' if subj else ''),
+                    'since': t.get('AskedWatchAt'), 'field': 'AskedWatch', 'answered': a if a and str(a.get('CreatedAt') or '') > str(t.get('AskedWatchAt') or '') else None})
     return out
+
+
+def _wrote_since(store, tid: int, at, theirs) -> dict | None:
+    "Their newest line on the task since `at`, else None."
+    rows = store._rows("SELECT * FROM message WHERE TaskId=? AND IFNULL(Direction,'in')<>'out' AND CreatedAt>? ORDER BY CreatedAt DESC LIMIT 20",
+                       (int(tid), str(at or '')))
+    return next((m for m in rows if theirs(m)), None)
+
+
+def settle(store, tid: int) -> None:
+    """THE WAIT ENDS WITH THE AGENT'S TURN THAT READ THEIR LINE (walk 17, K2): their reply wakes the agent and the task is its again, but only that
+    turn's end closes the wait - a turn that still waits says so again (declare: the wait stands from then). A turn begun before their line
+    never heard it, and settles nothing. Called at each turn's end (workerstate.record)."""
+    t = store.get_task(int(tid)) or {}
+    began = str((store.last_worker_event(int(tid), kinds=('working',)) or {}).get('CreatedAt') or '')
+    for w in on_them(store, t):
+        if not w['answered'] or str(w['answered'].get('CreatedAt') or '') > began: continue
+        store._exec('UPDATE task SET ' + w['field'] + '=NULL WHERE TaskId=?', (int(tid),))
 
 
 def is_them(key: str, msg: dict) -> bool:
@@ -100,13 +120,14 @@ def declare(store, tid: int, who: str, agent: str = 'agent') -> dict:
 
 
 def arrived(store, tid: int, msg: dict, mid: int = None, actor: str = 'router') -> bool:
-    """A line landed on the task. From the person it waits on: the wait ends, the task is open again - the owner's news,
+    """A line landed on the task. From the person it waits on: the task is open again and its agent's - the owner's news,
     with Continue leading where an agent left a session (processing_unread.card_for: `woke`) - and the Advisor reads it
-    afresh. From anyone else: nothing about the wait changes. True when it woke."""
+    afresh. The wait itself ends with the agent's turn that read it (settle): a holding reply is no answer (walk 17, K2).
+    From anyone else: nothing about the wait changes. True when it woke."""
     t = store.get_task(tid) or {}
     key = waiting(t)
     if not is_them(key, msg): return False
-    store._exec('UPDATE task SET WaitingOn=NULL, WokeMid=? WHERE TaskId=?', (mid, tid))
+    store._exec('UPDATE task SET WokeMid=? WHERE TaskId=?', (mid, tid))
     if t.get('Status') == 'waiting': store.update_task(tid, {'Status': 'open'}, actor)
     who = msg.get('from_name') or msg.get('FromName') or _addr(msg) or 'they'
     store.add_comment(tid, actor, 'agent', f'{who} answered - it was waiting on them.')

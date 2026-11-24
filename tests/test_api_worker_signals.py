@@ -74,22 +74,23 @@ class ApiWorkerSignals(unittest.TestCase):
         self.assertEqual(reply.count('Who should get it?'), 1, 'asked once, in its own words')
         self.assertEqual(taskstate.status(self.s, self.s.get_task(self.tid), sess.info(details=False))['key'], 'blocked')
 
-    def test_a_question_a_later_turn_no_longer_needs_is_over(self):
-        """Recorded on the real CLI, 2026-11-15: the agent asked which room; the owner then answered the sender outside the app, and the turn
-        that heard it ended "You can close the task with Mark done", its summary saying nothing is left - under a chip "agent waiting on you"
-        and a box "Answer the agent's question...". The question was never answered in the box, so nothing retired it. A turn whose own
-        summary says nothing is left on the owner, and that asks nothing, closes the questions its session still held open."""
+    def test_a_question_stands_past_a_turn_that_did_not_ask_it_again_until_the_agent_takes_it_back(self):
+        """Recorded on the real CLI, 2026-11-15: the agent asked which vendor; a later turn said nothing was left on the owner, and the box still
+        asked. The question was then retired by that turn's nothing_left - and walk 16 had questions vanish by the same kind of rule. The owner's
+        rule (2026-11-24): it stands until he answers it, the task closes, or the agent withdraws it - with the tool it asked with."""
         import json
+        from taskuary import agenttools
         sess, _ = self.turn('Two options.\n[[TASKUARY-ASK]] Which vendor?')
         self.assertEqual(ws.status(self.s, self.tid)['state'], 'input_needed')
         summ = lambda left: selfclose.SUMMARY_OPEN + json.dumps({'about': 'the vendors', 'did': 'Noted your answer to Gail', 'on_you': [], 'nothing_left': left}) + selfclose.SUMMARY_CLOSE
         say = lambda words: (mock.patch.object(general.llm_mod, 'build_llm', return_value=lambda system, user, **kw: words), sess)
         with say('Still comparing.' + summ(False))[0]: sess.send_prompt('Gail wrote again', as_owner=False)
         self.assertEqual([r['text'] for r in ws.status(self.s, self.tid)['requests']], ['Which vendor?'], 'a turn with work left still asks it')
-        with say('You answered Gail yourself - nothing more is needed here.' + summ(True))[0]: sess.send_prompt('You answered Gail outside the app', as_owner=False)
+        with say('Gail settled it - nothing more is needed here.' + summ(True))[0]: sess.send_prompt('Gail wrote: Acme', as_owner=False)
+        self.assertEqual([r['text'] for r in ws.status(self.s, self.tid)['requests']], ['Which vendor?'], 'not asked again is not answered')
+        self.assertIn('Withdrawn: Which vendor?', agenttools.call(self.s, self.tid, 'ask_owner', {'withdraw': True}, {}))
         st = ws.status(self.s, self.tid)
-        self.assertEqual(st['requests'], []); self.assertEqual(ws.events(self.s, self.tid, sess.sid)[-1]['Kind'], 'turn_end', 'and the turn is over, not going on')
-        self.assertNotIn(st['state'], ('input_needed', 'working'))
+        self.assertEqual(st['requests'], []); self.assertNotIn(st['state'], ('input_needed', 'working'))
 
     def test_the_choices_it_offers_are_its_asks_buttons_on_the_desktop_and_the_phone(self):
         """Walk 13: the agent passed ask_owner its choices and the app wrote them into the answer as "(a / b / c)" - prose he could not press.

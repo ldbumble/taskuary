@@ -49,5 +49,5 @@ test("waiting emails open Close out, and it says how many", async () => {
   const checklist = [{ id: "a", out: { to: "p@x.example" }, rid: 9 }, { id: "b", out: { to: "Gail" } }];
   assert.equal(waitingEmails(checklist, [slot]), 1);
   assert.equal(focusStage({ kind: "coding", task: "waiting", agent: "stopped and saved", emails: 1 }), "reply");
-  assert.equal(focusStage({ kind: "coding", task: "waiting", agent: "agent waiting on you", emails: 1 }), "agent");
+  assert.equal(focusStage({ kind: "coding", task: "waiting", agent: "waiting for your input", emails: 1 }), "agent");
 });

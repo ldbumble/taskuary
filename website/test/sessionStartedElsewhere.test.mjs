@@ -18,7 +18,7 @@ const src = taskSource();
 
 test("a live session anywhere means the agent stage is working, not 'not started'", () => {
   assert.equal(agentPhase({ session: { alive: true } }), "agent working");
-  assert.equal(agentPhase({ session: { alive: true, waiting: true } }), "agent waiting on you");
+  assert.equal(agentPhase({ session: { alive: true, waiting: true } }), "waiting for your input");
   // the shape the task detail actually carries (server: hub_term.for_task)
   assert.equal(agentPhase({ session: { sid: "c0df3a87bfa1", alive: true, agent: "coding" } }), "agent working");
   assert.equal(agentPhase({}), "waiting to start");

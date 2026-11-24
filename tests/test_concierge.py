@@ -617,7 +617,8 @@ class TaskNowTests(unittest.TestCase):
         with mock.patch('taskuary.terminal.live_sessions', return_value=[]):
             fx = concierge.facts(s, it)
         self.assertIn(f'TASK NOW: TQ-{t:04d} [waiting, coding] Export still broken - no agent on it right now', fx)
-        self.assertIn(f"a reply waits for the owner's yes (rv{r})", fx); self.assertIn('the escaping is wrong on line 40', fx)
+        self.assertIn(f'WHERE IT STANDS: waiting for your input', fx); self.assertIn(f'the reply to Dana', fx); self.assertIn(f'[rv{r}]', fx)
+        self.assertIn('the escaping is wrong on line 40', fx)
         s.decide_review(r, 'approved', 'Attached - sorry for the wait.', 'owner')
         self.assertIn('a reply went from this task', concierge.task_now(s, t)); self.assertIn('sorry for the wait', concierge.task_now(s, t))
         working = [{'taskId': t, 'agent': 'codex', 'label': 'codex', 'started': ago(0), 'idle': 3, 'waiting': False, 'tail': ['editing']}]

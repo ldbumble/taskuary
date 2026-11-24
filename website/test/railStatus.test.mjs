@@ -50,7 +50,7 @@ test("the live session's word leads, then the rail's row, then the server's stat
   // no rail row (the Tasks tab, or a closed task): the server's own state, in the same words
   assert.equal(taskStatus({ state: "agentdone" }).word, "agent finished");
   assert.equal(taskStatus({ state: "closed" }).word, "done");
-  assert.equal(taskStatus({ state: "theirs" }).word, "waiting on them");
+  assert.equal(taskStatus({ state: "theirs" }).word, "waiting for their input");
   assert.equal(taskStatus({ state: "working" }).spins, true);
   assert.equal(taskStatus({}), null);
   // a closed task pulled onto the table by a link wears no stale lane: the server says it is done
@@ -147,10 +147,10 @@ test("a newer read of the task takes back the rail's agent lane - on the row, it
 test("a chat task's waiting agent and its ready reply both say agent waiting on you; a coding task keeps its words", () => {
   for (const lane of ["blocked", "approve"]) {
     const st = railStatus({ lane, kind: lane === "approve" ? "review" : "agent", chat: true });
-    assert.equal(st.word, "agent waiting on you"); assert.equal(st.key, lane); assert.equal(st.badge, BADGE[lane]);
+    assert.equal(st.word, "waiting for your input"); assert.equal(st.key, lane); assert.equal(st.badge, BADGE[lane]);
   }
   assert.equal(railStatus({ lane: "approve", kind: "review" }).word, "ready to send", "a coding task keeps its words");
-  assert.equal(taskStatus({ chat: true, live: { alive: true, waiting: true } }).word, "agent waiting on you");
+  assert.equal(taskStatus({ chat: true, live: { alive: true, waiting: true } }).word, "waiting for your input");
   assert.equal(taskStatus({ live: { alive: true, waiting: true } }).word, LANE_META.blocked.word);
   assert.equal(taskStatus({ chat: true, live: { alive: true, waiting: false } }).word, LANE_META.working.word);
   assert.equal(railStatus({ lane: "approve", kind: "review", not_sent: true, chat: true }).word, rowMeta({ lane: "approve", kind: "review", not_sent: true }).word);
@@ -162,16 +162,16 @@ test("a chat agent the owner answered is agent done on the rail and the chip, ne
   assert.equal(row.word, "agent done"); assert.equal(row.badge, ""); assert.equal(row.spins, false);
   const parked = { alive: true, waiting: true };
   assert.equal(taskStatus({ chat: true, live: parked, state: "agentdone" }).word, "agent done");
-  assert.equal(taskStatus({ chat: true, live: parked, state: "blocked" }).word, "agent waiting on you");
+  assert.equal(taskStatus({ chat: true, live: parked, state: "blocked" }).word, "waiting for your input");
   assert.equal(taskStatus({ chat: true, live: { alive: true, waiting: false }, state: "agentdone" }).key, "working");
-  // ...a coding agent's too (the owner, 2026-11-10): it pushed, said nothing is left - "agent done", never "agent waiting on you"
+  // ...a coding agent's too (the owner, 2026-11-10): it pushed, said nothing is left - "agent done", never "waiting for your input"
   assert.equal(taskStatus({ live: parked, state: "agentdone" }).word, "agent done");
   assert.equal(taskStatus({ live: parked, state: "blocked" }).word, LANE_META.blocked.word, "one that asked, or waits on its Push, still waits on you");
   assert.equal(taskStatus({ state: "queued", queued: { state: "failed" } }).word, "couldn't start");
   assert.equal(taskStatus({ state: "queued", queued: { state: "waiting" } }).word, LANE_META.queued.word);
 });
 
-// THE RAIL WALK (2026-11-12): a general task with a reply drafted read "ready to send" on its rail row and "agent waiting on you" in its
+// THE RAIL WALK (2026-11-12): a general task with a reply drafted read "ready to send" on its rail row and "waiting for your input" in its
 // header - the header passed `chat` for any general task, the rail only where the server marked the row a chat. One reading: the row's.
 test("a general task's header reads its rail row's own words, chat or not", () => {
   for (const item of [{ lane: "approve", kind: "review" }, { lane: "approve", kind: "review", chat: true }, { lane: "yours", kind: "task", chat_done: true }, { lane: "blocked", kind: "agent" }])
@@ -194,11 +194,21 @@ test("off the rail the header draws the server's status as it is said, with the 
     "on the rail the row still leads");
 });
 
-// ROUND 3, 2026-11-22: after his Stop the server said "agent stopped" and the page drew "agent waiting on you" off the live session at rest -
+// ROUND 3, 2026-11-22: after his Stop the server said "agent stopped" and the page drew "waiting for your input" off the live session at rest -
 // at work is the live session's to say, at rest the server's one state
 test("an agent at rest reads the server's state, never the live session's own waiting", () => {
   const stopped = taskStatus({ live: { alive: true, waiting: true }, state: "stopped", server: { key: "stopped", word: "agent stopped" } });
   assert.equal(stopped.key, "stopped");
   assert.equal(taskStatus({ live: { alive: true, waiting: false }, state: "stopped" }).key, "working");
   assert.equal(taskStatus({ live: { alive: true, waiting: true } }).key, "blocked");      // ...the server said nothing: waiting, as before
+});
+
+test("a task waiting for somebody's input says whose on the rail row and in the header alike - the server's words (taskstate.standing)", () => {
+  // walks 14-16: "agent done" over the email that asked Erin for the numbers - the row now carries taskstate.status, named
+  const status = { key: "theirs", word: "waiting for Erin's input", hint: "", spins: false };
+  const row = { lane: "theirs", kind: "task", tid: 7, chat: true, status };
+  assert.equal(railStatus(row).word, "waiting for Erin's input");
+  assert.equal(taskStatus({ chat: true, rail: row, state: "theirs", server: status }).word, "waiting for Erin's input");
+  assert.equal(taskStatus({ chat: true, live: { alive: true, waiting: true }, state: "theirs", server: status }).word, "waiting for Erin's input");
+  assert.equal(railStatus({ ...row, status: { ...status, key: "blocked" } }).word, "waiting for their input", "another state's words are never borrowed");
 });

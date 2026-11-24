@@ -3,7 +3,7 @@
   "lanes": [
     {
       "key": "blocked",
-      "word": "agent waiting on you",
+      "word": "waiting for your input",
       "role": "you",
       "mark": "👋",
       "section": "task", "on_you": true, "waits": true,
@@ -52,7 +52,7 @@
     },
     {
       "key": "theirs",
-      "word": "waiting on them",
+      "word": "waiting for their input",
       "role": "muted",
       "mark": "📤",
       "section": "task", "on_you": false,
@@ -177,7 +177,7 @@
     },
     {
       "key": "chat_ready",
-      "word": "agent waiting on you",
+      "word": "waiting for your input",
       "role": "you",
       "mark": "👋",
       "hint": "the agent on this chat task answered or drafted, and its next move is yours - a draft to send, a step to approve, or an answer"
@@ -270,7 +270,7 @@
     },
     {
       "key": "theirs",
-      "word": "waiting on them",
+      "word": "waiting for their input",
       "role": "muted",
       "mark": "📤",
       "hint": "the last word is yours — a reply went out and nothing has come back. The ball is in their court, not yours"
@@ -324,7 +324,7 @@
   },
   "_idea_kinds": "THE ADVISOR'S KINDS OF LINE (assistant.py): `word` is what its card and its Timeline row call it, `counted` how a report's last run counts its candidates, `section` where the brief puts a line the model did not place (assistant.SECTIONS). A kind not here is an 'advisor idea' in Worth a thought.",
   "idea_kinds": {
-    "followup": { "word": "waiting on them", "counted": "follow up", "section": "loose" },
+    "followup": { "word": "waiting for their input", "counted": "follow up", "section": "loose" },
     "promise": { "word": "you promised", "counted": "promise", "section": "loose" },
     "cold": { "word": "gone quiet", "counted": "gone quiet", "section": "loose" },
     "prep": { "word": "prep", "counted": "prep", "section": "people" },

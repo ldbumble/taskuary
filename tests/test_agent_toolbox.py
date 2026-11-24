@@ -371,6 +371,9 @@ class TheServer(unittest.TestCase):
         builds, real = [], funnel.build
         with mock.patch.object(funnel, 'build', side_effect=lambda *a, **kw: builds.append(1) or real(*a, **kw)), \
              mock.patch('taskuary.terminal.live_sessions', return_value=[]), mock.patch.dict(REGISTRY, {'mssql': lambda cfg: ('1 row', 'n\n1')}):
+            # ...the task's origin is judged once and kept on its row at its first read (origin.of_task) - where it stands reads it (Trust)
+            from taskuary import origin
+            origin.of_task(self.s, self.tid)
             funnel.invalidate(); funnel.pile(self.s); n, top = len(builds), self.s.rail_top()
             for _ in range(3):
                 text, err = tool(self.tid, 'run_system', type='mssql', connector_id=card['ConnectorId'], query='select 1')

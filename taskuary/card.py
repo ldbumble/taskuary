@@ -86,12 +86,15 @@ def _ask(tid, q: dict, kind: str) -> dict:
 
 def _asks(store, tid: int) -> list:
     """The agent's question and the steps handed to him on a page, as cards: the question the live run is asking (workerstate.asking_of - its
-    group as one), else the ones a run that is over was still asking (left_asking, which the page draws); each page step that waits."""
-    from . import general, workerstate as ws
+    group as one), else the ones a run that is over was still asking (left_asking, which the page draws) or an agent at rest still asks
+    (taskstate.open_question: idled out, or after a restart - it stands until he answers, the task closes or the agent takes it back); each
+    page step that waits."""
+    from . import general, taskstate, workerstate as ws
     out = []
     try:
         live = general.session_for(tid) or ws._live(tid)
-        qs = [q] if live and (q := ws.asking_of(store, live)) else [] if live else ws.left_asking(store, tid)[:1]
+        qs = [q] if live and (q := ws.asking_of(store, live)) else [] if live else \
+            ws.left_asking(store, tid)[:1] or [q for q in (taskstate.open_question(store, tid),) if q]
         out += [_ask(tid, q, ANSWER) for q in qs if q.get('text') and q.get('ask', 'question') == 'question' and q.get('kind') != 'approval_needed']
     except Exception as e:
         from loguru import logger
@@ -169,15 +172,16 @@ def holds_close(store, tid, pressing=None) -> list:
 
 def may_close(store, tid, pressing=None) -> str:
     """MAY A PRESS ON THE CARD IN FRONT CLOSE TASK `tid` WITH IT (Send and close, Approve and close)? '' when nothing else holds the close,
-    else what does, in words ('the email to Erin Blake'). `pressing`: the card pressed - the front where none is named. A check-back its agent
-    set holds it too (walk 16: Send and close stood first under a reply while the agent's own check-back said the work goes on) - Send and
-    Mark done stay, and a check-back outlives Mark done (store.update_task)."""
+    else what does, in words ('the email to Erin Blake'). `pressing`: the card pressed - the front where none is named. An answer awaited from
+    somebody else and a check-back its agent set hold it too, as the task stands (taskstate.standing - walk 16: Send and close stood first
+    under a reply while the agent's own check-back said the work goes on) - Send and Mark done stay, and a check-back outlives Mark done."""
     if not tid: return ''
     if pressing is None: pressing = next((c['id'] for c in waiting(store, tid, asks=False, trust=False) if c['front'] and c['kind'] != TRUST), None)
     if (c := next((c['what'] or 'another card' for c in holds_close(store, tid, pressing)), '')): return c
-    from .checkback import of_task
-    cb = of_task(store.get_task(int(tid)))
-    return f"the check-back the agent set ({' '.join(cb['what'].split()[:12]) or 'its next look'})" if cb else ''
+    from .taskstate import standing
+    st = standing(store, tid)
+    if st['them']: return st['them'][0]['what']
+    return f"the check-back the agent set ({' '.join(st['check']['what'].split()[:12]) or 'its next look'})" if st['check'] else ''
 
 
 def lines(store, tid, asks: bool = True) -> list:

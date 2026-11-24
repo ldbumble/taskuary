@@ -440,20 +440,21 @@ def _cut(s, n=FACT_CHARS):
 
 def task_now(store, tid: int) -> str:
     """The task AS IT IS NOW - never as it was when the item entered the pipe. Status, who has it (a live
-    session working, parked, or asking; a headless run), what the agent last said and when, whether a draft
-    waits. The assistant reads this before every turn about a task, so 'the agent stopped' is never said of
-    an agent that picked the work back up a minute ago."""
+    session working or at rest; a headless run), where it stands (taskstate.standing: whose input it waits for,
+    and what), what the agent last said and when. The assistant reads this before every turn about a task, so
+    'the agent stopped' is never said of an agent that picked the work back up a minute ago."""
+    from . import taskstate
     t = store.get_task(tid) or {}
     if not t: return ''
     live = next((x for x in _live(store) if x.get('taskId') == tid), None)
     if live:
-        tail = [str(l).strip() for l in (live.get('tail') or []) if str(l).strip()]
         waiting = live.get('waiting') if live.get('waiting') is not None else (live.get('idle') or 0) >= 45
         who, req, idle = task_kinds.shown(live), live.get('request'), int(live.get('idle') or 0)
-        # the run's own word first (a stall is not a question, however the screen looks), then the screen
+        # the run's own word first (a stall is not a question, however the screen looks)
+        tail = [str(l).strip() for l in (live.get('tail') or []) if str(l).strip()]
         state = (f"{ws.request_line(who, req)} (idle {idle}s)" if waiting and req else
-                 f"{who} is PARKED and ASKING you: {tail[-1][:200]}" if waiting and live.get('state') == 'asking' else
-                 f"{who} is PARKED at its prompt, waiting on you (idle {idle}s)" if waiting else
+                 f"{who} is PARKED and ASKING you: {tail[-1][:200]}" if waiting and live.get('state') == 'asking' and tail else
+                 f"{who} is PARKED at its prompt, not working (idle {idle}s)" if waiting else
                  f"{who} is WORKING right now (idle {idle}s) - nothing for the owner until it stops")
     elif t.get('RunStatus') == 'running': state = f"{t.get('RunAgent') or 'an agent'} is running headless - nothing for the owner until it stops"
     # ...and whether its last session can be picked up, so "no agent" comes with the road that is real (2026-10-18)
@@ -462,9 +463,9 @@ def task_now(store, tid: int) -> str:
     else:
         from .general import carry_on
         state = 'no agent on it right now' + (f" - its last session is saved ({carry_on(t)})" if continuable(store, tid) else '')
-    rv = store.waiting_on_owner(tid)
     last = next((c for c in reversed(store.list_comments(tid)) if c.get('ActorType') in ('agent', 'assistant_agent')), None)
-    lines = [f"TASK NOW: {task_ref(tid)} [{t.get('Status')}, {t.get('Kind')}] {t.get('Title') or ''} - {state}"]
+    lines = [f"TASK NOW: {task_ref(tid)} [{t.get('Status')}, {t.get('Kind')}] {t.get('Title') or ''} - {state}",
+             f"  WHERE IT STANDS: {taskstate.said(st := taskstate.standing(store, tid))}" + ''.join(f' [rv{r}]' for r in st['rids'])]
     # ...and WHAT ITS SCREEN SAYS, so "what is it doing?" is answered from the work, not from a status word - the canvas
     # shows the agent's session beside the chat, and the assistant relays both ways about the thing on screen (2026-09-29)
     if live and live.get('sid'):
@@ -474,7 +475,6 @@ def task_now(store, tid: int) -> str:
         if screen: lines.append("THE AGENT'S SCREEN, last lines:\n" + '\n'.join(f'  {_cut(l, 200)}' for l in screen))
     sent = store.sent_reply(task_id=tid)
     if sent: lines.append(f"  a reply went from this task ({str(sent.get('DecidedAt') or sent.get('CreatedAt') or '')[:16]}): {_cut(sent.get('FinalText') or sent.get('DraftText'), 240)}")
-    if rv: lines.append(f"  a {rv.get('Kind')} waits for the owner's yes (rv{rv['ReviewId']})")
     from . import watch
     if w := watch.said(t): lines.append(f'  {w}')
     if last: lines.append(f"  the agent last said ({str(last.get('CreatedAt') or '')[:16]}): {_cut(last.get('Body'), 300)}")
@@ -4347,7 +4347,13 @@ def close_task(store, tid: int, actor: str = 'owner', save: bool = True, status:
     selfclose.unclaim(store, tid, actor)            # a finished task is nobody's to end any more
     # ...his close is HIS press only (`press`, by default when he is the actor): a road's own close - a merged PR, a workflow's end, a fold -
     # read "You marked it done." in his chat once every door came through here. Tell the truth: it is recorded as the road's
-    store.audit('task', tid, 'close_from_assistant' if (actor == 'owner' if press is None else press) else 'closed_by_road', actor)
+    # ...and its agent's question goes with it, unanswered - said so on the close's row for the day's brief (evening.collect): a closed task asks
+    # nothing, and the agent a reopen wakes reads what the page reads (walk 16: Mark done took the buttons away and the reopened turn still
+    # called the question open)
+    from . import workerstate
+    asked = workerstate.let_go(store, tid, 'the task was closed') if not closed else []
+    store.audit('task', tid, 'close_from_assistant' if (actor == 'owner' if press is None else press) else 'closed_by_road', actor,
+                detail={'unanswered': asked} if asked else None)
     # ...and the row goes off Unread with it (the owner, 2026-09-07: "it should just go off the unread
     # timeline"). Closing is the decision, wherever it was made; only the CHAT's close used to post the
     # read receipt, so a close on the Tasks page left the mail behind it sitting in the pipe as an fyi.

@@ -110,7 +110,7 @@ class TheDayAsItWasTests(unittest.TestCase):
         and sent the corrected copies as two new emails, ticked every to-do and said nothing was left - and the brief put "fix the headcount"
         under Tomorrow, because no reply sat on her very mail. What a task owes is the task's own facts; the brief only carries them."""
         from taskuary import general
-        s = MemoryStore()
+        s = MemoryStore(); s.set_setting('owner_email', 'alex@northwind.example', 't')
         tid = s.create_task({'Title': 'Q3 board pack', 'Kind': 'general', 'Status': 'open'}, 'owner')
         her = _mail(s, 'p1', 'Headcount in the pack', 'paula@northwind.example', hours=2, status='routed', body='Headcount should be 214, not 212.')
         s._exec('UPDATE message SET TaskId=? WHERE MessageId=?', (tid, her))
@@ -123,8 +123,8 @@ class TheDayAsItWasTests(unittest.TestCase):
         ev = evening.collect(s, 8)
         assert not [p for p in ev['priorities'] if 'Headcount' in p], ev['priorities']
         row = next(r for r in ev['on_tasks'] if 'Headcount' in r)
-        for fact in ('every to-do ticked', 'sent today (2)', 'nothing is left'): assert fact in row, row
-        assert any('nothing is left' in r for r in ev['open']), ev['open']
+        for fact in ('sent today (2)', 'no input awaited from anyone'): assert fact in row, row
+        assert any('no input awaited from anyone' in r for r in ev['open']), ev['open']
 
     def test_what_went_and_what_was_made_is_said_where_every_summary_reads_a_task_never_its_title(self):
         """Walk 14 (R1): the End-of-day report said "Tomorrow: send the 2026 vendor spend sheet" - sent at 2:26 - and "the Ask HN post first
@@ -181,12 +181,12 @@ class TheDayAsItWasTests(unittest.TestCase):
         s.set_on_you(tid, on, 'assistant')
         rv = s.add_review({'TaskId': tid, 'Kind': 'action', 'Status': 'pending', 'Reason': 'post the Ask HN question',
                            'DraftText': json.dumps({'action': 'browser_act', 'what': 'post the Ask HN question'})})
-        self.assertIn('its agent left on him: Press the Publish card', evening.owed(s, s.get_task(tid), _ago(8)))
+        self.assertIn('waiting for your input: post the Ask HN question', evening.owed(s, s.get_task(tid), _ago(8)))
         self.assertEqual(rulebook.agent_word(s, tid), 'on_you')
         s.decide_review(rv, 'rejected', None, 'owner')
         row = evening.owed(s, s.get_task(tid), _ago(8))
         self.assertNotIn('Press the Publish card', row)
-        self.assertIn('to-dos left: Make the account', row)
+        self.assertNotIn('to-dos left', row, 'an unticked to-do is no work left: the brief reads where the task stands (walk 17, K3)')
         self.assertIn('he turned down: post the Ask HN question', row)
         self.assertNotEqual(rulebook.agent_word(s, tid), 'on_you', 'nor the rail and header read it as on him')
 
@@ -204,7 +204,7 @@ class TheDayAsItWasTests(unittest.TestCase):
         s.decide_review(rv, 'rejected', None, 'owner')
         line = next(l for l in assistant._open(s).splitlines() if 'TQ-0001' in l)
         self.assertNotIn('awaiting Submit', line); self.assertIn('Post an Ask HN question', line)
-        self.assertIn('nothing waits for his press', line)
+        self.assertIn('no input awaited from anyone', line)
         # ...and a reply that asked a person something: waiting on her answer, never "agent done"
         m = s.add_message({'ExternalId': 'e1', 'ConversationId': 'th-1', 'Channel': 'email', 'Subject': 'Q4 vendor spend', 'FromName': 'Erin Blake',
                            'FromEmail': 'erin@northwind.example', 'SentAt': _ago(2), 'BodyText': 'Spendly is up 40%.', 'Status': 'routed', 'TaskId': tid})
@@ -212,7 +212,7 @@ class TheDayAsItWasTests(unittest.TestCase):
         self.assertIn('agent done', done, 'with nothing on him and nobody asked, its agent is done')
         asks._start_watch(s, tid, s.get_message(m))
         row = evening.owed(s, s.get_task(tid), _ago(8))
-        self.assertIn("waiting on Erin Blake's answer", row); self.assertIn('Q4 vendor spend', row)
+        self.assertIn("waiting for Erin's input: Erin Blake's answer", row); self.assertIn('Q4 vendor spend', row)
         self.assertNotIn('agent done', row)
 
     def test_the_brief_says_what_went_as_what_it_was_never_a_view_file_and_never_an_unanswered_close_as_handled(self):
@@ -228,7 +228,8 @@ class TheDayAsItWasTests(unittest.TestCase):
         s.add_comment(moved, 'assistant', general.SUMMARY_TYPE, json.dumps({'did': 'Asked.'}))
         from taskuary import workerstate as ws
         ws.record(s, moved, 'sid1', 'input_needed', text='Is December 12 still the date?', source='api')
-        s.update_task(moved, {'Status': 'done'}, 'owner'); s._exec('UPDATE task SET ClosedAt=? WHERE TaskId=?', (_ago(0), moved))
+        from taskuary import concierge
+        concierge.close_task(s, moved); s._exec('UPDATE task SET ClosedAt=? WHERE TaskId=?', (_ago(0), moved))
         ev = evening.collect(s, 24)
         sent = [a for a in ev['accomplished'] if 'state=sent' in a]
         assert sent and 'Weekly Timesheet Total' in sent[0] and 'slot' not in sent[0], sent

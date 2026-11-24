@@ -7,6 +7,7 @@ state is its rail lane in the rail's own words; a move into a lane that needs th
 memory store, no model call.
 """
 import hashlib, json, threading, time
+from email.utils import parseaddr
 from datetime import datetime, timedelta
 
 from loguru import logger
@@ -245,7 +246,9 @@ def _reply(store, t: dict) -> str | None:
     line = f"{task_ref(t['TaskId'])} {str(t.get('Title') or '').strip()} - {_who(m, first=False)} answered: {words}"
     if not _say(store, t, line): return None
     store._exec('UPDATE task SET AskedSeenMid=? WHERE TaskId=?', (m['MessageId'], t['TaskId']))
-    if t.get('AskedWatch') == 'reply': store._exec('UPDATE task SET AskedWatch=NULL WHERE TaskId=?', (t['TaskId'],))
+    # ...on a task an agent works, the turn that reads it ends the watch (waiton.settle): a holding reply is no answer (walk 17, K2)
+    from .general import handles
+    if t.get('AskedWatch') == 'reply' and not handles(t): store._exec('UPDATE task SET AskedWatch=NULL WHERE TaskId=?', (t['TaskId'],))
     return line
 
 
@@ -261,19 +264,23 @@ def _background(fn):
     threading.Thread(target=fn, name='taskuary-reply-watch', daemon=True).start()
 
 
-def watch_reply(store, rv: dict, body: str, now: datetime = None, llm=None) -> None:
+def watch_reply(store, rv: dict, body: str, now: datetime = None, llm=None, to: list = None) -> None:
     """After a reply really left: the model reads it (sentjudge.judge_text) and, when it ASKED them something, the watch
     for their answer starts - on the task the send just closed too. In the BACKGROUND: a regex (assistant._ASKS) decided
     this on the button's own thread, and a model call there would make Approve wait on it (the owner, 2026-10-11:
-    "Everything should be ai"; buttons never wait on AI). The task's comment says the watch began."""
-    tid, msg = rv.get('TaskId'), store.get_message(rv['MessageId']) if rv.get('MessageId') else None
-    if not tid or not msg or msg.get('Channel') != 'email' or not str(body or '').strip(): return None
+    "Everything should be ai"; buttons never wait on AI). The task's comment says the watch began.
+    ...AND A NEW MAIL (`to`: whom it went to) that asked them something puts the task waiting for their input (waiton.declare - walks 14-16:
+    "agent done" right after the email that asked Erin for the numbers, nothing saying it waited on her); their reply moves it back."""
+    tid, msg = rv.get('TaskId'), store.get_message(rv['MessageId']) if rv.get('MessageId') and not to else None
+    if not tid or not (msg and msg.get('Channel') == 'email' or to) or not str(body or '').strip(): return None
     via = door()                                # the door it was sent from - read here, on the asking thread
     def go():
-        from . import sentjudge
+        from . import sentjudge, waiton
         try:
-            v = sentjudge.judge_text(store, body, msg.get('Subject') or '', _who(msg, first=False), llm)
-            if v and v['asks_them']: _start_watch(store, tid, msg, now, via)
+            v = sentjudge.judge_text(store, body, (msg or {}).get('Subject') or '', _who(msg, first=False) if msg else str(to[0]), llm)
+            if v and v['asks_them']:
+                if msg: _start_watch(store, tid, msg, now, via)
+                else: waiton.declare(store, tid, parseaddr(str(to[0]))[1] or str(to[0]), 'assistant')
         except Exception as e: logger.warning(f'asks: the reply watch on {tid} was not judged - {e}')
     _background(go)
     return None

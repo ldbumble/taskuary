@@ -241,9 +241,9 @@ def agent_result(store, tid) -> tuple[str, list]:
     summ = list(general.turn_summaries(store, tid).values())
     s = summ[-1] if summ and isinstance(summ[-1], dict) else None
     if s:
-        from .taskstate import left_on_him
-        left = '; '.join(left_on_him(store, tid))          # ...while it stands: a press of his since is newer than those words
-        result = ' '.join(x for x in [str(s.get('did') or ''), f'Left on the owner: {left}.' if left else ''] if x)
+        from .taskstate import said, standing
+        st = standing(store, tid)                          # ...where it stands now: a press of his since is newer than those words
+        result = ' '.join(x for x in [str(s.get('did') or ''), f'Now {said(st)}.' if st['waits_on'] in ('you', 'them') else ''] if x)
     else:
         last = next((c for c in reversed(store.list_comments(tid, internal=True)) if c.get('ActorType') == general.ASSISTANT_TYPE), None)
         result = str((last or {}).get('Body') or '')[:1500]

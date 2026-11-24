@@ -3383,10 +3383,8 @@ class GeneralSession:
         # the worker's own lifecycle, as events (PW-225): the turn ended; and if it asked, the exact question
         try:
             from . import workerstate as ws
-            # ...AND A QUESTION THIS TURN NO LONGER NEEDS IS OVER (recorded on the real CLI, 2026-11-15): he answered the sender outside the
-            # app, the turn that heard it said "close the task with Mark done" with nothing left on him - under "agent waiting on you" and a
-            # box asking for the answer to a question nobody needed. Closed before the turn's end is written: an answer is a turn going on. The turn's own stored word (its summary's nothing_left), no reading of it;
-            # a sign-in or a page handed over is not a question of words, and ends by its own road
+            # ...a turn that left nothing on him finished the steps it went without. Its earlier question to him stands all the same until he
+            # answers it, the task closes or the agent takes it back (workerstate.let_go) - never because this turn did not ask it again
             if not asks and summ and summ.get('nothing_left'):
                 from . import proposals as _props
                 try: _props.finished_without(self.store, self.task_id)
@@ -3399,11 +3397,6 @@ class GeneralSession:
                     from . import wrapup as _wrap
                     try: _wrap.chat_playbook(self.store, self.task_id)
                     except Exception as e: logger.debug(f'task {self.task_id}: no playbook asked at its end - {e}')
-                from .signin import PREFIX as _SIGNIN
-                from .browserview import TURN_PREFIX as _TURN
-                for r in ws.open_requests(ws.events(self.store, self.task_id, self.sid)):
-                    if r['Kind'] == 'input_needed' and not str(r.get('RequestId') or '').startswith((_SIGNIN, _TURN)):
-                        ws.record(self.store, self.task_id, self.sid, 'answered', request_id=r['RequestId'], text='no longer asked - nothing is left on the owner', source=src)
             ws.record(self.store, self.task_id, self.sid, 'turn_end', text=reply[:4000], source=src)
             # ...each question of the reply as one group, so the owner answers them together (workerstate.answer_group) - WITH THE CHOICES THE
             # AGENT OFFERED (walk 13: passed to ask_owner, written into the answer as prose and never pressable): a button each, his press his

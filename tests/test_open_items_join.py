@@ -71,10 +71,10 @@ class WhatItWaitsOnTests(unittest.TestCase):
         from taskuary import asks
         asks._start_watch(self.s, self.tid, self.s.list_messages(self.tid)[0])     # the reply he sent asked her something
         seen = []
-        r = arrive(self.s, reader(seen, "waiting on erin blake's answer"), 'w', 'thread-N', ERIN, 'Erin Blake', [ALEX], 'Spendly',
+        r = arrive(self.s, reader(seen, "waiting for erin's input: erin blake's answer"), 'w', 'thread-N', ERIN, 'Erin Blake', [ALEX], 'Spendly',
                    'More users - we added the sales team in October. The price did not change.')
         said = [txt for t, txt in shown(json.loads(seen[-1])) if t == self.tid]
-        self.assertTrue(said and "waiting on erin blake's answer" in said[0].lower() and 'Q4 vendor spend' in said[0], said)
+        self.assertTrue(said and "waiting for erin's input: erin blake's answer" in said[0].lower() and 'Q4 vendor spend' in said[0], said)
         self.assertEqual(r['task_id'], self.tid, 'her answer reaches the task that asked')
 
     def test_the_agents_question_and_a_named_wait_are_on_its_line_and_go_when_answered(self):
@@ -83,8 +83,8 @@ class WhatItWaitsOnTests(unittest.TestCase):
         ws.record(self.s, self.tid, 'g1', 'input_needed', text='Is 25 seats or 250 the right count?', source='api')
         waiton.declare(self.s, self.tid, 'gail@northwind.example')
         line = next(l for l in context.open_items(self.s) if f'(tid {self.tid})' in l)
-        self.assertIn('its agent asks you: Is 25 seats or 250 the right count?', line)
-        self.assertIn('waiting on Gail', line)
+        self.assertIn("waiting for your input: the agent's question: Is 25 seats or 250 the right count?", line)
+        self.assertIn("also waiting for Gail's input", line)
 
 
 class OpenItemsBoundTests(unittest.TestCase):

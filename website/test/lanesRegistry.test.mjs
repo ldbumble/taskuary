@@ -70,7 +70,7 @@ test("every kind of row is counted, filed as mail and placed by lanes.json's ite
 
 test("an Advisor line's kind has one word on its card, its Timeline row and its report", () => {
   for (const [k, v] of Object.entries(IDEA)) { assert.equal(ideaWord(k), v.word); assert.equal(ideaCounted(k), v.counted); }
-  assert.equal(ideaWord("followup"), "waiting on them");
+  assert.equal(ideaWord("followup"), "waiting for their input");
   assert.equal(ideaWord(undefined), "advisor idea", "an unnamed kind is an Advisor idea, not a slip nobody saw");
 });
 

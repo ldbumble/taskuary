@@ -203,7 +203,7 @@ test("the waving agent is the one lane sized to be seen", () => {
   // "can't see the hand waving. used to say agent waving?" (the owner, 2026-09-11). The mark and
   // the word were both in the table; nothing wore them, because row_lane never said `blocked`.
   const meta = LANE_META.blocked;
-  assert.equal(meta.word, "agent waiting on you");          // ...the same word timelineState.waving uses
+  assert.equal(meta.word, "waiting for your input");          // ...the same word timelineState.waving uses
   assert.equal(meta.mark, "👋");
   assert.equal(meta.loud, true);
   // LOUD IS EXACTLY "this is on you". The two tables disagreed while they were two - the Timeline
@@ -220,7 +220,7 @@ test("the waving agent is the one lane sized to be seen", () => {
 // reply waiting for your yes were indistinguishable (the owner, 2026-09-22). These two words must
 // never collapse into one again, and they are the vocabulary's, not this rail's.
 test("a waving agent and a waiting reply are two different words", () => {
-  assert.equal(rowMeta({ lane: "blocked" }).word, "agent waiting on you");
+  assert.equal(rowMeta({ lane: "blocked" }).word, "waiting for your input");
   assert.equal(rowMeta({ lane: "approve" }).word, "ready to send");
   assert.notEqual(rowMeta({ lane: "blocked" }).word, rowMeta({ lane: "approve" }).word);
 });

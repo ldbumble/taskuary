@@ -136,8 +136,9 @@ TOOLS = {
                      'retry': {'type': 'boolean'}, 'corrections': {'type': 'array', 'items': {'type': 'object'}},
                      'check_back': {'type': 'object', 'properties': {'when': _STR, 'what': _STR}}}, ('did',)), ('GET', '/api/tasks/1')),
     'ask_owner': ('own', "Ask the owner the one thing only they can give - a fact or a decision - with your recommended answer. It stands "
-                         "on the task until they answer, and the answer comes to you. choices: short answers, when it is a pick.",
-                  _S({'question': _STR, 'choices': {'type': 'array', 'items': _STR}}, ('question',)), ('GET', '/api/tasks/1')),
+                         "on the task until they answer, the task closes or you withdraw it, and the answer comes to you. choices: short answers, "
+                         "when it is a pick. withdraw: true takes back your question still standing - it no longer needs their answer.",
+                  _S({'question': _STR, 'choices': {'type': 'array', 'items': _STR}, 'withdraw': {'type': 'boolean'}}), ('GET', '/api/tasks/1')),
     'playbooks': ('read', "How this company does each kind of job, written by the owner: with no `name`, the list of playbooks and when each "
                           "applies; with a `name`, that playbook whole. Read-only.",
                   _S({'name': _STR}), ('GET', '/api/tasks/1')),
@@ -762,7 +763,10 @@ def _call(store, tid: int, name: str, args: dict, doors: dict, skip=()) -> str:
         # "Thursday 26 November" it could not read was set nowhere at filing, while the agent told the owner "On Thursday, I'll check"
         return 'Kept - it shows on the task when your answer is filed.' + (_end_check(store, tid, a['check_back'], doors, skip) if a.get('check_back') else '')
     if name == 'ask_owner':
-        from . import selfclose
+        from . import selfclose, workerstate
+        if a.get('withdraw') is True:
+            gone = workerstate.let_go(store, tid, 'the agent took the question back')
+            return f"Withdrawn: {'; '.join(gone)}" if gone else 'No question of yours stands on the task - nothing to withdraw.'
         if not str(a.get('question') or '').strip(): raise ValueError('`question` is empty - write the one thing you need from the owner')
         selfclose.keep_mark(tid, 'ask', selfclose.ask_mark(a['question'], a.get('choices') if isinstance(a.get('choices'), list) else ()))
         return 'Asked - it stands on the task as their question, and their answer comes to you. Go on with what does not hang on it.'

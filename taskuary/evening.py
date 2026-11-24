@@ -260,8 +260,8 @@ def collect(store, hours: int = HOURS) -> dict:
 
     # ...WHAT IS OWED IS THE TASK'S TO SAY, NEVER A MAIL ROW'S (walk 6, 2026-11-23, the third walk running: "the corrected pack went out" under
     # Done today and "fix the headcount" under Tomorrow - the corrected copies were new emails, not replies to her mail, so her mail read
-    # unanswered; and a CI build its agent had fixed read open). A mail on a task is that task's: the brief reads the task's one state, its
-    # to-dos, what its cards sent and its agent's last word (owed), and the mail rides as what it is about. Only mail no task holds is weighed
+    # unanswered; and a CI build its agent had fixed read open). A mail on a task is that task's: the brief reads the task's one state
+    # (taskstate.standing) and what its cards sent (owed), and the mail rides as what it is about. Only mail no task holds is weighed
     # by itself
     from .store import task_ref
     priorities, on, on_tasks = [], {}, []
@@ -299,8 +299,11 @@ def collect(store, hours: int = HOURS) -> dict:
     runs = store._rows("SELECT r.AgentName, r.Status, r.LastError, r.TaskId, t.Title FROM run r LEFT JOIN task t ON t.TaskId=r.TaskId "
                        "WHERE COALESCE(r.FinishedAt, r.UpdatedAt, r.StartedAt)>=? ORDER BY r.RunId DESC LIMIT 80", (since,))
     # ...and a task he closed with its agent's question to him unanswered says so: read as handled, it was told as "confirmed" (walk 5)
-    from .taskstate import open_question
-    def closed(t): return 'closed, its question to him unanswered' if open_question(store, t['TaskId']) else 'closed'
+    # - said on the close's own row (concierge.close_task lets the question go with the task)
+    def closed(t):
+        r = store._one("SELECT Detail FROM audit WHERE EntityType='task' AND EntityId=? AND Action IN ('close_from_assistant','closed_by_road') "
+                       "ORDER BY Id DESC LIMIT 1", (t['TaskId'],)) or {}
+        return 'closed, its question to him unanswered' if '"unanswered"' in str(r.get('Detail') or '') else 'closed'
     # ...each task by what was ASKED of it, never the title its agent gave it early on - a label, which read "Ask HN post, awaiting Submit"
     # after he had dismissed the post (walk 16)
     from .context import asked
@@ -319,36 +322,26 @@ def collect(store, hours: int = HOURS) -> dict:
 
 def owed(store, t: dict, since: str) -> str:
     """WHERE ONE OPEN TASK STANDS, from the facts every surface reads - never a rule of the brief's own: its status as the rail says it
-    (taskstate.status), its to-dos not ticked, what its cards sent in the window, and what its agent's last summary left on him."""
-    from . import general, taskstate, waiton
-    tid, bits = int(t['TaskId']), []
-    # ...never "agent done" while it waits on somebody's answer (walk 16: "agent done" right after the send that asked Erin something)
-    them = waiton.on_them(store, store.get_task(tid) or t)
-    try: st = taskstate.status(store, t); bits.append('' if them and st['key'] in taskstate.CHAT_DONE else st['word'])
-    except Exception: bits.append(str(t.get('Status') or 'open'))
-    # ...the agent's own to-dos: a step its turn left ON HIM (`on_you`) is said below by the one reading of what still stands on him
-    # (taskstate.left_on_him) - kept here too it outlived the card it named (walk 15: "to-dos left: Press the Publish card" after he declined it)
-    todo = [i for i in store.task_checklist(tid) if not i.get('on_you')]; left = [i for i in todo if not i.get('done')]
-    if todo: bits.append(f"to-dos left: {'; '.join(_one_line(i.get('text'), 80) for i in left[:4])}" if left else 'every to-do ticked')
+    (taskstate.status), where it stands (taskstate.standing: whose input it waits for, and what), and what went and
+    what he turned down in the window."""
+    from . import taskstate
+    tid = int(t['TaskId']); now = taskstate.said(taskstate.standing(store, tid))
+    try: word = taskstate.status(store, t)['word']
+    except Exception: word = str(t.get('Status') or 'open')
+    bits = ['' if now.startswith(word) else word, now]
     from . import ledger
     # ...WHAT went and what was made, as the ledger says it (walk 14: "Tomorrow: send the vendor spend sheet" - sent at 2:26 - read off the
     # task's title beside a bare count; "it first needs an account" after the agent had made one)
     sent = ledger.rows(store, ('sent', 'act'), task=tid, since=since)
     if sent: bits.append(f"sent today ({len(sent)}): {'; '.join(ledger.said(r) for r in sent[:3])}")
     if (made := ledger.rows(store, 'account', task=tid, since=since)): bits.append(f"made: {'; '.join(ledger.said(r) for r in made[:3])}")
-    # ...and its cards as they stand NOW (cardqueue.state), never the words a turn wrote before his press (walk 13: "the post goes out only
-    # when you press the card" told after he had declined it): what waits for his press, what he turned down today, what the agent left
+    # ...and what he turned down today, as the cards stand NOW (walk 13: "the post goes out only when you press the card" told after he had
+    # declined it) - what still waits for his press is where it stands, above
     from . import cardqueue
     from .conversation import _card
-    ws = cardqueue.state(store, tid)['units']
-    bits.append(f"waits for his press: {'; '.join(cardqueue.what(store, u) for u in ws[:3])}" if ws else 'nothing waits for his press')
     his = lambda r: (st := _card(r)['status']) == 'rejected' or st == 'closed_unsent' and r.get('DecidedBy') not in ('agent', 'assistant', 'taskuary')
     no = [r for r in store._rows("SELECT * FROM review WHERE TaskId=? AND DecidedAt>=? ORDER BY DecidedAt", (tid, since)) if his(r)]
     if no: bits.append(f"he turned down: {'; '.join(cardqueue.what(store, {'rids': [r['ReviewId']], 'rows': [r]}) for r in no[:3])}")
-    s = general._last_said(store, tid)[1]
-    if isinstance(s, dict) and s.get('nothing_left'): bits.append('its agent says nothing is left')
-    elif (left := taskstate.left_on_him(store, tid)): bits.append(f"its agent left on him: {'; '.join(_one_line(x, 80) for x in left[:3])}")
-    bits += waiton.stands(store, t)           # ...and what it waits on now: whose answer, and its agent's question to him
     return ' · '.join(b for b in bits if b)
 
 

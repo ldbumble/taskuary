@@ -143,6 +143,11 @@ def record(store, tid: int, sid: str, kind: str, request_id: str = None, text: s
                             'ChoicesJson': json.dumps(list(choices)) if choices else None, 'Source': source, 'EventId': event_id})
     try: store._poke('task-changed', task_id=tid)
     except Exception: pass
+    if kind == 'turn_end':                       # ...and a wait whose answer this turn read is over (waiton.settle)
+        try:
+            from . import waiton
+            waiton.settle(store, tid)
+        except Exception as e: logger.debug(f'task {tid}: its wait was not settled - {e}')
     if kind == 'turn_end' or kind in TERMINAL:   # a batch close that waited for the turn (batch.close_if_settled)
         try:
             from . import batch
@@ -202,6 +207,24 @@ def open_requests(evs: list) -> list:
     return [e for i, e in enumerate(evs)
             if i > max(spoke, failed) and e['Kind'] in REQUESTS and answered.get(e['RequestId'], -1) < i and e.get('Source') != READ_OFF_PROSE
             and not (e['Kind'] == 'stalled' and e.get('Source') == 'hook' and str(e.get('Text') or '').strip().lower() == 'unknown')]
+
+
+def in_words(e: dict) -> bool:
+    """A question the agent asked in its own words - never a step on a page, a press waiting in an app, or a chooser on its screen, each of
+    which only his press, the page or the screen closes."""
+    from .agentdesktop import READY
+    r = str(e.get('RequestId') or '')
+    return e.get('Kind') == 'input_needed' and e.get('Source') != 'screen' and ask_of(r)['ask'] == 'question' and not r.startswith(READY)
+
+
+def let_go(store, tid: int, why: str) -> list:
+    """THE AGENT'S QUESTION TO HIM STANDS UNTIL HE ANSWERS IT (a press, his line, his answer outside - line_answers), THE TASK CLOSES, OR THE AGENT
+    TAKES IT BACK (the owner, 2026-11-24) - never because a later turn did not ask it again. This is the last two: each question in words still
+    open on the task's run is answered by `why` (concierge.close_task; ask_owner's `withdraw`). [the texts let go]."""
+    sid = current_sid(store, int(tid))
+    out = [e for e in open_requests(events(store, int(tid), sid) if sid else []) if in_words(e)]
+    for e in out: record(store, int(tid), sid, 'answered', request_id=e['RequestId'], text=why, source='taskuary')
+    return [e['Text'] for e in out]
 
 
 def _public_request(e: dict) -> dict:

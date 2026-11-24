@@ -12,7 +12,7 @@ from unittest import mock
 
 from fastapi.testclient import TestClient
 
-from taskuary import funnel, server, terminal, workerstate
+from taskuary import funnel, origin, server, terminal, workerstate
 from taskuary.store import SQLiteStore
 from taskuary.testing import Factory
 
@@ -34,6 +34,7 @@ class FinishedAgentOneStateTests(unittest.TestCase):
                             from_name='Erin Blake', from_email='erin@northwind.example')
             f.route(mid, tid, 'create', 'a question addressed to you')
             cls.s.update_task(tid, {'Assignee': 'agent:coding'}, 'walk')
+            origin.raise_to(cls.s, tid, 'trusted', 'owner')      # ...he trusted her, as he must have for an agent to run (taskstate.standing)
             sid = uuid.uuid4().hex[:12]
             if case != 'no-hook-exit':
                 workerstate.record(cls.s, tid, sid, 'working')

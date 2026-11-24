@@ -119,7 +119,9 @@ def test_the_assistants_turn_reads_the_tasks_own_move_not_an_advisors_pick(s):
 
 # ── one field, both pages ───────────────────────────────────────────────────────────────────────────────────────────────────────────
 def test_the_task_page_and_the_rails_item_on_the_table_carry_the_same_field(s, monkeypatch):
-    f = Factory(s); tid = f.task(title='Q3 accruals', kind='reply'); f.message(tid)      # a row the rail carries, and an agent answered on it
+    # ...from a colleague: a stranger's mail would hold Trust in front, and nothing is closed over his Trust still to press (taskstate.standing)
+    s.set_setting('owner_email', 'alex@northwind.example', 't')
+    f = Factory(s); tid = f.task(title='Q3 accruals', kind='reply'); f.message(tid, from_email='gail.moreno@northwind.example', from_name='Gail Moreno')
     s.add_comment(tid, 'assistant', general.SUMMARY_TYPE, json.dumps({'about': 'Gail asked', 'did': 'Gail has the file', 'nothing_left': True}))
     quiet = agent_task(s, summary={'about': 'x', 'did': 'y'}, title='Look up the pay date')
     funnel.invalidate(); monkeypatch.setattr(server, 'store', s)

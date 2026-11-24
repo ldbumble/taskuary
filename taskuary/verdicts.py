@@ -398,11 +398,12 @@ def _deliver_review(store, rv, final, verb, actor, note=None, cc=None, envelope=
                                    'who': str((msg or {}).get('FromEmail') or '').lower(), 'cc': [str(a).lower() for a in (sent.get('cc') or [])],
                                    'chase': rv.get('Origin') == 'chase'})      # task.chase's own mark (review.Origin)
         except Exception as e: logger.warning(f'review {rid}: the outcome row was not written - {e}')
-        # A reply that ASKED them something keeps watching for the answer, even once the task is marked done (asks.py) -
-        # whether it asked is the model's to read, off this thread: the button never waits on it
-        if not outgoing and rv.get('Kind') not in ('action', 'slot'):
+        # A reply that ASKED them something keeps watching for the answer, even once the task is marked done (asks.py) - and a new mail that
+        # did waits for their input - whether it asked is the model's to read, off this thread: the button never waits on it
+        if rv.get('Kind') != 'action':
             from . import asks
-            try: asks.watch_reply(store, rv, attempted['body'])
+            new = outgoing or rv.get('Kind') == 'slot'
+            try: asks.watch_reply(store, rv, attempted['body'], to=(_went_to(store, rv, attempted) or list(sent.get('to') or [])) if new else None)
             except Exception as e: logger.warning(f'the reply watch did not start on review {rid}: {e}')
         return {'ok': True, 'status': attempted['status'], 'sent': sent, 'send_error': None,
                 'delivery': 'reconciled' if reconciled else 'sent'}

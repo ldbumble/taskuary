@@ -46,7 +46,7 @@ test("owner completion policy is carried by the durable task tag", () => {
 
 test("timeline exposes task state beside current agent or reply attention", () => {
   assert.deepEqual(timelinePhases({ TaskStatus: "waiting", AgentWaiting: true }),
-    { task: "waiting", agent: "agent waiting on you", reply: null });
+    { task: "waiting", agent: "waiting for your input", reply: null });
   assert.deepEqual(timelinePhases({ TaskStatus: "done", ReviewStatus: "sent" }),
     { task: "done", agent: null, reply: "sent" });
 });
@@ -55,7 +55,7 @@ test("timeline exposes task state beside current agent or reply attention", () =
 test("one stage is open: the last thing owed wins, and a closed task shows itself", () => {
   const draftReady = { kind: "coding", task: "open", agent: "stopped and saved", reply: "ready to send", hasSender: true };
   assert.equal(focusStage(draftReady), "reply");                                    // sending it is what closes the task
-  assert.equal(focusStage({ ...draftReady, agent: "agent waiting on you" }), "reply");
+  assert.equal(focusStage({ ...draftReady, agent: "waiting for your input" }), "reply");
   assert.equal(focusStage({ kind: "reply", task: "open", agent: "waiting to start", reply: "not drafted", hasSender: true }), "reply");
   // the kind does not open the agent stage - having work in it does (2026-09-14)
   assert.equal(focusStage({ kind: "coding", task: "open", agent: "waiting to start", reply: "sent", hasSender: true }), "task");
@@ -110,7 +110,7 @@ test("proposals are not the reply, and the reply is not a proposal", () => {
 // shows a terminal sitting at a prompt with the thing that unblocks it folded away below.
 // Parked on anything else - a question, a wall - the agent is what stopped, and it wins.
 test("a waving agent outranks a proposal, unless the proposal is what it wants", () => {
-  const base = { kind: "coding", task: "open", agent: "agent waiting on you", reply: "not drafted", proposal: true };
+  const base = { kind: "coding", task: "open", agent: "waiting for your input", reply: "not drafted", proposal: true };
   assert.equal(focusStage({ ...base, agentSub: "asking" }), "agent");
   assert.equal(focusStage({ ...base, agentSub: "stalled" }), "agent");
   assert.equal(focusStage({ ...base, agentSub: "parked" }), "agent");
@@ -120,7 +120,7 @@ test("a waving agent outranks a proposal, unless the proposal is what it wants",
 });
 
 test("a drafted reply still outranks a waving agent, whatever it is parked on", () => {
-  const base = { kind: "coding", task: "open", agent: "agent waiting on you", reply: "ready to send" };
+  const base = { kind: "coding", task: "open", agent: "waiting for your input", reply: "ready to send" };
   assert.equal(focusStage({ ...base, agentSub: "asking" }), "reply");
   assert.equal(focusStage({ ...base, agentSub: "approval" }), "reply");
 });

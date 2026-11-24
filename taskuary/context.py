@@ -394,7 +394,6 @@ def recent_open(store, msg: dict, limit: int = OPEN_SEATS) -> list:
     the thread, the record, the sender, a name on another channel - newest first."""
     conv, sender, text, own = _arrival_keys(msg)
     ids = ids_of(f"{msg.get('subject') or ''} {msg.get('body') or ''}")
-    from . import waiton
     out, rows = [], store.tasks_open_linked()
     near = alike(store, text, rows, NEAREST)
     names = [] if own else arrival_names(store, msg)
@@ -423,7 +422,7 @@ def recent_open(store, msg: dict, limit: int = OPEN_SEATS) -> list:
         out.append({'tid': t['TaskId'], 'ref': task_ref(t['TaskId']), 'title': t.get('Title') or '',
                     'from': OWN_TASK if t.get('OriginBase') == 'owner' else _who(sender, senders),
                     'why': hit[0], **({'about': _short(t.get('Summary'), 200)} if (meant or named or tied) and t.get('Summary') else {}),
-                    **({'waits_on': w} if (w := waiton.stands(store, t)) else {}),
+                    **({'waits_on': w} if (w := _stands(store, t)) else {}),
                     **_threads(convs), **({'in_another_chat': True} if chat and convs and conv not in convs else {}), '_rank': hit[1]})
     out.sort(key=lambda r: -r['_rank'])
     return [{k: v for k, v in r.items() if k != '_rank'} for r in out[:limit]]
@@ -457,19 +456,27 @@ def open_items(store, skip=(), limit: int = OPEN_ITEMS) -> list:
     """The owner's open tasks and Watching items as one line each - ref and tid, title, what it asks, where it came from, age - so an
     arrival about the same matter from anyone, on any channel, can be named as that task (same_as). `skip` is what triage was already
     shown. Evidence, never a rule: the model says whether one of them is this."""
-    from . import waiton
     from .senders import channel_name
     out = []
     for t in store.tasks_open_brief(limit + len(skip)):
         if t['TaskId'] in skip: continue
         src = 'yours' if _own(t) else ', '.join(x for x in (channel_name(t.get('Channel') or t.get('Source')), _short(t.get('FromName'), 30)) if x)
-        out.append(_item(t, src, 'watching' if t.get('WatchedAt') else '', waits=' ; '.join(waiton.stands(store, t))))
+        out.append(_item(t, src, 'watching' if t.get('WatchedAt') else '', waits=_stands(store, t)))
         if len(out) >= limit: break
     return out
 
 
+def _stands(store, t: dict) -> str:
+    """Where an open task stands now, as stored - never its title or the ask that opened it (taskstate.standing): whose input it waits for and
+    what - walk 16: an answer on a new thread to the reply a task had sent was read as a notice, since nothing triage was shown said that task
+    waited on it. '' when it waits on nobody."""
+    from . import taskstate
+    st = taskstate.standing(store, t['TaskId'])
+    return taskstate.said(st) if st['waits_on'] in ('you', 'them') or st['them'] else ''
+
+
 def _item(t: dict, *tail, waits: str = '') -> str:
-    """One line: ref and (tid), title, what it asks, what it waits on now (waiton.stands), then `tail` and its age - what it asks gives way,
+    """One line: ref and (tid), title, what it asks, where it stands now (_stands), then `tail` and its age - what it asks gives way,
     never which task or its state."""
     head, waits = f"{task_ref(t['TaskId'])} (tid {t['TaskId']}) {_short(t.get('Title'), 50)}", _short(waits, OPEN_WAITS_CHARS)
     tail = ' | '.join(x for x in (*tail, _age(t.get('CreatedAt'))) if x)

@@ -65,7 +65,10 @@ class WakeTests(unittest.TestCase):
         out, _, _ = arrive(self.s, 'w1', PAULA, 'Paula Vance', 'The file is the 8/17 one.')
         t = self.s.get_task(self.tid)
         self.assertEqual((out['status'], out['task_id']), ('attached', self.tid))       # routed onto the task, never filed away
-        self.assertEqual((t['WaitingOn'], t['Status'], str(t['WokeMid'])), (None, 'open', str(out['message_id'])))
+        # ...the wait itself ends with the agent's turn that reads it (waiton.settle): a holding reply is no answer (walk 17, K2)
+        self.assertEqual((t['WaitingOn'], t['Status'], str(t['WokeMid'])), (PAULA, 'open', str(out['message_id'])))
+        from taskuary import taskstate
+        self.assertNotEqual(taskstate.standing(self.s, self.tid)['waits_on'], 'them', 'her line moves it on - no longer waiting on her')
 
     def test_a_reply_from_someone_else_leaves_the_wait(self):
         out, _, _ = arrive(self.s, 'w2', GAIL, 'Gail Moreno', 'Thanks all.')

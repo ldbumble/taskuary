@@ -2,6 +2,29 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.4.3.4 - 2026-11-24
+
+- Anything for the owner's review is one tool: propose, its kind the road the press takes
+- Every card, file and view a turn sets down stands in one Artifact
+- The one review tool keeps its post road over master's revert: the picture rides on its card once, the guide names no second post shape
+- A read receipt's picture is read off the writer's lock
+- A view can be worked with: controls, worked-out values, his answer; data tools give rows show takes
+- A queued start fills every free slot: each runs on its own thread, the drain moves on once it is at work
+- A conversation said afresh says each new mail once
+- Anything for review is one card: ReviewCard in Artifact.jsx, each kind only its fields
+- A table never wraps while there is room: its frame widens, then its font steps down, then it wraps at words
+- The chat draws a view's controls, works its values out as they move, and sends his pick once
+- What Taskuary made opens in the one task page
+- The rail's tail: one read row per look, one task re-presented per change, Mark done not behind the census
+- A change card shows what it will say: the new words whole, marked where they change, his edit is what is saved
+- A chat opens at the start of its newest reply, never its very bottom
+- The start queue leaves a change-log row: the rail shows a queued start at once
+- The Advisor reads its goals from ADVISOR.md and sees unanswered follow-ups per thread, in Taskuary and the mailbox
+- A line filed onto a task still shows: an FYI row on the rail and an arrival in its chat
+- Mark done's result stays on the closed task's row: a greyed "âœ“ Done" beside Reopen
+- The day's "What's open" card names the open tasks
+- An answer and its turn's row are filed in one step: a read never sees one without the other
+
 ## 0.4.3.3 - 2026-11-24
 
 - A check-back set with an ISO time and offset stands at that time, not at the offset's hour

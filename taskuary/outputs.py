@@ -197,11 +197,21 @@ def preview_of(p: Path, name: str = ''):
 # A PICTURE DRAWS AT ITS OWN SHAPE (the owner, 2026-11-18: "images should be able to render however the agent wants it or make sense to
 # show"): the page reserves its real width and height before it loads, so nothing jumps - read here off the file's header, no imaging library
 def pixels(p) -> list | None:
-    "[width, height] of a PNG, GIF, JPEG, WebP or BMP picture, read off its header - None for anything else or a header it cannot read."
+    """[width, height] of a PNG, GIF, JPEG, WebP or BMP picture, or of an MP4, MOV or WebM video, read off its header - None for anything else
+    or a header it cannot read. A VIDEO TOO (the owner, 2026-11-23: an upright clip stood in a 16:9 frame the chat's whole width): its shape
+    reserves its room as a picture's does (taskOutputs.mediaFit)."""
     import struct
     try:
-        with open(p, 'rb') as f: b = f.read(64 * 1024)
-        if b[:8] == b'\x89PNG\r\n\x1a\n': w, h = struct.unpack('>II', b[16:24])
+        with open(p, 'rb') as f:
+            b = f.read(64 * 1024)
+            if b[4:8] in (b'ftyp', b'moov', b'mdat', b'wide', b'free'): return _track(f)
+        if b[:4] == b'\x1aE\xdf\xa3':                     # ...a WebM: its first video track's PixelWidth (B0) and PixelHeight (BA)
+            m = re.search(rb'\xb0([\x81\x82])', b)
+            if not m: return None
+            n = m[1][0] - 0x80; w = int.from_bytes(b[m.end():m.end() + n], 'big')
+            m = re.compile(rb'\xba([\x81\x82])').search(b, m.end() + n)
+            h = int.from_bytes(b[m.end():m.end() + m[1][0] - 0x80], 'big') if m else 0
+        elif b[:8] == b'\x89PNG\r\n\x1a\n': w, h = struct.unpack('>II', b[16:24])
         elif b[:6] in (b'GIF87a', b'GIF89a'): w, h = struct.unpack('<HH', b[6:10])
         elif b[:2] == b'BM': w, h = struct.unpack('<ii', b[18:26]); h = abs(h)
         elif b[:4] == b'RIFF' and b[8:12] == b'WEBP':
@@ -222,6 +232,28 @@ def pixels(p) -> list | None:
     except (OSError, struct.error, ValueError): return None
 
 
+def _track(f) -> list | None:
+    "[width, height] of an MP4/MOV's first video track, off its track header (tkhd), turned as its matrix turns it (a phone's upright clip)."
+    import struct
+    def boxes(at, end):
+        while at + 8 <= end:
+            f.seek(at); n, k = struct.unpack('>I4s', f.read(8)); h = 8
+            if n == 1: n, h = struct.unpack('>Q', f.read(8))[0], 16
+            elif n == 0: n = end - at
+            if n < h: return
+            yield k, at + h, at + n
+            at += n
+    for k, a, z in boxes(0, f.seek(0, 2)):
+        if k != b'moov': continue
+        for t in (x for x in boxes(a, z) if x[0] == b'trak'):
+            for k3, a3, _ in boxes(t[1], t[2]):
+                if k3 != b'tkhd': continue
+                f.seek(a3); v = f.read(1)[0]; f.seek(a3 + 4 + (32 if v == 1 else 20) + 16)
+                m = struct.unpack('>9i', f.read(36)); w, h = (x >> 16 for x in struct.unpack('>II', f.read(8)))
+                if w > 0 and h > 0: return [int(h), int(w)] if m[0] == 0 and m[1] != 0 else [int(w), int(h)]
+    return None
+
+
 def row(tid: int, p: Path, rel: str) -> dict:
     "One file as the page draws it - the same shape as a shown page (page_row), so one list draws both."
     from urllib.parse import quote
@@ -229,7 +261,7 @@ def row(tid: int, p: Path, rel: str) -> dict:
     st = p.stat()
     return {'id': f'output:{rel}', 'name': p.name, 'path': rel, 'kind': 'output', 'content_type': kind,
             'size': st.st_size, 'at': datetime.fromtimestamp(st.st_mtime).strftime('%Y-%m-%d %H:%M:%S'), 'preview': sheet, 'url': f'/api/task-outputs/{int(tid)}/{quote(rel)}',
-            **({'dims': d} if kind.startswith('image/') and (d := pixels(p)) else {}),
+            **({'dims': d} if kind.startswith(('image/', 'video/')) and (d := pixels(p)) else {}),
             **({'note': 'No preview on this install - Download opens it in your spreadsheet app.'} if PREVIEW.get(ext) == 'sheet' and not sheet else {})}
 
 
@@ -459,7 +491,7 @@ def page_row(a: dict) -> dict:
     "A task's artifact as the page draws it - a page an agent showed or published among them - here, so a look-up never imports the server."
     return {'id': a['ArtifactId'], 'name': a.get('Name') or 'session artifact.md',
             'content_type': a.get('ContentType') or 'text/markdown', 'size': a.get('Size') or 0,
-            **({'dims': d} if str(a.get('ContentType') or '').startswith('image/') and (f := _confined(a.get('Path'))) and (d := pixels(f)) else {}),
+            **({'dims': d} if str(a.get('ContentType') or '').startswith(('image/', 'video/')) and (f := _confined(a.get('Path'))) and (d := pixels(f)) else {}),
             'kind': a.get('Kind') or 'session', 'created_by': a.get('CreatedBy') or '', 'created_at': a.get('CreatedAt'),
             'url': f"/api/task-artifacts/{a['ArtifactId']}" if a.get('Path') else None,
             # a page a Claude session published: its claude.ai link (claude_artifacts); `url` is the local copy

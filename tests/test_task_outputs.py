@@ -51,6 +51,24 @@ class TaskOutputsTests(unittest.TestCase):
             self.assertEqual(outputs.row(self.tid, self.dir / name, name).get('dims'), dims, name)
         self.assertNotIn('dims', outputs.row(self.tid, self.dir / 'notes.md', 'notes.md'))
 
+    def test_a_video_carries_its_own_shape_an_upright_one_upright(self):
+        """The owner, 2026-11-23: an upright video the agent made stood the chat's whole width, letterboxed in a 16:9 frame. Its shape is read
+        off its header as a picture's is - an MP4's track header, turned as a phone's matrix turns it, and a WebM's pixel sizes."""
+        import struct
+        def box(k, body): return struct.pack('>I4s', 8 + len(body), k) + body
+        def mp4(w, h, turned=False):
+            m = (0, 1 << 16, 0, -(1 << 16), 0, 0, 0, 0, 1 << 30) if turned else (1 << 16, 0, 0, 0, 1 << 16, 0, 0, 0, 1 << 30)
+            tkhd = b'\0\0\0\x03' + b'\0' * 20 + b'\0' * 16 + struct.pack('>9i', *m) + struct.pack('>II', w << 16, h << 16)
+            sound = b'\0\0\0\x03' + b'\0' * 36 + struct.pack('>9i', *m) + b'\0' * 8      # ...an audio track has no size: the video's is read
+            return box(b'ftyp', b'isom\0\0\0\0') + box(b'moov', box(b'trak', box(b'tkhd', sound)) + box(b'trak', box(b'tkhd', tkhd)))
+        webm = b'\x1aE\xdf\xa3' + b'\0' * 20 + b'\xe0\x88' + b'\xb0\x82' + struct.pack('>H', 720) + b'\xba\x82' + struct.pack('>H', 1280)
+        for name, body, dims in (('upright.mp4', mp4(720, 1280), [720, 1280]), ('phone.mov', mp4(1280, 720, True), [720, 1280]),
+                                 ('wide.mp4', mp4(1280, 720), [1280, 720]), ('clip.webm', webm, [720, 1280])):
+            (self.dir / name).write_bytes(body)
+            self.assertEqual(outputs.row(self.tid, self.dir / name, name).get('dims'), dims, name)
+        (self.dir / 'cut.mp4').write_bytes(box(b'ftyp', b'isom') + b'\0\0')
+        self.assertNotIn('dims', outputs.row(self.tid, self.dir / 'cut.mp4', 'cut.mp4'), 'a file cut short has no shape, and no error')
+
     def test_the_folder_is_the_one_the_agent_picked(self):
         self.assertEqual(outputs.folder(17), config.home() / 'scratch' / 'outputs' / 'TQ-0017')
 

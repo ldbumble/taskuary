@@ -2821,6 +2821,7 @@ class GeneralSession:
             except Exception as e: logger.debug(f'task {self.task_id}: the cards before this turn stayed live - {e}')
             from . import selfclose as _marks
             _marks.take_marks(self.task_id)          # ...a turn that failed before its answer was filed leaves no end_turn for this one
+            from . import agenttools; agenttools.heard(self.task_id)       # ...nor a call it was heard making
             try:
                 from . import workerstate as ws
                 # ...Taskuary's own turn (a line on the thread, a check-back) is not the owner speaking: their question still waits (the night run,
@@ -3280,7 +3281,8 @@ class GeneralSession:
         """File one turn's answer: its markers read, its draft, question or close raised, the reply kept as the task's comment.
 """
         src = 'api'
-        from . import selfclose as _marks
+        from . import agenttools, selfclose as _marks
+        late = agenttools.made_late(self.store, self.task_id, self.trace, agenttools.heard(self.task_id))     # ...a call that never reached us
         if (said := _marks.take_marks(self.task_id)): reply = f'{reply}\n\n{said}'      # ...what its end_turn and ask_owner calls said (agenttools)
         let_go_retry(self.store, self.task_id)     # ...the AI answered: no try is owed any more (queue_retry)
         # ...AND THE ANSWER IS FILED WHATEVER ONE OF ITS ACTS DOES (the agent audit, 2026-11-22: a draft, withdraw or Hub step that raised threw the
@@ -3439,6 +3441,7 @@ class GeneralSession:
                 act('reading how the turn ended', hooks.judge_ended, self.store, self.task_id, self.sid, reply[:4000], then=self.wake, summ=summ,
                     jobs=background.left(self.trace, path))
         rid = self.store.add_comment(self.task_id, 'assistant', ASSISTANT_TYPE, reply)
+        if late: self.store.add_comment(self.task_id, 'taskuary', 'agent', late)
         # ...and the files this turn wrote, as it left them: a later turn rewrites them in place (outputs.keep_turn, the owner 2026-11-07)
         from . import outputs, sharedfiles
         try: made = outputs.keep_turn(self.task_id, rid, t0)

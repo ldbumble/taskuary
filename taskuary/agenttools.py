@@ -462,7 +462,32 @@ def _arguments(a) -> dict:
 def call(store, tid: int, name: str, args: dict, doors: dict, skip=()) -> str:
     """_call - and a card's tool says where its card stands in the task's line (cardqueue: one card at a time, in the order raised). `skip`:
     the tools this session is not offered (rpc's), which find_tools never names. Run behind the tool door (DOOR): a refusal names tools."""
+    if (m := LATE.fullmatch(name)): _HEARD.setdefault(int(tid), set()).add(m[1])
     with door('tool'): return _card_call(store, tid, name, args, doors, skip)
+
+
+# A STATE CALL THAT NEVER REACHED TASKUARY IS MADE AS ITS TURN IS FILED (walk 17, K4): the server restarted under a turn, its end_turn - the
+# check-back in it - failed twice with a connection error, and nothing set the check-back the agent had told the owner of. The call is in the
+# turn's own trace: one about this task alone that no door answered (heard) is made when the turn files, through the same tool
+LATE = re.compile(r"(?:mcp__taskuary__|taskuary[./_])?(end_turn|check_back)")
+_HEARD = {}                                     # task -> the LATE tools a door answered in its turn now running
+def heard(tid) -> set:
+    "The LATE tools a door answered for task `tid` since the last ask - and forgotten, for the next turn."
+    return _HEARD.pop(int(tid), set())
+
+def made_late(store, tid: int, trace, heard: set) -> str:
+    "Make the end_turn/check_back calls in `trace` (a turn's events) that no door answered: what Taskuary did, as a line for the task ('' for none)."
+    from . import checkback
+    doors, said = {'check_back': lambda t, when, what: checkback.set_check(store, t, when, what)}, []
+    for e in trace or []:
+        if e.get('type') != 'tool_call' or not (m := LATE.fullmatch(str(e.get('name') or ''))) or m[1] in heard: continue
+        a = (e.get('detail') or {}).get('args') or {}
+        if not isinstance(a, dict): continue
+        try:
+            if m[1] == 'end_turn': _call(store, tid, 'end_turn', {k: v for k, v in a.items() if k != 'check_back'}, doors)
+            if (cb := a.get('check_back') if m[1] == 'end_turn' else a): said.append(_end_check(store, tid, cb, doors).strip())
+        except Exception as x: logger.warning(f'task {tid}: its {m[1]} call, made late, did not go - {x}')
+    return ' '.join(["Taskuary made the agent's call that did not reach it during the turn.", *said]) if said else ''
 
 
 # A TO-DO IS NEVER TICKED DONE OVER ITS FAILED ACT (HIPAA walk 6: "summarise the lease, then set up a meeting with Ray" was ticked in the

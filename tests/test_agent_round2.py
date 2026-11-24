@@ -346,6 +346,34 @@ class CheckBackTests(unittest.TestCase):
         self.assertEqual(s.get_task(tid)['CheckBackAt'], '2026-11-26 07:00:00')
         self.assertIn('The check-back is set for', said); self.assertIn('Erin sent the order form', said)
 
+    def test_a_check_back_whose_call_never_reached_taskuary_is_set_as_the_turn_files(self):
+        """Walk 17 (K4, invented people): the server restarted under Erin's turn; its end_turn - check_back Thursday in it - failed twice with a
+        connection error, the turn filed "the Thursday check-back isn't registered", and nothing set it. The call is in the turn's trace:
+        one no door answered is made as the turn files, through the same tool - and one a door did answer is never made twice."""
+        import time as _t
+        s = MemoryStore(); tid = owner_task(s, 'Get a corrected Trainly quote'); agenttools.heard(tid)     # ...as its turn began
+        cb ={'when': 'Thursday 26 November', 'what': 'Dana Holt sent the corrected quote'}
+        ended = {'type': 'tool_call', 'name': 'mcp__taskuary__end_turn', 'detail': {'tool_call_id': 't9', 'args': {
+            'did': 'Drafted the emails to Dana Holt and Alex Doyle', 'check_back': cb}}}
+        def file(trace):
+            with mock.patch.object(general, '_selected', return_value=('api:test', 'Test', 'm')): sess = general.GeneralSession(s, tid)
+            try:
+                sess.trace = [{'type': 'start', 'at': _t.time()}, ended, {'type': 'tool_result', 'name': 'mcp__taskuary__end_turn',
+                              'detail': {'is_error': True, 'result': 'MCP error: fetch failed (ECONNREFUSED)'}}] if trace else []
+                with mock.patch('taskuary.hooks.judge_ended'), mock.patch('taskuary.remind.datetime') as dt:
+                    dt.now.return_value, dt.side_effect, dt.strptime = datetime(2026, 11, 24, 7, 18), datetime, datetime.strptime
+                    sess._file("Both emails are drafted. Taskuary's end-of-turn tool failed twice, so the check-back isn't registered.", [], _t.time())
+            finally: sess.close()
+        file(True)
+        t = s.get_task(tid)
+        self.assertEqual((t['CheckBackAt'], t['CheckBackWhat']), ('2026-11-26 07:00:00', 'Dana Holt sent the corrected quote'))
+        said = [c['Body'] for c in s.list_comments(tid) if c.get('Actor') == 'taskuary']
+        self.assertTrue(any('The check-back is set for' in b for b in said), said)
+        s.update_task(tid, {'CheckBackAt': None, 'CheckBackWhat': None}, 'owner')
+        agenttools.call(s, tid, 'end_turn', {'did': 'x', 'check_back': {'when': 'garbled', 'what': 'y'}}, {'check_back': lambda *a: {}})
+        selfclose.take_marks(tid); file(True)
+        self.assertFalse(s.get_task(tid).get('CheckBackAt'), 'a call a door answered is the agent\'s to make again, never made twice')
+
 
 if __name__ == '__main__':
     unittest.main()

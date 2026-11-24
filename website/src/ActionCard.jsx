@@ -19,6 +19,7 @@ import { failLine, landed, press } from "./press.js";
 import { asLive, MovedPast } from "./PassedCard.jsx";
 import { MdLine } from "./md.jsx";
 import { ACCENT, ALERT_INK, DIM, FAINT, INK } from "./theme.jsx";
+import Artifact from "./Artifact.jsx";
 
 // ...as wide as the pick it shows, its chevron beside it - sized to its longest choice, "Anyone" stood a word's gap from its own arrow - and
 // a ring when the keyboard is on it (the scenario run, 2026-11-06: no outline at all)
@@ -95,8 +96,7 @@ export default function ActionCard({ row: was, tid, live = true, onChanged, past
   const has = (f) => f.value || f.editable;
   const lines = fields.filter((f) => f.type === "line" && has(f) && !f.heading), heads = fields.filter((f) => f.heading && has(f));
   return (<MovedPast on={past}>
-    <Box data-tq-act={row?.ReviewId} data-tq-act-kind={act.kind} data-tq-act-state={gone ? "done" : st.live ? "waiting" : "not-done"}
-      className="tq-turn-frame">
+    <Artifact data-tq-act={row?.ReviewId} data-tq-act-kind={act.kind} data-tq-act-state={gone ? "done" : st.live ? "waiting" : "not-done"}>
       <Box sx={{ display: "flex", alignItems: "center", gap: 1, px: 1.5, pt: 1.25, pb: 0.75 }}>
         {post && <Box aria-hidden sx={{ width: 34, height: 34, borderRadius: "50%", bgcolor: "var(--tq-inset, #dfe6ec)", color: "var(--tq-link, #55697a)", display: "grid", placeItems: "center", fontWeight: 700, fontSize: 13 }}>
           {faceOf(row)}</Box>}
@@ -149,6 +149,6 @@ export default function ActionCard({ row: was, tid, live = true, onChanged, past
       {/* ...with the way past it pressable (connectorcatalog.not_signed_in: "[open its card](#connector=linkedin)") - design round 6, D8 */}
       {failed && <Typography role="alert" sx={{ px: 1.5, pb: 1, fontSize: 12.5, color: ALERT_INK }}><MdLine text={failed} /></Typography>}
       <FileDialog file={viewing} onClose={() => setViewing(null)} />
-    </Box></MovedPast>
+    </Artifact></MovedPast>
   );
 }

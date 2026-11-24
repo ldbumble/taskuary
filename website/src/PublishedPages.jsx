@@ -17,6 +17,7 @@ import { useOverlay } from "./overlays.js";
 import { csvRows, fitSvg, lockDown } from "./shownPages.js";
 import { deliverables, MEDIA_H, mediaFit } from "./taskOutputs.js";
 import "./publishedPages.css";
+import Artifact from "./Artifact.jsx";
 
 // sandboxed WITHOUT allow-same-origin: the page's scripts run (charts, tabs) but in an opaque origin -
 // no Taskuary token, no cookies, no reach into this window
@@ -199,7 +200,7 @@ export function FileView({ file: f, onClose }) {
   const [err, save, saved] = useSave();
   return (
     <div className="tq-published tq-file-view" data-tq-file-view={f.name || ""}>
-      <div className="tq-published-page tq-turn-frame" data-tq-pdf={isPdf(f) ? "" : undefined}>
+      <Artifact className="tq-published-page" data-tq-pdf={isPdf(f) ? "" : undefined}>
         <div className="tq-published-row">
           <span className="tq-published-name tq-published-file"><b>{f.name}</b><span>{label(f)}{f.size ? ` · ${sizeOf(f.size)}` : ""}</span></span>
           {isText(f) && <CopyFile f={f} />}
@@ -209,7 +210,7 @@ export function FileView({ file: f, onClose }) {
         {err && <div className="tq-published-note" data-tq-file-error="">{err}</div>}
         {saved && <div className="tq-published-note" data-tq-file-saved="">{saved}</div>}
         <Preview page={f} />
-      </div>
+      </Artifact>
     </div>
   );
 }
@@ -219,7 +220,7 @@ const sizeOf = (n) => n < 1024 ? `${n} B` : n < 1048576 ? `${Math.round(n / 1024
 function OutputFile({ file: p, open, onToggle, verb = "" }) {
   const can = !!p.preview && !p.missing, [err, save, saved] = useSave();
   return (
-    <div className="tq-published-page tq-turn-frame" data-tq-output={p.path} data-tq-pdf={isPdf(p) ? "" : undefined} style={mediaFit(p)?.box}>
+    <Artifact className="tq-published-page" data-tq-output={p.path} data-tq-pdf={isPdf(p) ? "" : undefined} style={mediaFit(p)?.box}>
       <div className="tq-published-row">
         {/* ...its name opens it too, as a page's does: a PDF clicked by its name was read nowhere */}
         <button type="button" className={`tq-published-name${can ? "" : " tq-published-file"}`} disabled={!can} onClick={onToggle}
@@ -237,7 +238,7 @@ function OutputFile({ file: p, open, onToggle, verb = "" }) {
       {err && <div className="tq-published-note" data-tq-file-error="">{err}</div>}
       {saved && <div className="tq-published-note" data-tq-file-saved="">{saved}</div>}
       {open && can && <Preview page={p} />}
-    </div>
+    </Artifact>
   );
 }
 
@@ -289,7 +290,7 @@ export default function PublishedPages({ pages, open: openAll = false, verb = ""
 function PageRow({ p, open, onToggle, verb }) {
   const [err, save, saved] = useSave();
   return (
-    <div className="tq-published-page tq-turn-frame" data-tq-pdf={isPdf(p) ? "" : undefined} style={mediaFit(p)?.box}>
+    <Artifact className="tq-published-page" data-tq-pdf={isPdf(p) ? "" : undefined} style={mediaFit(p)?.box}>
       <div className="tq-published-row">
         <button type="button" className="tq-published-name" disabled={!p.url} onClick={onToggle}
           title={p.url ? (open ? "Hide it" : "Show it here") : "No copy was kept - open it on claude.ai"}>
@@ -310,6 +311,6 @@ function PageRow({ p, open, onToggle, verb }) {
       {err && <div className="tq-published-note" data-tq-file-error="">{err}</div>}
       {saved && <div className="tq-published-note" data-tq-file-saved="">{saved}</div>}
       {open && p.url && <Preview page={p} />}
-    </div>
+    </Artifact>
   );
 }

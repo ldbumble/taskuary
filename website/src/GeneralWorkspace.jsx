@@ -68,6 +68,7 @@ import ChatBubbleOutlineIcon from "@mui/icons-material/ChatBubbleOutline";
 import AssessmentOutlinedIcon from "@mui/icons-material/AssessmentOutlined";
 import PersonOutlineIcon from "@mui/icons-material/PersonOutline";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
+import Artifact from "./Artifact.jsx";
 
 const errText = (e) => e?.response?.data?.detail || e?.message || "The assistant could not respond.";
 const textOf = (message) => (message?.content || []).filter((p) => p.type === "text").map((p) => p.text).join("\n").trim();
@@ -499,11 +500,11 @@ const ConvLine = ({ x, more }) => {
       data-tq-try-again="" onClick={() => retry(x)}>{btn("try_again")}</button></>}</div>}</div>;
 };
 /* A DRAFT HE SAID NO TO says what he pressed, with its words, in its own place (answered cards stay greyed saying what was pressed) */
-const NotSent = ({ c }) => <div className="tq-conv-past tq-turn-frame" data-tq-past-card={c.status} data-tq-past-review={c.review} role="note">
+const NotSent = ({ c }) => <Artifact className="tq-conv-past" data-tq-past-card={c.status} data-tq-past-review={c.review} role="note">
   {/* ...a letter is not sent; a step he turned down (a read of a folder, a push) is a no, never a send (walk 5: "Not sent - you said don't send ·
       read the folder Users") */}
   <div className="tq-conv-past-head">{c.what === "action" ? "You said no to this" : "Not sent - you said don't send"}</div>
-  {!!c.was?.text && <div className="tq-conv-past-words" dir="auto">{c.was.text}</div>}</div>;
+  {!!c.was?.text && <div className="tq-conv-past-words" dir="auto">{c.was.text}</div>}</Artifact>;
 /* A CARD THE CHAT MOVED PAST IS THE CARD IT WAS, ITS BUTTONS GREYED (the owner, 2026-11-18: "don't need reason. just keep it with buttons but
    the buttons grayed out once you moved on"): rewritten by a later turn, set aside as he wrote again, or taken back by its agent - drawn in its
    own place from the words it had then (`was`), never moved, never gone, and no line saying why */

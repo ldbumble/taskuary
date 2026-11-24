@@ -36,6 +36,7 @@ import { blankAsk, blankRefusal, blankSpans } from "./blanks.js";
 import { attUrl } from "./fileSave.js";
 import { outputRow } from "./taskOutputs.js";
 import { POST_PICTURE } from "./actionCard.js";
+import Artifact from "./Artifact.jsx";
 
 // what a held form press sends, read-only: its title, its other short lines, its words, its picture where the task made it
 function HeldPost({ post, tid }) {
@@ -659,17 +660,17 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
   // ...an approved act reads as what it did, never its JSON (resultOf)
   const done = resultOf(r);
   if (done) return (
-    <Box data-tq-act-result="" className="tq-turn-frame" sx={{ px: 1.5, py: 1.25 }}>
+    <Artifact data-tq-act-result="" sx={{ px: 1.5, py: 1.25 }}>
       <Typography variant="body2" sx={{ color: INK, overflowWrap: "anywhere" }}>
         <b>{done.said}</b>{done.what ? ` · ${done.what}` : ""}{done.url && <> · <a href={done.url} target="_blank" rel="noreferrer">{done.url.replace(/^https?:\/\//, "").slice(0, 80)}</a></>}</Typography>
       {done.command && <details><summary style={{ fontSize: 12, color: DIM, cursor: "pointer" }}>What it runs</summary>
         <Typography component="code" variant="caption" sx={{ whiteSpace: "pre-wrap", color: DIM, display: "block" }}>{done.command}</Typography></details>}
-    </Box>);
+    </Artifact>);
   if (r.Status !== "pending") {
     return (r.FinalText || r.DraftText) ? (
-      <Typography variant="caption" className="tq-turn-frame" sx={{ whiteSpace: "pre-wrap", color: DIM, display: "block", px: 1.5, py: 1.25 }}>
+      <Artifact as="p" sx={{ whiteSpace: "pre-wrap", color: DIM, fontSize: 12, lineHeight: 1.66, px: 1.5, py: 1.25 }}>
         {(r.FinalText || r.DraftText).slice(0, 500)}
-      </Typography>
+      </Artifact>
     ) : null;
   }
 
@@ -684,7 +685,7 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
   // ...WAITING, IT STANDS IN THE SAME RAISED FRAME IT WILL HAVE ONCE SENT (the owner, 2026-11-23: "white border raised like it does after you
   // click send"): appTheme.css .tq-turn-frame, one for every card
   return (
-    <Box className="tq-turn-frame" data-tq-card-frame="" sx={{ px: 1.5, py: 1.25 }}>
+    <Artifact data-tq-card-frame="" sx={{ px: 1.5, py: 1.25 }}>
       {err && <Alert severity="error" onClose={() => setErr("")} sx={{ mb: 1 }}>{err}</Alert>}
       {/* THE PRESS IS SAID AT ONCE, ON THE BUTTON HE PRESSED (the owner, 2026-11-16: Accept and close showed nothing for 15 seconds): it spins
           with what it is doing, and nothing else on the card moves until it is the pressed card (the owner, 2026-11-17: "when you click buttons
@@ -955,6 +956,6 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
           </Box>}
         </Alert>
       )}
-    </Box>
+    </Artifact>
   );
 }

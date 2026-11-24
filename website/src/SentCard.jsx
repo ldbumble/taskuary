@@ -9,12 +9,13 @@ import { sentMark, sentSaid, sentTitle } from "./sentLine.js";
 import { fmtDateTime } from "./dates.js";
 import { FOCUS_RING, pressable } from "./pressable.js";
 import { DIM, INK } from "./theme.jsx";
+import Artifact from "./Artifact.jsx";
 
 
 export default function SentCard(p) {
   const [open, setOpen] = useState(false), long = String(p.text || "").split("\n").length > 3 || String(p.text || "").length > 260;
   return (
-    <Box data-tq-sent-here={p.id || ""} data-tq-act-state="sent" className="tq-turn-frame" sx={{ px: 1.5, py: 1.25 }}>
+    <Artifact data-tq-sent-here={p.id || ""} data-tq-act-state="sent" sx={{ px: 1.5, py: 1.25 }}>
       <Typography sx={{ fontSize: 13.5, fontWeight: 700, color: INK, lineHeight: 1.3, overflowWrap: "anywhere" }}>{sentTitle(p)}</Typography>
       <Typography data-tq-sent-text="" sx={{ mt: 0.4, fontSize: 13, lineHeight: 1.5, color: DIM, whiteSpace: "pre-wrap", overflowWrap: "anywhere",
         ...(open ? {} : { display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }) }}>{p.text}</Typography>
@@ -25,6 +26,6 @@ export default function SentCard(p) {
         <Typography role="status" data-tq-sent-line="" sx={{ fontSize: 12, color: DIM, overflowWrap: "anywhere" }}>
           {sentSaid(p)}{p.at ? ` · ${fmtDateTime(p.at)}` : ""}</Typography>
       </Box>
-    </Box>
+    </Artifact>
   );
 }

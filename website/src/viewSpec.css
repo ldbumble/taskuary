@@ -15,7 +15,7 @@
 }
 /* ...IN THE TURN'S READING COLUMN (--tq-turn-item, appTheme.css), left-aligned; one whose table needs more takes what it needs
    (--tq-view-need, measured by ViewSpec's Table), up to the chat's width. Two classes: the chat's own `* { max-width: 100% }` never beats it */
-.tq-dash.tq-view { max-width: min(100%, max(var(--tq-turn-item), var(--tq-view-need, 0px))); }
+.tq-dash.tq-view.tq-turn-frame { max-width: min(100%, max(var(--tq-turn-item), var(--tq-view-need, 0px))); }
 :root[data-theme="dark"] .tq-view {
   --v-info: #9cbbe0; --v-info-bg: rgba(79, 138, 203, .1); --v-info-bd: rgba(79, 138, 203, .28);
   --v-ok: #7cc482; --v-ok-bg: rgba(95, 184, 101, .1); --v-ok-bd: rgba(95, 184, 101, .28);
@@ -142,12 +142,12 @@
 .tq-view-note > div > p:last-child:not(:first-child) { color: var(--d-muted); }
 
 /* ONE FRAME FOR THE WHOLE VIEW, after json-render's own card (the owner, 2026-11-23: "look at the original json render open source repo ... that
-   was fire good"): the view is ONE raised card - the frame every card and file of a turn stands on (appTheme.css .tq-turn-frame) - with its
+   was fire good"): the view is ONE raised card - the Artifact every card and file of a turn stands in (Artifact.jsx, appTheme.css .tq-turn-frame) - with its
    title on top and its blocks laid flat inside it, a hairline between those stacked one under another; never a stack of separate boxes. A
    number reads as theirs does: its label muted over it, the value large, how it moved small beside it */
 :root .tq-dash.tq-view { --d-surface: var(--tq-frame-bg); }   /* ...its surfaces (a sticky table head, a dot's ring) the frame's own, light and dark */
-.tq-dash.tq-view { --v-pad: 20px; padding: var(--v-pad); gap: 18px; box-sizing: border-box; background: var(--tq-frame-bg);
-  border: 1px solid var(--tq-border, #e4e0d9); border-radius: 12px; box-shadow: var(--tq-frame-shadow); }
+.tq-dash.tq-view { --v-pad: 20px; padding: var(--v-pad); gap: 18px; }
+.tq-dash.tq-view.tq-turn-frame { overflow: visible; }   /* ...a chart's tooltip at its edge is never cut by the frame */
 .tq-view .tq-view-card.flush { margin: 0 calc(-1 * var(--v-pad)); max-width: none; }   /* ...a table runs to the frame's edges */
 .tq-view .tq-view-card.flush:last-child { margin-bottom: calc(-1 * var(--v-pad)); }
 .tq-view .tq-view-grid[data-cols="1"] > .tq-view-el + .tq-view-el, .tq-view .tq-view-kids > .tq-view-el + .tq-view-el {

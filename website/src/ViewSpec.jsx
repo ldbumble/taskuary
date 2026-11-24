@@ -26,6 +26,7 @@ import { fmtNum, numOf, places, reportShape } from "./reportRows.js";
 import { run as pageRun } from "./pageView.js";
 import { openAppLink } from "./appLinks.js";
 import { buttonOf, columnsOf, fmtAs, labels, placesOf } from "./viewSpec.js";
+import Artifact from "./Artifact.jsx";
 
 // A CHECKLIST: done ticked, the one being done marked, the rest open - the agent's plan (GeneralWorkspace) is drawn by the same row
 const PLAN_ICON = { done: PlanDone, now: NowIcon, todo: PlanTodo };
@@ -146,8 +147,8 @@ class Guard extends React.Component {
 
 export default function ViewSpec({ spec }) {
   if (!spec) return null;
-  return <Guard><section className="tq-dash tq-view" data-tq-view="" data-tq-view-skip="" aria-label={spec.title || "A view from the agent"}>
+  return <Guard><Artifact as="section" className="tq-dash tq-view" data-tq-view="" data-tq-view-skip="" aria-label={spec.title || "A view from the agent"}>
     {spec.title && <h3 className="tq-view-title">{spec.title}</h3>}
     <Node els={spec.elements} id={spec.root} />
-  </section></Guard>;
+  </Artifact></Guard>;
 }

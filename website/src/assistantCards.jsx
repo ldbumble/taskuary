@@ -67,6 +67,7 @@ import { SECTIONS as STEPS } from "./taskLayout.js";   // a task's sections, by 
 import { WorkstreamLabel } from "./Workstream.jsx";   // the idea's workstream, a small label (the owner, 2026-11-01)
 import { channelName } from "./taskSources.js";
 import { repliesOf } from "./connectorCatalog.js";
+import Artifact from "./Artifact.jsx";
 
 const errText = (e) => e?.response?.data?.detail || e?.message || "That did not work";
 const edge = (lane) => { const r = laneMeta(lane).role; return r ? ROLES[r].solid : "#d3ccc1"; };
@@ -520,7 +521,7 @@ function ReportTurn({ mid, revision, name }) {
   const v = useMemo(() => reportView(text, name), [text, name]);
   if (!doc) return <div className="tq-card-excerpt">…</div>;
   if (doc.error) return <div className="tq-card-err">{doc.error}</div>;
-  return <>{isMorning(doc) ? <div className="tq-turn-frame" style={{ padding: 16 }}><DigestText text={text} sourceId={digestOf(doc)} /></div> : <ViewSpec spec={v.spec} />}
+  return <>{isMorning(doc) ? <Artifact style={{ padding: 16 }}><DigestText text={text} sourceId={digestOf(doc)} /></Artifact> : <ViewSpec spec={v.spec} />}
     <Attachments messageId={mid} dense skip={v.owns} /></>;
 }
 

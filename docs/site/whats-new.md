@@ -2,6 +2,34 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.4.3.2 - 2026-11-24
+
+- A check-back set with an ISO time and offset stands at that time, not at the offset's hour
+- Settings names the Advisor under Task agents, where its look runs
+- Send and close is not offered under the agent's standing question
+- A scam warning for the owner holds no start and asks for no Trust
+- The answer a task waits on reaches its agent whatever triage read it as
+- Triage sees a closed task as closed, with nothing owed or awaited on it
+- A check-back the app made as the turn filed is said in the chat under that turn
+- Sign-ups use puts his mailbox only into a box that asks an email, never the account name being made
+- The phone brings up the waiting draft an answer names by its person, and a list keeps its refs
+- A Codex turn's words are drawn once, and a fold's line counts a command instead of quoting it
+- The Advisor's Run now runs its job-ideas look first, as the morning's does
+- person says who someone is and every task the owner has had with them; it loads with the first turn
+- A post is a tool of its own: propose_post, one card per network
+- Agents end with the app however it ends, and the next start ends what a dead run left
+- Temp folders go with the run that made them, and the next run sweeps what a dead one left
+- Browser harness temp folders are swept like Python's, and a recording has a ceiling
+- Triage judges conversations side by side: order is kept within a thread only
+- Mark done answers with the rail it can have at once; a stale one is read behind, never rebuilt inside the press
+- A long chat is read on one reader snapshot and built with the writer's lock free; its mail is read once, each line's route by the line
+- A long task's read carries its newest messages whole and the rest as who, where and when; Show all reads them whole
+- Not a task answers once the task is gone; its agent's process is let go of behind the answer
+- A line typed to an agent at rest answers once it is kept and heard; its turn answers in the chat
+- A triage backlog is said over the rail and in the Timeline's header: Sorting N new messages
+- What came in since is found off the writer: only a joined thread's body is read, on the reader snapshot
+- Revert "A post is a tool of its own: propose_post, one card per network"
+
 ## 0.4.3.1 - 2026-11-24
 
 - A check-back set with an ISO time and offset stands at that time, not at the offset's hour

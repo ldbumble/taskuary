@@ -17,6 +17,7 @@ AFTER_MEETINGS = 'after_meetings'
 
 
 _SOON = re.compile(r'(?:in\s+)?(\d+|a|an|one|two|three|four|half an?)\s+(hour|hr|minute|min)s?')
+_ISO = re.compile(r'\d{4}-\d{2}-\d{2}[t ]\d{2}:\d{2}(?::\d{2}(?:\.\d{3}|\.\d{6})?)?(?:z|[+-]\d{2}:\d{2})?')
 _BARE_TIME = re.compile(r'(?:at\s+)?(?:\d{1,2}(?::\d{2})?\s*(?:am|pm|a\.m\.|p\.m\.)|\d{1,2}:\d{2})')
 
 
@@ -29,6 +30,14 @@ def parse(until, now: datetime = None) -> str | None:
     if s in NONE_WORDS: return None
     from .agenttools import echo                # ...the value bounded and its cut marked, so the way on is never what a length cut takes
     unreadable = f'"{echo(until)}" is not a day I can read - say a date (2026-10-09, 9 October), "in 2 weeks" or "today 3pm"'
+    # AN ISO TIME IS READ AS ONE, its offset an offset (walk 18): "2026-11-27T08:00:00-05:00" met the free-text time rule below, which took
+    # the "-05:00" for the hour - every check-back an agent set with an offset stood at 5 AM. A time with no offset is local already
+    if _ISO.fullmatch(s):
+        try: at = datetime.fromisoformat(s.upper().replace('Z', '+00:00'))
+        except ValueError: raise ValueError(unreadable) from None
+        if at.tzinfo: at = at.astimezone().replace(tzinfo=None)
+        if at <= now: raise ValueError('that time has already gone - pick a later one')
+        return f"{at:%Y-%m-%d %H:%M:%S}"
     if m := _SOON.fullmatch(s):
         n = {'a': 1, 'an': 1, 'one': 1, 'two': 2, 'three': 3, 'four': 4}.get(m.group(1)) or (0.5 if m.group(1).startswith('half') else int(m.group(1)))
         if not n: raise ValueError(unreadable)

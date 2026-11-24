@@ -59,6 +59,17 @@ class ParseTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'November has no day 31'): remind.parse('31 November', now)
         with self.assertRaisesRegex(ValueError, 'is not a day I can read'): remind.parse('junk 5', now)
 
+    def test_an_iso_time_with_its_offset_is_that_moment_never_the_offset_as_the_hour(self):
+        """Walk 18 (L4a): the agent set its check-back for "2026-11-27T08:00:00-05:00" and the chip read "Fri 5 AM" - the offset's "-05:00"
+        was read as the time. An ISO time is that moment, in local time; one with seconds and no offset is local as written."""
+        from datetime import timezone
+        now = datetime(2026, 11, 24, 9, 0)
+        at = datetime(2026, 11, 27, 13, 0, tzinfo=timezone.utc).astimezone().replace(tzinfo=None)
+        for said in ('2026-11-27T13:00:00Z', '2026-11-27T13:00:00+00:00', '2026-11-27T08:00:00-05:00'):
+            self.assertEqual(remind.parse(said, now), f'{at:%Y-%m-%d %H:%M:%S}', said)
+        self.assertEqual(remind.parse('2026-11-27 08:00:00', now), '2026-11-27 08:00:00')
+        with self.assertRaisesRegex(ValueError, 'already gone'): remind.parse('2026-11-20T08:00:00-05:00', now)
+
     def test_none_clears_and_nonsense_or_the_past_is_refused(self):
         self.assertIsNone(remind.parse('none', self.NOW)); self.assertIsNone(remind.parse('', self.NOW))
         for bad in ('whenever', '2026-09-25', '2026-01-01', '2026-02-30'):

@@ -132,31 +132,30 @@ def keys(store, name: str = '', address: str = '') -> set:
     return {k for k in (raw.lower(), a) if k}
 
 
-OPEN = ('open', 'in_progress', 'waiting')
-
-
-def tasks_of(store, address: str, skip=None) -> list:
-    """A PERSON'S OPEN TASKS (the owner, 2026-11-24: an agent on one of Gail's asks could not see her other three): every open task with a
-    message from them or to them, newest message first - [{ref, title, asked, stands, last}]: `asked` the subject they asked it under,
-    `stands` where it stands in the words every surface says it in (taskstate.status), `last` its newest message's date. `skip`: a task id
-    left out (the one asking)."""
+def tasks_of(store, address: str, skip=None, limit: int = 12) -> list:
+    """A PERSON'S TASKS WITH THE OWNER (the owner, 2026-11-24: an agent on one of Gail's asks could not see her other three): every task with
+    a message from them or to them, open and closed, newest message first - [{ref, title, asked, stands, closed, last}]: `asked` the subject
+    they asked it under, `stands` where it stands in the words every reader reads (taskstate.said), `closed` the day it closed or '', `last`
+    its newest message's date. `skip`: a task id left out (the one asking)."""
     from . import memory, taskstate
     from .store import task_ref
     a = str(address or '').strip().lower()
     if '@' not in a: return []
-    ms = store._rows("SELECT m.TaskId, m.Subject, m.SentAt, m.FromEmail, m.RecipientsJson FROM message m JOIN task t ON t.TaskId=m.TaskId "
-                     f"WHERE t.Status IN ({','.join('?' * len(OPEN))}) AND (lower(IFNULL(m.FromEmail,''))=? OR lower(IFNULL(m.RecipientsJson,'')) LIKE ?) "
-                     "ORDER BY m.SentAt", (*OPEN, a, f'%{a}%'))
+    ms = store._rows("SELECT TaskId, Subject, SentAt, FromEmail, RecipientsJson FROM message WHERE TaskId IS NOT NULL "
+                     "AND (lower(IFNULL(FromEmail,''))=? OR lower(IFNULL(RecipientsJson,'')) LIKE ?) ORDER BY SentAt", (a, f'%{a}%'))
     on = {}
     for m in ms:
         if m['TaskId'] == skip or a not in memory.people_of(m): continue
         o = on.setdefault(m['TaskId'], {'asked': ''})
         if not o['asked'] and str(m.get('FromEmail') or '').lower() == a: o['asked'] = str(m.get('Subject') or '')
+    # ...the newest `limit` by their last message first, so where each stands is read for those alone
+    last = lambda tid: str((store._one('SELECT MAX(SentAt) At FROM message WHERE TaskId=?', (tid,)) or {}).get('At') or '')[:10]
     out = []
-    for tid in on:
-        t = store.get_task(tid) or {}
-        last = store._one('SELECT MAX(SentAt) At FROM message WHERE TaskId=?', (tid,)) or {}
-        try: stands = taskstate.status(store, t)['word']
+    for tid, at in sorted(((tid, last(tid)) for tid in on), key=lambda o: o[1], reverse=True)[:limit]:
+        if not (t := store.get_task(tid)): continue
+        shut = t.get('Status') in ('done', 'dropped')
+        try: stands = '' if shut else taskstate.said(taskstate.standing(store, tid))
         except Exception: stands = t.get('Status') or ''
-        out.append({'ref': task_ref(tid), 'title': t.get('Title') or '', 'asked': on[tid]['asked'], 'stands': stands, 'last': str(last.get('At') or '')[:10]})
-    return sorted(out, key=lambda o: o['last'], reverse=True)
+        out.append({'ref': task_ref(tid), 'title': t.get('Title') or '', 'asked': on[tid]['asked'], 'stands': stands, 'last': at,
+                    'closed': str(t.get('ClosedAt') or t.get('UpdatedAt') or '')[:10] if shut else ''})
+    return out

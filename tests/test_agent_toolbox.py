@@ -65,7 +65,7 @@ class TheServer(unittest.TestCase):
         said = rpc(self.tid, 'tools/call', {'name': 'find_tools', 'arguments': {'query': 'propose_reply'}}).json()['result']['content'][0]['text']
         self.assertIn('nothing is sent', said)
         # ...and the view and the acts load with the session, never a bare name it must search for (2026-11-13: no view in 8 sessions)
-        self.assertEqual({n for n, t in tools.items() if (t.get('_meta') or {}).get('anthropic/alwaysLoad')} - {'propose_email', 'propose'}, {'show', 'propose_reply', 'hand_over', 'remember', 'tick', 'end_turn', 'ask_owner'})
+        self.assertEqual({n for n, t in tools.items() if (t.get('_meta') or {}).get('anthropic/alwaysLoad')} - {'propose_email', 'propose'}, {'show', 'propose_reply', 'hand_over', 'remember', 'tick', 'end_turn', 'ask_owner', 'person'})
         self.assertNotIn('_meta', tools['search_messages'])
 
     def test_the_invoice_an_agent_made_rides_on_its_email_card(self):
@@ -398,32 +398,41 @@ class TheServer(unittest.TestCase):
         return self.s.add_message({'TaskId': tid, 'ExternalId': ext, 'Channel': 'email', 'FromName': frm[0], 'FromEmail': frm[1], 'Subject': subject,
                                    'BodyText': body, 'SentAt': at, 'Status': 'routed', **kw})
 
-    def test_person_tasks_lists_their_other_open_tasks_and_where_each_stands(self):
-        """The owner, 2026-11-24: an agent on one of Gail's asks could not see her other open work. Her other open tasks - the ones she wrote
-        on and the ones the owner wrote to her on - each with its ref, title, what she asked, where it stands and its last message; never this
-        task, a closed one, or someone else's."""
+    def test_person_says_their_other_tasks_open_and_closed_and_where_each_stands(self):
+        """Walk 18, 2026-11-24: a separate person_tasks tool was never loaded by Claude Code, so an agent on one of Gail's asks never saw her
+        others. `person` holds them: the ones she wrote on and the ones the owner wrote to her on, open and closed, each with its ref, title,
+        what she asked, where it stands (taskstate.said) or the day it closed, and its last message; never this task or someone else's. It
+        rides with the session's first turn, never a bare name to search for, and the session's config does not defer our server."""
+        from pathlib import Path
         from taskuary import taskstate
         from taskuary.store import task_ref
         mk = lambda title, status='open': self.s.create_task({'Title': title, 'Kind': 'general', 'Status': status}, 'owner')
         self.s.set_setting('owner_email', 'alex@northwind.example', 'owner')           # ...Gail is a colleague, never a stranger
-        accr, sent, done, rays = mk('Close Q4 accruals'), mk('Offsite venue shortlist'), mk('Old expense query', 'done'), mk('Badge printer')
+        accr, sent, done, rays = mk('Close Q4 accruals'), mk('Offsite venue shortlist'), mk('Old expense query'), mk('Badge printer')
         self._mail(self.tid, 'g0', 'Ready for the renewal call?')
         self._mail(accr, 'g1', 'Can we close Q4 accruals this week?', at='2026-11-03 10:00:00')
         self._mail(sent, 'g2', 'Offsite venues', frm=('Alex Doyle', 'alex@northwind.example'), at='2026-11-05 16:00:00', Direction='out',
                    RecipientsJson=json.dumps({'to': ['gail@northwind.example']}))
-        self._mail(done, 'g3', 'Expense query')
+        self._mail(done, 'g3', 'Expense query', at='2026-10-01 09:00:00')
+        self.s.update_task(done, {'Status': 'done'}, 'owner')
         self._mail(rays, 'r1x', 'Badge printer is jammed', frm=('Ray Colton', 'ray@northwind.example'))
-        text, err = tool(self.tid, 'person_tasks', who='Gail Moreno')
+        text, err = tool(self.tid, 'person', name='Gail Moreno')
         self.assertFalse(err, text)
         lines = [l for l in text.splitlines() if l.startswith('- TQ-')]
-        self.assertEqual([l.split()[1] for l in lines], [task_ref(sent), task_ref(accr)], 'newest message first; not this task, a closed one or Ray\'s')
+        self.assertEqual([l.split()[1] for l in lines], [task_ref(sent), task_ref(accr), task_ref(done)], "newest first, closed too; not this task or Ray's")
         self.assertIn('Close Q4 accruals (asked as "Can we close Q4 accruals this week?")', lines[1])
-        self.assertIn(f"- {taskstate.status(self.s, self.s.get_task(accr))['word']}; last message 2026-11-03", lines[1])
-        self.assertIn('last message 2026-11-05', lines[0])
-        text, _ = tool(self.tid, 'person_tasks', who='ray@northwind.example')
+        self.assertIn(f"- {taskstate.said(taskstate.standing(self.s, accr))}; last message 2026-11-03", lines[1])
+        self.assertIn(f" - closed {self.s.get_task(done)['ClosedAt'][:10]}; last message 2026-10-01", lines[2])
+        self.assertIn('Ready for the renewal call?', text, 'and her latest messages')
+        text, _ = tool(self.tid, 'person', name='ray@northwind.example')
         self.assertIn(task_ref(rays), text)
-        text, _ = tool(self.tid, 'person_tasks', who='Nobody Atall')
+        text, _ = tool(self.tid, 'person', name='Nobody Atall')
         self.assertIn('try their address', text)
+        tools = {t['name']: t for t in rpc(self.tid, 'tools/list').json()['result']['tools']}
+        self.assertNotIn('person_tasks', tools, 'one tool for who a person is')
+        self.assertTrue(tools['person']['_meta']['anthropic/alwaysLoad'])
+        cfg = json.loads(Path(agenttools.claude_config(self.tid)).read_text(encoding='utf-8'))['mcpServers'][agenttools.SERVER]
+        self.assertNotIn('alwaysLoad', cfg, "a server-wide alwaysLoad: false would defer every tool, the per-tool flag too")
 
     def test_past_figures_reads_what_the_app_already_knows_in_numbers(self):
         """The owner, 2026-11-24: a renewal's agent asked him for last year's seat count while the signed renewal sat in his mail. The figures

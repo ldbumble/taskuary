@@ -54,11 +54,10 @@ TOOLS = {
     'my_task': ('read', "This task's brief: title, summary, status and checklist with each to-do's id. Read-only.", _S({}), ('GET', '/api/tasks/1')),
     'search_tasks': ('read', "Search the owner's tasks, mail, chats and pull requests by words (Taskuary's own search box), and what "
                              "earlier tasks SETTLED - the id found, the route that worked, the account used. Read-only.", _S({'words': _STR}, ('words',)), ('GET', '/api/search')),
-    'person': ('read', "Who a name or address is in the owner's mail, and their latest messages. Read-only.",
-               _S({'name': _STR}, ('name',)), ('GET', '/api/agent/messages')),
-    'person_tasks': ('read', "A person's other open tasks with the owner, newest message first: each task's ref (TQ-0123), its title, the "
-                             "subject they asked it under, where it stands, and the date of its last message. `who`: a name or address. "
-                             "Read-only.", _S({'who': _STR}, ('who',)), ('GET', '/api/agent/messages')),
+    'person': ('read', "Who a name or address is in the owner's mail and what the owner has had with them: their address, what the record "
+                       "holds on them, their other tasks with the owner newest first - open and closed, each with its ref (TQ-0123), its "
+                       "title, the subject they asked it under, where it stands or the day it closed, and its last message's date - and their "
+                       "latest messages. Read-only.", _S({'name': _STR}, ('name',)), ('GET', '/api/agent/messages')),
     'past_figures': ('read', "What the owner's saved mail and record already hold in figures for a vendor or person, over a year: their "
                              "charges with amounts, dates and message ids (how often, the change from the one before, the same amount twice), "
                              "the sentences of their mail that state a number (a seat count, a price, a total) with the message id and date, "
@@ -315,7 +314,9 @@ CODING_TOOLS = ('note_peers', 'use_repo', 'find_repos', 'propose_land')
 # ...ON EVERY ROAD, ONE LIST (walk 10, 2026-11-23): an AI card's harness deferred propose and hand_over by a second table (apiagent.LATER),
 # so an agent asked to post saw no tool that posts and said "I cannot publish directly". Every act that raises a card for his press - and
 # the sign-up, the one way a password is typed - is here, and nothing here is ever deferred (apiagent.LATER is built without them)
-ALWAYS_LOAD = ('show', 'propose_reply', 'propose_email', 'propose', 'hand_over', 'browser_signup', 'remember', 'tick', 'end_turn', 'ask_owner')
+# ...and WHO A PERSON IS (walk 18, 2026-11-24): deferred, `person_tasks` was never once loaded, and an agent on one of a person's asks never
+# saw the two others the same mail answered - `person` now holds their tasks too and rides with the first turn
+ALWAYS_LOAD = ('show', 'propose_reply', 'propose_email', 'propose', 'hand_over', 'browser_signup', 'remember', 'tick', 'end_turn', 'ask_owner', 'person')
 # ONE LINE A TOOL, FOR EVERY BRAIN (the owner, 2026-11-15: "They should be MCP-style tools with simple JSON: what they do and descriptions.
 # All methods can be searched later"): the whole description of every tool rode on every call - ~15,000 characters, ~650 a tool. A tool is
 # listed by its name, this line and its parameters' names and types (lean); its full words, rules and examples are find_tools' answer
@@ -325,8 +326,7 @@ SHORT = {
     'read_attachment': 'The text of one attachment on a saved message, by its id.',
     'my_task': "This task's brief and to-dos with their ids.",
     'search_tasks': "Search the owner's tasks, mail, chats and pull requests, and what earlier tasks settled.",
-    'person': "Who a name or address is in the owner's mail, and their latest messages.",
-    'person_tasks': "A person's other open tasks: ref, title, what they asked, where it stands, last message date.",
+    'person': "Who a name or address is: their record, open and closed tasks and where each stands, latest messages.",
     'past_figures': "What the mail and record already hold in figures for a vendor or person: charges, prices, seat counts.",
     'search_knowledge': "Search the owner's knowledge base (indexed folders, SharePoint).",
     'owner_memory': "Look up the owner's memory: what they said, their people, what they confirmed.",
@@ -695,25 +695,19 @@ def _call(store, tid: int, name: str, args: dict, doors: dict, skip=()) -> str:
                          **({'report': h['source']} if h.get('channel') == 'report' and h.get('source') else {})} for h in got.get('hits', [])][:40])
                     + (f'\n\n{done}' if done else ''), fence_it=True)
     if name == 'person':
-        from . import people
+        from . import ledger, people
         who = people.resolve(store, a.get('name', ''))
-        if not who: return f"nobody in the owner's mail matches {a.get('name')!r}"
+        if not who: return f"nobody in the owner's mail matches {echo(a.get('name'))} - try their address"
         if 'candidates' in who: return 'several people match - ask again with one of: ' + ', '.join(who['candidates'])
-        hits = mailsearch.search(store, who['address'], limit=8)
-        # ...and what the record holds on them (ledger.person): mail Taskuary sent them from any task, the address he gave, his promises
-        from . import ledger
-        rec = ledger.person(store, who['address'])
-        return _out(f"{who['address']}\n\n" + (f"ON RECORD:\n" + '\n'.join(f'- {x}' for x in rec) + '\n\n' if rec else '') + mailsearch.says(hits), fence_it=True)
-    if name == 'person_tasks':
-        from . import people
-        who = people.resolve(store, a.get('who', ''))
-        if not who: return f"nobody in the owner's mail matches {echo(a.get('who'))} - try their address, or person to find who they are"
-        if 'candidates' in who: return 'several people match - ask again with one of: ' + ', '.join(who['candidates'])
-        ts = people.tasks_of(store, who['address'], skip=tid)
-        if not ts: return f"{who['address']} has no other open task with the owner"
-        return _out(f"{who['address']} - {len(ts)} other open task(s):\n" + '\n'.join(
-            f"- {t['ref']} {t['title']}" + (f" (asked as \"{t['asked']}\")" if t['asked'] and t['asked'] != t['title'] else '')
-            + f" - {t['stands'] or 'open'}; last message {t['last'] or 'none'}" for t in ts), fence_it=True)
+        # ...what the record holds on them (ledger.person): mail Taskuary sent them from any task, the address he gave, his promises
+        rec, ts, hits = ledger.person(store, who['address']), people.tasks_of(store, who['address'], skip=tid), mailsearch.search(store, who['address'], limit=8)
+        # ...AND EVERY OTHER TASK THEY ARE ON, IN THE SAME ANSWER (walk 18, 2026-11-24): a second tool for them was never loaded, so an agent
+        # answering one of a person's asks did not see that the same mail answered two more
+        task = lambda t: f"- {t['ref']} {t['title']}" + (f" (asked as \"{t['asked']}\")" if t['asked'] and t['asked'] != t['title'] else '') + \
+            (f" - closed {t['closed']}" if t['closed'] else f" - {t['stands'] or 'open'}") + f"; last message {t['last'] or 'none'}"
+        return _out(f"{who['address']}\n\n" + (f"ON RECORD:\n" + '\n'.join(f'- {x}' for x in rec) + '\n\n' if rec else '')
+                    + (f"OTHER TASKS WITH THE OWNER ({len(ts)}, newest first):\n" + '\n'.join(map(task, ts)) if ts else 'No other task with the owner.')
+                    + "\nTheir figures (charges, prices, counts): past_figures.\n\n" + mailsearch.says(hits), fence_it=True)
     if name == 'past_figures':
         from . import lookout
         return _out(lookout.figures(store, str(a.get('who') or '')), fence_it=True)

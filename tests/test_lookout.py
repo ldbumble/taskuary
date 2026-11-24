@@ -112,6 +112,21 @@ def test_a_quote_not_in_what_it_read_or_a_number_it_cannot_back_drops_the_idea_a
     assert row['idea_kind'] == 'money' and row['title'] == i['Text']
 
 
+def test_an_idea_opens_on_the_whole_prompt_its_look_was_sent_and_the_rail_carries_it_once():
+    """THE WHOLE PROMPT (the owner, 2026-11-24: "shouldn't the input show the whole thing as just the beginning and ... as any long prompt?"):
+    the idea's chat opens on what the look was actually sent - its instructions and the window, the lens it took - never its family's one line."""
+    from taskuary import funnel
+    s, ids = world()
+    a, b = ids['dup']
+    llm = brain({'ideas': [idea('money', 'Vendor billing sent invoice 4471 twice', [f'msg{a}', f'msg{b}'])]})
+    iid = lookout.tick(s, llm, force=True)['raised'][0]
+    row = next(x for x in funnel.build(s)['items'] if x.get('idea') == iid)
+    assert row['asked'] == f"{llm.seen[0][0]}\n\n{llm.seen[0][1]}" and 'The one not taken longest:' in row['asked']
+    assert 'window' not in row['action'], 'the window rides the row once, as what was asked'
+    old = s.upsert_idea({'key': 'idea:lookout-before', 'kind': 'pitch', 'text': 'Raised before the window was kept', 'action': {'type': 'lookout', 'family': 'pitch'}}, ago(days=1))
+    assert lookout.asked(json.loads(old['ActionJson'])) == lookout.SYSTEM and lookout.asked({'type': 'other'}) == ''
+
+
 def test_the_run_reads_before_it_proposes_and_a_count_it_claims_is_counted_again():
     """ONE RUN WITH READ-ONLY TOOLS: it searches the mail - his sent mail too - reads a message whole, and only then proposes; a count it
     states is run again by the code and must match. Nothing it may call moves anything."""
@@ -237,8 +252,8 @@ def test_an_idea_lands_under_the_advisor_never_in_fyi_and_says_its_family(canoni
                                                               'connection': 'joined up', 'new_idea': 'new idea'}
     assert all(lanes.idea_section(f) == 'ideas' for f in lookout.FAMILIES)
     assert json.loads(s.get_idea(iid)['ActionJson'])['suggest'].endswith('\nPitch: "I caught a double invoice"')
-    # ...and its chat on the Agent tab opens with what the look was asked to find (the owner, 2026-11-23: "shows the input prompt that created it")
-    if canonical: assert row['asked'] == lookout.FAMILIES['money']
+    # ...and its chat on the Agent tab opens with the prompt that created it (test_an_idea_opens_on_the_whole_prompt_its_look_was_sent...)
+    if canonical: assert row['asked'].startswith(lookout.SYSTEM)
 
 
 def test_a_daily_pass_never_says_yesterdays_idea_again_whatever_its_words():

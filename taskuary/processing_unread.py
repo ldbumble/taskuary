@@ -316,7 +316,7 @@ def card_for(store, item, compact, live_state, now, states=None, noise=None, lea
                 late = 0
             elif slip: lane = slip
             from .lookout import asked
-            base.update(idea=idea['IdeaId'], idea_kind=idea.get('Kind'), action=action, asked=asked(action), workstream=idea.get('Workstream') or '',
+            base.update(idea=idea['IdeaId'], idea_kind=idea.get('Kind'), action={k: v for k, v in action.items() if k != 'window'}, asked=asked(action), workstream=idea.get('Workstream') or '',
                         priority=triage.get('priority'), tid=action.get('tid') or tid,
                         mid=action.get('mid'), settling=bool(triage.get('pending')), who_email=action.get('who_email') or '', late_days=late,
                         urgent_request=lane == 'asked' and (bool(triage.get('urgent')) or funnel.priority_rank(triage.get('priority')) == 0))

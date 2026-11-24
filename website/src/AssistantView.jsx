@@ -76,7 +76,7 @@ import CloseNote from "./CloseNote.jsx";
 import { AttachImage, ImageTray, usePromptImages, useSendWhenUp } from "./promptImages.jsx";
 import { handToItem, startsItems } from "./ItemSections.jsx";
 import { afterCancel, afterConfirm, afterExecute, holdsProposal, markExecuted, proposalSay } from "./proposalCard.js";
-import { LEVEL_META, LEVEL_ROLE, arrivals, isUrgent, arrivedAt, asPressed, withOpened, stillLeaving, bandsOf, canAdvance as canWalkOn, cardFor, currentItemFromPile, madeHere, displayRevision, drawOrder, fillCaps, followsItem, foldsAs, inOrder, interactiveCardIndex, drawnKey, tableCardIndex, keysOf, liveBrowseId, pastView, lastActIndex, chipsOf, receiptChips, CAPPED, FLOOR, FOOT_PX, levelLabel, nextMarkerKey, trimCaps, ROW_PX, refreshCurrentPresentation, refreshPilePresentation, rowMeta, tableItemOf, settledHistory, sinceOpener, walkOf, walkPlace } from "./funnelPile.js";
+import { AGENT_VERBS, LEVEL_META, LEVEL_ROLE, arrivals, isUrgent, arrivedAt, asPressed, withOpened, stillLeaving, bandsOf, canAdvance as canWalkOn, cardFor, currentItemFromPile, madeHere, displayRevision, drawOrder, fillCaps, followsItem, foldsAs, inOrder, interactiveCardIndex, drawnKey, tableCardIndex, keysOf, liveBrowseId, pastView, lastActIndex, chipsOf, receiptChips, CAPPED, FLOOR, FOOT_PX, levelLabel, nextMarkerKey, trimCaps, ROW_PX, refreshCurrentPresentation, refreshPilePresentation, rowMeta, itemVerbs, tableItemOf, settledHistory, sinceOpener, walkOf, walkPlace } from "./funnelPile.js";
 import { FYI_PAGE, ageHover, subLine, answersTo, awayFromClear, closedElsewhere, coveredByReload, fyiHasRoom, fyiTail, heldSince, latestLine, pileRows, pinOf, rowKeys, sameRow, sentChips } from "./funnelPile.js";
 import { railStatus, rowWhy } from "./railStatus.js";
 import { UndoLine } from "./Removed.jsx";
@@ -184,8 +184,6 @@ const refusedPress = (say) => Object.assign(new Error(say || "That did not go th
 // and Change my setup. `bar`: they stand on the bar, where nothing else but the walk does (actionRow.splitRow)
 const NEW_DOOR = SIDE_NAV.find((n) => n.key === "new");
 const IDLE_CHIPS = [{ verb: "newtask", label: NEW_DOOR.label, hint: NEW_DOOR.hint, bar: true }, { verb: "tour", label: "Change my setup", bar: true }];
-// the presses that start an agent on an item: each opens the agent box first (askAgent) - `coder` is coding_agent's old name
-const AGENT_VERBS = ["coding_agent", "regular_agent", "coder"];
 const speakOn = () => { try { return localStorage.getItem("taskuary_speak") === "1"; } catch { return false; } };
 const speak = (text) => {
   if (!text || typeof window === "undefined" || !window.speechSynthesis) return;
@@ -1079,7 +1077,7 @@ function Line({ m, lastBrief = false, live, last, moves = false, actions, fresh,
   // THE WORDS RIDE IN THE CARD (2026-09-23): Next beside the card's verb, every other word on its
   // quiet Also line. Only answer chips (a model's own options) and a card-less line keep the strip.
   const inCard = !!card && kind !== "walk" && kind !== "setup";
-  const verbs = inCard ? chips.filter((c) => c.verb) : [];
+  const verbs = inCard ? itemVerbs(kind, chips.filter((c) => c.verb)) : [];
   // a card that has FOLDED or been walked past is not the item any more - its recorded words (Stop and save, Remind me)
   // were still offered while it closed (the owner, 2026-10-06: "why do we still have these buttons while it's closing a task?");
   // all it keeps is the way on

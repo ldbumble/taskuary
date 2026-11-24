@@ -88,3 +88,17 @@ test("a line in a report's own box starts the agent on it by the one start, neve
   assert.match(ask, /else if \(START\) await START\(\{ key: ask\.key, title \}, \{ verb: AGENT, text: q, files: pics\.paths \}\);/);
   assert.match(read("AssistantView.jsx"), /startsItems\(startOnItem\);/, "the start is the one Send to agent takes");
 });
+
+// ONE WAY IN ON WHAT TASKUARY MADE (the owner, 2026-11-24, a dashboard's row: "don't need both send to agent and message on bottom no?"): a report,
+// a dashboard or an Advisor idea opens on the Agent tab with its own box, and his first line there starts the agent on it - so its row has no Send
+// to agent; what came in from outside (an FYI, a mail, a meeting) keeps the one it has
+test("a made item's row has no Send to agent and its box starts the agent on his first line; an FYI keeps its Send to agent", async () => {
+  const { itemVerbs, madeHere } = await import("../src/funnelPile.js");
+  const chips = ["regular_agent", "coding_agent", "report_off", "not_ours", "mine"].map((verb) => ({ verb, label: verb }));
+  for (const k of ["report", "dashboard", "idea"]) assert.deepEqual(itemVerbs(k, chips).map((c) => c.verb), ["report_off", "not_ours", "mine"], k);
+  for (const k of ["message", "meeting", "fyis"]) assert.deepEqual(itemVerbs(k, chips), chips, k);
+  assert.ok(madeHere({ kind: "report", key: "report:1" }) && !madeHere({ kind: "fyi", key: "msg:1" }));
+  assert.match(read("AssistantView.jsx"), /const verbs = inCard \? itemVerbs\(kind, chips\.filter\(\(c\) => c\.verb\)\) : \[\];/, "the row's words pass through it");
+  const ask = read("ItemSections.jsx");
+  assert.match(ask, /else if \(START\) await START\(\{ key: ask\.key, title \}, \{ verb: AGENT, text: q, files: pics\.paths \}\);/, "the box is the way in");
+});

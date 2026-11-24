@@ -310,7 +310,13 @@ export const cardFor = (item) => (item ? assistantFocus(item).card : null);
 // WHAT TASKUARY MADE ON ITS OWN (the owner, 2026-11-23: "Anything that comes in on the Agent tab shows the input prompt that created it (even if
 // automated: a report, routine, dashboard, Advisor)"): a report's run, a dashboard, an Advisor's line open on the Agent tab as a chat with its own
 // box (assistantCards madeSection) - so, like a task, it is the one box on screen; what came in from outside stays on Came from
-export const madeHere = (item) => ["report", "dashboard", "idea"].includes(cardFor(item));
+const MADE = ["report", "dashboard", "idea"];
+export const madeHere = (item) => MADE.includes(cardFor(item));
+// the presses that start an agent on an item - `coder` is coding_agent's old name
+export const AGENT_VERBS = ["coding_agent", "regular_agent", "coder"];
+// ...and NONE ON WHAT TASKUARY MADE (the owner, 2026-11-24: "don't need both send to agent and message on bottom no?"): its box starts the agent
+// on it (AssistantView.startOnItem) and is the one way in - the row keeps the rest. What came in from outside keeps its Send to agent
+export const itemVerbs = (card, verbs) => (MADE.includes(card) ? verbs.filter((c) => !AGENT_VERBS.includes(c.verb)) : verbs);
 
 // HOW LONG IT HAS WAITED ON YOU, beside the item's ref on the action row: the rail's gutter says it per row, but the eye is on the
 // buttons when deciding, and an old ask looked the same there as a new one (the row-bot comparison, 2026-10-07). Only what is on

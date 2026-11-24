@@ -22,6 +22,7 @@ import { BORDER, DIM, INK, frameInner } from "./theme.jsx";
 import { layTable, onPressing, useSpineAll } from "./actionRow.js";
 import { itemLines, readingOf } from "./threadReading.js";
 import { MESSAGE } from "./kinds.js";
+import { ArrivedWords } from "./GeneralWorkspace.jsx";
 
 // a section's white card on the warm ground, as a task's focus is
 export const ItemPart = ({ children, sx = null, ...rest }) => <Box {...rest} sx={{ ...FOCUS, px: { xs: 1.25, sm: 2 }, minWidth: 0, ...sx }}>{children}</Box>;
@@ -53,15 +54,13 @@ const KIND_NOUN = { fyi: "notice", report: "report", dashboard: "dashboard", ide
 // that created it (even if automated: a report, routine, dashboard, Advisor) ... Same card as the other ones"): the ask that made it on the
 // asking side, marked as automated, then the turn that answered it - its content in the turn's one frame - in the task chat's own rows
 // (GeneralWorkspace ConvLine, ConvTurn: the same classes, generalWorkspace.css). `input`: { head, text }; ItemAsk's box stands under it.
-// ...a long ask (a brief's whole prompt) reads its first lines, the rest one press away, as what came in reads (GeneralWorkspace ArrivedWords)
-const LONG_ASK = 280;
+// ...the WHOLE prompt that made it (the owner, 2026-11-24: "shouldn't the input show the whole thing as just the beginning and ... as any long
+// prompt?"): its first lines, the rest one press away - the one long-line clamp (GeneralWorkspace ArrivedWords)
 export function MadeTurn({ input, name = "Taskuary", children }) {
-  const [all, setAll] = useState(false), long = String(input.text || "").length > LONG_ASK;
   return <div className="tq-aui-chat" data-tq-made="">
     <div className="tq-aui-message tq-aui-user" data-tq-made-input="">
       <div className="tq-aui-user-head"><BoltIcon aria-hidden sx={{ fontSize: 13, verticalAlign: "-2px", mr: 0.4 }} />{input.head}</div>
-      {!!input.text && <div className="tq-aui-user-bubble" dir="auto"><span className={long && !all ? "tq-made-clamp" : undefined}>{input.text}</span></div>}
-      {long && <button type="button" className="tq-aui-arrived-more-btn" aria-expanded={all} onClick={() => setAll((a) => !a)}>{all ? "Show less" : "Show all"}</button>}</div>
+      {!!input.text && <div className="tq-aui-user-bubble" dir="auto"><ArrivedWords words={input.text} /></div>}</div>
     <div className="tq-aui-message tq-aui-agent"><div className="tq-aui-role">{name}</div><div className="tq-aui-agent-body">{children}</div></div></div>;
 }
 export function ItemAsk({ ask, hand = null, onHand = null, agent = false, hint = "", draft }) {
@@ -115,10 +114,9 @@ export function ItemAsk({ ask, hand = null, onHand = null, agent = false, hint =
 // `lays`: its moves ride the `about` section on a desk (ItemLay); `ask`: what it says and the box, in the AGENT section only (the owner, 2026-11-05:
 // "chat is on the came from tab. that's weird ... chat box is only on the agent tab") - the item still opens on what came in, never on Agent
 // `hands`: it takes a Send to agent with no box of its own to answer from (an FYI handful: ask null) - the box is drawn while a chip is on
-// `noAgent`: no Send to agent on its strip (an Advisor idea - the owner, 2026-11-06)
 // `moves`: what registers the item's row verbs (RowMoves, Foot), mounted out of sight - a section of its own once, "Nothing owed" on its tab
 const AGENT_STARTS = new Set(["regular_agent", "coding_agent", "send-general", "start-agent"]);
-export default function ItemSections({ kind, label, title, aside, sections: all, about, here = about, height, itemKey, lays = false, ask = null, hands = false, noAgent = false,
+export default function ItemSections({ kind, label, title, aside, sections: all, about, here = about, height, itemKey, lays = false, ask = null, hands = false,
   moves = null }) {
   // NO AGENT COLUMN WITH NOTHING OF ITS OWN (the owner, 2026-11-06: "the one bottom box with Came-from as a chip, with no side-column Agent"): the
   // box is at the foot of the section the item is about, its Came-from a chip on it
@@ -151,7 +149,7 @@ export default function ItemSections({ kind, label, title, aside, sections: all,
   const box = (ask || hand) && <ItemAsk ask={ask} hand={hand} onHand={setHand} draft={draft} agent={boxAt === "agent"}
     hint={hand ? `What should the agent do with this ${noun}?` : ""} />;
   // ...and none once it is handed on: the press is made, the box is where it goes now
-  const skip = (v) => (noAgent || !!hand) && AGENT_STARTS.has(String(v?.id || "").split(":").pop());
+  const skip = (v) => !!hand && AGENT_STARTS.has(String(v?.id || "").split(":").pop());
   const body = useRef(null), [w, setW] = useState(0);
   useLayoutEffect(() => {
     const el = body.current;

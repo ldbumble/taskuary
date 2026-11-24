@@ -154,7 +154,7 @@ export const subjectOf = (x, prev) => { const sub = String(x?.subject || "").tri
   return !sub || x.own || bare(sub) === bare(prev?.subject) || bare(sub) === bare(x.words) ? "" : sub; };
 /* WHAT CAME IN READS IN PLACE (the owner, 2026-11-11: "you should be able to hit expand and read the whole email"): a few lines, and - only
    where they are cut - one toggle that opens the whole message where it stands, whatever channel it came on */
-const ArrivedWords = ({ words }) => {
+export const ArrivedWords = ({ words }) => {
   const el = useRef(null), [open, setOpen] = useState(false), [cut, setCut] = useState(false);
   React.useLayoutEffect(() => { const e = el.current; if (e && !open) setCut(e.scrollHeight > e.clientHeight + 1); }, [words, open]);
   return <><span ref={el} className={`tq-aui-arrived-words${open ? " tq-aui-arrived-open" : ""}`} dir="auto">{words}</span>

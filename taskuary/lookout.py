@@ -897,10 +897,11 @@ def investigate(store, llm, user: str, seen: dict) -> dict | None:
 
 # ── WHERE IT LANDS ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 def asked(action) -> str:
-    """What the look was asked to find when it raised this idea - its family's brief - the line its chat on the Agent tab opens with
-    (the owner, 2026-11-23: "anything that comes in on the Agent tab shows the input prompt that created it"); '' for any other line."""
+    """The prompt the look that raised this idea was sent - its instructions and the window it read, lenses and all - the line its chat on the
+    Agent tab opens with (the owner, 2026-11-23: "anything that comes in on the Agent tab shows the input prompt that created it"; 2026-11-24:
+    "shouldn't the input show the whole thing"); one raised before the window was kept shows the instructions alone; '' for any other line."""
     a = action or {}
-    return FAMILIES.get(a.get('family'), '') if a.get('type') == 'lookout' else ''
+    return '\n\n'.join(x for x in (SYSTEM, a.get('window')) if x) if a.get('type') == 'lookout' else ''
 
 
 def key_of(x: dict) -> str:
@@ -921,21 +922,22 @@ def _said(x: dict) -> dict:
             'why': f"{x['evidence']} {x['why']}" + (f"\nWhat it comes to: {st['line']}" if st else ''), **({'stake': st} if st else {})}
 
 
-def land(store, x: dict) -> tuple:
+def land(store, x: dict, window: str = '') -> tuple:
     """(what happened, the row): 'raised' a new idea row, 'updated' the one already on these subjects in this family when new evidence came
-    (in place, never said twice), or 'repeat' with the earlier row when nothing is new or it was already put down."""
+    (in place, never said twice), or 'repeat' with the earlier row when nothing is new or it was already put down. `window`: the run's prompt
+    as sent, kept on the idea for its chat (asked)."""
     subs, was = subjects(store, x['refs']), None
     if (old := same(store, x['family'], subs)) or (was := store._one('SELECT * FROM idea WHERE Key=?', (key_of(x),))):
         old = old or was | {'act': json.loads(was.get('ActionJson') or '{}') or {}}
         a, new = old['act'], [r for r in x['refs'] if r not in {e.get('ref') for e in old['act'].get('evidence') or []}]
         if old.get('Status') not in ('open', 'snoozed') or not new: return 'repeat', old
         ev = (a.get('evidence') or []) + [e for e in _evidence(store, x) if e['ref'] in new]
-        act = a | _said(x) | {'evidence': ev, 'subjects': sorted(set(a.get('subjects') or []) | set(subs))}
+        act = a | _said(x) | {'evidence': ev, 'subjects': sorted(set(a.get('subjects') or []) | set(subs)), 'window': window}
         store._exec('UPDATE idea SET Text=?, ActionJson=?, LastSaid=? WHERE IdeaId=?', (x['title'], json.dumps(act), _ts(_now()), old['IdeaId']))
         store.audit('idea', old['IdeaId'], 'lookout_updated', 'advisor', 'agent', {'family': x['family'], 'new': new})
         return 'updated', store.get_idea(old['IdeaId'])
     # ...the pitch on a line of its own, apart from the next step (the owner, 2026-11-02)
-    act = {'type': 'lookout', 'family': x['family'], 'whose': 'yours - nobody asked for it', **_said(x), 'evidence': _evidence(store, x), 'subjects': subs}
+    act = {'type': 'lookout', 'family': x['family'], 'whose': 'yours - nobody asked for it', **_said(x), 'evidence': _evidence(store, x), 'subjects': subs, 'window': window}
     r = store.upsert_idea({'key': key_of(x), 'kind': x['family'], 'text': x['title'], 'sig': key_of(x), 'action': act}, _ts(_now()))
     store.audit('idea', r['IdeaId'], 'lookout_raised', 'advisor', 'agent', {'family': x['family'], 'refs': x['refs']})
     return 'raised', r
@@ -1093,7 +1095,7 @@ def tick(store, llm=None, force: bool = False, wait: bool = False) -> dict:
         for x in got['ideas']:
             if x['family'] in quiet and x['family'] in once_: held_.append((x, 'its kind raises one a day while under the bar')); continue
             if len(raised) >= room: held_.append((x, 'enough raised for now')); continue
-            what, r = land(store, x)
+            what, r = land(store, x, user)
             if what == 'repeat': held_.append((x, f"said before as \"{_one(r.get('Text'), 80)}\" - nothing new since")); continue
             (raised if what == 'raised' else updated).append(r['IdeaId']); once_.add(x['family'])
         _hold(store, held_)

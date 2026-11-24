@@ -885,9 +885,9 @@ def cannot(item: dict | None, verb: str, store=None) -> str:
     # an idea triage already opened a task for IS that task - Make a task on it made nothing new (the owner, 2026-10-01:
     # "no Make a task on an item that already is a task"); a closed one is history, and new work may be a task again
     if verb == 'mine' and item.get('kind') == 'idea' and _live_task(store, item): return f"{what} is already a task on your list."
-    # ...and a report is made a task by Send to agent alone (the owner, 2026-11-13), with what he wants to know about it (2026-11-16)
+    # ...and a report is made a task by his words in its box alone (the owner, 2026-11-13; its Send to agent folded into the box, 2026-11-24)
     if verb == 'mine' and item.get('kind') == 'report':
-        return f"{what} is a report - {buttons.label('regular_agent')} makes it a task, with what you want the agent to find out about it."
+        return f"{what} is a report - what you type in its box makes it a task, with the agent finding out what you asked about it."
     # the slipped answers belong to a slipped card: typed on anything else, or pressed after they wrote back, they do nothing
     # ...save a Chase the rule lit on a wait past its day (rulebook.adds: 3 working days on 'theirs', a late goal step - the owner,
     # 2026-10-23), which goes to the thread rulebook.chase_thread names

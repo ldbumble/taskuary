@@ -17,7 +17,7 @@ import { RepoPicker } from "./RepoPicker.jsx";
 import { AgentAsk } from "./RunForm.jsx";
 import { RemindPicker } from "./RemindMe.jsx";
 import { agentRuns } from "./taskFilter.js";
-import { cardFor, laneMeta } from "./funnelPile.js";
+import { AGENT_VERBS, cardFor, laneMeta } from "./funnelPile.js";
 import { afterExecute, proposalOf } from "./proposalCard.js";
 import { closeoutOf } from "./reviewProposal.js";
 import { needsYou, matchFor, CHIP_MOVE } from "./assistantGame.js";
@@ -174,7 +174,6 @@ function Draft({ item, busy, play }) {
 // `given` is a set the Core's answer already carried; `initial` a proposal it already made.
 // THE AGENT BOX'S START, on the game's item: the hand-off's own proposal carrying the owner's words and the agent chosen
 // (concierge.propose_direct), run at once - the box was the confirmation. A repository still to choose comes back as the picker.
-const AGENT_VERBS = ["coding_agent", "regular_agent", "coder"];
 export const handOver = async (item, o, onRepo) => {
   const { data: p } = await api.post("/api/concierge/propose", { verb: o.verb, key: item.key, table: true, exact: true, text: o.text || null, files: o.files || [],
     agent: o.agent || null, brain: o.brain || null, pick: o.pick || null, model: o.model || null });

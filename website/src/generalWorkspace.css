@@ -87,7 +87,6 @@
 [data-tq-canvas-item] .tq-aui-message { margin-bottom: 14px; }
 /* WHAT TASKUARY MADE, ON THE AGENT TAB (ItemSections MadeTurn): on the chat's own ground, as a task's chat is - its box's ground with it */
 .tq-item-sec:has(> [data-tq-made]) { --tq-item-ground: var(--tq-panel, #fbfaf7); background: var(--tq-item-ground); }
-.tq-aui-user-bubble > .tq-made-clamp { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 [data-tq-canvas-item] .tq-aui-hint:not([role]) { display: none; }
 @media (max-width: 700px) {
   .tq-aui-viewport { padding-left: 10px; padding-right: 10px; }

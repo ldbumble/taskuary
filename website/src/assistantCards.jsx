@@ -1111,9 +1111,9 @@ export function IdeaCard({ card, onOpenTask, onTimeline, onNavigate, onDone, tab
   // Agent tab since it's generated"): what its look was asked to find, then what it noticed, what to do and what it rests on, as a view - the
   // mail it is based on one press away; its moves are the same ones, on its pane (ItemLay), and the bar is Back and Next
   if (table != null) return (
-    <ItemSections kind="idea" itemKey={card.key} label={look ? `Advisor · ${ideaWord(card.idea_kind)}` : "Advisor"} height={table} about="agent" lays ask={ask} title={card.title} noAgent
+    <ItemSections kind="idea" itemKey={card.key} label={look ? `Advisor · ${ideaWord(card.idea_kind)}` : "Advisor"} height={table} about="agent" lays ask={ask} title={card.title}
       aside={<><SourceMark item={card} size={13} />{card.when && ago(card.when)}{card.workstream && <WorkstreamLabel slug={card.workstream} sx={{ ml: 0.75 }} />}</>}
-      sections={madeSection(card.title, { head: `Automated · Advisor · ${ideaWord(card.idea_kind)}`, text: card.asked ? `Look out for ${card.asked}` : "" },
+      sections={madeSection(card.title, { head: `Automated · Advisor · ${ideaWord(card.idea_kind)}`, text: card.asked || "" },
         <><ViewSpec spec={ideaView(card)} /><CardErr err={err} /></>)}
         moves={<ItemPart data-tq-idea-close=""><RowMoves on="on its panes" />{foot}</ItemPart>} />);
   return (

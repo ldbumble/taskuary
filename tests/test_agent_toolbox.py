@@ -65,7 +65,7 @@ class TheServer(unittest.TestCase):
         said = rpc(self.tid, 'tools/call', {'name': 'find_tools', 'arguments': {'query': 'propose_reply'}}).json()['result']['content'][0]['text']
         self.assertIn('nothing is sent', said)
         # ...and the view and the acts load with the session, never a bare name it must search for (2026-11-13: no view in 8 sessions)
-        self.assertEqual({n for n, t in tools.items() if (t.get('_meta') or {}).get('anthropic/alwaysLoad')} - {'propose_email', 'propose'}, {'show', 'propose_reply', 'hand_over', 'remember', 'tick', 'end_turn', 'ask_owner', 'person'})
+        self.assertEqual({n for n, t in tools.items() if (t.get('_meta') or {}).get('anthropic/alwaysLoad')} - {'propose_email', 'propose_post', 'propose'}, {'show', 'propose_reply', 'hand_over', 'remember', 'tick', 'end_turn', 'ask_owner', 'person'})
         self.assertNotIn('_meta', tools['search_messages'])
 
     def test_the_invoice_an_agent_made_rides_on_its_email_card(self):
@@ -915,3 +915,84 @@ def test_an_agent_is_told_to_offer_to_keep_code_it_wrote_as_a_routine():
     save it for later". Asked to save the script it wrote, the agent left a .py in Downloads: save_routine sat only in propose's long words,
     which an agent reads by name (find_tools). The tool's own line says it."""
     assert 'save_routine' in agenttools.SHORT['propose']
+
+
+class APostIsItsOwnTool(unittest.TestCase):
+    """The owner's live task, 2026-11-24: a routine asked for X, Reddit and LinkedIn drafts; the agent made the picture and wrote the three posts
+    as prose - a post card was a run_tool shape inside propose's long words, and it never called it ("where is the post? just see image").
+    propose_post files the card the run_tool road files: his connected account on the press, else Post via the browser with the final Post held."""
+    PNG = b'\x89PNG\r\n\x1a\n' + b'\0' * 64
+
+    def setUp(self):
+        import shutil
+        from taskuary import outputs
+        self.s, self.tid, _ = world()
+        self.p = mock.patch.object(server, 'store', self.s); self.p.start()
+        self.d = outputs.folder(self.tid); shutil.rmtree(self.d, True); self.d.mkdir(parents=True, exist_ok=True)
+        (self.d / 'tools-compared.png').write_bytes(self.PNG); (self.d / 'notes.txt').write_text('sources')
+
+    def tearDown(self):
+        import shutil
+        self.p.stop(); shutil.rmtree(self.d, True)
+
+    def cards(self): return self.s._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action' AND Status='pending' ORDER BY ReviewId", (self.tid,))
+
+    def test_it_loads_with_the_first_turn_and_propose_no_longer_carries_the_post(self):
+        listed = {t['name']: t for t in rpc(self.tid, 'tools/list').json()['result']['tools']}
+        self.assertTrue(listed['propose_post']['_meta']['anthropic/alwaysLoad'])
+        self.assertNotIn('propose_post', agenttools.deferred())
+        self.assertNotIn('post', agenttools.TOOLS['propose'][1].split('(a send')[1].split(')')[0])
+
+    def test_on_a_connected_network_its_press_posts_through_the_connection_and_nothing_before(self):
+        card = self.s.get_connector_by_type('linkedin')
+        self.s.save_connector({'ConnectorId': card['ConnectorId'], 'Active': 1, 'Secret': 'tok'}, 'test')
+        ran = []
+        with mock.patch.dict(REGISTRY, {'linkedin_post': lambda cfg: ran.append(cfg) or ('Posted', '')}):
+            said, err = tool(self.tid, 'propose_post', network='linkedin', text='Three tools, compared.', picture='tools-compared.png')
+            self.assertFalse(err, said); self.assertEqual(ran, [])
+            self.assertIn('its press (Post to LinkedIn) runs it on his connected account', said)
+            rv, = self.cards(); p = json.loads(rv['DraftText'])
+            self.assertEqual((p['action'], p['type'], p['image'], p['network'], p['connector_id']),
+                             ('run_tool', 'linkedin_post', 'tools-compared.png', 'LinkedIn', card['ConnectorId']))
+            from taskuary import verdicts
+            out = verdicts.decide(self.s, rv, 'approve', 'Three tools, compared.')
+        self.assertTrue(out['ok'], out); self.assertEqual(len(ran), 1)
+        self.assertEqual(ran[0]['text'], 'Three tools, compared.'); self.assertTrue(str(ran[0]['image_path']).endswith('tools-compared.png'))
+
+    def test_on_a_network_not_connected_it_is_the_browser_post_whose_final_post_waits(self):
+        from taskuary import general, proposals
+        said, err = tool(self.tid, 'propose_post', network='x', text='Three tools, compared.', link='https://northwind.example/compare')
+        self.assertFalse(err, said); self.assertIn('the card shows Post via the browser', said)
+        rv, = self.cards(); p = json.loads(rv['DraftText'])
+        self.assertEqual(p['type'], 'x_post'); self.assertTrue(p['text'].endswith('https://northwind.example/compare'))
+        ran = []
+        with mock.patch.dict(REGISTRY, {'x_post': lambda cfg: ran.append(cfg) or ('Posted', '')}), \
+             mock.patch.object(general, 'to_agent', side_effect=lambda s, tid, text, *a, **k: ran.append(text) or 'woke'):
+            self.assertTrue(proposals.via_browser(self.s, rv['ReviewId'], '')['ok'])
+        self.assertEqual(len(ran), 1, 'nothing ran on X: the agent was handed the words')
+        self.assertIn('Taskuary holds that press for his yes', ran[0]); self.assertIn('Three tools, compared.', ran[0])
+
+    def test_its_picture_rides_on_the_card_once(self):
+        tool(self.tid, 'propose_post', network='linkedin', text='Three tools, compared.', picture='tools-compared.png')
+        with mock.patch('taskuary.terminal.live_sessions', return_value=[]): got = server._assistant_payload(self.tid)
+        self.assertEqual([o['name'] for o in got['outputs']], ['notes.txt'])
+
+    def test_three_networks_are_three_cards_standing_one_at_a_time_and_none_posts(self):
+        from taskuary import cardqueue
+        ran = []
+        with mock.patch.dict(REGISTRY, {t: (lambda cfg: ran.append(cfg) or ('Posted', '')) for t in ('x_post', 'linkedin_post', 'reddit_post')}):
+            said, err = tool(self.tid, 'propose_post', picture='tools-compared.png', items=[
+                {'network': 'x', 'text': 'Three tools, compared.'}, {'network': 'linkedin', 'text': 'We compared three tools.'},
+                {'network': 'reddit', 'subreddit': 'smallbusiness', 'title': 'Three tools compared', 'text': 'What we found.'}])
+        self.assertFalse(err, said); self.assertEqual(ran, [])
+        rvs = self.cards()
+        self.assertEqual([json.loads(r['DraftText'])['type'] for r in rvs], ['x_post', 'linkedin_post', 'reddit_post'])
+        self.assertFalse(any(r.get('Batch') for r in rvs), 'different networks are different cards, never one bulk card')
+        self.assertEqual(cardqueue.state(self.s, self.tid)['live'], [rvs[0]['ReviewId']])
+        self.assertEqual(cardqueue.held(self.s, self.tid), {rvs[1]['ReviewId'], rvs[2]['ReviewId']})
+
+    def test_a_network_with_no_post_card_says_which_there_are(self):
+        said, err = tool(self.tid, 'propose_post', network='myspace', text='Hi')
+        self.assertTrue(err); self.assertIn('no post card', said); self.assertIn('linkedin', said); self.assertFalse(self.cards())
+        said, err = tool(self.tid, 'propose_post', network='Twitter', text='Hi')
+        self.assertFalse(err, said); self.assertEqual(json.loads(self.cards()[0]['DraftText'])['type'], 'x_post')

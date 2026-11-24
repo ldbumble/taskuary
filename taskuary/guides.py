@@ -25,9 +25,7 @@ def _show():
     return f'{SHOW_TYPES}\n\nA WORKED SPEC - a grid of stats, a chart beside a table, and a checklist:\n{SHOW_EXAMPLE}'
 
 # ...and the shapes of the rarer proposals, out of every turn's tool list (2026-11-09)
-PROPOSE = ("THE SHAPES OF A `propose` run_tool: a post - {action: run_tool, type: linkedin_post | x_post | reddit_post {subreddit, title} "
-           "| bluesky_post | mastodon_post, text, image: a picture in your task folder}, one card per network, connected or not, drawn for the "
-           "owner as the post with its Post button (or, not connected, Connect and the words to copy). A new GitHub issue - {type: github_issue, repo: owner/name, title, "
+PROPOSE = ("THE SHAPES OF A `propose` run_tool: a new GitHub issue - {type: github_issue, repo: owner/name, title, "
            "body, labels?}, drawn with its Create issue button. On a Jira, Monday or Linear item - type jira_comment {body}, jira_move "
            "{status}, jira_assign {assignee}, jira_close {body?} (monday_ and linear_ the same); `item` is the one this task came from "
            "unless you name another. Every one waits for the owner's press; always give `why`.")
@@ -35,7 +33,7 @@ PROPOSE = ("THE SHAPES OF A `propose` run_tool: a post - {action: run_tool, type
 # topic -> (what it is for, in one line; its text)
 GUIDES = {'browser': ("driving Taskuary's browser: looking at a page, signing in, a CAPTCHA, a step only the owner can do", _browser),
           'show': ('the `show` types and their props, with a worked example', _show),
-          'propose': ('the shapes of a post, a new GitHub issue and a Jira, Monday or Linear write', lambda: PROPOSE),
+          'propose': ('the shapes of a new GitHub issue and a Jira, Monday or Linear write', lambda: PROPOSE),
           'number': ('teaching a figure out of a customised system before you state it - schema, definition, known numbers, proof', _number)}
 
 def index() -> str: return '; '.join(f'{k} ({w})' for k, (w, _) in GUIDES.items())

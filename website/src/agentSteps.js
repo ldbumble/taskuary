@@ -14,6 +14,7 @@ import { plural } from "./timeWords.js";
 import stepKinds from "../../taskuary/stepkinds.json" with { type: "json" };
 import ownTools from "../../taskuary/owntools.json" with { type: "json" };
 import { forOwner } from "./stepWhy.js";
+import { CATALOGUE } from "./connectorCatalog.js";
 
 const flat = (s) => String(s || "").split(/\s+/).join(" ").trim();
 const clip = (s, n = 90) => { const t = flat(s); return t.length > n ? `${t.slice(0, n - 1)}…` : t; };
@@ -336,6 +337,10 @@ const OWN = {
   runsystem: (a) => ({ kind: "data", summary: a.type ? `Looked up data in ${clip(a.type, 30)}` : "Looked up data in a connected system" }),
   proposereply: () => ({ kind: "edit", summary: "Drafted a reply", tried: "Could not set up the reply" }),
   proposeemail: () => ({ kind: "edit", summary: "Drafted an email", tried: "Could not set up the email" }),
+  // ...by the network's own card title ("X (Twitter)" is X), the catalogue's - never a second list of names here
+  proposepost: (a) => { const w = String(a.network || "").trim(), card = CATALOGUE.find((c) => c.type === w.toLowerCase()),
+    n = card ? card.title.replace(/\s*\(.*\)\s*$/, "") : clip(w, 30);
+    return { kind: "edit", summary: n ? `Drafted a post for ${n}` : "Drafted a post", tried: n ? `Could not set up the post for ${n}` : "Could not set up the post" }; },
   replynotneeded: () => ({ kind: "plan", summary: "Marked the reply as not needed", tried: "Could not mark the reply as not needed" }),
   signform: () => ({ kind: "edit", summary: "Filled in and signed a form", tried: "Could not fill in the form" }),
   propose: () => ({ kind: "plan", summary: "Asked for your yes", tried: "Could not set up the step for your yes" }),

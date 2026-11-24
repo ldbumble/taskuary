@@ -1540,11 +1540,14 @@ def test_an_account_the_agent_made_is_one_vault_row_he_can_read_and_the_next_tas
     [row] = signin.listing(s)
     assert (row['site'], row['user'], row['by'], row['task'], row['confirmed']) == ('inbox.example', USER, 'agent', tid, False), row
     assert signin.reveal(s, 'inbox.example') == typed[0] and typed[0] not in json.dumps(row)
-    assert any('Kept the inbox.example account' in c['Body'] for c in s.list_comments(tid))
+    # ...WALK 13: and no line says an account was made - the site never took the form ("The account was created", the phone repeated)
+    lines = lambda: [c['Body'] for c in s.list_comments(tid) if c['Body'].startswith('Kept the')]
+    assert lines() == []
     told = docsync.agent_systems(s)
     assert f'inbox.example as {USER} (made by the agent on' in told and 'not signed in with yet' in told and typed[0] not in told
     signin._used(s, 'inbox.example', tid)                # ...the site took a sign-in with it: the account is on the record (ledger.account)
     assert signin.listing(s)[0]['confirmed']
+    assert [l for l in lines() if 'inbox.example account' in l], 'said once a sign-in with it went in'
     # ...and an account made AGAIN is unconfirmed again until a site takes the new one
     signin.save(s, 'inbox.example', USER, 'Another-pw-2!', by='taskuary', task=tid)
     s._exec('UPDATE signin_vault SET SavedAt=SavedAt+5 WHERE Site=?', ('inbox.example',))
@@ -1556,8 +1559,10 @@ def test_an_account_the_agent_made_is_one_vault_row_he_can_read_and_the_next_tas
     def to(state): return lambda sid, site, c: c.go(state, f'https://signup.mail.example/{state}') or {'ok': True, 'user': USER}
     assert signing_up(s, tid, NextStep('https://signup.mail.example/signup'), to('birthdate'))[0]
     assert not next(r for r in signin.listing(s) if r['site'] == 'mail.example')['confirmed']
+    assert any('mail.example sign-up' in l and 'asks more' in l for l in lines()) and not any('mail.example account' in l for l in lines())
     assert signing_up(s, tid, NextStep('https://signup.mail.example/signup'), to('inbox'))[0]
     assert next(r for r in signin.listing(s) if r['site'] == 'mail.example')['confirmed']
+    assert any('mail.example account' in l for l in lines())
     # ...and the saved sign-in typed again by Taskuary, then pressed by the agent, stays the owner's own row
     signin.save(s, 'bank.example', USER, PW)
     signin.pressing(s, tid, 'sess1', 'bank.example', conn=UpPage('https://www.bank.example/signin', pw=PW))

@@ -326,11 +326,10 @@ def _forget_live(site):
 
 def _used(store, site, tid=None, confirm=True):
     """The site took the saved sign-in: kept on its row, and - `confirm`, the page past every step - the account on the record (ledger.account)."""
-    from . import ledger
     store._exec('UPDATE signin_vault SET LastUsed=? WHERE Site=?', (_now(), site))
     if not confirm: return
     row = saved(store, site) or {}
-    ledger.account(store, site, _user(row), 'signed_in', tid or row.get('Task'), by='agent' if row.get('SavedBy') in MADE_BY else 'owner')
+    account(store, site, _user(row), 'signed_in', tid or row.get('Task'), by='agent' if row.get('SavedBy') in MADE_BY else 'owner')
 
 
 # ── the one-time fill link ───────────────────────────────────────────────────────────────────────────────────────────────
@@ -856,10 +855,19 @@ PAST_STEADY = 3
 _TYPED = {}                     # tid -> {'user', 'pw', 'site'}: what the owner sent on the page, until the sign-in is past - memory only
 SAVED_LINE = 'Saved your {site} sign-in to the vault - remove it under {where}.'
 MADE_LINE = 'Kept the {site} account{who} the agent made in {where} - its password is there for you.'
-def made_line(store, tid, site: str, user: str = '') -> None:
+TAKEN_LINE = 'Kept the password of the {site} sign-up{who} in {where} - {site} took the form and asks more before the account is made.'
+# ...WRITTEN FROM THE LEDGER'S ACT ONLY (walk 13: written at the attempt, it said "the account the agent made" of a sign-up the site never took,
+# and the phone repeated "The account was created"): `act` is what the site let past - a signed-in page (made), or a form it took that asks more
+def made_line(store, tid, site: str, user: str = '', act: str = 'signed_up') -> None:
     "The task says, once, that an account its agent made is kept and where he reads its password (one vault - listing)."
     from . import words
-    store.add_comment_once(int(tid), 'taskuary', 'agent', MADE_LINE.format(site=site, who=f' ({user})' if user else '', where=words.name('signins')))
+    store.add_comment_once(int(tid), 'taskuary', 'agent', (TAKEN_LINE if act == MADE else MADE_LINE).format(
+        site=site, who=f' ({user})' if user else '', where=words.name('signins')))
+def account(store, site, user, act, tid, by='agent') -> None:
+    "A site let an account's sign-in or sign-up past: on the record (ledger.account) and, an agent's, said once on the task that made it (made_line)."
+    from . import ledger
+    ledger.account(store, site, user, act, tid, by=by)
+    if by == 'agent' and str(tid or '').isdigit(): made_line(store, tid, site, user, act)
 
 
 def heard(tid, site: str, raw) -> bool:
@@ -1513,9 +1521,8 @@ def signed_in_page(c, site) -> bool:
 def took(store, tid, site, user, c) -> bool:
     """A site took a sign-up form: on the record (ledger.account) as an account made - 'signed_up', confirmed, where the page after it is a signed-in
     page; MADE, not yet, where it asks more (walk 11: Outlook's birth-date step counted as made, "confirmed" for an account Microsoft then refused)."""
-    from . import ledger
     ok = signed_in_page(c, site)
-    ledger.account(store, site, user, 'signed_up' if ok else MADE, tid)
+    account(store, site, user, 'signed_up' if ok else MADE, tid)
     return ok
 def confirm_later(store, sid, conn=None) -> bool:
     """After an act: the page is a signed-in page of a site whose agent-made sign-in is not confirmed yet - confirmed now (ledger.account 'signed_in').
@@ -1531,7 +1538,7 @@ def confirm_later(store, sid, conn=None) -> bool:
         finally:
             if conn is None: c.close()
     except Exception: return False
-    if ok: ledger.account(store, site, _user(row), 'signed_in', row.get('Task'), by='agent')
+    if ok: account(store, site, _user(row), 'signed_in', row.get('Task'))
     return ok
 REFILL = "((fs) => { " + DEEP + r"""
   // ...in the form it was typed in (FORM's `f`): two forms of one page name their boxes alike (a sign-in's acct beside a sign-up's acct)
@@ -1795,7 +1802,6 @@ def _make(store, tid, sid, site, c, fill=None, send=None, said: dict = None) -> 
         # step stood on the same page read as "kept its form up", the row went, and the account the agent then finished had no password anywhere)
         drop = bool(got.get('why')) or bool(prev)
         if not kept and drop: _restore(store, site, prev)
-        elif not kept: made_line(store, tid, site, user)
         _audit(store, tid, site, 'vault', False, got.get('why') or 'the form stayed up', signup=True)
         if said is not None: said['why'] = got.get('why') or ''
         return False, (f'No account yet: {site} kept its sign-up form up' + (f' - it says "{got["why"]}"' if got.get('why') else
@@ -1803,7 +1809,7 @@ def _make(store, tid, sid, site, c, fill=None, send=None, said: dict = None) -> 
                        ('Nothing was kept. ' if drop or kept else "The password it was sent is kept with the owner's saved sign-ins, marked "
                         'not signed in with yet. ') + 'Fix what it asks for and run `agent-browser signup` again; a box only the owner can fill is theirs.')
     if (u := got.get('user')) and u != user and not kept: user = u; save(store, site, user, pw, by='taskuary', keep_old=True, task=tid)
-    if not kept: _kept(prev, _raw(store, site)); made_line(store, tid, site, user)
+    if not kept: _kept(prev, _raw(store, site))
     from .browsergate import overcome
     overcome(store, tid, site, f'Done on a later try: the account on {site} was made', signup=True)
     return True, _answered(store, tid, sid, site, c, user, kept)
@@ -1936,7 +1942,6 @@ def form_state(sid) -> dict:
 
 def settled(store, sid, conn=None) -> str:
     "After that press: the site took it - kept, and said in one line; it kept its form up - the row put back as it was. '' when none was pressed."
-    from . import ledger
     t = _PRESSED.pop(str(sid), None)
     if not t: return ''
     tid, site, prev, user = t
@@ -1944,12 +1949,12 @@ def settled(store, sid, conn=None) -> str:
         c = conn or connect(sid)
         try:
             ok = accepted(c, site)
-            if ok and not prev: ledger.account(store, site, user, 'signed_in', tid)     # ...a sign-in it typed that the site let in
+            if ok and not prev: account(store, site, user, 'signed_in', tid)     # ...a sign-in it typed that the site let in
         finally:
             if conn is None: c.close()
     except Exception: ok = True                          # ...unreadable: what the site was sent stays kept - a password lost is the worse
     if not ok: _restore(store, site, prev); return ''    # ...refused (a wrong password, a form kept up): what was there comes back, or nothing
-    _kept(prev, _raw(store, site)); made_line(store, tid, site, user)
+    _kept(prev, _raw(store, site))
     _audit(store, tid, site, 'vault', True, 'kept from a press', saved=True)
     return f"TASKUARY: the password that form sent to {site} is kept with the owner's saved sign-ins."
 

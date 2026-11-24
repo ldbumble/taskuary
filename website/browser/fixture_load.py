@@ -78,6 +78,14 @@ def install(app, store):
             reqs.append((time.time() - T0, f'{request.method} {norm(request.url.path)}', round((time.perf_counter() - t) * 1000, 1)))
         return resp
 
+    # ── every judged mail's own time, start to landed (ingest._judge_one: one row, one lane) - its overhead is this less the model's delay ──
+    judged, o_judge = [], ingest._judge_one
+    def judge_one(st, r, llm):
+        t = time.perf_counter()
+        try: return o_judge(st, r, llm)
+        finally: judged.append((time.time() - T0, round((time.perf_counter() - t) * 1000, 1), r['MessageId'], threading.current_thread().name))
+    ingest._judge_one = judge_one
+
     # ── the loop and the pool, and the one-second sampler ──
     lag, samples = [], []
     loop_state = {'on': False}
@@ -118,7 +126,7 @@ def install(app, store):
     @app.get('/api/fixture/load/stats')
     async def load_stats(since: float = 0.0):
         f = lambda xs: [x for x in list(xs) if x[0] >= since]
-        return {'now': time.time() - T0, 'holds': f(holds), 'waits': f(waits), 'lag': f(lag), 'reqs': f(reqs),
+        return {'now': time.time() - T0, 'holds': f(holds), 'waits': f(waits), 'lag': f(lag), 'reqs': f(reqs), 'judged': f(judged),
                 'samples': [s for s in list(samples) if s['t'] >= since]}
 
     # ── mail handed in as a poll hands it ──

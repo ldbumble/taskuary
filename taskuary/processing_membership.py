@@ -4,7 +4,7 @@ The caller owns a SQLite write transaction.  This module reads the complete raw
 identity graph and updates only the additive ``processing_*`` identity tables.  It
 does not infer read/action state or call providers, workers, or legacy feed code.
 """
-import json
+import collections, json
 
 
 MANAGED_ENTITY_KINDS = {'task', 'message', 'review', 'idea', 'attachment', 'run'}
@@ -171,39 +171,28 @@ def census_inputs(cur):
     }
 
 
-class _WouldWrite(Exception): pass
+def reconcile_membership(cur, *, stamp, new_item_id):
+    """Read and apply one census inside ``cur``'s transaction, all of it - the settle's road, which must see its own answer."""
+    ops, result = plan_membership(census_inputs(cur), stamp=stamp, new_item_id=new_item_id)
+    for q, p in ops: cur.execute(q, p)
+    return result
 
 
-def _would_write(*a): raise _WouldWrite()
-
-
-class _NoWrites:
-    "The cursor a dry census runs on: its inputs are in hand, so the first statement it issues is a write it would make."
-    execute = staticmethod(_would_write)
-
-
-def dry_census(inputs, *, stamp):
-    """The census over `inputs` IF it changes nothing - its result, conflicts and diagnostics included - else None.
-    Run outside every lock: most census-input writes (a message's Status, a task's SourceRef) move no member, and that
-    answer needs no writer at all."""
-    try: return reconcile_membership(_NoWrites(), stamp=stamp, new_item_id=_would_write, follow_item=_would_write, inputs=inputs)
-    except _WouldWrite: return None
-
-
-def reconcile_membership(cur, *, stamp, new_item_id, follow_item, inputs=None):
-    """Apply one uncapped raw-identity census inside ``cur``'s transaction. `inputs`: census_inputs() as read at the
-    generation this transaction still finds (the caller checks that) - the very rows this would read, so not read twice."""
-    inputs = census_inputs(cur) if inputs is None else inputs
+def plan_membership(inputs, *, stamp, new_item_id):
+    """One uncapped raw-identity census over census_inputs(): (the writes it makes, in order, as (sql, params); its result).
+    Pure - it reads nothing but `inputs`, so it is worked out with no lock held, and its writes applied by whoever holds one."""
+    ops = []
     tasks, messages, reviews, ideas = inputs['tasks'], inputs['messages'], inputs['reviews'], inputs['ideas']
     attachments, runs, current_rows = inputs['attachments'], inputs['runs'], inputs['current_rows']
-    # the two this pass adds to as it writes: copies, so a dry pass that stopped at its first write leaves them as read
+    # the two this pass adds to as it plans: copies, so what it was handed stays as read
     item_rows, have_aliases = dict(inputs['item_rows']), dict(inputs['aliases'])
+    live = collections.Counter(r['ItemId'] for r in current_rows)     # active members per item, kept as the plan writes
     current = {}
     conflicts, diagnostics = [], []
     roots = {}
 
     def follow_loaded(item_id):
-        # follow_item over the rows just read, memoised: one SELECT per member was ~10k a pass
+        # a redirect followed over the rows just read, memoised: one SELECT per member was ~10k a pass
         if item_id not in roots:
             seen, at = set(), item_id
             while at and at not in seen:
@@ -349,9 +338,9 @@ def reconcile_membership(cur, *, stamp, new_item_id, follow_item, inputs=None):
             preferred = available[0] if available else None
         if preferred is None:
             preferred = new_item_id()
-            cur.execute('''INSERT INTO processing_item
+            ops.append(('''INSERT INTO processing_item
                 (ItemId,Kind,CreatedAt,UpdatedAt) VALUES (?,?,?,?)''',
-                (preferred, group['kind'], stamp, stamp))
+                (preferred, group['kind'], stamp, stamp)))
             created_item_ids.add(preferred)
             item_rows[preferred] = {'ItemId': preferred, 'Kind': group['kind'],
                                     'CreatedAt': stamp, 'UpdatedAt': stamp,
@@ -381,9 +370,8 @@ def reconcile_membership(cur, *, stamp, new_item_id, follow_item, inputs=None):
         target = desired.get(entity)
         stale_item = found['row']['ItemId'] != found['root']
         if entity not in raw_entities or target is None or found['root'] != target or stale_item:
-            cur.execute('UPDATE processing_member SET RetiredAt=? WHERE MemberId=?',
-                        (stamp, found['row']['MemberId']))
-            retired_ids.add(found['row']['MemberId'])
+            ops.append(('UPDATE processing_member SET RetiredAt=? WHERE MemberId=?', (stamp, found['row']['MemberId'])))
+            retired_ids.add(found['row']['MemberId']); live[found['row']['ItemId']] -= 1
             retired_members += 1
             touched_items.add(found['root'])
             if target is not None:
@@ -407,9 +395,10 @@ def reconcile_membership(cur, *, stamp, new_item_id, follow_item, inputs=None):
                     'work' if entity[0] == 'run' else 'member')
             if role == 'primary':
                 have_primary = True; primaries.add(target)
-            cur.execute('''INSERT INTO processing_member
+            ops.append(('''INSERT INTO processing_member
                 (ItemId,EntityKind,LocalId,Role,JoinedAt) VALUES (?,?,?,?,?)''',
-                (target, entity[0], entity[1], role, stamp))
+                (target, entity[0], entity[1], role, stamp)))
+            live[target] += 1
             active[entity] = {'ItemId': target, 'EntityKind': entity[0],
                               'LocalId': entity[1], 'Role': role}
             created_members += 1
@@ -421,13 +410,11 @@ def reconcile_membership(cur, *, stamp, new_item_id, follow_item, inputs=None):
             chosen = next((entity for entity in entities if entity in active), None)
             if chosen is not None:
                 primaries.add(target)
-                row = cur.execute('''SELECT MemberId FROM processing_member
-                    WHERE EntityKind=? AND LocalId=? AND RetiredAt IS NULL''', chosen).fetchone()
-                cur.execute('UPDATE processing_member SET RetiredAt=? WHERE MemberId=?',
-                            (stamp, row['MemberId']))
-                cur.execute('''INSERT INTO processing_member
+                ops.append(('UPDATE processing_member SET RetiredAt=? WHERE EntityKind=? AND LocalId=? AND RetiredAt IS NULL',
+                            (stamp, *chosen)))
+                ops.append(('''INSERT INTO processing_member
                     (ItemId,EntityKind,LocalId,Role,JoinedAt) VALUES (?,?,?,?,?)''',
-                    (target, chosen[0], chosen[1], 'primary', stamp))
+                    (target, chosen[0], chosen[1], 'primary', stamp)))
                 retired_members += 1
                 created_members += 1
                 touched_items.add(target)
@@ -455,10 +442,10 @@ def reconcile_membership(cur, *, stamp, new_item_id, follow_item, inputs=None):
             continue
         if old:
             continue
-        cur.execute('''INSERT INTO processing_alias
+        ops.append(('''INSERT INTO processing_alias
             (Namespace,Scope,Value,EntityKind,LocalId,Provenance,CreatedAt)
             VALUES ('legacy_funnel','local',?,?,?,'processing-membership',?)''',
-            (value, entity_kind, local_id, stamp))
+            (value, entity_kind, local_id, stamp)))
         have_aliases[value] = {'EntityKind': entity_kind, 'LocalId': local_id}
         created_aliases += 1
         target = desired.get((entity_kind, local_id))
@@ -506,57 +493,63 @@ def reconcile_membership(cur, *, stamp, new_item_id, follow_item, inputs=None):
                row['ToLocalId'], row['Kind'])
         if row['Provenance'] in MANAGED_RELATION_PROVENANCE:
             if key not in desired_relations:
-                cur.execute('UPDATE processing_relation SET RetiredAt=? WHERE RelationId=?',
-                            (stamp, row['RelationId']))
+                ops.append(('UPDATE processing_relation SET RetiredAt=? WHERE RelationId=?', (stamp, row['RelationId'])))
                 retired_relations += 1
                 for entity in ((key[0], key[1]), (key[2], key[3])):
                     if entity in active:
-                        touched_items.add(follow_item(cur, active[entity]['ItemId']))
+                        touched_items.add(follow_loaded(active[entity]['ItemId']))
                 continue
         existing_relations.add(key)
     created_relations = 0
     for key in sorted(desired_relations):
         if key in existing_relations:
             continue
-        cur.execute('''INSERT INTO processing_relation
+        ops.append(('''INSERT INTO processing_relation
             (FromEntityKind,FromLocalId,ToEntityKind,ToLocalId,Kind,Provenance,CreatedAt)
-            VALUES (?,?,?,?,?,'processing-membership',?)''', (*key, stamp))
+            VALUES (?,?,?,?,?,'processing-membership',?)''', (*key, stamp)))
         created_relations += 1
         for entity in ((key[0], key[1]), (key[2], key[3])):
             if entity in active:
-                touched_items.add(follow_item(cur, active[entity]['ItemId']))
+                touched_items.add(follow_loaded(active[entity]['ItemId']))
+
+    def follow_now(item_id):
+        # follow_loaded with this pass's own redirects in it: one redirect below can be where the next one lands
+        seen = set()
+        while item_id and item_id not in seen:
+            seen.add(item_id); row = item_rows.get(item_id)
+            if not row: return None
+            if not row.get('RedirectItemId'): return item_id
+            item_id = row['RedirectItemId']
+        raise ValueError(f'processing item redirect cycle at {item_id}')
 
     redirected_items = 0
     for source, destinations in sorted(moved_destinations.items()):
         if source in destinations or len(destinations) != 1:
             continue
-        if cur.execute('''SELECT 1 FROM processing_member WHERE ItemId=?
-            AND RetiredAt IS NULL LIMIT 1''', (source,)).fetchone():
-            continue
-        target = next(iter(destinations))
-        target = follow_item(cur, target)
+        if live[source] > 0: continue
+        target = follow_now(next(iter(destinations)))
         if target and target != source:
-            cur.execute('''UPDATE processing_item SET RedirectItemId=?,ContextRevision=NULL,
-                ViewRevision=NULL,UpdatedAt=? WHERE ItemId=? AND RedirectItemId IS NULL''',
-                (target, stamp, source))
-            redirected_items += cur.rowcount
+            row = item_rows.get(source)
+            if row and not row.get('RedirectItemId'):
+                ops.append(('''UPDATE processing_item SET RedirectItemId=?,ContextRevision=NULL,
+                    ViewRevision=NULL,UpdatedAt=? WHERE ItemId=?''', (target, stamp, source)))
+                item_rows[source] = {**row, 'RedirectItemId': target}; redirected_items += 1
             touched_items.add(target)
 
     for group in ordered_groups:
         target = targets[group['key']]
         row = item_rows.get(target) or {}
         if row.get('Kind') != group['kind']:
-            cur.execute('''UPDATE processing_item SET Kind=?,ContextRevision=NULL,
-                ViewRevision=NULL,UpdatedAt=? WHERE ItemId=?''',
-                (group['kind'], stamp, target))
+            ops.append(('''UPDATE processing_item SET Kind=?,ContextRevision=NULL,
+                ViewRevision=NULL,UpdatedAt=? WHERE ItemId=?''', (group['kind'], stamp, target)))
             touched_items.add(target)
     for item_id in sorted(item for item in touched_items if item):
-        cur.execute('''UPDATE processing_item SET ContextRevision=NULL,ViewRevision=NULL,
-            UpdatedAt=? WHERE ItemId=?''', (stamp, item_id))
+        ops.append(('''UPDATE processing_item SET ContextRevision=NULL,ViewRevision=NULL,
+            UpdatedAt=? WHERE ItemId=?''', (stamp, item_id)))
 
     conflicts.sort(key=lambda row: json.dumps(row, sort_keys=True))
     diagnostics.sort(key=lambda row: json.dumps(row, sort_keys=True))
-    return {
+    return ops, {
         'created_items': len(created_item_ids),
         'created_members': created_members,
         'moved_members': moved_members,

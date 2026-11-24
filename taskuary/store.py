@@ -110,6 +110,10 @@ _OFF_WRITER, _ON_WRITER = threading.local(), threading.local()
 _HELD = threading.local()        # held_settings(): (the store, {name: its row}) for this thread while a build holds them
 # ...and A WRITE TO WHAT IS HELD lets go of it, whoever wrote it (_exec): the statement's own target table, read off its grammar
 _HELD_TABLES = re.compile(r'^\s*(?:INSERT(?:\s+OR\s+\w+)?\s+INTO|REPLACE\s+INTO|UPDATE(?:\s+OR\s+\w+)?|DELETE\s+FROM)\s+(?:setting|doc)\b', re.I)
+CENSUS_CHUNK = 500     # census writes per turn on the writer: a press waits for one turn, never the whole pass
+CENSUS_TRIES = 3       # census passes raced by a write before one is run under a single lock, so a busy store still settles
+_CENSUS_COUNTS = ('created_items', 'created_members', 'moved_members', 'retired_members', 'redirected_items',
+                  'created_aliases', 'created_relations', 'retired_relations')
 READERS_KEPT = 16      # reader connections kept open for reuse: a request pool's worth of threads reading at once
 
 _LIVE_UNSET = object()
@@ -3435,8 +3439,7 @@ class SQLiteStore:
         iid = target[0]; before = members(iid)
         cur.execute('SAVEPOINT processing_settlement_census')
         try:
-            result = reconcile_membership(cur, stamp=stamp, new_item_id=self._processing_item_id,
-                                          follow_item=self._processing_follow)
+            result = reconcile_membership(cur, stamp=stamp, new_item_id=self._processing_item_id)
             now = self._processing_read_target(cur, key)
             if now is None or now[0] != iid or members(iid) != before:
                 raise ValueError('processing membership must be reconciled before settlement')
@@ -3574,77 +3577,88 @@ class SQLiteStore:
             due = r['DirtyGeneration'] != r['AttemptedGeneration'] and r['MembershipGeneration'] != r['CensusGeneration']
             return r['MembershipGeneration'] if due else None
 
-    def _census_off_writer(self, stamp):
-        """THE CENSUS READS WITH NOBODY WAITING (2026-10-28): ~1 s of reading and grouping on a real mailbox, 3-14 s under load,
-        all of it inside BEGIN IMMEDIATE on the writer's lock - every few seconds, with 6-8 requests queued behind it. Its
-        inputs are read here on a reader snapshot and grouped outside any lock; the writer's turn then only checks that
-        MembershipGeneration has not moved (nothing it read was written since) and applies what is left: nothing at all
-        when the census changes no member, which is most of them. None when there is no census to run or no reader."""
-        from .processing_membership import census_current, census_inputs, dry_census
-        if not self._off_writer(): return None
-        with self._snapshot_read() as cur:
-            st = self._processing_reconcile_status_cursor(cur)
-            if st['dirty_generation'] == st['reconciled_generation'] or census_current(cur): return None
-            inputs = census_inputs(cur)
-        return {'inputs': inputs, 'result': dry_census(inputs, stamp=stamp)}
+    def _census_plan(self, cur, stamp):
+        """What a census would do, read on `cur`: the reconcile state, the MembershipGeneration it was read at, whether the census
+        can be skipped (nothing it reads moved since a clean one), and its writes and result - worked out in Python, with no lock."""
+        from .processing_membership import census_current, census_inputs, plan_membership
+        before = self._processing_reconcile_status_cursor(cur)
+        gen = cur.execute('SELECT MembershipGeneration FROM processing_reconcile_state WHERE Singleton=1').fetchone()[0]
+        if before['dirty_generation'] == before['reconciled_generation']: return {'before': before, 'current': True}
+        if census_current(cur):         # only writes the census never reads: its answer cannot have moved
+            return {'before': before, 'current': False, 'gen': gen, 'skip': True, 'ops': [],
+                    'result': {**dict.fromkeys(_CENSUS_COUNTS, 0), 'conflicts': before['conflicts'], 'diagnostics': before['diagnostics']}}
+        ops, result = plan_membership(census_inputs(cur), stamp=stamp, new_item_id=self._processing_item_id)
+        return {'before': before, 'current': False, 'gen': gen, 'skip': False, 'ops': ops, 'result': result}
 
-    def reconcile_processing_membership(self, *, fixed_now=None):
-        """Reconcile exact raw entity relationships in one uncapped write transaction.
+    def _census_apply(self, cur, plan, ops, last, stamp):
+        """One turn of a planned census on the writer: False when something it read was written since the last turn (plan['gen'],
+        None for a plan made in this very transaction) - else its writes, and on the last turn the bookkeeping."""
+        gen = lambda: cur.execute('SELECT MembershipGeneration FROM processing_reconcile_state WHERE Singleton=1').fetchone()[0]
+        if plan['gen'] is not None and gen() != plan['gen']: return False
+        for q, p in ops: cur.execute(q, p)
+        plan['gen'] = gen()
+        return self._census_finish(cur, plan, stamp) if last else True
 
-        This is an explicit startup/background operation. Inventory and API getters
-        never call it, and it does not infer read, defer, action, or provider identity.
-        """
-        stamp = fixed_now or _now()
-        if not isinstance(stamp, str) or not stamp:
-            raise ValueError('fixed_now must be a non-empty string')
-        from .processing_membership import reconcile_membership, census_current, mark_census
-        pre = self._census_off_writer(stamp)
+    def _census_finish(self, cur, plan, stamp):
+        "The census's bookkeeping, in the transaction that applied its last write."
+        from .processing_membership import mark_census
+        from . import processing_rail
+        st, result = self._processing_reconcile_status_cursor(cur), plan['result']
+        complete = not result['conflicts']
+        if not plan['skip']: mark_census(cur, complete)
+        # a write the census does not read may have landed since it was planned: it settles with it, as under one transaction
+        cur.execute('''UPDATE processing_reconcile_state SET AttemptedGeneration=?, ReconciledGeneration=?, LastAttemptAt=?,
+            ConflictsJson=?, DiagnosticsJson=? WHERE Singleton=1''',
+            (st['dirty_generation'], st['dirty_generation'] if complete else st['reconciled_generation'], stamp,
+             json.dumps(result['conflicts'], sort_keys=True), json.dumps(result['diagnostics'], sort_keys=True)))
+        after = self._processing_reconcile_status_cursor(cur)
+        processing_rail.trim(self.cx)        # the rail needs only the recent dirty rows
+        return {**after, **result, 'status': 'complete' if complete else 'conflicted'}
+
+    def _census_turn(self, run):
+        "One short BEGIN IMMEDIATE on the writer: run(cur) inside it; commit what it wrote unless it answers False."
         with self.lock:
-            self._clear_stale(); cur = self.cx.cursor()
-            cur.execute('BEGIN IMMEDIATE')
+            self._clear_stale(); cur = self.cx.cursor(); cur.execute('BEGIN IMMEDIATE')
             try:
-                before = self._processing_reconcile_status_cursor(cur)
-                if before['dirty_generation'] == before['reconciled_generation']:
-                    self.cx.commit()
-                    return {
-                        **before,
-                        'created_items': 0, 'created_members': 0, 'moved_members': 0,
-                        'retired_members': 0, 'redirected_items': 0,
-                        'created_aliases': 0, 'created_relations': 0,
-                        'retired_relations': 0,
-                        'status': 'already_current',
-                    }
-                if census_current(cur):        # only writes the census never reads: its answer cannot have moved
-                    result = {**dict.fromkeys(('created_items', 'created_members', 'moved_members', 'retired_members', 'redirected_items',
-                                               'created_aliases', 'created_relations', 'retired_relations'), 0),
-                              'conflicts': before['conflicts'], 'diagnostics': before['diagnostics']}
-                else:
-                    # the census read outside is this one's if nothing it read has been written since (CENSUS_INPUTS)
-                    gen = cur.execute('SELECT MembershipGeneration FROM processing_reconcile_state WHERE Singleton=1').fetchone()[0]
-                    fresh = pre is not None and pre['inputs']['generation'] == gen
-                    result = (pre['result'] if fresh and pre['result'] is not None else reconcile_membership(
-                        cur, stamp=stamp, new_item_id=self._processing_item_id,
-                        follow_item=self._processing_follow, inputs=pre['inputs'] if fresh else None))
-                    mark_census(cur, not result['conflicts'])
-                dirty = before['dirty_generation']
-                complete = not result['conflicts']
-                cur.execute('''UPDATE processing_reconcile_state
-                    SET AttemptedGeneration=?, ReconciledGeneration=?, LastAttemptAt=?,
-                        ConflictsJson=?, DiagnosticsJson=? WHERE Singleton=1''',
-                    (dirty, dirty if complete else before['reconciled_generation'], stamp,
-                     json.dumps(result['conflicts'], sort_keys=True),
-                     json.dumps(result['diagnostics'], sort_keys=True)))
-                after = self._processing_reconcile_status_cursor(cur)
-                from . import processing_rail
-                processing_rail.trim(self.cx)        # the rail needs only the recent dirty rows
-                self.cx.commit()
-                self._writes += 1
-                return {**after, **result, 'status': 'complete' if complete else 'conflicted'}
+                out = run(cur)
+                if out is False: self.cx.rollback()
+                else: self.cx.commit(); self._writes += 1
+                return out
             except BaseException:
                 self.cx.rollback()
                 raise
             finally:
                 cur.close()
+
+    def reconcile_processing_membership(self, *, fixed_now=None):
+        """Reconcile exact raw entity relationships, uncapped.
+
+        This is an explicit startup/background operation. Inventory and API getters
+        never call it, and it does not infer read, defer, action, or provider identity.
+
+        THE CENSUS NEVER HOLDS THE WRITER FOR ITS WHOLE PASS (2026-11-23): one BEGIN IMMEDIATE held store.lock ~4 s on a real
+        mailbox, every press and the list waiting up to 10 s behind it. It is read on a reader snapshot and worked out with no
+        lock; its writes go in turns of CENSUS_CHUNK, the lock let go between. Each turn first finds MembershipGeneration where
+        the last one left it - else something the census read was written in between, and it is planned again from what is
+        there now (which carries on from the turns already applied). After CENSUS_TRIES such races, one pass under one lock.
+        """
+        stamp = fixed_now or _now()
+        if not isinstance(stamp, str) or not stamp:
+            raise ValueError('fixed_now must be a non-empty string')
+        def already(plan): return {**plan['before'], **dict.fromkeys(_CENSUS_COUNTS, 0), 'status': 'already_current'}
+        for _ in range(CENSUS_TRIES):
+            with self._processing_read() as cur: plan = self._census_plan(cur, stamp)
+            if plan['current']: return already(plan)
+            chunks = [plan['ops'][i:i + CENSUS_CHUNK] for i in range(0, len(plan['ops']), CENSUS_CHUNK)] or [[]]
+            for i, chunk in enumerate(chunks):
+                out = self._census_turn(lambda cur: self._census_apply(cur, plan, chunk, i == len(chunks) - 1, stamp))
+                if out is False: break
+                if i < len(chunks) - 1: time.sleep(0.001)     # the lock is not fair: let whoever waits for it in before the next turn
+            else: return out
+        def under_lock(cur):
+            plan = self._census_plan(cur, stamp)
+            return already(plan) if plan['current'] else self._census_apply(cur, {**plan, 'gen': None}, plan['ops'], True, stamp)
+        return self._census_turn(under_lock)
 
     @staticmethod
     def _processing_item_id():

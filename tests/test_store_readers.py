@@ -2,8 +2,8 @@
 membership census - a setting, the connector list, the owner's name, a pile's ~500 small reads. What this pins:
   - a plain read runs on a reader connection: it sees every committed write, never another thread's open transaction, and
     never waits for the writer; the thread holding the writer reads its own transaction; writers still go one at a time
-  - the census reads and groups off the writer, and applies under the lock only when nothing it read has moved since -
-    its answer the same as a census under the lock, write for write
+  - the census reads and plans off the writer and applies its writes in short turns, each only when nothing it read has
+    moved since - its answer the same as a census under one lock, write for write, and a press waits one turn at most
   - the worker runs at most one census per CENSUS_EVERY while mail lands, and a new message still settles within it
   - a slow wait is logged once a minute per call site, with the rest counted
   - a pile built on a big store does not wait for a held writer
@@ -141,11 +141,14 @@ def _graph(st):
                                                      'MembershipGeneration, CensusGeneration, ConflictsJson, DiagnosticsJson FROM processing_reconcile_state')]}
 
 
-def _story(st, *, locked_only):
-    "The same writes, a reconcile after each - with the census off the writer, or (the old road) only under the lock."
+def _story(st, *, chunk=store_mod.CENSUS_CHUNK, tries=store_mod.CENSUS_TRIES):
+    "The same writes, a reconcile after each - its writes in turns of `chunk`, or (tries=0) all of it under one lock."
     n, k = itertools.count(), itertools.count()
     st._processing_item_id = lambda: f'pi_{next(n):05d}'
-    if locked_only: st._census_off_writer = lambda stamp: None
+    with mock.patch.object(store_mod, 'CENSUS_CHUNK', chunk), mock.patch.object(store_mod, 'CENSUS_TRIES', tries): return _told(st, k)
+
+
+def _told(st, k):
     rec = lambda: st.reconcile_processing_membership(fixed_now=f'2026-10-28 08:00:{next(k):02d}')
     out = []
     tasks = [st.create_task({'Title': f'Task {i}', 'Kind': 'reply', 'Status': 'open'}, 'fixture') for i in range(5)]
@@ -160,10 +163,32 @@ def _story(st, *, locked_only):
     return [{k: v for k, v in r.items() if k != 'last_attempt_at'} for r in out], _graph(st)
 
 
-def test_the_census_off_the_writer_gives_the_census_under_it(tmp_path):
-    a, b = SQLiteStore(str(tmp_path / 'a.db')), SQLiteStore(str(tmp_path / 'b.db'))
-    try: assert _story(a, locked_only=False) == _story(b, locked_only=True)
-    finally: a.close(); b.close()
+def test_the_census_in_turns_gives_the_census_under_one_lock(tmp_path):
+    a, b, c = (SQLiteStore(str(tmp_path / f'{x}.db')) for x in 'abc')
+    try: assert _story(a, chunk=2) == _story(b) == _story(c, tries=0)
+    finally: a.close(); b.close(); c.close()
+
+
+def test_a_press_waits_for_one_turn_of_the_census_not_the_whole_pass(s):
+    """THE OWNER'S LOG (2026-11-23): "held 4.2s by processing-membership at processing_all.py:598 reconcile", presses and the
+    list waiting up to 10 s - the census was one BEGIN IMMEDIATE over its whole pass. A small write that lands while a big
+    census applies its writes waits for one turn of them, and the lock is free between."""
+    s.cx.executemany("INSERT INTO message(ExternalId, ConversationId, Channel, Subject, BodyText, Status, SentAt) "
+                     "VALUES (?, ?, 'email', 'S', 'x', 'new', '2026-10-28 08:00:00')", [(f'r:{i}', f't:{i}') for i in range(3000)])
+    s.cx.commit()
+    span, wait = [], []
+    def census(): s.reconcile_processing_membership(); span.append(time.perf_counter())
+    def press():
+        end = time.perf_counter() + 30
+        while not s.cx.in_transaction and time.perf_counter() < end: pass      # the census has the writer
+        t0 = time.perf_counter(); s.set_setting('pressed', 'yes', 't'); wait.append((t0, time.perf_counter()))
+    ts = [threading.Thread(target=census), threading.Thread(target=press)]
+    for t in ts: t.start()
+    for t in ts: t.join(60)
+    (t0, done), = wait
+    assert done < span[0] and done - t0 < (span[0] - t0) / 4, f'the press waited {done - t0:.2f}s of the census\'s {span[0] - t0:.2f}s'
+    assert s.get_setting('pressed') == 'yes' and not s.processing_reconcile_status()['pending']
+    assert s.cx.execute('SELECT COUNT(*) FROM processing_member WHERE RetiredAt IS NULL').fetchone()[0] == 3000
 
 
 def test_a_census_that_moves_nothing_reads_nothing_under_the_lock(s):
@@ -183,23 +208,17 @@ def test_a_write_landing_mid_census_is_counted_under_the_lock(s):
     census under the lock reads again - and puts the message where it now is."""
     a, b = (s.create_task({'Title': t, 'Kind': 'reply', 'Status': 'open'}, 'fixture') for t in 'AB')
     mid = mail(s, 1, tid=a); s.reconcile_processing_membership()
-    real = s._census_off_writer
-    def raced(stamp):
-        pre = real(stamp); s._exec('UPDATE message SET TaskId=? WHERE MessageId=?', (b, mid)); return pre
+    real, raced_once = s._census_plan, []
+    def raced(cur, stamp):
+        plan = real(cur, stamp)
+        if not raced_once: raced_once.append(1); s._exec('UPDATE message SET TaskId=? WHERE MessageId=?', (b, mid))
+        return plan
     s._exec("UPDATE message SET Status='fyi' WHERE MessageId=?", (mid,))
-    with mock.patch.object(s, '_census_off_writer', raced): s.reconcile_processing_membership()
+    with mock.patch.object(s, '_census_plan', raced): s.reconcile_processing_membership()
     item = lambda kind, local: s.cx.execute('SELECT ItemId FROM processing_member WHERE EntityKind=? AND LocalId=? AND RetiredAt IS NULL',
                                             (kind, str(local))).fetchone()[0]
     assert item('message', mid) == item('task', b) != item('task', a)
     assert not s.processing_reconcile_status()['pending']
-
-
-def test_a_dry_census_stops_at_its_first_write():
-    "No member, no item: the census would allocate one - so a dry pass answers None, not a guess."
-    inputs = {'generation': 1, 'tasks': {'1': {'TaskId': 1, 'SourceRef': None, 'CreatedAt': 'x'}}, 'messages': {}, 'reviews': {},
-              'ideas': {}, 'attachments': {}, 'runs': {}, 'item_rows': {}, 'current_rows': [], 'aliases': {}, 'relations': []}
-    assert pm.dry_census(inputs, stamp='2026-10-28 08:00:00') is None
-    assert inputs['item_rows'] == {} and inputs['aliases'] == {}, 'and leaves what it was handed as it was'
 
 
 # ── the worker: one census per CENSUS_EVERY while mail lands ─────────────────────────────────────────────

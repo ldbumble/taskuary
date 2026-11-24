@@ -563,11 +563,11 @@ def compact_inventory(snapshot, query, *, include_excluded=False, degraded_ok=Fa
 # AT MOST ONE CENSUS PER CENSUS_EVERY WHILE MAIL IS LANDING (2026-10-28): every census-input write - a message filed, then triaged,
 # then put on its task - asked for a census of its own, ~1 s each on a real mailbox, back to back. A write that no census reads
 # still settles on the next tick. A census waits for its inputs to hold still for one tick (a census read while they move is
-# read again under the lock - store._census_off_writer) and for CENSUS_EVERY since the last one began, and never longer than
+# planned again - store.reconcile_processing_membership) and for CENSUS_EVERY since the last one began, and never longer than
 # CENSUS_EVERY after it was first due: a burst is counted once, and a new message still reaches the rail within ~2 s.
 # ...and it is OFF (0) by default, measured: every pile read waits for the census to settle (wait_settled), so holding the
 # census back held the pile back with it - p50 0.6 s with no wait, 1.1 s at 1 s, 1.5 s at 2 s, on a copy of a real store with
-# mail landing every 3 s. With the census read off the writer (store._census_off_writer) a back-to-back census costs CPU, not
+# mail landing every 3 s. With the census read and planned off the writer (store._census_plan) a back-to-back census costs CPU, not
 # the lock: 2 s of writer lock in 30 s with no wait, against 9-15 s before. Set it when nothing reads the rail while mail lands.
 CENSUS_EVERY = 0.0
 

@@ -20,11 +20,11 @@ def store(tmp_path):
 
 @pytest.fixture
 def censuses(monkeypatch):
-    "Census passes that answered: a dry pass that stopped at its first write is not one - the pass under the lock is."
-    calls, real = [], pm.reconcile_membership
+    "Census passes worked out."
+    calls, real = [], pm.plan_membership
     def counted(*a, **k):
         r = real(*a, **k); calls.append(1); return r
-    monkeypatch.setattr(pm, 'reconcile_membership', counted)
+    monkeypatch.setattr(pm, 'plan_membership', counted)
     return calls
 
 

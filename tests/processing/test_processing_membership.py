@@ -438,13 +438,13 @@ def test_reconcile_failure_rolls_back_members_aliases_relations_and_generation(t
     mid = add_message(store, subject='Rollback membership', brief=json.dumps({'ideas': []}))
     before_status = store.processing_reconcile_status()
     before_changes = store.cx.total_changes
-    real = processing_membership.reconcile_membership
+    real = store._census_finish
 
-    def fail_after_apply(*args, **kwargs):
+    def fail_after_apply(*args, **kwargs):      # in the turn that wrote it all: a small census is one turn
         real(*args, **kwargs)
         raise RuntimeError('synthetic failure after apply')
 
-    monkeypatch.setattr(processing_membership, 'reconcile_membership', fail_after_apply)
+    monkeypatch.setattr(store, '_census_finish', fail_after_apply)
     with pytest.raises(RuntimeError, match='synthetic failure'):
         store.reconcile_processing_membership(fixed_now=NOW)
 

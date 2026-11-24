@@ -370,3 +370,85 @@ def test_a_build_reads_each_setting_once_and_its_own_write_fresh(s):
         assert seen == ['x'] and s.get_setting('missing') is None
     n[0] = 0; s.get_setting('owner_email'); s.get_setting('owner_email')
     assert n[0] == 2, 'outside the hold every read is the table'
+
+
+# ── a read receipt's picture is read off the writer (the load run, 2026-11-24) ───────────────────────────
+# Opening a row of a 2,000-line chat projected the whole item under the writer's lock (0.4 s idle, up to 8 s under load), and so did
+# every line the Assistant mirrored onto it: 101 s and 76 s of lock in one run, every press and triage write queued behind it.
+
+from taskuary import processing_projection as projection
+
+
+def chat(st, n):
+    tid = st.create_task({'Title': 'Site ops', 'Kind': 'reply', 'Status': 'open'}, 'fixture')
+    for i in range(n): mail(st, f'chat{i}', tid=tid, status='routed')
+    st.reconcile_processing_membership(); st.activate_processing_reads(fixed_now='2026-10-28T09:00:00', live_state=[])
+    return tid
+
+
+def written(st):
+    q = lambda sql: sorted(tuple(r) for r in st.cx.execute(sql))
+    return (q('SELECT EntityKind, LocalId, Fingerprint, Origin FROM processing_read_receipt'), q('SELECT Key, Status, Note FROM funnel_state'),
+            q('SELECT Key, ContextRevision, Summary FROM processing_display_summary'), q('SELECT Key FROM processing_read_defer'))
+
+
+def watched_projection(st, under, wait=0.0, gate=None, started=None):
+    """processing_projection, noting whether the writer's lock was held - and, once `gate` is set, slow (a long chat on a busy home)."""
+    real = projection.processing_projection
+    def slow(cur, iid, **k):
+        under.append(st.lock._is_owned())
+        if gate is None or gate.is_set():
+            if started: started.set()
+            time.sleep(wait)
+        return real(cur, iid, **k)
+    return mock.patch.object(projection, 'processing_projection', slow)
+
+
+@pytest.mark.parametrize('press', ['open', 'mirror', 'done'])
+def test_a_write_waits_for_no_read_receipts_picture(s, press):
+    """Another thread's write lands at once while a receipt's picture is read: it was read under the lock (a row opened, a line mirrored
+    onto the task, Done), and the write waited it out."""
+    tid = chat(s, 20); s.set_funnel_state(f'task:{tid}', 'surfaced', 'owner', read=True)       # read, so the mirror keeps it read
+    under, gate, started = [], threading.Event(), threading.Event()
+    def go():
+        if press == 'open': gate.set(); s.set_funnel_state(f'task:{tid}', 'surfaced', 'owner', note='sig', read=True)
+        elif press == 'done': gate.set(); s.set_funnel_state(f'task:{tid}', 'done', 'owner')
+        else:
+            with s.processing_own_words(tid, 'Taskuary'): s.add_comment(tid, 'Taskuary', 'assistant', 'Opened it.'); gate.set()
+    with watched_projection(s, under, 0.6, gate, started):
+        t = threading.Thread(target=go); t.start(); started.wait(5); time.sleep(0.05)
+        t0 = time.perf_counter(); s.set_setting('typed', 'a line', 'owner'); took = time.perf_counter() - t0
+        t.join()
+    assert under and not any(under), 'the picture was read off the writer'
+    assert took < 0.3, f'the write waited {took:.2f}s behind the picture'
+
+
+def test_what_lands_on_the_item_after_its_picture_was_read_is_read_again_under_the_lock(s):
+    tid = chat(s, 3); real, late = s._ahead, []
+    def raced(find):
+        got = real(find); late.append(mail(s, 'late', tid=tid, status='routed')); s.reconcile_processing_membership(); return got
+    with mock.patch.object(s, '_ahead', raced): s.set_funnel_state(f'task:{tid}', 'surfaced', 'owner', read=True)
+    assert ('message', str(late[0])) in {r[:2] for r in written(s)[0]}, 'the line that landed in between is in the receipt'
+
+
+def test_a_picture_read_ahead_writes_what_one_read_under_the_lock_wrote(tmp_path):
+    """Open, a mirrored line, Done - with writes elsewhere landing between each picture and its lock: the same rows as the old road
+    (every picture read under the lock), and no picture read under the lock where nothing it reads moved."""
+    def walk(st, ahead):
+        tid = chat(st, 12); other = st.create_task({'Title': 'Another', 'Kind': 'reply', 'Status': 'open'}, 'fixture')
+        real, n = st._ahead, itertools.count()
+        def raced(find):
+            got = real(find) if ahead else None
+            st.add_comment(other, 'agent', 'agent', 'elsewhere'); mail(st, f'x{next(n)}', tid=other); return got
+        under = []
+        with mock.patch.object(st, '_ahead', raced), watched_projection(st, under):
+            st.set_funnel_state(f'task:{tid}', 'surfaced', 'owner', note='sig', read=True)
+            with st.processing_own_words(tid, 'Taskuary'): st.add_comment(tid, 'Taskuary', 'assistant', 'Opened it.')
+            st.set_funnel_state(f'task:{tid}', 'done', 'owner')
+        return written(st), under
+    a, b = SQLiteStore(str(tmp_path / 'ahead.db')), SQLiteStore(str(tmp_path / 'under.db'))
+    try:
+        (got, under_a), (want, under_b) = walk(a, True), walk(b, False)
+        assert got == want and got[0] and got[2]
+        assert not any(under_a) and any(under_b)
+    finally: a.close(); b.close()

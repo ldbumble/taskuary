@@ -31,6 +31,17 @@ class PlainFailureTests(unittest.TestCase):
         self.assertTrue(gone.startswith('The service could not be reached'), gone)
         for x in (slow, gone): self.assertNotRegex(x, r'ConnectionPool|northwind|443')
 
+    def test_a_cli_failure_reaches_the_screen_without_its_colour_codes(self):
+        """Walk 15 (AI-ERR): a dead Codex turn showed "\\x1b[2m2026-11-24T09:27:06Z\\x1b[0m \\x1b[31mERROR\\x1b[0m ..." on the task and the rail -
+        its stderr's colour codes as text. The failure's sentence (failures.classify: the chat's failed turn and run_failed read it) keeps the
+        words, never the codes."""
+        from taskuary import failures, funnel
+        raw = ('session/prompt: The Codex app-server exited with code 4294967295. The agent starts it again on the next request. '
+               '\x1b[2m2026-11-24T09:27:06Z\x1b[0m \x1b[31mERROR\x1b[0m \x1b[2mcodex_app_server\x1b[0m: `[features].multi_agent` is deprecated.')
+        for said in (failures.classify(raw)['sentence'], funnel.failure(raw)['sentence']):
+            self.assertNotIn('\x1b', said); self.assertNotRegex(said, r'\[\d+m')
+            self.assertIn('exited with code 4294967295', said); self.assertIn('ERROR codex_app_server', said)
+
     def test_a_mail_read_cut_off_part_way_is_said_in_words_with_the_way_on(self):
         """A mailbox poll whose connection dropped mid-read (an IMAP socket's EOF, Graph's RemoteDisconnected, a reset) reached the card and
         the bell as the socket's own words, or as the folder and a page of requests' repr - with nothing to say it is retried."""

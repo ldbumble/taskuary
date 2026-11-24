@@ -171,3 +171,19 @@ def test_its_chat_is_built_with_the_writer_s_lock_free(big):
     assert free == [True] and len(got['items']) >= LINES / 2
 
 
+def test_its_chat_reads_what_came_in_off_the_writer(big):
+    """The load run, 2026-11-24 (after the fix above): what came in since was found by reading every arrival of the chat, bodies and all, on
+    the writer's connection under its lock - 312 holds, 66 s of it in 15 min with one 2,000-line chat open. None of the chat's reads go there."""
+    from taskuary import chatlog
+    s, tid = big
+    chatlog.serve(s, tid)
+    seen, cx = [], s.cx
+    class Spy:
+        def __getattr__(self, k): return getattr(cx, k)
+        def execute(self, q, *a): seen.append(q); return cx.execute(q, *a)
+    s.cx = Spy()
+    try: chatlog.serve(s, tid)
+    finally: s.cx = cx
+    assert not [q for q in seen if 'FROM chatlog' in q and q.lstrip().upper().startswith('SELECT') and "Kind='arrival'" in q], seen
+
+

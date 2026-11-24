@@ -903,10 +903,12 @@ def came_in(store, tid: int) -> None:
     from .conversation import _mail, stamp
     tid = int(tid)
     if _live(store, tid): return
-    with store.lock:
-        rows = [dict(r) for r in store.cx.execute("SELECT Key, Body FROM chatlog WHERE TaskId=? AND Kind='arrival'", (tid,))]
-        have = {r['Key'] for r in rows} | {f'm:{m}' for r in rows if r['Key'][:2] == 'j:' for m in (json.loads(r['Body']).get('thread') or {}).get('mids') or []}
-        foot = store.cx.execute('SELECT MAX(At) AS a FROM chatlog WHERE TaskId=? AND Parent IS NULL', (tid,)).fetchone()['a'] or 0
+    # ...read on one reader snapshot, never the writer's lock, and only a joined thread's body (the load run, 2026-11-24: a 2,000-line chat's
+    # every arrival read and parsed under the lock on each poll - 66 s of it in 15 min)
+    with store.pinned_read():
+        rows = store._rows("SELECT Key, CASE WHEN Key LIKE 'j:%' THEN Body END AS Body FROM chatlog WHERE TaskId=? AND Kind='arrival'", (tid,))
+        foot = (store._one('SELECT MAX(At) AS a FROM chatlog WHERE TaskId=? AND Parent IS NULL', (tid,)) or {}).get('a') or 0
+    have = {r['Key'] for r in rows} | {f'm:{m}' for r in rows if r['Key'][:2] == 'j:' for m in (json.loads(r['Body'] or '{}').get('thread') or {}).get('mids') or []}
     # ...AND WHAT A STRANGER WROTE TOO, the moment it is held (the Codex walk's judge, 2026-11-19: a failing CI build hidden 13 minutes behind
     # Trust, then drawn out of order): in its place, in time order - the hold's line and its Trust stand beside it; no agent hears it until then
     new = [x for x in _mail(store, tid) if (x.get('Channel') or '') != OWN and f"m:{x['MessageId']}" not in have]

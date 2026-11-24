@@ -216,8 +216,7 @@ def ask(store, tid: int, request: dict, wait: float = None, timed_out=None, move
         if ans.endswith('_always'): store.set_perm_rule(tid, pattern(r), 'allow' if ans.startswith('allow') else 'reject')
         store.audit('task', tid, 'permission_answered', 'owner', detail={'pid': pid, 'answer': ans, 'pattern': pattern(r), 'asked': asked(r), 'call': r['call']})
         try:                                           # ...the turn that waited on it hears it now: his press stands where he made it
-            from . import chatlog, conversation
-            chatlog.asked_answered(store, tid, r['call'], ans)          # ...on the row it was asked on, where there is one - no line besides
+            from . import conversation
             conversation.hear_press(store, tid, 'permission_answered')
         except Exception as e: logger.debug(f'permission on {task_ref(tid)}: its answer not written as heard - {e}')
         # ...AND EVERY CHAT BOUND TO THE TASK HEARS IT, whichever road it came by (the button, the chat, the rail's answer): answered on the

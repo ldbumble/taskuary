@@ -941,12 +941,9 @@ def press_lines(store, tid: int) -> list:
     # card should never go anywhere and just say it was approved ... keep the action cards but gray out if passed"): `perm` - what it asked
     # and his answer - lets the page draw the card it was, never a bare line in its place
     perm = {r['Id']: _detail(r) for r in store._rows("SELECT Id, Detail FROM audit WHERE EntityType='task' AND EntityId=? AND Action='permission_answered'", (tid,))}
-    # ...but one asked ON ITS CALL'S ROW is that row's: the row says his answer (chatlog.asked_answered), and a line besides was a second record
-    from .chatlog import asked_on_row
-    rowed = asked_on_row(store, tid) if perm else set()
     own = [{'id': f'press-{i}', 'role': 'user', 'press': True, 'content': [{'type': 'text', 'text': f'You {what}.'}], 'createdAt': at,
             **({'perm': {'asked': str(perm[i].get('asked') or ''), 'answer': str(perm[i].get('answer') or '')}} if i in perm else {})}
-           for i, at, what, *x in presses(store, tid) if not x and not (i in perm and str(perm[i].get('call') or '') in rowed)]
+           for i, at, what, *x in presses(store, tid) if not x]
     return sorted(own + agent_set(store, tid), key=lambda m: int(m['id'].split('-')[1]))        # as they happened: one audit chain numbers both
 # ...and WHAT THE AGENT SET FOR THEM BY TOOL is a line at its time too (the agent walk, 2026-11-09: a reminder it set stood nowhere on the page
 # but in its own prose) - the page's alone: its own act is never told back to it

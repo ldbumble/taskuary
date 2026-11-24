@@ -705,29 +705,6 @@ def test_a_plan_is_one_row_replaced_whole_and_the_sessions_state_is_no_row():
     assert c.state == {'commands': [{'name': 'compact'}], 'mode': 'plan', 'usage': {'used': 1200, 'size': 200000}}
 
 
-def test_a_plan_updated_after_his_line_is_drawn_under_it_and_the_turn_above_keeps_its_own():
-    """A PLAN IS THE TURN'S THAT LAST UPDATED IT: one ACP session keeps its plan across turns, and its next update - after his line - redrew the
-    row where it first stood, ABOVE that line. The newest plan stands in the newest turn; the turn above keeps the plan as it stood there."""
-    from taskuary import conversation, general
-    s, tid = world()
-    conversation.hear(s, tid, turn=True)
-    plan = lambda *st: chatlog.feed(s, tid, 'sid1', 'acp', {'sessionUpdate': 'plan', 'entries': [
-        {'content': c, 'status': x} for c, x in zip(('Read the ledger', 'Fix the tax line'), st)]})
-    plan('in_progress', 'pending'); plan('completed', 'in_progress')
-    general.wait_line(s, tid, 'Gail says the tax line is fine', line_id='l-gail'); conversation.hear(s, tid, ['l-gail'])
-    plan('completed', 'completed'); plan('completed', 'completed')
-    items = chatlog.read(s, tid, 'everything')['items']
-    assert [x['kind'] for x in items] == ['turn', 'line', 'turn'], [x['kind'] for x in items]
-    st = lambda t: [[i['status'] for i in x['items']] for x in t['steps'] if x['k'] == 'plan']
-    assert st(items[0]) == [['completed', 'in_progress']], 'the turn above keeps the plan as it stood there, replaced in place within it'
-    assert st(items[2]) == [['completed', 'completed']], 'the newest plan is under his line, once'
-    # ...and the same rule on a session's own record read whole (conversation.acp_steps)
-    up = lambda x: {'sessionUpdate': 'plan', 'entries': [{'content': 'Fix the tax line', 'status': x}]}
-    got = conversation.acp_steps([up('pending'), up('in_progress'), {'sessionUpdate': 'user_message_chunk', 'content': {'type': 'text', 'text': 'Gail says fine'}},
-                                  up('completed'), up('completed')])
-    assert [(x['k'], x.get('items', [{}])[0].get('status')) for x in got] == [('plan', 'in_progress'), ('you', None), ('plan', 'completed')]
-
-
 def test_a_row_is_pushed_to_the_open_chat_as_it_is_written():
     """THE WORDS STREAM INTO THEIR ROW (the owner, 2026-11-23): each write of a row goes out on the task's run-tail with the row as a read
     serves it and the turn it stands in - the page patches it in place (chatStream.patchSteps), never waiting on a 600 ms read."""

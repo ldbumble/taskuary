@@ -20,13 +20,11 @@ const argsOf = (s) => (s.args && Object.keys(s.args).length ? s.args
 const OVER = ["completed", "failed"];
 // ...and a call put to the owner (permissions.calls) is neither: `held` waits on his answer, `refused` was never run - drawn as either, it read
 // "Deleted ledger-archive" over the card that asked for it, and after his Reject too (the stress round, 2026-11-18)
-const ASKED = { held: "Taskuary held this for the owner - it waits for your answer on its card.", refused: "Not run - nobody allowed it.", rejected: "Not run - you said no." };
-// ...and HIS ANSWER ON ITS ROW is the one record of it (chatlog.asked_answered - no press line besides): his no reads as his, never "nobody"
-const askedOf = (s) => (ASKED[s.status] ? s.status : String(s.answer || "").startsWith("reject") && s.status !== "completed" ? "rejected" : "");
-const runs = (s, running, last) => running && !askedOf(s) && (s.status ? !OVER.includes(s.status) : last);
+const ASKED = { held: "Taskuary held this for the owner - it waits for your answer on its card.", refused: "Not run - nobody allowed it." };
+const runs = (s, running, last) => running && !ASKED[s.status] && (s.status ? !OVER.includes(s.status) : last);
 // ...and one ACP still called pending or running when nothing runs any more NEVER FINISHED - a permission left open when Taskuary restarted, a
 // session that died mid-call: drawn done, "Edited totals.py" read as made (the stress round, 2026-11-10)
-const ended = (s, output, a = askedOf(s)) => (a ? { result: ASKED[a], is_error: true, state: a === "held" ? a : "refused" } : s.status && !OVER.includes(s.status) ? { result: output || "It never finished.", is_error: true }
+const ended = (s, output) => (ASKED[s.status] ? { result: ASKED[s.status], is_error: true, state: s.status } : s.status && !OVER.includes(s.status) ? { result: output || "It never finished.", is_error: true }
   : { result: output, is_error: s.status === "failed" });
 export const eventsOf = (steps, running, tail = true) => steps.flatMap((s, i) => {
   const id = s.id || `t${i}`, output = String(s.output || "").trim();

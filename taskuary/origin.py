@@ -81,8 +81,15 @@ def of_task(store, tid: int, msgs=None) -> tuple:
     return o, why
 
 
+def _memo(store) -> dict:
+    """senders.known's memo for one read of the store, across its tasks (cardqueue.fresh: until the next write): the cold rail judged each
+    task's people afresh - the same sixty correspondents asked again on each of 470 tasks, 4 s of the first pile after a restart (2026-11-24)"""
+    from . import cardqueue
+    return cardqueue.fresh(store, ('origin-memo',), dict)
+
+
 def _of_task(store, tid: int, msgs=None) -> tuple:
-    o, why, t = _judge(store, tid, msgs, {}, {})
+    o, why, t = _judge(store, tid, msgs, _memo(store), {})
     # a bare UPDATE: a read must not move UpdatedAt/UpdatedBy and reorder the lists
     if (t.get('Origin'), t.get('OriginWhy')) != (o, why): store._exec('UPDATE task SET Origin=?, OriginWhy=? WHERE TaskId=?', (o, why, tid))
     if t.get('_lifted') and t['_lifted'][0] > int(t.get('TrustedThrough') or 0): _lift(store, t, o)
@@ -381,11 +388,11 @@ def released(store, was: set) -> list:
 def _hold(store, tid: int, t: dict) -> dict | None:
     msgs = store.list_messages(tid)
     if of_task(store, tid, msgs)[0] != 'stranger': return None
-    through, memo, seen = int(t.get('TrustedThrough') or 0), {}, {}
+    through, memo, seen = int(t.get('TrustedThrough') or 0), _memo(store), {}
     mids = [m['MessageId'] for m in msgs if m['MessageId'] > through and not _own(m) and (m.get('Channel') or '') not in OURS
             and senders.can_hold(m) and (r := of_message(store, m, memo, seen)) and r[0] == 'stranger']
     if not mids or not (offer := senders.trust_offer(store, int(tid), msgs)): return None      # Taskuary's own words, a teammate chat: no sender to trust
-    m = senders.whom(store, msgs, through) or {}
+    m = senders.whom(store, msgs, through, memo) or {}
     who = ' '.join(str(m.get('FromName') or m.get('FromEmail') or 'this sender').split())        # ...mid-sentence: "You have not trusted this sender yet"
     # ...WITH THE ADDRESS BESIDE THE NAME (the readiness review, 2026-11-14): a display name is the sender's to choose, and a stranger
     # named like a colleague read as that colleague on the one line the press rests on
@@ -408,11 +415,11 @@ def his_own(store, tid) -> bool:
     "He made the task, or what started it is trusted - a stranger's mail only joined it."
     t, msgs = store.get_task(int(tid)) or {}, store.list_messages(int(tid))
     if t.get('OriginBase'): return t['OriginBase'] != 'stranger'                 # ...made by him, or vouched for by his Trust (raise_to)
-    if not (b := _base(store, int(tid), t, msgs, {}, {})) or b[0] == 'stranger': return False
+    if not (b := _base(store, int(tid), t, msgs, memo := _memo(store), {})) or b[0] == 'stranger': return False
     if b != NO_BASE: return True                                                # ...his guide chat, his ask to the assistant, a trusted report
     # ...else the mail that made it says: a stranger's mail started it, or it came from someone trusted (or him)
     first = min(msgs, key=lambda m: m['MessageId'], default=None)
-    return not first or first['MessageId'] <= int(t.get('TrustedThrough') or 0) or of_message(store, first)[0] != 'stranger'
+    return not first or first['MessageId'] <= int(t.get('TrustedThrough') or 0) or of_message(store, first, memo)[0] != 'stranger'
 
 def keeps_him(store, tid) -> dict | None:
     "The hold when it keeps his own line too (a task a stranger's mail started), else None - what every road his line takes asks."

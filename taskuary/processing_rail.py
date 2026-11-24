@@ -28,6 +28,9 @@ DIRTY_ROWS = {
     # ...and the two tables only the card's display backing reads (funnel_presentation): the stamp cache
     # is valid exactly while no backing table has been written, so every one of them must leave a row here
     'waitroom': [("'task'", 'TaskId')],
+    # ...and the start queue, which the task's state reads (taskstate: "Waiting its turn", a start that failed): a queued start wrote no
+    # row, and the rail kept the task's old state for up to PILE_EVERY
+    'dispatchq': [("'task'", 'TaskId')],
     'connector': [("'connector'", 'ConnectorId')],
     'task_artifact': [("'task'", 'TaskId')],
     'transcript': [("'task'", 'TaskId')],

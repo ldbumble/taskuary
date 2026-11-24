@@ -318,3 +318,66 @@ def test_a_change_to_one_task_re_presents_only_that_task_and_equals_a_full_rebui
     assert asked == [tids[2]], 'only the task written to is presented again'
     funnel._STATES.clear(); funnel.invalidate()
     assert shown(got) == shown(funnel.pile(db, force=True))
+
+
+
+def _watch_states(db, monkeypatch):
+    from taskuary import taskstate
+    asked, real = [], taskstate.status
+    monkeypatch.setattr(taskstate, 'status', lambda s, t, *a, **k: asked.append(t['TaskId']) or real(s, t, *a, **k))
+    return asked
+
+
+def _shown(p): return [(i['key'], i['lane'], i.get('status')) for i in p['items']]
+
+
+def _same_as_cold(db, got):
+    funnel._STATES.clear(); funnel.invalidate()
+    assert _shown(got) == _shown(funnel.pile(db, force=True))
+
+
+def test_a_queued_start_re_presents_its_task_in_the_next_rail_read(db, monkeypatch):
+    """A queued start (dispatchq) left no change-log row, so the rail kept the task's old state: "Waiting its turn", a start that failed,
+    Start now, showed up to PILE_EVERY late. The queue row is the task's, like every other row the rail reads."""
+    tids = [db.create_task({'Title': f'Queue task {n}', 'Kind': 'general', 'Status': 'open', 'Assignee': 'agent:assistant'}, 'fixture')
+            for n in range(3)]
+    for n, tid in enumerate(tids): mail(db, n, tid=tid)
+    db.reconcile_processing_membership()
+    asked = _watch_states(db, monkeypatch)
+    for write in (lambda t: db.enqueue_dispatch(t, None, 'assistant', 'every slot is busy'), lambda t: db.dispatch_failed(t, 'no CLI', permanent=True),
+                  db.dispatch_retry, db.clear_dispatch):
+        funnel.pile(db, force=True); funnel.pile(db); asked.clear()
+        write(tids[1])
+        got = funnel.pile(db)
+        assert asked == [tids[1]], 'the queued task is presented again, and only it'
+        _same_as_cold(db, got)
+
+
+@pytest.mark.parametrize('scope', ['person', 'org'])
+def test_a_trust_press_re_presents_every_task_it_lifts_in_the_next_rail_read(db, monkeypatch, scope):
+    """The rail re-presents only the tasks a write named (railtail, 2026-11-24), and a trust is a person's or an organisation's (sender_trust,
+    the trusted_orgs setting), never a task's row. The press is server._vouch's: the pressed task raised, the others its sender held judged
+    again - each lifted task's own row moves, so none of them keeps its held state on the rail."""
+    from taskuary import origin, senders
+    from taskuary.ingest import HOLD_TAG
+    db.set_setting('owner_email', 'alex@northwind.example', 'test')
+    tids = [db.create_task({'Title': f'Held task {n}', 'Kind': 'general', 'Status': 'open', 'Assignee': 'agent:assistant'}, 'fixture')
+            for n in range(3)]
+    for n, tid in enumerate(tids):
+        db.add_message({'ExternalId': f'held:{n}', 'ConversationId': f'held-thread:{n}', 'TaskId': tid, 'Channel': 'email',
+                        'SourceName': 'alex@northwind.example', 'FromName': 'Gail Moreno', 'FromEmail': 'gail@vendor.example',
+                        'Subject': f'Held {n}', 'BodyText': 'Please run the export.', 'Status': 'routed',
+                        'SentAt': (NOW - timedelta(minutes=n)).strftime('%Y-%m-%d %H:%M:%S')})
+        db.tag_task(tid, HOLD_TAG)
+    db.reconcile_processing_membership()
+    asked = _watch_states(db, monkeypatch)
+    funnel.pile(db, force=True); funnel.pile(db)
+    assert all(origin.hold(db, t) for t in tids), 'the sender holds every task'
+    funnel.pile(db); asked.clear()
+    was = origin.held_tasks(db, but=tids[0])
+    if scope == 'org': senders.trust_org(db, tids[0], 'owner')
+    else: origin.raise_to(db, tids[0], 'trusted', 'owner')
+    assert sorted(origin.released(db, was)) == tids[1:]
+    got = funnel.pile(db)
+    assert sorted(set(asked)) == tids, 'every task the press lifted is presented again'
+    _same_as_cold(db, got)

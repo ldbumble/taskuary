@@ -260,10 +260,11 @@ def _segments(cmd: str) -> list:
     return out
 
 
-def command_paths(cmd: str, cwd: str = '', env: dict = None) -> list:
+def command_paths(cmd: str, cwd: str = '', env: dict = None, made: list = None) -> list:
     """Every path a shell line names as an argument, through `cd`, `bash -c "..."` and `--opt=value` - None for one built from a variable
-    it cannot read. The program itself, options, URLs and switches (`/s`) are not paths."""
-    from .browsergate import words
+    it cannot read. The program itself, options, URLs and switches (`/s`) are not paths. `made` gets the files the line writes rather than
+    reads: a browser screenshot's picture (walk 16: the agent's own screenshot in Temp stood as a card asking to read it)."""
+    from .browsergate import _head, words
     from .shellgate import _OWN, shell_text, unwrap
     # ...a line that is a shell started on a script (Codex's every call) is read as that script, whole: cut at the `;` inside its quotes first,
     # `$outDir = "<its outputs folder>"; New-Item $outDir` lost its assignment and the task's own folder was held as a variable it could not
@@ -288,6 +289,7 @@ def command_paths(cmd: str, cwd: str = '', env: dict = None) -> list:
             if i is not None: out += command_paths(' '.join(w[i + 1:]), here, env)
             continue
         cd, named = tool in ('cd', 'chdir', 'set-location', 'sl', 'pushd'), len(out)
+        shot = (a := _head(w)) is not None and next((x.lower() for x in a if not x.startswith('-')), '') == 'screenshot'
         code = re.sub(r'[\d.]+$', '', tool) in ('python', 'py', 'node', 'ruby', 'perl', 'deno') and any(x in ('-c', '-e') for x in w[1:3])
         # ...an inline script's text is read word by word for the paths in it: its words are mostly data, so one is a path only where one is
         # there (below) - `open('~/.ssh/id_rsa')` in it is read as ever
@@ -313,7 +315,8 @@ def command_paths(cmd: str, cwd: str = '', env: dict = None) -> list:
             # walk, 2026-11-22: "~\$5.46", a price a PDF's script drew, held as a read in his home folder)
             if code and not _WILD.search(e) and not os.path.lexists(e): continue
             if cd: here = _cut(e); break
-            out.append(e)
+            if shot and made is not None: made.append(e)
+            else: out.append(e)
         else:
             if cd and len(w) == 1: here = os.path.expanduser('~')          # a bare `cd` goes home
         # ...a step that names no path reads where the line has moved to: `cd ~/Documents && ls`
@@ -342,4 +345,7 @@ def env_for(store, tid, cwd: str = '') -> dict:
 
 def of_command(store, tid, cmd: str, cwd: str = '') -> tuple:
     "(held, never) for a shell line."
-    return judge(store, tid, command_paths(cmd, cwd, env_for(store, tid, cwd)), cwd)
+    made = []
+    ps = command_paths(cmd, cwd, env_for(store, tid, cwd), made)
+    wrote(tid, made)                                  # ...the picture it takes is its own work, read back without asking (wrote)
+    return judge(store, tid, ps, cwd)

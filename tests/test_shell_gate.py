@@ -702,6 +702,23 @@ def test_a_folder_its_agent_wrote_in_is_its_own_to_read_back():
     finally: shutil.rmtree(d, ignore_errors=True)
 
 
+def test_a_browser_screenshot_it_takes_is_its_own_picture_never_a_read_to_approve():
+    """Walk 16: `agent-browser screenshot <a folder of the owner's>/s1.png 2>&1|tail -2` stood as a card "Read s1.png in Temp - outside this
+    task's own folders" - the picture's path read as a read. What the screenshot writes is the agent's own work, and reading it back is too."""
+    import os, shutil
+    from taskuary import readgate
+    from taskuary.store import MemoryStore
+    s = MemoryStore(); tid = s.create_task({'Title': 'Set up the vendor board', 'Kind': 'general', 'Status': 'open'}, 'owner')
+    d = os.path.join(os.getcwd(), 'tqshot-gate-test'); os.makedirs(d, exist_ok=True); shot = os.path.join(d, 's1.png').replace('\\', '/')
+    try:
+        readgate.WROTE.pop(tid, None)
+        assert readgate.of_command(s, tid, f'cat {shot}')[0], 'a read there is held'
+        assert readgate.of_command(s, tid, f'agent-browser screenshot {shot} 2>&1|tail -2') == ([], '')
+        assert readgate.of_command(s, tid, f'npx agent-browser --session t4 screenshot {shot} --full') == ([], '')
+        assert readgate.judge(s, tid, [shot]) == ([], ''), 'and the picture is its own to read back'
+    finally: shutil.rmtree(d, ignore_errors=True); readgate.WROTE.pop(tid, None)
+
+
 def test_an_inline_scripts_lines_and_words_are_its_text_and_a_path_in_it_is_read_where_one_is_there():
     """The HIPAA walk, 2026-11-22: a PDF a `python -c` script wrote to the task's own outputs was held for the owner as "a path it builds
     from a variable" - each line of the script was cut as a command of its own, and the copper price in its words, "~\\$5.46", read as a

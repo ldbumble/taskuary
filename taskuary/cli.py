@@ -428,11 +428,11 @@ def main():
     agent, stranger = session()
     if stranger is not None: _refuse_outside(args)
     if args.demo:
-        import os, tempfile
-        from . import demo
+        import os
+        from . import demo, spawn
         os.environ[demo.FLAG] = '1'
-        # a throwaway home, so a demo can never be pointed at somebody's real database by accident
-        os.environ.setdefault('TASKUARY_HOME', tempfile.mkdtemp(prefix='taskuary-demo-'))
+        # a throwaway home, so a demo can never be pointed at somebody's real database by accident - and gone when the demo ends (own_temp)
+        if not os.environ.get('TASKUARY_HOME'): os.environ['TASKUARY_HOME'] = spawn.own_temp('taskuary-demo-')
         print(f'demo mode: invented data in {os.environ["TASKUARY_HOME"]}, nothing can reach a real system')
     # --done goes over HTTP, unlike --note. A note is a database row and any process can write
     # one; ENDING a task needs the live session's scrollback, which exists only inside the

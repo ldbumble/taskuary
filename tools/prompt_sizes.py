@@ -4,11 +4,12 @@ No model is called and nothing leaves the machine: a recording stand-in answers.
 opened. Tokens are ESTIMATED as characters / 4. Prints one row per call kind - system, user, tools, calls per unit of work and tokens per unit -
 and the agent loop's calls step by step as they were sent before 2026-11-10 (every earlier tool answer whole) and as they are sent now
 (apiagent.sent). The owner, 2026-11-10: "they spent 25 dollars in one day? 32 million tokens?"."""
-import json, os, sys, tempfile
+import json, os, sys
 from pathlib import Path
 
-os.environ['TASKUARY_HOME'] = tempfile.mkdtemp(prefix='prompt_sizes_')
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from taskuary.spawn import own_temp
+os.environ['TASKUARY_HOME'] = own_temp('prompt_sizes_')        # gone when the run ends
 from unittest import mock
 
 NL = chr(10)

@@ -531,12 +531,8 @@ def switch_tab(sid: str, tab: str) -> bool:
     "Make tab `tab` (t<N> or its target id) the active one of this session's browser. Output to a FILE, never a pipe (navigate)."
     exe = program()
     if not exe or not TAB_REF.fullmatch(str(tab or '')) or not state(sid, fresh=True)['open']: return False
-    log = Path(tempfile.gettempdir()) / f'{session_name(sid)}-tab.log'
-    try:
-        with open(log, 'wb') as f:
-            p = spawn.popen([exe, '--session', session_name(sid), 'tab', tab], env=_cli_env(sid), stdout=f, stderr=f, stdin=subprocess.DEVNULL)
-            try: ok = p.wait(timeout=NAV_WAIT) == 0
-            except subprocess.TimeoutExpired: p.kill(); ok = False
+    try: ok = spawn.output([exe, '--session', session_name(sid), 'tab', tab], NAV_WAIT, env=_cli_env(sid))[0] == 0
+    except subprocess.TimeoutExpired: ok = False
     except OSError as e: logger.debug(f'the browser of {sid} did not switch to {tab}: {e}'); return False
     _CACHE.pop(sid, None)
     return ok

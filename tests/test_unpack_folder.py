@@ -331,3 +331,46 @@ def test_the_next_start_ends_what_a_dead_run_left_and_keeps_a_live_ones(tmp_path
     finally:
         for p in (left, kept):
             if p.poll() is None: p.kill()
+
+
+# ── what a run leaves in %TEMP% goes ───────────────────────────────────────────────────────
+# 2026-11-24: eleven thousand test homes, and a log file per browser session, in %TEMP% since early November.
+def test_a_command_heard_through_a_file_leaves_no_file(monkeypatch):
+    import tempfile
+    monkeypatch.setenv('TQ_SPAWN_MODE', 'say')
+    before = set(os.listdir(tempfile.gettempdir()))
+    rc, said = spawn.output([sys.executable, str(HARNESS)], 30)
+    assert (rc, said.strip()) == (3, 'the page is open')
+    assert set(os.listdir(tempfile.gettempdir())) == before
+
+
+def test_temp_folders_whose_maker_is_gone_are_swept_and_no_others(tmp_path):
+    dead = subprocess.Popen([sys.executable, str(HARNESS)], env={**os.environ, 'TQ_SPAWN_MODE': 'say'}, stdout=subprocess.DEVNULL); dead.wait(30)
+    def mk(name, maker=None, age=0):
+        d = tmp_path / name; (d / 'tmp').mkdir(parents=True); (d / 'taskuary.db').write_text('x')
+        if maker: (d / spawn.MARK).write_text(maker)
+        t = time.time() - age; os.utime(d, (t, t)); return d
+    killed = mk('tq_run_killed', f'{dead.pid} 1')
+    ours = mk('tq_run_ours', f'{os.getpid()} {spawn._stamp(os.getpid())}')
+    older, fresh = mk('tq_run_older_build', age=2 * 86400), mk('tq_run_older_build_now')
+    other = mk('someone_elses', f'{dead.pid} 1', age=2 * 86400)
+    assert spawn.sweep_temp('tq_run_', str(tmp_path)) == 2
+    assert not killed.exists() and not older.exists()
+    assert ours.exists() and fresh.exists() and other.exists()
+
+
+def test_own_temp_goes_at_exit_and_what_a_held_file_keeps_is_marked_for_the_next(tmp_path, monkeypatch):
+    import atexit
+    at = []
+    monkeypatch.setattr(atexit, 'register', lambda f, d: at.append((f, d)))
+    d = Path(spawn.own_temp('tq_own_', str(tmp_path)))
+    assert (d / spawn.MARK).read_text().startswith(f'{os.getpid()} ') and at == [(spawn.drop_temp, str(d))]
+    (d / 'tmp').mkdir(); (d / 'tmp' / 'x').write_text('x')
+    held = open(d / 'taskuary.db', 'w')
+    try:
+        spawn.drop_temp(str(d))
+        assert not (d / 'tmp').exists()
+        if os.name == 'nt': assert (d / spawn.MARK).exists(), 'what a held file kept is not marked for the next run'
+    finally: held.close()
+    spawn.drop_temp(str(d))
+    assert not d.exists()

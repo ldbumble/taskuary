@@ -178,7 +178,7 @@ class Holding(unittest.TestCase):
         self.check(); [rv] = self.pending()
         ran = []
         with installed(), mock.patch('taskuary.workerstate._live', return_value=self.sess), \
-                mock.patch.object(ad, '_run', lambda args, wait, tag: ran.append(args) or (0, '{"ok":true,"command":"click","data":{}}')):
+                mock.patch.object(ad, '_run', lambda args, wait: ran.append(args) or (0, '{"ok":true,"command":"click","data":{}}')):
             out = verdicts.decide(self.s, rv, 'approve')
         self.assertTrue(out['ok'], out)
         self.assertEqual(ran, [['click', '@s8f3k2p9:e8']])

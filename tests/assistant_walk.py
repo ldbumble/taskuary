@@ -10,7 +10,7 @@ is what Taskuary DOES with that answer, what the line says, and how long each to
   action     - the answer with its act: the button lit, the page opened, the draft started, the rows cleared
 `python -m tests.assistant_walk` prints the table (FAKE_CLAUDE_* env vars change the timings); `--real` runs the same steps on the
 installed claude instead - see real_cli_safe() for what has to hold first. tests/test_assistant_walk.py holds every step in CI."""
-import json, os, re, sys, tempfile, threading, time
+import json, os, re, sys, threading, time
 from contextlib import ExitStack
 from unittest import mock
 
@@ -170,7 +170,8 @@ def real_cli_safe() -> tuple:
     if not exe: return False, 'no claude on PATH'
     if '--setting-sources' not in subprocess.run([exe, '--help'], capture_output=True, text=True, encoding='utf-8').stdout:
         return False, 'this claude has no --setting-sources'
-    d = tempfile.mkdtemp(prefix='tq-real-control-'); os.makedirs(os.path.join(d, '.claude'))
+    from taskuary.spawn import own_temp
+    d = own_temp('tq-real-control-'); os.makedirs(os.path.join(d, '.claude'))
     with open(os.path.join(d, '.claude', 'settings.json'), 'w') as f:
         json.dump({'hooks': {'UserPromptSubmit': [{'hooks': [{'type': 'command', 'command': 'echo control>> control.txt'}]}]}}, f)
     env = {k: v for k, v in os.environ.items() if not k.startswith('TASKUARY_')}
@@ -202,7 +203,8 @@ def run(steps=STEPS, real: bool = False, warm: bool = True, quiet: bool = False,
     if quiet:
         from loguru import logger
         logger.remove()
-    scratch = tempfile.mkdtemp(prefix='tq-walk-')
+    from taskuary.spawn import own_temp
+    scratch = own_temp('tq-walk-')            # gone with the run, or swept by the next
     script = os.path.join(scratch, 'script.json')
     with open(script, 'w', encoding='utf-8') as f:
         json.dump([{'when': '^' + re.escape(s.text) + '$', 'first': s.first, 'then': s.then or 'Ok.'} for s in steps], f)

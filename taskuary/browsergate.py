@@ -32,9 +32,8 @@ What this does not cover, said plainly: an agent that reaches Chrome some other 
 program by its full path, `npx`, its own DevTools client, a script). This gates the road browser agents are told to take
 (browserview.brief), not every road there is.
 """
-import json, os, re, shlex, shutil, subprocess, tempfile, threading, time
+import json, os, re, shlex, shutil, subprocess, threading, time
 from .say import said as _said            # a failure written to the chat is said in his words (say.py)
-from pathlib import Path
 from urllib.parse import urlsplit
 from loguru import logger
 from .gate import BIG as _BIG4, TABLE, deny as _deny, says as _says
@@ -321,23 +320,17 @@ LATE = 'the browser did not answer in time'
 
 
 def _run(sid: str, args: list, wait: float, tag: str, cwd: str = None) -> tuple:
-    """(exit code, output) of one agent-browser command in this session's browser. Output to a FILE (browserview.navigate says
-    why: the daemon inherits a pipe and it never ends). `cwd`: the agent's folder, for an act that names a file by a relative path. A load
+    """(exit code, output) of one agent-browser command in this session's browser (`tag`: what it is, for the reader). Output to a file
+    (spawn.output): the daemon inherits a pipe and it never ends. `cwd`: the agent's folder, for an act that names a file by a relative path. A load
     an earlier command left stuck is stopped first, and one this command left is stopped after it - its output says so (browserview.unstick)."""
     from . import browserview, spawn
     exe = browserview.program()
     if not exe: raise RuntimeError('agent-browser is not installed')
     t0 = time.time()
     _ = browserview.began(sid) if args and (args[0] not in LOOKS or args[0] in NAVS) else browserview.unstick(sid)
-    log = Path(tempfile.gettempdir()) / f'{browserview.session_name(sid)}-{tag}.log'
-    with open(log, 'wb') as f:
-        p = spawn.popen([exe, '--session', browserview.session_name(sid), *args], env=browserview._cli_env(sid), stdout=f, stderr=f,
-                        stdin=subprocess.DEVNULL, **({'cwd': cwd} if cwd and os.path.isdir(cwd) else {}))
-        try: rc = p.wait(timeout=wait)
-        except subprocess.TimeoutExpired:
-            p.kill()
-            raise RuntimeError(LATE + (f' - {browserview.STOPPED}' if browserview.unstick(sid, t0) else ''))
-    said = log.read_text(encoding='utf-8', errors='replace')
+    try: rc, said = spawn.output([exe, '--session', browserview.session_name(sid), *args], wait, env=browserview._cli_env(sid),
+                                 **({'cwd': cwd} if cwd and os.path.isdir(cwd) else {}))
+    except subprocess.TimeoutExpired: raise RuntimeError(LATE + (f' - {browserview.STOPPED}' if browserview.unstick(sid, t0) else ''))
     return rc, said + (f'\n{browserview.STOPPED}' if rc != 0 and browserview.unstick(sid, t0) else '')
 
 

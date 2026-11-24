@@ -318,12 +318,75 @@ def _end_tree(pid: int):
         if (h := k.OpenProcess(0x0001, False, p)): k.TerminateProcess(W.HANDLE(h), 1); k.CloseHandle(W.HANDLE(h))
 
 
+# A TEMP FOLDER IS REMOVED BY WHOEVER MADE IT, AND BY THE NEXT ONE WHEN IT CANNOT (2026-11-24: eleven thousand test homes in %TEMP% since early
+# November). A process removes its own at exit - but SQLite or ConPTY can still hold a file then, and a killed run never gets there. So each
+# folder names its maker (pid and start time), and the next folder made with that prefix removes every one whose maker is gone.
+MARK = '.taskuary-maker'
+
+def rmtree(d, tries: int = 5) -> bool:
+    "Remove folder `d` as far as it goes: a file Windows still holds a moment is tried again, a read-only one made writable. True when gone."
+    import shutil, stat, time
+    def again(f, p, _):
+        try: os.chmod(p, stat.S_IWRITE); f(p)
+        except OSError: pass
+    for i in range(tries):
+        shutil.rmtree(d, **({'onexc': again} if sys.version_info >= (3, 12) else {'onerror': again}))
+        if not os.path.exists(d): return True
+        if i < tries - 1: time.sleep(.2 * (i + 1))
+    return False
+
+def _mark(d):
+    try:
+        with open(os.path.join(d, MARK), 'w', encoding='utf-8') as f: f.write(f'{os.getpid()} {_stamp(os.getpid())}')
+    except OSError: pass
+
+def drop_temp(d):
+    "At exit: our folder goes - and what a held file kept of it is marked ours again, for the next run to take."
+    if not rmtree(d) and os.path.isdir(d): _mark(d)
+
+def sweep_temp(prefix: str, root: str, unmarked_age: float = 86400) -> int:
+    """Remove the folders in `root` named `prefix`... whose maker no longer runs. One with no mark (an older build's) goes once it is a day old.
+    Returns how many went."""
+    import time
+    try: ds = [e for e in os.scandir(root) if e.name.startswith(prefix) and e.is_dir(follow_symlinks=False)]
+    except OSError: return 0
+    n = 0
+    for e in ds:
+        try:
+            with open(os.path.join(e.path, MARK), encoding='utf-8') as f: pid, made = f.read().split(' ', 1)
+            if _stamp(int(pid)) == made: continue                       # its maker still runs
+        except (OSError, ValueError):
+            try:
+                if time.time() - e.stat().st_mtime < unmarked_age: continue
+            except OSError: continue
+        n += rmtree(e.path, tries=1)
+    return n
+
+def own_temp(prefix: str, root: str = None) -> str:
+    "A new temp folder of this process: marked as ours, removed at our exit, and the leftovers of its prefix swept on a thread (sweep_temp)."
+    import atexit, tempfile
+    d = tempfile.mkdtemp(prefix=prefix, dir=root)
+    _mark(d); atexit.register(drop_temp, d)
+    threading.Thread(target=sweep_temp, args=(prefix, os.path.dirname(d)), daemon=True, name='temp-sweep').start()
+    return d
+
+
 # run(): a child waited for, bounded by its own timeout - not tied: subprocess.run builds its Popen inside, out of reach (a crash mid-run leaves
 # that one command to finish)
 def run(*args, **kw): return _started(subprocess.run, *args, **flags(**guard(**kw)))
 def popen(*args, **kw):
     f, kw = _popen(kw)
     return _started(f, *args, **flags(**guard(**kw)))
+def output(argv, timeout: float, **kw) -> tuple:
+    """(exit code, what it wrote) of a command whose output goes to a FILE, never a pipe: a helper it leaves running (agent-browser's
+    daemon, agent-desktop's command host) inherits the handle, and a pipe would never end. The file has no name - it goes with its last
+    handle, so a log per session no longer piles up in %TEMP%. Past `timeout` the command is ended and subprocess.TimeoutExpired raised."""
+    import tempfile
+    with tempfile.TemporaryFile() as f:
+        p = popen(argv, stdout=f, stderr=f, stdin=subprocess.DEVNULL, **kw)
+        try: rc = p.wait(timeout=timeout)
+        except subprocess.TimeoutExpired: p.kill(); raise
+        f.seek(0); return rc, f.read().decode('utf-8', 'replace')
 def bare(*args, **kw):
     """A child that sets its own creation flags (the WhatsApp bridge, the update helper, a browser): guarded, no console flag."""
     f, kw = _popen(kw)

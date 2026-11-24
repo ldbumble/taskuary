@@ -4,10 +4,11 @@ context ... This will make assistant quicker without having to call tools right 
 
 The table - its stage, ask, lit button, draft and the row's buttons by the id a CALL takes - then what this walk put down, one line each,
 bounded; and a button named from it is pressed or lit in the same round, with no look-up first."""
-import json, os, tempfile, unittest
+import json, os, unittest
 from unittest import mock
 
-os.environ.setdefault('TASKUARY_HOME', tempfile.mkdtemp(prefix='tq-canvas-'))
+from taskuary.spawn import own_temp                                             # noqa: E402
+if not os.environ.get('TASKUARY_HOME'): os.environ['TASKUARY_HOME'] = own_temp('tq-canvas-')      # run alone: a home that goes with the run
 from taskuary import concierge, funnel, general, ingest, server, terminal     # noqa: E402
 from tests import assistant_walk as aw                                         # noqa: E402
 

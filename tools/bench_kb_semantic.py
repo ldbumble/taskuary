@@ -7,9 +7,10 @@ brute-force scan (numpy and pure Python), and a whole hybrid `knowledge.search`.
 random-vector fake, so the model's own inference time is NOT in these numbers - that is whatever your
 Ollama takes per passage (measure it with `time ollama run`/a request to /v1/embeddings). Invented text only.
 """
-import os, random, sys, tempfile, time
-os.environ.setdefault('TASKUARY_HOME', tempfile.mkdtemp(prefix='taskuary_bench_'))
+import os, random, sys, time
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
+from taskuary.spawn import own_temp
+if not os.environ.get('TASKUARY_HOME'): os.environ['TASKUARY_HOME'] = own_temp('taskuary_bench_')    # gone when the run ends
 from unittest import mock
 from taskuary import kbembed, knowledge as kb
 from taskuary.store import MemoryStore

@@ -12,11 +12,24 @@ from pathlib import Path
 from unittest import mock
 from urllib.parse import urlsplit
 
+# The console ``pytest`` entrypoint does not prepend cwd like ``python -m pytest``.
+# An editable install may point at the owner's other checkout: always test THIS
+# worktree, and fail rather than mix already-imported application modules.
+_CHECKOUT_ROOT = Path(__file__).resolve().parents[1]
+_loaded_package = sys.modules.get('taskuary')
+if _loaded_package is not None:
+    if Path(getattr(_loaded_package, '__file__', '')).resolve().parent != _CHECKOUT_ROOT / 'taskuary':
+        raise RuntimeError('Taskuary was imported from another checkout before test isolation')
+sys.path.insert(0, str(_CHECKOUT_ROOT))
+
 # P0-ISOLATION: always allocate the suite's homes ourselves.  An arbitrary inherited
 # TASKUARY_TEST_HOME is not evidence that a path is disposable; accepting one here reopened the
 # same class of door that the original TASKUARY_HOME guard closed.  HOME/USERPROFILE matter too:
 # terminal.pretrust writes ~/.claude.json and provider SDKs use per-user config outside Taskuary.
-_TEST_ROOT = Path(tempfile.mkdtemp(prefix='taskuary_pytest_')).resolve()
+# The suite's root is spawn's own temp folder: removed at exit, and the roots of earlier runs that are gone - killed, or held by a file
+# at their exit - swept on a thread (spawn.own_temp). Only spawn is imported this early: it reads nothing of a home.
+from taskuary import spawn as _spawn
+_TEST_ROOT = Path(_spawn.own_temp('taskuary_pytest_')).resolve()
 _TASKUARY_HOME = _TEST_ROOT / 'taskuary'
 _USER_HOME = _TEST_ROOT / 'user'
 _TEMP_HOME = _TEST_ROOT / 'tmp'
@@ -46,16 +59,6 @@ tempfile.tempdir = str(_TEMP_HOME)
 os.environ.pop('TASKUARY_ALLOW_TEST_HOME', None)
 os.environ.pop('TASKUARY_DEMO', None)
 os.environ.pop('TASKUARY_API', None)
-
-# The console ``pytest`` entrypoint does not prepend cwd like ``python -m pytest``.
-# An editable install may point at the owner's other checkout: always test THIS
-# worktree, and fail rather than mix already-imported application modules.
-_CHECKOUT_ROOT = Path(__file__).resolve().parents[1]
-_loaded_package = sys.modules.get('taskuary')
-if _loaded_package is not None:
-    if Path(getattr(_loaded_package, '__file__', '')).resolve().parent != _CHECKOUT_ROOT / 'taskuary':
-        raise RuntimeError('Taskuary was imported from another checkout before test isolation')
-sys.path.insert(0, str(_CHECKOUT_ROOT))
 
 # Cache the read-only platform probe before the subprocess guard is installed.  On Windows,
 # ``platform`` otherwise invokes ``ver`` lazily while numpy/botocore are imported by tests.
@@ -510,8 +513,7 @@ def isolated_runtime_boundaries():
     # By this point every test server and PTY should have shut down.  Clean only the exact suite
     # directory allocated above; Windows can retain a short-lived SQLite/ConPTY handle, so cleanup
     # is best effort and never widens to a parent supplied by the environment.
-    try: shutil.rmtree(_TEST_ROOT)
-    except OSError: pass
+    _spawn.drop_temp(_TEST_ROOT)
 
 
 def pytest_configure(config):

@@ -460,9 +460,8 @@ class NavigateTests(unittest.TestCase):
         self.assertEqual(kw.get('stdin'), bv.subprocess.DEVNULL)
 
     def test_a_refusal_says_what_agent_browser_said(self):
-        log = Path(bv.tempfile.gettempdir()) / 'tq-s-open.log'
         def popen(argv, **kw):
-            log.write_bytes(b'noise\nError: net::ERR_NAME_NOT_RESOLVED\n')
+            kw['stdout'].write(b'noise\nError: net::ERR_NAME_NOT_RESOLVED\n')
             return mock.Mock(wait=mock.Mock(return_value=1), kill=mock.Mock())
         with mock.patch.object(bv.spawn, 'popen', side_effect=popen):
             with self.assertRaises(ValueError) as e: bv.navigate('s', 'nope.test')

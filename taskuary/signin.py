@@ -36,10 +36,9 @@ sign-in from the phone was a dead end. Now:
 Not built yet (next phase): reading a code out of the mail, a code split over one box per digit, a fill link on the phone (the share
 port is LAN-only), and a 1Password/Bitwarden provider.
 """
-import hashlib, html as H, ipaddress, json, logging, re, secrets, shutil, subprocess, tempfile, threading, time
+import hashlib, html as H, ipaddress, json, logging, re, secrets, shutil, subprocess, threading, time
 from datetime import datetime
 from .say import said as _said            # a failure written to the chat is said in his words (say.py)
-from pathlib import Path
 from urllib.parse import urlsplit
 from loguru import logger
 from . import words
@@ -1273,13 +1272,9 @@ def _cdp_url(sid: str) -> str:
     if (own := browserview.devtools_url(sid)): return own
     exe = browserview.program()
     if not exe: raise SignInError('agent-browser is not installed')
-    log = Path(tempfile.gettempdir()) / f'{browserview.session_name(sid)}-cdp.log'
-    with open(log, 'wb') as f:
-        p = spawn.popen([exe, '--session', browserview.session_name(sid), 'get', 'cdp-url'], env=browserview._cli_env(sid),
-                        stdout=f, stderr=f, stdin=subprocess.DEVNULL)
-        try: rc = p.wait(timeout=20)
-        except subprocess.TimeoutExpired: p.kill(); raise SignInError('the browser did not answer in time')
-    m = re.search(r'ws://127\.0\.0\.1:\d+/devtools/browser/[\w-]+', log.read_text(encoding='utf-8', errors='replace'))
+    try: rc, said = spawn.output([exe, '--session', browserview.session_name(sid), 'get', 'cdp-url'], 20, env=browserview._cli_env(sid))
+    except subprocess.TimeoutExpired: raise SignInError('the browser did not answer in time')
+    m = re.search(r'ws://127\.0\.0\.1:\d+/devtools/browser/[\w-]+', said)
     if rc != 0 or not m: raise SignInError("the task's browser is not open")
     return m.group(0)
 

@@ -42,8 +42,8 @@ def home() -> Path:
     database. Set TASKUARY_ALLOW_TEST_HOME=1 for the rare test that means it."""
     env = os.getenv('TASKUARY_HOME')
     if not env and _under_test():
-        import tempfile
-        env = os.environ['TASKUARY_HOME'] = tempfile.mkdtemp(prefix='taskuary_test_')
+        from .spawn import own_temp           # ...gone again when the run ends (spawn.own_temp)
+        env = os.environ['TASKUARY_HOME'] = own_temp('taskuary_test_')
         print(f'taskuary: test run with no TASKUARY_HOME - using {env}, not your real data',
               file=__import__('sys').stderr)
     p = Path(env or Path.home() / '.taskuary')

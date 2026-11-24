@@ -116,10 +116,9 @@ def _install_fresh_routes(app, store):
         """A general task asked from New with the owner's checkout named in his words, Developer mode off; its agent committed the fix there
         and proposed the push (browser/named-push-card: design round 6, D1 - the card was told to the agent and never drawn)."""
         import subprocess
-        from taskuary import agents, landing
-        import tempfile
+        from taskuary import agents, landing, spawn          # spawn.own_temp: the checkout goes when the fixture server does
         # ...his checkout lives outside Taskuary's own home, which no agent is ever given (floor.kept_secret)
-        home = Path(os.environ["TASKUARY_HOME"]); top = Path(tempfile.mkdtemp(prefix="tq-ledger-")); repo, bare = top / "ledger", top / "ledger-origin.git"
+        home = Path(os.environ["TASKUARY_HOME"]); top = Path(spawn.own_temp("tq-ledger-")); repo, bare = top / "ledger", top / "ledger-origin.git"
         G = body.get("git") or "git"        # ...a fresh home's PATH holds only the system's own
         git = lambda cwd, *a, env=None: subprocess.run([G, "-C", str(cwd), "-c", "user.name=Alex Doyle", "-c", "user.email=alex@northwind.example", *a],
                                                        check=True, capture_output=True, env=env)

@@ -8,13 +8,15 @@ bridge sends it (bubbles, WhatsApp emphasis) and the poll under it. Nothing reac
 'morning' is the day's opener with its menu; a bare number is a poll tap (the pick runs as code, no model); anything else
 is typed and goes to the model. Never point --home at the live ~/.taskuary: a walk marks items read and puts work on tasks.
 """
-import os, sys, tempfile
+import os, sys
 
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from taskuary.spawn import own_temp
 args = sys.argv[1:]
 home, CH = None, 'whatsapp'
 if args[:1] == ['--telegram']: CH, args = 'telegram', args[1:]
 if args[:1] == ['--home']: home, args = args[1], args[2:]
-os.environ['TASKUARY_HOME'] = home or tempfile.mkdtemp(prefix='wa-walk-')
+os.environ['TASKUARY_HOME'] = home or own_temp('wa-walk-')     # a scratch home goes when the walk ends
 if not home: os.environ['TASKUARY_DEMO'] = '1'
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 

@@ -25,8 +25,7 @@ WHAT KEEPS IT SAFE, the browser's rules applied to the desktop:
 Every act is caught at the command, on every AI (gate: the `agent-desktop` first on a task session's PATH is Taskuary's). What this
 does not cover, said as browsergate says it: an agent that drives the desktop some other way than that command.
 """
-import json, re, subprocess, tempfile
-from pathlib import Path
+import json, re, subprocess
 from loguru import logger
 
 TYPE, EXE = 'agent_desktop', 'agent-desktop'
@@ -106,17 +105,13 @@ def mark_from_triage(store, tid) -> bool:
     return False
 
 
-def _run(args: list, wait: float, tag: str) -> tuple:
-    "(exit code, output). Output to a FILE: on macOS the CLI keeps a command host that would inherit a pipe and never let it end."
+def _run(args: list, wait: float) -> tuple:
+    "(exit code, output). Output to a file (spawn.output): on macOS the CLI keeps a command host that would inherit a pipe and never let it end."
     from . import spawn
     exe = path()
     if not exe: raise RuntimeError(f'agent-desktop is not installed - {INSTALL}')
-    log = Path(tempfile.gettempdir()) / f'tq-desktop-{tag}.log'
-    with open(log, 'wb') as f:
-        p = spawn.popen([exe, *args], stdout=f, stderr=f, stdin=subprocess.DEVNULL)
-        try: rc = p.wait(timeout=wait)
-        except subprocess.TimeoutExpired: p.kill(); raise RuntimeError('agent-desktop did not answer in time')
-    return rc, log.read_text(encoding='utf-8', errors='replace')
+    try: return spawn.output([exe, *args], wait)
+    except subprocess.TimeoutExpired: raise RuntimeError('agent-desktop did not answer in time')
 
 
 def _envelope(said: str) -> dict:
@@ -127,7 +122,7 @@ def _envelope(said: str) -> dict:
 
 def test() -> str:
     "The card's Test: the installed version and what the OS lets it do, in its own words."
-    rc, said = _run(['status'], 30, 'status')
+    rc, said = _run(['status'], 30)
     st = _envelope(said)
     if rc != 0 or not st.get('ok'): raise RuntimeError(f"agent-desktop answered: {((st.get('error') or {}).get('message') or said)[-300:]}")
     d = st.get('data') or {}
@@ -205,7 +200,7 @@ def control(act: dict) -> dict:
     scope = [t for i, t in enumerate(a) if t in own or t.split('=', 1)[0] in own or (i and a[i - 1] in own)]
     out = {}
     for prop in ('role', 'text'):
-        try: rc, said = _run(['get', ref, '--property', prop, *scope], 15, 'look')
+        try: rc, said = _run(['get', ref, '--property', prop, *scope], 15)
         except Exception as e: logger.debug(f'desktop: no {prop} of {ref} - {e}'); continue
         v = (_envelope(said).get('data') or {}) if rc == 0 else {}
         val = v.get('value') if isinstance(v, dict) else v
@@ -364,7 +359,7 @@ def perform(store, tid: int, p: dict, run=None) -> dict:
     if not args: raise RuntimeError('this held act names no desktop command')
     if not on(store): raise RuntimeError('Agent Desktop is off on this computer now - nothing was done. Turn it on under Connections, and '
                                          'the agent holds the step anew.')
-    rc, said = (run or (lambda a: _run(a, 60, 'act')))(args)
+    rc, said = (run or (lambda a: _run(a, 60)))(args)
     env = _envelope(said)
     if rc != 0 or env.get('ok') is False:
         err = env.get('error') or {}

@@ -1130,7 +1130,7 @@ def _send_block(channel, has_message=True) -> str:
     return outbound.send_block(store, channel)
 
 
-def _can_send(channel, has_message=True, gh_ok=None) -> bool:
+def _can_send(channel, has_message=True) -> bool:
     """Can an approved reply actually LEAVE on this channel? One answer for the whole app -
     outbound.can_reply - so the Approve button, triage and the agent's wrap-up cannot
     disagree. The UI turns an unsendable draft's Approve into 'No response required'."""
@@ -1223,7 +1223,7 @@ def processing_item_detail(item_id: str, kind: str = None, id: int = None, view_
         if detail.get('task'):
             detail['artifacts'] = [_artifact_row(a) for a in detail.get('artifacts') or []]
         if row is not None:
-            row['CanSend'] = _can_send(row.get('Channel'), True, store.github_replies_ok())
+            row['CanSend'] = _can_send(row.get('Channel'), True)
             row['SendBlock'] = '' if row['CanSend'] else _send_block(row.get('Channel'), True)
             result['detail_revision'] = processing_all._digest({key: value for key, value in result.items()
                                                                if key != 'detail_revision'})

@@ -45,12 +45,11 @@ class CanReplyTests(unittest.TestCase):
         for ch in ('jira', 'linear', 'sentry', 'pagerduty', 'report', 'aws', 'azure', ''):
             self.assertFalse(outbound.can_reply(s, ch), ch)
 
-    def test_github_needs_its_own_card_switch(self):
+    def test_a_github_reply_goes_on_his_send(self):
+        # the owner, 2026-11-25: a card switch left his Send dark over a reply he wrote - his Send on its card is the say-so, as on a comment card
         s = MemoryStore()
-        self.assertFalse(outbound.can_reply(s, 'github'))       # off by default
-        cid = s.get_connector_by_type('github')['ConnectorId']
-        s.save_connector({'ConnectorId': cid, 'ConfigJson': json.dumps({'reply_comments': True})}, 't')
-        self.assertTrue(outbound.can_reply(s, 'github'))
+        self.assertTrue(outbound.can_reply(s, 'github')); self.assertEqual(outbound.send_block(s, 'github'), '')
+        self.assertIsNone(outbound.block_fix(s, 'github'))
 
     def test_the_setting_switches_a_channel_off(self):
         s = MemoryStore()
@@ -92,12 +91,11 @@ class DiscordReplyTests(unittest.TestCase):
 class FinishTests(unittest.TestCase):
     """wrapup.finish is the truth, and the UI promises exactly what it did: a channel that cannot carry the
     reply still gets its draft (the always-draft rule, PW-237) - Send is hidden and the reason said."""
-    def test_github_replies_off_still_drafts_but_cannot_send(self):
+    def test_a_github_reply_is_drafted_for_his_send(self):
         s = MemoryStore(); tid, mid = task_with(s, 'github')
         with mock.patch('taskuary.responder.write_draft', return_value='hi'):
             out = wrapup.finish(s, tid, {'summary': 'fixed'}, None, 'agent')
-        self.assertEqual((out['drafting'], out['message_id'], out['can_send']), (True, mid, False))
-        self.assertIn('GitHub replies are off', out['send_block'])
+        self.assertEqual((out['drafting'], out['message_id'], out['can_send']), (True, mid, True))
         self.assertEqual(len(s.list_reviews('pending')), 1)
         self.assertEqual(s.get_task(tid)['Status'], 'waiting')   # the draft waits on the owner's word: send elsewhere, or close without sending
 
@@ -152,11 +150,10 @@ class WrapEndpointTests(unittest.TestCase):
         self.assertEqual(server.store.pending_review(tid[0], live_only=False), None)
         self.assertTrue(any(str(c.get('Body') or '').startswith(wrapup.REPORT) for c in server.store.list_comments(tid[0])))
 
-    def test_github_wrap_by_the_owner_closes_instead_of_drafting_what_cannot_be_sent(self):
-        # the owner said Done (2026-09-07): a draft nobody can send must not hold the task open
+    def test_github_wrap_by_the_owner_drafts_for_his_send(self):
+        # ...a GitHub reply goes on his Send (the owner, 2026-11-25), so it is drafted like an email's
         out = self._wrap('github')
-        self.assertEqual((out['drafting'], out['can_send']), (False, False))
-        self.assertEqual(out['send_block'], '')
+        self.assertEqual((out['drafting'], out['can_send']), (True, True))
 
     def test_email_wrap_does_promise_one(self):
         self.assertTrue(self._wrap('email')['drafting'])

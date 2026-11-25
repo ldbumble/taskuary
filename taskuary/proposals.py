@@ -275,7 +275,7 @@ def receipt(rv: dict, final_text, out: dict, fields: dict = None) -> str:
     return json.dumps({**(as_left(p, final_text, fields) if p.get('action') in ('run_tool', *CHANGES) else p), 'result': out}, default=str)
 
 # What a proposal may touch: routing and visibility only. Never a permission that lets anything OUT
-# (agent_push_enabled, github_replies_ok, reply channels), never a token, key, model or document.
+# (agent_push_enabled, reply channels), never a token, key, model or document.
 SETTING_ALLOW = {
     'coding_auto_enabled': 'start the coding agent automatically on new coding work',
     'intent_classify_enabled': 'let the brain classify inbound mail at all',

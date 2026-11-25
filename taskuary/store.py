@@ -6787,16 +6787,6 @@ class SQLiteStore:
         c = self.get_connector(src['ConnectorId'], with_secret) if src else None
         return c if c and c.get('Type') == 'github' else self.get_connector_by_type('github', with_secret)
 
-    def github_replies_ok(self, repo=None) -> bool:
-        """May Taskuary answer issue/PR authors - which means posting a PUBLIC comment on the
-        thread? Off by default: an open repository's drive-by authors should not each get a
-        drafted reply, and before this flag the drafts were dead ends anyway (github had no
-        send road at all). The switch lives on the GitHub connector card, with its siblings -
-        the card that reaches `repo`, when one is named."""
-        c = self.github_for(repo)
-        try: return bool(json.loads((c or {}).get('ConfigJson') or '{}').get('reply_comments'))
-        except ValueError: return False
-
     def owner(self) -> dict:
         """Who this hub belongs to, from one setting. Falls back to whatever SOUL.md says so an
         existing document keeps working before the owner has ever touched the field."""

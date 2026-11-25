@@ -276,7 +276,8 @@ def _paths(tc: dict, cwd: str):
     from . import readgate
     t = tool_of(tc)
     if t['command'] or (t['kind'] not in ('read', 'search') and t['name'] not in readgate.READ_TOOLS and not _writes(tc)): return None
-    return readgate.tool_paths(_raw(tc), tc.get('locations'), cwd)
+    ps = readgate.tool_paths(_raw(tc), tc.get('locations'), cwd)
+    return readgate.listed(ps) if t['name'] in readgate.LIST_TOOLS else ps
 
 
 def tool_call(tc: dict, ctx: dict) -> tuple:

@@ -42,6 +42,17 @@ def _in(p: str, root: str) -> bool: return bool(root) and (p == root or p.starts
 # of the script and SVG it had just written stood as an Approve card - "outside this task's own folders" - the picture waiting on him). The
 # folder of every file a task's agent writes is its own for the rest of the task; the never-places stay shut whatever it wrote there
 WRITE_TOOLS = ('Write', 'Edit', 'MultiEdit', 'NotebookEdit')
+# A PATH THAT IS ONLY LISTED - its names, never what is in its files: a folder holding a never-place may be listed on his press (`ls ~`,
+# `find ~ -name x`, the LS tool), and is never read through (`grep -r ~`, `find ~ -exec cat`, `tar c ~`). judge reads the mark
+class Listed(str): pass
+LIST_TOOLS = ('LS', 'Glob')
+def listed(paths): return [Listed(p) if isinstance(p, str) else p for p in paths]
+# ...the programs that list names, and those that only filter the names piped to them: a line of these alone reads no file's contents
+_LISTS = {'ls', 'dir', 'tree', 'du', 'stat', 'find', 'get-childitem', 'gci', 'get-item', 'gi', 'test-path', 'resolve-path', 'realpath', 'pwd'}
+_NAMES = {'', '=', 'head', 'tail', 'sort', 'uniq', 'wc', 'grep', 'egrep', 'fgrep', 'findstr', 'select-string', 'sls', 'where-object', 'where',
+          '?', 'select-object', 'select', 'sort-object', 'measure-object', 'measure', 'format-table', 'ft', 'format-list', 'fl', 'out-string',
+          'more', 'less', 'cut', 'tr', 'echo', 'write-output', 'write-host', 'cd', 'chdir', 'set-location', 'sl', 'pushd', 'popd', 'true'}
+_RUNS_ON = ('-exec', '-execdir', '-ok', '-okdir')            # find's own way of reading what it found
 WROTE: dict = {}
 def wrote(tid, paths) -> None:
     "Note the folders task `tid`'s agent wrote files in (its file tools' own paths)."
@@ -193,7 +204,7 @@ def judge(store, tid, paths, cwd: str = '', write: bool = False) -> tuple:
         # ...a never-place is never the work's: only a work folder INSIDE it (the task's scratch, outputs, mail in Taskuary's home) lets a
         # read there through - a checkout at the home folder does not open the sign-ins in it. A glob that can reach one is that one, and so
         # is a folder that holds one (red team #3: `grep -r token /`, `tar c ~`, `find / -exec cat` read config.toml past the never-list)
-        sec = [r for r in nev if _in(p, r) or (_reaches(pat, r) if pat != p else _in(r, p))]
+        sec = [r for r in nev if _in(p, r) or (_reaches(pat, r) if pat != p else _in(r, p) and not isinstance(raw, Listed))]
         if any(_in(p, r) and (not sec or any(_in(r, n) for n in sec)) for r in mine) or (not sec and fetched(p, cwd, sids)): continue
         if sec: return [], NEVER_WRITE if write else NEVER
         if any(_in(p, r) for r in ok): continue
@@ -293,7 +304,7 @@ def command_paths(cmd: str, cwd: str = '', env: dict = None, made: list = None, 
     # `$outDir = "<its outputs folder>"; New-Item $outDir` lost its assignment and the task's own folder was held as a variable it could not
     # read (the HIPAA walk, 2026-11-21)
     if (inner := unwrap(cmd))[0]: return command_paths(inner[1], cwd, env, made, writes)
-    out, here, env = [], cwd, dict(env or {})
+    out, here, env, reads = [], cwd, dict(env or {}), False
     for seg in _segments(shell_text(str(cmd or ''))):        # ...a heredoc's or a here-string's body is data, never a path read
         # ...a path kept in a variable is read where the variable is (`$p='C:/x.csv'; Get-Content $p` - the real-CLI walk, 2026-11-16)
         if (m := re.match(r'^\s*\$?([A-Za-z_]\w*)\s*=\s*([^=].*)$', seg)):
@@ -312,6 +323,8 @@ def command_paths(cmd: str, cwd: str = '', env: dict = None, made: list = None, 
             if i is not None: out += command_paths(' '.join(w[i + 1:]), here, env, made, writes)
             continue
         cd, named = tool in ('cd', 'chdir', 'set-location', 'sl', 'pushd'), len(out)
+        lists = tool in _LISTS and not any(x in _RUNS_ON for x in w)
+        reads = reads or not (lists or tool in _NAMES)
         shot = (a := _head(w)) is not None and next((x.lower() for x in a if not x.startswith('-')), '') == 'screenshot'
         code = re.sub(r'[\d.]+$', '', tool) in ('python', 'py', 'node', 'ruby', 'perl', 'deno') and any(x in ('-c', '-e') for x in w[1:3])
         # ...an inline script's text is read word by word for the paths in it: its words are mostly data, so one is a path only where one is
@@ -351,12 +364,12 @@ def command_paths(cmd: str, cwd: str = '', env: dict = None, made: list = None, 
             if cd: here = _cut(e); break
             if shot and made is not None: made.append(e)
             elif to and writes is not None: writes.append(e)
-            else: out.append(e)
+            else: out.append(Listed(e) if lists else e)
         else:
             if cd and len(w) == 1: here = os.path.expanduser('~')          # a bare `cd` goes home
         # ...a step that names no path reads where the line has moved to: `cd ~/Documents && ls`
-        if not cd and len(out) == named and here != cwd: out.append(here)
-    return out
+        if not cd and len(out) == named and here != cwd: out.append(Listed(here) if lists else here)
+    return [str(o) if reads and isinstance(o, Listed) else o for o in out]     # ...names piped on to a reader (`| xargs cat`) are read
 
 
 def tool_paths(inp: dict, locations=None, cwd: str = '') -> list:

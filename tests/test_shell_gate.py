@@ -442,8 +442,15 @@ class ReadingOutside(unittest.TestCase):
         home = Path(self.secret).parent
         top = '/' if os.name != 'nt' else f'/{os.path.splitdrive(str(home))[0][0].lower()}/'
         for cmd in (f'grep -rhs token {top} --include=config.toml', f'find {top} -name config.toml -exec cat {{}} +', f'dd if="{home}/config.toml"',
-                    'tar czf - ~', f'tar czf "{self.work}/a.tgz" "{home.parent}"', 'grep -r token ~', f'cd "{home.parent}" && grep -r token .'):
+                    'tar czf - ~', f'tar czf "{self.work}/a.tgz" "{home.parent}"', 'grep -r token ~', f'cd "{home.parent}" && grep -r token .',
+                    'find ~ -name config.toml | xargs cat', 'ls ~ && cat ~/notes.txt ~'):
             self.assertEqual(rg.of_command(self.s, self.tid, cmd, self.work), ([], rg.NEVER), cmd)
+        # ...but a line that only LISTS names there reads no file: his card, as before - never a flat no he could not say yes to
+        for cmd in ('ls ~', "find ~ -name '*.pdf'", 'find ~ -name "*.pdf" | head -20', 'cd ~ && ls', 'Get-ChildItem ~ | Select-Object Name'):
+            held, never = rg.of_command(self.s, self.tid, cmd, self.work)
+            self.assertEqual((bool(held), never), (True, ''), cmd)
+        self.assertEqual((bool(rg.judge(self.s, self.tid, rg.listed([str(Path.home())]), self.work)[0])), True, 'the LS tool on the home folder')
+        self.assertEqual(rg.judge(self.s, self.tid, [str(Path.home())], self.work), ([], rg.NEVER), 'a tool that reads it, Grep')
         held, never = rg.of_command(self.s, self.tid, f'grep -r total "{self.docs}"', self.work)      # ...a folder beside them is his card
         self.assertEqual((bool(held), never), (True, ''))
         self.assertEqual(rg.of_command(self.s, self.tid, f'dd if=data.bin of=copy.bin', self.work), ([], ''))

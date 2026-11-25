@@ -570,6 +570,32 @@ class NamedCheckoutTests(unittest.TestCase):
         other = tempfile.mkdtemp(); git(other, 'init', '-q', '-b', 'side'); commit(other, 'x.py', 'x\n')
         self.assertEqual(ci.pr_plan(self.s, self.tid, {'cwd': other})['branch'], '')
 
+    def test_a_pull_request_goes_into_the_repositorys_own_branch_and_is_never_raised_or_opened_with_nothing_committed(self):
+        """Walk 22, 2026-11-25, both CLIs: "open a PR with this fix - it is uncommitted in my checkout". The repository's branch is main; the
+        card read "main -> master", nothing was committed, and the press said "Opened the pull request" having pushed nothing. The card's
+        base is the repository's own; one that cannot be opened is refused at the raise with the exact fix; the press pushes the branch."""
+        from taskuary import ci, proposals, verdicts
+        git(self.cwd, 'branch', '-m', 'main'); git(self.cwd, 'push', '-q', 'origin', 'main'); git(self.cwd, 'remote', 'set-head', 'origin', 'main')
+        with open(os.path.join(self.cwd, 'totals.py'), 'w', encoding='utf-8', newline='\n') as f: f.write('def total(a): return round(sum(a), 2)\n')
+        def ask():
+            no = []
+            return proposals.queue(self.s, self.tid, {'action': 'open_pr', 'cwd': self.cwd, 'repo': 'northwind/ledger', 'title': 'Round totals'}, 'agent', no), no
+        made, no = ask()
+        self.assertIsNone(made); self.assertIn("on 'main', the branch a pull request goes into", no[0]); self.assertIn('git switch -c', no[0])
+        git(self.cwd, 'switch', '-q', '-c', 'fix-rounding')
+        made, no = ask()
+        self.assertIsNone(made); self.assertEqual(no[0], 'nothing committed on fix-rounding - commit the fix first')
+        self.fix()
+        made, no = ask()
+        rv = self.s.get_review(made['reviewId'])
+        self.assertEqual([proposals._draft(rv)['pr'][k] for k in ('branch', 'base', 'repo')], ['fix-rounding', 'main', 'northwind/ledger'])
+        pr = {'number': 7, 'url': 'https://github.com/northwind/ledger/pull/7', 'head': 'fix-rounding', 'base': 'main', 'state': 'open'}
+        with mock.patch('taskuary.ci._conn', return_value={'Secret': 'tok'}), mock.patch('taskuary.github.open_pr', return_value=pr) as op, \
+             mock.patch('taskuary.general.to_agent'):
+            out = verdicts.decide(self.s, rv, 'approve')
+        self.assertEqual((out['status'], op.call_args[0][2:4]), ('approved', ('fix-rounding', 'main')))
+        self.assertEqual(git(self.remote, 'rev-parse', 'fix-rounding'), git(self.cwd, 'rev-parse', 'HEAD'), 'the press pushed the branch it opened')
+
     def test_propose_push_with_no_folder_takes_the_one_he_named(self):
         self.fix()
         out = landing.from_proposal(self.s, self.tid, {'action': 'push', 'why': 'the rounding fix'})

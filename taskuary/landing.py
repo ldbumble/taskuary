@@ -838,19 +838,15 @@ def _push(store, tid, s, how, actor) -> dict:
 def _pr(store, tid, s, actor) -> dict:
     """Open a PR: the branch pushed and a draft pull request opened through the GitHub card. Reached only by the owner's answer - their
     press is the push's press (an agent's propose_land only marks the question)."""
-    from . import ci, github
+    from . import ci
     cwd, base, br, repo = s['cwd'], s['base'], s['branch'], s['repo']
     if not repo: raise Refused("this checkout's origin is not a GitHub repository - push it and open the pull request by hand")
     # ...GITHUB'S NO IS THE LANDING'S NO (stress round, 2026-11-18): its own error passed land()'s handler - no line kept, the agent never told
-    try: c = ci._conn(store, repo)
+    try: ci._conn(store, repo)
     except RuntimeError as e: raise Refused(f'{e} - nothing was pushed') from e
-    rc, out, err = _push_as_agent(cwd, 'push', '-u', 'origin', br)
-    if rc: raise Refused(f"the push of {br} was refused: {ci.TOKEN_URL.sub('https://', (err or out))[:300]} - no pull request opened")
     t = store.get_task(tid) or {}
-    body = f"Opened by Taskuary for {task_ref(tid)}.\n\n{(t.get('Summary') or '')[:1500]}"
-    try: pr = github.open_pr(c['Secret'], repo, br, base, f"[{task_ref(tid)}] {t.get('Title') or 'work'}"[:120], body)
-    except Exception as e: raise Refused(f"{br} was pushed, but no pull request was opened: {str(e)[:300]}") from e
-    pr['repo'], pr['checks'], pr['checked_at'] = repo, None, None
-    ci._save_pr(store, tid, pr, actor)
+    plan = {'cwd': cwd, 'repo': repo, 'branch': br, 'base': base, 'title': f"[{task_ref(tid)}] {t.get('Title') or 'work'}"[:120]}
+    try: pr = ci.push_and_open(store, tid, plan, f"Opened by Taskuary for {task_ref(tid)}.\n\n{(t.get('Summary') or '')[:1500]}", actor)      # ...the one road
+    except RuntimeError as e: raise Refused(str(e)) from e
     return _landed(store, tid, 'pr', f"Pushed {br} and opened pull request #{pr['number']} into {base}: {pr.get('url')}", actor,
                    sha(cwd, br), pr=pr['number'], url=pr.get('url'))

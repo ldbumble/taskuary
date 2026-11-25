@@ -633,7 +633,9 @@ def queue(store, task_id: int, p: dict, actor='agent', refused: list | None = No
     # ...and a pull request's card says what it opens - its title, the repository, the branch into its base - as the press will read them
     if ok and p.get('action') == 'open_pr':
         from . import ci
-        p = {**p, 'pr': {k: v for k, v in ci.pr_plan(store, task_id, p).items() if k != 'cwd'}}
+        # ...and one that cannot be opened - no checkout, nothing committed, the base's own branch - is refused here with the fix (ci.pr_why)
+        if (no := ci.pr_why(plan := ci.pr_plan(store, task_id, p))): ok, why = False, no
+        else: p = {**p, 'pr': {k: v for k, v in plan.items() if k != 'cwd'}}
     # ...ONE CARD PER ASK (the stress round, 2026-11-18): the same proposal again - a retried call - is the card already waiting, and a
     # break_out moving what a waiting one moves is refused: stood behind it, its press could only fail
     if ok:

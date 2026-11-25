@@ -2224,8 +2224,8 @@ def _verdict_why(item: dict) -> str:
 
 def _sender_name(m: dict) -> str:
     """'Payworth Billing' as they sign; an address alone reads as its company ('billing@payworth.example' -> 'Payworth')."""
-    name = ' '.join(str(m.get('FromName') or '').split())
-    if name and '@' not in name: return name
+    from .triage import person_name
+    if (name := person_name(m.get('FromName'))): return name
     dom = str(m.get('FromEmail') or '').split('@')[-1].split('.')[0]
     return dom[:1].upper() + dom[1:] if dom else 'They'
 

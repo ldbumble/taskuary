@@ -106,6 +106,14 @@ def test_the_offer_is_worded_for_the_sender_s_organisation():
     wa, _ = _held(s, 'whatsapp', 'x ' + NOBODY, FromName='Erin Blake', FromEmail='whatsapp:155', ConversationId='whatsapp:g')
     assert senders.trust_offer(s, wa) == {'person': 'Trust Erin', 'org': None}
 
+def test_a_last_comma_first_display_name_is_trusted_by_the_first_name():
+    "Outlook writes outside senders \"Last, First at Organisation\": the press read \"Trust Moreno,\" (the owner's live task, 2026-11-25)."
+    s = _store()
+    t, _ = _held(s, FromEmail='gail@partner.example', FromName='Moreno, Gail at Partner Co')
+    assert senders.trust_offer(s, t)['person'] == 'Trust Gail'
+    # ...and the hold's own line names her as she is called, never the directory's order
+    assert origin.hold(s, t)['who'] == 'Gail Moreno'
+
 def test_a_forged_from_offers_no_organisation():
     s = _store()
     t, _ = _held(s, FromEmail='gail@partner.example', FromName='Gail Moreno', MailMetaJson=json.dumps({'auth': 'fail'}))

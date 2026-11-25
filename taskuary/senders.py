@@ -131,12 +131,15 @@ def trust_offer(store, tid: int, msgs=None) -> dict | None:
     if not m or (m.get('Channel') == 'email' and not can_hold(m)): return None
     meta, ch = _chat_meta(m), (m.get('Channel') or '').lower()
     if ch in ALERTS: return {'person': 'Trust alerts from this source', 'org': None}
+    from .triage import person_name
+    from .waiton import person
     if ch in TRACKERS:
-        n, org = str(m.get('FromName') or '').split(), f"Trust everyone from {str(m.get('SourceName') or 'this project')[:60]}"
+        n, org = person_name(m.get('FromName')).split(), f"Trust everyone from {str(m.get('SourceName') or 'this project')[:60]}"
         return {'person': f'Trust {n[0]}' if n and _author(m) else org, 'org': org if _author(m) else None}
     # a Slack line's name is a user id (U0...): its profile's real name when the poller recorded one, else "them"
-    words = str(meta.get('name') or ('' if ch == 'slack' else m.get('FromName')) or '').split()
-    first = words[0] if words and '@' not in words[0] else ''
+    # ...and the name as the person is called (waiton.person): Outlook's "Blake, Erin at Vendor" read "Trust Blake," (the owner, 2026-11-25)
+    words = (person_name(meta['name']) if meta.get('name') else '' if ch == 'slack' else person(m, store)).split()
+    first = words[0] if words else ''
     # a From that failed verification may be forged: vouching for the person is the owner's call, a whole organisation never rides on it
     o = {} if auth(m) == 'fail' else sender_org(store, m)
     org = (f"Trust {o['name']}" if o.get('name') else 'Trust their Slack workspace') if o.get('team') else \
@@ -223,7 +226,8 @@ NOBODY = 'so no agent starts on their words by itself'
 
 def _person(msg: dict, addr: str = '') -> str:
     "'Erin Blake (erin@vendor.example)', else the address - whoever the message says wrote it."
-    name = ' '.join(str(msg.get('from_name') or '').split())
+    from .triage import person_name
+    name = person_name(msg.get('from_name')) or ' '.join(str(msg.get('from_name') or '').split())
     if name and '@' not in name: return f'{name} ({addr})' if addr else name
     return addr or name or 'This sender'
 

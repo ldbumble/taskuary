@@ -1,6 +1,7 @@
 // THE TASK PAGE'S LAYOUT: what it came FROM, and the one chat where the agent works and every draft, Send and close is (the owner,
 // 2026-11-06: "there should no longer be close out code anywhere"). Pure, so node --test reads it.
 import { channelName } from "./taskSources.js";
+import { personName, senderName } from "./personName.js";
 import { plural } from "./timeWords.js";
 import { fmtDate } from "./dates.js";
 import { drawerLit, mainView, sectionOf, stageOf } from "./stages.js";
@@ -59,7 +60,7 @@ export const replyHolds = ({ pending = false, sent = false, proposals = 0, check
 // THE ONE LINE From folds to: who it came from and how many messages ("Gail Moreno · 3 messages"), a workflow's name, or - with
 // no message at all - where it was made
 export const fromLine = ({ sender = null, count = 0, workflow = null, made = "" } = {}) => {
-  if (count && sender) return [sender.FromName || sender.FromEmail || channelName(sender.Channel), plural(count, "message")].join(" · ");
+  if (count && sender) return [senderName(sender) || channelName(sender.Channel), plural(count, "message")].join(" · ");
   if (workflow) return `Routine · ${workflow.title}`;
   return made || "";
 };
@@ -119,15 +120,18 @@ export const TAB_MOST = 40;
 const UNNAMED = /^Teams (?:chat with (.+)|group|meeting|chat)$/i;
 export const cameFrom = (m) => {
   if (!m) return "";
-  if (String(m.Channel || "").toLowerCase() === "email") return String(m.FromName || m.FromEmail || "");
+  if (String(m.Channel || "").toLowerCase() === "email") return senderName(m);
   if (!String(m.SourceName || "").includes("@")) return String(m.SourceName || "");
   const s = String(m.Subject || "").trim(), u = s.match(UNNAMED);
-  return (u ? u[1] || m.FromName : s || m.FromName) || String(m.FromEmail || "");
+  return (u ? u[1] || personName(m.FromName) : s || personName(m.FromName)) || String(m.FromEmail || "");
 };
 // THE PILL ON THE BOX IS THE CONNECTION AND THE CHAT (the owner, 2026-11-17: "pill should be what the message connection card source is"):
 // "Teams · MFA Security App Help", "WhatsApp · Finance team", "Email · Gail Moreno", "Report · End of day checkup"
 // ...his own ask is the channel alone: its source is himself (ownwork.SOURCE "you"), never a second word for him
 export const cameChip = (m) => { const f = cameFrom(m); return !f ? "" : /^you$/i.test(f) ? channelName(m.Channel) : `${channelName(m.Channel)} · ${f}`; };
+// ...and THE MARKS triage put on the message (its `judged`: how hard the work, whether its data is sensitive), only where not ordinary - drawn
+// beside who sent it on What came in (the owner, 2026-11-25: "sensitive data" stood under the attachments pill)
+export const judgedMarks = (j) => [j?.difficulty === "hard" && "hard work", j?.data_class === "sensitive" && "sensitive data"].filter(Boolean).join(" · ");
 export const fromStatus = ({ channel = "", count = 0, msgs = [], workflow = null, made = "", sorted = "", to = "" } = {}) => ({
   lines: [count ? [channel, plural(count, "message")].filter(Boolean).join(" · ") : workflow ? `Routine · ${workflow.title}` : made, to,
     ...msgs.slice(0, TAB_MOST).map((m) => `${m.who}: ${q(m.words)}`)].filter(Boolean),
@@ -184,7 +188,7 @@ export const waitingOn = ({ task = {}, messages = [], now = new Date() } = {}) =
   const who = String(task.Assignee || "");
   if (task.Status !== "waiting" || !who.startsWith("person:")) return null;
   const addr = who.slice(7), mail = messages.find((m) => String(m.FromEmail || "").toLowerCase() === addr.toLowerCase() && m.FromName);
-  const name = mail?.FromName || holderName(addr) || addr;
+  const name = personName(mail?.FromName) || holderName(addr) || addr;
   const due = /^\d{4}-\d{2}-\d{2}/.test(String(task.DueAt || "")) ? new Date(`${String(task.DueAt).slice(0, 10)}T00:00:00`) : null;
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const late = due ? Math.round((today - due) / 86400000) : 0;

@@ -29,6 +29,7 @@ import { onPressing, useVerbs } from "./actionRow.js";
 import { BUTTONS_AT, FOCUS_EDGE, MOVES_AT, OPENS_FORM, PaneMoves, SEC_NAME, SpineMoves, TaskButtons } from "./TaskRow.jsx";
 import { closedBy, closedResult, pressBeat, pressOver, pressedOn } from "./pressResult.js";
 import { taskMoves } from "./taskMoves.js";
+import { senderName } from "./personName.js";
 import { MADE_RUN } from "./madeTask.js";
 import { choice, hint as btnHint, hintOfRow, label as btn, labelOfRow, liveVerb } from "./buttons.js";   // theme.jsx owns `label`
 import { PRIORITIES, level } from "./priority.js";
@@ -1848,7 +1849,7 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
   const tabLines = () => !twoUp || !t ? {} : made ? madeTabs() : {
     from: fromStatus({ channel: cameIn ? cameFrom(cameIn) || channelName(cameIn.Channel) : sources[0] ? channelName(sources[0].channel) : "",
       // ...EVERY message of its conversations, newest first - the tab draws as many as it has room for (fitTabLines): who, and their words
-      msgs: newestFirst(sources.flatMap((g) => g.msgs)).map((m) => ({ who: m.who || m.FromName || m.FromEmail || (m.Direction === "out" ? "You" : ""),
+      msgs: newestFirst(sources.flatMap((g) => g.msgs)).map((m) => ({ who: m.who || senderName(m) || (m.Direction === "out" ? "You" : ""),
         words: (rowText(m, sourceFiles.get(m.MessageId)) || cleanText(m.ReadText || m.BodyText || "")).slice(0, 200) })),
       count: sourceCount, workflow: fromWorkflow, made: `${detail.ref} · ${madeAt}`, to: toLine(cameIn?.Recipients).short, sorted: sortedLine(facts, t?.Kind || "task").replace(/^Sorted as: /, "Sorted: ") }),
     agent: agentStatus({ name: runRole || hasRecord || term ? agentName(t) : "",   /* Taskuary (kinds.js shownAgent) */

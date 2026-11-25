@@ -86,7 +86,9 @@ def _inbound(store, item) -> list:
     return [m for m in ms if m and str(m.get('Direction') or 'in') != 'out' and m.get('Status') not in ('context',)]
 
 
-def _name(m: dict) -> str: return ' '.join(str(m.get('FromName') or m.get('FromEmail') or 'Someone').split())
+def _name(m: dict) -> str:
+    from .waiton import person
+    return person(m) or ' '.join(str(m.get('FromName') or m.get('FromEmail') or 'Someone').split())
 
 
 def same_thread(store, item) -> int | None:

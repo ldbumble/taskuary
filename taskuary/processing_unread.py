@@ -620,7 +620,8 @@ def news_since_seen(view, read, allowed) -> dict:
     out = {'new_n': len(new)} if new else {}
     if len(msgs) > 1:
         m = msgs[-1]
-        out.update(last_at=str(m['SentAt']), latest={'who': 'You' if is_ours(m) else m.get('FromName') or m.get('FromEmail') or '',
+        from .triage import person_name
+        out.update(last_at=str(m['SentAt']), latest={'who': 'You' if is_ours(m) else person_name(m.get('FromName')) or m.get('FromName') or m.get('FromEmail') or '',
                                                      'text': ' '.join(str(m.get('BodyText') or m.get('Subject') or '').split())[:160]})
     return out
 

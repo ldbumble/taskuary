@@ -997,7 +997,8 @@ def _people_context(store, days: int = 2) -> tuple[str, list[int]]:
         head = (f"- {who} [{rs[0].get('Channel')}] re \"{_short(rs[0].get('Subject'), 60)}\" - {len(rs)} new, last word {'YOURS' if last_mine else 'THEIRS'} {_when(last_at)}"
                 + (f", {task_ref(tid)} {t.get('Kind')} {t.get('Status')}" if t else '') + f" (latest mid {rs[0]['MessageId']})"
                 + (f' - triage said: "{_short(judged, 140)}"' if judged else ''))
-        first = lambda c: ((c.get('FromName') or c.get('FromEmail') or '?').split(',')[0].split() or ['?'])[0]
+        from .triage import person_name
+        first = lambda c: ((person_name(c.get('FromName')) or c.get('FromEmail') or '?').split() or ['?'])[0]     # "Blake, Erin" is Erin
         def quote(c):
             attachments = store.list_attachments(c['MessageId'])
             files = ', '.join(f"{a.get('Name') or 'attachment'}" + (f" ({a['Path']})" if a.get('Path') else '')

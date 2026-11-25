@@ -969,6 +969,8 @@ def show_files(store, tid: int, paths) -> str:
         # ...AND EVERY FILE IS READ BACK, DRAWN OR NOT (walk 10, 2026-11-23: a deck's ".pptx cannot be shown" read nothing back, and a stale
         # "212" in it went to the board after "update everything")
         reads.append(p)
+        # ...and one of its task's folder is HANDED OVER: drawn in its turn as the file of the folder (several, one artifact), never also as a copy
+        if p.is_relative_to(outputs.folder(tid).resolve()): outputs.hand(tid, [p])
         # ...A WORKBOOK OR A DOCUMENT IN THE TASK'S OWN OUTPUTS FOLDER IS ALREADY IN FRONT OF HIM (the walks, 2026-11-21: show answered ".xlsx
         # cannot be shown" while the chat drew the sheet, and the agent told him it could not be previewed): the page previews what it makes there
         # under the turn that made it (outputs.preview_of) - said so, never refused

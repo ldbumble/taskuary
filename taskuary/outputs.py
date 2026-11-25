@@ -296,6 +296,24 @@ def turns_folder(tid: int) -> Path: return config.home() / 'scratch' / 'output-t
 def turn_folder(tid: int, turn: int) -> Path: return turns_folder(tid) / str(int(turn))
 
 
+# WHAT HIS AGENT HANDED HIM, NOT WHAT IT WORKED WITH (the owner's live task, 2026-11-25: "it should work through what it needs and action cards,
+# not a bunch of artifacts"): a script's charts and a drafts file were drawn in the chat beside the cards that carried them, as every file a
+# turn wrote was. A file of the folder is drawn in its turn only once `show` hands it over - several at once one artifact; the rest stay in
+# the task's files
+def hand(tid: int, paths) -> None:
+    "Mark these files of task `tid`'s folder (paths in it, or under it) as handed over to the owner."
+    got = handed(tid)
+    for p in paths:
+        try: got.add(rel(tid, Path(p)))
+        except (OSError, ValueError): continue
+    turns_folder(tid).mkdir(parents=True, exist_ok=True)
+    (turns_folder(tid) / 'handed.json').write_text(json.dumps(sorted(got)), encoding='utf-8')
+def handed(tid: int) -> set:
+    "The files of task `tid`'s folder its agent handed over (hand), by their paths in it."
+    try: return set(json.loads((turns_folder(tid) / 'handed.json').read_text(encoding='utf-8')))
+    except (OSError, ValueError): return set()
+
+
 def _kept_copy(tid: int, path: str, made: list):
     "The newest copy an earlier turn kept of `path`, from turns_made's list - None where none was kept."
     turn = next((t for t, ks in reversed(made) for k in ks if k['path'] == path and k.get('kept')), None)
@@ -383,14 +401,14 @@ def turn_versions(tid: int) -> list:
     from urllib.parse import quote
     made_ = turns_made(tid)
     if not made_: return []
-    now, out = {r['path']: r for r in listing(tid)}, []
+    now, out, gave = {r['path']: r for r in listing(tid)}, [], handed(tid)
     for turn, made in made_:
         for k in made:
             cur, p = now.get(k['path']), resolve(tid, k['path'])
             c = resolve(tid, k['path'], turn_folder(tid, turn)) if k.get('kept') else None
             # ...nor one written back since as it was (keep_turn): the file as it is now IS this turn's
             if cur and p and ((p.stat().st_mtime, p.stat().st_size) == (k['mtime'], k['size']) or _same(c, p)): continue
-            mine = {'id': f"output:{k['path']}@{turn}", 'turn': f'comment-{turn}', 'after': f'comment-{turn}'}
+            mine = {'id': f"output:{k['path']}@{turn}", 'turn': f'comment-{turn}', 'by': f'comment-{turn}', **({'after': f'comment-{turn}', 'handed': True} if k['path'] in gave else {})}
             if c:
                 out.append({**row(tid, c, k['path']), **mine, 'url': f"/api/task-outputs/{int(tid)}/{quote(k['path'])}?turn={turn}"})
             elif cur: out.append({**cur, **mine, 'later': True, 'note': 'Changed later - this opens its newest version.'})

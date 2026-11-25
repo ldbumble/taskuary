@@ -1046,6 +1046,20 @@ class APostIsAKindOfTheOneReviewTool(unittest.TestCase):
         with mock.patch('taskuary.terminal.live_sessions', return_value=[]): got = server._assistant_payload(self.tid)
         self.assertEqual([o['name'] for o in got['outputs']], ['notes.txt'])
 
+    def test_a_file_it_worked_with_stays_in_the_tasks_files_and_one_it_shows_is_drawn_in_its_turn(self):
+        """The owner's live task, 2026-11-25 ("not a bunch of artifacts"): the charts a script drew and a drafts file stood in the chat beside the
+        post cards that carried the charts. A file the agent only wrote is listed for the task's files and placed under no turn (`after`); one it
+        hands over with `show` is - and its picture on a card is the card's alone."""
+        (self.d / 'drafts.md').write_text('# Drafts')
+        tool(self.tid, 'propose', kind='post', network='x', text='Three tools, compared.', picture='tools-compared.png')
+        payload = lambda: server._assistant_payload(self.tid)
+        with mock.patch('taskuary.terminal.live_sessions', return_value=[]):
+            got = {o['name']: o for o in payload()['outputs']}
+            self.assertEqual(set(got), {'notes.txt', 'drafts.md'}); self.assertFalse([n for n, o in got.items() if 'after' in o])
+            said, err = tool(self.tid, 'show', files=['drafts.md', 'notes.txt']); self.assertFalse(err, said)
+            got = {o['name']: o for o in payload()['outputs']}
+        self.assertTrue(got['drafts.md'].get('handed') and got['notes.txt'].get('handed'), got)
+
     def test_three_networks_are_three_cards_standing_one_at_a_time_and_none_posts(self):
         from taskuary import cardqueue
         ran = []

@@ -84,9 +84,6 @@ def word(waits_on: str, who: str = '') -> str:
     return lanes.word('theirs').replace('their', f"{first}'s", 1) if named else lanes.word('theirs')
 
 
-def said(key: str, store=None, tid=None) -> str: return word('them', name_of(key, store, tid)) if key else ''
-
-
 def on_them(store, t: dict) -> list:
     """Whose answer an open task waits for, as stored: [{who, what, since}] - the person an agent said only they can answer, or a mail he sent
     asked something (WaitingOn: declare, asks.watch_reply), and the answer a reply he sent asked for (asks.py's watch, nothing from them on its

@@ -159,6 +159,16 @@ class RailTests(unittest.TestCase):
         waiton.arrived(self.s, self.tid, self.s.get_message(mid), mid)
         self.assertNotEqual(rulebook.revision(self.s, 'task', self.tid), was)
 
+    def test_a_reply_that_asked_them_reads_theirs_by_name_as_the_header_does(self):
+        """Walk 20: after a reply to a vendor that asked for demo times, the header read "waiting for Jordan's input" and the rail row "real
+        work with nobody on it" - the row read only an agent's declared wait, never the reply's own watch."""
+        tid = self.s.create_task({'Title': 'Vendor demo', 'Kind': 'todo', 'Status': 'open'}, 'o')
+        mid = mail(self.s, 'Demo next week?', who='Jordan Pike', email='jordan@vendor.example', hours=2, tid=tid, conv='c9')
+        self.s._exec("UPDATE task SET AskedWatch='reply', AskedSeenMid=?, AskedWatchAt=? WHERE TaskId=?", (mid, ago(minutes=-1), tid))   # ...the send, after their mail landed
+        self.tid = tid
+        [card] = self.rail()
+        self.assertEqual((card['lane'], card['why']), ('theirs', "waiting for Jordan's input"))
+
     def test_someone_elses_line_is_news_but_no_wake(self):
         mail(self.s, 'RE: PTO import', who='Gail Moreno', email=GAIL, hours=1, tid=self.tid, conv='c1', body='Any news?')
         card = self.rail()[0]

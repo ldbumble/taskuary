@@ -491,9 +491,11 @@ def card_for(store, item, compact, live_state, now, states=None, noise=None, lea
     if card.get('kind') == 'agent' and not card.get('summary'): card['summary'] = funnel.agent_found(store, tid)
     # WAITING ON A NAMED PERSON (waiton.py): an agent said only they can answer, so until they write the task is theirs - not an
     # agent stopped or saved (whose Continue would only ask again), nor one parked at its prompt reading "waiting on you"
-    them = waiton.waiting(task) if active and not review and not news else ''
+    # ...whoever it waits on as the header says it (waiton.on_them): a reply that asked them is a wait too (walk 20: the row read "real work with
+    # nobody on it" under the header's "waiting for Jordan's input")
+    them = next((w for w in waiton.on_them(store, task) if not w['answered']), None) if active and not review and not news else None
     if them and (not worker or worker.get('waiting')) and card['lane'] in ('yours', 'queued', 'stopped', 'saved', 'asked', 'blocked'):
-        card.update(lane='theirs', waiting_on=them, why=waiton.said(them, store, tid))
+        card.update(lane='theirs', waiting_on=them['key'], why=waiton.word('them', them['who']))
     # A LOOSE END (sweep.py): the daily check found this open task in no state that moves it - waiting on nobody named, or with
     # no date - and said so on the task's own row. It is the owner's move until the state is fixed, read live here, so a date or
     # a name put on it takes the line off at once; `lane_was` is what the check reads again tomorrow

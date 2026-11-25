@@ -28,6 +28,13 @@ class WhatAnAgentMayAsk(unittest.TestCase):
                 with self.assertRaises(ValueError): agenttools.proposal_of(ask)
                 self.assertEqual(proposals.parse(f'{proposals.MARK} {json.dumps(ask)}'), [])
 
+    def test_what_the_marker_takes_the_tool_takes(self):
+        # a push straight onto the base was the mark's to ask and the tool's "owner's own act" - the agent left nothing to ask with
+        for a in set(proposals.ACTIONS) - set(proposals.NOT_ASKED):
+            with self.subTest(a):
+                self.assertEqual(proposals.parse(f'{proposals.MARK} {json.dumps({"action": a})}')[0]['action'], a)
+                self.assertEqual(agenttools.proposal_of({'action': a, 'text': '# T\nwhen: w\nsteps: s'})['action'], a)
+
     def test_neither_lets_an_agent_mark_its_own_ask(self):
         ask = {'action': 'comment_issue', 'body': 'Fixed in the next release.', 'closeout': True, 'flow_run': {'run': 1}}
         want = {'action': 'comment_issue', 'body': 'Fixed in the next release.'}
@@ -134,19 +141,20 @@ class EveryPressOfTheOwnersIsSaidInWords(Acts):
 class AMarkThatWasRefusedIsHeard(Acts):
     """A mark in an answer is read once its turn is over, so nothing answers the agent that wrote it. A refused one was a line on the task
     it never saw - under an answer reading "Proposed - it waits on the task for your yes" (the stress round, 2026-11-10)."""
-    MARK = proposals.MARK + ' ' + json.dumps({'action': 'comment_issue', 'body': 'the fix is ready'})
-    WHY = 'comment_issue is not permitted - ' + proposals.switch_off('github_reply')
+    MARK = proposals.MARK + ' ' + json.dumps({'action': 'write_playbook', 'slug': 'refunds', 'text': '# Refunds\nwhen: a customer asks for a refund\nsteps: check the order, then refund it'})
+    WHY = 'write_playbook is not permitted - ' + proposals.switch_off('playbooks_enabled')
+    def answered(self): super().answered(); self.s.set_setting('playbooks_enabled', '0', 'owner')
 
     def test_its_reason_goes_back_to_the_caller_and_into_the_agents_next_turn(self):
         self.answered(); miss = []
         self.assertEqual(proposals.collect(self.s, self.tid, f'The fix is in. {self.MARK}', 'assistant', miss), [])
         self.assertEqual(miss, [self.WHY])
-        self.assertEqual(proposals.unheard(self.s, self.tid), [('comment_issue', self.WHY)])
+        self.assertEqual(proposals.unheard(self.s, self.tid), [('write_playbook', self.WHY)])
         self.assertIn(proposals.refusal_line(self.WHY), next_turn(self.s, self.tid))
 
     def test_one_the_tool_already_answered_is_not_said_again(self):
         self.answered(); miss = []
-        self.assertIsNone(proposals.queue(self.s, self.tid, {'action': 'comment_issue', 'body': 'the fix is ready'}, 'agent', refused=miss))
+        self.assertIsNone(proposals.queue(self.s, self.tid, json.loads(self.MARK.split(' ', 1)[1]), 'agent', refused=miss))
         self.assertEqual((miss, proposals.unheard(self.s, self.tid)), ([self.WHY], []))
         self.assertNotIn('was not put on a card', next_turn(self.s, self.tid))
 
@@ -163,7 +171,7 @@ class AnActOnTheLinkedIssueNeedsOne(Acts):
     Approve could only fail (the stress round, 2026-11-10)."""
     def ask(self, tid, a):
         miss = []
-        with mock.patch.object(proposals, '_switch_ok', return_value=True): return proposals.queue(self.s, tid, {'action': a, 'body': 'Fixed.', 'why': 'x'}, 'agent', refused=miss), miss
+        return proposals.queue(self.s, tid, {'action': a, 'body': 'Fixed.', 'why': 'x'}, 'agent', refused=miss), miss
 
     def test_it_is_refused_at_the_door_with_the_other_road(self):
         for a in ('comment_issue', 'close_issue'):
@@ -173,9 +181,15 @@ class AnActOnTheLinkedIssueNeedsOne(Acts):
         self.assertEqual(self.s._rows("SELECT 1 x FROM review WHERE TaskId=? AND Kind='action'", (self.tid,)), [], 'no card that cannot run')
 
     def test_a_task_from_an_issue_takes_it(self):
+        # ...with the GitHub card's own switches off, as they ship (the owner, 2026-11-25: "classic example of saying it can't do something"):
+        # 'Reply to issue/PR authors' and 'GitHub is the issue tracker' decide what Taskuary does by itself - the card is his press
         tid = Factory(self.s).task('Export drops a row', source='github', SourceRef='https://github.com/northwind/ledger/issues/7')
-        q, miss = self.ask(tid, 'comment_issue')
-        self.assertTrue(q); self.assertEqual((miss, proposals.linked(self.s, tid)), ([], ('northwind/ledger', 7)))
+        self.s.save_connector({'Type': 'github', 'Name': 'GitHub', 'Active': 1, 'ConfigJson': json.dumps({'reply_comments': False, 'use_as_tracker': False})}, 'owner')
+        for a in ('comment_issue', 'close_issue'):
+            with self.subTest(a):
+                q, miss = self.ask(tid, a)
+                self.assertTrue(q, miss); self.assertEqual(miss, [])
+        self.assertEqual(proposals.linked(self.s, tid), ('northwind/ledger', 7))
 
 
 class APressThatFailed(Acts):

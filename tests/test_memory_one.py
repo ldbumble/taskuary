@@ -70,7 +70,7 @@ def test_a_lesson_his_own_acts_keep_bearing_out_goes_into_use_with_no_press_from
     line = 'You leave paying vendor invoices to someone else'
     readers = lambda: memory.whole(s, 'triage') + memory.for_task(s, {'billing@payworth.example'}) + s.get_doc('learned')
     _taught(s, line, 'vendor invoices', 'task7', 'task8')
-    r = memory.get(s, 'vendor invoices')
+    r = memory.get(s, 'vendor invoices · watch')
     assert r['Kind'] == memory.INFERRED and not r['Confirmed'] and r['ev'] == ['task7', 'task8']
     assert line not in readers(), 'two episodes are not yet how he works'
     assert {l['key']: l for l in memory.page(s)['lines']}[r['key']]['status'] == 'hypothesis', 'the Memory page shows it still being learned'
@@ -82,7 +82,7 @@ def test_a_lesson_his_own_acts_keep_bearing_out_goes_into_use_with_no_press_from
     memory.mark(s, r['key'], 'wrong')
     assert line not in readers(), 'his Wrong takes it down at once'
     _taught(s, line, 'vendor invoices', 'task10', 'task11', 'task12')
-    assert line not in readers() and not memory.get(s, 'vendor invoices'), '...and it is never learned again'
+    assert line not in readers() and not memory.get(s, 'vendor invoices · watch'), '...and it is never learned again'
 
 
 def test_an_act_of_his_that_goes_against_a_line_in_use_weakens_it_until_his_acts_bear_it_out_again():
@@ -90,8 +90,8 @@ def test_an_act_of_his_that_goes_against_a_line_in_use_weakens_it_until_his_acts
     line = 'You leave paying vendor invoices to someone else'
     _taught(s, line, 'vendor invoices', 'task7', 'task8', 'task9')
     assert line in memory.whole(s, 'triage')
-    _taught(s, 'You pay the vendor invoices you approved yourself', 'paying approved invoices', 'task10', against='vendor invoices')
-    assert memory.get(s, 'vendor invoices')['N'] == 2 and line not in memory.whole(s, 'triage'), 'a contradicting act takes it out of use'
+    _taught(s, 'You pay the vendor invoices you approved yourself', 'paying approved invoices', 'task10', against='vendor invoices · watch')
+    assert memory.get(s, 'vendor invoices · watch')['N'] == 2 and line not in memory.whole(s, 'triage'), 'a contradicting act takes it out of use'
     _taught(s, line, 'vendor invoices', 'task11')
     assert line in memory.whole(s, 'triage'), 'borne out again, in use again'
 
@@ -121,14 +121,18 @@ def test_the_memory_stays_short_conclusions_within_its_caps_never_a_record():
 
 def test_one_make_it_a_task_acts_once_and_three_of_them_make_a_line():
     """The owner, 2026-11-24: one Make it a task was taught as a rule for all mail like it, in use at once. A one-off press is one episode;
-    the pattern repeated AUTO_AT times is the line in use."""
+    the same press on the same sender repeated AUTO_AT times is the line in use (2026-11-25) - never presses of other kinds or senders."""
     s = _store()
-    line = 'Facilities scheduling mail is real work for you'
+    line, ray, gail = 'Facilities scheduling mail is real work for you', 'ray@northwind.example', 'gail@northwind.example'
+    subj = lambda kind, who: memory.get(s, f'facilities scheduling · {kind} · {who}')
     with mock.patch.object(learning, '_llm', lambda st, llm=None: teacher(line, 'facilities scheduling', only_this=False)):
-        for src in ('msg21', 'msg22'): learning.teach(s, 'made_task', src, 'From: Ray\nSubject: Room bookings')
-        assert not memory.get(s, 'facilities scheduling')['Confirmed'] and line not in memory.whole(s, 'triage'), 'two presses are two episodes'
-        learning.teach(s, 'not_a_task', 'msg23', 'From: Ray\nSubject: Room bookings')
-    assert memory.get(s, 'facilities scheduling')['Confirmed'] and line in memory.whole(s, 'triage'), 'the third is the pattern'
+        for src in ('msg21', 'msg22'): learning.teach(s, 'made_task', src, 'From: Ray\nSubject: Room bookings', 'sender', ray)
+        assert not subj('made_task', ray)['Confirmed'] and line not in memory.whole(s, 'triage'), 'two presses are two episodes'
+        learning.teach(s, 'not_a_task', 'msg23', 'From: Ray\nSubject: Room bookings', 'sender', ray)
+        learning.teach(s, 'made_task', 'msg24', 'From: Gail\nSubject: Room bookings', 'sender', gail)
+        assert line not in memory.whole(s, 'triage'), 'a press of another kind, or on another sender, is no third'
+        learning.teach(s, 'made_task', 'msg25', 'From: Ray\nSubject: Room bookings', 'sender', ray)
+    assert subj('made_task', ray)['Confirmed'] and line in memory.whole(s, 'triage'), 'the third of the same press on the same sender is the pattern'
 
 
 def test_a_press_for_mail_like_this_from_now_on_is_his_confirmation_and_a_wrong_is_never_learned_again():

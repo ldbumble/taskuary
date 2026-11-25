@@ -120,8 +120,9 @@ def teach(store, kind: str, src: str, facts: str, scope: str = 'global', key: st
         only = a.get('only_this') is True and scope != 'global'
         subj = str(a.get('subject') or '').strip() or memory._key(line) + (f' · {key}' if only and key else '')
         # ...A HABIT IS THE SAME PRESS ON THE SAME SENDER OR KIND, AUTO_AT TIMES (the owner, 2026-11-25): a one-off press counts only beside its
-        # own kind on its own sender or topic - two Make it a task on Ray's mail and a Not a task on Gail's are three presses, and no habit
-        if kind not in FOR_GOOD and not memory.subject_of(subj).endswith(memory.subject_of(tag := ' · '.join(['', kind, *([key] if key else [])]))):
+        # own kind, on its own sender (a sender's press) or on the subject the line is about (a topic's: each mail's topic words differ, so the
+        # model's subject groups them) - two Make it a task on Ray's mail and a Not a task on Gail's are three presses, and no habit
+        if kind not in FOR_GOOD and not memory.subject_of(subj).endswith(memory.subject_of(tag := ' · '.join(['', kind, *([key] if key and scope == 'sender' else [])]))):
             subj += tag
         got = memory.infer(store, line, subj, [src] if src else [], scope=scope if only else 'global', key=(key or '') if only else '',
                            source=f'verdict:{kind}', confirmed=kind in FOR_GOOD)

@@ -360,7 +360,7 @@ class DeskRoutes(unittest.TestCase):
     def test_a_new_job_is_started_on_its_own_task_and_opened(self):
         # the owner, 2026-11-12: "assistant tab should not open new but open task directly" - no New card filled in and pressed on the way
         s = store(); started = []
-        with mock.patch('taskuary.capabilities.has_ai', return_value=True),              mock.patch.object(general, 'start_session', side_effect=lambda st, t, actor='owner': started.append(t) or mock.Mock()):
+        with mock.patch('taskuary.capabilities.has_ai', return_value=True),              mock.patch.object(general, 'start_session', side_effect=lambda st, t, actor='owner', **k: started.append(t) or mock.Mock()):
             out, _ = say(s, 'research which payroll vendors integrate with Payworth', None,
                          'CALL: {"kind": "task.create_from_text", "params": {"kind": "general", "text": "which payroll vendors integrate with Payworth"}}')
         t = next(t for t in s.list_tasks() if 'payroll' in str(t.get('Title')).lower())

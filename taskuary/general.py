@@ -87,6 +87,18 @@ def owner_spoke(store, tid: int) -> bool:
     ms, own = store.list_messages(tid), None
     if ms: own = own_addresses(store)
     return not any(str(m.get('Direction') or 'in') != 'out' and not from_owner(store, m, own) for m in ms)
+def his_turn(store, tid: int) -> bool:
+    """Is the agent's turn now HIS (the owner, 2026-11-25: memory comes only from what he does or says): his words are on the task
+    (owner_spoke) and the newest turn was begun or steered by a line he typed, his words a door filed, or a press of his - not by a mail,
+    a message or a page someone else wrote (conversation.hear's ledger). A task whose ledger holds no turn (a terminal he types in) is his."""
+    if not owner_spoke(store, tid): return False
+    t = (store._one("SELECT MAX(At) AS a FROM heard WHERE TaskId=? AND Kind='turn'", (int(tid),)) or {}).get('a')
+    got = store._rows('SELECT Kind, Ref FROM heard WHERE TaskId=? AND At>=?', (int(tid), t)) if t else []
+    if not got or any(r['Kind'] in ('line', 'press', 'own') for r in got): return True
+    from .ingest import own_addresses
+    from .wrapup import from_owner
+    mids, own = {r['Ref'] for r in got if r['Kind'] == 'mail'}, own_addresses(store)
+    return all(from_owner(store, m, own) for m in store.list_messages(int(tid)) if str(m['MessageId']) in mids)
 def _kept_text(body) -> str:
     "The words of a line kept for a turn (wait_line's JSON)."
     try: got = json.loads(body or '{}')
@@ -2857,7 +2869,7 @@ class GeneralSession:
         self.busy, self.last = True, t0
         # ...ONE hand-over, written once (take_kept -> conversation.hear): his lines, what came in and was pressed since the last turn, and the
         # turn's own start - so they stand together in the order they came
-        try: took, err = [{**r, **line_said(r)} for r in take_kept(self.store, self.task_id, turn=True, sid=self.sid)], None
+        try: took, err = [{**r, **line_said(r)} for r in take_kept(self.store, self.task_id, turn=True, sid=self.sid, own=(as_owner and not brief) or pressed)], None
         except Exception as e: took, err = None, e
         if err or (mine and not took):          # ...taken back in that instant (a cancelled wait drops its line): nothing to say
             self.busy, (self.trace, self.trace_revision, self.last) = False, was; self._lock.release()

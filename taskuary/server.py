@@ -6333,8 +6333,8 @@ AGENT_KEEPS = 5          # new memory lines one task's agent may write in a day;
 def agent_remember(body: AgentRememberBody, request: Request):
     """The remember tool (`taskuary --remember`): a fact the owner told the session on its OWN task, kept as the Assistant keeps one
     (memory.remember) - what he said, in use at once for triage, every agent and the Assistant (the owner, 2026-11-14: "if the user tells
-    you something, they should not have to say it again"). Silent: no line in the chat, no card. Never on a stranger's task, and only where
-    the owner has spoken in this chat - a sender's words are never the owner's (general.owner_spoke)."""
+    you something, they should not have to say it again"). Silent: no line in the chat, no card. Never on a stranger's task, and only on a
+    turn his own words or press began (general.his_turn) - a sender's words are never the owner's."""
     from . import general, memory, origin
     _own_task_only(request, body.task_id)
     if not store.get_task(body.task_id): raise HTTPException(404, 'no such task')
@@ -6344,6 +6344,9 @@ def agent_remember(body: AgentRememberBody, request: Request):
     if not general.owner_spoke(store, body.task_id):
         raise HTTPException(422, "not kept: the owner has said nothing in this chat, and only their own words go into their memory - what a "
                                  "sender wrote is not theirs. Carry on with the task; if the owner tells you the fact, keep it then.")
+    if not general.his_turn(store, body.task_id):
+        raise HTTPException(422, "not kept: this turn began from someone else's message, not the owner's words, and only what he says or does "
+                                 "goes into his memory. Carry on with the task.")
     # ...and A TASK'S CHAT IS NOT A DIARY (the owner, 2026-11-14: "be careful not to make the memory file too big"): a few facts a day from
     # one task, counted by its own audit rows - past that it is chatter, and the line is not written
     from datetime import timedelta

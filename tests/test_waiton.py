@@ -54,6 +54,29 @@ class DeclareTests(unittest.TestCase):
         self.assertFalse(self.s.get_task(self.tid)['WaitingOn'])
 
 
+class NamedNeverAnId(unittest.TestCase):
+    """The owner's live task, 2026-11-25: its header read "waiting for Whatsapp:133702382264527's input" - a chat's sender id where the person's
+    name belongs. Whoever a task waits on is named by the message's own name, else the name saved for the chat, else the chat as he says it."""
+    ID, CONV = 'whatsapp:15550100', 'whatsapp:15550100@s.whatsapp.net'
+    def setUp(self):
+        self.s = store(); self.tid = Factory(self.s).attachable(from_email=ERIN).tid
+
+    def wa(self, name):
+        self.s.add_message({'TaskId': self.tid, 'ExternalId': f'wa-{name}', 'Channel': 'whatsapp', 'ConversationId': self.CONV,
+                            'FromName': name, 'FromEmail': self.ID, 'BodyText': 'I will check and get back to you.', 'Status': 'routed'})
+        self.assertTrue(waiton.declare(self.s, self.tid, name, 'agent')['ok'])
+        self.assertEqual(self.s.get_task(self.tid)['WaitingOn'], self.ID, 'kept by the id that matches their next line')
+        [w] = waiton.on_them(self.s, self.s.get_task(self.tid))          # ...what taskstate.standing names for 'them'
+        return w['who'], waiton.word('them', w['who'])
+
+    def test_a_whatsapp_sender_is_named_by_their_name(self):
+        self.assertEqual(self.wa('Gail Moreno'), ('Gail Moreno', "waiting for Gail's input"))
+
+    def test_with_no_name_it_is_the_chat_never_its_id(self):
+        who, said = self.wa('15550100')                 # ...the poller's stand-in name: the chat's own number
+        self.assertEqual((who, said), ('the WhatsApp chat', lanes.word('theirs')))
+
+
 class WakeTests(unittest.TestCase):
     """The answer arriving through ingest - judged fyi ("Thursday works" reads as nothing to do), which used to file it."""
     def setUp(self):

@@ -229,11 +229,11 @@ def _answer(store, tid: int) -> dict | None:
     return next((m for m in rows if not is_ours(m) and (not me or str(m.get('FromEmail') or '').lower() != me)), None)
 
 
-def _who(m: dict, first: bool = True) -> str:
-    """A person as the owner calls them: 'Erin' from "Blake, Erin" - or the address when there is no name."""
-    from .triage import person_name
-    n = person_name((m or {}).get('FromName'))
-    return (n.split()[0] if first else n) if n else str((m or {}).get('FromEmail') or 'them')
+def _who(m: dict, first: bool = True, store=None) -> str:
+    """A person as the owner calls them: 'Erin' from "Blake, Erin" - or, with no name, the address or the chat (waiton.person)."""
+    from .waiton import person, readable
+    n = person(m, store)
+    return (n.split()[0] if first else n) if n else readable((m or {}).get('FromEmail')) or 'them'
 
 
 def _reply(store, t: dict) -> str | None:

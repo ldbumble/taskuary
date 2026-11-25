@@ -304,7 +304,7 @@ class StandingTests(unittest.TestCase):
         # ...her holding line moves it to the agent, the wait still standing - triage still sees whose answer it waits for (walk 17, K2)
         erin_writes('2026-01-01 10:00:00', 'Still working on the split - the quote is attached.')
         st = taskstate.standing(s, tid)
-        self.assertEqual((st['waits_on'], [x['who'] for x in st['them']]), ('agent', ['Erin']))
+        self.assertEqual((st['waits_on'], [x['who'] for x in st['them']]), ('agent', ['Erin Blake']))   # ...named as her line names her (waiton.person)
         self.assertIn("also waiting for Erin's input", taskstate.said(st))
         self.assertNotEqual(taskstate.state(s, s.get_task(tid)), 'theirs')
         # ...the turn that read it still waits on her, and says so again: the wait stands

@@ -43,10 +43,34 @@ def waiting(task: dict) -> str:
     return '' if t.get('Status') in ('done', 'dropped') else str(t.get('WaitingOn') or '')
 
 
-def name_of(key: str) -> str:
-    """The waited-on person as the rail names a holder: 'Erin Blake' from erin.blake@northwind.example or from 'erin blake'."""
+def name_of(key: str, store=None, tid=None) -> str:
+    """The waited-on person as the rail names a holder: 'Erin Blake' from 'erin blake', or by the task's own message from them (person) -
+    else from erin.blake@northwind.example, or the chat a channel's id stands for, never the id itself."""
     from .processing_unread import holder_name
-    return holder_name('person:' + key) if '@' in key else key.title()
+    k = str(key or '')
+    if '@' not in k and ':' not in k: return k.title()
+    m = next((m for m in reversed(store.list_messages(int(tid))) if _addr(m) == k), None) if store and tid else None
+    return person(m, store) or (holder_name('person:' + k) if ':' not in k else readable(k))
+
+
+# WHO SOMEBODY IS, BY NAME (the owner's live task, 2026-11-25: its header read "waiting for Whatsapp:133702382264527's input"): a chat's
+# sender id stood where the person's name belongs - the rail, the header and a watch's line name them here
+def person(m: dict, store=None) -> str:
+    """The name a message's sender goes by: its FromName, else the name the owner saved for its chat - never an address or a chat's id
+    (the poller's stand-in for a name). '' when it has none."""
+    from . import wanames
+    from .triage import person_name
+    m, conv = m or {}, str((m or {}).get('ConversationId') or '')
+    i = _addr(m).split(':', 1)[-1]
+    saved = wanames.name_of(store, conv.split(':', 1)[1]) if store and conv.startswith('whatsapp:') else ''
+    return next((person_name(n) for n in (m.get('FromName') or m.get('from_name'), saved) if person_name(n) and not wanames.bare(n, i)), '')
+
+
+def readable(key: str) -> str:
+    "An address or a chat with no name to it, as he would say it: the address, 'the WhatsApp chat'."
+    from .senders import channel_name
+    k = str(key or '')
+    return f"the {channel_name(k.split(':', 1)[0])} chat" if ':' in k and '@' not in k else k
 
 
 def word(waits_on: str, who: str = '') -> str:
@@ -56,10 +80,11 @@ def word(waits_on: str, who: str = '') -> str:
     if waits_on == 'you': return lanes.word('blocked')
     if waits_on != 'them': return ''
     first = (str(who or '').split() or [''])[0]
-    return lanes.word('theirs').replace('their', f"{first}'s", 1) if first and '@' not in first else lanes.word('theirs')
+    named = first and not any(c in first for c in '@:') and not str(who).startswith('the ')      # ...never an address, an id or a chat (readable)
+    return lanes.word('theirs').replace('their', f"{first}'s", 1) if named else lanes.word('theirs')
 
 
-def said(key: str) -> str: return word('them', name_of(key)) if key else ''
+def said(key: str, store=None, tid=None) -> str: return word('them', name_of(key, store, tid)) if key else ''
 
 
 def on_them(store, t: dict) -> list:
@@ -69,10 +94,10 @@ def on_them(store, t: dict) -> list:
     not yet read through to a turn's end (settle) - a holding "still working on it" is no end of the wait (walk 17, K2)."""
     from . import asks
     if not t or t.get('Status') in ('done', 'dropped'): return []
-    out = [{'who': name_of(k), 'what': f'an answer from {name_of(k)}', 'since': t.get('WaitingSince'), 'field': 'WaitingOn', 'key': k,
+    out = [{'who': (n := name_of(k, store, t['TaskId'])), 'what': f'an answer from {n}', 'since': t.get('WaitingSince'), 'field': 'WaitingOn', 'key': k,
             'answered': _wrote_since(store, t['TaskId'], t.get('WaitingSince'), lambda m: is_them(k, m))} for k in (waiting(t),) if k]
     if t.get('AskedWatch') == 'reply' and (m := asks._waiting_on(store, t)):
-        subj, who, a = ' '.join(str(m.get('Subject') or '').split())[:70], asks._who(m, first=False), asks._answer(store, t['TaskId'])
+        subj, who, a = ' '.join(str(m.get('Subject') or '').split())[:70], asks._who(m, first=False, store=store), asks._answer(store, t['TaskId'])
         out.append({'who': who, 'key': _addr(m), 'what': f"{who}'s answer to the reply sent {str(t.get('AskedWatchAt') or '')[:16]}" + (f' re "{subj}"' if subj else ''),
                     'since': t.get('AskedWatchAt'), 'field': 'AskedWatch', 'answered': a if a and str(a.get('CreatedAt') or '') > str(t.get('AskedWatchAt') or '') else None})
     return out

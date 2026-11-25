@@ -28,6 +28,9 @@ const runs = (s, running, last) => running && !askedOf(s) && (s.status ? !OVER.i
 // session that died mid-call: drawn done, "Edited totals.py" read as made (the stress round, 2026-11-10)
 const ended = (s, output, a = askedOf(s)) => (a ? { result: ASKED[a], is_error: true, state: a === "held" ? a : "refused" } : s.status && !OVER.includes(s.status) ? { result: output || "It never finished.", is_error: true }
   : { result: output, is_error: s.status === "failed" });
+// A TURN WITH ITS FAILED LINE SAYS THE FAILURE ONCE (chatlog.read's rule, on the steps the open chat patched in as they came - walk 19: "No AI is
+// connected" stood twice, the error step pushed live and the turn's own line under it)
+export const turnSteps = (t) => (t?.fail ? (t.steps || []).filter((s) => s.k !== "error") : t?.steps || []);
 export const eventsOf = (steps, running, tail = true) => steps.flatMap((s, i) => {
   const id = s.id || `t${i}`, output = String(s.output || "").trim();
   if (s.k === "tool") return [{ type: "tool_call", name: s.name, detail: { tool_call_id: id, args: argsOf(s), output,

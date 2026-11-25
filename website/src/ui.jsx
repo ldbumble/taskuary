@@ -15,6 +15,7 @@ import { Alert, Autocomplete, Box, Button, Chip, CircularProgress, Dialog, Dialo
 import { ButtonBar } from "./ButtonBar.jsx";
 import SearchIcon from "@mui/icons-material/Search";
 import api from "./api";
+import { SETUP_CHANGED } from "./wrote.js";
 import { browserRecogniser, dictate, dictationError, inAppWindow, micFix } from "./dictation.js";
 import { chooseVoice, voiceChoice, micRoute } from "./voiceChoice.js";
 import { onLive, touches } from "./live.js";
@@ -778,8 +779,9 @@ export const useAgents = () => {
   const [v, setV] = useState(() => agentsLast || AGENTS_UNREAD);
   useEffect(() => {
     let on = true;
-    api.get("/api/agents").then(({ data }) => { agentsLast = agentsOf(data); if (on) setV(agentsLast); }).catch(() => {});
-    return () => { on = false; };
+    const read = () => api.get("/api/agents").then(({ data }) => { agentsLast = agentsOf(data); if (on) setV(agentsLast); }).catch(() => {});
+    read(); window.addEventListener(SETUP_CHANGED, read);      // ...and again when an AI card or setting moves (wrote.movesSetup)
+    return () => { on = false; window.removeEventListener(SETUP_CHANGED, read); };
   }, []);
   return v;
 };

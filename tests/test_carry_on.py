@@ -124,6 +124,22 @@ class CarryOnTests(unittest.TestCase):
         self.assertEqual(taskstate.standing(s, tid)['waits_on'], 'agent')
         self.assertEqual(taskstate.state(s, s.get_task(tid)), 'queued', 'its agent owes the next move: never "agent done"')
 
+    def test_the_answer_to_a_mail_he_started_reaches_an_agent_though_none_ever_worked_it(self):
+        """Walk 21 (S2): the Assistant drafted his mail asking Erin for the vendor spend, he pressed Send, and the task waited on her. Her answer
+        with the CSV landed and sat 45 minutes under "waiting to start" - the task was a reply task no agent had ever worked, so the wait woke it
+        and nothing ran. The answer it waits on is work for an agent, the first one on it where none has been."""
+        from taskuary import waiton
+        s = store()
+        tid = s.create_task({'Title': 'Monthly vendor spend', 'Kind': 'reply', 'Status': 'open', 'Source': 'outbox'}, 'owner')
+        s.add_message({'TaskId': tid, 'ExternalId': 'out1', 'Channel': 'email', 'ConversationId': 'AAQk-spend', 'Subject': 'Monthly vendor spend',
+                       'FromName': 'Alex Doyle', 'FromEmail': 'alex@northwind.example', 'Direction': 'out', 'BodyText': 'Erin, can you send the spend?',
+                       'Status': 'routed'})
+        waiton.declare(s, tid, 'erin@northwind.example', 'assistant')
+        erin = dict(external_id='x4', conversation_id='AAQk-spend', subject='RE: Monthly vendor spend', body='Here it is - 212 of 250 seats in use.')
+        out, spawned = ingested(s, mail(**erin), intent='fyi')
+        self.assertEqual((out['task_id'], spawned), (tid, ['_auto_general']))
+        general.OPENING.discard(tid)
+
     def test_never_over_a_live_session(self):
         s = store(); tid = finished_task(s)
         with mock.patch.object(general, 'session_for', return_value=object()):

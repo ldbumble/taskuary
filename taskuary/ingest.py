@@ -1902,10 +1902,11 @@ def land_on(store, msg: dict, tid: int, v: dict | None, actor: str, how: str = '
 
 def answered(store, t: dict, v: dict | None) -> dict | None:
     """The verdict the answer a task waits on reaches its agent by (land_on): work on that task for its own agent - the wait is the reason it
-    matters, never triage's lane. A task no agent works, and a line triage could not read, keep their verdict."""
+    matters, never triage's lane. A task no agent has worked yet - a reply he started, his own row - is the assistant's, as any reply owed
+    is (reply_to_agent; walk 21: Erin's answer to his mail sat 45 minutes under "waiting to start"). A line triage could not read keeps its verdict."""
     from . import general
-    kind = 'general' if general.handles(t) else t.get('Kind')
-    if kind not in task_kinds.AGENT or (v or {}).get('degraded'): return v
+    kind = t.get('Kind') if t.get('Kind') in task_kinds.AGENT and not general.handles(t) else 'general'
+    if (v or {}).get('degraded'): return v
     return {**(v or {}), 'intent': 'task', 'kind': kind, 'awaited': True}
 
 

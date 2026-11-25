@@ -390,13 +390,22 @@ def unknown_tool(t) -> str:
 # WHAT A CARD SHOWS IS WHAT ITS PRESS RUNS (red team F1): a card its connector declares (connectorcatalog `actions`) draws only its declared
 # fields and its picture, so a key beside them - a `script`, a `query` - would run unseen under the card's words. Only these ride beside them
 SHOWN_BESIDE = ('action', 'type', 'connector_id', 'why', 'network', 'flow_run', 'closeout', 'image', 'image_path', 'result')   # the last two never run (_run)
+def _hidden(p: dict) -> tuple:
+    "(the fields a declared act's card draws, the keys of `p` beside them) - ((), []) for a tool no card declares."
+    from .connectorcatalog import action_for
+    if not (act := action_for((p or {}).get('type'))): return (), []
+    fs = [f['key'] for f in act.get('fields') or []]
+    return fs, sorted(k for k in p if k not in SHOWN_BESIDE and k not in fs)
 def unshown(p: dict) -> str:
     "'' when every field of a run_tool on a declared act is one its card draws, else what to drop: nothing runs that the card does not show."
-    from .connectorcatalog import action_for
-    if not (act := action_for((p or {}).get('type'))): return ''
-    fs = [f['key'] for f in act.get('fields') or []]
-    hid = sorted(k for k in p if k not in SHOWN_BESIDE and k not in fs)
+    fs, hid = _hidden(p)
     return f"{p['type']}'s card shows only {', '.join(fs)} - {', '.join(hid)} would run unseen under it; propose it without them" if hid else ''
+# ...AND AN AGENT'S EXTRA FIELD IS LEFT OFF ITS CARD, NEVER A REFUSAL (the owner's design, 2026-11-25: "harmless extra fields are ignored" - a
+# post raised with its `hashtags` or an `alt` beside its words was refused whole, and came back to him as prose): what the card does not draw
+# is dropped where the card is raised (queue), so it is neither shown nor run - a stored one is still refused at the press (validate)
+def shown_only(p: dict) -> dict:
+    hid = set(_hidden(p)[1])
+    return {k: v for k, v in p.items() if k not in hid} if hid else p
 
 
 CHANGED = 'This card changed after it was shown to you - nothing ran. It is shown again as it stands now; read it and press again.'
@@ -567,7 +576,7 @@ def queue(store, task_id: int, p: dict, actor='agent', refused: list | None = No
     several = ''
     if p.get('action') == 'run_tool' and actor != 'workflow':
         from .reports import REGISTRY, query_only, tool_card
-        p = {**query_only(p), **({'connector_id': p['connector_id']} if str(p.get('connector_id') or '').strip() else {})}
+        p = shown_only({**query_only(p), **({'connector_id': p['connector_id']} if str(p.get('connector_id') or '').strip() else {})})
         # ...on THE card it will run on, pinned now (reports.tool_card): the press ran the first card of its type, under a card naming it
         if p.get('type') in REGISTRY and not p.get('connector_id'):
             try: p = {**p, **({'connector_id': c['ConnectorId']} if (c := tool_card(store, p['type'])) else {})}

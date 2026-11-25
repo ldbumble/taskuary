@@ -8,9 +8,17 @@ import json
 from datetime import datetime, timedelta
 from unittest import mock
 
-from taskuary import reports
+import pytest
+
+from taskuary import reports, scopes
 from taskuary.reports import REGISTRY
 from taskuary.store import MemoryStore
+
+
+@pytest.fixture(autouse=True)
+def stand_ins_read():
+    "The stand-in sources here read: declared so, as every real one is (scopes.ACTIONS) - an undeclared one would wait as a write (flow.held_writes)."
+    with mock.patch.dict(scopes.ACTIONS, {'_r': 'read', '_ok': 'read', '_bad': 'read'}): yield
 
 
 def _report(s, cfg, title='Ledger check'):

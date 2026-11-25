@@ -169,3 +169,41 @@ def test_fix_with_ai_on_a_run_the_app_broke_points_at_the_app_without_a_model():
         out = flow.execute(s, src, tid, llm=no_model)
     got = flow.repair(s, workflows.cfg_of(src), s.get_report_run(out['run_id']), no_model, src['SourceId'])
     assert got['cause'] == 'taskuary' and 'flow' not in got and got['fix'] == {'label': buttons.label('fix'), 'href': '#connector=reader'}
+
+
+# ── a saved report that writes ───────────────────────────────────────────────────────────────────────────────────────────
+def test_a_saved_report_that_writes_runs_on_schedule_only_where_he_always_approved_it():
+    """The owner, 2026-11-25: "Saved report can write on schedule if you authorize it on setup." A plain saved report whose run writes to a
+    connected system - its card raised to write, so nothing but this rule stops it - writes nothing on its schedule until he says so: the run
+    is a task with the write as its card, "Always approve this step" on it (the routine's own standing yes). Once pressed, the write runs now,
+    and every later scheduled run writes unpressed as a report; a changed report waits again. Invented people and paths."""
+    from taskuary import verdicts
+    s = MemoryStore()
+    card = s.get_connector_by_type('smb_file')
+    s.save_connector({'ConnectorId': card['ConnectorId'], 'Active': True, 'Scope': 'write'}, 'test')
+    cfg = {'type': 'smb_write', 'title': 'Nightly AP export for Erin', 'path': 'exports/ap.csv', 'content': 'vendor,amount', 'daily_at': '02:00'}
+    sid = s.save_source({'Channel': 'report', 'Address': cfg['title'], 'Owner': 'o', 'Active': 1, 'ConfigJson': json.dumps(cfg)}, 'o')
+    ran = []
+    write = lambda c: (ran.append(c) or 'wrote 1 file', '')
+    def scheduled():
+        src = s.get_source(sid)
+        with mock.patch.dict(reports.REGISTRY, {'smb_write': write}), mock.patch.object(reports, 'gate', REAL_GATE), \
+             mock.patch.object(workflows, '_spawn', lambda f: f()):
+            return reports._run_report_source(s, src, workflows.cfg_of(src), llm=None, trigger='schedule')
+    out = scheduled()
+    assert ran == [] and out.get('task_id'), out                                     # ...not authorized: nothing written
+    rv = s._one("SELECT * FROM review WHERE TaskId=? AND Kind='action' AND Status='pending'", (out['task_id'],))
+    assert rv and json.loads(rv['DraftText'])['flow_run']['key'], 'the write is a card he can always approve'
+    with mock.patch.dict(reports.REGISTRY, {'smb_write': write}):
+        got = verdicts.decide(s, s.get_review(rv['ReviewId']), 'approve', None, None, 'owner', always=True)
+    assert got['ok'] and got['always'] and len(ran) == 1, got                          # ...his press runs it now
+    import time
+    for _ in range(200):                                                               # ...and its run goes on, on its own thread
+        if [r['status'] for r in s.report_run_of_task(out['task_id'])['steps']] == ['ok']: break
+        time.sleep(0.02)
+    out = scheduled()
+    assert len(ran) == 2 and not out.get('task_id'), out                              # ...and the next scheduled run writes unpressed
+    assert not s._one("SELECT 1 AS x FROM review WHERE Kind='action' AND Status='pending'")
+    s.save_source({'SourceId': sid, 'ConfigJson': json.dumps({**cfg, 'path': 'exports/elsewhere.csv'})}, 'o')
+    out = scheduled()
+    assert len(ran) == 2 and out.get('task_id'), 'a report changed since is another write: it waits again'

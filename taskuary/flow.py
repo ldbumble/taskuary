@@ -152,10 +152,29 @@ def size_of(d: list) -> str:
 
 
 def steps_of(cfg: dict) -> list:
-    """The steps a run walks - the saved flow, or the one agent step every prompt-only workflow always was."""
+    """The steps a run walks - the saved flow, a saved report's sources (report_steps), or the one agent step every prompt-only workflow
+    always was."""
     f = (cfg or {}).get('flow')
     if isinstance(f, list) and f: return f
+    if (r := report_steps(cfg)): return r
     return [{'id': 's1', 'kind': 'agent', 'label': 'Agent works it', 'prompt': (cfg or {}).get('prompt') or '', 'skill': (cfg or {}).get('skill') or ''}]
+
+
+def report_steps(cfg: dict) -> list:
+    """A SAVED REPORT'S SOURCES AS THE STEPS ITS RUN READS OR WRITES (the owner, 2026-11-25: "saved report can write on schedule if you
+    authorize it on setup"): each a `source` step by its place, so a report's write is a routine's write - its card, its "Always approve
+    this step" (grant), and his standing yes read by the same key. [] for a routine, an agent job, or a report Taskuary runs itself."""
+    from .compose import NOT_A_SOURCE, REPORT_KEYS
+    cfg, t = cfg or {}, str((cfg or {}).get('type') or '')
+    if cfg.get('flow') or not t or t in ('agent', *NOT_A_SOURCE): return []
+    subs = [x for x in cfg.get('sources') or [] if isinstance(x, dict) and x.get('type')] or [{k: v for k, v in cfg.items() if k not in REPORT_KEYS}]
+    return [{**x, 'id': f'source{i}', 'kind': 'source', 'label': x.get('label') or x.get('type')} for i, x in enumerate(subs, 1)]
+
+
+def held_writes(store, sid, cfg: dict) -> list:
+    "The steps of saved report `sid` that write to a connected system and that he has not always approved as saved: each waits for his press."
+    from . import scopes
+    return [x for x in report_steps(cfg) if writes(x['type']) and scopes.reaches(x['type'], x) and not standing(store, sid, x)]
 
 
 def is_flow(cfg: dict) -> bool:

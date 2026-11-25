@@ -652,6 +652,8 @@ class ApiTests(unittest.TestCase):
             else: path.write_text(previous, encoding='utf-8')
 
     def test_sources_crud_run_and_delete(self):
+        from taskuary import scopes                       # ...a stand-in that reads, declared so (an undeclared one waits as a write)
+        p = mock.patch.dict(scopes.ACTIONS, {'_t': 'read'}); p.start(); self.addCleanup(p.stop)
         REGISTRY['_t'] = lambda cfg: ('2 rows', 'x\ny')
         try:
             cfg = {'type': '_t', 'title': 'T', 'every_minutes': 30}

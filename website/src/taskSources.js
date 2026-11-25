@@ -4,6 +4,7 @@ import { routeIntent, routeWhy } from "./triageVerdict.js";
 import { plural } from "./timeWords.js";
 import { level } from "./priority.js";
 import { CATALOGUE } from "./connectorCatalog.js";
+import { senderName } from "./personName.js";
 
 const CHANNEL_NAMES = { email: "Email", whatsapp: "WhatsApp", telegram: "Telegram", slack: "Slack", teams: "Teams", github: "GitHub",
   monday: "Monday", jira: "Jira", linear: "Linear", imessage: "iMessage", discord: "Discord", report: "Report", assistant: "Assistant",
@@ -17,7 +18,7 @@ const CHATS = new Set(["whatsapp", "teams", "slack", "telegram", "imessage", "di
 export const isChat = (ch) => CHATS.has(ch);
 
 export const isMine = (m) => m?.Status === "context" || m?.Direction === "out" || !!m?.mine;
-export const senderOf = (m) => (isMine(m) ? "You" : m?.FromName || m?.FromEmail || channelName(m?.Channel));
+export const senderOf = (m) => (isMine(m) ? "You" : senderName(m) || channelName(m?.Channel));
 const oneLine = (s) => String(s || "").replace(/\s+/g, " ").trim();
 // ...cut on a word, never mid-word ("qualifying donor" stood as the end of a sentence, 2026-10-28)
 const clip = (s, n) => s.length <= n ? s : `${s.slice(0, n).replace(/\s+\S*$/, "")}…`;

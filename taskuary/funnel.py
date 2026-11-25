@@ -302,7 +302,8 @@ def from_feed(store, rows: list, *, canonical=False) -> list:
         if not canonical and group and speaks.get(group) != r['MessageId']:
             more[group] = more.get(group, 0) + 1
             continue
-        who = r.get('FromName') or r.get('FromEmail') or r.get('SourceName') or r.get('Channel') or ''
+        from .triage import person_name
+        who = person_name(r.get('FromName')) or r.get('FromName') or r.get('FromEmail') or r.get('SourceName') or r.get('Channel') or ''
         # ...and the two fields the ROAD is read from, so the rail's pill can say what triage said
         # rather than what is waiting now - the same rule the Timeline row and its Triage tab use
         # (timelineState.roadOf; the owner, 2026-09-07: "once the ai decides it should show what the
@@ -348,7 +349,7 @@ def from_feed(store, rows: list, *, canonical=False) -> list:
             # named here by that one (continuity.answers, the one reading of it)
             from .continuity import answers
             if answers(rv) != r.get('MessageId') and (am := store.get_message(answers(rv))):
-                base.update(who=am.get('FromName') or am.get('FromEmail') or base.get('who'), preview=am.get('BodyText') or base.get('preview'))
+                base.update(who=person_name(am.get('FromName')) or am.get('FromName') or am.get('FromEmail') or base.get('who'), preview=am.get('BodyText') or base.get('preview'))
             from . import capabilities
             out.append(_item(f"review:{r['ReviewId']}", 'action' if action else 'review', 'approve', subj, rid=r['ReviewId'],
                              why='an agent proposed an action - it runs only if you say so' if action

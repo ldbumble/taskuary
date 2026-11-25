@@ -29,6 +29,7 @@ import { onPressing, useVerbs } from "./actionRow.js";
 import { BUTTONS_AT, FOCUS_EDGE, MOVES_AT, OPENS_FORM, PaneMoves, SEC_NAME, SpineMoves, TaskButtons } from "./TaskRow.jsx";
 import { closedBy, closedResult, pressBeat, pressOver, pressedOn } from "./pressResult.js";
 import { taskMoves } from "./taskMoves.js";
+import { senderName } from "./personName.js";
 import { MADE_RUN } from "./madeTask.js";
 import { choice, hint as btnHint, hintOfRow, label as btn, labelOfRow, liveVerb } from "./buttons.js";   // theme.jsx owns `label`
 import { PRIORITIES, level } from "./priority.js";
@@ -99,7 +100,7 @@ import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 // Recover once automatically; a real module error still reaches the view boundary on retry.
 import { autostartPlan, isGeneralKind, opensOnRegular } from "./autostart.js";
 import { agentWorkspaceMode, barContinues } from "./taskWorkspace.js";
-import { SECTIONS, cameFrom, cameChip, chatLatch, homeSection, liveTerminal, soloTodo, startsAnother, replyHolds, agentStatus, agentWord, answeredOutside, reportLine, askInBody, askIsTitle, writeupAt, focusOf, fromLine as fromLineOf, fromStatus, layoutOf, sameWords, sectionFade, waitingOn, workPane } from "./taskLayout.js";
+import { SECTIONS, cameFrom, cameChip, judgedMarks, chatLatch, homeSection, liveTerminal, soloTodo, startsAnother, replyHolds, agentStatus, agentWord, answeredOutside, reportLine, askInBody, askIsTitle, writeupAt, focusOf, fromLine as fromLineOf, fromStatus, layoutOf, sameWords, sectionFade, waitingOn, workPane } from "./taskLayout.js";
 import { mainView, stageOf } from "./stages.js";
 import { chatOf, taskStatus } from "./railStatus.js";
 import { StatusPill } from "./StatusMark.jsx";
@@ -1307,6 +1308,7 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
   // WATCH IT (watch.py, the owner, 2026-11-01): not the owner's - kept open under Watching, walked after Tasks, back when the thread moves. Nothing
   // is sent. On the walk's table it is the walk's close (railwalk.leave "watch"); on a task already watched the same press ends the watch
   const watching = !!t?.WatchedAt && !["done", "dropped"].includes(t.Status);
+  const watchLine = watching ? String(detail?.watch || "") : "";       // ...what it waits for, and when it is back (watch.line)
   const watchIt = async () => {
     const off = watching;
     if (!off) { await pressBeat("watch"); onLeave?.(); }
@@ -1848,7 +1850,7 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
   const tabLines = () => !twoUp || !t ? {} : made ? madeTabs() : {
     from: fromStatus({ channel: cameIn ? cameFrom(cameIn) || channelName(cameIn.Channel) : sources[0] ? channelName(sources[0].channel) : "",
       // ...EVERY message of its conversations, newest first - the tab draws as many as it has room for (fitTabLines): who, and their words
-      msgs: newestFirst(sources.flatMap((g) => g.msgs)).map((m) => ({ who: m.who || m.FromName || m.FromEmail || (m.Direction === "out" ? "You" : ""),
+      msgs: newestFirst(sources.flatMap((g) => g.msgs)).map((m) => ({ who: m.who || senderName(m) || (m.Direction === "out" ? "You" : ""),
         words: (rowText(m, sourceFiles.get(m.MessageId)) || cleanText(m.ReadText || m.BodyText || "")).slice(0, 200) })),
       count: sourceCount, workflow: fromWorkflow, made: `${detail.ref} · ${madeAt}`, to: toLine(cameIn?.Recipients).short, sorted: sortedLine(facts, t?.Kind || "task").replace(/^Sorted as: /, "Sorted: ") }),
     agent: agentStatus({ name: runRole || hasRecord || term ? agentName(t) : "",   /* Taskuary (kinds.js shownAgent) */
@@ -1874,6 +1876,18 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
   // ...WHOM IT WENT TO under who sent it, a plain line: its first few names, all of them with the whole email (the owner, 2026-11-03)
   const toWent = () => { const w = toLine(cameIn?.Recipients); return w.short && (
     <Typography data-tq-came-in-to="" title={w.full} sx={{ fontSize: 12.5, color: DIM, overflowWrap: "anywhere" }}>{cameInFull ? w.full : w.short}</Typography>); };
+  // ...how hard triage judged the work, or that it carries sensitive data - only when it is not ordinary, and a press corrects it (the router,
+  // 2026-10-25) - a MARK OF THE MESSAGE, beside who sent it, never after its files (the owner, 2026-11-25: it sat under the attachments pill)
+  const judgedMark = () => { const label = judgedMarks(detail?.judged); return label && <>
+    <Chip size="small" data-tq-judged="" label={label}
+      title={`${detail.judged.by === "owner" ? "You said so" : "Triage judged it so"} - in Auto, hard work runs on the strong model. Click to correct it.`}
+      onClick={(e) => setJudgeAt(e.currentTarget)} sx={{ height: 19, fontSize: 10, bgcolor: PANEL2, cursor: "pointer" }} />
+    <Menu open={!!judgeAt} anchorEl={judgeAt} onClose={() => setJudgeAt(null)}>
+      {["quick", "standard", "hard"].map((d) => <MenuItem key={d} selected={detail?.judged?.difficulty === d} sx={{ fontSize: 12 }}
+        onClick={() => judge({ difficulty: d })}>{d === "quick" ? "Quick work" : d === "hard" ? "Hard work" : "Ordinary work"}</MenuItem>)}
+      {[["ordinary", "Ordinary data"], ["sensitive", "Sensitive data"]].map(([k, l]) => <MenuItem key={k} selected={(detail?.judged?.data_class || "ordinary") === k}
+        sx={{ fontSize: 12 }} onClick={() => judge({ data_class: k })}>{l}</MenuItem>)}
+    </Menu></>; };
   const fromFacts = () => (<>
                         {!twoUp && toWent()}
                         <Box sx={{ display: "flex", alignItems: "baseline", gap: 1, flexWrap: "wrap", "&:empty": { display: "none" } }}>
@@ -1887,18 +1901,7 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
                               setHistOpen(true); setOpenMsg(mid); setSeekLetter(mid);
                             }}
                             sx={{ height: 19, fontSize: 10, bgcolor: PANEL2 }} />}
-                          {/* ...and how hard triage judged the work, or that it carries sensitive data - only when it is not ordinary, and a
-                              press corrects it (the router, 2026-10-25) */}
-                          {(detail?.judged?.difficulty === "hard" || detail?.judged?.data_class === "sensitive") && <Chip size="small" data-tq-judged=""
-                            label={[detail.judged.difficulty === "hard" && "hard work", detail.judged.data_class === "sensitive" && "sensitive data"].filter(Boolean).join(" · ")}
-                            title={`${detail.judged.by === "owner" ? "You said so" : "Triage judged it so"} - in Auto, hard work runs on the strong model. Click to correct it.`}
-                            onClick={(e) => setJudgeAt(e.currentTarget)} sx={{ height: 19, fontSize: 10, bgcolor: PANEL2, cursor: "pointer" }} />}
-                          <Menu open={!!judgeAt} anchorEl={judgeAt} onClose={() => setJudgeAt(null)}>
-                            {["quick", "standard", "hard"].map((d) => <MenuItem key={d} selected={detail?.judged?.difficulty === d} sx={{ fontSize: 12 }}
-                              onClick={() => judge({ difficulty: d })}>{d === "quick" ? "Quick work" : d === "hard" ? "Hard work" : "Ordinary work"}</MenuItem>)}
-                            {[["ordinary", "Ordinary data"], ["sensitive", "Sensitive data"]].map(([k, l]) => <MenuItem key={k} selected={(detail?.judged?.data_class || "ordinary") === k}
-                              sx={{ fontSize: 12 }} onClick={() => judge({ data_class: k })}>{l}</MenuItem>)}
-                          </Menu>
+                          {(!twoUp || !cameIn) && judgedMark()}
                           {!twoUp && fromExpands(sources) && <Link component="button" type="button" underline="hover" onClick={() => setShowAll((v) => !v)}
                             sx={{ ml: "auto", fontSize: 12 }}>{showAll ? "Show less" : `Show all ${sourceCount}`}</Link>}
                         </Box>
@@ -2043,8 +2046,10 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
       <Box data-tq-came-in="" sx={CARD}>
         <Typography sx={cardHead}>What came in</Typography>
         {cameIn ? <>
-          <Typography sx={{ fontSize: 13, color: DIM }}>{byLine(cameIn.who || cameIn.FromName || cameIn.FromEmail, cameFromWhere(cameIn),
-            cameIn.SentAt ? whenShort(cameIn.SentAt) : "")}</Typography>
+          <Box data-tq-came-in-head="" sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
+            <Typography sx={{ fontSize: 13, color: DIM }}>{byLine(cameIn.who || senderName(cameIn), cameFromWhere(cameIn),
+              cameIn.SentAt ? whenShort(cameIn.SentAt) : "")}</Typography>
+            {judgedMark()}</Box>
           {toWent()}
           {/* ...THE MESSAGE ITSELF, never Taskuary's notes about it (the real-Claude walk, 2026-11-19: "paying is Alex's own action, and the
               sender is unverified" stood where the vendor's mail should): what Taskuary made of it is the card beside, and the agent's */}
@@ -2069,7 +2074,9 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
         {/* ...in his words, never the app's own name for its sorting (design round 5, 2026-11-19: "What triage made of it") */}
         <Typography sx={cardHead}>How Taskuary read it</Typography>
         <Typography sx={{ fontSize: 15, lineHeight: 1.5, color: INK }}>{madeOf(facts, t?.Kind || "task")}</Typography>
-        {triaged.why && <Typography sx={{ fontSize: 13, lineHeight: 1.5, color: DIM, overflowWrap: "anywhere" }}>{triaged.why}</Typography>}
+        {/* ...a WATCH says what it waits for and when it is back (the server's watch.line, the header's and the rail's same words) - in triage's why's place */}
+        {(watchLine || triaged.why) && <Typography data-tq-watch-line={watchLine ? "" : undefined} sx={{ fontSize: 13, lineHeight: 1.5, color: DIM, overflowWrap: "anywhere" }}>
+          {watchLine || triaged.why}</Typography>}
         {triaged.later > 0 && <Typography sx={{ fontSize: 12.5, color: FAINT }}>{plural(triaged.later, "later message")} joined this task</Typography>}
         {workContext && <Typography sx={{ fontSize: 12.5, color: FAINT }}>Works from: {workContext}</Typography>}
         {facts.pills.filter((p) => p.tone === "alert" && p.key !== "priority").map((p) => (
@@ -3432,7 +3439,7 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
                       {/* ONE CHAT FOR EVERY KIND (the owner, 2026-11-06: "one shared chat object for coding and regular"): the component reads its own
                           source (chatStream.chatSource) - a coding task's sessions, or the general agent's conversation - and the branch's landing
                           card joins it wherever the task works in a checkout */}
-                      <GeneralWorkspace key={`${t.TaskId}-${generalRevision}`} task={t} compact onSession={generalSession} reread={chatRead} trustOnRow
+                      <GeneralWorkspace key={`${t.TaskId}-${generalRevision}`} task={t} compact onSession={generalSession} reread={chatRead} trustOnRow={!watching}
                         queued={chatPane && !liveSession && queuedRow && !queuedRow.retryTurn ? <QueuedStart taskId={t.TaskId} queued={queuedRow} line onChanged={() => { loadTasks(); loadDetail(t.TaskId); }} /> : null}
                         stopTries={queuedRow?.retryTurn ? () => api.delete(`/api/tasks/${t.TaskId}/dispatch`).then(() => { loadTasks(); loadDetail(t.TaskId); }).catch(() => {}) : null}
                         liveSid={term?.alive && term.mode === "assistant" ? term.sid : ""}

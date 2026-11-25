@@ -86,7 +86,9 @@ def _inbound(store, item) -> list:
     return [m for m in ms if m and str(m.get('Direction') or 'in') != 'out' and m.get('Status') not in ('context',)]
 
 
-def _name(m: dict) -> str: return ' '.join(str(m.get('FromName') or m.get('FromEmail') or 'Someone').split())
+def _name(m: dict) -> str:
+    from .waiton import person
+    return person(m) or ' '.join(str(m.get('FromName') or m.get('FromEmail') or 'Someone').split())
 
 
 def same_thread(store, item) -> int | None:
@@ -227,6 +229,8 @@ def state(store, item: dict, verbs: list) -> tuple:
     from . import watch
     if (wb := watch.back(t)) == 'handled': return 'watch_handled', {'who': _name((_inbound(store, it) or [{}])[-1])}
     if wb == 'quiet': return 'watch_quiet', {}
+    # ...and ONE STILL WATCHED says what it waits for (watch.line; the owner, 2026-11-25: its row read "<sender> asked 2 hours ago")
+    if watch.watching(t) and not store.waiting_on_owner(t['TaskId']): return 'watching', {'back': (b := watch.back_when(t))[:1].upper() + b[1:]}
     # THE WRITER SAID WHAT IT NEEDS (store.set_review_draft_needs): no failure - the work is an agent's, so Continue the one that worked it,
     # else Send to agent. Its reason is on the card already, so nothing is said (walk 2026-10-29: it lit "New task to fix this")
     if draft_needs(store, it) or reply_unwritten(store, it): return 'needs_agent', {}

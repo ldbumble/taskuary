@@ -105,3 +105,19 @@ test("held for a sender: Trust stands first on the row, filled, and never folds 
   const held = taskMoves({ repo: { held: true, can: true } }, run, w), r2 = taskButtons(splitRow(rowOf({ list: held, ref: "" }), { open: "agent" }).by);
   assert.deepEqual([r2[0].v.id, r2[0].v.tone], ["repo", "p"]);
 });
+
+// A WATCHED TASK IS SOMEBODY ELSE'S TO HANDLE (the owner, 2026-11-25: "Trust <name>" stood lit on a thread a colleague is answering): its Trust
+// is no move owed - it waits unlit, and the watch's own move stands on the row
+test("watched, though held for a sender: nothing filled, Stop watching on the row, Trust unlit", async () => {
+  const { taskMoves } = await import("../src/taskMoves.js"), { rowOf, splitRow, pillsOf } = await import("../src/actionRow.js");
+  const w = { label: (k, s) => (k === "watch" && s === "on" ? "Stop watching" : k), hint: () => "", doneHint: "", natTitle: "", repo: "", repoHint: "" };
+  const run = new Proxy({}, { get: () => () => {} });
+  const verbs = taskMoves({ trust: { label: "Trust Gail" }, watching: true, repo: {} }, run, w);
+  const row = taskButtons(splitRow(rowOf({ list: verbs, ref: "" }), { open: "agent" }).by);
+  assert.ok(!row.some((x) => x.v?.tone === "p"), "nothing lit as owed");
+  assert.ok(!row.some((x) => x.v?.unblocks), "Trust unblocks no work of his");
+  const phone = rowOf({ list: verbs, ref: "" });
+  assert.ok(phone.decide.some((x) => x.label === "Stop watching"), "the watch's move stands on the row, out of More");
+  assert.ok(phone.more.some((x) => x.id === "trust"), "Trust waits in More");
+  assert.notEqual(pillsOf(phone).lead?.id, "trust", "nor leads the phone's row");
+});

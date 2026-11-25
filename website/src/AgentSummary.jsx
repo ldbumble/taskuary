@@ -12,6 +12,7 @@ import { isCardReview } from "./actionCard.js";
 import { Md } from "./md.jsx";
 import { MicButton } from "./ui.jsx";
 import { MESSAGE } from "./kinds.js";
+import { senderName } from "./personName.js";
 import { keepUnsent, unsent } from "./unsent.js";
 import { AttachRow, IMAGE_ACCEPT, INLINE_CHIPS, fileChips, fileState, usePromptImages, useSendWhenUp } from "./promptImages.jsx";
 import { ALERT_INK, BORDER, DIM, FAINT, INK } from "./theme.jsx";
@@ -20,7 +21,7 @@ import { ALERT_INK, BORDER, DIM, FAINT, INK } from "./theme.jsx";
 const HEAD = { display: "block", color: INK, fontSize: 13.5, fontWeight: 700, mt: 1.5, mb: 0.25 };
 const Head = ({ children, first }) => <Typography component="span" sx={{ ...HEAD, ...(first ? { mt: 0 } : {}) }}>{children}</Typography>;
 const LINE = { fontSize: 13.5, lineHeight: 1.55, color: INK, overflowWrap: "anywhere" };
-const who = (r) => r.FromName || r.FromEmail || "";
+const who = (r) => senderName(r);
 
 const PARA = { ...LINE, mt: 1 };
 // A REGULAR CHAT (the owner, 2026-11-05: "it's just a chat with it summarizing in different paragraphs (short text as possible) this is the chat,

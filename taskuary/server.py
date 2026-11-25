@@ -2493,7 +2493,7 @@ def _task_detail(task_id: int, rev: str = '', opened: bool = False, whole: bool 
     dm = next((m for m in msgs if m.get('Danger')), {})
     # THE ONE MOVE ITS ROW FILLS (rulebook.recommended: its agent's own turn and the task's facts) - the same field the rail's item on the
     # table carries (_pile_payload), so the task page and the canvas light one button and neither asks the Advisor
-    from . import rulebook
+    from . import rulebook, watch
     known = {'task': d['task'], 'story': story, 'judged': judged, 'ended': ran, 'messages': msgs}       # ...and asks nothing this read knows
     return _revisioned({**d,'task': {**d['task'], 'Playbook': _playbook_brief(d['task'])}, 'recommended': rulebook.recommended_task(store, task_id, known),
             'origin': {**o,                                                                  # who's words are on it (origin.py)
@@ -2534,6 +2534,8 @@ def _task_detail(task_id: int, rev: str = '', opened: bool = False, whole: bool 
             'state': (st := _task_state(task_id, d, session)),
             # ...and ITS STATUS IN WORDS, said once (taskstate.status): the header's pill draws it as the phone and the bell say it
             'status': _task_status(task_id, d, session, st),
+            # ...and what a watch on it waits for, in its one line (watch.line - the chip's hover and the rail's row say the same)
+            'watch': watch.line(store, d['task']),
             # ...and WHERE IT IS UP TO, at rest (stages.json, the owner 2026-10-26): the page reads its own from what it draws, the same rules
             'stage': stages.of_task(store, d['task'], st, session, msgs),
             # ...and who closed it and why, one line, when its agent did (taskstate.closed_why)

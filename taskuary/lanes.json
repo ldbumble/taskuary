@@ -59,6 +59,14 @@
       "hint": "your task, waiting on somebody else - it comes back when they answer"
     },
     {
+      "key": "watching",
+      "word": "watching",
+      "role": "muted",
+      "mark": "👀",
+      "section": "task", "on_you": false,
+      "hint": "somebody else's to handle - kept under Watching, back when its thread moves or after a quiet week"
+    },
+    {
       "key": "queued",
       "word": "waiting to start",
       "role": "working",

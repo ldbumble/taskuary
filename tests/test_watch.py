@@ -220,6 +220,54 @@ class Watched(unittest.TestCase):
             return server._run_operation({'kind': kind, 'target': self.t, 'targetKind': 'task', 'params': params}, BackgroundTasks())
 
 
+class AStrangersThreadWatchedTests(unittest.TestCase):
+    """THE OWNER'S LIVE WATCH (2026-11-25): triage read a new sender's chase as somebody else's to handle and put it under Watching - and the
+    task said "on you", its lit move "Trust <surname>,", and nowhere what it watched for. A watch with nothing owed is watched: its Trust waits on
+    no work of his, and every surface says what it waits for and when it is back, in one line (watch.line)."""
+    WHY = 'Erin Blake is chasing a refund, but Gail Moreno already handled this thread and is the one expected to respond'
+
+    def setUp(self):
+        from taskuary.ingest import ingest_message
+        self.s = store(); self.s.set_setting('owner_email', 'alex@northwind.example', 't')
+        brain = lambda *a, **k: json.dumps({'intent': 'watch', 'why': self.WHY, 'title': 'Refund request follow-up'})
+        with mock.patch('taskuary.ingest._spawn'):
+            self.t = ingest_message(self.s, {'external_id': 'w1', 'channel': 'email', 'from_email': 'erin@partner.example',
+                                             'from_name': 'Blake, Erin at Partner Co', 'conversation_id': 'conv-refund', 'subject': 'Refund',
+                                             'sent_at': ago(2), 'body': 'Following up on my refund - any news?'}, llm=brain)['task_id']
+
+    def test_a_held_stranger_on_a_watch_is_owed_nothing_and_it_reads_watching(self):
+        from taskuary import card, origin, taskstate
+        self.assertTrue(watch.watching(self.s.get_task(self.t)))
+        self.assertTrue(origin.hold(self.s, self.t), 'the sender is still held - no agent works their words')
+        self.assertFalse([c for c in card.waiting(self.s, self.t) if c['kind'] == card.TRUST], 'Trust stood as a card owed on a watch')
+        st = taskstate.standing(self.s, self.t)
+        self.assertNotEqual(st['waits_on'], 'you', 'a watch read "on you" with nothing owed')
+        t = self.s.get_task(self.t)
+        self.assertEqual(taskstate.state(self.s, t), 'watching')
+        self.assertFalse(lanes.LANE['watching']['on_you'])
+
+    def test_every_surface_says_what_the_watch_waits_for_and_when_it_is_back(self):
+        from taskuary import remind, taskstate
+        line = watch.line(self.s, self.s.get_task(self.t))
+        back = remind.when(f"{datetime.now() + timedelta(days=watch.QUIET_DAYS):%Y-%m-%d}")
+        self.assertEqual(line, f'Watching: {self.WHY} - back when the thread moves, or on {back} if it stays quiet')
+        st = taskstate.status(self.s, self.s.get_task(self.t))
+        self.assertEqual((st['key'], st['word'], st['hint']), ('watching', 'watching', line), "the header's chip")
+        self.assertTrue(taskstate.said(taskstate.standing(self.s, self.t)).startswith(line), 'what the brief, the Advisor and the Assistant read')
+        self.s.reconcile_processing_membership(fixed_now=ago(0)); funnel.invalidate()
+        with mock.patch('taskuary.terminal.live_sessions', return_value=[]):
+            [i] = [i for i in funnel.one_state(self.s, processing_unread.build(self.s, live_state=[]))['items'] if i.get('tid') == self.t]
+        self.assertEqual((lanes.level_of(i), i['lane'], i['why']), ('watching', 'watching', line), "the rail's row")
+        self.assertFalse(lanes.on_you(i))
+        self.assertEqual(i['who'], 'Erin Blake', 'the row named her "Blake, Erin at Partner Co"')
+        rec = rulebook.recommended_task(self.s, self.t)
+        self.assertEqual(((rec or {}).get('verb'), (rec or {}).get('why')), (None, f'Back when the thread moves, or on {back} if it stays quiet.'),
+                         'the row on the table read "<sender> asked 2 hours ago"')
+        # ...and a watch the owner set himself, with no verdict behind it, still says when it is back
+        t2 = theirs(self.s); watch.watch(self.s, t2)
+        self.assertTrue(watch.line(self.s, self.s.get_task(t2)).startswith('Watching for somebody else to handle it - back when the thread moves, or on '))
+
+
 class HandedToAnAgentTests(Watched):
     """THE OWNER'S WATCHED TASK, HANDED TO AN AGENT (the owner, 2026-11-11: "i changed task to general agent and nothing happened also it's
     still on watching rail"): triage read an ask put to the owner as somebody else's, the owner chose who does it on the task - and the

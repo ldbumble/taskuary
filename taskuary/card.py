@@ -146,8 +146,11 @@ def _waiting(store, tid: int, asks: bool, trust: bool = True) -> list:
     from .conversation import unwritten
     # ...the line itself read once whatever is asked beside it (the Trust, the agent's question): Send and close and where it stands each ask -
     # and before the hold, whose first judging of the task's origin writes it down (origin.of_task), which a line kept would not outlive
+    # ...AND ON A WATCHED TASK THE TRUST IS OWED TO NOBODY (the owner, 2026-11-25: "Trust <name>" lit, "on you", on a thread somebody else
+    # handles): no work of his waits on it - it stands in the chat for him to press if he wants an agent on it, and waits on nothing
     if asks or trust:
-        line, h = waiting(store, tid, asks=False, trust=False), origin.keeps_him(store, tid) if trust else None
+        from . import watch
+        line, h = waiting(store, tid, asks=False, trust=False), origin.keeps_him(store, tid) if trust and not watch.watching(store.get_task(tid)) else None
         out = [{'id': f'trust:{tid}', 'task': tid, 'kind': TRUST, 'sort': 'trust', 'state': 'pending', 'verb': None, 'what': cq._flat(h.get('line')),
                 'rids': [], 'at': None, 'decided': None, 'by': None, 'error': '', 'front': True}] if h else []
         return out + line + (_asks(store, tid) if asks else [])

@@ -39,8 +39,9 @@ def _at(s):
     except ValueError: return None
 
 def first_name(who: str) -> str:
-    """'Erin Blake' -> 'Erin'; a company or an address stays whole."""
-    w = ' '.join(str(who or '').split())
+    """'Erin Blake' (or Outlook's "Blake, Erin") -> 'Erin'; a company or an address stays whole."""
+    from .triage import person_name
+    w = person_name(who) or ' '.join(str(who or '').split())
     return w.split(' ')[0] if ' ' in w and '@' not in w else w
 
 def greeting(now: datetime) -> str: return 'Good morning' if now.hour < 12 else 'Good afternoon' if now.hour < 18 else 'Good evening'

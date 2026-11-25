@@ -10,6 +10,7 @@ import { Box, Typography } from "@mui/material";
 import { Attachments } from "./Attachments.jsx";
 import { cleanText, tsMs } from "./ui.jsx";
 import { clock, dayLabel } from "./dates.js";
+import { firstName as personFirst } from "./personName.js";
 import { BORDER, FAINT, INK } from "./theme.jsx";
 
 // the channels whose messages are a conversation, not letters
@@ -42,7 +43,7 @@ const timeOf = (at) => { const d = new Date(tsMs(at)); return clock(d); };
 // 2026-10-25, over the 2026-10-15 line). The first name
 // only, the run being read down a column; the well a shade darker than the card's shaded body it sits on (2026-10-25); the full name is the bubble's hover. A bubble may take 86% of the column (70% before): the
 // thread is read in From's 300-520px now, where 70% broke a one-line message onto two.
-const firstName = (m) => String(m.FromName || m.FromEmail || m.Channel || "").split(/[\s@]+/)[0];
+const firstName = (m) => personFirst(m.FromName) || String(m.FromEmail || m.Channel || "").split(/[\s@]+/)[0];
 
 export default function ChatThread({ messages = [], maxHeight = 460 }) {
   // newest first, like the rest of the app: the box opens at its top, which is the latest line

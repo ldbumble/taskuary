@@ -66,6 +66,7 @@ import { TYPE_LABELS } from "./reportWords.js";
 import { SECTIONS as STEPS } from "./taskLayout.js";   // a task's sections, by name (ItemSections)
 import { WorkstreamLabel } from "./Workstream.jsx";   // the idea's workstream, a small label (the owner, 2026-11-01)
 import { channelName } from "./taskSources.js";
+import { personName } from "./personName.js";
 import { repliesOf } from "./connectorCatalog.js";
 import Artifact from "./Artifact.jsx";
 
@@ -185,15 +186,8 @@ const CHANNEL_WORD = { email: "Email", github: "GitHub", whatsapp: "WhatsApp", t
 export const channelWord = (ch) => CHANNEL_WORD[String(ch || "").toLowerCase()] || (ch ? String(ch)[0].toUpperCase() + String(ch).slice(1) : "");
 // work the owner started has nobody behind it: its "sender" is the owner ("owner" from CreatedBy, "You" from ownwork)
 export const isOwn = (card) => card?.channel === "own" || ["owner", "you", "me"].includes(String(card?.who || "").trim().toLowerCase());
-// a display name as a person is called (triage.person_name): Outlook's "Doyle, Alex M. at Northwind" reads "Alex M. Doyle"
-export const personName = (name) => {
-  let n = String(name || "").replace(/\s*<[^>]*>/g, "").replace(/"/g, " ").replace(/\s+/g, " ").trim();
-  if (!n || n.includes("@")) return n;
-  n = n.replace(/\s+at\s+[^,<>@]+$/i, "").trim();
-  const parts = n.split(",");
-  if (parts.length === 2 && parts[0].trim() && parts[1].trim() && parts[0].trim().split(" ").length <= 2) n = `${parts[1].trim()} ${parts[0].trim()}`;
-  return n;
-};
+// a display name as a person is called (personName.js, triage.person_name): Outlook's "Doyle, Alex M. at Northwind" reads "Alex M. Doyle"
+export { personName };
 const capital = (s) => { const t = String(s || "").trim(); return t ? t[0].toUpperCase() + t.slice(1) : ""; };
 // WHAT AN AGENT IS, never the profile it runs under (the owner, 2026-09-28, puzzled by a bare profile name on a card; 2026-10-28:
 // "General agent · researcher" named the instructions as the worker): a chat agent is Taskuary, a terminal one the coding agent.

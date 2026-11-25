@@ -485,7 +485,8 @@ def compact_inventory(snapshot, query, *, include_excluded=False, degraded_ok=Fa
             legacy = message_row(message, item, threads, now.strftime('%Y-%m-%d %H:%M:%S'), leads=leads)
             target = {'kind': 'message', 'id': message['MessageId']}
             title = message.get('Subject') or legacy.get('Title') or 'Message'
-            actor, stamp = message.get('FromName') or message.get('FromEmail') or '', message.get('SentAt') or message.get('CreatedAt')
+            from .triage import person_name         # ...the sender as they are called: Outlook's "Blake, Erin at Partner Co" is Erin Blake
+            actor, stamp = person_name(message.get('FromName')) or message.get('FromName') or message.get('FromEmail') or '', message.get('SentAt') or message.get('CreatedAt')
             channel, source, status = message.get('Channel') or '', message.get('SourceName') or '', message.get('Status') or ''
             channel = task_mark(view.get('tasks', []), view.get('messages', [])) or channel
             preview, category = legacy['Preview'], legacy['Category']

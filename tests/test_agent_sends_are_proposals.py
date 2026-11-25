@@ -219,6 +219,15 @@ class AWriteAboveTheCardsAuthorityWaitsForThePress(unittest.TestCase):
         proposals.execute(server.store, rv, 'owner')
         self.assertEqual(len(self.ran), 1)
 
+    def test_a_card_not_marked_an_agent_tool_is_the_same_card_for_his_press(self):
+        # 'not marked as an agent tool (Intacct -> Role)' was a 403 the agent could only pass on in words - his press is the yes for this one call
+        server.store.save_connector({'ConnectorId': self.card['ConnectorId'], 'Roles': 'report', 'Scope': ''}, 'test')
+        r = c.post('/api/tools/run', headers=agent(self.tid),
+                   json={'type': 'intacct_create', 'object': 'APBILL', 'fields': {'VENDORID': 'V-PAYWORTH'}, 'task_id': self.tid})
+        self.assertEqual(r.status_code, 202, r.text); self.assertIn('agent tool', r.json()['says']); self.assertEqual(self.ran, [])
+        proposals.execute(server.store, server.store.get_review(r.json()['review']), 'owner')
+        self.assertEqual(len(self.ran), 1)
+
     def test_with_no_task_the_refusal_says_how_and_not_to_raise_the_authority(self):
         r = c.post('/api/tools/run', headers=agent(), json={'type': 'intacct_create', 'object': 'APBILL', 'fields': {}})
         self.assertIn(r.status_code, (403, 422)); self.assertIn('task_id', r.json()['detail']); self.assertEqual(self.ran, [])

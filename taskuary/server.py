@@ -9304,7 +9304,7 @@ def tool_run(body: dict, request: Request):
         return _agent_proposes(request, t, conn, body, scopes.reaches(t, body) or f'{t} reaches people')
     if not conn.get('Active'):
         raise HTTPException(403, f"the {t} connection is off - turn it on under {words.name('connections')}")
-    if 'tool' not in store_mod.roles_of(conn):
+    if 'tool' not in store_mod.roles_of(conn) and guard.scope_of(cfg['server'], request.headers) != guard.AGENT:
         raise HTTPException(403, f'the {t} connection is not marked as an agent tool ({words.card(t)} → Role)')
     hub_tools = {'handbook_search', 'handbook_write', 'handbook_vote',
                  'hub_search', 'hub_write', 'hub_vote', 'hub_comment'}
@@ -9316,7 +9316,10 @@ def tool_run(body: dict, request: Request):
         tool = _mcp_tool(conn, body) if t == 'mcp' else None
         if why := scopes.reaches(t, body, tool): return _agent_proposes(request, t, conn, body, why)
         # ...and a change above the card's Authority is the same proposal (docsync.agent_systems tells the agent so): the 403 below said
-        # "raise it under the card", a step only the owner can take, and lit nothing for them to press
+        # "raise it under the card", a step only the owner can take, and lit nothing for them to press. So is a call on a connection he
+        # never marked as an agent tool: "not marked as an agent tool (its card -> Role)" was the same sentence the agent could only pass on
+        if 'tool' not in store_mod.roles_of(conn):
+            return _agent_proposes(request, t, conn, body, f"runs on {conn.get('Name') or t}, which is not marked as an agent tool")
         if not scopes.allows(conn, t):
             return _agent_proposes(request, t, conn, body, f"needs {scopes.needs(t)} Authority on {conn.get('Name') or t}, which is set to "
                                                            f"{scopes.scope_of(conn)}")

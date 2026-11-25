@@ -496,6 +496,31 @@ _CONFIG_SECRETS = frozenset({
 })
 
 
+def _secretish(k) -> bool:
+    k = str(k).lower()
+    return k in _CONFIG_SECRETS or k.endswith(('_secret', '_password', '_token', '_key'))
+
+
+def masked_detail(detail):
+    """AN AUDIT ROW NEVER CARRIES A SECRET (the red team, 2026-11-24, T5): a connector's create/edit row kept the ConfigJson it saved - a
+    client secret, a TOTP key, a password, a LINE channel secret - and /api/audit/recent served it to an agent, which signed its own vendor
+    push with it. Its card's secret fields and any secret-shaped key come out, at any depth; what was changed stays said."""
+    if not isinstance(detail, str) or not detail.startswith('{'): return detail
+    try: d = json.loads(detail)
+    except ValueError: return detail
+    if not isinstance(d, dict): return detail
+    keys = set(WRITE_ONLY_CONFIG.get(str(d.get('Type') or d.get('type') or ''), ()))
+    def clean(x):
+        if isinstance(x, dict): return {k: clean(v) for k, v in x.items() if k not in keys and not _secretish(k)}
+        if isinstance(x, list): return [clean(v) for v in x]
+        if isinstance(x, str) and x.startswith('{'):
+            try: return json.dumps(clean(json.loads(x)))
+            except ValueError: return x
+        return x
+    out = json.dumps(clean(d), default=str)
+    return out if out != json.dumps(d, default=str) else detail
+
+
 def without_config_secrets(row: dict) -> dict:
     """A connector row an agent may see: ConfigJson minus the keys that are credentials."""
     out = dict(row)

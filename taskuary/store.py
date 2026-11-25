@@ -5432,7 +5432,8 @@ class SQLiteStore:
         a broken chain. A tamper-evident log that breaks itself is worse than none: it makes a real
         tamper indistinguishable from its own noise. (Seen at ids 151/152 of a live database, both
         stamped the same second, both carrying the same PrevHash.)"""
-        d = detail if isinstance(detail, str) or detail is None else json.dumps(detail, default=str)
+        from .guard import masked_detail
+        d = masked_detail(detail if isinstance(detail, str) or detail is None else json.dumps(detail, default=str))
         with self.lock:
             row = self.cx.execute('SELECT RowHash FROM audit ORDER BY Id DESC LIMIT 1').fetchone()
             prev = (row['RowHash'] if row and row['RowHash'] else None) or GENESIS
@@ -5501,8 +5502,11 @@ class SQLiteStore:
             if mine: e['note'], notes = mine[-1], notes[len(mine):]
         return ev
     def list_audit(self, et=None, eid=None, limit=200):
-        if et: return self._rows('SELECT * FROM audit WHERE EntityType=? AND EntityId=? ORDER BY Id DESC LIMIT ?', (et, eid, limit))
-        return self._rows('SELECT * FROM audit ORDER BY Id DESC LIMIT ?', (limit,))
+        "Audit rows, newest first - a row written before secrets were kept out of it (guard.masked_detail) read without them too."
+        from .guard import masked_detail
+        rows = self._rows('SELECT * FROM audit WHERE EntityType=? AND EntityId=? ORDER BY Id DESC LIMIT ?', (et, eid, limit)) if et else \
+            self._rows('SELECT * FROM audit ORDER BY Id DESC LIMIT ?', (limit,))
+        return [{**r, 'Detail': masked_detail(r.get('Detail'))} for r in rows]
     def verify_audit_chain(self):
         """Two different failures, and calling both "broken" was the problem.
 

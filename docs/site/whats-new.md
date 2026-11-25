@@ -2,6 +2,31 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.4.3.7 - 2026-11-24
+
+- Taskuary at a glance tells one story: the week in five numbers, every day in one switched chart, the flow, what waits, the cost
+- The week's strip is as tall as its fullest cell, each sparkline right under its figure
+- A pass counts only from the server that took the mail in, never from a header the sender typed
+- A stranger is never 'written to before' by citing his thread, or by a search value that runs as keys
+- What a later session runs waits for his press on every road, not only a stranger's
+- A secret named by a script, a file:// address, a link or $TASKUARY_HOME is never read
+- config.toml is the owner's alone on every save, and no backup of it carries a token
+- The agent's browser never opens a file, the metadata address, Taskuary's own API or DevTools
+- The owner's own secrets in the app's environment never reach a session
+- A line triage read as written to steer an AI is held from every turn, whoever sent it
+- A sender's name reaches an agent clipped and fenced, with its address, like the rest of their words
+- A name is said only for the address it belongs to
+- An audit row never carries a connector's secret
+- Revert "A triage backlog is said over the rail and in the Timeline's header: Sorting N new messages"
+- A session's proof is the server's to make, every write of an agent's proves its task, and only the owner signs a note as his
+- A file is read by the page's cookie, never by the owner token in its address
+- A shown page navigates nowhere, a framed link runs in no origin of ours, and a stranger's words draw no app
+- A Send of his words is said by its card; the agent is woken only where a step follows
+- An AI card whose models include an image model draws, and nothing to draw with is a Connect card
+- draw_image rides with the first turn, and the always-sent tool list stays under its 7,000 characters
+- Whoever a task waits on is named by name, never by a chat's sender id
+- The picture tool's step reads as what it did: Drew a picture
+
 ## 0.4.3.6 - 2026-11-24
 
 - The built-in dashboard says what the AI spent per day and for whom, per task, and what closed each day

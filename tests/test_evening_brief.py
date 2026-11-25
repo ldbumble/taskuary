@@ -195,18 +195,18 @@ class TheDayAsItWasTests(unittest.TestCase):
                                                                         'on_you': ['The post goes out only when you press the card']}))
         rv = s.add_review({'TaskId': tid, 'Kind': 'action', 'Status': 'pending', 'Reason': 'the agent proposes to post the Ask HN question',
                            'DraftText': json.dumps({'action': 'browser_act', 'what': 'post the Ask HN question'})})
-        self.assertEqual(taskstate.turn_outcome(s, tid), 'blocked', 'while the card waits, the turn left it on him')
+        self.assertEqual(taskstate.standing(s, tid)['waits_on'], 'you', 'while the card waits it is his move')
         s.decide_review(rv, 'rejected', None, 'owner')
         row = evening.owed(s, s.get_task(tid), _ago(8))
         self.assertNotIn('goes out only when you press', row)
         self.assertIn('he turned down: post the Ask HN question', row)
-        self.assertEqual(taskstate.left_on_him(s, tid), [])
-        self.assertEqual(taskstate.turn_outcome(s, tid), 'agentdone', 'the header no longer reads "agent waiting on you"')
+        self.assertEqual((taskstate.standing(s, tid)['waits_on'], taskstate.state(s, s.get_task(tid))), (None, 'agentdone'),
+                         'the header no longer reads "agent waiting on you"')
 
     def test_a_step_the_agent_left_on_him_goes_with_the_card_it_names_never_kept_as_a_to_do(self):
         """Walk 15 (R1): the turn's `on_you` is also written to the task's to-dos (general -> store.set_on_you); he dismissed the Publish card,
         and the End-of-day report still read "to-dos left: Press the Publish card" beside "he turned down: Publish" - "still waiting on you".
-        What is left on him is one reading (taskstate.left_on_him), and the to-dos say only the agent's own."""
+        What is left on him is one reading (taskstate.standing), and the to-dos say only the agent's own."""
         from taskuary import general, rulebook, taskstate
         s = MemoryStore()
         tid = s.create_task({'Title': 'Ask HN post', 'Kind': 'general', 'Status': 'open'}, 'owner')

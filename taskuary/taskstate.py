@@ -96,25 +96,11 @@ def _chat_resting(store, t: dict) -> str | None:
     return turn_outcome(store, t['TaskId'])
 
 
-def left_on_him(store, tid: int) -> list:
-    """WHAT THE AGENT'S LAST TURN LEFT ON HIM, WHILE IT STILL STANDS - the one reading every surface takes (the header, the rail, a report, the
-    Assistant). Its summary's `on_you` is words written at that turn's end; a press of his on a card since then is newer than them (walk 13: the
-    End-of-day report said the post "goes out only when you press the card" after he had declined it, and the header read "agent waiting on
-    you" after his Send). From then on what stands is the cards' own state (cardqueue.state), never those words. [] when nothing stands."""
-    from .general import _last_said
-    c, s = _last_said(store, int(tid))
-    if not isinstance(s, dict) or s.get('nothing_left'): return []
-    left = [t for x in s.get('on_you') or [] if (t := str(x.get('text') if isinstance(x, dict) else x or '').strip())]
-    if left and store._one("SELECT 1 AS x FROM review WHERE TaskId=? AND DecidedAt>=? AND IFNULL(DecidedBy,'') NOT IN ('agent','assistant','taskuary') "
-                           "LIMIT 1", (int(tid), str(c.get('CreatedAt') or ''))): return []
-    return left
-
-
 # WHERE A TASK STANDS, SAID ONCE (the owner, 2026-11-24 - walks 11-16): the rail's lane, the header's chip, the phone, the day's brief, the
 # Advisor, the Assistant's facts, triage's open work and Send and close each put "who moves next" together from their own mix of status, title,
 # cards, questions, check-backs and sent mail, and drifted - "agent done" over a sent question, a brief repeating a title, a live button over a
-# question answered. Each reads this now. ONE status, "waiting for input": his (a card, the agent's question to him, a step its turn left on him)
-# or somebody else's (a sent mail or question awaiting their answer). Their answer or a check-back come due moves it back to the agent.
+# question answered. Each reads this now. ONE status, "waiting for input": his - a card waiting for his press or the agent's question to him,
+# nothing else (the owner, 2026-11-25: a turn's `on_you` steps with nothing asked read "waiting for your input", walk 21) - or somebody else's (a sent mail or question awaiting their answer). Their answer or a check-back come due moves it back to the agent.
 def standing(store, tid, key: str = None) -> dict:
     """{waits_on: 'you'|'them'|'agent'|None, who, what: [...], since, next, closed, them, check} for task `tid` - `who` the person it waits on
     ('them'), `what` what is awaited (the cards, the question, the mail), `since` from when, `next` the check-back's time or None; `them` every
@@ -138,7 +124,7 @@ def _standing(store, tid, key: str = None) -> dict:
     mine = [c for c in card.waiting(store, tid) if c['state'] == 'pending' and c['what']]
     # ...each card with the buttons it draws where it has no Send (card.presses): a Copy-only draft read "ready for your Send" in the brief
     what = [say.get(c['kind'], '{}').format(c['what']) + (f' ({card.press_words(c)})' if c['kind'] == card.SEND and 'approve' not in c['presses'] else '')
-            for c in mine] or left_on_him(store, tid)
+            for c in mine]
     if what: return {**out, 'waits_on': 'you', 'what': what, 'since': min((str(c['at']) for c in mine if c.get('at')), default=None),
                      'rids': [r for c in mine for r in c['rids'] if isinstance(r, int)], 'trust': bool(mine) and mine[0]['kind'] == card.TRUST,
                      'ask': next((c['what'] for c in mine if c['kind'] == card.ANSWER), '')}
@@ -177,13 +163,12 @@ def _held(k: str, st: dict) -> str:
 def turn_outcome(store, tid: int) -> str | None:
     """HOW THE LAST TURN ENDED, off the stored turn - one reading for a chat at rest and one whose session is still up: 'agentdone' only for a
     turn that did the work (the Neon walk, 2026-11-19: a green "agent done" and "Finished at 11:53 PM" over a turn that failed, and over one
-    that refused and left him "Enable local shell access"). A failed turn is 'stopped', its reason on it; one whose own summary left
-    something on him is 'blocked'. None: it never answered."""
+    that refused and left him "Enable local shell access"). A failed turn is 'stopped', its reason on it. Its card or its question to him
+    is read before it (standing), never the steps its summary listed. None: it never answered."""
     from .general import ASSISTANT_TYPE, failed_line
     last = store._one('SELECT CommentId, Body FROM comment WHERE TaskId=? AND ActorType=? ORDER BY CommentId DESC LIMIT 1', (int(tid), ASSISTANT_TYPE))
     if not last: return None
-    if failed_line(last['Body'])[1]: return 'stopped'
-    return 'blocked' if left_on_him(store, tid) else 'agentdone'
+    return 'stopped' if failed_line(last['Body'])[1] else 'agentdone'
 
 
 class TaskState:
@@ -406,10 +391,7 @@ def done_for_now(store, t: dict, session: dict) -> bool:
     # coding agent is
     # ...and never one that has not run a turn at all (never_ran, 2026-11-17: a held task's session, its first turn refused, read "agent done -
     # type to carry on" on the rail over a chat no agent had worked)
-    # ...and never one whose turn left a step on him (turn_outcome 'blocked'): the header read "agent waiting on you" off it while the rail,
-    # reading this, said "Finished; nothing since" (the walk, 2026-11-21) - one answer for both
-    if handles(t) and (session.get('mode') or 'assistant') == 'assistant':
-        return last not in ('stopped', 'failed') and not never_ran(store, t, session) and turn_outcome(store, tid) != 'blocked'
+    if handles(t) and (session.get('mode') or 'assistant') == 'assistant': return last not in ('stopped', 'failed') and not never_ran(store, t, session)
     return last == 'turn_end' and not landing.asked(store, tid)
 
 

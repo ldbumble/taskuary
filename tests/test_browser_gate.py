@@ -744,12 +744,37 @@ class WhereTheBrowserNeverGoes(unittest.TestCase):
             self.assertIn('DevTools', self.no(cmd), cmd)
             self.assertEqual(gate.asks('agent-browser', cmd), (True, True), 'the launcher asks, and fails closed with Taskuary unreachable')
         # ...and the shell's own road to the port, on every road a shell line takes
-        for cmd in (f'curl -s http://127.0.0.1:{self.cdp}/json/version', 'echo $AGENT_BROWSER_CDP', f'python -c "import websocket; websocket.create_connection(\'ws://localhost:{self.cdp}/devtools/browser\')"'):
-            self.assertIn('DevTools', gate.reason(gate.check(self.s, self.tid, 'run1', cmd, '')), cmd)
+        # ...and the real program run past the launcher on PATH (red team round 4): by a path, a package runner, node, a PATH of its own
+        for cmd in (f'curl -s http://127.0.0.1:{self.cdp}/json/version', f'python -c "import websocket; websocket.create_connection(\'ws://localhost:{self.cdp}/devtools/browser\')"',
+                    'C:/Users/alex/AppData/Roaming/npm/agent-browser click @e7', r'C:\Users\alex\AppData\Roaming\npm\agent-browser.ps1 click @e7',
+                    'npx agent-browser@0.41.2 click @e7', 'node ~/npm/agent-browser/bin/agent-browser.js click @e7', 'agent-browser-win32-x64.exe click @e7',
+                    'PATH=/usr/local/bin agent-browser click @e7', 'bash -c "/opt/npm/agent-browser click @e7"'):
+            self.assertIn(bg.NOT_RUN, gate.reason(gate.check(self.s, self.tid, 'run1', cmd, '')), cmd)
             tc = {'toolCallId': 'c', 'kind': 'execute', 'rawInput': {'command': cmd}}
             self.assertEqual(gate.tool_call(tc, {'store': self.s, 'task_id': self.tid, 'cwd': '', 'sid': 'run1'})[0], gate.REFUSED, cmd)
         for cmd in ('agent-browser open https://toll.example', 'agent-browser open http://localhost:3000/', 'agent-browser get url'):
             self.assertEqual(bg.check(self.s, self.tid, 's1', cmd), {}, cmd)
+        for cmd in ('agent-browser snapshot -i', 'timeout 30 agent-browser click @e7', 'ls node_modules/agent-browser'):
+            self.assertEqual(gate.reason(gate.check(self.s, self.tid, 'run1', cmd, '')), '', cmd)
+
+    def test_the_devtools_port_is_never_in_the_agents_shell_and_only_the_real_program_is_handed_it(self):
+        """Red team round 4: AGENT_BROWSER_CDP sat in every agent's shell, so `$((39000+222))` or a script's process.env['AGENT_BROWSER_'+'CDP']
+        found the port no spelling check could see. The launcher hands it to the real program alone, from a file in Taskuary's own folder."""
+        from taskuary import terminal
+        self.assertNotIn('AGENT_BROWSER_CDP', browserview.env('s1'))
+        self.assertNotIn('AGENT_BROWSER_CDP', terminal.session_env('assistant', self.tid, sid='s1'))
+        self.assertEqual(browserview.kept_cdp(browserview.session_name('s1')), {'AGENT_BROWSER_CDP': str(self.cdp)})
+        ran = []
+        with mock.patch.dict(os.environ, {'AGENT_BROWSER_SESSION': browserview.session_name('s1')}), mock.patch.object(gate, 'real', return_value='real-agent-browser'), \
+             mock.patch.object(gate, 'ask', return_value=''), mock.patch('taskuary.spawn.run', lambda argv, **k: ran.append(k.get('env')) or SimpleNamespace(returncode=0)):
+            gate.main(['gate', 'agent-browser', 'snapshot'])
+        self.assertEqual(ran[0]['AGENT_BROWSER_CDP'], str(self.cdp))
+
+    def test_a_loopback_address_is_known_however_it_is_spelled(self):
+        for host in ('0177.0.0.1', '017700000001', '2130706433', '0x7f.1', '0x7f000001', '127.1', '[::ffff:127.0.0.1]', '[::1]', 'localhost.', '0'):
+            self.assertIn('is not opened', self.no(f'agent-browser open http://{host}:{self.cdp}/json'), host)
+        with mock.patch('socket.getaddrinfo', return_value=[(2, 1, 6, '', ('127.0.0.1', self.cdp))]):
+            self.assertIn('is not opened', self.no(f'agent-browser open http://loop.vendor.example:{self.cdp}/json'), 'a name is judged by what it resolves to')
 
     def test_data_handed_to_a_site_it_was_never_on_is_judged_and_the_work_on_its_own_site_is_not(self):
         with on(url='https://docs.vendor.example/pricing'), verdict({'irreversible': True, 'sure': True, 'big': 'private',

@@ -132,11 +132,21 @@ IDLE_MS = '0'
 # second site is open ("Invalid response: EOF", 2026-11-15) - so Taskuary keeps the cookies itself, over DevTools (keep, clock).
 AUTOSAVE_MS = '0'
 def env(sid: str) -> dict:
-    """What every agent-browser command of session `sid` runs with - the agent's, the pane's and the server's alike: its name, the
-    browser it attaches to (AGENT_BROWSER_CDP, the session's own Chrome: real_chrome), and the launch options its fingerprint holds."""
-    return {'AGENT_BROWSER_SESSION': session_name(sid), 'AGENT_BROWSER_CDP': str(cdp_port(sid)),
-            'AGENT_BROWSER_IDLE_TIMEOUT_MS': IDLE_MS, 'AGENT_BROWSER_AUTOSAVE_INTERVAL_MS': AUTOSAVE_MS}
-def _cli_env(sid: str) -> dict: return {**os.environ, **env(sid)}    # the server's own calls match the pty's
+    """What every agent-browser command of session `sid` runs with - the agent's, the pane's and the server's alike: its name and the
+    launch options its fingerprint holds. ...NEVER THE DEVTOOLS PORT (red team round 4): the session's Chrome answers there with no
+    password, the owner's sign-ins in it, so an agent that read AGENT_BROWSER_CDP from its shell (`curl 127.0.0.1:$PORT/json`, a script's
+    process.env) drove the browser past the gate. The real program alone is handed it (cdp), by the server and by the gate's launcher"""
+    return {'AGENT_BROWSER_SESSION': session_name(sid), 'AGENT_BROWSER_IDLE_TIMEOUT_MS': IDLE_MS, 'AGENT_BROWSER_AUTOSAVE_INTERVAL_MS': AUTOSAVE_MS}
+def cdp(sid: str) -> dict: return {'AGENT_BROWSER_CDP': str(cdp_port(sid))}     # the browser the real program attaches to (real_chrome)
+def _cli_env(sid: str) -> dict: return {**os.environ, **env(sid), **cdp(sid)}    # the server's own calls match the pty's
+def port_file(session: str) -> Path:
+    "Where a session's DevTools port is kept for the gate's launcher: in Taskuary's own folder, which no agent reads (readgate's never)."
+    from . import config
+    return config.home() / 'browser-ports' / re.sub(r'[^\w.-]', '_', str(session))
+def kept_cdp(session: str) -> dict:
+    "The launcher's: {AGENT_BROWSER_CDP: port} for the session named `session`, as the server chose it - {} where none was."
+    try: return {'AGENT_BROWSER_CDP': str(int(port_file(session).read_text(encoding='utf-8').strip()))} if session else {}
+    except (OSError, ValueError): return {}
 # ...AND IT STANDS IN THE TASK'S FOLDER (walk 19: `agent-browser screenshot proton-signup.png` saved into the folder the SERVER was started
 # in - the daemon resolves a relative path against its own working folder, and it took the server's). The task's outputs folder, where what
 # the agent makes is shown; a session no task names, Taskuary's scratch - never wherever Taskuary was started
@@ -1128,7 +1138,7 @@ def ask_open(sid: str, url: str) -> dict:
 # A REAL CHROME, ON A DESKTOP OF ITS OWN (the owner, 2026-11-16: a site's "Verify you are human" looped however often he clicked it in the
 # view). agent-browser's own launch was two tells Cloudflare reads: a headless Chrome, and navigator.webdriver TRUE - set by that launch
 # whatever flags it was handed (measured on 0.41.2) - so it re-challenged for ever. Taskuary starts each session's Chrome itself, an
-# ordinary headed one with no automation flag and a profile of its own, and agent-browser attaches to it over DevTools (env's
+# ordinary headed one with no automation flag and a profile of its own, and agent-browser attaches to it over DevTools (cdp's
 # AGENT_BROWSER_CDP, so every command of the session drives this one). On Windows its window lives on a desktop of Taskuary's own: drawn
 # and screencast as any window is, never on the owner's screen, in his taskbar or taking his focus - and his clicks in the view reach it
 # as they always did, and count (recorded: the same Cloudflare check looping headless, through on one click here). Elsewhere the window
@@ -1144,6 +1154,8 @@ def cdp_port(sid: str) -> int:
     with _PORTS_LOCK:
         if str(sid) not in _PORTS:
             with socket.socket() as so: so.bind(('127.0.0.1', 0)); _PORTS[str(sid)] = so.getsockname()[1]
+            try: (f := port_file(session_name(sid))).parent.mkdir(parents=True, exist_ok=True); f.write_text(str(_PORTS[str(sid)]), encoding='utf-8')
+            except OSError as e: logger.warning(f'the browser port of {sid} was not kept for its launcher - {e}')
         return _PORTS[str(sid)]
 
 def chrome_exe() -> str:
@@ -1174,6 +1186,7 @@ def _forget_profile(sid: str) -> None:
     import shutil
     shutil.rmtree(_profile(sid), ignore_errors=True)
     with _PORTS_LOCK: _PORTS.pop(str(sid), None)
+    port_file(session_name(sid)).unlink(missing_ok=True)
 
 def _spawn_chrome(argv: list, hidden: bool = True) -> int:
     "Start Chrome where the owner never sees it; its pid. `hidden` (Windows): on Taskuary's own desktop; else its window off the screen."

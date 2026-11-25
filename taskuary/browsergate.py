@@ -226,15 +226,33 @@ def dests(cmd: str) -> list:
 # session's Chrome answers there unauthenticated, so reaching it is driving Chrome past this gate. The agent's own DevTools address
 # (`get cdp-url`, `connect`, `--cdp`) is the same door
 _META = ('metadata.google.internal', 'metadata.goog', 'metadata', 'instance-data')
+def _aton(h: str):
+    """A dotted number as inet_aton reads it on every OS - one to four parts, each hex (0x), octal (a leading 0) or decimal, the last filling
+    what is left (0177.0.0.1, 017700000001, 0x7f.1, 127.1) - None where it is not one. The platform's own differs: Windows' took 017700000001
+    as decimal, which is how it slipped"""
+    ps = h.split('.')
+    try: ns = [int(p, 16) if p[:2] == '0x' else int(p, 8) if len(p) > 1 and p[0] == '0' else int(p) for p in ps]
+    except ValueError: return None
+    *hi, lo = ns
+    if len(ns) > 4 or any(not 0 <= n <= 255 for n in hi) or not 0 <= lo < 256 ** (5 - len(ns)): return None
+    return sum(n << 8 * (3 - i) for i, n in enumerate(hi)) + lo
+
+
 def _ip(host: str):
     "The address a host names, however its number is spelled (2852039166, 0xa9fea9fe, 169.254.43518, [::ffff:169.254.169.254]) - None for a name."
-    import ipaddress, socket
-    h = str(host or '').strip('[]').lower()
-    try: ip = ipaddress.ip_address(int(h, 16) if re.fullmatch(r'0x[0-9a-f]+', h) else int(h) if h.isdigit() else h)
-    except ValueError:
-        try: ip = ipaddress.ip_address(socket.inet_ntoa(socket.inet_aton(h)))
-        except (OSError, ValueError): return None
+    import ipaddress
+    h = str(host or '').strip('[]').lower().rstrip('.')
+    n = _aton(h) if re.fullmatch(r'[0-9a-fx.]+', h) else None
+    try: ip = ipaddress.ip_address(n if n is not None else h)
+    except ValueError: return None
     return getattr(ip, 'ipv4_mapped', None) or ip
+
+
+def _reaches(host: str, port) -> list:
+    "The addresses a name reaches as this computer resolves it (localhost., a hosts-file name, 127.0.0.1.nip.io) - [] for none."
+    import socket
+    try: return [x for i in socket.getaddrinfo(host, port or 80, proto=socket.IPPROTO_TCP) if (x := _ip(i[4][0])) is not None]
+    except (OSError, UnicodeError, ValueError): return []
 
 
 def _ports() -> set:
@@ -250,9 +268,10 @@ def barred(url: str) -> str:
     if re.match(r'^(view-source:)?file:', u, re.I): return 'it is a file on this computer'
     try: p = urlsplit(u if '://' in u else 'http://' + u); host, port = (p.hostname or '').rstrip('.'), p.port
     except ValueError: return 'it is an address that cannot be read'
-    ip = _ip(host)
-    if host in _META or ip is not None and (ip.is_link_local or str(ip) == 'fd00:ec2::254'): return "it is the cloud's metadata or a link-local address"
-    if port and (ip is not None and (ip.is_loopback or ip.is_unspecified) or host == 'localhost' or host.endswith('.localhost')) and port in _ports():
+    # ...judged by what it reaches, never its spelling (red team round 4): a number in any of inet_aton's spellings, a name as it resolves here
+    ips = [ip] if (ip := _ip(host)) is not None else _reaches(host, port) if host else []
+    if host in _META or any(x.is_link_local or str(x) == 'fd00:ec2::254' for x in ips): return "it is the cloud's metadata or a link-local address"
+    if port and (any(x.is_loopback or x.is_unspecified for x in ips) or host == 'localhost' or host.endswith('.localhost')) and port in _ports():
         return "it is Taskuary's own address or a browser's DevTools port"
     return ''
 
@@ -269,12 +288,35 @@ def refused(cmd: str) -> str:
 
 
 def devtools(cmd: str) -> str:
-    "Why a shell line is refused for reaching a browser's DevTools - its port by number, or the variable that holds it ('' when it does not)."
+    """Why a shell line is refused for going around the browser's gate ('' when it does not): a browser's DevTools port by number (the port
+    itself is never in the agent's shell - browserview.env), or the real agent-browser run some other way than the one on the session's PATH."""
     from . import browserview
     with browserview._PORTS_LOCK: ps = set(browserview._PORTS.values())
-    if re.search(r'AGENT_BROWSER_CDP', str(cmd or ''), re.I) or any(re.search(rf':{p}(?!\d)', str(cmd or '')) for p in ps):
+    if any(re.search(rf':{p}(?!\d)', str(cmd or '')) for p in ps):
         return f"{NOT_RUN}: the browser's DevTools port is never the agent's - drive this task's browser through agent-browser's own commands."
+    if aside(cmd): return f"{NOT_RUN}: run it as plain `agent-browser` - the one this session's PATH gives it - never by a path, npx or node."
     return ''
+
+
+# ...THE REAL PROGRAM BY ANOTHER NAME (red team round 4): the gate is the `agent-browser` first on the session's PATH, so a path to the real
+# one (`~/AppData/Roaming/npm/agent-browser click`, its platform binary, `node .../agent-browser.js`), a package runner that finds its own
+# copy (npx, pnpm dlx, bunx) or a PATH of the line's own pressed past it. By the program word, never the words it is handed
+_REAL = re.compile(r'^agent-browser(?:-(?:win32|linux|darwin)[\w-]*)?(?:\.(?:exe|cmd|bat|ps1|js|mjs|cjs))?(?:@[^/]*)?$', re.I)
+RUNNERS = frozenset('npx pnpm pnpx dlx bunx bun yarn node deno'.split())
+def _base(t: str) -> str: return os.path.basename(str(t).replace(chr(92), '/')).lower()
+def _prog(t: str) -> str: return re.sub(r'\.(exe|cmd|bat|ps1)$', '', _base(t))
+def aside(cmd: str) -> bool:
+    "Does this line run agent-browser past the session's own launcher?"
+    if 'agent-browser' not in joined(cmd): return False
+    for argv in _segments(str(cmd).replace(chr(92), '/')) or [[str(cmd)]]:      # ...a Windows path's backslashes kept as its separators
+        a = launched(argv, lambda t: bool(_REAL.match(_base(t))))
+        if a and _prog(a[0]) in RUNNERS and any(_REAL.match(_base(t)) for t in a[1:4]): return True
+        if a and _REAL.match(_base(a[0])):
+            before = argv[:len(argv) - len(a)]
+            if a[0].lower() not in (EXE, EXE + '.cmd') or any(_prog(t) in RUNNERS or re.match(r'^path=', t, re.I) for t in before): return True
+            continue
+        if any(aside(t) for t in argv[1:] if 'agent-browser' in t.lower() and ' ' in t.strip()): return True   # bash -c "...", powershell -Command "..."
+    return False
 
 
 VISITED: dict = {}           # sid -> the sites its browser has been on (sends): a query to one of them is the work going on there

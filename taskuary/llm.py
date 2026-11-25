@@ -647,6 +647,13 @@ def effective_pick(store, pick=None) -> str:
     return str(pick).strip() or agents.default_pick(store)
 
 
+def pick_card(store, pick: str):
+    "The AI card a `connector:<id>` or `connector:<type>` pick names, else None - ONE reading for the router and every surface."
+    want = str(pick or '')[10:]
+    return next((c for c in store.list_connectors() if c['Type'] in AI_TYPES and want
+                 and (c['ConnectorId'] == int(want) if want.isdigit() else c['Type'] == want)), None)
+
+
 def brain_status(store, pick=None) -> dict:
     """What `effective_pick` names and whether it can answer: {pick, Name, Type, ready, why}. A chosen brain that
     cannot start stays the answer - with `ready` False and `why` saying so - rather than reading as set up."""
@@ -667,9 +674,7 @@ def brain_status(store, pick=None) -> dict:
         ok, cli = hub_agents.runs_here(prof), hub_agents.cli_of(prof, row['Name'])
         return {**out, 'Name': f"{row['Name']} (CLI)", 'Type': 'cli', 'ready': ok,
                 'why': '' if ok else f"{row['Name']} is chosen, but '{cli}' is not installed on this machine"}
-    want = primary[10:] if primary.startswith('connector:') else primary
-    c = next((c for c in store.list_connectors() if c['Type'] in AI_TYPES
-              and (c['ConnectorId'] == int(want) if want.isdigit() else c['Type'] == want)), None)
+    c = pick_card(store, primary if primary.startswith('connector:') else f'connector:{primary}')
     if not c: return {**out, 'why': f'{primary} is chosen, but no such AI connector exists'}
     ok = bool(c['Active'] and (c['HasSecret'] or c['Type'] == 'ollama'))
     return {**out, **c, 'ready': ok, 'why': '' if ok else f"{c['Name'] or c['Type']} is chosen, but it is switched off or has no key"}

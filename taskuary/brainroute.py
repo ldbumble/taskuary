@@ -573,7 +573,8 @@ def off(store, pick: str, tested: bool = True) -> str:
     test - signed out - its budget spent, out of reach, resting on its usage limit - '' when it can. ONE reading for the router and a session."""
     if not pick or pick == 'demo': return ''
     if pick.startswith('connector:'):
-        c = next((c for c in store.list_connectors() if f"connector:{c['ConnectorId']}" == pick), None)
+        from .llm import pick_card
+        c = pick_card(store, pick)           # by id or by type, as the brain is built (llm._build_llm)
         if not c: return 'is not connected'
         if not c.get('Active'): return 'is off'
         if not c.get('HasSecret') and c.get('Type') != 'ollama': return 'has no key'

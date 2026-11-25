@@ -520,9 +520,11 @@ def main(argv: list = None) -> int:
         print(r.get('said') or r.get('why') or f'{verb}: no answer'); return 0 if r.get('ok') else 1
     why = ask(name, args)
     if why: print(why, file=sys.stderr); return 1
-    from . import spawn
-    # ...its output handed on by name: started with no console, a real program behind a .cmd wrote nothing to handles it only inherited
-    rc = spawn.run([exe, *args], stdin=sys.stdin, stdout=sys.stdout, stderr=sys.stderr).returncode
+    from . import browserview, spawn
+    # ...its output handed on by name: started with no console, a real program behind a .cmd wrote nothing to handles it only inherited.
+    # ...and the real program alone is told the browser's DevTools port, never the agent's shell (browserview.env)
+    env = {**os.environ, **browserview.kept_cdp(os.environ.get('AGENT_BROWSER_SESSION') or '')} if name == 'agent-browser' else None
+    rc = spawn.run([exe, *args], stdin=sys.stdin, stdout=sys.stdout, stderr=sys.stderr, **({'env': env} if env else {})).returncode
     if (said := ask(name, args, after=True, rc=rc)): print(said, file=sys.stderr)
     return rc
 

@@ -116,9 +116,9 @@ class StateTests(unittest.TestCase):
             # ...on a computer with no Chrome installed: the installed one comes first (chrome_exe), so it is out of the way for the whole launch
             no_chrome = mock.patch.object(bv, 'installed_chrome', return_value=''); no_chrome.start(); self.addCleanup(no_chrome.stop)
             self.assertEqual(bv.chrome_exe(), str(exe))
-            e = bv.env('rc1'); port = bv.cdp_port('rc1')
-            self.assertEqual(e['AGENT_BROWSER_CDP'], str(port)); self.assertNotIn('AGENT_BROWSER_USER_AGENT', e)
-            self.assertEqual(bv.env('rc1')['AGENT_BROWSER_CDP'], str(port), 'one port per session, whoever asks')
+            e = bv._cli_env('rc1'); port = bv.cdp_port('rc1')
+            self.assertEqual(e['AGENT_BROWSER_CDP'], str(port)); self.assertNotIn('AGENT_BROWSER_USER_AGENT', bv.env('rc1'))
+            self.assertEqual(bv.cdp('rc1')['AGENT_BROWSER_CDP'], str(port), 'one port per session, whoever asks')
             started, up = [], iter([False, False, True])
             with mock.patch.object(bv, '_spawn_chrome', side_effect=lambda argv, hidden=True: started.append(argv) or 4242),                  mock.patch.object(bv, '_listening', side_effect=lambda p, timeout=.25: next(up, True)), mock.patch.object(bv.time, 'sleep'):
                 self.assertEqual(bv.real_chrome('rc1'), 4242)

@@ -382,7 +382,7 @@ def hold(store, tid) -> dict | None:
 # from any process. The cold rail after a restart judged every open task's senders afresh, ~4 s of its first pile (2026-11-24)
 # ...and the rules it was judged BY: a stored hold outlives an update, so a change to who counts as trusted (the mail-proof rule, 2026-11-24)
 # moves this and every task is judged again on its next read
-RULES = 5
+RULES = 6
 _SIG = """SELECT t.Status, t.TrustedThrough, t.OriginBase, (SELECT COUNT(*) FROM message WHERE TaskId=t.TaskId) n,
     (SELECT MAX(MessageId) FROM message WHERE TaskId=t.TaskId) m, (SELECT Gen FROM change_gen WHERE Tbl='trust') g,
     h.Sig, h.HoldJson FROM task t LEFT JOIN origin_hold h ON h.TaskId=t.TaskId WHERE t.TaskId=?"""
@@ -393,8 +393,8 @@ def _judged(store, tid) -> dict | None:
     if r['Sig'] == sig:
         try: return json.loads(r['HoldJson'])
         except (TypeError, ValueError): pass
-    h = _hold(store, int(tid), store.get_task(int(tid)) or {})
-    got = {'hold': h, 'own': his_own(store, tid) if h else None}
+    h = _hold(store, int(tid), t := store.get_task(int(tid)) or {})
+    got = {'hold': h, 'own': his_own(store, tid) if h else None, 'quiet': _quiet(store, int(tid), t)}
     # ...kept under what it was judged ON: a write meanwhile (its own lift, another process) leaves it stale, so it is judged again
     store._exec('INSERT OR REPLACE INTO origin_hold (TaskId, Sig, HoldJson) VALUES (?,?,?)', (int(tid), sig, json.dumps(got)))
     return got
@@ -404,9 +404,18 @@ def _judged(store, tid) -> dict | None:
 def withheld(store, tid) -> set:
     "The messages on the task no agent is handed until he trusts their senders - whatever the task's status (a closed one is judged afresh)."
     if not tid: return set()
-    if (j := _judged(store, tid)) is not None: h = j.get('hold')
-    else: h = _hold(store, int(tid), t) if (t := store.get_task(int(tid))) else None
-    return set((h or {}).get('mids') or ())
+    if (j := _judged(store, tid)) is None: j = {'hold': _hold(store, int(tid), t), 'quiet': _quiet(store, int(tid), t)} if (t := store.get_task(int(tid))) else {}
+    return set(((j or {}).get('hold') or {}).get('mids') or ()) | set((j or {}).get('quiet') or ())
+# ...AND A MACHINE'S NOTICE FROM SOMEONE UNTRUSTED ON HIS OWN TASK (red team round 4): it holds nothing - no start waits on it, and there is
+# nobody behind it to Trust (senders.can_hold, walk 17) - but his task runs at his full power (launch_mode), so its words are handed to no
+# agent there either. A task a stranger started runs in the stranger's mode, and hears it as their words; his Trust on the sender hands it on
+def _quiet(store, tid: int, t: dict) -> list:
+    "The untrusted senders' notices on a task that runs at his full power: none where it does not."
+    msgs = store.list_messages(tid)
+    if of_task(store, tid, msgs)[0] != 'stranger' or not his_own(store, tid) or teammate_bound(store, tid): return []
+    through, memo, seen = int(t.get('TrustedThrough') or 0), _memo(store), {}
+    return [m['MessageId'] for m in msgs if m['MessageId'] > through and not _own(m) and (m.get('Channel') or '') not in OURS
+            and not senders.can_hold(m) and (r := of_message(store, m, memo, seen)) and r[0] == 'stranger']
 def heard(store, tid, msgs) -> list:
     "`msgs` of task `tid` less what is withheld from its agent."
     return [m for m in msgs if m.get('MessageId') not in w] if (w := withheld(store, tid)) else list(msgs)

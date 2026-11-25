@@ -6,9 +6,11 @@ The receiving server's Authentication-Results is the evidence. verdict() reads i
 Trust is asymmetric: a sender can write their own Authentication-Results header into the mail before it is sent, and
 the receiving server adds its result on TOP. So a fail counts wherever it appears (forging one gains nothing), but a
 pass counts only from the RECEIVING server (RFC 8601 s.5: a result is believed only from an authserv-id the reader knows
-is its own): the organisation named by the top-most Received header's `by` host - the hop the receiving server wrote
-as it took the mail in, above anything a sender typed. A server that stamps nothing leaves the sender's own header as
-the top-most one (the red team, 2026-11-24: a typed 'dmarc=pass' read as verified), and no longer passes. A nameless
+is its own): the top-most Received header's `by` host - the hop the receiving server wrote as it took the mail in - and
+only its own top-most stamp, with that exact authserv-id, among the headers it wrote above the first hop of anyone else.
+A server that stamps nothing leaves the sender's own header as the top-most one (the red team, 2026-11-24: a typed
+'dmarc=pass' read as verified), and no longer passes; nor does a typed id of a SIBLING host of the receiver's own
+organisation (round 4: `mail.<its domain>` under `by mx.<its domain>` read as the receiver's word). A nameless
 result (Exchange Online writes none) is Exchange's word only on a Graph read; an ARC-Authentication-Results counts
 only from the receiving organisation too. Exchange's own X-MS-Exchange-Organization-AuthAs
 is stripped from mail arriving from outside, so Internal there is the organisation's word - on a Graph read only:
@@ -72,9 +74,22 @@ def org_domain(dom: str) -> str:
 
 _BY = re.compile(r'\bby\s+([a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,})\b', re.I)
 
+def _by(v: str) -> str: return m[1].lower().rstrip('.') if (m := _BY.search(_uncomment(v))) else ''
 def receiver(hs) -> str:
-    "The organisation that took the mail in: the top-most Received header naming its `by` host (Gmail's first one names only an IP)."
-    return next((org_domain(m[1]) for k, v in hs if k == 'received' and (m := _BY.search(_uncomment(v)))), '')
+    "The host that took the mail in: the top-most Received header naming its `by` host (Gmail's first one names only an IP)."
+    return next((h for k, v in hs if k == 'received' and (h := _by(v))), '')
+
+
+def _own(hs, rcv: str) -> list:
+    "The headers the receiving host wrote: from the top, up to the first Received a host other than `rcv` wrote - below it, anyone's words."
+    for i, (k, v) in enumerate(hs):
+        if k == 'received' and (h := _by(v)) and h != rcv: return hs[:i]
+    return hs
+
+
+def _stamp(hs, rcv: str, name: str) -> list:
+    "The receiving host's own top-most `name` result - its exact authserv-id, among the headers it wrote (_own) - [] where it wrote none."
+    return next((rs for k, v in _own(hs, rcv) if k == name for sid, rs in [parse(v, arc=name != 'authentication-results')] if rcv and sid == rcv), [])
 
 
 def verdict(headers, internal: bool = False) -> str:
@@ -84,12 +99,10 @@ def verdict(headers, internal: bool = False) -> str:
     frm = email.utils.parseaddr(next((v for k, v in hs if k == 'from'), ''))[1]
     dom = frm.rsplit('@', 1)[-1].strip().lower() if '@' in frm else ''
     ars = [parse(v) for k, v in hs if k == 'authentication-results']
-    arcs = [parse(v, arc=True) for k, v in hs if k == 'arc-authentication-results']
     rcv = receiver(hs)
-    ours = lambda sid: bool(rcv and sid and org_domain(sid) == rcv)
-    mine = [rs for i, (sid, rs) in enumerate(ars) if ours(sid) or (internal and i == 0 and not sid)] + [rs for sid, rs in arcs if ours(sid)]
-    trusted = [r for rs in mine for r in rs]
-    every = [r for _, rs in ars for r in rs] + [r for sid, rs in arcs if ours(sid) for r in rs]
+    arc = _stamp(hs, rcv, 'arc-authentication-results')
+    trusted = _stamp(hs, rcv, 'authentication-results') + arc + (ars[0][1] if internal and ars and not ars[0][0] else [])
+    every = [r for _, rs in ars for r in rs] + arc
     if internal and any(k == 'x-ms-exchange-organization-authas' and v.strip().lower() == 'internal' for k, v in hs): return 'pass'
     if any(m == 'dmarc' and v == 'pass' for m, v, _ in trusted): return 'pass'
     if any(m == 'dkim' and v == 'pass' and _aligned(p.get('header.d', ''), dom) for m, v, p in trusted): return 'pass'

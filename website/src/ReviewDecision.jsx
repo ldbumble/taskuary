@@ -390,7 +390,7 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
     setBusy(true); setErr(""); setSendErr("");
     try {
       const out = await press(api, r.ReviewId,
-        { verb, final_text: verb === "approve" && !delivery.frozen ? value : null, ...(r.Kind === "action" ? { shown: proposalFrom(r) } : {}),
+        { verb, final_text: verb === "approve" && !delivery.frozen ? value : null, ...(r.Kind === "action" ? { shown: proposalFrom(r) } : delivery.frozen ? {} : { shown: { to: meta.to ?? null } }),
           // only on the send: rejecting or "no reply needed" copies nobody on nothing
           cc: verb === "approve" && !proposal && !delivery.frozen ? ccNow : null, anyway, blanks_ok: blanksOk, ...envelopeEdits(verb),
           // ...Send and close says so WITH the send: the server closes as it goes, before the task's agent is told it went - told first, a

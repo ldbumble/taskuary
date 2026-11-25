@@ -36,6 +36,17 @@ def test_a_pass_the_sender_typed_is_never_the_receiving_server_s():
     assert mailauth.verdict([('Received', 'by 2002:a05:7300:5d8b with SMTP id x'), ('Received', 'from mail.vendor.example by mx.google.example'),
                              FROM, AR('mx.google.example; dmarc=pass header.from=northwind.example')]) == 'pass'   # Gmail's IP-only top hop
 
+def test_a_sibling_host_of_the_receivers_own_domain_is_not_the_receiver():
+    "Red team round 4: a typed result under the id of another host of the receiving organisation read as the receiving server's own word."
+    for name, v in (('Authentication-Results', 'mail.northwind.example; dmarc=pass header.from=northwind.example'),
+                    ('ARC-Authentication-Results', 'i=1; relay.northwind.example; dmarc=pass header.from=northwind.example')):
+        assert mailauth.verdict([RCV, FROM, AR('mx.northwind.example; dmarc=none'), (name, v)]) == 'none', name
+        assert mailauth.verdict([RCV, FROM, (name, v)]) == 'none', name
+    # ...and the receiver's own id is believed only above the first hop someone else wrote: below it, it is the sender's typing
+    typed = AR('mx.northwind.example; dmarc=pass header.from=northwind.example')
+    assert mailauth.verdict([RCV, ('Received', 'from [198.51.100.9] by smtp.vendor.example'), FROM, typed]) == 'none'
+    assert mailauth.verdict([RCV, typed, ('Received', 'from [198.51.100.9] by smtp.vendor.example'), FROM]) == 'pass'
+
 def test_exchange_internal_mail_is_a_pass():
     assert mailauth.verdict({'From': FROM[1], 'X-MS-Exchange-Organization-AuthAs': 'Internal', 'X-MS-Exchange-Organization-AuthSource': 'mx01.northwind.example'}, internal=True) == 'pass'
     assert mailauth.verdict({'From': FROM[1], 'X-MS-Exchange-Organization-AuthAs': 'Internal',

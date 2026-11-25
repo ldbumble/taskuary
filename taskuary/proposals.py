@@ -284,6 +284,7 @@ SETTING_ALLOW = {
     'calendar_enabled': 'read your calendar',
     'playbooks_enabled': 'let agents follow and propose playbooks',
     'agent_issues_enabled': 'treat GitHub issues as the tracker (off = GitHub items are rows on the work rail, not tasks)',
+    'email_signature': 'the signature under every email you send',        # ...an agent's word on how he signs (server.agent_remember)
 }
 # ...and the same rule for a CONNECTOR's own switches, which is where "PRs are Timeline items, not
 # tasks" actually lives (store.github_permissions reads the connector first).
@@ -348,6 +349,10 @@ def setting_changes(p: dict) -> tuple:
             return [], f'{name} must be one of {", ".join(SETTING_VALUES[name])}'
         if name in ('poll_minutes', 'funnel_hours', 'funnel_max') and not v.isdigit():
             return [], f'{name} must be a whole number'
+        if name == 'email_signature':
+            from .signatures import shape
+            try: v = shape(v)
+            except ValueError as e: return [], str(e)
         out.append({'name': name, 'value': v, 'says': SETTING_ALLOW[name]})
     return out, '' if out else 'no change was named'
 
@@ -386,11 +391,19 @@ def unshown(p: dict) -> str:
 
 
 CHANGED = 'This card changed after it was shown to you - nothing ran. It is shown again as it stands now; read it and press again.'
+def _to(x) -> list: return sorted({' '.join(str(a).split()).lower() for a in (x if isinstance(x, (list, tuple)) else [x]) if a})
 def unlike_shown(rv: dict, shown, verb: str) -> dict | None:
-    """The press's refusal when the card the page drew (`shown`: its proposal, as drawn) is not the proposal on file - a field changed after
-    it was shown never runs under the words he read (red team F1). None to go on: no card shown (a phone's typed yes), or the same one."""
-    if shown is None or (rv or {}).get('Kind') != 'action' or verb not in ('approve', 'edit', 'merge_anyway'): return None
-    if _draft(rv) == shown: return None
+    """The press's refusal when the card the page drew (`shown`: an action's proposal, a letter's {to}, as drawn) is not the one on file - a
+    field changed after it was shown never runs under the words he read (red team F1), and a letter never goes to someone the card did not
+    name (round 4: an agent's second save in its turn rewrote the To of the card on his screen). None to go on: no card shown (a phone's
+    typed yes), or the same one."""
+    if not isinstance(shown, dict) or verb not in ('approve', 'edit', 'merge_anyway'): return None
+    if (rv or {}).get('Kind') == 'action': same = _draft(rv) == shown
+    else:
+        try: env = json.loads(rv.get('Deliver') or '{}') or {}
+        except (TypeError, ValueError): env = {}
+        same = 'to' not in shown or _to(env.get('to')) == _to(shown['to'])
+    if same: return None
     return {'ok': False, 'status': rv.get('Status') or 'pending', 'sent': None, 'changed': True, 'send_error': CHANGED}
 
 
@@ -1151,6 +1164,9 @@ def _run(store, rv: dict, p: dict, tid, a: str, actor: str, edited, skip_checks:
                 if not conn: raise RuntimeError(f"no {c['connector']} connector to change")
                 store.merge_connector_config(conn['ConnectorId'], {c['name']: c['value']})
                 done.append(f"{c['connector']}.{c['name']} = {c['value']}")
+            elif c['name'] == 'email_signature':                    # ...its one home, which re-signs the letters waiting for his Send
+                from .signatures import keep
+                done.append(f"email signature = {keep(store, c['value'], actor)!r}")
             else:
                 store.set_setting(c['name'], str(c['value']), actor)
                 done.append(f"{c['name']} = {c['value']}")

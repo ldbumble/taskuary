@@ -42,6 +42,25 @@ test("a page has no peer connection and no window of its own; what it asks to op
   assert.deepEqual(JSON.parse(JSON.stringify(sent)), [{ tqOpen: "https://vendor.example/a" }, { tqOpen: "https://vendor.example/b" }]);
 });
 
+// RED TEAM ROUND 4: a mail's .html attachment asked to open on a clock, and the owner's next click anywhere in the app opened it - the app's
+// window counts any click as a press. The frame between passes an ask on only while it is woken itself, which a click in the page does and
+// one in the app does not (it is of another origin). In one Chrome: before, every ask passed - idle and after a click on the app alike; after,
+// none passed until the page itself was clicked
+test("the frame between passes on what its page asks to open only on a press in the page itself", async () => {
+  const { runInNewContext } = await import("node:vm");
+  const { RELAY } = await import("../src/shownPages.js");
+  const code = RELAY.slice("<script>".length, -"</script>".length);
+  const page = {}, sent = [], w = { frames: [page], parent: { postMessage: (m) => sent.push(m) }, navigator: { userActivation: { isActive: false } } };
+  runInNewContext(code, w);
+  w.onmessage({ source: page, data: { tqOpen: "https://vendor.example/x" } });
+  assert.deepEqual(sent, [], "no press in the page: nothing goes on");
+  w.navigator.userActivation.isActive = true;
+  w.onmessage({ source: {}, data: { tqOpen: "https://vendor.example/y" } });
+  w.onmessage({ source: page, data: { tqOpen: "https://vendor.example/x" } });
+  assert.deepEqual(JSON.parse(JSON.stringify(sent)), [{ tqOpen: "https://vendor.example/x" }]);
+  assert.ok(shut("<p>x</p>").includes(RELAY));
+});
+
 test("the app opens only what its own frame asked, a web address, on the owner's press, never its own address", () => {
   const frame = {}, ask = (tqOpen, source = frame) => ({ source, data: { tqOpen } }), own = "http://127.0.0.1:7787";
   assert.equal(outsideLink(ask("https://vendor.example/r"), frame, true, own), "https://vendor.example/r");

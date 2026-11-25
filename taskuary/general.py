@@ -3496,15 +3496,10 @@ class GeneralSession:
         # shows only for an open sign-in ask, so nothing showed): a turn that ends with its browser on a page asking for a password raises the
         # ask itself - the vault's sign-in first, else the page beside the chat
         from .browserview import handing
-        if signing is None and turn is None and not asks and not handing(self.store, self.task_id):
-            from . import signin
+        if signing is None and turn is None and not asks:
+            from .browserview import left_on_signin
             try:
-                # ...but never over a step of its own held on that tab: that card is his one move there (the HIPAA walk, 2026-11-22: "Sign in to
-                # 127.0.0.10 to continue" stood under the held sign-up's Approve, the sign-up form's password box read as a sign-in)
-                # ...on any of its tabs (the Codex walk, 2026-11-22: the held sign-up on one tab, its turn ending on a sign-in page it opened in another)
-                from .browsergate import held
-                if (signin.on_signin_page(self.sid) and not signin.set_aside(self.store, self.task_id, self.sid)
-                        and not held(self.store, self.task_id, self.sid)): signing = ''
+                if left_on_signin(self.store, self.task_id, self.sid): signing = ''
             except Exception as e: logger.debug(f'task {self.task_id}: the browser could not be read for a sign-in - {e}')
         # ...a marker a session still writes (the road before hand_over) goes the one road hand_over takes
         if signing is not None or turn is not None:

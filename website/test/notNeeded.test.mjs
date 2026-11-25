@@ -5,7 +5,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { nextSteps, draftHome, freshNext } from "../src/agentSummary.js";
+import { nextSteps } from "../src/agentSummary.js";
 import { pendingReplyReview } from "../src/taskLifecycle.js";
 import * as ask from "../src/agentDraftAsk.js";
 
@@ -23,12 +23,10 @@ test("(a) a review marked not needed renders no Send and no banner", () => {
   // ...and the retired draft is no card anywhere: not the page's pending reply, not a Next step, not a turn's card
   assert.equal(pendingReplyReview([retired]), undefined);
   assert.deepEqual(nextSteps({ reviews: [retired] }).drafts, []);
-  assert.equal(draftHome([retired], [{ id: "comment-2", role: "assistant", createdAt: "2026-11-10 09:00:00" }]), null);
 });
 
 test("(c) the re-evaluated turn shows one line and no card", () => {
   const n = nextSteps({ summary: { did: "You answered Erin yourself - no new response needed.", nothing_left: true }, reviews: [retired] });
   assert.deepEqual([n.drafts, n.onYou, n.held, n.nothing], [[], [], [], true]);
-  assert.equal(freshNext([retired]), true, "nothing stale waits either");
 });
 

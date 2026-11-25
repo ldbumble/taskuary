@@ -21,13 +21,14 @@ class OwnerSaysNoReply(unittest.TestCase):
 
     def test_through_the_tool_the_waiting_draft_is_retired_and_the_sessions_end_drafts_none(self):
         s = store(); tid, rid = drafted_task(s)
-        self.assertEqual([d['review'] for d in general.draft_turns(s, tid)], [rid])
+        pending = lambda: [r['ReviewId'] for r in s._rows("SELECT ReviewId FROM review WHERE TaskId=? AND Status='pending'", (tid,))]
+        self.assertEqual(pending(), [rid])
         doors = {'not_needed': lambda t, why: verdicts.not_needed(s, t, why, 'coding')}
         got = json.loads(agenttools.call(s, tid, 'reply_not_needed', {'why': 'Alex said no reply is needed'}, doors))
         self.assertTrue(got['ok'])
         rv = s.get_review(rid)
         self.assertEqual(rv['Status'], 'closed_unsent'); self.assertEqual(rv['NotNeeded'], 'Alex said no reply is needed')
-        self.assertEqual(general.draft_turns(s, tid), [])                       # no card left to draw, on any turn
+        self.assertEqual(pending(), [])                       # no card left to draw, on any turn
         # ...and the session ending is no new draft in its place: the report's reply would have stood with Send again
         with mock.patch.object(wrapup, 'freshen', side_effect=AssertionError('no reply to refresh')), \
              mock.patch('taskuary.responder.write_draft', side_effect=AssertionError('nothing to draft')):

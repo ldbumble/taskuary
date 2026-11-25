@@ -1176,27 +1176,6 @@ def own_replies(store, tid: int, since: str = None) -> list:
     rows = store._rows("SELECT * FROM message m WHERE (IFNULL(m.Direction,'in')='out' OR m.Status='context') AND m.CreatedAt>? "
                        "AND m.Status NOT IN ('history','skipped') AND (m.TaskId=? OR " + ON_THREAD + ") ORDER BY m.SentAt, m.MessageId", (since, tid, tid))
     return [x for x in rows if not ours(x)]
-def draft_turns(store, tid: int) -> list:
-    """Each pending reply draft and the turn it belongs to, for the chat: {review, turn ('comment-<id>' of the answer that left it, None before
-    any did), at (when it was drafted), stale (a later turn answered a newer message and left it untouched), before (that message's time)}."""
-    rows = store.list_comments(tid, internal=True)
-    ins = sorted([str(c.get('CreatedAt') or '') for c in rows if c.get('ActorType') == USER_TYPE] + [str(x['JoinedAt']) for x in store._rows(JOINED, (tid,))])
-    outs = [c for c in rows if c.get('ActorType') == ASSISTANT_TYPE]
-    out = []
-    for rv in store._rows("SELECT ReviewId, CreatedAt FROM review WHERE TaskId=? AND Status='pending' AND Kind IN ('draft_reply','draft') "
-                          "AND IFNULL(DraftText,'')<>'' ORDER BY ReviewId", (tid,)):
-        s = wrapup.left_by(store, rv['ReviewId']); at = str((s or rv).get('CreatedAt') or '')
-        later = next((i for i in ins if i > at), None)
-        # ...the first answer after it wrote it only with no line in between: an answer after the owner's line is that line's, and a draft made
-        # before it - on arrival - jumped from under the mail to that answer's Next steps (the recorded walk, 2026-11-10)
-        turn = s['CommentId'] if s else next((c['CommentId'] for c in outs if str(c.get('CreatedAt') or '') >= at
-                                               and not (later and later < str(c.get('CreatedAt') or ''))), None)
-        # ...STALE ONLY UNTIL THE AGENT HAS READ WHAT CAME AFTER IT (the owner, 2026-11-08: "it says draft is still applicable but i can't send
-        # it"): each turn hears the draft waiting and withdraws or rewrites one the newest message undoes (its events, WITHDRAW_LINE), so a
-        # draft still pending after a later turn is one the agent KEPT - current, with its Send. Until that turn it reads "before your last message"
-        stale = bool(later) and not any(str(c.get('CreatedAt') or '') > later and c['CommentId'] != turn for c in outs)
-        out.append({'review': rv['ReviewId'], 'turn': f'comment-{turn}' if turn else None, 'at': at, 'stale': stale, 'before': later if stale else None})
-    return out
 
 
 def mail_row(store, x: dict, n: int = 3000) -> dict:

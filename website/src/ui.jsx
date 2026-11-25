@@ -613,9 +613,10 @@ export const MicButton = ({ onText, onInterim, onActive, ctl, size = 18, sx }) =
     }
     if (viaBuiltin) return keys();
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // one voice, mono at 32 kbps: speech needs no more, and the browser's default (~128 kbps) was four times the bytes to upload
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1 } });
       const type = window.MediaRecorder?.isTypeSupported?.("audio/webm;codecs=opus") ? "audio/webm;codecs=opus" : undefined;
-      const mr = new MediaRecorder(stream, type ? { mimeType: type } : undefined);
+      const mr = new MediaRecorder(stream, { audioBitsPerSecond: 32000, ...(type ? { mimeType: type } : {}) });
       const chunks = [], meter = levelMeter(stream);
       mr.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
       mr.onstop = async () => {
@@ -637,6 +638,7 @@ export const MicButton = ({ onText, onInterim, onActive, ctl, size = 18, sx }) =
   const stop = () => { rec?.stop(); if (!viaBrowser) setRec(null); };   // the browser's dictation reports back itself
   const title = err || (!voice ? ""
     : rec ? "Stop and transcribe"
+    : busy ? `Transcribing with ${voice.label || voice.provider}…`
     : route === "connector" ? `Dictate (${voice.label || voice.provider})`
     : viaBrowser ? `Dictate — your browser's own recogniser. A voice AI (${placeName("voice")}) is more accurate and reads voice notes.`
     : viaBuiltin ? `Dictate — ${builtin.label} (Win+H): its bar types into the box; press again, or its own stop, to end`

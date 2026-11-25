@@ -1129,17 +1129,20 @@ def list_models(t, cfg: dict, key: str) -> list:
     return [m for m in _list_models(t, cfg, key) if not _NOT_A_BRAIN.search(m)]
 
 
-def image_models(t, cfg: dict, key: str) -> list:
-    """The image-generation models an OpenAI-compatible endpoint serves, by the MODE its own model list gives each (a LiteLLM gateway's
-    /model/info: mode image_generation) - never by a model's name. [] for an endpoint that keeps no such list or answers nothing."""
+def info_models(t, cfg: dict, key: str, has) -> list:
+    """The models an OpenAI-compatible endpoint serves whose own model list says `has(model_info)` (a LiteLLM gateway's /model/info) -
+    never read off a model's name. [] for an endpoint that keeps no such list or answers nothing."""
     if t not in OPENAI_COMPATIBLE: return []
     try:
         r = requests.get(f'{compat_base(t, cfg)}/model/info', headers={'Authorization': f'Bearer {key}'} if key else {},
                          timeout=GATEWAY_WAIT if t == 'hipaa_ai' else 15, allow_redirects=False)
         rows = (_json(r) or {}).get('data') if r.status_code == 200 else None
     except Exception: return []
-    return sorted({m['model_name'] for m in rows or () if isinstance(m, dict) and m.get('model_name')
-                   and (m.get('model_info') or {}).get('mode') == 'image_generation'})
+    return sorted({m['model_name'] for m in rows or () if isinstance(m, dict) and m.get('model_name') and has(m.get('model_info') or {})})
+
+
+def image_models(t, cfg: dict, key: str) -> list: return info_models(t, cfg, key, lambda i: i.get('mode') == 'image_generation')
+def audio_models(t, cfg: dict, key: str) -> list: return info_models(t, cfg, key, lambda i: i.get('mode') == 'chat' and i.get('supports_audio_input'))
 
 
 MODELS_TTL, _models_cache = 600, {}      # a provider's list, per connector, for ten minutes - a cache, not a setting

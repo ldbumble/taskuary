@@ -113,6 +113,7 @@ def transcribe(store, data: bytes, mime: str = 'audio/ogg', name: str = 'audio.o
     t, cfg, key, terms = c['Type'], _cfg(c), c.get('Secret') or '', vocabulary(store)
     mime = (mime or 'audio/ogg').split(';')[0].strip()
     if gate and silent(data, mime, level, seconds): return {'text': '', 'provider': t, 'model': None, 'silent': True}
+    t0 = time.time()
     if t in GATEWAY_TYPES: text, model = _gateway(cfg, key, data, mime, terms)
     elif t in COMPAT: text, model = _openai_compat(t, cfg, key, data, mime, name, terms)
     elif t == 'gemini_stt': text, model = _gemini(cfg, key, data, mime, name, terms)
@@ -124,6 +125,7 @@ def transcribe(store, data: bytes, mime: str = 'audio/ogg', name: str = 'audio.o
         if not key: raise RuntimeError(f'{LABELS[t]}: no API key saved')
         text, model = {'assemblyai': _assemblyai, 'speechmatics': _speechmatics, 'gladia': _gladia, 'azure_speech': _azure}[t](cfg, key, data, mime, name, terms)
     else: raise RuntimeError(f'unknown voice connector type {t!r}')
+    logger.info(f"voice: {len(data) // 1024} KB {mime}{f' ({seconds:.0f}s of audio)' if seconds else ''} heard by {t} {model} in {time.time() - t0:.1f}s")
     text = (text or '').strip()
     return {'text': '', 'provider': t, 'model': model, 'silent': True} if echoed(text, terms) else {'text': text, 'provider': t, 'model': model}
 
@@ -160,34 +162,76 @@ def silent(data: bytes, mime: str, level: float = None, seconds: float = None) -
 
 
 _GW_MODEL = {}
+CONNECT = 4         # net.CONNECT: a dead IPv6 route on Windows is given up on in seconds, not after the read half's minutes
 
 
+# THE MODEL THAT HEARS IS THE CARD'S OWN, AT LOW EFFORT (the owner, 2026-11-25: a dictation on another computer took 149.5 s). It went to the
+# first "flash" the gateway listed, thinking as it liked: up to 1,535 reasoning tokens to write down 66 words, and 6-18 s a clip where its twin
+# at low effort answers in 2-4. The card's own model is the one its setup proved answers; it hears when the gateway's /model/info says so
 def _gateway_model(cfg, base, key):
-    "The card's voice_model, else a Gemini the gateway lists (the fast one first) - Gemini is what hears audio behind it."
+    """The card's voice_model; else, of the models the gateway says take audio, the card's own model when it is one, else the one its tiers
+    lead with (firstrun.tier_models); else, from a gateway with no such list, a Gemini it lists."""
+    from . import llm
+    from .firstrun import tier_models
     if cfg.get('voice_model'): return cfg['voice_model']
-    if base not in _GW_MODEL:
-        try: ids = [m.get('id') or '' for m in requests.get(f'{base}/models', headers={'Authorization': f'Bearer {key}'}, timeout=(15, 90)).json().get('data', [])]
-        except (requests.RequestException, ValueError, AttributeError): ids = []
-        gem = [i for i in ids if 'gemini' in i.lower()]
-        _GW_MODEL[base] = next((i for i in gem if 'flash' in i.lower()), None) or (gem[0] if gem else None)
-    return _GW_MODEL[base] or cfg.get('model') or 'hipaa-ai'
+    own = llm.split_effort(str(cfg.get('model') or '').strip())[0]
+    if (base, own) not in _GW_MODEL:
+        if hear := llm.audio_models('hipaa_ai', cfg, key): pick = own if own in hear else tier_models(hear, llm.OPENAI_COMPATIBLE['hipaa_ai'][1])['model']
+        else:
+            try: ids = [m.get('id') or '' for m in requests.get(f'{base}/models', headers={'Authorization': f'Bearer {key}'}, timeout=(CONNECT, 30)).json().get('data', [])]
+            except (requests.RequestException, ValueError, AttributeError): ids = []
+            gem = [i for i in ids if 'gemini' in i.lower()]
+            pick = next((i for i in gem if 'flash' in i.lower()), None) or (gem[0] if gem else None)
+        _GW_MODEL[base, own] = pick
+    return _GW_MODEL[base, own] or own or 'hipaa-ai'
+
+
+# ...AND ONE CALL STUCK BEHIND THE MODEL IS ASKED AGAIN BESIDE IT: that 149.5 s was 148.2 s inside Vertex with no retry or fallback, while a
+# call to the same model three seconds later answered in 1.5 s - the slowness is one request's, not the model's. No answer after HEDGE
+# seconds sends its twin; the first good answer wins and the other is left to finish on its own
+HEDGE = 20
+
+
+def _hedged(post):
+    "post() once; with no answer after HEDGE s, once more beside it. (the first good response, whether the twin was sent)."
+    from concurrent.futures import ThreadPoolExecutor, wait, as_completed
+    ex = ThreadPoolExecutor(2, thread_name_prefix='voice-hedge'); fs = [ex.submit(post)]
+    try:
+        if not wait(fs, HEDGE)[0]: fs.append(ex.submit(post))
+        bad = err = None
+        for f in as_completed(fs):
+            try: r = f.result()
+            except requests.RequestException as e: err = e; continue
+            if r.status_code < 300: return r, len(fs) > 1
+            bad = r
+        if bad is not None: return bad, len(fs) > 1
+        raise err
+    finally: ex.shutdown(wait=False)
 
 
 _FMT = {'m4a': 'mp4'}
 
 
 def _gateway(cfg, key, data, mime, terms=()):
-    "The HIPAA AI gateway: the clip as an input_audio part of one chat message to a Gemini model behind it."
-    from .llm import gateway_base
+    "The HIPAA AI gateway: the clip as an input_audio part of one chat message to a model behind it that hears audio."
+    from .llm import gateway_base, _EFFORT_REFUSED
     if not key: raise RuntimeError('HIPAA AI: no access code saved')
     try: base = gateway_base(cfg)
     except ValueError as e: raise RuntimeError(f'HIPAA AI: {e}')
     if not base: raise RuntimeError('HIPAA AI: no gateway address on its card')
+    t0 = time.time()
     model, ext = _gateway_model(cfg, base, key), ext_for(mime)
-    ask = HEAR + (f" Words that may come up: {', '.join(terms)}." if terms else '')
-    body = {'model': model, 'temperature': 0, 'messages': [{'role': 'user', 'content': [
+    t1, ask = time.time(), HEAR + (f" Words that may come up: {', '.join(terms)}." if terms else '')
+    body = {'model': model, 'temperature': 0, 'reasoning_effort': 'low', 'messages': [{'role': 'user', 'content': [
         {'type': 'text', 'text': ask}, {'type': 'input_audio', 'input_audio': {'data': base64.b64encode(data).decode(), 'format': _FMT.get(ext, ext)}}]}]}
-    r = requests.post(f'{base}/chat/completions', headers={'Authorization': f'Bearer {key}'}, json=body, timeout=(15, 180))
+    post = lambda: requests.post(f'{base}/chat/completions', headers={'Authorization': f'Bearer {key}'}, json=body, timeout=(CONNECT, 180))
+    r, twin = _hedged(post)
+    if r.status_code in (400, 422) and _EFFORT_REFUSED.search(r.text or ''): body.pop('reasoning_effort'); r, twin = _hedged(post)
+    h = getattr(r, 'headers', None) or {}
+    try: gw = f", gateway {float(h.get('x-litellm-response-duration-ms')) / 1000:.1f}s"     # LiteLLM's own time: the rest is the road there
+    except (TypeError, ValueError): gw = ''
+    logger.info(f"voice: HIPAA AI {model} {r.status_code} in {time.time() - t1:.1f}s (model pick {t1 - t0:.1f}s{gw}, retries "
+                f"{h.get('x-litellm-attempted-retries', '?')}, fallbacks {h.get('x-litellm-attempted-fallbacks', '?')}{', twin sent' if twin else ''})")
     if r.status_code >= 300: _fail(r, LABELS['hipaa_ai'])
     msg = ((r.json().get('choices') or [{}])[0].get('message') or {}).get('content') or ''
     if isinstance(msg, list): msg = ' '.join(p.get('text', '') for p in msg if isinstance(p, dict))
@@ -211,8 +255,10 @@ def _openai_compat(t, cfg, key, data, mime, name, terms=()):
     if terms:
         if t == 'openai_stt' and model == 'gpt-transcribe': form['keywords[]'] = list(terms)
         form['prompt'] = ', '.join(terms)
-    r = requests.post(f'{base}/audio/transcriptions', headers={'Authorization': f'Bearer {key}'} if key else {},
-                      files={'file': (name, data, mime)}, data=form, timeout=180)
+    t0 = time.time()
+    r, twin = _hedged(lambda: requests.post(f'{base}/audio/transcriptions', headers={'Authorization': f'Bearer {key}'} if key else {},
+                                            files={'file': (name, data, mime)}, data=form, timeout=(CONNECT, 180)))
+    logger.info(f"voice: {LABELS[t]} {model} {r.status_code} in {time.time() - t0:.1f}s{' (twin sent)' if twin else ''}")
     if r.status_code >= 300: _fail(r, LABELS[t])
     return r.json().get('text', ''), model
 
@@ -223,7 +269,7 @@ def _deepgram(cfg, key, data, mime, terms=()):
     params = {'model': model, 'smart_format': 'true'}
     if cfg.get('language'): params['language'] = cfg['language']
     if terms: params['keyterm' if model.startswith('nova-3') else 'keywords'] = list(terms) if model.startswith('nova-3') else [f'{x}:1' for x in terms]
-    r = requests.post('https://api.deepgram.com/v1/listen', params=params, data=data, timeout=180,
+    r = requests.post('https://api.deepgram.com/v1/listen', params=params, data=data, timeout=(CONNECT, 180),
                       headers={'Authorization': f'Token {key}', 'Content-Type': mime})
     if r.status_code >= 300: _fail(r, 'Deepgram')
     try: return r.json()['results']['channels'][0]['alternatives'][0]['transcript'], model
@@ -237,7 +283,7 @@ def _elevenlabs(cfg, key, data, mime, name, terms=()):
     if cfg.get('language'): form['language_code'] = cfg['language']
     if terms and model.startswith('scribe_v2'): form['keyterms'] = list(terms)
     r = requests.post('https://api.elevenlabs.io/v1/speech-to-text', headers={'xi-api-key': key},
-                      files={'file': (name, data, mime)}, data=form, timeout=180)
+                      files={'file': (name, data, mime)}, data=form, timeout=(CONNECT, 180))
     if r.status_code >= 300: _fail(r, 'ElevenLabs')
     return r.json().get('text', ''), model
 

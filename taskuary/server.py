@@ -8744,12 +8744,19 @@ def voice_vocabulary_save(body: dict):
     store.audit('setting', 0, 'voice_vocabulary', ACTOR, detail={'count': len(terms)})
     return {'terms': terms, 'limit': voice.VOCAB_MAX}
 
+_VOICE_POOL = None      # the mic's own threads: a dictation never queues behind the shared pool's model calls and polls
+
 @app.post('/api/voice/transcribe')
 async def voice_transcribe(request: Request):
     """A clip from the browser's microphone, posted as the raw body (no multipart dependency):
     the text comes back and goes wherever the prompt box goes."""
+    global _VOICE_POOL
+    from concurrent.futures import ThreadPoolExecutor
+    from functools import partial
     from . import voice
+    t0 = time.time()
     data = await request.body()
+    logger.info(f'voice: {len(data) // 1024} KB clip arrived in {time.time() - t0:.1f}s')
     if not data: raise HTTPException(422, 'no audio in the request')
     mime = (request.headers.get('content-type') or 'audio/webm').split(';')[0].strip()
     # a call to the transcription service, seconds long: on the loop it froze every pane and request until it answered
@@ -8757,8 +8764,9 @@ async def voice_transcribe(request: Request):
         try: return float(request.headers.get(h))
         except (TypeError, ValueError): return None
     # the browser's measure of its own recording (MicButton): a silent clip is answered "nothing heard", never sent to be made up
-    try: return await run_in_threadpool(voice.transcribe, store, data, mime, f'clip.{voice.ext_for(mime)}', mic=True,
-                                        level=num('x-voice-level'), seconds=num('x-voice-seconds'))
+    _VOICE_POOL = _VOICE_POOL or ThreadPoolExecutor(4, thread_name_prefix='voice')
+    try: return await asyncio.get_running_loop().run_in_executor(_VOICE_POOL, partial(
+        voice.transcribe, store, data, mime, f'clip.{voice.ext_for(mime)}', mic=True, level=num('x-voice-level'), seconds=num('x-voice-seconds')))
     except RuntimeError as e: raise HTTPException(409, str(e))
     except requests.RequestException as e: raise HTTPException(502, f'could not reach the transcription service: {str(e)[:160]}')
 

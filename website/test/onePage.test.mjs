@@ -70,7 +70,7 @@ test("a dashboard on the table is TaskPage too, its dashboard the turn's frame a
   const { draw } = await P, html = draw("dashboard", dash, chips(["report_off", "next"]));
   theTaskPage(html, "dashboard");
   assert.match(html, /data-tq-made-source="dashboard"/); assert.match(html, /The dashboard/);
-  assert.match(html, /class="tq-dash-canvas tq-turn-frame tq-turn-wide"/);
+  assert.match(html, /class="tq-dash-canvas tq-turn-frame tq-turn-wide( tq-dash-wait)?"/);    // ...holding its room while its rows load
 });
 
 test("an Advisor idea on the table is TaskPage: Came from the evidence it rests on, Agent the look's prompt and what it noticed", async () => {

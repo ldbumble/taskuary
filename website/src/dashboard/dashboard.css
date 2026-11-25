@@ -8,7 +8,8 @@
   --d-surface: #ffffff; --d-plane: #f6f4f1; --d-chip: #efede9; --d-ink: #262521; --d-ink2: #4d4a43; --d-muted: #6e685f;
   --d-grid: #eeeae4; --d-axis: #d3ccc0; --d-border: #e4e0d9; --d-wash: rgba(85, 105, 122, .07); --d-focus: #55697a;
   --d-s1: #3f77b3; --d-s2: #c8743a; --d-s3: #2f9e7a; --d-s4: #c19a2e; --d-s5: #b06c9e; --d-s6: #6a8f3c; --d-other: #b3ab9e;
-  --d-track: #dfe7f0; --d-up: #2f6b34; --d-down: #8a3646; --d-up-bg: #e3f1e4; --d-down-bg: #f8e4e7; --d-flat-bg: #efede9;
+  --d-track: var(--tq-tint-slate, #dfe7f0); --d-up: var(--tq-success, #2f6b34); --d-down: var(--tq-danger, #8a3646);
+  --d-up-bg: var(--tq-tint-sage, #e3f1e4); --d-down-bg: var(--tq-tint-red, #f8e4e7); --d-flat-bg: var(--tq-tint-neutral, #efede9);
   container-type: inline-size; display: flex; flex-direction: column; gap: 12px; min-height: 0; color: var(--d-ink);
   font-size: 13px;
 }
@@ -16,7 +17,6 @@
   --d-surface: #1c1b19; --d-plane: #121110; --d-chip: #262522; --d-ink: #f0eee9; --d-ink2: #c9c5bb; --d-muted: #8f897e;
   --d-grid: #2b2a27; --d-axis: #3a3935; --d-border: rgba(255, 255, 255, .1); --d-wash: rgba(255, 255, 255, .06); --d-focus: #8fb0d6;
   --d-s1: #4f8acb; --d-s2: #cf7e44; --d-s3: #36a882; --d-s4: #b08a22; --d-s5: #c07aae; --d-s6: #78a046; --d-other: #5d5a54;
-  --d-track: #24364a; --d-up: #6cc472; --d-down: #ec8e9a; --d-up-bg: rgba(95, 184, 101, .16); --d-down-bg: rgba(224, 131, 143, .16); --d-flat-bg: #2b2a27;
 }
 
 /* one row of filters, above everything it scopes (never inside a card): the range a segmented control - a quiet track, the chosen

@@ -72,7 +72,7 @@ def test_the_cli_brain_hands_its_images_on(monkeypatch):
     from taskuary import llm
     from taskuary.store import MemoryStore
     got = {}
-    monkeypatch.setattr(agents, 'agent_row', lambda store, name: {'Config': json.dumps({'cmd': 'claude'})})
+    monkeypatch.setattr(agents, 'agent_row', lambda store, name, model=None: {'Config': json.dumps({'cmd': 'claude'})})
     monkeypatch.setattr(agents, 'with_cmd', lambda prof, store=None: prof)
     def fake_run(prof, prompt, trace, resume=None, images=None, **kw): got['images'] = images; return '{"intent": "reply"}', 's1', None
     monkeypatch.setattr(agents, 'run_cli', fake_run)

@@ -11,6 +11,7 @@ import { CcRow, DraftField, ToRow } from "./ui.jsx";
 import { attUrl } from "./fileSave.js";
 import { FOCUS_RING, pressable } from "./pressable.js";
 import { MdLine } from "./md.jsx";
+import { listCap } from "./bulkCard.js";
 import { changeMarks, hasChange, wordDiff } from "./textDiff.js";
 import { ACCENT, ALERT_INK, BORDER, DIM, FAINT, INK, label as LABEL } from "./theme.jsx";
 
@@ -164,7 +165,7 @@ function Field({ f, onView }) {
 // the first few open in their own card to review. THE FILES A TURN MADE ARE THE SAME ROWS (TurnFiles): its name a press that shows it in the one
 // preview under them (`onPick`, `picked`), its kind and size the line, its Download the row's `tail`
 export const Items = ({ items }) => (
-  <Box component="ul" data-tq-review-items="" sx={{ listStyle: "none", m: 0, p: 0, maxHeight: 420, overflowY: "auto" }}>
+  <Box component="ul" data-tq-review-items="" sx={{ listStyle: "none", m: 0, p: 0, maxHeight: listCap(items), overflowY: "auto" }}>
     {items.map((x, i) => <Box component="li" key={x.id} data-tq-bulk-row={x.id} {...(x.picked ? { "data-tq-picked": "" } : {})}
       sx={{ borderTop: i ? `1px solid ${BORDER}` : "none", py: 0.5, ...(x.onPick ? { px: 0.75, borderRadius: "4px", bgcolor: x.picked ? "var(--tq-inset, #eef2f5)" : "transparent" } : {}) }}>
       <Box sx={{ display: "flex", alignItems: "center", gap: 1, minWidth: 0 }}>

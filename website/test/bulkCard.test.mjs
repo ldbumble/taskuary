@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
-import { countOf, pressOf, progress, rowOf, rowState, running } from "../src/bulkCard.js";
+import { countOf, listCap, pressOf, progress, rowOf, rowState, running } from "../src/bulkCard.js";
 
 // ONE CARD FOR A BULK JOB (taskuary/bulkcard.py; the owner, 2026-11-16). Invented people and a stand-in repository.
 const mail = (id, to, extra = {}) => ({ ReviewId: id, Kind: "slot", Status: "pending", Batch: "b1", DraftText: "Hello - about Market St.",
@@ -19,6 +19,10 @@ test("the press says what it does, by the act's own words", () => {
   assert.equal(pressOf([mail(1, "a@cedar.example")], 24), "Send 24 emails");
   assert.equal(pressOf([close(1)], 37), "Close 37 issues");
   assert.equal(countOf([close(1), close(2)]), "2 issues"); assert.equal(countOf([mail(1, "a@cedar.example")]), "1 email");
+  // ...and posts are posts to their network, by its name (the card gallery, 2026-11-25: six LinkedIn posts read "6 steps", each row "linkedin_post")
+  const post = (id) => ({ ReviewId: id, Kind: "action", Status: "pending", Batch: "b3", Reason: "the post", DraftText: JSON.stringify({ action: "run_tool", type: "linkedin_post", text: `Tip ${id}: invoices in one place.` }) });
+  assert.equal(countOf([post(1), post(2)]), "2 posts"); assert.equal(pressOf([post(1), post(2)], 2), "Post to LinkedIn - all 2");
+  assert.deepEqual(rowOf(post(3)), { id: 3, target: "LinkedIn", line: "Tip 3: invoices in one place.", flags: [] });
 });
 
 test("each row stands where its run left it, and the bar counts what is over", () => {
@@ -151,4 +155,9 @@ test("a bulk card the chat moved past is the same card with its press, greyed, a
   assert.deepEqual([R.root().type.name, R.root().props.on], ["MovedPast", true]);
   R.reset(); R.render(BulkCard, { rows: rows.map((r) => ({ ...r, Status: "pending", DecideNote: null })), tid: 7, onChanged: () => {} }); await flush();
   assert.equal(R.root().props.on, false);
+});
+
+test("rows open to review are given most of the window, a list of lines stays short", () => {
+  assert.equal(listCap([{ id: 1 }, { id: 2 }]), 420);
+  assert.equal(listCap([{ id: 1, open: true }, { id: 2 }]), "min(80vh, 900px)");
 });

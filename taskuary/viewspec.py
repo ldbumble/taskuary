@@ -338,8 +338,9 @@ def shown(spec) -> str:
     if all(e['type'] in WORDS for e in view['elements'].values()): raise ValueError('a view of only words shows nothing your answer does not - say them there')
     # ...a view he can answer is one of its own: its id names it to the answer road, so the same choice shown twice is two questions
     if asks(view): view['id'] = __import__('uuid').uuid4().hex[:12]
-    return f"Shown in the owner's chat. {MARK}{json.dumps(view, ensure_ascii=False, separators=(',', ':'))}" + \
-        (' His pick comes to you as his press.' if asks(view) else '')
+    # ...AND THE SPEC IS THE ANSWER'S LAST THING: every reader takes it from the mark to the end (viewSpec.specIn, session_artifacts.view). The
+    # line on his pick stood after it, so a view he could answer - a choice, a button - read as no view and was never drawn (the card gallery)
+    return f"Shown in the owner's chat.{' His pick comes to you as his press.' if asks(view) else ''} {MARK}{json.dumps(view, ensure_ascii=False, separators=(',', ':'))}"
 def asks(view) -> bool: return any(e['type'] == 'choice' or (e.get('on') or {}).get('press', {}).get('action') == 'answer' for e in view['elements'].values())
 
 

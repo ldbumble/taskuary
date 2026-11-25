@@ -426,7 +426,9 @@ class TheWhatIf(unittest.TestCase):
         bad(one('slider', {'label': 'x', 'value': 'n', 'min': 5, 'max': 5}), 'min must be under max')
 
     def test_only_a_view_he_can_answer_has_an_id_of_its_own(self):
-        said = lambda spec: json.loads(viewspec.shown(spec).partition(viewspec.MARK)[2].split(' His pick')[0])
+        # ...and the spec is the answer's last thing: the chat reads it from the mark to the end, and words after it left a choice undrawn
+        said = lambda spec: json.loads(viewspec.shown(spec).partition(viewspec.MARK)[2])
+        self.assertIn('His pick comes to you', viewspec.shown(WHAT_IF).partition(viewspec.MARK)[0])
         self.assertNotIn('id', said(SPEC))
         a, b = said(WHAT_IF), said(WHAT_IF)
         self.assertNotEqual(a['id'], b['id'])                # ...the same choice shown twice is two questions

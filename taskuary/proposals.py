@@ -122,6 +122,9 @@ ACTIONS = {
     # A TASK'S AGENT ASKING FOR ONE OF HIS REPORTS OR ROUTINES TO RUN NOW (the owner, 2026-11-25): raised by its door, never an agent's marker -
     # his press is his Run now (server._rerun_report)
     'rerun_report': ('run a report or routine of yours now', ('source_id',), None),
+    # A CHECKOUT ONLY HIS YES PICKS (repochoice.Asks, the owner 2026-11-25): raised by the use_repo door, never an agent's marker - his press makes
+    # it this task's code, as his Change does (repochoice.use, mine)
+    'use_repo': ('work in this checkout on this task', ('path',), None),
 }
 FAILED_NOTE = 'failed'      # a pressed act that failed: settled, its error kept (ActError) - its agent sets up what goes next
 HELD_ACTS = ('browser_act', 'shell_act', 'desktop_act')     # raised by a hook before the act ran - never an agent's marker
@@ -143,7 +146,7 @@ def _gate(a: str):
 # WHAT NO AGENT MAY ASK FOR, AND THE MARKS NONE MAY PUT ON ITS OWN ASK - one list for both doors: the marker (parse) and the tool
 # (agenttools.proposal_of). They were two, and had drifted (the spine audit, 2026-11-09): the tool's did not name the held steps, so an agent
 # could file a "held step" of its own - a command of its choosing, on the card the owner reads as one Taskuary stopped
-NOT_ASKED = ('merge_pr', 'close_item', 'repair_workflow', 'change_setup', 'use_desktop', 'start_task', 'switch_ai', 'rerun_report', *HELD_ACTS)
+NOT_ASKED = ('merge_pr', 'close_item', 'repair_workflow', 'change_setup', 'use_desktop', 'start_task', 'switch_ai', 'rerun_report', 'use_repo', *HELD_ACTS)
 MARKS = ('closeout', 'flow_run')
 
 # A POST IS DRAWN AS THE POST (the owner, 2026-11-05: "it's not showing the post and the image as a linkedin post and asking me if i want to
@@ -645,7 +648,8 @@ def queue(store, task_id: int, p: dict, actor='agent', refused: list | None = No
             else f"change the {p.get('kind') or 'report'} \"{p['title']}\"" if p['action'] == 'change_setup'
             else f"start \"{p['title']}\" as its own task" if p['action'] == 'start_task'
             else f"run this task on {p.get('ai') or p['pick']}" if p['action'] == 'switch_ai'
-            else f"run \"{p.get('title') or p['source_id']}\" now" if p['action'] == 'rerun_report' else why)
+            else f"run \"{p.get('title') or p['source_id']}\" now" if p['action'] == 'rerun_report'
+            else f"work in {p['path']} on this task" if p['action'] == 'use_repo' else why)
     # ...nor a held browser act: the agent did not propose it, it tried it, and the hook stopped it (browsergate.check)
     # ...a shell step by what it does, never its raw line: the card folds the command under "Show the command"
     reason = (f"held before it ran, {HELD_IN[p['action']]}: {p.get('what') or ('a step' if p['action'] == 'shell_act' else p.get('command'))}"
@@ -1214,6 +1218,9 @@ def _run(store, rv: dict, p: dict, tid, a: str, actor: str, edited, skip_checks:
         from .server import new_task_from                  # ...the new_task door's own road, made and started on his press
         out = new_task_from(int(tid), str(p['title']), str(p['ask']), str(p.get('kind') or 'general'), str(p.get('model') or ''),
                             str(p.get('repo') or ''), actor)
+    elif a == 'use_repo':
+        from . import repochoice
+        out = repochoice.use(store, int(tid), str(p['path']), str(p.get('why') or ''), actor, mine=True)
     elif a == 'rerun_report':
         from .server import _rerun_report                    # ...his Run now, on his press
         out = _rerun_report(int(p['source_id']), by=actor)

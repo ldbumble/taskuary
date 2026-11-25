@@ -6448,6 +6448,12 @@ def agent_use_repo(body: AgentUseRepoBody, request: Request):
     _own_task_only(request, body.task_id)
     if not store.get_task(body.task_id): raise HTTPException(404, 'no such task')
     try: return repochoice.use(store, body.task_id, body.path_or_name, body.why)
+    except repochoice.Asks as e:            # ...a pick his yes makes: one card, his press the pick (the owner, 2026-11-25)
+        from . import proposals
+        from .selfclose import CARD_TAIL
+        q = proposals.queue(store, body.task_id, {'action': 'use_repo', 'path': e.path, 'why': str(body.why or '')[:200]}, 'taskuary', refused=(miss := []))
+        if not q: raise HTTPException(403, f"{e} - {miss[0] if miss else 'it was not put to him'}")
+        return {'ok': True, 'queued': True, 'review': q['reviewId'], 'says': f'Not taken yet: {e}. Working in {e.path}: {CARD_TAIL}'}
     except PermissionError as e: raise HTTPException(403, str(e))
     except ValueError as e: raise HTTPException(422, str(e))
 

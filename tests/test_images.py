@@ -253,5 +253,54 @@ class TheToolAgentsCallTests(unittest.TestCase):
         post.assert_not_called()
 
 
+class AnAICardThatCanDrawTests(unittest.TestCase):
+    """An install whose only AI is an access-code gateway asked for a picture and was told to paste the prompt into another app, while the
+    gateway served an image model (2026-11-25). Any OpenAI-compatible AI card whose model list gives a model the image mode draws."""
+    BASE = 'https://ai.northwind.example/v1'
+
+    def _gateway(self, image_mode=True):
+        from taskuary import llm
+        s = MemoryStore(); c = _conn(s, 'hipaa_ai', {'base_url': self.BASE}, secret='code-1')
+        llm._models_cache.pop(c['ConnectorId'], None)
+        self.addCleanup(llm._models_cache.pop, c['ConnectorId'], None)
+        info = [{'model_name': 'fast-chat', 'model_info': {'mode': 'chat'}},
+                {'model_name': 'pictures', 'model_info': {'mode': 'image_generation' if image_mode else 'chat'}}]
+        def get(url, headers=None, **kw):
+            r = mock.Mock(status_code=200, headers={'Content-Type': 'application/json'}, text='')
+            r.json.return_value = {'data': info} if url == f'{self.BASE}/model/info' else {'data': [{'id': 'fast-chat'}, {'id': 'pictures'}]}
+            assert headers == {'Authorization': 'Bearer code-1'}, headers
+            return r
+        p = mock.patch.object(llm.requests, 'get', side_effect=get); p.start(); self.addCleanup(p.stop)
+        return s, c
+
+    def test_a_card_whose_list_has_an_image_model_draws_through_it(self):
+        s, c = self._gateway()
+        self.assertEqual(images.ready(s), {'ready': True, 'provider': 'image_server', 'label': f"{c['Name']} · pictures"})
+        with mock.patch.object(images.requests, 'post', return_value=_resp(payload={'data': [{'b64_json': B64}]})) as post:
+            out = images.generate(s, 'a duck on a pond')
+        url, kw = post.call_args.args[0], post.call_args.kwargs
+        self.assertEqual(url, f'{self.BASE}/images/generations')
+        self.assertEqual((kw['headers'], kw['json']['model']), ({'Authorization': 'Bearer code-1'}, 'pictures'))
+        self.assertEqual((out['data'], out['label']), (PNG, f"{c['Name']} · pictures"))
+
+    def test_a_card_that_lists_only_chat_models_draws_nothing(self):
+        s, _ = self._gateway(image_mode=False)
+        self.assertIsNone(images.pick(s))
+
+
+class NothingToDrawWithTests(unittest.TestCase):
+    def test_the_agents_tool_answers_with_one_connect_card_and_draws_nothing(self):
+        from taskuary import agenttools, viewspec, words
+        s = MemoryStore(); tid = s.create_task({'Title': 'a poster for the fair'}, 'owner')
+        with tempfile.TemporaryDirectory() as d, mock.patch.dict('os.environ', {'TASKUARY_HOME': d}), \
+             mock.patch.object(images.requests, 'post', side_effect=AssertionError('nothing may be drawn')):
+            said = agenttools._call(s, tid, 'draw_image', {'prompt': 'a poster'}, {})
+        self.assertIn('Nothing was drawn', said)
+        view = json.loads(said.partition(viewspec.MARK)[2])
+        buttons = [e for e in view['elements'].values() if e['type'] == 'button']
+        self.assertEqual(len(buttons), 1)
+        self.assertEqual(buttons[0]['props'], {'label': 'Connect an image model', 'open': words.href('images')})
+
+
 if __name__ == '__main__':
     unittest.main()

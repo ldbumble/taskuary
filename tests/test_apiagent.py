@@ -286,7 +286,7 @@ class OneRoundTripTests(unittest.TestCase):
         whole = len(json.dumps(apiagent.tools_for(1, 'p', True, post=post) + list(apiagent.DEFERRED[(1, 'p')].values())))
         core = apiagent.tools_for(1, 'p', True, post=post)
         names = [t['function']['name'] for t in core]
-        assert {'search_messages', 'read_message', 'propose', 'show', 'file_write'} <= set(names) and 'calendar' not in names
+        assert {'search_messages', 'read_message', 'propose', 'show', 'draw_image', 'file_write'} <= set(names) and 'calendar' not in names
         assert names[-1] == 'find_tools' and len(json.dumps(core)) < whole * 0.5
         TOOL_CHARS = 7_000                # what every call carries before a word of the job: was ~15,000 (23 tools at ~650 characters); end_turn and ask_owner ride in it since the prompt's protocols became tools, and every act that raises a card since walk 10 (2026-11-23)
         assert len(json.dumps(core, separators=(',', ':'))) < TOOL_CHARS

@@ -117,6 +117,13 @@ TOOLS = {
              _S({'title': _STR, 'root': _STR, 'elements': {'type': 'object', 'additionalProperties': __import__('taskuary.viewspec', fromlist=['x']).element_schema()},
                  'state': {'type': 'object'}, 'files': {'type': 'array', 'items': _STR}}),
              ('GET', '/api/tasks/1')),
+    # ...and A PICTURE, drawn by the owner's image model (images.pick: an image card, or an AI card whose models include one) - the one road to
+    # images.run_image_generate an agent has; with nothing to draw with, its answer is his Connect card (the owner, 2026-11-25)
+    'draw_image': ('own', "Draw a picture from `prompt` with the owner's image model; it lands in this task's outputs and shows in this "
+                          "chat. `size`: 1024x1024, 1024x1536 (tall) or 1536x1024 (wide). With no image model connected, nothing is drawn and"
+                          " his chat shows the card that connects one.",
+                   _S({'prompt': _STR, 'size': {'type': 'string', 'enum': ['1024x1024', '1024x1536', '1536x1024']}}, ('prompt',)),
+                   ('GET', '/api/tasks/1')),
     'tick': ('own', "Tick (done=true) or untick one of this task's to-dos: `item` is its id, the one in brackets after it.",
              _S({'item': _STR, 'done': {'type': 'boolean'}}, ('item',)), ('POST', '/api/agent/tick')),
     # ...and the list itself (the owner, 2026-11-09: "no new table - triage's to-do list IS the issue list")
@@ -130,17 +137,17 @@ TOOLS = {
     # one question only the owner can answer, and the company's playbooks - each said by its own description, never in every prompt
     'end_turn': ('own', "Call once as your turn ends: where the task stands, shown on its page. name: the task in 3-6 words. about: 2-3 "
                         "sentences - which conversation, who asked, for whom. did: the result first (path, link, figure), then what you did. "
-                        "on_you: steps only the owner can take that no card or question carries, each with why. nothing_left: the goal is met "
-                        "and checked. answer_is_result: your words are what was asked. after_press: send (a step of yours follows his press - "
-                        "it wakes you) or handoff. retry: another try may work. corrections: when he corrects you, [{kind: "
-                        "redraft|ask, review: draft id|null, said: his words}]. check_back: {when, what}.",
+                        "on_you: steps only the owner can take that no card or question carries, each with why. nothing_left: goal met and "
+                        "checked. answer_is_result: your words are what was asked. after_press: send (his press wakes you for your next step) "
+                        "or handoff. retry: another try may work. corrections: [{kind: "
+                        "redraft|ask, review: draft id|null, said: his words}].",
                  _S({'name': _STR, 'about': _STR, 'did': _STR, 'on_you': {'type': 'array', 'items': _STR}, 'nothing_left': {'type': 'boolean'},
                      'answer_is_result': {'type': 'boolean'}, 'after_press': {'type': 'string', 'enum': ['send', 'handoff']},
                      'retry': {'type': 'boolean'}, 'corrections': {'type': 'array', 'items': {'type': 'object'}},
                      'check_back': {'type': 'object', 'properties': {'when': _STR, 'what': _STR}}}, ('did',)), ('GET', '/api/tasks/1')),
-    'ask_owner': ('own', "Ask the owner the one thing only they can give - a fact or a decision - with your recommended answer. It stands "
-                         "on the task until they answer, the task closes or you withdraw it, and the answer comes to you. choices: short answers, "
-                         "when it is a pick. withdraw: true takes back your question still standing - it no longer needs their answer.",
+    'ask_owner': ('own', "Ask the owner the one fact or decision only they can give, with your recommended answer. It stands "
+                         "until answered, closed or withdrawn; the answer comes to you. choices: short answers for a pick. "
+                         "withdraw: true takes your standing question back.",
                   _S({'question': _STR, 'choices': {'type': 'array', 'items': _STR}, 'withdraw': {'type': 'boolean'}}), ('GET', '/api/tasks/1')),
     'playbooks': ('read', "How this company does each kind of job, written by the owner: with no `name`, the list of playbooks and when each "
                           "applies; with a `name`, that playbook whole. Read-only.",
@@ -335,7 +342,7 @@ SHORT = {
     'read_attachment': 'The text of one attachment on a saved message, by its id.',
     'my_task': "This task's brief and to-dos with their ids.",
     'search_tasks': "Search the owner's tasks, mail, chats and pull requests, and what earlier tasks settled.",
-    'person': "Who a name or address is: their record, open and closed tasks and where each stands, latest messages.",
+    'person': "Who a name or address is: their record, their tasks and where each stands, latest messages.",
     'past_figures': "What the mail and record already hold in figures for a vendor or person: charges, prices, seat counts.",
     'search_knowledge': "Search the owner's knowledge base (indexed folders, SharePoint).",
     'owner_memory': "Look up the owner's memory: what they said, their people, what they confirmed.",
@@ -345,8 +352,9 @@ SHORT = {
     'guide': "Read one of Taskuary's how-tos (browser, number, propose ...).",
     'run_system': "Run one tool on one of the owner's systems: {type, connector_id, ...its fields}.",
     'web_search': "Search the web through this task's AI card.",
-    'show': 'Draws bar, line and pie charts, tables, number tiles and checklists inline in this chat, with sliders, toggles, selects and '
-            'dates that recompute them live and choices whose pick comes back to you - or shows files you made.',
+    'show': 'Draws bar, line and pie charts, tables, number tiles and checklists in this chat, with sliders, toggles, selects and '
+            'dates recomputing them live, and choices whose pick comes back to you - or shows files you made.',
+    'draw_image': "Draw a picture from a prompt into this task and this chat.",
     'tick': "Tick or untick a to-do: `item` is its id.",
     'todos': "Add, reword or merge this task's to-dos.",
     # end_turn and ask_owner are listed with their whole words: the fields ARE how they are used
@@ -368,9 +376,9 @@ SHORT = {
     'answer_invite': "Answer this task's meeting invite: accept, decline or propose.",
     'set_up_meeting': "Set up a meeting for the owner's press.",
     'share': "Share a report or dashboard of the owner's with a person.",
-    'propose': "Anything that needs the owner's review and press - a reply, an email, a post, a GitHub/Jira/Monday comment or issue, a PR or push, "
-               "an order on a system, a script you wrote kept by save_routine: one card in this chat, its words editable, nothing done before his press. `kind`: reply, email, post "
-               "or act (`action`); several at once in `items`.",
+    'propose': "Anything for the owner's review and press - a reply, an email, a post, GitHub/Jira/Monday comment or issue, PR or push, "
+               "an order on a system, a script kept by save_routine: one card in this chat, its words editable, nothing done before his press. `kind` "
+               "(an act names its `action`); several at once in `items`.",
     'find_tools': "A tool's instructions by name, or more tools by need.",
 }
 def lean(s):
@@ -776,6 +784,15 @@ def _call(store, tid: int, name: str, args: dict, doors: dict, skip=()) -> str:
             try: session_artifacts.view(store, tid, said[-1].partition(viewspec.MARK)[2])
             except (OSError, ValueError) as e: logger.warning(f'the view shown on task {tid} was not kept - {e}')
         return ' '.join(said)
+    if name == 'draw_image':
+        from . import images, outbound
+        # ...nothing to draw with is his one Connect card in this chat (outbound.connect_fix, the card a post on a network not connected shows)
+        if fix := outbound.connect_fix(store, 'images'):
+            card = _call(store, tid, 'show', {'title': fix['says'], 'root': 'go', 'elements': {'go': {'type': 'button', 'props': {'label': fix['label'], 'open': fix['href']}}}}, doors)
+            return f"Nothing was drawn: {fix['says'].lower()}. His chat shows the card that connects one ({fix['label']}); the picture can be drawn once he has. {card}"
+        try: out = images.run_image_generate(store, a, task_id=tid)
+        except RuntimeError as e: raise ValueError(refusal(f'nothing was drawn - {e}', 'say what the image model answered, or try again with another prompt'))
+        return f"Drew {out['name']} with {out['label']}. " + show_files(store, tid, [out['file']])
     if name == 'tick': return _j(doors['tick'](tid, str(a['item']), a.get('done', True) is not False))
     if name == 'check_back': return _j(doors['check_back'](tid, str(a.get('when') or ''), str(a.get('what') or '')))
     if name == 'todos': return _j(doors['todos'](tid, a))

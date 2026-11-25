@@ -209,14 +209,14 @@ def codex_config(cid: int, name: str, base: str, header: str, extra: dict, model
     return '\n'.join(out) + '\n'
 
 
-def opencode_config(name: str, base: str, header: str, extra: dict, model: str, strong: str) -> dict:
+def opencode_config(name: str, base: str, header: str, extra: dict, model: str, strong: str, chosen: str = '') -> dict:
     """opencode.json for a card: the card as its one provider, its models with the efforts the gears ask for, and its own roads out closed
     (sharing, auto-update) - the rest is closed by its environment (row)."""
     opts = {'baseURL': base, 'apiKey': f'{{env:{KEY_ENV}}}'} if not header else {'baseURL': base, 'headers': {header: f'{{env:{KEY_ENV}}}'}}
     if extra: opts['headers'] = {**opts.get('headers', {}), **extra}
     # ...each model once as itself and once per effort (oc_name), so a gear is a model name - the one thing its command line takes
     models = {}
-    for m in dict.fromkeys(x for x in (model, strong) if x):
+    for m in dict.fromkeys(x for x in (model, strong, chosen) if x):
         models[m] = {'name': m, 'tool_call': True}
         models.update({f'{m}-{e}': {'id': m, 'name': f'{m} ({e})', 'tool_call': True, 'options': {'reasoningEffort': e}} for e in ('low', 'medium', 'high')})
     return {'$schema': 'https://opencode.ai/config.json', 'model': f'card/{model}',
@@ -267,9 +267,10 @@ def catalog(cmd: str, models: list, window: int) -> dict:
     return {'models': [one(i, m) for i, m in enumerate(models)]}
 
 
-def row(store, name: str) -> dict | None:
+def row(store, name: str, chosen: str = '') -> dict | None:
     """The agent row `cli:card-<id>` runs (agents.agent_row): the card's harness CLI, its gears in the card's models, and its environment.
-    None for any other name, or a card whose harness cannot run here."""
+    None for any other name, or a card whose harness cannot run here. `chosen`: a model of the card's he picked for this run - listed in the
+    harness's own models beside the gears' (walk 20: the chooser's claude-sonnet-5-5 was no model Codex offered, and the run took the card's)."""
     cid = card_id(name)
     if cid is None: return None
     t, cfg, key = _cfg(store, cid)
@@ -281,19 +282,20 @@ def row(store, name: str) -> dict | None:
     base, header, extra, model = _provider(t, cfg)
     e = split_pick(cfg.get('model'))[1]
     quick, normal, hard = gears(cfg, f'{model}@{e}' if e else model)
+    chosen = split_pick(chosen)[0] if chosen else ''
     d, label = folder(cid), f'{(store.get_connector(cid) or {}).get("Name") or t} (card {cid})'
     if h == 'codex':
         home = d / 'codex'; home.mkdir(exist_ok=True)
         window = int(cfg.get('context_window') or 1_000_000)
         cat = home / 'models.json'
-        try: _write(cat, json.dumps(catalog(cmd, [x for x in dict.fromkeys((model, split_pick(hard)[0])) if x], window)))
+        try: _write(cat, json.dumps(catalog(cmd, [x for x in dict.fromkeys((model, split_pick(hard)[0], chosen)) if x], window)))
         except Exception as e: cat = None; logger.warning(f'harness: no model catalogue for card {cid} - Codex says its fallback warning ({e})')
         _write(home / 'config.toml', codex_config(cid, label, base, header, extra, model, window, str(cat) if cat else ''))
         env = {'CODEX_HOME': str(home)}
     else:
         strong = split_pick(hard)[0] if cfg.get('strong_model') else ''
         f = d / 'opencode.json'
-        _write(f, json.dumps(opencode_config(label, base, header, extra, model, strong), indent=2))
+        _write(f, json.dumps(opencode_config(label, base, header, extra, model, strong, chosen), indent=2))
         quick, normal, hard = (oc_name(x) for x in (quick, normal, hard))
         # its own config and data folders, so the owner's other providers and sign-ins are not loaded, and nothing is fetched for them
         env = {'OPENCODE_CONFIG': str(f), 'XDG_CONFIG_HOME': str(d / 'config'), 'XDG_DATA_HOME': str(d / 'data'),

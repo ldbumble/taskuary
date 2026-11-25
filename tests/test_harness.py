@@ -86,6 +86,24 @@ def test_opencode_is_the_second_launcher_on_the_same_road(here):
     assert prof['env']['OPENCODE_DISABLE_AUTOUPDATE'] == '1' and prof['env']['OPENCODE_CONFIG'].endswith('opencode.json')
 
 
+def test_the_model_he_picked_is_one_the_cards_harness_offers_so_the_run_takes_it(here, monkeypatch):
+    """Walk 20: on the gateway card the chooser read "HIPAA AI · claude-sonnet-5-5", "you chose it" - and every run took the card's model:
+    Codex's session offers only the models of its catalogue, which held the card's two, so the pick was not one it could switch to."""
+    monkeypatch.setattr(harness, 'bundled', lambda cmd: {'slug': 'gpt-x'})
+    s = MemoryStore(); cid = _card(s)
+    seen = []
+    real = agents.agent_row
+    with mock.patch.object(agents, 'agent_row', side_effect=lambda st, n, m=None: seen.append(m) or real(st, n, m)):
+        llm.make_cli_llm(s, f'card-{cid}', 'claude-sonnet-5-5', cli_tools=True, task_id=7)
+    assert seen == ['claude-sonnet-5-5'], 'the run hands its pick to the row the harness is started from'
+    ms = json.loads((harness.folder(cid) / 'codex' / 'models.json').read_text(encoding='utf-8'))['models']
+    assert [m['slug'] for m in ms] == ['hydrogen', 'neon', 'claude-sonnet-5-5']
+    oc = _card(s, harness='opencode')
+    prof = json.loads(agents.agent_row(s, f'card-{oc}', 'claude-sonnet-5-5@high')['Config'])
+    f = json.loads((harness.folder(oc) / 'opencode.json').read_text(encoding='utf-8'))
+    assert 'claude-sonnet-5-5-high' in f['provider']['card']['models'] and prof['model'] == 'card/hydrogen'
+
+
 def test_install_no_api_card_installs_nothing_and_an_opencode_card_installs_only_opencode(monkeypatch):
     harness._TRIED.clear(); monkeypatch.setattr(harness, 'ON', True)
     started = []

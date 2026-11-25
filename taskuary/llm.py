@@ -401,7 +401,7 @@ def make_cli_llm(store, agent_name: str, model: str = None, cwd: str = None, tra
     main `model` stays reserved for the coding sessions. One brain, two gears: the classifier
     reads one email; it does not need the model that rewrites your codebase."""
     from . import agents as hub_agents
-    row = hub_agents.agent_row(store, agent_name)
+    row = hub_agents.agent_row(store, agent_name, model)         # ...a card's harness lists the model picked for this run (harness.row)
     if not row: return None
     prof = {k: v for k, v in json.loads(row.get('Config') or '{}').items() if k not in ('cwd', 'cwd_map')}
     # A ROLE'S ROW THAT NAMES NO CLI (synced before any brain was chosen) runs on the brain chosen for it, else on a ready one - it

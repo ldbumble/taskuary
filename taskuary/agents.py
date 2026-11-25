@@ -786,14 +786,14 @@ def ready_brains(store) -> list:
     return sorted(keys, key=lambda k: tests.get(k) is not True)
 
 
-def agent_row(store, name: str) -> dict | None:
+def agent_row(store, name: str, model: str = None) -> dict | None:
     """The row a `cli:<name>` pick runs. A BRAIN IS A CLI TOOL OR AN AI CONNECTION, NEVER A PROFILE (the owner, 2026-10-15:
     "there is no such profile or brain.. it's models or cli tools only"): `cli:claude` is the Claude Code connection, whatever
     profiles exist. A profile name here is a pick saved before brains named tools (`cli:<profile>`) - still run, by its row, so an
     old chat keeps working until migrate_brain_settings rewrites it."""
     if not name: return None
     from . import config, harness
-    if harness.card_id(name) is not None: return harness.row(store, name)      # an API card's agent, on its harness CLI (harness.py)
+    if harness.card_id(name) is not None: return harness.row(store, name, model or '')     # an API card's agent, on its harness CLI (harness.py)
     from .cli_connections import with_defaults
     conn = (config.load().get('cli_connections') or {}).get(str(name))
     if conn: return {'Name': name, 'Kind': 'general', 'Runner': 'cli', 'Config': json.dumps(with_defaults(conn))}

@@ -35,7 +35,8 @@ const agent = async (t, name, args = {}) => {
   let json = null; try { json = JSON.parse(text); } catch { /* words */ }
   return { text, err: !!res.isError, json };
 };
-const task = async (title, ask, more = {}) => ({ ...(await fx("task", { title, ask, ...more })), said: [], trace: [] });
+// ...and its agent takes a moment over his line before it raises anything, as any agent does: the chat orders a card and a line by the second
+const task = async (title, ask, more = {}) => { const t = { ...(await fx("task", { title, ask, ...more })), said: [], trace: [] }; await sleep(1100); return t; };
 const files = async (t, ...names) => (await fx("files", { taskId: t.taskId, names })).paths;
 const end = (t, text) => fx("end", { taskId: t.taskId, text, trace: t.trace });
 const LETTERS = ["erin", "gail", "paula"].map((who) => ({ to: `${who}@northwind.example`, subject: "The ledger portal is live Monday",
@@ -172,6 +173,7 @@ try {
   // ...Chrome's own PDF viewer is a page of the browser's (chrome-extension:, chrome:): let through, or every PDF preview is a black box. All else stays shut
   page.off("request", page.fixtureRequestGuard);
   page.on("request", (r) => (/^chrome(-extension|-untrusted)?:/.test(r.url()) ? r.continue() : page.fixtureRequestGuard(r)));
+  page.on("response", (r) => { if (r.status() >= 500) errors.push(`${r.status()} ${r.request().method()} ${new URL(r.url()).pathname}`); });
   page.on("pageerror", (e) => errors.push(`pageerror: ${e.message.slice(0, 300)}`)); page.on("console", (m) => { if (m.type() === "error") errors.push(m.text().slice(0, 300)); });
   await page.goto(h.ui, { waitUntil: "domcontentloaded" }); await sleep(3000);
   // what stands on the task's page: its buttons, and what a card should never read
@@ -195,9 +197,11 @@ try {
     return { top: Math.round(v.scrollTop), tall: v.scrollHeight, room: v.clientHeight, drawn: on.length, seen, ...(veil ? { HIDDEN_BY: veil } : {}) }; });
   const clip = async () => { const box = await page.evaluate(() => { const r = document.querySelector("[data-tq-task-page]")?.getBoundingClientRect(); return r && r.width > 50 ? { x: r.x, y: r.y, width: r.width, height: r.height } : null; });
     return box ? { clip: { x: Math.max(0, box.x - 8), y: Math.max(0, box.y - 8), width: box.width + 16, height: box.height + 16 } } : {}; };
+  // ...and never with Chrome laying the page out again under the capture (captureBeyondViewport): the chat answers a window that changes size, and
+  // every other shot was a chat caught mid-move - a card above the fold, a blank view - that no window of his ever showed
   const shot = async (name) => {
     const c = await chat(), w = page.viewport().width;
-    await page.screenshot({ path: path.join(OUT, `${name}.png`), ...(await clip()) });
+    await page.screenshot({ path: path.join(OUT, `${name}.png`), captureBeyondViewport: false, ...(await clip()) });
     if (!c || c.tall <= c.room + 2) return c;
     let tall = 1000;
     for (let i = 0; i < 4 && tall < 3600; i++) {
@@ -206,7 +210,7 @@ try {
       tall = Math.min(3600, tall + need + 60); await page.setViewport({ width: w, height: tall }); await sleep(600);
     }
     await page.evaluate(() => { const v = document.querySelector("[data-tq-task-page] .tq-aui-viewport"); if (v) v.scrollTop = 0; }); await sleep(200);
-    await page.screenshot({ path: path.join(OUT, `${name}-all.png`), ...(await clip()) });
+    await page.screenshot({ path: path.join(OUT, `${name}-all.png`), captureBeyondViewport: false, ...(await clip()) });
     await page.setViewport({ width: w, height: 1000 }); await sleep(500);
     return c;
   };
@@ -231,6 +235,9 @@ try {
   const flush = () => writeFile(path.join(OUT, "README.txt"), said.join("\n") + "\n");
   for (const [k, t] of Object.entries(made)) {
     said.push(`${k}  (task ${t.taskId})`, ...t.said);
+    // ...and where each of its cards stands in the store as the page is opened: a card greyed on the screen is one something settled
+    const rows = (await api(`/api/tasks/${t.taskId}`)).reviews || [];
+    if (rows.length) said.push(`    cards: ${rows.map((r) => `rv${r.ReviewId} ${r.Kind} ${r.Status}${r.DecideNote ? ` (${r.DecideNote})` : ""}`).join(", ")}`);
     try {
       await open(t.taskId, 1440, "light"); said.push(`    wide: ${JSON.stringify({ chat: await shot(`${k}-wide`), ...(await read()) })}`);
       await open(t.taskId, 430, "light"); said.push(`    narrow: ${JSON.stringify({ chat: await shot(`${k}-narrow`), ...(await read()) })}`);

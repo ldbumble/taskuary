@@ -83,3 +83,38 @@ test("drawn, the spend tiles show the slider, the switchable legend, the pie's s
   assert.match(pie, /class="tq-dash-pie"/);
   assert.match(pie, /<span title="Pro">Pro<\/span><b>3<\/b><em>75%<\/em>/);
 });
+
+// SPEND IS DOLLARS (the owner, 2026-11-24: "spend is cost, not tokens"): a "$" tile says its figures as money, its change as a pill coloured by
+// whether that way is good, and its tokens small under it; a chart in an agent's chat can be an area over its soft fill - the same Line
+test("drawn, a dollar tile says money, a pill for its change and its tokens under it; an agent's area chart is the dashboard's", async () => {
+  const { build } = await import("esbuild");
+  const out = await build({ stdin: { resolveDir: new URL("..", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1"), loader: "jsx", contents: `
+    import React from "react"; import { renderToStaticMarkup } from "react-dom/server.browser"; import Dashboard from "./src/dashboard/Dashboard.jsx";
+    import ViewSpec from "./src/ViewSpec.jsx";
+    export const html = (spec, data, now) => renderToStaticMarkup(<Dashboard spec={spec} data={data} now={now} onOpen={() => {}} />);
+    export const view = (spec) => renderToStaticMarkup(<ViewSpec spec={spec} />);` }, loader: { ".css": "empty" },
+    bundle: true, write: false, format: "esm", jsx: "automatic", platform: "browser", conditions: ["worker"], logLevel: "silent",
+    define: { "process.env.NODE_ENV": '"production"' } });
+  const { html, view } = await import(`data:text/javascript;base64,${Buffer.from(out.outputFiles[0].text).toString("base64")}`);
+  const day = (n) => daysAgo(n, NOW);
+  // this week $11.50 against $10.00 the week before; 1.2M tokens of which 400K on a plan, none with no price
+  const rows = [{ day: day(1), cost: 6.5, tokens: 500000, billing: "priced" }, { day: day(3), cost: 5, tokens: 300000, billing: "priced" },
+    { day: day(2), cost: null, tokens: 400000, billing: "plan" }, { day: day(9), cost: 10, tokens: 900000, billing: "priced" }];
+  const spec = { title: "t", filters: { range: 7 }, sources: [{ key: "ai", date: "day" }], components: [
+    { kind: "stat", title: "AI spend", source: "ai", agg: "sum", y: "cost", unit: "$", good: "down",
+      also: [{ label: "tokens", agg: "sum", y: "tokens" }, { label: "on your plan", agg: "sum", y: "tokens", where: { billing: "plan" } },
+             { label: "with no price", agg: "sum", y: "tokens", where: { billing: "unknown" } }] }] };
+  const got = html(spec, { sources: { ai: { rows, columns: Object.keys(rows[0]) } } }, NOW);
+  assert.match(got, /<div class="tq-dash-value">\$11\.50<\/div>/, "dollars, no unit after them");
+  assert.match(got, /<b class="pill down">▲ 15%<\/b><span>vs prior 7 days<\/span>/, "spend up is the bad way");
+  assert.match(got, /<div class="tq-dash-also"><span><b>1\.2M<\/b> tokens<\/span><span><b>400\.0K<\/b> on your plan<\/span><\/div>/);
+  assert.doesNotMatch(got, /with no price/, "a figure that comes to nothing is not said");
+  assert.match(got, /<linearGradient id="tq-dash-g\d+"/, "the sparkline fades under its line");
+  const area = view({ root: "a", elements: { a: { type: "chart", props: { kind: "area", points: [{ label: "Mon", value: 2 }, { label: "Tue", value: 5 }] } } } });
+  assert.match(area, /data-tq-dash-kind="area"/);
+});
+
+test("money reads as a person reads it", async () => {
+  const { money } = await import("../src/dashboard/slice.js");
+  assert.deepEqual([0.4213, 54.2, 20, 1234.4, 12345, 2.5e6, null].map(money), ["$0.42", "$54.20", "$20", "$1,234", "$12.3K", "$2.5M", "–"]);
+});

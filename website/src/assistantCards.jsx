@@ -1016,7 +1016,8 @@ export function DashboardCard({ card, onOpenTask, onDone, table = null }) {
   const [name] = nameAndRest(card.title, card.who), day = dayLabel(card.when), at = got?.data?.at ? fmtTime12(got.data.at) : "";
   // ...ON THE TABLE in the turn's frame at the chat's whole width: a dashboard is looked at, and room is what it needs (the owner, 2026-11-23:
   // "Dashboards should take up most of the screen since real estate is paramount")
-  const drawn = <div className={on ? "tq-dash-canvas tq-turn-frame tq-turn-wide" : "tq-dash-canvas"} data-tq-dash-canvas="">
+  // ...its room kept while its rows are read: drawn short, the chat moved down to the dashboard as they landed - the run's line jumped off the top
+  const drawn = <div className={`${on ? "tq-dash-canvas tq-turn-frame tq-turn-wide" : "tq-dash-canvas"}${got?.data ? "" : " tq-dash-wait"}`} data-tq-dash-canvas="">
     {got?.data ? <Dashboard spec={got.config} data={got.data} /> : <div className="tq-card-excerpt">{err || (got ? DASH.never : DASH.loading)}</div>}
   </div>;
   const routine = useRoutine(on && card, "dashboard", DASH.edit);

@@ -156,6 +156,14 @@ export const fmt = (v) => {
   if (a >= 1e4) return `${(v / 1e3).toFixed(1)}K`;
   return Number.isInteger(v) ? v.toLocaleString("en-US") : v.toLocaleString("en-US", { maximumFractionDigits: 1 });
 };
+// dollars as a person reads them (dashboards.money): $0.42, $54.20, $20, $1,234, $12.3K - a whole number of dollars (an axis's tick) has no cents - a tile whose unit is "$" says its figures so
+export const money = (v) => {
+  if (v === null || v === undefined || Number.isNaN(v)) return "–";
+  const a = Math.abs(v);
+  return a >= 1e6 ? `$${(v / 1e6).toFixed(1)}M` : a >= 1e4 ? `$${(v / 1e3).toFixed(1)}K`
+    : `$${v.toLocaleString("en-US", a >= 1000 || Number.isInteger(v) ? { maximumFractionDigits: 0 } : { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+};
+export const fmtOf = (c) => (c?.unit === "$" ? money : fmt);
 export const signed = (v) => (v > 0 ? `+${fmt(v)}` : v < 0 ? `−${fmt(-v)}` : "±0");
 
 // the segment filter's choices: every value the column takes, across the sources that carry it

@@ -752,7 +752,7 @@ CREATE TABLE IF NOT EXISTS lore_vote (LoreId INTEGER, Actor TEXT, Delta INTEGER,
 -- kept a month, the rest 90 days (brainroute.trim).
 CREATE TABLE IF NOT EXISTS brainroute (Id INTEGER PRIMARY KEY, At TEXT, Job TEXT, TaskId INTEGER, MessageId INTEGER, Pick TEXT,
   Model TEXT, Tier TEXT, Rule TEXT, Why TEXT, Difficulty TEXT, DataClass TEXT, EscalatedFrom INTEGER, Outcome TEXT, Ms INTEGER,
-  Ran TEXT, TokensIn INTEGER, Cached INTEGER, TokensOut INTEGER, Calls INTEGER, Sid TEXT, Caller TEXT, FellFrom TEXT);
+  Ran TEXT, TokensIn INTEGER, Cached INTEGER, TokensOut INTEGER, Calls INTEGER, Sid TEXT, Caller TEXT, FellFrom TEXT, Cost REAL);
 CREATE INDEX IF NOT EXISTS idx_brainroute_task ON brainroute(TaskId, Id);
 -- How hard a task's work is, whether its reader could tell, and what kind of data it carries - triage's judgements, apart from the
 -- priority, kept per task (brainroute.judged). `By` is 'owner' once they correct one: their word stands until they change it again.
@@ -1540,7 +1540,8 @@ class SQLiteStore:
             brcols = {r[1] for r in self.cx.execute('PRAGMA table_info(brainroute)')}
             # ...and which function asked (aiusage.asking, 2026-11-11): a row from before it has none, and reads as a call nobody named
             for c, t in (('Ran', 'TEXT'), ('TokensIn', 'INTEGER'), ('Cached', 'INTEGER'), ('TokensOut', 'INTEGER'), ('Calls', 'INTEGER'), ('Sid', 'TEXT'),
-                         ('Caller', 'TEXT'), ('FellFrom', 'TEXT')):      # ...and the model asked for, where another answered (llm.fell_back)
+                         ('Caller', 'TEXT'), ('FellFrom', 'TEXT'),       # ...and the model asked for, where another answered (llm.fell_back)
+                         ('Cost', 'REAL')):      # ...and what the provider said the call cost, in dollars, where it says (aiusage.cost, 2026-11-24)
                 if c not in brcols: self.cx.execute(f'ALTER TABLE brainroute ADD COLUMN {c} {t}')
             # after the widen above, which rebuilds the table without it
             if 'LastErrorAt' not in {r[1] for r in self.cx.execute('PRAGMA table_info(connector)')}:
@@ -4738,7 +4739,7 @@ class SQLiteStore:
     # A route row is on no screen's road but the log's own, so it does not move this connection's write counter: the display
     # caches are keyed on it (feed_tag, PROCESSING_DIRTY_TABLES), and every AI call writes one - the rail would rebuild for nothing.
     BRAIN_ROUTE_COLS = ('At', 'Job', 'TaskId', 'MessageId', 'Pick', 'Model', 'Tier', 'Rule', 'Why', 'Difficulty', 'DataClass',
-                        'EscalatedFrom', 'Outcome', 'Ms', 'Ran', 'TokensIn', 'Cached', 'TokensOut', 'Calls', 'Sid', 'Caller')
+                        'EscalatedFrom', 'Outcome', 'Ms', 'Ran', 'TokensIn', 'Cached', 'TokensOut', 'Calls', 'Sid', 'Caller', 'Cost')
     def add_brain_route(self, rec: dict) -> int:
         cols = [c for c in self.BRAIN_ROUTE_COLS if rec.get(c) is not None]
         return self._exec_unseen(f"INSERT INTO brainroute ({','.join(cols)}) VALUES ({','.join('?' * len(cols))})", [rec[c] for c in cols])
@@ -4768,8 +4769,10 @@ class SQLiteStore:
         tok = lambda k: None if u.get(k) is None else int(u[k])
         self._exec_unseen('''UPDATE brainroute SET Calls=COALESCE(Calls,0)+1, Ms=CASE WHEN ? IS NULL THEN Ms ELSE COALESCE(Ms,0)+? END,
             TokensIn=CASE WHEN ? IS NULL THEN TokensIn ELSE COALESCE(TokensIn,0)+? END, Cached=CASE WHEN ? IS NULL THEN Cached ELSE COALESCE(Cached,0)+? END,
-            TokensOut=CASE WHEN ? IS NULL THEN TokensOut ELSE COALESCE(TokensOut,0)+? END, Ran=COALESCE(?, Ran), FellFrom=COALESCE(?, FellFrom) WHERE Id=?''',
-            (ms, ms, tok('in'), tok('in'), tok('cached'), tok('cached'), tok('out'), tok('out'), u.get('model') or None, u.get('fell_from') or None, int(rid)))
+            TokensOut=CASE WHEN ? IS NULL THEN TokensOut ELSE COALESCE(TokensOut,0)+? END, Cost=CASE WHEN ? IS NULL THEN Cost ELSE COALESCE(Cost,0)+? END,
+            Ran=COALESCE(?, Ran), FellFrom=COALESCE(?, FellFrom) WHERE Id=?''',
+            (ms, ms, tok('in'), tok('in'), tok('cached'), tok('cached'), tok('out'), tok('out'), u.get('cost'), u.get('cost'), u.get('model') or None,
+             u.get('fell_from') or None, int(rid)))
     def brain_routes_since(self, since: str, task_id: int = None, limit: int = 20000) -> list:
         q, p = 'SELECT * FROM brainroute WHERE At>=?', [since]
         if task_id is not None: q, p = q + ' AND TaskId=?', p + [int(task_id)]

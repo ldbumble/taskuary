@@ -840,7 +840,10 @@ class DemoDashboardTests(unittest.TestCase):
         s = MemoryStore(); demo.seed(s)
         n = sum(r['state'] == 'open' for r in dashboards._tasks(s, 90))
         heads = [m['Subject'] for m in s._rows("SELECT Subject FROM message WHERE Channel='report' AND Status NOT IN ('skipped','expired') ORDER BY MessageId")]
-        self.assertTrue(any(h.startswith('Taskuary at a glance') and f'Open now {n}' in h for h in heads), (n, heads))
+        # ...the built-in's headline is what the AI spent, what a task cost and what got done; its open count is in its body
+        bodies = [m['BodyText'] for m in s._rows("SELECT BodyText FROM message WHERE Channel='report' AND Status NOT IN ('skipped','expired') AND Subject LIKE 'Taskuary at a glance%'")]
+        self.assertTrue(any(f'Open now: {n}' in b for b in bodies), n)
+        self.assertTrue(any(h.startswith('Taskuary at a glance — AI spend $') for h in heads), heads)
         self.assertTrue(any(h.startswith('Northwind desk') and f'Open tasks {n}' in h for h in heads), (n, heads))
         # ...and nothing made after the dashboards changed its number: the walks and the static demo know the morning's messages by them
         self.assertEqual(s.get_message(45)['TaskId'], next(t['TaskId'] for t in s.list_tasks() if 'LinkedIn' in (t.get('Title') or '')))

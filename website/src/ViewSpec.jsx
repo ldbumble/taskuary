@@ -112,10 +112,10 @@ function ChartNow(p) {
 }
 const Chart = ({ kind, title = "", format, points }) => {
   const nf = format ? (n) => fmtAs(n, format, placesOf(points.map((x) => x.value), format)) : undefined;
-  const c = { kind: kind === "line" ? "line" : "bars", title, x: "label", y: "value", w: 2, twin: false, inline: true, fmt: nf, h: 160 };
+  const c = { kind: kind === "line" || kind === "area" ? kind : "bars", title, x: "label", y: "value", w: 2, twin: false, inline: true, fmt: nf, h: 160 };
   const marks = points.map((x, i) => ({ key: x.label || `#${i + 1}`, value: x.value, rows: [], on: !!x.highlight }));
   if (kind === "pie") return <PieBody groups={marks} f={nf || ((n) => fmtNum(n, 0))} />;
-  if (kind === "line") return <Line c={c} points={marks} onDrill={() => {}} />;
+  if (kind === "line" || kind === "area") return <Line c={c} points={marks} onDrill={() => {}} />;      // ...an area: the line over its soft fill
   const st = columnsOf(marks);
   return st ? <Stacked c={c} st={st} slots={{ value: 0 }} onDrill={() => {}} /> : <Bars c={c} groups={marks} onDrill={() => {}} />;
 };

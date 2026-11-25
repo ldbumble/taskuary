@@ -268,10 +268,7 @@ def test_the_template_runs_deterministically_over_the_apps_own_rows():
     assert runs['s1']['minutes'] == 30 and runs['s3']['minutes'] is None
     tiles = dict(dashboards.headline(dashboards.GLANCE, one))
     assert tiles == {'Came in': '4', 'New tasks': '2', 'Open now': '1', 'Median reply time': '3 h', 'Agent time per session': '45 min',
-                     'AI tokens': '-', 'Tokens per task': '-', 'Minutes per agent run': '-'}      # no AI ran in this store
-    closed = next(c for c in dashboards.GLANCE['components'] if c['kind'] == 'progress')
-    week = dashboards.in_range(src['closed']['rows'], 'closed', dashboards.span(closed, 90))
-    assert dashboards.span(closed, 90) == 7 and dashboards.aggregate(dashboards.where(week, closed['where'])) == 1
+                     'AI spend': '-', 'Cost per task': '-', 'Tasks completed': '1'}      # no AI ran in this store
 
 
 def test_a_components_own_range_and_the_median_are_checked():
@@ -303,7 +300,7 @@ def test_the_built_in_one_is_an_ordinary_dashboard_edited_and_kept_like_any_othe
     s = MemoryStore()
     row = next(r for r in s.list_sources(active_only=False) if r['Address'] == dashboards.GLANCE['title'])
     cfg = json.loads(row['ConfigJson'])
-    goal = next(c for c in cfg['components'] if c['kind'] == 'progress'); goal['target'] = 20
+    goal = next(c for c in cfg['components'] if c['title'] == 'Tasks completed'); goal['where'] = {'status': 'dropped'}
     cfg['components'] = [c for c in cfg['components'] if c['title'] != 'Who writes most']
     post = lambda c, spec: c.post('/api/sources', json={'SourceId': row['SourceId'], 'Channel': 'report', 'Address': spec['title'],
                                                         'ConfigJson': json.dumps(spec), 'Active': True})
@@ -312,7 +309,7 @@ def test_the_built_in_one_is_an_ordinary_dashboard_edited_and_kept_like_any_othe
         assert post(c, cfg).status_code == 200
         assert post(c, {**cfg, 'components': [{**goal, 'source': 'gone'}]}).status_code == 422     # ...the check any dashboard's save runs
         got = c.get(f"/api/dashboards/{row['SourceId']}").json()['config']
-    assert next(x for x in got['components'] if x['kind'] == 'progress')['target'] == 20
+    assert next(x for x in got['components'] if x['title'] == 'Tasks completed')['where'] == {'status': 'dropped'}
     assert 'Who writes most' not in [x['title'] for x in got['components']]
     s._heal_seeded_report_owner()                                       # the heal that runs on start leaves an edited one alone
     assert json.loads(s.get_source(row['SourceId'])['ConfigJson'])['components'] == got['components']

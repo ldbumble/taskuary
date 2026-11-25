@@ -5,7 +5,7 @@
   "types": {
     "table": { "columns": "cols", "rows": "rows!" },
     "stats": { "items": "tiles!" },
-    "chart": { "kind": "bar|line|pie", "format": "currency|number|percent", "points": "points", "rows": "records", "x": "str", "y": "str" },
+    "chart": { "kind": "bar|line|area|pie", "format": "currency|number|percent", "points": "points", "rows": "records", "x": "str", "y": "str" },
     "list": { "items": "strs!" },
     "checklist": { "items": "checks!" },
     "steps": { "items": "strs!" },

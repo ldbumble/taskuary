@@ -4383,7 +4383,8 @@
               "type": "text",
               "edit": true,
               "agent": true,
-              "max": 500
+              "max": 500,
+              "link_counts": 23
             },
             {
               "key": "spoiler",
@@ -4618,7 +4619,7 @@
               "edit": true,
               "agent": true,
               "max": 280,
-              "link": 23
+              "link_counts": 23
             },
             {
               "key": "image",

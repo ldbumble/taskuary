@@ -29,6 +29,15 @@ test("the card's fields map from the declaration: values from the proposal, else
   assert.equal(textKey(act), "text");
 });
 
+// THE CARD COUNTS AS ITS NETWORK DOES (the owner's live task, 2026-11-25: an X post X would take read "314 of 280 characters", its Post greyed)
+test("a post's words count against its network's limit as that network counts them: a link on X is 23", async () => {
+  const { lengthOf } = await import("../src/actionCard.js");
+  const box = (t) => actionFor(t).fields.find((f) => f.key === "text"), link = `https://news.example/${"a".repeat(90)}`;
+  assert.equal(lengthOf(box("x_post"), `Did you buy? ${link}`), 13 + 23);
+  assert.equal(lengthOf(box("linkedin_post"), `Did you buy? ${link}`), 13 + link.length);   // ...where the network counts every letter
+  assert.ok(lengthOf(box("x_post"), `${"w".repeat(240)} ${link}`) <= box("x_post").max);
+});
+
 test("the press's words follow the pick: Post to LinkedIn, or Save as draft", () => {
   const act = actionFor("linkedin_post");
   assert.deepEqual(wordsOf(act, valuesOf(act, POST)), { press: "Post to LinkedIn", busy: "Posting…", done: "Posted", undone: "Not posted" });

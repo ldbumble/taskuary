@@ -1060,6 +1060,36 @@ class APostIsAKindOfTheOneReviewTool(unittest.TestCase):
         self.assertEqual(cardqueue.state(self.s, self.tid)['live'], [rvs[0]['ReviewId']])
         self.assertEqual(cardqueue.held(self.s, self.tid), {rvs[1]['ReviewId'], rvs[2]['ReviewId']})
 
+    def test_a_post_that_replaces_its_network_never_takes_back_the_card_it_just_raised(self):
+        """The owner's live task, 2026-11-25: his answer greyed the Reddit card; the agent raised it again with `replaces: "Reddit"`, and the
+        new card - the only Reddit one still unsent - was withdrawn by its own call ("it then got rid of that image")."""
+        tool(self.tid, 'propose', kind='post', network='reddit', subreddit='smallbusiness', title='Three tools', text='What we found.',
+             picture='tools-compared.png')
+        old, = self.cards(); self.s.decide_review(old['ReviewId'], 'superseded', None, 'taskuary', note='set aside when you moved on')
+        said, err = tool(self.tid, 'propose', kind='post', network='reddit', subreddit='smallbusiness', title='Three tools',
+                         text='What we found. Disclosure: none.', picture='tools-compared.png', replaces='Reddit')
+        self.assertFalse(err, said)
+        new, = self.cards(); self.assertIn('Disclosure', json.loads(new['DraftText'])['text'])
+        self.assertNotEqual(json.loads(said).get('replaced'), new['ReviewId'])
+
+    def test_a_post_over_its_networks_limit_is_refused_to_its_agent_with_the_limit_and_its_count(self):
+        """The owner's live task, 2026-11-25: an X card stood reading "314 of 280 characters", its Post greyed. The card road refuses it to
+        the agent, who shortens it before he sees it - and a link counts as X counts it, so a post X takes is never refused for its address."""
+        said, err = tool(self.tid, 'propose', kind='post', network='x', text='z' * 300)
+        self.assertTrue(err); self.assertIn('280', said); self.assertIn('this one is 300', said); self.assertIn('shorten', said)
+        self.assertFalse(self.cards())
+        said, err = tool(self.tid, 'propose', kind='post', network='linkedin', text='w' * 3001)
+        self.assertTrue(err); self.assertIn('3000', said); self.assertFalse(self.cards())
+        # ...249 as X counts it, 314 letter by letter: the shape on his screen, which X would have taken
+        long_link = 'https://news.example/markets/' + 'a' * 90
+        words = f"{'Northwind priced its offer at $40. ' * 5}\n\n{long_link}\n\nDid you buy?"
+        self.assertGreater(len(words), 280)
+        said, err = tool(self.tid, 'propose', kind='post', network='x', text=words)
+        self.assertFalse(err, said); self.assertEqual(len(self.cards()), 1)
+        from taskuary import inboxes
+        with self.assertRaises(RuntimeError) as e: inboxes.run_x_post({'text': 'z' * 281, '_card': {}})
+        self.assertIn('this one is 281', str(e.exception))
+
     def test_a_network_with_no_post_card_says_which_there_are(self):
         said, err = tool(self.tid, 'propose', kind='post', network='myspace', text='Hi')
         self.assertTrue(err); self.assertIn('no post card', said); self.assertIn('linkedin', said); self.assertFalse(self.cards())

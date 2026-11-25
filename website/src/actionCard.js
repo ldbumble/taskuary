@@ -33,6 +33,8 @@ export const faceOf = (row) => { const s = String(row?.as || row?.network || "")
 export const choiceOf = (f, v) => (f?.choices || []).find((c) => String(c.value) === String(v)) || null;
 // each declared field with its value - the proposal's, else the catalogue's default - and whether the owner may change it now (only while it waits)
 export const fieldsOf = (act, p, live = false) => (act?.fields || []).map((f) => ({ ...f, value: p?.[f.key] ?? f.default ?? "", editable: !!(live && f.edit) }));
+// ...its words' length as its network counts them, against the field's `max` (connectorcatalog.length): a link is `link_counts` where it says
+export const lengthOf = (f, text) => String(text ?? "").replace(/https?:\/\/\S+/g, (m) => (f?.link_counts ? "x".repeat(f.link_counts) : m)).length;
 export const valuesOf = (act, p) => Object.fromEntries(fieldsOf(act, p).map((f) => [f.key, f.value]));
 // the press's words: a picked choice's own ("Save as draft") over the act's ("Post to LinkedIn")
 export const wordsOf = (act, values = {}) => {
@@ -60,9 +62,6 @@ export const stateOf = (row, live = true) => {
   if (s === "superseded" && row?.ActError) return { done: false, failed: true, said: "" };
   return { done: false, said: s === "pending" ? w.undone : `${w.undone} · dismissed` };
 };
-// HOW LONG ITS NETWORK SAYS THE WORDS ARE (connectorcatalog.length, the same rule): a link by the field's own `link` where it declares one - X
-// counts every link as 23 - so a post that fits is never drawn over its limit, its press greyed
-export const lengthOf = (f, text) => { const t = String(text || ""); return f?.link ? t.replace(/https?:\/\/\S+/g, "x".repeat(f.link)).length : t.length; };
 // the box's words: the act's one editable text field (a post's `text`, a tracker comment's `body`)
 export const textKey = (act) => (act?.fields || []).find((f) => f.type === "text" && f.edit)?.key || "text";
 // the press is lit while the box holds words - or where the act may go without them (`optional`) and the agent left none: Close issue with no

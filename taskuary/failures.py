@@ -108,7 +108,7 @@ def classify(e, *, act: str = None, tid=None) -> dict:
     # on, the owner's Trust (concierge.recover) - a retry is refused the same way
     from .origin import Refusal, RefusedForStranger
     code = 'stranger' if any(isinstance(x, (Refusal, RefusedForStranger)) for x in (e, getattr(e, '__cause__', None), getattr(e, '__context__', None))) else ''
-    return {'sentence': redact.scrub(sentence)[:500], 'fix': fix, 'retry': not fix and not unknown and not code, 'unknown': bool(unknown), 'code': code}
+    return {'sentence': redact.secrets(sentence)[:500], 'fix': fix, 'retry': not fix and not unknown and not code, 'unknown': bool(unknown), 'code': code}
 
 
 def outcome(c: dict, **more) -> dict:

@@ -1170,8 +1170,10 @@ def rpc(msg: dict, run, skip=(), portable: bool = False) -> dict | None:
             try: name, args = aliased(name, args)
             except ValueError: pass
         if name not in TOOLS or name in skip: return err(-32602, f"unknown tool {name!r} - this task's tools are the ones tools/list names")
-        try: return ok({'content': [{'type': 'text', 'text': run(name, args)}], 'isError': False})
-        except Exception as e: return ok({'content': [{'type': 'text', 'text': failed(name, e)}], 'isError': True})
+        # ...EVERY ANSWER SCRUBBED, whatever tool made it (redact.scrub): what comes back here goes on to the agent's provider
+        from .redact import scrub
+        try: return ok({'content': [{'type': 'text', 'text': scrub(run(name, args))}], 'isError': False})
+        except Exception as e: return ok({'content': [{'type': 'text', 'text': scrub(failed(name, e))}], 'isError': True})
     return err(-32601, f'method {m!r} is not served here')
 
 

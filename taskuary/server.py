@@ -549,11 +549,29 @@ async def token_gate(request: Request, call_next):
             logger.warning(f'stranger session on task {tid} refused {request.method} {request.url.path} - {why}')
             return JSONResponse({'detail': f'agents cannot do this: {why}.'}, status_code=403)
     resp = await call_next(request)
+    # ...AND WHAT A SESSION READS IS SCRUBBED (redact.scrub): an agent's `taskuary --message`, its curl of its own task or a document goes
+    # on to its provider - his store and his own page keep every number
+    if scope in (guard.AGENT, guard.STRANGER): resp = await _scrubbed(resp)
     # ...the owner's page, proven by its header, is handed the cookie its pictures and downloads are read by: same-site only, out of script's reach
     if tok and scope == guard.OWNER and guard.token_matches(presented, tok) and not request.url.path.startswith(FILE_READS) \
             and not guard.token_matches(request.cookies.get(FILE_COOKIE), fk := guard.file_key(cfg['server'])):
         resp.set_cookie(FILE_COOKIE, fk, httponly=True, samesite='strict', path='/api/')
     return resp
+
+
+_WORDS = ('application/json', 'text/plain', 'text/markdown', 'text/csv', 'text/html')
+
+async def _scrubbed(resp):
+    "A session's answer with its words scrubbed - JSON and text only, whole; a file's bytes and a stream go as they are."
+    if not str(resp.headers.get('content-type') or '').split(';')[0].strip().lower() in _WORDS: return resp
+    from . import redact
+    body = b''.join([c async for c in resp.body_iterator]).decode('utf-8', 'surrogateescape')
+    # ...JSON by its strings, never its text: `password=` takes to the next space, and across a closing quote it broke the answer
+    try: out = json.dumps(redact.scrub_all(json.loads(body)), ensure_ascii=False, separators=(',', ':')) if 'json' in resp.headers.get('content-type', '') else redact.scrub(body)
+    except ValueError: out = redact.scrub(body)
+    out = out.encode('utf-8', 'surrogateescape')
+    return Response(out, status_code=resp.status_code, headers={k: v for k, v in resp.headers.items() if k.lower() != 'content-length'},
+                    background=getattr(resp, 'background', None))
 
 
 def _stranger_file_task(kind: str, aid):

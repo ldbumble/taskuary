@@ -342,7 +342,8 @@ def brief_file(store, tid) -> str:
     from .context import files
     p = files(tid)[1]
     p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text('\n'.join(out), encoding='utf-8')
+    from .redact import scrub                   # ...read by the agent's own Read tool, straight to its provider (context.write)
+    p.write_text(scrub('\n'.join(out)), encoding='utf-8')
     return str(p)
 
 

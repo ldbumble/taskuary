@@ -971,7 +971,9 @@ def write(store, tid: int, msgs: list = None, repo: str = None):
         text = build(store, tid, msgs, repo)
         if not text: return None
         p = files(tid)[0]; p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(text, encoding='utf-8')
+        # ...SCRUBBED AS IT IS WRITTEN: the agent reads this file with its own Read tool, straight to its provider - no door after this one
+        from .redact import scrub
+        p.write_text(scrub(text), encoding='utf-8')
         return str(p)
     except Exception as e:
         logger.warning(f'context file for task {tid} not written: {e}')

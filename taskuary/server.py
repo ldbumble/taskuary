@@ -6334,18 +6334,22 @@ def agent_remember(body: AgentRememberBody, request: Request):
     from datetime import timedelta
     since = (datetime.now() - timedelta(days=1)).isoformat(sep=' ', timespec='seconds')
     kept = store._one("SELECT COUNT(*) n FROM audit WHERE EntityType='task' AND EntityId=? AND Action='agent_remembered' AND CreatedAt>=?", (body.task_id, since))
+    # ...HOW HE SIGNS IS HIS TO SET (red team round 4): on an agent's word alone the line under every email he sends changed with no press - it
+    # waits as one card, and his Approve sets it (signatures.keep)
+    if body.signature:
+        from . import proposals
+        miss = []
+        if not proposals.queue(store, body.task_id, {'action': 'settings', 'changes': [{'name': 'email_signature', 'value': body.note}],
+                                                     'why': 'how you sign, as you said it in this chat'}, f'agent:{body.agent}', refused=miss):
+            raise HTTPException(422, miss[0] if miss else 'not kept as the signature')
+        return {'ok': True, 'signature': True, 'says': "Held for the owner's press as one card: his Approve makes it the signature under every email. Carry on."}
     known = any(memory.subject_of(r['Subject']) == memory.subject_of(body.subject) for r in memory.rows(store, memory.SAID))
-    if int((kept or {}).get('n') or 0) >= AGENT_KEEPS and not body.signature and not known and not memory.has_said(store, body.note):
+    if int((kept or {}).get('n') or 0) >= AGENT_KEEPS and not known and not memory.has_said(store, body.note):
         raise HTTPException(422, f"not kept: {AGENT_KEEPS} facts from this task are in the owner's memory since yesterday, and it holds only what "
                                  "changes how future work is handled. Carry on with the task; a fact that corrects one of them is kept under its subject.")
-    try: r = memory.remember(store, body.note, body.subject, body.about, actor=f'agent:{body.agent}', signature=body.signature)
+    try: r = memory.remember(store, body.note, body.subject, body.about, actor=f'agent:{body.agent}')
     except ValueError as e: raise HTTPException(422, str(e))
     if not r.get('already'): store.audit('task', body.task_id, 'agent_remembered', body.agent, 'agent', {'line': r['text'][:400], 'subject': r.get('subject'), 'replaced': r.get('replaced')})
-    if r.get('signature'):
-        # ...and HE SEES IT CHANGED, where it happened (round 4, 2026-11-22: a memory sentence became his signature, said nowhere)
-        store.add_comment(body.task_id, 'taskuary', 'agent', f"Your email signature now reads: {r['text']!r} - Settings, Email signature, changes it.")
-        return {'ok': True, **r, 'says': f"Kept as the owner's saved signature, exactly as it goes under every email: {r['text']!r}. Every email set up from now carries it, "
-                                       "and the drafts waiting for his Send were re-signed with it. Carry on."}
     # ...and his other lines about the same person, each under its subject: one this makes untrue is corrected under that subject - two lines that
     # disagree are read as two truths (walk 6)
     rest = [] if r.get('replaced') or r.get('already') or not body.about.strip() else \

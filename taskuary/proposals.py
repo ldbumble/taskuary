@@ -282,6 +282,7 @@ SETTING_ALLOW = {
     'calendar_enabled': 'read your calendar',
     'playbooks_enabled': 'let agents follow and propose playbooks',
     'agent_issues_enabled': 'treat GitHub issues as the tracker (off = GitHub items are rows on the work rail, not tasks)',
+    'email_signature': 'the signature under every email you send',        # ...an agent's word on how he signs (server.agent_remember)
 }
 # ...and the same rule for a CONNECTOR's own switches, which is where "PRs are Timeline items, not
 # tasks" actually lives (store.github_permissions reads the connector first).
@@ -346,6 +347,10 @@ def setting_changes(p: dict) -> tuple:
             return [], f'{name} must be one of {", ".join(SETTING_VALUES[name])}'
         if name in ('poll_minutes', 'funnel_hours', 'funnel_max') and not v.isdigit():
             return [], f'{name} must be a whole number'
+        if name == 'email_signature':
+            from .signatures import shape
+            try: v = shape(v)
+            except ValueError as e: return [], str(e)
         out.append({'name': name, 'value': v, 'says': SETTING_ALLOW[name]})
     return out, '' if out else 'no change was named'
 
@@ -1157,6 +1162,9 @@ def _run(store, rv: dict, p: dict, tid, a: str, actor: str, edited, skip_checks:
                 if not conn: raise RuntimeError(f"no {c['connector']} connector to change")
                 store.merge_connector_config(conn['ConnectorId'], {c['name']: c['value']})
                 done.append(f"{c['connector']}.{c['name']} = {c['value']}")
+            elif c['name'] == 'email_signature':                    # ...its one home, which re-signs the letters waiting for his Send
+                from .signatures import keep
+                done.append(f"email signature = {keep(store, c['value'], actor)!r}")
             else:
                 store.set_setting(c['name'], str(c['value']), actor)
                 done.append(f"{c['name']} = {c['value']}")

@@ -220,6 +220,22 @@ class TheServer(unittest.TestCase):
         self.assertFalse(r['isError'], r); self.assertTrue(self.s.get_task(theirs).get('CheckBackAt'))
         self.assertTrue(agenttools.url(1).split(':', 2)[2].split('/', 1)[1].startswith('api/'))   # under /api: token and origin gates apply
 
+    def test_how_he_signs_told_to_an_agent_waits_as_one_card_and_his_approve_sets_it(self):
+        """Red team round 4: on an agent's word alone, the line under every email he sends changed with no press."""
+        from taskuary import general, proposals
+        self.s.set_setting('owner_email', 'alex@northwind.example', 'owner'); self.s.set_setting('email_signature', 'Alex Doyle', 'owner')
+        self.s.add_comment(self.tid, 'owner', general.USER_TYPE, 'Sign my mail "Best, Alex" from now on.')
+        text, err = tool(self.tid, 'remember', note='Best,\nAlex', signature=True)
+        self.assertFalse(err, text); self.assertIn("owner's press", text)
+        self.assertEqual(self.s.get_setting('email_signature'), 'Alex Doyle', 'nothing changed before his press')
+        [rv] = self.s._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action' AND Status='pending'", (self.tid,))
+        self.assertEqual(json.loads(rv['DraftText'])['changes'][0]['value'], 'Best,\nAlex')
+        proposals.execute(self.s, rv, 'owner', None)
+        self.assertEqual(self.s.get_setting('email_signature'), 'Best,\nAlex')
+        # ...and a sentence is no sign-off block: refused to the agent, nothing held
+        text, err = tool(self.tid, 'remember', note='Training spend needs sign-off from Marcus Reed. Email signature: Alex Doyle, Operations Lead.' * 2, signature=True)
+        self.assertTrue(err); self.assertIn('not kept as the signature', text)
+
     def test_a_fact_the_owner_tells_one_tasks_agent_is_one_memory_line_every_reader_has(self):
         # the live shape, 2026-11-14 (real CLI): told "Erin left the company; send payroll questions to Gail now", the task's agent answered
         # "I can't write to Taskuary's memory from this task" - and triage, the next task's agent and the Assistant never heard it

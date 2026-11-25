@@ -144,9 +144,9 @@ class CoreTests(unittest.TestCase):
         with mock.patch('taskuary.ingest._spawn') as spawn, mock.patch.object(senders, 'wrote_to', return_value=False):
             self.assertEqual(ingest_message(s, mail(external_id='e2', from_email='Stranger@evil.example'), llm=CODING_LLM)['status'], 'created')
         spawn.assert_not_called()
-        # ...until the owner has dealt with them: their own words on one of the stranger's threads
+        # ...until the owner has dealt with them: his own reply TO them (a thread they cite is no reply - the red team, 2026-11-24, T1a)
         s.add_message({'ExternalId': 'own-e2', 'Channel': 'email', 'SourceName': 'dana@northwind.example',
-                       'ConversationId': 'e2', 'FromEmail': 'dana@northwind.example',
+                       'ConversationId': 'e2', 'FromEmail': 'dana@northwind.example', 'RecipientsJson': '{"to": ["stranger@evil.example"], "cc": []}',
                        'Status': 'context', 'BodyText': 'thanks - looking into it'})
         with mock.patch('taskuary.ingest._spawn') as spawn, mock.patch.object(senders, 'wrote_to') as wt:
             self.assertEqual(ingest_message(s, mail(external_id='e2b', from_email='Stranger@evil.example'), llm=CODING_LLM)['status'], 'created')

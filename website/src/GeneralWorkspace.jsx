@@ -172,6 +172,11 @@ const Arrived = ({ mail, prev = null }) => mail.map((x, i0, list) => {
     {/* ...a mail's subject over its words, once a run (the owner, 2026-11-09: "you can't see anything about the email") - the words are the
         sender's NEW ones, the stamp and the quoted chain left out on the server (general.mail_row) */}
     {!!subjectOf(x, all[i - 1]) && <span className="tq-aui-arrived-subject" dir="auto">{x.subject}</span>}
+    {/* ...and the line it answers or quotes, over its words (the owner, 2026-11-25: a Teams quote came in as a bare "follow up regarding this
+        issue") - who, when and their words, clamped; the server keeps it on the arrival (ingest.with_parent, general.replied) */}
+    {!!x.reply?.text && <span className="tq-aui-arrived-reply" data-tq-arrived-reply="" dir="auto">
+      <span className="tq-aui-arrived-reply-head">{[x.reply.who || "Earlier message", x.reply.at ? when(x.reply.at) : ""].filter(Boolean).join(" · ")}</span>
+      {" "}{x.reply.text}</span>}
     {!!mailWords(x) && <ArrivedWords words={mailWords(x)} />}
     <CameWith x={x} />
     {/* ...a notice kept from the agent says so on itself, in one line (origin.QUIET_LINE, the owner 2026-11-25) */}

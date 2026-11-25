@@ -99,6 +99,23 @@ class Events(unittest.TestCase):
         self.assertIn(f'(m{a}', turn); self.assertIn(f'(m{b}', turn)
         self.assertLess(turn.index('budget is fixed'), turn.index('Erin Blake joins'))
 
+    def test_a_quoted_chat_line_reaches_the_agent_with_what_it_quotes(self):
+        """The owner, 2026-11-25: a Teams line quoting an earlier message reached the agent as a bare "any news on this one?", and it asked
+        the sender which message they meant. The quoted line (ingest.with_parent) rides in its event and in a fresh brief, fenced."""
+        from taskuary.terminal import FENCE_OPEN
+        s = store(); tid = task(s)
+        meta = {'reply_to': {'who': 'Ray Colton', 'at': '2026-11-18 15:05:00', 'text': 'The March export is missing the second site.'}}
+        s.add_message({'TaskId': tid, 'ExternalId': 'teams:c1:m2', 'ConversationId': 'teams:c1', 'Channel': 'teams', 'FromName': 'Gail Moreno',
+                       'FromEmail': 'gail@vendor.example', 'SentAt': '2026-11-23 09:05', 'BodyText': 'Any news on this one please?',
+                       'Status': 'routed', 'MailMetaJson': json.dumps(meta)})
+        quote = f'in reply to {FENCE_OPEN}Ray Colton'
+        turn = self.say(s, tid, 'Answer her.')
+        self.assertIn(quote, turn); self.assertIn(f'at 2026-11-18 15:05:00: {FENCE_OPEN}The March export is missing the second site.', turn)
+        self.assertLess(turn.index('second site'), turn.index('Any news on this one'))
+        general.session_for(tid).close(learn=False, report=False); general.drop_session(tid)
+        s._exec('DELETE FROM session_resume WHERE TaskId=?', (tid,))
+        self.assertIn(quote, self.say(s, tid, 'Again, please.', kept=False))          # ...and said afresh, in the brief
+
     def test_nothing_is_told_twice(self):
         s = store(); tid = task(s)
         mail(s, tid, 2, 'Budget is fixed at ten thousand.')

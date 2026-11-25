@@ -780,6 +780,9 @@ def poll_whatsapp(store, c, sources: list, llm=None, file_only=False) -> int:
             'sent_at': datetime.fromtimestamp(m.get('ts') or 0).strftime('%Y-%m-%d %H:%M:%S'),
             'source_name': where(m, jid),
             **({'mail_meta': meta} if meta else {}),
+            # ...and the line it quotes (ingest.with_parent): the stored one by its id, else the words the bridge carried
+            **({'reply_to': {**({'ext': f"whatsapp:{jid}:{m['quotedId']}"} if m.get('quotedId') else {}), 'text': m.get('quoted') or ''}}
+               if m.get('quoted') or m.get('quotedId') else {}),
             'images': images_for_triage(store, atts), **files_for_triage(atts),
             **({'file_reason': f'voice note - not transcribed: {why[:160]}'} if not transcribed else {})}, llm=llm)
         n += r['status'] != 'duplicate'

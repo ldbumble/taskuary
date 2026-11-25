@@ -1607,6 +1607,8 @@ def slack_msg(src: dict, m: dict, own: str = '', names: dict | None = None) -> d
             # a reply in a thread shown in the channel too (thread_broadcast): its answer goes under the thread's first line, not under it
             **({'thread': str(m['thread_ts'])} if m.get('thread_ts') and str(m['thread_ts']) != str(m.get('ts')) else {})}
     return {'external_id': f"slack:{src['Address']}:{m.get('ts')}", 'channel': 'slack', 'subject': None, 'body': m.get('text'),
+            # ...and that first line is the one it answers (ingest.with_parent reads it from the store)
+            **({'reply_to': {'ext': f"slack:{src['Address']}:{meta['thread']}"}} if meta.get('thread') else {}),
             'from_name': m.get('user'), 'conversation_id': f"slack:{src['Address']}", 'source_name': src['Address'],
             'sent_at': datetime.fromtimestamp(float(m.get('ts', 0))).strftime('%Y-%m-%d %H:%M:%S'), **({'mail_meta': meta} if meta else {})}
 
@@ -1658,6 +1660,23 @@ def slack_team_name(tok: str, team: str) -> str:
         except Exception as e:
             logger.info(f'slack: the name of workspace {team} could not be read - {e}'); _SLACK_TEAMS[team] = ''
     return _SLACK_TEAMS[team]
+
+
+def teams_quote(tok: str, cid: str, m: dict) -> dict | None:
+    """The line a Teams message quotes, for ingest.with_parent: Graph puts a quoted reply in `attachments` as a messageReference - its id the
+    quoted message's, its content the sender and a preview - and only a tag in the body, which _clean drops. `fetch` reads it whole by id."""
+    a = next((a for a in m.get('attachments') or [] if a.get('contentType') == 'messageReference' and a.get('id')), None)
+    if not a or not cid: return None
+    try: c = json.loads(a.get('content') or '{}')
+    except ValueError: c = {}
+    who = next((x.get('displayName') for x in ((c.get('messageSender') or {}).get(k) or {} for k in ('user', 'application')) if x.get('displayName')), '')
+    def fetch():
+        r = requests.get(f"{GRAPH}/chats/{cid}/messages/{a['id']}", headers={'Authorization': f'Bearer {tok}'}, timeout=20)
+        if r.status_code != 200: logger.info(f'teams: a quoted message could not be read ({r.status_code}) - its preview stands'); return None
+        j = r.json()
+        return {'who': ((j.get('from') or {}).get('user') or {}).get('displayName'), 'at': _local(j.get('createdDateTime') or ''),
+                'text': _clean((j.get('body') or {}).get('content'))}
+    return {'ext': f"teams:{cid}:{a['id']}", 'who': who, 'text': _clean(c.get('messagePreview')) or c.get('messagePreview') or '', 'fetch': fetch}
 
 
 def ingest_teams_chats(store, upn: str, tok: str, since, llm=None, file_only=False, read_it=False, user=False, state=None, feed=None) -> int:
@@ -1756,7 +1775,8 @@ def ingest_teams_chats(store, upn: str, tok: str, since, llm=None, file_only=Fal
                                     'your message in this chat - kept for context', keep_unmatched=True)
             continue
         # no address (the lookup failed): the Graph id, never the shared 'Teams user' every failed lookup wears
-        out = ingest_message(store, {**common, 'from_name': name, 'from_email': addr or f"teams:{user['id']}"}, llm=llm, file_only=file_only)
+        out = ingest_message(store, {**common, 'from_name': name, 'from_email': addr or f"teams:{user['id']}",
+                                     **({'reply_to': q} if (q := teams_quote(tok, cid, m)) else {})}, llm=llm, file_only=file_only)
         n += out['status'] != 'duplicate'
         if atts and out.get('message_id') and out['status'] != 'duplicate':
             try: save_attachments(store, out['message_id'], atts, f'teams:{m["id"]}')

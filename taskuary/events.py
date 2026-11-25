@@ -130,7 +130,9 @@ def _message(e) -> str:
     else: head = f"Message from {named(e.get('who'), e.get('addr')) or 'someone'} (m{e.get('mid')}{', ' + where if where else ''})"
     if e.get('elsewhere'): head += f", filed on {e['elsewhere']}"
     text = str(e.get('text') or '')
-    return f"{head}:\n{text if e.get('own') or e.get('mine') else fence(text)}" + _files(e.get('files'))
+    from .general import reply_line
+    return f"{head}:\n" + ''.join(f'{r}\n' for r in [reply_line(e.get('parent'))] if r) + \
+        f"{text if e.get('own') or e.get('mine') else fence(text)}" + _files(e.get('files'))
 
 
 CARD = {'approved': 'he approved it', 'edited': 'he changed your words, then approved it', 'rejected': 'he turned it down',
@@ -181,10 +183,11 @@ def render(rows: list, fresh: bool = False) -> str:
 
 # ---- the writers, each called where its fact happens ---------------------------------------------------------------------------------------
 
-def _mail_text(store, m: dict) -> str:
+def _mail_shown(store, m: dict) -> dict:
+    "What the chat shows of it (general.mail_row): its words, and the line it answers or quotes."
     from .general import mail_row
-    try: return mail_row(store, m)['words']
-    except Exception: return str(m.get('OwnText') or m.get('BodyText') or m.get('Subject') or '')
+    try: return mail_row(store, m)
+    except Exception: return {'words': str(m.get('OwnText') or m.get('BodyText') or m.get('Subject') or '')}
 
 
 @_safe
@@ -203,7 +206,7 @@ def arrived(store, mid: int, tid: int = None) -> None:
     mine = not own and from_owner(store, m)              # ...his ask, filed as the task's own row (New, the phone): his words, never fenced
     body = dict(mid=mid, who=asked(m) or m.get('FromName') or '', addr='' if asked(m) else m.get('FromEmail') or '', channel=m.get('Channel') or '', own=own, mine=mine,
                 subject=str(m.get('Subject') or '').strip() if str(m.get('Channel') or 'email').lower() == 'email' else '',
-                text=_mail_text(store, m)[:3000], files=files[:8])
+                text=(r := _mail_shown(store, m))['words'][:3000], files=files[:8], **({'parent': r['reply']} if r.get('reply') else {}))
     if tid and not ours(tid): add(store, tid, 'message', f'message:{mid}', **body)
     if own and m.get('ConversationId'):
         from .store import task_ref

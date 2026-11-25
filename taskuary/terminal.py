@@ -1951,9 +1951,11 @@ def seed_text(store, tid: int, instruction: str = None, repo: str = None, cwd: s
     md = b['checklist']
     if md: say('CHECKLIST - what was asked for, as triage read it; the source message follows, and it is the authority'
                + (f' ({TICK_HEAD}: `taskuary --tick <id>`)' if _tickable(md) else '') + ':\n' + fence(md), theirs_too=True)
+    from .general import reply_line as _reply_line, replied as _replied
     if m: say(f"FROM {m.get('FromName') or m.get('FromEmail')} on {m.get('Channel')}, "
               f"subject \"{m.get('Subject') or ''}\": "
-              f"{fence(_cut(strip_boilerplate(m.get('BodyText') or ''), ASK_CHARS))}", theirs_too=True)
+              + ''.join(f'{r}\n' for r in [_reply_line(_replied(store, m))] if r)
+              + f"{fence(_cut(strip_boilerplate(m.get('BodyText') or ''), ASK_CHARS))}", theirs_too=True)
     if m and len(b['message_ids']) > 1 and b['context']:
         say('CONVERSATION so far, oldest first (history included; the message above is the latest): '
             + fence(no_emails(_cut(b['context'], BRIEF_CONTEXT, 'conversation'))), theirs_too=True)

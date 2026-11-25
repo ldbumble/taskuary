@@ -232,6 +232,31 @@ try {
     if (src.startsWith("pick:")) { const r = [...pg.querySelectorAll("[data-tq-pick]")].find((x) => x.innerText.trim() === src.slice(5)); if (!r) return "NO SUCH ROW"; r.click(); return `picked ${src.slice(5)}`; }
     const b = [...pg.querySelectorAll(".tq-aui-viewport button, .tq-aui-viewport [role=button], [data-tq-browser-pane] button, button")].find((x) => new RegExp(src).test(x.innerText.trim()) && !x.disabled && x.getBoundingClientRect().width > 0);
     if (!b) return "NO SUCH BUTTON"; b.click(); return `pressed ${b.innerText.trim()}`; }, typeof re === "string" ? re : re.source);
+  // ...AND EVERY PICTURE A CARD DRAWS OPENS LARGER, TO ZOOM (PictureView): pressed, zoomed by + and the wheel, dragged, stepped to the next where
+  // the card holds several, shut by Esc - each shot whole, the viewer standing over the window. Nothing to press, nothing said
+  const zoomed = async (tid, k, w, theme) => {
+    await open(tid, w, theme);
+    const at = await page.evaluate(() => { const i = [...document.querySelectorAll("[data-tq-task-page] .tq-turn-frame img")].find((x) => x.getBoundingClientRect().width > 0);
+      if (!i) return null; i.scrollIntoView({ block: "center" }); const r = i.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2, cursor: getComputedStyle(i).cursor }; });
+    if (!at) return "";
+    const state = () => page.evaluate(() => { const d = document.querySelector("[data-tq-picture-viewer]"); if (!d) return "no viewer";
+      const i = d.querySelector("[data-tq-picture-big]"), r = i.getBoundingClientRect();
+      return `${i.getAttribute("data-tq-picture-big")} ${d.querySelector("[data-tq-zoom-at]")?.innerText} ${d.querySelector("[data-tq-picture-at]")?.innerText || ""} img ${Math.round(r.width)}x${Math.round(r.height)} ${i.naturalWidth ? "ok" : "BROKEN"}`.trim(); });
+    const snap = async (name) => { await sleep(500); await page.screenshot({ path: path.join(OUT, `${k}-${name}.png`), captureBeyondViewport: false }); return `${name}: ${await state()}`; };
+    const tag = `viewer-${w}-${theme}`, out = [`card cursor ${at.cursor}`];
+    await page.mouse.click(at.x, at.y); out.push(await snap(tag));
+    if (w === 1440 && theme === "light") {
+      await page.keyboard.press("+"); await page.keyboard.press("+"); out.push(await snap(`${tag}-plus`));
+      const s = await page.evaluate(() => { const r = document.querySelector("[data-tq-picture-stage]").getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; });
+      await page.mouse.move(s.x, s.y); await page.mouse.down(); await page.mouse.move(s.x + 160, s.y + 90, { steps: 8 }); await page.mouse.up(); out.push(await snap(`${tag}-dragged`));
+      await page.keyboard.press("0"); await page.mouse.move(s.x - 200, s.y - 100); await page.mouse.wheel({ deltaY: -400 }); out.push(await snap(`${tag}-wheel`));
+      if (await page.$("[data-tq-picture-next]")) { await page.click("[data-tq-picture-next]"); out.push(await snap(`${tag}-next`)); await page.keyboard.press("ArrowRight"); out.push(await snap(`${tag}-arrow`)); }
+    }
+    if (w === 430) { const c = await page.evaluate(() => { const r = document.querySelector("[data-tq-picture-stage]")?.getBoundingClientRect(); return r && { x: r.x + 6, y: r.bottom - 6 }; });
+      if (c) await page.mouse.click(c.x, c.y); await sleep(400); out.push(`press past it: ${await state()}`); }
+    else { await page.keyboard.press("Escape"); await sleep(400); out.push(`Esc: ${await state()}`); }
+    return out.join(" | ");
+  };
   const flush = () => writeFile(path.join(OUT, "README.txt"), said.join("\n") + "\n");
   for (const [k, t] of Object.entries(made)) {
     said.push(`${k}  (task ${t.taskId})`, ...t.said);
@@ -242,6 +267,7 @@ try {
       await open(t.taskId, 1440, "light"); said.push(`    wide: ${JSON.stringify({ chat: await shot(`${k}-wide`), ...(await read()) })}`);
       await open(t.taskId, 430, "light"); said.push(`    narrow: ${JSON.stringify({ chat: await shot(`${k}-narrow`), ...(await read()) })}`);
       await open(t.taskId, 1440, "dark"); said.push(`    dark: ${JSON.stringify({ chat: await shot(`${k}-dark`) })}`);
+      for (const [w, theme] of [[1440, "light"], [430, "light"], [1440, "dark"]]) { const v = await zoomed(t.taskId, k, w, theme); if (v) said.push(`    viewer ${w} ${theme}: ${v}`); }
       if (t.press?.length) await open(t.taskId, 1440, "light");
       await t.before?.();
       for (const [re, name, wait = 3500] of t.press || []) {

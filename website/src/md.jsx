@@ -15,6 +15,7 @@ import { codeLocalPaths, localFile, plainCitations } from "./taskOutputs.js";
 import CopyCorner from "./CopyCorner.jsx";
 import { attUrl, saveFile } from "./fileSave.js";
 import { FileView, isPdf } from "./PublishedPages.jsx";
+import { PictureDialog } from "./PictureView.jsx";
 import ViewSpec from "./ViewSpec.jsx";
 import { fencedView } from "./viewSpec.js";
 import { useOverlay } from "./overlays.js";
@@ -140,7 +141,6 @@ const Img = ({ src, alt }) => <A href={src}>{`[image${alt ? `: ${alt}` : ""}]`}<
 export const LocalFiles = React.createContext(null);
 const LocalPath = ({ f, children }) => {
   const [big, setBig] = React.useState(false), src = attUrl({ url: f.url });
-  useOverlay(big, () => setBig(false), { typeThrough: true });
   return (<>
     {/* ...a picture opens over the chat; any other file as a link to a file does (A: saved, a PDF read under it) */}
     {f.image ? <a href={src} data-tq-file-link="" onClick={(e) => { e.preventDefault(); setBig(true); }} style={{ color: "var(--tq-link, #55697a)", fontWeight: 600, textDecoration: "none" }}>
@@ -149,12 +149,7 @@ const LocalPath = ({ f, children }) => {
     {f.image && <span data-tq-local-picture="" style={{ display: "block", margin: "4px 0 6px" }}>
       <img src={src} alt={f.name} onClick={() => setBig(true)} title="Open it whole"
         style={{ maxWidth: "100%", maxHeight: 220, objectFit: "contain", cursor: "zoom-in", border: `1px solid ${BORDER}`, borderRadius: 4, background: "#fff" }} /></span>}
-    {big && <Dialog open onClose={() => setBig(false)} maxWidth="lg" data-tq-local-picture-big="">
-      <DialogTitle sx={{ display: "flex", alignItems: "center", gap: 1, py: 1, fontSize: 14 }}>
-        <span style={{ flex: 1, fontWeight: 600 }}>{f.name}</span>
-        <IconButton size="small" aria-label="Close" onClick={() => setBig(false)}><CloseIcon fontSize="small" /></IconButton></DialogTitle>
-      <DialogContent dividers sx={{ p: 1 }}><img src={src} alt={f.name} style={{ maxWidth: "100%", display: "block", margin: "0 auto" }} /></DialogContent>
-    </Dialog>}
+    {f.image && <PictureDialog file={big ? { url: f.url, name: f.name, path: f.rel } : null} onClose={() => setBig(false)} />}
   </>);
 };
 const Code = ({ children, node, ...rest }) => {

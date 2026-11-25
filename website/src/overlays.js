@@ -15,8 +15,8 @@ export const boxBeneath = (doc = document) => BOXES.map((q) => [...doc.querySele
 export const typesText = (e) => e.key?.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey;
 
 // `open`, `close`: the overlay's own state. `typeThrough`: it holds no box of its own (a picture, a file), so a typed key shuts it and goes
-// on into the box beneath
-export function useOverlay(open, close, { typeThrough = false } = {}) {
+// on into the box beneath - all but the keys it answers itself (`own`: a picture's + and -)
+export function useOverlay(open, close, { typeThrough = false, own = "" } = {}) {
   const shut = useRef(close); shut.current = close;
   useEffect(() => {
     if (!open || typeof window === "undefined") return undefined;
@@ -25,7 +25,7 @@ export function useOverlay(open, close, { typeThrough = false } = {}) {
     const other = (e) => { if (e.detail !== me) shut.current?.(); };
     const moved = () => shut.current?.();
     const key = (e) => {
-      if (!typeThrough || !typesText(e) || e.target?.closest?.("input, textarea, [contenteditable=true]")) return;
+      if (!typeThrough || !typesText(e) || own.includes(e.key) || e.target?.closest?.("input, textarea, [contenteditable=true]")) return;
       const box = boxBeneath(); if (!box) return;
       // ...focused within the keydown, so the key's own character lands in it - and again once the dialog has let go, since a closing dialog
       // gives the focus back to what opened it
@@ -34,7 +34,7 @@ export function useOverlay(open, close, { typeThrough = false } = {}) {
     window.addEventListener(OPENED, other); window.addEventListener("keydown", key, true);
     const off = onStep(moved);              // ...a link, Back, the canvas moving to another place (appLinks.onStep)
     return () => { window.removeEventListener(OPENED, other); window.removeEventListener("keydown", key, true); off(); };
-  }, [open, typeThrough]);
+  }, [open, typeThrough, own]);
 }
 
 // ...AND A MENU IS AN OVERLAY WITH NO BOX OF ITS OWN (the walks, 2026-11-18, recorded with a real mouse and keyboard): with the Change menu

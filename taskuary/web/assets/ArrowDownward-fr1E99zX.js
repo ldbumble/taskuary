@@ -1,0 +1,5 @@
+<<<<<<<< HEAD:taskuary/web/assets/ArrowDownward-BE9tbh9v.js
+import{Q as o,j as r}from"./index-CZ0G9wkh.js";const s=o(r.jsx("path",{d:"m20 12-1.41-1.41L13 16.17V4h-2v12.17l-5.58-5.59L4 12l8 8z"}),"ArrowDownward");export{s as A};
+========
+import{Q as o,j as r}from"./index-bbk1ZnCy.js";const s=o(r.jsx("path",{d:"m20 12-1.41-1.41L13 16.17V4h-2v12.17l-5.58-5.59L4 12l8 8z"}),"ArrowDownward");export{s as A};
+>>>>>>>> worktree-agent-a47472350d5ab2d4b:taskuary/web/assets/ArrowDownward-fr1E99zX.js

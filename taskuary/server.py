@@ -284,6 +284,9 @@ async def _lifespan(_app):
         from . import filing
         if (n := filing.migrate(store)): logger.info(f'mark-read choice moved onto {n} card(s)')
     except Exception as e: logger.warning(f'mark-read choice not moved onto the cards: {e}')
+    try:                           # ...and a title from before titles were said without a password (walk 19)
+        if (n := store.scrub_titles()): logger.info(f'{n} task title(s) no longer carry a password')
+    except Exception as e: logger.warning(f'titles not scrubbed: {e}')
     try:                           # ...and the old four priorities as the new three, once (2026-10-25)
         if (moved := store.migrate_priorities()): logger.info(f'priorities renamed to regular / important / urgent: {moved}')
         from . import dashboards                                   # ...and a saved dashboard's cuts on them

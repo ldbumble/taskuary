@@ -326,7 +326,8 @@ HIS_TITLE = 'title_his_words'          # the audit row that says a task's title 
 def title_of(words: str, n: int = 120) -> str:
     "THE ONE TITLE MADE FROM HIS WORDS - New's, the Assistant's set-up, a hand-off's: one line, cut at a word, its first letter a capital."
     from .concierge import _title_cut
-    t = _title_cut(' '.join(str(words or '').split()), n)
+    from .redact import shown                   # ...said as the store keeps it (store._shown_title), so own_title still knows it for his
+    t = _title_cut(shown(' '.join(str(words or '').split())), n)
     return t[:1].upper() + t[1:]
 def own_title(store, tid: int, words: str) -> bool:
     "Record, once at its making, that task `tid` is called by his words (its title is title_of them) - a name he gave it is not marked."

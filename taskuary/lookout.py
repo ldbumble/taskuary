@@ -979,7 +979,8 @@ def asked(action) -> str:
     "shouldn't the input show the whole thing"); one raised before the window was kept shows the instructions alone; '' for any other line."""
     a = action or {}
     if a.get('type') != 'lookout': return ''
-    return a['window'] if a.get('whole') else '\n\n'.join(x for x in (SYSTEM, a.get('window')) if x)
+    from .redact import shown                   # ...shown, so without a password his mail or a task's title put in the window (walk 19)
+    return shown(a['window'] if a.get('whole') else '\n\n'.join(x for x in (SYSTEM, a.get('window')) if x))
 
 
 def key_of(x: dict) -> str:

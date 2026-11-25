@@ -155,6 +155,14 @@ def _delivery_claim_alive(claim):
 GENESIS = '0' * 64
 # the channels Taskuary writes itself - its reports and the Advisor's ideas - which carry no sender address
 OWN_CHANNELS = ('report', 'assistant')
+def _shown_title(fields: dict) -> dict:
+    """A TITLE IS SHOWN, never a prompt (walk 19): his "post it ... password chirp-pass" became the title the rail and the phone carried. The
+    Summary keeps his words - the agent signs in with them; the title is said without the password (redact.shown)."""
+    if not fields.get('Title'): return fields
+    from .redact import shown
+    return {**fields, 'Title': shown(fields['Title'])}
+
+
 TASK_COLS = ('Title', 'Summary', 'Kind', 'Status', 'Priority', 'Assignee', 'Source', 'SourceRef', 'Tags', 'RemindAt', 'AskedVia', 'DueAt',
              'DoneWhen', 'ParentId', 'OriginBase', 'TrustedThrough', 'Origin', 'OriginWhy', 'WatchedAt', 'WatchBack', 'ThreadJson',
              'CheckBackAt', 'CheckBackWhat', 'Files')
@@ -2322,7 +2330,7 @@ class SQLiteStore:
         # id and one of them hit the primary key (audit 2026-09-02)
         # one of the three priorities, whatever word the caller used (processing_order.level, 2026-10-25) - regular when it gave none
         from .processing_order import level
-        fields = {**fields, 'Priority': level(fields.get('Priority')), **({'Files': files_json(fields['Files'])} if 'Files' in fields else {})}
+        fields = {**_shown_title(fields), 'Priority': level(fields.get('Priority')), **({'Files': files_json(fields['Files'])} if 'Files' in fields else {})}
         with self.idlock:
             tid = self._insert('task', {**fields, 'TaskId': self._next_task_id() if numbered else self._next_internal_id()},
                                 TASK_COLS + ('TaskId',), {'CreatedBy': actor, 'CreatedAt': _now()})
@@ -2353,6 +2361,14 @@ class SQLiteStore:
         if out: self._bump_snapshots()
         return out
 
+    def scrub_titles(self) -> int:
+        "A title kept from before titles were scrubbed (_shown_title), without its password: how many changed."
+        from .redact import shown
+        rows = [(t, r['TaskId']) for r in self._rows('SELECT TaskId, Title FROM task') if (t := shown(r['Title'])) != (r['Title'] or '')]
+        for t, tid in rows: self._exec('UPDATE task SET Title=? WHERE TaskId=?', (t, tid))
+        if rows: self._bump_snapshots()
+        return len(rows)
+
     def _next_internal_id(self) -> int:
         """The same never-reused rule, in the range no TQ number reaches (INTERNAL_TASK_BASE)."""
         live = self._one('SELECT MAX(TaskId) m FROM task WHERE TaskId>=?', (INTERNAL_TASK_BASE,))['m'] or 0
@@ -2371,6 +2387,7 @@ class SQLiteStore:
                    'ON CONFLICT(Name) DO UPDATE SET Value=excluded.Value', ('task_id_mark', str(nxt), 'store'))
         return nxt
     def update_task(self, task_id, fields, actor):
+        fields = _shown_title(fields)
         if 'Priority' in fields:
             from .processing_order import level
             fields = {**fields, 'Priority': level(fields['Priority'])}

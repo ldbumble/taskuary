@@ -384,11 +384,19 @@ def unshown(p: dict) -> str:
 
 
 CHANGED = 'This card changed after it was shown to you - nothing ran. It is shown again as it stands now; read it and press again.'
+def _to(x) -> list: return sorted({' '.join(str(a).split()).lower() for a in (x if isinstance(x, (list, tuple)) else [x]) if a})
 def unlike_shown(rv: dict, shown, verb: str) -> dict | None:
-    """The press's refusal when the card the page drew (`shown`: its proposal, as drawn) is not the proposal on file - a field changed after
-    it was shown never runs under the words he read (red team F1). None to go on: no card shown (a phone's typed yes), or the same one."""
-    if shown is None or (rv or {}).get('Kind') != 'action' or verb not in ('approve', 'edit', 'merge_anyway'): return None
-    if _draft(rv) == shown: return None
+    """The press's refusal when the card the page drew (`shown`: an action's proposal, a letter's {to}, as drawn) is not the one on file - a
+    field changed after it was shown never runs under the words he read (red team F1), and a letter never goes to someone the card did not
+    name (round 4: an agent's second save in its turn rewrote the To of the card on his screen). None to go on: no card shown (a phone's
+    typed yes), or the same one."""
+    if not isinstance(shown, dict) or verb not in ('approve', 'edit', 'merge_anyway'): return None
+    if (rv or {}).get('Kind') == 'action': same = _draft(rv) == shown
+    else:
+        try: env = json.loads(rv.get('Deliver') or '{}') or {}
+        except (TypeError, ValueError): env = {}
+        same = 'to' not in shown or _to(env.get('to')) == _to(shown['to'])
+    if same: return None
     return {'ok': False, 'status': rv.get('Status') or 'pending', 'sent': None, 'changed': True, 'send_error': CHANGED}
 
 

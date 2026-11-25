@@ -595,7 +595,7 @@ class DecideBody(BaseModel):
     fields: dict | None = None       # an action card's choices the owner changed (who sees a post, now or a draft): connectorcatalog.owner_edits
     closes: bool = False             # Send and close: the task's close as the send goes, before its agent is told (verdicts.decide)
     steps: list[int] | None = None   # a turn's held steps pressed as one card: this one first, the rest in order (shellgate.approve_steps)
-    shown: dict | None = None        # an action card's proposal as the page drew it: the press runs only that (press_review)
+    shown: dict | None = None        # the card as the page drew it - an action's proposal, a letter's {to}: the press runs only that (press_review)
 class CodeBody(BaseModel):
     repo: str | None = None; agent: str | None = None
     model: str | None = None; instruction: str | None = None

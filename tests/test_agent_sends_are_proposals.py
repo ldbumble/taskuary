@@ -453,3 +453,18 @@ class ACardRunsWhatItShows(unittest.TestCase):
             r = c.post(f'/api/reviews/{rid}/decide', headers=owner(), json={'verb': 'approve', 'shown': shown})
         self.assertTrue(r.json()['changed'], r.text); self.assertEqual(ran, [])
         self.assertEqual(s.get_review(rid)['Status'], 'pending')
+
+    def test_a_letter_whose_recipient_changed_after_it_was_shown_never_goes(self):
+        """Red team round 4: an agent's second save of its email in the same turn rewrites the card in place (slots.draft) - its To swapped
+        between the card on his screen and his Send, and the letter went to the address he never saw."""
+        from taskuary import outbound
+        s, sent = server.store, []
+        rid = s.add_review({'TaskId': self.tid, 'Kind': 'email', 'Status': 'pending', 'Reason': 'the agent wrote this email', 'DraftText': 'The figures are attached.',
+                            'Deliver': json.dumps({'channel': 'email', 'to': ['erin@northwind.example'], 'subject': 'Q3 figures'})})
+        s.set_review_deliver(rid, json.dumps({'channel': 'email', 'to': ['taker@outsider.example'], 'subject': 'Q3 figures'}))
+        with mock.patch.object(outbound, 'send_out', lambda *a, **k: sent.append(a) or {'ok': True}):
+            r = c.post(f'/api/reviews/{rid}/decide', headers=owner(), json={'verb': 'approve', 'final_text': 'The figures are attached.',
+                                                                           'shown': {'to': ['Erin@northwind.example']}})
+        self.assertTrue(r.json()['changed'], r.text); self.assertEqual(sent, [])
+        self.assertEqual(s.get_review(rid)['Status'], 'pending')
+        self.assertIsNone(proposals.unlike_shown(s.get_review(rid), {'to': ['taker@outsider.example']}, 'approve'), 'the card as it stands now goes')

@@ -57,7 +57,7 @@ function Group({ files }) {
           </Artifact>}
       {err && <div className="tq-published-note" data-tq-file-error="">{err}</div>}
       {saved && <div className="tq-published-note" data-tq-file-saved="">{saved}</div>}
-      <FileDialog file={viewing} onClose={() => setViewing(null)} />
+      <FileDialog file={viewing} files={files} onClose={() => setViewing(null)} />
     </div>
   );
 }

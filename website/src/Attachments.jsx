@@ -161,8 +161,8 @@ export const Attachments = ({ messageId, canFetch, dense, original, skip = null,
         {open && files.some((a) => a.id === open.id) && <FileView key={open.id} file={open} onClose={() => setOpen(null)} />}
         </Box>
       )}
-      {/* full size, on top of everything - a screenshot of a spreadsheet is unreadable inline - in the one file dialog (FileDialog) */}
-      <FileDialog file={big} onClose={() => setBig(null)} />
+      {/* full size, on top of everything - a screenshot of a spreadsheet is unreadable inline - in the one file dialog (FileDialog), the mail's other pictures a step away */}
+      <FileDialog file={big} files={imgs} onClose={() => setBig(null)} />
     </Box>
   );
 };

@@ -18,6 +18,7 @@ import { csvRows, fitSvg, outsideLink, SANDBOX, shut } from "./shownPages.js";
 import { deliverables, MEDIA_H, mediaFit } from "./taskOutputs.js";
 import "./publishedPages.css";
 import Artifact from "./Artifact.jsx";
+import { PictureDialog } from "./PictureView.jsx";
 
 // sandboxed WITHOUT allow-same-origin: the page's scripts run (charts, tabs) but in an opaque origin -
 // no Taskuary token, no cookies, no reach into this window (shownPages.SANDBOX) - and inside a frame that lets it navigate nowhere (shut)
@@ -127,7 +128,7 @@ function MediaPlayer({ page }) {
 }
 
 export function Preview({ page }) {
-  const [body, setBody] = useState(null), [err, setErr] = useState("");
+  const [body, setBody] = useState(null), [err, setErr] = useState(""), [big, setBig] = useState(false);
   const sheet = page.preview === "sheet", pdf = isPdf(page), doc = page.preview === "document";
   const picture = isPicture(page) || pdf, text = isText(page);
   // ...and a file of a kind with no preview (a zip, a .pptx) says so: read as text it drew its raw bytes over the chat
@@ -157,7 +158,9 @@ export function Preview({ page }) {
   // ...THE PAGE ITSELF, fitted to the frame's width - never the viewer's page list beside it (the owner, 2026-11-23: "show the full pdf not with
   // the side bar"); its toolbar stays for zoom, print and download
   if (pdf) return <iframe className="tq-published-frame" title={page.name} src={`${body}#navpanes=0&view=FitH`} />;
-  if (picture) return <div className="tq-published-picture"><img src={body} alt={page.name} style={mediaFit(page)?.media} /></div>;
+  // ...and a press on it opens it larger, to zoom (PictureView)
+  if (picture) return <div className="tq-published-picture"><img src={body} alt={page.name} onClick={() => setBig(true)} data-tq-zoomable=""
+    style={{ cursor: "zoom-in", ...mediaFit(page)?.media }} /><PictureDialog file={big ? page : null} onClose={() => setBig(false)} /></div>;
   if (text) return <pre className="tq-published-text">{body.length > 200000 ? `${body.slice(0, 200000)}\n…` : body}</pre>;
   if (page.preview === "table" || /csv/.test(type(page))) {
     const [head, ...rows] = csvRows(body);
@@ -186,8 +189,12 @@ function PageFrame({ title, html }) {
 
 // A FILE OPENED WHERE IT IS NAMED (the owner, 2026-11-05: "i need to be able to click on this and a pop up will show the file ... without having
 // to hit download then look at it and then come back"): its name in the agent's words opens it over the chat - the card's own Preview, and
-// Download beside it for when it is wanted after all. Esc or the cross closes it, back where the owner was reading
-export function FileDialog({ file, onClose }) {
+// Download beside it for when it is wanted after all. Esc or the cross closes it, back where the owner was reading. A picture opens in the one
+// viewer that zooms (PictureView), stepping through `files` - the card's other pictures
+const asPicture = (f) => isPicture(f) || !!f?.is_image;
+export const FileDialog = ({ file, files = null, onClose }) => asPicture(file)
+  ? <PictureDialog file={file} files={files?.filter(asPicture)} onClose={onClose} /> : <FileBox file={file} onClose={onClose} />;
+function FileBox({ file, onClose }) {
   const [, save] = useSave();
   useOverlay(!!file, onClose, { typeThrough: true });
   if (!file) return null;

@@ -177,7 +177,7 @@ export const Items = ({ items }) => (
         <Typography sx={{ fontSize: 13, color: DIM, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{x.line}</Typography>
         {(x.flags || []).map((f) => <Typography key={f} variant="caption" sx={{ color: "var(--tq-warn, #8a4b1c)" }}>{f}</Typography>)}
         {x.failed && <Typography variant="caption" title={x.failed} sx={{ color: "var(--tq-danger, #7a2f3c)", maxWidth: 260, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{x.failed}</Typography>}
-        {x.onOpen && <Button size="small" onClick={x.onOpen} sx={{ minWidth: 0 }}>{x.open ? "Hide" : "Open"}</Button>}
+        {x.onOpen && <Button size="small" data-tq-opens-under="" aria-expanded={!!x.open} onClick={x.onOpen} sx={{ minWidth: 0 }}>{x.open ? "Hide" : "Open"}</Button>}
         {x.tail}
       </Box>
       {x.open && x.body && <Box sx={{ pl: 4, pb: 1 }}>{x.body}</Box>}

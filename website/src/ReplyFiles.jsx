@@ -25,7 +25,8 @@ const asViewed = (rid, f) => { const e = String(f.name).split(".").pop().toLower
   return { id: `reply:${rid}:${f.name}`, name: f.name, path: f.name, kind: "output", preview: EXT_PREVIEW[e] || null, url: u,
     content_type: e === "csv" ? "text/csv" : e === "pdf" ? "application/pdf" : "", size: f.size }; };
 
-export default function ReplyFiles({ reviewId, files = [], promised = false, short = [], channel = "email", onChanged, toRow = false, disabled = false }) {
+// `over`: the card went or was put down - its files stay to open, and nothing on it adds or takes one (a greyed "Attach another" stood on every sent email)
+export default function ReplyFiles({ reviewId, files = [], promised = false, short = [], channel = "email", onChanged, toRow = false, disabled = false, over = false }) {
   const pick = useRef(null);
   const [busy, setBusy] = useState("");
   const [err, setErr] = useState(""), [viewing, setViewing] = useState(null);
@@ -72,7 +73,7 @@ export default function ReplyFiles({ reviewId, files = [], promised = false, sho
           <AttachChip key={f.name} name={f.name} note={sizeText(f.size)} title={`Open ${f.name}`} onClick={() => setViewing(asViewed(reviewId, f))}
             onRemove={disabled || busy === f.name ? null : () => drop(f.name)} data-tq-reply-file={f.name} />
         ))}</AttachRow>}
-        {mail && toRow ? null : mail ? (
+        {(mail && toRow) || over ? null : mail ? (
           <Button size="small" onClick={() => pick.current?.click()} disabled={disabled || busy === "adding"}
             startIcon={busy === "adding" ? <CircularProgress size={11} /> : <AttachFileIcon sx={{ fontSize: 14 }} />}
             sx={{ color: DIM, textTransform: "none", fontSize: 11.5 }}>

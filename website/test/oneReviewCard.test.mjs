@@ -158,3 +158,24 @@ test("a pressed card and a held step are drawn in the one frame", async () => {
     why: "it leaves this computer", cwd: "C:/work" }, { ReviewId: 2 })]);
   assert.match(waits, /<div class="tq-turn-frame[^"]*"[^>]*data-tq-held-steps="1"/); assert.match(waits, /data-tq-held-approve=""/);
 });
+
+// ...A CARD THAT WENT OFFERS NO PRESS (the card gallery, 2026-11-25: a greyed "Attach another" stood beside the files of every sent email): its
+// files stay to open, the press to add one is gone with its Send
+test("a sent email keeps its files and no Attach", async () => {
+  const { card } = await P, files = { channel: "email", to: ["erin@northwind.example"], subject: "Re: Plans", attachments: [{ name: "plans.pdf", size: 2048 }] };
+  const waits = card(reply({ Deliver: JSON.stringify(files) }));
+  assert.match(waits, /data-tq-reply-file="plans\.pdf"/); assert.match(waits, /Attach another/);
+  const went = card(reply({ Status: "approved", FinalText: "Thanks Erin - the plans are attached.", DecidedAt: "2026-11-24 09:05:00", Deliver: JSON.stringify(files) }));
+  assert.match(went, /data-tq-reply-file="plans\.pdf"/); assert.doesNotMatch(went, /Attach (another|a file)/);
+});
+
+// ...AND A PRESS THAT OPENS SOMETHING UNDER ITS CARD SAYS SO (data-tq-opens-under), so the chat keeps the card where it stood (GeneralWorkspace's
+// fold) - Connect on a network not set up drew its setup under the card, and the chat jumped to the setup's foot
+test("Connect and a bulk row's Open are presses that open under what was pressed", async () => {
+  const { card, bulk } = await P;
+  const post = act({ action: "run_tool", type: "linkedin_post", network: "LinkedIn", text: "Three tools, compared." }, { connect: { label: "Connect LinkedIn", href: "#connector=linkedin", says: "LinkedIn isn't connected" },
+    Connect: { label: "Connect LinkedIn", href: "#connector=linkedin", says: "LinkedIn isn't connected" } });
+  assert.match(card(post), /<button[^>]*data-tq-opens-under=""[^>]*>(?:<span[^>]*>.*?<\/span>)?Connect LinkedIn/);
+  const letter = (id) => reply({ ReviewId: id, Kind: "slot", Batch: "b1", MessageId: null, Deliver: JSON.stringify({ channel: "email", to: [`owner${id}@vendor.example`], subject: "Renewal" }) });
+  assert.match(bulk([letter(1), letter(2), letter(3)]), /<button[^>]*data-tq-opens-under=""[^>]*aria-expanded="true"[^>]*>Hide/);
+});

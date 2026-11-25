@@ -683,7 +683,10 @@ function AssistantThread({ task, onAsked, onStop, selectionRef, attachmentsRef, 
     // ...through the scroll the shrink itself makes (the browser pulls the view up to the new end, which read as "at the end" again) until the
     // observer has placed it
     let folding = false;
-    const fold = (e) => { const b = e.target?.closest?.("[data-tq-arrived-expand]"); if (!b) return;
+    // ...AND SO IS ANY PRESS THAT OPENS SOMETHING UNDER IT (`data-tq-opens-under`: a card's Connect bringing its connection's setup up, a bulk
+    // row opened to review - the card gallery, 2026-11-25: Connect GitHub drew eight steps of setup and the chat, held at its end, jumped to
+    // "Remove connection" at the foot of them, the card he pressed a screen above)
+    const fold = (e) => { const b = e.target?.closest?.("[data-tq-arrived-expand], [data-tq-opens-under]"); if (!b) return;
       const at = b.getAttribute("aria-expanded") === "true" ? b : b.closest("[data-tq-item], .tq-aui-arrived") || b;
       mine(); stick.current = false; folding = true; mark = { el: at, off: at.getBoundingClientRect().top - v.getBoundingClientRect().top }; };
     const scrolled = () => { if (folding) was = v.scrollTop; else on(); };

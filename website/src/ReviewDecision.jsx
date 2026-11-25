@@ -36,6 +36,8 @@ const setupUnder = (href, onClose, onConnected) => href && <React.Suspense fallb
   <ConnectSetup href={href} onClose={onClose} onConnected={() => { onClose(); onConnected(); }} /></React.Suspense>;
 // Connect brings the connection's setup up under the card, where it is one connection's card; any other link still opens where it points
 const connectRun = (href, setAt) => () => (setupType(href) ? setAt((x) => (x ? "" : href)) : openAppLink(href));
+// ...its setup comes up UNDER the card: the chat keeps what he pressed where it stood (GeneralWorkspace's fold), never its end
+const OPENS_UNDER = { "data-tq-opens-under": "" };
 import { FOCUS_RING, pressable } from "./pressable.js";
 import { runOperation } from "./taskOps.js";
 import { draftCanSend, useCapabilities } from "./capabilities.js";
@@ -535,7 +537,7 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
   const connect = (!proposal || proposalFrom(r)?.action === "run_tool") && !delivery.frozen ? r.Connect : null;
   const moves = r.Status !== "pending" || look === "sent" ? [] : [
     ...(connect ? [
-      { id: no("connect"), label: connect.label, tone: "p", disabled: off, run: connectRun(connect.href, setSetupAt), title: `${connect.says} - sets up its connection here` },
+      { id: no("connect"), label: connect.label, tone: "p", disabled: off, run: connectRun(connect.href, setSetupAt), title: `${connect.says} - sets up its connection here`, attrs: OPENS_UNDER },
       // ...and a card that is connected but cannot send keeps the Copy it drew before (`waits`): the draft can still go out by hand
       ...(connect.waits ? [{ id: no("copy"), label: copied ? `✓ ${btn("copy", "done")}` : btn("copy"), tone: "s", disabled: off || !words.trim(), run: copyIt, title: copyTitle }] : []),
     ] : delivery.frozen ? [
@@ -726,7 +728,7 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
           <Button size="small" variant="contained" disableElevation disabled={off} onClick={redraft} title={btnHint("redraft")}>{redraftLabel}</Button>
         </Box>}</>}
       files={!proposal && !isCal && (!shut || deliveryFiles(filedDelivery).length > 0) && <ReplyFiles reviewId={r.ReviewId} files={deliveryFiles(filedDelivery)} promised={filesPromised(r)} short={filesShort(filedDelivery, deliveryFiles(filedDelivery))}
-        channel={r.Channel} onChanged={onChanged} toRow={toRow} disabled={off || delivery.frozen || shut} />}
+        channel={r.Channel} onChanged={onChanged} toRow={toRow} disabled={off || delivery.frozen || shut} over={shut} />}
       under={shut ? done?.command && <details><summary style={{ fontSize: 12, color: DIM, cursor: "pointer" }}>What it runs</summary>
         <Typography component="code" variant="caption" sx={{ whiteSpace: "pre-wrap", color: DIM, display: "block" }}>{done.command}</Typography></details> : <>
         {connect && <Typography data-tq-not-connected="" variant="body2" sx={{ color: DIM, mt: 0.75 }}>{connect.says} - {connect.waits || "the draft waits here until it is"}.</Typography>}
@@ -852,7 +854,7 @@ export function ActReview({ row: was, tid, live = true, onChanged, past = false 
   const pressRow = gone || !st.live ? [] : row?.connect ? [
     ...(post ? [{ id: "browser", label: busy === "browser" ? "Handing it over…" : "Post via the browser", tone: "p", spin: busy === "browser", disabled: !ok || !text.trim(), run: viaBrowser,
       attrs: { "data-tq-act-browser": "" } }] : []),
-    { id: "connect", label: row.connect.label, tone: post ? "s" : "p", run: connectRun(row.connect.href, setSetupAt), attrs: { "data-tq-act-connect": "" } },
+    { id: "connect", label: row.connect.label, tone: post ? "s" : "p", run: connectRun(row.connect.href, setSetupAt), attrs: { "data-tq-act-connect": "", ...OPENS_UNDER } },
     { id: "copy", label: copied ? `✓ ${btn("copy", "done") || "Copied"}` : btn("copy"), tone: "s", disabled: !text.trim(), title: hint("copy"), attrs: { "data-tq-act-copy": "" },
       run: () => { try { navigator.clipboard?.writeText(text); setCopied(true); } catch { /* the words stay on the card */ } } }, dismiss]
     : [{ id: "approve", label: busy === "approve" ? w.busy : w.press, tone: "p", spin: busy === "approve", disabled: !ok, run: () => decide("approve"),

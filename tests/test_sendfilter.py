@@ -96,7 +96,7 @@ class TheClaudeAiConnectors(unittest.TestCase):
         argv = []
         with mock.patch('taskuary.clis.which', return_value='claude'), \
              mock.patch('taskuary.spawn.popen', side_effect=lambda a, **kw: argv.append((a, kw)) or P()), \
-             mock.patch.object(sendfilter.os, 'name', 'posix'):
+             mock.patch('taskuary.spawn.end', side_effect=lambda p: p.kill()),              mock.patch.object(sendfilter.os, 'name', 'posix'):
             got = sendfilter.claude_ai_list()
         self.assertEqual(got, {'claude.ai Team Chat': {'status': 'connected', 'tools': ['search', 'post_message']},
                                'claude.ai Files': {'status': 'needs-auth', 'tools': []}})

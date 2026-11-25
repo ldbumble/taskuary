@@ -67,9 +67,11 @@ export default function ReplyFiles({ reviewId, files = [], promised = false, sho
   return (
     <Box sx={{ mb: 0.75 }}>
       <FileDialog file={viewing} onClose={() => setViewing(null)} />
-      <Box sx={{ display: "flex", flexWrap: "nowrap", alignItems: "center", gap: 0.75, minWidth: 0 }}>
+      {/* ...ON A PHONE the press to add one drops under the files, and two files share the card's width (the card gallery, 2026-11-25: in a card
+          180px wide the second attachment was cut away whole - an email read as carrying one file) */}
+      <Box sx={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 0.75, minWidth: 0 }}>
         {/* ...the one attachment chip, in the one row: a few, then "+N more" (promptImages AttachRow, the owner 2026-11-06) */}
-        {files.length > 0 && <AttachRow sx={{ flex: "0 1 auto", pb: 0 }}>{files.map((f) => (
+        {files.length > 0 && <AttachRow sx={{ flex: "0 1 auto", pb: 0, "& > .tq-attach-chip": { flexShrink: 1, minWidth: "min(96px, 44%)" } }}>{files.map((f) => (
           <AttachChip key={f.name} name={f.name} note={sizeText(f.size)} title={`Open ${f.name}`} onClick={() => setViewing(asViewed(reviewId, f))}
             onRemove={disabled || busy === f.name ? null : () => drop(f.name)} data-tq-reply-file={f.name} />
         ))}</AttachRow>}

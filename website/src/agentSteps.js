@@ -341,6 +341,7 @@ const OWN = {
   proposepost: (a) => OWN.propose({ ...a, kind: "post" }),
   replynotneeded: () => ({ kind: "plan", summary: "Marked the reply as not needed", tried: "Could not mark the reply as not needed" }),
   signform: () => ({ kind: "edit", summary: "Filled in and signed a form", tried: "Could not fill in the form" }),
+  drawimage: () => ({ kind: "edit", summary: "Drew a picture", tried: "Could not draw the picture" }),
   // ...a post by the network's own card title ("X (Twitter)" is X), the catalogue's - never a second list of names here
   propose: (a) => { const k = a.kind || (a.network ? "post" : "");
     if (k === "reply") return { kind: "edit", summary: "Drafted a reply", tried: "Could not set up the reply" };

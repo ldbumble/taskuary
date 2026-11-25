@@ -553,9 +553,9 @@ def _card_call(store, tid: int, name: str, args: dict, doors: dict, skip=()) -> 
     if raises and _asking(store, tid):
         raise ValueError(refusal('your question to the owner stands - nothing was raised', 'wait for his answer, then raise it; if this card does '
                                  'not hang on the question, take the question back with ask_owner withdraw: true and raise it'))
-    then, args = ((args or {}).get('then'), {k: v for k, v in (args or {}).items() if k != 'then'}) if raises else (None, args)
+    then, todo, args = ((args or {}).get('then'), (args or {}).get('todo'), {k: v for k, v in (args or {}).items() if k not in ('then', 'todo')}) if raises else (None, None, args)
     try:
-        with (card.raising(store, tid, then) if raises else contextlib.nullcontext()):
+        with (card.raising(store, tid, then, todo) if raises else contextlib.nullcontext()):
             if raises and isinstance((args or {}).get('items'), list): out = _many(store, tid, name, args, doors)
             else: out = _call(store, tid, name, args, doors, skip)
     except ValueError:
@@ -585,8 +585,12 @@ ITEMS = {'type': 'array', 'items': {'type': 'object'},
 # per checkout
 TOOLS['propose'][2]['properties']['items'] = ITEMS
 # ...and on every card a tool raises, the agent's own step after his press (card.raising): that press wakes it only where it names one
+# ...AND THE TO-DO THE CARD DOES (walk 22, 2026-11-25: Codex put `then: "mark to-do ... complete"` on every card, so every Send woke it to tick a
+# box and say it went): the press's record is Taskuary's - it ticks the to-do as the press goes (card.went), and nobody is woken for it
 for _t in TOOLS.values():
-    if _t[0] == 'propose': _t[2]['properties']['then'] = {'type': 'string', 'description': 'your own step after his press, if any'}
+    if _t[0] == 'propose':
+        _t[2]['properties']['then'] = {'type': 'string', 'description': 'your own next act after his press, if any (not bookkeeping - Taskuary records the press itself)'}
+        _t[2]['properties']['todo'] = {'type': 'string', 'description': "the id of this task's to-do this card does, if one - Taskuary ticks it when his press has gone"}
 def _take_back(store, tid: int, doors: dict, old, stand: list) -> None:
     "The one unsent card `old` names (its id, or who or what it was to), withdrawn - never one of `stand`, the cards the call itself stands as."
     from . import verdicts
@@ -602,7 +606,7 @@ def _many(store, tid: int, name: str, args: dict, doors: dict) -> str:
     old = args.get('replaces') if not any('replaces' in it for it in items) else None
     if len(items) > 500: raise ValueError(f'{len(items)} items is past what one card holds (500) - split them, or narrow the list')
     key, top = bulkcard.new_key(), (store._one('SELECT MAX(ReviewId) AS m FROM review') or {}).get('m') or 0
-    refused, went, held, mine, says = [], [], [], [], []
+    refused, went, held, mine, says, words = [], [], [], [], [], {}
     for i, it in enumerate(items):
         try: out = _call(store, tid, name, {**base, **it}, doors)
         except Exception as e: refused.append(f'item {i + 1}: {failed(name, e)}'); continue
@@ -618,7 +622,8 @@ def _many(store, tid: int, name: str, args: dict, doors: dict) -> str:
         elif isinstance(got, dict) and got.get('send_error'): held.append(f"{who} ({str(got['send_error']).rstrip(' .')})")
         # ...the card EACH item filed, by its own answer - never every card raised on the task meanwhile: a reply drafted for a mail that came
         # in as the items were filed, or the agent's own call beside this one, joined the card and went with its one press
-        if isinstance(got, dict) and isinstance(rid := got.get('review_id', got.get('review')), int): mine.append(rid)
+        if isinstance(got, dict) and isinstance(rid := got.get('review_id', got.get('review')), int):
+            mine.append(rid); words.setdefault(rid, []).append(str((store.get_review(rid) or {}).get('DraftText') or ''))
         # ...and what the files on each say (read_back), once a block: several mails with the same deck answered with no read-back at all
         if isinstance(got, dict) and got.get('files_say'): says.append(got['files_say'])
     # ...ONE CALL IS ONE CARD, WHATEVER ITS COUNT (the owner, 2026-11-25: "if it's 3 of the same email to different people then it goes in a bulk
@@ -630,14 +635,20 @@ def _many(store, tid: int, name: str, args: dict, doors: dict) -> str:
     stand = [r['ReviewId'] for r in store._rows(f"SELECT ReviewId FROM review WHERE TaskId=? AND Status='pending' AND ReviewId IN ({','.join('?' * len(mine))})",
                                                 (int(tid), *mine))] if mine else []
     mine = [r for r in stand if r > top]
+    # ...AND ITEMS THAT ARE ONE LETTER WRITTEN SEVERAL WAYS ARE ITS VERSIONS, ON THAT ONE CARD (walk 22, 2026-11-25: "Yes - Thursday 2pm" and
+    # "No - keep Friday" for one reply; each item rewrote the same card and only the last stood): kept on it for him to pick from, the first in
+    # its box - what he picks, and changes, is what his Send sends
+    picks = {r: list(dict.fromkeys(v)) for r, v in words.items() if r in stand and len(set(v)) > 1}
+    for r, v in picks.items(): store.set_review_versions(r, v)
     if old and stand: _take_back(store, tid, doors, old, stand)
     # ...and only MANY OF THE SAME THING is one card (the owner, 2026-11-20): posts for different networks are different things - each its own
     # card in the row, with its own picture - however many there are
     bulk = len(mine) > 1 and len({str({**base, **it}.get('type') or {**base, **it}.get('network') or '') for it in items}) <= 1
     if bulk: store._exec(f"UPDATE review SET Batch=? WHERE ReviewId IN ({','.join('?' * len(mine))})", (key, *mine))
     n = len(stand)
-    card = ('They stand as ONE card: the owner does them all with one press; you hear the whole run once.' if bulk
-            else f'They stand one at a time, {n} in a row: the owner sees each in turn and presses it; you hear how they went once the last is answered, or at once if a press fails.')
+    card = (f"They stand as ONE card holding {len(next(iter(picks.values())))} versions: the owner picks one, changes it if he likes, and sends that one." if picks and n == 1
+            else 'They stand as ONE card: the owner does them all with one press; you hear the whole run once.' if bulk
+            else f'They stand as one card with a tab each, {n} of them: the owner sees and presses each, in any order; you hear how they went once the last is answered, or at once if a press fails.')
     shown = ((f"{len(went)} of {len(items)} sent at once - a routine's email to what its owner saved into it goes without a press; say they went."
               + (f" Not sent: {'; '.join(held)}." if held else '') + (f" The {n} unsent stand for the owner's Send{' as ONE card' if bulk else ', one at a time'}." if n else '')) if went
              else card if n else 'Nothing was filed, so no card stands - fix what each item was refused for and call it again.')

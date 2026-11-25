@@ -424,13 +424,13 @@ def _peek(store, spec):
     """Run one schema look-up and hand back rows the model can read. Errors come back as text
     rather than raising: 'that object does not exist' is information the model should use, and
     the composer failing outright teaches it nothing."""
-    from .reports import REGISTRY, resolve_cfg
+    from .reports import REGISTRY, pair, resolve_cfg
     t = (spec or {}).get('type')
     if t not in REGISTRY: return f'(no such lookup type: {t})'
     # a look-up READS; a script is code nobody has read yet, and what this model was shown may have been written by anybody
     if t == 'python_script': return '(a script is never run as a look-up - it runs only once the owner has read and saved it)'
     try:
-        head, body = REGISTRY[t](resolve_cfg(store, {**spec, 'max_rows': SCHEMA_ROWS}))
+        head, body = pair(REGISTRY[t](resolve_cfg(store, {**spec, 'max_rows': SCHEMA_ROWS})))
         return f'{head}\n{body[:6000]}'
     except Exception as e:
         return f'(the lookup failed: {str(e)[:300]})'

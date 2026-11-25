@@ -147,7 +147,7 @@ class AShortTurnWakesTheAgentOnceTests(unittest.TestCase):
 
     def test_a_turn_that_ended_on_a_held_step_waits_on_the_owner(self):
         """The overnight run, 2026-11-03: a delete held for Approve, the agent said it was waiting for it, and the judge read the turn as
-        short. A held step is waiting on the owner: no wake. Another session's held step does not count."""
+        short. A held step is waiting on the owner: no wake - whichever session of the task held it (a card that waits on him is his move)."""
         s = MemoryStore(); tid = researcher(s)
         said = 'Nothing has changed yet, because the delete is waiting for your approval.'
         for sid, held in (('g3', 'g3'), ('g4', 'someone-else')):
@@ -156,7 +156,7 @@ class AShortTurnWakesTheAgentOnceTests(unittest.TestCase):
                           'Reason': 'held before it ran'})
             woke = []
             hooks.judge_ended(s, tid, sid, said, brain=verdict(True, 'waiting on Approve'), wait=True, then=woke.append)
-            self.assertEqual(woke, [] if sid == 'g3' else ['Approve'])
+            self.assertEqual(woke, [])
             self.assertEqual(s.last_worker_event(tid, skip=ws.NOTES)['Kind'], 'turn_end')        # never a failure
 
     def test_a_turn_that_set_its_own_check_back_is_not_woken_before_it_is_due(self):
@@ -210,6 +210,23 @@ class AShortTurnWakesTheAgentOnceTests(unittest.TestCase):
         s.decide_review(rid, 'approved', None, 'owner')                # ...nothing waits on him any more: the same words are the judge's to read
         hooks.judge_ended(s, tid, 'g9', said, brain=judge, wait=True, then=woke.append)
         self.assertEqual((woke, asked), (['email to Omar not yet sent'], [1]))
+
+    def test_a_turn_that_raised_a_card_of_any_kind_and_stopped_is_not_woken(self):
+        """Walk 22, 2026-11-25 (Codex): "Post on Bluesky ..." - the agent said "I'll prepare the post for your approval", raised the post's card
+        and ended. Only a LETTER that waited counted as his move, so the judge read the words as short and woke it: a second turn by itself,
+        its words under its own card. Whatever waits on him - an act, a post - is the same stored fact, and no model is asked."""
+        said = "I'll prepare the Bluesky post for your approval."
+        asked, woke = [], []
+        def judge(*a, **k): asked.append(1); return json.dumps({'unfinished': True, 'why': 'the agent still needs to draft the post'})
+        s = MemoryStore(); tid = researcher(s)
+        rid = s.add_review({'TaskId': tid, 'Kind': 'action', 'Status': 'pending', 'Reason': 'the agent proposes to post on Bluesky',
+                            'DraftText': json.dumps({'action': 'run_tool', 'type': 'bluesky_post', 'text': 'Our AP team closed October in four days.'})})
+        ws.record(s, tid, 'g9', 'working', text='', source='api'); ws.record(s, tid, 'g9', 'turn_end', text=said, source='api')
+        hooks.judge_ended(s, tid, 'g9', said, brain=judge, wait=True, then=woke.append)
+        self.assertEqual((woke, asked), ([], []), 'his press is next: no wake, no model asked')
+        s.decide_review(rid, 'rejected', None, 'owner')
+        hooks.judge_ended(s, tid, 'g9', said, brain=judge, wait=True, then=woke.append)
+        self.assertEqual(len(asked), 1, 'nothing waits on him any more: the words are the judge\'s to read')
 
     def test_an_unreadable_verdict_is_no_verdict(self):
         s = MemoryStore(); tid = researcher(s)

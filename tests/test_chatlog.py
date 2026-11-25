@@ -288,6 +288,44 @@ def test_a_card_pressed_on_its_tab_behind_the_front_stands_beside_its_run_never_
     assert [(t['name'], t['done'], t['front']) for t in run] == [('X', False, True), ('LinkedIn', False, False), ('Reddit', True, False)]
 
 
+def test_the_held_step_of_a_cards_browser_road_is_drawn_on_that_card_as_its_next_press():
+    """Walk 22, 2026-11-25, both homes: X and LinkedIn posts; Post via the browser on the X card; he signs in, says "post without the picture",
+    and the agent's final Post is held - joined to the X card he had already pressed, whose row read `approved`, so NOTHING could be pressed
+    anywhere and both agents said a card waited. The step is that card's next press: the card waits again carrying it, no card of its own
+    is drawn for it - held, set aside by his next line, or pressed - and its press ends the card."""
+    from unittest import mock
+    from taskuary import cardqueue, conversation, general, proposals
+    s, tid = world()
+    conversation.hear(s, tid, turn=True)
+    x, li = [s.add_review({'TaskId': tid, 'Kind': 'action', 'Status': 'pending', 'Origin': 'agent', 'Reason': 'the post you asked for',
+                           'DraftText': json.dumps({'action': 'run_tool', 'type': t, 'text': 'We close the month in four days.'})}) for t in ('x_post', 'linkedin_post')]
+    s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'Two posts are set up.')
+    chatlog.read(s, tid)
+    with mock.patch.object(general, 'to_agent', return_value='woke'): assert proposals.via_browser(s, x, '')['ok']
+    cards = lambda: {c['review']: c for i in chatlog.read(s, tid)['items'] for c in ([i] if i['kind'] == 'card' else i.get('cards') or [])}
+    cardqueue._SEEN.clear()
+    assert cards()[x]['status'] == 'approved' and not cards()[x].get('step'), 'handed: the agent has it, nothing of his to press yet'
+    hold = lambda: proposals.queue(s, tid, {'action': 'browser_act', 'sid': 's1', 'args': ['click', '@e20'], 'command': 'agent-browser click @e20',
+                                            'site': 'x.example', 'what': 'Publish your post on X', 'why': 'it speaks for you'}, 'agent')['reviewId']
+    held = hold(); cardqueue._SEEN.clear()
+    got = cards()
+    assert got[x]['status'] == 'pending' and got[x]['step'] == {'review': held, 'what': 'Publish your post on X'}, got[x]
+    assert held not in got and li not in got and chatlog.live_card(s, tid)['review'] == x, 'one card: the step is on it, never beside it'
+    said = cardqueue.screen(s, tid)
+    assert 'Waiting for his press now, drawn on the card he pressed' in said and 'Publish your post on X' in said and 'NOT done yet - do it' not in said, said
+    # ...his next line sets the step aside as it does every waiting card: the card is handed again, and no greyed card of the step is drawn
+    s.decide_review(held, 'superseded', None, 'taskuary', note=proposals.SET_ASIDE); cardqueue._SEEN.clear()      # ...as set_aside_drafts settles it
+    got = cards()
+    assert s.get_review(held)['Status'] == 'superseded' and held not in got and got[x]['status'] == 'approved' and not got[x].get('step'), got
+    # ...the agent presses Post again: held anew, on the same card; his press runs it and the card is done - LinkedIn comes forward
+    again = hold(); cardqueue._SEEN.clear()
+    assert again != held and cards()[x]['step']['review'] == again
+    s.decide_review(again, 'approved', None, 'owner'); assert cardqueue.done(s, tid, 'Posted on x.example') == [x]; cardqueue._SEEN.clear()
+    got = cards()
+    assert got[x]['status'] == 'approved' and not got[x].get('step') and again not in got and held not in got, got
+    assert cardqueue.state(s, tid)['live'] == [got[li]['review']] if li in got else True
+
+
 def test_a_tab_he_said_no_to_is_marked_so_never_as_one_that_went():
     """The card gallery, 2026-11-25: three emails in a line - one sent, the next dropped - and the dropped one's tab was ticked like the sent
     one. A card settled without going (his no, a press that failed) says so on its tab (`no`); one that went, or still waits, does not."""

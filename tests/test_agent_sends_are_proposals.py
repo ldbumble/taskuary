@@ -56,6 +56,14 @@ class AgentSendsWaitForThePress(unittest.TestCase):
         r = c.post('/api/tools/run', headers=owner(), json={'type': 'linkedin_post', 'text': 'We shipped.'})
         self.assertTrue(r.json()['ok'], r.text); self.assertEqual(len(self.ran), 1)
 
+    def test_a_read_whose_executor_answers_rows_and_columns_gives_the_agent_its_data(self):
+        """Walk 22, 2026-11-25: an agent's read of linkedin_me - an executor that answers {rows, columns} - came back headline "rows", output
+        "columns": the dict unpacked as a pair. Every reader of an executor reads either shape (reports.pair)."""
+        me = lambda cfg: {'rows': [{'name': 'Alex Doyle', 'followers': 312}], 'columns': ['name', 'followers']}
+        with mock.patch.dict(REGISTRY, {'linkedin_me': me}):
+            r = c.post('/api/tools/run', headers=agent(self.tid), json={'task_id': self.tid, 'type': 'linkedin_me'}).json()
+        self.assertTrue(r['ok'], r); self.assertEqual(r['headline'], '1 row'); self.assertIn('Alex Doyle', r['output']); self.assertIn('312', r['output'])
+
     def test_no_task_named_is_a_refusal_that_says_how(self):
         r = c.post('/api/tools/run', headers=agent(), json={'type': 'linkedin_post', 'text': 'hi'})
         self.assertEqual(r.status_code, 422); self.assertIn('task_id', r.json()['detail']); self.assertEqual(self.ran, [])
@@ -387,8 +395,7 @@ def test_the_final_post_held_in_the_browser_stands_on_the_card_he_pressed_in_fro
                                       'DraftText': json.dumps({'action': 'run_tool', 'type': kind, 'text': 'Strollers then and now.'})})
     x, rd, li = post('x_post'), post('reddit_post'), post('linkedin_post')
     with mock.patch.object(general, 'to_agent', return_value='woke'): proposals.via_browser(s, x, '')
-    held = s.add_review({'TaskId': tid, 'Kind': 'action', 'Status': 'pending', 'Reason': 'held before it ran: Publish your post on X',
-                         'DraftText': json.dumps({'action': 'browser_act', 'sid': 's1', 'args': ['click', '@e91'], 'site': 'x.example'})})
+    held = proposals.queue(s, tid, {'action': 'browser_act', 'sid': 's1', 'args': ['click', '@e91'], 'site': 'x.example', 'what': 'Publish your post on X'})['reviewId']
     st = cardqueue.state(s, tid)
     assert st['live'] == [x, held], st
     assert rd in st['held'] and li in st['held'] and held not in cardqueue.held(s, tid)

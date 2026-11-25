@@ -85,6 +85,13 @@ def add(store, tid: int, outputs, actor: str, sender: dict = None, again: bool =
             elif found.get('candidates'): i['out']['candidates'] = found['candidates']
             if is_sender(sender, i['out']['to']): continue        # the name resolved to the sender's own address
         if twice or i['out']['to'].casefold() not in have: new.append(i)      # ...`twice`: a second letter to them, asked for (draft)
+    # ...and a second letter about the same thing is still a second line of the list: the list keeps one line per text, so it was dropped
+    # unsaid and its agent told "`to` must be one address" (walk 22, 2026-11-25) - numbered, as the second it is
+    said = {i['text'] for i in store.task_checklist(tid)} if twice else set()
+    for i in new:
+        base, n = i['text'], 2
+        while i['text'] in said: i['text'], n = f'{base} ({n})', n + 1
+        said.add(i['text'])
     return store.add_checklist_items(tid, new, actor) if new else []
 
 
@@ -234,7 +241,8 @@ def draft(store, tid: int, text: str, to: str = '', subject: str = '', slot: str
     rewrote = r0['ReviewId'] if agent != 'owner' and r0 and r0.get('Status') == 'pending' and str(r0.get('DraftBy') or '').startswith('agent:') \
               and not _written_before(store, tid, r0) else None
     added = False
-    if hit and hit.get('done'): return {'ok': False, 'why': f"the email to {hit['out'].get('to')} was already sent or dropped"}
+    if hit and hit.get('done'): return {'ok': False, 'why': f"the email to {hit['out'].get('to')} was already sent or dropped - for another letter "
+                                                                "to them, call it again with `slot: \"new\"`"}
     if hit and want and '@' in want and str(hit['out'].get('to')).casefold() != want:
         # a slot that named a person: the address the agent found is where this one goes (never guessed by us)
         hit = _point(store, tid, hit, ' '.join(str(to).split()), agent)

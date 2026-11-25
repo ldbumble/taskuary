@@ -1328,6 +1328,8 @@ class SQLiteStore:
             if 'NotNeeded' not in rvcols: self.cx.execute('ALTER TABLE review ADD COLUMN NotNeeded TEXT')
             # ...and the BULK CARD it is one row of (bulkcard.py): many of the same act raised together, one card, one press for them all
             if 'Batch' not in rvcols: self.cx.execute('ALTER TABLE review ADD COLUMN Batch TEXT')
+            # ...and THE VERSIONS OF ITS WORDS its agent gave for him to pick from (one call's `items` for one letter): one card, a pick on it
+            if 'Versions' not in rvcols: self.cx.execute('ALTER TABLE review ADD COLUMN Versions TEXT')
             # ...and THE AGENT'S OWN STEP AFTER HIS PRESS (`then`, card.raising): his press wakes it only where there is one (general.carries_on).
             # A card left pending under a turn whose summary said `after_press: send` keeps that, once
             if 'NextStep' not in rvcols:
@@ -5965,7 +5967,7 @@ class SQLiteStore:
             self.set_review_draft_error(rid, EMPTY_DRAFT)
             return False
         fp = None if files in (None, ...) else json.dumps({'named': [str(f) for f in files]})
-        self._exec("UPDATE review SET FilesPromised=CASE WHEN ? THEN ? WHEN DraftText IS ? THEN FilesPromised END, DraftText=?, RunId=?, DraftError=NULL, DraftNeeds=NULL, NotNeeded=NULL, "
+        self._exec("UPDATE review SET FilesPromised=CASE WHEN ? THEN ? WHEN DraftText IS ? THEN FilesPromised END, DraftText=?, RunId=?, DraftError=NULL, DraftNeeds=NULL, NotNeeded=NULL, Versions=NULL, "
                    f"DraftBy=?, {_DRAFT_AT} WHERE ReviewId=? AND DeliveryClaim IS NULL AND IFNULL(DeliveryState,'') NOT IN ('sending','unknown','sent')",
                    (files is not ..., fp, draft, draft, run_id, by, draft, _now(), rid))
         self._review_changed(rid)
@@ -6039,6 +6041,11 @@ class SQLiteStore:
         self._review_changed(rid)
     def set_review_not_needed(self, rid, why):
         self._exec("UPDATE review SET NotNeeded=? WHERE ReviewId=? AND Status='pending'", (by_sentence(why, 300) or None, rid))
+        self._review_changed(rid)
+    def set_review_versions(self, rid, versions: list):
+        "The versions of review `rid`'s words its agent gave for him to pick from (agenttools._many) - the first stands in its box; None for none."
+        self._exec('UPDATE review SET DraftText=?, Versions=? WHERE ReviewId=?', (versions[0], json.dumps(versions), rid)) if versions else \
+            self._exec('UPDATE review SET Versions=NULL WHERE ReviewId=?', (rid,))
         self._review_changed(rid)
     def set_review_next_step(self, rid, then):
         "The agent's own step after his press on review `rid` (card.raising), None for none."

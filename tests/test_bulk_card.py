@@ -118,6 +118,22 @@ def test_one_call_is_one_card_whatever_its_count_and_separate_calls_are_cards_on
     assert not s._rows('SELECT 1 FROM review WHERE TaskId=? AND Batch IS NOT NULL', (tid,))
 
 
+def test_versions_of_one_reply_are_one_card_he_picks_from_never_the_last_one_alone():
+    """Walk 22, 2026-11-25 (Claude): one call, `items` "Yes - Thursday 2pm works" and "No - let us keep Friday" for one reply. Each item was
+    filed as its own reply, the second rewrote the first, and ONE card stood holding only the "No". Versions of one thing are one card
+    holding each of them: the first in its box, the rest his to pick."""
+    from test_own_ask_no_reply import mailed_task
+    s = MemoryStore(); tid = mailed_task(s, 'general')
+    yes, no = 'Hi Erin, yes - Thursday 2pm works. Alex', 'Hi Erin, no - let us keep Friday. Alex'
+    with mock.patch.object(server, 'store', s): out = call(tid, 'propose', kind='reply', items=[{'text': yes}, {'text': no}])
+    [rv] = s._rows("SELECT * FROM review WHERE TaskId=? AND Status='pending' AND TRIM(IFNULL(DraftText,''))<>''", (tid,))
+    assert out['ok'] and out['on_the_card'] == 1 and '2 versions' in out['shown'], out
+    assert rv['DraftText'] == yes and json.loads(rv['Versions']) == [yes, no], 'both kept on the one card, the first in its box'
+    # ...and a later rewrite by its agent is one letter again
+    s.update_review_draft(rv['ReviewId'], 'Hi Erin, Thursday at 2 it is. Alex', None)
+    assert not s.get_review(rv['ReviewId'])['Versions']
+
+
 def test_forty_issues_closed_with_some_refused_counts_each_and_says_why():
     s, tid = world()
     with mock.patch.object(server, 'store', s):

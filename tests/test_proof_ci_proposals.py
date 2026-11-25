@@ -546,8 +546,9 @@ class ProposalTests(unittest.TestCase):
     def test_collect_queues_a_review_and_records_refusals(self):
         s = MemoryStore(); s.set_setting('agent_push_enabled', '1', 't')
         tid = s.create_task({'Title': 't', 'Kind': 'coding', 'Status': 'open'}, 't')
-        made = proposals.collect(s, tid, 'TASKUARY-PROPOSE {"action": "open_pr", "why": "ready"}\n'
-                                         'TASKUARY-PROPOSE {"action": "comment_issue", "body": "hi"}')
+        with mock.patch.object(ci, 'pr_why', return_value=''):
+            made = proposals.collect(s, tid, 'TASKUARY-PROPOSE {"action": "open_pr", "why": "ready"}\n'
+                                             'TASKUARY-PROPOSE {"action": "comment_issue", "body": "hi"}')
         self.assertEqual([m['action'] for m in made], ['open_pr'])   # replies switch is off
         rv = s.get_review(made[0]['reviewId'])
         self.assertEqual((rv['Kind'], rv['Status']), ('action', 'pending'))
@@ -561,7 +562,10 @@ class ProposalTests(unittest.TestCase):
         from taskuary import github, terminal
         s = armed(MemoryStore()); tid = s.create_task({'Title': 'Fix the ledger rounding', 'Kind': 'coding', 'Status': 'open', 'Tags': 'repo:northwind/ledger'}, 't')
         ses = mock.Mock(cwd='C:/work/ledger')
-        with mock.patch.object(terminal, 'session_for', return_value=ses), mock.patch.object(ci, 'branch_for', return_value='fix-rounding'):
+        from taskuary import landing
+        with mock.patch.object(terminal, 'session_for', return_value=ses), mock.patch.object(ci, 'branch_for', return_value='fix-rounding'), \
+             mock.patch.object(ci, 'base_of', return_value='master'), mock.patch.object(ci, 'pr_why', return_value=''), \
+             mock.patch.object(landing, '_push_as_agent', return_value=(0, '', '')):
             rid = proposals.collect(s, tid, 'TASKUARY-PROPOSE {"action": "open_pr", "title": "Keep cents in totals", "body": "Rounds to two places."}')[0]['reviewId']
             pr = json.loads(s.get_review(rid)['DraftText'])['pr']
             self.assertEqual((pr['repo'], pr['branch'], pr['base']), ('northwind/ledger', 'fix-rounding', 'master'))
@@ -575,12 +579,12 @@ class ProposalTests(unittest.TestCase):
 
     def test_approving_runs_it_and_rejecting_does_not(self):
         s = armed(MemoryStore()); tid = s.create_task({'Title': 't', 'Kind': 'coding', 'Status': 'open'}, 't')
-        rid = proposals.collect(s, tid, 'TASKUARY-PROPOSE {"action": "open_pr"}')[0]['reviewId']
+        with mock.patch.object(ci, 'pr_why', return_value=''): rid = proposals.collect(s, tid, 'TASKUARY-PROPOSE {"action": "open_pr"}')[0]['reviewId']
         with mock.patch.object(ci, 'open_for_task', return_value={'number': 9, 'url': 'u'}) as op:
             out = verdicts.decide(s, s.get_review(rid), 'approve')
         op.assert_called_once()
         self.assertEqual((out['status'], out['result']['pr']), ('approved', 9))
-        rid2 = proposals.collect(s, tid, 'TASKUARY-PROPOSE {"action": "open_pr"}')[0]['reviewId']
+        with mock.patch.object(ci, 'pr_why', return_value=''): rid2 = proposals.collect(s, tid, 'TASKUARY-PROPOSE {"action": "open_pr"}')[0]['reviewId']
         with mock.patch.object(ci, 'open_for_task') as op2:
             verdicts.decide(s, s.get_review(rid2), 'reject')
         op2.assert_not_called()
@@ -588,7 +592,7 @@ class ProposalTests(unittest.TestCase):
 
     def test_his_approve_opens_the_pr_though_the_agents_switch_went_off(self):
         s = armed(MemoryStore()); tid = s.create_task({'Title': 't', 'Kind': 'coding', 'Status': 'open'}, 't')
-        rid = proposals.collect(s, tid, 'TASKUARY-PROPOSE {"action": "open_pr"}')[0]['reviewId']
+        with mock.patch.object(ci, 'pr_why', return_value=''): rid = proposals.collect(s, tid, 'TASKUARY-PROPOSE {"action": "open_pr"}')[0]['reviewId']
         s.set_setting('agent_push_enabled', '0', 't')                # ...the agents may not go alone; his press is not theirs
         with mock.patch.object(ci, 'open_for_task', return_value={'number': 7, 'url': 'https://github.com/northwind/ledger/pull/7'}) as op:
             verdicts.decide(s, s.get_review(rid), 'approve')

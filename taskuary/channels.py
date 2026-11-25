@@ -303,11 +303,11 @@ def test_connector(store, cid: int, draft: dict | None = None) -> dict:
         elif c['Type'] in RESEARCH:
             # a real call, not a key-shape check: these all fail the same way (401) and the
             # owner should find that out here rather than from an empty report on Monday
-            from .reports import REGISTRY, resolve_cfg
+            from .reports import REGISTRY, pair, resolve_cfg
             probe = ({'url': 'https://example.com'} if c['Type'] in PAGE_READERS
                      else {'actor': 'apify~hello-world'} if c['Type'] == 'apify'
                      else {'query': 'taskuary local-first ai task hub', 'num': 1})
-            head, _body = REGISTRY[c['Type']](resolve_cfg(store, {**probe, 'type': c['Type'], 'max_rows': 1, 'connector_id': cid}))
+            head, _body = pair(REGISTRY[c['Type']](resolve_cfg(store, {**probe, 'type': c['Type'], 'max_rows': 1, 'connector_id': cid})))
             detail = f'{c["Type"]} answered: {head}'
         elif c['Type'] in ('jira', 'asana', 'monday', 'clickup', 'todoist'):
             from . import pm

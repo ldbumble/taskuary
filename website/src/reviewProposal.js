@@ -51,9 +51,12 @@ export const toolWhere = (p) => {
 // Only the plumbing, and the place the "Where" line already names, are left out
 const BODY_KEYS = ["text", "body", "message", "query", "script"];
 const bodyKey = (p) => BODY_KEYS.find((x) => p?.[x] != null && p[x] !== "");
-const facts = (p) => { const k = bodyKey(p), w = whereKey(p);
-  return Object.entries(p || {}).filter(([x, v]) => x !== k && x !== w && !PLUMBING.has(x) && v !== "" && v != null)
-    .map(([x, v]) => ({ label: upFirst(x.replace(/_/g, " ")), now: typeof v === "string" ? v : JSON.stringify(v) })); };
+// ...AND A THING NAMED WITH ITS ID IS ONE ROW, BY NAME (reports.CHECKS; walk 22, 2026-11-25: "vendor id: 58 / account id: 7" was all a bill's card
+// said): "Vendor: Payworth (id 58)" - the id still on the card, beside what it is the id of
+const facts = (p) => { const k = bodyKey(p), w = whereKey(p), said = (v) => (typeof v === "string" ? v : JSON.stringify(v));
+  const named = (x) => x.endsWith("_id") && p[x.slice(0, -3)] != null && p[x.slice(0, -3)] !== "";
+  return Object.entries(p || {}).filter(([x, v]) => x !== k && x !== w && !PLUMBING.has(x) && v !== "" && v != null && !named(x))
+    .map(([x, v]) => ({ label: upFirst(x.replace(/_/g, " ")), now: said(v) + (p[`${x}_id`] != null && p[`${x}_id`] !== "" ? ` (id ${said(p[`${x}_id`])})` : "") })); };
 export const toolFacts = (p) => (bodyKey(p) ? facts(p) : []);
 export const toolBody = (p) => { const k = bodyKey(p); return k ? String(p[k]) : facts(p).map((f) => `${f.label.toLowerCase()}: ${f.now}`).join("\n"); };
 
@@ -84,6 +87,7 @@ export const reviewText = (review) => {
   // the WHAT is the context line already (proposals.queue's Reason); the box is the exact command Approve runs, once - with no AI the card
   // said "agent-browser click @e12" three times over (2026-10-25)
   if (["browser_act", "shell_act", "desktop_act"].includes(proposal?.action)) return proposal.command ? `Approve runs: ${proposal.command}` : proposal.what || "";
+  if (proposal?.action === "page_step") return "";             // ...his step is the card's own line: no box of words under it
   if (PAGES.has(proposal?.action) && proposal.text) return proposal.text;
   // ...AND NO CARD SHOWS ITS OWN JSON (the card round, 2026-11-12: a setting's change stood as `{"action": "settings", "changes": [...]}` in a
   // box he could type into): any other proposal's box holds what it carries, in words - or nothing, and the card draws no box (`bare`)
@@ -217,6 +221,20 @@ export const proposalPresentation = (review) => {
   };
   // A HELD BROWSER ACT (browsergate.py, 2026-10-25): what the agent's browser would do and on which page, in words - Approve runs that
   // exact command there, so the words are read-only like a tool run's
+  // A STEP ON THE AGENT'S PAGE ONLY HE CAN DO (pagestep.py, the owner 2026-11-25: "the browser should be treated like a card, so only one at a
+  // time"): what he does and on which site, in the words it was handed over with - its press is his I'm done, the step's own hand-back
+  if (proposal?.action === "page_step") return {
+    kind: "action",
+    title: "Your step on the agent's page",
+    context: "",
+    lead: upFirst(String(proposal.what || "A step on the page only you can do")), leadWhy: "The page is open beside this card - do the step there, then press I'm done.",
+    destinationLabel: "On",
+    destination: proposal.site || "",
+    approveLabel: "I'm done",
+    busyLabel: "handing back…",
+    rejectLabel: "Dismiss",
+    readOnly: true, bare: true,
+  };
   if (proposal?.action === "browser_act") return {
     kind: "action",
     title: "The agent's browser waits for your yes",

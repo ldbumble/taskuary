@@ -52,9 +52,16 @@ def done(store, tid: int, said: str) -> list:
     if not (r := in_flight(store, tid)): return []
     p = json.loads(r['FinalText'])
     store.review_result(r['ReviewId'], json.dumps({**p, 'result': {**p['result'], 'done': str(said or 'done')[:300]}}))
-    from . import ledger
+    from . import card, ledger
     ledger.went(store, r['ReviewId'])                    # ...it went live: on the record (ledger.py), as an act its card ran is
+    card.went(store, r)                                  # ...and the to-do it does is ticked, as any card's that went
     return [r['ReviewId']]
+
+
+def step(u: dict) -> dict | None:
+    """THE STEP OF A HANDED CARD'S BROWSER ROAD THAT WAITS FOR HIS PRESS (walk 22, 2026-11-25: the final Post on X was held, joined to the X card
+    he had pressed, and drawn nowhere - both agents said a card waited): that card's own next press, drawn on it - the newest held, or None."""
+    return next(reversed(_waits(u)), None) if u.get('rows') and handed(u['rows'][0]) else None
 
 
 def in_flight(store, tid: int) -> dict | None:
@@ -100,18 +107,17 @@ def _units(store, tid: int, past: set) -> list:
     "Every card of the line on task `tid`, waiting or settled, oldest first: [{'rids', 'at', 'done', 'rows'}] - the landing question among them."
     from . import landing
     from .conversation import ep
-    from .proposals import moved_on
+    from .proposals import HELD_ACTS, moved_on
     out, by = [], {}
     # ...A STEP HELD WHILE A PRESSED ACT IS UNDER WAY IS THAT ACT'S OWN NEXT PRESS (his live app, 2026-11-23: Post via the browser on the X card, the
     # agent signed in and wrote the post, and the gate held its final Post - queued as a card of its own behind the Reddit and LinkedIn cards, so
-    # Reddit stood in front, the browser said nothing waited on him, and the agent ended on "I'll bring you the link"): it joins the card he
-    # pressed, which stays in front until its act is done
-    fl = in_flight(store, tid); fl_at = ep(fl.get('DecidedAt')) if fl else None
+    # Reddit stood in front, the browser said nothing waited on him, and the agent ended on "I'll bring you the link"): it is a row of the card
+    # he pressed (its `card`, written as it was held - proposals.queue), drawn on that card (step) - one a card taken back or failed left
+    # waiting stands as a card of its own
     for r in store._rows("SELECT * FROM review WHERE TaskId=? ORDER BY ReviewId", (int(tid),)):
         if r['ReviewId'] in past or obsolete_read(store, tid, r): continue
-        if fl and r['ReviewId'] > fl['ReviewId'] and r['Kind'] == 'action' and _p(r).get('action') == 'browser_act' and ep(r['CreatedAt']) >= fl_at:
-            u = by.get(f"rv{fl['ReviewId']}")
-            if u: u['rids'].append(r['ReviewId']); u['rows'].append(r); continue
+        if r['Kind'] == 'action' and (p := _p(r)).get('action') in HELD_ACTS and (u := by.get(f"rv{p.get('card')}")) and (r['Status'] != 'pending' or u['rows'][0]['Status'] in ('approved', 'edited')):
+            u['rids'].append(r['ReviewId']); u['rows'].append(r); continue
         # ...a settled one by what it was while it waited: its run tells how many came together ("2 of 3")
         if r['Status'] != 'pending' and not r.get('DecidedAt'): continue
         if not in_line(r if r['Status'] == 'pending' else {**r, 'Status': 'pending', 'DecideNote': None}): continue
@@ -276,7 +282,7 @@ def tabs(store, s: dict) -> list:
 def tab(store, u: dict) -> str:
     "A card's name on its tab: 'LinkedIn', 'Erin Blake', else what it is ('Push')."
     from .proposals import POSTS
-    r = (_waits(u) or u['rows'] or [{}])[0]
+    r = (([] if step(u) else _waits(u)) or u['rows'] or [{}])[0]
     if r.get('Kind') == 'action' and not r.get('Batch') and (net := POSTS.get(_p(r).get('type'))): return net
     if r.get('Kind') not in (None, 'action') and not r.get('Batch') and (to := to_whom(store, r)): return to
     w = what(store, u)
@@ -359,7 +365,7 @@ def line(s: dict) -> str:
     """What the live card says of the line, plain: '1 of 2 · next: the email to Erin', and the last of them '2 of 2' (the real-Claude walk,
     2026-11-19: the second letter stood with no count once the first went) - '' for a card alone in its line."""
     if not s['live'] or s['of'] < 2: return ''
-    return f"{s['n']} of {s['of']}" + (f" · next: {s['next']}" if s['of'] > s['n'] else '')
+    return f"{s['n']} of {s['of']}" + (f" · next: {s['next']}" if s['of'] > s['n'] and s['next'] else '')      # ...none where what follows it is settled already
 
 
 SCREEN_HEAD = ("WHAT THE OWNER'S SCREEN SHOWS ON THIS TASK NOW, AND WHAT CAME OF EACH CARD (Taskuary's record - a card it does not name is not "
@@ -421,7 +427,11 @@ def screen(store, tid: int, skip=()) -> str:
         if set(u['rids']) & set(skip): continue
         r = (_waits(u) or u['rows'] or [{}])[0]; n, ids = name(u, r), set(u['rids'])
         if u['done'] is None:
-            if (h := next((x for x in u['rows'] if handed(x)), None)):
+            if (sp := step(u)):
+                # ...its held step is HIS now, on the card he pressed - never "do it", never a card of its own (walk 22: both agents said one waited)
+                waiting.append(f"Waiting for his press now, drawn on the card he pressed as its last step ({what(store, {'rids': u['rids'][:1], 'rows': u['rows'][:1]}, True)}): "
+                               f"{_flat(_p(sp).get('what') or _p(sp).get('command'))}")
+            elif (h := next((x for x in u['rows'] if handed(x)), None)):
                 waiting.append(f"Handed to you by his press {clock(h.get('DecidedAt'))}, NOT done yet - do it; it is done once its own final press "
                                f"has gone, and the next card waits until then. One you cannot do now: keep_card it with `why` (it stands again "
                                f"for his press); one he drops: withdraw_draft it: {name(u, h)}")
@@ -433,6 +443,10 @@ def screen(store, tid: int, skip=()) -> str:
                 shown = '' if 'approve' in ps else f" (its card: {card.press_words({'kind': card.SEND, 'presses': ps})})"
                 waiting.append(f'Waiting for his press now{outcome(r)}: {n}{shown}')
             elif u['rids'] == front: waiting.append(f'Comes forward once your turn ends (you are going on from his last press): {n}')
+            # ...A CARD BEHIND THE FRONT IN ITS RUN IS A TAB OF THE SAME CARD, HIS TO PRESS (tabs; walk 22: told "not on his screen yet", an agent drew
+            # the second post again as a table and a file "for review" beside the cards)
+            elif ids & held and any(ids <= {x for w in run for x in w['rids']} and any(w['rids'] == front for w in run) for run in st['runs'] if len(run) > 1):
+                waiting.append(f'On his screen now, a tab of the same card as the one in front - his to press in any order: {n}')
             elif ids & held: waiting.append(f'Not on his screen yet - it comes forward once the one before it is pressed (after an act, once you have heard how it went): {n}')
             continue
         s, at = (_card(r)['status'] if r else 'approved'), clock(r.get('DecidedAt')) if r else ''

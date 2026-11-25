@@ -125,9 +125,13 @@ ACTIONS = {
     # A CHECKOUT ONLY HIS YES PICKS (repochoice.Asks, the owner 2026-11-25): raised by the use_repo door, never an agent's marker - his press makes
     # it this task's code, as his Change does (repochoice.use, mine)
     'use_repo': ('work in this checkout on this task', ('path',), None),
+    # A STEP ON THE AGENT'S PAGE ONLY HE CAN DO - a sign-in, a robot check (pagestep.py, the owner 2026-11-25: "the browser should be treated
+    # like a card, so only one at a time"): raised by Taskuary from the step its agent handed over, never an agent's marker - his press is
+    # his I'm done, the step's own hand-back
+    'page_step': ("do a step on the agent's page that only he can", ('request',), None),
 }
 FAILED_NOTE = 'failed'      # a pressed act that failed: settled, its error kept (ActError) - its agent sets up what goes next
-HELD_ACTS = ('browser_act', 'shell_act', 'desktop_act')     # raised by a hook before the act ran - never an agent's marker
+HELD_ACTS = ('browser_act', 'shell_act', 'desktop_act', 'page_step')     # raised by a hook before the act ran - never an agent's marker
 # ...each by its own gate, which runs it on the owner's yes (perform) and tells its agent their no (declined) - and where it was held, as its
 # card says it. One table: the card's reason (queue), the yes (execute) and the no (settle) each spelled the three out
 HELD_IN = {'browser_act': "in the agent's browser", 'shell_act': "in the agent's shell", 'desktop_act': 'on your desktop'}
@@ -141,8 +145,8 @@ def act_words(reason) -> str:
     why = why.split(': ', 1)[1] if why.startswith('held before it ran') and ': ' in why else why
     return why.split(' - ')[0]
 def _gate(a: str):
-    from . import agentdesktop, browsergate, shellgate
-    return {'browser_act': browsergate, 'shell_act': shellgate, 'desktop_act': agentdesktop}[a]
+    from . import agentdesktop, browsergate, pagestep, shellgate
+    return {'browser_act': browsergate, 'shell_act': shellgate, 'desktop_act': agentdesktop, 'page_step': pagestep}[a]
 # WHAT NO AGENT MAY ASK FOR, AND THE MARKS NONE MAY PUT ON ITS OWN ASK - one list for both doors: the marker (parse) and the tool
 # (agenttools.proposal_of). They were two, and had drifted (the spine audit, 2026-11-09): the tool's did not name the held steps, so an agent
 # could file a "held step" of its own - a command of its choosing, on the card the owner reads as one Taskuary stopped
@@ -278,13 +282,11 @@ def as_left(p: dict, final_text, fields: dict = None) -> dict:
 def _ran(res) -> dict:
     """An executor's answer as the card reads it: (headline, body), or the {rows, columns} a connector returns - its first row's
     link the place it landed. Unpacking that dict as a pair read its two KEYS: a LinkedIn post said "rows" / "columns"."""
-    if isinstance(res, dict):
-        rows = res.get('rows') or []
-        first = rows[0] if rows and isinstance(rows[0], dict) else {}
-        return {k: v for k, v in {'headline': str(res.get('headline') or f"{len(rows)} row{'s' * (len(rows) != 1)}")[:200],
-                                  'output': json.dumps(rows, default=str)[:2000], 'url': first.get('url') or ''}.items() if v}
-    head, body = res
-    return {'headline': str(head)[:200], 'output': (body or '')[:2000]}
+    from .reports import pair
+    head, body = pair(res)
+    rows = res.get('rows') or [] if isinstance(res, dict) else []
+    url = rows[0].get('url') or '' if rows and isinstance(rows[0], dict) else ''
+    return {'headline': str(head)[:200], **({'output': body[:2000]} if body or not isinstance(res, dict) else {}), **({'url': url} if url else {})}
 
 
 def receipt(rv: dict, final_text, out: dict, fields: dict = None) -> str:
@@ -575,9 +577,12 @@ def tool_words(store, p: dict) -> str:
 def queue(store, task_id: int, p: dict, actor='agent', refused: list | None = None, unheard: bool = False) -> dict | None:
     """ONE proposal through the gate: a pending review when it validates, a recorded refusal (None) when not - its reason appended to
     `refused`, so the agent that proposed it is told why and can fix it (refusal_line). `unheard`: no answer goes back to it now (collect)."""
-    from . import card, trackers
+    from . import card, cardqueue, trackers
     # ...its `then`, the agent's own step after the press, is the card's (card.carries_on) - never part of what is run or compared
     then, p = card.then_of(p), {k: v for k, v in p.items() if k != 'then'}
+    # ...and a step held while a card his press handed over is under way - its page's last press, a file it reads to upload, his sign-in - is
+    # that card's own next press (cardqueue.step)
+    if p.get('action') in HELD_ACTS: p = {**p, **({'card': fl['ReviewId']} if (fl := cardqueue.in_flight(store, int(task_id))) else {})}
     # an agent's comment or move on "the ticket" means the item this task came from: named on the proposal, so the card says which
     if p.get('action') == 'run_tool' and p.get('type') in trackers.TYPES and not str(p.get('item') or '').strip():
         it = trackers.item_of(store, task_id)
@@ -601,6 +606,12 @@ def queue(store, task_id: int, p: dict, actor='agent', refused: list | None = No
         p = p or {'action': 'change_routine'}
     ok, why = validate(store, p) if not routine else (False, routine)
     if ok and several: ok, why = False, several
+    # ...and a write its system can check is read against it now (reports.checked): the card says each thing by name, and one that cannot
+    # happen as asked is answered with why - never found out at his press
+    if ok and p.get('action') == 'run_tool' and actor != 'workflow':
+        from .reports import checked
+        try: p = checked(store, p)
+        except ValueError as e: ok, why = False, str(e)[:300]
     # ...a new GitHub issue names its repository and a title, said to the agent now rather than at the press
     if ok and p.get('action') == 'run_tool' and p.get('type') == 'github_issue':
         from .github import issue_check, issue_labels
@@ -631,7 +642,9 @@ def queue(store, task_id: int, p: dict, actor='agent', refused: list | None = No
     # ...and a pull request's card says what it opens - its title, the repository, the branch into its base - as the press will read them
     if ok and p.get('action') == 'open_pr':
         from . import ci
-        p = {**p, 'pr': {k: v for k, v in ci.pr_plan(store, task_id, p).items() if k != 'cwd'}}
+        # ...and one that cannot be opened - no checkout, nothing committed, the base's own branch - is refused here with the fix (ci.pr_why)
+        if (no := ci.pr_why(plan := ci.pr_plan(store, task_id, p))): ok, why = False, no
+        else: p = {**p, 'pr': {k: v for k, v in plan.items() if k != 'cwd'}}
     # ...ONE CARD PER ASK (the stress round, 2026-11-18): the same proposal again - a retried call - is the card already waiting, and a
     # break_out moving what a waiting one moves is refused: stood behind it, its press could only fail
     if ok:
@@ -679,7 +692,8 @@ def queue(store, task_id: int, p: dict, actor='agent', refused: list | None = No
             else f"work in {p['path']} on this task" if p['action'] == 'use_repo' else why)
     # ...nor a held browser act: the agent did not propose it, it tried it, and the hook stopped it (browsergate.check)
     # ...a shell step by what it does, never its raw line: the card folds the command under "Show the command"
-    reason = (f"held before it ran, {HELD_IN[p['action']]}: {p.get('what') or ('a step' if p['action'] == 'shell_act' else p.get('command'))}"
+    reason = (str(p.get('what') or 'a step on the page only you can do') if p['action'] == 'page_step' else       # ...his step, in the words it was handed over with
+              f"held before it ran, {HELD_IN[p['action']]}: {p.get('what') or ('a step' if p['action'] == 'shell_act' else p.get('command'))}"
               + (f" - {p['why']}" if p.get('why') else '') if p['action'] in HELD_ACTS else
               f"finishing it: {'merge pull request #' + str(p.get('number')) if p['action'] == 'merge_pr' else trackers.words(p) if p['action'] == 'close_item' else 'close the issue it came from'}"
               if p.get('closeout') else f"the {'workflow asks' if actor == 'workflow' else 'agent proposes'} to {said}" + (f" - {p['why'][:200]}" if p.get('why') else ''))
@@ -869,6 +883,7 @@ def _older(store, tid: int, inputs) -> list:
         # ...but a bulk card at work runs on to its end, and shows it (bulkcard: the owner, 2026-11-16)
         if r.get('Batch') and bulkcard.running(store, r['Batch']): return False
         if r['Kind'] == 'slot': return words(r) and not str(r.get('Reason') or '').startswith('your email')
+        if _action(r) == 'page_step': return False              # ...a step on a page is closed by his press or the page alone (workerstate.page_step)
         return r['Kind'] == 'action' or words(r) or r['Kind'] not in ('draft_reply', 'draft')
     return [r['ReviewId'] for r in rows if card(r) and (t := ep(r.get('DraftAt') or r['CreatedAt'])) is not None
             and any(t < at and bears(store, r, m) for at, m in inputs)]

@@ -95,37 +95,74 @@ def pr_plan(store, task_id: int, p: dict = None) -> dict:
     norm = lambda d: os.path.normcase(os.path.realpath(d))
     at = landing.top(str(p.get('cwd') or ''))
     cwd = at if at and norm(at) in map(norm, landing.named(store, task_id)) else getattr(hub_term.session_for(task_id), 'cwd', None) or ''
+    repo = hub_term.guess_repo(store, task_id, {})[0] or _cfg(store).get('default_repo') or (landing._repo(cwd) if cwd else '') or str(p.get('repo') or '')
     return {'title': f"[{task_ref(task_id)}] {' '.join(str(p.get('title') or '').split()) or t.get('Title') or 'work'}"[:120],
-            'repo': hub_term.guess_repo(store, task_id, {})[0] or _cfg(store).get('default_repo') or (landing._repo(cwd) if cwd else '') or str(p.get('repo') or ''),
-            'branch': branch_for(store, task_id, cwd) if cwd else '', 'base': _cfg(store).get('default_base') or 'master', 'cwd': cwd}
+            'repo': repo, 'branch': branch_for(store, task_id, cwd) if cwd else '', 'base': base_of(store, cwd, repo), 'cwd': cwd}
 
 
-def open_for_task(store, task_id: int, actor='owner', p: dict = None) -> dict:
-    """Open (or find) the draft PR for this task's branch. Refuses the default branch: a PR
-    from main to main is not a thing, and it is the shape a mis-detected branch takes.
-    `p`: the proposal its card showed - what was shown is what is opened (pr_plan), the agent's own `body` its words."""
-    from . import github
-    from .store import task_ref
-    plan = pr_plan(store, task_id, p)
-    if not plan['cwd']: raise RuntimeError('no session on this task to read a branch from')
-    repo, branch, base = plan['repo'], plan['branch'], plan['base']
-    if not repo: raise RuntimeError('no repository known for this task')
-    c = _conn(store, repo)
+def base_of(store, cwd: str = '', repo: str = '') -> str:
+    """THE BRANCH A PULL REQUEST OR A PUSH GOES INTO: the one he set on the GitHub card, else the repository's own default - as its checkout
+    knows it (origin/HEAD), as GitHub says it, else the one of main / master its origin has. '' where nothing says (walk 22, 2026-11-25: a
+    fixed 'master' put "main -> master" on a card for a repository with no master, and the main-into-main guard missed)."""
+    from .agents import _git
+    if (b := str(_cfg(store).get('default_base') or '').strip()): return b
+    if cwd and (b := (_git(cwd, 'symbolic-ref', '--short', 'refs/remotes/origin/HEAD') or '').strip()): return b.split('/', 1)[-1]
+    if repo:
+        try:
+            from . import github
+            if (b := github.repo_info(_conn(store, repo)['Secret'], repo).get('default_branch')): return str(b)
+        except Exception as e: logger.debug(f'ci: the default branch of {repo} was not read from GitHub - {e}')
+    return next((b for b in ('main', 'master') if cwd and _git(cwd, 'rev-parse', '--verify', '--quiet', f'refs/remotes/origin/{b}')), '')
+
+
+def pr_why(plan: dict) -> str:
+    """'' when the pull request `plan` says (pr_plan) can be opened - else why not, with the exact fix. ONE CHECK for the raise (proposals.queue:
+    a card that cannot go is never shown) and the press (open_for_task) - walk 22, 2026-11-25: "Opened the pull request" for main into a
+    master that did not exist, with the fix still uncommitted."""
+    from .agents import _git
+    cwd, repo, branch, base = plan['cwd'], plan['repo'], plan['branch'], plan['base']
+    if not cwd: return 'no checkout is known for this task - give `cwd`: the git checkout the owner named, where the work is'
+    if not repo: return 'no repository is known for this task - give `repo`: owner/name, the GitHub repository the checkout pushes to'
+    if not base: return f'the branch {repo} takes pull requests into could not be read - fetch its origin (git fetch origin), then propose it again'
     if not branch or branch == base:
-        raise RuntimeError(f"the checkout is on '{branch or 'a detached HEAD'}' - the agent needs its own "
-                           'branch before a pull request can be opened')
-    t = store.get_task(task_id) or {}
-    # the issue this task came from closes with the merge - GitHub's own keyword, when both live in one repo
-    iss = re.search(r'github\.com/([^/]+/[^/]+)/issues/(\d+)', str(t.get('SourceRef') or ''))
-    closes = f"Closes #{iss.group(2)}\n\n" if iss and iss.group(1).lower() == repo.lower() else ''
-    body = (f"Opened by Taskuary for {task_ref(task_id)}.\n\n{closes}{(str((p or {}).get('body') or '').strip() or t.get('Summary') or '')[:1500]}\n\n"
-            '_Draft: it merges when you approve its merge on the task in Taskuary, or merge it here yourself._')
-    pr = github.open_pr(c['Secret'], repo, branch, base, plan['title'], body)
+        return (f"the checkout is on '{branch or 'a detached HEAD'}'{', the branch a pull request goes into' if branch else ''} - put the work on a "
+                'branch of its own (git switch -c <name>) and commit it there first')
+    onto = f'origin/{base}' if _git(cwd, 'rev-parse', '--verify', '--quiet', f'refs/remotes/origin/{base}') else base
+    if (_git(cwd, 'rev-list', '--count', f'{onto}..{branch}') or '0').strip() in ('', '0'): return f'nothing committed on {branch} - commit the fix first'
+    return ''
+
+
+def push_and_open(store, task_id: int, plan: dict, body: str, actor='owner') -> dict:
+    """THE ONE ROAD A PULL REQUEST GOES BY (his Approve on its card - open_for_task - and Open a PR on the work's card - landing._pr): the
+    branch pushed as the agent's own push would go, then the draft opened through the GitHub card and kept on the task. A RuntimeError says
+    what went and what did not."""
+    from . import github, landing
+    repo, branch, base = plan['repo'], plan['branch'], plan['base']
+    c = _conn(store, repo)
+    rc, out, err = landing._push_as_agent(plan['cwd'], 'push', '-u', 'origin', branch)
+    if rc: raise RuntimeError(f"the push of {branch} was refused: {TOKEN_URL.sub('https://', (err or out))[:300]} - no pull request opened")
+    try: pr = github.open_pr(c['Secret'], repo, branch, base, plan['title'], body)
+    except Exception as e: raise RuntimeError(f'{branch} was pushed, but no pull request was opened: {str(e)[:300]}') from e
     pr['repo'], pr['checks'], pr['checked_at'] = repo, None, None
     _save_pr(store, task_id, pr, actor)
     store.audit('task', task_id, 'pr_opened', actor, detail={'repo': repo, 'number': pr['number']})
     logger.info(f'PR #{pr["number"]} opened for task {task_id} ({repo} {branch} -> {base})')
     return pr
+
+
+def open_for_task(store, task_id: int, actor='owner', p: dict = None) -> dict:
+    """Push this task's branch and open (or find) its draft PR. `p`: the proposal its card showed - what was shown is what is opened
+    (pr_plan), the agent's own `body` its words. One that cannot go (pr_why) is refused with the fix, as it is at the raise."""
+    from .store import task_ref
+    plan = pr_plan(store, task_id, p)
+    if (why := pr_why(plan)): raise RuntimeError(why)
+    t = store.get_task(task_id) or {}
+    # the issue this task came from closes with the merge - GitHub's own keyword, when both live in one repo
+    iss = re.search(r'github\.com/([^/]+/[^/]+)/issues/(\d+)', str(t.get('SourceRef') or ''))
+    closes = f"Closes #{iss.group(2)}\n\n" if iss and iss.group(1).lower() == plan['repo'].lower() else ''
+    body = (f"Opened by Taskuary for {task_ref(task_id)}.\n\n{closes}{(str((p or {}).get('body') or '').strip() or t.get('Summary') or '')[:1500]}\n\n"
+            '_Draft: it merges when you approve its merge on the task in Taskuary, or merge it here yourself._')
+    return push_and_open(store, task_id, plan, body, actor)
 
 
 def _where(store, task_id: int):
@@ -138,8 +175,7 @@ def _where(store, task_id: int):
     repo, _ = hub_term.guess_repo(store, task_id, {})
     repo = repo or _cfg(store).get('default_repo')
     if not repo: raise RuntimeError('no repository known for this task')
-    base = _cfg(store).get('default_base') or 'master'
-    return cwd, repo, base, branch_for(store, task_id, cwd)
+    return cwd, repo, base_of(store, cwd, repo), branch_for(store, task_id, cwd)
 
 
 def push_direct(store, task_id: int, actor='owner') -> dict:

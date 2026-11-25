@@ -111,6 +111,29 @@ class ReadsAndWrites(unittest.TestCase):
                 qb.create_bill(self.cfg, 'Nobody', 10, 'Office Supplies')
         with self.assertRaisesRegex(qb.QuickBooksError, 'positive'): qb._money('-3')
 
+    def test_a_bills_card_names_the_vendor_and_account_and_one_the_books_do_not_have_is_never_raised(self):
+        """Walk 22, 2026-11-25: the approval card for a bill read "vendor id: 58 / account id: 7 / amount: 120" - nothing he could check. A write
+        is read against its system as its card is raised (reports.CHECKS): each thing it names stands by NAME, its id kept as what runs; a
+        vendor the books do not have is answered to the agent with why, and no card stands. Books that cannot be reached refuse nothing."""
+        from taskuary import proposals
+        s = self.s; tid = s.create_task({'Title': 'Post the Payworth bill', 'Kind': 'general', 'Status': 'open'}, 'owner')
+        def fake(method, url, **kw):
+            q = (kw.get('params') or {}).get('query', '')
+            if "FROM Vendor WHERE Id = '58'" in q: return _resp(200, {'QueryResponse': {'Vendor': [{'Id': '58', 'DisplayName': 'Payworth'}]}})
+            if "FROM Vendor WHERE Id = '99'" in q: return _resp(200, {'QueryResponse': {}})
+            if "FROM Account WHERE Name = 'Software subscriptions'" in q: return _resp(200, {'QueryResponse': {'Account': [{'Id': '7', 'Name': 'Software subscriptions'}]}})
+            raise AssertionError(f'unexpected call {method} {url} {q}')
+        bill = {'action': 'run_tool', 'type': 'quickbooks_bill', 'vendor_id': 58, 'account': 'Software subscriptions', 'amount': 120}
+        with mock.patch.object(qb.requests, 'request', side_effect=fake), mock.patch.object(qb, 'token', return_value='at'):
+            why = []; made = proposals.queue(s, tid, bill, refused=why); self.assertTrue(made, why)
+            p = json.loads(s.get_review(made['reviewId'])['DraftText'])
+            self.assertEqual((p['vendor'], p['vendor_id'], p['account'], p['account_id'], p['amount']), ('Payworth', '58', 'Software subscriptions', '7', 120.0))
+            no = []
+            self.assertIsNone(proposals.queue(s, tid, {**bill, 'vendor_id': 99, 'memo': 'another'}, refused=no))
+            self.assertIn('no vendor with id 99', no[0])
+        with mock.patch.object(qb, 'token', side_effect=qb.QuickBooksError('QuickBooks refused the token (401)')):
+            self.assertTrue(proposals.queue(s, tid, {**bill, 'memo': 'while the books are away'}), 'not reached is not refused')
+
     def test_a_bill_already_posted_under_the_doc_number_is_not_posted_again(self):
         """A timeout after Intuit committed, then a re-approval, used to book the bill twice (audit 2026-09-02)."""
         def fake(method, url, **kw):

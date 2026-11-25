@@ -355,12 +355,40 @@ def _standing(store, tid) -> tuple:
 
 
 @contextmanager
-def raising(store, tid, then):
+def raising(store, tid, then, todo=None):
     """Run a call that raises cards on task `tid`: each card it raised or rewrote keeps `then` - none clears it, the newest raise speaks - the
-    landing question's too. Read back by `carries_on`, after a restart as before it."""
+    landing question's too. Read back by `carries_on`, after a restart as before it. `todo`: the task's to-do those cards do (went)."""
     from . import landing
     was = _standing(store, tid)
     yield
     now, then = _standing(store, tid), ' '.join(str(then or '').split())[:300]
-    for rid in [k for k, v in now[0].items() if was[0].get(k) != v]: store.set_review_next_step(rid, then)
+    todo = next((i['id'] for i in store.task_checklist(int(tid)) if str(todo or '').strip().strip('[]') == i['id']), None)
+    for rid in [k for k, v in now[0].items() if was[0].get(k) != v]:
+        store.set_review_next_step(rid, then)
+        if todo: store.audit('review', rid, FULFILS, 'agent', 'agent', {'todo': todo})
     if now[1] and now[1] != was[1]: landing.keep_then(store, int(tid), then)
+
+
+# THE PRESS'S RECORD IS TASKUARY'S, NEVER A TURN OF THE AGENT'S (the owner: "wake only for a real next step"; walk 22, 2026-11-25: every card
+# carried `then: "mark the to-do complete"`, so every Send woke its agent to tick a box and say under the card what the card already said).
+# A card names the to-do it does as it is raised (`todo`, raising); the to-do is ticked by plain code once every card raised for it has gone -
+# every kind of card, by the one door a press that went passes (verdicts.decide; cardqueue.done for an act handed to the browser)
+FULFILS = 'fulfils'
+def _todos(store, rid) -> set:
+    out = set()
+    for r in store.list_audit('review', int(rid)):
+        if r.get('Action') != FULFILS: continue
+        try: d = r['Detail'] if isinstance(r.get('Detail'), dict) else json.loads(r.get('Detail') or '{}')
+        except ValueError: d = {}
+        if d.get('todo'): out.add(str(d['todo']))
+    return out
+
+
+def went(store, rv: dict) -> list:
+    "His press on review `rv` went: -> the to-dos ticked, each one this card does with no other card for it still waiting or under way."
+    tid, mine = rv.get('TaskId'), _todos(store, rv['ReviewId']) if rv.get('ReviewId') else set()
+    if not (tid and mine): return []
+    open_ = [r for r in store._rows("SELECT * FROM review WHERE TaskId=? AND ReviewId<>? AND Status IN ('pending','held','approved','edited')", (int(tid), rv['ReviewId']))
+             if r['Status'] in ('pending', 'held') or cq.handed(r)]
+    left = set().union(*(_todos(store, r['ReviewId']) for r in open_)) if open_ else set()
+    return [t for t in sorted(mine - left) if store.tick_checklist_item(int(tid), t, True, 'taskuary')]

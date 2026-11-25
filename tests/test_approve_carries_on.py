@@ -931,7 +931,8 @@ def test_the_screen_fact_says_what_waits_what_is_held_what_is_greyed_and_what_ha
     said = cardqueue.screen(s, tid)
     # ...each card of one by what it is, never its number (walk 11: the agent told him it drafted the reply "(rv2)")
     assert 'post on X' in said.split('Waiting for his press now:')[1].split('\n')[0] and 'The portal launches Monday.' in said, said
-    assert 'post on Reddit' in said.split('Not on his screen yet')[1].split('\n')[0], said
+    # ...and the one behind it is a tab of the same card, his to press (walk 22: told "not on his screen yet", an agent drew it again beside the cards)
+    assert 'post on Reddit' in said.split('On his screen now, a tab of the same card')[1].split('\n')[0] and 'Not on his screen yet' not in said, said
     assert 'the email to gail@northwind.example' in said.split('Sent')[1].split('\n')[0] and not re.search(r'\brv\d', said), said
     s._exec("UPDATE review SET CreatedAt='2000-01-01 00:00:01' WHERE ReviewId IN (?,?)", (x, reddit))
     general.wait_line(s, tid, 'Give me a button for each', line_id='l-each')                 # ...his line greys both, the moment it is sent
@@ -1026,6 +1027,26 @@ def test_then_is_kept_on_the_card_whatever_road_raised_it_and_a_rewrite_without_
         s.decide_review(again['ReviewId'], 'approved', None, 'owner')
         assert general.approved(s, tid, 'Approve', 'saved', review=again['ReviewId']) == ''
     assert told.call_count == 1
+
+
+def test_the_to_do_a_card_does_is_ticked_by_its_press_and_nobody_is_woken_for_it():
+    """Walk 22, 2026-11-25 (Codex): every card carried `then: "mark the to-do complete"`, so every Send, Post and bulk run woke the agent to tick
+    a box and say under the card what the card already said. The card names the to-do it does (`todo`); the press that goes ticks it - plain
+    code, no `then`, nobody woken - and with several cards for one to-do, only once the last has gone."""
+    s = MemoryStore(); tid = Factory(s).task('Write the onboarding playbook')
+    todo = s.merge_task_checklist(tid, ['Save the onboarding playbook'], 'owner')[0]['id']
+    doors = {'propose': lambda t, p: {'ok': bool(q := proposals.queue(s, t, p)), 'review': q and q['reviewId']}}
+    done = lambda: next(i['done'] for i in s.task_checklist(tid) if i['id'] == todo)
+    for slug in ('onboarding', 'offboarding'):
+        agenttools.call(s, tid, 'propose', {'kind': 'act', 'action': 'write_playbook', 'slug': slug, 'todo': todo,
+                                            'text': f'# {slug}\nwhen: a new hire starts\nDay one: the laptop.'}, doors)
+    a, b = s._rows("SELECT * FROM review WHERE TaskId=? ORDER BY ReviewId", (tid,))
+    assert not card.carries_on(a) and 'todo' not in a['DraftText'], 'the to-do is the card\'s record, never part of what runs'
+    assert 'not bookkeeping' in agenttools.TOOLS['propose'][2]['properties']['then']['description']
+    with mock.patch.object(general, 'to_agent', return_value='woke') as told:
+        assert verdicts.decide(s, a, 'approve')['ok'] and not done(), 'a card for it still waits'
+        assert verdicts.decide(s, b, 'approve')['ok'] and done()
+    assert not told.called, 'no next step of its own: the press woke nobody'
 
 
 def test_a_landing_wakes_its_agent_only_where_its_proposal_named_a_step_after_it():

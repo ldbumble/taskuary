@@ -1186,9 +1186,10 @@ OP_BUTTON = {'message.file': 'not_ours', 'message.archive': 'not_ours', 'prefere
 BUTTONED = frozenset({'not_ours', 'mine', 'regular_agent'})
 # HIS WORDS DO WHAT NO BUTTON SHOWS (the owner, 2026-11-25): an FYI draws one move, Send to agent, but "not ours", "make this a task" or
 # "block this sender" typed over a mail with no task behind it is still the ask - a put-down pressed, anything else its card for his
-# press, whatever the row draws. A task's row is the task page's, whose moves are its own (row_buttons)
+# press, whatever the row draws. A task's row is the task page's, whose moves are its own (row_buttons), and a report never had them (CHIPS)
 WORDS_DO = frozenset({'not_ours', 'mine'})
-def words_do(verb: str, it: dict | None) -> bool: return BUTTON_OF.get(verb, verb) in WORDS_DO and bool((it or {}).get('mid')) and not (it or {}).get('tid')
+def words_do(verb: str, it: dict | None) -> bool:
+    it = it or {}; return BUTTON_OF.get(verb, verb) in WORDS_DO and it.get('kind') == 'fyi' and bool(it.get('mid')) and not it.get('tid')
 
 def is_button(store, item: dict | None, verb: str) -> bool:
     """Whether the owner has a button on this item for what `verb` does - or his words do it all the same (WORDS_DO)."""

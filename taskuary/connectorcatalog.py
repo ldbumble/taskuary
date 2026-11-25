@@ -143,6 +143,10 @@ def connected_count(store, cli_connections: dict) -> int:
 
 # WHAT THE OWNER PRESSES, PER CONNECTOR (the catalogue's `actions`, the owner 2026-11-05): the fields an act's card shows, which the owner
 # may change before the press, which the agent may name, and the per-connection defaults. One card draws them all (ActionCard.jsx).
+def site_card(host) -> dict | None:
+    "The card whose own site `host` is on (its `hosts`, by the host's end: www.linkedin.com is linkedin.com's) - None for a site no card names."
+    h = str(host or '').lower().rstrip('.')
+    return next((c for c in cards() for d in c.get('hosts') or [] if h == d or h.endswith('.' + d)), None)
 def actions(t: str) -> list: return list((by_type(t) or {}).get('actions') or [])
 def action_for(tool: str) -> dict | None:
     "The declared act a run_tool on `tool` is, with the card it belongs to - None for a tool no card sets up for a press."

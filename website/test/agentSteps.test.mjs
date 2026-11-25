@@ -518,6 +518,20 @@ test("a refused write the agent then made is one row, and the fold's line counts
   assert.match(ws, /p\.steps\.filter\(\(st\) => !\(chat && st\.status === "recovered"\)\)/, "the chat folds a try made good");
 });
 
+// WALK 21 (S11): "1 step - could not show you 'Monthly Vendor Spend (Jan–Oct 2026)'" stood over the chart the agent's next show drew, titled
+// a little differently. A view that failed and was then drawn is made good, as a write is: the chart is the turn's outcome
+test("a show that failed and then drew a view under another title is made good", async () => {
+  const { turnParts } = await import("../src/chatStream.js");
+  const { MARK } = await import("../src/viewSpec.js");
+  const view = (title) => ({ title, root: "c", elements: { c: { type: "chart", props: { kind: "line", points: [{ label: "Jan", value: 1 }, { label: "Feb", value: 2 }] } } } });
+  const call = (id, args) => ({ type: "tool_call", name: "mcp__taskuary__show", detail: { tool_call_id: id, args } });
+  const done = (id, result, is_error = false) => ({ type: "tool_result", name: id, detail: { tool_call_id: id, result, is_error } });
+  const parts = turnParts([call("v1", view("Monthly Vendor Spend")), done("v1", "elements.c.props.data must be rows", true),
+    call("v2", view("Total Monthly Vendor Spend")), done("v2", `Shown in the owner's chat. ${MARK}${JSON.stringify(view("Total Monthly Vendor Spend"))}`)]);
+  assert.equal(parts.filter((p) => p.type === "view").length, 1, "the chart is drawn");
+  assert.deepEqual(parts.flatMap((p) => (p.type === "work" ? p.steps : [])).map((s) => s.status), ["recovered"]);
+});
+
 // WALK 18 (Codex): a turn whose one step was a PowerShell line read "1 step - ran $p = '..\..\..\attachments\…'; Add-Type -Assem…" on its fold -
 // the command quoted as the turn's summary. The row keeps its command; the fold's line counts it, as it counts two
 test("a fold's line counts a command row and never quotes its code", async () => {

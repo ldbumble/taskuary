@@ -51,6 +51,17 @@ test("a held step that failed is over: the card says which and why once, and tha
   assert.doesNotMatch(c.said, /the rest wait/);
 });
 
+// WALK 21: the post's first step failed on its quoting, the agent's retry joined the same card, the second Approve posted it once - and the
+// card read "Failed - 1 of 2 ran, step 1 failed" while the agent said the post was sent. A step that ran after the one that failed is the outcome
+test("a retry that ran after the step that failed is the card's outcome", () => {
+  const bad = step(1, "curl -d '{\"text\":\"hi\"}' https://chirp.example/api", "Send data to chirp.example", "superseded", { ActError: "The held step failed: The string is missing the terminator" });
+  const again = step(2, "Invoke-RestMethod -Method Post https://chirp.example/api", "Send data to chirp.example", "approved", { FinalText: JSON.stringify({ action: "shell_act", result: { said: "ok" } }) });
+  const c = heldCard([bad, again]);
+  assert.equal(c.pressed, "approved");
+  assert.deepEqual(c.steps.map((s) => s.state), ["failed", "ran"], "the step that failed keeps its mark");
+  assert.equal(c.error, "");
+});
+
 test("a yes the page refused reads as not done, with the one plain line", () => {
   const said = "vendor.example did not take it - something on the page covers that control. The agent was told and goes on another way.";
   const p = { action: "browser_act", command: "click @e4", what: "Press Submit on the order", result: { performed: null, refused: said } };

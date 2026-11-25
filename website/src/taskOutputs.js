@@ -55,8 +55,10 @@ const ext = (name) => (/\.([a-z0-9]+)$/i.exec(name || "")?.[1] || "").toLowerCas
 // key file - is null and stays plain text: the agent's `show` tool copies a file from its own scratch onto the task instead
 const IMAGE = new Set(["png", "jpg", "jpeg", "gif", "webp", "svg"]);
 const WHOLE = /^(?:file:\/+)?(?:[A-Za-z]:[\\/]|\\\\|\/)\S/;
+// ...WHICHEVER WAY ITS ADDRESS WAS WRITTEN: a markdown link carries `C:\...` as `C:%5C...` (walk 21: the link was plain words)
+const unescaped = (s) => { try { return /%[0-9a-f]{2}/i.test(s) ? decodeURIComponent(s) : s; } catch { return s; } };
 export const localFile = (raw, tid) => {
-  const s = String(raw || "").trim();
+  const s = unescaped(String(raw || "").trim());
   if (!WHOLE.test(s) || /[\n\x60]/.test(s)) return null;
   const rel = outputOf(s, tid);
   return rel ? { rel, name: baseName(rel), url: outputUrl(tid, rel), image: IMAGE.has(ext(rel)) } : null;

@@ -240,7 +240,7 @@ export const columnsOf = (marks) => (marks.length <= COLS || marks.some((m) => m
 export const buttonOf = (p) => ({ label: p.label, ...(p.verb ? { verb: p.verb, lights: label(p.verb) } : { open: p.open }) });
 
 // ── a trace's `show` call -> the chat's view part ───────────────────────────────────────────────
-const SHOW = /^(mcp__taskuary__)?show$/;
+export const SHOW = /^(mcp__taskuary__)?show$/;
 // its answer's spec, after MARK: the server's own check of it. Only a call with no answer yet (live) or none kept (a log) draws its arguments
 export const specIn = (out) => { const s = String(out || ""), i = s.indexOf(MARK); if (i < 0) return undefined;
   try { return JSON.parse(s.slice(i + MARK.length).replace(/ ⏎ /g, "\n").trim()); } catch { return null; } };

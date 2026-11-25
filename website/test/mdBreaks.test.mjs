@@ -47,3 +47,13 @@ test("a file of the task linked in the words opens as the file, and a link the m
   assert.doesNotMatch(md(`Open [vendor-spend-2026.html](<${at}>) to see it.`), /<a /);
   assert.doesNotMatch(mdIn(`Open [x](<${at.replace("TQ-0003", "TQ-0009")}>).`, 3), /<a /, "another task's folder is not this one's file");
 });
+
+// walk 21: the same link written the Windows way - [vendor-spend-2026.html](C:\...\outputs\TQ-0002\...), no <> - drew as plain words: the
+// markdown carries each backslash as %5C, and the address read as no path. A path is a path however its separators were written
+test("a file of the task linked with backslashes opens as the file", async () => {
+  const { mdIn } = await P;
+  const at = "C:\\Users\\alex\\AppData\\Local\\Taskuary\\scratch\\outputs\\TQ-0002\\vendor-spend-2026.html";
+  const html = mdIn(`Here it is: [vendor-spend-2026.html](${at})`, 2);
+  assert.match(html, /<a href="\/api\/task-outputs\/2\/vendor-spend-2026\.html[^"]*"[^>]*data-tq-file-link=""/, html);
+  assert.doesNotMatch(mdIn(`[x](${at.replace("TQ-0002", "TQ-0009")})`, 2), /<a /, "another task's folder is not this one's file");
+});

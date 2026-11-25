@@ -45,7 +45,9 @@ function landingTitle(s) {
   // ...and where there is nowhere to push, the card says so rather than standing silent
   if (s.noRemote && !s.landed) return `${n(s.commits || 0, "commit")} on ${s.base}${of(s)}, not pushed - this checkout has no remote to push to`;
   if (s.own && (s.ask || s.passed || s.landed)) return `Land ${s.branch} into ${s.base} - ${n(s.commits || s.ahead || 0, "commit")}, ${files(s)}`;
-  if (s.landed) return `${s.landed.how === "deploy" ? "Push and deploy" : "Push"} ${s.base} - ${files(s)}`;
+  // ...and once pushed it keeps the title it asked with - what went and where (the card gallery, 2026-11-25: "Push master - 0 files" over
+  // "✓ Pushed": pushed, none of its own is left to count)
+  if (s.landed) return `Push ${s.landed.commits ? `${n(s.landed.commits, "commit")} ` : ""}to ${s.base}${of(s)}${s.landed.how === "deploy" ? " and deploy" : ""}`;
   return `Worked on ${s.branch} - ${files(s)}`;
 }
 // ...the one filled button: the agent's pick, else the furthest a push goes, else the first way to land

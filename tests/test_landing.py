@@ -259,6 +259,9 @@ class LandingTests(unittest.TestCase):
             s = landing.state(self.s, self.tid)
         self.assertEqual((s['landed']['how'], s['commits']), ('push', 0))
         self.assertEqual(s['at'], s['landed']['at']); self.assertTrue(s['at'])
+        # ...and it says what it pushed once, on itself: how many went is kept for its title, and its press is no chat line under it
+        self.assertEqual(s['landed']['commits'], 1)
+        self.assertFalse([m for m in general.press_lines(self.s, self.tid) if 'went through' in m['content'][0]['text']])
 
     def test_a_card_read_again_asks_git_nothing_it_already_said_of_its_commits(self):
         """The owner's live app, 2026-11-19: /landing took 23 s - every poll asked git again for each own commit's files and whether each is on

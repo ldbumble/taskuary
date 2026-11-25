@@ -76,7 +76,8 @@ export default function LandingCard({ taskId, onChanged, onState, inChat = false
     setBusy("");
   };
   const label = (h) => (s.answers || []).find((a) => a.how === h)?.label || h;
-  const sub = [tip, `+${s.plus || 0} −${s.minus || 0}`, s.ask && s.proposal?.why].filter(Boolean).join(" · ");
+  // ...its size while it has one: pushed from the shared base none of its own is left to count, and "+0 −0" said nothing
+  const sub = [tip, (s.changed || !s.landed) && `+${s.plus || 0} −${s.minus || 0}`, s.ask && s.proposal?.why].filter(Boolean).join(" · ");
   const link = { ...FOCUS_RING, display: "inline-block", fontSize: 11.5, color: "var(--tq-link, #55697a)", cursor: "pointer", fontWeight: 600, "&:hover": { textDecoration: "underline" } };
   const press = (h, tone0, tone = tone0) => (
     <Button key={h} size="small" disableElevation disabled={!!busy} data-tq-land={h} variant={tone === "p" ? "contained" : tone === "s" ? "outlined" : "text"}
@@ -94,7 +95,7 @@ export default function LandingCard({ taskId, onChanged, onState, inChat = false
     <Frame data-tq-landing="" data-tq-act-state={s.passed ? "passed" : s.ask ? "waiting" : s.landed ? "pressed" : "resting"}
       sx={inChat ? { px: 1.5, py: 1.25 } : { mt: 1.1, pt: 1, borderTop: `1px solid ${BORDER}` }}>
       <Typography data-tq-landing-title="" sx={{ fontSize: 13.5, fontWeight: 700, color: INK, lineHeight: 1.3, overflowWrap: "anywhere" }}>{w.title}</Typography>
-      <Typography noWrap data-tq-landing-sub="" title={[sub, w.shared].filter(Boolean).join(" - ")} sx={{ fontSize: 11.5, color: FAINT }}>{sub}</Typography>
+      {!!sub && <Typography noWrap data-tq-landing-sub="" title={[sub, w.shared].filter(Boolean).join(" - ")} sx={{ fontSize: 11.5, color: FAINT }}>{sub}</Typography>}
       {!!s.files?.length && <Box sx={{ display: "flex", gap: 1.5, mt: 0.4 }}>
         <Typography {...pressable(() => setFiles((o) => !o))} data-tq-landing-files="" aria-expanded={filesOpen} sx={link}>
           {filesOpen ? "Hide the files" : "Show the files"}</Typography>

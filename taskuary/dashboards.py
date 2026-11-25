@@ -19,7 +19,7 @@ from .store import task_ref
 
 # kind -> (bindings it cannot draw without, the width it takes on a four-column grid)
 KINDS = {'stat': ((), 1), 'progress': (('target',), 1), 'line': (('x',), 2), 'area': (('x',), 2), 'bar': (('x',), 2),
-         'stacked': (('x', 'series'), 2), 'table': ((), 4), 'list': (('label',), 2)}
+         'stacked': (('x', 'series'), 2), 'pie': (('x',), 2), 'table': ((), 4), 'list': (('label',), 2)}
 AGGS = ('count', 'sum', 'avg', 'median', 'min', 'max')
 RANGES = (7, 30, 90, 0)            # days back; 0 is everything the sources returned
 MAX_SOURCES, MAX_COMPONENTS, ROWS = 8, 20, 2000
@@ -176,7 +176,7 @@ _by_model, _, _, _run_minutes, _calls = AI_TILES
 SPEND_TILES = [
     {'kind': 'stacked', 'title': 'AI tokens per day, by who used them', 'said': 'Tokens per day, split by triage, the Advisor, tasks and the Assistant',
      'source': 'ai', 'x': 'day', 'series': 'who', 'agg': 'sum', 'y': 'tokens', 'w': 2},
-    {'kind': 'bar', 'title': 'AI tokens by who used them', 'said': 'Tokens for triage, the Advisor, tasks and the Assistant, in that order',
+    {'kind': 'pie', 'title': 'AI tokens by who used them', 'said': "Each one's share of the tokens: triage, the Advisor, tasks and the Assistant",
      'source': 'ai', 'x': 'who', 'agg': 'sum', 'y': 'tokens', 'order': ['Triage', 'Advisor', 'Tasks', 'Assistant', 'Other'], 'w': 2},
     {'kind': 'stat', 'title': 'Tokens per task', 'said': "What one task's agent work comes to in tokens, on average", 'source': 'ai', 'agg': 'sum',
      'y': 'tokens', 'per': 'task_id', 'where': {'kind': 'agent run'}, 'good': 'none'}]
@@ -682,7 +682,7 @@ def _panel(spec, data, c, days) -> list:
         by = {}
         for r in rows: by.setdefault(_key_of(r.get(c.get('x'))), []).append(r)
         return [f'{t}:', *(f"{x}: " + ', '.join(f'{s} {fmt(v)}' for s, v in _groups(rs, c.get('series'), agg, y)) for x, rs in sorted(by.items()))]
-    gs = _groups(rows, c.get('x'), agg, y, int(_num(c.get('limit')) or 8), c.get('order')) if k == 'bar' else sorted(_groups(rows, c.get('x'), agg, y))
+    gs = _groups(rows, c.get('x'), agg, y, int(_num(c.get('limit')) or 8), c.get('order')) if k in ('bar', 'pie') else sorted(_groups(rows, c.get('x'), agg, y))
     return [f'{t}:', *(f'{x}: {fmt(v)}' for x, v in gs)] if gs else [f'{t}: nothing']
 
 

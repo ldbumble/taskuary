@@ -1332,7 +1332,8 @@ def opens(store) -> dict | None:
     Taskuary at a glance, the one every install comes with - else the agent's finished post while it is open, else the first open task."""
     if not enabled() or os.environ.get(OPENS_ENV, '1') == '0' or store is None: return None
     from .dashboards import GLANCE
-    if (d := next((s for s in store.list_sources() if s.get('Channel') == 'report' and s.get('Name') == GLANCE['title']), None)):
+    # ...found by its title, which a report keeps as its Address (2026-11-24: matched on a Name no source has, the demo opened on a task)
+    if (d := next((s for s in store.list_sources() if s.get('Channel') == 'report' and s.get('Address') == GLANCE['title']), None)):
         return {'report': d['SourceId']}
     live = [t for t in store.list_tasks() if t.get('Status') not in ('done', 'dropped')]
     t = next((t for t in live if t.get('Title') == SHOWCASE), None) or next(iter(live), None)
@@ -1509,6 +1510,21 @@ def seed_ai_usage(store) -> int:
                                    'Cached': int(i * 0.6) if job in AGENT else 0, 'TokensOut': o, 'Ms': ms, 'Calls': 1,
                                    'Sid': f'demo-run-{tid}' if job in AGENT else None})
             n += 1
+    # ...and the work on no task (the owner, 2026-11-24: spend per triage, Advisor, tasks and Assistant): the Advisor's look a few times
+    # a day, the Assistant on the days she asked it something, a memory pass in the evening - two weeks of it, the same every demo
+    if not store._rows("SELECT 1 FROM brainroute WHERE Job IN ('advisor', 'assistant') LIMIT 1"):
+        today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        for d in range(14):
+            k, day = (d + 3) * 2654435761 % 1000, today - timedelta(days=d)
+            calls = [('advisor', 'advisor.run', 'standard', 7 * 60 + 40 + h * 190, 9000 + (k * (h + 3)) % 9000, 900 + k % 700) for h in range(1 + k % 3)]
+            if d % 7 not in (2, 5): calls += [('assistant', None, 'standard', 9 * 60 + 15 + h * 140, 6000 + (k * (h + 7)) % 14000, 500 + k % 900) for h in range(1 + d % 3)]
+            if d % 2: calls.append(('memory', 'memory.reflect', 'light', 21 * 60, 2200 + k % 1800, 300))
+            for job, caller, tier, mins, i, o in calls:
+                if (at := day + timedelta(minutes=mins)) > datetime.now(): continue
+                store.add_brain_route({'At': at.strftime('%Y-%m-%d %H:%M:%S'), 'Job': job, 'Caller': caller, 'Pick': 'cli:claude', 'Model': '', 'Tier': tier,
+                                       'Rule': 'demo', 'Why': 'Written for the demo - no AI ran', 'Outcome': 'ok', 'Ran': AI_MODELS[tier], 'TokensIn': i,
+                                       'Cached': int(i * 0.4), 'TokensOut': o, 'Ms': 4000 + o * 8, 'Calls': 1})
+                n += 1
     return n
 
 

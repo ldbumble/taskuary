@@ -3358,7 +3358,8 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true, r
   // first load replaces the conversation, and a card posted before it would be wiped
   const doneReq = useRef(0);
   useEffect(() => {
-    if (!request?.n || request.n === doneReq.current || !state) return;
+    // ...a report's row is looked for on the rail, so that ask waits for the rail: asked first, the demo opened its dashboard's setup page (2026-11-24)
+    if (!request?.n || request.n === doneReq.current || !state || (request.kind === "report" && !pile)) return;
     doneReq.current = request.n;
     // ...`at` numbers the ask, so a view already open on the page opens the card a second link names (ConnectorsView, SettingsView)
     if (request.kind === "browse") browseRef.current?.(request.area, { ...(request.state || {}), at: request.n });
@@ -3388,7 +3389,7 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true, r
     else if (request.kind === "home") { setRailOpen(false); setFoldedKey(null); browseDownRef.current?.(); putOnTable(null, "view");
       setMsgs((m) => (m.length && m.every((x) => x.role === "browse") ? [] : m)); }
     if (request.fromUrl) { navHow.current = "replace"; urlStep.current = true; urlWant.current = request.kind === "task" && request.tid ? `#task=${request.tid}` : ""; }
-  }, [request, state]);   // eslint-disable-line react-hooks/exhaustive-deps
+  }, [request, state, pile]);   // eslint-disable-line react-hooks/exhaustive-deps
   // A COLD LINK TO A TASK (#task=N in a new tab) draws that task first: the conversation came back with the walk's last item on
   // the table, which drew whole - its view and every read behind it - for the 0.6-1 s the link's own pull took, then gave way.
   // The page stays on its loading spinner until the pull has answered (or failed); what it then draws is what it drew before.

@@ -22,7 +22,7 @@ import WarnIcon from "@mui/icons-material/WarningAmberRounded";
 import "./dashboard/dashboard.css";
 import "./diffView.css";
 import "./viewSpec.css";
-import { Bars, Line, Stacked, slotColor } from "./dashboard/charts.jsx";
+import { Bars, Line, PieBody, Stacked } from "./dashboard/charts.jsx";
 import { Md } from "./md.jsx";
 import { fmtNum, numOf, places, reportShape } from "./reportRows.js";
 import { run as pageRun } from "./pageView.js";
@@ -102,20 +102,7 @@ function Stats({ items }) {
 // a chart from its points alone: no rows behind a mark, so nothing to drill into, and no table twin (the points are the whole of it). The
 // dashboard's own bars and line, each value at its bar's end in the view's format, one point picked out where the agent highlighted it
 // ...and a run of short labels as columns (viewSpec.columnsOf), the chart's height whatever their count
-// ...a pie: each slice its share, its colour the dashboards' series, the legend its label and value
-const Pie = ({ points, nf = (n) => fmtNum(n, 0) }) => {
-  const sum = points.reduce((a, p) => a + Math.max(0, p.value), 0) || 1, R = 42, C = 2 * Math.PI * R;
-  let at = 0;
-  return <div className="tq-view-pie">
-    <svg viewBox="0 0 100 100" role="img" aria-label={points.map((p) => `${p.label} ${nf(p.value)}`).join(", ")}>
-      {points.map((p, i) => { const len = (Math.max(0, p.value) / sum) * C, off = at; at += len;
-        return <circle key={i} cx="50" cy="50" r={R} fill="none" stroke={slotColor(i)} strokeWidth="14" strokeDasharray={`${len} ${C - len}`}
-          strokeDashoffset={-off} transform="rotate(-90 50 50)" />; })}
-    </svg>
-    <ul>{points.map((p, i) => <li key={i}><i style={{ background: slotColor(i) }} /><span>{p.label}</span>
-      <b>{nf(p.value)}</b><em>{Math.round((Math.max(0, p.value) / sum) * 100)}%</em></li>)}</ul>
-  </div>;
-};
+// ...a pie: the dashboards' own (charts.PieBody) - each slice its share, its colour the series', the legend its label, value and share
 function ChartNow(p) {
   const { state } = useView();
   let err = null;
@@ -125,9 +112,9 @@ function ChartNow(p) {
 }
 const Chart = ({ kind, title = "", format, points }) => {
   const nf = format ? (n) => fmtAs(n, format, placesOf(points.map((x) => x.value), format)) : undefined;
-  if (kind === "pie") return <Pie points={points} nf={nf} />;
   const c = { kind: kind === "line" ? "line" : "bars", title, x: "label", y: "value", w: 2, twin: false, inline: true, fmt: nf, h: 160 };
   const marks = points.map((x, i) => ({ key: x.label || `#${i + 1}`, value: x.value, rows: [], on: !!x.highlight }));
+  if (kind === "pie") return <PieBody groups={marks} f={nf || ((n) => fmtNum(n, 0))} />;
   if (kind === "line") return <Line c={c} points={marks} onDrill={() => {}} />;
   const st = columnsOf(marks);
   return st ? <Stacked c={c} st={st} slots={{ value: 0 }} onDrill={() => {}} /> : <Bars c={c} groups={marks} onDrill={() => {}} />;

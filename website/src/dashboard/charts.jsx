@@ -3,7 +3,7 @@
 // tooltip on every mark that the table view also carries (docs/notes/dashboards.md). Text wears the ink; marks wear the slots.
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { DASH } from "../words.js";
-import { OTHER, aggregate, delta, fmt, itemLink, signed, sortRows, timeSeries } from "./slice.js";
+import { OTHER, aggregate, delta, fmt, itemLink, signed, slices, sortRows, timeSeries, withoutSeries } from "./slice.js";
 
 export const slotColor = (i) => (i === undefined || i === null || i < 0 ? "var(--d-other)" : `var(--d-s${(i % 6) + 1})`);
 const label = (k) => (k === OTHER ? DASH.other : k);
@@ -84,8 +84,8 @@ const Delta = ({ d, good, days }) => {
 };
 
 export function StatTile({ c, rows, all, date, days, now, onDrill, stale }) {
-  const v = aggregate(rows, c.agg, c.y), d = delta(all, date, days, c.agg, c.y, now);
-  const pts = date ? timeSeries(rows, date, c.agg, c.y, { days: days || 30, now }) : [];
+  const v = aggregate(rows, c.agg, c.y, c.per), d = delta(all, date, days, c.agg, c.y, now, c.per);
+  const pts = date ? timeSeries(rows, date, c.agg, c.y, { days: days || 30, now, per: c.per }) : [];
   return (
     <Card c={c} w={1} stale={stale} className="tq-dash-stat" onPress={() => onDrill({ title: c.title, rows })}>
       <Value v={v} unit={c.unit} />
@@ -96,7 +96,7 @@ export function StatTile({ c, rows, all, date, days, now, onDrill, stale }) {
 }
 
 export function Progress({ c, rows, onDrill, stale }) {
-  const v = aggregate(rows, c.agg, c.y) ?? 0, t = Number(c.target) || 0, pct = t ? Math.max(0, Math.min(1, v / t)) : 0;
+  const v = aggregate(rows, c.agg, c.y, c.per) ?? 0, t = Number(c.target) || 0, pct = t ? Math.max(0, Math.min(1, v / t)) : 0;
   const left = Math.max(0, t - v);
   return (
     <Card c={c} w={1} stale={stale} className="tq-dash-stat" onPress={() => onDrill({ title: c.title, rows })}>
@@ -148,8 +148,11 @@ export function Bars({ c, groups, onDrill, stale }) {
 
 // ── stacked columns: categories (or days) split by a second column ─────────────────────────────────────────
 // ...an agent's view (ViewSpec) asks for its own figures (`c.fmt`) and one column picked out (`st.on`)
-export function Stacked({ c, st, slots, onDrill, stale }) {
-  const [tipEl, show, hide] = useTip(), f = c.fmt || fmt, hi = !!st.on?.size;
+export function Stacked({ c, st: all, slots, onDrill, stale }) {
+  const [tipEl, show, hide] = useTip(), f = c.fmt || fmt, hi = !!all.on?.size;
+  // ...a legend entry pressed switches its series off and on: the columns and their axis are what is left (withoutSeries)
+  const [off, setOff] = useState(() => new Set()), st = withoutSeries(all, off);
+  const flip = (s) => setOff((o) => { const n = new Set(o); if (n.has(s)) n.delete(s); else if (n.size < all.series.length - 1) n.add(s); return n; });
   const tot = (k) => st.series.reduce((a, s) => a + (st.cells[k][s]?.value ?? 0), 0);
   const max = niceMax(Math.max(1, ...st.keys.map(tot)));       // the axis's top is a round number, and its ticks say it
   const color = (s) => (s === OTHER ? "var(--d-other)" : slotColor(slots[s]));
@@ -158,7 +161,9 @@ export function Stacked({ c, st, slots, onDrill, stale }) {
     rows={st.keys.map((k) => [keyLabel(k, st.dated), ...st.series.map((s) => st.cells[k][s]?.value ?? 0), tot(k)])} />;
   return (
     <Card c={c} w={c.w || 2} stale={stale} table={table}>
-      {st.series.length > 1 && <div className="tq-dash-legend">{st.series.map((s) => <span key={s}><i style={{ background: color(s) }} />{label(s)}</span>)}</div>}
+      {all.series.length > 1 && <div className="tq-dash-legend" role="group" aria-label={DASH.series}>{all.series.map((s) => (
+        <button type="button" key={s} aria-pressed={!off.has(s)} onClick={() => flip(s)} title={off.has(s) ? DASH.show_series : DASH.hide_series}>
+          <i style={{ background: color(s) }} />{label(s)}</button>))}</div>}
       {!st.keys.length || !st.series.length ? <div className="tq-dash-none">{DASH.no_rows}</div> : (<div className="tq-dash-plot">
         <div className="tq-dash-yax" aria-hidden="true">{[1, 0.5, 0].map((q) => <span key={q} style={{ top: `${(1 - q) * 100}%` }}>{f(max * q)}</span>)}</div>
         <div className="tq-dash-plotbody">
@@ -178,6 +183,42 @@ export function Stacked({ c, st, slots, onDrill, stale }) {
         <div className="tq-dash-xlab">{st.keys.filter((_, i) => i % every === 0 || i === st.keys.length - 1).map((k) => <span key={k}>{keyLabel(k, st.dated)}</span>)}</div>
         </div></div>)}
       {tipEl}
+    </Card>
+  );
+}
+
+// ── a pie: shares of one whole, a ring with the whole in its middle and a legend that says each slice's value and share. The one pie
+// every surface draws - a dashboard's tile, and an agent's chart in its chat (ViewSpec)
+export function PieBody({ groups, f = fmt, onPick }) {
+  const { total, slices: ss } = slices(groups), R = 40, C = 2 * Math.PI * R;
+  let at = 0;
+  if (!ss.length) return <div className="tq-dash-none">{DASH.no_rows}</div>;
+  return (
+    <div className="tq-dash-pie">
+      <div className="ring">
+        <svg viewBox="0 0 100 100" role="img" aria-label={ss.map((g) => `${label(g.key)} ${f(g.value)}`).join(", ")}>
+          <circle cx="50" cy="50" r={R} fill="none" className="track" strokeWidth="13" />
+          {ss.map((g, i) => { const len = g.share * C, gap = ss.length > 1 ? Math.min(1.6, len / 3) : 0, from = at; at += len;
+            return <circle key={g.key} className="slice" cx="50" cy="50" r={R} fill="none" stroke={g.other ? "var(--d-other)" : slotColor(g.slot ?? i)} strokeWidth="13"
+              strokeDasharray={`${Math.max(0, len - gap)} ${C - Math.max(0, len - gap)}`} strokeDashoffset={-from} transform="rotate(-90 50 50)"
+              style={{ "--n": i }} onClick={onPick ? () => onPick(g) : undefined} />; })}
+        </svg>
+        <div className="mid"><b>{f(total)}</b></div>
+      </div>
+      <ul>{ss.map((g, i) => <li key={g.key} className={onPick ? "go" : ""} onClick={onPick ? () => onPick(g) : undefined}>
+        <i style={{ background: g.other ? "var(--d-other)" : slotColor(g.slot ?? i) }} /><span title={label(g.key)}>{label(g.key)}</span>
+        <b>{f(g.value)}</b><em>{Math.round(g.share * 100)}%</em></li>)}</ul>
+    </div>
+  );
+}
+
+export function Pie({ c, groups, onDrill, stale }) {
+  const f = c.fmt || fmt;
+  const table = <TwinTable head={[cleanCol(c.x), c.agg && c.agg !== "count" ? `${c.agg} ${cleanCol(c.y)}` : "count", "share"]}
+    rows={slices(groups).slices.map((g) => [label(g.key), g.value, `${Math.round(g.share * 100)}%`])} />;
+  return (
+    <Card c={c} w={c.w || 2} stale={stale} table={table}>
+      <PieBody groups={groups} f={f} onPick={(g) => onDrill({ title: `${c.title} · ${label(g.key)}`, rows: g.rows })} />
     </Card>
   );
 }

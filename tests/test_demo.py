@@ -618,8 +618,12 @@ class TheDemoOpensOnItsTourTests(unittest.TestCase):
             if got and said and said[0] < got[0]: late.append((t['Title'], got[0], said[0]))
         self.assertEqual(late, [])
 
-    def test_the_first_view_opens_on_an_agents_finished_work_never_the_greeting(self):
+    def test_the_first_view_opens_on_the_built_in_dashboard_else_an_agents_finished_work_never_the_greeting(self):
+        from taskuary.dashboards import GLANCE
         s, _ = self.seeded()
+        glance = next(x for x in s.list_sources() if x.get('Channel') == 'report' and x.get('Address') == GLANCE['title'])
+        with on(): self.assertEqual(demo.opens(s), {'report': glance['SourceId']})
+        s._exec('UPDATE source SET Active=0 WHERE SourceId=?', (glance['SourceId'],))      # ...and without it, the agent's finished post
         post = next(t for t in s.list_tasks() if t['Title'] == demo.SHOWCASE)
         with on(): self.assertEqual(demo.opens(s), {'tid': post['TaskId']})
         with on(), mock.patch.dict(os.environ, {demo.OPENS_ENV: '0'}): self.assertIsNone(demo.opens(s))

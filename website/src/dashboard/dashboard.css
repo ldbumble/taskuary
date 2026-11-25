@@ -32,6 +32,16 @@
 .tq-dash-bar label { display: inline-flex; align-items: center; height: 32px; box-sizing: border-box; padding-left: 12px; border: 1px solid var(--d-border);
   border-radius: 9px; background: var(--d-surface); font-size: 12.5px; color: var(--d-muted); text-transform: capitalize; }
 .tq-dash-bar label:focus-within { border-color: var(--d-focus); }
+/* the range's slider beside its presets: how many days, in words, over a thin track filled up to the thumb */
+.tq-dash-bar label.tq-dash-slide { gap: 12px; padding: 0 14px 0 12px; text-transform: none; flex: 1 1 220px; max-width: 360px; }
+.tq-dash-slide span { color: var(--d-ink); font-weight: 600; white-space: nowrap; min-width: 6.5em; font-variant-numeric: tabular-nums; }
+.tq-dash-slide input { -webkit-appearance: none; appearance: none; flex: 1; min-width: 80px; height: 4px; border-radius: 2px; margin: 0; cursor: pointer;
+  background: linear-gradient(to right, var(--d-s1) var(--p, 0%), var(--d-track) var(--p, 0%)); outline: none; }
+.tq-dash-slide input::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: var(--d-surface);
+  border: 2px solid var(--d-s1); box-shadow: 0 1px 3px rgba(38, 37, 33, .25); transition: transform .12s; }
+.tq-dash-slide input::-moz-range-thumb { width: 12px; height: 12px; border-radius: 50%; background: var(--d-surface); border: 2px solid var(--d-s1); }
+.tq-dash-slide input:hover::-webkit-slider-thumb, .tq-dash-slide input:focus-visible::-webkit-slider-thumb { transform: scale(1.15); }
+.tq-dash-slide input:focus-visible { box-shadow: 0 0 0 3px color-mix(in srgb, var(--d-focus) 30%, transparent); }
 .tq-dash-select { appearance: none; -webkit-appearance: none; font: inherit; font-size: 12.5px; font-weight: 600; text-transform: none; height: 100%;
   border: 0; outline: 0; cursor: pointer; padding: 0 30px 0 8px; color: var(--d-ink); max-width: 220px; border-radius: 0 9px 9px 0;
   background: transparent url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%236e685f' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right 11px center; }
@@ -108,8 +118,33 @@
 .tq-dash-col .seg + .seg { border-bottom: 2px solid var(--d-surface); box-sizing: content-box; }
 .tq-dash-col .seg:last-child { border-radius: 4px 4px 0 0; }
 .tq-dash-xlab { display: flex; justify-content: space-between; font-size: 11px; color: var(--d-muted); font-variant-numeric: tabular-nums; }
-.tq-dash-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 11.5px; color: var(--d-ink2); }
-.tq-dash-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+.tq-dash-legend { display: flex; flex-wrap: wrap; gap: 4px 6px; font-size: 11.5px; color: var(--d-ink2); margin: -2px 0 0 -6px; }
+.tq-dash-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; transition: opacity .15s, transform .15s; }
+/* ...each entry a switch for its series: pressed off it greys, its swatch an outline, and the columns close up without it */
+.tq-dash-legend button { all: unset; cursor: pointer; padding: 2px 6px; border-radius: 6px; transition: background-color .15s, color .15s; }
+.tq-dash-legend button:hover { background: var(--d-wash); color: var(--d-ink); }
+.tq-dash-legend button:focus-visible { outline: 2px solid var(--d-focus); }
+.tq-dash-legend button[aria-pressed="false"] { color: var(--d-muted); text-decoration: line-through; text-decoration-color: var(--d-axis); }
+.tq-dash-legend button[aria-pressed="false"] i { opacity: .25; transform: scale(.8); }
+.tq-dash-col .seg { transition: height .35s cubic-bezier(.16, 1, .3, 1); }
+
+/* a pie: a ring with the whole in its middle, the legend beside it - label, value, share in three aligned columns */
+.tq-dash-pie { display: flex; align-items: center; gap: 22px; flex-wrap: wrap; min-height: 128px; }
+.tq-dash-pie .ring { position: relative; width: 128px; height: 128px; flex: none; }
+.tq-dash-pie svg { width: 100%; height: 100%; display: block; overflow: visible; }
+.tq-dash-pie .track { stroke: var(--d-grid); }
+.tq-dash-pie .slice { cursor: pointer; transition: stroke-width .15s; }
+.tq-dash-pie .slice:hover { stroke-width: 16; }
+.tq-dash-pie .mid { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none; }
+.tq-dash-pie .mid b { font-size: 19px; font-weight: 640; letter-spacing: -.02em; color: var(--d-ink); font-variant-numeric: tabular-nums; }
+.tq-dash-pie ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 170px; font-size: 12.5px; }
+.tq-dash-pie li { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto 3em; align-items: center; gap: 8px; color: var(--d-ink2);
+  padding: 3px 6px; margin: 0 -6px; border-radius: 6px; }
+.tq-dash-pie li.go { cursor: pointer; } .tq-dash-pie li.go:hover { background: var(--d-wash); }
+.tq-dash-pie li i { width: 10px; height: 10px; border-radius: 3px; }
+.tq-dash-pie li span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tq-dash-pie li b { color: var(--d-ink); font-weight: 600; font-variant-numeric: tabular-nums; text-align: right; }
+.tq-dash-pie li em { font-style: normal; color: var(--d-muted); text-align: right; font-variant-numeric: tabular-nums; }
 
 /* line/area in SVG: 2px line, a hairline grid, an end dot with a surface ring, a crosshair that snaps to the day */
 .tq-dash-svg { display: block; width: 100%; overflow: visible; }
@@ -178,10 +213,12 @@
   .tq-dash-bars .bar, .tq-dash-fill { transform-origin: left center;
     animation: tq-dash-grow .8s cubic-bezier(.16, 1, .3, 1) backwards; animation-delay: calc(min(var(--i, 0), 12) * 35ms + 120ms); }
   .tq-dash-col { animation: tq-dash-rise .8s cubic-bezier(.16, 1, .3, 1) backwards; animation-delay: calc(min(var(--i, 0), 12) * 35ms + 120ms); }
+  .tq-dash-pie .slice { animation: tq-dash-fade .6s ease-out backwards; animation-delay: calc(min(var(--i, 0), 12) * 35ms + 120ms + var(--n, 0) * 60ms); }
   .tq-dash-svg .ln { stroke-dasharray: calc(var(--len, 0) * 1px); animation: tq-dash-draw 1s cubic-bezier(.33, 1, .68, 1) backwards; }
   .tq-dash-spark .ln { stroke-dasharray: none; }
 }
 @keyframes tq-dash-in { from { opacity: .35; transform: translateY(6px); } }
+@keyframes tq-dash-fade { from { opacity: 0; } }
 @keyframes tq-dash-grow { from { transform: scaleX(0); } }
 @keyframes tq-dash-rise { from { clip-path: inset(100% 0 0 0); } to { clip-path: inset(0 0 0 0); } }
 @keyframes tq-dash-draw { from { stroke-dashoffset: calc(var(--len, 0) * 1px); } to { stroke-dashoffset: 0; } }

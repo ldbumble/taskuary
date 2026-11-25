@@ -604,6 +604,7 @@ DASHBOARD_COMPONENTS = (
     '- "bar": ranked categories. "x" = the category column, "agg", "y", optional "limit" (default 8; the rest fold into Other),'
     ' optional "order": [x values] to keep stages in their order, "share": true to say each bar as a share of the first.\n'
     '- "stacked": categories split by a second column: "x", "series" (at most 6 values read well), "agg", "y".\n'
+    '- "pie": shares of one whole, at most 6 slices: "x" = the category column, "agg", "y", optional "order".\n'
     '- "table": rows. "columns": [...], optional "sort": "<column>" or "-<column>", "limit".\n'
     '- "list": items, each one line. "label" = the column a person reads, optional "meta" column, "sort", "limit". A row with a '
     'task_id column opens that task when pressed.\n')

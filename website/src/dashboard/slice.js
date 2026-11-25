@@ -26,7 +26,14 @@ export const inSegment = (rows, column, value) => !column || value === undefined
   ? rows : rows.filter((r) => !(column in r) || String(r[column]) === String(value));
 export const where = (rows, w) => !w ? rows : rows.filter((r) => Object.entries(w).every(([k, v]) => String(r[k]) === String(v)));
 
-export const aggregate = (rows, agg = "count", y) => {
+// ...or, `per` a column, that number averaged over each of the column's values (tokens per task) - a blank value is no one's (dashboards.aggregate)
+export const aggregate = (rows, agg = "count", y, per) => {
+  if (per) {
+    const by = new Map();
+    for (const r of rows) if (r[per] !== null && r[per] !== undefined && r[per] !== "") { const k = String(r[per]); if (!by.has(k)) by.set(k, []); by.get(k).push(r); }
+    const vals = [...by.values()].map((g) => aggregate(g, agg, y)).filter((v) => v !== null);
+    return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
+  }
   if (!agg || agg === "count") return rows.length;
   const vals = rows.map((r) => num(r[y])).filter((v) => v !== null);
   if (!vals.length) return null;
@@ -72,11 +79,11 @@ const daySpan = (rows, x, days, now) => {
 };
 
 // a value per day: a count or a sum is 0 on a quiet day; an average has no value there, and the line breaks
-export const timeSeries = (rows, x, agg, y, { days, now = new Date() } = {}) => {
+export const timeSeries = (rows, x, agg, y, { days, now = new Date(), per } = {}) => {
   const by = new Map();
   for (const r of rows) { const k = dayOf(r[x]); if (!isDay(k)) continue; if (!by.has(k)) by.set(k, []); by.get(k).push(r); }
-  const zero = !agg || agg === "count" || agg === "sum";
-  return daySpan(rows, x, days, now).map((key) => { const rs = by.get(key) || []; return { key, value: rs.length ? aggregate(rs, agg, y) : zero ? 0 : null, rows: rs }; });
+  const zero = !per && (!agg || agg === "count" || agg === "sum");
+  return daySpan(rows, x, days, now).map((key) => { const rs = by.get(key) || []; return { key, value: rs.length ? aggregate(rs, agg, y, per) : zero ? 0 : null, rows: rs }; });
 };
 
 // COLOUR FOLLOWS THE ENTITY, NEVER ITS RANK: slots are dealt by each value's share of ALL the source's rows, before any filter,
@@ -106,12 +113,27 @@ export const stacked = (rows, x, series, agg, y, { slots, days, now = new Date()
   return { keys, dated, series: [...seen].sort((a, b) => rank(a) - rank(b) || a.localeCompare(b)), cells };
 };
 
+// THE SERIES A LEGEND SWITCHED OFF (a pressed legend entry): gone from every column and from the totals the axis is scaled to - the rest
+// keep their colours, which follow the entity (seriesSlots), never what is left
+export const withoutSeries = (st, off) => !off?.size ? st : { ...st, series: st.series.filter((s) => !off.has(s)),
+  cells: Object.fromEntries(Object.entries(st.cells).map(([k, c]) => [k, Object.fromEntries(Object.entries(c).filter(([s]) => !off.has(s)))])) };
+
+// a pie's slices: each group's share of the whole, a negative or empty value no slice - and the whole, said in its middle
+export const slices = (groups) => {
+  const keep = groups.filter((g) => (g.value ?? 0) > 0), total = keep.reduce((a, g) => a + g.value, 0);
+  return { total, slices: keep.map((g) => ({ ...g, share: total ? g.value / total : 0 })) };
+};
+
+// the range a slider sets: a whole number of days from one to the most the sources read (90), anything else the nearest of them
+export const MAX_DAYS = 90;
+export const clampDays = (v) => Math.max(1, Math.min(MAX_DAYS, Math.round(Number(v)) || 1));
+
 // a tile's delta: this range against the one before it, the same length - only when the rows are dated and a range is chosen
-export const delta = (rows, date, days, agg, y, now = new Date()) => {
+export const delta = (rows, date, days, agg, y, now = new Date(), per) => {
   if (!date || !days) return null;
   const cut = daysAgo(days - 1, now), prevCut = daysAgo(days * 2 - 1, now);
   const cur = rows.filter((r) => dayOf(r[date]) >= cut), prev = rows.filter((r) => { const d = dayOf(r[date]); return d >= prevCut && d < cut; });
-  const a = aggregate(cur, agg, y), b = aggregate(prev, agg, y);
+  const a = aggregate(cur, agg, y, per), b = aggregate(prev, agg, y, per);
   if (a === null || b === null) return null;
   return { now: a, prev: b, change: a - b, pct: b ? (a - b) / Math.abs(b) : null };
 };

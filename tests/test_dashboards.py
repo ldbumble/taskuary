@@ -43,7 +43,7 @@ def test_a_good_spec_validates():
     ({'title': ''}, 'no title'),
     ({'sources': []}, 'no source'),
     ({'components': []}, 'shows nothing'),
-    ({'components': [{'kind': 'pie', 'title': 'Pie', 'source': 'tasks'}]}, 'not a preset'),
+    ({'components': [{'kind': 'gauge', 'title': 'Gauge', 'source': 'tasks'}]}, 'not a preset'),
     ({'components': [{'kind': 'bar', 'title': 'B', 'source': 'nowhere', 'x': 'kind'}]}, 'not one of the sources'),
     ({'components': [{'kind': 'bar', 'title': 'B', 'source': 'tasks'}]}, 'needs x'),
     ({'components': [{'kind': 'stat', 'title': 'S', 'source': 'tasks', 'agg': 'sum'}]}, 'adds up'),

@@ -916,6 +916,19 @@ def front_tab(sid: str, site: str) -> bool:
     return bool(hit) and switch_tab(sid, str(hit['id']))
 
 
+def left_on_signin(store, tid: int, sid: str) -> bool:
+    """A turn ended asking nothing, its browser on a page that asks for a password: is that sign-in his step now (general's turn end)?
+    Never over a step of its own held on one of its tabs: that card is his one move there (the HIPAA and Codex walks, 2026-11-22: "Sign in to
+    127.0.0.10 to continue" stood under the held sign-up's Approve). NOR BESIDE ANY CARD THAT WAITS ON HIM (his live task, 2026-11-25: three
+    post cards stood, and "Sign in to linkedin.com to continue" was raised beside them off a tab its agent had left on LinkedIn's sign-in -
+    "we are trying to post to twitter but the browser is asking about linkedin"): one thing is asked of him at a time, and what his browser
+    pane shows belongs to the card on his screen - an agent that needs the page signed in hands it over itself (hand_over)."""
+    from . import card, signin
+    from .browsergate import held
+    return bool(not handing(store, tid) and signin.on_signin_page(sid) and not signin.set_aside(store, tid, sid) and not held(store, tid, sid)
+                and not card.waiting(store, tid, asks=False, trust=False))
+
+
 def hand_over(store, tid: int, what: str = '', site: str = '', sid: str = None, watch=..., sign_in: bool = False, ended: bool = False) -> dict:
     """Hand task `tid`'s owner the step `what` on its browser's page - done by Taskuary itself where it can (a saved sign-in), else one card.
     `site`: the domain the agent names for a sign-in ('new:<site>' a sign-up, as the old marker claimed it). `sign_in`: a sign-in that names no
@@ -934,6 +947,10 @@ def hand_over(store, tid: int, what: str = '', site: str = '', sid: str = None, 
     # ...AND AN ERROR PAGE IS THE AGENT'S, NEVER HIS (CLI 4: LinkedIn's own error page was handed to him as a "security check")
     from .browsergate import page_error
     if (bad := page_error(sid)): return {'ok': False, 'why': f'nothing was handed to him - {bad.removeprefix("TASKUARY: ")}'}
+    # ...NOR A PAGE OF A SERVICE WHOSE CARD IS CONNECTED (browsergate.card_site): its sign-in is the connection's own, never a step for him
+    # ...nor, where it is not connected, before his press on its card handed the act over (browsergate.card_first)
+    from .browsergate import card_first, card_site
+    if (fact := card_site(store, (at := state(sid, fresh=True).get('url'))) or card_first(store, tid, at)): return {'ok': False, 'why': f'nothing was handed to him - {fact}'}
     # ...A SITE NAMED IS A SIGN-IN ONLY ON A PAGE THAT ASKS ONE (walk 10: "Enter your date of birth" on signup.live.com, named with its site,
     # took the saved sign-in's road and answered "Taskuary is signing in" while the step went to him): a page read with no box a sign-in
     # fills is his turn

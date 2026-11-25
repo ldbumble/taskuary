@@ -112,7 +112,8 @@ TOOLS = {
                      "choice - their props and worked examples are the guide tool's `show` topic. A view never sends, pays or closes. "
                      "A bad spec comes back saying what to fix. `files`: full paths of files you made - a picture,"
                      " a PDF, a page, or any file that is text - each is copied onto the task and drawn in this "
-                     f"chat as it is, a picture as the picture. {SHOW_WHAT} It is the one road onto the owner's screen: a viewer, a browser or an app opened on the computer is not"
+                     "chat as it is, a picture as the picture; several in one call (versions of one thing) stand as one artifact, "
+                     f"separate calls as separate ones. {SHOW_WHAT} It is the one road onto the owner's screen: a viewer, a browser or an app opened on the computer is not"
                      " on it, and its answer says what was shown.",
              _S({'title': _STR, 'root': _STR, 'elements': {'type': 'object', 'additionalProperties': __import__('taskuary.viewspec', fromlist=['x']).element_schema()},
                  'state': {'type': 'object'}, 'files': {'type': 'array', 'items': _STR}}),
@@ -531,6 +532,12 @@ def _failed_now(store, tid: int) -> str:
     return got[1] if got and got[0] >= _turn_began(store, tid) else ''
 
 
+def _asking(store, tid: int) -> bool:
+    "Whether the task's agent's own question to the owner stands: asked in this turn (ask_owner's mark), or asked before and not yet answered."
+    from . import selfclose, taskstate
+    return selfclose.asks_now(tid) or bool(taskstate.open_question(store, tid))
+
+
 def _card_call(store, tid: int, name: str, args: dict, doors: dict, skip=()) -> str:
     args = _arguments(args)
     # ...ONE item is one card, as if given whole (2026-11-17: a lone break_out stood as "1 step - review a few, then do them all", "Approve all 1")
@@ -540,6 +547,12 @@ def _card_call(store, tid: int, name: str, args: dict, doors: dict, skip=()) -> 
         raise ValueError(refusal(f'not ticked: {bad} failed in this turn', 'tick it once that is done; say in your answer what is still left'))
     from . import card
     raises = TOOLS[name][0] == 'propose'
+    # A QUESTION TO HIM HOLDS THE TURN THERE (the owner's live task, 2026-11-25: "it asked a question, then underneath it created the post that was
+    # greyed out ... if it asks a question it has to wait there"): a card raised under the agent's own standing question was greyed by his answer
+    # to it. Nothing is raised while it stands; a card raised before it stays as it is
+    if raises and _asking(store, tid):
+        raise ValueError(refusal('your question to the owner stands - nothing was raised', 'wait for his answer, then raise it; if this card does '
+                                 'not hang on the question, take the question back with ask_owner withdraw: true and raise it'))
     then, args = ((args or {}).get('then'), {k: v for k, v in (args or {}).items() if k != 'then'}) if raises else (None, args)
     try:
         with (card.raising(store, tid, then) if raises else contextlib.nullcontext()):
@@ -565,9 +578,9 @@ def _card_call(store, tid: int, name: str, args: dict, doors: dict, skip=()) -> 
 # then send them all out"): any card's tool takes `items` - each item that tool's own fields, over the ones given beside them - and files each
 # by its own door, as one call would; the rows share one Batch, which the line of cards and the chat hold as ONE card with one press
 ITEMS = {'type': 'array', 'items': {'type': 'object'},
-         'description': "several of this same act at once: a list of objects, each with this tool's own fields - fields beside `items` are "
-                        "shared by all. A few stand one at a time for the owner's press each; many (25 emails, 40 issues to close) stand as ONE "
-                        "card he reviews a few of and does with one press. You hear how they went once."}
+         'description': "one act for many people, or versions of one thing: a list of objects, each with this tool's own fields - fields "
+                        "beside `items` are shared by all. They stand as ONE card, done with one press; you hear how they went once. Unrelated "
+                        "acts are separate calls: one card each, one after another."}
 # ...on the one review tool (an email, a post, a close, a SQL write, an API call) - an invite answers one meeting, the landing question is one
 # per checkout
 TOOLS['propose'][2]['properties']['items'] = ITEMS
@@ -599,16 +612,18 @@ def _many(store, tid: int, name: str, args: dict, doors: dict) -> str:
         if isinstance(got, dict) and isinstance(rid := got.get('review_id', got.get('review')), int): mine.append(rid)
         # ...and what the files on each say (read_back), once a block: several mails with the same deck answered with no read-back at all
         if isinstance(got, dict) and got.get('files_say'): says.append(got['files_say'])
-    # ...A FEW STAND ONE AT A TIME, MANY AS ONE CARD (design round 5, I4: three caterer emails came as one bulk card - one Send, a guessed address
-    # sent unopened): under bulkcard.MANY each is its own card in the line ("1 of 3"), as the same three raised one call each would be
+    # ...ONE CALL IS ONE CARD, WHATEVER ITS COUNT (the owner, 2026-11-25: "if it's 3 of the same email to different people then it goes in a bulk
+    # card because it's one action to multiple people. If separate emails need to be sent they should come one after another ... this is something
+    # the agent should decide which tool to use"): how it calls is its choice - `items` is one act to many, separate calls are separate cards.
+    # A count decided it before (five or more), so the same three emails were one card or three by nothing the agent chose
     mine = [r['ReviewId'] for r in store._rows(f"SELECT ReviewId FROM review WHERE TaskId=? AND ReviewId>? AND Status='pending' AND ReviewId IN ({','.join('?' * len(mine))})",
                                                (int(tid), top, *mine))] if mine else []
     # ...and only MANY OF THE SAME THING is one card (the owner, 2026-11-20): posts for different networks are different things - each its own
     # card in the row, with its own picture - however many there are
-    bulk = len(mine) >= bulkcard.MANY and len({str({**base, **it}.get('type') or {**base, **it}.get('network') or '') for it in items}) <= 1
+    bulk = len(mine) > 1 and len({str({**base, **it}.get('type') or {**base, **it}.get('network') or '') for it in items}) <= 1
     if bulk: store._exec(f"UPDATE review SET Batch=? WHERE ReviewId IN ({','.join('?' * len(mine))})", (key, *mine))
     n = len(mine)
-    card = ('They stand as ONE card: the owner reviews a few and does them all with one press; you hear the whole run once.' if bulk
+    card = ('They stand as ONE card: the owner does them all with one press; you hear the whole run once.' if bulk
             else f'They stand one at a time, {n} in a row: the owner sees each in turn and presses it; you hear how they went once the last is answered, or at once if a press fails.')
     shown = ((f"{len(went)} of {len(items)} sent at once - a routine's email to what its owner saved into it goes without a press; say they went."
               + (f" Not sent: {'; '.join(held)}." if held else '') + (f" The {n} unsent stand for the owner's Send{' as ONE card' if bulk else ', one at a time'}." if n else '')) if went
@@ -835,7 +850,9 @@ def _call(store, tid: int, name: str, args: dict, doors: dict, skip=()) -> str:
     if name == 'ask_owner':
         from . import selfclose, workerstate
         if a.get('withdraw') is True:
-            gone = workerstate.let_go(store, tid, 'the agent took the question back')
+            had, gone = selfclose.asks_now(tid), workerstate.let_go(store, tid, 'the agent took the question back')
+            selfclose.drop_asks(tid)
+            if had and not gone: gone = ['the question you asked in this turn']
             return f"Withdrawn: {'; '.join(gone)}" if gone else 'No question of yours stands on the task - nothing to withdraw.'
         if not str(a.get('question') or '').strip(): raise ValueError('`question` is empty - write the one thing you need from the owner')
         selfclose.keep_mark(tid, 'ask', selfclose.ask_mark(a['question'], a.get('choices') if isinstance(a.get('choices'), list) else ()))
@@ -961,6 +978,8 @@ def show_files(store, tid: int, paths) -> str:
         # ...AND EVERY FILE IS READ BACK, DRAWN OR NOT (walk 10, 2026-11-23: a deck's ".pptx cannot be shown" read nothing back, and a stale
         # "212" in it went to the board after "update everything")
         reads.append(p)
+        # ...and one of its task's folder is HANDED OVER: drawn in its turn as the file of the folder (several, one artifact), never also as a copy
+        if p.is_relative_to(outputs.folder(tid).resolve()): outputs.hand(tid, [p])
         # ...A WORKBOOK OR A DOCUMENT IN THE TASK'S OWN OUTPUTS FOLDER IS ALREADY IN FRONT OF HIM (the walks, 2026-11-21: show answered ".xlsx
         # cannot be shown" while the chat drew the sheet, and the agent told him it could not be previewed): the page previews what it makes there
         # under the turn that made it (outputs.preview_of) - said so, never refused
@@ -1019,9 +1038,12 @@ def replaced(store, doors, tid: int, was: list, out, old, why: str):
     from . import verdicts
     o = json.loads(out.body) if hasattr(out, 'body') else out
     if not old or not (isinstance(o, dict) and o.get('ok')): return o
+    # ...THE NEW CARD IS NEVER THE ONE IT TAKES BACK, BY WHATEVER KEY ITS DOOR NAMED IT (the owner's live task, 2026-11-25): a post's door answers
+    # `review`, not `review_id`, so nothing was kept - "replaces: Reddit" withdrew the Reddit card it had just raised, picture and all
+    new = o.get('review_id') or o.get('review')
     # ...an email to the same person was rewritten in its own review: withdrawing `old` then took back the new one with it
-    if str(old).casefold().removeprefix('rv') == str(o.get('review_id')): return {**o, 'replaced': o['review_id']}
-    w = doors['withdraw'](tid, why, str(old), keep=o.get('review_id') or 0)
+    if str(old).casefold().removeprefix('rv') == str(new): return {**o, 'replaced': new}
+    w = doors['withdraw'](tid, why, str(old), keep=new or 0)
     w = json.loads(w.body) if hasattr(w, 'body') else w
     if w.get('ok'): return {**o, 'replaced': w.get('review_id')}
     # ...this very call already took its place (a new reply supersedes the old one itself): "nothing unsent to withdraw" read to the agent

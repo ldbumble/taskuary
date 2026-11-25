@@ -1061,6 +1061,20 @@ class APostIsAKindOfTheOneReviewTool(unittest.TestCase):
         with mock.patch('taskuary.terminal.live_sessions', return_value=[]): got = server._assistant_payload(self.tid)
         self.assertEqual([o['name'] for o in got['outputs']], ['notes.txt'])
 
+    def test_a_file_it_worked_with_stays_in_the_tasks_files_and_one_it_shows_is_drawn_in_its_turn(self):
+        """The owner's live task, 2026-11-25 ("not a bunch of artifacts"): the charts a script drew and a drafts file stood in the chat beside the
+        post cards that carried the charts. A file the agent only wrote is listed for the task's files and placed under no turn (`after`); one it
+        hands over with `show` is - and its picture on a card is the card's alone."""
+        (self.d / 'drafts.md').write_text('# Drafts')
+        tool(self.tid, 'propose', kind='post', network='x', text='Three tools, compared.', picture='tools-compared.png')
+        payload = lambda: server._assistant_payload(self.tid)
+        with mock.patch('taskuary.terminal.live_sessions', return_value=[]):
+            got = {o['name']: o for o in payload()['outputs']}
+            self.assertEqual(set(got), {'notes.txt', 'drafts.md'}); self.assertFalse([n for n, o in got.items() if 'after' in o])
+            said, err = tool(self.tid, 'show', files=['drafts.md', 'notes.txt']); self.assertFalse(err, said)
+            got = {o['name']: o for o in payload()['outputs']}
+        self.assertTrue(got['drafts.md'].get('handed') and got['notes.txt'].get('handed'), got)
+
     def test_three_networks_are_three_cards_standing_one_at_a_time_and_none_posts(self):
         from taskuary import cardqueue
         ran = []
@@ -1074,6 +1088,71 @@ class APostIsAKindOfTheOneReviewTool(unittest.TestCase):
         self.assertFalse(any(r.get('Batch') for r in rvs), 'different networks are different cards, never one bulk card')
         self.assertEqual(cardqueue.state(self.s, self.tid)['live'], [rvs[0]['ReviewId']])
         self.assertEqual(cardqueue.held(self.s, self.tid), {rvs[1]['ReviewId'], rvs[2]['ReviewId']})
+
+    def test_a_post_that_replaces_its_network_never_takes_back_the_card_it_just_raised(self):
+        """The owner's live task, 2026-11-25: his answer greyed the Reddit card; the agent raised it again with `replaces: "Reddit"`, and the
+        new card - the only Reddit one still unsent - was withdrawn by its own call ("it then got rid of that image")."""
+        tool(self.tid, 'propose', kind='post', network='reddit', subreddit='smallbusiness', title='Three tools', text='What we found.',
+             picture='tools-compared.png')
+        old, = self.cards(); self.s.decide_review(old['ReviewId'], 'superseded', None, 'taskuary', note='set aside when you moved on')
+        said, err = tool(self.tid, 'propose', kind='post', network='reddit', subreddit='smallbusiness', title='Three tools',
+                         text='What we found. Disclosure: none.', picture='tools-compared.png', replaces='Reddit')
+        self.assertFalse(err, said)
+        new, = self.cards(); self.assertIn('Disclosure', json.loads(new['DraftText'])['text'])
+        self.assertNotEqual(json.loads(said).get('replaced'), new['ReviewId'])
+
+    def test_a_post_over_its_networks_limit_is_refused_to_its_agent_with_the_limit_and_its_count(self):
+        """The owner's live task, 2026-11-25: an X card stood reading "314 of 280 characters", its Post greyed. The card road refuses it to
+        the agent, who shortens it before he sees it - and a link counts as X counts it, so a post X takes is never refused for its address."""
+        said, err = tool(self.tid, 'propose', kind='post', network='x', text='z' * 300)
+        self.assertTrue(err); self.assertIn('280', said); self.assertIn('this one is 300', said); self.assertIn('shorten', said)
+        self.assertFalse(self.cards())
+        said, err = tool(self.tid, 'propose', kind='post', network='linkedin', text='w' * 3001)
+        self.assertTrue(err); self.assertIn('3000', said); self.assertFalse(self.cards())
+        # ...249 as X counts it, 314 letter by letter: the shape on his screen, which X would have taken
+        long_link = 'https://news.example/markets/' + 'a' * 90
+        words = f"{'Northwind priced its offer at $40. ' * 5}\n\n{long_link}\n\nDid you buy?"
+        self.assertGreater(len(words), 280)
+        said, err = tool(self.tid, 'propose', kind='post', network='x', text=words)
+        self.assertFalse(err, said); self.assertEqual(len(self.cards()), 1)
+        from taskuary import inboxes
+        with self.assertRaises(RuntimeError) as e: inboxes.run_x_post({'text': 'z' * 281, '_card': {}})
+        self.assertIn('this one is 281', str(e.exception))
+
+    def test_a_pictures_description_rides_on_its_card_and_a_field_its_network_has_not_is_left_off(self):
+        """The owner's live task, 2026-11-25: the LinkedIn card was refused for its picture's `alt` ("would run unseen under it"), so the agent
+        put the alt text in each card's why and wrote a drafts file beside the cards to hold it. A picture's description is the picture's, and
+        a `title` on an X post - no field of X's - is left off rather than refusing the post."""
+        said, err = tool(self.tid, 'propose', kind='act', action='run_tool', type='linkedin_post', text='Three tools, compared.',
+                         image='tools-compared.png', alt='Three bars, one per tool')
+        self.assertFalse(err, said)
+        said, err = tool(self.tid, 'propose', kind='post', network='x', title='Tools', text='Three tools, compared.', picture='tools-compared.png',
+                         alt='Three bars, one per tool')
+        self.assertFalse(err, said)
+        li, x = (json.loads(r['DraftText']) for r in self.cards())
+        self.assertEqual((li['alt'], x['alt']), ('Three bars, one per tool',) * 2); self.assertNotIn('title', x)
+
+    def test_a_question_to_him_holds_the_turn_no_card_is_raised_under_it_until_his_answer(self):
+        """The owner's live task, 2026-11-25: the agent asked whether he held a position to disclose, then raised three post cards under the
+        question in the same turn - and his answer greyed them all ("if it asks a question it has to wait there"). A card raised before the
+        question stays; one after it is refused with what to do, and nothing is drawn; once he has answered, the next turn raises it."""
+        from taskuary import selfclose, taskstate
+        said, err = tool(self.tid, 'propose', kind='post', network='x', text='Three tools, compared.'); self.assertFalse(err, said)
+        tool(self.tid, 'ask_owner', question='Do you hold a position to disclose?', choices=['None'])
+        said, err = tool(self.tid, 'propose', kind='post', network='reddit', subreddit='smallbusiness', title='Three tools', text='What we found.')
+        self.assertTrue(err); self.assertIn('your question to the owner stands', said); self.assertIn('wait for his answer', said)
+        self.assertEqual([json.loads(r['DraftText'])['type'] for r in self.cards()], ['x_post'])
+        # ...filed unanswered, it still stands on the task for the next turn
+        selfclose.take_marks(self.tid)
+        with mock.patch.object(taskstate, 'open_question', return_value={'text': 'Do you hold a position to disclose?'}):
+            self.assertTrue(tool(self.tid, 'propose', kind='post', network='reddit', subreddit='smallbusiness', title='Three tools', text='What we found.')[1])
+        # ...his answer: the turn it wakes raises the card
+        said, err = tool(self.tid, 'propose', kind='post', network='reddit', subreddit='smallbusiness', title='Three tools', text='What we found. None.')
+        self.assertFalse(err, said); self.assertEqual(len(self.cards()), 2)
+        # ...and a question taken back in its own turn holds nothing
+        tool(self.tid, 'ask_owner', question='Which subreddit?')
+        self.assertIn('Withdrawn', tool(self.tid, 'ask_owner', withdraw=True)[0])
+        self.assertFalse(tool(self.tid, 'propose', kind='post', network='linkedin', text='We compared three tools.')[1])
 
     def test_a_network_with_no_post_card_says_which_there_are(self):
         said, err = tool(self.tid, 'propose', kind='post', network='myspace', text='Hi')

@@ -539,6 +539,14 @@ def no_verdict_left_over():
 
 
 @pytest.fixture(autouse=True)
+def no_turn_marks_left_over():
+    """A turn's end_turn and ask_owner marks wait by task number for its answer to be filed (selfclose._MARKS): a test that asked and filed
+    nothing left its question standing on the next test's task 1, and that task's cards were held behind it."""
+    from taskuary import selfclose
+    selfclose._MARKS.clear(); yield
+
+
+@pytest.fixture(autouse=True)
 def no_adapter_priming(monkeypatch):
     "A server a test starts never launches the real ACP adapters to warm them (agents.prime_adapters)."
     from taskuary import agents

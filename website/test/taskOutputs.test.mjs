@@ -94,16 +94,17 @@ test("a file the server placed nowhere goes to the turn at work when it was writ
   const T = (h, m, s = 0) => new Date(2026, 10, 13, h, m, s) / 1000, at = (h, m) => `2026-11-13 ${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:00`;
   const turns = [{ id: "t:a:0", answer: "comment-4", started: T(9, 0), ended: T(9, 5) },
     { id: "t:b:0", started: T(10, 0), ended: T(10, 4) }, { id: "t:c:0", started: T(11, 0), ended: null }];
-  const listed = [{ path: "kept.xlsx", after: "comment-4", at: at(9, 2) },        // the server's own pick stands
-    { path: "during.csv", after: null, at: at(10, 2) },                            // ...written while the second turn worked
-    { path: "live.md", after: "comment-99", at: at(11, 3) },                       // ...an answer this list has not got: the turn at work now
-    { path: "dropped in.pdf", after: null, at: at(10, 30) },                       // ...between turns: nobody's
-    { path: "before.txt", after: null, at: at(8, 0) }];
-  assert.deepEqual(placeMade(listed, turns).map((r) => [r.path, r.after]),
+  const listed = [{ path: "kept.xlsx", by: "comment-4", at: at(9, 2) },        // the server's own pick stands
+    { path: "during.csv", by: null, at: at(10, 2) },                            // ...written while the second turn worked
+    { path: "live.md", by: "comment-99", at: at(11, 3) },                       // ...an answer this list has not got: the turn at work now
+    { path: "dropped in.pdf", by: null, at: at(10, 30) },                       // ...between turns: nobody's
+    { path: "before.txt", by: null, at: at(8, 0) }];
+  assert.deepEqual(placeMade(listed, turns).map((r) => [r.path, r.by]),
     [["kept.xlsx", "comment-4"], ["during.csv", "t:b:0"], ["live.md", "t:c:0"], ["dropped in.pdf", null], ["before.txt", null]]);
-  // ...and turnFiles draws each in that turn and nowhere else
-  const placed = placeMade(listed, turns);
-  assert.deepEqual(turnFiles({ listed: placed, id: "t:b:0", tid: 17 }).map((f) => f.path), ["during.csv"]);
+  // ...and turnFiles draws each where that turn names it, and nowhere else
+  const placed = placeMade(listed, turns), words = "The rows are in `during.csv`.";
+  assert.deepEqual(turnFiles({ listed: placed, id: "t:b:0", words, tid: 17 }).map((f) => f.path), ["during.csv"]);
+  assert.deepEqual(turnFiles({ listed: placed, id: "t:c:0", words, tid: 17 }), []);
   assert.deepEqual(placeMade(undefined, turns), []);
 });
 
@@ -140,23 +141,28 @@ test("v1..v9 list once with 8 earlier versions, and every other file it made is 
   assert.equal(new Set(["budget 2025.xlsx", "budget 2026.xlsx", "region 1.csv", "region 2.csv"].map(family)).size, 4);
 });
 
-// WHAT IT MADE IS IN THE TURN THAT MADE IT, WHATEVER ITS KIND (the owner, 2026-11-15: he asked for a query to review; the agent saved it as a
-// file and said only that it was ready - "The sql is hidden behind the 6 steps"; and of the first fix, which still folded a script away beside
-// a workbook: "this has nothing to do with sql, anything an agent creates should not be hidden of course")
-test("every file a turn made is drawn in the turn: a script, a helper beside its workbook, a log", async () => {
-  const out = (name, at = "2026-11-15 07:40:00") => ({ kind: "output", name, path: name, at, after: "comment-9", preview: "text" });
-  const two = [out("clear_columns_up.sql"), out("clear_columns_down.sql", "2026-11-15 07:40:05")];
-  assert.deepEqual(turnFiles({ listed: two, id: "comment-9", words: "The SQL is ready for you to review. I haven't run it.", tid: 17 }).map((f) => f.name), ["clear_columns_down.sql", "clear_columns_up.sql"]);
-  // ...the helper beside the workbook it built: after it, as it was written before it - never folded away
-  const mixed = [out("rates.xlsx"), out("build_rates.py", "2026-11-15 07:39:00"), out("run.log", "2026-11-15 07:38:00"), out("rows.csv", "2026-11-15 07:37:00")].map((r) => (r.name === "rows.csv" ? { ...r, path: "tmp/rows.csv" } : r));
-  assert.deepEqual(turnFiles({ listed: mixed, id: "comment-9", words: "The workbook is ready.", tid: 17 }).map((f) => f.path), ["rates.xlsx", "build_rates.py", "run.log", "tmp/rows.csv"]);
+// WHAT IT HANDS OVER IS THE TURN'S, WHAT IT WORKED WITH IS THE TASK'S FILES (the owner's live task, 2026-11-25: "it should work through what it needs
+// and action cards, not a bunch of artifacts"): two charts a script drew rode on two post cards, and stood again in the chat with a drafts file
+test("a turn draws what it handed over - three workbooks one artifact - never the charts and drafts it only worked with", async () => {
+  const out = (name, extra = {}) => ({ kind: "output", name, path: name, at: "2026-11-25 10:14:00", by: "comment-9", ...extra });
+  const three = ["east.xlsx", "west.xlsx", "north.xlsx"].map((n) => out(n, { after: "comment-9" }));
+  assert.deepEqual(turnFiles({ listed: three, id: "comment-9", words: "The three regions are ready.", tid: 17 }).map((f) => f.name).sort(), ["east.xlsx", "north.xlsx", "west.xlsx"]);
+  assert.deepEqual(turnFiles({ listed: three, id: "comment-3", tid: 17 }), []);
+  const { filesLabel } = await import("../src/taskOutputs.js");
+  assert.equal(filesLabel(turnFiles({ listed: three, id: "comment-9", tid: 17 })), "3 workbooks");          // ...TurnFiles' one group
+  // ...the TQ-1487 shape: two charts on two post cards, a drafts file and the script, none handed over - only the cards
+  const worked = [out("valuation.png"), out("proceeds.png"), out("drafts.md"), out("charts.py")];
+  const cards = carried([{ ReviewId: 1, post: { type: "x_post", image: "valuation.png" } }, { ReviewId: 2, post: { type: "reddit_post", image: "proceeds.png" } }]);
+  assert.deepEqual(turnFiles({ listed: worked, id: "comment-9", words: "Queued two post cards.", tid: 17, skip: cards }), []);
+  // ...and a picture on a card is the card's even where the turn handed it over
+  assert.deepEqual(turnFiles({ listed: worked.map((r) => ({ ...r, after: "comment-9" })), id: "comment-9", tid: 17, skip: cards }).map((f) => f.name).sort(), ["charts.py", "drafts.md"]);
   // ...and no list of extensions, folders or names is left to decide it, on the page or the server
   const fs = await import("node:fs"), read = (p) => fs.readFileSync(new URL(p, import.meta.url), "utf8");
   for (const src of [read("../src/taskOutputs.js"), read("../src/PublishedPages.jsx"), read("../../taskuary/outputs.py")]) assert.doesNotMatch(src, /WORK_EXT|SCRIPT_EXT|WORK_DIR|WORK_NAME|isWorking|is_working|working file/);
 });
 
 test("an older version of a file a turn made is that file's history, not one more file in the turn", () => {
-  const listed = [{ ...outputRow(17, "plan_v2.md"), after: "comment-3", at: "2026-11-13 10:02:00" }, { ...outputRow(17, "plan_v1.md"), after: "comment-3", at: "2026-11-13 10:01:00" }];
+  const listed = [{ ...outputRow(17, "plan_v2.md"), by: "comment-3", at: "2026-11-13 10:02:00" }, { ...outputRow(17, "plan_v1.md"), by: "comment-3", at: "2026-11-13 10:01:00" }];
   const made = turnFiles({ listed, id: "comment-3", words: `Done: ${HOME}/TQ-0017/plan_v2.md`, tid: 17 });
   assert.deepEqual(made.map((r) => [r.path, r.earlier.map((e) => e.path)]), [["plan_v2.md", ["plan_v1.md"]]]);
 });
@@ -189,8 +195,8 @@ test("the task's folder and its files named bare become code spans the chat open
 });
 
 test("each turn shows the file as it made it; the newest turn the file itself (the owner, 2026-11-07: same file with revisions)", () => {
-  const now = { id: "output:tools.md", path: "tools.md", name: "tools.md", kind: "output", url: "/api/task-outputs/8/tools.md", after: "comment-9" };
-  const then = { ...now, id: "output:tools.md@3", url: "/api/task-outputs/8/tools.md?turn=3", turn: "comment-3", after: "comment-3" };
+  const now = { id: "output:tools.md", path: "tools.md", name: "tools.md", kind: "output", url: "/api/task-outputs/8/tools.md", by: "comment-9" };
+  const then = { ...now, id: "output:tools.md@3", url: "/api/task-outputs/8/tools.md?turn=3", turn: "comment-3", by: "comment-3" };
   const listed = [now], versions = [then];
   assert.deepEqual(forTurn(listed, versions, "comment-3"), [then]);              // turn 1 reads the copy it left
   assert.deepEqual(forTurn(listed, versions, "comment-9"), [now]);               // ...the newest turn the file as it is now
@@ -255,18 +261,18 @@ test("every card and file of a turn stands in the one frame, which reads the one
 
 // A FILE ANOTHER TURN MADE IS NOT DRAWN AGAIN (the walk, 2026-11-18): the agent's posts file stood whole under three answers that only spoke of it
 test("a file a turn only names, made by another turn, stays under the turn that made it", () => {
-  const posts = { id: "output:posts.txt", path: "posts.txt", name: "posts.txt", kind: "output", url: "/api/task-outputs/8/posts.txt", after: "comment-3" };
+  const posts = { id: "output:posts.txt", path: "posts.txt", name: "posts.txt", kind: "output", url: "/api/task-outputs/8/posts.txt", by: "comment-3" };
   const words = `The three drafts are in ${HOME}/TQ-0008/posts.txt.`;
   assert.deepEqual(turnFiles({ listed: [posts], id: "comment-3", words, tid: 8 }).map((f) => f.path), ["posts.txt"]);
   assert.deepEqual(turnFiles({ listed: [posts], id: "comment-9", words, tid: 8 }), []);
   // ...and one the listing does not place is still drawn where an answer names it
-  assert.deepEqual(turnFiles({ listed: [{ ...posts, after: null }], id: "comment-9", words, tid: 8 }).map((f) => f.path), ["posts.txt"]);
+  assert.deepEqual(turnFiles({ listed: [{ ...posts, by: null }], id: "comment-9", words, tid: 8 }).map((f) => f.path), ["posts.txt"]);
 });
 
 // ONE THING, ONE PLACE (the owner, 2026-11-23, of a post card whose picture also stood above it as a file: "don't need both"; "images that
 // are connected to text don't make it 2 artifacts but one"): what a card carries is drawn in the card, never again as a file of a turn
 test("a file a card carries is the card's alone: a post's picture, an email's attachment; a file the words only name stays a file", () => {
-  const listed = ["hill.png", "rates.xlsx", "notes.md"].map((n) => ({ path: n, name: n, after: "t1" }));
+  const listed = ["hill.png", "rates.xlsx", "notes.md"].map((n) => ({ path: n, name: n, by: "t1" }));
   const post = { ReviewId: 4, post: { type: "linkedin_post", text: "A walk up the hill", image: "hill.png" } };
   const email = { ReviewId: 5, Deliver: JSON.stringify({ to: ["erin@northwind.example"], attachments: [{ name: "rates.xlsx", path: `${HOME}/TQ-0008/rates.xlsx` }] }) };
   const made = (skip) => turnFiles({ listed, id: "t1", words: "Made hill.png, rates.xlsx and notes.md.", tid: 8, skip }).map((f) => f.name);

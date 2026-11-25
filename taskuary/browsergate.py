@@ -287,6 +287,35 @@ def refused(cmd: str) -> str:
     return next((f'{d} is not opened: {why}' for d in dests(cmd) if (why := barred(d))), '')
 
 
+# A CONNECTED SERVICE'S SITE IS NOT THE AGENT'S ROAD TO IT (the owner, 2026-11-25: "we are trying to post to twitter but the browser is asking
+# about linkedin" - its LinkedIn card connected, the agent opened linkedin.com/feed, landed on LinkedIn's sign-in, and that page was handed to
+# him beside the post cards). One rule for every card that names its site (connectorcatalog `hosts`) and declares an act: while its
+# connection can act (outbound.connect_fix - the answer its card's button is drawn from) the page is not opened, and the answer is that fact
+def _carded(url) -> dict | None:
+    from . import connectorcatalog as cat
+    u = str(url or '').strip()
+    c = cat.site_card(_site(u if '://' in u else 'http://' + u))
+    return c if c and c.get('actions') else None
+def card_site(store, url) -> str:
+    "'' unless `url` is on the site of a service whose card is connected - then that fact, as the agent is told it."
+    from . import outbound
+    if not (c := _carded(url)) or outbound.connect_fix(store, c['type']): return ''
+    press = ', '.join(a['press'] for a in c['actions'] if a.get('press'))
+    return f"{c.get('title') or c['type']} is connected: its card does it ({press}) through the connection at the owner's press - its site is not opened in the browser"
+# ...AND WHERE IT IS NOT CONNECTED, THE CARD COMES FIRST AND ITS SIGN-IN AT HIS PRESS (the owner, 2026-11-22: "card first, sign-in at the press";
+# the real runs of 2026-11-25: asked for posts with X not set up, Codex and Claude each opened x.com and handed him "Sign in to X" with no
+# card raised at all). A page of such a service is his step only once his press on its card handed the act to the agent (cardqueue.handed)
+def card_first(store, tid, url) -> str:
+    "'' unless `url` is on the site of a service with a card, not connected, and no press of his on task `tid` handed its act over - then that fact."
+    from . import cardqueue, outbound
+    if not (c := _carded(url)) or not outbound.connect_fix(store, c['type']): return ''
+    tools = {a.get('tool') for a in c['actions']}
+    if any(cardqueue.handed(r) and cardqueue._p(r).get('type') in tools
+           for r in store._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action' AND Status IN ('approved','edited')", (int(tid),))): return ''
+    return (f"{c.get('title') or c['type']} is not connected: what goes there is raised as its card first, and the owner's press on that card "
+            "(Post via the browser) hands it to you for the site - its sign-in is his step then, not before")
+
+
 def devtools(cmd: str) -> str:
     """Why a shell line is refused for going around the browser's gate ('' when it does not): a browser's DevTools port by number (the port
     itself is never in the agent's shell - browserview.env), or the real agent-browser run some other way than the one on the session's PATH."""
@@ -813,6 +842,7 @@ def _check(store, tid: int, sid: str, cmd: str, brain=None, cwd: str = '') -> di
         return _deny(f"{NOT_RUN}: that would close the owner's tab - your step on {his} waits on him there. Leave it open and go on in another tab; "
                      "you are told when he is done.")
     if (no := refused(cmd)): return _deny(f'{NOT_RUN}: {no}.')
+    if (fact := next((w for d in dests(cmd) if (w := card_site(store, d))), '')): return _deny(f'{NOT_RUN}: {fact}.')
     seen = VISITED.setdefault(str(sid), set()) | {_site((_PAGES.get(str(sid)) or {}).get('url'))}
     todo = acts(cmd, seen)
     if not todo or all(typing(a) for a in todo): VISITED[str(sid)].update(_site(d) for d in dests(cmd)); return {}

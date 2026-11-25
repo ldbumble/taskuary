@@ -29,6 +29,15 @@ test("the card's fields map from the declaration: values from the proposal, else
   assert.equal(textKey(act), "text");
 });
 
+// THE CARD COUNTS AS ITS NETWORK DOES (the owner's live task, 2026-11-25: an X post X would take read "314 of 280 characters", its Post greyed)
+test("a post's words count against its network's limit as that network counts them: a link on X is 23", async () => {
+  const { lengthOf } = await import("../src/actionCard.js");
+  const box = (t) => actionFor(t).fields.find((f) => f.key === "text"), link = `https://news.example/${"a".repeat(90)}`;
+  assert.equal(lengthOf(box("x_post"), `Did you buy? ${link}`), 13 + 23);
+  assert.equal(lengthOf(box("linkedin_post"), `Did you buy? ${link}`), 13 + link.length);   // ...where the network counts every letter
+  assert.ok(lengthOf(box("x_post"), `${"w".repeat(240)} ${link}`) <= box("x_post").max);
+});
+
 test("the press's words follow the pick: Post to LinkedIn, or Save as draft", () => {
   const act = actionFor("linkedin_post");
   assert.deepEqual(wordsOf(act, valuesOf(act, POST)), { press: "Post to LinkedIn", busy: "Posting…", done: "Posted", undone: "Not posted" });
@@ -54,15 +63,17 @@ test("waiting is live only on the newest turn; done keeps its words and link; an
   assert.equal(stateOf(row("rejected"), true).said, "Not posted · dismissed");
 });
 
-// WHAT A TURN MADE, IN THE TURN: placed by `after` or named in its words, each thing once, whatever its kind - less the post's own picture
-test("a turn's files: placed or named, newest of a family, the helper script too, the post's picture skipped", () => {
-  const row = (path, after, at) => ({ id: `output:${path}`, name: path, path, kind: "output", after, at, content_type: path.endsWith(".png") ? "image/png" : "text/csv" });
+// WHAT A TURN HANDS OVER, IN THE TURN: named in its words, each thing once, whatever its kind - less the post's own picture; one it only made
+// stays in the task's files (the owner's live task, 2026-11-25: "not a bunch of artifacts")
+test("a turn's files: the ones it names, newest of a family, the helper script too, the post's picture skipped", () => {
+  const row = (path, by, at) => ({ id: `output:${path}`, name: path, path, kind: "output", by, at, content_type: path.endsWith(".png") ? "image/png" : "text/csv" });
   const listed = [row("chart.png", "m2", "2026-11-05 10:02:00"), row("prices v2.csv", "m2", "2026-11-05 10:03:00"), row("prices v1.csv", "m2", "2026-11-05 10:01:00"),
     row("fetch.py", "m2", "2026-11-05 10:00:00"), row("gas.png", "m2", "2026-11-05 10:04:00"), row("older.csv", "m1", "2026-11-05 09:00:00")];
-  const got = turnFiles({ listed, id: "m2", tid: 5, skip: ["gas.png"] }).map((f) => f.path).sort();
-  assert.deepEqual(got, ["chart.png", "fetch.py", "prices v2.csv"]);
+  assert.deepEqual(turnFiles({ listed, id: "m2", tid: 5, skip: ["gas.png"] }), []);                 // ...made, never named: none
+  const words = "Done: chart.png, prices v2.csv, fetch.py and gas.png.";
+  assert.deepEqual(turnFiles({ listed, id: "m2", tid: 5, words, skip: ["gas.png"] }).map((f) => f.path).sort(), ["chart.png", "fetch.py", "prices v2.csv"]);
   // ...and a file another turn made is drawn there, never again under an answer that only names it (the walk, 2026-11-18)
-  assert.deepEqual(turnFiles({ listed, id: "m1", tid: 5, words: "See `/x/scratch/outputs/TQ-0005/chart.png`" }).map((f) => f.path).sort(), ["older.csv"]);
+  assert.deepEqual(turnFiles({ listed, id: "m1", tid: 5, words: "See `/x/scratch/outputs/TQ-0005/chart.png`" }), []);
 });
 
 

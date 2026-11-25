@@ -1157,8 +1157,9 @@ def approved(store, tid: int, press: str, what: str, actor: str = 'owner', revie
     from . import card, workerstate as ws
     rv = store.get_review(int(review)) if review else None
     said = bool(rv) and rv.get('Kind') != 'action'
-    # ...and his Send IS the answer to what its agent asked about that card (the owner's ruling, card.asked_about)
-    if said and (qs := card.asked_about(store, rv['ReviewId'])): ws.let_go(store, tid, 'answered by his Send', only=qs)
+    # ...and his press IS the answer to what its agent asked about that card (the owner's ruling, card.asked_about) - a post's and an act's
+    # as a letter's: "should the post go out as drafted?" stood on the task after the post went
+    if rv and (qs := card.asked_about(store, rv['ReviewId'])): ws.let_go(store, tid, 'answered by his press on its card', only=qs)
     if not card.carries_on(rv) and (said or not at_work(int(tid))): return ''
     # ...WHAT WENT IS ITS CARD'S EVENT (events.card, written as the store wrote the card): this only wakes the agent to hear it
     mark = review and (lambda how: store.audit('review', int(review), TOLD, actor, 'system', {'task': int(tid), 'how': how}))
@@ -3508,15 +3509,10 @@ class GeneralSession:
         # shows only for an open sign-in ask, so nothing showed): a turn that ends with its browser on a page asking for a password raises the
         # ask itself - the vault's sign-in first, else the page beside the chat
         from .browserview import handing
-        if signing is None and turn is None and not asks and not handing(self.store, self.task_id):
-            from . import signin
+        if signing is None and turn is None and not asks:
+            from .browserview import left_on_signin
             try:
-                # ...but never over a step of its own held on that tab: that card is his one move there (the HIPAA walk, 2026-11-22: "Sign in to
-                # 127.0.0.10 to continue" stood under the held sign-up's Approve, the sign-up form's password box read as a sign-in)
-                # ...on any of its tabs (the Codex walk, 2026-11-22: the held sign-up on one tab, its turn ending on a sign-in page it opened in another)
-                from .browsergate import held
-                if (signin.on_signin_page(self.sid) and not signin.set_aside(self.store, self.task_id, self.sid)
-                        and not held(self.store, self.task_id, self.sid)): signing = ''
+                if left_on_signin(self.store, self.task_id, self.sid): signing = ''
             except Exception as e: logger.debug(f'task {self.task_id}: the browser could not be read for a sign-in - {e}')
         # ...a marker a session still writes (the road before hand_over) goes the one road hand_over takes
         if signing is not None or turn is not None:

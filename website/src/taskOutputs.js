@@ -162,14 +162,16 @@ export function shownOnce(cited, shown) {
 }
 
 // A FILE IS IN THE TURN THAT MADE IT, OR NOT IN THE CHAT (the owner, 2026-11-13: nothing is pinned at the chat's foot): one the server named no
-// turn of this list for (`after`) goes to the turn at work when it was written - begun by then, not ended more than a second before - as the
-// work card goes to its turn (landing.landingTurn). One no turn was at work for keeps `after` null: no turn draws it, and it stays in the
+// turn of this list for (`by`) goes to the turn at work when it was written - begun by then, not ended more than a second before - as the
+// work card goes to its turn (landing.landingTurn). One no turn was at work for keeps `by` null: no turn owns it, and it stays in the
 // task's files (Email someone, the task's folder), never a row under the conversation
 const secs = (s) => (typeof s === "number" ? s : +new Date(String(s || "").replace(" ", "T")) / 1000);
 export const placeMade = (listed, turns) => {
   const ts = (turns || []).map((t) => ({ key: t.answer || t.id, from: t.started ?? secs(t.at), to: t.ended })), keys = new Set(ts.map((t) => t.key));
   const madeIn = (at) => { const s = secs(at); return Number.isFinite(s) ? ts.filter((t) => t.from <= s + 1 && (t.to == null || t.to + 1 >= s)).at(-1)?.key ?? null : null; };
-  return (listed || []).map((r) => (keys.has(r.after) ? r : { ...r, after: madeIn(r.at || r.created_at) }));
+  // ...and one handed over (`after`, outputs.hand) is in the turn its maker is, placed the same way
+  const place = (r, k) => (keys.has(r[k]) ? {} : { [k]: madeIn(r.at || r.created_at) });
+  return (listed || []).map((r) => ({ ...r, ...place(r, "by"), ...(r.handed ? place(r, "after") : {}) }));
 };
 
 // ONE OF EACH THING IT MADE (the owner, 2026-10-28: "it looks like it created a million attachments. Agents should not create lists of
@@ -203,17 +205,25 @@ export const forTurn = (listed, versions, id) => {
   return [...out, ...[...mine.values()].filter((v) => !out.includes(v))];
 };
 
-// WHAT A TURN MADE, IN THE TURN (the owner, 2026-11-05: "the post and images are as artifacts separate not inline???"): the files placed on this
-// answer by when they were made (the server's `after`, as a shown page's) and the ones its words or its summary name - each thing once, the
-// newest of a family, whatever its kind - less `skip` (what a card carries: `carried`). A FILE ANOTHER TURN MADE IS DRAWN THERE, never
-// again under every answer that names it (the walk, 2026-11-18: the posts file stood whole under three turns that only spoke of it)
+// WHAT A TURN HANDS OVER, IN THE TURN (the owner, 2026-11-05: "the post and images are as artifacts separate not inline???"): the files its words
+// or its summary name - each thing once, the newest of a family, whatever its kind - less `skip` (what a card carries: `carried`). A FILE IT ONLY
+// MADE IS NOT DRAWN (the owner's live task, 2026-11-25: "it should work through what it needs and action cards, not a bunch of artifacts"): a
+// script's charts and a drafts file stood beside the cards that carried them - what it made is in the task's files; what it handed over with
+// `show` (`after`, outputs.hand) is drawn here, several as one artifact. A FILE ANOTHER TURN MADE IS DRAWN THERE, never under every answer that
+// names it (the walk, 2026-11-18): `by`
 export const turnFiles = ({ listed = [], id, words = "", did = "", tid, skip = [] } = {}) => {
   const no = new Set([...(skip || [])].map(baseName)), by = new Map();
-  for (const r of (listed || []).filter((x) => x?.after != null && x.after === id)) by.set(r.path, r);
-  for (const rel of outputRefs(`${words || ""}\n${did || ""}`, tid, listed).files) {
+  for (const r of (listed || []).filter((x) => x?.after != null && x.after === id)) by.set(r.path, r);      // ...what it handed over (show)
+  // ...named by its path, or by its name alone in a code span (`tools.md`) - in the listing's order
+  const said = `${words || ""}\n${did || ""}`, refs = outputRefs(said, tid, listed).files;
+  const named = new Set([...refs, ...(listed || []).filter((r) => r?.path && said.includes(`\`${baseName(r.path)}\``)).map((r) => r.path)]);
+  for (const rel of [...(listed || []).map((r) => r?.path).filter((p) => named.has(p)), ...refs]) {
     const r = by.has(rel) ? null : outputRow(tid, rel, listed);
-    if (r && (r.after == null || r.after === id)) by.set(rel, r);
+    if (r && (r.by == null || r.by === id)) by.set(rel, r);
   }
+  // ...a named file's earlier versions this turn made ride on it, as its history
+  const fams = new Set([...by.values()].map((r) => family(r.name || r.path)));
+  for (const r of listed || []) if (r?.by === id && fams.has(family(r.name || r.path)) && !by.has(r.path)) by.set(r.path, r);
   return deliverables([...by.values()].filter((r) => !no.has(baseName(r.path || r.name)) && !r.missing)).made;
 };
 

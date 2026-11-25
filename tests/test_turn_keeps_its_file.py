@@ -42,7 +42,7 @@ class TurnKeepsItsFile(unittest.TestCase):
         got = self.payload()
         then = [v for v in got['turnOutputs'] if v['path'] == 'tools.md']
         self.assertEqual([v['turn'] for v in then], [f'comment-{one}'])           # turn 1 has its own...
-        self.assertEqual([o['after'] for o in got['outputs'] if o['path'] == 'tools.md'], [f'comment-{two}'])   # ...the newest turn the file
+        self.assertEqual([o['by'] for o in got['outputs'] if o['path'] == 'tools.md'], [f'comment-{two}'])   # ...the newest turn the file
         with mock.patch.object(server, 'store', self.s):
             c = TestClient(server.app)
             self.assertEqual(c.get(then[0]['url']).text, '| Spendly | Payworth | Trainly |')    # turn 1's copy, as it left it

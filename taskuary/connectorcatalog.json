@@ -4239,6 +4239,7 @@
     },
     {
       "type": "linkedin",
+      "hosts": ["linkedin.com"],
       "title": "LinkedIn",
       "group": "Social",
       "planned": false,
@@ -4320,6 +4321,7 @@
     },
     {
       "type": "bluesky",
+      "hosts": ["bsky.app"],
       "title": "Bluesky",
       "group": "Social",
       "planned": false,
@@ -4381,7 +4383,8 @@
               "type": "text",
               "edit": true,
               "agent": true,
-              "max": 500
+              "max": 500,
+              "link_counts": 23
             },
             {
               "key": "spoiler",
@@ -4441,6 +4444,7 @@
     },
     {
       "type": "reddit",
+      "hosts": ["reddit.com"],
       "title": "Reddit",
       "group": "Social",
       "planned": false,
@@ -4587,6 +4591,7 @@
     },
     {
       "type": "x",
+      "hosts": ["x.com", "twitter.com"],
       "title": "X (Twitter)",
       "group": "Social",
       "planned": false,
@@ -4613,7 +4618,8 @@
               "type": "text",
               "edit": true,
               "agent": true,
-              "max": 280
+              "max": 280,
+              "link_counts": 23
             },
             {
               "key": "image",

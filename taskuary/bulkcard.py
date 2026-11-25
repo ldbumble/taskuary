@@ -12,9 +12,6 @@ import json, threading, time, uuid
 from loguru import logger
 
 KEY = 'batch:'                 # setting: batch:<key> -> the run's state
-# HOW MANY IS MANY (design round 5, I4; the owner: "I have 2 emails to send, should we send this one?" - one card at a time for a few, the bulk
-# card for many): fewer than this raised in one call stand one at a time in the line of cards (agenttools._many)
-MANY = 5
 YES = 'approve'
 LEFT = 'left out by you'      # a row he unticked: closed, never done
 _CLAIM = threading.Lock()      # a press claims the card's run (run)

@@ -1,0 +1,4 @@
+# The owner's lock on the basic interactions: sha256 of each contract file and of CLAUDE.md's locked section.
+# contract tests are the owner's: change only with his written OK (tests/test_contract_lock.py).
+7a99cc48bfcf505eb5449096b7e2ea7bd31466e72917d9614b23eddbd43b2675  tests/contract/test_agent_job_contract.py
+7ef210255d4eba6cf286229f04a8fd46f65eb88af152fdbf008dfab4cee0e074  CLAUDE.md#The basic interactions (locked)

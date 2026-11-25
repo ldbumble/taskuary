@@ -117,7 +117,7 @@ test("the chat lets go of its end only for the owner's own scroll up, never for 
   let moved = 0; const chat = { hasAttribute: (n) => n === "data-tq-follows-end", getBoundingClientRect: () => ({ top: 0, left: 0, width: 400, height: 300, bottom: 300 }), scrollTo: () => { moved += 1; }, scrollTop: 72 };
   unclip(chat, { getBoundingClientRect: () => ({ top: 200, bottom: 230 }) });
   assert.equal(moved, 0, "a scroller that follows its own end is never unclipped");
-  assert.match(view, /const ro = new ResizeObserver\(\(\) => \{[\s\S]{0,700}?\s+if \(stick\.current\) v\.scrollTop = v\.scrollHeight;/, "and any resize while held pins it");
+  assert.match(view, /const ro = new ResizeObserver\(\(\) => \{[\s\S]{0,700}?\s+if \(stick\.current\) v\.scrollTop = endAt\(v, el\);/, "and any resize while held pins it");
   assert.doesNotMatch(view, /stick\.current = v\.scrollHeight - v\.scrollTop - v\.clientHeight < 56/, "where it stands alone no longer decides");
 });
 
@@ -340,6 +340,28 @@ test("a change of width keeps the row he was reading where it stood", async () =
   assert.equal(at(), was, "held, it stands where it stood");
   const gw = fs.readFileSync(new URL("../src/GeneralWorkspace.jsx", import.meta.url), "utf8");
   assert.match(gw, /else \{ const d = anchorShift\(v, mark\); if \(Math\.abs\(d\) > 1\) v\.scrollTop \+= d; \}/);
+});
+
+// The card gallery, 2026-11-25: a view taller than the window was drawn a beat after its chat opened; held at its end, the chat went to the view's
+// foot and its title was off the top. What is drawn under a reply at rest never carries that reply's top out of the view
+test("held at its end, a chat at rest follows what is drawn under it no further than the top of its newest reply", async () => {
+  const { endAt } = await import("../src/chatStream.js");
+  const chat = (hs, live = false) => {
+    const view = { scrollTop: 0, clientHeight: 400, scrollHeight: hs.reduce((a, b) => a + b, 0), getBoundingClientRect: () => ({ top: 60 }) };
+    const tops = hs.map((_, i) => hs.slice(0, i).reduce((a, b) => a + b, 0));
+    const rows = hs.map((_, i) => ({ parentElement: { closest: () => null }, hasAttribute: () => false, getBoundingClientRect: () => ({ top: 60 + tops[i] - view.scrollTop }) }));
+    return { view, root: { querySelectorAll: () => rows, querySelector: () => (live ? {} : null) }, tops };
+  };
+  const view = chat([14, 900]);                                 // the reply's head at 14, its view drawn late: 900 tall in a 400 window
+  assert.equal(endAt(view.view, view.root), 14, "the reply's top stays at the top of the view - never its foot");
+  view.view.scrollTop = 300;                                    // ...he read on past its top: the end is followed, as it was
+  assert.equal(endAt(view.view, view.root), 514);
+  const working = chat([14, 900], true);
+  assert.equal(endAt(working.view, working.root), 514, "a turn at work is followed to its last word");
+  const short = chat([600, 300, 80]);
+  assert.equal(endAt(short.view, short.root), short.view.scrollHeight - 400, "a short reply's top is past the end: the end");
+  const gw = fs.readFileSync(new URL("../src/GeneralWorkspace.jsx", import.meta.url), "utf8");
+  assert.doesNotMatch(gw, /v\.scrollTop = v\.scrollHeight/, "every pin to the end goes by the one rule");
 });
 
 // A CHAT OPENS AT THE START OF ITS NEWEST REPLY (the owner, 2026-11-24): opened at its very bottom, a long answer was read from its last lines up

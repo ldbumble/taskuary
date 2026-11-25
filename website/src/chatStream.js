@@ -273,6 +273,16 @@ export const openAt = (view, root) => {
   const top = rows[i].getBoundingClientRect().top - view.getBoundingClientRect().top + view.scrollTop;
   return Math.max(0, Math.min(end, Math.round(top)));
 };
+/* ...AND HELD AT ITS END IT FOLLOWS WHAT IS DRAWN UNDER IT NO FURTHER THAN THAT (the card gallery, 2026-11-25: a view taller than the window was
+   drawn a beat after its chat opened, and the chat, held at its end, went down to the view's foot - its title and the reply's head off the top).
+   A turn at work is followed to its last word, as it was; in a chat at rest the top of the newest reply never leaves the view by the chat's own
+   doing - once he has read past it, the end is followed as before. -> the scrollTop to stand at */
+export const endAt = (view, root) => {
+  const end = Math.max(0, view.scrollHeight - view.clientHeight);
+  if (root?.querySelector?.('[data-tq-turn="working"], [data-tq-turn="starting"]')) return end;
+  const top = openAt(view, root);
+  return view.scrollTop > top + 1 ? end : top;
+};
 
 // THE CHAT'S OWN LIST ON THE PAGE (GeneralWorkspace): what is drawn is the server's list (conversation.items), with two things of the page's -
 // THE LIST ASKED LAST: the one this view last read, or one read ahead with its task as he came back to it (taskDetail.prefetchTask) - an older

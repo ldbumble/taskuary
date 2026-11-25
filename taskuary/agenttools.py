@@ -137,17 +137,17 @@ TOOLS = {
     # one question only the owner can answer, and the company's playbooks - each said by its own description, never in every prompt
     'end_turn': ('own', "Call once as your turn ends: where the task stands, shown on its page. name: the task in 3-6 words. about: 2-3 "
                         "sentences - which conversation, who asked, for whom. did: the result first (path, link, figure), then what you did. "
-                        "on_you: steps only the owner can take that no card or question carries, each with why. nothing_left: the goal is met "
-                        "and checked. answer_is_result: your words are what was asked. after_press: send (a step of yours follows his press - "
-                        "it wakes you) or handoff. retry: another try may work. corrections: when he corrects you, [{kind: "
-                        "redraft|ask, review: draft id|null, said: his words}]. check_back: {when, what}.",
+                        "on_you: steps only the owner can take that no card or question carries, each with why. nothing_left: goal met and "
+                        "checked. answer_is_result: your words are what was asked. after_press: send (his press wakes you for your next step) "
+                        "or handoff. retry: another try may work. corrections: [{kind: "
+                        "redraft|ask, review: draft id|null, said: his words}].",
                  _S({'name': _STR, 'about': _STR, 'did': _STR, 'on_you': {'type': 'array', 'items': _STR}, 'nothing_left': {'type': 'boolean'},
                      'answer_is_result': {'type': 'boolean'}, 'after_press': {'type': 'string', 'enum': ['send', 'handoff']},
                      'retry': {'type': 'boolean'}, 'corrections': {'type': 'array', 'items': {'type': 'object'}},
                      'check_back': {'type': 'object', 'properties': {'when': _STR, 'what': _STR}}}, ('did',)), ('GET', '/api/tasks/1')),
-    'ask_owner': ('own', "Ask the owner the one thing only they can give - a fact or a decision - with your recommended answer. It stands "
-                         "on the task until they answer, the task closes or you withdraw it, and the answer comes to you. choices: short answers, "
-                         "when it is a pick. withdraw: true takes back your question still standing - it no longer needs their answer.",
+    'ask_owner': ('own', "Ask the owner the one fact or decision only they can give, with your recommended answer. It stands "
+                         "until answered, closed or withdrawn; the answer comes to you. choices: short answers for a pick. "
+                         "withdraw: true takes your standing question back.",
                   _S({'question': _STR, 'choices': {'type': 'array', 'items': _STR}, 'withdraw': {'type': 'boolean'}}), ('GET', '/api/tasks/1')),
     'playbooks': ('read', "How this company does each kind of job, written by the owner: with no `name`, the list of playbooks and when each "
                           "applies; with a `name`, that playbook whole. Read-only.",
@@ -342,7 +342,7 @@ SHORT = {
     'read_attachment': 'The text of one attachment on a saved message, by its id.',
     'my_task': "This task's brief and to-dos with their ids.",
     'search_tasks': "Search the owner's tasks, mail, chats and pull requests, and what earlier tasks settled.",
-    'person': "Who a name or address is: their record, open and closed tasks and where each stands, latest messages.",
+    'person': "Who a name or address is: their record, their tasks and where each stands, latest messages.",
     'past_figures': "What the mail and record already hold in figures for a vendor or person: charges, prices, seat counts.",
     'search_knowledge': "Search the owner's knowledge base (indexed folders, SharePoint).",
     'owner_memory': "Look up the owner's memory: what they said, their people, what they confirmed.",
@@ -352,9 +352,9 @@ SHORT = {
     'guide': "Read one of Taskuary's how-tos (browser, number, propose ...).",
     'run_system': "Run one tool on one of the owner's systems: {type, connector_id, ...its fields}.",
     'web_search': "Search the web through this task's AI card.",
-    'show': 'Draws bar, line and pie charts, tables, number tiles and checklists inline in this chat, with sliders, toggles, selects and '
-            'dates that recompute them live and choices whose pick comes back to you - or shows files you made.',
-    'draw_image': "Draw a picture from a prompt with the owner's image model; it lands in this task and shows in this chat.",
+    'show': 'Draws bar, line and pie charts, tables, number tiles and checklists in this chat, with sliders, toggles, selects and '
+            'dates recomputing them live, and choices whose pick comes back to you - or shows files you made.',
+    'draw_image': "Draw a picture from a prompt into this task and this chat.",
     'tick': "Tick or untick a to-do: `item` is its id.",
     'todos': "Add, reword or merge this task's to-dos.",
     # end_turn and ask_owner are listed with their whole words: the fields ARE how they are used
@@ -376,9 +376,9 @@ SHORT = {
     'answer_invite': "Answer this task's meeting invite: accept, decline or propose.",
     'set_up_meeting': "Set up a meeting for the owner's press.",
     'share': "Share a report or dashboard of the owner's with a person.",
-    'propose': "Anything that needs the owner's review and press - a reply, an email, a post, a GitHub/Jira/Monday comment or issue, a PR or push, "
-               "an order on a system, a script you wrote kept by save_routine: one card in this chat, its words editable, nothing done before his press. `kind`: reply, email, post "
-               "or act (`action`); several at once in `items`.",
+    'propose': "Anything for the owner's review and press - a reply, an email, a post, GitHub/Jira/Monday comment or issue, PR or push, "
+               "an order on a system, a script kept by save_routine: one card in this chat, its words editable, nothing done before his press. `kind` "
+               "(an act names its `action`); several at once in `items`.",
     'find_tools': "A tool's instructions by name, or more tools by need.",
 }
 def lean(s):

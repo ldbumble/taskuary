@@ -1184,11 +1184,16 @@ BUTTON_OF = {'not_ours_sender': 'not_ours', 'not_ours_remember': 'not_ours', 'bl
 OP_BUTTON = {'message.file': 'not_ours', 'message.archive': 'not_ours', 'preference.exclude_sender': 'not_ours',
              'preference.sender_rule': 'not_ours'}
 BUTTONED = frozenset({'not_ours', 'mine', 'regular_agent'})
+# HIS WORDS DO WHAT NO BUTTON SHOWS (the owner, 2026-11-25): an FYI draws one move, Send to agent, but "not ours", "make this a task" or
+# "block this sender" typed over a mail with no task behind it is still the ask - a put-down pressed, anything else its card for his
+# press, whatever the row draws. A task's row is the task page's, whose moves are its own (row_buttons)
+WORDS_DO = frozenset({'not_ours', 'mine'})
+def words_do(verb: str, it: dict | None) -> bool: return BUTTON_OF.get(verb, verb) in WORDS_DO and bool((it or {}).get('mid')) and not (it or {}).get('tid')
 
 def is_button(store, item: dict | None, verb: str) -> bool:
-    """Whether the owner has a button on this item for what `verb` does."""
+    """Whether the owner has a button on this item for what `verb` does - or his words do it all the same (WORDS_DO)."""
     b = BUTTON_OF.get(verb, verb)
-    if not item or b not in BUTTONED: return True
+    if not item or b not in BUTTONED or words_do(verb, item): return True
     if b in {c['verb'] for c in chips_for(store, item)}: return True
     return b == 'regular_agent' and bool(item.get('tid')) and not _agent_holds(store, item)
 
@@ -1426,7 +1431,11 @@ def _start_agent(store, tid: int, table: dict | None, it: dict, verb: str, words
 
 
 def _put_down(store, tid: int, table: dict | None, it: dict, b: str, note: str = '', actor: str = 'owner') -> dict:
-    label, kind = _label_on(store, it, b), PUT_DOWN[b]
+    try: label = _label_on(store, it, b)
+    except CallMiss:                                                    # ...his words press it where the row draws none (WORDS_DO)
+        if not words_do(b, it): raise
+        label = buttons.label(b)
+    kind = PUT_DOWN[b]
     target = it.get('mid') if kind == 'message.file' else it.get('tid')
     if not target: return _lit(store, tid, table, it, b)                # nothing behind the row to run it on: its button, lit
     note = note.strip()[:2000] if b == 'close_note' else ''
@@ -3891,7 +3900,11 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
     if not routes() and kind in AS_SENT and target: params = as_sent(params, kind)
     if tk == 'task' and (wrote := _landed(store, tid, kind, int(target or 0), params,
                                           lambda: _task_writes(store, tid, kind, int(target or 0), params, named, actor, said=text))) is not None: return wrote
-    if routes(): return _route(store, tid, kind, int(target or 0), params, named, it, item, text, actor)
+    if routes():
+        try: return _route(store, tid, kind, int(target or 0), params, named, it, item, text, actor)
+        except CallMiss:                    # ...no button for it on the row, and his words ask for it all the same: its card (WORDS_DO)
+            on, b = _row_button(store, kind, int(target or 0), params, item)
+            if not words_do(b, on): raise
     # A PHONE ASKS YES OR NO ONLY FOR WHAT THE ROW CAN DO (2026-11-02): the desk refuses a tool whose button the row cannot carry (cannot) or
     # does not draw (_label_on); the phone skipped both, so "keep going" over an agent with no saved session asked "Continue: TQ-0006?",
     # "reopen TQ-0004" over an open task asked to reopen it and "triage this again" over a sorted FYI asked to sort it again - each yes
@@ -3900,7 +3913,7 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
     on, b = _row_button(store, kind, int(target or 0), params, item)
     if on and b and b != 'answer_agent':
         if why := cannot(on, b, store): raise CallMiss(f"{why} Say so in plain words. Nothing was changed.")
-        if b not in {x['verb'] for x in row_buttons(store, on) + chips_for(store, on)}: _label_on(store, on, b)
+        if b not in {x['verb'] for x in row_buttons(store, on) + chips_for(store, on)} and not words_do(b, on): _label_on(store, on, b)
     # the phone's words: one yes-or-no for what goes out or closes...
     instant = False
     # ...but A SMALL CHANGE ACTS AT ONCE (the owner, 2026-11-02, asked "should small changes act without asking": "yes"): priority, the kind
@@ -6385,6 +6398,7 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
             # ...with what it found first: "find the mail from Gail" searched, said it was not there, and wrote an agent the hunt - and only
             # "Wrote it into New" was shown, the finding gone (the live sweep, 2026-11-01)
             return _new(store, tid, item, 'coding' if verb == 'coding_agent' else 'general', decision.get('text') or text, lead=gate(reply)[0].strip())
+        carded = False
         if target_item:
             # ...a put-down (Mark done, Not ours just this once) is pressed, not lit (_press_or_light) - on the item IN FRONT of the owner only.
             # One named off the table is brought up with its button lit: "walk me through my tasks" was narrated in words with no card,
@@ -6401,12 +6415,16 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
                 # the page one link away (the 2026-10-20 query walk)
                 if verb == 'rerun' and target_item.get('source_id'):
                     return _page(store, tid, item, *report_page(store, target_item['source_id'], 'report.run', target_item.get('title') or ''))
-                reply, options = _in_words(llm, system, table, text, verb)
-                rec('assistant', reply)
-                return {'say': reply, 'options': options, 'chips': chips_for(store, item), 'decision': None}
-        say_ = 'Nothing is on the table. Name the one you mean - the sender or its TQ ref - and I will bring it up.'
-        rec('assistant', say_)
-        return {'say': say_, 'options': [], 'chips': walk_chips(len(p['items'])), 'decision': None}
+                # ...and what his words ask for all the same (WORDS_DO) goes on to its card for his press, below
+                carded = words_do(verb, target_item) and not elsewhere
+                if not carded:
+                    reply, options = _in_words(llm, system, table, text, verb)
+                    rec('assistant', reply)
+                    return {'say': reply, 'options': options, 'chips': chips_for(store, item), 'decision': None}
+        if not carded:
+            say_ = 'Nothing is on the table. Name the one you mean - the sender or its TQ ref - and I will bring it up.'
+            rec('assistant', say_)
+            return {'say': say_, 'options': [], 'chips': walk_chips(len(p['items'])), 'decision': None}
     if decision and verb in PROPOSALS:
         try: prop = propose_for(store, tid, decision, target_item, text, actor, elsewhere=elsewhere, table=item)
         except ValueError as e:

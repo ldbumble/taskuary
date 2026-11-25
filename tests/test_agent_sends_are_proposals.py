@@ -114,7 +114,7 @@ class WhatReaches(unittest.TestCase):
         """The owner, 2026-11-25: "to write to the systems or any connector should require approval mechanically". Every executor that is
         not a read (scopes.ACTIONS) waits, an unclassified one included - only Taskuary's own store is written unpressed."""
         quiet = [t for t in REGISTRY if not t.startswith('_') and t not in ('mcp', 'graphql') and scopes.needs(t) != 'read'
-                 and t not in scopes.OWN_STORE and not scopes.reaches(t)]
+                 and t not in scopes.OWN_STORE | scopes.NEVER_AGENT and not scopes.reaches(t)]      # his own script: no agent's call reaches it
         self.assertEqual(quiet, [])
         self.assertTrue(scopes.reaches('some_new_executor'))
 

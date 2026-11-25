@@ -367,8 +367,18 @@ def card_tiers(store, cid: int, models=None) -> tuple:
         models.remove(dead)
 
 
+def _boxes(store, cid: int) -> tuple:
+    "(the card's type, its config) - read off the row, nothing asked of its gateway."
+    c = store.get_connector(cid) or {}
+    try: return c.get('Type'), json.loads(c.get('ConfigJson') or '{}') or {}
+    except ValueError: return c.get('Type'), {}
+
+
 def fill_tiers(store, cid: int, models=None) -> dict:
-    """Fill the card's EMPTY model boxes from what it lists; returns what was written."""
+    """Fill the card's EMPTY model boxes from what it lists; returns what was written. A card with none empty asks its gateway nothing (walk 21:
+    switched off and on, its save waited 97 s on a list and a call per model, and the top bar read "Setup: pick your AI" until it answered)."""
+    typ, conf = _boxes(store, cid)
+    if all(str(conf.get(k) or '').strip() for k in (TIER_BOX.get(typ, 'model'), 'light_model', 'strong_model')): return {}
     c, conf, tiers = card_tiers(store, cid, models)
     if not tiers: return {}
     tiers[TIER_BOX.get(c['Type'], 'model')] = tiers.pop('model')
@@ -377,24 +387,30 @@ def fill_tiers(store, cid: int, models=None) -> dict:
     return put
 
 
+JOBS = ('triage_ai', 'concierge_ai', 'assistant_ai')      # the jobs an AI card is pointed at (models_by_job)
 def models_by_job(store, cfg: dict, cid: int, only_blank: bool = False) -> dict:
     """Point triage and the Assistant at the card's light tier and the general agent at its model tier (card_tiers: Claude where it
     answers, else the strongest that does - the owner, 2026-10-16 and 2026-11-15). `only_blank`: the Connections page - a job the owner
     pointed somewhere, or one a brain already runs, keeps it; setup's pick sets them all."""
     from . import agents, aidefaults, llm
-    c, conf, tiers = card_tiers(store, cid)
-    agent = (tiers or {}).get('model') or ''
-    fast = (tiers or {}).get('light_model') or agent
-    pick = f'connector:{cid}'
     # A BLANK JOB IS NOT AN UNPOINTED ONE (2026-11-09: the card switched on in Connections took the general agent off the owner's own
     # Claude Code, which the blank slot already ran on, and wrote it as the owner's pick - "who decided this"). From Connections it takes only
     # a job nothing else would run: no CLI ready here, no other AI card on. Saved FOR the owner, never as their choice
     other = only_blank and (agents.ready_brains(store) or any(o['ConnectorId'] != cid and o['Type'] in llm.AI_TYPES and o['Active']
                                                                and (o['HasSecret'] or o['Type'] == 'ollama') for o in store.list_connectors()))
     free = lambda slot: not only_blank or (not str(store.get_setting(slot) or '').strip() and not other)
+    # ...and with no job to point, nothing is asked of the gateway: the card's own boxes say its models (fill_tiers, walk 21)
+    if not any(map(free, JOBS)):
+        typ, conf = _boxes(store, cid)
+        agent = str(conf.get(TIER_BOX.get(typ, 'model')) or '').strip()
+        return {'fast': str(conf.get('light_model') or '').strip() or agent, 'agent': agent}
+    c, conf, tiers = card_tiers(store, cid)
+    agent = (tiers or {}).get('model') or ''
+    fast = (tiers or {}).get('light_model') or agent
+    pick = f'connector:{cid}'
     # triage's model is the card's own box: a card with a light tier (fill_tiers) sorts on that gear, its model box stays the normal one
     light = str(conf.get('light_model') or '').strip()
-    for slot, model in (('triage_ai', fast), ('concierge_ai', fast), ('assistant_ai', agent)):
+    for slot, model in zip(JOBS, (fast, fast, agent)):
         if model and free(slot): aidefaults.apply(store, cfg, slot, pick, None if slot == 'triage_ai' and light else model,
                                                   actor='migration' if only_blank else 'owner')
     return {'fast': fast, 'agent': agent}

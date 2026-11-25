@@ -256,6 +256,21 @@ class CardTiersTests(unittest.TestCase):
             TestClient(server.app).post('/api/connectors', json={'ConnectorId': cid, 'Secret': 'hai-code-123', 'Active': 1})
         self.assertEqual({k: self._conf(s, cid).get(k) for k in self.OWNERS}, self.OWNERS)
 
+    def test_switched_off_and_on_a_card_with_nothing_to_fill_asks_its_gateway_nothing(self):
+        """Walk 21: the card switched off and on held its save 97 s while its list was read and each model asked again - with every box already
+        filled and every job already pointed - and the top bar, which reads setup again on the save's answer, said "Setup: pick your AI" while the
+        AI answered. A switch-on with nothing to fill answers at once, saying the card's own models."""
+        from fastapi.testclient import TestClient
+        from taskuary import server
+        s, cid = self._card(self.OWNERS)
+        for slot in ('triage_ai', 'concierge_ai', 'assistant_ai'): s.set_setting(slot, f'connector:{cid}', 'owner')
+        s.save_connector({'ConnectorId': cid, 'Active': 0}, 'owner')
+        with mock.patch.object(server, 'store', s), mock.patch('taskuary.llm.list_models', side_effect=AssertionError('asked the gateway')), \
+             mock.patch('taskuary.firstrun.answers', side_effect=AssertionError('asked a model')):
+            r = TestClient(server.app).post('/api/connectors', json={'ConnectorId': cid, 'Active': 1}).json()
+        self.assertEqual(r['discovery']['said'], 'connected · its models: gemini-3.8-flash, claude-sonnet-5-5')
+        self.assertEqual(self._conf(s, cid), {**self._conf(s, cid), **self.OWNERS})
+
 
 class _Gateway:
     """A gateway on this computer that answers /v1/models and /v1/chat/completions - or turns every code away (`status`)."""

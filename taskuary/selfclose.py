@@ -307,7 +307,7 @@ CARD_TAIL = ('It is an action card on this task now, the owner\'s to press: when
 # every AI at its next turn (guidance). Kept short by the Docs meter (doclimits, AGENTS_CHARS) so it never grows back into a rulebook. Only
 # security stays in code, outside his text: the fence (terminal.FENCE_LINE), SECRET_LINE below, and the gates.
 from pathlib import Path as _Path
-AGENTS_DOC, AGENTS_CHARS = 'agents', 800
+AGENTS_DOC, AGENTS_CHARS = 'agents', 1000
 def flat(t: str) -> str:
     "The text as a session receives it, docMeter.flatten line for line: headings unmarked, blank lines dropped, one space between everything"
     ls = [re.sub(r'^[ #*-]+|[ #*-]+$', '', l).strip() if re.match(r'\s*#', l) else l.strip() for l in str(t or '').splitlines() if l.strip()]

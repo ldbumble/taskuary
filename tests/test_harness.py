@@ -203,7 +203,7 @@ def test_every_act_that_raises_a_card_is_offered_on_every_road(monkeypatch):
     """Walk 10, 2026-11-23: on an AI card's harness propose and hand_over were deferred by apiagent.LATER while agenttools.ALWAYS_LOAD said they
     ride every turn - asked to post, the agent saw no tool that posts and said "I cannot publish directly"."""
     from taskuary import agenttools, apiagent
-    acts = {'propose', 'hand_over', 'ask_owner', 'browser_signup'}
+    acts = {'propose', 'hand_over', 'ask_owner', 'browser_signup', 'show', 'end_turn'}       # ...and the view and the turn's end AGENTS.md names
     assert acts <= set(agenttools.ALWAYS_LOAD) and not acts & apiagent.LATER
     assert acts - {'browser_signup'} <= {t['name'] for t in agenttools.listing(portable=True)}
     listed = [apiagent._fn(t['name'], t['description'], t['inputSchema']) for t in agenttools.listing()]

@@ -6794,7 +6794,7 @@ def task_diff(tid: int, scope: str = 'task'):
 def task_land(tid: int, flow: str = None):
     """Publish this task's work the way Settings says: a DRAFT pull request, or the commits
     pushed straight onto the default branch. `flow` overrides for this one task. Never
-    merges, never force-pushes, and refuses unless 'Agents may push / deploy' is on."""
+    merges, never force-pushes. His press is the yes: 'Agents may push / deploy' says only whether an agent may go without one."""
     if not store.get_task(tid): raise HTTPException(404, 'task not found')
     from . import ci
     try:

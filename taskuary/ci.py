@@ -3,8 +3,8 @@ and a red build - or a human's review comment - goes back to the agent that wrot
 instead of to nobody.
 
 The human gate never moves. Taskuary opens drafts and merges one only on the owner's yes - the
-task's close-out (proposals.CLOSEOUT); pushing at all still needs the GitHub card's 'Agents may
-push / deploy'. What this adds is the half that was missing:
+task's close-out (proposals.CLOSEOUT); a push or a draft from here is always his press ('Agents may
+push / deploy' says only whether an agent may go without one). What this adds is the half that was missing:
 after the agent stops typing, something watches what its work did to CI and hands the
 failure back with the failing check named.
 
@@ -88,8 +88,6 @@ def open_for_task(store, task_id: int, actor='owner') -> dict:
     from main to main is not a thing, and it is the shape a mis-detected branch takes."""
     from . import github, terminal as hub_term
     from .store import task_ref
-    if not store.get_setting('agent_push_enabled') == '1':
-        raise RuntimeError("pushing is off - flip 'Agents may push / deploy' on the GitHub card first")
     ses = hub_term.session_for(task_id)
     cwd = getattr(ses, 'cwd', None)
     if not cwd: raise RuntimeError('no session on this task to read a branch from')
@@ -141,8 +139,6 @@ def push_direct(store, task_id: int, actor='owner') -> dict:
     the branch moved underneath you, and the answer is to pull, not to overwrite."""
     from .agents import _git, _git_rc
     from .store import task_ref
-    if store.get_setting('agent_push_enabled') != '1':
-        raise RuntimeError("pushing is off - flip 'Agents may push / deploy' on the GitHub card first")
     cwd, repo, base, branch = _where(store, task_id)
     if _git(cwd, 'status', '--porcelain').strip():
         raise RuntimeError('the checkout has uncommitted changes - the agent should commit them first '

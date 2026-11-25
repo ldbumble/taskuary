@@ -134,25 +134,26 @@ class EveryPressOfTheOwnersIsSaidInWords(Acts):
 class AMarkThatWasRefusedIsHeard(Acts):
     """A mark in an answer is read once its turn is over, so nothing answers the agent that wrote it. A refused one was a line on the task
     it never saw - under an answer reading "Proposed - it waits on the task for your yes" (the stress round, 2026-11-10)."""
-    MARK = proposals.MARK + ' ' + json.dumps({'action': 'open_pr', 'why': 'the fix is ready'})
-    WHY = 'open_pr is not permitted - ' + proposals.switch_off('agent_push_enabled')
+    MARK = proposals.MARK + ' ' + json.dumps({'action': 'comment_issue', 'body': 'the fix is ready'})
+    WHY = 'comment_issue is not permitted - ' + proposals.switch_off('github_reply')
 
     def test_its_reason_goes_back_to_the_caller_and_into_the_agents_next_turn(self):
         self.answered(); miss = []
         self.assertEqual(proposals.collect(self.s, self.tid, f'The fix is in. {self.MARK}', 'assistant', miss), [])
         self.assertEqual(miss, [self.WHY])
-        self.assertEqual(proposals.unheard(self.s, self.tid), [('open_pr', self.WHY)])
+        self.assertEqual(proposals.unheard(self.s, self.tid), [('comment_issue', self.WHY)])
         self.assertIn(proposals.refusal_line(self.WHY), next_turn(self.s, self.tid))
 
     def test_one_the_tool_already_answered_is_not_said_again(self):
         self.answered(); miss = []
-        self.assertIsNone(proposals.queue(self.s, self.tid, {'action': 'open_pr', 'why': 'the fix is ready'}, 'agent', refused=miss))
+        self.assertIsNone(proposals.queue(self.s, self.tid, {'action': 'comment_issue', 'body': 'the fix is ready'}, 'agent', refused=miss))
         self.assertEqual((miss, proposals.unheard(self.s, self.tid)), ([self.WHY], []))
         self.assertNotIn('was not put on a card', next_turn(self.s, self.tid))
 
     def test_one_that_was_taken_says_nothing(self):
-        self.answered(); self.s.set_setting('agent_push_enabled', '1', 't'); miss = []
-        self.assertEqual(len(proposals.collect(self.s, self.tid, f'The fix is in. {self.MARK}', 'assistant', miss)), 1)
+        self.answered(); miss = []
+        mark = proposals.MARK + ' ' + json.dumps({'action': 'open_pr', 'why': 'the fix is ready'})     # ...a PR card, the agents' push switch off
+        self.assertEqual(len(proposals.collect(self.s, self.tid, f'The fix is in. {mark}', 'assistant', miss)), 1)
         self.assertEqual((miss, proposals.unheard(self.s, self.tid)), ([], []))
 
 

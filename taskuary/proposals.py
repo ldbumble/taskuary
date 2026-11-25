@@ -53,20 +53,22 @@ def strip(text: str) -> str:
 MAX = 5                      # per transcript: a loop proposing 200 pushes is a bug, not intent
 
 # action -> (what it does in words, required keys, the switch that must be ON for it to be
-# proposable at all). Nothing here executes without an approved review.
+# proposable at all). Nothing here executes without an approved review. A push, a pull request, a merge is NEVER gated by "Agents may push /
+# deploy": that switch says whether an agent goes WITHOUT asking - off, the card IS the asking, and his press is the yes (the owner, 2026-11-25:
+# "classic example of saying it can't do something" - a PR card refused because the switch was off, the agent left to say so in words).
 ACTIONS = {
     # 'land' does whatever the owner's git_flow says (a draft PR, or straight onto the
     # default branch) - the agent asks to PUBLISH, the owner decides what publishing means.
     # open_pr / push_direct force one road for an agent that means one specifically.
     'land': ('publish this work (a draft pull request, or straight to the default branch - your setting)',
-             (), 'agent_push_enabled'),
-    'open_pr': ('open a DRAFT pull request for this task', (), 'agent_push_enabled'),
+             (), None),
+    'open_pr': ('open a DRAFT pull request for this task', (), None),
     'push_direct': ('push these commits STRAIGHT onto the default branch - no pull request',
-                    (), 'agent_push_enabled'),
+                    (), None),
     'comment_issue': ('post a PUBLIC comment on the linked issue/PR', ('body',), 'github_reply'),
     'close_issue': ('close the linked GitHub issue', (), 'use_as_tracker'),
     # the close-out of a task whose work is an open pull request (CLOSEOUT below): raised by the finish, never by an agent
-    'merge_pr': ('merge the pull request this task opened', ('repo', 'number'), 'agent_push_enabled'),
+    'merge_pr': ('merge the pull request this task opened', ('repo', 'number'), None),
     'run_tool': ('run a step in a connected system', ('type',), None),
     # the close-out of a task from a Jira, Monday or Linear item (trackers.py, 2026-10-25): its comment, and the move to done - raised by
     # the finish like merge_pr, never by an agent (an agent's own comment or move is a run_tool on jira_comment, linear_move, ...)

@@ -135,8 +135,14 @@ def install(app, store):
     # ...the agent itself is the one far end with nobody behind it: every wake of a task's agent - a press with its `then`, an answer - is kept
     # (GET woken) where a model would have taken it, whatever road it would have gone by
     PAGES, WOKEN = {}, []
-    general.to_agent = lambda st, t, said="", actor="owner", heard=None, **k: WOKEN.append({"taskId": (t or {}).get("TaskId") if isinstance(t, dict) else t,
-                                                                                            "said": str(said)[:400]}) or (heard and heard("woke")) or "woke"
+    # ...his ANSWER to a step or a question is no wake: it goes the product's own road (its answer says what became of it), and only the wake
+    # at that road's end is the stand-in's
+    real = general.to_agent
+    def to_agent(st, t, said="", actor="owner", heard=None, **k):
+        if k.get("request"): return real(st, t, said, actor, heard=heard, **k)
+        WOKEN.append({"taskId": (t or {}).get("TaskId") if isinstance(t, dict) else t, "said": str(said)[:400]})
+        return (heard and heard("woke")) or "woke"
+    general.to_agent = to_agent
 
     @app.post("/api/fixture/gallery/session")
     def gallery_session(body: dict = Body(...)):

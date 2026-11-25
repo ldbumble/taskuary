@@ -8,9 +8,9 @@ from taskuary import chatlog
 from taskuary.store import MemoryStore
 
 
-def world():
+def world(kind='general'):
     s = MemoryStore()
-    return s, s.create_task({'Title': 'Vendor review for Erin', 'Kind': 'general', 'Status': 'in_progress'}, 'owner')
+    return s, s.create_task({'Title': 'Vendor review for Erin', 'Kind': kind, 'Status': 'in_progress'}, 'owner')
 
 
 def test_an_item_is_appended_once_and_keeps_its_place_through_every_update():
@@ -498,14 +498,16 @@ def test_a_reply_raised_empty_and_written_after_his_line_stands_under_the_turn_t
     assert [x['kind'] for x in items] == ['arrival', 'turn', 'line', 'turn'] and at.get(rid) == 3, (at, [x['kind'] for x in items])
 
 
-def test_a_reply_rewritten_in_place_by_the_next_turn_stands_under_that_turn():
+@pytest.mark.parametrize('kind', ['general', 'coding'])
+def test_a_reply_rewritten_in_place_by_the_next_turn_stands_under_that_turn(kind):
     """THE OWNER'S LIVE APP (2026-11-25: "why is there text after the card?"): one turn wrote the reply to a sender, the next - the agent going on
     by itself, nothing of his between - rewrote that same card in place, and the card stayed in the first turn with the second's words, the
-    turn that wrote them drawn after it. A card whose words a later turn wrote is that turn's last thing. Invented people."""
+    turn that wrote them drawn after it. A card whose words a later turn wrote is that turn's last thing - on a coding task exactly as on a chat
+    task (the owner, 2026-11-25: "it should be exactly the same"): its chat is the same log. Invented people."""
     import time as t_
     from taskuary import cardqueue, conversation, general, wrapup
     from taskuary.store import set_owner
-    s, tid = world()
+    s, tid = world(kind)
     set_owner(s, 'Alex Doyle', 'alex@northwind.example')
     s.add_message({'TaskId': tid, 'ExternalId': 'mr2', 'Channel': 'email', 'FromName': 'Marcus Reed', 'FromEmail': 'marcus@northwind.example',
                    'ToEmail': 'alex@northwind.example', 'Subject': 'Harness', 'BodyText': 'How do the tools fit together? Marcus', 'Status': 'routed'})

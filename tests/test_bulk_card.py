@@ -25,8 +25,8 @@ def call(tid, name, **a):
     return json.loads(r['content'][0]['text'])
 
 
-def world():
-    s = MemoryStore(); tid = own_task(s, 'general')
+def world(kind='general'):
+    s = MemoryStore(); tid = own_task(s, kind)
     s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'Set up.'); s._exec("UPDATE comment SET CreatedAt='2000-01-01 00:00:00'")
     gh = s.get_connector_by_type('github')
     s.save_connector({'ConnectorId': gh['ConnectorId'], 'Secret': 'ghp_stand_in', 'Active': 1}, 'test')
@@ -80,6 +80,25 @@ def test_twenty_five_emails_are_one_card_and_one_press_sends_them_all():
     [said] = told
     assert '24 done, 0 failed, 1 left out by them' in said, 'its agent hears the whole run once'
     assert s.get_review(q['live'][3])['DecideNote'] == bulkcard.LEFT
+
+
+def test_a_bulk_card_and_a_run_of_cards_stand_alike_on_a_coding_task_and_a_chat_task():
+    """ONE CHAT (the owner, 2026-11-25: "it should be exactly the same, only difference is what level of feedback it shows by default"): a
+    coding task's bulk card, and its run of cards with a tab each, stand in its chat where a chat task's do - read by the one list."""
+    from taskuary import chatlog
+    def drawn(kind, bulk):
+        s, tid = world(kind)
+        with mock.patch.object(server, 'store', s):
+            if bulk: call(tid, 'propose_email', items=emails(3))
+            else:
+                for e in emails(3): call(tid, 'propose_email', **e)
+            d = chatlog.serve(s, tid, 'steps')
+        cards = [(x['kind'], [(k['what'], k['status'], k.get('n')) for k in ([x] if x['kind'] == 'card' else x.get('cards') or [])]) for x in d['items']]
+        return cards, d['queue']['line'], [[t['name'] for t in r] for r in d['queue']['runs']]
+    for bulk in (True, False):
+        assert drawn('coding', bulk) == drawn('general', bulk), bulk
+    assert [w for _, c in drawn('coding', True)[0] for w in c] == [('batch', 'pending', 3)]
+    assert len(drawn('coding', False)[2]) == 1 and len(drawn('coding', False)[2][0]) == 3, 'three cards, one card with a tab each'
 
 
 def test_one_call_is_one_card_whatever_its_count_and_separate_calls_are_cards_one_after_another():

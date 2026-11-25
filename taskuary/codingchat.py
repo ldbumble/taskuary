@@ -1,27 +1,23 @@
-"""A CODING TASK IS THE SAME ONE CHAT (the owner, 2026-11-06: "combine the close out action in the coding cli as well. basically making general
-and coding agent more similar. i do like you can review the code diffs if you want... i like the editor that you can see the code").
+"""A CODING TASK IS THE SAME ONE CHAT (the owner, 2026-11-25: "it should be exactly the same, only difference is what level of feedback it
+shows by default"). Its chat is the task's one log (chatlog.py), drawn by the same page as every task's; its cards stand where that log puts
+them. What is kept here is only what a coding session has and a chat agent has not:
+- each session's steps - the CLI's own log (sessionrecord.cli_steps: Claude, Codex, Copilot, Gemini), else the copy kept when it was saved,
+  written into the log as they come (chatlog.logged);
+- the live CLI: is it running, and is its screen asking something only the terminal answers (live_of).
 
-Nothing new is recorded for it. The chat is read off what Taskuary already keeps of a coding session:
-- each session's steps - the CLI's own log (sessionrecord.cli_steps: Claude, Codex, Copilot, Gemini), else the copy kept when it was saved;
-- the mail that came in, in its sender's words (general.JOINED - the general chat's own shown_history reads the same rows);
-- and the live session: is its CLI running, and is its screen asking something only the terminal answers (a login, a permission prompt).
-The page maps the steps into chat rows with the general chat's own step lines (chatStream.js -> agentSteps.js).
-
-THE ACP SEAM. A coding session run over ACP (step 1: acp.py) has no CLI log to read - its session/update notifications ARE the record.
-`record_update` keeps each one beside the task as it arrives; `chat` hands a session's kept updates to the page as `updates`, and
-chatStream.stepsFromAcp maps them into the very step shape a log gives, so both roads draw one row shape. A coding session over ACP
-(acpcoding.ACPCoding) calls `record_update(tid, sid, update)` for every update it gets, and for every prompt it sends."""
+THE ACP SEAM. A coding session run over ACP (acp.py) has no CLI log to read - its session/update notifications ARE the record.
+`record_update` keeps each one beside the task as it arrives (acpcoding.ACPCoding calls it for every update it gets, and for every prompt it
+sends); the landing card and the agent's own history read it back (acp_updates)."""
 import collections, json, os, re, threading, time
 from datetime import datetime
 from pathlib import Path
 
 from loguru import logger
 
-from . import outputs, session_artifacts, sessionrecord
+from . import session_artifacts, sessionrecord
 
 ACP_KEEP = 20000                  # the newest updates kept per session: message chunks arrive a token at a time
 OUT_KEEP = 8000                   # the characters of one tool's output kept: the page shows 1,500 of it (agentSteps.detailOf)
-MAIL_N = 3000
 
 
 def _acp_path(tid: int, sid: str) -> Path:
@@ -148,12 +144,6 @@ def acp_updates(tid: int, sid: str) -> list:
     return follow(p, _keep, _kept, list) if p.is_file() else []
 
 
-def mails(store, tid: int) -> list:
-    "What came in on the task, each in its sender's words - the shape the general chat draws (general.shown_history `mail`)."
-    from .general import JOINED, mail_row
-    return [{**mail_row(store, x, MAIL_N), 'joined': x.get('JoinedAt') or x.get('CreatedAt')} for x in store._rows(JOINED, (int(tid),))]
-
-
 def _live(tid: int):
     "The coding CLI running on this task now, if one is - a general agent's own chat session is not one."
     from . import terminal as term
@@ -185,36 +175,6 @@ def live_of(t) -> dict | None:
 def _epoch(at) -> float:
     try: return datetime.strptime(str(at or '')[:19].replace('T', ' '), '%Y-%m-%d %H:%M:%S').timestamp()
     except ValueError: return 0.
-
-
-def waiting(store, tid: int, t=None) -> list:
-    """THE OWNER'S LINES NO TURN HAS TAKEN YET, on every screen (the owner, 2026-11-08: "i asked another question and the text was never sent into
-    the prompt"): the waiting room's notes not yet handed over, and what a live ACP session holds for its next turn - each drawn as theirs,
-    "Waiting for the agent", until a turn takes it. The general chat's own road (general.waiting_lines); [{id, text, at}], oldest first."""
-    from . import general
-    from .waitroom import TEAMMATE, parts
-    # IN THE ORDER A LINE MOVES (general.take_line): kept, then held by the session, then drawn in its record - read in that order, so a line
-    # read gone from one is already in the next, and named once by its kept row's id (`line`) wherever two reads both hold it (chat)
-    kept = general.waiting_lines(store, int(tid))
-    out = kept + [{'id': f"w{x['WId']}", 'text': parts(x.get('Note'))[0], 'at': x.get('CreatedAt')} for x in store.waiting_notes(int(tid))
-                  if (x.get('CreatedBy') or 'owner') not in ('router', TEAMMATE)]
-    held = list(getattr(t, '_q', None) or []) if t is not None else []
-    # ...and the owner's words a reopening's first prompt leads with ("FROM THE OWNER: ..." - Continue): held until its adapter is up, ten seconds
-    # and more, they were on no screen but the one that sent them (the owner, 2026-11-10)
-    from .outcomes import owner_split
-    lines = lambda text, brief, shown: shown or ([w] if brief and (w := owner_split(text)[0]) else [])
-    # ...each named as the page knows it (`line`, the name it was sent under - as a kept row is named), its kept row's id beside it (`kept`): named
-    # by that id, the page drew the line twice while the session held it (the browser walk, 2026-11-10)
-    return out + [{'id': f'q{i}', 'text': w['text'], 'at': None, 'kept': w.get('line'), **({'line': w['name']} if w.get('name') else {})}
-                  if isinstance(w, dict) else {'id': f'q{i}', 'text': w, 'at': None}
-                  for i, (_t, _b, shown, _d) in enumerate(held) for w in lines(_t, _b, shown) if not (isinstance(w, dict) and w.get('drawn'))]
-
-
-def _once(waiting: list, sessions: list) -> list:
-    "Each owner's line once: a kept row the session holds too, or one its record already draws, is drawn there - not twice."
-    drawn = {(u.get('_meta') or {}).get('line') for s in sessions for u in s.get('updates') or []} - {None}
-    held = {w.get('kept') for w in waiting if str(w['id']).startswith('q')} - {None}
-    return [w for w in waiting if (w.get('kept') if str(w['id']).startswith('q') else w['id']) not in drawn | (set() if str(w['id']).startswith('q') else held)]
 
 
 # ...each step's time in the server's own zone, as every stamp the page reads (store.norm_stamp): a CLI log stamps UTC, and the turn read
@@ -269,30 +229,6 @@ def sessions(store, tid: int, local: bool = True) -> list:
             if not ext or sid in acp or last.get((cli, ext)) == i]
 
 
-def chat(store, tid: int) -> dict:
-    """What the coding chat draws (GeneralWorkspace.jsx): the sessions' steps or ACP updates, the mail that came in, and the live CLI - one that
-    idled out (acpcoding.idle_out) still, at rest: the chat stays as it was, and its box is the input that brings it back."""
-    from . import acpcoding, general, permissions, taskstate
-    t = _live(int(tid)) or (acpcoding.IDLED.get(int(tid)) if acpcoding.idled(int(tid), store) else None)
-    from .landing import has_checkout
-    # A LINE MOVES ONE WAY - kept, held by its session, drawn in its record - so it is read in that order: read after the sessions, a line
-    # taken between the two reads was in neither (CI, 2026-11-10). One caught in two is drawn once, by its kept row's id (_once)
-    was, w = general.at_work(int(tid)), waiting(store, tid, t)
-    ss = owned(store, tid, sessions(store, tid))
-    # ...and what the indicator and the lines read, from the one function the general chat's payload calls (general.line_state)
-    return {'task': int(tid), 'sessions': ss, 'mails': mails(store, tid), 'live': live_of(t),
-            'checkout': has_checkout(store, tid, getattr(t, 'cwd', '') or ''),
-            **general.line_state(store, int(tid), _once(w, ss), was),
-            # ...and the owner's presses, each one quiet line at its time - the general chat's own (general.press_lines): a coding task's Remind me
-            # or Push left no line in its chat at all (the audit, 2026-11-10)
-            'presses': general.press_lines(store, int(tid)),
-            # ...and what it asks the owner, by the general chat's own read (taskstate.asking)
-            'asking': taskstate.asking(store, store.get_task(int(tid)) or {'TaskId': int(tid)}, t if getattr(t, 'alive', False) else None),
-            # ...and the turn each card stands in, the general payload's `turns` and `drafts` read off this record (cards)
-            **cards(store, int(tid), ss),
-            'permissions': permissions.pending(int(tid), store)}         # what the agent waits on the owner's button for
-
-
 def owned(store, tid: int, ss: list) -> list:
     """ONLY WHAT THE OWNER TYPED IS DRAWN AS HIS (the owner's rules, part 3: "the same fact reads the same"): an ACP adapter sends user-role
     messages of its own - a slash command's output and the like - and the chat drew them in his bubble. Every line he typed is recorded
@@ -309,27 +245,3 @@ def owned(store, tid: int, ss: list) -> list:
                       {**u, '_meta': {'taskuary': 'owner' if mine(u) else 'brief' if sent(u) else 'agent'}})
     return [{**s, 'updates': [mark(u) for u in s['updates']]} if s.get('updates') else s for s in ss]
 
-
-def cards(store, tid: int, ss: list) -> dict:
-    """WHERE EACH CARD STANDS IN THE CODING CHAT, BY ITS TURN - `turns`, `drafts` and `published`, read off this record:
-    the page compared times itself and named its turns by position, so nothing here could name one (2026-11-11). A card is of the turn whose step
-    was newest when it was raised, named as the page names that step (`sid#n`, its place in what `chat` hands it - chatStream.chatRows); raised on
-    arrival, or after his line before the turn's first step: none. A draft is stale once his line came after it and no step of the agent's since."""
-    def whose(u):
-        k, m = u.get('sessionUpdate') or u.get('k'), (u.get('_meta') or {}).get('taskuary')
-        return 'his' if k == 'you' or (k == 'user_message_chunk' and m == 'owner') else '' if k in ('brief', 'user_message_chunk', 'gap', 'screen') else 'agent'
-    at_ = lambda x: str(x or '').replace('T', ' ')[:19]
-    steps = sorted(((at_(u.get('_at') or u.get('at') or s.get('at')), f"{s['sid']}#{i}", whose(u)) for s in ss
-                    for i, u in enumerate(s.get('updates') or s.get('steps') or [])), key=lambda x: x[0])
-    turn = lambda at: next((n if w == 'agent' else None for t, n, w in reversed(steps) if t <= at_(at) and w), None)
-    his = lambda at: next((t for t, _, w in steps if t > at_(at) and w == 'his'), None)
-    # ...A LETTER BY WHEN ITS WORDS WERE LAST WRITTEN (DraftAt): rewritten in place by a later turn it is that turn's - by its card's raising it
-    # stood under the turn before, and the turn that wrote its words drew after it (the owner's live app, 2026-11-25)
-    rows = store._rows("SELECT ReviewId, Kind, Status, COALESCE(DraftAt, CreatedAt) AS CreatedAt, DraftText FROM review WHERE TaskId=? AND Kind<>'slot' ORDER BY ReviewId", (tid,))
-    drafts = [{'review': r['ReviewId'], 'turn': turn(r['CreatedAt']), 'at': r['CreatedAt'], 'stale': stale, 'before': later if stale else None}
-              for r in rows if r['Status'] == 'pending' and r['Kind'] in ('draft_reply', 'draft') and str(r.get('DraftText') or '').strip()
-              for later in [his(r['CreatedAt'])] for stale in [bool(later) and not any(t > later and w == 'agent' for t, _, w in steps)]]
-    # ...and each page it showed or published, in the turn that showed it as the general chat's are (outputs.pages): the coding chat drew only a
-    # page whose trace carried the tool's answer, and a published one never (the overnight walk, 2026-11-11)
-    return {'turns': {str(r['ReviewId']): turn(r['CreatedAt']) for r in rows}, 'drafts': drafts,
-            'published': [{**p, 'after': turn(p['created_at'])} for p in outputs.pages(store, tid)]}

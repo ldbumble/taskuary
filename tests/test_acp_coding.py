@@ -8,7 +8,7 @@ from unittest import mock
 
 import pytest
 
-from taskuary import acpcoding, agents, blackboard, codingchat, devphone, general, peers, permissions, session_artifacts, shellgate, terminal, waitroom
+from taskuary import acpcoding, agents, blackboard, chatlog, codingchat, devphone, general, peers, permissions, session_artifacts, shellgate, terminal, waitroom
 from taskuary.store import MemoryStore
 from taskuary import llm, origin
 
@@ -89,8 +89,8 @@ def test_a_coding_task_on_claude_runs_over_acp_and_its_turn_is_the_chat(world, m
     assert first['sessionUpdate'] == 'user_message_chunk' and first['_meta'] == {'taskuary': 'brief'} and 'one-line comment' in first['content']['text']
     assert all(u.get('_at') for u in ups)                                            # stamped: the chat places each turn under its mail
     assert any(b.get('type') == 'diff' for u in ups if u['sessionUpdate'] == 'tool_call_update' for b in u.get('content') or [])
-    chat = codingchat.chat(s, tid)
-    assert chat['sessions'][-1]['source'] == 'acp' and chat['live']['transport'] == 'acp' and chat['live']['terminal']
+    live = chatlog.serve(s, tid)['live']
+    assert codingchat.sessions(s, tid)[-1]['source'] == 'acp' and live['transport'] == 'acp' and live['terminal']
     assert t.ext_id == 'sess_fake_1' and s.resumable_session(tid)['ExtId'] == 'sess_fake_1'
     # its Terminal: the command and its streamed output, never a blank pane
     assert '$' in t.scrollback() and 'git status --short' in t.scrollback() and 'M totals.py' in t.scrollback()
@@ -157,7 +157,7 @@ def test_the_box_while_it_works_waits_and_goes_in_as_one_prompt_and_stop_cancels
 
 def test_a_line_typed_while_it_works_is_kept_shown_and_taken_by_the_next_turn(world, monkeypatch):
     """The owner, 2026-11-08: "i asked another question and the text was never sent into the prompt". A line typed mid-turn - in the chat's box
-    or the session's Terminal - is the waiting room's: on the task, drawn as theirs on every screen (codingchat `waiting`), and the next turn's.
+    or the session's Terminal - is the waiting room's: on the task, drawn as theirs on every screen (the chat's `pending`), and the next turn's.
     And the chat's clock counts from this turn's start, never the session's or the owner's line days back (codingchat.live_of `turnStarted`)."""
     s, tid, repo = world
     monkeypatch.setenv('FAKE_ACP_HANG', '1')
@@ -167,11 +167,12 @@ def test_a_line_typed_while_it_works_is_kept_shown_and_taken_by_the_next_turn(wo
     live = codingchat.live_of(t)
     assert live['working'] and abs(live['turnStarted'] - (time.time() - 5)) < 2
     t.write('was this code completed?\r')                                                   # ...typed in its Terminal
-    assert until(lambda: [w['text'] for w in codingchat.chat(s, tid)['waiting']] == ['was this code completed?'])
+    waiting = lambda: [p['text'] for p in chatlog.serve(s, tid)['pending'] if p['kind'] == 'line']
+    assert until(lambda: waiting() == ['was this code completed?'])
     assert [w['text'] for w in general.waiting_lines(s, tid)] == ['was this code completed?']        # kept as the owner's (general.take_line)
     assert t.cancel() and idle(t, 2)
     assert until(lambda: 'was this code completed?' in ' '.join([x for k, x in t.history if k == 'said'][-1].split()))
-    assert codingchat.chat(s, tid)['waiting'] == []
+    assert waiting() == []
     ups = [u for u in codingchat.acp_updates(tid, t.sid) if u['sessionUpdate'] == 'user_message_chunk']
     assert any(u['content']['text'] == 'was this code completed?' and u['_meta']['taskuary'] == 'owner' for u in ups)      # drawn as theirs
 
@@ -394,9 +395,9 @@ def test_a_coding_session_idle_past_its_period_closes_quietly_and_the_next_input
     assert acpcoding.idle_sweep() == [tid]
     assert not t.alive and t.sid not in terminal.SESSIONS and acpcoding.idled(tid, s)
     assert [c['Body'] for c in s.list_comments(tid)] == said_before                                     # not a word on the task
-    chat = codingchat.chat(s, tid)
-    assert chat['live'] and chat['live']['sid'] == sid and not chat['live']['working']                  # the same chat, at rest
-    assert any(x['sid'] == sid and x['source'] == 'acp' for x in chat['sessions'])
+    d = chatlog.serve(s, tid)
+    assert not d['working'] and not (d['live'] or {}).get('working') and d['ran']                         # the same chat, at rest
+    assert any(x['sid'] == sid and x['source'] == 'acp' for x in codingchat.sessions(s, tid))
     monkeypatch.setattr(clipool, 'IDLE_SECONDS', 30 * 60); monkeypatch.setattr(waitroom, 'later', later)
     waitroom.add(s, tid, 'now round the tax', 'owner')
     q = terminal.session_for(tid)
@@ -413,7 +414,7 @@ def test_the_plan_it_writes_is_in_the_coding_chat(world, monkeypatch):
     s, tid, repo = world
     monkeypatch.setenv('FAKE_ACP_CODE', str(repo / 'totals.py'))
     t = open_(s, tid, repo); assert idle(t)
-    ups = codingchat.chat(s, tid)['sessions'][-1]['updates']
+    ups = codingchat.sessions(s, tid)[-1]['updates']
     plans = [u for u in ups if u['sessionUpdate'] == 'plan']
     assert len(plans) == 2
     assert [(e['content'], e['status']) for e in plans[-1]['entries']] == [('Read the file', 'completed'), ('Add the comment', 'completed')]
@@ -540,7 +541,7 @@ def test_a_user_role_update_the_adapter_sent_itself_is_the_agents_not_the_owners
     s.add_comment(tid, 'owner', general.USER_TYPE, 'is the tax line right?')          # a line he typed, kept as his
     codingchat.record_update(tid, t.sid, {'sessionUpdate': 'user_message_chunk', 'content': {'type': 'text', 'text': 'is the tax line right?'}})
     codingchat.record_update(tid, t.sid, {'sessionUpdate': 'user_message_chunk', 'content': {'type': 'text', 'text': 'Compacted the conversation.'}})
-    ups = [u for ss in codingchat.chat(s, tid)['sessions'] for u in ss.get('updates') or [] if u['sessionUpdate'] == 'user_message_chunk']
+    ups = [u for ss in codingchat.owned(s, tid, codingchat.sessions(s, tid)) for u in ss.get('updates') or [] if u['sessionUpdate'] == 'user_message_chunk']
     who = {u['content']['text']: u['_meta']['taskuary'] for u in ups}
     assert who['is the tax line right?'] == 'owner' and who['Compacted the conversation.'] == 'agent'
 

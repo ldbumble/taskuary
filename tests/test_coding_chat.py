@@ -1,6 +1,5 @@
-"""A coding task is the same one chat (codingchat.py, the owner 2026-11-06): the endpoint serves each session's steps - the CLI's own log,
-with an edit's own diff - or, for a session run over ACP, its kept updates (the seam step 1 plugs into); the mail that came in, in its
-sender's words; and the live CLI. And a part of the diff the owner turns down in review is taken back out in one commit, or nothing moves.
+"""A coding task is the same one chat (the owner, 2026-11-06 and 2026-11-25): each session's steps are read off the CLI's own log, with an
+edit's own diff - or, for a session run over ACP, its kept updates (codingchat.py) - and drawn in the task's one list as a chat task's. And a part of the diff the owner turns down in review is taken back out in one commit, or nothing moves.
 Invented people, a temp git repo, no network."""
 import json, os, subprocess, tempfile
 from unittest import mock
@@ -63,25 +62,28 @@ def test_a_codex_patch_is_kept_per_file():
     assert [(s['file'], s['edit']['patch']) for s in steps] == [('portal/app.js', '@@\n-a\n+b'), ('portal/new.js', '+x')]
 
 
-def test_the_endpoint_serves_the_log_the_mail_and_no_live_cli(home, server):
+def test_a_coding_task_s_log_is_its_sessions_and_its_mail_and_files_read_as_a_chat_task_s(home, server):
+    """ONE CHAT (the owner, 2026-11-25: "it should be exactly the same"): a coding task's sessions are read off the CLI's own log, and its
+    mail and the rest of what the chat stands on come by the two reads every task's chat makes - never a payload of its own."""
     srv, c = server
     claude_log(home, 'cc2')
     f = Factory(srv.store)
     tid = f.task(title='Budget total misses tax', kind='coding')
     f.message(task_id=tid, from_name='Erin Blake', from_email='erin@northwind.example', body='The budget total skips the tax line again.')
     srv.store.add_transcript(tid, 'pane-1', 'screen', 'coding', 'C:/work/ledger', 'cc2', brain='claude')
-    got = c.get(f'/api/tasks/{tid}/coding-chat').json()['data']
-    assert got['live'] is None
-    assert [m['who'] for m in got['mails']] == ['Erin Blake'] and 'tax line' in got['mails'][0]['words']
-    (s,) = got['sessions']
+    (s,) = codingchat.sessions(srv.store, tid)
     assert (s['sid'], s['cli'], s['source']) == ('pane-1', 'claude', 'Claude Code log')
     assert [x['k'] for x in s['steps']] == ['you', 'tool', 'tool', 'tool', 'said']
     # ...each step's time in the server's own zone, as the mail's: a CLI log stamps UTC
     assert s['steps'][0]['at'] == sessionrecord._local('2026-11-06T09:00:00Z')
-    assert c.get('/api/tasks/999999/coding-chat').status_code == 404
+    conv = c.get(f'/api/tasks/{tid}/conversation').json()
+    assert conv['live'] is None and [x['who'] for x in conv['items'] if x['kind'] == 'arrival'] == ['Erin Blake']
+    got = c.get(f'/api/tasks/{tid}/assistant')
+    assert got.status_code == 200 and 'outputs' in got.json() and 'cards' in got.json(), 'its files and action cards by the read a chat task makes'
+    assert c.get('/api/tasks/999999/assistant').status_code == 404
 
 
-def test_an_acp_session_is_served_as_its_updates(home, server):
+def test_an_acp_session_is_read_as_its_updates(home, server):
     srv, c = server
     tid = Factory(srv.store).task(title='Budget total misses tax', kind='coding')
     srv.store.add_transcript(tid, 'acp-7', 'screen', 'coding', 'C:/work/ledger', '', brain='claude')
@@ -89,49 +91,16 @@ def test_an_acp_session_is_served_as_its_updates(home, server):
               {'sessionUpdate': 'agent_message_chunk', 'content': {'type': 'text', 'text': 'Fixed.'}}):
         codingchat.record_update(tid, 'acp-7', u)
     codingchat.record_update(tid, 'acp-7', 'not a dict')          # a bad line costs nothing
-    (s,) = c.get(f'/api/tasks/{tid}/coding-chat').json()['data']['sessions']
+    (s,) = codingchat.sessions(srv.store, tid)
     assert s['source'] == 'acp' and [u['sessionUpdate'] for u in s['updates']] == ['tool_call', 'agent_message_chunk']
 
 
-def test_each_card_is_named_with_the_turn_that_raised_it_as_the_page_names_that_turns_step():
-    """ONE PLACEMENT ROAD (2026-11-11): the page placed a coding card by comparing times and named the turns by position, so the server could not
-    name one. A card is of the turn whose step was newest when it was raised (`sid#n`, the update's place); raised on arrival or after his line
-    before the turn's first step, none. A draft is stale once his line came after it and no step of the agent's has since."""
-    from taskuary.store import MemoryStore
-    s = MemoryStore(); tid = s.create_task({'Title': 'Ledger totals', 'Kind': 'coding'}, 'owner')
-    u = lambda at, k, meta=None: {'sessionUpdate': k, '_at': at, **({'_meta': {'taskuary': meta}} if meta else {})}
-    ss = [{'sid': 'a1', 'updates': [u('2026-11-11 09:00:00', 'user_message_chunk', 'owner'), u('2026-11-11 09:00:05', 'tool_call'),
-                                    u('2026-11-11 09:00:09', 'agent_message_chunk'), u('2026-11-11 09:10:00', 'user_message_chunk', 'owner')]}]
-    def card(at, kind='draft_reply'):
-        rid = s.add_review({'TaskId': tid, 'Kind': kind, 'Status': 'pending', 'DraftText': 'Hi Erin'}); s._exec('UPDATE review SET CreatedAt=? WHERE ReviewId=?', (at, rid)); return rid
-    arrival, mine, after_his, held = card('2026-11-11 08:00:00'), card('2026-11-11 09:00:06'), card('2026-11-11 09:10:01'), card('2026-11-11 09:00:09', 'action')
-    got = codingchat.cards(s, tid, ss)
-    assert got['turns'] == {str(arrival): None, str(mine): 'a1#1', str(after_his): None, str(held): 'a1#2'}
-    assert [(d['review'], d['turn'], d['stale']) for d in got['drafts']] == [(arrival, None, False), (mine, 'a1#1', True), (after_his, None, False)]
-
-
-def test_a_draft_rewritten_in_place_stands_in_the_turn_that_rewrote_it():
-    """A REWRITE IN PLACE IS THE NEWEST WRITER'S (the owner's live app, 2026-11-25: "why is there text after the card?"): a reply raised on a
-    mail's arrival, written by one turn and rewritten by the next - a second mail typed into the session - stood under the first turn by when
-    its card was raised, its words the second's, and the turn that wrote them drew after it. It stands by when its words were last written."""
-    from taskuary.store import MemoryStore
-    s = MemoryStore(); tid = s.create_task({'Title': 'Ledger totals', 'Kind': 'coding'}, 'owner')
-    u = lambda at, k, meta=None: {'sessionUpdate': k, '_at': at, **({'_meta': {'taskuary': meta}} if meta else {})}
-    ss = [{'sid': 'a1', 'updates': [u('2026-11-11 09:00:00', 'user_message_chunk', 'owner'), u('2026-11-11 09:00:05', 'tool_call'),
-                                    u('2026-11-11 09:00:09', 'agent_message_chunk'), u('2026-11-11 09:01:00', 'user_message_chunk', 'brief'),
-                                    u('2026-11-11 09:01:05', 'tool_call'), u('2026-11-11 09:01:09', 'agent_message_chunk')]}]
-    rid = s.add_review({'TaskId': tid, 'Kind': 'draft', 'Status': 'pending', 'DraftText': 'Hi Erin'})
-    s._exec("UPDATE review SET CreatedAt='2026-11-11 08:59:50', DraftText='Hi Erin, the total is fixed', DraftAt='2026-11-11 09:01:06' WHERE ReviewId=?", (rid,))
-    got = codingchat.cards(s, tid, ss)
-    assert got['turns'][str(rid)] == 'a1#4' and [(d['review'], d['turn'], d['stale']) for d in got['drafts']] == [(rid, 'a1#4', False)]
-
-
-def test_a_resumed_conversation_is_drawn_once(home, server):
+def test_a_resumed_conversation_is_read_once(home, server):
     srv, c = server
     claude_log(home, 'cc3')
     tid = Factory(srv.store).task(title='Budget total misses tax', kind='coding')
     for sid in ('pane-1', 'pane-2'): srv.store.add_transcript(tid, sid, 'screen', 'coding', 'C:/work/ledger', 'cc3', brain='claude')
-    assert [s['sid'] for s in c.get(f'/api/tasks/{tid}/coding-chat').json()['data']['sessions']] == ['pane-2']
+    assert [s['sid'] for s in codingchat.sessions(srv.store, tid)] == ['pane-2']
 
 
 # ── review: a part turned down is reverted on the branch ─────────────────────────────────────
@@ -197,24 +166,22 @@ def test_a_checkout_on_another_branch_or_with_an_agent_in_it_moves_nothing(repo)
 
 def test_reverting_is_the_owners_door():
     assert guard.classify('POST', '/api/tasks/7/landing/revert')[0] == 'deny'
-    assert guard.classify('GET', '/api/tasks/7/coding-chat')[0] == 'read'
 
 
 def test_a_press_on_a_coding_task_is_a_line_in_its_chat_as_in_a_general_one(home, server):
     """The audit, 2026-11-10: Remind me or Push on a coding task left no line in its chat - the general chat draws each press as one quiet
-    line in the owner's voice (general.press_lines); the coding chat's payload carries the same lines, from the same function."""
-    from taskuary import general, remind
+    line in the owner's voice; a coding task's chat is the same list, so it draws the same line."""
+    from taskuary import remind
     srv, c = server
     tid = Factory(srv.store).task(title='Budget total misses tax', kind='coding')
     remind.set_reminder(srv.store, tid, 'friday', 'owner')
-    got = c.get(f'/api/tasks/{tid}/coding-chat').json()['data']['presses']
-    assert [m['content'][0]['text'] for m in got] == [m['content'][0]['text'] for m in general.press_lines(srv.store, tid)]
-    assert len(got) == 1 and got[0]['content'][0]['text'].startswith('You set a reminder for')
+    got = [x for x in c.get(f'/api/tasks/{tid}/conversation').json()['items'] if x['kind'] == 'press']
+    assert len(got) == 1 and got[0]['text'].startswith('You set a reminder for'), got
 
 
 def test_a_coding_agent_s_question_reads_as_a_chat_s_does(home, server, monkeypatch):
     """The audit, 2026-11-10: over ACP a coding agent's [[TASKUARY-ASK]] came a token at a time - the chat drew the bare marker, and the
-    payload carried no question to answer. Its words read as a general answer's (selfclose.asked_inline), its ask by the one read (taskstate.asking)."""
+    chat carried no question to answer. Its words read as a general answer's (selfclose.asked_inline), its ask by the one read (taskstate.asking)."""
     from types import SimpleNamespace
     from taskuary import workerstate as ws
     srv, c = server
@@ -225,10 +192,9 @@ def test_a_coding_agent_s_question_reads_as_a_chat_s_does(home, server, monkeypa
     from taskuary import terminal                                      # ...its session at rest over ACP, the question waiting on him
     live = SimpleNamespace(task_id=tid, sid='acp-8', alive=True, acp=True, started='2026-11-10 09:00:00', cli='claude', cwd='', _q=[], phase=lambda: 'parked')
     monkeypatch.setitem(terminal.SESSIONS, 'acp-8', live)
-    d = c.get(f'/api/tasks/{tid}/coding-chat').json()['data']
-    (said,) = [u['content']['text'] for u in d['sessions'][0]['updates'] if u['sessionUpdate'] == 'agent_message_chunk']
+    (said,) = [u['content']['text'] for u in codingchat.sessions(srv.store, tid)[0]['updates'] if u['sessionUpdate'] == 'agent_message_chunk']
     assert said == 'Q3 totals are in the reply. One thing only you can say:\n\nWhich vendor - Payworth or Trainly?'
-    assert d['asking']['text'] == 'Which vendor - Payworth or Trainly?'
+    assert c.get(f'/api/tasks/{tid}/conversation').json()['asking']['text'] == 'Which vendor - Payworth or Trainly?'
 
 
 def test_a_long_session_s_told_steps_are_marked_once_never_on_every_read_of_its_chat(home, monkeypatch):

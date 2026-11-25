@@ -247,7 +247,7 @@ def _lines(store, tid: int) -> list:
 
 def _handed(store, tid: int, notes: list, how: str, takes: bool = False):
     """The notes handed over: the waiting room's marked, and the owner's kept lines taken as his lines of the conversation (store.take_lines) -
-    the record of what he typed - once the session holds them, never before (codingchat.waiting reads them in that order). `takes`: the
+    the record of what he typed - once the session holds them, never before (chatlog.beside reads them in that order). `takes`: the
     session takes his lines itself as its turn begins (acpcoding._begins) - that is the hand-over, written once, there."""
     from . import general
     store.deliver_waiting([x['WId'] for x in notes if x.get('WId') is not None], how)

@@ -88,13 +88,12 @@ class ShownInTheChatTests(unittest.TestCase):
         self.assertEqual([p['after'] for p in data['published']], [line['id']])
 
     def test_a_coding_chat_places_its_pages_in_the_turn_that_showed_them(self):
-        # ...the same list the general chat gets, named by the coding chat's steps: it had none, and a page drew only from a trace that carried it
-        from taskuary import codingchat
+        # ...by the one list every chat reads (chatlog.beside `published`): a coding task's turn holds the page it showed, as a chat task's does
+        from taskuary import chatlog
+        self.s._exec("UPDATE task SET Kind='coding' WHERE TaskId=?", (self.tid,)); chatlog.serve(self.s, self.tid)      # ...its log begun
+        chatlog.put(self.s, self.tid, 'turn', 't:s1:0', {'started': 1.0, 'sid': 's1', 'text': 'The spend chart is up.'}, state='done')
         general._show_files(self.s, self.tid, [str(self.scratch / 'spend.png')], [])
-        self.s._exec("UPDATE task_artifact SET CreatedAt='2000-01-01 00:00:03' WHERE TaskId=?", (self.tid,))
-        ss = [{'sid': 's1', 'updates': [{'sessionUpdate': 'user_message_chunk', '_meta': {'taskuary': 'owner'}, '_at': '2000-01-01 00:00:00'},
-                                        {'sessionUpdate': 'tool_call', '_at': '2000-01-01 00:00:02'}, {'sessionUpdate': 'agent_message_chunk', '_at': '2000-01-01 00:00:09'}]}]
-        self.assertEqual([(p['name'], p['after']) for p in codingchat.cards(self.s, self.tid, ss)['published']], [('spend.png', 's1#1')])
+        self.assertEqual([(p['name'], p['after']) for p in chatlog.serve(self.s, self.tid)['published']], [('spend.png', 't:s1:0')])
 
     def test_a_picture_is_served_as_itself_and_a_page_only_as_text(self):
         general._show_files(self.s, self.tid, [str(self.scratch / n) for n in ('spend.png', 'spend.html')], [])

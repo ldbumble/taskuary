@@ -203,8 +203,9 @@ export const standing = (items) => new Set((items || []).flatMap((x) => (x.kind 
   .filter((c) => !isPastCard(c)).map((c) => c.review));
 export const hasParts = (parts) => (parts || []).some((p) => p.type !== "said" || p.text);
 
-// WHICH SOURCE a task's chat reads: a coding task, or any task with a coding CLI live on it, is its sessions (codingchat.py); every other is
-// the general agent's conversation (general.py). The one component draws either - this picks, nothing in the page does
+// WHICH AGENT a task's chat is typed to: a coding task, or any task with a coding CLI live on it, is its CLI's; every other the general agent's.
+// The chat itself is the same either way (the owner, 2026-11-25: "exactly the same") - one list, one payload; this picks only the default
+// detail (chatDetail.detailFor) and where Stop and the box go
 export const chatSource = (task, term) => (task?.Kind === "coding" || liveTerminal(term) ? "coding" : "general");
 // WHAT WAITS BY THE BOX, WHEN MANY DO (decided 2026-11-12): the NEWEST lines and the count - the strip scrolled from the oldest, so the line he
 // had just typed stood out of sight under a dozen older ones. A line that failed to go in is kept where it is wherever it stands

@@ -413,10 +413,11 @@ def _install_fresh_routes(app, store):
     def fixture_review_rows(body: dict = Body(...)):
         """A task holding the review rows given as they are stored - one of each kind the one review card draws (browser/one-card.mjs): `mail`
         a colleague's message it answers, `source` the task's SourceRef (a GitHub issue's link), `github` a stand-in GitHub that takes a comment,
-        `refuses` a run_tool type whose press fails. Nothing leaves the fixture: every send is the outbox's (/api/fixture/outbox)."""
+        `refuses` a run_tool type whose press fails, `kind` the task's kind (a coding task's chat is drawn as a chat task's). Nothing leaves the fixture: every send is the outbox's (/api/fixture/outbox)."""
         import json
         store.set_setting("owner_name", "Alex Doyle", "owner"); store.set_setting("owner_email", "alex@northwind.example", "owner")
-        tid = store.create_task({"Title": body.get("title") or "Review the card", "Kind": "general", "Status": "open", "SourceRef": body.get("source") or None}, "owner")
+        tid = store.create_task({"Title": body.get("title") or "Review the card", "Kind": body.get("kind") or "general", "Status": "open",
+                                 "SourceRef": body.get("source") or None}, "owner")
         mid = store.add_message({"TaskId": tid, "ExternalId": f"fx-rows-{tid}", "Channel": body.get("channel") or "email", "FromName": "Erin Blake",
                                  "FromEmail": "erin@northwind.example", "ToEmail": "alex@northwind.example", "Subject": body.get("subject") or "Vendor plans",
                                  "SentAt": "2026-11-24 08:00:00", "BodyText": body.get("mail") or "Hi Alex, could you send me the plans? Thanks, Erin", "Status": "routed"})

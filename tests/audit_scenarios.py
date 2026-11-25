@@ -267,7 +267,7 @@ class Run:
         card's place; asking and permissions from the kind's own status read, until the list carries them."""
         d = self.c.get(f'/api/tasks/{self.tid}/conversation').json()
         coding = (self.s.get_task(self.tid) or {}).get('Kind') == 'coding'
-        old = self.c.get(f'/api/tasks/{self.tid}/coding-chat').json()['data'] if coding else self.c.get(f'/api/tasks/{self.tid}/assistant').json()
+        old = d if coding else self.c.get(f'/api/tasks/{self.tid}/assistant').json()
         words = lambda t: t.get('text') or ''.join(x.get('text') or '' for x in t.get('steps') or [] if x.get('k') == 'said')
         said, ats, ids, home, at = [], [], [], {}, {}
         for x in d['items']:

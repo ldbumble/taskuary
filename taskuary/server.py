@@ -2679,10 +2679,8 @@ def _assistant_payload(task_id: int, session=None):
     from . import cardqueue as _cardqueue, general, proposals as _proposals
     task = store.get_task(task_id)
     if not task: raise HTTPException(404, 'task not found')
-    # ...READ on any task but a coding one (the owner, 2026-11-06: one prompt box everywhere): a reply task, or a closed one from before the chat,
-    # opens on its chat; what is typed there makes it the general agent's (_chat_kind), as Send to agent's dispatch did
-    if str(task.get('Kind') or '') == 'coding':
-        raise HTTPException(422, 'a coding task is worked in its terminal, not a chat')
+    # ...READ on every task, a coding one too (the owner, 2026-11-25: "it should be exactly the same"): its files and its action cards stand in
+    # its chat as a chat task's do
     _left_now(task_id)
     session = session or general.session_for(task_id)
     was = general.at_work(task_id)                        # ...and whether a turn works, before it too (line_state `was`)
@@ -6530,19 +6528,6 @@ def task_changes(tid: int):
     if not store.get_task(tid): raise HTTPException(404, 'no such task')
     if not landing.shown(store, tid): return {'data': None}
     return {'data': landing.changes(store, tid)}
-
-@app.get('/api/tasks/{tid}/coding-chat')
-def task_coding_chat(tid: int):
-    """A coding task as the one chat (codingchat.py): every session's steps - the CLI's own log, or its ACP updates - the mail that came
-    in, and the live CLI, for the page to draw in the general chat's own rows (chatStream.js)."""
-    from . import codingchat
-    if not store.get_task(tid): raise HTTPException(404, 'no such task')
-    from .sessionrecord import with_views
-    from .session_artifacts import VIEW
-    got = codingchat.chat(store, tid)
-    # ...each view a session drew put back where its trace no longer has it (sessionrecord.with_views): the task's own copy, one read
-    with_views(got['sessions'], store._rows("SELECT * FROM task_artifact WHERE TaskId=? AND Kind=?", (int(tid), VIEW)))
-    return {'data': got}
 
 class AgentChannelBody(BaseModel):
     kind: str

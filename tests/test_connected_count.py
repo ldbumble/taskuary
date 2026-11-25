@@ -98,6 +98,24 @@ def test_gmails_refused_sign_in_reads_signed_out_on_the_card_and_the_bell_alike(
     assert 'SIGNED_OUT' not in page and 'LastError.test' not in page, 'the page never reads error text for it'
 
 
+def test_a_rejected_token_reads_signed_out_on_its_card_and_clears_when_it_works_again():
+    """A revoked GitHub token answered 401 on every repo read: the card said "last test failed" over a sign-in to do. A 401 is the
+    credentials refused, whatever system says it - the card and the bell both say sign in again, once, and a read that works clears both."""
+    from taskuary import problems
+    s = MemoryStore()
+    cid = _card(s, 'github', Active=1, Secret='tok')
+    for _ in range(2): s.touch_connector(cid, 'org/app: 401 Client Error: Unauthorized for url: https://api.github.example/repos/org/app/issues')
+    assert _api(s)[cid]['State']['state'] == 'signed_out'
+    assert [p['kind'] for p in problems.collect(s) if p['connector'] == str(cid)] == ['signed_out'], 'one bell item, however many reads failed'
+    s.touch_connector(cid)
+    assert _api(s)[cid]['State']['state'] == 'connected' and not [p for p in problems.collect(s) if p['connector'] == str(cid)]
+    chatgpt = _card(s, 'chatgpt', Active=1, Secret='rt')
+    s.touch_connector(chatgpt, 'the ChatGPT sign-in has lapsed - sign in again on the ChatGPT card')
+    assert _api(s)[chatgpt]['State']['state'] == 'signed_out'
+    for err in ('GitHub refused the read (permissions or rate limit)', 'timed out after 401 seconds'):
+        assert not cc.signed_out({'Active': 1, 'LastError': err}), err
+
+
 def test_a_failing_data_card_is_not_connection_ok_in_the_picker():
     "The data-source picker read LastSyncAt alone - a switched-off card that once read said 'connection ✓'; it reads State now."
     page = (ROOT / 'website' / 'src' / 'ConnectorsView.jsx').read_text(encoding='utf-8')

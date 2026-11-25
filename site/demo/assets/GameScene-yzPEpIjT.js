@@ -1,4 +1,8 @@
+<<<<<<<< HEAD:site/demo/assets/GameScene-yzPEpIjT.js
 import{r as Xe,j as be,B as Ke,Y as $s,$ as Dh,a1 as _c,a3 as Zr,T as ci,X as jr,t as vc,er as xc}from"./index-CpQ4EvyP.js";/**
+========
+import{r as Xe,j as be,B as Ke,Y as $s,$ as Dh,a1 as _c,a3 as Zr,T as ci,X as jr,t as vc,er as xc}from"./index-DDpfNxOI.js";/**
+>>>>>>>> worktree-agent-ab63291f85596682a:site/demo/assets/GameScene-Bxa5Aego.js
  * @license
  * Copyright 2010-2025 Three.js Authors
  * SPDX-License-Identifier: MIT

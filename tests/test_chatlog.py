@@ -643,6 +643,23 @@ def test_the_words_it_streamed_stay_its_rows_once_the_answer_is_filed_and_only_t
     assert t['tail'] == '' and t['text'].startswith('Payworth'), 'the answer is not drawn a second time; its words are still the turn\'s'
 
 
+def test_a_message_pushed_as_it_streams_reads_as_the_turn_reads_it_its_repeated_opener_said_once():
+    """Walk 21 (S7, Codex): "I see you confirmed 2 p.m. with Erin." - a step - then the answer opening on that sentence again. A read of the turn
+    said it once; the row pushed to the open chat as it streamed was read alone, and the open chat drew the sentence twice."""
+    from taskuary import conversation, live
+    s, tid = world()
+    conversation.hear(s, tid, turn=True)
+    said = 'I see you confirmed 2 p.m. with Erin and told her you’d move the invite.'
+    say = lambda mid, t: chatlog.feed(s, tid, 'sid1', 'acp', {'sessionUpdate': 'agent_message_chunk', 'messageId': mid, 'content': {'type': 'text', 'text': t}})
+    say('m1', said)
+    chatlog.feed(s, tid, 'sid1', 'acp', {'sessionUpdate': 'tool_call', 'toolCallId': 'c1', 'kind': 'other', 'title': 'Marked the reply as not needed', 'status': 'completed'})
+    say('m2', f'{said}\n\nI marked the reply as no longer needed.')
+    chatlog.flush(s, tid)
+    n = s._one("SELECT Id FROM chatlog WHERE TaskId=? AND Key=?", (tid, 's:sid1:m:m2'))['Id']
+    assert chatlog.pushed(s, tid, n)['step']['text'] == 'I marked the reply as no longer needed.'
+    assert [x.get('text') for x in chatlog.read(s, tid, 'everything')['items'][-1]['steps'] if x['k'] == 'said'] == [said, 'I marked the reply as no longer needed.']
+
+
 def test_the_answer_draws_only_what_its_words_did_not_say_a_file_by_its_name_or_its_path():
     from taskuary.conversation import unsaid
     path = 'C:\\Users\\alex\\AppData\\Local\\Temp\\home\\scratch\\outputs\\TQ-0003\\Wellness_Flyer.pdf'

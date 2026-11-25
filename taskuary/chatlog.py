@@ -851,7 +851,12 @@ def pushed(store, tid: int, n: int) -> dict:
     if not r: return {}
     x = _item(dict(r))
     if x.get('k') == 'tool': x = tool_row(x)
-    elif not (x := next(iter(_said([x])), None)): return {}
+    else:
+        # ...read with what its turn said before it, as a read of the turn reads it (walk 21: an opener said again drew twice in the open chat)
+        with store.lock: before = [_item(dict(k)) for k in store.cx.execute("SELECT * FROM chatlog WHERE Parent=? AND Kind='step' AND Id<? ORDER BY Id",
+                                                                           (r['Parent'], int(n))).fetchall()]
+        _said(before, seen=(seen := set()))
+        if not (x := next(iter(_said([x], seen=seen)), None)): return {}
     return {'tid': int(tid), 'turn': r['TurnKey'], 'step': x}
 
 

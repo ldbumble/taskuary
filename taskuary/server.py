@@ -9960,10 +9960,10 @@ def report_preview(body: dict):
         head, summary = render_report(store, body, _llm() if body.get('ai_prompt') else None)
         # the chart is half of what a scheduled run hands back, so the dry run has to show it -
         # rendered in memory here, since a preview files no message to hang an attachment on
-        from .artifacts import chart_directive, rows_from_body, strip_directive, to_svg_chart
+        from .artifacts import chart_asked, rows_from_body, strip_directive, to_svg_chart
         svg, rows = '', rows_from_body(summary)
-        if rows and str(store.get_setting('report_images_enabled') or '1') == '1':
-            val, lab, ctitle = chart_directive(summary)
+        if rows and (want := chart_asked(store, summary)):
+            val, lab, ctitle = want
             svg = to_svg_chart(rows, None, ctitle or body.get('title') or head, val, lab) or ''
         return {'ok': True, 'headline': head, 'summary': strip_directive(summary)[:4000],
                 'rows': len(rows), 'chart': svg}
@@ -12491,7 +12491,7 @@ def settings():
     # `assistant_notes*` is a check's private memory of its own last run, one key per report
     # (assistant.notes_key) - bookkeeping, not a knob, however many reports there are
     rows = [s for s in store.list_settings() if s['Name'] not in ('ingest_status', 'assistant_last_run', 'pane_geometry', 'pane_theme')
-            # ...nor is what a scheduled report last read and wrote (reports.kept_report: its summary and rows, up to 12K a report)
+            # ...nor is what a scheduled report last read (render_report: the hash of its rows)
             and not s['Name'].startswith(('report_last_run:', 'report_read_mark:', 'assistant_notes'))]
     from .repochoice import FOLDERS_KEY, default_folders
     # ...a blank folder list means the usual homes for code that exist on THIS machine, so that is what it shipped as here

@@ -1117,6 +1117,9 @@ class CoreTests(unittest.TestCase):
     def test_prose_reports_produce_no_files_and_row_reports_produce_both(self):
         s = MemoryStore()
         body = '\n'.join(json.dumps(r) for r in self._report_rows())
+        bare = s.add_message({'Channel': 'report', 'Subject': 'Payroll Journal', 'BodyText': body, 'Status': 'feed'})
+        self.assertEqual(len(artifacts.attach_report_output(s, bare, 'Payroll Journal', body)), 1)   # no chart its answer did not ask for
+        body += '\nCHART: Debit | Employee | Debits'
         mid = s.add_message({'Channel': 'report', 'Subject': 'Payroll Journal', 'BodyText': body, 'Status': 'feed'})
         self.assertEqual(len(artifacts.attach_report_output(s, mid, 'Payroll Journal', body)), 2)
         names = [a['Name'] for a in s.list_attachments(mid)]

@@ -180,6 +180,14 @@ def chart_directive(text: str) -> tuple:
     return (bits[0] or None), (bits[1] if len(bits) > 1 and bits[1] else None), (bits[2] if len(bits) > 2 else '')
 
 
+def chart_asked(store, body: str) -> tuple:
+    """The chart a report's answer ASKED for - (value, label, title) - or None. A chart is drawn only on the answer's own
+    CHART: line: guessed from whatever rows came back it plotted one process's runtime under an error check's verdict (his
+    live app, 2026-11-25), a picture that answered nothing the report was asked."""
+    if str(store.get_setting('report_images_enabled') or '1') != '1' or not _CHART_LINE.search(body or ''): return None
+    return chart_directive(body)
+
+
 def strip_directive(text: str) -> str:
     """The CHART: line is an instruction to Taskuary, not prose for the reader."""
     return _CHART_LINE.sub('', text or '').strip()
@@ -302,13 +310,12 @@ def to_svg_chart(rows: list, path, title: str = '', want_val: str = None, want_l
 XLSX_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
 
 def attach_report_output(store, mid: int, title: str, body: str) -> list:
-    """Turn one report's rows into files on its message: the spreadsheet, and the chart when the
-    data has a measure in it. Prose-only reports (an AI summary, a failure) produce neither, and
-    `report_images_enabled` = 0 turns the chart off without losing the spreadsheet."""
+    """Turn one report's rows into files on its message: the spreadsheet, and the chart its answer asked for (chart_asked).
+    Prose-only reports (an AI summary, a failure) produce neither, and `report_images_enabled` = 0 turns the chart off
+    without losing the spreadsheet."""
     rows = rows_from_body(body)
     if not rows: return []
-    want_val, want_lab, want_title = chart_directive(body)
-    charts_on = str(store.get_setting('report_images_enabled') or '1') == '1'
+    want = chart_asked(store, body)
     stem = _SAFE.sub('', title or 'report').strip()[:60] or 'report'
     day = datetime.now().strftime('%Y-%m-%d')
     made = []
@@ -318,7 +325,7 @@ def attach_report_output(store, mid: int, title: str, body: str) -> list:
         made.append(store.add_attachment({'MessageId': mid, 'ExternalId': f'report:{mid}:xlsx', 'Name': x.name,
                                           'ContentType': XLSX_TYPE, 'Size': x.stat().st_size, 'Path': str(x)}))
     c = d / f'{stem} {day}.svg'
-    if charts_on and to_svg_chart(rows, c, want_title or stem, want_val, want_lab):
+    if want and to_svg_chart(rows, c, want[2] or stem, want[0], want[1]):
         made.append(store.add_attachment({'MessageId': mid, 'ExternalId': f'report:{mid}:chart', 'Name': c.name,
                                           'ContentType': 'image/svg+xml', 'Size': c.stat().st_size,
                                           'Inline': 1, 'Path': str(c)}))

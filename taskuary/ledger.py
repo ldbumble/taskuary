@@ -109,7 +109,10 @@ def went(store, rid, out=None, at=None) -> bool:
     try: p = json.loads(rv.get('FinalText') or rv.get('DraftText') or '{}') or {}
     except ValueError: p = {}
     p = p if isinstance(p, dict) else {}
-    link, what = _link(out if out is not None else p.get('result')), ' '.join(str(rv.get('Reason') or p.get('type') or p.get('action') or 'an act').split())[:300]
+    # ...the act as its card names it, never the card's reason for holding it (walk 19: the end-of-day report read "Publish your post - so it
+    # waits for your press" off this line, for a post that went at 21:44)
+    from .proposals import act_words
+    link, what = _link(out if out is not None else p.get('result')), (act_words(rv.get('Reason')) or p.get('type') or p.get('action') or 'an act')[:300]
     return write(store, 'act', link or what, link, 'went', f"rv{rv['ReviewId']}", rv.get('TaskId'), None,
                  {'what': what, 'type': p.get('type') or p.get('action') or ''}, at=at or rv.get('DecidedAt'))
 
@@ -236,12 +239,16 @@ def of_task(store, tid) -> list:
 # ONE ROW, SAID ONE WAY wherever it is read (the task's record, the owner's memory): an address row says the address and how it is known -
 # never the line or subject it was found under (walk 10, 2026-11-23: memory read `gail@... <Q3 board pack>` as a fact about her)
 SAY = {'sent': lambda r: f"sent \"{r['Value'] or 'a mail'}\" to {r['Subject']} ({r['At']})",
-       'act': lambda r: f"went live: {r['detail'].get('what') or r['Subject']}" + (f" - {r['Value']}" if r['Value'] else '') + f" ({r['At']})",
+       'act': lambda r: f"went live: {_act(r['detail'].get('what'))}" + (f" - {r['Value']}" if r['Value'] else '') + f" ({r['At']})",
        'account': lambda r: f"an account on {r['Subject']}" + (f" as {r['Value']}" if r['Value'] else '') + f" ({r['Act'].replace('_', ' ')})",
        'file': lambda r: f"file {r['Value'] or r['Subject']} ({r['Act']})",
        'address': lambda r: f"address {r['Subject']} ({'he gave it' if r['Act'] == 'given' else 'mailed'})",
        'promise': lambda r: f"he promised {r['Subject'] or 'them'}: {r['Value']}"}
 def said(r) -> str: return SAY[r['Kind']](r)
+def _act(what) -> str:
+    "A row's act in its card's words - a row written before went() kept them still carries the hold's reason."
+    from .proposals import act_words
+    return act_words(what) or 'an act'
 
 
 def person(store, address: str, limit=8) -> list:

@@ -475,6 +475,31 @@ def test_a_reply_raised_empty_and_written_after_his_line_stands_under_the_turn_t
     assert [x['kind'] for x in items] == ['arrival', 'turn', 'line', 'turn'] and at.get(rid) == 3, (at, [x['kind'] for x in items])
 
 
+def test_a_reply_rewritten_in_place_by_the_next_turn_stands_under_that_turn():
+    """THE OWNER'S LIVE APP (2026-11-25: "why is there text after the card?"): one turn wrote the reply to a sender, the next - the agent going on
+    by itself, nothing of his between - rewrote that same card in place, and the card stayed in the first turn with the second's words, the
+    turn that wrote them drawn after it. A card whose words a later turn wrote is that turn's last thing. Invented people."""
+    import time as t_
+    from taskuary import cardqueue, conversation, general, wrapup
+    from taskuary.store import set_owner
+    s, tid = world()
+    set_owner(s, 'Alex Doyle', 'alex@northwind.example')
+    s.add_message({'TaskId': tid, 'ExternalId': 'mr2', 'Channel': 'email', 'FromName': 'Marcus Reed', 'FromEmail': 'marcus@northwind.example',
+                   'ToEmail': 'alex@northwind.example', 'Subject': 'Harness', 'BodyText': 'How do the tools fit together? Marcus', 'Status': 'routed'})
+    conversation.hear(s, tid, turn=True)
+    rid = wrapup.agent_reply(s, tid, 'Hi Marcus, the harness hands the model its tools. Alex', to='marcus@northwind.example')['review_id']
+    s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'I drafted the reply to Marcus.')
+    chatlog.settled(); chatlog.read(s, tid)
+    t_.sleep(1.1)
+    conversation.hear(s, tid, turn=True)
+    assert wrapup.agent_reply(s, tid, 'Hi Marcus, the harness hands the model a menu of tools and skills. Alex', to='marcus@northwind.example')['review_id'] == rid
+    s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'I updated the reply to Marcus with the skills.')
+    chatlog.settled(); cardqueue._SEEN.clear()
+    items = chatlog.read(s, tid)['items']
+    at = {c['review']: i for i, x in enumerate(items) for c in x.get('cards') or []}
+    assert [x['kind'] for x in items] == ['arrival', 'turn', 'turn'] and at.get(rid) == 2, (at, [x['kind'] for x in items])
+
+
 def test_the_agents_own_words_are_the_question_the_marker_only_marks_the_wait():
     """WALK 8 (2026-11-20, decided that day): asked in its prose and again in its [[TASKUARY-ASK]], the turn asked Marcus's times twice. The
     marker sets the wait; its text is drawn only under a turn that said nothing of its own."""

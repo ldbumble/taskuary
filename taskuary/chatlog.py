@@ -956,6 +956,7 @@ def advance(store, tid: int) -> None:
     from . import cardqueue
     from .conversation import _card
     from .processing_unread import OWNER_ACTORS
+    from .wrapup import OWNER_SID
     tid = int(tid)
     q = cardqueue.state(store, tid)
     with store.lock:
@@ -971,7 +972,11 @@ def advance(store, tid: int) -> None:
         # ...A REPLY RAISED EMPTY AND WRITTEN AFTER HIS LINE IS THE CARD OF THE TURN THAT WROTE IT (the real walk 2, 2026-11-19: the agent asked,
         # he answered, and the letter its next turn wrote stood ABOVE his line, in the turn that had only asked): its words-less row was never
         # a card he could press, so it is put again where the words were written
-        if st == 'pending' and not json.loads(r['Body']).get('was') and _card(rv).get('was') and (o := open_turn(store, tid)) and o['Id'] != r.get('Parent'):
+        # ...and so is one A LATER TURN REWROTE IN PLACE (the owner's live app, 2026-11-25: "why is there text after the card?"): it stood in the
+        # first turn with the second's words, and the turn that wrote them drew after it - the words are the newest writer's, and so is the card.
+        # His own edit (wrapup.OWNER_SID) is not a turn's: it stays where he edited it
+        if (st == 'pending' and _card(rv).get('was') and _words(json.loads(r['Body'])) != _words(_card(rv)) and rv.get('DraftSid') != OWNER_SID
+                and (o := open_turn(store, tid)) and o['Id'] != r.get('Parent')):
             with store.lock: store.cx.execute('DELETE FROM chatlog WHERE Id=?', (r['Id'],)); store.cx.commit()
             rows.pop(k); continue
         # ...ONE TAKEN BACK BEFORE ITS TURN ENDED NEVER STOOD (drawn only then): its row goes, as nothing of it was ever on his screen
@@ -1016,6 +1021,11 @@ def advance(store, tid: int) -> None:
         put(store, tid, 'card', f'r:{rid}', c, parent=t, state=c['status'], src=f'review:{rid}')
 
 
+def _words(card: dict) -> str:
+    "The words a card's row stood with (`was`, conversation._card) - '' for one raised empty."
+    return str((card.get('was') or {}).get('text') or '')
+
+
 def _was_front(by: dict, rv: dict) -> bool:
     "Was review `rv` the card in front - no older card of the task still waiting when it was raised? Read from the stored reviews alone."
     from .conversation import ep
@@ -1050,7 +1060,9 @@ def advance_soon(store, tid: int, rid: int = None) -> None:
     a reply raised empty) - plain reads, no other lock taken."""
     # ...AND A LETTER RAISED EMPTY (its row has no words) IS THE CARD OF THE TURN WRITING IT NOW (walk 8, 2026-11-20: Marcus's reply, raised empty in
     # the turn that asked him for times, was written by the turn after his answer - and put back in the first, above his line, where none looked)
-    if rid and (not (row := get(store, tid, f'r:{int(rid)}')) or row.get('what') in DRAFTS + ('slot',) and not row.get('was')):
+    # ...and so is one whose words are not its row's: rewritten in place by a later turn (advance moves its row there)
+    if rid and (not (row := get(store, tid, f'r:{int(rid)}')) or row.get('what') in DRAFTS + ('slot',)
+                and (not row.get('was') or _words(row) != str((store.get_review(int(rid)) or {}).get('DraftText') or ''))):
         # ...the turn at work raised it even where his line landed under it a beat before its next step (the turn is cut there only at that step)
         try: _RAISED.setdefault(store, {})[int(rid)] = (open_turn(store, tid) or _live(store, tid) or {}).get('Id')
         except TypeError: pass                     # ...a store that cannot be held weakly keeps no note: the time of its raise places it

@@ -1516,8 +1516,7 @@ def how() -> str:
             '"Sign in" click` finds a control by what it IS. Take a screenshot only when the '
             'question is genuinely visual - it costs far more and says less. '
             '`agent-browser skills get core --full` if you need a command you do not know. '
-            'Taskuary itself is already running at $TASKUARY_URL: do not '
-            'start Taskuary, Vite, or another local server. '
+            'Taskuary itself is already running: do not start Taskuary, Vite, or another local server. '
             'NEVER type a password, a 2FA code or a card number, and never ask for a password. '
             # THE SIGN-IN IS TASKUARY'S (signin.py): the agent only says WHERE. The server types it - from the owner's vault or
             # their fill page - after checking the page's own origin, so nothing the agent reads or is told can aim it elsewhere.

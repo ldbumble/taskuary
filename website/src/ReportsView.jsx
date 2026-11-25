@@ -31,6 +31,7 @@ import { ChannelIcon, StatusDot, timeAgo, Crumb, Empty, FilterPills, SideRail } 
 import { RecentlyDeleted, UndoLine, removeNow } from "./Removed.jsx";
 import WorkflowEditor, { SchedulePicker, scheduleOf, withSchedule } from "./WorkflowEditor.jsx";
 import RunSteps from "./RunSteps.jsx";
+import ApproveWrite, { sameStep, useWrites } from "./ApproveWrite.jsx";
 import AdvisorRuns from "./AdvisorRuns.jsx";
 import { TYPE_LABELS, useScheduleWords } from "./reportWords.js";
 import { lastRanAt } from "./reportRows.js";
@@ -1205,6 +1206,13 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
     setCfg((c) => ({ ...withSchedule(c, next), on_startup: next.mode === "manual" ? c.on_startup : false }));
   };
   const [srcs, setSrcs] = useState(toSources(saved));   // the funnel's inputs, in order
+  // ...each one that writes to a system, as saved, with "Approve this write" on its card (flow.report_steps: source<n>, the typed ones by place)
+  const [writes, reloadWrites] = useWrites(cur?.SourceId, cur?.ConfigJson);
+  const savedSrcs = cur ? toSources(saved).filter((x) => x.type) : [];
+  const approveOn = (i) => {
+    const n = srcs.slice(0, i + 1).filter((x) => x.type).length, w = srcs[i]?.type && writes[`source${n}`];
+    return w ? <ApproveWrite sid={cur.SourceId} w={w} onChanged={reloadWrites} changed={!sameStep(toShape(srcs[i]), toShape(savedSrcs[n - 1] || {}))} /> : null;
+  };
   // the Assistant's OWN data sources: a system it checks without a saved report standing behind it
   // ...and Taskuary's own cards sit in that same list (type "taskuary"). A report saved before
   // they did - with the block dict, the first page's own key, or nothing - opens with the cards
@@ -1535,7 +1543,7 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
             <Box sx={{ display: "flex", gap: 1.5, flexWrap: "wrap", alignItems: "stretch", maxWidth: 720 }}>
               {srcs.map((src, i) => (
                 <SourceCard key={i} src={src} index={i} count={srcs.length} writeEnabled={workflow} ownSwitch={!workflow}
-                  typeOptions={typeOptions} connectors={connectors}
+                  typeOptions={typeOptions} connectors={connectors} extra={approveOn(i)}
                   dragging={drag === i}
                   onDragStart={() => setDrag(i)} onDragEnd={() => setDrag(null)}
                   onDropHere={() => { if (drag === null || drag === i) return;

@@ -15,6 +15,7 @@ import { ALERT, ALERT_INK, BORDER, DIM, FAINT, INK, PANEL, PANEL2, mono } from "
 import { PRIORITIES, level } from "./priority.js";
 import { SourceCard } from "./ReportsView.jsx";
 import { Dot, StepResult } from "./RunSteps.jsx";
+import ApproveWrite, { sameStep } from "./ApproveWrite.jsx";
 import { KIND_WORDS, ONLY_IF, badRefs, canAddAgent, insertStep, missingIn, moveStep, recHead, removeStep, runWords, testWords, toSaved,
   tokenInQuery, tokensFor } from "./workflowFlow.js";
 
@@ -160,7 +161,7 @@ function AddStep({ flow, at, onAdd, last }) {
   );
 }
 
-export default function WorkflowSteps({ flow, setFlow, outputs, setOutputs, connectors, types, title, sourceId, inputs, changed }) {
+export default function WorkflowSteps({ flow, setFlow, outputs, setOutputs, connectors, types, title, sourceId, inputs, changed, writes = {}, savedFlow = [], onWrites }) {
   const [open, setOpen] = useState(() => new Set(flow.length <= 3 ? flow.map((s) => s.id) : []));
   const [testing, setTesting] = useState("");
   const [tested, setTested] = useState(false);       // a test has run here - the outputs below are a test's, not the last run's
@@ -245,6 +246,9 @@ export default function WorkflowSteps({ flow, setFlow, outputs, setOutputs, conn
                     onChange={(e) => setStep(i, { label: e.target.value })} />
                   <KindConfig step={s} flow={flow} index={i} set={(p, replace) => setStep(i, p, replace)} typeOptions={typeOptions}
                     connectors={connectors || []} test={test} />
+                  {/* a write to a system, approved here for its scheduled runs - the step as saved (ApproveWrite) */}
+                  {writes[s.id] && <ApproveWrite sid={sourceId} w={writes[s.id]} onChanged={onWrites}
+                    changed={!sameStep(toSaved([s])[0], toSaved([savedFlow.find((x) => x.id === s.id) || {}])[0])} />}
                   {!!bad.length && <Typography variant="caption" sx={{ color: ALERT_INK }}>
                     {bad.map((r) => `{{${r}}}`).join(", ")} {bad.length === 1 ? "is not a step" : "are not steps"} above this one.</Typography>}
                   {s.kind !== "agent" && <OnlyIf flow={flow} index={i} step={s} onChange={(p) => setStep(i, p)} />}

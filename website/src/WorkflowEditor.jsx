@@ -13,6 +13,7 @@ import { BORDER, DIM, FAINT, INK, card } from "./theme.jsx";
 import { removeNow } from "./Removed.jsx";
 import { effortChoices, keepEffort, modelChoices } from "./workflowBrain.js";
 import WorkflowSteps from "./WorkflowSteps.jsx";
+import { useWrites } from "./ApproveWrite.jsx";
 import { REPAIR, REPORT_WORDS, asReport, asSteps, askFor, diffKeys, firstMissing, onlyReads, outputsOf, toSaved } from "./workflowFlow.js";
 import { openAppLink } from "./appLinks.js";
 import { openRun } from "./funnelPile.js";
@@ -118,6 +119,7 @@ export default function WorkflowEditor({ sourceId, sources, connectors, types, d
   const [outputs, setOutputs] = useState(() => outputsOf(lastRunRec?.steps));
   const [repair, setRepair] = useState(null);       // {was, explain} while the AI's repair waits on Keep or Discard
   const setFlow = (f) => setCfg((c) => ({ ...c, flow: typeof f === "function" ? f(c.flow || []) : f }));
+  const [writes, reloadWrites] = useWrites(cur?.SourceId, cur?.ConfigJson);     // its write steps as saved, each with "Approve this write"
   const names = Object.fromEntries((connectors || []).map((c) => [c.ConnectorId, c.Name || c.Type]));
   const turnIntoSteps = async () => {
     setBusy("steps"); setMsg(null);
@@ -245,7 +247,8 @@ export default function WorkflowEditor({ sourceId, sources, connectors, types, d
             action={onReport ? <Button size="small" color="inherit" sx={{ whiteSpace: "nowrap" }} onClick={() => onReport(asReport(cfg))}>{btnLabel("make_report")}</Button> : null}>
             {REPORT_WORDS} Add a step that acts - open a task, draft a message, write to a system - or make it a report.</Alert>}
           <WorkflowSteps flow={cfg.flow || []} setFlow={setFlow} outputs={outputs} setOutputs={setOutputs} connectors={connectors} types={types}
-            title={cfg.title} sourceId={cur?.SourceId} inputs={cfg.inputs} changed={changed} />
+            title={cfg.title} sourceId={cur?.SourceId} inputs={cfg.inputs} changed={changed}
+            writes={writes} savedFlow={cur ? parse(cur.ConfigJson).flow || [] : []} onWrites={reloadWrites} />
           {!(cfg.flow || []).length && <Typography component="button" type="button" onClick={() => setCfg((c) => { const n = { ...c }; delete n.flow; return n; })}
             sx={{ border: 0, bgcolor: "transparent", p: 0, mt: 0.5, cursor: "pointer", color: "var(--tq-link, #55697a)", fontSize: 12, fontWeight: 600 }}>
             Use one agent prompt instead</Typography>}

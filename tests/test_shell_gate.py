@@ -144,7 +144,7 @@ class Holding(unittest.TestCase):
         with mock.patch.object(sg.os.path, 'isdir', self.held_dir), run:
             out = verdicts.decide(self.s, rv, 'approve')
         self.assertFalse(out['ok']); self.assertIn('non-fast-forward', out['send_error'])
-        self.assertTrue(out['send_error'].startswith("Push the agent's commits out of this computer failed: "), out['send_error'])     # what did not happen, in his words
+        self.assertTrue(out['send_error'].startswith("Push the agent's commits out of this computer exited with code 1: "), out['send_error'])     # what did not happen, in his words
         with mock.patch.object(sg.os.path, 'isdir', return_value=False):
             self.assertRaisesRegex(RuntimeError, 'folder it was held in is gone', sg.perform, self.s, self.tid, json.loads(rv['DraftText']))
 
@@ -219,7 +219,7 @@ class Running(unittest.TestCase):
         self.assertEqual(sg.text('To northwind/ledger — done'.encode()), 'To northwind/ledger — done')
         self.assertEqual(sg.text(b'bad \xff byte'), 'bad \ufffd byte')
         self.assertEqual(sg.failed(sg.text(wsl.encode('utf-16-le')), 1),
-                         'The held step failed: Windows Subsystem for Linux has no installed distributions.')
+                         'The held step exited with code 1: Windows Subsystem for Linux has no installed distributions.')
         self.assertEqual(sg.failed('', 128), 'The held step failed: exit 128')
 
 
@@ -737,7 +737,27 @@ def test_a_powershell_failure_is_said_by_its_reason_never_its_position():
     said = ("At line:1 char:66\n+ \"C:\\WINDOWS\\powershell.exe\" -Command 'git push'\n+                ~~~~~~~~\n"
             "Unexpected token '-Command' in expression or statement.\n    + CategoryInfo          : ParserError: (:) [], ParentContainsErrorRecordException\n")
     assert sg.failed(said, 1, 'push 3 commits to northwind/ledger deploy') == \
-        "Push 3 commits to northwind/ledger deploy failed: Unexpected token '-Command' in expression or statement."
+        "Push 3 commits to northwind/ledger deploy exited with code 1: Unexpected token '-Command' in expression or statement."
+
+
+# AN APPROVED STEP IS RUN AS IT WAS HELD AND SAID AS IT ENDED (walk 20): Codex's PowerShell curl with a JSON body was approved; the site answered
+# {"ok":true,"id":1}, curl exited 6 on a word PowerShell 5.1 split off the body, and the card read "failed: {"ok":true,"id":1}"
+def test_an_approved_json_post_runs_the_agents_own_script_and_says_its_exit_and_output():
+    s = MemoryStore(); tid = Factory(s).task('Post the vendor tip')
+    ps = 'C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe'
+    script = ('curl.exe -s -X POST https://chirp.vendor.example/api/post -H "Authorization: Bearer tok" -H "Content-Type: application/json" '
+              '-d \'{"text": "Vendor tip: ask for the per-seat price in writing."}\'')
+    import shlex
+    from taskuary import gate
+    t = gate.tool_of({'kind': 'execute', 'rawInput': {'command': shlex.join([ps, '-Command', script])}})
+    p = {'command': t['command'], 'shell': t['shell'], 'argv': t['argv'], 'cwd': 'C:/work', 'what': 'send data to chirp.vendor.example (curl)'}
+    ran = []
+    with mock.patch.object(sg, '_tell'), mock.patch.object(sg.os.path, 'isdir', return_value=True):
+        try: sg.perform(s, tid, p, run=lambda argv, cwd: (ran.append(argv), (6, '{"ok":true,"id":1}'))[1])
+        except RuntimeError as e: said = str(e)
+        else: raise AssertionError('a non-zero exit read as a clean run')
+    assert ran[0][1:] == ['-Command', script], 'the very script the card held, not one quoted again'
+    assert said == 'Send data to chirp.vendor.example (curl) exited with code 6: {"ok":true,"id":1}', said
 
 
 # A READ-ONLY LOOK AT TASKUARY'S OWN API IS NO FILE READ (the roads audit, 2026-11-19): `curl "$TASKUARY_URL/api/..."` was held as "a path it

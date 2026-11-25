@@ -39,7 +39,7 @@ def test_the_presses_he_reads_in_the_chat_are_said_by_it():
 
 def test_a_held_steps_failure_is_its_reason_line():
     assert shellgate.failed(PS, 1, 'push 3 commits to northwind/ledger main') == \
-        "Push 3 commits to northwind/ledger main failed: Unexpected token '-Command' in expression or statement."
+        "Push 3 commits to northwind/ledger main exited with code 1: Unexpected token '-Command' in expression or statement."
     assert say.owner({'kind': 'reason', 'text': 'triage: fyi - Erin Blake shares the rota'}) == 'Erin Blake shares the rota'
 
 

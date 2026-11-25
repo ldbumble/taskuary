@@ -650,12 +650,14 @@ def text(raw) -> str:
 # ...ONE LINE THAT SAYS WHY, never git's list of files (the owner, 2026-11-10: "no idea what this is" over "U site/demo/assets/...js / U ...").
 # By the tools' own grammar, not by meaning: a status entry, a commit line or a bare path is not a reason, and git, gh and WSL put theirs on
 # an `error:` / `fatal:` line; else its first line, where WSL says it
+# ...AND AS IT ENDED, NEVER GUESSED (walk 20: an approved API post went out, printed the site's {"ok":true}, exited 6 on a stray word, and the
+# card read "failed: {"ok":true}"): a tool's own error line is its failure; any other end is its exit code and what it printed
 def failed(said: str, rc: int, what: str = '') -> str:
-    "What the owner reads when the held step failed: what did not happen, in his words, and the one line where the tool says why."
+    "What the owner reads when the held step ended badly: the step in his words, and the tool's error line - else its exit code and output."
     from . import say
-    why = say.reason(said)
-    step = str(what or 'the held step').split(';')[0].strip()
-    return f"{step[:1].upper()}{step[1:]} failed: {why[:240] or f'exit {rc}'}"
+    why, step = say.reason(said), str(what or 'the held step').split(';')[0].strip()
+    step = step[:1].upper() + step[1:]
+    return f"{step} failed: {why or f'exit {rc}'}" if not why or not rc or say._SAYS_WHY.match(why) else f"{step} exited with code {rc}: {why}"
 
 
 # THE OWNER'S PRESS NEVER RACES THE AGENT IN ITS OWN FOLDER (the owner, 2026-11-10: "no idea what this is. it's broken"): a second Approve
@@ -694,8 +696,7 @@ def perform(store, tid: int, p: dict, run=None) -> dict:
     # ...A STEP IS AS IT ENDED, NOT AS ITS LAST PIPE DID (the Claude walk, 2026-11-19: a push piped through `| tail` exited 0 and its card read
     # "Approved · it ran" with the refused push's address under it): a tool's own failure line - git's `error:` / `fatal:`, its "! [rejected]" -
     # in what it printed is a failure, read off that grammar
-    if rc == 0 and _FAILED_LINE.search(str(said or '')): rc = 1
-    if rc != 0:
+    if rc != 0 or _FAILED_LINE.search(str(said or '')):
         store.audit('task', tid, 'shell_act_failed', 'owner', 'human', {'what': p.get('what'), 'command': cmd[:300], 'said': str(said or '')[-1500:]})
         raise RuntimeError(failed(said, rc, p.get('what')))
     said = ' '.join(str(said or '').split())[-600:]

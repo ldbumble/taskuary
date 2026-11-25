@@ -253,6 +253,12 @@ class LandingTests(unittest.TestCase):
         from taskuary import general
         self.dev(); landing.land(self.s, self.tid, 'push')
         self.assertIn("pressed Push on the agent's work - it went through", general.presses(self.s, self.tid)[-1][2])
+        # ...and the card that was pressed keeps its place in the chat (the card gallery, 2026-11-25: with nothing of its own left unpushed
+        # it had no time to stand at, and was gone from the chat at its own press)
+        with mock.patch.object(landing, 'own', return_value={'commits': [], 'paths': {}, 'at': ''}):       # ...the remote has them all now
+            s = landing.state(self.s, self.tid)
+        self.assertEqual((s['landed']['how'], s['commits']), ('push', 0))
+        self.assertEqual(s['at'], s['landed']['at']); self.assertTrue(s['at'])
 
     def test_a_card_read_again_asks_git_nothing_it_already_said_of_its_commits(self):
         """The owner's live app, 2026-11-19: /landing took 23 s - every poll asked git again for each own commit's files and whether each is on

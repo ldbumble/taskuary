@@ -328,7 +328,10 @@ def state(store, tid: int, full: bool = False) -> dict | None:
     ahead = int(_git(cwd, 'rev-list', '--count', f'{base}..{br}') or 0) if mine else 0
     out = {'task': task_ref(tid), 'cwd': cwd, 'repo': _repo(cwd), 'base': base, 'branch': br if mine else base, 'own': mine, 'ahead': ahead,
            'shared': not mine, 'commits': ahead if mine else len(o['commits']),
-           'at': _stamp(int(_git(cwd, 'log', '-1', '--format=%ct', br) or 0)) if mine else o['at'],
+           # ...WHERE IT STANDS IN THE CHAT: when its newest change came in - and once pushed on the shared base, where none of its own is
+           # left to date it by, when it landed (the card gallery, 2026-11-25: the Push card had no place from its press on and was gone
+           # from the chat - a line under the turn said what the card should have)
+           'at': _stamp(int(_git(cwd, 'log', '-1', '--format=%ct', br) or 0)) if mine else o['at'] or (r.get('landed') or {}).get('at', ''),
            'files': files, 'changed': len(files), 'plus': sum(f['plus'] for f in files), 'minus': sum(f['minus'] for f in files),
            'landed': r.get('landed'), 'proposal': r.get('proposal')}
     out['name'] = out['repo'] or os.path.basename(os.path.normpath(cwd))      # ...the card names the repository it pushes to

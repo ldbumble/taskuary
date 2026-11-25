@@ -92,20 +92,23 @@ const Delta = ({ d, good, days, f = fmt }) => {
   const by = d.pct !== null ? `${Math.abs(d.pct * 100) < 10 ? (Math.abs(d.pct) * 100).toFixed(1) : Math.round(Math.abs(d.pct) * 100)}%` : f(Math.abs(d.change));
   return (
     <div className="tq-dash-delta"><b className={`pill ${dir}`}>{d.change > 0 ? "▲" : d.change < 0 ? "▼" : "•"} {d.change ? by : "0"}</b>
-      <span>{DASH.vs_before.replace("{n}", days)}</span></div>
+      <span>{days === 7 ? DASH.vs_week : DASH.vs_before.replace("{n}", days)}</span></div>
   );
 };
 
 // ...and under it, small, what else it says (`also`: its tokens under the dollars) - a figure that comes to nothing is not said
-function StatBody({ c, rows, all, also = [], date, days, now }) {
+// ...in a strip the sparkline sits right under the figure and its change, and what else it says under the line - so every cell's line is
+// at one height, and the strip is as tall as its fullest cell (2026-11-25: a cell stretched, its line far below its figure)
+function StatBody({ c, rows, all, also = [], date, days, now, strip = false }) {
   const v = aggregate(rows, c.agg, c.y, c.per), d = delta(all, date, days, c.agg, c.y, now, c.per);
   const pts = date ? timeSeries(rows, date, c.agg, c.y, { days: days || 30, now, per: c.per }) : [];
   const more = also.filter((a) => a.value);
   return <>
     <Value v={v} unit={c.unit} />
     {d ? <Delta d={d} good={c.good} days={days} f={fmtOf(c)} /> : <div className="tq-dash-delta"><span>{date ? DASH.no_change : DASH.right_now}</span></div>}
+    {strip && pts.length > 1 && <Spark points={pts} />}
     {more.length > 0 && <div className="tq-dash-also">{more.map((a) => <span key={a.label}><b>{fmt(a.value)}</b> {a.label}</span>)}</div>}
-    {pts.length > 1 && <Spark points={pts} />}
+    {!strip && pts.length > 1 && <Spark points={pts} />}
   </>;
 }
 export function StatTile({ c, onDrill, stale, ...stat }) {
@@ -125,7 +128,7 @@ export function Kpis({ c, cells, onDrill, stale }) {
           <div key={x.title} className="tq-dash-kpi" role="button" tabIndex={0} aria-label={x.title}
             onClick={() => onDrill({ title: x.title, rows: stat.rows })} onKeyDown={(e) => { if (e.key === "Enter") onDrill({ title: x.title, rows: stat.rows }); }}>
             <div className="tq-dash-kpi-h">{x.title}</div>
-            <StatBody c={x} {...stat} />
+            <StatBody c={x} {...stat} strip />
           </div>))}
       </div>
     </Card>

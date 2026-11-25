@@ -106,7 +106,7 @@ test("drawn, a dollar tile says money, a pill for its change and its tokens unde
              { label: "with no price", agg: "sum", y: "tokens", where: { billing: "unknown" } }] }] };
   const got = html(spec, { sources: { ai: { rows, columns: Object.keys(rows[0]) } } }, NOW);
   assert.match(got, /<div class="tq-dash-value">\$11\.50<\/div>/, "dollars, no unit after them");
-  assert.match(got, /<b class="pill down">▲ 15%<\/b><span>vs prior 7 days<\/span>/, "spend up is the bad way");
+  assert.match(got, /<b class="pill down">▲ 15%<\/b><span>vs last week<\/span>/, "spend up is the bad way");
   assert.match(got, /<div class="tq-dash-also"><span><b>1\.2M<\/b> tokens<\/span><span><b>400\.0K<\/b> on your plan<\/span><\/div>/);
   assert.doesNotMatch(got, /with no price/, "a figure that comes to nothing is not said");
   assert.match(got, /<linearGradient id="tq-dash-g\d+"/, "the sparkline fades under its line");

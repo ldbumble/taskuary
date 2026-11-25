@@ -559,7 +559,7 @@ def c_bug_pushed(r: Run):
         r.git('commit', '-qam', 'Refunds carry no tax')
         codingchat.record_update(r.tid, r.sid(), {'sessionUpdate': 'tool_call_update', 'toolCallId': 'commit-1', 'status': 'completed'})
     r.turn('Fixed in totals.py: a refund no longer adds tax. Press Push - then I check it is live and reply to Ray.',
-           fix, ('propose_land', {'how': 'push', 'why': 'the refund fix, one commit on master'}))
+           fix, ('propose_land', {'how': 'push', 'why': 'the refund fix, one commit on master', 'then': 'check it is live and reply to Ray'}))
     r.press(f'/api/tasks/{r.tid}/landing', {'how': 'push'}, label='press Push')
     r.turn('It is on origin/master (checked the remote head). The reply to Ray waits for your Send.',
            ('propose_reply', {'text': 'Hi Ray - fixed: refunds no longer add tax. It is live on master.'}), DONE_AT_SEND)
@@ -758,7 +758,7 @@ def o_silent_turn(r: Run):
 
 
 def p_break_out(r: Run):
-    "(p) A second matter on the task -> the break-out card -> Approve -> its own task."
+    "(p) A second matter on the task -> the break-out card -> Approve -> its own task, said by the card: no step of the agent's follows."
     r.arrive({'intent': 'task', 'kind': 'general', 'title': 'Erin: budget numbers'}, body='Can you check the budget numbers?')
     r.turn('The budget numbers check out.')
     r.arrive({'intent': 'task', 'kind': 'general', 'refines': False}, body='Also - the parking permits expire Friday, can you renew them?', label='a second matter joins')
@@ -766,18 +766,18 @@ def p_break_out(r: Run):
            lambda: r.tool('propose', action='break_out', why='parking permits are their own matter', title='Renew the parking permits',
                           summary='The parking permits expire Friday.', messages=[f"m{r.s._rows('SELECT MAX(MessageId) AS m FROM message')[0]['m']}"]))
     r.send(label='Approve the break-out')
-    r.turn('The parking permits are their own task now.')
+    assert r.quiet(label='approved: its card says it went'), 'a press whose card names no step after it wakes nobody'
 
 
 def q_save_routine(r: Run):
-    "(q) A script for a job that comes again -> the save-routine card -> Approve -> a routine."
+    "(q) A script for a job that comes again -> the save-routine card -> Approve -> a routine, said by the card: no step of the agent's follows."
     r.task('Weekly vendor totals')
     r.type('total the vendor invoices - I need this every Monday')
     r.turn('Totals are above. The script that made them can run every Monday - the card saves it as a routine.',
            ('propose', {'action': 'save_routine', 'why': 'the same totals every Monday', 'title': 'Monday vendor totals',
                         'script': 'print("vendor totals")', 'daily_at': '08:00'}))
     r.send(label='Approve the routine')
-    r.turn('Saved: it runs every Monday at 8.')
+    assert r.quiet(label='approved: its card says it went'), 'a press whose card names no step after it wakes nobody'
 
 
 def s_send_close_at_work(r: Run):

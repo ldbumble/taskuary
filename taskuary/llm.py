@@ -716,7 +716,7 @@ def _said(m: dict) -> dict:
     "One chat message with its words scrubbed: a string, or each text part of a list (a picture's part goes as it is)."
     c = m.get('content')
     if isinstance(c, str): return {**m, 'content': _scrubbed(c)}           # ...a Stable system keeps its cache blocks
-    if isinstance(c, list): return {**m, 'content': [{**p, 'text': redact.scrub(p['text'])} if isinstance(p, dict) and isinstance(p.get('text'), str) else p for p in c]}
+    if isinstance(c, list): return {**m, 'content': redact.scrub_parts(c)}
     return m
 
 

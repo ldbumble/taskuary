@@ -887,7 +887,7 @@ def x_named_checkout_pushed(r: Run):
     repo = his_checkout(r, remote=True)
     r.task('Fix the ledger rounding')
     r.type(f'fix the rounding bug in the ledger totals - my checkout is at {repo}. Push it once I say so.')
-    r.at_work(lambda: his_fix(r), ('propose', {'action': 'push', 'why': 'the rounding fix, one commit on master'}))
+    r.at_work(lambda: his_fix(r), ('propose', {'action': 'push', 'why': 'the rounding fix, one commit on master', 'then': 'check it reached origin'}))
     assert 'ERROR' not in r.results[-1], r.results[-1]
     r.answer('Fixed and committed in your checkout: totals now round to cents. Press Push and I check it reached origin.')
     land = r.c.get(f'/api/tasks/{r.tid}/landing').json()['data']

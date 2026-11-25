@@ -1465,8 +1465,11 @@ SESSIONS = ((38, 'finished'), (12, 'finished'), (55, 'failed'), (21, 'finished')
 def seed_history_work(store, f, past) -> None:
     import uuid
     at = lambda s, mins: (datetime.strptime(s, '%Y-%m-%d %H:%M:%S') + timedelta(minutes=mins)).strftime('%Y-%m-%d %H:%M:%S')
-    for tid, _m, when, _c, _v in past:            # closed a few hours after it arrived, not at the moment the demo was built
-        store._exec("UPDATE task SET ClosedAt=? WHERE TaskId=? AND Status='done'", (at(when, 150), tid))
+    # closed a few hours after it arrived, not at the moment the demo was built - or a day or two later, as work is: every one closed the
+    # same day put the week's done tasks on the days the mail came and none today, one odd hump on the dashboard's sparkline (2026-11-24)
+    latest = (datetime.now() - timedelta(minutes=40)).strftime('%Y-%m-%d %H:%M:%S')
+    for i, (tid, _m, when, _c, _v) in enumerate(past):
+        store._exec("UPDATE task SET ClosedAt=? WHERE TaskId=? AND Status='done'", (min(at(when, 150 + (i % 3) * 1440), latest), tid))
     replies = [p for p in past if p[4] == 'reply']
     for (tid, mid, when, _c, _v), hrs in zip(replies, REPLY_HOURS):
         rid = f.review(tid, mid, status='approved', draft='Done.', final='Done.')

@@ -140,7 +140,7 @@
 .tq-dash-pie svg { width: 100%; height: 100%; display: block; overflow: visible; }
 .tq-dash-pie .track { stroke: var(--d-grid); }
 .tq-dash-pie .slice { cursor: pointer; transition: stroke-width .15s; }
-.tq-dash-pie .slice:hover { stroke-width: 16; }
+.tq-dash-pie .slice:hover { stroke-width: 14; }
 .tq-dash-pie .mid { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; pointer-events: none; }
 .tq-dash-pie .mid b { font-size: 21px; font-weight: 650; letter-spacing: -.02em; color: var(--d-ink); font-variant-numeric: tabular-nums; line-height: 1.1; }
 .tq-dash-pie .mid span { font-size: 11px; color: var(--d-muted); }

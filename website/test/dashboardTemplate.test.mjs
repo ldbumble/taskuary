@@ -75,7 +75,7 @@ test("drawn, the spend tiles show the slider, the switchable legend, the pie's s
   assert.match(got, /<input type="range" min="1" max="90" step="1" aria-label="Days back" style="--p:[\d.]+%" value="7"\/>/);
   assert.match(got, /Last 7 days/);
   for (const s of ["Triage", "Advisor", "Tasks", "Assistant"]) assert.match(got, new RegExp(`<button type="button" aria-pressed="true"[^>]*><i [^>]*></i>${s}</button>`));
-  assert.match(got, /class="mid"><b>140\.0K<\/b>/, "the pie's whole in its middle");
+  assert.match(got, /class="mid"><b style="font-size:20px">140\.0K<\/b>/, "the pie's whole in its middle");
   assert.match(got, /<span title="Tasks">Tasks<\/span><b>120\.0K<\/b><em>86%<\/em>/);
   assert.match(got, /<div class="tq-dash-value">60\.0K/, "80K and 40K over two tasks");
   // ...and an agent's pie in its chat is the same pie
@@ -117,4 +117,24 @@ test("drawn, a dollar tile says money, a pill for its change and its tokens unde
 test("money reads as a person reads it", async () => {
   const { money } = await import("../src/dashboard/slice.js");
   assert.deepEqual([0.4213, 54.2, 20, 1234.4, 12345, 2.5e6, null].map(money), ["$0.42", "$54.20", "$20", "$1,234", "$12.3K", "$2.5M", "–"]);
+});
+
+// A PIE'S TOTAL FITS ITS HOLE (2026-11-24: "$34.83" touched the ring): the longer the figure, the smaller it is set - never past the hole
+test("drawn, a pie's total is set to fit the ring's hole, a long one smaller", async () => {
+  const { build } = await import("esbuild");
+  const out = await build({ stdin: { resolveDir: new URL("..", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1"), loader: "jsx", contents: `
+    import React from "react"; import { renderToStaticMarkup } from "react-dom/server.browser"; import { PieBody, holeFont } from "./src/dashboard/charts.jsx";
+    export { holeFont };
+    export const pie = (groups, f) => renderToStaticMarkup(<PieBody groups={groups} f={f} />);` }, loader: { ".css": "empty" },
+    bundle: true, write: false, format: "esm", jsx: "automatic", platform: "browser", conditions: ["worker"], logLevel: "silent",
+    define: { "process.env.NODE_ENV": '"production"' } });
+  const { pie, holeFont } = await import(`data:text/javascript;base64,${Buffer.from(out.outputFiles[0].text).toString("base64")}`);
+  const usd = (n) => `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const long = pie([{ key: "Tasks", value: 10000 }, { key: "Triage", value: 2345.67 }], usd);
+  assert.match(long, /<b style="font-size:12px">\$12,345\.67<\/b>/);
+  const px = (s) => parseInt(holeFont(s), 10);
+  // ...within the hole's 78px at about 0.62em a figure, whatever its length, and the short ones at the tile's full size
+  for (const s of ["$1.2K", "$34.83", "$1,234", "$12,345.67", "$123,456,789.00"]) assert.ok(px(s) * 0.62 * s.length <= 78 || px(s) === 10, s);
+  assert.equal(holeFont("$1.2K"), "21px");
+  assert.ok(px("$34.83") < 21 && px("$34.83") >= 18, holeFont("$34.83"));
 });

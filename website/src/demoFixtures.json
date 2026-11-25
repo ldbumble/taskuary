@@ -26909,7 +26909,7 @@
    }
   },
   "data": {
-   "at": "2026-11-05 20:01:52",
+   "at": "2026-11-05 20:06:42",
    "sources": {
     "mail": {
      "label": "What came in",
@@ -28426,7 +28426,7 @@
        "state": "closed",
        "priority": "regular",
        "arrived": "2026-10-31",
-       "closed": "2026-10-31",
+       "closed": "2026-11-01",
        "waiting": "5 days"
       },
       {
@@ -28450,7 +28450,7 @@
        "state": "closed",
        "priority": "regular",
        "arrived": "2026-10-31",
-       "closed": "2026-10-31",
+       "closed": "2026-11-02",
        "waiting": "5 days"
       },
       {
@@ -28462,7 +28462,7 @@
        "state": "closed",
        "priority": "regular",
        "arrived": "2026-11-01",
-       "closed": "2026-11-01",
+       "closed": "2026-11-02",
        "waiting": "4 days"
       },
       {
@@ -28486,7 +28486,7 @@
        "state": "closed",
        "priority": "regular",
        "arrived": "2026-11-01",
-       "closed": "2026-11-01",
+       "closed": "2026-11-03",
        "waiting": "4 days"
       },
       {
@@ -28498,7 +28498,7 @@
        "state": "closed",
        "priority": "regular",
        "arrived": "2026-11-02",
-       "closed": "2026-11-02",
+       "closed": "2026-11-03",
        "waiting": "3 days"
       },
       {
@@ -28522,7 +28522,7 @@
        "state": "closed",
        "priority": "regular",
        "arrived": "2026-11-03",
-       "closed": "2026-11-03",
+       "closed": "2026-11-05",
        "waiting": "2 days"
       },
       {
@@ -28534,7 +28534,7 @@
        "state": "closed",
        "priority": "regular",
        "arrived": "2026-11-03",
-       "closed": "2026-11-03",
+       "closed": "2026-11-04",
        "waiting": "2 days"
       },
       {
@@ -28558,7 +28558,7 @@
        "state": "closed",
        "priority": "regular",
        "arrived": "2026-11-04",
-       "closed": "2026-11-04",
+       "closed": "2026-11-05",
        "waiting": "yesterday"
       },
       {
@@ -28570,7 +28570,7 @@
        "state": "closed",
        "priority": "regular",
        "arrived": "2026-11-04",
-       "closed": "2026-11-04",
+       "closed": "2026-11-05",
        "waiting": "yesterday"
       },
       {
@@ -28853,7 +28853,7 @@
        "state": "closed",
        "priority": "regular",
        "arrived": "2026-10-31",
-       "closed": "2026-10-31",
+       "closed": "2026-11-01",
        "waiting": "5 days"
       },
       {
@@ -28877,7 +28877,7 @@
        "state": "closed",
        "priority": "regular",
        "arrived": "2026-10-31",
-       "closed": "2026-10-31",
+       "closed": "2026-11-02",
        "waiting": "5 days"
       },
       {
@@ -28889,7 +28889,7 @@
        "state": "closed",
        "priority": "regular",
        "arrived": "2026-11-01",
-       "closed": "2026-11-01",
+       "closed": "2026-11-02",
        "waiting": "4 days"
       },
       {
@@ -28913,7 +28913,7 @@
        "state": "closed",
        "priority": "regular",
        "arrived": "2026-11-01",
-       "closed": "2026-11-01",
+       "closed": "2026-11-03",
        "waiting": "4 days"
       },
       {
@@ -28925,7 +28925,7 @@
        "state": "closed",
        "priority": "regular",
        "arrived": "2026-11-02",
-       "closed": "2026-11-02",
+       "closed": "2026-11-03",
        "waiting": "3 days"
       },
       {
@@ -28949,7 +28949,7 @@
        "state": "closed",
        "priority": "regular",
        "arrived": "2026-11-03",
-       "closed": "2026-11-03",
+       "closed": "2026-11-05",
        "waiting": "2 days"
       },
       {
@@ -28961,7 +28961,7 @@
        "state": "closed",
        "priority": "regular",
        "arrived": "2026-11-03",
-       "closed": "2026-11-03",
+       "closed": "2026-11-04",
        "waiting": "2 days"
       },
       {
@@ -28985,7 +28985,7 @@
        "state": "closed",
        "priority": "regular",
        "arrived": "2026-11-04",
-       "closed": "2026-11-04",
+       "closed": "2026-11-05",
        "waiting": "yesterday"
       },
       {
@@ -28997,7 +28997,7 @@
        "state": "closed",
        "priority": "regular",
        "arrived": "2026-11-04",
-       "closed": "2026-11-04",
+       "closed": "2026-11-05",
        "waiting": "yesterday"
       },
       {
@@ -29176,7 +29176,7 @@
      "head": "12 agent runs",
      "rows": [
       {
-       "run_id": "ab75127aa528",
+       "run_id": "5d724de6995e",
        "task_id": 35,
        "ref": "TQ-0035",
        "day": "2026-11-05",
@@ -29186,7 +29186,7 @@
        "minutes": 13.4
       },
       {
-       "run_id": "8b941aa0f029",
+       "run_id": "4bce05922f21",
        "task_id": 34,
        "ref": "TQ-0034",
        "day": "2026-11-05",
@@ -29196,7 +29196,7 @@
        "minutes": 112.9
       },
       {
-       "run_id": "bc24673d039c",
+       "run_id": "4a1eaba930cb",
        "task_id": 33,
        "ref": "TQ-0033",
        "day": "2026-11-05",
@@ -29206,7 +29206,7 @@
        "minutes": 0.0
       },
       {
-       "run_id": "90fe3e8e2575",
+       "run_id": "75e091430cb1",
        "task_id": 32,
        "ref": "TQ-0032",
        "day": "2026-11-05",
@@ -29216,7 +29216,7 @@
        "minutes": 0.0
       },
       {
-       "run_id": "db1999587852",
+       "run_id": "6cd060aa8bfd",
        "task_id": 31,
        "ref": "TQ-0031",
        "day": "2026-11-05",
@@ -29226,7 +29226,7 @@
        "minutes": 187.8
       },
       {
-       "run_id": "398fc441a772",
+       "run_id": "7e2d01407d25",
        "task_id": 30,
        "ref": "TQ-0030",
        "day": "2026-11-05",
@@ -29236,7 +29236,7 @@
        "minutes": 0.0
       },
       {
-       "run_id": "921cd7e46f62",
+       "run_id": "7e686280ca76",
        "task_id": 16,
        "ref": "TQ-0016",
        "day": "2026-11-04",
@@ -29246,7 +29246,7 @@
        "minutes": 55.0
       },
       {
-       "run_id": "4160e5e65e7e",
+       "run_id": "8dee7d6ee440",
        "task_id": 17,
        "ref": "TQ-0017",
        "day": "2026-11-04",
@@ -29256,7 +29256,7 @@
        "minutes": 38.0
       },
       {
-       "run_id": "5c1abf58a71d",
+       "run_id": "71c5ca587a4b",
        "task_id": 18,
        "ref": "TQ-0018",
        "day": "2026-11-03",
@@ -29266,7 +29266,7 @@
        "minutes": 21.0
       },
       {
-       "run_id": "0c1b816cc924",
+       "run_id": "85e9166b64a1",
        "task_id": 20,
        "ref": "TQ-0020",
        "day": "2026-11-03",
@@ -29276,7 +29276,7 @@
        "minutes": 9.0
       },
       {
-       "run_id": "740f125b2558",
+       "run_id": "eb0a37bb75c0",
        "task_id": 22,
        "ref": "TQ-0022",
        "day": "2026-11-02",
@@ -29286,7 +29286,7 @@
        "minutes": 27.0
       },
       {
-       "run_id": "477bf58d6882",
+       "run_id": "4d1aa9d4a45b",
        "task_id": 25,
        "ref": "TQ-0025",
        "day": "2026-11-01",

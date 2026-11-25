@@ -205,8 +205,11 @@ export function Stacked({ c, st: all, slots, onDrill, stale }) {
 
 // ── a pie: shares of one whole, a ring with the whole in its middle and a legend that says each slice's value and share. The one pie
 // every surface draws - a dashboard's tile, and an agent's chart in its chat (ViewSpec)
+// THE TOTAL FITS ITS HOLE (2026-11-24: "$34.83" touched the ring): the hole is 68 of the ring's 100 across (r 40 less half a 12 stroke, twice),
+// 87px of a 128px ring - the figure gets 78px of it, at a figure's width of about 0.62em, and never more than 21px
+export const holeFont = (s) => `${Math.max(10, Math.min(21, Math.floor(78 / (0.62 * Math.max(1, String(s).length)))))}px`;
 export function PieBody({ groups, f = fmt, onPick }) {
-  const { total, slices: ss } = slices(groups), R = 38, C = 2 * Math.PI * R, W = 15;
+  const { total, slices: ss } = slices(groups), R = 40, C = 2 * Math.PI * R, W = 12, said = f(total);
   let at = 0;
   if (!ss.length) return <div className="tq-dash-none">{DASH.no_rows}</div>;
   return (
@@ -219,7 +222,7 @@ export function PieBody({ groups, f = fmt, onPick }) {
               strokeDasharray={`${Math.max(0, len - gap)} ${C - Math.max(0, len - gap)}`} strokeDashoffset={-from} transform="rotate(-90 50 50)"
               style={{ "--n": i }} onClick={onPick ? () => onPick(g) : undefined} />; })}
         </svg>
-        <div className="mid"><b>{f(total)}</b><span>{DASH.total}</span></div>
+        <div className="mid"><b style={{ fontSize: holeFont(said) }}>{said}</b><span>{DASH.total}</span></div>
       </div>
       <ul>{ss.map((g, i) => <li key={g.key} className={onPick ? "go" : ""} onClick={onPick ? () => onPick(g) : undefined}>
         <i style={{ background: g.other ? "var(--d-other)" : slotColor(g.slot ?? i) }} /><span title={label(g.key)}>{label(g.key)}</span>

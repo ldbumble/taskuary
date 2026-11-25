@@ -110,6 +110,8 @@ const sx = {
   "& h1, & h2, & h3, & h4": { fontWeight: 600, color: INK, lineHeight: 1.3, mt: 1.4, mb: 0.5 },
   "& h1": { fontSize: 17 }, "& h2": { fontSize: 15, pb: 0.35, borderBottom: `1px solid ${BORDER}` }, "& h3, & h4": { fontSize: 13.5 },
   "& p": { m: 0, mb: 0.75 }, "& ul, & ol": { m: 0, mb: 0.75, pl: 2.5 }, "& li": { mb: 0.25 },
+  // ...a task list's boxes ARE its bullets: a dot stood before every tick box
+  "& .contains-task-list": { pl: 0.5 }, "& .task-list-item": { listStyle: "none" },
   "& code": { ...mono, fontSize: 12, bgcolor: PANEL, px: 0.5, borderRadius: 0.5 },
   "& pre": { ...mono, fontSize: 12, bgcolor: PANEL, border: `1px solid ${BORDER}`, borderRadius: 1, p: 1, overflowX: "auto" },
   "& pre code": { bgcolor: "transparent", p: 0 },

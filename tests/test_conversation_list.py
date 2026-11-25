@@ -688,7 +688,8 @@ class TheList(unittest.TestCase):
         the next one shows". Before, both stood side by side with their Sends (2026-11-13). The first stands, saying what comes next; the
         second waits unseen until he has sent the first. Design round 5, I4: it then waited too for a turn its agent was woken to think in
         (~12 s of "Thinking..." over a letter already written) - a letter after a letter stands the moment his Send lands, in the turn that
-        wrote it, nobody woken; the press that ends the run wakes the agent, told of both. What went stays where it stood, for good."""
+        wrote it, nobody woken; the press that ends the run wakes nobody either where no step was declared (the owner, 2026-11-25) - its next
+        turn is told of both. What went stays where it stood, for good."""
         import json
         from taskuary import verdicts
         s, tid = self.s, self.tid
@@ -711,7 +712,8 @@ class TheList(unittest.TestCase):
             self.assertEqual(cards(now)[wrote['id']], [(ray, 'approved'), (erin, 'pending')]); self.assertEqual(conversation.flow_breaks(now, was), [])   # ...letters are card rows
             self.assertEqual(now['letters'], wrote['id'], 'it stands in the turn that wrote it, under the one that went')
             self.assertTrue(verdicts.decide(s, s.get_review(erin), 'approve', None, None, 'owner')['ok'])
-        self.assertEqual(len(woke), 1, 'the press that ends the run is the one wake'); self.assertIn(f'Card rv{ray} ', events.take(s, tid)[0]); self.assertIn(f'Card rv{erin} ', events.take(s, tid)[0])
+        self.assertEqual(woke, [], 'words he sent are said by their cards: no step declared, nobody woken (the owner, 2026-11-25)')
+        self.assertIn(f'Card rv{ray} ', events.take(s, tid)[0]); self.assertIn(f'Card rv{erin} ', events.take(s, tid)[0])
         self.assertEqual(cards(self.list())[wrote['id']], [(ray, 'approved'), (erin, 'approved')], 'each where it stood, for good')
 
     def test_an_email_that_waited_its_turn_and_was_taken_back_never_stands(self):

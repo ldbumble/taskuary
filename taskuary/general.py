@@ -993,10 +993,13 @@ def _last_said(store, tid) -> tuple:
         last = next((c for c in reversed(store.list_comments(int(tid), internal=True)) if c.get('ActorType') in (SUMMARY_TYPE, ASSISTANT_TYPE)), None)
         return last, (json.loads(last['Body']) if last and last.get('ActorType') == SUMMARY_TYPE else None)
     except (TypeError, ValueError): return last, None
-def carries_on(store, tid) -> bool:
+def carries_on(store, tid, said: bool = False) -> bool:
     """Its agent goes on once the owner presses what it set up: its last turn's summary says so (after_press 'send'), or there is none to say
-    otherwise - a coding session files none, and an approved merge is where it deploys. Only a summary that named no next step keeps it quiet."""
-    return not isinstance(s := _last_said(store, tid)[1], dict) or s.get('after_press') == 'send'
+    otherwise - a coding session files none, and an approved merge is where it deploys. Only a summary that named no next step keeps it quiet.
+    `said`: the press SENT his words to someone (a reply, a mail, a post) - the card says it went, so silence is no next step: only an agent
+    that said a step of its own follows goes on (the owner, 2026-11-25, twice in one night: "You sent Gabi..." under the card that read Sent)"""
+    s = _last_said(store, tid)[1]
+    return s.get('after_press') == 'send' if isinstance(s, dict) else not said
 
 
 # a thread's body run in a context of its own: what it sets (origin.OWNER_SPEAKS) never outlives it where a road runs it in place (Windows CI,
@@ -1138,7 +1141,12 @@ def approved(store, tid: int, press: str, what: str, actor: str = 'owner', revie
     # ...A PRESS WAKES ITS AGENT ONLY WHERE THERE IS A NEXT STEP (the owner, 2026-11-22: "only wake agent where there is next steps"): woken by
     # every Send, it said "I've sent the email to Gail" under the card that already read Sent. One at work hears it now; one at rest that said
     # nothing comes after the press hears it in its next turn, the card's event still past its cursor
-    if not at_work(int(tid)) and not carries_on(store, tid): return ''
+    # ...and words he SENT are said by their card (a reply, a mail, a post): at work or at rest, the agent hears them in its next turn unless it
+    # said a step follows - one at work was handed the Send by the waiting room as it stopped, and answered it under the card (2026-11-25) -
+    # or it is parked on a question of its own (_asking): it asked, he pressed, its step follows
+    from . import workerstate as ws
+    said = bool(review) and (store.get_review(int(review)) or {}).get('Kind') != 'action'
+    if (said or not at_work(int(tid))) and not carries_on(store, tid, said=said) and not _asking(store, ws._live(int(tid))): return ''
     # ...WHAT WENT IS ITS CARD'S EVENT (events.card, written as the store wrote the card): this only wakes the agent to hear it
     mark = review and (lambda how: store.audit('review', int(review), TOLD, actor, 'system', {'task': int(tid), 'how': how}))
     return to_agent(store, tid, '', actor, heard=mark, pressed=True)

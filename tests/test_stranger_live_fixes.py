@@ -411,6 +411,7 @@ def test_his_press_on_the_agent_s_card_wakes_it_though_a_stranger_wrote_on_his_t
     assert origin.hold(s, t) and origin.his_own(s, t)
     rid = s.add_review({'TaskId': t, 'Kind': 'draft_reply', 'Status': 'pending', 'DraftText': 'Please send the order form.'})
     s.decide_review(rid, 'approved', 'Please send the order form.', 'owner')
+    s.add_comment(t, 'assistant', general.SUMMARY_TYPE, json.dumps({'did': 'drafted the reply', 'after_press': 'send'}))   # ...it said a step follows
     told = []
     sess = SimpleNamespace(sid='run1', task_id=t, alive=True, waiting=lambda: False,
                            send_prompt=lambda text, **kw: told.append(origin.OWNER_SPEAKS.get()))

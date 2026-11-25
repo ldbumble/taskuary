@@ -112,7 +112,7 @@ class EveryYesCarriesOn(unittest.TestCase):
         self.assertFalse(general.follow_up(self.s, self.tid, 'send', said='again'), 'once per answer')
 
     def test_a_wake_that_never_started_leaves_the_next_press_to_start_it(self):
-        self.s.add_comment(self.tid, 'assistant', general.ASSISTANT_TYPE, 'The reply is ready - press Send.')
+        self.s.add_comment(self.tid, 'assistant', general.SUMMARY_TYPE, json.dumps({'did': 'drafted the reply', 'after_press': 'send'}))   # ...a step follows
         tried, told = [], []
         def start(*a, **kw):
             tried.append(1)
@@ -219,6 +219,7 @@ class OneRoadIntoTheAgent(unittest.TestCase):
         from taskuary import browsergate
         told = []
         sess = SimpleNamespace(sid='run1', task_id=self.tid, alive=True, send_prompt=lambda text, **kw: told.append((text, kw)))
+        self.s.add_comment(self.tid, 'assistant', general.SUMMARY_TYPE, json.dumps({'did': 'drafted the reply', 'after_press': 'send'}))   # ...a step follows
         with mock.patch.dict(term.SESSIONS, {'run1': sess}, clear=True), mock.patch.object(waitroom, 'tick', side_effect=AssertionError('no clock')):
             t0 = time.time()
             self.assertEqual(general.approved(self.s, self.tid, 'Send', 'the reply was sent', review=sent_card(self.s, self.tid)), 'told')
@@ -920,3 +921,30 @@ def test_a_card_set_aside_while_it_waited_its_turn_is_greyed_in_the_chat_never_g
     for r in (x, reddit): s.decide_review(r, 'superseded', None, 'taskuary', proposals.SET_ASIDE)     # his line moved past both
     cards = [c['review'] for i in chatlog.read(s, tid)['items'] for c in ([i] if i['kind'] == 'card' else i.get('cards') or [])]
     assert reddit in cards, 'greyed where it stood, never gone'
+
+
+class ASendIsSaidByItsCard(unittest.TestCase):
+    """The owner, 2026-11-25, twice in one night on a WhatsApp reply: Send woke the agent and it wrote "You sent Gabi..." under the card that
+    read Sent - once while it was still at work (the waiting room handed it the press as it stopped), once at rest with no summary filed. Words
+    he sent are said by their card; the agent hears them in its next turn, and is woken only where it said a step of its own follows."""
+    def setUp(self):
+        self.s = MemoryStore(); self.tid = self.s.create_task({'Title': 'Reply to Gail', 'Kind': 'general', 'Status': 'open'}, 'owner')
+
+    def test_a_send_at_work_or_with_no_summary_starts_no_turn_and_one_that_said_a_step_follows_wakes_it(self):
+        rid = sent_card(self.s, self.tid)
+        with mock.patch.object(general, 'to_agent', return_value='told') as told:
+            with mock.patch.object(general, 'at_work', return_value=True):
+                self.assertEqual(general.approved(self.s, self.tid, 'Send', 'the reply was sent', review=rid), '')    # ...busy at the press
+            self.assertEqual(general.approved(self.s, self.tid, 'Send', 'the reply was sent', review=rid), '')        # ...at rest, no summary
+            told.assert_not_called()
+            self.s.add_comment(self.tid, 'assistant', general.SUMMARY_TYPE, json.dumps({'did': 'drafted it', 'after_press': 'send'}))
+            self.assertEqual(general.approved(self.s, self.tid, 'Send', 'the reply was sent', review=rid), 'told')    # ...a step of its own follows
+
+    def test_a_send_its_agent_is_parked_on_wakes_it_though_it_declared_no_step(self):
+        "It asked \"Should the reply go out?\" and stands there: he pressed Send, so its step follows - woken with no summary filed."
+        rid, sess = sent_card(self.s, self.tid), SimpleNamespace(sid='run1', task_id=self.tid, alive=True, waiting=lambda: True)
+        with mock.patch.object(general, 'to_agent', return_value='told') as told, mock.patch.dict(term.SESSIONS, {'run1': sess}, clear=True):
+            self.assertEqual(general.approved(self.s, self.tid, 'Send', 'the reply was sent', review=rid), '')       # ...live, asking nothing
+            told.assert_not_called()
+            self.assertTrue(ws.record(self.s, self.tid, 'run1', 'input_needed', text='Should the reply go out?', source='api'))
+            self.assertEqual(general.approved(self.s, self.tid, 'Send', 'the reply was sent', review=rid), 'told')   # ...parked on its question

@@ -328,7 +328,7 @@ def test_after_a_restart_the_owners_outside_answer_and_the_next_line_reach_the_c
     general.IDLED.pop(tid, None); acpcoding.IDLED.pop(tid, None)          # the restart: nothing in memory but the store
     reopened = []
     run = lambda f, *a, **k: f(*a, **k)
-    with mock.patch('taskuary.ingest._spawn', side_effect=run), mock.patch.object(senders, 'start_known', return_value=(True, '')), \
+    with mock.patch('taskuary.ingest._spawn', side_effect=run), mock.patch.object(senders, 'known', return_value=(True, '')), \
          mock.patch.object(senders, 'wrote_to', return_value=True), mock.patch('taskuary.ingest.has_room', return_value=True), \
          mock.patch.object(origin, 'hold', return_value=None), mock.patch.object(waitroom, 'reopen_coding', side_effect=lambda store, t, notes, said, actor='router': reopened.append(said) or 'resumed'):
         channels.ingest_own_message(s, {'external_id': 'wa:own', 'conversation_id': conv, 'channel': 'whatsapp', 'source_name': 'Ray Colton',

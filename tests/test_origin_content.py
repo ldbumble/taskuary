@@ -134,7 +134,27 @@ def test_att_marks_reads_attached_mails_and_counts_files():
 def test_an_unverified_from_waits_on_a_mailbox_whose_server_verifies():
     s = _store(); m = {'channel': 'email', 'from_email': 'erin@vendor.example', 'from_name': 'Erin', 'source_name': ME, 'body': 'hi'}
     s.remember_trust(ME, 'erin@vendor.example', 'in your Sent Items')
-    assert senders.start_known(s, m)[0]                                       # a server that never stamps: nothing to go on, as before
+    assert senders.known(s, m, deep=True)[0]                                  # a server that never stamps: nothing to go on, as before
     _mail(s, None, 'x')
-    ok, why = senders.start_known(s, m); assert not ok and 'could not verify' in why
-    assert senders.start_known(s, {**m, 'auth': 'pass'})[0] and senders.known(s, m)[0]   # verified starts; the task's trust is unchanged
+    ok, why = senders.known(s, m, deep=True); assert not ok and 'could not verify' in why and why.stranger and why.unverified
+    assert senders.known(s, {**m, 'auth': 'pass'}, deep=True)[0]             # verified starts
+
+
+def test_his_trust_is_the_proof_an_unverified_sender_is_held_for_and_nothing_else_holds_them():
+    """WALK 19 (M1): on a mailbox whose server verifies, a vendor with no DMARC was held, Trust was pressed - and a second gate, the mail
+    proof, refused the start after it: two minutes of nothing, no line, no press. A colleague unverified read "you have not trusted"; a
+    reply from someone he had written to sat "waiting to start" with no reason and no button. One hold, its real cause, one Trust press."""
+    s = _store(); _mail(s, None, 'a verified mail: this server stamps')
+    def held(frm, name, kind='general'):
+        t = s.create_task({'Title': 'a', 'Kind': kind, 'Source': 'email'}, 'router')     # the start's sender check (ingest.auto_start_ok's last)
+        mid = _mail(s, t, 'hello', frm=frm, name=name, MailMetaJson='{"auth": "none"}')
+        return t, mid, {'channel': 'email', 'from_email': frm, 'from_name': name, 'source_name': ME, 'body': 'hello'}
+    s.remember_trust(ME, 'dana@vendor.example', 'in your Sent Items')                     # he wrote to her: her answer comes unverified
+    for frm, name, line in (('dana@vendor.example', 'Dana Holt', origin.UNVERIFIED_LINE), ('gail@northwind.example', 'Gail Moreno', origin.UNVERIFIED_LINE),
+                            ('jordan@stranger.example', 'Jordan Pike', origin.HELD_LINE)):
+        t, mid, m = held(frm, name)
+        h = origin.hold(s, t)
+        assert h and h['line'] == line.format(who=f'{name} ({frm})') and h['person'], (name, h)
+        assert not senders.known(s, m, mid, deep=True)[0]
+        origin.raise_to(s, t, 'trusted', 'owner')                                           # his Trust press
+        assert origin.hold(s, t) is None and senders.known(s, m, mid, deep=True) == (True, f'You vouched for {name} ({frm}).'), name

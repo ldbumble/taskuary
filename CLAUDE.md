@@ -154,3 +154,39 @@ meaning and model calls that plain data could answer listed with file and line.
 - What changes what the owner sees or presses beyond these rules is asked first, in plain words.
 - Small commits straight to `master`; targeted tests locally, the full suites in CI; red CI is
   fixed forward at once, rerunning only what failed.
+- tests/contract/ is locked: no agent edits it or its LOCK without the owner's written OK.
+
+### The basic interactions (locked)
+
+How a card is raised, pressed and handed off never changes without the owner's written OK. Each
+rule below is pinned by a plain test in `tests/contract/` (the real tools and routes, no browser,
+no model); `tests/contract/LOCK` holds the hash of those files and of this section, and
+`tests/test_contract_lock.py` fails when either differs. A contract test that fails is a broken
+product: fix the code, never the test.
+
+1. **Raise.** The agent supplies the content; Taskuary builds one valid card and picks the road
+   from the connection's state: connected, its press goes through the connection; not connected,
+   the post goes up through the browser at his press, with Connect beside it. A bad card (over the
+   network's limit as the network counts it, a picture that is not there) is never shown: the agent
+   is answered with the exact fix. A field the card does not draw is ignored.
+2. **Press.** Approve or Send executes exactly what was shown, once. A second press does nothing.
+   A card changed after it was shown does not run. A press after the agent stopped still executes.
+   A failed execution stays on its card and its agent is told once. His no is told to the agent as
+   his own.
+3. **Wake.** A press wakes the agent only if the card carries its `then`. A press with no `then`
+   wakes nobody, and answers the question the agent asked about that card.
+4. **Question.** The agent's question stands until he answers; nothing more is raised in the turn
+   that asked it; his answer reaches the agent once.
+5. **Hand-off on a page.** A step handed to him shows that step; his "I'm done" wakes the agent
+   once. A connected service's site is never opened or handed over for what its card does, and no
+   sign-in is put to him beside a card that waits: one thing is asked at a time, and what the
+   browser shows belongs to the card on his screen.
+6. **The turn's end.** Exactly one of needs-him / done / working. The chat shows words, cards and
+   files handed over on purpose; working files are kept in the task's files, not drawn; a card's
+   picture is drawn on its card only.
+7. **Restart.** A restart between a card and its press keeps all of the above.
+8. **Bulk, one component.** The agent chooses by how it calls, never a count: one call with
+   `items` (one act to many people, versions of one thing) is one card that does every item with
+   one press, exactly as shown; separate calls are separate cards, one after another. Files handed
+   over in one call are one artifact holding all of them. A review card and a file artifact are
+   drawn by the same component (`website/src/Artifact.jsx`).

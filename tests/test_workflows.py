@@ -75,8 +75,11 @@ class DispatchTests(unittest.TestCase):
         start.assert_called_once(); self.assertEqual(start.call_args[0][1], out['task_id'])
         text = session.send_prompt.call_args[0][0]
         for line in ('WORKFLOW RUN: Weekly access review - scheduled', 'OBJECTIVE: Review who got admin', 'INPUTS: {"window": "7d"}', 'CONNECTIONS: entra',
-                     'ALLOWED ACTIONS: you may write', 'ASK FIRST: revoking a grant', 'DONE WHEN: the review is posted', 'no triage and no procedure selection'):
+                     'ASK FIRST: revoking a grant', 'DONE WHEN: the review is posted'):
             self.assertIn(line, text)
+        # ...and no rule of the code's (his live app, 2026-11-25): told it "may write to the connected systems this workflow names", a run
+        # for posts on three networks, one named, wrote them as prose with no card - what an act may do is the gates', a card for his press
+        for rule in ('ALLOWED ACTIONS', 'systems this workflow names', '--done', 'procedure selection'): self.assertNotIn(rule, text)
         ingested.assert_not_called(); classified.assert_not_called(); cli.assert_not_called()               # no triage, no coding CLI
         self.assertEqual([m for m in s.feed(limit=50) if m.get('Channel') == 'report'], [])                  # nothing filed as a report
         runs = s.report_runs(sid, 3)

@@ -126,9 +126,10 @@ def brief(defn: dict, trigger: str, when: str, context: dict = None) -> str:
     if context: lines.append('THIS RUN: ' + json.dumps(context, default=str))
     if defn.get('connections'): lines.append('CONNECTIONS: ' + ', '.join(str(c) for c in defn.get('connection_names') or defn['connections']))
     if defn.get('steps'): lines.append('STEPS (the saved skill):\n' + defn['steps'].strip())
-    lines.append('ALLOWED ACTIONS: ' + ("you may write to the connected systems this workflow names, through Taskuary's tools and proposals; "
-                                        'anything outside them, and anything under ASK FIRST, waits for the owner'
-                                        if 'write' in defn['allowed_actions'] else 'read only - propose changes, make none'))
+    # ...AND NO RULE OF THE CODE'S (his live app, 2026-11-25: a routine for posts on X, Reddit and LinkedIn, LinkedIn alone named, was told
+    # it "may write to the connected systems this workflow names ... anything outside them waits for the owner", and its "Say --done with
+    # your result" - a command gone since end_turn - and it wrote three posts as prose, no card to press). What an act may do is the gates':
+    # every one waits as a card for his press, whatever this brief says. The run is told the routine's own words and its facts
     # the sign-in the owner typed by hand on an earlier run is in the profile this browser restores
     # (browserview.RESTORE_KEY), so the job starts signed in for as long as the site lets it
     if defn.get('browser'):
@@ -140,8 +141,6 @@ def brief(defn: dict, trigger: str, when: str, context: dict = None) -> str:
                      'a password or a code yourself.')
     if defn.get('approvals'): lines.append('ASK FIRST: ' + defn['approvals'])
     if defn.get('done_when'): lines.append('DONE WHEN: ' + defn['done_when'])
-    lines.append('This is a configured workflow, not an incoming request: no triage and no procedure selection apply. '
-                 'Say --done with your result when it is finished.')
     return '\n'.join(lines)
 
 

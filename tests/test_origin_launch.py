@@ -115,6 +115,10 @@ def test_an_untrusted_machines_notice_on_his_own_task_holds_nothing_and_reaches_
     events.arrived(s, mid, t)
     assert origin.of_task(s, t)[0] == 'stranger' and origin.hold(s, t) is None and _mode(s, t) == 'full'
     assert mid in origin.withheld(s, t) and not [e for e in events.pending(s, t) if e.get('mid') == mid]
+    # ...AND THE CHAT SAYS SO ON THE NOTICE, in one line (the owner, 2026-11-25): it stood there as if the agent had read it
+    from taskuary import conversation
+    [x] = [x for x in conversation.items(s, t)['items'] if x['kind'] == 'arrival']
+    assert x['mid'] == mid and x['kept'] == 'Not passed to the agent - sender not verified'
     # ...and on a task the stranger's notice started, the agent runs in the stranger's mode and hears it as their words, as before
     t2 = _opened_by(s, FromEmail='notices@renewals-desk.example', SenderClass='automated')
     assert _mode(s, t2) != 'full' and origin.withheld(s, t2) == set()

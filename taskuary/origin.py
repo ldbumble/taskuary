@@ -401,11 +401,20 @@ def _judged(store, tid) -> dict | None:
 # ...AND WHAT THE HOLD NAMES IS HANDED TO NO AGENT (the red team, 2026-11-24, F5: a stranger's reply on his trusted thread rode his full-power
 # agent's next turn as an event, under a page that said "the agent hears nothing more"): every road that hands a task's messages to its agent -
 # its events, its brief, its context file, a coding seed - leaves these out until his Trust, and then hands them once (events.commit)
+def _now_judged(store, tid) -> dict:
+    "_judged, or for a closed task judged afresh - {} for none."
+    if not tid: return {}
+    if (j := _judged(store, tid)) is None: j = {'hold': _hold(store, int(tid), t), 'quiet': _quiet(store, int(tid), t)} if (t := store.get_task(int(tid))) else {}
+    return j or {}
 def withheld(store, tid) -> set:
     "The messages on the task no agent is handed until he trusts their senders - whatever the task's status (a closed one is judged afresh)."
-    if not tid: return set()
-    if (j := _judged(store, tid)) is None: j = {'hold': _hold(store, int(tid), t), 'quiet': _quiet(store, int(tid), t)} if (t := store.get_task(int(tid))) else {}
-    return set(((j or {}).get('hold') or {}).get('mids') or ()) | set((j or {}).get('quiet') or ())
+    j = _now_judged(store, tid)
+    return set((j.get('hold') or {}).get('mids') or ()) | set(j.get('quiet') or ())
+# ...SAID ON THE NOTICE ITSELF, in one line (the owner, 2026-11-25): a notice kept from the agent stood in the chat as if the agent had read it
+QUIET_LINE = 'Not passed to the agent - sender not verified'
+def quiet(store, tid) -> set:
+    "The untrusted senders' notices kept from the agent of a task that runs at his full power (_quiet) - each said where it stands (QUIET_LINE)."
+    return set(_now_judged(store, tid).get('quiet') or ())
 # ...AND A MACHINE'S NOTICE FROM SOMEONE UNTRUSTED ON HIS OWN TASK (red team round 4): it holds nothing - no start waits on it, and there is
 # nobody behind it to Trust (senders.can_hold, walk 17) - but his task runs at his full power (launch_mode), so its words are handed to no
 # agent there either. A task a stranger started runs in the stranger's mode, and hears it as their words; his Trust on the sender hands it on

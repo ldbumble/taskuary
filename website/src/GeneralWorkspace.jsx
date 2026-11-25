@@ -173,6 +173,8 @@ const Arrived = ({ mail, prev = null }) => mail.map((x, i0, list) => {
     {!!subjectOf(x, all[i - 1]) && <span className="tq-aui-arrived-subject" dir="auto">{x.subject}</span>}
     {!!mailWords(x) && <ArrivedWords words={mailWords(x)} />}
     <CameWith x={x} />
+    {/* ...a notice kept from the agent says so on itself, in one line (origin.QUIET_LINE, the owner 2026-11-25) */}
+    {!!x.kept && <span className="tq-aui-arrived-kept" data-tq-arrived-kept="">{x.kept}</span>}
   </div>;
 });
 // a press's event line: its words without the closing stop, then the time - "You changed its workstream · 3:12 PM"

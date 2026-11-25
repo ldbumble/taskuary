@@ -267,6 +267,9 @@ def _key(server: dict, label: str) -> bytes:
     k = str(server.get('token') or server.get('agent_token') or '')
     return hmac.new(k.encode(), f'taskuary {label}'.encode(), hashlib.sha256).digest() if server.get('agent_token') else b''
 
+# the routes a file is read by: the page's pictures and Downloads (server.FILE_COOKIE), and all the desktop window saves (desktop.save_download)
+FILE_READS = ('/api/attachments/', '/api/task-artifacts/', '/api/task-outputs/')
+
 def file_key(server: dict) -> str:
     """The cookie a page's pictures and downloads are read by (server.FILE_COOKIE): keyed by the owner token, never the token itself (red team
     #3): a file read's cookie opens file reads, and nothing else. '' with no owner token - every caller is the owner then (scope_of)."""

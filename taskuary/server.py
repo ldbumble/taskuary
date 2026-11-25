@@ -469,7 +469,7 @@ OAUTH_RETURNS = ('/api/quickbooks/callback', '/api/zoho/callback', '/api/linkedi
 # of ours, with no token: its signature (or the card's secret path) is its proof, and it answers nothing but "taken". The generic OAuth
 # return rides the same tunnel when a vendor refuses an http redirect (oauth.redirect_uri). Every other path keeps the Host check, so a
 # tunnel pointed at this port reaches these doors and not the page that carries the owner token.
-FILE_COOKIE, FILE_READS = 'taskuary_files', ('/api/attachments/', '/api/task-artifacts/', '/api/task-outputs/')
+FILE_COOKIE, FILE_READS = 'taskuary_files', guard.FILE_READS
 def _outside_door(path: str) -> bool: return path == '/api/oauth/callback' or path.startswith('/api/inbound/')
 
 @app.middleware('http')

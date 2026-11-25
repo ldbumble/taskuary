@@ -256,6 +256,7 @@ class FileRoutesTests(unittest.TestCase):
         threading.Thread(target=srv.serve_forever, daemon=True).start()
         self.addCleanup(srv.shutdown)
         base = f'http://127.0.0.1:{srv.server_address[1]}'
+        own = mock.patch.dict(desktop.SERVING, {'url': base}); own.start(); self.addCleanup(own.stop)      # ...it plays this window's own server
         with tempfile.TemporaryDirectory() as d:
             dl = Path(d) / 'Downloads'
             got = desktop.save_download(f'{base}/api/task-outputs/7/chart.png?download=true', folder=dl)
@@ -277,6 +278,35 @@ class FileRoutesTests(unittest.TestCase):
         self.assertEqual(desktop.safe_name('..\\..\\x:y.txt'), 'x_y.txt')
         self.assertEqual((desktop.safe_name('..'), desktop.safe_name('')), ('download', 'download'))
 
+    def test_the_window_saves_only_its_own_servers_files_under_a_name_that_shows_what_it_is(self):
+        """Red team #3: save_download carries the owner's header, and the page hands it any address a link names - an agent's link to
+        /api/settings?download=true saved his settings into Downloads, another loopback port got his token, and `invoice\u202efdp.html` and
+        `run.url` landed under names that drew as a PDF or reach out when the folder is opened."""
+        import http.server, tempfile, threading
+        from taskuary import desktop
+        seen = []
+        class H(http.server.BaseHTTPRequestHandler):
+            def log_message(self, *a): pass
+            def do_GET(self):
+                seen.append((self.path, self.headers.get('X-Taskuary-Token')))
+                name = {'bidi': 'invoice\u202efdp.html', 'run': 'run.url', 'doc': 'Q3 report.docx'}.get(self.path.rsplit('/', 1)[-1].split('?')[0], 'x.txt')
+                self.send_response(200); self.send_header('Content-Disposition', f"attachment; filename*=UTF-8''{__import__('urllib.parse').parse.quote(name)}")
+                self.end_headers(); self.wfile.write(b'bytes')
+        srv, other = (http.server.ThreadingHTTPServer(('127.0.0.1', 0), H) for _ in range(2))
+        for x in (srv, other): threading.Thread(target=x.serve_forever, daemon=True).start(); self.addCleanup(x.shutdown)
+        base = f'http://127.0.0.1:{srv.server_address[1]}'
+        own = mock.patch.dict(desktop.SERVING, {'url': base}); own.start(); self.addCleanup(own.stop)
+        with tempfile.TemporaryDirectory() as d:
+            dl = Path(d) / 'Downloads'
+            for url in (f'{base}/api/settings?download=true', f'{base}/api/tasks', f'{base}/api/task-outputs/../settings',
+                        f'{base}/api/task-outputs/%2e%2e/%2e%2e/settings', f'http://127.0.0.1:{other.server_address[1]}/api/task-outputs/7/doc',
+                        'http://169.254.169.254/api/task-outputs/7/doc'):
+                self.assertEqual(desktop.save_download(url, folder=dl), {'error': 'Only a file from Taskuary itself can be saved here.'}, url)
+            self.assertEqual(seen, [])                                                   # ...none of them was even asked, the header never sent
+            names = [desktop.save_download(f'{base}/api/task-outputs/7/{k}', folder=dl).get('name') for k in ('bidi', 'run', 'doc')]
+            self.assertEqual(names, ['invoicefdp.html', 'run.url.txt', 'Q3 report.docx'])
+            self.assertEqual(sorted(p.name for p in dl.iterdir()), sorted(names))
+
     # -- the desktop road against the REAL server: what the window's Download leaves on disk ---------------------------------------
     def _serve(self):
         "The app itself on a loopback port, as the desktop window reaches it - not a stand-in that answers what a test expects."
@@ -287,7 +317,10 @@ class FileRoutesTests(unittest.TestCase):
             if srv.started: break
             time.sleep(0.05)
         self.addCleanup(setattr, srv, 'should_exit', True)
-        return f'http://127.0.0.1:{srv.servers[0].sockets[0].getsockname()[1]}', server.cfg['server'].get('token') or ''
+        from taskuary import desktop
+        base = f'http://127.0.0.1:{srv.servers[0].sockets[0].getsockname()[1]}'
+        own = mock.patch.dict(desktop.SERVING, {'url': base}); own.start(); self.addCleanup(own.stop)
+        return base, server.cfg['server'].get('token') or ''
 
     def test_the_desktop_download_saves_each_real_file_whole_from_the_real_server(self):
         """A PDF, a workbook, a 12 MB ZIP and a published page an agent made: the window's Download (desktop.save_download, the page's
@@ -350,6 +383,7 @@ class FileRoutesTests(unittest.TestCase):
         threading.Thread(target=srv.serve_forever, daemon=True).start()
         self.addCleanup(srv.shutdown)
         base = f'http://127.0.0.1:{srv.server_address[1]}'
+        own = mock.patch.dict(desktop.SERVING, {'url': base}); own.start(); self.addCleanup(own.stop)      # ...it plays this window's own server
         with tempfile.TemporaryDirectory() as d:
             dl = Path(d) / 'Downloads'
             for how in ('short', 'moved'):

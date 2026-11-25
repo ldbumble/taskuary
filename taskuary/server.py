@@ -5836,7 +5836,7 @@ def hub_post(body: HubPostBody, request: Request):
     tab is the person the ladder exists to protect, not a caller to check."""
     from . import guard, handbook as hub
     if not hub.enabled(store):
-        raise HTTPException(403, 'the Hub is off - turn its card on under Connections')
+        raise HTTPException(403, hub.OFF)
     _require_hub_write(request)
     if guard.scope_of(cfg['server'], request.headers) == guard.AGENT and len((body.why_earned or '').strip()) < 20:
         raise HTTPException(422, 'agent Hub posts need why_earned: the concrete investigation or reasoning that earned the post')
@@ -9305,6 +9305,9 @@ def tool_run(body: dict, request: Request):
     from . import connectorcatalog
     if not conn.get('Active') and connectorcatalog.action_for(t) and guard.scope_of(cfg['server'], request.headers) == guard.AGENT:
         return _agent_proposes(request, t, conn, body, scopes.reaches(t, body) or f'{t} reaches people')
+    if not conn.get('Active') and conn.get('Type') == 'handbook':
+        from .handbook import OFF
+        raise HTTPException(403, OFF)
     if not conn.get('Active'):
         from .agenttools import refusal
         raise HTTPException(403, refusal(f"the {t} connection is off - only the owner turns it on, under {words.name('connections')}",

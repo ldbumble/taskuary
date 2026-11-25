@@ -300,9 +300,10 @@ SETTING_VALUES = {'answer_to_agent': ('auto', 'ask', 'off')}   # timeline_fade r
 SWITCHES = {'playbooks_enabled': ('Use playbooks', words.name('sorting'), words.href('sorting') + '&key=playbooks_enabled')}
 def _switch_ok(store, name) -> bool: return not name or store.get_setting(name, '1') == '1'
 def switch_off(name) -> str:
-    "The switch `name` said as the owner finds it, with its link: what an agent passes on, never a place of its own guessing."
-    label, where, href = SWITCHES[name]
-    return f'"{label}" is off on {where} - [open it]({href}); only the owner turns it on'
+    """The switch `name` said as the owner finds it - and as HIS CHOICE (the owner, 2026-11-25: "it should find a way around it"): "only the
+    owner turns it on" was passed on to him as a step, over a switch that ships on and that he turned off."""
+    label, where, _ = SWITCHES[name]
+    return f'"{label}" is off on {where} - the owner\'s choice; nothing waits on it, so go on without it'
 
 
 def parse(text: str) -> list:

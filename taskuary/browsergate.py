@@ -291,14 +291,29 @@ def refused(cmd: str) -> str:
 # about linkedin" - its LinkedIn card connected, the agent opened linkedin.com/feed, landed on LinkedIn's sign-in, and that page was handed to
 # him beside the post cards). One rule for every card that names its site (connectorcatalog `hosts`) and declares an act: while its
 # connection can act (outbound.connect_fix - the answer its card's button is drawn from) the page is not opened, and the answer is that fact
-def card_site(store, url) -> str:
-    "'' unless `url` is on the site of a service whose card is connected - then that fact, as the agent is told it."
-    from . import connectorcatalog as cat, outbound
+def _carded(url) -> dict | None:
+    from . import connectorcatalog as cat
     u = str(url or '').strip()
     c = cat.site_card(_site(u if '://' in u else 'http://' + u))
-    if not c or not c.get('actions') or outbound.connect_fix(store, c['type']): return ''
+    return c if c and c.get('actions') else None
+def card_site(store, url) -> str:
+    "'' unless `url` is on the site of a service whose card is connected - then that fact, as the agent is told it."
+    from . import outbound
+    if not (c := _carded(url)) or outbound.connect_fix(store, c['type']): return ''
     press = ', '.join(a['press'] for a in c['actions'] if a.get('press'))
     return f"{c.get('title') or c['type']} is connected: its card does it ({press}) through the connection at the owner's press - its site is not opened in the browser"
+# ...AND WHERE IT IS NOT CONNECTED, THE CARD COMES FIRST AND ITS SIGN-IN AT HIS PRESS (the owner, 2026-11-22: "card first, sign-in at the press";
+# the real runs of 2026-11-25: asked for posts with X not set up, Codex and Claude each opened x.com and handed him "Sign in to X" with no
+# card raised at all). A page of such a service is his step only once his press on its card handed the act to the agent (cardqueue.handed)
+def card_first(store, tid, url) -> str:
+    "'' unless `url` is on the site of a service with a card, not connected, and no press of his on task `tid` handed its act over - then that fact."
+    from . import cardqueue, outbound
+    if not (c := _carded(url)) or not outbound.connect_fix(store, c['type']): return ''
+    tools = {a.get('tool') for a in c['actions']}
+    if any(cardqueue.handed(r) and cardqueue._p(r).get('type') in tools
+           for r in store._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action' AND Status IN ('approved','edited')", (int(tid),))): return ''
+    return (f"{c.get('title') or c['type']} is not connected: what goes there is raised as its card first, and the owner's press on that card "
+            "(Post via the browser) hands it to you for the site - its sign-in is his step then, not before")
 
 
 def devtools(cmd: str) -> str:

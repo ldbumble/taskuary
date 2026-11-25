@@ -732,6 +732,15 @@ def _call(store, tid: int, name: str, args: dict, doors: dict, skip=()) -> str:
         return _out(memory.lookup(store, str(a.get('about') or ''), target=f'task:{tid}'))
     if name == 'calendar':
         from .calendar import reachable, run_calendar
+        # ...READING IT SWITCHED OFF IS HIS CARD TO SWITCH IT ON (the owner, 2026-11-25: "what should a user do next when it refuses things?"):
+        # it answered "No calendar is connected" over a connected one, and its Connect link could not lift the switch - the one press is his
+        if store.get_setting('calendar_enabled', '1') != '1':
+            from . import proposals
+            q = proposals.queue(store, tid, {'action': 'settings', 'changes': [{'name': 'calendar_enabled', 'value': '1'}],
+                                             'why': "to read the owner's busy times for this task"}, 'agent', refused=(miss := []))
+            if not q: return refusal(f"Reading the owner's calendar is switched off - {miss[0] if miss else 'it was not put to him'}", 'go on without it')
+            from .selfclose import CARD_TAIL
+            return f"Reading the owner's calendar is switched off in his settings, so nothing was read. Switching it on: {CARD_TAIL}"
         # ...and no calendar to read says where one is connected, as set_up_meeting does (the owner, 2026-11-09: the agent told the owner to
         # "connect Outlook calendar access" in prose, with no link to press)
         if not reachable(store):

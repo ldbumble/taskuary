@@ -253,7 +253,7 @@ class PhoneTests(unittest.TestCase):
         s = MemoryStore()
         tid = s.create_task({'Title': 'Quote request', 'Kind': 'general', 'Status': 'done'}, 'o')
         line = 'You have not trusted Pat Lee (pat@vendor.example) yet - nothing goes to an agent until you do.'
-        with mock.patch.object(server, 'store', s), mock.patch.object(origin, 'hold', return_value={'line': line}),              mock.patch.object(origin, 'his_own', return_value=False),              mock.patch('taskuary.general.provider_options', return_value=['x']), mock.patch.object(server, '_brainless', return_value=''):
+        with mock.patch.object(server, 'store', s), mock.patch.object(origin, 'keeps_him', return_value={'line': line}),              mock.patch('taskuary.general.provider_options', return_value=['x']), mock.patch.object(server, '_brainless', return_value=''):
             said = ra._continue(s, str(tid), 'send them our price list')
         self.assertNotIn('Continuing', said); self.assertNotIn('picks up', said)
         self.assertIn('Your note waits on TQ-0001', said); self.assertIn(line, said)
@@ -266,7 +266,7 @@ class PhoneTests(unittest.TestCase):
         tid = s.create_task({'Title': 'Quote request', 'Kind': 'general', 'Status': 'done'}, 'o')
         dock = s.create_task({'Title': 'Assistant', 'Kind': 'general', 'Status': 'open'}, 'o')
         line = 'You have not trusted Pat Lee (pat@vendor.example) yet - nothing goes to an agent until you do.'
-        with mock.patch.object(server, 'store', s), mock.patch.object(origin, 'hold', return_value={'line': line}),              mock.patch.object(origin, 'his_own', return_value=False),              mock.patch('taskuary.general.provider_options', return_value=['x']), mock.patch.object(server, '_brainless', return_value=''),              mock.patch.object(concierge, 'continuable', return_value=True):
+        with mock.patch.object(server, 'store', s), mock.patch.object(origin, 'keeps_him', return_value={'line': line}),              mock.patch('taskuary.general.provider_options', return_value=['x']), mock.patch.object(server, '_brainless', return_value=''),              mock.patch.object(concierge, 'continuable', return_value=True):
             out = concierge._task_writes(s, dock, 'agent.continue', tid, {'note': 'send them our price list'}, 'TQ-0001', 'owner',
                                          said='send them our price list')
         self.assertEqual(out['say'], f'Your note waits on TQ-0001 - {line}')

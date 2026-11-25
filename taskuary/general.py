@@ -1149,18 +1149,19 @@ def approved(store, tid: int, press: str, what: str, actor: str = 'owner', revie
     """Wake task `tid`'s agent on the approval that went, as `to_agent` wakes it: 'told', 'woke' or ''. What went is its card's event
     (events.card), said once in the turn this wakes - or, where nothing wakes, in the agent's next turn."""
     # ...A PRESS WAKES ITS AGENT ONLY WHERE THERE IS A NEXT STEP (the owner, 2026-11-22: "only wake agent where there is next steps"): woken by
-    # every Send, it said "I've sent the email to Gail" under the card that already read Sent. One at work hears it now; one at rest that said
-    # nothing comes after the press hears it in its next turn, the card's event still past its cursor
+    # every Send, it said "I've sent the email to Gail" under the card that already read Sent. One that said nothing comes after the press hears
+    # it in its next turn, the card's event still past its cursor
     # ...and words he SENT are said by their card (a reply, a mail, a post): at work or at rest, the agent hears them in its next turn unless it
     # said a step follows - one at work was handed the Send by the waiting room as it stopped, and answered it under the card (2026-11-25).
     # A step follows only where the card's own `then` names one (card.carries_on) - the same on every road, and after a restart
     from . import card, workerstate as ws
     rv = store.get_review(int(review)) if review else None
-    said = bool(rv) and rv.get('Kind') != 'action'
     # ...and his press IS the answer to what its agent asked about that card (the owner's ruling, card.asked_about) - a post's and an act's
     # as a letter's: "should the post go out as drafted?" stood on the task after the post went
     if rv and (qs := card.asked_about(store, rv['ReviewId'])): ws.let_go(store, tid, 'answered by his press on its card', only=qs)
-    if not card.carries_on(rv) and (said or not at_work(int(tid))): return ''
+    # ...AT WORK OR AT REST (the owner, 2026-11-25: "the approval by the user sends it without further triggering the agent unless it fails of
+    # course or there are next steps"): an act's press told an agent at work as its next turn; it hears the card's event with its next line
+    if not card.carries_on(rv): return ''
     # ...WHAT WENT IS ITS CARD'S EVENT (events.card, written as the store wrote the card): this only wakes the agent to hear it
     mark = review and (lambda how: store.audit('review', int(review), TOLD, actor, 'system', {'task': int(tid), 'how': how}))
     return to_agent(store, tid, '', actor, heard=mark, pressed=True)

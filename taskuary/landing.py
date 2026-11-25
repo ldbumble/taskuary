@@ -795,8 +795,8 @@ def _landed(store, tid, how, said_, actor, at_sha='', **extra) -> dict:
 
 def _went(store, tid, text):
     "What his press landed, to the agent: woken only where its proposal named a step of its own after it (card.carries_on), else said in its next turn."
-    from . import card, events, general
-    if card.carries_on(record(store, tid).get('proposal')) or general.at_work(int(tid)): return _hand_back(store, tid, text)
+    from . import card, events
+    if card.carries_on(record(store, tid).get('proposal')): return _hand_back(store, tid, text)     # at work or at rest (general.approved)
     events.note(store, int(tid), text)
 
 

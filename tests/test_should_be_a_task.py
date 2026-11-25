@@ -25,15 +25,16 @@ class ShouldBeATaskTests(unittest.TestCase):
         self.c = TestClient(server.app)
         self.mid = ingest.ingest_message(self.s, dict(MSG), llm=FYI)['message_id']
 
-    def test_an_fyi_offers_should_be_a_task_where_a_task_offers_not_a_task(self):
+    def test_an_fyi_has_one_move_send_to_agent_a_phish_too(self):
+        """The owner, 2026-11-25: ONE move on an FYI, everywhere - Make it a task and Not for me went from its card, a phish's as well; the row
+        the Assistant may light (row_buttons) is the same one move."""
         self.assertEqual(self.s.get_message(self.mid)['Status'], 'filed')
-        chips = concierge.chips_for(self.s, {'kind': 'fyi', 'lane': 'fyi', 'mid': self.mid, 'key': f'msg:{self.mid}'})
-        mine = next(c for c in chips if c['verb'] == 'mine')
-        self.assertEqual(mine['label'], 'Make it a task')
-        self.assertNotIn('remove', [c['verb'] for c in chips])   # Not for me here is the FYI's own (not_ours) - one word, two acts (audit 2026-11-05)
-        self.assertEqual(buttons.label('remove'), 'Not for me')
-        # ...and its press, through the proposal road the row takes, wears the same words as its badge
-        prop = concierge.propose_for(self.s, None, {'verb': 'mine', 'on_item': True}, {'kind': 'fyi', 'lane': 'fyi', 'mid': self.mid, 'key': f'msg:{self.mid}'}, '')
+        fyi = {'kind': 'fyi', 'lane': 'fyi', 'mid': self.mid, 'key': f'msg:{self.mid}'}
+        for it in (fyi, {**fyi, 'danger': 'Wants Alex to sign in on a look-alike page.', 'danger_aim': 'owner'}):
+            self.assertEqual([c['verb'] for c in concierge.chips_for(self.s, it)], ['regular_agent', 'next'])
+            self.assertEqual([b['label'] for b in concierge.row_buttons(self.s, it)], [buttons.label('regular_agent')])
+        # ...and asked for in words, Make it a task is the plain button's name - no FYI state of its own
+        prop = concierge.propose_for(self.s, None, {'verb': 'mine', 'on_item': True}, fyi, '')
         self.assertEqual(prop['label'], 'Make it a task')
 
     def test_pressing_it_makes_an_open_task_and_triage_reads_the_lesson_once_three_presses_bear_it_out(self):

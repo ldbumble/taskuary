@@ -222,61 +222,34 @@ class WordsInsteadOfButtonsTests(unittest.TestCase):
         text = remote_assistant.turn_text(batch)
         self.assertNotIn('people told you', text)
         head = text.split('\n\n')[0].split('\n')
-        # ...numbered, so a number opens one - led by Got it, 1, the members 2 on (the owner, 2026-10-22)
-        self.assertEqual(head[1:], ["1 · Got it", f"2 · {funnel.CHANNEL_MARKS['github']} Alex - Run failed: ci",
-                                    f"3 · {funnel.CHANNEL_MARKS['email']} Erin - Rebecca is back Tuesday"])
+        # ...read, not numbered (the owner, 2026-11-25: one move) - and the way on, Got it, is the one choice under them
+        self.assertEqual(head[1:], [f"• {funnel.CHANNEL_MARKS['github']} Alex - Run failed: ci",
+                                    f"• {funnel.CHANNEL_MARKS['email']} Erin - Rebecca is back Tuesday"])
         self.assertTrue(head[0].endswith('2 fyi · nothing to do'), head[0])
-        # ...and the walk's own way on is said once, first, under the batch's word (A8, 2026-10-22)
+        self.assertTrue(text.endswith('Reply with one of:\n1 · Got it'), text)
         self.assertEqual(text.count('Got it'), 1)
-        self.assertNotIn('4 · ', text)
 
     def test_a_word_that_only_contains_next_is_not_the_way_on(self):
         """Which word is Next is the chip's verb or the vocabulary's own word - a label match on "next" took "Plan next week"
         for the way on and the batch offered none (the owner, 2026-10-11: no word matching)."""
         batch = {'kind': 'fyis', 'lane': 'fyi', 'items': [{'key': 'msg:7', 'who': 'Erin', 'title': 'Back Tuesday', 'channel': 'email'}]}
         text = remote_assistant.turn_text({'say': 'x', 'options': ['Plan next week'], 'chips': [], 'item': batch})
-        self.assertIn('3 · Plan next week', text); self.assertIn(f"1 · {remote_assistant.GOT_IT}", text)
+        self.assertIn('2 · Plan next week', text); self.assertIn(f"1 · {remote_assistant.GOT_IT}", text)
 
-    def test_a_number_on_an_fyi_batch_opens_that_one(self):
-        """The desktop's "Talk about it" on one member; the chat had four lines and no door into any of
-        them (the owner, 2026-09-20: "how do you dig into one specific one?")."""
+    def test_a_number_on_an_fyi_batch_is_got_it_never_a_member(self):
+        """ONE MOVE (the owner, 2026-11-25): a number that opened one member - the desktop's old "Talk about it" - went. The poll and the
+        numbers carry Got it alone; the members are read in the text, and a tap on Got it puts the batch down."""
         store, connector = armed_store()
-        batch = {'kind': 'fyis', 'lane': 'fyi', 'items': [{'key': 'msg:7', 'who': 'Alex', 'title': 'Run failed: ci', 'channel': 'github'},
-                                                          {'key': 'msg:8', 'who': 'Erin', 'title': 'Back Tuesday', 'channel': 'email'}]}
+        batch = {'kind': 'fyis', 'lane': 'fyi', 'key': 'fyis:msg:7,msg:8',
+                 'items': [{'key': 'msg:7', 'who': 'Alex', 'title': 'Run failed: ci', 'channel': 'github'},
+                           {'key': 'msg:8', 'who': 'Erin', 'title': 'Back Tuesday', 'channel': 'email'}]}
         text = remote_assistant.turn_text({'say': 'x', 'chips': [{'verb': 'next', 'label': 'All read, next'}], 'item': batch})
-        remote_assistant.remember_offered(store, 'whatsapp', JID, text)
-        with mock.patch.object(concierge, 'restore_current', return_value=batch), \
-             mock.patch.object(concierge, 'surface', return_value={'say': 'Erin: back Tuesday.', 'options': [], 'chips': [],
-                                                                   'item': {'kind': 'fyi', 'lane': 'fyi'}}) as opened, \
-             mock.patch.object(messengers, 'wa_send') as send:
-            remote_assistant.respond(store, 'whatsapp', JID, '3', connector['ConnectorId'])       # 1 is Got it: the second member is 3
-        self.assertEqual(opened.call_args.args[1], 'msg:8')
-        self.assertIn('Erin: back Tuesday.', send.call_args.args[2])
-
-    def test_every_member_is_a_poll_option_and_each_tap_opens_its_own(self):
-        """2026-09-29: two identical notifications and two long lines - the poll showed 3 of 4 (a poll drops a repeat),
-        and a tap on a long line went to the model: the bridge cuts at 100 UTF-16 units, where the mark counts twice."""
-        store, connector = armed_store()
-        long = 'Re: [northwind/ledger] docs: fill in the empty descriptions of 36 working connector cards (PR #121)'
-        batch = {'kind': 'fyis', 'lane': 'fyi', 'items': [
-            {'key': 'msg:1', 'who': 'ops@vendor.example', 'title': 'Success File Notification', 'channel': 'email'},
-            {'key': 'msg:2', 'who': 'ops@vendor.example', 'title': 'Success File Notification', 'channel': 'email'},
-            {'key': 'msg:3', 'who': 'Ray Colton', 'title': long, 'channel': 'email'}]}
-        text = remote_assistant.turn_text({'say': 'x', 'chips': [{'verb': 'next', 'label': 'All read, next'}], 'item': batch})
+        self.assertIn('Back Tuesday', text)
         with mock.patch.object(messengers, 'wa_send') as sent:
             remote_assistant.send(store, 'whatsapp', JID, text, connector['ConnectorId'])
-        poll = sent.call_args.kwargs['poll']
-        self.assertEqual(len(poll), 4, poll)
-        self.assertEqual(len(set(poll)), 4, 'a poll drops a repeated option')
-        self.assertTrue(all(len(o.encode('utf-16-le')) // 2 <= 100 for o in poll))
-        for vote, key in ((poll[2], 'msg:2'), (poll[3], 'msg:3')):         # poll[0] is Got it
-            remote_assistant.remember_offered(store, 'whatsapp', JID, text)
-            with mock.patch.object(concierge, 'restore_current', return_value=batch), \
-                 mock.patch.object(concierge, 'surface', return_value={'say': 'opened', 'item': {'kind': 'fyi'}}) as opened, \
-                 mock.patch.object(concierge, 'say') as model, mock.patch.object(messengers, 'wa_send'):
-                remote_assistant.respond(store, 'whatsapp', JID, vote, connector['ConnectorId'], poll=True)
-            model.assert_not_called()
-            self.assertEqual(opened.call_args.args[1], key)
+        self.assertNotIn('Back Tuesday', ' '.join(sent.call_args.kwargs['poll']), 'a member is not a choice')
+        self.assertEqual(sent.call_args.kwargs['poll'][0], remote_assistant.GOT_IT)
+        self.assertEqual(remote_assistant.remember_offered(store, 'whatsapp', JID, text), [remote_assistant.GOT_IT])
 
     def test_an_opened_member_is_the_whole_message_and_a_chat_line_brings_the_lines_before_it(self):
         """The owner, 2026-09-29: "for email, the full email, chat full chat and last few" - not its first 400 characters."""

@@ -61,7 +61,8 @@ class TelegramButtonsTests(unittest.TestCase):
         ra.send(self.s, 'telegram', TG_CHAT, 'Gail Moreno asked about Thursday.', self.c['ConnectorId'])
         self.assertEqual(self.sent()[-1]['text'], 'Gail Moreno asked about Thursday.')
 
-    def test_the_fyi_lines_the_buttons_carry_are_not_printed_too(self):
+    def test_the_fyi_lines_are_read_in_the_text_and_got_it_is_the_button(self):
+        """One move (the owner, 2026-11-25): a line of the batch is no button - the tap that opened one went."""
         items = [{'key': f'msg:{n}', 'kind': 'fyi', 'who': who, 'title': title} for n, (who, title) in
                  enumerate((('Payworth', 'Statement ready'), ('Trainly', 'Course reminder'), ('Ray Colton', 'Back Tuesday')))]
         batch = {'key': 'fyis:' + ','.join(i['key'] for i in items), 'kind': 'fyis', 'lane': 'fyi', 'items': items}
@@ -69,8 +70,8 @@ class TelegramButtonsTests(unittest.TestCase):
             ra.send(self.s, 'telegram', TG_CHAT, ra.turn_text({'say': 'x', 'item': batch}, store=self.s), self.c['ConnectorId'])
         msg = self.sent()[-1]
         buttons = [row[0]['text'] for row in msg['reply_markup']['inline_keyboard']]
-        self.assertIn('Ray Colton - Back Tuesday', buttons)
-        self.assertNotIn('Back Tuesday', msg['text'])
+        self.assertEqual(buttons, ['Got it'])
+        self.assertIn('Ray Colton - Back Tuesday', msg['text'])
         self.assertIn('3 fyi · nothing to do', msg['text'])
 
     def test_whatsapp_keeps_its_name_and_its_lines(self):

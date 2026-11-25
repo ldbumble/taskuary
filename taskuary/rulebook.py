@@ -305,8 +305,7 @@ def state(store, item: dict, verbs: list) -> tuple:
         if u: return ('waiting_late_usual', {'who': who, 'days': days, 'usual': usual.days(u['median'])}) if days >= u['days'] else ('waiting', {})
         return ('waiting_late', {'who': who, 'days': days}) if days >= CHASE_DAYS else ('waiting', {})
     if kind == 'idea': return 'idea', {}
-    # A PHISH FILED FYI IS PUT DOWN, NEVER HANDED ON (the owner, 2026-10-30): its row lit Send to agent - the one press that feeds a scam to
-    # an agent. Not ours is its move, lit (MOVES), and Send to agent waits in the ▾ (FyiCard's Foot `tuck`)
+    # A PHISH FILED FYI is named so to the model (the owner, 2026-10-30); its row is every FYI's one move, Send to agent (2026-11-25)
     if kind == 'fyi' and it.get('danger'): return 'fyi_danger', {}
     if kind == 'fyi': return 'fyi', {}
     ins = _inbound(store, it)

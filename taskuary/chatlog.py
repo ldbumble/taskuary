@@ -1212,11 +1212,11 @@ def migrate(store, tid: int, legacy=None) -> bool:
     # ...A LIST THAT HELD NOTHING HE SAW HAS NOTHING TO FREEZE (a new coding task read as its first start began: the old list drew no line yet,
     # the freeze wiped the line the press had heard, and his line stood by the box for good under the task's title, answered): the log is the record
     bare = lambda x: x['kind'] == 'turn' and x.get('state') in LIVE and not (x.get('steps') or x.get('text') or x.get('cards'))
-    items = [] if all(bare(x) for x in got.get('items') or []) else got['items']
+    items, keep = got.get('items') or [], all(bare(x) for x in got.get('items') or [])   # ...still drawn: the turn at work is written beside it
     with store.lock:
         if migrated(store, tid): return False
         # ...what dual-write wrote before is the warm-up: the list is the record
-        if items: store.cx.execute('DELETE FROM chatlog WHERE TaskId=?', (int(tid),))
+        if not keep: store.cx.execute('DELETE FROM chatlog WHERE TaskId=?', (int(tid),))
         prev, seen_live = 0., False
         def row(kind, key, body, parent=None, state=None):
             nonlocal prev

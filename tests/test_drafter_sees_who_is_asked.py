@@ -69,3 +69,11 @@ def test_named_on_the_cc_line_nothing_stops_the_reply(s):
 def test_on_the_to_line_the_writer_is_told_so(s):
     _, user = prompt(s, thread(s, 'Can you send the list?', to=(ME,), cc=(ERIN,)))
     assert 'To: you\n' in user and 'Cc: Erin Blake\n' in user and 'You are: on the To line' in user and 'HOW TRIAGE' not in user
+
+
+def test_a_stored_list_of_addresses_as_one_string_is_named_per_address_never_per_letter():
+    """A message whose To was kept as "a@x, b@y" read as "to someone at a, someone at l, someone at e ..." on Came from (2026-11-25)."""
+    from taskuary.store import MemoryStore
+    from taskuary import ingest
+    got = ingest.names_on_thread(MemoryStore(), {'conversation_id': 'c1', 'subject': 's'}, 'gail@northwind.example, ray@vendor.example')
+    assert got == ['someone at northwind.example', 'someone at vendor.example']

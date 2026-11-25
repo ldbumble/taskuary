@@ -2187,7 +2187,8 @@ def names_on_thread(store, msg: dict, addrs, memo=None) -> list:
     "someone at <domain>" - what a prompt is told instead of the address itself. Shared by triage's `addressed_to`, the reply
     writer's To/Cc lines and Came from's "to ... · cc ..." line. `memo` keeps each thread's names across calls: a task's page asks
     for every message on it, and a read per message is what made a long task slow to open (test_big_task_opens_fast)."""
-    addrs = [str(a).strip().lower() for a in addrs or [] if a]
+    if isinstance(addrs, str): addrs = re.split(r'[;,\s]+', addrs)    # ...a stored "a@x, b@y" is two addresses, never one per letter
+    addrs = [str(a).strip().lower() for a in addrs or [] if a and '@' in str(a)]
     conv = msg.get('conversation_id')
     key, memo = (conv, None if conv else msg.get('subject')), {} if memo is None else memo     # a thread's "RE:" rows are one thread
     if key not in memo:

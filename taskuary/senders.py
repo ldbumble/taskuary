@@ -166,10 +166,7 @@ _VERIFIED = {'pass': 'pass - the receiving mail server verified the From domain 
              'fail': 'FAILED - the receiving mail server could not verify the From domain: it may be forged'}
 
 
-def org_domain(dom: str) -> str:
-    "The organisation's own domain under a mail host: mail.aiprovider.example -> aiprovider.example; a country's co.uk kept whole."
-    p = (dom or '').lower().strip('.').split('.')
-    return '.'.join(p[-3:] if len(p) > 2 and len(p[-1]) == 2 and len(p[-2]) <= 3 else p[-2:])
+from .mailauth import org_domain
 
 
 def sender_check(store, msg: dict, now=None) -> dict:

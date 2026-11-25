@@ -323,7 +323,9 @@ def cards(store, tid: int, ss: list) -> dict:
                     for i, u in enumerate(s.get('updates') or s.get('steps') or [])), key=lambda x: x[0])
     turn = lambda at: next((n if w == 'agent' else None for t, n, w in reversed(steps) if t <= at_(at) and w), None)
     his = lambda at: next((t for t, _, w in steps if t > at_(at) and w == 'his'), None)
-    rows = store._rows("SELECT ReviewId, Kind, Status, CreatedAt, DraftText FROM review WHERE TaskId=? AND Kind<>'slot' ORDER BY ReviewId", (tid,))
+    # ...A LETTER BY WHEN ITS WORDS WERE LAST WRITTEN (DraftAt): rewritten in place by a later turn it is that turn's - by its card's raising it
+    # stood under the turn before, and the turn that wrote its words drew after it (the owner's live app, 2026-11-25)
+    rows = store._rows("SELECT ReviewId, Kind, Status, COALESCE(DraftAt, CreatedAt) AS CreatedAt, DraftText FROM review WHERE TaskId=? AND Kind<>'slot' ORDER BY ReviewId", (tid,))
     drafts = [{'review': r['ReviewId'], 'turn': turn(r['CreatedAt']), 'at': r['CreatedAt'], 'stale': stale, 'before': later if stale else None}
               for r in rows if r['Status'] == 'pending' and r['Kind'] in ('draft_reply', 'draft') and str(r.get('DraftText') or '').strip()
               for later in [his(r['CreatedAt'])] for stale in [bool(later) and not any(t > later and w == 'agent' for t, _, w in steps)]]

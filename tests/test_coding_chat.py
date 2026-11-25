@@ -110,6 +110,22 @@ def test_each_card_is_named_with_the_turn_that_raised_it_as_the_page_names_that_
     assert [(d['review'], d['turn'], d['stale']) for d in got['drafts']] == [(arrival, None, False), (mine, 'a1#1', True), (after_his, None, False)]
 
 
+def test_a_draft_rewritten_in_place_stands_in_the_turn_that_rewrote_it():
+    """A REWRITE IN PLACE IS THE NEWEST WRITER'S (the owner's live app, 2026-11-25: "why is there text after the card?"): a reply raised on a
+    mail's arrival, written by one turn and rewritten by the next - a second mail typed into the session - stood under the first turn by when
+    its card was raised, its words the second's, and the turn that wrote them drew after it. It stands by when its words were last written."""
+    from taskuary.store import MemoryStore
+    s = MemoryStore(); tid = s.create_task({'Title': 'Ledger totals', 'Kind': 'coding'}, 'owner')
+    u = lambda at, k, meta=None: {'sessionUpdate': k, '_at': at, **({'_meta': {'taskuary': meta}} if meta else {})}
+    ss = [{'sid': 'a1', 'updates': [u('2026-11-11 09:00:00', 'user_message_chunk', 'owner'), u('2026-11-11 09:00:05', 'tool_call'),
+                                    u('2026-11-11 09:00:09', 'agent_message_chunk'), u('2026-11-11 09:01:00', 'user_message_chunk', 'brief'),
+                                    u('2026-11-11 09:01:05', 'tool_call'), u('2026-11-11 09:01:09', 'agent_message_chunk')]}]
+    rid = s.add_review({'TaskId': tid, 'Kind': 'draft', 'Status': 'pending', 'DraftText': 'Hi Erin'})
+    s._exec("UPDATE review SET CreatedAt='2026-11-11 08:59:50', DraftText='Hi Erin, the total is fixed', DraftAt='2026-11-11 09:01:06' WHERE ReviewId=?", (rid,))
+    got = codingchat.cards(s, tid, ss)
+    assert got['turns'][str(rid)] == 'a1#4' and [(d['review'], d['turn'], d['stale']) for d in got['drafts']] == [(rid, 'a1#4', False)]
+
+
 def test_a_resumed_conversation_is_drawn_once(home, server):
     srv, c = server
     claude_log(home, 'cc3')

@@ -9,6 +9,8 @@ from unittest import mock
 from taskuary import concierge, general, ingest, processing_all
 from taskuary.store import MemoryStore
 
+REAL_START = general.start_session          # ...the real start, for a test that follows it past the patch its class puts on it
+
 
 @contextlib.contextmanager
 def triage_reads(same_as, seen=None):
@@ -76,6 +78,27 @@ class NewsBoxIsTheOneStartTests(unittest.TestCase):
     def test_a_code_fix_starts_its_agent_whatever_developer_mode_says(self):
         r = self.start('Fix the rounding bug in the ledger totals, checkout at C:/work/ledger')
         self.assertEqual(r.status_code, 200, r.text); self.assertTrue(r.json()['started'])
+
+    def test_the_ai_and_model_picked_on_news_chooser_are_what_its_agent_starts_on(self):
+        """The owner, 2026-11-24: "in New I asked for a certain model astra, the agent did not start with it?" - /api/start took his words
+        alone, so the session opened on what routing picks whatever he wanted. New's chooser (the task header's SwitchAi) rides the start, and
+        the session - the real one - opens on exactly that AI and model and saves them, so the task's header names them after."""
+        cid = self.s._exec("INSERT INTO connector (Type,Name,ConfigJson,Secret,Active) VALUES "
+                           "('hipaa_ai','HIPAA AI','{\"model\": \"claude-sonnet-5-5\"}','k',1)")
+        self.s._exec("INSERT INTO connector (Type,Name,ConfigJson,Secret,Active) VALUES ('openai','OpenAI','{\"model\": \"gpt-6\"}','k',1)")
+        pick = f'connector:{cid}'
+        general.start_session.side_effect = REAL_START
+        with mock.patch('threading.Thread', side_effect=lambda target, **k: mock.Mock(start=lambda: None)):
+            r = self.start('Compare the two payroll vendors and say which is cheaper', pick=pick, model='gemini-4-astra')
+            self.assertEqual(r.status_code, 200, r.text)
+            tid = r.json()['taskId']
+            s = general.session_for(tid); self.addCleanup(general.drop_session, tid)
+            self.assertEqual((s.pick, s.model), (pick, 'gemini-4-astra'))
+            self.assertEqual((self.s.saved_session(tid)['Pick'], self.s.saved_session(tid)['Model']), (pick, 'gemini-4-astra'))
+            # ...an AI that is not here is said as the header's chooser says it, and nothing is made
+            n = len(self.s.list_tasks())
+            r = self.start('Compare the two payroll vendors', pick='connector:999', model='gemini-4-astra')
+            self.assertEqual(r.status_code, 422); self.assertIn('not ready here', r.text); self.assertEqual(len(self.s.list_tasks()), n)
 
     def test_a_fix_in_the_folder_he_names_is_made_tested_and_committed_by_the_general_agent(self):
         """Design round 3, 2026-11-18: "Fix the rounding bug in the ledger totals - my checkout is at <path>" from New was refused on every AI

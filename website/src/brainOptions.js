@@ -47,14 +47,22 @@ export const codingChoice = (v) => String(v).startsWith("cli:") ? { brain: Strin
 // its models, the one at work marked (`now`). `current` is its pick (`cli:<key>` / `connector:<id>`), `model` the model it runs.
 // `why` is the reason the control is greyed: there is nothing else to hand it to.
 export const SHOWN = 3;
+const cardId = (pick) => /^connector:(\d+)$/.exec(String(pick || ""))?.[1] || "";
+// ...the AI cards a chooser lists, by id: whose own lists it reads (ModelPick.useCardModels)
+export const cardsOf = ({ coding = false, codingOptions = [], generalBrains = [] } = {}) =>
+  (coding ? codingOptions.map((o) => o.value) : generalBrains.map((b) => b.pick)).map(cardId).filter(Boolean);
 const modelRows = (ms = []) => ms.map((m) => (typeof m === "string" ? { id: m, label: m } : { id: m?.id, label: m?.label || m?.id })).filter((m) => m.id);
 // `named`: the AI's own name where its pick is not one of the rows (the server's willRun / ranOn brain) - the pill says it rather than nothing
-export function switchChoices({ coding = false, codingOptions = [], generalBrains = [], brainModels = {}, current = "", model = "", read = true, named: own = "" } = {}) {
-  const cardModels = (pick) => generalBrains.find((b) => b.pick === pick)?.models;
+// `auto`: a start not yet made (New's box) - its first row is Auto, what routing picks ({brain, model}: the server's general_runs), ticked
+// until another is chosen. `live`: an AI card's own list as its provider serves it ({<id>: [...]}, ModelPick.useCardModels) - a card lists no
+// models of its own, so HIPAA AI's gemini-4-astra was never a choice (the owner, 2026-11-24)
+export function switchChoices({ coding = false, codingOptions = [], generalBrains = [], brainModels = {}, current = "", model = "", read = true, named: own = "",
+  auto = null, live = {} } = {}) {
+  const cardModels = (pick) => { const ms = generalBrains.find((b) => b.pick === pick)?.models; return ms?.length ? ms : live[cardId(pick)]; };
   const ais = coding
     ? codingOptions.filter((o) => o.ready !== false).map((o) => ({ pick: o.value, label: o.label,
         models: modelRows(o.kind === "cli" ? brainModels[o.key]?.models || brainModels[o.key]?.choices : cardModels(o.value)) }))
-    : generalBrains.map((b) => ({ pick: b.pick, label: b.label, models: modelRows(b.models) }));
+    : generalBrains.map((b) => ({ pick: b.pick, label: b.label, models: modelRows(cardModels(b.pick)) }));
   const on = ais.find((a) => a.pick === current), named = on?.models.some((m) => m.id === model) ? model : "";
   // ...EACH AI ITS FEW MODELS (the 2026-11-18 walk: sixteen model names for one AI): its default and the first SHOWN of the list, the one at
   // work always - the rest `more`, folded under the AI's own "More models" until asked for
@@ -64,8 +72,9 @@ export function switchChoices({ coding = false, codingOptions = [], generalBrain
   // ...and THE PILL NAMES THE MODEL ITS TICK MARKS (the owner, 2026-11-23: "why does this say both claude and codex????" - Codex ticked at its
   // default under a pill reading "Codex · claude-sonnet"): a model its AI does not list is that AI's default; with no list read, as given
   const shown = on?.models.length ? named : model;
-  const said = on ? `${on.label}${shown ? ` · ${shown}` : ""}` : own ? `${own}${model ? ` · ${model}` : ""}` : "";
+  const runs = auto && [auto.brain, auto.model].filter(Boolean).join(" · ");
+  const said = on ? `${on.label}${shown ? ` · ${shown}` : ""}` : own ? `${own}${model ? ` · ${model}` : ""}` : auto ? `Auto${runs ? ` · ${runs}` : ""}` : "";
   const why = !read ? "Reading which AIs are ready…" : !ais.length ? "No AI is connected - connect one under Connections."
     : rows.length === 1 || rows.every((r) => r.now) ? "Only one AI is ready - connect another under Connections to hand this to it." : "";
-  return { rows, said, why };
+  return { rows: auto ? [{ pick: "", model: "", label: "Auto", note: runs || "what routing picks", now: !on }, ...rows] : rows, said, why };
 }

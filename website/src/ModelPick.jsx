@@ -7,17 +7,22 @@ import api from "./api";
 import { FAINT } from "./theme.jsx";
 import { idOf, offList } from "./aiCards.js";
 
-// the card's own list, read once per card while the page is open; a failed read leaves the static list (or the typed box)
-export function useModels(connector, on = true) {
-  const [live, setLive] = useState(null);
+// the cards' own lists, {<id>: [...]}, read once per card while the page is open; a failed read leaves that card out (its static list, or the
+// typed box). The AI chooser on a task and in New reads its cards' models here too (SwitchAi)
+export function useCardModels(connectors = [], on = true) {
+  const [live, setLive] = useState({});
+  const key = on ? [...new Set(connectors.filter(Boolean).map(String))].sort().join(",") : "";
   useEffect(() => {
-    if (!connector || !on) { setLive(null); return; }
+    setLive({});
+    if (!key) return;
     let ok = true;
-    api.get(`/api/ai/models/${connector}`).then((r) => ok && setLive(r.data?.error ? null : r.data?.models || [])).catch(() => ok && setLive(null));
+    for (const id of key.split(","))
+      api.get(`/api/ai/models/${id}`).then((r) => ok && !r.data?.error && setLive((m) => ({ ...m, [id]: r.data?.models || [] }))).catch(() => {});
     return () => { ok = false; };
-  }, [connector, on]);
+  }, [key]);
   return live;
 }
+export const useModels = (connector, on = true) => useCardModels([connector], on)[String(connector)] || null;
 
 export default function ModelPick({ value, models, connector, ready = true, disabled, placeholder, label, ai, onSave, width = 260 }) {
   const live = useModels(connector, ready);

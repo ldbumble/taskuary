@@ -2246,8 +2246,8 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
   // ...and before any AI has worked it, the one that WILL (the server's willRun, the router's own answer): never a bare "AI" (the owner, 2026-11-23)
   const ranAi = term?.pick || (term?.alive && term?.cli ? `cli:${term.cli}` : "") || detail?.ranOn?.pick || "", will = ranAi ? null : detail?.willRun || null;
   const aiNow = ranAi || will?.pick || "";
-  const aiChoices = switchChoices({ coding: ["coding", "cli"].includes(String(t?.Kind || "").toLowerCase()), codingOptions, generalBrains, brainModels,
-    current: aiNow, model: term?.model || detail?.ranOn?.model || will?.model || "", read: agentsRead, named: will?.brain || detail?.ranOn?.brain || "" });
+  const aiAsk = { coding: ["coding", "cli"].includes(String(t?.Kind || "").toLowerCase()), codingOptions, generalBrains, brainModels,
+    current: aiNow, model: term?.model || detail?.ranOn?.model || will?.model || "", read: agentsRead, named: will?.brain || detail?.ranOn?.brain || "" }, aiChoices = switchChoices(aiAsk);
   const switchAi = async (o) => {
     const id = selected;
     if (!beginStart(id, "switch")) return;
@@ -2964,7 +2964,7 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
                     logo={<ChannelIcon channel={rail?.channel || t.Source || "email"} sx={{ fontSize: 13 }} />} />
                   {/* ...and the AI that works it, a press away from another (SwitchAi) - on every open task, at work or at rest */}
                   {/* ...named, or not drawn until an AI is known (the owner, 2026-11-23: a bare "AI" chip said nothing) */}
-                  {notDone && aiChoices.said && <SwitchAi choices={aiChoices} off={detail?.aiOff || ""} busy={startingAgent === "switch"} onPick={switchAi} />}
+                  {notDone && aiChoices.said && <SwitchAi ask={aiAsk} off={detail?.aiOff || ""} busy={startingAgent === "switch"} onPick={switchAi} />}
                   {/* ...what AI the task used, and - a coding task in Developer mode - the chats its agent can be talked to from: quiet corner
                       buttons, each its popover (the owner, 2026-11-06: never at the bottom of the chat) */}
                   <HeadPop id="ai-used" title="AI used" icon={<TokenOutlinedIcon sx={{ fontSize: 16 }} />}><AiUsed taskId={t.TaskId} pop /></HeadPop>

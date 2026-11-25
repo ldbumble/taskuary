@@ -7,17 +7,21 @@ import { Box, Button, CircularProgress, Menu, MenuItem, Tooltip } from "@mui/mat
 import CheckIcon from "@mui/icons-material/Check";
 import SwapHorizIcon from "@mui/icons-material/SwapHoriz";
 import { BORDER, FAINT, INK } from "./theme.jsx";
-import { switchChoices } from "./brainOptions.js";
+import { cardsOf, switchChoices } from "./brainOptions.js";
+import { useCardModels } from "./ModelPick.jsx";
 
 const PILL = { fontSize: 11.5, fontWeight: 600, height: 26, minHeight: 26, py: 0, px: 1.25, borderRadius: 13, textTransform: "none", letterSpacing: 0,
   bgcolor: "var(--tq-panel, #f4f1ec)", color: INK, borderColor: BORDER, whiteSpace: "nowrap", maxWidth: 220, flexShrink: 1, minWidth: 0,
   "& .MuiButton-startIcon": { mr: 0.5 }, "&:hover": { borderColor: "var(--tq-border, #d8cfbe)", bgcolor: "var(--tq-panel, #f4f1ec)" } };
 
+// `ask`: what switchChoices reads - the AIs, the one at work - with each AI card's own models read here (ModelPick.useCardModels)
 // `off`: the AI at work stands in for one that is off (brainroute.stands_in) - "Running on Claude Code - HIPAA AI is off", said first
-export default function SwitchAi({ choices, off = "", busy = false, onPick }) {
+// `title`: what the pill is for where it is not a task's hand-over (New's box: the AI the job starts on)
+export default function SwitchAi({ ask = {}, off = "", busy = false, onPick, title: what = "" }) {
   const [at, setAt] = useState(null), [open, setOpen] = useState({});
-  const { rows, said, why } = choices || switchChoices();
-  const title = why || (off ? `${off} - hand this task to another AI` : said ? `Working on ${said} - hand this task to another AI` : "Hand this task to an AI");
+  const live = useCardModels(cardsOf(ask));
+  const { rows, said, why } = switchChoices({ ...ask, live });
+  const title = why || what || (off ? `${off} - hand this task to another AI` : said ? `Working on ${said} - hand this task to another AI` : "Hand this task to an AI");
   return <>
     <Tooltip title={title}><span style={{ display: "inline-flex", minWidth: 0 }}>
       <Button size="small" variant="outlined" sx={PILL} data-tq-switch-ai="" disabled={!!why || busy} aria-haspopup="menu" aria-label={title}
@@ -29,7 +33,7 @@ export default function SwitchAi({ choices, off = "", busy = false, onPick }) {
       {rows.filter((r) => !r.more || open[r.pick]).map((r) => [<MenuItem key={`${r.pick}/${r.model}`} data-tq-switch-option={`${r.pick}/${r.model}`} selected={r.now} disabled={r.now}
         onClick={() => { setAt(null); onPick?.({ pick: r.pick, model: r.model, label: r.model ? `${r.ai} (${r.model})` : r.label }); }}
         sx={{ fontSize: 12.5, pl: r.model ? 4 : 1.5, fontWeight: r.model ? 400 : 600, color: r.model ? FAINT : INK, gap: 1 }}>
-        <Box component="span" sx={{ flex: 1 }}>{r.label}{!r.model && <Box component="span" sx={{ fontWeight: 400, color: FAINT }}> · default model</Box>}</Box>
+        <Box component="span" sx={{ flex: 1 }}>{r.label}{!r.model && <Box component="span" sx={{ fontWeight: 400, color: FAINT }}> · {r.note || "default model"}</Box>}</Box>
         {r.now && <CheckIcon sx={{ fontSize: 14 }} aria-label="at work now" />}
       </MenuItem>,
       // ...under an AI's last shown model, the rest of its list one press away

@@ -1358,6 +1358,8 @@ def create_task(body: TaskBody):
 class StartBody(BaseModel):
     text: str = ''
     images: list[str] = []           # ...the files on his box: saved uploads only (prompt_images)
+    pick: str = ''                   # ...and the AI he chose on its chooser (SwitchAi), '' for Auto: `cli:<key>` / `connector:<id>`
+    model: str = ''
 
 @app.post('/api/start')
 def start_from_words(body: StartBody):
@@ -1368,7 +1370,11 @@ def start_from_words(body: StartBody):
     from . import concierge
     words = str(body.text or '').strip()
     if not words: raise HTTPException(422, 'say what the agent should do')
-    try: made = concierge.handoff_task(store, words, 'general', ACTOR, said=words, files=prompt_images(body.images), door='New')
+    # ...ON THE AI HE PICKED (the owner, 2026-11-24: "in New I asked for a certain model ... the agent did not start with it"): the task
+    # header's chooser, checked the same way (_ready_ai), the session opened on it. His words are the agent's, never read here for a model
+    if body.pick: _ready_ai(body.pick)
+    try: made = concierge.handoff_task(store, words, 'general', ACTOR, said=words, files=prompt_images(body.images), door='New',
+                                       pick=body.pick or None, model=body.model or None)
     except ValueError as e: _start_refused(None, None, e)
     return {'taskId': made['taskId'], 'ref': made['ref'], 'started': bool(made.get('started')), 'joined': bool(made.get('joined'))}
 
@@ -3321,6 +3327,14 @@ class ContinueBody(BaseModel):
     model: str | None = None
 
 
+def _ready_ai(pick: str, coding: bool = False) -> dict:
+    "The chooser's row for `pick` - an AI ready here for this kind of work, as every AI chooser lists them - else the 422 that says how to get it."
+    from . import agents as hub_agents, general
+    ready = hub_agents.coding_options(store) if coding else [{**o, 'value': o['pick']} for o in general.brain_options(store)]
+    if o := next((o for o in ready if o['value'] == pick and o.get('ready', True)), None): return o
+    raise HTTPException(422, f"That AI is not ready here - connect it under {words.name('ai')}, then pick it again.")
+
+
 def _take_ai(task_id: int, pick: str, model: str | None) -> str | None:
     """HAND THE TASK TO ANOTHER AI (the owner, 2026-11-18: "i need way to hand this to new AI agent instead of the one that blocked me"): the
     chosen AI must be one ready here; what works the task now is stopped - a chat's turn stopped and its session closed, a coding session paused
@@ -3330,9 +3344,7 @@ def _take_ai(task_id: int, pick: str, model: str | None) -> str | None:
     task = store.get_task(task_id)
     if not task: raise HTTPException(404, 'task not found')
     coding = str(task.get('Kind') or '').lower() in hub_agents.CODING_KINDS
-    ready = hub_agents.coding_options(store) if coding else [{**o, 'value': o['pick']} for o in general.brain_options(store)]
-    o = next((o for o in ready if o['value'] == pick and o.get('ready', True)), None)
-    if not o: raise HTTPException(422, f"That AI is not ready here - connect it under {words.name('ai')}, then pick it again.")
+    o = _ready_ai(pick, coding)
     if (s := general.session_for(task_id)):
         if s.busy and general.stop_turn(store, task_id):
             end = time.time() + 5
@@ -10417,6 +10429,8 @@ def agents():
             # be one choice with one entry (the 2026-09-16 spec).
             # the brains a NON-coding hand-off may choose, one per installed CLI (general.py)
             'general_brains': _general.brain_options(store),
+            # ...and what Auto starts one on: the router's own answer (_will_run), said on New's chooser before anything is picked
+            'general_runs': _will_run(None),
             'brain_list': brains_here,
             # ...and the CODING picker's full list - every CLI and every active AI card - with what a start that names none runs
             # (resolve_brain: chosen -> a ready CLI -> the only card), so the picker shows what will actually run

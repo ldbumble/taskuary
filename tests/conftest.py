@@ -422,11 +422,11 @@ def isolated_runtime_boundaries():
         return inner if inner[:1] == ['git'] else None
 
     def spawn_own(argv) -> bool:
-        "spawn's own POSIX helpers: the one watchdog that ends tied children when we die, and the read of a process's start time (spawn._stamp)."
+        "spawn's own POSIX helpers: the watchdog that ends tied children when we die, a process's start time (spawn._stamp), the tree under one (spawn.end)."
         from taskuary import spawn
         command = [str(x) for x in (argv if isinstance(argv, (list, tuple)) else [argv])]
         ps = command[:4] == ['ps', '-o', 'pid=,stat=,lstart=', '-p'] and len(command) == 5 and all(x.isdigit() for x in command[4].split(','))
-        return command == ['/bin/sh', '-c', spawn.WATCH_SH] or ps
+        return command == ['/bin/sh', '-c', spawn.WATCH_SH] or ps or command == ['ps', '-A', '-o', 'pid=,ppid=']   # ...and spawn.end's tree read
 
     def allowed_process(argv, kwargs) -> bool:
         return (reviewed_python(argv) or git_allowed(argv, kwargs) or bool((g := shell_git(argv)) and git_allowed(g, kwargs))

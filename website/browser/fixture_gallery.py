@@ -156,6 +156,20 @@ def install(app, store):
             state.gallery = True; browserview.state = state
         return {"ok": True, "sid": sid}
 
+    @app.post("/api/fixture/gallery/browserhold")
+    def gallery_browserhold(body: dict = Body(...)):
+        """A press on the agent's page held for his Approve, as its CLI's hook holds it (browsergate - a click on a site's own Post): its Approve
+        runs on the stand-in browser, which says it did it."""
+        from taskuary import browsergate, proposals
+        tid = int(body["taskId"]); sid = f"gal{tid}"
+        if not getattr(browsergate._run, "gallery", False):
+            real = browsergate._run
+            def run(s, args, *a, **k): return (0, f"done: {' '.join(args)}") if str(s) in PAGES else real(s, args, *a, **k)
+            run.gallery = True; browsergate._run = run
+        args = body.get("args") or ["click", "@e20"]
+        return proposals.queue(store, tid, {"action": "browser_act", "sid": sid, "args": args, "command": " ".join(["agent-browser", *args]), "what": body["what"],
+                                            "site": body.get("site") or "", "url": PAGES.get(sid, "")}, "taskuary")
+
     @app.get("/api/fixture/gallery/woken")
     def gallery_woken(): return {"woken": WOKEN}
 
@@ -169,7 +183,8 @@ def install(app, store):
     @app.post("/api/fixture/gallery/world")
     def gallery_world(body: dict = Body(...)):
         """The far ends: `connect` connections made (their type), each write tool of theirs answered by a stand-in that says where it landed;
-        `refuse` tools whose press fails, with the words they fail with; `github` a GitHub that takes a comment and a new issue."""
+        `refuse` tools whose press fails, with the words they fail with; `github` a GitHub that takes a comment, a new issue and a pull request;
+        `books` the vendors and accounts a QuickBooks stand-in holds ({"Vendor": {"Payworth": 58}, "Account": {...}}), read as its check reads them."""
         from taskuary import reports
         ids = {}
         for t in body.get("connect") or []:
@@ -185,6 +200,17 @@ def install(app, store):
             from taskuary import ci, github
             github.comment_issue = lambda *a, **k: "https://github.example/northwind/ledger/issues/12#issuecomment-1"
             ci._conn = lambda *a, **k: {"Secret": "fixture-token"}
+            github.open_pr = lambda _tok, repo, branch, *a, **k: {"number": 31, "url": f"https://github.example/{repo}/pull/31", "head": branch, "draft": True}
+            # ...and its reading of a pull request it opened, for the merge card that follows: a draft, GitHub's to decide at the merge
+            from taskuary import ghcloseout
+            ghcloseout.assess = lambda _s, repo, n, pr=None: {"state": "draft", "ok": True, "reason": "", "note": "", "offers": [], "method": "squash",
+                                                             "pr": {"number": n, "state": "open", "draft": True, "base": "master", "mergeable_state": "draft"}}
+        if books := body.get("books"):
+            from taskuary import quickbooks
+            def query(_cfg, sql, limit=200, books=books):
+                ent, field = ("Vendor", "DisplayName") if " FROM Vendor " in sql else ("Account", "Name")
+                return [{"Id": str(i), field: n} for n, i in books.get(ent, {}).items() if f"'{n}'" in sql or f"'{i}'" in sql][:limit]
+            quickbooks.query = query
         return {"ok": True, "connectors": ids}
 
     @app.post("/api/fixture/gallery/checkout")

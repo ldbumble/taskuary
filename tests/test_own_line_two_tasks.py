@@ -106,6 +106,28 @@ class AnOlderTaskInTheRoom(unittest.TestCase):
         s.attach_message(mid, old)
         self.assertEqual([m['ExternalId'] for m in conversation._mail(s, new)], ['e2', 'o3'])
 
+    def test_his_lines_on_the_room_are_read_from_its_threads_not_the_whole_mailbox(self):
+        """The owner, 2026-11-25: "hitting Next is still a bit slow". Every open and chat read asked, of every line he ever sent, whether this
+        task held an earlier line of its thread - ~140 ms a read on a real store. Its work now follows the task's threads, not the mailbox."""
+        from taskuary import general
+        s = MemoryStore()
+        new = s.create_task({'Title': 'Build the export', 'Kind': 'coding', 'Status': 'open'}, 'o')
+        old = s.create_task({'Title': 'Rota', 'Kind': 'task', 'Status': 'done'}, 'o')
+        s._exec("UPDATE task SET CreatedAt='2026-09-01 00:00:00' WHERE TaskId=?", (new,))
+        # ...a mailbox of 20,000 lines on 2,000 threads, a third of them his own, all filed on another task
+        s._exec("WITH RECURSIVE n(j) AS (SELECT 0 UNION ALL SELECT j+1 FROM n WHERE j<19999) INSERT INTO message (ExternalId, ConversationId, Channel, "
+                "Direction, Status, TaskId, SentAt, CreatedAt, BodyText) SELECT 'x'||j, 'thread-'||(j%2000), 'email', CASE WHEN j%3=0 THEN 'out' ELSE 'in' END, "
+                "CASE WHEN j%3=0 THEN 'context' ELSE 'filed' END, ?, datetime('2026-10-01','+'||(j/100)||' minutes'), "
+                "datetime('2026-10-01','+'||(j/100)||' minutes'), 'an older line' FROM n", (old,))
+        s.add_message({'ExternalId': 'e1', 'ConversationId': 'thread-5', 'Channel': 'email', 'SentAt': '2026-10-01 00:00:30', 'BodyText': 'x',
+                       'Status': 'filed', 'TaskId': new})
+        steps = [0]; s.cx.set_progress_handler(lambda: steps.__setitem__(0, steps[0] + 1), 100)
+        got = [m['ExternalId'] for m in general.room_own(s, new)]
+        s.cx.set_progress_handler(None, 0)
+        # ...his lines on thread-5 no earlier than the task's own first line on it, as before
+        self.assertEqual(got, ['x4005', 'x10005', 'x16005'])
+        self.assertLess(steps[0], 50, f'{steps[0] * 100} database steps for one task on a 20,000-line mailbox')
+
 
 if __name__ == '__main__':
     unittest.main()

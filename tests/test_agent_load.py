@@ -65,12 +65,13 @@ def test_a_full_queue_fills_every_free_slot_and_each_freed_one_at_once():
         time.sleep(1.0)
         ses.phase = lambda: 'parked'; ended.append(tid); bb.freed(st)           # the turn ends, its slot frees (general.send_prompt)
         return True
-    def later(st, delay=2.0): threading.Timer(delay, bb._safe, (st,)).start()     # the real timer road (conftest stops it elsewhere)
+    # ...AT ONCE: a freed slot's own drain runs; the slow retry (its seconds-long timer) never fires, so only a start on the free fills a slot
+    retries = []
+    def later(st, delay=2.0): threading.Thread(target=bb._safe, args=(st,)).start() if delay < 1 else retries.append(delay)
     with mock.patch.dict(terminal.SESSIONS, {}, clear=True), mock.patch.object(ingest, '_start_general', side_effect=turn),          mock.patch.object(bb, 'drain_later', later):
         t0 = time.time(); bb.drain(s)
-        while len(ended) < 12 and time.time() - t0 < 15: time.sleep(0.05)
-        took = time.time() - t0
-    assert sorted(ended) == sorted(tids) and peak[0] == 4
-    assert took < 4.5, took                                                      # three rounds of 1 s turns, not twelve
+        while len(ended) < 12 and time.time() - t0 < 30: time.sleep(0.05)
+    assert sorted(ended) == sorted(tids), f'{len(ended)} of 12 ran on freed slots alone (retries asked: {retries})'
+    assert peak[0] == 4, peak                                                    # every free slot filled, never one over the cap
     assert not s.queued_dispatches()
     assert all(sum(c['Body'].startswith('Started - ') for c in s.list_comments(t)) == 1 for t in tids)

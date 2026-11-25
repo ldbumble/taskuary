@@ -242,7 +242,7 @@ def test_the_rows_recommended_move_reads_the_agents_own_word():
     turn(s, tid, f'Done.\n{block(on_you=[], nothing_left=True)}')
     assert rulebook.agent_word(s, tid) == 'nothing_left' and rulebook.recommended_task(s, tid)['verb'] == 'close'
     turn(s, tid, f'Still Friday.\n{block()}')
-    assert rulebook.agent_word(s, tid) == 'on_you' and rulebook.recommended_task(s, tid) is None, 'a step of its list is on the owner'
+    assert rulebook.agent_word(s, tid) == '', 'a step of its list with no card and no question waits on nobody (the owner, 2026-11-25)'
 
 
 def test_a_pending_draft_is_not_nothing_left():

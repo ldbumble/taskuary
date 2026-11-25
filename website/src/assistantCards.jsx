@@ -60,7 +60,8 @@ import { READY } from "./taskLifecycle.js";
 import { connError, openBugReport } from "./bugReportOpen.js";
 import { dayLabel, fmtTime } from "./dates.js";
 import { useShare } from "./Share.jsx";
-import ItemSections, { ItemLay, ItemPart, handToItem, startItem } from "./ItemSections.jsx";
+import ItemSections, { ItemLay, ItemPart, startItem } from "./ItemSections.jsx";
+import { arrivalHand, arrivalMoves, handToItem, whoName } from "./itemHand.js";
 import TaskPage from "./TaskPage.jsx";   // what Taskuary made is drawn by the one task page (useMade)
 import { PaneMoves } from "./TaskRow.jsx";   // an FYI's Came from carries its pane's moves as a task's does
 import { TYPE_LABELS } from "./reportWords.js";
@@ -1516,7 +1517,6 @@ export function BriefCard({ card, onStart }) {
 // line - who, the subject, when - and a line of what they wrote (gistFor: their words, no quoted chain, no pictures). Its line is the press
 // that opens it: its whole text, pictures and "open the original" (children, mounted only then) and, in a batch, its own moves. `open` and
 // `onHead` hand the state to the batch (one open at a time); without them the message keeps its own
-const whoName = (w) => String(w || "someone").replace(/\s*<[^>]*>/g, "") || "someone";
 // the mail's own subject, beside triage's title when the two differ (B3): what it was sent as, and what triage made of it
 export const shownSubject = (item) => (item?.subject && item.subject !== item.title ? item.subject : "");
 // what triage read the words as trying to make an AI do (message.Danger): the task page's one warning line, on the card too (B3) - a scam
@@ -1576,15 +1576,13 @@ function FyiSections({ card, table, items, msgs, foot, err, next }) {
 // how many fyi a card can show whole before every line folds to one (FyisCard)
 const FOLD_AT = 6;
 
-export function FyisCard({ card, onDone, onSurface, onTimeline, onPropose, onAgent, table = null, movedTo = {}, onOpenRef = null }) {
-  const caps = useCapabilities(), canCode = caps.coding;      // no coding tool connected: no Coding agent (capabilities.js)
-  const noAi = cannotStart(caps);                              // ...and no AI: Send to agent greyed, saying why (trust audit F3)
+export function FyisCard({ card, onDone, onSurface, onTimeline, onAgent, table = null, movedTo = {}, onOpenRef = null }) {
+  const noAi = cannotStart(useCapabilities());                 // no AI: Send to agent greyed, saying why (trust audit F3)
   const [open, setOpen] = useState(null);
   const [busy, setBusy] = useState("");
   const [err, setErr] = useState("");
   const [left, setLeft] = useState({});                      // the lines whose list was left: the press is a badge on that line
-  // SEND TO AGENT ON ONE LINE opens the agent box under that line (RunForm.AgentAsk) - what about it is the issue, which agent - and
-  // only its Start hands it over (the owner, 2026-10-23); { key, coding }
+  // ...off the table (a card in the chat, no box of its own to take a chip) Send to agent opens the agent box under that line (RunForm.AgentAsk)
   const [asking, setAsking] = useState(null);
   const items = (card.items || []).map((i) => (movedTo[i.key] && !i.tid ? { ...i, tid: movedTo[i.key].tid } : i));
   // A batch of four is read whole: every line carries its gist and its two doors, and you never
@@ -1600,44 +1598,24 @@ export function FyisCard({ card, onDone, onSurface, onTimeline, onPropose, onAge
     catch (e) { setErr(failOf(e)); }
     setBusy("");
   };
-  const propose = async (verb, i) => {
-    setBusy(i.key); setErr("");
-    try { await onPropose?.(verb, i.key); } catch (e) { setErr(failOf(e)); }
-    setBusy("");
-  };
   // one line's list, left from under that line (unsubscribe.js) - never the handful's, and never marking it read: All read does that
   const unsub = async (i) => {
     setBusy(i.key); setErr("");
     try { await unsubscribeFrom(api, i.mid); setLeft((l) => ({ ...l, [i.key]: true })); } catch (e) { setErr(failOf(e)); }
     setBusy("");
   };
-  // ...and acting on it belongs to the ONE you opened, through the same proposal road the words take (PW-151) - never on the handful, never
-  // marking its siblings; and an entry already filed under a task is never offered to be made one (the owner, 2026-10-01)
-  // ...ON THE TABLE THE LINE'S SEND TO AGENT IS THE AGENT TAB'S BOX, the handful a chip each, the pressed one first (ItemSections.handToItem; the
-  // owner, 2026-11-05: "attach the report or fyi list to the prompt box"): ONE agent starts on the first chip left, the rest named for it to read
-  const handAll = (i, coding) => handToItem(card.key, { verb: coding ? "coding_agent" : "regular_agent",
-    items: [i, ...items.filter((x) => x.key !== i.key)].filter((x) => x.mid && !x.tid && !movedTo[x.key]).map((x) => ({ key: x.key, title: `${whoName(x.who)}: ${x.title || ""}` })),
-    start: async (o) => {
-      const [lead, ...rest] = o.items.map((c) => items.find((x) => x.key === c.key)).filter(Boolean);
-      const also = rest.length ? `\n\nTHE OTHER MESSAGES OF THIS LIST IT IS ABOUT (read each with read_message)\n${rest.map((x) => `m${x.mid} - ${whoName(x.who)}: ${x.title || ""}`).join("\n")}` : "";
-      await onAgent?.(lead, { verb: o.verb, text: `${o.text}${also}`, files: o.files });
-    } });
-  const ask = (i, coding) => { if (!(table != null && handAll(i, coding))) setAsking({ key: i.key, coding }); };
+  // ...ON THE TABLE THE LINE'S ONE MOVE PUTS IT ON THE AGENT TAB'S BOX, the handful a chip each, the pressed one first (itemHand.arrivalHand)
+  const ask = (i) => { if (!(table != null && handToItem(card.key, arrivalHand(i, items, movedTo, onAgent)))) setAsking(i.key); };
   const actsOf = (i) => (<>
             <div className="tq-card-actions tq-fyi-acts">
               {/* ...Reply where somebody reads one (the item's `replies`, the server's): a code host's or a billing mailer's line has none */}
               {i.mid && i.replies && <Button size="small" variant="outlined" disabled={!!busy} onClick={() => reply(i)} title={btnHint("reply")} sx={quiet}>{btn("reply")}</Button>}
-              {i.mid && !i.tid && <Button size="small" variant="outlined" disabled={!!busy} onClick={() => propose("mine", i)} title={btnHint("mine", "fyi")} sx={quiet}>{btn("mine", "fyi")}</Button>}
-              {i.mid && !i.tid && canCode && <Button size="small" variant="outlined" disabled={!!busy} onClick={() => ask(i, true)} title={btnHint("coding_agent")} sx={quiet}>{btn("coding_agent")}</Button>}
-              {i.mid && !i.tid && <Button size="small" variant="outlined" disabled={!!busy || !!noAi} onClick={() => ask(i, false)} title={noAi || btnHint("regular_agent")} sx={quiet}>{btn("regular_agent")}</Button>}
-              {/* one line of the handful can be put down on its own - All read was the only way to let any of it go */}
-              {i.mid && <Button size="small" variant="outlined" disabled={!!busy} onClick={() => propose("not_ours", i)} title={btnHint("not_ours")} sx={quiet}>{btn("not_ours")}</Button>}
+              {arrivalMoves(i).map((v) => <Button key={v} size="small" variant="outlined" disabled={!!busy || !!noAi} onClick={() => ask(i)} title={noAi || btnHint(v)} sx={quiet}>{btn(v)}</Button>)}
               {canUnsubscribe(i) && (left[i.key] ? <span className="tq-pressed" data-tq-pressed={btn("unsubscribe")}>✓ {btn("unsubscribe")}</span>
                 : <Button size="small" variant="outlined" disabled={!!busy} onClick={() => unsub(i)} title={btnHint("unsubscribe")} sx={quiet}>{btn("unsubscribe")}</Button>)}
-              <Button size="small" onClick={() => onSurface?.(i.key)} sx={faint}>Talk about it</Button>
             </div>
-          {asking?.key === i.key && (
-            <AgentAsk key={`${i.key}:${asking.coding}`} coding={asking.coding} what="It gets the message and its attachments."
+          {asking === i.key && (
+            <AgentAsk key={i.key} what="It gets the message and its attachments."
               onClose={() => setAsking(null)} onStart={async (o) => { await onAgent?.(i, o); setAsking(null); }} />
           )}
   </>);

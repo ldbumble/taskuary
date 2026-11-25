@@ -102,3 +102,26 @@ test("a made item's row has no Send to agent and its box starts the agent on his
   const ask = read("ItemSections.jsx");
   assert.match(ask, /else if \(START\) await START\(\{ key: ask\.key, title \}, \{ verb: AGENT, text: q, files: pics\.paths \}\);/, "the box is the way in");
 });
+
+// ONE MOVE ON AN ARRIVAL IN THE LIST (the owner, 2026-11-25: under a marketing mail the row stood Make it a task, Send to coding agent, Send to
+// agent, Not for me and Talk about it): Send to agent alone, and its press puts the mail on the item's box as a chip - his words start the work
+test("an arrival's one move is Send to agent, and its press puts it on the box as a chip, the pressed one first", async () => {
+  const { arrivalHand, arrivalMoves, handToItem, takeHands } = await import("../src/itemHand.js");
+  const { label } = await import("../src/buttons.js");
+  const promo = { key: "msg:7", mid: 7, who: "Trainly <news@trainly.example>", title: "Spring sale" };
+  const other = { key: "msg:8", mid: 8, who: "Spendly", title: "Your receipt" }, filed = { key: "msg:9", mid: 9, tid: 4, who: "Erin Blake", title: "W-9" };
+  assert.deepEqual(arrivalMoves(promo), ["regular_agent"]);
+  assert.equal(label(arrivalMoves(promo)[0]), "Send to agent");
+  assert.deepEqual(arrivalMoves(filed), [], "a line on a task already is the task's");
+  assert.deepEqual(arrivalMoves(other, { tid: 5 }), [], "nor one that went to a task here");
+  assert.equal(handToItem("fyis:1", arrivalHand(promo, [promo], {}, null)), false, "no box drawn to take it: the caller opens the agent box");
+  let got = null; const off = takeHands("fyis:1", (h) => { got = h; });
+  const started = [];
+  assert.equal(handToItem("fyis:1", arrivalHand(other, [promo, other, filed], {}, async (lead, o) => started.push([lead.key, o]))), true);
+  assert.equal(got.verb, "regular_agent");
+  assert.deepEqual(got.items, [{ key: "msg:8", title: "Spendly: Your receipt" }, { key: "msg:7", title: "Trainly: Spring sale" }]);
+  await got.start({ verb: got.verb, text: "Unsubscribe me from these", files: [], items: got.items });
+  assert.equal(started[0][0], "msg:8");
+  assert.match(started[0][1].text, /^Unsubscribe me from these\n\nTHE OTHER MESSAGES OF THIS LIST IT IS ABOUT \(read each with read_message\)\nm7 - Trainly: Spring sale$/);
+  off(); assert.equal(handToItem("fyis:1", arrivalHand(promo, [promo], {}, null)), false);
+});

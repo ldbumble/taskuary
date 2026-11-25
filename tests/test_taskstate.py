@@ -252,6 +252,27 @@ class StandingTests(unittest.TestCase):
         for k in ('brief', 'advisor', 'assistant'): self.assertIn('no input awaited from anyone', quiet[k], k)
         self.assertNotIn('waiting for', quiet['triage'])
 
+    def test_steps_its_turn_listed_for_him_wait_on_nobody_a_card_or_its_question_does(self):
+        """Walk 21: a turn ended with steps in its summary's `on_you` and asked nothing, set up no card - and every surface read "waiting for
+        your input" (the owner, 2026-11-25: only a card waiting for his press or the agent's question to him is waiting for his input)."""
+        import json
+        from taskuary import general, workerstate as ws
+        s = self.s
+        tid = _chat(s, 'Rotate the keys')
+        s.add_comment(tid, 'agent', general.SUMMARY_TYPE, json.dumps({'did': 'Listed the keys', 'nothing_left': False,
+                                                                        'on_you': ['Paste the new key into the vault']}))
+        got = self.surfaces(tid)
+        self.assertEqual(taskstate.standing(s, tid)['waits_on'], None)
+        for k in ('header', 'phone', 'brief', 'advisor', 'assistant'): self.assertNotIn('waiting for your input', got[k], k)
+        self.assertNotEqual(got['rail'][1], 'waiting for your input')
+        # ...a card set up for his press is
+        rv = s.add_review({'TaskId': tid, 'Kind': 'action', 'Status': 'pending', 'Reason': 'save the new key',
+                           'DraftText': json.dumps({'action': 'browser_act', 'what': 'save the new key'})})
+        self.assertEqual((taskstate.standing(s, tid)['waits_on'], self.surfaces(tid)['header']), ('you', 'waiting for your input'))
+        # ...and so is its question to him
+        s.decide_review(rv, 'rejected', None, 'owner'); ws.record(s, tid, 'sid1', 'input_needed', text='Which vault?', source='api')
+        self.assertEqual((taskstate.standing(s, tid)['waits_on'], self.surfaces(tid)['header']), ('you', 'waiting for your input'))
+
     def test_the_agents_question_stands_until_he_answers_the_task_closes_or_the_agent_takes_it_back(self):
         from taskuary import agenttools, concierge, workerstate as ws
         s = self.s

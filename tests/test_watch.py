@@ -253,7 +253,7 @@ class HandedToAnAgentTests(Watched):
         from taskuary import general
         started = []
         with mock.patch.object(general, '_start_line', lambda *a, **k: started.append(watch.watching(self.s.get_task(self.t)))), \
-                mock.patch('taskuary.origin.hold', return_value=None):
+                mock.patch('taskuary.origin.keeps_him', return_value=None):
             general.take_line(self.s, self.t, 'Please send Erin the signed form.', line_id='l-watch', wait=True)
         self.assertEqual(started, [False], 'the turn started with the task still under Watching')
         self.assertEqual(self.level(), 'task')

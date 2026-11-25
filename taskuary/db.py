@@ -22,7 +22,8 @@ def is_url(cs: str) -> bool: return '://' in cs
 # a linked server) or a BACKUP. So a read-level query must be ONE statement that starts SELECT or WITH and names none of the verbs or
 # server routines that act - checked on the SQL with its comments and quoted text taken out. The card's DB user is still the real ceiling.
 import re
-_QUOTED = re.compile(r"--[^\n]*|/\*.*?\*/|'(?:[^']|'')*'|\"(?:[^\"]|\"\")*\"|`[^`]*`|\[[^\]]*\]", re.S)
+# ...never MySQL's executable comment (`/*! ... */` - round 4): MySQL runs what it holds, so it is read as the SQL it is
+_QUOTED = re.compile(r"--[^\n]*|/\*(?!!).*?\*/|'(?:[^']|'')*'|\"(?:[^\"]|\"\")*\"|`[^`]*`|\[[^\]]*\]", re.S)
 # the statements that act (reserved words, so no plain column carries them), and the routines that reach outside: called, with a '('
 _ACTS = re.compile(r'\b(insert|update|delete|merge|drop|alter|create|truncate|exec|execute|grant|revoke|deny|into|backup|restore|dbcc|bulk)\b'
                    r'|\b(openrowset|opendatasource|openquery|openxml|dblink\w*|pg_read_\w+|pg_write_\w+|pg_ls_dir|lo_import|lo_export|pg_sleep|'
@@ -39,6 +40,9 @@ def read_only(query: str) -> str:
     return query
 
 
+READ_ONLY_TX = ('postgresql', 'mysql', 'mariadb')        # ...where SET TRANSACTION READ ONLY, before the first statement, holds the transaction
+
+
 def _rows_sqlalchemy(cs, query, n, write=False):
     try: import sqlalchemy
     except ImportError:
@@ -46,12 +50,16 @@ def _rows_sqlalchemy(cs, query, n, write=False):
         # metadata predates the extra (see aws._boto3)
         raise RuntimeError('sqlalchemy is not installed - run: pip install sqlalchemy, plus the engine '
                            'driver (psycopg2-binary for postgres, pymysql for mysql, snowflake-sqlalchemy…)')
-    eng = sqlalchemy.create_engine(cs, pool_pre_ping=True)
+    # ...A READ IS THE DATABASE'S OWN WORD WHERE IT HAS ONE (round 4: a text check let `SELECT * FROM read_csv('C:/...')` read any file on this
+    # computer through DuckDB): DuckDB opened with no reach outside its own file, and a read-only transaction on Postgres and MySQL
+    name = sqlalchemy.engine.make_url(cs).get_backend_name()
+    eng = sqlalchemy.create_engine(cs, pool_pre_ping=True, **({'connect_args': {'config': {'enable_external_access': False}}}
+                                                              if name == 'duckdb' and not write else {}))
     try:
         # an explicit transaction: a 1.4 Connection has no commit()/rollback() of its own, so every query on an
         # install that still had 1.4 failed with "'Connection' object has no attribute 'rollback'" (2026-10-06)
         with eng.connect() as cx, cx.begin() as tx:
-            if not write and eng.dialect.name == 'postgresql': cx.execute(sqlalchemy.text('SET TRANSACTION READ ONLY'))   # the server's own word too
+            if not write and eng.dialect.name in READ_ONLY_TX: cx.execute(sqlalchemy.text('SET TRANSACTION READ ONLY'))   # the server's own word too
             res = cx.execute(sqlalchemy.text(query))
             rows = [dict(r._mapping) for r in res.fetchmany(n)] if res.returns_rows else [{'rows_affected': max(res.rowcount, 0)}]
             tx.commit() if write else tx.rollback()      # read is read (mssql.run_query)

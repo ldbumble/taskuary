@@ -2,6 +2,18 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.4.3.9 - 2026-11-25
+
+- The answer a task waits on reaches an agent even where none worked it yet
+- A finished agent's row reads the wait its header reads
+- A held card's outcome is its latest run: a retry that ran is not 'Failed'
+- Read gate: a word the shell fills in is judged as the folder it will be
+- An AI card switched on with nothing to fill asks its gateway nothing
+- Stop ends the agent's whole process tree, on every road
+- A show that failed and was then drawn is made good, as a write is
+- A message pushed to the open chat reads as its turn reads it
+- A file linked with backslashes opens as the file
+
 ## 0.4.3.8 - 2026-11-25
 
 - The file cookie is keyed by the owner token, never the token itself

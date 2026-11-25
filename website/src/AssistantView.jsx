@@ -74,7 +74,8 @@ import ContinueBox from "./ContinueBox.jsx";
 import { AgentAsk } from "./RunForm.jsx";
 import CloseNote from "./CloseNote.jsx";
 import { AttachImage, ImageTray, usePromptImages, useSendWhenUp } from "./promptImages.jsx";
-import { handToItem, startsItems } from "./ItemSections.jsx";
+import { startsItems } from "./ItemSections.jsx";
+import { handToItem } from "./itemHand.js";
 import { afterCancel, afterConfirm, afterExecute, holdsProposal, markExecuted, proposalSay } from "./proposalCard.js";
 import { AGENT_VERBS, LEVEL_META, LEVEL_ROLE, arrivals, isUrgent, arrivedAt, asPressed, withOpened, stillLeaving, bandsOf, canAdvance as canWalkOn, cardFor, currentItemFromPile, madeHere, displayRevision, drawOrder, fillCaps, followsItem, foldsAs, inOrder, interactiveCardIndex, drawnKey, tableCardIndex, keysOf, liveBrowseId, pastView, lastActIndex, chipsOf, receiptChips, CAPPED, FLOOR, FOOT_PX, levelLabel, nextMarkerKey, trimCaps, ROW_PX, refreshCurrentPresentation, refreshPilePresentation, rowMeta, itemVerbs, tableItemOf, settledHistory, sinceOpener, walkOf, walkPlace } from "./funnelPile.js";
 import { FYI_PAGE, ageHover, subLine, answersTo, awayFromClear, closedElsewhere, coveredByReload, fyiHasRoom, fyiTail, heldSince, latestLine, pileRows, pinOf, rowKeys, sameRow, sentChips } from "./funnelPile.js";
@@ -1048,7 +1049,7 @@ function Line({ m, lastBrief = false, live, last, moves = false, actions, fresh,
     brief: <BriefCard card={m.card} onStart={actions.start} />,
     // SET UP TASKUARY is the two cards, not the 13-stop walk (the owner, 2026-10-14: "what is this garbage ... where are the cards")
     firstrun: <FirstRun revisit onChanged={actions.reload} onWalk={() => actions.start(null)} />,
-    fyis: <FyisCard card={c} onDone={actions.done} onSurface={actions.surface} onTimeline={actions.timeline} onPropose={actions.propose} onAgent={actions.agent} table={table}
+    fyis: <FyisCard card={c} onDone={actions.done} onSurface={actions.surface} onTimeline={actions.timeline} onAgent={actions.agent} table={table}
       movedTo={actions.movedTo} onOpenRef={actions.openRef} />,
   }[kind] : null;
   // A STOP THE WALK HAS MOVED PAST is a finished step, not something the assistant said. Falling

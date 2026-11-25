@@ -22,6 +22,7 @@ import { layTable, onPressing, useSpineAll } from "./actionRow.js";
 import { itemLines, readingOf } from "./threadReading.js";
 import { MESSAGE } from "./kinds.js";
 import { ArrivedWords } from "./GeneralWorkspace.jsx";
+import { takeHands } from "./itemHand.js";
 
 // a section's white card on the warm ground, as a task's focus is
 export const ItemPart = ({ children, sx = null, ...rest }) => <Box {...rest} sx={{ ...FOCUS, px: { xs: 1.25, sm: 2 }, minWidth: 0, ...sx }}>{children}</Box>;
@@ -39,9 +40,7 @@ const SAYS = { says: "What this says", matters: "What matters to you" };
 // type in when they hit send to agent?"): the press opens the Agent tab with the item ON the box as a chip - an FYI handful's every line, each
 // one removable - and the cursor in it. With a chip on, Send starts the agent: the item and the owner's words, through the road the old agent box
 // took (`hand.start`, AssistantView.startOnItem); with none, the box answers from the item as it did. Removing the last chip goes back to that.
-// `hand`: { verb, items: [{ key, title }], start({ verb, text, files, items }) } - set by handToItem, through the item's own ItemSections
-const HANDS = new Map();
-export const handToItem = (key, hand) => { const f = key && HANDS.get(key); if (!f) return false; f(hand); return true; };
+// `hand`: { verb, items: [{ key, title }], start({ verb, text, files, items }) } - set by handToItem (itemHand.js), through the item's own ItemSections
 let START = null;
 export const startsItems = (f) => { START = f; };
 // ...and the same start for an item Taskuary made, drawn by the task page (madeTask: its chat's box)
@@ -128,9 +127,7 @@ export default function ItemSections({ kind, label, title, aside, sections: all,
   const takes = !!ask || hands, boxAt = sections.some((s) => s.key === "agent") ? "agent" : about;
   useEffect(() => {
     if (!takes) return undefined;
-    const f = (h) => setHand(h);
-    HANDS.set(itemKey, f);
-    return () => { if (HANDS.get(itemKey) === f) HANDS.delete(itemKey); };
+    return takeHands(itemKey, (h) => setHand(h));
   }, [itemKey, takes, boxAt]);
   // ...opened where its box now is, the moment it is handed on - and back on the item once the chip is off and the section with it
   useEffect(() => { if (hand) setOpen(boxAt); else setOpen((o) => (sections.some((x) => x.key === o) ? o : about)); }, [hand, boxAt]);   // eslint-disable-line react-hooks/exhaustive-deps

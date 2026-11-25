@@ -416,18 +416,41 @@ def _conf_dirs() -> list:
     "Where the CLIs are told to keep that configuration instead (CLAUDE_CONFIG_DIR and kin), as normalised roots."
     return [_norm(os.environ[v], real=rl) for v in ('CLAUDE_CONFIG_DIR', 'COPILOT_HOME') if os.environ.get(v) for rl in (True, False)]
 
+# ...a checkout Claude Code keeps in its own worktrees folder (<repo>/.claude/worktrees/<name>/) is the repository's code: judged from its own
+# root, so its .claude/settings.json is still one and its app.py is not. A nested `git init .claude` opens nothing - only that folder is read so
+_WORKTREE = re.compile(r'^.*/\.claude/worktrees/[^/]+(?=/)')
+
 def _is_conf(p: str) -> bool:
     "`p` normalised and folded: one of the files above, or anything in a relocated CLI home."
-    return bool(_CONF.search(p)) or _under(p, _conf_dirs()) or bool(os.environ.get('CODEX_HOME')) and any(
+    return bool(_CONF.search(_WORKTREE.sub('', p))) or _under(p, _conf_dirs()) or bool(os.environ.get('CODEX_HOME')) and any(
         p == _norm(os.path.join(os.environ['CODEX_HOME'], f), real=rl) for f in ('config.toml', 'hooks.json', 'AGENTS.md') for rl in (True, False))
 
-def _git_config_write(args: list) -> bool:
-    "`git [-C dir] [-c k=v] config ...` that is not a read: it writes .git/config (or ~/.gitconfig) without naming either."
-    i = 0
-    while i < len(args) and args[i].startswith('-'): i += 2 if args[i] in ('-C', '-c') else 1
-    if i >= len(args) or args[i].lower() != 'config': return False
+# GIT'S OWN CONFIGURATION THAT RUNS A PROGRAM, OR SENDS A PUSH ELSEWHERE (red team #2, T2): `git -c core.sshCommand='sh x' fetch` runs x, and
+# `git -c remote.origin.pushurl=<elsewhere> push` goes past the trusted repo's own origin (shellgate.trusted reads it without the -c). By key,
+# git's own grammar: written to a config file, given for one command (-c, --config-env), or put in the environment git reads them from
+_GIT_EXEC = re.compile(r'(?:core\.(?:sshcommand|hookspath|fsmonitor|editor|askpass|gitproxy|worktree)|credential\..*|alias\..*|include(?:if)?\..*'
+                       r'|diff\.external|filter\..*|protocol\..*|uploadpack\..*|url\..*|remote\..*\.(?:url|pushurl|uploadpack|receivepack|proxy|vcs)'
+                       r'|sequence\.editor|gpg\..*|ssh\.variant|http\.(?:.*\.)?proxy|.*\.(?:textconv|command|cmd|driver|helper|program|process|tool))')
+_GIT_ENV = re.compile(r'(?<![\w$])(?:export\s+|set\s+"?|\$env:)?(GIT_(?:SSH(?:_COMMAND)?|CONFIG(?:_PARAMETERS|_COUNT|_KEY_\d+|_VALUE_\d+|_GLOBAL|_SYSTEM)?'
+                      r'|EXTERNAL_DIFF|ASKPASS|EDITOR|SEQUENCE_EDITOR|EXEC_PATH|PROXY_COMMAND|TEMPLATE_DIR))\s*=', re.I)
+
+def _git_exec(args: list) -> str:
+    """The key of `git [-C dir] [-c k=v] [config ...]` that runs a program or moves a push: given with -c / --config-env, or written by
+    `git config` (a key it cannot read - `--edit`, none named - counts). '' for every other git command, and for config reads."""
+    i, given = 0, []
+    while i < len(args) and args[i].startswith('-'):
+        a = args[i]
+        if a in ('-c', '--config-env') and i + 1 < len(args): given.append(args[i + 1])
+        elif a.startswith('--config-env='): given.append(a.split('=', 1)[1])
+        i += 2 if a in ('-C', '-c', '--config-env', '--git-dir', '--work-tree', '--namespace') else 1
+    if k := next((k for g in given if _GIT_EXEC.fullmatch(k := g.split('=', 1)[0].strip().casefold())), ''): return k
+    if i >= len(args) or args[i].lower() != 'config': return ''
     rest = args[i + 1:]
-    return not any(a.startswith('--get') or a in ('--list', '-l') for a in rest) and (rest[:1] or [''])[0] not in ('get', 'list')
+    if any(a.startswith('--get') or a in ('--list', '-l') for a in rest) or (rest[:1] or [''])[0] in ('get', 'list'): return ''
+    if any(a in ('--edit', '-e') for a in rest): return 'its whole file'
+    keys = [a for a in rest if not a.startswith('-') and a not in ('set', 'unset', 'rename-section', 'remove-section')]
+    k = keys[0].casefold() if keys else ''
+    return k if not k or _GIT_EXEC.fullmatch(k) else ''
 
 def _write_hit(text: str, cwd: str = '') -> str:
     "Why a shell command writes into one of them, or ''. Its targets: a redirection, or what a writing command writes to."
@@ -448,7 +471,8 @@ def _write_hit(text: str, cwd: str = '') -> str:
             elif p in _ALL_ARGS: targets += plain + [a[3:] for a in args if a.lower().startswith('of=')]
             elif p in _LAST_ARG: targets += plain[-1:] + [args[i + 1] for i, a in enumerate(args[:-1]) if a.lower() in ('-destination', '-t', '--target-directory')]
             elif p in _IN_PLACE and any(re.fullmatch(r'-\w*i\S*|--in-place\S*', a) for a in args): targets += plain
-            elif p == 'git' and _git_config_write(args): return "it changes git's configuration, which runs in the owner's next git command (core.hooksPath and kin)"
+            elif p == 'git' and (k := _git_exec(args)): return f"it sets git's {k}, which runs a program or sends a push elsewhere"
+        if m := _GIT_ENV.search(seg): return f"it sets {m[1].upper()}, which makes git run a program or read settings of its own"
         for t in targets:
             if hit(t): return f'it writes {t}, which a later session of the owner reads as configuration or runs'
     return ''

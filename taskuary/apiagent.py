@@ -271,7 +271,8 @@ def env_of(store, tid: int, sid: str) -> dict:
     import os
     from . import browserview, terminal
     from .clis import HEADLESS_ENV
-    return {**os.environ, **terminal.session_env('assistant', tid, sid=sid), **browserview.env(sid), **HEADLESS_ENV}
+    from .agents import ambient
+    return {**ambient(os.environ), **terminal.session_env('assistant', tid, sid=sid), **browserview.env(sid), **HEADLESS_ENV}
 
 
 SAY = {}                       # (tid, sid) -> how this turn says a step of Taskuary's own (the browser being set up) in the chat

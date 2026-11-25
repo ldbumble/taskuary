@@ -680,7 +680,8 @@ def perform(store, tid: int, p: dict, run=None) -> dict:
     from . import readgate
     readgate.grant(store, tid, p.get('reads'))
     if not cmd and p.get('reads'):
-        said = f"The owner let you read {', '.join(p['reads'])} for the rest of this task. Read what you needed there now. " + NEXT
+        v = 'write' if str(p.get('what') or '').startswith('write') else 'read'        # ...what his yes let it do, as the card said it (readgate._said, settings)
+        said = f"The owner let you {v} {', '.join(p['reads'])} for the rest of this task. {v.title()} what you needed there now. " + NEXT
         if (told := _batch.get()) is not None: told.append(p.get('what') or 'a read')
         else: _tell(store, tid, said, wake=True)
         store.audit('task', tid, 'shell_act_done', 'owner', 'human', {'what': p.get('what'), 'reads': p['reads']})

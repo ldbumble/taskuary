@@ -15,6 +15,7 @@ Python's) are no one's files and pass.
 """
 import os, re, sys, tempfile
 from pathlib import Path
+from urllib.parse import unquote
 
 from .gate import TABLE
 WHY, NEVER = TABLE['reads'].why, TABLE['never'].why          # said as the one table says them (gate.TABLE)
@@ -29,6 +30,8 @@ _SPLIT = re.compile(r'(\$\{[^}\s]*\})|\r?\n|;|&&|\|\||\||\{|\}|\(|\)')
 # to the task's own outputs held as "a path it builds from a variable" - the copper price in its words)
 _VAR = re.compile(r'\$\{?(?:env:)?([A-Za-z_]\w*)\}?|%([A-Za-z_]\w*)%', re.I)
 _WILD = re.compile(r'[*?\[]')
+# a variable read by name in a script's text: Python's os.environ[...] / .get / getenv, Node's process.env, Ruby's ENV[...], Perl's $ENV{...}
+_ENV_REF = re.compile(r'''(?:os\.environ(?:\.get)?|os\.getenv|process\.env|Deno\.env\.get|\bENV|\$ENV)\s*[\[({.]?\s*["']?([A-Za-z_]\w*)["']?\s*[\])}]?''')
 
 
 def _n(p) -> str: return os.path.normcase(os.path.realpath(os.path.expanduser(str(p))))
@@ -155,7 +158,7 @@ def opened(store, tid, p: dict) -> bool:
     from . import floor, shellgate
     if p.get('action') != 'shell_act' or not p.get('reads'): return False
     cwd = p.get('cwd') or ''
-    if p.get('command') and shellgate.acts(p['command'], cwd): return False
+    if p.get('command') and shellgate.acts(p['command'], cwd) or TABLE['settings'].why in str(p.get('why') or ''): return False
     ok, nev = own(store, tid, cwd) + _open(), [_n(x) for x in floor.kept_secret()]
     return all(not any(_in(_n(f), r) for r in nev) and any(_in(_n(f), r) for r in ok) for f in p['reads'])
 
@@ -179,9 +182,13 @@ def judge(store, tid, paths, cwd: str = '', write: bool = False) -> tuple:
     mine, nev, sids = own(store, tid, cwd), [_n(p) for p in floor.kept_secret()], () if write else _sids(store, tid)
     ok = granted(store, tid) + ([_n(tempfile.gettempdir())] if write else _open())
     verb, why = ('write', TABLE['writes'].why) if write else ('read', WHY)
-    held, blind = {}, False
+    held, blind, out = {}, False, []
     for raw in paths or []:
         if raw is None: blind = True; continue
+        # ...WHAT A LATER SESSION RUNS IS NEVER JUST WORK (red team #2, T2): a git hook, git's config, a CLI's settings or hooks - the floor's
+        # one list (floor._is_conf), on every road - waits for his press even in the agent's own checkout; his yes lets that one file be written
+        if write and floor._is_conf(c := floor._norm(raw)) and not any(_in(_n(raw), _n(g)) for g in granted(store, tid)):
+            out.append(settings(f'write {os.path.basename(c)}', _n(raw))); continue
         p, pat = _n(_cut(raw)), _n(raw)
         # ...a never-place is never the work's: only a work folder INSIDE it (the task's scratch, outputs, mail in Taskuary's home) lets a
         # read there through - a checkout at the home folder does not open the sign-ins in it. A glob that can reach one is that one
@@ -192,9 +199,14 @@ def judge(store, tid, paths, cwd: str = '', write: bool = False) -> tuple:
         p = os.path.realpath(os.path.expanduser(_cut(str(raw))))     # ...said as the owner's own spelling of it, never case-folded
         folder = p if os.path.isdir(p) else os.path.dirname(p)
         held.setdefault(folder, []).append('' if folder == p else os.path.basename(p))
-    out = [{'tool': verb, 'kind': 'reads', 'what': _said(f, ns, verb), 'why': why, 'where': f, 'folder': f} for f, ns in held.items()]
+    out += [{'tool': verb, 'kind': 'reads', 'what': _said(f, ns, verb), 'why': why, 'where': f, 'folder': f} for f, ns in held.items()]
     if blind: out.append({'tool': verb, 'kind': 'reads', 'what': f'{verb} files at a path it builds from a variable', 'why': why, 'where': '', 'folder': ''})
     return out, ''
+
+
+def settings(what: str, path: str = '') -> dict:
+    "One held step that changes what a later session or git command runs (TABLE 'settings'): `path` the file his yes lets it write."
+    return {'tool': 'write', 'kind': 'settings', 'what': what, 'why': TABLE['settings'].why, 'where': path, 'folder': path}
 
 
 def _cut(p: str) -> str:
@@ -303,7 +315,9 @@ def command_paths(cmd: str, cwd: str = '', env: dict = None, made: list = None, 
         code = re.sub(r'[\d.]+$', '', tool) in ('python', 'py', 'node', 'ruby', 'perl', 'deno') and any(x in ('-c', '-e') for x in w[1:3])
         # ...an inline script's text is read word by word for the paths in it: its words are mostly data, so one is a path only where one is
         # there (below) - `open('~/.ssh/id_rsa')` in it is read as ever
-        if code: w = [w[0], *(t for x in w[1:] for t in re.split(r"[\s'\"(),;=+]+", x) if t and t not in ('-c', '-e'))]
+        # ...and a variable it reads by name (`os.environ['TASKUARY_HOME'] + '/config.toml'`, process.env.HOME) is that variable's path, joined to
+        # the text after it (red team #2, T3): the script names the file as surely as `cat $TASKUARY_HOME/config.toml` does
+        if code: w = [w[0], *(t for x in w[1:] for t in re.split(r"[\s'\"(),;=+]+", _joined(x)) if t and t not in ('-c', '-e'))]
         dest = max((i for i, x in enumerate(w) if i and not x.startswith('-')), default=0) if tool in _COPIES else 0
         for i, x in enumerate(w[1:], 1):
             to = bool(_REDIRECT.match(w[i - 1])) or i == dest or tool in _WRITERS
@@ -312,11 +326,17 @@ def command_paths(cmd: str, cwd: str = '', env: dict = None, made: list = None, 
             if (v := _VAR.fullmatch(x)) and (v[1] or v[2]).lower() in env: x = env[(v[1] or v[2]).lower()]
             # ...after a `cd` away, a plain name that is there is read there (`cd ~ && cat .ssh/x`)
             near = here != cwd and here and x and not x.startswith('-') and os.path.exists(os.path.join(here, x))
+            # ...and a plain name that is a link somewhere else is read where it leads (`ln -s ../../.taskuary/config.toml c; cat c`)
+            near = near or bool(x) and not x.startswith('-') and _linked(os.path.join(here or cwd or os.getcwd(), x))
+            # ...a file:// address is the file it names (`curl file://$TASKUARY_HOME/config.toml`)
+            if re.match(r'^file:', x, re.I): x = re.sub(r'^/(?=[A-Za-z]:)', '', unquote(re.sub(r'^file:(//(localhost)?)?', '', x, flags=re.I)))
             # ...and Taskuary's own address as a session is handed it ($TASKUARY_URL/api/...) is a web address, never a file: a read-only curl
             # of its own API was held as "a path it builds from a variable", a card each time the agent looked (the roads audit, 2026-11-19)
             if not x or '://' in x or _OWN.match(x) or re.match(r'^/\w$', x) or re.match(r'^(/dev/|\d$)', x) or not (near or _pathish(x)): continue
             e = _expand(x, here, env)
-            if e is None: out.append(None); continue
+            if e is None:
+                if not code: out.append(None)        # ...in a script's text a name it does not know is mostly not a path at all
+                continue
             e = re.sub(r'^/([A-Za-z])(?=/|$)', r'\1:', e) if os.name == 'nt' else e
             if not os.path.isabs(e): e = os.path.join(here or os.getcwd(), e)
             # ...a rooted token whose first folder does not exist is a pattern or an API path, not a file (`grep /api/ x`). A glob stays
@@ -351,15 +371,29 @@ def tool_paths(inp: dict, locations=None, cwd: str = '') -> list:
 
 
 def env_for(store, tid, cwd: str = '') -> dict:
-    "The variables a session of this task has that the server does not: its outputs folder and the folder it is in."
-    from . import outputs
-    return {'taskuary_outputs': str(outputs.folder(int(tid))) if str(tid or '').isdigit() else '', 'pwd': cwd}
+    "The variables a session of this task has that the server may not: its outputs folder, the folder it is in, and Taskuary's home."
+    from . import config, outputs
+    return {'taskuary_outputs': str(outputs.folder(int(tid))) if str(tid or '').isdigit() else '', 'pwd': cwd, 'taskuary_home': str(config.home())}
+
+
+def _joined(code: str) -> str:
+    "A script's text with each variable it reads by name as `${NAME}/`, and the string joined on after it (`+ '/x'`, `, 'x'`, `/ 'x'`) one path."
+    return re.sub(r'''(\}/|~)["']?\)?\s*[+/,]\s*[fbru]?["']''', r'\1/', _ENV_REF.sub(r'${\1}/', code))
+
+
+def _linked(p: str) -> bool:
+    "Is `p` (there now) reached through a link - its real path not the one written?"
+    try: return os.path.lexists(p) and os.path.normcase(os.path.realpath(p)) != os.path.normcase(os.path.abspath(p))
+    except (OSError, ValueError): return False
 
 
 def of_command(store, tid, cmd: str, cwd: str = '') -> tuple:
     "(held, never) for a shell line."
+    from . import floor
     made, ws = [], []
     ps = command_paths(cmd, cwd, env_for(store, tid, cwd), made, ws)
     wrote(tid, made)                                  # ...the picture it takes is its own work, read back without asking (wrote)
     (held, never), (wheld, wnever) = judge(store, tid, ps, cwd), judge(store, tid, ws, cwd, write=True)
-    return held + wheld, never or wnever
+    # ...and a line that writes one of them, or sets git's own config that runs a program - the floor's reading of a shell line (T2)
+    conf = [settings(why.removeprefix('it ')) for why in [floor._write_hit(str(cmd or ''), cwd)] if why]
+    return held + wheld + conf, never or wnever

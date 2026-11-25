@@ -173,6 +173,14 @@ def _resolve_cmd(name: str) -> list:
     return [path]
 
 
+# THE OWNER'S OWN SECRETS IN THE SERVER'S ENVIRONMENT ARE NO SESSION'S (red team #2, T3): a trusted session inherited every variable the app
+# was started with - a vendor's API key, a database password, a package registry's token - for its agent to print. By the variable's name, its
+# grammar: one that names a credential goes, unless it is how an AI or the code host its work pushes to signs in (the CLI, git, gh) or Taskuary's own
+_SECRET_ENV = re.compile(r'(TOKEN|SECRET|PASSWORD|PASSWD|PASSPHRASE|APIKEY|_KEY|CREDENTIALS?|_PAT|_AUTH)$', re.I)
+_SIGN_IN_ENV = re.compile(r'^(ANTHROPIC|CLAUDE|OPENAI|CODEX|GEMINI|GOOGLE|AWS|AZURE|VERTEX|CLOUD_ML|COPILOT|GH|GITHUB|GITLAB|GLAB|TASKUARY)_', re.I)
+def ambient(base) -> dict: return {k: v for k, v in dict(base).items() if not _SECRET_ENV.search(k) or _SIGN_IN_ENV.match(k)}
+
+
 def child_env(base: dict = None, home: str = None, windows: bool = None) -> dict:
     """The environment a CLI is entitled to expect.
 
@@ -189,7 +197,7 @@ def child_env(base: dict = None, home: str = None, windows: bool = None) -> dict
     of this test managed to fail on the platform it was pretending to be.
     """
     import ntpath                    # a Windows path, split as one wherever this runs
-    env = dict(os.environ if base is None else base)
+    env = ambient(os.environ) if base is None else dict(base)       # ...the profile's own variables (spawn_env) stay as he set them
     # ...and NO CLI KEEPS A MEMORY OF ITS OWN (the recorded walk, 2026-11-11: an agent saved a "playbook" into Claude Code's memory folder,
     # where no card held it and no other agent reads it). It was switched off for chat agents only; a coding agent in a pane, over ACP, or a
     # one-shot with tools still wrote there. Every CLI Taskuary starts takes its environment from here, so here it is off for all of them
@@ -1888,7 +1896,7 @@ def _fell_back(name: str, why, trace):
 def spawn_env(profile: dict, extra_env: dict = None) -> dict:
     "A headless CLI's environment: the process's own, or - for a stranger's task (profile strict_env) - only what terminal.STRICT_ENV lets through."
     from .terminal import strict_ok          # lazy: terminal imports this module
-    base = {k: v for k, v in os.environ.items() if not profile.get('strict_env') or strict_ok(k)}
+    base = {k: v for k, v in ambient(os.environ).items() if not profile.get('strict_env') or strict_ok(k)}
     # ...and the profile's own (an API card's harness: its CODEX_HOME and its key - in the environment, never on disk; harness.row)
     return child_env({**base, **(profile.get('env') or {}), **(extra_env or {})})
 

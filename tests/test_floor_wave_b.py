@@ -116,6 +116,10 @@ def test_the_repository_s_own_instructions_and_code_stay_editable(repo):
         for tool in ('Write', 'Edit'): assert call(tool, repo, file_path=os.path.join(repo, p)) == {}, p
     for p in ('.git/config', '.claude/settings.local.json', '.mcp.json', '.git/hooks/pre-commit'):
         assert call('Read', repo, file_path=os.path.join(repo, p)) == {}, p              # reads are unchanged
+    # ...and a checkout in Claude Code's own worktrees folder is code, judged from its own root (every write there was refused as settings)
+    wt = os.path.join(repo, '.claude', 'worktrees', 'fix-parser')
+    assert call('Write', wt, file_path=os.path.join(wt, 'src', 'app.py')) == {}
+    assert denied(call('Write', wt, file_path=os.path.join(wt, '.claude', 'settings.json'))) and denied(call('Write', wt, file_path=os.path.join(repo, '.claude', 'settings.json')))
 
 
 # ── round 2: the environment emptied by any option order; written content judged only where it will run ──────────────

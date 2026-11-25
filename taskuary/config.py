@@ -7,7 +7,7 @@ are runtime overlays on [server] (a container binds 0.0.0.0 this way) and are ne
 back — save() keeps the on-disk [server] block. Empty env is unset, so compose cannot wipe
 a token stored on the volume.
 """
-import json, os
+import json, os, re
 from loguru import logger
 try: import tomllib
 except ImportError: import tomli as tomllib  # py3.10
@@ -72,18 +72,24 @@ def _put(text: str):
     them over the owner's - every open page and agent then refused as out of date (CI: the floor door answered 401 to its own token)."""
     import time, uuid
     p = home() / 'config.toml'; tmp = p.with_name(f'.config.{uuid.uuid4().hex}.tmp'); tmp.write_text(text, encoding='utf-8')
+    if os.name != 'nt': tmp.chmod(0o600)      # ...the owner's alone from its first byte (red team #2, T3): every save, not only a token's write
     for i in range(50):                       # ...Windows refuses a replace while a reader holds the file open: a moment later it goes
         try: return os.replace(tmp, p)
         except PermissionError:
             if i == 49: tmp.unlink(missing_ok=True); raise
             time.sleep(.02)
 
-def _write(d: dict):
-    p = home() / 'config.toml'
-    _put(dumps_toml(d) + '\n')
-    if os.name != 'nt':
-        try: p.chmod(0o600)
-        except OSError: pass
+def _write(d: dict): _put(dumps_toml(d) + '\n')
+
+_CRED = re.compile(r'(token|secret|password|passwd|api_?key)$', re.I)
+def backup(name: str) -> None:
+    """A copy of config.toml to go back to before a migration, once - WITHOUT its tokens and keys (red team #2, T3: the copy held the owner
+    token in clear beside the sealed original). Restored, the server mints fresh ones (guard.ensure_tokens); the owner's alone on disk."""
+    p, b = home() / 'config.toml', home() / name
+    if not p.exists() or b.exists(): return
+    bare = lambda d: {k: bare(v) if isinstance(v, dict) else v for k, v in d.items() if not (_CRED.search(k) and isinstance(v, str))}
+    b.write_text(dumps_toml(bare(_read())) + '\n', encoding='utf-8')
+    if os.name != 'nt': b.chmod(0o600)
 
 def port_number(value) -> int:
     """A TCP port accepted by sockets and server runners."""

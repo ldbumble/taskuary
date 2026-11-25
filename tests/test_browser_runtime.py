@@ -238,3 +238,22 @@ class TheCliAgentTests(unittest.TestCase):
 
 
 if __name__ == '__main__': unittest.main()
+
+
+class AnAiThatCannotUseTheBrowser(unittest.TestCase):
+    """The owner, 2026-11-25: "it should find a way around it" - "This AI can't use the browser - Codex can: pick it in the Agent menu" was a
+    line for him to act on in a menu. It is one card, "Run this task on <the AI that can>", and his press hands the task to it."""
+    def test_it_is_one_card_his_press_hands_the_task_over(self):
+        from taskuary import capabilities, proposals, server
+        s = MemoryStore(); tid = s.create_task({'Title': 'Read the denials in the portal', 'Kind': 'general', 'Status': 'open'}, 'owner')
+        codex = {'pick': 'cli:codex', 'label': 'Codex CLI', 'type': 'cli'}
+        with mock.patch.object(capabilities, 'other_ais', return_value=[codex]):
+            said = general.browser_card(s, tid, 'connector:4'); again = general.browser_card(s, tid, 'connector:4')
+        self.assertIn('Codex CLI can', said); self.assertIn("the owner's to press", again)
+        (card,) = s._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action' AND Status='pending'", (tid,))
+        self.assertIn('run this task on Codex CLI', card['Reason'])
+        with mock.patch.object(server, 'continue_work', return_value={'continued': True, 'kind': 'general'}) as go:
+            out = proposals.execute(s, card, 'owner')
+        self.assertEqual(go.call_args.args[1].pick, 'cli:codex'); self.assertTrue(out['continued'])
+        with mock.patch.object(capabilities, 'other_ais', return_value=[]):
+            self.assertIn('no AI here that can', general.browser_card(s, tid, 'connector:4'))

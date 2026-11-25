@@ -624,11 +624,17 @@ def browser_offered(store, tid: int, pick: str) -> bool:
         logger.debug(f'general: browser not offered on task {tid} - {e}'); return False
 
 
-def no_browser_line(store, pick: str) -> str:
-    "The line on screen where a card that takes no tools was asked for a browser: the AIs really here that could, or none (capabilities.other_ais)."
+def browser_card(store, tid: int, pick: str) -> str:
+    """Where this task's AI cannot use the browser: ONE CARD, "Run this task on <the AI here that can>" (the owner, 2026-11-25: "it should find a
+    way around it") - his press hands the task to it and picks the work up there (server.continue_work). Its line, or that no AI here can."""
     from .capabilities import other_ais
-    others = other_ais(store, pick, clis=True)
-    return "This AI can't use the browser" + (f" - {', '.join(others)} can: pick it in the Agent menu." if others else '.')
+    from . import proposals
+    o = next(iter(other_ais(store, pick, clis=True, options=True)), None)
+    if not o: return "This AI can't use the browser, and no AI here that can is connected."
+    q = proposals.queue(store, int(tid), {'action': 'switch_ai', 'pick': o['pick'], 'ai': o['label']}, 'taskuary', refused=(miss := []))
+    if not q: return f"This AI can't use the browser - {miss[0] if miss else 'it was not put to him'}."
+    from .selfclose import CARD_TAIL
+    return f"This AI can't use the browser; {o['label']} can. Running this task on it: {CARD_TAIL}"
 
 
 def walk_pick(store, task: dict = None) -> str:
@@ -3177,7 +3183,7 @@ class GeneralSession:
                     system = f'{system}\n\n{apiagent.BRIEF}'
                 elif not stranger:
                     # ...and where it cannot, the next real step as the owner's question - never "cannot be done from here" (2026-11-09)
-                    if self.browser_wanted and not apiagent.can(brain): self._remember_trace('progress', 'browser', no_browser_line(self.store, self.pick))     # true of a card that takes no tools, and only of it
+                    if self.browser_wanted and not apiagent.can(brain): self._remember_trace('progress', 'browser', browser_card(self.store, self.task_id, self.pick))     # true of a card that takes no tools, and only of it
                     if apiagent.can(brain): system = f'{system}\n\n{apiagent.no_browser_line()}'
                 # ...and WHAT IT CAN DO HERE (capabilities.fact): a card that takes no tools hears it has words alone, one with tools what its
                 # own hands make - read off the tools it is offered - and only the AIs really here

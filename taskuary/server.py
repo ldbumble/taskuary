@@ -6196,7 +6196,7 @@ def agent_browser(body: AgentBrowserBody, request: Request):
         from . import origin
         if origin.of_task(store, body.task_id)[0] == 'stranger':
             raise HTTPException(403, 'this task has no browser: it carries a message from someone the owner has not vouched for')
-        raise HTTPException(403, general.no_browser_line(store, road))
+        raise HTTPException(403, general.browser_card(store, body.task_id, road))
     try: return {'ok': True, **browserview.ask_open(str(s.sid), body.url)}
     except ValueError as e: raise HTTPException(422, str(e))
 

@@ -115,14 +115,14 @@ HANDS = {
 }
 
 
-def other_ais(store, pick: str = '', clis: bool = False) -> list:
+def other_ais(store, pick: str = '', clis: bool = False, options: bool = False) -> list:
     """The AIs ready here besides `pick`, by the names the task's Agent menu shows them (general.provider_options): a CLI only where it starts
     on this computer and its last test did not fail (agents.ready_brains) - the menu lists every one connected, installed or not. `clis`: those
-    alone (what drives a browser whatever its model)."""
+    alone (what drives a browser whatever its model). `options`: each as its menu row ({pick, label, ...}), not its name."""
     from . import agents, general
     if store is None: return []
     ready = {f'cli:{k}' for k in _safe(lambda: agents.ready_brains(store), [])}
-    return [o['label'] for o in _safe(lambda: general.provider_options(store), [])
+    return [o if options else o['label'] for o in _safe(lambda: general.provider_options(store), [])
             if o.get('pick') != pick and (o['pick'] in ready if o.get('type') == 'cli' else not clis)]
 
 

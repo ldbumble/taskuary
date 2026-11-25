@@ -1000,7 +1000,10 @@ def carries_on(store, tid, said: bool = False) -> bool:
     `said`: the press SENT his words to someone (a reply, a mail, a post) - the card says it went, so silence is no next step: only an agent
     that said a step of its own follows goes on (the owner, 2026-11-25, twice in one night: "You sent Gabi..." under the card that read Sent)"""
     s = _last_said(store, tid)[1]
-    return s.get('after_press') == 'send' if isinstance(s, dict) else not said
+    if isinstance(s, dict): return s.get('after_press') == 'send'
+    # ...but a coding agent files no summary to name a step with, nor one that lights Mark done: unwoken, its task stood agent done with
+    # nothing lit (the audit corpus, CI 2026-11-25), so its Send wakes it as before
+    return not said or not handles(store.get_task(int(tid)))
 
 
 # a thread's body run in a context of its own: what it sets (origin.OWNER_SPEAKS) never outlives it where a road runs it in place (Windows CI,

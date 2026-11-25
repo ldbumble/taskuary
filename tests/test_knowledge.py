@@ -138,8 +138,9 @@ class ReindexTests(unittest.TestCase):
         self.assertEqual(kb.block(self.s, 'zebra'), '')
         # agent task context and the coding agent context file carry it for a thread that touches the documents
         tid = self.s.create_task({'Title': 'refund after move-out', 'Kind': 'coding'}, 'o')
-        self.s.add_message({'TaskId': tid, 'Channel': 'email', 'Subject': 'resident refund', 'BodyText': 'When is the refund paid after move-out?',
-                            'FromEmail': 'a@b.test', 'FromName': 'A', 'SentAt': '2026-08-30 10:00', 'Status': 'new'})
+        mid = self.s.add_message({'TaskId': tid, 'Channel': 'email', 'Subject': 'resident refund', 'BodyText': 'When is the refund paid after move-out?',
+                                  'FromEmail': 'a@b.test', 'FromName': 'A', 'SentAt': '2026-08-30 10:00', 'Status': 'new'})
+        self.s.update_task(tid, {'TrustedThrough': mid}, 'owner')      # a sender he trusts: a stranger's words reach no agent (origin.withheld)
         self.assertIn('policy.docx', agents.task_context(self.s, tid))
         self.assertIn('## From the knowledge base', context.build(self.s, tid))
 

@@ -9,7 +9,7 @@ import { baseName, describeCall, isWork, present, stepsOf } from "./agentSteps.j
 import { editHunks, stat } from "./diffView.js";
 import { isSignin } from "./browserSplit.js";
 import { liveTerminal } from "./taskLayout.js";
-import { filesOf, viewOf } from "./viewSpec.js";
+import { filesOf, SHOW, viewOf } from "./viewSpec.js";
 import { plural } from "./timeWords.js";
 
 // ── a coding session's steps -> trace events, the one currency ───────────────────────────────────
@@ -111,8 +111,9 @@ export function turnParts(events, { keepStart = false, live = false } = {}) {
   }
   flush();
   // ...an edit that failed and was then made is no failure (agentSteps' `recovered`): Claude's first try at a string not found, its second made
-  parts.forEach((p, i) => p.type === "work" && p.steps.forEach((s) => { if (s.status === "error" && s.kind === "edit"
-    && parts.slice(i + 1).some((q) => q.type === "edit" && q.summary.startsWith(s.summary))) s.status = "recovered"; }));
+  // ...and so is a view that failed and was then drawn, whatever it was titled the second time (walk 21: "could not show you" over the chart)
+  const made = (s, q) => (s.kind === "edit" ? q.type === "edit" && q.summary.startsWith(s.summary) : SHOW.test(String(s.tool || "")) && q.type === "view");
+  parts.forEach((p, i) => p.type === "work" && p.steps.forEach((s) => { if (s.status === "error" && parts.slice(i + 1).some((q) => made(s, q))) s.status = "recovered"; }));
   // ...and its plan is the one row the agent keeps replacing (chatlog: one per plan, in place) - never a filter keeping the last of several
   return parts.map((p, i) => ({ ...p, id: p.id || `p${i}` }));
 }

@@ -137,6 +137,22 @@ class OwnerTokenTests(unittest.TestCase):
         self.assertNotIn('owner-plain-token', disk); self.assertIn('vault:', disk)        # ...what file:// or a Read of it would show
         self.assertEqual(config.load()['server']['token'], 'owner-plain-token')
 
+    def test_where_no_keychain_seals_it_the_file_is_his_alone_and_no_backup_carries_a_token(self):
+        """Red team #2, T3: on Linux/mac with no keychain the vault is plain - config.toml was left 0644 by every save but a token's (an atomic
+        replace takes the temp file's mode), and config.before-cli-connections.toml, a copy taken before a migration, held both tokens in clear."""
+        import os, stat
+        from taskuary import config
+        d = self.home()
+        with mock.patch.dict(os.environ, {'TASKUARY_VAULT': 'plain'}):
+            config.load(); config.save({'agents': {'coding': {'kind': 'coding'}}, 'github': {'token': 'ghp-plain', 'default_repo': 'northwind/ledger'}})
+            if os.name != 'nt': self.assertEqual(stat.S_IMODE((d / 'config.toml').stat().st_mode), 0o600)
+            config.backup('config.before-cli-connections.toml')
+        b = d / 'config.before-cli-connections.toml'
+        kept = b.read_text(encoding='utf-8')
+        for secret in ('owner-plain-token', 'agent-tok', 'ghp-plain'): self.assertNotIn(secret, kept)
+        self.assertIn('northwind/ledger', kept)                                     # ...the rest of it is there to go back to
+        if os.name != 'nt': self.assertEqual(stat.S_IMODE(b.stat().st_mode), 0o600)
+
     def test_a_sessions_process_never_opens_it(self):
         import os
         from taskuary import config

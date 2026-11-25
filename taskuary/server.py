@@ -45,16 +45,10 @@ try:
     from loguru import logger as _log                    # loguru is not bound at module scope yet here
     _added = hub_agents.ensure_coding(cfg)
     _split_cli = cli_connections.migrate(cfg)
-    if _split_cli:
-        import shutil
-        _config_file = config.home() / 'config.toml'
-        _backup_file = config.home() / 'config.before-cli-connections.toml'
-        if _config_file.exists() and not _backup_file.exists(): shutil.copy2(_config_file, _backup_file)
+    if _split_cli: config.backup('config.before-cli-connections.toml')
     # a profile is instructions on any brain: its own CLI leaves it, and the shipped coding profile takes the name `coding` (2026-10-15)
     _config_file = config.home() / 'config.toml'
-    _backup_file = config.home() / 'config.before-profiles-on-brains.toml'
-    if _config_file.exists() and not _backup_file.exists() and 'provider' in _config_file.read_text(encoding='utf-8'):
-        import shutil; shutil.copy2(_config_file, _backup_file)
+    if _config_file.exists() and 'provider' in _config_file.read_text(encoding='utf-8'): config.backup('config.before-profiles-on-brains.toml')
     _layered = hub_agents.layer_profiles(cfg, store)
     if _added or _split_cli or _layered:
         config.save(cfg)

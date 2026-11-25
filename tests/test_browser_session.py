@@ -260,7 +260,8 @@ class StartingItTests(unittest.TestCase):
              mock.patch.object(bv, '_read', return_value='9222'), \
              mock.patch.object(bv.spawn, 'run') as run:
             bv.close('abc123')
-        self.assertEqual(run.call_args[0][0], ['ab', '--session', 'tq-abc123', 'close'])
+        # ...among what ran: a pane another test left behind may close its own browser through the same patched run while this one does
+        self.assertIn(['ab', '--session', 'tq-abc123', 'close'], [c[0][0] for c in run.call_args_list])
 
 
 if __name__ == '__main__':

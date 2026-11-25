@@ -203,6 +203,7 @@ def child_env(base: dict = None, home: str = None, windows: bool = None) -> dict
     # one-shot with tools still wrote there. Every CLI Taskuary starts takes its environment from here, so here it is off for all of them
     from .clis import NO_MEMORY
     env.update(NO_MEMORY)
+    env['PYTHONUTF8'] = '1'          # ...and a Python it runs reads and writes UTF-8, never the code page (shellgate.PS_UTF8 says what broke)
     if home is None:
         try: home = str(Path.home())
         except (RuntimeError, OSError): return env      # nothing better to say than nothing

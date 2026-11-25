@@ -52,15 +52,45 @@ def via_file(url: str, folder) -> pathlib.Path:
                 f'<title>Taskuary</title><script>location.replace({json.dumps(url)})</script>')
     return f
 
-def remote_link(url: str, token: str) -> str:
-    "A keyed address from ANOTHER process's server (the instance already running), or the plain one if it gives none."
+# A CHALLENGE IN PLACE OF A TOKEN ON DISK (the owner, 2026-11-25: the owner token lives in the server's memory alone): another process of the
+# owner's - Taskuary started again, `taskuary --link` - is handed a launch key by the running server once it reads back a one-time word the
+# server wrote into its home's launch folder (owner-only, and kept from a stranger's session by the floor) - within TTL, used once
+_WORDS: dict = {}
+
+def challenge(folder) -> str:
+    "A one-time word written to an owner-only file in `folder`: the file's name, which the caller reads it back by."
+    d = pathlib.Path(folder); d.mkdir(parents=True, exist_ok=True)
+    name, word = f'{secrets.token_hex(8)}.word', secrets.token_urlsafe(24)
+    fd = os.open(d / name, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(fd, 'w', encoding='utf-8') as w: w.write(word)
+    with _LOCK: _WORDS[name] = (word, time.monotonic() + TTL, d / name)
+    return name
+
+def proved(name, word) -> bool:
+    "True once for the word `challenge` wrote under `name`, read back within TTL; the word and its file are spent either way."
+    with _LOCK: got = _WORDS.pop(str(name or ''), None)
+    if not got: return False
+    try: got[2].unlink()
+    except OSError: pass
+    return got[1] > time.monotonic() and secrets.compare_digest(got[0].encode(), str(word or '').encode())
+
+def remote_link(url: str, folder) -> str:
+    """A keyed address from ANOTHER process's server (the instance already running) - asked for a challenge, the word read back from the
+    running server's `folder` (its home) - or the plain one if it gives none."""
     u = urllib.parse.urlsplit(url)
-    try:
+    def ask(body: dict) -> dict:
         conn = http.client.HTTPConnection(u.hostname, u.port or 80, timeout=5)
         try:
-            conn.request('POST', '/api/launch-key', headers={'X-Taskuary-Token': token or '', 'Content-Length': '0'})
+            raw = json.dumps(body).encode()
+            conn.request('POST', '/api/launch-key', body=raw, headers={'Content-Type': 'application/json', 'Content-Length': str(len(raw))})
             r = conn.getresponse()
-            k = json.loads(r.read() or b'{}').get('key') if r.status == 200 else ''
+            return json.loads(r.read() or b'{}') if r.status == 200 else {}
         finally: conn.close()
+    try:
+        got = ask({})
+        name = str(got.get('challenge') or '')
+        if name and re.fullmatch(r'[0-9a-f]{16}\.word', name):
+            got = ask({'challenge': name, 'word': (pathlib.Path(folder) / 'launch' / name).read_text(encoding='utf-8')})
+        k = str(got.get('key') or '')
     except (OSError, ValueError, http.client.HTTPException): k = ''
     return f"{url.rstrip('/')}/?k={urllib.parse.quote(k)}" if k else url

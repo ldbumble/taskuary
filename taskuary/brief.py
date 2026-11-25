@@ -97,8 +97,11 @@ def background(store, chars: int = 9_000, workstream: str = None, drop=()) -> st
         body = re.sub(r'\n{3,}', '\n\n', '\n'.join(keep)).strip()
         if body: out.append(f'## {what}\n{body[:chars]}')
     # ...and what About you saved, which no doc carries: an agent asked for the job title the owner had typed in (the email walk, 2026-10-29)
-    saved = [f'{k}: {v}' for k, n in (('Name', 'owner_name'), ('Job title', 'owner_title'), ('Company', 'owner_company'))
+    saved = [f'{k}: {v}' for k, n in (('Name', 'owner_name'), ('Job title', 'owner_title'), ('Company', 'owner_company'), ('Email', 'owner_email'))
              if (v := ' '.join(str(store.get_setting(n) or '').split()))]
     if saved: out.insert(0, '## Saved in About you\n' + '\n'.join(saved))
-    return ('ABOUT THE OWNER (background for everything below - facts about whom you work for, not tasks to do)\n\n'
-            + '\n\n'.join(out)) if out else ''
+    # ...AND WHO READS ITS WORDS (the owner, 2026-11-25): an agent wrote of him in the third person to his own face - the reader is a fact
+    from .responder import owner_of
+    who = owner_of(store)
+    return (f"ABOUT THE OWNER (background for everything below - facts about whom you work for, not tasks to do; the person reading "
+            f"your words is the owner{'' if who == 'the owner' else ', ' + who})\n\n" + '\n\n'.join(out)) if out else ''

@@ -1648,6 +1648,26 @@ def test_a_sign_up_uses_his_mailbox_and_details_on_his_press_and_its_code_comes_
     assert told[0].startswith(f'The owner approved the sign-up on rentscope.example. rentscope.example took the sign-up as {MAILBOX}'), told
 
 
+def test_a_sign_up_the_agent_filled_with_his_own_details_is_his_card_and_names_them():
+    """The owner, 2026-11-25: for a sign-up he asked for the agent may use his real name, company and mailbox - each one a fact of its brief -
+    and the form is sent only on his press, the card naming them; one it filled with a throwaway is its own, as before."""
+    from taskuary import brief, browsergate
+    s = MemoryStore(); tid = Factory(s).task('Trial account on RentScope')
+    s.save_source({'Channel': 'email', 'Address': MAILBOX, 'Owner': 'o', 'Active': 1, 'ConfigJson': '{}'}, 'o')
+    for k, v in (('owner_name', 'Alex Doyle'), ('owner_company', 'Northwind'), ('owner_email', MAILBOX)): s.set_setting(k, v, 'owner')
+    assert all(x in brief.background(s) for x in ('Name: Alex Doyle', 'Company: Northwind', f'Email: {MAILBOX}'))
+    page = WhoPage(user=MAILBOX); page.fields_ = [{'k': 'email', 't': 'email', 'v': MAILBOX}, {'k': 'fullname', 't': 'text', 'v': 'Alex Doyle'}]
+    with gate(False), mock.patch.object(browsergate, 'judge', lambda *a, **k: [{'hold': False}]), on_page(page.href), \
+         mock.patch.object(signin, 'connect', return_value=page):
+        ok, said = signin.signup(s, tid, 'sess1')
+    assert ok and said.startswith('HELD for the owner') and not page.who, said
+    [rv] = s._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action' AND Status='pending'", (tid,))
+    p = json.loads(rv['DraftText'])
+    assert p['what'] == f'Make an account on rentscope.example with {MAILBOX} and Alex Doyle', p['what']
+    assert 'as' not in p                                   # ...his press sends the form as the agent filled it
+    assert signin.typed_his(s, {'user': 'alex.trial77@tempbox.example', 'fields': [{'v': 'Sam Stone'}]}) == {}
+
+
 def test_sign_ups_use_only_a_mailbox_taskuary_reads_and_empty_is_as_before():
     """A code sent where Taskuary reads nothing reaches nobody: a mailbox that is not connected is refused, and one disconnected later is no
     longer used. Empty, a sign-up is today's: the judge decides, the form goes as the agent filled it, and nothing of his is typed."""

@@ -629,7 +629,7 @@ class ApiTests(unittest.TestCase):
         except ImportError: import tomli as tomllib
         path = config.home() / 'config.toml'
         previous = path.read_text(encoding='utf-8') if path.exists() else None
-        stored = {'host': '127.0.0.1', 'port': 7787, 'token': 'stored-secret', 'allowed_hosts': 'testserver'}
+        stored = {'host': '127.0.0.1', 'port': 7787, 'allowed_hosts': 'testserver'}     # ...an older build's token is taken off (config._owner_token)
         # allowed_hosts rides along: rewriting [server] wholesale used to drop the name the test
         # client calls this server by, and every later test in the process was refused at the Host
         path.write_text('[server]\nhost = "127.0.0.1"\nport = 7787\ntoken = "stored-secret"\nallowed_hosts = "testserver"\n', encoding='utf-8')
@@ -643,8 +643,7 @@ class ApiTests(unittest.TestCase):
                                  ('0.0.0.0', 'from-env'))
             disk = tomllib.loads(path.read_text(encoding='utf-8'))
             self.assertTrue(disk['server'].pop('agent_token', None))     # minted on load, belongs on disk
-            from taskuary import vault                    # ...the owner token sealed where this machine seals (config._owner_token)
-            self.assertEqual({**disk['server'], 'token': vault.unseal(disk['server']['token'])}, stored)
+            self.assertEqual(disk['server'], stored)
             self.assertEqual(disk['cli_connections']['overlay-cli']['cmd'], 'overlay-echo-cli')
         finally:
             server.cfg['server'] = old_server

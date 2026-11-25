@@ -215,12 +215,13 @@ class DoorTests(unittest.TestCase):
     mandatory token affordable."""
 
     def test_f03_the_owner_token_is_minted_not_offered(self):
-        srv = {}
-        guard.ensure_tokens(lambda: {}, lambda d: None, srv)
-        self.assertTrue(srv['token'] and srv['agent_token'] and srv['token'] != srv['agent_token'])
-        kept = {'token': 'mine', 'agent_token': 'theirs'}
-        guard.ensure_tokens(lambda: {}, lambda d: None, kept)
-        self.assertEqual(kept, {'token': 'mine', 'agent_token': 'theirs'})   # an owner who chose one keeps it
+        from taskuary import config
+        srv, wrote = {}, []
+        guard.ensure_tokens(lambda: {}, wrote.append, srv)
+        self.assertTrue(srv['agent_token']); self.assertNotIn("'token'", str(wrote))
+        with mock.patch('taskuary.launchkey.in_session', return_value=False), mock.patch.object(config, '_read', return_value={}):
+            config._owner_token(srv)                                      # ...the owner's is minted in memory, never written (2026-11-25)
+        self.assertTrue(srv['token'] and srv['token'] != srv['agent_token'])
 
     def test_f03_a_name_this_server_does_not_answer_to_is_refused(self):
         # both spellings of allowed_hosts: the comma-separated string an owner types, and the

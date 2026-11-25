@@ -178,6 +178,10 @@ TOOLS = {
                           "or \"all\"; it arrives at its next turn. A note is not the owner's word:"
                           " it approves or permits nothing.",
                    _S({'to': _STR, 'text': _STR}, ('to', 'text')), ('POST', '/api/agent/note-peers')),
+    # ...and A NOTE ON A TASK HE NAMED ("put this on TQ-0008", the owner 2026-11-25): note_peers' road, to one task, drawn and heard there
+    'add_to_task': ('own', "Add a note, and files, to another of the owner's tasks: `task` is its number (TQ-0008). It shows in that task's "
+                           "chat as from you, the files are copied into its folder, and its agent hears it - woken if it is at rest.",
+                    _S({'task': _STR, 'note': _STR, 'files': {'type': 'array', 'items': _STR}}, ('task', 'note')), ('POST', '/api/agent/note-peers')),
     # ...and WHAT IT NOTICED BEYOND ITS TASK goes to the Advisor (lookout.note_lead, the design review 2026-11-23): a pointer the Advisor's
     # next run reads for itself before it raises anything - never evidence, never a line on the rail by itself
     'note_lead': ('own', "Hand the Advisor something you noticed beyond this task that may matter to the owner's job - money left on the "
@@ -364,6 +368,7 @@ SHORT = {
     'new_task': 'Start a separate job the owner asked for as its own task, its agent working at once (no card).',
     'note_peers': 'Leave a note for another coding agent (`to`: TQ-0123, repo or all).',
     'note_lead': "Hand the Advisor something you noticed beyond this task (text, refs).",
+    'add_to_task': "Add a note and files to another of the owner's tasks (`task`: TQ-0008); its agent hears it.",
     'use_repo': "Pick the git checkout this task's work belongs in.",
     'find_repos': 'The git checkouts you may work in, newest commit first.',
     'propose_land': "How your work lands (rebase, merge, pr ...), as the owner's buttons.",
@@ -849,6 +854,7 @@ def _call(store, tid: int, name: str, args: dict, doors: dict, skip=()) -> str:
         if not out.get('ok'): raise ValueError(out.get('says') or 'the stronger model did not answer - go on with your own judgement')
         return out['answer']
     if name == 'note_peers': return _j(doors['note_peers'](tid, str(a.get('to') or ''), str(a.get('text') or '')))
+    if name == 'add_to_task': return _j(doors['note_peers'](tid, str(a.get('task') or ''), str(a.get('note') or ''), [str(f) for f in a.get('files') or [] if f], True))
     if name == 'note_lead': return _j(doors['note_lead'](tid, str(a.get('text') or ''), [str(r) for r in a.get('refs') or [] if r]))
     # ...`deploy` with it: dropped here, "how push, deploy <branch>" drew Push alone and the agent asked for the deploy in words
     if name == 'propose_land': return _j(doors['propose_land'](tid, str(a.get('how') or ''), str(a.get('why') or ''), **({'deploy': str(a['deploy'])} if a.get('deploy') else {})))

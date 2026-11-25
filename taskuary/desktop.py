@@ -578,7 +578,7 @@ def already_serving(host='127.0.0.1', port=None):
     return url if serving(url, secs=3) else ''      # something else on that port is not ours to open
 
 
-def show_running(url: str, token: str) -> int:
+def show_running(url: str) -> int:
     """NEVER TWO TASKUARYS OPEN (the owner, TQ-1397). Started again, Taskuary used to open a window of its own onto the one running - a
     second Taskuary.exe, which outlived that server's exit by seconds and held the install folder, so the next installer aborted and
     the old version came back (TQ-1251, TQ-1397). Now the running one is asked to bring its window to the front, and this start ends;
@@ -587,12 +587,14 @@ def show_running(url: str, token: str) -> int:
     try:
         conn = http.client.HTTPConnection(u.hostname, u.port or 80, timeout=5)
         try:
-            conn.request('POST', '/api/window', headers={'X-Taskuary-Token': token or '', 'Content-Length': '0'})
+            conn.request('POST', '/api/window', headers={'Content-Length': '0'})       # ...no token: it is in that server's memory alone
             shown = conn.getresponse().status == 200
         finally: conn.close()
     except (OSError, http.client.HTTPException): shown = False
     from taskuary import launchkey
-    if not shown: webbrowser.open(launchkey.remote_link(url, token))
+    if not shown:
+        from taskuary import config
+        webbrowser.open(launchkey.remote_link(url, config.home()))
     print(f'Taskuary is already running at {url} - ' + ('brought its window to the front.' if shown else 'opened it in the browser.'))
     return 0
 
@@ -701,7 +703,7 @@ def main():
     # ...on ITS port: a start given --port asked the configured one (7787) instead, so a scratch copy started beside the owner's brought
     # the owner's window to the front, or opened it in his browser (2026-11-16)
     running = already_serving(port=port) or held_elsewhere()
-    if running: splash(); return show_running(running, config.load()['server'].get('token') or '')
+    if running: splash(); return show_running(running)
     allow_downloads(webview)
     held, booted = {}, threading.Event()
     # MAXIMIZED, on whatever screen it is: a fixed 1280x840 was taller than a laptop's work area, so every launch - an update's

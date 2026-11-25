@@ -267,12 +267,12 @@ def where_line(store, tid: int) -> str:
 
 
 def env_of(store, tid: int, sid: str) -> dict:
-    "What a command runs with: the session's own environment, as a CLI's (terminal.session_env), its browser session named (browserview.env)."
+    "What a command runs with: the session's own environment, as a CLI's (child_env, terminal.session_env), its browser session named (browserview.env)."
     import os
     from . import browserview, terminal
     from .clis import HEADLESS_ENV
-    from .agents import ambient
-    return {**ambient(os.environ), **terminal.session_env('assistant', tid, sid=sid), **browserview.env(sid), **HEADLESS_ENV}
+    from .agents import ambient, child_env
+    return child_env({**ambient(os.environ), **terminal.session_env('assistant', tid, sid=sid), **browserview.env(sid), **HEADLESS_ENV})
 
 
 SAY = {}                       # (tid, sid) -> how this turn says a step of Taskuary's own (the browser being set up) in the chat

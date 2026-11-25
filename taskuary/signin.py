@@ -1770,6 +1770,17 @@ def set_identity(store, d: dict, by='owner') -> dict:
     return identity(store)
 
 
+# ...AND HIS OWN DETAILS ARE THE AGENT'S TO USE for a sign-up he asked for (the owner, 2026-11-25): his name, company and mailbox are facts of its
+# brief (brief.background: Saved in About you); a form the agent filled with any of them is sent only on his press, one card naming them
+def typed_his(store, f: dict) -> dict:
+    "Which of his details - a mailbox Taskuary reads for him, his saved name, his company - the agent typed into the sign-up form `f`."
+    from .ingest import owner_addresses
+    vals = {' '.join(str(v or '').split()).lower() for v in [f.get('user'), *(x.get('v') for x in f.get('fields') or [])]} - {''}
+    his = {'company': ' '.join(str(store.get_setting('owner_company') or '').split()), 'name': ' '.join(str(store.get_setting('owner_name') or '').split())}
+    got = {'mailbox': next((a for a in sorted(owner_addresses(store)) if a.lower() in vals), '')} | his
+    return {k: v for k, v in got.items() if v and v.lower() in vals}
+
+
 def identity_words(who: dict) -> str:
     "The mailbox and details a sign-up will use, as his card names them: 'with alex@northwind.example and Northwind, Alex Doyle' - '' for none."
     rest, m = ', '.join(who[k] for k in IDENTITY_KEYS[1:] if who.get(k)), who.get('mailbox')
@@ -1838,8 +1849,9 @@ def signup(store, tid, sid) -> tuple[bool, str]:
         f, who = c.js(FORM) or {}, identity(store)
         if not who.get('mailbox') and (dead := unread_inbox(store, f)): return False, _dead_inbox(store, tid, site, dead)
         name = site_name(url, sid) or site
-        # ...HIS OWN MAILBOX AND DETAILS GO ONLY ON HIS PRESS: a sign-up that uses them is always one card, the judge not asked
-        if who: v = {'hold': True, 'why': 'it signs up with your own mailbox and details'}
+        # ...HIS OWN MAILBOX AND DETAILS GO ONLY ON HIS PRESS: a sign-up that uses them - Sign-ups use's, or ones the agent typed - is always
+        # one card, the judge not asked
+        if who or (mine := typed_his(store, f)): v = {'hold': True, 'why': 'it signs up with your own mailbox and details'}
         else:
             # ...WHAT THIS ACT DOES IS KNOWN, so the page is read as it (walk 12): it sends a password Taskuary makes with the boxes the agent
             # filled - an account's form, never a message (pw) - and spends money only where a box of the form takes a card (`pay`: the page's
@@ -1853,7 +1865,7 @@ def signup(store, tid, sid) -> tuple[bool, str]:
         if not f.get('password'): return False, _no_box(site)
         # ...and the card says only what is true of it, from these facts (say.owner): the judge's "under your name and email" over a form
         # that asked neither, "you asked to see this Submit first" of a Submit he never named (walk 12) - and the mailbox and details it uses
-        what = say.owner({'kind': 'signup_held', 'site': name, 'as': identity_words(who)})
+        what = say.owner({'kind': 'signup_held', 'site': name, 'as': identity_words(who or typed_his(store, f))})
         proposals.queue(store, tid, {'action': 'browser_act', 'sid': str(sid), 'args': ['signup'], 'signup': site, 'url': here or url, 'site': site,
                                      'name': name, **({'tab': t} if (t := getattr(c, 'target', '')) else {}), 'fields': f.get('fields') or [], 'command': f'send the sign-up form on {name}',
                                      'what': what, 'why': v['why'], **({'as': who} if who else {})}, 'agent')

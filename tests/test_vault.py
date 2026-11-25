@@ -145,13 +145,24 @@ class OwnerTokenTests(unittest.TestCase):
         os.environ.pop('TASKUARY_TOKEN', None)
         return d
 
-    def test_the_token_is_sealed_on_disk_and_opened_by_the_owners_process(self):
-        from taskuary import config
+    def test_the_token_lives_in_the_servers_memory_alone_and_the_old_one_is_deleted_and_refused(self):
+        """The owner, 2026-11-25: sealed on disk it was still a file the OS opens for any process of his account. Minted at each start, it
+        is written nowhere; one an older build stored, sealed or plain, is taken off config.toml and refused."""
+        from taskuary import config, guard
         d = self.home()
-        self.assertEqual(config.load()['server']['token'], 'owner-plain-token')
-        disk = (d / 'config.toml').read_text(encoding='utf-8')
-        self.assertNotIn('owner-plain-token', disk); self.assertIn('vault:', disk)        # ...what file:// or a Read of it would show
-        self.assertEqual(config.load()['server']['token'], 'owner-plain-token')
+        (d / 'config.toml').write_text(f'[server]\ntoken = "{vault.seal("owner-old-token")}"\nagent_token = "agent-tok"\n', encoding='utf-8')
+        with mock.patch.dict(config._LIVE, clear=True):
+            srv = config.load()['server']
+            tok = srv['token']
+            self.assertTrue(tok); self.assertNotEqual(tok, 'owner-old-token')
+            self.assertEqual(config.load()['server']['token'], tok, 'one token for the whole run')
+            config.save(config.load())
+            for f in (p for p in d.rglob('*') if p.is_file()): self.assertNotIn(tok.encode(), f.read_bytes(), f)
+            disk = (d / 'config.toml').read_text(encoding='utf-8')
+            self.assertNotIn('token =', disk.replace('agent_token =', '')); self.assertIn('agent-tok', disk)
+            self.assertEqual(guard.scope_of(srv, {'X-Taskuary-Token': 'owner-old-token'}), guard.ANON)
+            self.assertEqual(guard.scope_of(srv, {'X-Taskuary-Token': tok}), guard.OWNER)
+        with mock.patch.dict(config._LIVE, clear=True): self.assertNotEqual(config.load()['server']['token'], tok, 'a restart mints another')
 
     def test_where_no_keychain_seals_it_the_file_is_his_alone_and_no_backup_carries_a_token(self):
         """Red team #2, T3: on Linux/mac with no keychain the vault is plain - config.toml was left 0644 by every save but a token's (an atomic

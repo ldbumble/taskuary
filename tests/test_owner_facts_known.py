@@ -16,6 +16,11 @@ class OwnerFactsKnownTests(unittest.TestCase):
         self.assertIn('Job title: Operations Director', bg)
         self.assertIn('Company: Northwind', bg)
 
+    def test_the_agent_knows_the_one_reading_its_words_is_the_owner(self):
+        "The owner, 2026-11-25: an agent wrote of him in the third person to his own face - who reads it is a fact of its context."
+        s = MemoryStore(); _owner(s)
+        self.assertIn('the person reading your words is the owner, Alex Doyle', brief.background(s).split('\n', 1)[0])
+
 
     def test_nothing_saved_says_nothing(self):
         s = MemoryStore(); s.set_setting('email_signature_on', '0', 'owner')

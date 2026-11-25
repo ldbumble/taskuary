@@ -471,6 +471,9 @@ OAUTH_RETURNS = ('/api/quickbooks/callback', '/api/zoho/callback', '/api/linkedi
 # tunnel pointed at this port reaches these doors and not the page that carries the owner token.
 FILE_COOKIE, FILE_READS = 'taskuary_files', guard.FILE_READS
 def _outside_door(path: str) -> bool: return path == '/api/oauth/callback' or path.startswith('/api/inbound/')
+# ...and the two doors another process of the owner's knocks on with no token - the token is in this server's memory alone (config._owner_token):
+# Taskuary started again bringing the window forward, and a launch key handed out on a challenge only the owner's account can answer
+OWN_STARTS = ('/api/window', '/api/launch-key')
 
 @app.middleware('http')
 async def token_gate(request: Request, call_next):
@@ -506,7 +509,7 @@ async def token_gate(request: Request, call_next):
     tok = cfg['server'].get('token')
     presented = request.headers.get('X-Taskuary-Token')
     if tok and request.url.path.startswith('/api') and not guard.token_matches(presented, tok, cfg['server'].get('agent_token')) \
-            and guard.stranger_tid(cfg['server'], presented) is None:
+            and guard.stranger_tid(cfg['server'], presented) is None and not (request.method == 'POST' and request.url.path in OWN_STARTS):
         # an <img src> cannot carry a header, so a file READ is the owner's by the cookie his own page was handed (FILE_COOKIE) - never
         # a token in its address, where history, a referer and a log kept it (the red team, 2026-11-24, T8c)
         # ...and an OAuth callback is a redirect from the provider's site: no header can ride on it.
@@ -693,14 +696,22 @@ def index(k: str = ''):
     return _index_response(_web_root / 'index.html', seed=launchkey.redeem(k) if k else False)
 
 
+class LaunchKeyBody(BaseModel): challenge: str = ''; word: str = ''
+
 @app.post('/api/launch-key')
-def launch_key(request: Request):
+def launch_key(request: Request, body: LaunchKeyBody | None = None):
     """A one-time key for `/?k=` (launchkey.py): the CLI asks the running instance for one to open the owner's browser
     with, and `taskuary --link` prints one. The owner's alone - an agent or a stranger's session holding one could
-    read the owner token out of the page."""
+    read the owner token out of the page. Another process of his holds no token (it is in this server's memory alone): it
+    is handed a challenge, and the key once it reads back the word written into Taskuary's home (launchkey.challenge)."""
     from . import launchkey
-    if guard.scope_of(cfg['server'], request.headers) != guard.OWNER: raise HTTPException(403, "a launch key is the owner's")
-    return {'key': launchkey.mint()}
+    scope = guard.scope_of(cfg['server'], request.headers)
+    if scope == guard.OWNER: return {'key': launchkey.mint()}
+    if scope != guard.ANON: raise HTTPException(403, "a launch key is the owner's")
+    if body and body.challenge:
+        if not launchkey.proved(body.challenge, body.word): raise HTTPException(403, 'that word is not the one written - ask again')
+        return {'key': launchkey.mint()}
+    return {'challenge': launchkey.challenge(config.home() / 'launch')}
 
 
 @app.post('/api/window')
@@ -708,7 +719,7 @@ def show_window(request: Request):
     """ONE TASKUARY OPEN AT A TIME (the owner, TQ-1397): Taskuary started again asks the running one to bring its window to the front,
     and opens none of its own. 409 where this one has no window (server-only, a browser) - the second start opens the browser then."""
     from . import workerstate
-    if guard.scope_of(cfg['server'], request.headers) != guard.OWNER: raise HTTPException(403, "showing the window is the owner's")
+    if guard.scope_of(cfg['server'], request.headers) not in (guard.OWNER, guard.ANON): raise HTTPException(403, "showing the window is the owner's")
     f = workerstate.SHOW[0]
     if f is None: raise HTTPException(409, 'this Taskuary has no window to show')
     f(); return {'shown': True}
@@ -6333,8 +6344,8 @@ AGENT_KEEPS = 5          # new memory lines one task's agent may write in a day;
 def agent_remember(body: AgentRememberBody, request: Request):
     """The remember tool (`taskuary --remember`): a fact the owner told the session on its OWN task, kept as the Assistant keeps one
     (memory.remember) - what he said, in use at once for triage, every agent and the Assistant (the owner, 2026-11-14: "if the user tells
-    you something, they should not have to say it again"). Silent: no line in the chat, no card. Never on a stranger's task, and only where
-    the owner has spoken in this chat - a sender's words are never the owner's (general.owner_spoke)."""
+    you something, they should not have to say it again"). Silent: no line in the chat, no card. Never on a stranger's task, and only on a
+    turn his own words or press began (general.his_turn) - a sender's words are never the owner's."""
     from . import general, memory, origin
     _own_task_only(request, body.task_id)
     if not store.get_task(body.task_id): raise HTTPException(404, 'no such task')
@@ -6344,6 +6355,9 @@ def agent_remember(body: AgentRememberBody, request: Request):
     if not general.owner_spoke(store, body.task_id):
         raise HTTPException(422, "not kept: the owner has said nothing in this chat, and only their own words go into their memory - what a "
                                  "sender wrote is not theirs. Carry on with the task; if the owner tells you the fact, keep it then.")
+    if not general.his_turn(store, body.task_id):
+        raise HTTPException(422, "not kept: this turn began from someone else's message, not the owner's words, and only what he says or does "
+                                 "goes into his memory. Carry on with the task.")
     # ...and A TASK'S CHAT IS NOT A DIARY (the owner, 2026-11-14: "be careful not to make the memory file too big"): a few facts a day from
     # one task, counted by its own audit rows - past that it is chatter, and the line is not written
     from datetime import timedelta
@@ -6394,7 +6408,7 @@ def agent_ask_stronger(body: AgentAskStrongerBody, request: Request):
     try: return askstronger.ask(store, body.task_id, body.question, body.context)
     except ValueError as e: raise HTTPException(422, str(e))
 
-class AgentNoteBody(BaseModel): task_id: int; to: str; text: str
+class AgentNoteBody(BaseModel): task_id: int; to: str; text: str; files: list[str] = []; wake: bool = False
 
 @app.post('/api/agent/note-peers')
 def agent_note_peers(body: AgentNoteBody, request: Request):
@@ -6403,7 +6417,7 @@ def agent_note_peers(body: AgentNoteBody, request: Request):
     from . import peers
     _own_task_only(request, body.task_id)
     if not store.get_task(body.task_id): raise HTTPException(404, 'no such task')
-    try: return peers.send(store, body.task_id, body.to, body.text)
+    try: return peers.send(store, body.task_id, body.to, body.text, body.files, body.wake)
     except PermissionError as e: raise HTTPException(403, str(e))
     except ValueError as e: raise HTTPException(422, str(e))
 
@@ -6737,7 +6751,7 @@ async def mcp_rpc(request: Request, task: int = 0):
              'answer_invite': lambda tid, a: agent_answer_invite(AgentInviteBody(**{**a, 'task_id': tid}), request),
              'meeting': lambda tid, a: agent_meeting(AgentMeetingBody(**{**a, 'task_id': tid}), request),
              'share': lambda tid, a: agent_share(AgentShareBody(**{**a, 'task_id': tid}), request),
-             'note_peers': lambda tid, to, text: agent_note_peers(AgentNoteBody(task_id=tid, to=to, text=text), request),
+             'note_peers': lambda tid, to, text, files=(), wake=False: agent_note_peers(AgentNoteBody(task_id=tid, to=to, text=text, files=list(files), wake=wake), request),
              'note_lead': lambda tid, text, refs: agent_note_lead(AgentLeadBody(task_id=tid, text=text, refs=refs), request),
              'propose_land': lambda tid, how, why, deploy='': agent_propose_land(AgentLandBody(task_id=tid, how=how, why=why, deploy=deploy), request),
              'use_repo': lambda tid, target, why: agent_use_repo(AgentUseRepoBody(task_id=tid, path_or_name=target, why=why), request)}

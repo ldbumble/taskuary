@@ -295,6 +295,10 @@ def read(store, tid: int, level: str = None, ending: bool = False, also=None) ->
             if r['State'] not in LIVE and not (x.get('text') or x['steps'] or x['cards'] or x.get('summary') or x.get('fail')): continue
         out.append(x)
     moved_past(store, out, tid)
+    from .origin import QUIET_LINE, quiet
+    if any(x['kind'] == 'arrival' for x in out) and (q := quiet(store, tid)):
+        for x in out:
+            if x['kind'] == 'arrival' and x.get('mid') in q: x['kept'] = QUIET_LINE
     lvl = level_of(store, store.get_task(int(tid)) or {}, level)
     return {'rev': n, 'items': [detailed(x, lvl) for x in out], 'level': lvl, **({'also': side} if also else {})}
 

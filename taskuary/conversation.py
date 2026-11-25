@@ -178,6 +178,10 @@ def _mail_(store, tid: int) -> list:
     # ...BUT NEVER THE SENT-FOLDER COPY OF A LETTER TASKUARY SENT ON HIS PRESS (walk 13: every send drawn twice - the "Sent" card, then the
     # same mail again as "You · by email"): that copy IS the card's send, drawn once by the card, and no input to the agent either (events.py)
     if any(x.get('Own') for x in rows): mine = general.went_from_here(store, tid); rows = [x for x in rows if not (x.get('Own') and mine(x))]
+    # ...NOR HIS ASK FILED AS A MESSAGE (outbox.ask_row - the owner, 2026-11-25): drawn as "Email from You", a result he shared stood in the chat
+    # as mail he had sent while its draft still waited unsent. It is his ask, which the task's opener says in his words (chatlog.opener)
+    from .outbox import is_ask
+    rows = [x for x in rows if not is_ask(x)]
     return sorted(({**x, 'T': ep((x.get('SentAt') if x.get('Own') else None) or x.get('JoinedAt') or x.get('CreatedAt'))} for x in rows),
                   key=lambda x: (x['T'], x['MessageId']))
 
@@ -233,12 +237,13 @@ def came(x: dict) -> tuple:
     return (int(ep(x.get('CreatedAt'))), _after(x.get('Body')), 1, x['CommentId'])
 
 
-def hear(store, tid: int, lines=(), turn: bool = False, sid: str = '', standing: bool = False) -> int:
+def hear(store, tid: int, lines=(), turn: bool = False, sid: str = '', standing: bool = False, own: bool = False) -> int:
     """THE ONE HAND-OVER. Called ONCE at the moment a road gives the agent its input: `lines` - his lines it takes now, as they waited
     (store.take_lines' rows), or the name (LineId) of one sent this moment; `turn` - a turn begins, and with it the agent is told everything
     that came in or was pressed since its last one (its events, events.take), so those are heard here too, and the turn's own start is marked.
     `standing`: a line that begins a turn at the press - what already stood in the chat unheard is heard with it, before it, so nothing
-    drawn moves under his line. Each input once, whoever calls and however often. -> how many were new.
+    drawn moves under his line. `own`: the turn is his - his words a door filed itself, or his press (general.his_turn). Each input once,
+    whoever calls and however often. -> how many were new.
     WHAT ONE HAND-OVER TAKES STANDS IN THE ORDER IT CAME (the recorded flood, 2026-11-11: his lines were written down first, then his own
     replies, then the sender's mail in the order triage got through them - "34, 31, 46"): by each one's own time, and inside one second - a
     stamp is no finer - by the order the store took them in: a line knows the newest message that was there when it was typed (came).
@@ -259,7 +264,7 @@ def hear(store, tid: int, lines=(), turn: bool = False, sid: str = '', standing:
     refs += [((1, *came(x)), 'line', str(x.get('LineId') or '')) if isinstance(x, dict) else ((2, i), 'line', str(x))
              for i, x in enumerate(lines) if x]
     refs = [(k, r) for _, k, r in sorted(refs, key=lambda x: x[0]) if r]
-    if turn: refs.append(('turn', str(time.time_ns())))
+    if turn: refs += [('turn', ns := str(time.time_ns()))] + ([('own', ns)] if own else [])
     if not refs: return 0
     n = 0
     with store.lock:

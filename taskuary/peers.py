@@ -74,14 +74,24 @@ def targets(store, frm: int, to: str) -> tuple:
     return 'task', [tid], repo_label(me)
 
 
-def send(store, frm: int, to: str, text: str) -> dict:
+def send(store, frm: int, to: str, text: str, files=(), wake: bool = False) -> dict:
     """One note from the agent on task `frm`. A stranger's task writes to nobody (its agent's words are the stranger's, carried on), and
-    nobody writes into a stranger's task (what the owner's agents know is not theirs)."""
+    nobody writes into a stranger's task (what the owner's agents know is not theirs).
+    `wake` - the add_to_task tool, "put this on TQ-0008" (the owner, 2026-11-25): one task, the note drawn in its chat as an arrival from this
+    task's agent, `files` copied into its folder and named in the note, and its agent at rest woken on it."""
     text = ' '.join(str(text or '').split())[:MAX]
     if not text: raise ValueError('a note with no words is not a note')
     if _stranger(store, frm): raise PermissionError("a stranger's task does not write to other agents")
     scope, tids, repo = targets(store, frm, to)
+    if (wake or files) and scope != 'task': raise ValueError('`task` is one task, by its number (TQ-0123)')
+    if wake and _stranger(store, tids[0]):
+        raise PermissionError(f"{task_ref(tids[0])} carries a message from someone the owner has not vouched for - nothing was added to it")
     tids = [t for t in tids if not _stranger(store, t)]
+    if files:
+        from . import outputs
+        got = [(f, outputs.take(store, frm, f)) for f in files]
+        if (miss := [str(f) for f, p in got if not p]): raise ValueError(f"nothing was added: {', '.join(miss)} is no file this task may read")
+        text += ' Files: ' + '; '.join(str(outputs._copy_in(tids[0], p)) for _, p in got)
     sent = []
     for t in tids:
         store.add_peer_note(frm, t, scope, repo, text)
@@ -94,8 +104,23 @@ def send(store, frm: int, to: str, text: str) -> dict:
     for t in tids:
         try: deliver(store, t)
         except Exception as e: logger.warning(f'peer note to {task_ref(t)} kept, not handed over yet: {e}')
+    if wake: return _added(store, frm, tids[0], text)
     if not sent: return {'sent': 0, 'to': [], 'says': 'No other coding agent is at work there right now - nobody got it. The wall (taskuary --note) keeps a line for whoever comes next.'}
     return {'sent': len(sent), 'to': sent, 'says': f"Sent to {who}. It reaches each one's next turn."}
+
+
+def _added(store, frm: int, tid: int, text: str) -> dict:
+    """The note `text` on task `tid`, from the agent of task `frm`: in its chat as an arrival, and with its agent - a pane at its next stop
+    (deliver, tick), any other agent by the one road an input takes (general.to_agent): told, woken at rest, or kept for its next turn."""
+    import time
+    from . import chatlog, general
+    from .conversation import stamp
+    head = f'From the agent of {task_ref(frm)}'
+    chatlog.put(store, tid, 'arrival', f'g:{time.time_ns()}', {'who': head, 'head': head, 'channel': 'agent', 'own': False,
+                                                               'at': stamp(time.time()), 'files': 0, 'words': text}, src=f'peer:{frm}')
+    how = '' if not store.peer_notes(tid) or any(t.task_id == tid for t in _cli_sessions()) else general.to_agent(store, tid, take(store, tid))
+    said = {'told': 'its agent has it now', 'woke': 'its agent was woken on it', 'started': 'its agent was started on it'}.get(how, 'its agent reads it at its next turn')
+    return {'sent': 1, 'to': [task_ref(tid)], 'says': f'Added to {task_ref(tid)}: {said}.'}
 
 
 def framed(rows: list, store=None) -> str:

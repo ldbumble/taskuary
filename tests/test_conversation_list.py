@@ -1772,3 +1772,16 @@ def test_a_turn_that_stops_starting_is_news_to_a_page_that_asks_if_anything_chan
     at_work = {'rev': 'r7', 'items': [{'kind': 'turn', 'state': 'working'}]}
     assert server._revisioned(at_work, held).get('same') is not True
     assert server._revisioned(starting, held) == {'rev': held, 'same': True}
+
+
+def test_a_result_he_shares_is_never_drawn_as_mail_he_sent():
+    """The owner, 2026-11-25: sharing a result by email filed it as his ask (outbox.ask_row), and the chat drew it "Email from You" - the draft
+    standing as mail he had sent while it still waited unsent."""
+    from taskuary import outbox
+    s = MemoryStore()
+    tid = s.create_task({'Title': 'Share the Q3 summary', 'Summary': 'Share "Q3 summary" with gail@northwind.example', 'Kind': 'reply',
+                         'Status': 'open', 'Source': 'outbox'}, 'owner')
+    mid = outbox.ask_row(s, tid, 'email', ['gail@northwind.example'], [], 'Q3 summary', 'Revenue is up four percent on the quarter.')
+    s.add_route(mid, tid, 'outbox', None, 'you shared a result', [], 'owner')
+    assert not [x for x in conversation.items(s, tid).get('items') or [] if x['kind'] == 'arrival']
+    assert conversation.not_given(s, tid) == []                       # ...nor handed to an agent as mail that came in

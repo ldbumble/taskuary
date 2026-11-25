@@ -100,7 +100,7 @@ import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 // Recover once automatically; a real module error still reaches the view boundary on retry.
 import { autostartPlan, isGeneralKind, opensOnRegular } from "./autostart.js";
 import { agentWorkspaceMode, barContinues } from "./taskWorkspace.js";
-import { SECTIONS, cameFrom, cameChip, chatLatch, homeSection, liveTerminal, soloTodo, startsAnother, replyHolds, agentStatus, agentWord, answeredOutside, reportLine, askInBody, askIsTitle, writeupAt, focusOf, fromLine as fromLineOf, fromStatus, layoutOf, sameWords, sectionFade, waitingOn, workPane } from "./taskLayout.js";
+import { SECTIONS, cameFrom, cameChip, judgedMarks, chatLatch, homeSection, liveTerminal, soloTodo, startsAnother, replyHolds, agentStatus, agentWord, answeredOutside, reportLine, askInBody, askIsTitle, writeupAt, focusOf, fromLine as fromLineOf, fromStatus, layoutOf, sameWords, sectionFade, waitingOn, workPane } from "./taskLayout.js";
 import { mainView, stageOf } from "./stages.js";
 import { chatOf, taskStatus } from "./railStatus.js";
 import { StatusPill } from "./StatusMark.jsx";
@@ -1876,6 +1876,18 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
   const toWent = () => { const w = toLine(cameIn?.Recipients); return w.short && (
     <Typography data-tq-came-in-to="" title={w.full} sx={{ fontSize: 12.5, color: DIM, overflowWrap: "anywhere" }}>{cameInFull ? w.full : w.short}</Typography>); };
   const fromFacts = () => (<>
+  // ...how hard triage judged the work, or that it carries sensitive data - only when it is not ordinary, and a press corrects it (the router,
+  // 2026-10-25) - a MARK OF THE MESSAGE, beside who sent it, never after its files (the owner, 2026-11-25: it sat under the attachments pill)
+  const judgedMark = () => { const label = judgedMarks(detail?.judged); return label && <>
+    <Chip size="small" data-tq-judged="" label={label}
+      title={`${detail.judged.by === "owner" ? "You said so" : "Triage judged it so"} - in Auto, hard work runs on the strong model. Click to correct it.`}
+      onClick={(e) => setJudgeAt(e.currentTarget)} sx={{ height: 19, fontSize: 10, bgcolor: PANEL2, cursor: "pointer" }} />
+    <Menu open={!!judgeAt} anchorEl={judgeAt} onClose={() => setJudgeAt(null)}>
+      {["quick", "standard", "hard"].map((d) => <MenuItem key={d} selected={detail?.judged?.difficulty === d} sx={{ fontSize: 12 }}
+        onClick={() => judge({ difficulty: d })}>{d === "quick" ? "Quick work" : d === "hard" ? "Hard work" : "Ordinary work"}</MenuItem>)}
+      {[["ordinary", "Ordinary data"], ["sensitive", "Sensitive data"]].map(([k, l]) => <MenuItem key={k} selected={(detail?.judged?.data_class || "ordinary") === k}
+        sx={{ fontSize: 12 }} onClick={() => judge({ data_class: k })}>{l}</MenuItem>)}
+    </Menu></>; };
                         {!twoUp && toWent()}
                         <Box sx={{ display: "flex", alignItems: "baseline", gap: 1, flexWrap: "wrap", "&:empty": { display: "none" } }}>
                           {!!(detail.attachments?.length || detail.links?.length) && <Chip size="small" icon={<AttachFileIcon sx={{ fontSize: 13 }} />}
@@ -1888,18 +1900,7 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
                               setHistOpen(true); setOpenMsg(mid); setSeekLetter(mid);
                             }}
                             sx={{ height: 19, fontSize: 10, bgcolor: PANEL2 }} />}
-                          {/* ...and how hard triage judged the work, or that it carries sensitive data - only when it is not ordinary, and a
-                              press corrects it (the router, 2026-10-25) */}
-                          {(detail?.judged?.difficulty === "hard" || detail?.judged?.data_class === "sensitive") && <Chip size="small" data-tq-judged=""
-                            label={[detail.judged.difficulty === "hard" && "hard work", detail.judged.data_class === "sensitive" && "sensitive data"].filter(Boolean).join(" · ")}
-                            title={`${detail.judged.by === "owner" ? "You said so" : "Triage judged it so"} - in Auto, hard work runs on the strong model. Click to correct it.`}
-                            onClick={(e) => setJudgeAt(e.currentTarget)} sx={{ height: 19, fontSize: 10, bgcolor: PANEL2, cursor: "pointer" }} />}
-                          <Menu open={!!judgeAt} anchorEl={judgeAt} onClose={() => setJudgeAt(null)}>
-                            {["quick", "standard", "hard"].map((d) => <MenuItem key={d} selected={detail?.judged?.difficulty === d} sx={{ fontSize: 12 }}
-                              onClick={() => judge({ difficulty: d })}>{d === "quick" ? "Quick work" : d === "hard" ? "Hard work" : "Ordinary work"}</MenuItem>)}
-                            {[["ordinary", "Ordinary data"], ["sensitive", "Sensitive data"]].map(([k, l]) => <MenuItem key={k} selected={(detail?.judged?.data_class || "ordinary") === k}
-                              sx={{ fontSize: 12 }} onClick={() => judge({ data_class: k })}>{l}</MenuItem>)}
-                          </Menu>
+                          {(!twoUp || !cameIn) && judgedMark()}
                           {!twoUp && fromExpands(sources) && <Link component="button" type="button" underline="hover" onClick={() => setShowAll((v) => !v)}
                             sx={{ ml: "auto", fontSize: 12 }}>{showAll ? "Show less" : `Show all ${sourceCount}`}</Link>}
                         </Box>
@@ -2044,8 +2045,10 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
       <Box data-tq-came-in="" sx={CARD}>
         <Typography sx={cardHead}>What came in</Typography>
         {cameIn ? <>
-          <Typography sx={{ fontSize: 13, color: DIM }}>{byLine(cameIn.who || cameIn.FromName || cameIn.FromEmail, cameFromWhere(cameIn),
-            cameIn.SentAt ? whenShort(cameIn.SentAt) : "")}</Typography>
+          <Box data-tq-came-in-head="" sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
+            <Typography sx={{ fontSize: 13, color: DIM }}>{byLine(cameIn.who || senderName(cameIn), cameFromWhere(cameIn),
+              cameIn.SentAt ? whenShort(cameIn.SentAt) : "")}</Typography>
+            {judgedMark()}</Box>
           {toWent()}
           {/* ...THE MESSAGE ITSELF, never Taskuary's notes about it (the real-Claude walk, 2026-11-19: "paying is Alex's own action, and the
               sender is unverified" stood where the vendor's mail should): what Taskuary made of it is the card beside, and the agent's */}

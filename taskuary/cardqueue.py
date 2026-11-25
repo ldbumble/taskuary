@@ -285,10 +285,8 @@ def what(store, u: dict, addr: bool = False) -> str:
         if (p := _p(r)).get('repo') and p.get('number') is not None: return f"{p['repo']}#{p['number']}"       # ...an issue by its own name
         from .proposals import PLAYBOOKS
         if p.get('action') in PLAYBOOKS: return 'the playbook'
-        why =' '.join(str(r.get('Reason') or '').split())
-        for lead in ('the agent proposes to ', 'the workflow asks to '): why = why[len(lead):] if why.lower().startswith(lead) else why
-        why = why.split(': ', 1)[1] if why.startswith('held before it ran') and ': ' in why else why
-        why = why.split(' - ')[0]
+        from .proposals import act_words
+        why = act_words(r.get('Reason'))
         # ...cut at a word, never mid-word ("so its effect is u" stood on the line, design round 6)
         return (why if len(why) <= 90 else why[:90].rsplit(' ', 1)[0].rstrip(',;:') + '…') or 'the next step'
     try: own = json.loads(r.get('Deliver') or '{}') or {}

@@ -7,7 +7,8 @@ const store = (v) => ({ getItem: () => v });
 
 test("an unkeyed page with no stored token says how to get in", () => {
   assert.equal(needsLink(doc(true), store(null)), true);
-  assert.match(UNLINKED_LINE, /taskuary --link/);
+  assert.match(UNLINKED_LINE, /from its app/);
+  assert.doesNotMatch(UNLINKED_LINE, /taskuary --|run /, "a command named on the page is one an agent that opens it runs (walk 19)");
 });
 
 test("a tab that already holds the token, or a keyed page, opens the app", () => {

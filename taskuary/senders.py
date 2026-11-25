@@ -208,11 +208,12 @@ def sender_check(store, msg: dict, now=None) -> dict:
 # chat or what to do (2026-10-16). Each is now a whole sentence naming the person and the channel; the caller adds what
 # the owner can do next, and an allow-sentence reads after "Starting by itself:".
 class Said(str):
-    "A trust verdict's sentence. `.stranger` marks the first-time-sender rule, which ingest tags as a hold - by flag, not by its words."
-    stranger = False
+    """A trust verdict's sentence. `.stranger` marks the first-time-sender rule, which ingest tags as a hold - by flag, not by its words;
+    `.unverified`: the hold is the mail server's, which could not vouch for the From (origin.hold says so)."""
+    stranger = unverified = False
 
-def _said(text: str, stranger: bool = False) -> Said:
-    s = Said(text); s.stranger = stranger
+def _said(text: str, stranger: bool = False, unverified: bool = False) -> Said:
+    s = Said(text); s.stranger, s.unverified = stranger, unverified
     return s
 
 _CH = {'whatsapp': 'WhatsApp', 'imessage': 'iMessage', 'google_chat': 'Google Chat', 'rocketchat': 'Rocket.Chat', **INBOX_NAMES}
@@ -235,20 +236,17 @@ def known(store, msg: dict, exclude_mid=None, deep: bool = False, memo: dict = N
     return False, o['said']
 
 
-# AN UNVERIFIED FROM STARTS NOTHING BY ITSELF (M1, 2026-11-08): a 'none' verdict - a domain with no DMARC record, a mail no check
+# AN UNVERIFIED FROM IS NOBODY HE KNOWS UNTIL HE SAYS SO (M1, 2026-11-08): a 'none' verdict - a domain with no DMARC record, a mail no check
 # vouched for - fell through to the address rules, so a forged From of a past correspondent started a full agent. On a mailbox whose
-# server does verify (it has stamped a pass or a fail here before), a 'none' waits for the owner's press; the task's trust is unchanged.
-def verifies(store, mailbox: str) -> bool:
+# server does verify (it has stamped a pass or a fail here before), a 'none' from someone he only wrote to is a stranger's: the task is
+# held with its one Trust press, and that press is the proof (walk 19: a second gate after Trust started nothing and said nothing).
+def verifies(store, mailbox: str, memo: dict = None) -> bool:
     "Has this mailbox's server ever stamped a verdict on mail here (mailauth)?"
-    return bool(mailbox) and store._one("SELECT 1 x FROM message WHERE lower(SourceName)=lower(?) AND Channel='email' "
-                                        "AND json_extract(MailMetaJson, '$.auth') IN ('pass', 'fail') LIMIT 1", (mailbox,)) is not None
-
-def start_known(store, msg: dict, mid=None) -> tuple:
-    "known() for the unattended start and for passing a line into a live agent: and a mail's From must be verified where it can be."
-    ok, why = known(store, msg, exclude_mid=mid, deep=True)
-    if not ok or str(msg.get('channel') or '') != 'email' or auth(msg) != 'none' or not verifies(store, msg.get('source_name') or ''): return ok, why
-    return False, _said(f"The mail server could not verify that {str(msg.get('from_email') or 'this sender')[:80]} sent this (no DMARC or "
-                        "DKIM pass), so it waits for your press.")
+    if memo is not None and ('verifies', mailbox) in memo: return memo[('verifies', mailbox)]
+    v = bool(mailbox) and store._one("SELECT 1 x FROM message WHERE lower(SourceName)=lower(?) AND Channel='email' "
+                                     "AND json_extract(MailMetaJson, '$.auth') IN ('pass', 'fail') LIMIT 1", (mailbox,)) is not None
+    if memo is not None: memo[('verifies', mailbox)] = v
+    return v
 
 
 def _known(store, msg: dict, exclude_mid=None, deep: bool = False, memo: dict = None) -> tuple:
@@ -288,28 +286,29 @@ def _known(store, msg: dict, exclude_mid=None, deep: bool = False, memo: dict = 
             if _vouched(store, (msg.get('source_name') or '').strip().lower(), addr, memo) == 'you vouched for them': return True, _said(f'You vouched for {who}.')
             if (o := org_of(store, _domain(addr))): return True, _said(f"Everyone at {o.get('domain') or _domain(addr)} is trusted - you said so.")
             return False, _said(f'{who} writes from your own domain, but the mail server did not verify that they sent it (no DMARC or DKIM '
-                                f'pass), {NOBODY}.', True)
+                                f'pass), {NOBODY}.', True, True)
         if addr in once('own', lambda: own_addresses(store)): return True, _said('It came from your own address.')
         return (True, _said(f'{addr} is on your own domain.')) if on('trust_own_domain') else \
                (False, _said(f'{who} is on your own domain, but trusting your own domain is switched off in Settings, {NOBODY}.'))
     if (o := org_of(store, _domain(addr))):
         return True, _said(f"Everyone at {o.get('domain') or _domain(addr)} is trusted - you said so.")
+    mailbox = (msg.get('source_name') or '').strip().lower()
+    if (r := _vouched(store, mailbox, addr, memo)) in OWNER_SAID: return True, _said(f'You vouched for {who}.')      # his press: proof enough
     if not on('trust_sent_history'):
         return False, _said(f'{who} is new here, and checking your Sent Items for people you know is switched off in Settings, {NOBODY}.', True)
-    mailbox = (msg.get('source_name') or '').strip().lower()
     sent = _said(f'You have written to {addr} before - it is in your Sent Items.')
-    if (r := _vouched(store, mailbox, addr, memo)): return True, sent if r == 'in your Sent Items' else _said(f'You vouched for {who}.')
-    if store.wrote_to_locally(mailbox, addr, exclude_mid, memo=memo): return True, _said(f'You have written to {addr} before.')
-    if deep:
-        try: hit = wrote_to(store, mailbox, addr)
+    if not r and store.wrote_to_locally(mailbox, addr, exclude_mid, memo=memo): r, sent = True, _said(f'You have written to {addr} before.')
+    if not r and deep:
+        try: r = wrote_to(store, mailbox, addr)
         except Exception as e:
             logger.warning(f'could not check Sent Items of {mailbox} for {addr}: {e}')
             return False, _said(f'Taskuary could not check the Sent Items of {mailbox or "this mailbox"} ({str(e)[:120]}), '
                                 f'so it cannot tell whether you know {who}, and no agent starts on their words by itself.')
-        if hit:
-            store.remember_trust(mailbox, addr, 'in your Sent Items')
-            return True, sent
-    return False, _said(f'{who} is not on your domain and you have never written to them, {NOBODY}.', True)
+        if r: store.remember_trust(mailbox, addr, 'in your Sent Items')
+    if not r: return False, _said(f'{who} is not on your domain and you have never written to them, {NOBODY}.', True)
+    if auth(msg) == 'none' and verifies(store, mailbox, memo):
+        return False, _said(f'The mail server could not verify that {who} sent this (no DMARC or DKIM pass), {NOBODY}.', True, True)
+    return True, sent
 
 
 def _vouched(store, where: str, who: str, memo: dict = None):

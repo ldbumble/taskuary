@@ -13,6 +13,7 @@ The one rule that is easy to get wrong: a git SHA is 40 hex characters. A catch-
 chat scrub did until it came here. Entropy only counts when the line says it holds a secret.
 """
 import unittest
+from unittest import mock
 
 from taskuary import redact
 
@@ -91,6 +92,37 @@ class TheOwnersMailIsNotTouchedTests(unittest.TestCase):
         mid = s.add_message({'Channel': 'email', 'Direction': 'in', 'FromEmail': 'vendor@example.com',
                              'Subject': 'Your code', 'BodyText': body, 'SentAt': '2026-09-15T09:00:00'})
         self.assertEqual(body, s.get_message(mid)['BodyText'])
+
+
+
+class AShownLineCarriesNoPasswordTests(unittest.TestCase):
+    """WALK 19: his "Post on our Chirp account (..., username northwind, password chirp-pass)" became the task's title, and the rail, the
+    phone and the Advisor's chat carried the password. A prompt keeps it (the agent signs in with it); what is shown never does."""
+    LINE = 'Post the budget tip on Chirp - username northwind, my password is Hunter2!x9'
+
+    def test_a_said_password_is_taken_from_what_is_shown_and_only_there(self):
+        self.assertEqual(redact.shown(self.LINE), 'Post the budget tip on Chirp - username northwind, my password is [redacted:password]')
+        self.assertEqual(redact.shown('password chirp-pass)'), 'password [redacted:password])')
+        self.assertEqual(redact.scrub(self.LINE), self.LINE, 'a prompt keeps it: the agent he gave it to signs in with it')
+        for t in ('Reset password is broken', 'password reset', 'pin the tab', 'password: [redacted:secret]'): self.assertEqual(redact.shown(t), t)
+
+    def test_his_title_the_phone_and_the_advisor_carry_no_password(self):
+        from taskuary import general, lookout, messengers, remote_assistant
+        from taskuary.store import MemoryStore
+        s = MemoryStore()
+        tid = s.create_task({'Title': general.title_of(self.LINE), 'Summary': self.LINE, 'Kind': 'task', 'Status': 'open', 'OriginBase': 'owner'}, 'owner')
+        t = s.get_task(tid)
+        self.assertNotIn('Hunter2', t['Title']); self.assertIn('Hunter2', t['Summary'])
+        self.assertTrue(general.own_title(s, tid, self.LINE), 'still his words as made, so the agent may name it')
+        s.update_task(tid, {'Title': 'Chirp: password is Hunter2!x9'}, 'agent')
+        self.assertNotIn('Hunter2', s.get_task(tid)['Title'])
+        s._exec('UPDATE task SET Title=? WHERE TaskId=?', (self.LINE, tid))          # a title kept from before
+        self.assertEqual(s.scrub_titles(), 1); self.assertNotIn('Hunter2', s.get_task(tid)['Title'])
+        cid = s.get_connector_by_type('whatsapp')['ConnectorId']
+        with mock.patch.object(messengers, 'wa_send') as sent:
+            remote_assistant.send(s, 'whatsapp', '15551234567@s.whatsapp.net', f'Open: {self.LINE}', cid, asked=True)
+        self.assertTrue(sent.called); self.assertFalse(any('Hunter2' in str(c.args) for c in sent.call_args_list))
+        self.assertNotIn('Hunter2', lookout.asked({'type': 'lookout', 'whole': True, 'window': f'TASKS: task{tid} open: {self.LINE}'}))
 
 
 if __name__ == '__main__':

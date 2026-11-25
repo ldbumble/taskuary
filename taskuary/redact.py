@@ -10,7 +10,7 @@ point of the mail it arrived in.
 Deterministic on purpose. An AI cannot decide what to hide from an AI - by the time it judges,
 the credential is already in a prompt - and a classifier that is 97% right leaks the rest
 forever. Rules are exhaustive where they match and honest where they do not: this catches
-credentials that have a SHAPE, and will never catch "the wifi password is bluefish17".
+credentials that have a SHAPE; a password merely SAID ("the wifi password is bluefish17") is taken only from what is shown (shown).
 
 The placeholder is LABELLED (`[redacted:aws-key]`, not a blank) because the drafter often has to
 write "I've rotated the key you sent" without ever seeing it; a bare hole makes a model guess at
@@ -66,6 +66,19 @@ def scrub(text) -> str:
     out = str(text or '')
     for rx, sub in _RULES: out = rx.sub(sub, out)
     return out
+
+
+# SAID, NOT SHAPED: "my password is Hunter2!x9", "username northwind, password chirp-pass". A prompt keeps these - the agent he gave a
+# password to signs in with it - but a line drawn for him or sent to his phone (a task's title, the rail, the phone) is not a prompt, and a
+# title copied his sentence, password and all, onto the rail and the phone (walk 19). The value must hold a digit or a sign, so "password
+# reset" stays a title.
+_SAID = re.compile(r"""(?i)(?P<k>\b(?:password|passwd|passcode|pwd|pin)\b(?:\s+(?:is|was)\b)?\s*[:=]?\s*)"""
+                   r"""(?![=:\[])(?P<v>(?=[^\s,;)\]"']*[^A-Za-z\s,;)\]"'])[^\s,;)\]"']{4,})""")
+
+
+def shown(text) -> str:
+    "`text` as it may be SHOWN - on a title, the rail, the phone: every credential scrub takes, and a password said in words."
+    return _SAID.sub(lambda m: m.group('k') + _ph('password'), scrub(text))
 
 
 def holds_placeholder(text) -> bool: return MARK in str(text or '')

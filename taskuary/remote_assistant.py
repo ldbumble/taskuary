@@ -3376,7 +3376,8 @@ def send(store, channel: str, chat: str, text: str, connector_id: int = None, pa
     from . import chatformat, messengers
     _SAID.n = getattr(_SAID, 'n', 0) + 1
     if not asked and held_back(store, channel, chat, f'{len(str(text or ""))} chars', urgent): return
-    text = bubble(text)
+    from .redact import shown
+    text = bubble(shown(text))                  # a phone is a screen: nothing goes there with a password in it (walk 19)
     out = messengers.tg_send if channel == 'telegram' else messengers.wa_send
     talked(store, channel, chat)
     # A VOICE NOTE IS SAID BACK before it is acted on (A17, 2026-10-22): the owner could not tell what was transcribed - once, on the turn's

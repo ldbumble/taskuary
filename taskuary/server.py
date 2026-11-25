@@ -278,6 +278,9 @@ async def _lifespan(_app):
         from . import filing
         if (n := filing.migrate(store)): logger.info(f'mark-read choice moved onto {n} card(s)')
     except Exception as e: logger.warning(f'mark-read choice not moved onto the cards: {e}')
+    try:                           # ...and a title from before titles were said without a password (walk 19)
+        if (n := store.scrub_titles()): logger.info(f'{n} task title(s) no longer carry a password')
+    except Exception as e: logger.warning(f'titles not scrubbed: {e}')
     try:                           # ...and the old four priorities as the new three, once (2026-10-25)
         if (moved := store.migrate_priorities()): logger.info(f'priorities renamed to regular / important / urgent: {moved}')
         from . import dashboards                                   # ...and a saved dashboard's cuts on them
@@ -515,7 +518,8 @@ async def token_gate(request: Request, call_next):
             # was open across a token change answered every click with whichever screen's generic
             # "that did not work" fallback happened to be nearest (2026-09-10 audit).
             # ...and not "reload": a reload no longer re-seeds the token (R29). The page drops the stale one on this code.
-            return JSONResponse({'detail': 'This page is signed in with an out-of-date token. Open Taskuary from its app, or run `taskuary --link`.',
+            # ...naming no command: an agent that met this ran `taskuary --link` and asked him to sign it in (walk 19)
+            return JSONResponse({'detail': 'This page is signed in with an out-of-date token. Open Taskuary from its app.',
                                  'code': 'unauthorized'}, status_code=401)
     # WHAT AN AGENT MAY NOT DO, before a handler exists to be talked round (guard.py). A session
     # runs with the agent token in its environment, and the routes that SEND - approve a reply,

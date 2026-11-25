@@ -112,6 +112,15 @@ HELD_ACTS = ('browser_act', 'shell_act', 'desktop_act')     # raised by a hook b
 # ...each by its own gate, which runs it on the owner's yes (perform) and tells its agent their no (declined) - and where it was held, as its
 # card says it. One table: the card's reason (queue), the yes (execute) and the no (settle) each spelled the three out
 HELD_IN = {'browser_act': "in the agent's browser", 'shell_act': "in the agent's shell", 'desktop_act': 'on your desktop'}
+
+
+def act_words(reason) -> str:
+    """An act card's Reason (propose) as the act itself, the card's own words: "held before it ran, in the agent's browser: Publish your post on
+    Chirp - it speaks for you ..., so it waits for your press" is "Publish your post on Chirp". Our own sentence, parsed as written."""
+    why = ' '.join(str(reason or '').split())
+    for lead in ('the agent proposes to ', 'the workflow asks to '): why = why[len(lead):] if why.lower().startswith(lead) else why
+    why = why.split(': ', 1)[1] if why.startswith('held before it ran') and ': ' in why else why
+    return why.split(' - ')[0]
 def _gate(a: str):
     from . import agentdesktop, browsergate, shellgate
     return {'browser_act': browsergate, 'shell_act': shellgate, 'desktop_act': agentdesktop}[a]

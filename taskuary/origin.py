@@ -368,6 +368,8 @@ def _claude_version(cmd: str) -> tuple:
 # any task's. One function says it (`hold`); every road that hands an agent anything asks it.
 # ...ONE SHORT SENTENCE TO HIM, NO "THEY" FOR ONE NAMED PERSON (rule 8, 2026-11-12): the Trust button under it says the rest
 HELD_LINE = "You have not trusted {who} yet, so no agent works on this until you do."
+# ...unless what holds it is the mail server, which could not vouch that {who} sent it (senders.Said.unverified): the same one Trust press
+UNVERIFIED_LINE = "The mail server could not verify that {who} sent this, so no agent works on it until you vouch for it."
 # ...and where an agent already worked the thread they wrote on: it is handed nothing more until he says so
 JOINED_LINE = "You have not trusted {who} yet, so the agent hears nothing more from this thread until you do."
 # ...and what the press does past this task, said under it: a trust is kept, and Settings is where it is taken back
@@ -380,7 +382,7 @@ def hold(store, tid) -> dict | None:
 # from any process. The cold rail after a restart judged every open task's senders afresh, ~4 s of its first pile (2026-11-24)
 # ...and the rules it was judged BY: a stored hold outlives an update, so a change to who counts as trusted (the mail-proof rule, 2026-11-24)
 # moves this and every task is judged again on its next read
-RULES = 3
+RULES = 4
 _SIG = """SELECT t.Status, t.TrustedThrough, t.OriginBase, (SELECT COUNT(*) FROM message WHERE TaskId=t.TaskId) n,
     (SELECT MAX(MessageId) FROM message WHERE TaskId=t.TaskId) m, (SELECT Gen FROM change_gen WHERE Tbl='trust') g,
     h.Sig, h.HoldJson FROM task t LEFT JOIN origin_hold h ON h.TaskId=t.TaskId WHERE t.TaskId=?"""
@@ -424,8 +426,9 @@ def _hold(store, tid: int, t: dict) -> dict | None:
     msgs = store.list_messages(tid)
     if of_task(store, tid, msgs)[0] != 'stranger': return None
     through, memo, seen = int(t.get('TrustedThrough') or 0), _memo(store), {}
-    mids = [m['MessageId'] for m in msgs if m['MessageId'] > through and not _own(m) and (m.get('Channel') or '') not in OURS
-            and senders.can_hold(m) and (r := of_message(store, m, memo, seen)) and r[0] == 'stranger']
+    said = {m['MessageId']: r[1] for m in msgs if m['MessageId'] > through and not _own(m) and (m.get('Channel') or '') not in OURS
+            and senders.can_hold(m) and (r := of_message(store, m, memo, seen)) and r[0] == 'stranger'}
+    mids = list(said)
     if not mids or not (offer := senders.trust_offer(store, int(tid), msgs)): return None      # Taskuary's own words, a teammate chat: no sender to trust
     m = senders.whom(store, msgs, through, memo) or {}
     who = ' '.join(str(m.get('FromName') or m.get('FromEmail') or 'this sender').split())        # ...mid-sentence: "You have not trusted this sender yet"
@@ -433,7 +436,8 @@ def _hold(store, tid: int, t: dict) -> dict | None:
     # named like a colleague read as that colleague on the one line the press rests on
     addr = str(m.get('FromEmail') or '').strip()
     named = f'{who} ({addr})' if '@' in addr and addr.lower() not in who.lower() else who
-    return {'line': HELD_LINE.format(who=named), 'person': offer['person'], 'org': offer.get('org'), 'who': who, 'mids': mids,
+    line = UNVERIFIED_LINE if getattr(said.get(m.get('MessageId')), 'unverified', False) else HELD_LINE
+    return {'line': line.format(who=named), 'person': offer['person'], 'org': offer.get('org'), 'who': who, 'mids': mids,
             'after': TRUST_AFTER}
 
 

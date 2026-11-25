@@ -294,7 +294,7 @@ def auto_start_ok(store, msg: dict, mid: int, kind: str, own: bool = False) -> t
     if not own and (d := danger(store, msg, mid)): return False, said(f'It reads as an attempt to steer an AI ({d}) - nothing starts until you press.')
     if kind not in task_kinds.AGENT: return False, said('A person has to do this one, so it is on your list.')
     if (held := gate_why(store, kind, own)): return False, said(held)
-    return (True, '') if own else senders.start_known(store, msg, mid)      # `own`: the owner's own line or press - no sender to check
+    return (True, '') if own else senders.known(store, msg, exclude_mid=mid, deep=True)      # `own`: the owner's own line or press - no sender to check
 
 
 def _start_workflow(store, msg: dict, intent: dict, actor: str, note: str = '') -> dict | None:
@@ -2417,7 +2417,7 @@ def pass_in_why(store, tid, msg: dict, mid, follow: dict | None) -> str:
 # while the agent was live. Each road now asks only what is its own (new work, a conversation to carry on) and this for the rest.
 def reach_why(store, tid, msg: dict, mid, follow: dict | None, kind: str, own: bool = False, lack: str = '', vouched: bool = False) -> str:
     """'' when this line may reach the task's `kind` agent by itself, else why not. A LIVE agent hears it where its sender may start
-    one (senders.start_known); a STOPPED one is carried on only where a fresh task would have started it (auto_start_ok). `own`: the
+    one (senders.known); a STOPPED one is carried on only where a fresh task would have started it (auto_start_ok). `own`: the
     owner's own line or press - no sender to check, nothing of theirs read as steering. `lack`: what the road itself is missing (no
     conversation to carry on), said only past the gate - a road that starts a first agent on it instead never passes a held channel.
     `vouched`: the owner's Trust on this task is the line's pass - its sender is not judged again (a bare quote names nobody to remember)."""
@@ -2431,7 +2431,7 @@ def reach_why(store, tid, msg: dict, mid, follow: dict | None, kind: str, own: b
     # ...nor a line that reads as steering an AI (the owner, 2026-10-28): it waits for the owner's press
     if not own and (d := danger(store, msg, mid, follow)): return f'it reads as an attempt to steer an AI ({d})'
     if lack or (own and live) or vouched: return lack
-    ok, why = senders.start_known(store, msg, mid) if live else auto_start_ok(store, msg, mid, kind, own=own)
+    ok, why = senders.known(store, msg, exclude_mid=mid, deep=True) if live else auto_start_ok(store, msg, mid, kind, own=own)
     return '' if ok else str(why)
 
 

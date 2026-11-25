@@ -147,6 +147,24 @@ class TheDayAsItWasTests(unittest.TestCase):
         self.assertIn('an account on news.ycombinator.example', line(post)); self.assertIn('he turned down: post the Ask HN question', line(post))
         self.assertIn('sent "2026 vendor spend sheet"', evening.owed(s, s.get_task(sheet), _ago(8)))
 
+    def test_a_post_that_went_live_is_said_as_the_post_never_as_the_hold_it_waited_under(self):
+        """Walk 19 (R1): the Chirp post was approved and published at 21:44; the End-of-day report said "Prepared your Chirp post and held it
+        for your approval" and "Waiting for your press to publish the post" - the went-live line carried the held card's reason."""
+        from taskuary import ledger, proposals
+        s = MemoryStore()
+        tid = s.create_task({'Title': 'Publish Chirp budget tip', 'Kind': 'general', 'Status': 'open'}, 'owner')
+        p = {'action': 'browser_act', 'what': 'Publish your post on Chirp', 'why': 'it speaks for you to other people, so it waits for your press'}
+        reason = f"held before it ran, {proposals.HELD_IN['browser_act']}: {p['what']} - {p['why']}"
+        rv = s.add_review({'TaskId': tid, 'Kind': 'action', 'Status': 'pending', 'Reason': reason, 'DraftText': json.dumps(p)})
+        s.decide_review(rv, 'approved', None, 'owner')
+        self.assertTrue(ledger.went(s, rv, {'url': 'http://chirp.test/p/1'}))
+        for line in (ledger.of_task(s, tid)[0], evening.owed(s, s.get_task(tid), _ago(8))):
+            self.assertIn('went live: Publish your post on Chirp - http://chirp.test/p/1', line)
+            self.assertNotIn('waits for your press', line); self.assertNotIn('held before', line)
+        # ...and a row written before keeps the hold's reason in its record: it is said as the act all the same
+        ledger.write(s, 'act', reason, '', 'went', 'rv0', tid, None, {'what': reason})
+        self.assertFalse(any('waits for your press' in l for l in ledger.of_task(s, tid)))
+
     def test_a_card_he_declined_is_told_from_its_state_never_from_the_words_its_turn_wrote_before(self):
         """Walk 13: the agent's turn ended "the post goes out only when you press the card"; he declined the card, and the End-of-day report
         and the Assistant both still said it waited for his press - and the header read "agent waiting on you". What stands is the card's

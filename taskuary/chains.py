@@ -129,11 +129,12 @@ def refresh_outlook(store, tok: str, mailbox: str, conversation_id: str, before:
 
 
 def _imap_search(M, box: str, root: str, readonly: bool = True, gm_thread=None) -> list:
-    typ, _d = M.select(box if box == 'INBOX' else f'"{box}"', readonly=readonly)
+    from .imapmail import _quoted
+    typ, _d = M.select(_quoted(box), readonly=readonly)
     if typ != 'OK': raise RuntimeError(f'SELECT {box} returned {typ}: {_d}')
     # the provider's own thread where it has one, as Graph's conversationId is for Outlook (the owner, 2026-10-26: "it
     # should be this way for all email services"): Gmail's holds a reply whose headers never named the root
-    crit = f'(X-GM-THRID {int(gm_thread)})' if gm_thread else f'(OR HEADER Message-ID "{root}" HEADER References "{root}")'
+    crit = f'(X-GM-THRID {int(gm_thread)})' if gm_thread else f'(OR HEADER Message-ID {_quoted(root, False)} HEADER References {_quoted(root, False)})'
     typ, data = M.uid('search', None, crit)
     if typ != 'OK': raise RuntimeError(f'SEARCH {box} returned {typ}: {data}')
     return sorted(int(x) for x in (data[0] or b'').split())

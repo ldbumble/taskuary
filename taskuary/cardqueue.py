@@ -107,7 +107,7 @@ def _units(store, tid: int, past: set) -> list:
     "Every card of the line on task `tid`, waiting or settled, oldest first: [{'rids', 'at', 'done', 'rows'}] - the landing question among them."
     from . import landing
     from .conversation import ep
-    from .proposals import moved_on
+    from .proposals import HELD_ACTS, moved_on
     out, by = [], {}
     # ...A STEP HELD WHILE A PRESSED ACT IS UNDER WAY IS THAT ACT'S OWN NEXT PRESS (his live app, 2026-11-23: Post via the browser on the X card, the
     # agent signed in and wrote the post, and the gate held its final Post - queued as a card of its own behind the Reddit and LinkedIn cards, so
@@ -116,7 +116,7 @@ def _units(store, tid: int, past: set) -> list:
     # waiting stands as a card of its own
     for r in store._rows("SELECT * FROM review WHERE TaskId=? ORDER BY ReviewId", (int(tid),)):
         if r['ReviewId'] in past or obsolete_read(store, tid, r): continue
-        if r['Kind'] == 'action' and (p := _p(r)).get('action') in ('browser_act', 'page_step') and (u := by.get(f"rv{p.get('card')}")) and (r['Status'] != 'pending' or u['rows'][0]['Status'] in ('approved', 'edited')):
+        if r['Kind'] == 'action' and (p := _p(r)).get('action') in HELD_ACTS and (u := by.get(f"rv{p.get('card')}")) and (r['Status'] != 'pending' or u['rows'][0]['Status'] in ('approved', 'edited')):
             u['rids'].append(r['ReviewId']); u['rows'].append(r); continue
         # ...a settled one by what it was while it waited: its run tells how many came together ("2 of 3")
         if r['Status'] != 'pending' and not r.get('DecidedAt'): continue
@@ -365,7 +365,7 @@ def line(s: dict) -> str:
     """What the live card says of the line, plain: '1 of 2 · next: the email to Erin', and the last of them '2 of 2' (the real-Claude walk,
     2026-11-19: the second letter stood with no count once the first went) - '' for a card alone in its line."""
     if not s['live'] or s['of'] < 2: return ''
-    return f"{s['n']} of {s['of']}" + (f" · next: {s['next']}" if s['of'] > s['n'] else '')
+    return f"{s['n']} of {s['of']}" + (f" · next: {s['next']}" if s['of'] > s['n'] and s['next'] else '')      # ...none where what follows it is settled already
 
 
 SCREEN_HEAD = ("WHAT THE OWNER'S SCREEN SHOWS ON THIS TASK NOW, AND WHAT CAME OF EACH CARD (Taskuary's record - a card it does not name is not "

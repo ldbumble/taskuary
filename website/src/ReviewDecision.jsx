@@ -889,7 +889,7 @@ export function ActReview({ row: was, tid, live = true, onChanged, past = false,
     <ReviewCard id={row?.ReviewId} kind={act.kind} state={stepRow ? "waiting" : gone ? "done" : st.live ? "waiting" : "not-done"} data-tq-act={row?.ReviewId} data-tq-act-kind={act.kind}
       face={post ? faceOf(row) : ""} label={post ? `${row?.as || `Your ${row?.network || ""} account`} · ${row?.network || "post"}` : act.title}
       fields={fields} press={stepRow || pressRow} after={after} failed={failed || (stepRow && err) || ""} onView={setViewing}
-      before={stepRow && <Typography data-tq-act-step-says="" sx={{ fontSize: 12.5, color: INK, mb: 0.75 }}>{step.press === "done" ? "Your step on the page, open beside this card" : "Waiting for your press - the agent has it ready on the page"}: {step.what}</Typography>}
+      before={stepRow && <Typography data-tq-act-step-says="" sx={{ fontSize: 12.5, color: INK, mb: 0.75 }}>{step.press === "done" ? "Your step on the page, open beside this card" : "Waiting for your press - the next step of putting this up"}: {step.what}</Typography>}
       tail={st.live && !gone && row?.connect && <Typography data-tq-not-connected="" sx={{ fontSize: 11.5, color: FAINT }}>{row.connect.says}{post
         ? " - Post via the browser has the agent put it up there, and its last Post waits for you" : row.connect.waits ? ` - ${row.connect.waits}` : ""}</Typography>}
       under={<>{row?.connect && st.live && !gone && setupUnder(setupAt, () => setSetupAt(""), () => decide("approve"))}

@@ -217,6 +217,13 @@ def test_a_post_put_up_through_the_browser_keeps_every_further_press_on_its_one_
     assert signin['ReviewId'] not in got, 'his sign-in is on the post\'s card, never a card beside it'
     ws.record(w.s, w.tid, 'run1', 'answered', request_id='yourturn:signin-x', text="I'm done", source='owner')
     assert not w.cards()[x].get('step') and w.s.get_review(signin['ReviewId'])['Status'] == 'approved'
+    # ...and a shell step held on the way (the re-walk, 2026-11-25: the picture's upload, held, stood as a third tab behind LinkedIn)
+    li = w.act({'action': 'run_tool', 'type': 'linkedin_post', 'text': 'We close the month in four days.'})
+    up = proposals.queue(w.s, w.tid, {'action': 'shell_act', 'sid': 'run1', 'turn': 0, 'command': 'agent-browser upload @e10 close.png', 'what': 'attach the picture'})['reviewId']
+    got = w.cards()
+    assert got[x]['step']['review'] == up and up not in got and cardqueue.state(w.s, w.tid)['held'] == [li], 'the held upload is the X card\'s, in front of LinkedIn'
+    with mock.patch.object(proposals, '_run', return_value={'performed': 'attach the picture'}): assert w.press(up).get('ok')
+    w.s.decide_review(li, 'rejected', None, 'owner')
     held = proposals.queue(w.s, w.tid, {'action': 'browser_act', 'sid': 'run1', 'args': ['click', '@e20'], 'what': 'Publish your post on X'})['reviewId']
     got = w.cards()
     assert got[x]['step']['review'] == held and held not in got

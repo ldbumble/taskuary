@@ -172,10 +172,11 @@ product: fix the code, never the test.
    is answered with the exact fix. A field the card does not draw is ignored.
 2. **Press.** Approve or Send executes exactly what was shown, once. A second press does nothing.
    A card changed after it was shown does not run. A press after the agent stopped still executes.
-   A failed execution stays on its card and its agent is told once. His no is told to the agent as
-   his own.
-3. **Wake.** A press wakes the agent only if the card carries its `then`. A press with no `then`
-   wakes nobody, and answers the question the agent asked about that card.
+   A failed execution stays on its card, with the way past it, and its agent is woken once with what
+   failed and why. His no is told to the agent as his own.
+3. **Wake.** His press executes without waking the agent, at work or at rest, unless the card
+   carries its `then` or the execution fails. A press with no `then` that went wakes nobody, and
+   answers the question the agent asked about that card; a bulk card's run is the same, once.
 4. **Question.** The agent's question stands until he answers; no card is raised under it, in
    that turn or after, until he answers; his answer reaches the agent once.
 5. **Hand-off on a page.** A step handed to him shows that step; his "I'm done" wakes the agent
@@ -193,3 +194,10 @@ product: fix the code, never the test.
    one press, exactly as shown; separate calls are separate cards, one after another. Files handed
    over in one call are one artifact holding all of them. A review card and a file artifact are
    drawn by the same component (`website/src/Artifact.jsx`).
+9. **Every write waits for his press.** An agent's call that writes, changes, creates, deletes or
+   sends on any connector is a card, at any Authority; nothing runs before his press. What is a
+   write is the executor's line in `scopes.ACTIONS` - one not listed is a write; a read (a query, a
+   search, a report pulling data) runs with no card. Only Taskuary's own store is written unpressed.
+   A routine's write step waits too, unless he pressed "Always approve this step" on it: that
+   routine's step, exactly as saved, then runs unpressed; any other target, executor or an agent's
+   own call during the run is a card as usual. Taken back under Settings → Agent permissions.

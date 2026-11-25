@@ -181,3 +181,11 @@ def test_the_windows_own_page_hears_the_microphone_without_webview2s_pop_up():
     handlers[0](None, ours); handlers[0](None, theirs)
     assert (ours.State, theirs.State) == ('allow', 'default')
     with mock.patch.object(desktop.sys, 'platform', 'linux'): assert desktop.allow_microphone() is False
+
+
+def test_the_window_file_has_no_relative_import_since_the_exe_runs_it_as_main():
+    """The exe is built from desktop.py and runs it as __main__: a `from . import` there raised "attempted relative import with no
+    known parent package" the moment he pressed Download on a PDF (2026-11-25)."""
+    import ast, pathlib
+    tree = ast.parse(pathlib.Path(__file__).parents[1].joinpath('taskuary', 'desktop.py').read_text(encoding='utf-8'))
+    assert [n.lineno for n in ast.walk(tree) if isinstance(n, ast.ImportFrom) and n.level] == []

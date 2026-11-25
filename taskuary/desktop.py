@@ -366,7 +366,7 @@ def save_download(url: str, folder: Path = None) -> dict:
     """Fetch one of this app's own files and save it in Downloads: {'name', 'folder', 'path'}, or {'error'} in the server's words.
     Only this machine's server is asked - the page's address for the file, with the owner token in the request's header."""
     import json, posixpath, urllib.request as ureq, urllib.error as uerr
-    from . import config, guard
+    from taskuary import config, guard              # absolute: the exe runs this file as __main__, where a relative import has no package
     u, own = urllib.parse.urlsplit(str(url or '')), urllib.parse.urlsplit(SERVING.get('url') or f"http://127.0.0.1:{config.load()['server'].get('port') or 7787}")
     # ...and only a FILE of it (red team #3): the owner's header rides on this, so an agent's link to /api/settings?download=true saved his
     # settings into Downloads. The file routes the page saves from (guard.FILE_READS), on this window's own port, nothing climbing out of them

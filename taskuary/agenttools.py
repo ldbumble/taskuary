@@ -268,8 +268,8 @@ TOOLS = {
     # agent asked for three posts found none of them and wrote prose. One door; its `kind` is the road the press takes (_review) - the card is
     # the same editable raised card whatever it holds. ...`slot` (the agent walk, 2026-11-10): triage had put "an email to Ray Colton" on the
     # task; the agent names the checklist line it fills - no name is matched here
-    'propose': ('propose', "Anything for the owner's review and press: one card in this chat, its words editable, and nothing happens until "
-                           "he presses it. `kind` is where it goes on the press:\n"
+    'propose': ('propose', "Anything for the owner's review and press: one card in this chat - the draft itself, its words his to edit - and nothing "
+                           "happens until he presses it. `kind` is where it goes on the press:\n"
                            "- reply: to a person on this task, on the channel of the message it answers (email, WhatsApp, Teams...). `to`: a "
                            "name or address, else the newest message's sender. `answers`: the number of the message it replies to (THE MAIL "
                            "ON THIS TASK). `only: true` to that mail's sender alone, `cc` instead of the thread's own, `why_to` one line on "
@@ -357,7 +357,7 @@ SHORT = {
     'run_system': "Run one tool on one of the owner's systems: {type, connector_id, ...its fields}.",
     'web_search': "Search the web through this task's AI card.",
     'show': 'Draws bar, line and pie charts, tables, number tiles and checklists in this chat, with sliders, toggles, selects and '
-            'dates recomputing them live, and choices whose pick comes back to you - or shows files you made.',
+            'dates recomputing them live, and choices whose pick comes back to you - or hands the owner files you made, one artifact a call.',
     'draw_image': "Draw a picture from a prompt into this task and this chat.",
     'tick': "Tick or untick a to-do: `item` is its id.",
     'todos': "Add, reword or merge this task's to-dos.",
@@ -382,8 +382,8 @@ SHORT = {
     'set_up_meeting': "Set up a meeting for the owner's press.",
     'share': "Share a report or dashboard of the owner's with a person.",
     'propose': "Anything for the owner's review and press - a reply, an email, a post, GitHub/Jira/Monday comment or issue, PR or push, "
-               "an order on a system, a script kept by save_routine: one card in this chat, its words editable, nothing done before his press. `kind` "
-               "(an act names its `action`); several at once in `items`.",
+               "an order on a system, a script kept by save_routine: one card in this chat - the draft itself, its words his to edit - nothing "
+               "done before his press. `kind` (an act names its `action`); several of one act in `items`; `then` your own step after his press.",
     'find_tools': "A tool's instructions by name, or more tools by need.",
 }
 def lean(s):

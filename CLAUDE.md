@@ -160,8 +160,9 @@ meaning and model calls that plain data could answer listed with file and line.
 
 How a card is raised, pressed and handed off never changes without the owner's written OK. Each
 rule below is pinned by a plain test in `tests/contract/` (the real tools and routes, no browser,
-no model); `tests/contract/LOCK` holds the hash of those files and of this section, and
-`tests/test_contract_lock.py` fails when either differs. A contract test that fails is a broken
+no model); `tests/contract/LOCK` holds the hash of those files, of this section and of what every
+agent is told about its cards (`taskuary/templates/agents.md`), and `tests/test_contract_lock.py` fails
+when any of them differs. A contract test that fails is a broken
 product: fix the code, never the test.
 
 1. **Raise.** The agent supplies the content; Taskuary builds one valid card and picks the road

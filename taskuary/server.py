@@ -2734,10 +2734,10 @@ def _assistant_payload(task_id: int, session=None):
             # ...AND A FILE IS DRAWN ONLY WHERE IT WAS HANDED OVER (the owner's live task, 2026-11-25: "it should work through what it needs and
             # action cards, not a bunch of artifacts"): charts a script made and a drafts file stood in the chat beside the cards that carried them.
             # A file made is in the task's files; `by` is the turn that wrote it, so the turn whose words or summary name it draws it - placed
-            # under that turn (`after`) only once `show` handed it over (outputs.hand), several of them one artifact
+            # under that turn (`after`) only once `show` handed it over (outputs.hand), what one call handed one artifact (`call`)
             # ...the handed ones in the order he was handed them (outputs.as_handed), not newest first
-            'outputs': outputs.as_handed([{**o, 'by': (t := by.get(o['path']) or at_turn(o.get('at'))), **({'after': t, 'handed': True} if o['path'] in gave else {})}
-                        for by, cards, gave in [(outputs.made_by(task_id), outputs.on_cards(store, task_id), outputs.handed(task_id))]
+            'outputs': outputs.as_handed([{**o, 'by': (t := by.get(o['path']) or at_turn(o.get('at'))), **({'after': t, 'handed': True, 'call': gave[o['path']]} if o['path'] in gave else {})}
+                        for by, cards, gave in [(outputs.made_by(task_id), outputs.on_cards(store, task_id), outputs.call_of(task_id))]
                         for o in outputs.made(store, task_id) if o.get('name') not in cards], outputs.handed(task_id)),
             # ...and each EARLIER turn's own version of a file a later turn changed (outputs.turn_versions): drawn under that turn instead
             'turnOutputs': [o for cards in [outputs.on_cards(store, task_id)] for o in outputs.turn_versions(task_id) if o.get('name') not in cards],

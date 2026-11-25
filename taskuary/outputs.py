@@ -301,18 +301,29 @@ def turn_folder(tid: int, turn: int) -> Path: return turns_folder(tid) / str(int
 # turn wrote was. A file of the folder is drawn in its turn only once `show` hands it over - several at once one artifact; the rest stay in
 # the task's files
 def hand(tid: int, paths) -> None:
-    "Mark these files of task `tid`'s folder (paths in it, or under it) as handed over to the owner, in the order they were handed."
-    got = handed(tid)
+    """Mark these files of task `tid`'s folder (paths in it, or under it) as handed over to the owner, in the order they were handed - ONE CALL,
+    ONE HAND-OVER (the card gallery, 2026-11-25: a chart and its workbook, each shown by a call of its own, stood as one artifact "2 files"):
+    what one call hands is one group (calls), and a file handed before keeps the place it has."""
+    got, new = calls(tid), []
     for p in paths:
         try: r = rel(tid, Path(p))
         except (OSError, ValueError): continue
-        if r not in got: got.append(r)
+        if r not in new and not any(r in g for g in got): new.append(r)
+    if not new: return
     turns_folder(tid).mkdir(parents=True, exist_ok=True)
-    (turns_folder(tid) / 'handed.json').write_text(json.dumps(got), encoding='utf-8')
+    (turns_folder(tid) / 'handed.json').write_text(json.dumps(got + [new]), encoding='utf-8')
+def calls(tid: int) -> list:
+    "What each `show` call handed over, a list of paths per call, in order. A list kept before calls were (bare paths) is one hand-over."
+    try: got = list(json.loads((turns_folder(tid) / 'handed.json').read_text(encoding='utf-8')))
+    except (OSError, ValueError): return []
+    old = [g for g in got if isinstance(g, str)]
+    return ([old] if old else []) + [list(g) for g in got if isinstance(g, list)]
 def handed(tid: int) -> list:
     "The files of task `tid`'s folder its agent handed over (hand), by their paths in it - in the order it handed them."
-    try: return list(json.loads((turns_folder(tid) / 'handed.json').read_text(encoding='utf-8')))
-    except (OSError, ValueError): return []
+    return [p for g in calls(tid) for p in g]
+def call_of(tid: int) -> dict:
+    "{path: which hand-over it was in} - the page draws each hand-over as an artifact of its own."
+    return {p: i for i, g in enumerate(calls(tid)) for p in g}
 def as_handed(rows: list, gave: list) -> list:
     """`rows` with the handed ones among them in the order they were handed (the card gallery, 2026-11-25: "three versions - pick one" stood
     newest first, the third version leading; a board pack led with its clip): each keeps a handed row's place, the rest stay where they were."""
@@ -407,14 +418,14 @@ def turn_versions(tid: int) -> list:
     from urllib.parse import quote
     made_ = turns_made(tid)
     if not made_: return []
-    now, out, gave = {r['path']: r for r in listing(tid)}, [], handed(tid)
+    now, out, gave = {r['path']: r for r in listing(tid)}, [], call_of(tid)
     for turn, made in made_:
         for k in made:
             cur, p = now.get(k['path']), resolve(tid, k['path'])
             c = resolve(tid, k['path'], turn_folder(tid, turn)) if k.get('kept') else None
             # ...nor one written back since as it was (keep_turn): the file as it is now IS this turn's
             if cur and p and ((p.stat().st_mtime, p.stat().st_size) == (k['mtime'], k['size']) or _same(c, p)): continue
-            mine = {'id': f"output:{k['path']}@{turn}", 'turn': f'comment-{turn}', 'by': f'comment-{turn}', **({'after': f'comment-{turn}', 'handed': True} if k['path'] in gave else {})}
+            mine = {'id': f"output:{k['path']}@{turn}", 'turn': f'comment-{turn}', 'by': f'comment-{turn}', **({'after': f'comment-{turn}', 'handed': True, 'call': gave[k['path']]} if k['path'] in gave else {})}
             if c:
                 out.append({**row(tid, c, k['path']), **mine, 'url': f"/api/task-outputs/{int(tid)}/{quote(k['path'])}?turn={turn}"})
             elif cur: out.append({**cur, **mine, 'later': True, 'note': 'Changed later - this opens its newest version.'})

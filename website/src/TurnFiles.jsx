@@ -8,7 +8,7 @@ import React, { useState } from "react";
 import { Box, Button } from "@mui/material";
 import { attUrl, useSave } from "./fileSave.js";
 import { CopyFile, FileDialog, isText, Preview } from "./PublishedPages.jsx";
-import { fileKind, filesLabel, mediaFit, sizeWords } from "./taskOutputs.js";
+import { fileGroups, fileKind, filesLabel, mediaFit, sizeWords } from "./taskOutputs.js";
 import Artifact, { Items } from "./Artifact.jsx";
 import { INK } from "./theme.jsx";
 
@@ -24,9 +24,12 @@ const Body = ({ f, onView, picked }) => isPic(f)
         style={{ cursor: "zoom-in", objectFit: "contain", ...(mediaFit(f)?.media || { maxHeight: 320 }) }} /></div>
   : f.preview || picked ? <Preview key={f.path} page={f} /> : null;
 
-export default function TurnFiles({ files }) {
+// ONE CALL, ONE HAND-OVER (the card gallery, 2026-11-25: a chart and its workbook, each shown by its own call, stood as one "2 files"): what
+// one `show` handed is one artifact, the next call's the next (taskOutputs.fileGroups)
+export default function TurnFiles({ files }) { return fileGroups(files).map((g) => <Group key={g[0].path} files={g} />); }
+
+function Group({ files }) {
   const [viewing, setViewing] = useState(null), [pick, setPick] = useState(null), [err, save, saved] = useSave();
-  if (!files?.length) return null;
   const one = files.length === 1, f = files.find((x) => x.path === pick) || files[0];
   const items = one ? [] : files.map((x) => ({ id: x.path, target: x.name, line: [fileKind(x), sizeWords(x.size)].filter(Boolean).join(" · "),
     picked: x === f, onPick: () => setPick(x.path), tail: <Download f={x} save={save} sx={{ minWidth: 0 }} /> }));

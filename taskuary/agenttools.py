@@ -974,7 +974,7 @@ def show_files(store, tid: int, paths) -> str:
     from . import outputs, session_artifacts
     from .general import file_name
     if isinstance(paths, str): paths = [paths]
-    roots, rows, why, drawn, reads = _show_roots(), [], [], [], []
+    roots, rows, why, drawn, reads, gave = _show_roots(), [], [], [], [], []
     for raw in list(paths or [])[:12]:
         # ...A PATH WITHOUT ITS ROOT IS THE TASK'S OWN (walk 9, 2026-11-23: "outputs/TQ-0014/sample-invoice.pdf" and a bare file name were
         # refused as outside the outputs folder they were in, and the agent's end_turn said it showed them): read against its outputs folder,
@@ -991,8 +991,8 @@ def show_files(store, tid: int, paths) -> str:
         # ...AND EVERY FILE IS READ BACK, DRAWN OR NOT (walk 10, 2026-11-23: a deck's ".pptx cannot be shown" read nothing back, and a stale
         # "212" in it went to the board after "update everything")
         reads.append(p)
-        # ...and one of its task's folder is HANDED OVER: drawn in its turn as the file of the folder (several, one artifact), never also as a copy
-        if p.is_relative_to(outputs.folder(tid).resolve()): outputs.hand(tid, [p])
+        # ...and one of its task's folder is HANDED OVER: drawn in its turn as the file of the folder (this call's, one artifact), never also as a copy
+        if p.is_relative_to(outputs.folder(tid).resolve()): gave.append(p)
         # ...A WORKBOOK OR A DOCUMENT IN THE TASK'S OWN OUTPUTS FOLDER IS ALREADY IN FRONT OF HIM (the walks, 2026-11-21: show answered ".xlsx
         # cannot be shown" while the chat drew the sheet, and the agent told him it could not be previewed): the page previews what it makes there
         # under the turn that made it (outputs.preview_of) - said so, never refused
@@ -1004,6 +1004,7 @@ def show_files(store, tid: int, paths) -> str:
         except OSError as e: why.append(f'{n}: {e}'); continue
         rows.append({'id': a['ArtifactId'], 'name': a.get('Name') or p.name, 'path': f"shown:{a['ArtifactId']}", 'kind': 'shown',
                      'content_type': a.get('ContentType') or '', 'size': a.get('Size') or 0, 'url': f"/api/task-artifacts/{a['ArtifactId']}"})
+    outputs.hand(tid, gave)             # ...this call's files together: one hand-over, one artifact
     from . import attachtext
     say = attachtext.block(attachtext.of_paths(reads), SHOWN_SAY, file_cap=SHOWN_CHARS)
     if not rows and not drawn and not say: raise ValueError('nothing was shown - ' + '; '.join(why))

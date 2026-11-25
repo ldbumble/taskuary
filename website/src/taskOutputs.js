@@ -227,6 +227,14 @@ export const turnFiles = ({ listed = [], id, words = "", did = "", tid, skip = [
   return deliverables([...by.values()].filter((r) => !no.has(baseName(r.path || r.name)) && !r.missing)).made;
 };
 
+// ...AND WHAT ONE CALL HANDED IS ONE ARTIFACT: a turn's files by the `show` call that handed each (`call`, outputs.call_of), in the order they
+// stand; the ones its words only name are one group, as they were
+export const fileGroups = (files) => {
+  const by = new Map();
+  for (const f of files || []) { const k = f.handed ? f.call ?? -1 : "named"; by.set(k, [...(by.get(k) || []), f]); }
+  return [...by.values()];
+};
+
 // ONE THING, ONE PLACE (the owner, 2026-11-23: "images that are connected to text don't make it 2 artifacts but one"): a file an item the chat
 // sets down carries - a post's picture, an email's attachments - is drawn in that item only, never again as a file or a shown page of a turn.
 // The names the chat's cards own (`rows`: their review rows); turnFiles' `skip` and the shown pages read it. A file only words name stays a file

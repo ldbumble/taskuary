@@ -27,8 +27,11 @@ export const lockDown = (html) => {
 // frame of its own whose one rule is frame-src 'none' (a srcdoc frame takes on its parent's policy too, so the page's scripts run as before)
 export const SANDBOX = "allow-scripts";
 const attr = (s) => String(s).replace(/&/g, "&amp;").replace(/"/g, "&quot;");
-// ...the frame between hands on what its page asks to open, and nothing else (PRELUDE)
-const RELAY = "<script>onmessage=(e)=>{const u=e.source===frames[0]&&e.data&&e.data.tqOpen;if(typeof u==='string')parent.postMessage({tqOpen:u},'*')}</script>";
+// ...the frame between hands on what its page asks to open, and nothing else (PRELUDE) - and only on a press IN the page (red team round 4: a
+// mail's .html attachment asked on a clock, and the owner's next click anywhere in the app opened it - the app's own window counts any click).
+// A click in the page wakes this frame, its parent; one in the app does not, for this frame is of another origin (HTML's activation rules)
+export const RELAY = "<script>onmessage=(e)=>{const u=e.source===frames[0]&&e.data&&e.data.tqOpen,a=navigator.userActivation;"
+  + "if(typeof u==='string'&&a&&a.isActive)parent.postMessage({tqOpen:u},'*')}</script>";
 export const shut = (html) => `<!doctype html><meta http-equiv="Content-Security-Policy" content="frame-src 'none'">`
   + `<style>html,body{margin:0;height:100%;overflow:hidden}iframe{border:0;width:100%;height:100%;display:block}</style>${RELAY}`
   + `<iframe sandbox="${SANDBOX}" srcdoc="${attr(lockDown(html))}"></iframe>`;

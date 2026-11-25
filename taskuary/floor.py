@@ -84,7 +84,8 @@ def _above(p, roots): return any(r == p or r.startswith(p.rstrip('/') + '/') for
 
 def _deny(why: str) -> dict:
     return {'hookSpecificOutput': {'hookEventName': 'PreToolUse', 'permissionDecision': 'deny',
-                                   'permissionDecisionReason': f"{why} - a stranger's task may not touch it"}}
+                                   'permissionDecisionReason': f"{why} - a stranger's task may not touch it. Nothing ran; go on with the task "
+                                                               "in its own folder"}}
 
 def _port() -> str:
     from . import config

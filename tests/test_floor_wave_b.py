@@ -75,6 +75,12 @@ def test_the_floor_lets_through_exactly_what_the_cli_runs_for_a_stranger():
     assert '`taskuary --prompts`' in call('Bash', command='taskuary --prompts')['hookSpecificOutput']['permissionDecisionReason']
 
 
+def test_every_refusal_says_the_way_on():
+    "...never only what is refused: a stranger's session read \"is a protected file - a stranger's task may not touch it\" and had no next step"
+    why = call('Bash', command='taskuary --prompts')['hookSpecificOutput']['permissionDecisionReason']
+    assert 'go on with the task in its own folder' in why
+
+
 # ── B3: what a later session reads as configuration or runs ─────────────────────────────────────────────────────────
 HOME_FILES = ['~/.claude/settings.local.json', '~/.claude/hooks/pre.sh', '~/.claude/agents/a.md', '~/.claude/commands/c.md',
               '~/.claude/skills/s/SKILL.md', '~/.claude/CLAUDE.md', '~/.codex/config.toml', '~/.codex/hooks.json', '~/.codex/AGENTS.md',

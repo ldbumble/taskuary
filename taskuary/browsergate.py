@@ -826,7 +826,8 @@ def _check(store, tid: int, sid: str, cmd: str, brain=None, cwd: str = '') -> di
         if a.get('read'):           # a box's value is read only where the page shows it is no password box
             c = control(a, pg)
             if not c.get('role') or 'password' in f"{c.get('name')} {c.get('role')}".lower():
-                return _deny(f"{NOT_RUN}: reading what is typed in that box is refused - it is a password box, or the page does not say what it is.")
+                return _deny(f"{NOT_RUN}: reading what is typed in that box is refused - it is a password box, or the page does not say what it is. "
+                             "Go on without its value: snapshot shows what the page says.")
             continue
         # ...AND A SCRIPT reads any box (`eval "...input[type=password].value"`): judged only on whether it can be undone, a read passed - so
         # none runs while a password box of the page holds one (signin.holds_password), a sign-up's made password waiting for his press among them

@@ -6,7 +6,7 @@ old, a finished turn woken again, Resume's words on a carry-on nobody pressed, "
 import json, shutil
 from unittest import mock
 
-from taskuary import agenttools, channels, config, general, hooks, ingest, outputs, server, wrapup
+from taskuary import agenttools, channels, config, general, hooks, ingest, outputs, proposals, server, wrapup
 from taskuary.store import MemoryStore
 from test_carry_on import ingested, mail, store
 from test_freshness_walk import reads, stamp, teams_task
@@ -156,6 +156,18 @@ def test_no_calendar_gives_the_connect_link():
     with mock.patch.object(server, 'store', s), mock.patch('taskuary.calendar.reachable', return_value=False):
         said, bad = call(tid, 'calendar')
     assert not bad and '[Connect a calendar](' in said
+
+
+def test_the_calendar_switched_off_is_his_card_to_switch_it_on():
+    # it answered "No calendar is connected" over a connected one, its Connect link no way past a switch: the call raises the card, once
+    s = MemoryStore(); tid = own_task(s, 'general'); s.set_setting('calendar_enabled', '0', 'owner')
+    with mock.patch.object(server, 'store', s), mock.patch('taskuary.calendar.reachable', return_value=True):
+        said, bad = call(tid, 'calendar'); again, _ = call(tid, 'calendar')
+    assert not bad and 'not connected' not in said and 'switched off' in said and "the owner's to press" in said
+    cards = s._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action' AND Status='pending'", (tid,))
+    assert len(cards) == 1 and json.loads(cards[0]['DraftText'])['changes'][0]['name'] == 'calendar_enabled'
+    proposals.execute(s, cards[0], 'owner')
+    assert s.get_setting('calendar_enabled') == '1'
 
 
 def test_a_file_sent_in_the_chat_lands_in_the_task_folder():

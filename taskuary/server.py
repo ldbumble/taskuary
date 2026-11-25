@@ -9296,15 +9296,20 @@ def tool_run(body: dict, request: Request):
         # no card is not 'nothing to check' - it is nothing the owner ever switched on. Types with no
         # card (sqlite, local_file, agent, rest) used to run for anyone holding the API: any file on
         # disk, any database, another agent run (audit 2026-09-02)
-        raise HTTPException(403, f'{t} has no connection card an owner turned on - it is not an agent tool')
+        # ...said with the way on (the owner's rules, part 4): "it is not an agent tool" alone left the agent nothing to try
+        from .agenttools import refusal
+        raise HTTPException(403, refusal(f'{t} has no connection card an owner turned on - it is not an agent tool',
+                                         "work it with your session's own tools, or on one of his systems", see=('list_systems', 'lists them')))
     # ...AN AGENT'S POST ON A NETWORK NOT CONNECTED is its card all the same, Connect where Post would be (outbound.review_connect): "the
     # connection is off - turn it on" sent the agent to say in words what the card's own Connect does (design round 2, 2026-11-18)
     from . import connectorcatalog
     if not conn.get('Active') and connectorcatalog.action_for(t) and guard.scope_of(cfg['server'], request.headers) == guard.AGENT:
         return _agent_proposes(request, t, conn, body, scopes.reaches(t, body) or f'{t} reaches people')
     if not conn.get('Active'):
-        raise HTTPException(403, f"the {t} connection is off - turn it on under {words.name('connections')}")
-    if 'tool' not in store_mod.roles_of(conn):
+        from .agenttools import refusal
+        raise HTTPException(403, refusal(f"the {t} connection is off - only the owner turns it on, under {words.name('connections')}",
+                                         'go on with what is connected', see=('list_systems', 'lists it')))
+    if 'tool' not in store_mod.roles_of(conn) and guard.scope_of(cfg['server'], request.headers) != guard.AGENT:
         raise HTTPException(403, f'the {t} connection is not marked as an agent tool ({words.card(t)} → Role)')
     hub_tools = {'handbook_search', 'handbook_write', 'handbook_vote',
                  'hub_search', 'hub_write', 'hub_vote', 'hub_comment'}
@@ -9316,7 +9321,10 @@ def tool_run(body: dict, request: Request):
         tool = _mcp_tool(conn, body) if t == 'mcp' else None
         if why := scopes.reaches(t, body, tool): return _agent_proposes(request, t, conn, body, why)
         # ...and a change above the card's Authority is the same proposal (docsync.agent_systems tells the agent so): the 403 below said
-        # "raise it under the card", a step only the owner can take, and lit nothing for them to press
+        # "raise it under the card", a step only the owner can take, and lit nothing for them to press. So is a call on a connection he
+        # never marked as an agent tool: "not marked as an agent tool (its card -> Role)" was the same sentence the agent could only pass on
+        if 'tool' not in store_mod.roles_of(conn):
+            return _agent_proposes(request, t, conn, body, f"runs on {conn.get('Name') or t}, which is not marked as an agent tool")
         if not scopes.allows(conn, t):
             return _agent_proposes(request, t, conn, body, f"needs {scopes.needs(t)} Authority on {conn.get('Name') or t}, which is set to "
                                                            f"{scopes.scope_of(conn)}")

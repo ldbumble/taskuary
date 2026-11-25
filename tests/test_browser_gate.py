@@ -704,7 +704,9 @@ class LooksThatAreNot(unittest.TestCase):
         with on(snap=snap):
             self.assertEqual(bg.check(s, t, 's1', 'agent-browser get value @e1'), {})
             for ref in ('@e2', '@e9', '"#pw"'):
-                self.assertEqual(bg.check(s, t, 's1', f'agent-browser get value {ref}')['hookSpecificOutput']['permissionDecision'], 'deny', ref)
+                no = bg.check(s, t, 's1', f'agent-browser get value {ref}')['hookSpecificOutput']
+                self.assertEqual(no['permissionDecision'], 'deny', ref)
+                self.assertIn('Go on without its value', no['permissionDecisionReason'])      # ...with the way on, never only the no
 
 
     def test_a_script_run_while_a_password_box_holds_one_is_refused(self):

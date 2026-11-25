@@ -221,6 +221,18 @@ class ChangeTests(unittest.TestCase):
         cfg = json.loads(self.s.get_source(self.sid)['ConfigJson'])
         self.assertEqual(cfg['done_when'], 'Each network has its post card waiting for his press.')
 
+    def test_a_run_at_work_hears_its_routines_new_words_on_its_next_turn_once(self):
+        # the live shape, 2026-11-25: a run's words said "keep the drafts for manual posting"; he changed them in the editor and typed "make these
+        # posts again" on the run - its conversation went on, resumed on the old words, and nothing told it what the routine says now
+        from taskuary import events
+        done = run_task(self.s, self.sid); self.s.update_task(done, {'Status': 'done'}, 'o')
+        workflows.save(self.s, {'SourceId': self.sid, 'ConfigPatch': {'prompt': 'Set up each post as a post card for my press.'}}, 'o')
+        said, _ = events.take(self.s, self.tid)
+        self.assertIn("This task's routine was changed - what it says now:\nOBJECTIVE: Set up each post as a post card for my press.", said)
+        self.assertEqual(events.take(self.s, done)[0], '', 'a finished run is told nothing')
+        workflows.save(self.s, {'SourceId': self.sid, 'ConfigPatch': {'cron': '0 9 * * 1'}}, 'o')
+        self.assertEqual(said.count('was changed'), 1); self.assertEqual(events.take(self.s, self.tid)[0].count('was changed'), 1, 'a new clock is no new word to it')
+
     def test_the_editor_saves_by_the_same_road(self):
         with self.assertRaises(ValueError): workflows.save(self.s, {'SourceId': self.sid, 'ConfigPatch': {'flow': [{'id': 's1', 'kind': 'nope'}]}}, 'o')
 

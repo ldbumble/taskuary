@@ -302,6 +302,11 @@ def script_routine(store, p: dict) -> tuple:
     return cfg, ''
 
 
+def _told(store, src) -> str:
+    "What a run of this routine is told of it (brief), past the run's own first line - '' for what is no routine."
+    return brief(definition(store, src), '', '').split('\n', 1)[-1] if src and is_workflow(src) else ''
+
+
 def save(store, fields: dict, actor: str) -> int:
     """THE ONE SAVE OF A ROUTINE OR REPORT - the editor's (POST /api/sources), an agent's script kept as a routine, a run's change to its
     own routine and a run's own repair alike: a ConfigPatch laid over what is stored, then its clock, its dashboard and its steps checked
@@ -333,6 +338,13 @@ def save(store, fields: dict, actor: str) -> int:
     # Wednesday ran seconds later, beside the editor's "Saved - runs Mon at 08:00", and again beside its own Save & run now -
     # two laptop tasks, two approvals (walk 2026-10-21). Run now is the door for running it now.
     if not was and is_workflow(store.get_source(sid)): store.touch_source(sid)
+    # A RUN AT WORK HEARS ITS ROUTINE'S NEW WORDS (his live app, 2026-11-25): a post routine's words said "keep the drafts for manual posting";
+    # he changed them to "a post card for my press" and typed "make these posts again" on the run - its conversation went on, resumed, its
+    # first prompt holding the old words alone, and it wrote prose again. What changed is one event on each open run (events.note), told once
+    if was and (now := _told(store, store.get_source(sid))) != _told(store, was):
+        from . import events
+        for r in store._rows("SELECT TaskId FROM task WHERE Source='workflow' AND SourceRef=? AND Status NOT IN ('done','dropped')", (f'workflow:{sid}',)):
+            events.note(store, r['TaskId'], f"This task's routine was changed - what it says now:\n{now}")
     from .docsync import sync_connections
     sync_connections(store, actor)
     return sid

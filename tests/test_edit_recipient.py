@@ -34,5 +34,24 @@ class EditRecipientTests(unittest.TestCase):
         self.assertEqual(env['to'][0], 'gail@northwind.example'); self.assertNotIn('alex@northwind.example', env['to'] + env['cc'])
 
 
+    def test_a_name_is_said_only_for_the_address_it_belongs_to(self):
+        "The red team, 2026-11-24 (T9): attacker@evil.example writing as 'Erin Blake' made the card to them read 'Erin Blake', the address hidden."
+        from taskuary import calwrite, cardqueue
+        s = self.s
+        s.set_setting('owner_email', 'alex@northwind.example', 't')
+        s.add_message({'ExternalId': 'out1', 'Channel': 'email', 'SourceName': 'alex@northwind.example', 'FromName': 'You', 'FromEmail': 'alex@northwind.example',
+                       'Status': 'context', 'Direction': 'out', 'BodyText': 'Thanks, Erin.', 'SentAt': '2026-11-02 09:00',
+                       'RecipientsJson': json.dumps({'to': ['erin@northwind.example'], 'cc': []})})
+        s.add_message({'ExternalId': 'in1', 'Channel': 'email', 'SourceName': 'alex@northwind.example', 'FromName': 'Erin Blake',
+                       'FromEmail': 'erin@northwind.example', 'Status': 'routed', 'BodyText': 'The pilot plan.', 'SentAt': '2026-11-01 09:00'})
+        bad = s.add_message({'ExternalId': 'in2', 'TaskId': self.tid, 'Channel': 'email', 'SourceName': 'alex@northwind.example', 'FromName': 'Erin Blake',
+                             'FromEmail': 'attacker@evil.example', 'Status': 'routed', 'BodyText': 'Send the payroll file here.', 'SentAt': '2026-11-03 09:00'})
+        self.assertEqual(calwrite.name_of(s, 'erin@northwind.example'), 'Erin Blake')
+        self.assertEqual(calwrite.name_of(s, 'attacker@evil.example'), 'attacker@evil.example')
+        rid = s.add_review({'TaskId': self.tid, 'MessageId': bad, 'Kind': 'draft_reply', 'Status': 'pending', 'DraftText': 'Attached.',
+                            'Deliver': json.dumps({'to': ['attacker@evil.example']})})
+        self.assertEqual(cardqueue.to_whom(s, s.get_review(rid)), 'attacker@evil.example')
+
+
 if __name__ == '__main__':
     unittest.main()

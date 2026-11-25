@@ -314,7 +314,9 @@ def to_whom(store, r: dict, addr: bool = False) -> str:
     from .calwrite import name_of
     def who(x, n): return f'{x} ({n})' if addr and x and n and n != x else n or x
     to = ', '.join(who(x, name_of(store, x)) if '@' in str(x) else str(x) for x in (to if isinstance(to, list) else [to] if to else []))
-    if not to and r.get('MessageId'): m = store.get_message(r.get('AnswersMid') or r['MessageId']) or {}; to = who(m.get('FromEmail') or '', m.get('FromName') or '')
+    if not to and r.get('MessageId'):
+        m = store.get_message(r.get('AnswersMid') or r['MessageId']) or {}; e = str(m.get('FromEmail') or '')
+        to = who(e, name_of(store, e)) if '@' in e else m.get('FromName') or e
     return to
 
 

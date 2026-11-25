@@ -2,6 +2,17 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.4.3.6 - 2026-11-24
+
+- The built-in dashboard says what the AI spent per day and for whom, per task, and what closed each day
+- The built-in dashboard opens the demo, with a range slider, series you can switch off and a pie of who used the tokens
+- New starts its agent on the AI and model picked on its box, the task header's own chooser
+- The website demo's built-in dashboard draws the spend tiles over a fresh demo's rows
+- What the AI spent is dollars: the provider's own cost, else the model's list price, else none - and the dashboard says it
+- The website demo's built-in dashboard says its two weeks of AI use in dollars
+- A pie's total fits its ring's hole, and the demo's done tasks close across the week
+- The dashboard's up/down badges and slider track take the app's palette, so dark mode follows
+
 ## 0.4.3.5 - 2026-11-24
 
 - The FYI lane's filed news: a read writes nothing, and Taskuary's own lines are not news

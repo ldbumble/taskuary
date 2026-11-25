@@ -6248,53 +6248,71 @@ class AgentNewTaskBody(BaseModel): task_id: int; title: str = ''; ask: str = '';
 def agent_new_task(body: AgentNewTaskBody, request: Request):
     """The new_task tool: a separate job the owner asked for on this task, made a task of its own and started at once (the owner, 2026-11-17:
     "I think it should be able to create new task from the agent"). It is the owner's own work - made as New makes it, started by the task
-    page's own dispatch door - so nothing is held for a press: nothing leaves. Never from a stranger's task, nor one the owner never spoke on."""
-    from . import general, origin, repochoice
+    page's own dispatch door - so nothing is held for a press: nothing leaves. Never from a stranger's task; on one the owner never spoke on, a
+    card for his press."""
+    from . import general, origin
     _own_task_only(request, body.task_id)
     if not store.get_task(body.task_id): raise HTTPException(404, 'no such task')
-    if origin.of_task(store, body.task_id)[0] == 'stranger' or not general.owner_spoke(store, body.task_id):
-        raise HTTPException(403, 'not started: only the owner starts new work, and they have not asked for it on this task - say what you '
-                                 'would start in your answer instead.')
+    if origin.of_task(store, body.task_id)[0] == 'stranger':
+        raise HTTPException(403, "not started: this task carries a message from someone the owner has not vouched for, and a stranger's words "
+                                 'never start new work - say what you would start in your answer instead.')
     title, ask = ' '.join(str(body.title or '').split())[:120], str(body.ask or '').strip()
     if not title or not ask: raise HTTPException(422, 'give `title` (a line) and `ask` (the whole brief) - nothing was started')
     kind = str(body.kind or 'general').strip().lower()
     if kind not in task_kinds.AGENT: raise HTTPException(422, f'`kind` is general or coding, not {kind!r} - nothing was started')
+    # ...ON A TASK HE NEVER SPOKE ON, ONE CARD: "Start <title> as its own task" (the owner, 2026-11-25: "it should find a way around it") -
+    # it was a refusal the agent could only turn into words; his press makes it and starts it (new_task_from), the same road as this one
+    if not general.owner_spoke(store, body.task_id):
+        from . import proposals
+        from .selfclose import CARD_TAIL
+        p = {'action': 'start_task', 'title': title, 'ask': ask, 'kind': kind, **({'repo': body.repo} if body.repo else {}),
+             **({'model': body.model} if body.model else {})}
+        q = proposals.queue(store, body.task_id, p, 'taskuary', refused=(miss := []))
+        if not q: raise HTTPException(422, f"not started: {miss[0] if miss else 'it was not put to him'}")
+        return {'ok': True, 'queued': True, 'review': q['reviewId'], 'started': False,
+                'next': f'Not started: the owner has not asked for new work on this task. Starting "{title}": {CARD_TAIL}'}
+    return new_task_from(body.task_id, title, ask, kind, body.model, body.repo, body.agent)
+
+
+def new_task_from(from_tid: int, title: str, ask: str, kind: str = 'general', model: str = '', repo: str = '', agent: str = 'agent') -> dict:
+    "Make the task `title` asked from task `from_tid` and start its agent - the new_task tool's road, and the press on its card (proposals)."
+    from . import general, repochoice
     if kind == 'coding' and not hub_agents.developer_mode(store): kind = 'general'
     # ...ONE JOB IS ONE TASK (the stress round, 2026-11-18): the call repeated - a retry, a resumed session replaying its last step - made
     # a second task and a second agent beside the first. The same title from the same task, still open, is that task: answered as made,
     # and started only if its first start never went
     with _NEW_TASK_LOCK:
-        new = _made_from(body.task_id, title)
+        new = _made_from(from_tid, title)
         if new and (general.history(store, new) or general.starting(new) or getattr(hub_term.session_for(new), 'alive', False)):
             return {'ok': True, 'task': task_ref(new), 'title': title, 'already': True, 'started': True,
                     'next': f'{task_ref(new)} was already started from here and is working on it - nothing new was made'}
         # ...AND THE SAME WORK ALREADY OPEN ELSEWHERE IS THAT TASK (the owner's live app 2026-11-18): the ask arrives as a message does - triage
         # reads whether an open task is it (ingest.arrive_words), and its agent hears it there in Taskuary's words, never a line in his name
         from . import ingest
-        if not new and (same := (ingest.arrive_words(store, f'{title}. {ask}', 'taskuary', ACTOR, skip={body.task_id},
-                                                     said=f'From {task_ref(body.task_id)}: {ask}') or {}).get('tid')):
-            store.add_comment(body.task_id, body.agent, 'agent', f'Handed to {task_ref(same)}, which is already that work: {title}')
+        if not new and (same := (ingest.arrive_words(store, f'{title}. {ask}', 'taskuary', ACTOR, skip={from_tid},
+                                                     said=f'From {task_ref(from_tid)}: {ask}') or {}).get('tid')):
+            store.add_comment(from_tid, agent, 'agent', f'Handed to {task_ref(same)}, which is already that work: {title}')
             return {'ok': True, 'task': task_ref(same), 'title': title, 'already': True, 'started': True,
                     'next': f'{task_ref(same)} is already that same work - its agent was told; nothing new was made. Say so in one line'}
         made = not new
         if made:
             # ...the owner's ask, made at the door they asked from - the task they spoke on's ("agent" is no door: the Assistant named it one)
             from . import asks
-            via = asks.of(store.get_task(body.task_id)) or 'desktop'
-            new = store.create_task({'Title': title, 'Summary': ask, 'Kind': kind, 'AskedVia': via, 'OriginBase': 'owner'}, body.agent)
+            via = asks.of(store.get_task(from_tid)) or 'desktop'
+            new = store.create_task({'Title': title, 'Summary': ask, 'Kind': kind, 'AskedVia': via, 'OriginBase': 'owner'}, agent)
             from . import selfclose
             selfclose.claim(store, new, ACTOR)           # the owner's own work: its agent never closes it by itself
-            store.audit('task', new, 'create', body.agent, detail={'from_task': body.task_id, 'title': title})
+            store.audit('task', new, 'create', agent, detail={'from_task': from_tid, 'title': title})
     out = {'ok': True, 'task': task_ref(new), 'title': title, 'kind': kind}
     # ...a checkout named for what is not a coding task (developer mode off made it general) is said dropped, never silently
-    if body.repo and kind != 'coding': out['repo_not_set'] = f'{body.repo} was not set: {task_ref(new)} is a general task, which works in no checkout'
-    if body.repo and kind == 'coding':
-        try: repochoice.use(store, new, body.repo, f'named by the agent on {task_ref(body.task_id)}')
+    if repo and kind != 'coding': out['repo_not_set'] = f'{repo} was not set: {task_ref(new)} is a general task, which works in no checkout'
+    if repo and kind == 'coding':
+        try: repochoice.use(store, new, repo, f'named by the agent on {task_ref(from_tid)}')
         except (PermissionError, ValueError) as e: out['repo_not_set'] = str(e)
-    res = _start_new_task(new, kind, ask, body.model)
+    res = _start_new_task(new, kind, ask, model)
     # ...said on this task once it is known: "Started" was written before the start, and stood over one that was refused
-    if res['started']: store.add_comment(body.task_id, body.agent, 'agent', f'Started {task_ref(new)}: {title}')
-    elif made: store.add_comment(body.task_id, body.agent, 'agent', f"Made {task_ref(new)}: {title} - its agent did not start: {res['why']}")
+    if res['started']: store.add_comment(from_tid, agent, 'agent', f'Started {task_ref(new)}: {title}')
+    elif made: store.add_comment(from_tid, agent, 'agent', f"Made {task_ref(new)}: {title} - its agent did not start: {res['why']}")
     return {**out, **res}
 
 def _start_new_task(new: int, kind: str, ask: str, model: str) -> dict:

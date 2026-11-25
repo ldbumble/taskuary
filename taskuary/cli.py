@@ -750,14 +750,14 @@ def main():
     host, port = args.host or cfg['server']['host'], args.port or cfg['server']['port']
     url = public_url(host, port)
     if args.link:
-        if _busy(host, port) and _is_taskuary(url): print(launchkey.remote_link(url, cfg['server'].get('token') or ''))
+        if _busy(host, port) and _is_taskuary(url): print(launchkey.remote_link(url, config.home()))
         else: print(f'Taskuary is not running at {url} - start it with `taskuary`, then ask again.')
         return
     if _busy(host, port):
         if _is_taskuary(url):
             # don't crash into 'address already in use' - reuse the running instance, signed in with a key it hands us
             print(f'Taskuary is already running at {url} - opening it.')
-            if not args.no_browser: _open_private(launchkey.remote_link(url, cfg['server'].get('token') or ''))
+            if not args.no_browser: _open_private(launchkey.remote_link(url, config.home()))
             return
         from .desktop import free_port
         old, port = port, free_port(host)
@@ -768,7 +768,7 @@ def main():
     if h := instance.holder():
         at = h.get('url') or ''
         print(f'Taskuary is already running on {config.home()}{f" at {at}" if at else ""} - ' + ('opening it.' if at else 'quit it first.'))
-        if at and not args.no_browser: _open_private(launchkey.remote_link(at, cfg['server'].get('token') or ''))
+        if at and not args.no_browser: _open_private(launchkey.remote_link(at, config.home()))
         return
     instance.claim(url)
     print(f'Taskuary {__version__} - {url}  (data: {config.db_path()})')

@@ -149,25 +149,20 @@ def _load() -> dict:
     return cfg
 
 def _owner_token(srv: dict):
-    """THE OWNER TOKEN IS SEALED ON DISK AND NEVER OPENED IN AN AGENT'S SESSION (red team F2): config.toml held it as text, so a session that
-    read the file - by file://, or by loading this package - became the owner. On disk it is sealed by the OS (vault: DPAPI, the keychain);
-    the server and the owner's own CLI open it, and a process carrying a session's marks (launchkey.in_session) holds a random one instead,
-    never written. A plain one from before is sealed in place; one this machine cannot open is minted again, so the door never stands open."""
-    from . import guard, launchkey, vault
-    tok = srv.get('token')
-    if launchkey.in_session(): srv['token'] = __import__('secrets').token_urlsafe(24); return
-    if vault.sealed(tok):
-        if tok not in _OPENED: _OPENED[tok] = vault.unseal(tok)      # ...once: config is read many times a page
-        srv['token'] = _OPENED[tok]
-        if not srv['token']: srv.pop('token'); guard.ensure_tokens(_read, _write, srv)
-        return
-    if not tok or vault.mode() == 'plain': return
-    try:
-        cur = _read()
-        if (cur.get('server') or {}).get('token') == tok and vault.sealed(s := vault.seal(tok)):
-            cur['server']['token'] = s; _write(cur)
-    except Exception as e: logger.warning(f'the owner token stays as it was on disk ({e})')
-_OPENED: dict = {}
+    """THE OWNER TOKEN LIVES IN THE RUNNING SERVER'S MEMORY ALONE (the owner, 2026-11-25): sealed in config.toml it was still a file a session
+    could read and the OS would open for it (red team F2). Minted when this process first reads its config, and never written anywhere: a
+    restart mints another, and an open tab or the phone opens again from the app. A window, the launch key and the phone link are handed it
+    by the server that holds it (launchkey.remote_link). A process carrying a session's marks (launchkey.in_session) holds a random one of its
+    own. One an older build left on disk, sealed or plain, is deleted - and refused, as any token not this run's."""
+    import secrets
+    from . import launchkey
+    if launchkey.in_session(): srv['token'] = secrets.token_urlsafe(24); return
+    if 'token' in srv:                     # ...read off config.toml just now: an older build's
+        try:
+            if 'token' in (cur := _read()).get('server', {}): cur['server'].pop('token'); _write(cur)
+        except Exception as e: logger.warning(f'the old owner token was not taken off config.toml ({e}) - it is refused all the same')
+    srv['token'] = _LIVE.setdefault('token', secrets.token_urlsafe(24))
+_LIVE: dict = {}
 
 
 def db_path() -> str:

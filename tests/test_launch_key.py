@@ -37,9 +37,23 @@ def test_the_launch_key_door_is_the_owner_s_alone():
     t = server.store.create_task({'Title': 'x', 'Kind': 'coding', 'Source': 'email'}, 'router')
     assert c.post('/api/launch-key', headers={'X-Taskuary-Token': server.cfg['server']['agent_token']}).status_code == 403
     assert c.post('/api/launch-key', headers={'X-Taskuary-Token': guard.stranger_token(server.cfg['server'], t)}).status_code == 403
-    assert c.post('/api/launch-key', headers={'X-Taskuary-Token': 'wrong'}).status_code == 401
     k = c.post('/api/launch-key').json()['key']                 # the owner (conftest's default header)
     assert TOK() in c.get(f'/?k={k}').text
+
+def test_another_process_of_his_gets_a_key_by_reading_back_the_word_written_in_his_home():
+    """The owner, 2026-11-25: the token is in the server's memory alone, so Taskuary started again and `taskuary --link` hold none - the
+    running server writes a one-time word into its home, and a key is handed out for it once."""
+    from taskuary import config
+    nobody = {'X-Taskuary-Token': 'wrong'}
+    got = c.post('/api/launch-key', headers=nobody).json()
+    assert 'key' not in got and set(got) == {'challenge'}
+    f = config.home() / 'launch' / got['challenge']
+    assert c.post('/api/launch-key', headers=nobody, json={'challenge': got['challenge'], 'word': 'guessed'}).status_code == 403
+    assert not f.exists()                                        # ...spent by the wrong word: a guess is never tried twice
+    got = c.post('/api/launch-key', headers=nobody).json(); word = (config.home() / 'launch' / got['challenge']).read_text(encoding='utf-8')
+    k = c.post('/api/launch-key', headers=nobody, json={'challenge': got['challenge'], 'word': word}).json()['key']
+    assert TOK() in c.get(f'/?k={k}').text
+    assert c.post('/api/launch-key', headers=nobody, json={'challenge': got['challenge'], 'word': word}).status_code == 403    # once
 
 def test_the_window_door_brings_the_owner_s_window_forward_and_is_hers_alone(monkeypatch):
     from taskuary import workerstate
@@ -49,28 +63,31 @@ def test_the_window_door_brings_the_owner_s_window_forward_and_is_hers_alone(mon
     workerstate.SHOW[0] = lambda: fronted.append(1)
     assert c.post('/api/window', headers={'X-Taskuary-Token': server.cfg['server']['agent_token']}).status_code == 403 and not fronted
     assert c.post('/api/window').json() == {'shown': True} and fronted == [1]
+    assert c.post('/api/window', headers={'X-Taskuary-Token': ''}).json() == {'shown': True} and fronted == [1, 1]    # ...Taskuary started again holds no token
 
 def test_link_adds_a_fresh_key():
     a, b = launchkey.link('http://127.0.0.1:7787'), launchkey.link('http://127.0.0.1:7787/')
     assert a.startswith('http://127.0.0.1:7787/?k=') and b.startswith('http://127.0.0.1:7787/?k=') and a != b
 
-def test_remote_link_asks_the_running_server_with_the_owner_token(monkeypatch):
-    seen = {}
-    class Resp:
-        status = 200
-        def read(self): return b'{"key": "abc"}'
+def test_remote_link_answers_the_running_servers_challenge_with_the_word_in_its_home(monkeypatch, tmp_path):
+    import json
+    (tmp_path / 'launch').mkdir(); (tmp_path / 'launch' / '0123456789abcdef.word').write_text('the-word', encoding='utf-8')
+    seen = []
     class Conn:
-        def __init__(self, host, port, timeout=None): seen['at'] = (host, port)
-        def request(self, m, path, headers=None, body=None): seen.update(m=m, path=path, h=headers)
-        def getresponse(self): return Resp()
+        def __init__(self, host, port, timeout=None): self.at = (host, port)
+        def request(self, m, path, headers=None, body=None): seen.append((self.at, m, path, headers, json.loads(body)))
+        def getresponse(self):
+            said = {'key': 'abc'} if seen[-1][4].get('word') == 'the-word' else {'challenge': '0123456789abcdef.word'}
+            return types.SimpleNamespace(status=200, read=lambda: json.dumps(said).encode())
         def close(self): pass
     monkeypatch.setattr(launchkey.http.client, 'HTTPConnection', Conn)
-    assert launchkey.remote_link('http://127.0.0.1:7795', 'own') == 'http://127.0.0.1:7795/?k=abc'
-    assert seen['m'] == 'POST' and seen['path'] == '/api/launch-key' and seen['h']['X-Taskuary-Token'] == 'own' and seen['at'] == ('127.0.0.1', 7795)
+    assert launchkey.remote_link('http://127.0.0.1:7795', tmp_path) == 'http://127.0.0.1:7795/?k=abc'
+    assert [(at, m, p) for at, m, p, _h, _b in seen] == [(('127.0.0.1', 7795), 'POST', '/api/launch-key')] * 2
+    assert not any('X-Taskuary-Token' in h for *_x, h, _b in seen)        # ...no token rides: it is in that server's memory alone
     class Bad(Conn):
         def getresponse(self): raise OSError('refused')
     monkeypatch.setattr(launchkey.http.client, 'HTTPConnection', Bad)
-    assert launchkey.remote_link('http://127.0.0.1:7795', 'own') == 'http://127.0.0.1:7795'   # an old server: the plain address
+    assert launchkey.remote_link('http://127.0.0.1:7795', tmp_path) == 'http://127.0.0.1:7795'   # an old server: the plain address
 
 # the CLI's browser opens, keyed - through a private file since wave B: tests/test_launch_key_private.py
 

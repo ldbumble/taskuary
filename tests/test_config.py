@@ -60,32 +60,33 @@ class TomlTests(unittest.TestCase):
 
     def test_env_overrides_do_not_persist_on_agent_save(self):
         """Runtime overlays must not round-trip through save() — that's how Docker was
-        writing host = 0.0.0.0 and token = None onto the volume."""
+        writing host = 0.0.0.0 and token = None onto the volume. And the owner token is
+        in memory alone (config._owner_token): one an older build stored is taken off."""
         path = config.home() / 'config.toml'
         previous = path.read_text(encoding='utf-8') if path.exists() else None
-        stored = {'host': '127.0.0.1', 'port': 7787, 'token': 'stored-secret'}
+        stored = {'host': '127.0.0.1', 'port': 7787}
         path.write_text('[server]\nhost = "127.0.0.1"\nport = 7787\ntoken = "stored-secret"\n',
                         encoding='utf-8')
         try:
             env_empty = {'TASKUARY_HOST': '0.0.0.0', 'TASKUARY_PORT': '9000', 'TASKUARY_TOKEN': ''}
-            with mock.patch.dict(os.environ, env_empty):
+            with mock.patch.dict(os.environ, env_empty), mock.patch.dict(config._LIVE, clear=True):
                 runtime = config.load()
-                self.assertEqual((runtime['server']['host'], runtime['server']['port'],
-                                  runtime['server']['token']),
-                                 ('0.0.0.0', 9000, 'stored-secret'))  # empty env does not disable
+                live = runtime['server']['token']
+                self.assertEqual((runtime['server']['host'], runtime['server']['port']), ('0.0.0.0', 9000))
+                self.assertTrue(live); self.assertNotEqual(live, 'stored-secret')       # empty env does not disable it
                 runtime.setdefault('agents', {})['overlay'] = {'cmd': 'echo', 'timeout': 5}
                 config.save(runtime)
                 # the running object keeps the overlay after save
                 self.assertEqual(runtime['server']['host'], '0.0.0.0')
-                self.assertEqual(runtime['server']['token'], 'stored-secret')
+                self.assertEqual(runtime['server']['token'], live)
             raw = path.read_text(encoding='utf-8')
             # the agent token is minted on load and BELONGS on disk (guard.ensure_tokens): it has
             # to survive a restart, or every launch hands the live sessions a token the next one
             # does not recognise. Everything else must still match what was stored.
             got = tomllib.loads(raw)['server']
             self.assertTrue(got.pop('agent_token', None))
-            from taskuary import vault                   # ...the owner token as stored, sealed where this machine seals (config._owner_token)
-            self.assertEqual({**got, 'token': vault.unseal(got['token'])}, stored)
+            self.assertEqual(got, stored)
+            self.assertNotIn(live, raw)
             self.assertNotIn('0.0.0.0', raw)
             self.assertNotIn('None', raw)
             self.assertEqual(tomllib.loads(raw)['agents']['overlay']['cmd'], 'echo')
@@ -98,7 +99,7 @@ class TomlTests(unittest.TestCase):
                 self.assertEqual(runtime['server']['token'], 'from-env')  # still the overlay
             disk = tomllib.loads(path.read_text(encoding='utf-8'))
             self.assertTrue(disk['server'].pop('agent_token', None))     # minted on load, belongs on disk
-            self.assertEqual({**disk['server'], 'token': vault.unseal(disk['server']['token'])}, stored)
+            self.assertEqual(disk['server'], stored)
             self.assertEqual(disk['agents']['overlay2']['cmd'], 'true')
         finally:
             if previous is None: path.unlink(missing_ok=True)

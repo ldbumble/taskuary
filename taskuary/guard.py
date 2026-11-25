@@ -494,7 +494,7 @@ def origin_ok(headers) -> bool:
 
 # ── the tokens ──────────────────────────────────────────────────────────────────────────
 def ensure_tokens(read, write, server: dict) -> dict:
-    """Give this install both tokens if it has none, and persist them.
+    """Give this install an agent token if it has none, and persist it - the owner token is minted in memory alone (config._owner_token).
 
     The agent token tells a session's request from a person's; without it the deny list has
     nothing to act on. The OWNER token used to be the owner's choice, on the reasoning that
@@ -507,17 +507,14 @@ def ensure_tokens(read, write, server: dict) -> dict:
 
     `read`/`write` are config's own reader and writer, passed in rather than imported - config
     calls this from inside load(), and importing it back would be a cycle."""
-    fresh = {k: _secrets.token_urlsafe(24) for k in ('agent_token', 'token') if not server.get(k)}
+    fresh = {k: _secrets.token_urlsafe(24) for k in ('agent_token',) if not server.get(k)}
     if not fresh: return server
     server.update(fresh)
     try:
         cur = read()
-        from .vault import seal                    # ...the owner's sealed on disk (config._owner_token); the agent's is in every session anyway
-        cur.setdefault('server', {}).update({k: seal(v) if k == 'token' else v for k, v in fresh.items()})
+        cur.setdefault('server', {}).update(fresh)
         write(cur)
-        logger.info(f"wrote {' and '.join(sorted(fresh))} to config.toml"
-                    + (' - the page this server hands out carries the owner token' if 'token' in fresh else '')
-                    + (' - sessions run with less authority than you do' if 'agent_token' in fresh else ''))
+        logger.info('wrote agent_token to config.toml - sessions run with less authority than you do')
     except Exception as e:
         # in memory only: still enforced for this run, just regenerated on the next start
         logger.warning(f'could not persist {sorted(fresh)} ({e}) - they hold for this run only')

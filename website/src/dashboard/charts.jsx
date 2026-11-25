@@ -92,23 +92,66 @@ const Delta = ({ d, good, days, f = fmt }) => {
   const by = d.pct !== null ? `${Math.abs(d.pct * 100) < 10 ? (Math.abs(d.pct) * 100).toFixed(1) : Math.round(Math.abs(d.pct) * 100)}%` : f(Math.abs(d.change));
   return (
     <div className="tq-dash-delta"><b className={`pill ${dir}`}>{d.change > 0 ? "▲" : d.change < 0 ? "▼" : "•"} {d.change ? by : "0"}</b>
-      <span>{DASH.vs_before.replace("{n}", days)}</span></div>
+      <span>{days === 7 ? DASH.vs_week : DASH.vs_before.replace("{n}", days)}</span></div>
   );
 };
 
 // ...and under it, small, what else it says (`also`: its tokens under the dollars) - a figure that comes to nothing is not said
-export function StatTile({ c, rows, all, also = [], date, days, now, onDrill, stale }) {
+// ...in a strip the sparkline sits right under the figure and its change, and what else it says under the line - so every cell's line is
+// at one height, and the strip is as tall as its fullest cell (2026-11-25: a cell stretched, its line far below its figure)
+function StatBody({ c, rows, all, also = [], date, days, now, strip = false }) {
   const v = aggregate(rows, c.agg, c.y, c.per), d = delta(all, date, days, c.agg, c.y, now, c.per);
   const pts = date ? timeSeries(rows, date, c.agg, c.y, { days: days || 30, now, per: c.per }) : [];
   const more = also.filter((a) => a.value);
+  return <>
+    <Value v={v} unit={c.unit} />
+    {d ? <Delta d={d} good={c.good} days={days} f={fmtOf(c)} /> : <div className="tq-dash-delta"><span>{date ? DASH.no_change : DASH.right_now}</span></div>}
+    {strip && pts.length > 1 && <Spark points={pts} />}
+    {more.length > 0 && <div className="tq-dash-also">{more.map((a) => <span key={a.label}><b>{fmt(a.value)}</b> {a.label}</span>)}</div>}
+    {!strip && pts.length > 1 && <Spark points={pts} />}
+  </>;
+}
+export function StatTile({ c, onDrill, stale, ...stat }) {
   return (
-    <Card c={c} w={1} stale={stale} className="tq-dash-stat" onPress={() => onDrill({ title: c.title, rows })}>
-      <Value v={v} unit={c.unit} />
-      {d ? <Delta d={d} good={c.good} days={days} f={fmtOf(c)} /> : <div className="tq-dash-delta"><span>{date ? DASH.no_change : DASH.right_now}</span></div>}
-      {more.length > 0 && <div className="tq-dash-also">{more.map((a) => <span key={a.label}><b>{fmt(a.value)}</b> {a.label}</span>)}</div>}
-      {pts.length > 1 && <Spark points={pts} />}
+    <Card c={c} w={1} stale={stale} className="tq-dash-stat" onPress={() => onDrill({ title: c.title, rows: stat.rows })}>
+      <StatBody c={c} {...stat} />
     </Card>
   );
+}
+
+// ── A STRIP OF NUMBERS (`kpis`): the answer first - each its own stat, side by side in one card, divided by a hairline; a press drills ─
+export function Kpis({ c, cells, onDrill, stale }) {
+  return (
+    <Card c={c} w={c.w || 4} stale={stale} className="tq-dash-kpis">
+      <div className="tq-dash-kpirow" style={{ "--n": cells.length }}>
+        {cells.map(({ c: x, ...stat }) => (
+          <div key={x.title} className="tq-dash-kpi" role="button" tabIndex={0} aria-label={x.title}
+            onClick={() => onDrill({ title: x.title, rows: stat.rows })} onKeyDown={(e) => { if (e.key === "Enter") onDrill({ title: x.title, rows: stat.rows }); }}>
+            <div className="tq-dash-kpi-h">{x.title}</div>
+            <StatBody c={x} {...stat} strip />
+          </div>))}
+      </div>
+    </Card>
+  );
+}
+
+// ── ONE CHART OVER THE DAYS (`trend`): the measure and what splits it switched on top, its columns the stacked preset's own ─────────
+export function Trend({ c, metrics, view, onDrill, stale, start = [0, 0] }) {
+  const [m, setM] = useState(start[0]), [s, setS] = useState(start[1]);
+  const mi = Math.min(m, metrics.length - 1), splits = metrics[mi]?.splits || [], si = Math.min(s, Math.max(0, splits.length - 1));
+  const got = view(mi, si);
+  const top = (
+    <div className="tq-dash-switches">
+      <div className="tq-dash-seg" role="group" aria-label={DASH.measure}>
+        {metrics.map((x, i) => <button key={x.label} type="button" aria-pressed={i === mi} onClick={(e) => { e.stopPropagation(); setM(i); setS(0); }}>{x.label}</button>)}
+      </div>
+      {splits.length > 0 && <div className="tq-dash-seg small" role="group" aria-label={DASH.split_by}>
+        <span className="lead">{DASH.split_by}</span>
+        {splits.map(([l], i) => <button key={l} type="button" aria-pressed={i === si} onClick={(e) => { e.stopPropagation(); setS(i); }}>{l}</button>)}
+      </div>}
+    </div>
+  );
+  return <Stacked key={`${mi}-${si}`} c={{ ...c, ...got.c }} st={got.st} slots={got.slots} onDrill={onDrill} stale={stale} top={top} tall />;
 }
 
 export function Progress({ c, rows, onDrill, stale }) {
@@ -139,6 +182,12 @@ export function Bars({ c, groups, onDrill, stale }) {
   const first = groups[0]?.value || 0, pct = (g) => (c.share && first ? `${Math.round(((g.value ?? 0) / first) * 100)}%` : "");
   const table = <TwinTable head={[cleanCol(c.x), c.agg && c.agg !== "count" ? `${c.agg} ${cleanCol(c.y)}` : "count", ...(c.share ? ["share"] : [])]}
     rows={groups.map((g) => [label(g.key), g.value, ...(c.share ? [pct(g)] : [])])} />;
+  // ...ONE CATEGORY IS NO CHART (the owner, 2026-11-25: a lone bar 'general 1' is noise): it is said, its figure and its name
+  if (groups.length === 1 && !c.share && !c.inline) return (
+    <Card c={c} w={c.w || 2} stale={stale} className="tq-dash-one">
+      <div className="tq-dash-onefig"><b>{f(groups[0].value)}</b><span>{label(groups[0].key)}</span></div>
+    </Card>
+  );
   return (
     <Card c={c} w={c.w || 2} stale={stale} table={table}>
       {!groups.length ? <div className="tq-dash-none">{DASH.no_rows}</div> : (
@@ -164,7 +213,7 @@ export function Bars({ c, groups, onDrill, stale }) {
 
 // ── stacked columns: categories (or days) split by a second column ─────────────────────────────────────────
 // ...an agent's view (ViewSpec) asks for its own figures (`c.fmt`) and one column picked out (`st.on`)
-export function Stacked({ c, st: all, slots, onDrill, stale }) {
+export function Stacked({ c, st: all, slots, onDrill, stale, top = null, tall = false }) {
   const [tipEl, show, hide] = useTip(), f = c.fmt || fmt, hi = !!all.on?.size;
   // ...a legend entry pressed switches its series off and on: the columns and their axis are what is left (withoutSeries)
   const [off, setOff] = useState(() => new Set()), st = withoutSeries(all, off);
@@ -176,7 +225,8 @@ export function Stacked({ c, st: all, slots, onDrill, stale }) {
   const table = <TwinTable head={[cleanCol(c.x), ...st.series.map(label), "total"]}
     rows={st.keys.map((k) => [keyLabel(k, st.dated), ...st.series.map((s) => st.cells[k][s]?.value ?? 0), tot(k)])} />;
   return (
-    <Card c={c} w={c.w || 2} stale={stale} table={table}>
+    <Card c={c} w={c.w || 2} stale={stale} table={table} className={tall ? "tq-dash-tall" : ""}>
+      {top}
       {all.series.length > 1 && <div className="tq-dash-legend" role="group" aria-label={DASH.series}>{all.series.map((s) => (
         <button type="button" key={s} aria-pressed={!off.has(s)} onClick={() => flip(s)} title={off.has(s) ? DASH.show_series : DASH.hide_series}>
           <i style={{ background: color(s) }} />{label(s)}</button>))}</div>}

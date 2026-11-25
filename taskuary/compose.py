@@ -605,6 +605,9 @@ DASHBOARD_COMPONENTS = (
     ' optional "order": [x values] to keep stages in their order, "share": true to say each bar as a share of the first.\n'
     '- "stacked": categories split by a second column: "x", "series" (at most 6 values read well), "agg", "y".\n'
     '- "pie": shares of one whole, at most 6 slices: "x" = the category column, "agg", "y", optional "order".\n'
+    '- "kpis": a strip of numbers, "items": [stats as above, each with its own "title"] - the answer first, one card, w 4 or 2.\n'
+    '- "trend": ONE chart over the days instead of several alike, "metrics": [{"label", "source", "agg", "y", "where", "unit", "splits": '
+    '[[label, column], ...]}] - the measure and its split are switched on top of it. w 4.\n'
     '- "table": rows. "columns": [...], optional "sort": "<column>" or "-<column>", "limit".\n'
     '- "list": items, each one line. "label" = the column a person reads, optional "meta" column, "sort", "limit". A row with a '
     'task_id column opens that task when pressed.\n')

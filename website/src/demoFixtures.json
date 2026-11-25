@@ -13122,7 +13122,7 @@
     "Owner": "template",
     "ConnectorId": null,
     "Active": 1,
-    "ConfigJson": "{\"type\": \"dashboard\", \"title\": \"Taskuary at a glance\", \"daily_at\": \"07:00\", \"sources\": [{\"key\": \"mail\", \"label\": \"What came in\", \"type\": \"taskuary_data\", \"dataset\": \"mail\", \"days\": 90, \"date\": \"day\"}, {\"key\": \"flow\", \"label\": \"How far it got\", \"type\": \"taskuary_data\", \"dataset\": \"flow\", \"days\": 90, \"date\": \"day\"}, {\"key\": \"tasks\", \"label\": \"Tasks\", \"type\": \"taskuary_data\", \"dataset\": \"tasks\", \"days\": 90, \"date\": \"arrived\"}, {\"key\": \"closed\", \"label\": \"Tasks closed\", \"type\": \"taskuary_data\", \"dataset\": \"tasks\", \"days\": 90, \"date\": \"closed\"}, {\"key\": \"agents\", \"label\": \"Agent sessions\", \"type\": \"taskuary_data\", \"dataset\": \"agent_runs\", \"days\": 90, \"date\": \"day\"}, {\"key\": \"replies\", \"label\": \"Replies\", \"type\": \"taskuary_data\", \"dataset\": \"replies\", \"days\": 90, \"date\": \"day\"}, {\"key\": \"ai\", \"label\": \"AI used\", \"type\": \"taskuary_data\", \"dataset\": \"ai_usage\", \"days\": 90, \"date\": \"day\"}], \"filters\": {\"range\": 7, \"segment\": \"channel\"}, \"components\": [{\"kind\": \"stat\", \"title\": \"AI spend\", \"said\": \"What the AI cost, in dollars, with its tokens under it\", \"source\": \"ai\", \"agg\": \"sum\", \"y\": \"cost\", \"unit\": \"$\", \"good\": \"down\", \"also\": [{\"label\": \"tokens\", \"agg\": \"sum\", \"y\": \"tokens\"}, {\"label\": \"tokens on your plan\", \"agg\": \"sum\", \"y\": \"tokens\", \"where\": {\"billing\": \"plan\"}}, {\"label\": \"tokens with no price\", \"agg\": \"sum\", \"y\": \"tokens\", \"where\": {\"billing\": \"unknown\"}}]}, {\"kind\": \"stat\", \"title\": \"Cost per task\", \"said\": \"What one task's agent work costs, on average\", \"source\": \"ai\", \"agg\": \"sum\", \"y\": \"cost\", \"per\": \"task_id\", \"unit\": \"$\", \"where\": {\"kind\": \"agent run\"}, \"good\": \"down\", \"also\": [{\"label\": \"tokens a task\", \"agg\": \"sum\", \"y\": \"tokens\", \"per\": \"task_id\", \"where\": {\"kind\": \"agent run\"}}]}, {\"kind\": \"stat\", \"title\": \"Tasks completed\", \"said\": \"How many tasks were done\", \"source\": \"closed\", \"agg\": \"count\", \"where\": {\"status\": \"done\"}, \"good\": \"up\"}, {\"kind\": \"stat\", \"title\": \"Open now\", \"said\": \"How many tasks are open right now, lower is better\", \"source\": \"tasks\", \"agg\": \"count\", \"where\": {\"state\": \"open\"}, \"range\": false, \"good\": \"down\"}, {\"kind\": \"stacked\", \"title\": \"AI spend per day\", \"said\": \"Dollars per day, split by triage, the Advisor, tasks and the Assistant\", \"source\": \"ai\", \"x\": \"day\", \"series\": \"who\", \"agg\": \"sum\", \"y\": \"cost\", \"unit\": \"$\", \"order\": [\"Triage\", \"Advisor\", \"Tasks\", \"Assistant\", \"Other\"], \"w\": 2}, {\"kind\": \"pie\", \"title\": \"AI spend by who\", \"said\": \"Each one's share of the dollars: triage, the Advisor, tasks and the Assistant\", \"source\": \"ai\", \"x\": \"who\", \"agg\": \"sum\", \"y\": \"cost\", \"unit\": \"$\", \"order\": [\"Triage\", \"Advisor\", \"Tasks\", \"Assistant\", \"Other\"], \"w\": 2}, {\"kind\": \"stat\", \"title\": \"Came in\", \"said\": \"How many messages came in\", \"source\": \"mail\", \"agg\": \"count\"}, {\"kind\": \"stat\", \"title\": \"New tasks\", \"said\": \"How many new tasks arrived\", \"source\": \"tasks\", \"agg\": \"count\"}, {\"kind\": \"stat\", \"title\": \"Median reply time\", \"said\": \"The median hours from an ask to my reply, lower is better\", \"source\": \"replies\", \"agg\": \"median\", \"y\": \"hours\", \"unit\": \"h\", \"good\": \"down\"}, {\"kind\": \"stat\", \"title\": \"Agent time per session\", \"said\": \"The median minutes an agent session takes\", \"source\": \"agents\", \"agg\": \"median\", \"y\": \"minutes\", \"unit\": \"min\", \"good\": \"none\"}, {\"kind\": \"stacked\", \"title\": \"Tasks closed per day\", \"said\": \"Tasks closed per day, split by done or dropped\", \"source\": \"closed\", \"x\": \"closed\", \"series\": \"status\", \"where\": {\"state\": \"closed\"}, \"order\": [\"done\", \"dropped\"], \"w\": 2}, {\"kind\": \"bar\", \"title\": \"How far it got\", \"said\": \"How far what came in got, stage by stage, each as a share of what came in\", \"source\": \"flow\", \"x\": \"stage\", \"order\": [\"Came in\", \"Triaged\", \"On a task\", \"Task closed\"], \"share\": true, \"w\": 2}, {\"kind\": \"stacked\", \"title\": \"What came in, by channel\", \"said\": \"Messages in per day, split by channel, stacked\", \"source\": \"mail\", \"x\": \"day\", \"series\": \"channel\", \"w\": 2}, {\"kind\": \"stacked\", \"title\": \"Agent sessions, and how they ended\", \"said\": \"Agent sessions per day, split by how they ended\", \"source\": \"agents\", \"x\": \"day\", \"series\": \"outcome\", \"w\": 2}, {\"kind\": \"stacked\", \"title\": \"AI tokens by model, per day\", \"said\": \"Tokens per model per day, stacked\", \"source\": \"ai\", \"x\": \"day\", \"series\": \"model\", \"agg\": \"sum\", \"y\": \"tokens\", \"w\": 2}, {\"kind\": \"bar\", \"title\": \"Open work by kind\", \"said\": \"Open tasks right now, by kind\", \"source\": \"tasks\", \"x\": \"kind\", \"where\": {\"state\": \"open\"}, \"range\": false, \"w\": 2}, {\"kind\": \"list\", \"title\": \"Waiting longest on you\", \"said\": \"The open tasks that have waited longest on me, with how long, at most 6\", \"source\": \"tasks\", \"label\": \"title\", \"meta\": \"waiting\", \"where\": {\"status\": \"open\"}, \"range\": false, \"sort\": \"arrived\", \"limit\": 6, \"w\": 2}, {\"kind\": \"bar\", \"title\": \"Who writes most\", \"said\": \"Who sends the most messages, top 6\", \"source\": \"mail\", \"x\": \"sender\", \"limit\": 6, \"w\": 2}], \"route\": {\"timeline\": {\"how\": \"always\"}, \"alert\": {\"how\": \"never\"}, \"send\": {\"how\": \"always\"}, \"triage\": {\"how\": \"never\"}}}",
+    "ConfigJson": "{\"type\": \"dashboard\", \"title\": \"Taskuary at a glance\", \"daily_at\": \"07:00\", \"sources\": [{\"key\": \"mail\", \"label\": \"What came in\", \"type\": \"taskuary_data\", \"dataset\": \"mail\", \"days\": 90, \"date\": \"day\"}, {\"key\": \"flow\", \"label\": \"How far it got\", \"type\": \"taskuary_data\", \"dataset\": \"flow\", \"days\": 90, \"date\": \"day\"}, {\"key\": \"tasks\", \"label\": \"Tasks\", \"type\": \"taskuary_data\", \"dataset\": \"tasks\", \"days\": 90, \"date\": \"arrived\"}, {\"key\": \"closed\", \"label\": \"Tasks closed\", \"type\": \"taskuary_data\", \"dataset\": \"tasks\", \"days\": 90, \"date\": \"closed\"}, {\"key\": \"agents\", \"label\": \"Agent sessions\", \"type\": \"taskuary_data\", \"dataset\": \"agent_runs\", \"days\": 90, \"date\": \"day\"}, {\"key\": \"replies\", \"label\": \"Replies\", \"type\": \"taskuary_data\", \"dataset\": \"replies\", \"days\": 90, \"date\": \"day\"}, {\"key\": \"ai\", \"label\": \"AI used\", \"type\": \"taskuary_data\", \"dataset\": \"ai_usage\", \"days\": 90, \"date\": \"day\"}], \"filters\": {\"range\": 7, \"segment\": \"channel\"}, \"components\": [{\"kind\": \"kpis\", \"title\": \"This week\", \"said\": \"What came in, what became work, what got done, what waits on me and what the AI cost\", \"w\": 4, \"items\": [{\"title\": \"Came in\", \"source\": \"mail\", \"agg\": \"count\"}, {\"title\": \"Became work\", \"source\": \"tasks\", \"agg\": \"count\", \"good\": \"up\"}, {\"title\": \"Done\", \"source\": \"closed\", \"agg\": \"count\", \"where\": {\"status\": \"done\"}, \"good\": \"up\"}, {\"title\": \"Waiting on you\", \"source\": \"tasks\", \"agg\": \"count\", \"where\": {\"state\": \"open\"}, \"range\": false, \"good\": \"down\"}, {\"title\": \"AI spend\", \"source\": \"ai\", \"agg\": \"sum\", \"y\": \"cost\", \"unit\": \"$\", \"good\": \"down\", \"also\": [{\"label\": \"tokens\", \"agg\": \"sum\", \"y\": \"tokens\"}, {\"label\": \"on your plan\", \"agg\": \"sum\", \"y\": \"tokens\", \"where\": {\"billing\": \"plan\"}}, {\"label\": \"with no price\", \"agg\": \"sum\", \"y\": \"tokens\", \"where\": {\"billing\": \"unknown\"}}]}]}, {\"kind\": \"trend\", \"title\": \"Day by day\", \"said\": \"Each day: what came in, the work done, agent sessions, AI spend or AI tokens, split\", \"w\": 4, \"metrics\": [{\"label\": \"Came in\", \"source\": \"mail\", \"agg\": \"count\", \"splits\": [[\"channel\", \"channel\"]]}, {\"label\": \"Work done\", \"source\": \"closed\", \"agg\": \"count\", \"where\": {\"state\": \"closed\"}, \"splits\": [[\"outcome\", \"status\"]], \"order\": [\"done\", \"dropped\"]}, {\"label\": \"Agent sessions\", \"source\": \"agents\", \"agg\": \"count\", \"splits\": [[\"outcome\", \"outcome\"]]}, {\"label\": \"AI spend\", \"source\": \"ai\", \"agg\": \"sum\", \"y\": \"cost\", \"unit\": \"$\", \"splits\": [[\"who\", \"who\"], [\"model\", \"model\"]], \"order\": [\"Triage\", \"Advisor\", \"Tasks\", \"Assistant\", \"Other\"]}, {\"label\": \"AI tokens\", \"source\": \"ai\", \"agg\": \"sum\", \"y\": \"tokens\", \"splits\": [[\"who\", \"who\"], [\"model\", \"model\"]], \"order\": [\"Triage\", \"Advisor\", \"Tasks\", \"Assistant\", \"Other\"]}]}, {\"kind\": \"bar\", \"title\": \"From mail to done\", \"said\": \"How far what came in got, stage by stage, each as a share of what came in\", \"source\": \"flow\", \"x\": \"stage\", \"order\": [\"Came in\", \"Triaged\", \"On a task\", \"Task closed\"], \"share\": true, \"w\": 2}, {\"kind\": \"list\", \"title\": \"Waiting on you\", \"said\": \"The open tasks that have waited longest on me, with how long, at most 6\", \"source\": \"tasks\", \"label\": \"title\", \"meta\": \"waiting\", \"where\": {\"state\": \"open\"}, \"range\": false, \"sort\": \"arrived\", \"limit\": 6, \"w\": 2}, {\"kind\": \"pie\", \"title\": \"AI spend by who\", \"said\": \"Each one's share of the dollars: triage, the Advisor, tasks and the Assistant\", \"source\": \"ai\", \"x\": \"who\", \"agg\": \"sum\", \"y\": \"cost\", \"unit\": \"$\", \"order\": [\"Triage\", \"Advisor\", \"Tasks\", \"Assistant\", \"Other\"], \"w\": 2}, {\"kind\": \"kpis\", \"title\": \"Per piece of work\", \"said\": \"What one task's agent work costs, an agent session's minutes and my reply time\", \"w\": 2, \"items\": [{\"title\": \"Cost per task\", \"source\": \"ai\", \"agg\": \"sum\", \"y\": \"cost\", \"per\": \"task_id\", \"unit\": \"$\", \"where\": {\"kind\": \"agent run\"}, \"good\": \"down\", \"also\": [{\"label\": \"tokens\", \"agg\": \"sum\", \"y\": \"tokens\", \"per\": \"task_id\", \"where\": {\"kind\": \"agent run\"}}]}, {\"title\": \"Agent session\", \"source\": \"agents\", \"agg\": \"median\", \"y\": \"minutes\", \"unit\": \"min\", \"good\": \"none\"}, {\"title\": \"Your reply\", \"source\": \"replies\", \"agg\": \"median\", \"y\": \"hours\", \"unit\": \"h\", \"good\": \"down\"}]}], \"route\": {\"timeline\": {\"how\": \"always\"}, \"alert\": {\"how\": \"never\"}, \"send\": {\"how\": \"always\"}, \"triage\": {\"how\": \"never\"}}}",
     "LastPolledAt": "2026-11-05 17:30:46",
     "RouteWords": "Reports: every run; alert: never",
     "ScheduleWords": "daily at 07:00"
@@ -26645,103 +26645,197 @@
    },
    "components": [
     {
-     "kind": "stat",
-     "title": "AI spend",
-     "said": "What the AI cost, in dollars, with its tokens under it",
-     "source": "ai",
-     "agg": "sum",
-     "y": "cost",
-     "unit": "$",
-     "good": "down",
-     "also": [
+     "kind": "kpis",
+     "title": "This week",
+     "said": "What came in, what became work, what got done, what waits on me and what the AI cost",
+     "w": 4,
+     "items": [
       {
-       "label": "tokens",
-       "agg": "sum",
-       "y": "tokens"
+       "title": "Came in",
+       "source": "mail",
+       "agg": "count"
       },
       {
-       "label": "tokens on your plan",
-       "agg": "sum",
-       "y": "tokens",
-       "where": {
-        "billing": "plan"
-       }
+       "title": "Became work",
+       "source": "tasks",
+       "agg": "count",
+       "good": "up"
       },
       {
-       "label": "tokens with no price",
-       "agg": "sum",
-       "y": "tokens",
+       "title": "Done",
+       "source": "closed",
+       "agg": "count",
        "where": {
-        "billing": "unknown"
-       }
+        "status": "done"
+       },
+       "good": "up"
+      },
+      {
+       "title": "Waiting on you",
+       "source": "tasks",
+       "agg": "count",
+       "where": {
+        "state": "open"
+       },
+       "range": false,
+       "good": "down"
+      },
+      {
+       "title": "AI spend",
+       "source": "ai",
+       "agg": "sum",
+       "y": "cost",
+       "unit": "$",
+       "good": "down",
+       "also": [
+        {
+         "label": "tokens",
+         "agg": "sum",
+         "y": "tokens"
+        },
+        {
+         "label": "on your plan",
+         "agg": "sum",
+         "y": "tokens",
+         "where": {
+          "billing": "plan"
+         }
+        },
+        {
+         "label": "with no price",
+         "agg": "sum",
+         "y": "tokens",
+         "where": {
+          "billing": "unknown"
+         }
+        }
+       ]
       }
      ]
     },
     {
-     "kind": "stat",
-     "title": "Cost per task",
-     "said": "What one task's agent work costs, on average",
-     "source": "ai",
-     "agg": "sum",
-     "y": "cost",
-     "per": "task_id",
-     "unit": "$",
-     "where": {
-      "kind": "agent run"
-     },
-     "good": "down",
-     "also": [
+     "kind": "trend",
+     "title": "Day by day",
+     "said": "Each day: what came in, the work done, agent sessions, AI spend or AI tokens, split",
+     "w": 4,
+     "metrics": [
       {
-       "label": "tokens a task",
+       "label": "Came in",
+       "source": "mail",
+       "agg": "count",
+       "splits": [
+        [
+         "channel",
+         "channel"
+        ]
+       ]
+      },
+      {
+       "label": "Work done",
+       "source": "closed",
+       "agg": "count",
+       "where": {
+        "state": "closed"
+       },
+       "splits": [
+        [
+         "outcome",
+         "status"
+        ]
+       ],
+       "order": [
+        "done",
+        "dropped"
+       ]
+      },
+      {
+       "label": "Agent sessions",
+       "source": "agents",
+       "agg": "count",
+       "splits": [
+        [
+         "outcome",
+         "outcome"
+        ]
+       ]
+      },
+      {
+       "label": "AI spend",
+       "source": "ai",
+       "agg": "sum",
+       "y": "cost",
+       "unit": "$",
+       "splits": [
+        [
+         "who",
+         "who"
+        ],
+        [
+         "model",
+         "model"
+        ]
+       ],
+       "order": [
+        "Triage",
+        "Advisor",
+        "Tasks",
+        "Assistant",
+        "Other"
+       ]
+      },
+      {
+       "label": "AI tokens",
+       "source": "ai",
        "agg": "sum",
        "y": "tokens",
-       "per": "task_id",
-       "where": {
-        "kind": "agent run"
-       }
+       "splits": [
+        [
+         "who",
+         "who"
+        ],
+        [
+         "model",
+         "model"
+        ]
+       ],
+       "order": [
+        "Triage",
+        "Advisor",
+        "Tasks",
+        "Assistant",
+        "Other"
+       ]
       }
      ]
     },
     {
-     "kind": "stat",
-     "title": "Tasks completed",
-     "said": "How many tasks were done",
-     "source": "closed",
-     "agg": "count",
-     "where": {
-      "status": "done"
-     },
-     "good": "up"
+     "kind": "bar",
+     "title": "From mail to done",
+     "said": "How far what came in got, stage by stage, each as a share of what came in",
+     "source": "flow",
+     "x": "stage",
+     "order": [
+      "Came in",
+      "Triaged",
+      "On a task",
+      "Task closed"
+     ],
+     "share": true,
+     "w": 2
     },
     {
-     "kind": "stat",
-     "title": "Open now",
-     "said": "How many tasks are open right now, lower is better",
+     "kind": "list",
+     "title": "Waiting on you",
+     "said": "The open tasks that have waited longest on me, with how long, at most 6",
      "source": "tasks",
-     "agg": "count",
+     "label": "title",
+     "meta": "waiting",
      "where": {
       "state": "open"
      },
      "range": false,
-     "good": "down"
-    },
-    {
-     "kind": "stacked",
-     "title": "AI spend per day",
-     "said": "Dollars per day, split by triage, the Advisor, tasks and the Assistant",
-     "source": "ai",
-     "x": "day",
-     "series": "who",
-     "agg": "sum",
-     "y": "cost",
-     "unit": "$",
-     "order": [
-      "Triage",
-      "Advisor",
-      "Tasks",
-      "Assistant",
-      "Other"
-     ],
+     "sort": "arrived",
+     "limit": 6,
      "w": 2
     },
     {
@@ -26763,134 +26857,51 @@
      "w": 2
     },
     {
-     "kind": "stat",
-     "title": "Came in",
-     "said": "How many messages came in",
-     "source": "mail",
-     "agg": "count"
-    },
-    {
-     "kind": "stat",
-     "title": "New tasks",
-     "said": "How many new tasks arrived",
-     "source": "tasks",
-     "agg": "count"
-    },
-    {
-     "kind": "stat",
-     "title": "Median reply time",
-     "said": "The median hours from an ask to my reply, lower is better",
-     "source": "replies",
-     "agg": "median",
-     "y": "hours",
-     "unit": "h",
-     "good": "down"
-    },
-    {
-     "kind": "stat",
-     "title": "Agent time per session",
-     "said": "The median minutes an agent session takes",
-     "source": "agents",
-     "agg": "median",
-     "y": "minutes",
-     "unit": "min",
-     "good": "none"
-    },
-    {
-     "kind": "stacked",
-     "title": "Tasks closed per day",
-     "said": "Tasks closed per day, split by done or dropped",
-     "source": "closed",
-     "x": "closed",
-     "series": "status",
-     "where": {
-      "state": "closed"
-     },
-     "order": [
-      "done",
-      "dropped"
-     ],
-     "w": 2
-    },
-    {
-     "kind": "bar",
-     "title": "How far it got",
-     "said": "How far what came in got, stage by stage, each as a share of what came in",
-     "source": "flow",
-     "x": "stage",
-     "order": [
-      "Came in",
-      "Triaged",
-      "On a task",
-      "Task closed"
-     ],
-     "share": true,
-     "w": 2
-    },
-    {
-     "kind": "stacked",
-     "title": "What came in, by channel",
-     "said": "Messages in per day, split by channel, stacked",
-     "source": "mail",
-     "x": "day",
-     "series": "channel",
-     "w": 2
-    },
-    {
-     "kind": "stacked",
-     "title": "Agent sessions, and how they ended",
-     "said": "Agent sessions per day, split by how they ended",
-     "source": "agents",
-     "x": "day",
-     "series": "outcome",
-     "w": 2
-    },
-    {
-     "kind": "stacked",
-     "title": "AI tokens by model, per day",
-     "said": "Tokens per model per day, stacked",
-     "source": "ai",
-     "x": "day",
-     "series": "model",
-     "agg": "sum",
-     "y": "tokens",
-     "w": 2
-    },
-    {
-     "kind": "bar",
-     "title": "Open work by kind",
-     "said": "Open tasks right now, by kind",
-     "source": "tasks",
-     "x": "kind",
-     "where": {
-      "state": "open"
-     },
-     "range": false,
-     "w": 2
-    },
-    {
-     "kind": "list",
-     "title": "Waiting longest on you",
-     "said": "The open tasks that have waited longest on me, with how long, at most 6",
-     "source": "tasks",
-     "label": "title",
-     "meta": "waiting",
-     "where": {
-      "status": "open"
-     },
-     "range": false,
-     "sort": "arrived",
-     "limit": 6,
-     "w": 2
-    },
-    {
-     "kind": "bar",
-     "title": "Who writes most",
-     "said": "Who sends the most messages, top 6",
-     "source": "mail",
-     "x": "sender",
-     "limit": 6,
-     "w": 2
+     "kind": "kpis",
+     "title": "Per piece of work",
+     "said": "What one task's agent work costs, an agent session's minutes and my reply time",
+     "w": 2,
+     "items": [
+      {
+       "title": "Cost per task",
+       "source": "ai",
+       "agg": "sum",
+       "y": "cost",
+       "per": "task_id",
+       "unit": "$",
+       "where": {
+        "kind": "agent run"
+       },
+       "good": "down",
+       "also": [
+        {
+         "label": "tokens",
+         "agg": "sum",
+         "y": "tokens",
+         "per": "task_id",
+         "where": {
+          "kind": "agent run"
+         }
+        }
+       ]
+      },
+      {
+       "title": "Agent session",
+       "source": "agents",
+       "agg": "median",
+       "y": "minutes",
+       "unit": "min",
+       "good": "none"
+      },
+      {
+       "title": "Your reply",
+       "source": "replies",
+       "agg": "median",
+       "y": "hours",
+       "unit": "h",
+       "good": "down"
+      }
+     ]
     }
    ],
    "route": {
@@ -26909,7 +26920,7 @@
    }
   },
   "data": {
-   "at": "2026-11-05 20:06:42",
+   "at": "2026-11-05 21:10:11",
    "sources": {
     "mail": {
      "label": "What came in",
@@ -29176,7 +29187,7 @@
      "head": "12 agent runs",
      "rows": [
       {
-       "run_id": "5d724de6995e",
+       "run_id": "50e86033f3da",
        "task_id": 35,
        "ref": "TQ-0035",
        "day": "2026-11-05",
@@ -29186,7 +29197,7 @@
        "minutes": 13.4
       },
       {
-       "run_id": "4bce05922f21",
+       "run_id": "37791c711aa4",
        "task_id": 34,
        "ref": "TQ-0034",
        "day": "2026-11-05",
@@ -29196,7 +29207,7 @@
        "minutes": 112.9
       },
       {
-       "run_id": "4a1eaba930cb",
+       "run_id": "7f8eedcd818c",
        "task_id": 33,
        "ref": "TQ-0033",
        "day": "2026-11-05",
@@ -29206,7 +29217,7 @@
        "minutes": 0.0
       },
       {
-       "run_id": "75e091430cb1",
+       "run_id": "7af96aed5b09",
        "task_id": 32,
        "ref": "TQ-0032",
        "day": "2026-11-05",
@@ -29216,7 +29227,7 @@
        "minutes": 0.0
       },
       {
-       "run_id": "6cd060aa8bfd",
+       "run_id": "78223d01560e",
        "task_id": 31,
        "ref": "TQ-0031",
        "day": "2026-11-05",
@@ -29226,7 +29237,7 @@
        "minutes": 187.8
       },
       {
-       "run_id": "7e2d01407d25",
+       "run_id": "b4da505b75d5",
        "task_id": 30,
        "ref": "TQ-0030",
        "day": "2026-11-05",
@@ -29236,7 +29247,7 @@
        "minutes": 0.0
       },
       {
-       "run_id": "7e686280ca76",
+       "run_id": "51583c874d1d",
        "task_id": 16,
        "ref": "TQ-0016",
        "day": "2026-11-04",
@@ -29246,7 +29257,7 @@
        "minutes": 55.0
       },
       {
-       "run_id": "8dee7d6ee440",
+       "run_id": "dba990591480",
        "task_id": 17,
        "ref": "TQ-0017",
        "day": "2026-11-04",
@@ -29256,7 +29267,7 @@
        "minutes": 38.0
       },
       {
-       "run_id": "71c5ca587a4b",
+       "run_id": "4db246df419d",
        "task_id": 18,
        "ref": "TQ-0018",
        "day": "2026-11-03",
@@ -29266,7 +29277,7 @@
        "minutes": 21.0
       },
       {
-       "run_id": "85e9166b64a1",
+       "run_id": "4aef271e21fb",
        "task_id": 20,
        "ref": "TQ-0020",
        "day": "2026-11-03",
@@ -29276,7 +29287,7 @@
        "minutes": 9.0
       },
       {
-       "run_id": "eb0a37bb75c0",
+       "run_id": "ba23d352d5e6",
        "task_id": 22,
        "ref": "TQ-0022",
        "day": "2026-11-02",
@@ -29286,7 +29297,7 @@
        "minutes": 27.0
       },
       {
-       "run_id": "4d1aa9d4a45b",
+       "run_id": "7cecef636d70",
        "task_id": 25,
        "ref": "TQ-0025",
        "day": "2026-11-01",
@@ -29366,7 +29377,7 @@
     },
     "ai": {
      "label": "AI used",
-     "head": "227 ai usage",
+     "head": "228 ai usage",
      "rows": [
       {
        "day": "2026-11-05",
@@ -29939,13 +29950,13 @@
        "billing": "priced",
        "task_id": null,
        "kind": "one call",
-       "calls": 57,
-       "tokens_in": 314127,
-       "tokens_out": 14455,
-       "cached": 94214,
-       "tokens": 234368,
-       "seconds": 275.8,
-       "cost": 0.30161,
+       "calls": 60,
+       "tokens_in": 333997,
+       "tokens_out": 15235,
+       "cached": 100173,
+       "tokens": 249059,
+       "seconds": 294.1,
+       "cost": 0.320017,
        "minutes": null
       },
       {
@@ -29966,6 +29977,26 @@
        "tokens": 91191,
        "seconds": 146.4,
        "cost": 0.39646,
+       "minutes": null
+      },
+      {
+       "day": "2026-11-05",
+       "job": "memory",
+       "who": "Other",
+       "what": "memory",
+       "brain": "Anthropic API",
+       "model": "claude-haiku-4-5",
+       "tier": "quick",
+       "billing": "priced",
+       "task_id": null,
+       "kind": "one call",
+       "calls": 1,
+       "tokens_in": 2600,
+       "tokens_out": 300,
+       "cached": 780,
+       "tokens": 2120,
+       "seconds": 6.4,
+       "cost": 0.003398,
        "minutes": null
       },
       {

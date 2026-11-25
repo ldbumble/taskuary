@@ -128,6 +128,15 @@ export const slices = (groups) => {
 export const MAX_DAYS = 90;
 export const clampDays = (v) => Math.max(1, Math.min(MAX_DAYS, Math.round(Number(v)) || 1));
 
+// ONE MEASURE OF A TREND, SPLIT (`trend`): its source's rows per day, through the same cut every tile takes, split by the column its
+// split names - coloured by the measure's own `order` where it gives one, else by share - and said in its own figures
+export const trendView = (spec, data, m, si, cut = {}) => {
+  const col = m.splits?.[si]?.[1], x = dateOf(spec, m), rows = componentRows(spec, data, m, cut);
+  const has = (m.order || []).some((k) => rowsOf(data, m.source).some((r) => String(r[col]) === String(k)));
+  const slots = has ? Object.fromEntries(m.order.map((k, n) => [String(k), n])) : seriesSlots(rowsOf(data, m.source), col);
+  return { c: { x, series: col, agg: m.agg, y: m.y, unit: m.unit, fmt: fmtOf(m) }, slots, st: stacked(rows, x, col, m.agg, m.y, { slots, days: cut.days, now: cut.now }) };
+};
+
 // a tile's delta: this range against the one before it, the same length - only when the rows are dated and a range is chosen
 export const delta = (rows, date, days, agg, y, now = new Date(), per) => {
   if (!date || !days) return null;
@@ -185,8 +194,9 @@ export const spanOf4 = (c) => Math.max(1, Math.min(4, Number(c.w) || (c.kind ===
 // The share is frozen when pressed, so a filter the owner set on the page is not the dashboard; the spec's default range is.
 export const snapshotOf = (spec, data, now = new Date()) => {
   const days = Number(spec?.filters?.range) || 0, srcs = Object.entries(data?.sources || {}).filter(([, s]) => (s?.rows || []).length);
-  const text = (spec?.components || []).filter((c) => c.kind === "stat")
-    .map((c) => { const v = aggregate(componentRows(spec, data, c, { days, now }), c.agg, c.y); return `${c.title || "value"}: ${fmt(v)}${c.unit && v !== null ? ` ${c.unit}` : ""}`; })
+  const text = (spec?.components || []).flatMap((c) => (c.kind === "stat" ? [c] : c.kind === "kpis" ? c.items || [] : []))   // ...a strip's numbers too
+    .map((c) => { const v = aggregate(componentRows(spec, data, c, { days, now }), c.agg, c.y, c.per);
+      return `${c.title || "value"}: ${fmtOf(c)(v)}${c.unit && c.unit !== "$" && v !== null ? ` ${c.unit}` : ""}`; })
     .join("\n");
   const rows = srcs.length === 1 ? srcs[0][1].rows : srcs.flatMap(([k, s]) => s.rows.map((r) => ({ source: s.label || k, ...r })));
   return { text, data: rows };

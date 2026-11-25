@@ -56,6 +56,8 @@ MAX = 5                      # per transcript: a loop proposing 200 pushes is a 
 # proposable at all). Nothing here executes without an approved review. A push, a pull request, a merge is NEVER gated by "Agents may push /
 # deploy": that switch says whether an agent goes WITHOUT asking - off, the card IS the asking, and his press is the yes (the owner, 2026-11-25:
 # "classic example of saying it can't do something" - a PR card refused because the switch was off, the agent left to say so in words).
+# ...and the same for a comment on, or the close of, the GitHub issue a task came from: "Reply to issue/PR authors" and "GitHub is the issue
+# tracker" decide what Taskuary drafts and files by itself - an agent's card for his press is his explicit say-so, never refused by them
 ACTIONS = {
     # 'land' does whatever the owner's git_flow says (a draft PR, or straight onto the
     # default branch) - the agent asks to PUBLISH, the owner decides what publishing means.
@@ -65,8 +67,8 @@ ACTIONS = {
     'open_pr': ('open a DRAFT pull request for this task', (), None),
     'push_direct': ('push these commits STRAIGHT onto the default branch - no pull request',
                     (), None),
-    'comment_issue': ('post a PUBLIC comment on the linked issue/PR', ('body',), 'github_reply'),
-    'close_issue': ('close the linked GitHub issue', (), 'use_as_tracker'),
+    'comment_issue': ('post a PUBLIC comment on the linked issue/PR', ('body',), None),
+    'close_issue': ('close the linked GitHub issue', (), None),
     # the close-out of a task whose work is an open pull request (CLOSEOUT below): raised by the finish, never by an agent
     'merge_pr': ('merge the pull request this task opened', ('repo', 'number'), None),
     'run_tool': ('run a step in a connected system', ('type',), None),
@@ -294,21 +296,9 @@ SETTING_VALUES = {'answer_to_agent': ('auto', 'ask', 'off')}   # timeline_fade r
 
 # A REFUSAL NAMES THE SWITCH THAT REFUSED, AND OPENS IT (design round 2, 2026-11-18): "the owner has that switch off" named none, and an agent
 # told the owner to "turn on pull requests under Policies" - a page of mail rules with no such switch. Each switch by its label where the owner
-# sees it, and the link that opens that place; GitHub's are read where its card keeps them (store.github_permissions), never a second copy
-SWITCHES = {'agent_push_enabled': ('Agents may push / deploy', 'the GitHub card', '#connector=github'),
-            'use_as_tracker': ('GitHub is the issue tracker', 'the GitHub card', '#connector=github'),
-            'github_reply': ('Reply to issue/PR authors', 'the GitHub card', '#connector=github'),
-            'playbooks_enabled': ('Use playbooks', words.name('sorting'), words.href('sorting') + '&key=playbooks_enabled')}
-def _switch_ok(store, name) -> bool:
-    if not name: return True
-    if name == 'agent_push_enabled': return store.github_permissions()[1]
-    if name == 'use_as_tracker': return store.github_permissions()[0]
-    if name == 'playbooks_enabled': return store.get_setting(name, '1') == '1'
-    import json as _j
-    c = store.get_connector_by_type('github') or {}
-    try: cfg = _j.loads(c.get('ConfigJson') or '{}')
-    except ValueError: cfg = {}
-    return bool(cfg.get({'github_reply': 'reply_comments'}.get(name, name)))
+# sees it, and the link that opens that place
+SWITCHES = {'playbooks_enabled': ('Use playbooks', words.name('sorting'), words.href('sorting') + '&key=playbooks_enabled')}
+def _switch_ok(store, name) -> bool: return not name or store.get_setting(name, '1') == '1'
 def switch_off(name) -> str:
     "The switch `name` said as the owner finds it, with its link: what an agent passes on, never a place of its own guessing."
     label, where, href = SWITCHES[name]

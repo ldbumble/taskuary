@@ -519,15 +519,21 @@ class ProposalTests(unittest.TestCase):
 
     def test_a_refusal_names_the_switch_that_refused_and_links_to_it(self):
         # a walk, 2026-11-18: "open_pr is not permitted - the owner has that switch off" named no switch, and the agent told the owner to "turn
-        # on pull requests under Policies" - a page of mail rules with no such switch. The switch is the GitHub card's own, read where the
-        # card keeps it (store.github_permissions), and the refusal names it with the link that opens it
+        # on pull requests under Policies" - a page of mail rules with no such switch. The refusal names the switch with the link that opens it
+        s = MemoryStore(); s.set_setting('playbooks_enabled', '0', 'owner')
+        p = {'action': 'write_playbook', 'slug': 'refunds', 'text': '# Refunds\nwhen: a customer asks for a refund\nsteps: check the order, then refund it'}
+        ok, why = proposals.validate(s, p)
+        self.assertFalse(ok); self.assertIn('"Use playbooks" is off', why); self.assertIn('key=playbooks_enabled)', why)
+        s.set_setting('playbooks_enabled', '1', 'owner')
+        self.assertTrue(proposals.validate(s, p)[0])
+
+    def test_a_github_comment_card_stands_with_the_cards_switches_off(self):
+        # the owner, 2026-11-25: a card refused by a switch left the agent saying in words it could not. 'Reply to issue/PR authors' is off as it
+        # ships - his press on the comment card is the say-so
         s = MemoryStore()
-        cid = s.save_connector({'Type': 'github', 'Name': 'GitHub', 'Active': 1, 'ConfigJson': json.dumps({'reply_comments': False})}, 'owner')
-        ok, why = proposals.validate(s, {'action': 'comment_issue', 'body': 'fixed'})
-        self.assertFalse(ok); self.assertIn('"Reply to issue/PR authors" is off', why); self.assertIn('(#connector=github)', why)
-        self.assertNotIn('Polic', why)
-        s.save_connector({'ConnectorId': cid, 'ConfigJson': json.dumps({'reply_comments': True})}, 'owner')
-        self.assertTrue(proposals.validate(s, {'action': 'comment_issue', 'body': 'fixed'})[0])     # ...the card's switch is the one that counts
+        s.save_connector({'Type': 'github', 'Name': 'GitHub', 'Active': 1, 'ConfigJson': json.dumps({'reply_comments': False})}, 'owner')
+        self.assertTrue(proposals.validate(s, {'action': 'comment_issue', 'body': 'fixed'})[0])
+        self.assertTrue(proposals.validate(s, {'action': 'close_issue'})[0])
 
     def test_collect_queues_a_review_and_records_refusals(self):
         s = MemoryStore(); s.set_setting('agent_push_enabled', '1', 't')

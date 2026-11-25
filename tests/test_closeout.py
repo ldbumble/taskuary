@@ -436,7 +436,9 @@ class ContributorPullRequestTests(unittest.TestCase):
     def test_an_agent_cannot_mark_its_own_ask_as_a_close_out(self):
         ps = proposals.parse('TASKUARY-PROPOSE {"action": "close_issue", "closeout": true}')
         self.assertNotIn('closeout', ps[0])
-        self.assertFalse(proposals.validate(MemoryStore(), ps[0])[0])                     # the tracker switch still gates it
+        s = MemoryStore(); tid = s.create_task({'Title': 't', 'Status': 'open', 'SourceRef': 'https://github.com/northwind/ledger/issues/7'}, 't')
+        rid = proposals.queue(s, tid, ps[0], 'agent')['reviewId']                       # ...it stands as the agent's ask for his press
+        self.assertIn('the agent proposes', s.get_review(rid)['Reason'])
 
     def test_your_merge_closes_the_task_and_retires_the_unsent_thank_you(self):
         """Merged is finished (the owner, 2026-09-28: "if they were merged in, they should just close")."""

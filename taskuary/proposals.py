@@ -322,7 +322,10 @@ def parse(text: str) -> list:
 
 def setting_changes(p: dict) -> tuple:
     """(changes, reason). Every named switch checked against the allow-list BEFORE it is proposed -
-    so a proposal the owner sees is one that could actually be applied."""
+    so a proposal the owner sees is one that could actually be applied. A switch it may not touch is said with the way on: what such a
+    switch lets go without asking is asked one act at a time, on the act's own card."""
+    never = lambda n: (f"{n} is not a switch a proposal may touch - what it lets go without asking is asked one act at a time: propose the "
+                       "act itself, and his press on its card is the yes")
     out, got = [], p.get('changes') or []
     # ...{switch: value} is the same changes written as one object - read as such: its keys came through below as "a change must be an object"
     if isinstance(got, dict): got = [got] if 'name' in got else [{'name': k, 'value': v} for k, v in got.items()]
@@ -330,10 +333,10 @@ def setting_changes(p: dict) -> tuple:
         if not isinstance(c, dict): return [], 'each change is {"name": a switch, "value": its new value} - {"connector", "name", "value"} for a connection\'s own switch'
         conn, name, val = str(c.get('connector') or '').strip().lower(), str(c.get('name') or '').strip(), c.get('value')
         if conn:
-            if name not in CONNECTOR_ALLOW.get(conn, {}): return [], f'{conn}.{name} is not a switch a proposal may touch'
+            if name not in CONNECTOR_ALLOW.get(conn, {}): return [], never(f'{conn}.{name}')
             out.append({'connector': conn, 'name': name, 'value': bool(val), 'says': CONNECTOR_ALLOW[conn][name]})
             continue
-        if name not in SETTING_ALLOW: return [], f'{name} is not a switch a proposal may touch'
+        if name not in SETTING_ALLOW: return [], never(name)
         v = str('1' if val is True else '0' if val is False else val).strip()
         if name in SETTING_VALUES and v not in SETTING_VALUES[name]:
             return [], f'{name} must be one of {", ".join(SETTING_VALUES[name])}'

@@ -527,6 +527,13 @@ class ProposalTests(unittest.TestCase):
         s.set_setting('playbooks_enabled', '1', 'owner')
         self.assertTrue(proposals.validate(s, p)[0])
 
+    def test_a_switch_no_card_may_turn_says_to_ask_for_the_act(self):
+        # "agent_push_enabled is not a switch a proposal may touch" was the whole answer: refused, and nothing to ask with instead
+        for c in ({'name': 'agent_push_enabled', 'value': True}, {'connector': 'github', 'name': 'agents_push', 'value': True}):
+            with self.subTest(c):
+                ok, why = proposals.validate(MemoryStore(), {'action': 'settings', 'changes': [c]})
+                self.assertFalse(ok); self.assertIn('propose the act itself', why)
+
     def test_a_github_comment_card_stands_with_the_cards_switches_off(self):
         # the owner, 2026-11-25: a card refused by a switch left the agent saying in words it could not. 'Reply to issue/PR authors' is off as it
         # ships - his press on the comment card is the say-so

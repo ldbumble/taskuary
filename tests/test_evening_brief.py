@@ -165,6 +165,22 @@ class TheDayAsItWasTests(unittest.TestCase):
         ledger.write(s, 'act', reason, '', 'went', 'rv0', tid, None, {'what': reason})
         self.assertFalse(any('waits for your press' in l for l in ledger.of_task(s, tid)))
 
+    def test_what_he_did_is_newest_first_across_mail_and_acts_that_went_live(self):
+        """Walk 20 (R1): the Chirp post went live after the night's mail went out, but every act was added after every mail - under a header
+        that says newest first - and the brief, at most five items, left the post out though its row was there."""
+        from taskuary import ledger
+        s = MemoryStore()
+        for i, h in enumerate((3, 2.5, 2, 1.5, 1.2, 1.1)):
+            s.add_message({'ExternalId': f'out{i}', 'Channel': 'email', 'SourceName': 'alex@northwind.example', 'Direction': 'out', 'Status': 'context',
+                           'Subject': f'Vendor follow-up {i}', 'FromEmail': 'alex@northwind.example', 'SentAt': _ago(h), 'BodyText': 'Sent.'})
+        tid = s.create_task({'Title': 'Post the budget tip on Chirp', 'Kind': 'general', 'Status': 'open'}, 'owner')
+        rv = s.add_review({'TaskId': tid, 'Kind': 'action', 'Status': 'approved', 'Reason': 'Publish your budget season tip on Chirp',
+                           'DraftText': json.dumps({'action': 'browser_act'})})
+        ledger.went(s, rv, {}, at=_ago(0.5))
+        got = evening.collect(s, 8)['accomplished']
+        self.assertIn('Publish your budget season tip on Chirp', got[0])
+        self.assertEqual([l for l in got if 'Vendor follow-up' in l][0].count('Vendor follow-up 5'), 1, 'the mail newest first too')
+
     def test_a_card_he_declined_is_told_from_its_state_never_from_the_words_its_turn_wrote_before(self):
         """Walk 13: the agent's turn ended "the post goes out only when you press the card"; he declined the card, and the End-of-day report
         and the Assistant both still said it waited for his press - and the header read "agent waiting on you". What stands is the card's

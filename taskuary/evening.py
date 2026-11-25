@@ -244,19 +244,21 @@ def collect(store, hours: int = HOURS) -> dict:
             continue
         eligible.append(row)
 
+    # (when, line): THE BLOCK SAYS NEWEST FIRST, AND IS (walk 20: a post that went live at 02:36 stood after every mail of the night, the acts
+    # being added last, and a brief of at most five items left it out)
     accomplished = []
-    accomplished.extend(_row_line(r, 'sent') for r in sent)
-    accomplished.extend(_row_line(r, 'archived') for r in archived)
+    accomplished.extend((r.get('SentAt'), _row_line(r, 'sent')) for r in sent)
+    accomplished.extend((r.get('SentAt'), _row_line(r, 'archived')) for r in archived)
     for row in eligible:
         review = str(row.get('ReviewStatus') or '').lower()
         if review in ('approved', 'edited', 'sent'):
-            accomplished.append(_row_line(row, 'replied'))
+            accomplished.append((row.get('SentAt'), _row_line(row, 'replied')))
         elif row.get('TaskStatus') == 'done':
-            accomplished.append(_row_line(row, 'completed'))
+            accomplished.append((row.get('SentAt'), _row_line(row, 'completed')))
         elif _invite(row):
             # Ingest has positively identified and triaged this as a calendar invite. It is safe
             # to call handled; a plain auto-filed FYI is intentionally not treated the same way.
-            accomplished.append(_row_line(row, 'invite handled'))
+            accomplished.append((row.get('SentAt'), _row_line(row, 'invite handled')))
 
     # ...WHAT IS OWED IS THE TASK'S TO SAY, NEVER A MAIL ROW'S (walk 6, 2026-11-23, the third walk running: "the corrected pack went out" under
     # Done today and "fix the headcount" under Tomorrow - the corrected copies were new emails, not replies to her mail, so her mail read
@@ -289,10 +291,11 @@ def collect(store, hours: int = HOURS) -> dict:
         to = ', '.join(r['detail'].get('to') or []) if r['Kind'] == 'sent' else ''
         what = (f"email \"{_one_line(r['Value'], 100)}\"" if r['Value'] else 'email') if r['Kind'] == 'sent' else \
                _one_line(r['detail'].get('what') or 'an act he approved', 120) + (f" ({r['Value']})" if r['Value'] else '')
-        accomplished.append(f"state=sent | src=📤 | task={task_ref(r['TaskId']) if r.get('TaskId') else '-'} | what={what}{f' to {_one_line(to, 120)}' if to else ''}")
+        accomplished.append((r['At'], f"state=sent | src=📤 | task={task_ref(r['TaskId']) if r.get('TaskId') else '-'} | at={str(r['At'])[:16]} | what={what}{f' to {_one_line(to, 120)}' if to else ''}"))
     from .session_artifacts import VIEW
-    for a in store._rows("SELECT TaskId, Name FROM task_artifact WHERE CreatedAt>=? AND IFNULL(Kind,'')<>? ORDER BY ArtifactId DESC LIMIT 40", (since, VIEW)):
-        accomplished.append(f"state=made | src=📄 | task={task_ref(a['TaskId']) if a.get('TaskId') else '-'} | file={_one_line(a.get('Name'), 120)}")
+    for a in store._rows("SELECT TaskId, Name, CreatedAt FROM task_artifact WHERE CreatedAt>=? AND IFNULL(Kind,'')<>? ORDER BY ArtifactId DESC LIMIT 40", (since, VIEW)):
+        accomplished.append((a['CreatedAt'], f"state=made | src=📄 | task={task_ref(a['TaskId']) if a.get('TaskId') else '-'} | at={str(a['CreatedAt'])[:16]} | file={_one_line(a.get('Name'), 120)}"))
+    accomplished = [l for _, l in sorted(accomplished, key=lambda x: str(x[0] or ''), reverse=True)]
     open_ = store._rows("SELECT * FROM task WHERE Status IN ('open','in_progress','waiting') AND IFNULL(SourceRef,'')<>? "
                         "ORDER BY CASE Priority WHEN 'urgent' THEN 0 WHEN 'important' THEN 1 WHEN 'high' THEN 1 ELSE 2 END, COALESCE(UpdatedAt, CreatedAt) DESC "
                         "LIMIT 40", (DOCK_TAG,))

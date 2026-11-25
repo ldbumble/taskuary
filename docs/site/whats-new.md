@@ -2,6 +2,33 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.4.4.5 - 2026-11-25
+
+- A view he can answer is drawn: its spec is the last thing of show's answer
+- A deck previews as its slides, and files handed over keep their order
+- A bulk card of posts says posts and their network, and rows open to review are not cut
+- A held step, a pressed card and a push stand in the one frame
+- A press that opens under its card keeps the card in place; a sent card has no Attach
+- A task list's boxes are its bullets, and a phone's bars stand under their labels
+- A Push card he pressed keeps its place in the chat
+- On a phone a card's two files share its width
+- A coding task's chat is a chat task's: one list, one payload, its own road deleted
+- A voice note the phone cannot hear moves nothing: its line no longer sends the last card again
+- Each show call is a hand-over of its own
+- A pushed card says what it pushed once, on itself
+- A saved report writes on its schedule only where he always approved that write
+- A pull request card says its title, repository and branch
+- A pressed card says what its press did, from one function
+- The primary press is the filled button on every card
+- A tab he said no to is crossed, never ticked
+- A long subject or title wraps on its card
+- A view drawn under a reply keeps the reply's top in view
+- A pull request card reads its branch from the checkout he named
+- A write step is approved where it is set up, the same yes as its run card's
+- Download from the desktop window imports what it needs absolutely: the exe runs desktop.py as __main__
+- A turned-down sign-in says so on its card, with its sign-in lit
+- A chat with nothing drawn yet keeps its log when it is first read
+
 ## 0.4.4.4 - 2026-11-25
 
 - A view he can answer is drawn: its spec is the last thing of show's answer

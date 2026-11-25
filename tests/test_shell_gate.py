@@ -432,6 +432,22 @@ class ReadingOutside(unittest.TestCase):
                         'curl -s https://docs.northwind.example/a', 'cat notes.md'):
                 self.assertEqual(rg.of_command(self.s, self.tid, cmd, self.work), ([], ''), cmd)
 
+    def test_a_folder_that_holds_a_secret_is_that_secret_however_the_line_reads_it(self):
+        """Red team #3: `cat <home>/config.toml` was held, but a line that names a folder ABOVE it - the root, the user's home - or names it
+        as `if=<path>` passed: grep -r, find -exec cat, dd and tar each printed the owner token. A folder that holds a never-place is that
+        never-place; one beside it still asks as before."""
+        from pathlib import Path
+        from taskuary import config, readgate as rg
+        ssh = Path.home() / '.ssh'; ssh.mkdir(exist_ok=True); (ssh / 'id_ed25519').touch(); Path(self.secret).touch()
+        home = Path(self.secret).parent
+        top = '/' if os.name != 'nt' else f'/{os.path.splitdrive(str(home))[0][0].lower()}/'
+        for cmd in (f'grep -rhs token {top} --include=config.toml', f'find {top} -name config.toml -exec cat {{}} +', f'dd if="{home}/config.toml"',
+                    'tar czf - ~', f'tar czf "{self.work}/a.tgz" "{home.parent}"', 'grep -r token ~', f'cd "{home.parent}" && grep -r token .'):
+            self.assertEqual(rg.of_command(self.s, self.tid, cmd, self.work), ([], rg.NEVER), cmd)
+        held, never = rg.of_command(self.s, self.tid, f'grep -r total "{self.docs}"', self.work)      # ...a folder beside them is his card
+        self.assertEqual((bool(held), never), (True, ''))
+        self.assertEqual(rg.of_command(self.s, self.tid, f'dd if=data.bin of=copy.bin', self.work), ([], ''))
+
     def test_a_sign_in_place_stays_closed_inside_a_work_folder_or_behind_a_glob(self):
         """The never-list was judged after the work area and after a glob was cut to its folder: a task whose checkout is the home folder
         (a dotfiles repository) read the sign-ins in it freely, and once the owner let a task read his home folder, `cat ~/.s*/<key>`

@@ -191,8 +191,9 @@ def judge(store, tid, paths, cwd: str = '', write: bool = False) -> tuple:
             out.append(settings(f'write {os.path.basename(c)}', _n(raw))); continue
         p, pat = _n(_cut(raw)), _n(raw)
         # ...a never-place is never the work's: only a work folder INSIDE it (the task's scratch, outputs, mail in Taskuary's home) lets a
-        # read there through - a checkout at the home folder does not open the sign-ins in it. A glob that can reach one is that one
-        sec = [r for r in nev if _in(p, r) or (pat != p and _reaches(pat, r))]
+        # read there through - a checkout at the home folder does not open the sign-ins in it. A glob that can reach one is that one, and so
+        # is a folder that holds one (red team #3: `grep -r token /`, `tar c ~`, `find / -exec cat` read config.toml past the never-list)
+        sec = [r for r in nev if _in(p, r) or (_reaches(pat, r) if pat != p else _in(r, p))]
         if any(_in(p, r) and (not sec or any(_in(r, n) for n in sec)) for r in mine) or (not sec and fetched(p, cwd, sids)): continue
         if sec: return [], NEVER_WRITE if write else NEVER
         if any(_in(p, r) for r in ok): continue
@@ -245,7 +246,7 @@ def _pathish(t: str) -> bool:
     """Drive-rooted, Git Bash's /c/, ~, a variable with a path after it, a rooted POSIX path - or a relative one that climbs out with `..`.
     A bare `$f` is a loop's word, not a place."""
     if re.match(r'^[A-Za-z]:[\\/]|^~(?=[\\/]|$)|^[$%].*[\\/]', t) or '..' in re.split(r'[\\/]', t): return True
-    return t.startswith('/') and (bool(re.match(r'^/[A-Za-z](?=/|$)', t)) if os.name == 'nt' else len(t) > 1)
+    return t.startswith('/') and (bool(re.match(r'^/[A-Za-z](?=/|$)', t)) if os.name == 'nt' else True)      # ...`/` itself, the root of all
 
 
 def _quoted(cmd: str) -> list:
@@ -322,7 +323,8 @@ def command_paths(cmd: str, cwd: str = '', env: dict = None, made: list = None, 
         for i, x in enumerate(w[1:], 1):
             to = bool(_REDIRECT.match(w[i - 1])) or i == dest or tool in _WRITERS
             x = re.sub(r'^\d?[<>]+&?', '', x)
-            if x.startswith('-'): x = x.split('=', 1)[1] if '=' in x else ''
+            # ...an option's value is read as its own word, and so is a `name=value` operand's (`dd if=<home>/config.toml`, red team #3)
+            if x.startswith('-') or re.match(r'^[A-Za-z_][\w.-]*=', x): x = x.split('=', 1)[1] if '=' in x else ''
             if (v := _VAR.fullmatch(x)) and (v[1] or v[2]).lower() in env: x = env[(v[1] or v[2]).lower()]
             # ...after a `cd` away, a plain name that is there is read there (`cd ~ && cat .ssh/x`)
             near = here != cwd and here and x and not x.startswith('-') and os.path.exists(os.path.join(here, x))

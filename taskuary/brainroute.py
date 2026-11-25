@@ -598,9 +598,10 @@ def stands_in(store, task) -> str:
     t = task if isinstance(task, dict) else store.get_task(int(task)) if str(task or '').isdigit() else None
     if not t: return ''
     s = general.session_for(t['TaskId'])
-    if s and (back := getattr(s, 'stood_for', '')) and (no := down(store, back)): return f'Running on {_said(store, s.pick)} - {_said(store, back)} {no}'
+    # ...and only where an AI does stand in: "Running on no AI" said a thing ran that nothing ran, and nothing to do about it (the owner, 2026-11-25)
+    if s and s.pick and (back := getattr(s, 'stood_for', '')) and (no := down(store, back)): return f'Running on {_said(store, s.pick)} - {_said(store, back)} {no}'
     r = None if s else choose(store, 'general', t)
-    return f'Running on {_said(store, r.pick)} - {_said(store, r.off)} {off(store, r.off)}' if r and r.off else ''
+    return f'Running on {_said(store, r.pick)} - {_said(store, r.off)} {off(store, r.off)}' if r and r.off and r.pick else ''
 
 
 def for_session(store, task, brain: str = None) -> tuple:

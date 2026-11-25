@@ -106,6 +106,16 @@ def test_a_level_on_a_card_that_is_off_runs_on_the_next_ready_ai_on_its_own_mode
     assert brainroute.stands_in(s, tid) == ''
 
 
+def test_nothing_says_running_on_no_ai(s):
+    """The owner, 2026-11-25: the task's AI pill read "Running on no AI - OpenAI API is off" - a thing at work that nothing was, and no way on."""
+    from types import SimpleNamespace
+    from unittest import mock
+    h = _card(s, 'openai', model='gemini-x'); tid = _task(s, 'standard')
+    s.save_connector({'ConnectorId': int(h[10:]), 'Active': 0}, 'owner')
+    with mock.patch.object(general, 'session_for', return_value=SimpleNamespace(pick='', stood_for=h)), mock.patch.object(brainroute, 'mode', return_value='auto'):
+        assert brainroute.stands_in(s, tid) == ''
+
+
 def test_the_sensitive_rule_still_wins(s):
     brainroute.save_rules(s, [{**r, 'on': True} if r['id'] == 'sensitive' else r for r in brainroute.rules(s)])
     _set(s, hard=('cli:claude', ''))

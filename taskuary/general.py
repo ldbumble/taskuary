@@ -2551,7 +2551,7 @@ class GeneralSession:
         from . import brainroute, sessionrecord
         back, say = getattr(self, 'stood_for', ''), lambda p: brainroute._said(self.store, p)
         if back and back != self.pick and not brainroute.down(self.store, back): to, model, line = back, None, f'{say(back)} is on again - the agent runs on it.'
-        elif back and back != self.pick and not getattr(self, 'told', False):
+        elif back and back != self.pick and self.pick and not getattr(self, 'told', False):
             # ...a conversation that opened on the stand-in says so at its first turn - unless the failure that queued this try already did
             self.told, q = True, self.store.get_dispatch(self.task_id) or {}
             if q.get('Turn') == RETRY_TURN and say(self.pick) in str(q.get('LastError') or ''): return

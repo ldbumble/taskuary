@@ -178,6 +178,10 @@ def _mail_(store, tid: int) -> list:
     # ...BUT NEVER THE SENT-FOLDER COPY OF A LETTER TASKUARY SENT ON HIS PRESS (walk 13: every send drawn twice - the "Sent" card, then the
     # same mail again as "You · by email"): that copy IS the card's send, drawn once by the card, and no input to the agent either (events.py)
     if any(x.get('Own') for x in rows): mine = general.went_from_here(store, tid); rows = [x for x in rows if not (x.get('Own') and mine(x))]
+    # ...NOR HIS ASK FILED AS A MESSAGE (outbox.ask_row - the owner, 2026-11-25): drawn as "Email from You", a result he shared stood in the chat
+    # as mail he had sent while its draft still waited unsent. It is his ask, which the task's opener says in his words (chatlog.opener)
+    from .outbox import is_ask
+    rows = [x for x in rows if not is_ask(x)]
     return sorted(({**x, 'T': ep((x.get('SentAt') if x.get('Own') else None) or x.get('JoinedAt') or x.get('CreatedAt'))} for x in rows),
                   key=lambda x: (x['T'], x['MessageId']))
 

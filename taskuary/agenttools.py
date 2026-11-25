@@ -112,7 +112,8 @@ TOOLS = {
                      "choice - their props and worked examples are the guide tool's `show` topic. A view never sends, pays or closes. "
                      "A bad spec comes back saying what to fix. `files`: full paths of files you made - a picture,"
                      " a PDF, a page, or any file that is text - each is copied onto the task and drawn in this "
-                     f"chat as it is, a picture as the picture. {SHOW_WHAT} It is the one road onto the owner's screen: a viewer, a browser or an app opened on the computer is not"
+                     "chat as it is, a picture as the picture; several in one call (versions of one thing) stand as one artifact, "
+                     f"separate calls as separate ones. {SHOW_WHAT} It is the one road onto the owner's screen: a viewer, a browser or an app opened on the computer is not"
                      " on it, and its answer says what was shown.",
              _S({'title': _STR, 'root': _STR, 'elements': {'type': 'object', 'additionalProperties': __import__('taskuary.viewspec', fromlist=['x']).element_schema()},
                  'state': {'type': 'object'}, 'files': {'type': 'array', 'items': _STR}}),
@@ -572,9 +573,9 @@ def _card_call(store, tid: int, name: str, args: dict, doors: dict, skip=()) -> 
 # then send them all out"): any card's tool takes `items` - each item that tool's own fields, over the ones given beside them - and files each
 # by its own door, as one call would; the rows share one Batch, which the line of cards and the chat hold as ONE card with one press
 ITEMS = {'type': 'array', 'items': {'type': 'object'},
-         'description': "several of this same act at once: a list of objects, each with this tool's own fields - fields beside `items` are "
-                        "shared by all. A few stand one at a time for the owner's press each; many (25 emails, 40 issues to close) stand as ONE "
-                        "card he reviews a few of and does with one press. You hear how they went once."}
+         'description': "one act for many people, or versions of one thing: a list of objects, each with this tool's own fields - fields "
+                        "beside `items` are shared by all. They stand as ONE card, done with one press; you hear how they went once. Unrelated "
+                        "acts are separate calls: one card each, one after another."}
 # ...on the one review tool (an email, a post, a close, a SQL write, an API call) - an invite answers one meeting, the landing question is one
 # per checkout
 TOOLS['propose'][2]['properties']['items'] = ITEMS
@@ -606,16 +607,18 @@ def _many(store, tid: int, name: str, args: dict, doors: dict) -> str:
         if isinstance(got, dict) and isinstance(rid := got.get('review_id', got.get('review')), int): mine.append(rid)
         # ...and what the files on each say (read_back), once a block: several mails with the same deck answered with no read-back at all
         if isinstance(got, dict) and got.get('files_say'): says.append(got['files_say'])
-    # ...A FEW STAND ONE AT A TIME, MANY AS ONE CARD (design round 5, I4: three caterer emails came as one bulk card - one Send, a guessed address
-    # sent unopened): under bulkcard.MANY each is its own card in the line ("1 of 3"), as the same three raised one call each would be
+    # ...ONE CALL IS ONE CARD, WHATEVER ITS COUNT (the owner, 2026-11-25: "if it's 3 of the same email to different people then it goes in a bulk
+    # card because it's one action to multiple people. If separate emails need to be sent they should come one after another ... this is something
+    # the agent should decide which tool to use"): how it calls is its choice - `items` is one act to many, separate calls are separate cards.
+    # A count decided it before (five or more), so the same three emails were one card or three by nothing the agent chose
     mine = [r['ReviewId'] for r in store._rows(f"SELECT ReviewId FROM review WHERE TaskId=? AND ReviewId>? AND Status='pending' AND ReviewId IN ({','.join('?' * len(mine))})",
                                                (int(tid), top, *mine))] if mine else []
     # ...and only MANY OF THE SAME THING is one card (the owner, 2026-11-20): posts for different networks are different things - each its own
     # card in the row, with its own picture - however many there are
-    bulk = len(mine) >= bulkcard.MANY and len({str({**base, **it}.get('type') or {**base, **it}.get('network') or '') for it in items}) <= 1
+    bulk = len(mine) > 1 and len({str({**base, **it}.get('type') or {**base, **it}.get('network') or '') for it in items}) <= 1
     if bulk: store._exec(f"UPDATE review SET Batch=? WHERE ReviewId IN ({','.join('?' * len(mine))})", (key, *mine))
     n = len(mine)
-    card = ('They stand as ONE card: the owner reviews a few and does them all with one press; you hear the whole run once.' if bulk
+    card = ('They stand as ONE card: the owner does them all with one press; you hear the whole run once.' if bulk
             else f'They stand one at a time, {n} in a row: the owner sees each in turn and presses it; you hear how they went once the last is answered, or at once if a press fails.')
     shown = ((f"{len(went)} of {len(items)} sent at once - a routine's email to what its owner saved into it goes without a press; say they went."
               + (f" Not sent: {'; '.join(held)}." if held else '') + (f" The {n} unsent stand for the owner's Send{' as ONE card' if bulk else ', one at a time'}." if n else '')) if went

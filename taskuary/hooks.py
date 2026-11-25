@@ -898,6 +898,7 @@ def browser(payload: dict, sid: str = '', task: str = '') -> dict:
     if not t or not st: return {}
     w = tool in readgate.WRITE_TOOLS
     paths = readgate.tool_paths(inp, cwd=cwd) if w or tool in readgate.READ_TOOLS else None
+    if paths and tool in readgate.LIST_TOOLS: paths = readgate.listed(paths)
     # ...asked in the CLI's own prompt where the owner can answer it there, held for the task's Approve where nobody can (shellgate.asks)
     # ...A WRITE PASSES THE SAME GATE AS A READ (red team F2): a Write to Taskuary's config, its package or a startup folder ran unasked
     out = gate.check(st, t.task_id, t.sid, cmd, cwd, tool, shellgate.asks(st, t), about=str(inp.get('description') or ''), paths=paths, write=w)

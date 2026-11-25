@@ -183,7 +183,7 @@ class TaskOutputsTests(unittest.TestCase):
             url = f'/api/task-outputs/{self.tid}/notes.md'
             self.assertEqual(self.client.get(url).status_code, 401)
             self.assertEqual(self.client.get(url, params={'token': 'owner-secret'}).status_code, 401)
-            self.client.cookies.set(server.FILE_COOKIE, 'owner-secret')
+            self.client.cookies.set(server.FILE_COOKIE, guard.file_key(cfg['server']))
             try: self.assertEqual(self.client.get(url).status_code, 200)
             finally: self.client.cookies.clear()
 

@@ -9,7 +9,7 @@ from loguru import logger
 from . import vault
 from .inboxes import TYPES as INBOXES, NAMES as INBOX_NAMES     # the helpdesks and newer trackers: seeded and triggering like the rest
 from .apireads import types as _read_types                     # a vendor's REST API read (apireads.json): each row a card
-from .connectorcatalog import secret_keys                      # the config fields a card declares secret: sealed like the Secret column
+from .connectorcatalog import map_secrets, secret_keys         # the config fields a card declares secret: sealed like the Secret column
 def _posts() -> set:
     from .connectorcatalog import cards
     return {c['type'] for c in cards() for a in c.get('actions') or [] if a.get('road') == 'run_tool'}
@@ -1162,6 +1162,17 @@ def _units_of(picture):
     return picture['_units']
 
 
+_OPENED: dict = {}
+def _open_sealed(v):
+    "A sealed config value opened, once a process: a page's dozen card reads would each ask the OS again."
+    if not vault.sealed(v): return v
+    if v not in _OPENED: _OPENED[v] = vault.unseal(v)
+    return _OPENED[v]
+def _sealed_in(cfg) -> set:
+    "Every sealed value in a config, at any depth."
+    out = set(); map_secrets(cfg, lambda v: out.add(v) if vault.sealed(v) else v, within=True); return out
+
+
 class SQLiteStore:
     """The local-first binding. One connection, a lock (sqlite + threads), rows as dicts."""
 
@@ -1718,15 +1729,15 @@ class SQLiteStore:
             for cid, sec in self.cx.execute("SELECT ConnectorId, Secret FROM connector WHERE Secret IS NOT NULL AND Secret != '' "
                                             "AND Secret NOT LIKE 'vault:%'").fetchall():
                 if vault.sealed(new := vault.seal(sec)): self.cx.execute('UPDATE connector SET Secret=? WHERE ConnectorId=?', (new, cid))
-            # ...and the config fields a card declares secret (connectorcatalog.secret_config) saved before they were sealed there too
+            # ...and the config fields that are secret (connectorcatalog.map_secrets) saved before they were sealed there too
             n = 0
             for cid, t, cj in self.cx.execute("SELECT ConnectorId, Type, ConfigJson FROM connector WHERE ConfigJson IS NOT NULL AND ConfigJson != ''").fetchall():
                 try: c = json.loads(cj)
                 except (TypeError, ValueError): continue
                 if not isinstance(c, dict): continue
-                got = {k: v for k in secret_keys(t) if c.get(k) and not vault.sealed(c[k]) and vault.sealed(v := vault.seal(c[k]))}
-                if got: n += len(got); self.cx.execute('UPDATE connector SET ConfigJson=? WHERE ConnectorId=?', (json.dumps({**c, **got}), cid))
-            if n: logger.info(f'sealed {n} secret config field(s) that were kept as text')
+                got = map_secrets(c, lambda v: v if vault.sealed(v) else vault.seal(v), secret_keys(t))
+                if got != c: n += 1; self.cx.execute('UPDATE connector SET ConfigJson=? WHERE ConnectorId=?', (json.dumps(got), cid))
+            if n: logger.info(f'sealed the secret config fields of {n} card(s) that were kept as text')
             # The handbook ships ON - handbook.enabled has said so since it was written - but its
             # card is seeded like every other, at Active 0, and enabled() reads the card when one
             # exists. So the feature was off on every install that ever ran: wrapup.wrap skipped
@@ -6262,29 +6273,33 @@ class SQLiteStore:
         """Every card, secrets left out. ASKED A DOZEN TIMES A PAGE READ (the owner's restart, 2026-11-16: /api/setup, the first run, the
         agents and the rail each asked it again, ~340 cards each time): kept until a connector is written - change_gen's trigger counts every
         write, from any process - and read with that count in one snapshot. A copy each time: callers edit what they get."""
-        if not self._off_writer(): return self._rows(f'SELECT {self._CONN_SAFE} FROM connector ORDER BY ConnectorId')   # ...its own writes, unread
+        if not self._off_writer(): return [self._shown(r) for r in self._rows(f'SELECT {self._CONN_SAFE} FROM connector ORDER BY ConnectorId')]   # ...its own writes, unread
         with self._snapshot_read() as cur:
             gen = cur.execute("SELECT Gen FROM change_gen WHERE Tbl='connector'").fetchone()
             got = self._conn_cache
-            if gen is None: return [dict(r) for r in cur.execute(f'SELECT {self._CONN_SAFE} FROM connector ORDER BY ConnectorId')]
+            if gen is None: return [self._shown(dict(r)) for r in cur.execute(f'SELECT {self._CONN_SAFE} FROM connector ORDER BY ConnectorId')]
             if got is None or got[0] != gen[0]:
-                got = self._conn_cache = (gen[0], [dict(r) for r in cur.execute(f'SELECT {self._CONN_SAFE} FROM connector ORDER BY ConnectorId')])
+                got = self._conn_cache = (gen[0], [self._shown(dict(r)) for r in cur.execute(f'SELECT {self._CONN_SAFE} FROM connector ORDER BY ConnectorId')])
         return [dict(r) for r in got[1]]
     # A SECRET KEPT IN ConfigJson IS SEALED LIKE THE Secret COLUMN: the fields a card declares secret (connectorcatalog.secret_config -
     # an app's client secret, a refresh token, an authenticator key, a sender password) - a copy of taskuary.db must not carry them in the clear
     @staticmethod
-    def _opened(r):
-        """A with_secret row carries the secret itself: the column holds it sealed (vault.py) - and so do its config's sealed fields.
-        Every sealed value opens, declared or not: the marker is the app's own, and a field once sealed must stay readable."""
-        if r and r.get('Secret'): r['Secret'] = vault.unseal(r['Secret'])
+    def _opened(r, keep=None):
+        """A with_secret row carries the secret itself: the column holds it sealed (vault.py) - and so do its config's sealed fields, at any
+        depth. Every sealed value opens, declared or not: the marker is the app's own, and a field once sealed must stay readable. `keep`:
+        top-level keys left sealed - a read without with_secret keeps its card's declared ones shut, and opens what is sealed by shape alone."""
+        if r and r.get('Secret') and keep is None: r['Secret'] = vault.unseal(r['Secret'])
         if r and vault.PREFIX in (r.get('ConfigJson') or ''):
             try: cfg = json.loads(r['ConfigJson'])
             except (TypeError, ValueError): return r
-            if isinstance(cfg, dict) and any(vault.sealed(v) for v in cfg.values()):
-                r['ConfigJson'] = json.dumps({k: vault.unseal(v) if vault.sealed(v) else v for k, v in cfg.items()})
+            if isinstance(cfg, dict):
+                r['ConfigJson'] = json.dumps({k: v if k in (keep or ()) else map_secrets(v, _open_sealed, within=True) for k, v in cfg.items()})
         return r
+    def _shown(self, r):
+        "A row read without with_secret: what is sealed by its shape alone opens (it was text before), what its card declares stays shut."
+        return self._opened(r, secret_keys(r.get('Type'))) if r else r
     def _cfg_sealed(self, cid, cj, typ=None):
-        """ConfigJson as stored: its declared secret fields sealed. A value that opens to what is stored keeps its seal - a card saved
+        """ConfigJson as stored: its secret fields sealed. A value that opens to what is stored keeps its seal - a card saved
         from a with_secret read would otherwise mint a new keychain entry on every save - and one replaced is forgotten."""
         try: cfg = json.loads(cj) if cj else None
         except (TypeError, ValueError): return cj
@@ -6294,22 +6309,20 @@ class SQLiteStore:
         except (TypeError, ValueError): old = {}
         return self._seal_cfg(cfg, old if isinstance(old, dict) else {}, row.get('Type') or typ, cj)
     def _seal_cfg(self, cfg: dict, old: dict, typ, cj=None):
-        """`cfg` as stored over `old`, the stored config of a card of type `typ`: what _cfg_sealed says, from a config already read."""
-        if cj is None: cj = json.dumps(cfg)
-        keys = secret_keys(typ)
-        if not any(cfg.get(k) or old.get(k) for k in keys): return cj
-        for k in keys:
-            v, was = cfg.get(k), old.get(k)
-            if v and not vault.sealed(v): cfg[k] = was if vault.sealed(was) and vault.unseal(was) == v else vault.seal(v)
-            if was and was != cfg.get(k): vault.forget(was)
-        return json.dumps(cfg)
+        """`cfg` as stored over `old`, the stored config of a card of type `typ`: each secret in it (connectorcatalog.map_secrets - what the
+        card declares and what is one by its shape) sealed, a value already sealed in `old` keeping that seal."""
+        was = _sealed_in(old)
+        prev = {_open_sealed(v): v for v in was}
+        out = map_secrets(cfg, lambda v: v if vault.sealed(v) else prev.get(v) or vault.seal(v), secret_keys(typ))
+        for v in was - _sealed_in(out): vault.forget(v)
+        return (json.dumps(cfg) if cj is None else cj) if out == cfg else json.dumps(out)
     def get_connector(self, cid, with_secret=False):
         r = self._one(f"SELECT {'*' if with_secret else self._CONN_SAFE} FROM connector WHERE ConnectorId=?", (cid,))
-        return self._opened(r) if with_secret else r
+        return self._opened(r) if with_secret else self._shown(r)
     def connectors_by_type(self, ctype, with_secret=False):
         rows = self._rows(f"SELECT {'*' if with_secret else self._CONN_SAFE} FROM connector "
                           'WHERE Type=? ORDER BY Active DESC, ConnectorId', (ctype,))
-        return [self._opened(r) for r in rows] if with_secret else rows
+        return [self._opened(r) if with_secret else self._shown(r) for r in rows]
     def get_connector_by_type(self, ctype, with_secret=False):
         """Compatibility/default lookup for code that needs one connection: prefer an active
         instance, then the original catalog row. Instance-aware paths use ConnectorId."""

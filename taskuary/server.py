@@ -469,7 +469,7 @@ OAUTH_RETURNS = ('/api/quickbooks/callback', '/api/zoho/callback', '/api/linkedi
 # of ours, with no token: its signature (or the card's secret path) is its proof, and it answers nothing but "taken". The generic OAuth
 # return rides the same tunnel when a vendor refuses an http redirect (oauth.redirect_uri). Every other path keeps the Host check, so a
 # tunnel pointed at this port reaches these doors and not the page that carries the owner token.
-FILE_COOKIE, FILE_READS = 'taskuary_files', ('/api/attachments/', '/api/task-artifacts/', '/api/task-outputs/')
+FILE_COOKIE, FILE_READS = 'taskuary_files', guard.FILE_READS
 def _outside_door(path: str) -> bool: return path == '/api/oauth/callback' or path.startswith('/api/inbound/')
 
 @app.middleware('http')
@@ -512,7 +512,7 @@ async def token_gate(request: Request, call_next):
         # ...and an OAuth callback is a redirect from the provider's site: no header can ride on it.
         # It proves itself with the one-time state it was issued (quickbooks_authorize), not the token.
         file_read = request.url.path.startswith(FILE_READS)
-        if not (file_read and guard.token_matches(request.cookies.get(FILE_COOKIE), tok)) \
+        if not (file_read and guard.token_matches(request.cookies.get(FILE_COOKIE), guard.file_key(cfg['server']))) \
                 and request.url.path not in OAUTH_RETURNS and not _outside_door(request.url.path):
             # In JSON, like every other refusal: an HTML body left `detail` undefined, so a tab that
             # was open across a token change answered every click with whichever screen's generic
@@ -548,8 +548,8 @@ async def token_gate(request: Request, call_next):
     resp = await call_next(request)
     # ...the owner's page, proven by its header, is handed the cookie its pictures and downloads are read by: same-site only, out of script's reach
     if tok and scope == guard.OWNER and guard.token_matches(presented, tok) and not request.url.path.startswith(FILE_READS) \
-            and not guard.token_matches(request.cookies.get(FILE_COOKIE), tok):
-        resp.set_cookie(FILE_COOKIE, tok, httponly=True, samesite='strict', path='/api/')
+            and not guard.token_matches(request.cookies.get(FILE_COOKIE), fk := guard.file_key(cfg['server'])):
+        resp.set_cookie(FILE_COOKIE, fk, httponly=True, samesite='strict', path='/api/')
     return resp
 
 

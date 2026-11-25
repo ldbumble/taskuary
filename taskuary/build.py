@@ -134,10 +134,8 @@ _TOOL = re.compile(r'^[ \t]*\[\[CARD-(ASK|SAVE|TEST|DONE)(?::([^\]]*))?\]\][ \t]
 
 
 def _secretish(key: str) -> bool:
-    from .guard import WRITE_ONLY_CONFIG, _CONFIG_SECRETS
-    k = str(key or '').lower()
-    return (k == 'secret' or k in _CONFIG_SECRETS or k.endswith(('_secret', '_password', '_token', '_key'))
-            or any(k in keys for keys in WRITE_ONLY_CONFIG.values()))
+    from .guard import WRITE_ONLY_CONFIG, _secretish as named
+    return named(key or '') or any(str(key or '').lower() in keys for keys in WRITE_ONLY_CONFIG.values())
 
 
 def card_brief(store, cid: int, ctx: dict) -> str:

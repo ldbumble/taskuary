@@ -14,7 +14,7 @@ import { label as btn } from "./buttons.js";
 import { copyText } from "./CopyCorner.jsx";
 import { Md } from "./md.jsx";
 import { useOverlay } from "./overlays.js";
-import { csvRows, fitSvg, SANDBOX, shut } from "./shownPages.js";
+import { csvRows, fitSvg, outsideLink, SANDBOX, shut } from "./shownPages.js";
 import { deliverables, MEDIA_H, mediaFit } from "./taskOutputs.js";
 import "./publishedPages.css";
 import Artifact from "./Artifact.jsx";
@@ -169,8 +169,19 @@ export function Preview({ page }) {
     );
   }
   return isHtml(page)
-    ? <iframe className="tq-published-frame" title={page.name} sandbox={SANDBOX} srcDoc={shut(isImage(page) ? fitSvg(body) : body)} />
+    ? <PageFrame title={page.name} html={shut(isImage(page) ? fitSvg(body) : body)} />
     : <div className="tq-published-md"><Md text={body} /></div>;
+}
+
+// ...its links open in the owner's browser as any outside link does: the page asks (shownPages.outsideLink), the app opens it
+function PageFrame({ title, html }) {
+  const ref = React.useRef(null);
+  React.useEffect(() => {
+    const on = (e) => { const u = outsideLink(e, ref.current?.contentWindow); if (u) window.open(u, "_blank", "noopener,noreferrer"); };
+    window.addEventListener("message", on);
+    return () => window.removeEventListener("message", on);
+  }, []);
+  return <iframe ref={ref} className="tq-published-frame" title={title} sandbox={SANDBOX} srcDoc={html} />;
 }
 
 // A FILE OPENED WHERE IT IS NAMED (the owner, 2026-11-05: "i need to be able to click on this and a pop up will show the file ... without having

@@ -278,6 +278,14 @@ def allow_downloads(webview) -> bool:
 # downloads lands in the same folder (downloads_to_folder).
 _BAD = set('<>:"/\\|?*')
 LOOPBACK = {'127.0.0.1', 'localhost', '::1'}
+SERVING: dict = {}          # the address this window's own server answers on (start_server): the one save_download asks
+# ...A NAME THAT RUNS WHEN IT IS OPENED, OR WHEN ITS FOLDER IS (red team #3): a link an agent wrote can name what the server sends back, and
+# `run.url` or a `.scf` in Downloads reaches out the moment Explorer draws its icon. What the system runs by name (PATHEXT, and its default
+# where there is none) and the shell's own shortcut files are saved as text: the bytes are kept, nothing is started by a double-click.
+_RUNS = frozenset({'.com', '.exe', '.bat', '.cmd', '.vbs', '.vbe', '.js', '.jse', '.wsf', '.wsh', '.msc', '.ps1', '.psm1', '.scr', '.pif', '.cpl',
+                   '.hta', '.msi', '.msp', '.reg', '.jar', '.lnk', '.url', '.scf', '.library-ms', '.searchconnector-ms', '.settingcontent-ms',
+                   '.appref-ms', '.application', '.website', '.desktop', '.command', '.inf'}
+                  | {e.strip().lower() for e in os.environ.get('PATHEXT', '').split(';') if e.strip()})
 
 
 def _known_downloads():
@@ -306,9 +314,13 @@ def downloads_dir() -> Path:
 
 
 def safe_name(name: str, fallback: str = 'download') -> str:
-    "A file name only: no folder in it, nothing Windows refuses - a name off the wire never picks where it lands."
-    n = ''.join('_' if c in _BAD or ord(c) < 32 else c for c in str(name or '').replace('\\', '/').split('/')[-1]).strip().rstrip('. ')
-    return n if n and n not in ('.', '..') else fallback
+    """A file name only: no folder in it, nothing Windows refuses - a name off the wire never picks where it lands. No control or bidi mark
+    (`invoice\u202efdp.html` drew as invoicelmth.pdf), and one that would run when opened is saved as text (_RUNS)."""
+    import unicodedata
+    n = ''.join('_' if c in _BAD or ord(c) < 32 else c for c in str(name or '').replace('\\', '/').split('/')[-1]
+                if unicodedata.category(c) not in ('Cf', 'Cc') or ord(c) < 32).strip().rstrip('. ')
+    if not n or n in ('.', '..'): return fallback
+    return f'{n}.txt' if os.path.splitext(n)[1].lower() in _RUNS else n
 
 
 def free_name(folder: Path, name: str) -> Path:
@@ -345,18 +357,31 @@ def _claim(folder: Path, name: str):
     raise FileExistsError(f'no free name for {name} in {folder}')
 
 
+class _NoRedirect(__import__('urllib.request').request.HTTPRedirectHandler):
+    "A file route answers with the file; a redirect is followed nowhere, the owner's header on it."
+    def redirect_request(self, *a, **k): return None
+
+
 def save_download(url: str, folder: Path = None) -> dict:
     """Fetch one of this app's own files and save it in Downloads: {'name', 'folder', 'path'}, or {'error'} in the server's words.
     Only this machine's server is asked - the page's address for the file, with the owner token in the request's header."""
-    u = urllib.parse.urlsplit(str(url or ''))
-    if u.scheme not in ('http', 'https') or (u.hostname or '') not in LOOPBACK: return {'error': 'Only a file from Taskuary itself can be saved here.'}
-    import json, urllib.request as ureq, urllib.error as uerr
+    import json, posixpath, urllib.request as ureq, urllib.error as uerr
+    from . import config, guard
+    u, own = urllib.parse.urlsplit(str(url or '')), urllib.parse.urlsplit(SERVING.get('url') or f"http://127.0.0.1:{config.load()['server'].get('port') or 7787}")
+    # ...and only a FILE of it (red team #3): the owner's header rides on this, so an agent's link to /api/settings?download=true saved his
+    # settings into Downloads. The file routes the page saves from (guard.FILE_READS), on this window's own port, nothing climbing out of them
+    path = urllib.parse.unquote(u.path)
+    try: port = u.port
+    except ValueError: port = None
+    if u.scheme not in ('http', 'https') or (u.hostname or '') not in LOOPBACK or port != own.port \
+            or not path.startswith(guard.FILE_READS) or posixpath.normpath(path) != path or '\\' in path:
+        return {'error': 'Only a file from Taskuary itself can be saved here.'}
     folder = Path(folder) if folder else downloads_dir()
     try: folder.mkdir(parents=True, exist_ok=True)
     except OSError as e: return {'error': f'The Downloads folder could not be opened - {e.strerror or e}.'}
-    opener = ureq.build_opener(ureq.ProxyHandler({}))       # loopback: a system proxy must not see the token
+    # loopback: a system proxy must not see the token - and no redirect takes it anywhere else (_NoRedirect)
+    opener = ureq.build_opener(ureq.ProxyHandler({}), _NoRedirect())
     # ...which rides in its header, as the page's own calls carry it - a file's address carries none (server.FILE_COOKIE)
-    from . import config
     if tok := str(config.load()['server'].get('token') or ''): opener.addheaders = [('X-Taskuary-Token', tok)]
     name = urllib.parse.unquote(u.path.rsplit('/', 1)[-1])
     try:
@@ -592,6 +617,7 @@ def start_server(host='127.0.0.1', port=None):
         probe = '127.0.0.1' if host in ('0.0.0.0', '::') else host
         with socket.socket() as s: port = want if s.connect_ex((probe, int(want))) != 0 else free_port(host)
     server = Server(server_config(app, host, port))
+    SERVING['url'] = f'http://{host}:{port}'
     server.thread = threading.Thread(target=server.run, daemon=True); server.thread.start()   # kept: quitting joins it
     for _ in range(200):
         if server.started: break

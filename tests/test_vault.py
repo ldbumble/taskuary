@@ -90,10 +90,26 @@ class VaultTests(unittest.TestCase):
         self.assertTrue(vault.sealed(self.cfg_raw(s, cid)['sender_password']))
         self.assertEqual(json.loads(s.get_connector(cid, with_secret=True)['ConfigJson'])['sender_password'], 'sp-invented-2')
 
-    def test_a_field_its_card_does_not_declare_secret_stays_plain_whatever_its_name(self):
+    # ...AND ONE IT DOES NOT DECLARE IS SEALED BY ITS SHAPE (red team #3): an MCP card's headers, a local server's env, a dsn, a webhook
+    # address sat in the column as text. Sealed at rest; every read the card's own code makes still gets the value.
+    SHAPES = {'url': 'https://mcp.vendor.example/v1', 'headers': {'Authorization': 'Bearer hb-invented', 'X-Team': 'ops'},
+              'env': {'API_KEY': 'ek-invented'}, 'conn_str': 'Server=db.example;Pwd=cs-invented', 'dsn': 'postgres://u:dp-invented@db.example/x',
+              'cookie': 'sid=ck-invented', 'passphrase': 'pp-invented', 'webhook_url': 'https://hooks.example/wh-invented',
+              'apiKey': 'ak-invented', 'accessToken': 'at-invented', 'nested': {'auth': {'client_secret': 'ns-invented'}},
+              'callback': 'https://ops:cb-invented@hooks.example/x', 'region': 'eu', 'retries': 3}
+
+    def test_a_secret_shaped_field_its_card_does_not_declare_is_sealed_at_rest_and_still_reads(self):
         s = MemoryStore()
-        cid = s.save_connector({'Type': 'intacct', 'Name': 'Books', 'ConfigJson': json.dumps({'entity_id': 'E1', 'client_secret': 'not-declared-here'})}, 'o')
-        self.assertEqual(self.cfg_raw(s, cid), {'entity_id': 'E1', 'client_secret': 'not-declared-here'})
+        cid = s.save_connector({'Type': 'mcp', 'Name': 'Tools', 'ConfigJson': json.dumps(self.SHAPES)}, 'o')
+        raw = json.dumps(self.cfg_raw(s, cid))
+        self.assertNotIn('-invented', raw)
+        self.assertEqual((self.cfg_raw(s, cid)['region'], self.cfg_raw(s, cid)['url']), ('eu', self.SHAPES['url']))
+        self.assertEqual(json.loads(s.get_connector(cid, with_secret=True)['ConfigJson']), self.SHAPES)
+        self.assertEqual(json.loads(s.get_connector(cid)['ConfigJson']), self.SHAPES)          # ...a plain read too: it was text before
+        self.assertEqual(json.loads(next(r for r in s.list_connectors() if r['ConnectorId'] == cid)['ConfigJson']), self.SHAPES)
+        before = self.cfg_raw(s, cid)
+        s.save_connector({'ConnectorId': cid, 'ConfigJson': s.get_connector(cid)['ConfigJson']}, 'o')
+        self.assertEqual(self.cfg_raw(s, cid), before)                                       # a save of what it read keeps each seal
 
     def test_an_old_databases_plain_secret_config_is_sealed_once_at_startup(self):
         import os, tempfile

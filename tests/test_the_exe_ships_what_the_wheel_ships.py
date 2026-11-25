@@ -63,5 +63,14 @@ class TheSpecStillParsesTests(unittest.TestCase):
         ast.parse((ROOT / 'taskuary.spec').read_text(encoding='utf-8'))
 
 
+class TheWebServerHasAFloorTests(unittest.TestCase):
+    def test_starlette_and_fastapi_are_pinned_above_their_known_advisories(self):
+        "Red team #3: starlette came in through fastapi with no floor of its own, so an old one with published advisories still installed."
+        deps = re.findall(r'^\s*"([A-Za-z_-]+)>=([\d.]+)', (ROOT / 'pyproject.toml').read_text(encoding='utf-8'), re.M)
+        floor = {n: tuple(int(x) for x in v.split('.')) for n, v in deps}
+        self.assertGreaterEqual(floor.get('starlette', ()), (0, 49, 1))
+        self.assertGreaterEqual(floor.get('fastapi', ()), (0, 115))
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -322,9 +322,11 @@ def _hands(store, tid: int, sid: str, name: str, a: dict) -> str:
         # ...a read outside the task's own folders waits for the owner, as a CLI's does (readgate.py)
         from . import gate, readgate
         cwd = workdir(store, tid)
-        held, never = readgate.judge(store, tid, [_path(store, tid, a.get('path') or '.')], cwd)
+        ps = [_path(store, tid, a.get('path') or '.')]
+        if name == 'files_list': ps = readgate.listed(ps)           # ...its names only (readgate.Listed)
+        held, never = readgate.judge(store, tid, ps, cwd)
         if never: raise ValueError(never)
-        if held: return gate.reason(gate.check(store, tid, sid, cwd=cwd, paths=[_path(store, tid, a.get('path') or '.')])) or gate.HELD_SAID
+        if held: return gate.reason(gate.check(store, tid, sid, cwd=cwd, paths=ps)) or gate.HELD_SAID
     if name == 'files_list':
         d = _path(store, tid, a.get('path') or '.')
         if not d.is_dir(): raise ValueError(f'{d} is not a folder')

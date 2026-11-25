@@ -61,6 +61,21 @@ class FileRoutesTests(unittest.TestCase):
             self.assertIn(quote(n) if quote(n) != n else f'"{n}"', cd)        # the file's own name, RFC 5987 where it is not plain
             self.assertEqual(self.client.head(url).status_code, 200, n)       # what the page asks before it saves
 
+    def test_a_file_is_read_by_the_page_s_cookie_and_never_by_a_token_in_its_address(self):
+        """The red team, 2026-11-24 (T8c): Download put the owner token in the file's address (?download=true&token=...), where history,
+        a referer and a log kept it. A browser's <img src> or link carries no header, so the page is handed a same-site, script-proof cookie
+        by its first call, and the file is read by that alone."""
+        url, tok = self.rows()['plain.txt']['url'], server.cfg['server'].get('token') or ''
+        bare = TestClient(server.app, headers={'X-Taskuary-Token': ''})
+        self.assertEqual(bare.get(url, params={'download': 'true', 'token': tok}).status_code, 401)
+        page = TestClient(server.app)                                          # ...the page's own call, with its header, hands it the cookie
+        got = page.get('/api/tasks')
+        cookie = got.headers.get('set-cookie') or ''
+        self.assertIn(f'{server.FILE_COOKIE}=', cookie); self.assertIn('HttpOnly', cookie); self.assertIn('SameSite=strict', cookie)
+        bare.cookies.set(server.FILE_COOKIE, tok)
+        self.assertEqual(bare.get(url, params={'download': 'true'}).status_code, 200)
+        self.assertEqual(TestClient(server.app, headers={'X-Taskuary-Token': ''}).get(url).status_code, 401)   # ...and nothing else opens it
+
     def test_open_is_inline_for_what_the_page_draws_and_attachment_for_the_rest(self):
         rows = self.rows()
         def get(n, **q): return self.client.get(rows[n]['url'], params=q)
@@ -238,7 +253,7 @@ class FileRoutesTests(unittest.TestCase):
         base = f'http://127.0.0.1:{srv.server_address[1]}'
         with tempfile.TemporaryDirectory() as d:
             dl = Path(d) / 'Downloads'
-            got = desktop.save_download(f'{base}/api/task-outputs/7/chart.png?download=true&token=t', folder=dl)
+            got = desktop.save_download(f'{base}/api/task-outputs/7/chart.png?download=true', folder=dl)
             self.assertEqual((got['name'], got['folder']), ('chart.png', str(dl)))      # the whole folder: "Downloads" alone said not which
             self.assertEqual((dl / 'chart.png').read_bytes(), b'png-bytes')
             self.assertEqual(desktop.save_download(f'{base}/api/task-outputs/7/chart.png', folder=dl)['name'], 'chart (1).png')
@@ -287,10 +302,10 @@ class FileRoutesTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             dl = Path(d) / 'Downloads'
             for n in ('Collections – Q3.pdf', 'Collections by payer.xlsx', 'Quarter pack.zip'):
-                got = desktop.save_download(f"{base}{rows[n]['url']}?download=true&token={tok}", folder=dl)
+                got = desktop.save_download(f"{base}{rows[n]['url']}?download=true", folder=dl)         # ...the window's own header carries the token
                 self.assertEqual((got.get('name'), got.get('folder')), (n, str(dl)), got)
                 self.assertEqual((dl / n).read_bytes(), (self.dir / n).read_bytes(), n)
-            got = desktop.save_download(f"{base}/api/task-artifacts/{art['ArtifactId']}?download=true&token={tok}", folder=dl)
+            got = desktop.save_download(f"{base}/api/task-artifacts/{art['ArtifactId']}?download=true", folder=dl)
             self.assertEqual(got.get('name'), 'Budget coverage.html', got)
             self.assertEqual((dl / 'Budget coverage.html').read_bytes(), page.read_bytes())
             # the bridge the window calls it through (pywebview's js_bridge_call): what the page is handed back is the same line
@@ -299,7 +314,7 @@ class FileRoutesTests(unittest.TestCase):
             said = []
             win = type('Window', (), {'_functions': {'save_download': desktop.save_download}, '_js_api': None, 'evaluate_js': lambda s, js: said.append(js)})()
             with mock.patch.object(desktop, 'downloads_dir', lambda: dl):      # the page passes the address alone: Downloads is the window's
-                js_bridge_call(win, 'save_download', [f"{base}{rows['Quarter pack.zip']['url']}?download=true&token={tok}"], 'p1')
+                js_bridge_call(win, 'save_download', [f"{base}{rows['Quarter pack.zip']['url']}?download=true"], 'p1')
                 for _ in range(400):
                     if said: break
                     __import__('time').sleep(0.05)

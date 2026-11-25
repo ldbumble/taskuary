@@ -347,7 +347,7 @@ def _claim(folder: Path, name: str):
 
 def save_download(url: str, folder: Path = None) -> dict:
     """Fetch one of this app's own files and save it in Downloads: {'name', 'folder', 'path'}, or {'error'} in the server's words.
-    Only this machine's server is asked - the page's address for the file, which carries the owner token it was shown with."""
+    Only this machine's server is asked - the page's address for the file, with the owner token in the request's header."""
     u = urllib.parse.urlsplit(str(url or ''))
     if u.scheme not in ('http', 'https') or (u.hostname or '') not in LOOPBACK: return {'error': 'Only a file from Taskuary itself can be saved here.'}
     import json, urllib.request as ureq, urllib.error as uerr
@@ -355,6 +355,9 @@ def save_download(url: str, folder: Path = None) -> dict:
     try: folder.mkdir(parents=True, exist_ok=True)
     except OSError as e: return {'error': f'The Downloads folder could not be opened - {e.strerror or e}.'}
     opener = ureq.build_opener(ureq.ProxyHandler({}))       # loopback: a system proxy must not see the token
+    # ...which rides in its header, as the page's own calls carry it - a file's address carries none (server.FILE_COOKIE)
+    from . import config
+    if tok := str(config.load()['server'].get('token') or ''): opener.addheaders = [('X-Taskuary-Token', tok)]
     name = urllib.parse.unquote(u.path.rsplit('/', 1)[-1])
     try:
         with opener.open(url, timeout=60) as r:

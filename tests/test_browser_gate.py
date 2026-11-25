@@ -286,8 +286,9 @@ class Judging(unittest.TestCase):
         b = Brain(None)
         said = 'Sign up for a free account on each of the ten vendors and collect their tables.'
         with verdict({'irreversible': True, 'sure': True, 'what': 'Submit the sign-up on RentScope', 'big': False}):
-            self.assertFalse(one(self.s, self.act, {'url': CHECKOUT, 'elements': SNAP}, b, said=said)['hold'])
-            self.assertFalse(one(self.s, self.act, {'url': CHECKOUT}, Brain(None), said='')['hold'], 'a free sign-up runs on the task he opened')
+            # ...an account's form: the password box the agent filled is what makes it a sign-up (browsergate.page: pw)
+            self.assertFalse(one(self.s, self.act, {'url': CHECKOUT, 'elements': SNAP, 'pw': True}, b, said=said)['hold'])
+            self.assertFalse(one(self.s, self.act, {'url': CHECKOUT, 'pw': True}, Brain(None), said='')['hold'], 'a free sign-up runs on the task he opened')
         self.assertIn(said, b.seen[0])
         for kind, what, why in (('money', 'Pay $49 for DealFlow Pro', 'spends your money'), ('private', 'Send your mobile number to ZoningNow', 'your own details'),
                                 ('speaks', 'Post the announcement on social.example', 'speaks for you'), ('deletes', 'Cancel the plan on cloud.example', 'deletes or cancels')):
@@ -335,7 +336,7 @@ class Judging(unittest.TestCase):
         self.assertIn('submit them all yourself', bg.asked(self.s, self.tid))
         b = Brain(None)
         with verdict({'irreversible': True, 'sure': True, 'what': 'creates a free account on parcelpulse.example', 'asked': True, 'big': False}):
-            self.assertFalse(one(self.s, self.act, {'url': CHECKOUT}, b, said=bg.asked(self.s, self.tid))['hold'])
+            self.assertFalse(one(self.s, self.act, {'url': CHECKOUT, 'pw': True}, b, said=bg.asked(self.s, self.tid))['hold'])   # ...an account's form
         self.assertIn('submit them all yourself', b.seen[0])
 
     def test_a_reversible_act_sure_of_it_passes(self):
@@ -1025,3 +1026,19 @@ def _check(s, tid, sid, cmd, tool='Bash', cwd='', **k):
     "The one check point (gate.check), in the old hook's order of arguments."
     from taskuary import gate
     return gate.check(s, tid, sid, cmd, cwd, tool, **k)
+
+
+class WhatCannotBeUndoneWaits(unittest.TestCase):
+    """The owner's rule, broken live 2026-11-24: the judge called "Publish your BYD opinion post on x.com" not big but irreversible, and the
+    code let "not big" through - the post went out on X with no press, twice. What cannot be undone waits; only an account's form (a sign-up
+    or a sign-in, the owner's 2026-11-19 ruling) runs on the judge's "not big"."""
+    def setUp(self): self.s, self.act = MemoryStore(), bg.acts('agent-browser click @e74')[0]
+
+    def test_a_post_the_judge_calls_not_big_but_irreversible_is_held_and_a_sign_up_still_runs(self):
+        post = {'big': False, 'sure': True, 'irreversible': True, 'what': 'Publish your post on social.example'}
+        with verdict(post):
+            v = one(self.s, self.act, {'url': 'https://social.example/compose', 'fields': []}, Brain(None), said='Post the comparison on social.example')
+            self.assertTrue(v['hold'], 'a post that cannot be called back waits for his press'); self.assertIn("can't be undone", v['why'])
+            self.assertFalse(one(self.s, self.act, {'url': 'https://social.example/signup', 'pw': True}, Brain(None), said='Sign me up')['hold'])
+        with verdict({**post, 'irreversible': False}):
+            self.assertFalse(one(self.s, self.act, {'url': 'https://social.example/search'}, Brain(None), said='')['hold'], 'what can be undone runs')

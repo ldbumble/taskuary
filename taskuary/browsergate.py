@@ -418,8 +418,10 @@ def rule_of(v: dict) -> tuple:
     SAYS it is not big passes on that: one that left `big` out (a CLI judge carries no schema) is read by whether it can be undone."""
     big, sure, irr, kind = v.get('big'), v.get('sure'), v.get('irreversible'), str(v.get('kind') or '')
     if big is True: return True, WHY.get(kind, BIG_WHY), kind
-    if big is False and (sure is not False or not irr): return False, '', ''
-    if big is None and irr and sure: return True, "it can't be undone", ''
+    # ...WHAT CANNOT BE UNDONE WAITS, WHATEVER ELSE THE JUDGE SAID (the owner's rule; 2026-11-24: "Publish your BYD opinion post on x.com" was judged
+    # big false, irreversible true - and posted with no press, twice). Only the judge's word that a step can be undone lets "not big" through
+    if irr: return True, "it can't be undone", kind
+    if big is False: return False, '', ''
     if big is None and sure: return False, '', ''
     return True, UNSURE, ''
 def wants(item: dict) -> dict: return {'type': 'object', 'properties': {'acts': {'type': 'array', 'items': item}}, 'required': ['acts']}
@@ -636,7 +638,11 @@ def _verdict(act: dict, v: dict | None, pg: dict, said: str, mine: bool = False)
     # anybody, and an account form whose password the agent typed is a sign-up or a sign-in, never a message (walk 9, 2026-11-23). A post's box
     # still waits. And following a link sends nothing of his - no form, no words. Money or a delete, by a form or a link, still waits
     if kind in ('private', 'speaks') and (mine or follows(act, pg) or (kind == 'speaks' and pg.get('pw') and not any(f.get('t') == 'textarea' for f in pg.get('fields') or []))):
-        v = {**v, 'big': False}
+        v = {**v, 'big': False, 'irreversible': False}
+    # ...and an account's form - a password box the agent filled - is a sign-up or a sign-in (the owner, 2026-11-19: a free sign-up runs): what
+    # it starts is an account, not something sent for him that cannot be called back. These facts are the only way past the judge's word that
+    # a step cannot be undone: anything else it says so of waits for his press (rule_of)
+    elif v.get('big') is not True and pg.get('pw'): v = {**v, 'irreversible': False}
     hold, why, kind = rule_of(v)
     return {'hold': hold, 'what': what, 'why': why, **({'kind': kind} if hold and kind else {})}
 

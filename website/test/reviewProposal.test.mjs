@@ -1,6 +1,22 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+// The card gallery, 2026-11-25: a pull request's card showed its body alone under "On this task" - which title, repository and branch it opens
+// are the server's reading for the press (ci.pr_plan), drawn as the card's own rows
+test("a pull request card says its title, its repository and its branch", async () => {
+  const { proposalPresentation: show, reviewText: words } = await import("../src/reviewProposal.js");
+  const review = { Kind: "action", Reason: "the agent proposes to open a DRAFT pull request for this task - the rounding fix",
+    DraftText: JSON.stringify({ action: "open_pr", title: "Keep cents in totals", body: "Rounds to two places.", why: "the rounding fix",
+      pr: { title: "[TQ-0021] Keep cents in totals", repo: "northwind/ledger", branch: "fix-rounding", base: "master" } }) };
+  const p = show(review);
+  assert.deepEqual([p.destinationLabel, p.destination], ["In", "northwind/ledger"]);
+  assert.deepEqual(p.rows, [{ label: "Title", now: "[TQ-0021] Keep cents in totals" }, { label: "Branch", now: "fix-rounding → master" }]);
+  assert.equal(words(review), "Rounds to two places."); assert.equal(p.bare, false);
+  // ...and with no branch or repository known yet it says its title alone - never a place it does not know
+  const bare = show({ ...review, DraftText: JSON.stringify({ action: "open_pr", pr: { title: "[TQ-0021] Fix the rounding", repo: "", branch: "", base: "master" } }) });
+  assert.deepEqual([bare.destination, bare.rows.length, bare.bare], ["", 1, true]);
+});
+
 import { heldActsLine, proposalPresentation, reviewStatusLabel, resultOf, reviewText } from "../src/reviewProposal.js";
 
 const playbook = {

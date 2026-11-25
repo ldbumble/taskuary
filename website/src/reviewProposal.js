@@ -271,6 +271,22 @@ export const proposalPresentation = (review) => {
     busyLabel: "Commenting…",
     rejectLabel: "Dismiss",
   };
+  // A PULL REQUEST SAYS WHAT IT OPENS (the card gallery, 2026-11-25: its body alone, under "On this task"): its title, the repository and the
+  // branch into its base, as the server read them for the press (ci.pr_plan) - its body the box, read-only as it goes
+  if (proposal?.action === "open_pr" && proposal.pr) return {
+    kind: "action",
+    title: "Open a draft pull request",
+    context: review.Reason || "Proposed · nothing is opened until you approve",
+    ...leadOf(review),
+    destinationLabel: "In",
+    destination: proposal.pr.repo || "",
+    rows: [{ label: "Title", now: proposal.pr.title }, ...(proposal.pr.branch ? [{ label: "Branch", now: `${proposal.pr.branch} → ${proposal.pr.base}` }] : [])],
+    approveLabel: APPROVE,
+    busyLabel: "opening…",
+    rejectLabel: "Dismiss",
+    readOnly: true,
+    bare: !String(proposal.body || "").trim(),
+  };
   // A PART OF THE TASK THAT IS ANOTHER MATTER (proposals.break_out, the owner 2026-11-10): the new task's title leads, what moves is read-only -
   // Approve runs the task page's own split with exactly those messages and to-dos
   if (proposal?.action === "break_out") return {

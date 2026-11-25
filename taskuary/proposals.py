@@ -628,6 +628,10 @@ def queue(store, task_id: int, p: dict, actor='agent', refused: list | None = No
         p, miss = break_out(store, task_id, p)
         if miss: ok, why = False, miss
     if ok: p = change_card(store, p)
+    # ...and a pull request's card says what it opens - its title, the repository, the branch into its base - as the press will read them
+    if ok and p.get('action') == 'open_pr':
+        from . import ci
+        p = {**p, 'pr': ci.pr_plan(store, task_id, p.get('title'))}
     # ...ONE CARD PER ASK (the stress round, 2026-11-18): the same proposal again - a retried call - is the card already waiting, and a
     # break_out moving what a waiting one moves is refused: stood behind it, its press could only fail
     if ok:
@@ -1148,7 +1152,7 @@ def _run(store, rv: dict, p: dict, tid, a: str, actor: str, edited, skip_checks:
     if a in ('land', 'open_pr', 'push_direct'):
         from . import ci
         fn = {'land': ci.land, 'open_pr': ci.open_for_task, 'push_direct': ci.push_direct}[a]
-        r = fn(store, tid, actor)
+        r = fn(store, tid, actor, **{k: str(p[k]) for k in ('title', 'body') if a == 'open_pr' and p.get(k)})     # ...as its card showed them
         out = {'pr': r.get('number'), 'branch': r.get('branch'), 'sha': (r.get('sha') or '')[:7],
                'url': r.get('url')}
         out = {k: v for k, v in out.items() if v}

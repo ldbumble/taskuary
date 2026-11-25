@@ -83,20 +83,29 @@ def branch_for(store, task_id: int, cwd: str) -> str:
     return BRANCH_SAFE.sub('-', b) if b and b != 'HEAD' else ''
 
 
-def open_for_task(store, task_id: int, actor='owner') -> dict:
+def pr_plan(store, task_id: int, title: str = '') -> dict:
+    """What this task's pull request will be - {title, repo, branch, base}, each '' where it is not known yet. One reading for the card that
+    asks for it (proposals.queue: the card gallery, 2026-11-25 - a PR card showed its body alone, "On this task") and the press that opens it
+    (open_for_task). `title`: the agent's own words for it, else the task's."""
+    from . import terminal as hub_term
+    from .store import task_ref
+    t, cwd = store.get_task(task_id) or {}, getattr(hub_term.session_for(task_id), 'cwd', None)
+    return {'title': f"[{task_ref(task_id)}] {' '.join(str(title or '').split()) or t.get('Title') or 'work'}"[:120],
+            'repo': hub_term.guess_repo(store, task_id, {})[0] or _cfg(store).get('default_repo') or '',
+            'branch': branch_for(store, task_id, cwd) if cwd else '', 'base': _cfg(store).get('default_base') or 'master'}
+
+
+def open_for_task(store, task_id: int, actor='owner', title: str = '', body: str = '') -> dict:
     """Open (or find) the draft PR for this task's branch. Refuses the default branch: a PR
-    from main to main is not a thing, and it is the shape a mis-detected branch takes."""
+    from main to main is not a thing, and it is the shape a mis-detected branch takes.
+    `title`, `body`: what its card showed of the agent's own words - what was shown is what is opened."""
     from . import github, terminal as hub_term
     from .store import task_ref
-    ses = hub_term.session_for(task_id)
-    cwd = getattr(ses, 'cwd', None)
-    if not cwd: raise RuntimeError('no session on this task to read a branch from')
-    repo, _ = hub_term.guess_repo(store, task_id, {})
-    repo = repo or _cfg(store).get('default_repo')
+    if not getattr(hub_term.session_for(task_id), 'cwd', None): raise RuntimeError('no session on this task to read a branch from')
+    plan = pr_plan(store, task_id, title)
+    repo, branch, base = plan['repo'], plan['branch'], plan['base']
     if not repo: raise RuntimeError('no repository known for this task')
     c = _conn(store, repo)
-    branch = branch_for(store, task_id, cwd)
-    base = _cfg(store).get('default_base') or 'master'
     if not branch or branch == base:
         raise RuntimeError(f"the checkout is on '{branch or 'a detached HEAD'}' - the agent needs its own "
                            'branch before a pull request can be opened')
@@ -104,9 +113,9 @@ def open_for_task(store, task_id: int, actor='owner') -> dict:
     # the issue this task came from closes with the merge - GitHub's own keyword, when both live in one repo
     iss = re.search(r'github\.com/([^/]+/[^/]+)/issues/(\d+)', str(t.get('SourceRef') or ''))
     closes = f"Closes #{iss.group(2)}\n\n" if iss and iss.group(1).lower() == repo.lower() else ''
-    body = (f"Opened by Taskuary for {task_ref(task_id)}.\n\n{closes}{(t.get('Summary') or '')[:1500]}\n\n"
+    body = (f"Opened by Taskuary for {task_ref(task_id)}.\n\n{closes}{(str(body or '').strip() or t.get('Summary') or '')[:1500]}\n\n"
             '_Draft: it merges when you approve its merge on the task in Taskuary, or merge it here yourself._')
-    pr = github.open_pr(c['Secret'], repo, branch, base, f"[{task_ref(task_id)}] {t.get('Title') or 'work'}"[:120], body)
+    pr = github.open_pr(c['Secret'], repo, branch, base, plan['title'], body)
     pr['repo'], pr['checks'], pr['checked_at'] = repo, None, None
     _save_pr(store, task_id, pr, actor)
     store.audit('task', task_id, 'pr_opened', actor, detail={'repo': repo, 'number': pr['number']})

@@ -6,6 +6,7 @@
 import React from "react";
 import { Box, Typography } from "@mui/material";
 import { failedAsk, proposalPresentation, heldLead, proposalFrom, resultOf } from "./reviewProposal.js";
+import Artifact from "./Artifact.jsx";
 import { BORDER, DIM, FAINT, INK } from "./theme.jsx";
 
 export const PASSED_NOTE = "set aside when you moved on";
@@ -43,8 +44,7 @@ export default function PassedCard({ reviews }) {
   const same = (a, b) => String(a || "").trim().toLowerCase() === String(b || "").trim().toLowerCase();
   const line = done ? (!same(done.what, title) && done.what) || (p?.destination ? `${p.destinationLabel} ${p.destination}` : "") : failed ? String(r.ActError) : "Nothing was done.";
   return (
-    <Box data-tq-passed={r.ReviewId || ""} data-tq-act-state={pressed} sx={{ mt: 0.5, px: 1.25, py: 0.9, border: `1px solid ${BORDER}`, borderRadius: 1.5,
-      bgcolor: "var(--tq-panel, #fff)" }}>
+    <Artifact data-tq-passed={r.ReviewId || ""} data-tq-act-state={pressed} sx={{ px: 1.5, py: 1.25 }}>
       <Typography sx={{ fontSize: 13.5, fontWeight: 700, color: INK, lineHeight: 1.3, overflowWrap: "anywhere" }}>
         {rs.length > 1 ? `${title} - ${rs.length} steps` : title}</Typography>
       <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mt: 0.6, flexWrap: "wrap" }}>
@@ -52,6 +52,6 @@ export default function PassedCard({ reviews }) {
         {!!(line || done?.url) && <Typography role="status" data-tq-passed-line="" sx={{ fontSize: 12, color: DIM, overflowWrap: "anywhere" }}>{line}
           {done?.url && <>{line ? " · " : ""}<a href={done.url} target="_blank" rel="noreferrer">{done.url.replace(/^https?:\/\//, "").slice(0, 70)}</a></>}</Typography>}
       </Box>
-    </Box>
+    </Artifact>
   );
 }

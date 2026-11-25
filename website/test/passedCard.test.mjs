@@ -15,7 +15,8 @@ test("a card moved past keeps its buttons, every one of them off, greyed once", 
     import React from "react"; import { renderToStaticMarkup } from "react-dom/server.browser"; import { MovedPast } from "./src/PassedCard.jsx";
     const card = (on, inner) => <MovedPast on={on}><button>Send</button>{inner}</MovedPast>;
     export const html = (on, nested) => renderToStaticMarkup(card(on, nested ? card(true) : null));` },
-    bundle: true, write: false, format: "esm", jsx: "automatic", platform: "browser", logLevel: "silent", define: { "process.env.NODE_ENV": '"production"' } });
+    bundle: true, write: false, format: "esm", jsx: "automatic", platform: "browser", logLevel: "silent", define: { "process.env.NODE_ENV": '"production"' },
+    loader: { ".css": "empty", ".png": "empty", ".svg": "empty", ".woff2": "empty", ".json": "json" } });      // ...the card stands in the one frame (Artifact): its styles are no part of this
   const { html } = await import(`data:text/javascript;base64,${Buffer.from(out.outputFiles[0].text).toString("base64")}`);
   assert.equal(html(false), "<button>Send</button>", "a live card is untouched");
   assert.match(html(true), /^<fieldset disabled="" inert="" data-tq-moved-past="" aria-disabled="true" style="[^"]*opacity:0\.6;filter:grayscale\(1\)[^"]*"><button>Send<\/button><\/fieldset>$/);

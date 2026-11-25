@@ -14,6 +14,9 @@ const page = async () => {
     const out = await build({ stdin: { resolveDir: new URL("..", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1"), loader: "jsx", contents: `
       import React from "react"; import { renderToStaticMarkup } from "react-dom/server.browser";
       import ReviewDecision, { SentReview } from "./src/ReviewDecision.jsx"; import BulkReview from "./src/BulkCard.jsx";
+      import PassedCard from "./src/PassedCard.jsx"; import HeldSteps from "./src/HeldSteps.jsx";
+      export const passed = (reviews) => renderToStaticMarkup(<PassedCard reviews={reviews} />);
+      export const held = (reviews) => renderToStaticMarkup(<HeldSteps reviews={reviews} />);
       export const card = (review, more = {}) => renderToStaticMarkup(<ReviewDecision review={review} onChanged={() => {}} {...more} />);
       export const bulk = (rows) => renderToStaticMarkup(<BulkReview rows={rows} tid={7} onChanged={() => {}} />);
       export const sent = (p) => renderToStaticMarkup(<SentReview {...p} />);` },
@@ -142,4 +145,16 @@ test("a held browser step names its site once - in its title where the title say
   assert.equal((named.match(/127\.0\.0\.1/g) || []).length, 1, "the site said once");
   const bare = held('Click the "Sign in" button');
   assert.match(bare, />On</); assert.equal((bare.match(/127\.0\.0\.1/g) || []).length, 1, "the On row names it");
+});
+
+// ...AND A CARD HE PRESSED AND A HELD STEP STAND IN THE ONE FRAME every card of a turn does (the card gallery, 2026-11-25: each drew a flat box of
+// its own, the chat's whole width, beside raised cards a column wide - "consistent look, all through the one Artifact frame")
+test("a pressed card and a held step are drawn in the one frame", async () => {
+  const { passed, held } = await P;
+  const said = { action: "comment_issue", repo: "northwind/ledger", number: 12, body: "Fixed.", result: { commented: "northwind/ledger#12" } };
+  const went = passed([act(said, { ReviewId: 1, Status: "approved", FinalText: JSON.stringify(said) })]);
+  assert.match(went, /<div class="tq-turn-frame[^"]*"[^>]*data-tq-passed="1"/); assert.match(went, /Approved/);
+  const waits = held([act({ action: "shell_act", sid: "run1", turn: 1, command: "curl -X POST https://api.vendor.example/orders", what: "send data to api.vendor.example",
+    why: "it leaves this computer", cwd: "C:/work" }, { ReviewId: 2 })]);
+  assert.match(waits, /<div class="tq-turn-frame[^"]*"[^>]*data-tq-held-steps="1"/); assert.match(waits, /data-tq-held-approve=""/);
 });

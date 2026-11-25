@@ -90,7 +90,7 @@ test("the push card has no Not now; a passed one is the same card with its butto
   const body = fs.readFileSync(path.join(process.cwd(), "src", "LandingCard.jsx"), "utf8");
   assert.doesNotMatch(body, /landing\/hold|data-tq-land-hold|Not now|s\.held/);
   assert.match(body, /data-tq-act-state=\{s\.passed \? "passed" : s\.ask \? "waiting"/);
-  assert.match(body, /return \(<MovedPast on=\{s\.passed\}>\n\s+<Box data-tq-landing=""/);
+  assert.match(body, /return \(<MovedPast on=\{s\.passed\}>\n\s+<Frame data-tq-landing=""/);      // ...in the chat, the one frame (Artifact)
   assert.doesNotMatch(body, /w\.passed|!s\.passed &&/);
 });
 

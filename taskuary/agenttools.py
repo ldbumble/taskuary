@@ -1278,10 +1278,14 @@ def stranger_args(cli: str, task_id, argv: list = ()) -> list:
 
 def codex_args(task_id) -> list:
     """Codex's own spelling (`-c mcp_servers.<name>...`, verified on codex-cli 0.164, 2026-10-25): the URL, and the headers read from
-    the session's env (env_http_headers), so nothing secret is on the command line."""
-    from . import guard
+    the session's env (env_http_headers), so nothing secret is on the command line.
+    ...AND ITS SANDBOX WRITES THE TASK'S OUTPUTS FOLDER (his live app, 2026-11-25: a Codex agent's picture, copied to $TASKUARY_OUTPUTS for its
+    post card, was "Access to the path is denied" - Codex writes only its cwd, the task's work folder, so nothing it made could reach the task)."""
+    from . import guard, outputs
+    from .agents import codex_roots
     hdrs = '{"X-Taskuary-Token"="%s","%s"="%s"}' % (guard.AGENT_ENV, guard.TASK_HDR, guard.TASK_ENV)
-    return ['-c', f'mcp_servers.{SERVER}.url="{url(task_id)}"', '-c', f'mcp_servers.{SERVER}.env_http_headers={hdrs}']
+    return codex_roots(['-c', f'mcp_servers.{SERVER}.url="{url(task_id)}"', '-c', f'mcp_servers.{SERVER}.env_http_headers={hdrs}'],
+                       outputs.env_folder(task_id) or outputs.folder(int(task_id)))
 
 
 def insert(argv: list, extra: list) -> list:

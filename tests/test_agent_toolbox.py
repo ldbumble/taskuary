@@ -5,7 +5,7 @@ on the session's OWN task; propose tools light a button and send nothing.
 import json, re, unittest
 from unittest import mock
 from fastapi.testclient import TestClient
-from taskuary import agenttools, config, guard, server, viewspec
+from taskuary import agents, agenttools, config, guard, server, viewspec
 from taskuary.reports import REGISTRY
 from taskuary.store import MemoryStore
 
@@ -500,6 +500,17 @@ class TheTable(unittest.TestCase):
         self.assertIn('mcp_servers.taskuary.url="http://127.0.0.1:', ' '.join(argv))
         self.assertIn('env_http_headers={"X-Taskuary-Token"="TASKUARY_TOKEN"', ' '.join(argv))
         self.assertNotIn(SRV['agent_token'], ' '.join(argv))
+
+    def test_codex_may_write_the_tasks_outputs_folder_and_its_browser_folder_in_one_key(self):
+        """His live app, 2026-11-25: a Codex agent drew a picture for a post, and copying it to the task's outputs folder was "Access to
+        the path is denied" - its sandbox wrote only its cwd. The task's outputs folder is a writable root beside the browser's, one key."""
+        from taskuary import browserview, outputs
+        argv = agents._own_settings({'cmd': 'codex'}, 'codex', agenttools.session_args(MemoryStore(), 'codex', 7))
+        (val,) = [a for a in argv if str(a).startswith(agents.ROOTS + '=')]
+        roots = agents._toml_value(val.split('=', 1)[1])
+        self.assertEqual(roots, [outputs.folder(7).as_posix(), browserview.home().as_posix()])
+        self.assertEqual(agents.codex_acp_config(argv)[agents.ROOTS], roots)                  # ...the ACP road's session config too
+        self.assertEqual(agents._own_settings({'cmd': 'codex'}, 'codex', argv), argv)        # ...each once, however often it is applied
 
     def test_the_flags_go_before_the_first_option_so_no_prompt_is_read_as_a_config(self):
         self.assertEqual(agenttools.insert(['claude', '--dangerously-skip-permissions', 'do it'], ['--mcp-config', 'f']),

@@ -2224,6 +2224,19 @@ def cli_has_flag(name: str, flag: str) -> bool:
     return _FLAGS[(exe, flag)]
 
 
+ROOTS = 'sandbox_workspace_write.writable_roots'
+def codex_roots(args: list, *dirs) -> list:
+    "`args` with `dirs` among Codex's writable roots: one `-c` key holding them all (a second would replace the first), each once."
+    args, kv = list(args), f'{ROOTS}='
+    i = next((n for n, a in enumerate(args) if str(a).startswith(kv) and n and args[n - 1] in ('-c', '--config')), -1)
+    had = _toml_value(str(args[i])[len(kv):]) if i >= 0 else []
+    roots = list(dict.fromkeys([*(had if isinstance(had, list) else []), *(Path(d).as_posix() for d in dirs)]))
+    val = f"{kv}[{','.join(repr(r) for r in roots)}]"
+    if i >= 0: args[i] = val
+    else: args += ['-c', val]
+    return args
+
+
 def _own_settings(profile: dict, name: str, args: list) -> list:
     """THE ASSISTANT READS NONE OF THE OWNER'S USER-LEVEL CLAUDE SETTINGS (the owner, 2026-10-21): their user-wide hooks POST to this app
     on every prompt and every stop - 0.3-0.5 s a turn, measured - and its headless, tool-less brain has no use for them. Only a profile
@@ -2236,9 +2249,9 @@ def _own_settings(profile: dict, name: str, args: list) -> list:
     # ...AND A CODEX SANDBOX MAY WRITE WHERE ITS BROWSER KEEPS ITS SOCKETS (his live app, 2026-11-23: after a restart every agent-browser command
     # of a Codex task failed "Socket directory ~/.agent-browser is not writable" - Codex runs commands as its own restricted user, and only a
     # daemon started before it could be reached): the folder is a writable root of every Codex run, on the argv road and the ACP road alike
-    if _cli_name(name) == 'codex' and 'sandbox_workspace_write.writable_roots' not in ' '.join(map(str, args)):
+    if _cli_name(name) == 'codex':
         from . import browserview
-        args += ['-c', f"sandbox_workspace_write.writable_roots=['{browserview.home().as_posix()}']"]
+        args = codex_roots(args, browserview.home())
     if profile.get('user_settings') is not False or _cli_name(name) != 'claude': return args
     if '--setting-sources' not in args and cli_has_flag(name, '--setting-sources'): args += ['--setting-sources', 'project,local']
     from . import hooks

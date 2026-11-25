@@ -940,9 +940,11 @@ def cannot(item: dict | None, verb: str, store=None) -> str:
             return f"The note on {what} is yours to change in the box - there is nothing for the AI to redraft."
     # A DRAFT THAT CANNOT LEAVE is not offered Send (capabilities.can_send_draft): a Teams chat is read here and never
     # posted into, so the button - and the Advisor's line over it - could only ever end "not sent" (2026-10-18)
-    if verb == 'approve' and item.get('kind') == 'review' and item.get('rid') and store is not None:
-        from . import capabilities, outbound
-        if not capabilities.can_send_draft(store, item['rid']):
+    # ...on any row whose card is that draft, as the card draws it (card.presses): an agent's row carried the Teams draft too (walk 21)
+    rv = store.get_review(int(item['rid'])) if verb in ('approve', 'send_close') and str(item.get('rid') or '').isdigit() and store is not None else None
+    if rv and rv.get('Kind') != 'action':
+        from . import capabilities, card, outbound
+        if 'approve' not in card.presses(store, rv):
             block = outbound.send_block(store, capabilities.draft_channel(store, item['rid'])) or 'its channel cannot deliver a reply'
             return f"The draft on {what} cannot be sent from here - {block}."
     # an agent already RUNNING on the task is not handed it again (the owner, 2026-10-01) - the dispatch door refuses it too
@@ -5914,8 +5916,9 @@ def _rail_block(p: dict, cap: int = RAIL_CAP, store=None) -> str:
     """THE RAIL BY NAME, for this turn: ref, who and what of each row the pile already holds - no read, no build. "Remind me
     tomorrow about the Payworth invoice" had nothing in the prompt that said the Payworth invoice was TQ-0005, so it became a
     new to-do every time (2026-10-06). Only for resolving a name the owner uses; the item on the table still comes first."""
+    from . import card, taskstate
     items = p.get('items') or []
-    rows = []
+    rows, yours = [], []
     for i in items[:cap]:
         # EVERY ROW HAS A HANDLE the model copies into `on` - its TQ ref, else its message's m-number - so naming one is exact: words
         # ("the Payworth mail") were resolved by a word-overlap guess in code (the owner, 2026-10-08: no code in front of the AI)
@@ -5923,9 +5926,13 @@ def _rail_block(p: dict, cap: int = RAIL_CAP, store=None) -> str:
         # ...and whether a DRAFT waits on it: the lane's word alone ("ready to send") left "reject the draft on TQ-0004" answered
         # "there is no draft", and "send the reply to Sam" written as a new one (real-AI check, 2026-10-18)
         # ...and WHAT IT HOLDS, card by card (card.lines, the cards its page draws): an agent task's emails, post and question
-        from . import card
-        held = card.lines(store, int(i['tid'])) if store is not None and str(i.get('tid') or '').isdigit() else []
-        if bits: rows.append(f"- {' · '.join(bits)} ({funnel.lane_word(i)}"
+        tid = int(i['tid']) if store is not None and str(i.get('tid') or '').isdigit() else None
+        held = card.lines(store, tid) if tid else []
+        # ...and a task's row WHERE IT STANDS (taskstate.standing - the header's, the dashboard's, the brief's), never the lane's word over the
+        # title it was opened under (walk 21: the phone's "five need you" held one he had answered and one with its agent)
+        st = taskstate.standing(store, tid) if tid else None
+        if st and st['waits_on'] == 'you': yours.append(handle_of(i))
+        if bits: rows.append(f"- {' · '.join(bits)} ({taskstate.said(st) if st else funnel.lane_word(i)}"
                              + ('; a drafted reply waits for your yes' if i.get('rid') and i.get('draft') and not held else '') + ')'
                              + ''.join(f"\n  · {x['line']}" + (f" [rv{x['rid']}]" if x.get('rid') else '') for x in held[:6]))
     if not rows: return ''
@@ -5934,7 +5941,12 @@ def _rail_block(p: dict, cap: int = RAIL_CAP, store=None) -> str:
     # titles above, the rest unknown to it (the owner, 2026-10-28: "it should know everything on the work rail")
     from .lookups import rail_counts
     live = [i for i in items if not i.get('settling')]
-    whole = (f"\nTHE WHOLE RAIL: {len(live)} rows ({rail_counts(live)}). pipe.read reads every one with what its sender wrote - "
+    # ...with the tasks whose move is his by that same reading, counted as the dashboard's "Waiting on you" counts them (walk 21: four there, five
+    # on the phone)
+    yours += [handle_of(i) for i in items[cap:] if not i.get('settling') and str(i.get('tid') or '').isdigit() and taskstate.standing(store, int(i['tid']))['waits_on'] == 'you'] \
+        if store is not None else []
+    mine = (f"; waiting for your input: {len(yours)}" + (f" - {', '.join(dict.fromkeys(yours))}" if yours else '')) if store is not None else ''
+    whole = (f"\nTHE WHOLE RAIL: {len(live)} rows ({rail_counts(live)}{mine}). pipe.read reads every one with what its sender wrote - "
              '`section` (task, reports, fyi...) or `who` to narrow it; one call summarizes a whole section.') if live else ''
     # ..."what's waiting on me" is answered by bringing each up with its button lit - one short line per item, never "not seen yet"
     owed = ('\nWHAT WAITS ON THE OWNER is each row\'s · lines: asked about it, bring the item up and light its button (button.light), one '

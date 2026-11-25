@@ -395,7 +395,11 @@ def screen(store, tid: int, skip=()) -> str:
                                f"for his press); one he drops: withdraw_draft it: {name(u, h)}")
             elif r and ids <= past: greyed(r, n)
             elif ids & live:
-                waiting.append(f'Waiting for his press now{outcome(r)}: {n}')
+                # ...on the buttons its card draws where it has no Send (card.presses; walk 21: "ready to send" over Copy + Redraft)
+                from . import card
+                ps = card.presses(store, r) if r and r.get('Kind') != 'action' else ('approve',)
+                shown = '' if 'approve' in ps else f" (its card: {card.press_words({'kind': card.SEND, 'presses': ps})})"
+                waiting.append(f'Waiting for his press now{outcome(r)}: {n}{shown}')
             elif u['rids'] == front: waiting.append(f'Comes forward once your turn ends (you are going on from his last press): {n}')
             elif ids & held: waiting.append(f'Not on his screen yet - it comes forward once the one before it is pressed (after an act, once you have heard how it went): {n}')
             continue

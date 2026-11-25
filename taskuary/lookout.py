@@ -989,9 +989,23 @@ def key_of(x: dict) -> str:
 
 
 def _evidence(store, x) -> list:
+    "Each id it cites, said - an attachment with its message beside it (`link`), the one the page opens."
     q = {}
     for c in x.get('quotes') or []: q.setdefault(c['ref'], c['quote'])
-    return [{'ref': r, 'label': ref_line(store, r), **({'quote': q[r]} if r in q else {})} for r in x['refs']]
+    return [{'ref': r, 'label': ref_line(store, r), **({'quote': q[r]} if r in q else {}),
+             **({'link': o} if (o := _owner_ref(store, r)) != r and o != 'msg0' else {})} for r in x['refs']]
+
+
+def _about(store, refs) -> dict:
+    """WHO AND WHICH THREAD AN IDEA IS ABOUT, off what it cites (the owner, 2026-11-25: "Draft a reply on the existing thread" with no word of
+    whose thread or to whom): {'on': {mid, who}} of the newest message among its refs - an attachment's by its message - its sender, or for one
+    of his own the people it went to. Kept apart from an idea's own `mid` (the mail it was raised ON, whose task its work joins). {} where it
+    cites no message."""
+    ms = [m for r in refs if (o := _owner_ref(store, r)).startswith('msg') and o != 'msg0' and (m := store.get_message(int(o[3:])))]
+    if not ms: return {}
+    m = max(ms, key=lambda m: str(m.get('SentAt') or ''))
+    who = ', '.join(_to(m)[:2]) if (m.get('Direction') or 'in') == 'out' else (m.get('FromName') or m.get('FromEmail') or '')
+    return {'on': {'mid': m['MessageId'], **({'who': _one(who, 80)} if who else {})}}
 
 
 def _said(x: dict) -> dict:
@@ -1011,12 +1025,14 @@ def land(store, x: dict, window: str = '') -> tuple:
         a, new = old['act'], [r for r in x['refs'] if r not in {e.get('ref') for e in old['act'].get('evidence') or []}]
         if old.get('Status') not in ('open', 'snoozed') or not new: return 'repeat', old
         ev = (a.get('evidence') or []) + [e for e in _evidence(store, x) if e['ref'] in new]
-        act = a | _said(x) | {'evidence': ev, 'subjects': sorted(set(a.get('subjects') or []) | set(subs)), 'window': window, 'whole': True}
+        act = a | _said(x) | {'evidence': ev, 'subjects': sorted(set(a.get('subjects') or []) | set(subs)), 'window': window, 'whole': True} \
+            | _about(store, [e['ref'] for e in ev])
         store._exec('UPDATE idea SET Text=?, ActionJson=?, LastSaid=? WHERE IdeaId=?', (x['title'], json.dumps(act), _ts(_now()), old['IdeaId']))
         store.audit('idea', old['IdeaId'], 'lookout_updated', 'advisor', 'agent', {'family': x['family'], 'new': new})
         return 'updated', store.get_idea(old['IdeaId'])
     # ...the pitch on a line of its own, apart from the next step (the owner, 2026-11-02)
-    act = {'type': 'lookout', 'family': x['family'], 'whose': 'yours - nobody asked for it', **_said(x), 'evidence': _evidence(store, x), 'subjects': subs, 'window': window, 'whole': True}
+    act = {'type': 'lookout', 'family': x['family'], 'whose': 'yours - nobody asked for it', **_said(x), 'evidence': _evidence(store, x), 'subjects': subs,
+           'window': window, 'whole': True, **_about(store, x['refs'])}
     r = store.upsert_idea({'key': key_of(x), 'kind': x['family'], 'text': x['title'], 'sig': key_of(x), 'action': act}, _ts(_now()))
     store.audit('idea', r['IdeaId'], 'lookout_raised', 'advisor', 'agent', {'family': x['family'], 'refs': x['refs']})
     return 'raised', r

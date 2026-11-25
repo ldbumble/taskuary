@@ -117,6 +117,8 @@ class WaitingCardTests(unittest.TestCase):
     had no Send, and asked for the text the phone said "I do not have the text of the message in front of me here". The card that waits is
     the task's front card (cardqueue), shown in full with its own buttons, pressed through the desk's own door."""
     def setUp(self):
+        # ...a mailbox that sends: with none the card draws Connect email, and the phone offers no Send either (card.presses)
+        sends = mock.patch('taskuary.capabilities.can_send_draft', return_value=True); sends.start(); self.addCleanup(sends.stop)
         self.s = MemoryStore()
         self.tid = self.s.create_task({'Title': 'Board pack for Thursday', 'Kind': 'general', 'Status': 'open'}, 'owner')
         self.s._exec("INSERT INTO worker_event (TaskId, Sid, Kind, Text, Source, CreatedAt) VALUES (?, 's1', 'turn_end', ?, 'api', '2026-11-23 08:40:00')",

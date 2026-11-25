@@ -63,6 +63,27 @@ def _error(r) -> str:
     return cq._flat(r.get('Reason')) if r.get('DeliveryState') in ('failed', 'unknown') else ''
 
 
+def presses(store, r: dict) -> tuple:
+    """THE BUTTONS A REVIEW'S CARD DRAWS, by verb - the one answer every surface that names a press reads (the phone's picks, the Assistant's
+    lines, the agent's screen fact, where it stands). A letter its channel cannot deliver (capabilities.can_send_draft) has no Send: its
+    Connect where a connection would lift it ('connect:<its label>', outbound.review_connect), else Copy - as the desk draws it (walk 21:
+    "ready to send" and a phone poll's Send over a Teams card that had only Copy)."""
+    if r.get('Kind') == 'action': return ('approve',)
+    from . import capabilities, outbound
+    if capabilities.can_send_draft(store, r.get('ReviewId')): return ('approve', 'redraft')
+    fix = capabilities._safe(lambda: outbound.review_connect(store, r), None)
+    if not (fix and fix.get('label')): return ('copy', 'redraft')
+    return (f"connect:{fix['label']}", *(('copy',) if fix.get('waits') else ()), 'redraft')     # ...its draft kept to copy, where it says so
+
+
+def press_words(c: dict) -> str:
+    "A card's buttons by their names, for a reader that reads words: 'Copy, Redraft - it cannot be sent from here'."
+    from . import buttons
+    ps = c.get('presses') or ()
+    return ', '.join(v.partition(':')[2] or buttons.label(v, 'action' if c.get('kind') == APPROVE else None) for v in ps) + \
+        (' - it cannot be sent from here' if c.get('kind') == SEND and 'approve' not in ps else '')
+
+
 def _of(store, rows: list, front: bool = False) -> dict:
     "A card of review rows (one, or a bulk card's / a turn's held steps): its state is the first open row's, else the first row's."
     rows = [r for r in rows if r]
@@ -71,7 +92,8 @@ def _of(store, rows: list, front: bool = False) -> dict:
     return {'id': f"rv{r['ReviewId']}", 'task': r.get('TaskId'), 'kind': APPROVE if r.get('Kind') == 'action' else SEND, 'sort': sort_of(r),
             'state': st, 'verb': VERBS.get(r.get('Status')) if st in ('done', 'handed') else None,
             'what': cq.what(store, {'rids': [x['ReviewId'] for x in rows], 'rows': rows}), 'rids': [x['ReviewId'] for x in rows],
-            'at': r.get('CreatedAt'), 'decided': r.get('DecidedAt'), 'by': r.get('DecidedBy'), 'error': _error(r), 'front': front, 'row': r}
+            'at': r.get('CreatedAt'), 'decided': r.get('DecidedAt'), 'by': r.get('DecidedBy'), 'error': _error(r), 'front': front, 'row': r,
+            'presses': presses(store, r) if st == 'pending' else ()}
 
 
 def of_review(store, r: dict) -> dict: return _of(store, [r])
@@ -208,6 +230,10 @@ def lines(store, tid, asks: bool = True) -> list:
             what, held = f"{'an email' if r.get('Kind') == 'slot' else 'a reply'}{' to ' + to if to else ''}", r.get('Status') == 'held'
             says = (f"an email this task owes still waits for your {S}" if r.get('Kind') == 'slot' else
                     'a reply held while the agent worked comes back for your Send' if held else f'another reply still waits for your {S}')
+            # ...as its card draws it (presses): one its channel cannot deliver has no Send to name
+            if c['state'] == 'pending' and 'approve' not in c['presses']:
+                out.append({'rid': r['ReviewId'], 'verb': None, 'says': f'{what} still waits to be copied - {press_words(c)}',
+                            'line': f'{what} is drafted - {press_words(c)}'}); continue
             out.append({'rid': r['ReviewId'], 'verb': 'approve', 'says': says, 'line': f"{what} is drafted - {S} sends it" + (' (held while the agent works)' if held else '')})
         elif c['kind'] == APPROVE and c['state'] == 'handed':
             d = json.loads(r.get('FinalText') or '{}') if str(r.get('FinalText') or '').startswith('{') else {}

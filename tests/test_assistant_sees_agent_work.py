@@ -4,12 +4,19 @@ named the task, never the emails, the post or the agent's question. Now one read
 draws) gives each item a short line and its button, and the turn's rail, pipe.list, approvals.list and the dock all carry it. Invented people.
 """
 import json
+import pytest
 from taskuary import card
 from unittest import mock
 
 from taskuary import concierge, general, lookups, slots, terminal as term, workerstate as ws
 from taskuary.store import MemoryStore
 from test_worker_events import live
+
+
+@pytest.fixture(autouse=True)
+def _mailbox_sends():
+    "A mailbox that sends: its emails' cards draw Send (card.presses - with none, they draw Connect email)."
+    with mock.patch('taskuary.capabilities.can_send_draft', return_value=True): yield
 
 
 def agent_task(s):
@@ -45,3 +52,17 @@ def test_the_assistant_the_dock_and_their_reads_all_carry_it():
     assert 'a LinkedIn post waits for your Approve' in lookups.approvals_list(s, {})
     with mock.patch('taskuary.funnel.pile', return_value={'items': [{'tid': tid, 'who': 'Alex Doyle', 'title': 'Compare expense tools', 'lane': 'approve'}]}):
         assert 'an email to gail@northwind.example' in lookups.pipe_list(s, {})
+
+
+def test_the_rail_the_assistant_reads_says_where_each_task_stands_and_counts_what_waits_on_him_by_it():
+    """Walk 21, the phone: "Five items need you today" - the dashboard said four. One of the five he had answered by email himself, its row
+    still under the title it was opened with ("Erin needs you to confirm ..."); the model read each row's lane word over its title. A task's
+    row now says where it stands (taskstate.standing, the header's and the dashboard's reading), and the count of what waits on him is that."""
+    s = MemoryStore(); tid = agent_task(s)
+    done = s.create_task({'Title': 'Erin needs you to confirm Friday at 2 pm', 'Kind': 'general', 'Status': 'open', 'OriginBase': 'owner'}, 'owner')
+    rail = concierge._rail_block({'items': [{'tid': tid, 'ref': f'TQ-{tid:04}', 'who': 'Alex Doyle', 'title': 'Compare expense tools', 'lane': 'approve'},
+                                            {'tid': done, 'ref': f'TQ-{done:04}', 'who': 'Erin Blake', 'title': 'Erin needs you to confirm Friday at 2 pm',
+                                             'lane': 'blocked'}]}, store=s)
+    erin = next(r for r in rail.splitlines() if f'TQ-{done:04}' in r)
+    assert 'no input awaited from anyone' in erin and 'waiting on you' not in erin, erin
+    assert f'waiting for your input: 1 - TQ-{tid:04}' in rail, rail

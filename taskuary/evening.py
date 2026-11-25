@@ -255,10 +255,6 @@ def collect(store, hours: int = HOURS) -> dict:
             accomplished.append((row.get('SentAt'), _row_line(row, 'replied')))
         elif row.get('TaskStatus') == 'done':
             accomplished.append((row.get('SentAt'), _row_line(row, 'completed')))
-        elif _invite(row):
-            # Ingest has positively identified and triaged this as a calendar invite. It is safe
-            # to call handled; a plain auto-filed FYI is intentionally not treated the same way.
-            accomplished.append((row.get('SentAt'), _row_line(row, 'invite handled')))
 
     # ...WHAT IS OWED IS THE TASK'S TO SAY, NEVER A MAIL ROW'S (walk 6, 2026-11-23, the third walk running: "the corrected pack went out" under
     # Done today and "fix the headcount" under Tomorrow - the corrected copies were new emails, not replies to her mail, so her mail read
@@ -272,8 +268,12 @@ def collect(store, hours: int = HOURS) -> dict:
             if row.get('TaskStatus') in ('done', 'dropped') or not (t := store.get_task(tid)): continue
             if tid not in on: on[tid] = f'on {task_ref(tid)}: {owed(store, t, since)}'
             on_tasks.append(_row_line(row, on[tid])); continue
+        # ...AN INVITE IS ONE THAT CAME IN, never one "handled" because triage knew it for an invite (walk 21: "handled one meeting invite" with
+        # none answered): his answer is a reply like any other, above; one he has not answered is still his to answer
         flagged = str(_mail_meta(row).get('flag') or '').lower() == 'flagged'
         if flagged or str(row.get('ReviewStatus') or '').lower() == 'pending': priorities.append(_row_line(row, 'open priority'))
+        elif _invite(row) and str(row.get('ReviewStatus') or '').lower() not in ('approved', 'edited', 'sent'):
+            priorities.append(_row_line(row, 'invite, not answered'))
 
     # ...never the Assistant's own chat (general.DOCK_TAG), on either list: it is no work of his (walk 5: "Taskuary guide" stood as an open
     # task; round 3, 2026-11-22: "Completed the Taskuary guide task" stood as done)

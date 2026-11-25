@@ -258,9 +258,13 @@ def state(store, item: dict, verbs: list) -> tuple:
     if kind in ('agentdone', 'wrapup') and tid and 'review_changes' in offered and changes_waiting(store, tid): return 'unpushed', {}
     # ...AND A FINISHED AGENT WHOSE TASK WAITS ON SOMEBODY'S ANSWER IS THAT WAIT (walk 21: "waiting for Jordan's input" in the header over a row
     # reading "Finished at 5:43 AM; nothing since"): one reading of who moves next, taskstate.standing, as the header's
+    # ...and one whose next move is his or its agent's is never "Finished; nothing since" (walk 21: the chip "waiting for your input" off a step
+    # the turn left on him, the row "Finished at 6:12 AM; nothing since" beside it): no line there - where it stands says what waits
     if kind in ('agentdone', 'wrapup') and tid and lane != 'theirs':
         from . import taskstate
-        if taskstate.standing(store, int(tid))['waits_on'] == 'them': lane = 'theirs'
+        waits = taskstate.standing(store, int(tid))['waits_on']
+        if waits == 'them': lane = 'theirs'
+        elif waits: return 'agent_done', {'what': '', 'when': ''}
     if kind in ('agentdone', 'wrapup') and lane != 'theirs':
         # ...its reason the newest of what ended it - the agent's last word, or the owner's reply that went - with nothing come in since
         try: sent = store.sent_reply(task_id=int(tid)) if tid else None

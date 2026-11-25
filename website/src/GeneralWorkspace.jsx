@@ -671,16 +671,27 @@ function AssistantThread({ task, onAsked, onStop, selectionRef, attachmentsRef, 
       if (opening.current) { place(); hold(); return; }
       if (stick.current) v.scrollTop = v.scrollHeight;
       else { const d = anchorShift(v, mark); if (Math.abs(d) > 1) v.scrollTop += d; }
-      hold();
+      folding = false; hold();
     });
     // ...and when the VIEW itself gets shorter - the box under it grew a line as he typed - as when the chat gets longer (the recorded walks,
     // 2026-11-11: 14 px behind its end for a beat each time)
-    v.addEventListener("scroll", on, { passive: true }); ro.observe(el); ro.observe(v);
+    // ...AND A LINE HE OPENS OR SHUTS HIMSELF ("Show all" / "Show less", ArrivedWords) is his move, never the chat's own growth or fold: the end lets
+    // go, and what he pressed stays where it stood - the line's top as it opens, its toggle as it shuts (the owner, 2026-11-25: Show less "reloaded
+    // the page" - held at the end, the chat kept its old height over nothing for SHRINK_HOLD, a blank view, then dropped back to the top)
+    // ...through the scroll the shrink itself makes (the browser pulls the view up to the new end, which read as "at the end" again) until the
+    // observer has placed it
+    let folding = false;
+    const fold = (e) => { const b = e.target?.closest?.("[data-tq-arrived-expand]"); if (!b) return;
+      const at = b.getAttribute("aria-expanded") === "true" ? b : b.closest("[data-tq-item], .tq-aui-arrived") || b;
+      mine(); stick.current = false; folding = true; mark = { el: at, off: at.getBoundingClientRect().top - v.getBoundingClientRect().top }; };
+    const scrolled = () => { if (folding) was = v.scrollTop; else on(); };
+    el.addEventListener("click", fold, true);
+    v.addEventListener("scroll", scrolled, { passive: true }); ro.observe(el); ro.observe(v);
     const off = [[v, "wheel", mine], [v, "touchmove", mine], [v, "pointerdown", down], [window, "pointerup", mine], [window, "pointercancel", mine], [document, "keydown", mine]];
     off.forEach(([t, n, f]) => t.addEventListener(n, f, { passive: true, capture: true }));
     opening.current = true; place(); hold();
     const settle = setTimeout(() => { opening.current = false; }, OPEN_HOLD);
-    return () => { clearTimeout(free); clearTimeout(settle); v.removeEventListener("scroll", on); ro.disconnect(); off.forEach(([t, n, f]) => t.removeEventListener(n, f, { capture: true })); };
+    return () => { clearTimeout(free); clearTimeout(settle); v.removeEventListener("scroll", scrolled); el.removeEventListener("click", fold, true); ro.disconnect(); off.forEach(([t, n, f]) => t.removeEventListener(n, f, { capture: true })); };
   }, [!!list]);   // eslint-disable-line react-hooks/exhaustive-deps
   // ...after EVERY draw, not only the list's: a card's own words (the page's node) grow the chat too - and once more when the draw is whole
   // (a microtask: after the rows that measured themselves in this same draw have grown), still before anything is painted

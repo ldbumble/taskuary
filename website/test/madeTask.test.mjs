@@ -50,6 +50,20 @@ test("an Advisor's idea is what it noticed and what to do; what it rests on is i
   assert.deepEqual(src.rows, [["Why", "the same amount twice"]]);
 });
 
+test("a look's idea says the thread it is about and its person, as the look saved them - and an attachment it cites opens as its mail", () => {
+  // the owner, 2026-11-25: "Draft a reply on the existing thread asking for allowlist confirmation" - whose thread, to whom? A look's idea has no
+  // `mid` (it was raised on no one mail); what it is about is the newest message it cites (lookout._about: `on`)
+  const card = { title: "Get the vendor's QA inputs before the holiday closure", action: { type: "lookout", next_step: "Draft a reply on the existing thread.",
+    why: "QA closes for the holidays on the 20th.", on: { mid: 31, who: "Jordan Pike" },
+    evidence: [{ ref: "msg31", label: "2026-11-24 Jordan Pike: QA inputs for the pilot" }, { ref: "att4", link: "msg31", label: "qa-plan.pdf on 2026-11-24 Jordan Pike: QA inputs" }] } };
+  const src = ideaSource(card);
+  assert.deepEqual(src.rows, [["Based on", "2026-11-24 Jordan Pike: QA inputs for the pilot"], ["Why", "QA closes for the holidays on the 20th."]]);
+  assert.deepEqual(src.links.map((l) => l.href), ["#msg=31", "#msg=31"], "the attachment opens as the mail it came on");
+  assert.equal(ideaSource({ action: { ...card.action, evidence: [] } }).rows[0][1], "Jordan Pike's message", "by its sender where no cite says it");
+  // ...and the turn the page opens on says it too, under what to do: its Came from opens folded to an arrow
+  assert.deepEqual(typed(ideaView(card), "text").map((e) => e.props.text).at(-1), "**Based on** - 2026-11-24 Jordan Pike: QA inputs for the pilot");
+});
+
 test("a report's source is its routine: name, schedule, prompt, what it reads, where it goes, and Edit", () => {
   const row = { SourceId: 4, Address: "Headcount by site", ScheduleWords: "every day at 07:00", RouteWords: "Reports: every run" };
   const src = routineSource(row, { ai_prompt: "Count heads per site.", sources: [{ type: "mssql" }, { type: "mssql" }, { type: "rss" }] }, { types: { mssql: "SQL Server" }, edit: "Edit this report" });

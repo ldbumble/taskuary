@@ -360,6 +360,25 @@ def test_a_connected_services_page_is_never_handed_to_him(w):
     assert browserview.handing(w.s, w.tid) is None
 
 
+def test_where_a_network_is_not_connected_its_card_comes_first_and_its_sign_in_at_his_press(w):
+    """The owner, 2026-11-22: "card first, sign-in at the press". On real runs both Codex and Claude, asked for posts with X not set up, opened
+    x.com and handed him "Sign in to X" with no card raised. The site's page is his step only once his press on the card (Post via the
+    browser) handed the post to the agent: before it the hand-over is answered with that fact, and nothing is put to him."""
+    page = {'open': True, 'url': 'https://x.com/i/flow/login'}
+    with mock.patch.object(browserview, 'state', return_value=page), mock.patch.object(browsergate, 'page_error', return_value=''), \
+         mock.patch.object(signin, 'needs', side_effect=lambda st, tid, sid, *a, **k: ws.record(st, tid, sid, 'input_needed', request_id='signin:x.com',
+                                                                                             text='Sign in to x.com to continue', source='api') and {'site': 'x.com'}), \
+         mock.patch.object(signin, 'shows_signin', return_value=True):
+        said, _ = w.agent('hand_over', what='sign in to X', site='x.com')
+        assert json.loads(said)['ok'] is False and 'card' in json.loads(said)['why'], said
+        assert browserview.handing(w.s, w.tid) is None, 'nothing is put to him before the card'
+        rid, _ = w.post('x', 'Invoices in one place - live Monday.')
+        with w.wakes(): assert c.post(f'/api/reviews/{rid}/via-browser', headers=OWNER, json={'final_text': 'Invoices in one place - live Monday.'}).json()['ok']
+        said, _ = w.agent('hand_over', what='sign in to X', site='x.com')
+        assert json.loads(said)['ok'], f'after his press the sign-in is his step: {said}'
+        assert browserview.handing(w.s, w.tid)
+
+
 def test_no_sign_in_is_put_to_him_beside_a_card_that_waits(w):
     """The owner: "we are trying to post to twitter but the browser is asking about linkedin. it's completely broken." His screen showed the X
     card and, beside it, "Sign in to linkedin.com to continue" off a tab the agent had left on a sign-in page. One thing is asked of him at a

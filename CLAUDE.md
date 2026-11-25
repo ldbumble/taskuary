@@ -175,10 +175,11 @@ product: fix the code, never the test.
    his own.
 3. **Wake.** A press wakes the agent only if the card carries its `then`. A press with no `then`
    wakes nobody, and answers the question the agent asked about that card.
-4. **Question.** The agent's question stands until he answers; nothing more is raised in the turn
-   that asked it; his answer reaches the agent once.
+4. **Question.** The agent's question stands until he answers; no card is raised under it, in
+   that turn or after, until he answers; his answer reaches the agent once.
 5. **Hand-off on a page.** A step handed to him shows that step; his "I'm done" wakes the agent
-   once. A connected service's site is never opened or handed over for what its card does, and no
+   once. A connected service's site is never opened or handed over for what its card does; where
+   it is not connected its card comes first, and its sign-in is his step only after his press. No
    sign-in is put to him beside a card that waits: one thing is asked at a time, and what the
    browser shows belongs to the card on his screen.
 6. **The turn's end.** Exactly one of needs-him / done / working. The chat shows words, cards and

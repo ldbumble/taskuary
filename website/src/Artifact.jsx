@@ -3,7 +3,8 @@
 // email, a reply, a post, a GitHub comment, a held step, sent or waiting - stand in this one raised frame (appTheme.css .tq-turn-frame).
 // `label` is what it is in plain words, over its content; `press` is the row under it - none for a thing made, the press named by what it does
 // for a thing to review. What is inside (a picture, a preview, a view's blocks, editable words) is the content's own renderer.
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { lineAt } from "./cardLine.js";
 import { Box, Button, Checkbox, CircularProgress, Typography } from "@mui/material";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import { PressedButton } from "./PassedCard.jsx";
@@ -62,6 +63,57 @@ export function ReviewCard({ id = "", kind = "", state = "waiting", label: title
       {failed && <Typography role="alert" data-tq-review-failed="" sx={{ pt: 0.75, fontSize: 12.5, color: ALERT_INK, overflowWrap: "anywhere" }}><MdLine text={failed} /></Typography>}
       {under}
     </Artifact>
+  );
+}
+
+// A RUN OF CARDS IS ONE CARD WITH TABS (the owner, 2026-11-25: "a little carousel thing on top that scrolls from one to the other"): a tab a
+// card, named by where it goes, the one shown marked and a settled one ticked; under them each card as it is (`children`, one per tab, in its
+// order), side by side, the shown one slid into view. A press on a card is that card's alone; once it is settled the line slides on to the next
+// that waits, after a beat that lets its outcome be read. The height follows the card shown, so nothing under it jumps
+const SLIDE = 280, SETTLE = 650, GAP = 24;
+const useLayout = typeof window === "undefined" ? useEffect : useLayoutEffect;
+export function CardLine({ tabs, children }) {
+  const panes = React.Children.toArray(children);
+  const [pick, setPick] = useState(null), [at, setAt] = useState(() => lineAt(tabs)), [h, setH] = useState(null), refs = useRef([]);
+  const want = lineAt(tabs, pick, at);
+  const settled = !!tabs[at]?.done;
+  useEffect(() => {
+    if (want === at) return undefined;
+    const t = setTimeout(() => setAt(want), settled ? SETTLE : 0);
+    return () => clearTimeout(t);
+  }, [want, at, settled]);
+  useLayout(() => {
+    const el = refs.current[at];
+    if (!el) return undefined;
+    const fit = () => setH(el.offsetHeight); fit();
+    const ro = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(fit);
+    ro?.observe(el); return () => ro?.disconnect();
+  }, [at, panes.length]);
+  const go = (i) => { if (!tabs[i]) return; setPick({ key: tabs[i].key, done: !!tabs[i].done }); setAt(i); };
+  const keys = (e) => { const d = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0; if (d) { e.preventDefault(); go((at + d + tabs.length) % tabs.length); } };
+  const ease = { transition: `transform ${SLIDE}ms cubic-bezier(.2,.7,.2,1), height ${SLIDE}ms ease`, "@media (prefers-reduced-motion: reduce)": { transition: "none" } };
+  return (
+    <Box data-tq-card-line={tabs.length} data-tq-line-at={tabs[at]?.key || ""} sx={{ maxWidth: "min(100%, var(--tq-turn-item))", my: 1 }}>
+      <Box role="tablist" aria-label="Cards in line" onKeyDown={keys} sx={{ display: "flex", alignItems: "center", gap: 0.25, mb: 0.75, minWidth: 0 }}>
+        <Box sx={{ display: "flex", alignItems: "center", minWidth: 0, overflow: "hidden" }}>
+          {tabs.map((t, i) => <React.Fragment key={t.key}>{i > 0 && <Box component="span" aria-hidden sx={{ color: FAINT, fontSize: 12, px: 0.25 }}>·</Box>}
+            <Box component="button" type="button" role="tab" aria-selected={i === at} tabIndex={i === at ? 0 : -1} data-tq-line-tab={t.key}
+              data-tq-tab-state={t.done ? "done" : "waiting"} onClick={() => go(i)} title={t.name}
+              sx={{ ...FOCUS_RING, font: "inherit", fontSize: 12.5, lineHeight: 1.6, cursor: "pointer", bgcolor: "transparent", border: 0, px: 0.5, py: 0.125, minWidth: 0,
+                maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", borderBottom: "2px solid", borderRadius: 0,
+                borderColor: i === at ? ACCENT : "transparent", fontWeight: i === at ? 700 : 500, color: i === at ? INK : t.done ? FAINT : DIM,
+                transition: "color 160ms ease, border-color 160ms ease", "&:hover": { color: INK } }}>{t.done ? `✓ ${t.name}` : t.name}</Box></React.Fragment>)}
+        </Box>
+        <Typography data-tq-card-queue="" component="span" sx={{ ml: "auto", pl: 1, flexShrink: 0, fontSize: 11.5, color: FAINT }}>{`${at + 1} of ${tabs.length}`}</Typography>
+      </Box>
+      {/* ...room around the cards for their raised edge, which the slide's window would cut */}
+      <Box sx={{ overflow: "hidden", m: "-6px", p: "6px", ...(h != null ? { height: h + 12, boxSizing: "border-box" } : {}), ...ease }}>
+        <Box sx={{ display: "flex", alignItems: "flex-start", gap: `${GAP}px`, transform: `translateX(calc(${-at} * (100% + ${GAP}px)))`, ...ease }}>
+          {panes.map((p, i) => <Box key={tabs[i]?.key ?? i} ref={(el) => { refs.current[i] = el; }} role="tabpanel" data-tq-line-pane={tabs[i]?.key ?? i}
+            {...(i === at ? {} : { inert: "", "aria-hidden": "true" })} sx={{ flex: "0 0 100%", minWidth: 0 }}>{p}</Box>)}
+        </Box>
+      </Box>
+    </Box>
   );
 }
 

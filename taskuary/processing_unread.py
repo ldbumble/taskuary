@@ -588,6 +588,7 @@ def card_for(store, item, compact, live_state, now, states=None, noise=None, lea
     # is asking, which gets through as it does through a reminder
     from . import watch
     card['watching'] = bool(active and watch.watching(task) and not asking_now and not read.get('deferred'))
+    if card['watching']: card['why'] = watch.line(store, task) or card.get('why')       # ...and says what it waits for (watch.line)
     # FOR LATER SAYS WHEN IT COMES BACK (the canvas redesign, 2026-09-29): the rail's gutter counts down to it - a row put away
     # with Remind me, on its date. Nothing else has a time to say: nothing is "passed" any more (Q7, 2026-10-30)
     card.pop('surfaced', None); card.pop('surfaced_at', None)

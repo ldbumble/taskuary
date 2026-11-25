@@ -1308,6 +1308,7 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
   // WATCH IT (watch.py, the owner, 2026-11-01): not the owner's - kept open under Watching, walked after Tasks, back when the thread moves. Nothing
   // is sent. On the walk's table it is the walk's close (railwalk.leave "watch"); on a task already watched the same press ends the watch
   const watching = !!t?.WatchedAt && !["done", "dropped"].includes(t.Status);
+  const watchLine = watching ? String(detail?.watch || "") : "";       // ...what it waits for, and when it is back (watch.line)
   const watchIt = async () => {
     const off = watching;
     if (!off) { await pressBeat("watch"); onLeave?.(); }
@@ -1875,7 +1876,6 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
   // ...WHOM IT WENT TO under who sent it, a plain line: its first few names, all of them with the whole email (the owner, 2026-11-03)
   const toWent = () => { const w = toLine(cameIn?.Recipients); return w.short && (
     <Typography data-tq-came-in-to="" title={w.full} sx={{ fontSize: 12.5, color: DIM, overflowWrap: "anywhere" }}>{cameInFull ? w.full : w.short}</Typography>); };
-  const fromFacts = () => (<>
   // ...how hard triage judged the work, or that it carries sensitive data - only when it is not ordinary, and a press corrects it (the router,
   // 2026-10-25) - a MARK OF THE MESSAGE, beside who sent it, never after its files (the owner, 2026-11-25: it sat under the attachments pill)
   const judgedMark = () => { const label = judgedMarks(detail?.judged); return label && <>
@@ -1888,6 +1888,7 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
       {[["ordinary", "Ordinary data"], ["sensitive", "Sensitive data"]].map(([k, l]) => <MenuItem key={k} selected={(detail?.judged?.data_class || "ordinary") === k}
         sx={{ fontSize: 12 }} onClick={() => judge({ data_class: k })}>{l}</MenuItem>)}
     </Menu></>; };
+  const fromFacts = () => (<>
                         {!twoUp && toWent()}
                         <Box sx={{ display: "flex", alignItems: "baseline", gap: 1, flexWrap: "wrap", "&:empty": { display: "none" } }}>
                           {!!(detail.attachments?.length || detail.links?.length) && <Chip size="small" icon={<AttachFileIcon sx={{ fontSize: 13 }} />}
@@ -2073,7 +2074,9 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
         {/* ...in his words, never the app's own name for its sorting (design round 5, 2026-11-19: "What triage made of it") */}
         <Typography sx={cardHead}>How Taskuary read it</Typography>
         <Typography sx={{ fontSize: 15, lineHeight: 1.5, color: INK }}>{madeOf(facts, t?.Kind || "task")}</Typography>
-        {triaged.why && <Typography sx={{ fontSize: 13, lineHeight: 1.5, color: DIM, overflowWrap: "anywhere" }}>{triaged.why}</Typography>}
+        {/* ...a WATCH says what it waits for and when it is back (the server's watch.line, the header's and the rail's same words) - in triage's why's place */}
+        {(watchLine || triaged.why) && <Typography data-tq-watch-line={watchLine ? "" : undefined} sx={{ fontSize: 13, lineHeight: 1.5, color: DIM, overflowWrap: "anywhere" }}>
+          {watchLine || triaged.why}</Typography>}
         {triaged.later > 0 && <Typography sx={{ fontSize: 12.5, color: FAINT }}>{plural(triaged.later, "later message")} joined this task</Typography>}
         {workContext && <Typography sx={{ fontSize: 12.5, color: FAINT }}>Works from: {workContext}</Typography>}
         {facts.pills.filter((p) => p.tone === "alert" && p.key !== "priority").map((p) => (
@@ -3436,7 +3439,7 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
                       {/* ONE CHAT FOR EVERY KIND (the owner, 2026-11-06: "one shared chat object for coding and regular"): the component reads its own
                           source (chatStream.chatSource) - a coding task's sessions, or the general agent's conversation - and the branch's landing
                           card joins it wherever the task works in a checkout */}
-                      <GeneralWorkspace key={`${t.TaskId}-${generalRevision}`} task={t} compact onSession={generalSession} reread={chatRead} trustOnRow
+                      <GeneralWorkspace key={`${t.TaskId}-${generalRevision}`} task={t} compact onSession={generalSession} reread={chatRead} trustOnRow={!watching}
                         queued={chatPane && !liveSession && queuedRow && !queuedRow.retryTurn ? <QueuedStart taskId={t.TaskId} queued={queuedRow} line onChanged={() => { loadTasks(); loadDetail(t.TaskId); }} /> : null}
                         stopTries={queuedRow?.retryTurn ? () => api.delete(`/api/tasks/${t.TaskId}/dispatch`).then(() => { loadTasks(); loadDetail(t.TaskId); }).catch(() => {}) : null}
                         liveSid={term?.alive && term.mode === "assistant" ? term.sid : ""}

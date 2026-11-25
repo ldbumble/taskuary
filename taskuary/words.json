@@ -86,6 +86,7 @@
     "done_list":     {"line": "All {n} to-dos ticked.", "is": "every to-do on the task is ticked"},
     "watch_handled": {"line": "{who} wrote; it looks handled.", "is": "a watched task came back, and triage read the new message as handled by somebody else"},
     "watch_quiet":   {"line": "A week watched; nothing on the thread.", "is": "a watched task came back after a week with nothing on the thread"},
+    "watching":      {"line": "{back}.", "is": "kept under Watching for somebody else to handle - nothing owed by the owner until its thread moves"},
     "own":           {"line": "", "is": "the owner's own task, nothing else known"}
   },
   "local": "on this computer",

@@ -477,7 +477,7 @@ def task_now(store, tid: int) -> str:
     sent = store.sent_reply(task_id=tid)
     if sent: lines.append(f"  a reply went from this task ({str(sent.get('DecidedAt') or sent.get('CreatedAt') or '')[:16]}): {_cut(sent.get('FinalText') or sent.get('DraftText'), 240)}")
     from . import watch
-    if w := watch.said(t): lines.append(f'  {w}')
+    if w := watch.said(t, store): lines.append(f'  {w}')
     if last: lines.append(f"  the agent last said ({str(last.get('CreatedAt') or '')[:16]}): {_cut(last.get('Body'), 300)}")
     if t.get('Status') in ('done', 'dropped'): lines.append(f"  closed {str(t.get('ClosedAt') or t.get('UpdatedAt') or '')[:16]}")
     return '\n'.join(lines)
@@ -3330,7 +3330,7 @@ def read_op(store, kind: str, params: dict) -> str:
                                                      for n, b in enumerate(boxes, 1)))
         if t.get('RemindAt'): out.append(f"put away until {str(t['RemindAt'])[:10]} ({buttons.label('defer')})")
         from . import watch
-        if w := watch.said(t): out.append(w)
+        if w := watch.said(t, store): out.append(w)
         from .ingest import recipients_said, row_recipients
         for msg in (store.list_messages(tid) or [])[:6]:
             rc = recipients_said(row_recipients(store, msg))         # ...and whom it went to (2026-11-03)

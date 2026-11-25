@@ -21,10 +21,29 @@ def watching(task) -> bool: return bool((task or {}).get('WatchedAt')) and (task
 def back(task) -> str: return str((task or {}).get('WatchBack') or '') if (task or {}).get('Status') not in CLOSED else ''
 # ...said to the Assistant wherever it reads a task (the rail audit, 2026-11-02): "what am I watching?" and "why is it not in my walk?" read
 # tasks.list and task.read, and neither said a task was watched - the model could not answer either
-def said(task) -> str:
-    if watching(task): return f"WATCHED since {str(task['WatchedAt'])[:10]} (Watch it) - under Watching, still walked after Tasks; back in Tasks when its thread moves or after a quiet week"
+def said(task, store=None) -> str:
+    if watching(task): return f"WATCHED since {str(task['WatchedAt'])[:10]} (Watch it), under Watching, still walked after Tasks - " + \
+        (line(store, task) if store is not None else 'back in Tasks when its thread moves or after a quiet week')
     return {'moved': 'back from Watching - its thread moved', 'handled': 'back from Watching - its thread looks handled',
             'quiet': 'back from Watching after a quiet week'}.get(back(task), '')
+
+
+# WHAT A WATCH WAITS FOR, SAID ONCE (the owner, 2026-11-25: a watched task said "on you" and nowhere what it was watching): triage's own
+# reading where it put the task here (its verdict's `why` names who is expected to handle it), and when it comes back by itself - the header's
+# chip, the rail's row and every reader of where a task stands (taskstate.status / said) read this one line
+def line(store, t) -> str:
+    "'Watching: <triage's why> - back when the thread moves, or on Wed 2 Dec if it stays quiet', or '' for a task not watched."
+    if not watching(t): return ''
+    vs = store.task_verdicts(t['TaskId']) if t.get('TaskId') else {}
+    why = next((' '.join(str(v['why']).split()) for _, v in sorted(vs.items(), reverse=True)
+                if isinstance(v, dict) and v.get('intent') == 'watch' and str(v.get('why') or '').strip()), '')
+    return (f'Watching: {why.rstrip(".")}' if why else 'Watching for somebody else to handle it') + f' - {back_when(t)}'
+def back_when(t) -> str:
+    "'back when the thread moves, or on Wed 2 Dec if it stays quiet' - the part a row short of room says (rulebook's fact line)."
+    from .remind import when
+    try: back = when(f"{datetime.strptime(str(t['WatchedAt'])[:19], '%Y-%m-%d %H:%M:%S') + timedelta(days=QUIET_DAYS):%Y-%m-%d}")
+    except (KeyError, TypeError, ValueError): back = ''
+    return 'back when the thread moves' + (f', or on {back} if it stays quiet' if back else '')
 
 
 def watch(store, tid: int, actor: str = 'owner') -> dict:

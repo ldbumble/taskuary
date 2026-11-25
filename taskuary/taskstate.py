@@ -112,11 +112,12 @@ def standing(store, tid, key: str = None) -> dict:
     return cardqueue.fresh(store, ('standing', int(tid), key), lambda: _standing(store, tid, key))
 def _standing(store, tid, key: str = None) -> dict:
     from datetime import datetime
-    from . import card, checkback, waiton
+    from . import card, checkback, waiton, watch
     t = store.get_task(int(tid)) or {}
     out = {'waits_on': None, 'who': '', 'what': [], 'since': None, 'next': None, 'closed': not t or t.get('Status') in ('done', 'dropped'),
-           'them': [], 'check': None, 'rids': []}
+           'them': [], 'check': None, 'rids': [], 'watch': ''}
     if out['closed']: return out
+    out['watch'] = watch.line(store, t)          # ...what a watch on it waits for, whoever's move it is now
     cb, w = checkback.of_task(t), waiton.on_them(store, t)
     out.update(next=cb['at'] if cb else None, them=w, check=cb)
     if (key or TaskState(store, tid=int(tid)).base) == 'working' or retrying(store, tid): return {**out, 'waits_on': 'agent'}
@@ -141,7 +142,8 @@ def said(st: dict) -> str:
     an answer from Erin Blake (since 11-24 10:02) · checks back Fri 9 AM"."""
     from . import remind, waiton
     if st['closed']: return 'closed - no input awaited from anyone'       # ...its questions and waits let go with the close
-    head = waiton.word(st['waits_on'], st['who']) or ('with its agent' if st['waits_on'] == 'agent' else 'no input awaited from anyone')
+    head = waiton.word(st['waits_on'], st['who']) or ('with its agent' if st['waits_on'] == 'agent' else
+                                                      st.get('watch') or 'no input awaited from anyone')
     what = '; '.join(' '.join(str(x).split())[:120] for x in st['what'][:3])
     # ...and an answer awaited from somebody else while his comes first, so their reply is known for the one it answers (triage's same_as)
     also = '' if st['waits_on'] == 'them' else ''.join(f" · also {waiton.word('them', x['who'])}: {x['what']}" for x in st['them'][:2])
@@ -272,7 +274,11 @@ class TaskState:
     @cached_property
     def key(self) -> str:
         "Its state key, for the Tasks list, the Board, the page and the stage (stages.facts) - `base` as where it stands says it (standing)."
-        return _held(self.base, standing(self.store, self.tid, self.base)) if self.base in ('agentdone', 'theirs', 'yours') else self.base
+        k = _held(self.base, standing(self.store, self.tid, self.base)) if self.base in ('agentdone', 'theirs', 'yours') else self.base
+        # ...A WATCHED TASK WITH NOTHING OWED IS WATCHED, never "on you" (the owner, 2026-11-25): somebody else handles it (watch.py) - a card,
+        # the agent's question or anybody's answer awaited still reads as it does
+        from . import watch
+        return 'watching' if k in ('yours', 'held') and watch.watching(self.t) else k
 
     @cached_property
     def base(self) -> str:
@@ -441,6 +447,8 @@ def status(store, t: dict, session=None, queued=None, key: str = None) -> dict:
     out = {**words(k), 'spins': k == 'working'}
     # ...and whose input it waits for, by name (standing): "waiting for Erin's input"
     if k == 'theirs': out['word'] = waiton.word('them', standing(store, t['TaskId'], k)['who'])
+    # ...and what a watch waits for, in its one line (watch.line): the chip's hover says it, as the rail's row does
+    if k == 'watching': out['hint'] = standing(store, t['TaskId'], k)['watch'] or out['hint']
     if handles(t) and not is_dock(t):
         if k in CHAT_READY: out = {**out, 'word': lanes.word('chat_ready'), 'hint': lanes.hint('chat_ready')}
         elif k in CHAT_DONE: out = {**words('chat_done'), 'spins': False}

@@ -25,21 +25,23 @@ export function taskMoves(s, run, w) {
   return [
     // A TASK HELD FOR A SENDER HE HAS NOT TRUSTED IS UNBLOCKED BY ONE PRESS, LIT ON THE ROW (walk 14, 2026-11-24: opened from the rail its Trust sat in
     // the folded Agent pane, "Agent not started", and nothing on screen moved it) - the row's own move, as a start held for a repository is
-    ...(s.trust && !s.closed ? [{ id: "trust", group: "decide", tone: "p", unblocks: true, label: s.trust.busy ? "Starting…" : s.trust.label, run: run.trust,
-      ...off(s.trust.busy ? "it is starting" : ""), title: s.trust.hint }] : []),
+    // ...BUT A WATCHED TASK IS NOBODY'S WORK FOR HIM (the owner, 2026-11-25: "Trust <name>" lit on a thread somebody else handles): its Trust
+    // waits in More, and the watch's own move stands on the row
+    ...(s.trust && !s.closed ? [{ id: "trust", ...(s.watching ? { group: "more" } : { group: "decide", tone: "p", unblocks: true }),
+      label: s.trust.busy ? "Starting…" : s.trust.label, run: run.trust, ...off(s.trust.busy ? "it is starting" : ""), title: s.trust.hint }] : []),
     ...(s.closed && pressWord(s.closedWith) ? [{ id: "closed-result", group: "decide", tone: "s", label: `✓ ${pressWord(s.closedWith)}`, result: true, disabled: true,
       why: "you closed it - Reopen brings it back" }] : []),
     s.closed
       ? { id: "reopen", group: "decide", tone: "s", label: s.reopening ? "Reopening…" : w.label("reopen"), run: run.reopen, ...off(s.reopening ? "it is reopening" : ""), title: w.hint("reopen") }
       // ...a live session has no primary; nor a waiting draft: its Send, under the draft, is the move (2026-10-06), so Mark done stands outlined
       : { id: "done", group: "more", label: s.finishing ? "Marking done…" : w.label("done"), ...off(s.finishing ? "it is closing" : ""), run: run.done, title: w.doneHint,
-        promote: !s.live && !s.waitingDraft && !s.trust, beside: s.live, onCard: s.waitingDraft && !s.live },
+        promote: !s.live && !s.waitingDraft && !(s.trust && !s.watching), beside: s.live, onCard: s.waitingDraft && !s.live },
     // ...Mark done with words: its card opens in the conversation, under the item
     { id: "close-note", group: "more", label: w.label("close-note"), run: run.note, title: w.hint("close-note"), ...off(s.closed ? CLOSED : s.live ? LIVE : "") },
     // ONE VERB FOR IT, button and dialog (U13)
     { id: "nat", group: "more", label: w.label("nat"), run: run.nat, title: w.natTitle, ...shut },
     { id: "remind", group: "more", label: s.away || w.label("remind"), run: run.remind, title: w.hint("remind"), ...shut },
-    { id: "watch", group: "more", label: w.label("watch", s.watching ? "on" : null), run: run.watch, title: w.hint("watch", s.watching ? "on" : null), ...shut },
+    { id: "watch", group: s.watching && !s.closed ? "decide" : "more", label: w.label("watch", s.watching ? "on" : null), run: run.watch, title: w.hint("watch", s.watching ? "on" : null), ...shut },
     ...(s.manual ? [{ id: "hand", group: "more", label: w.label("hand"), run: run.hand, title: w.hint("hand"), tucked: true, ...shut }] : []),
     { id: "reshape", group: "more", label: w.label("reshape"), run: run.reshape, title: w.hint("reshape"), ...shut },
     // WHAT THE PILLS USED TO CHANGE (section 1's redesign, 2026-10-16): the same PATCHes and the same repository picker, each a menu at the row's button

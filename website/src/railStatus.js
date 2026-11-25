@@ -57,7 +57,8 @@ const railStatus_ = (item, cantSend = false, page = null) => {
   const key = copy ? UNSENDABLE : item.not_sent ? "not_sent" : item.hold ? "held" : done ? "agentdone" : KIND_META[item.kind] ? item.kind : item.lane;
   const spins = item.lane === "working" && !item.settling;
   // ...and the server's words for the very state it read (funnel.one_state: taskstate.status) - whose input it waits for, by name
-  const own = item.status?.key === key && item.status.word ? { word: item.status.word } : {};
+  // ...and its sentence where the server says more than the lane's (taskstate.status: what a watch waits for, watch.line)
+  const own = item.status?.key === key && item.status.word ? { word: item.status.word, ...(item.status.hint ? { hint: item.status.hint } : {}) } : {};
   return said(key, copy ? { ...rowMeta(item), ...KIND_META[UNSENDABLE] } : done ? { ...rowMeta(item), ...KIND_META.agentdone } : { ...rowMeta(item), ...own }, spins);
 
 };

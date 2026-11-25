@@ -272,7 +272,8 @@ def watch_reply(store, rv: dict, body: str, now: datetime = None, llm=None, to: 
     ...AND A NEW MAIL (`to`: whom it went to) that asked them something puts the task waiting for their input (waiton.declare - walks 14-16:
     "agent done" right after the email that asked Erin for the numbers, nothing saying it waited on her); their reply moves it back."""
     tid, msg = rv.get('TaskId'), store.get_message(rv['MessageId']) if rv.get('MessageId') and not to else None
-    if not tid or not (msg and msg.get('Channel') == 'email' or to) or not str(body or '').strip(): return None
+    # ...on every channel a reply leaves by (walk 20: a WhatsApp reply asking Gail to confirm set no wait, and the task read "agent done")
+    if not tid or not (msg or to) or not str(body or '').strip(): return None
     via = door()                                # the door it was sent from - read here, on the asking thread
     def go():
         from . import sentjudge, waiton

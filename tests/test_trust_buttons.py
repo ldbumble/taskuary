@@ -140,6 +140,14 @@ def test_the_task_page_s_origin_carries_the_same_words():
     assert d['agentStory']['trust'] == d['origin']['trust']
 
 
+def test_a_chat_strangers_hold_names_them_never_their_chat_id():
+    "Walk 20: \"You have not trusted Gail Moreno (15550100142@s.whatsapp.net) yet\" - a chat's id beside her name, where a mail's address goes."
+    s = _store()
+    t, _ = _held(s, 'whatsapp', FromEmail='15550100142@s.whatsapp.net', FromName='Gail Moreno', ConversationId='whatsapp:15550100142@s.whatsapp.net')
+    h = origin.hold(s, t)
+    assert h and h['line'] == origin.HELD_LINE.format(who='Gail Moreno'), h
+
+
 def test_the_hold_names_the_new_sender_and_trust_vouches_for_them_alone():
     """HIPAA walk 6, H8: a printer's quote joined a colleague's task; past the trusted mark her own chat line came first, and the hold read
     "You have not trusted Gail Moreno yet ... [Trust Gail]" - the press that vouches would have vouched for her. The line, the button and

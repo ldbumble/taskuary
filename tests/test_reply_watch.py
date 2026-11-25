@@ -157,3 +157,20 @@ def test_a_reply_watch_never_keeps_the_advisors_chase_off_a_closed_task(s):
     asks.touched(s, 1)                                                            # the ledger's table, made on first read
     s._exec('UPDATE ledger SET At=?', (ago(days=7),))                             # a week since the send
     assert s.get_task(tid)['AskedWatch'] == 'reply' and tid not in asks.touched(s, 24)['tids']
+
+
+def test_a_whatsapp_reply_that_asks_waits_on_them_by_name(s):
+    """Walk 20: a WhatsApp reply asking Gail to confirm set no wait - the task read "agent done" and nothing named her. A reply that asks waits
+    for the answer on every channel it leaves by, and the wait names the person, never the chat's id."""
+    from taskuary import waiton
+    tid = s.create_task({'Title': 'Confirm the rota with Gail', 'Kind': 'general', 'Status': 'open', 'Source': 'whatsapp'}, 'triage')
+    mid = s.add_message({'TaskId': tid, 'ExternalId': 'wa-1', 'ConversationId': 'whatsapp:15550100142@s.whatsapp.net', 'Channel': 'whatsapp',
+                         'FromName': 'Gail Moreno', 'FromEmail': '15550100142@s.whatsapp.net', 'BodyText': 'Can you cover Friday?',
+                         'SentAt': ago(hours=1), 'Status': 'routed', 'Direction': 'in'})
+    rid = s.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft_reply', 'Status': 'pending', 'DraftText': 'Which day suits you for the swap?'})
+    with mock.patch('taskuary.outbound.reply_to_message', return_value={'channel': 'whatsapp', 'to': ['15550100142@s.whatsapp.net'], 'cc': []}), \
+         mock.patch.object(outbound, 'send_block', return_value=''), mock.patch('taskuary.learning.learn_from'), \
+         mock.patch.object(asks, '_background', side_effect=lambda f: f()), mock.patch('taskuary.llm.build_llm', return_value=brain(SAID)):
+        assert verdicts.decide(s, s.get_review(rid), 'approve')['ok']
+    [w] = waiton.on_them(s, s.get_task(tid))
+    assert w['who'] == 'Gail Moreno' and waiton.word('them', w['who']) == "waiting for Gail's input", w

@@ -382,7 +382,7 @@ def hold(store, tid) -> dict | None:
 # from any process. The cold rail after a restart judged every open task's senders afresh, ~4 s of its first pile (2026-11-24)
 # ...and the rules it was judged BY: a stored hold outlives an update, so a change to who counts as trusted (the mail-proof rule, 2026-11-24)
 # moves this and every task is judged again on its next read
-RULES = 4
+RULES = 5
 _SIG = """SELECT t.Status, t.TrustedThrough, t.OriginBase, (SELECT COUNT(*) FROM message WHERE TaskId=t.TaskId) n,
     (SELECT MAX(MessageId) FROM message WHERE TaskId=t.TaskId) m, (SELECT Gen FROM change_gen WHERE Tbl='trust') g,
     h.Sig, h.HoldJson FROM task t LEFT JOIN origin_hold h ON h.TaskId=t.TaskId WHERE t.TaskId=?"""
@@ -431,10 +431,12 @@ def _hold(store, tid: int, t: dict) -> dict | None:
     mids = list(said)
     if not mids or not (offer := senders.trust_offer(store, int(tid), msgs)): return None      # Taskuary's own words, a teammate chat: no sender to trust
     m = senders.whom(store, msgs, through, memo) or {}
-    who = ' '.join(str(m.get('FromName') or m.get('FromEmail') or 'this sender').split())        # ...mid-sentence: "You have not trusted this sender yet"
+    from .waiton import person
+    who = ' '.join((person(m, store) or str(m.get('FromEmail') or 'this sender')).split())     # ...mid-sentence: "You have not trusted this sender yet"
     # ...WITH THE ADDRESS BESIDE THE NAME (the readiness review, 2026-11-14): a display name is the sender's to choose, and a stranger
-    # named like a colleague read as that colleague on the one line the press rests on
-    addr = str(m.get('FromEmail') or '').strip()
+    # named like a colleague read as that colleague on the one line the press rests on - a mail address; a chat's id is no address (walk 20:
+    # "Gail Moreno (15550100142@s.whatsapp.net)")
+    addr = str(m.get('FromEmail') or '').strip() if (m.get('Channel') or 'email') == 'email' else ''
     named = f'{who} ({addr})' if '@' in addr and addr.lower() not in who.lower() else who
     line = UNVERIFIED_LINE if getattr(said.get(m.get('MessageId')), 'unverified', False) else HELD_LINE
     return {'line': line.format(who=named), 'person': offer['person'], 'org': offer.get('org'), 'who': who, 'mids': mids,

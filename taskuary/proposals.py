@@ -172,7 +172,8 @@ def post_of(a: dict) -> dict:
     text, link = str(a.get('text') or '').strip(), str(a.get('link') or '').strip()
     own = field(action_for(t), 'link')
     if link and not own and link not in text: text = f'{text}\n\n{link}'.strip()
-    keep = {k: a[k] for k in ('subreddit', 'title', 'why') if str(a.get(k) or '').strip()}
+    # ...only what its network's card takes: a `title` on an X post is no field of X's, and was refused as running unseen - it is left off
+    keep = {k: a[k] for k in ('subreddit', 'title', 'why', 'alt') if str(a.get(k) or '').strip() and (k in ('why', 'alt') or field(action_for(t), k))}
     return {'action': 'run_tool', 'type': t, 'text': text, **keep, **({'image': a['picture']} if a.get('picture') else {}),
             **({'link': link} if link and own else {})}
 # A POST ON A NETWORK NOT CONNECTED IS STILL ITS CARD, AND ITS PRESS HANDS IT TO THE AGENT FOR THE SITE (the owner, 2026-11-22: "card first,
@@ -389,7 +390,9 @@ def unknown_tool(t) -> str:
 
 # WHAT A CARD SHOWS IS WHAT ITS PRESS RUNS (red team F1): a card its connector declares (connectorcatalog `actions`) draws only its declared
 # fields and its picture, so a key beside them - a `script`, a `query` - would run unseen under the card's words. Only these ride beside them
-SHOWN_BESIDE = ('action', 'type', 'connector_id', 'why', 'network', 'flow_run', 'closeout', 'image', 'image_path', 'result')   # the last two never run (_run)
+# ...and the picture's description (`alt`), drawn as the picture's own words on the card (the owner's live task, 2026-11-25: refused as "alt
+# would run unseen", the agent wrote its alt text into the card's why and a drafts file beside the cards)
+SHOWN_BESIDE = ('action', 'type', 'connector_id', 'why', 'network', 'flow_run', 'closeout', 'image', 'alt', 'image_path', 'result')   # the last two never run (_run)
 def unshown(p: dict) -> str:
     "'' when every field of a run_tool on a declared act is one its card draws, else what to drop: nothing runs that the card does not show."
     from .connectorcatalog import action_for

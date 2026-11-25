@@ -439,6 +439,10 @@ def validate(store, p: dict) -> tuple:
     if a == 'run_tool' and p.get('type') in NEVER_AGENT and not isinstance(p.get('flow_run'), dict):
         return False, f"{p['type']} is never an agent's to run - code on this computer runs only from a report or routine the owner saved"
     if a == 'run_tool' and (hid := unshown(p)): return False, hid
+    # ...AND NO CARD STANDS OVER ITS NETWORK'S LIMIT (the owner's live task, 2026-11-25: an X post read "314 of 280" on his screen): its agent
+    # is told the limit and its count, and shortens it before he sees it
+    from .connectorcatalog import action_for, too_long
+    if a == 'run_tool' and (long := too_long(action_for(p.get('type')), p)): return False, long
     # NOTHING EMPTY IS PUT IN FRONT OF THE OWNER: a playbook that could not be filed, or says nothing of how the job is done, is refused at
     # this one gate - the tool, a marker in the agent's words, the on-close question - and its writer is told what it lacks
     if a == PLAYBOOK:

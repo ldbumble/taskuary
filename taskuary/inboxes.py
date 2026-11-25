@@ -1440,7 +1440,7 @@ def items_x(store, c, since) -> list:
 # POSTING IS A SIGN-IN AS YOU, NOT THE APP: the card's bearer token reads, but X takes a post only on user context. The four user keys of
 # the owner's own developer app (Keys and tokens: API key and secret, access token and secret, made after the app is set to Read and write)
 # sign each call with OAuth 1.0a - no redirect, nothing that expires. What X lets that app post is its plan's to say.
-X_API, X_CHARS, X_IMAGE_MAX = 'https://api.x.com/2', 280, 5 * 1024 * 1024
+X_API, X_IMAGE_MAX = 'https://api.x.com/2', 5 * 1024 * 1024
 X_KEYS = ('consumer_key', 'consumer_secret', 'access_token', 'access_secret')
 
 
@@ -1462,7 +1462,8 @@ def run_x_post(cfg):
     from .outbound import Fixable
     c, text = cfg.get('_card') or {}, str(cfg.get('text') or '').strip()
     if not text: raise RuntimeError('an X post needs `text`')
-    if len(text) > X_CHARS: raise RuntimeError(f'X posts are capped at {X_CHARS} characters; this one is {len(text)}')
+    from .connectorcatalog import action_for, too_long
+    if long := too_long(action_for('x_post'), {'text': text}): raise RuntimeError(long)
     if miss := [n for n in X_KEYS if not str(_cfg(c).get(n) or '').strip()]:
         # ...SAID AS A SIGN-IN, IN PLAIN WORDS WITH THE WAY PAST IT (walk 8, 2026-11-20: "consumer_key, consumer_secret ... not saved" stood on his
         # card): the keys are the X card's own setup, which that card walks him through

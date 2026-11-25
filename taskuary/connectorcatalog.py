@@ -151,6 +151,22 @@ def field(act: dict, key: str) -> dict | None: return next((f for f in (act or {
 def text_key(act: dict) -> str | None:
     "The act's words the owner edits in its box (a post's `text`, a tracker comment's `body`)."
     return next((f['key'] for f in (act or {}).get('fields') or [] if f['type'] == 'text' and f.get('edit')), None)
+# A POST'S LENGTH AS ITS NETWORK COUNTS IT (the owner's live task, 2026-11-25): X counts a link as 23 characters whatever its length, so a post
+# of 249 read "314 of 280" on its card and its press would have refused it. A field's `max` is its network's limit; `link_counts`, where it
+# declares one, what each link counts for. The card's counter (actionCard.lengthOf) reads the same two
+LINK = re.compile(r'https?://\S+')
+def length(f: dict, text) -> int:
+    "How long `text` is against field `f`'s `max`: its characters, each link as `link_counts` where the field declares it."
+    t = str(text or '')
+    return len(LINK.sub(lambda m: 'x' * int(f['link_counts']), t) if (f or {}).get('link_counts') else t)
+def too_long(act: dict, p: dict) -> str:
+    "'' when every limited field of `p` is within its network's limit, else what to shorten, with the limit and its count."
+    for f in (act or {}).get('fields') or []:
+        if f.get('max') and (n := length(f, (p or {}).get(f['key']))) > int(f['max']):
+            who = (by_type(act.get('card')) or {}).get('title') or act.get('card') or 'This network'
+            link = f", a link counting {f['link_counts']}" if f.get('link_counts') else ''
+            return f"{who} allows {f['max']} characters in a {str(f.get('label') or f['key']).lower()}{link}; this one is {n} - shorten it"
+    return ''
 def choice_ok(f: dict, v) -> bool: return f.get('type') != 'choice' or str(v) in {str(c['value']) for c in f.get('choices') or []}
 
 

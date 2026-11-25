@@ -33,6 +33,8 @@ export const faceOf = (row) => { const s = String(row?.as || row?.network || "")
 export const choiceOf = (f, v) => (f?.choices || []).find((c) => String(c.value) === String(v)) || null;
 // each declared field with its value - the proposal's, else the catalogue's default - and whether the owner may change it now (only while it waits)
 export const fieldsOf = (act, p, live = false) => (act?.fields || []).map((f) => ({ ...f, value: p?.[f.key] ?? f.default ?? "", editable: !!(live && f.edit) }));
+// ...its words' length as its network counts them, against the field's `max` (connectorcatalog.length): a link is `link_counts` where it says
+export const lengthOf = (f, text) => String(text ?? "").replace(/https?:\/\/\S+/g, (m) => (f?.link_counts ? "x".repeat(f.link_counts) : m)).length;
 export const valuesOf = (act, p) => Object.fromEntries(fieldsOf(act, p).map((f) => [f.key, f.value]));
 // the press's words: a picked choice's own ("Save as draft") over the act's ("Post to LinkedIn")
 export const wordsOf = (act, values = {}) => {

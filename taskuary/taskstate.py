@@ -136,7 +136,9 @@ def _standing(store, tid, key: str = None) -> dict:
     if (key or TaskState(store, tid=int(tid)).base) == 'working' or retrying(store, tid): return {**out, 'waits_on': 'agent'}
     say = {card.ANSWER: "the agent's question: {}", card.ON_PAGE: 'a step on the page: {}', card.LAND: '{} question'}
     mine = [c for c in card.waiting(store, tid) if c['state'] == 'pending' and c['what']]
-    what = [say.get(c['kind'], '{}').format(c['what']) for c in mine] or left_on_him(store, tid)
+    # ...each card with the buttons it draws where it has no Send (card.presses): a Copy-only draft read "ready for your Send" in the brief
+    what = [say.get(c['kind'], '{}').format(c['what']) + (f' ({card.press_words(c)})' if c['kind'] == card.SEND and 'approve' not in c['presses'] else '')
+            for c in mine] or left_on_him(store, tid)
     if what: return {**out, 'waits_on': 'you', 'what': what, 'since': min((str(c['at']) for c in mine if c.get('at')), default=None),
                      'rids': [r for c in mine for r in c['rids'] if isinstance(r, int)], 'trust': bool(mine) and mine[0]['kind'] == card.TRUST,
                      'ask': next((c['what'] for c in mine if c['kind'] == card.ANSWER), '')}

@@ -940,9 +940,11 @@ def cannot(item: dict | None, verb: str, store=None) -> str:
             return f"The note on {what} is yours to change in the box - there is nothing for the AI to redraft."
     # A DRAFT THAT CANNOT LEAVE is not offered Send (capabilities.can_send_draft): a Teams chat is read here and never
     # posted into, so the button - and the Advisor's line over it - could only ever end "not sent" (2026-10-18)
-    if verb == 'approve' and item.get('kind') == 'review' and item.get('rid') and store is not None:
-        from . import capabilities, outbound
-        if not capabilities.can_send_draft(store, item['rid']):
+    # ...on any row whose card is that draft, as the card draws it (card.presses): an agent's row carried the Teams draft too (walk 21)
+    rv = store.get_review(int(item['rid'])) if verb in ('approve', 'send_close') and str(item.get('rid') or '').isdigit() and store is not None else None
+    if rv and rv.get('Kind') != 'action':
+        from . import capabilities, card, outbound
+        if 'approve' not in card.presses(store, rv):
             block = outbound.send_block(store, capabilities.draft_channel(store, item['rid'])) or 'its channel cannot deliver a reply'
             return f"The draft on {what} cannot be sent from here - {block}."
     # an agent already RUNNING on the task is not handed it again (the owner, 2026-10-01) - the dispatch door refuses it too

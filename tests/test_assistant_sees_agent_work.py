@@ -4,12 +4,19 @@ named the task, never the emails, the post or the agent's question. Now one read
 draws) gives each item a short line and its button, and the turn's rail, pipe.list, approvals.list and the dock all carry it. Invented people.
 """
 import json
+import pytest
 from taskuary import card
 from unittest import mock
 
 from taskuary import concierge, general, lookups, slots, terminal as term, workerstate as ws
 from taskuary.store import MemoryStore
 from test_worker_events import live
+
+
+@pytest.fixture(autouse=True)
+def _mailbox_sends():
+    "A mailbox that sends: its emails' cards draw Send (card.presses - with none, they draw Connect email)."
+    with mock.patch('taskuary.capabilities.can_send_draft', return_value=True): yield
 
 
 def agent_task(s):

@@ -2266,6 +2266,10 @@ def card_picks(store, item: dict | None) -> list:
     if rv.get('Kind') == 'action':
         return [(buttons.label('approve', 'action'), {'t': 'card', 'rid': rid, 'verb': 'approve'}), (DISMISS, {'t': 'card', 'rid': rid, 'verb': 'reject'})]
     if rv.get('Kind') not in LETTER_KINDS: return []
+    # ...and only the presses its card draws (card.presses): a letter its channel cannot deliver has no Send here either (walk 21: the poll
+    # offered Send under "draft to copy"), and its words are on the card above to copy
+    from . import card
+    if 'approve' not in card.presses(store, rv): return []
     rows = [(buttons.label('approve'), {'t': 'card', 'rid': rid, 'verb': 'approve'}), (EDIT, {'t': 'card', 'rid': rid, 'verb': 'edit'})]
     from . import slots
     if rv.get('Kind') == slots.KIND and (sid := slots.of_review(rv)) and rv.get('TaskId'):

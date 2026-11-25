@@ -693,6 +693,24 @@ def test_the_words_it_streamed_stay_its_rows_once_the_answer_is_filed_and_only_t
     assert t['tail'] == '' and t['text'].startswith('Payworth'), 'the answer is not drawn a second time; its words are still the turn\'s'
 
 
+def test_words_held_behind_a_first_token_are_written_once_they_settle_while_the_agent_thinks():
+    """His live chat, 2026-11-25: "I", then 10-20 s of Thinking, then the rest. The message's first token was written at once, the rest of its
+    sentence came a beat later and was held for the next thing the agent did - and it reasoned, then wrote a tool call's input, for seconds."""
+    import time
+    from taskuary import conversation
+    s, tid = world()
+    conversation.hear(s, tid, turn=True)
+    say = lambda u: chatlog.feed(s, tid, 'sid1', 'acp', u)
+    say({'sessionUpdate': 'agent_message_chunk', 'messageId': 'm1', 'content': {'type': 'text', 'text': 'I'}})
+    say({'sessionUpdate': 'agent_message_chunk', 'messageId': 'm1', 'content': {'type': 'text', 'text': '’ll check the vendor sheet first.'}})
+    say({'sessionUpdate': 'agent_thought_chunk', 'content': {'type': 'text', 'text': 'Which sheet is newest?'}})
+    said = lambda: [x.get('text') for x in chatlog.read(s, tid, 'everything')['items'][-1]['steps'] if x['k'] == 'said']
+    assert said() == ['I'], 'the first token is drawn at once'
+    end = time.time() + 3
+    while said() != ['I’ll check the vendor sheet first.'] and time.time() < end: time.sleep(0.05)
+    assert said() == ['I’ll check the vendor sheet first.'], 'nothing else came, and the sentence is whole within a beat'
+
+
 def test_a_message_pushed_as_it_streams_reads_as_the_turn_reads_it_its_repeated_opener_said_once():
     """Walk 21 (S7, Codex): "I see you confirmed 2 p.m. with Erin." - a step - then the answer opening on that sentence again. A read of the turn
     said it once; the row pushed to the open chat as it streamed was read alone, and the open chat drew the sentence twice."""

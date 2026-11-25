@@ -735,27 +735,40 @@ def _upsert(store, tid: int, sid: str, f: dict, u: dict) -> None:
         ref = f"c:{u.get('compactionId')}"; e = f['ents'].setdefault(ref, {'ups': []}); e['ups'].append(u)
     else: return            # ...commands, mode, usage: the session's state (acp.ACPClient), never a line of the chat
     if kind not in _MSG: f['last'] = (kind, False)
-    # ...words a token at a time are written a few times a second, the rest at the next thing it does or its answer (flush)
-    if chunky and e.get('j') is not None and now - e.get('at', 0) < CHUNK_S: f['dirty'].add(ref); return
+    # ...words a token at a time are written a few times a second, and what is held is written once it settles (_settle)
+    if chunky and e.get('j') is not None and now - e.get('at', 0) < CHUNK_S: f['dirty'].add(ref); return _settle(store, tid, sid, f)
     for r in [r for r in f['dirty'] if r != ref]: _put(store, tid, sid, f, r)
     _put(store, tid, sid, f, ref)
     while len(f['ents']) > ENTS: f['ents'].pop(next(iter(f['ents'])))
 
 
+# ...ON A CLOCK, NEVER ON THE NEXT THING IT DOES (his live chat, 2026-11-25: "I", then 10-20 s of Thinking, then the rest): a message's first
+# token was written, the rest of the sentence came a beat later and was held, and the model then reasoned or wrote a tool call's input -
+# nothing else came to write it. What is held is written CHUNK_S after it was held, whatever comes next
+def _settle(store, tid: int, sid: str, f: dict) -> None:
+    if f.get('settle'): return
+    def go():
+        f['settle'] = None
+        if not (getattr(store, '_closed', False) or getattr(store, '_closing', False)):
+            for r in list(f['dirty']): _put(store, tid, sid, f, r)
+    f['settle'] = t = threading.Timer(CHUNK_S, _safe(go)); t.daemon = True; t.start()
+
+
 def _put(store, tid: int, sid: str, f: dict, ref: str) -> None:
     from .conversation import acp_steps
-    f['dirty'].discard(ref)
-    if not (e := f['ents'].get(ref)) or not (got := acp_steps(e['ups'])): return
-    if (s := got[0]).get('k') in ('you', 'brief', 'thought'): return       # ...his lines and Taskuary's briefs are the hand-over's, never a step
-    x = one_step(s)
-    e['at'] = time.time()
-    if e.get('j') == (j := json.dumps(x, sort_keys=True, default=str)): return
-    # ...the row IS the step as it now reads: what it no longer says (an ask answered) is cleared, never left from the read before
-    was, e['j'], e['keys'] = e.get('keys') or (), j, set(x)
-    # ...a plan is the turn's that last updated it (the newest plan in the newest turn): one updated after his line never redraws above it
-    n = step(store, tid, sid, ref, {**{k: None for k in was if k not in x}, **x}, state=x.get('status'), turns=x.get('k') == 'plan')
-    from . import live
-    if live._clients and (p := pushed(store, tid, n)): live.emit(live.RUN, task_id=int(tid), steps=[p])     # ...the open chat patches this row
+    with f.setdefault('lock', threading.RLock()):          # ...the clock's write and the stream's are one at a time (_settle)
+        f['dirty'].discard(ref)
+        if not (e := f['ents'].get(ref)) or not (got := acp_steps(e['ups'])): return
+        if (s := got[0]).get('k') in ('you', 'brief', 'thought'): return       # ...his lines and Taskuary's briefs are the hand-over's, never a step
+        x = one_step(s)
+        e['at'] = time.time()
+        if e.get('j') == (j := json.dumps(x, sort_keys=True, default=str)): return
+        # ...the row IS the step as it now reads: what it no longer says (an ask answered) is cleared, never left from the read before
+        was, e['j'], e['keys'] = e.get('keys') or (), j, set(x)
+        # ...a plan is the turn's that last updated it (the newest plan in the newest turn): one updated after his line never redraws above it
+        n = step(store, tid, sid, ref, {**{k: None for k in was if k not in x}, **x}, state=x.get('status'), turns=x.get('k') == 'plan')
+        from . import live
+        if live._clients and (p := pushed(store, tid, n)): live.emit(live.RUN, task_id=int(tid), steps=[p])     # ...the open chat patches this row
 
 
 _LOGS = ('claude-log', 'codex-log')

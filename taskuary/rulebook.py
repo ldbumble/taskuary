@@ -441,6 +441,9 @@ def _recommended(store, it: dict, verbs: list | None, f: dict | None, unlit: boo
     elif st == 'action_held': v = None if unconnected(store, it) else pick('approve', 'send_close')
     elif st == 'draft_ready' or ((w := store.waiting_on_owner(int(tid)) if tid else None) and (w.get('FinalText') or w.get('DraftText'))):
         v = None if unconnected(store, it) else pick('send_close', 'approve')
+    # ...HIS SEND AFTER ITS LAST WORD FINISHED IT: a Send of his words wakes nobody unless the agent said a step follows (general.approved), so
+    # with nothing come in since, nothing more is coming - Mark done is lit, as it was when the agent was woken only to say "it went"
+    elif st == 'agent_done' and why.startswith('Your reply went') and agent_word(store, tid) != 'on_you': v = pick('close')
     elif tid and (said := agent_word(store, tid)) is not None: v, why = (pick('close'), NOTHING_LEFT) if said == 'nothing_left' else (None, why)
     # ...an agent that writes no summary (a coding agent's terminal) says it by ending its work: its own last word, never the owner's reply
     else: v = pick('close') if st == 'agent_done' and why.startswith('Finished') else None

@@ -1090,6 +1090,19 @@ class APostIsAKindOfTheOneReviewTool(unittest.TestCase):
         with self.assertRaises(RuntimeError) as e: inboxes.run_x_post({'text': 'z' * 281, '_card': {}})
         self.assertIn('this one is 281', str(e.exception))
 
+    def test_a_pictures_description_rides_on_its_card_and_a_field_its_network_has_not_is_left_off(self):
+        """The owner's live task, 2026-11-25: the LinkedIn card was refused for its picture's `alt` ("would run unseen under it"), so the agent
+        put the alt text in each card's why and wrote a drafts file beside the cards to hold it. A picture's description is the picture's, and
+        a `title` on an X post - no field of X's - is left off rather than refusing the post."""
+        said, err = tool(self.tid, 'propose', kind='act', action='run_tool', type='linkedin_post', text='Three tools, compared.',
+                         image='tools-compared.png', alt='Three bars, one per tool')
+        self.assertFalse(err, said)
+        said, err = tool(self.tid, 'propose', kind='post', network='x', title='Tools', text='Three tools, compared.', picture='tools-compared.png',
+                         alt='Three bars, one per tool')
+        self.assertFalse(err, said)
+        li, x = (json.loads(r['DraftText']) for r in self.cards())
+        self.assertEqual((li['alt'], x['alt']), ('Three bars, one per tool',) * 2); self.assertNotIn('title', x)
+
     def test_a_network_with_no_post_card_says_which_there_are(self):
         said, err = tool(self.tid, 'propose', kind='post', network='myspace', text='Hi')
         self.assertTrue(err); self.assertIn('no post card', said); self.assertIn('linkedin', said); self.assertFalse(self.cards())

@@ -172,7 +172,8 @@ def post_of(a: dict) -> dict:
     text, link = str(a.get('text') or '').strip(), str(a.get('link') or '').strip()
     own = field(action_for(t), 'link')
     if link and not own and link not in text: text = f'{text}\n\n{link}'.strip()
-    keep = {k: a[k] for k in ('subreddit', 'title', 'why') if str(a.get(k) or '').strip()}
+    # ...only what its network's card takes: a `title` on an X post is no field of X's, and was refused as running unseen - it is left off
+    keep = {k: a[k] for k in ('subreddit', 'title', 'why', 'alt') if str(a.get(k) or '').strip() and (k in ('why', 'alt') or field(action_for(t), k))}
     return {'action': 'run_tool', 'type': t, 'text': text, **keep, **({'image': a['picture']} if a.get('picture') else {}),
             **({'link': link} if link and own else {})}
 # A POST ON A NETWORK NOT CONNECTED IS STILL ITS CARD, AND ITS PRESS HANDS IT TO THE AGENT FOR THE SITE (the owner, 2026-11-22: "card first,
@@ -394,7 +395,9 @@ def unknown_tool(t) -> str:
 
 # WHAT A CARD SHOWS IS WHAT ITS PRESS RUNS (red team F1): a card its connector declares (connectorcatalog `actions`) draws only its declared
 # fields and its picture, so a key beside them - a `script`, a `query` - would run unseen under the card's words. Only these ride beside them
-SHOWN_BESIDE = ('action', 'type', 'connector_id', 'why', 'network', 'flow_run', 'closeout', 'image', 'image_path', 'result')   # the last two never run (_run)
+# ...and the picture's description (`alt`), drawn as the picture's own words on the card (the owner's live task, 2026-11-25: refused as "alt
+# would run unseen", the agent wrote its alt text into the card's why and a drafts file beside the cards)
+SHOWN_BESIDE = ('action', 'type', 'connector_id', 'why', 'network', 'flow_run', 'closeout', 'image', 'alt', 'image_path', 'result')   # the last two never run (_run)
 def _hidden(p: dict) -> tuple:
     "(the fields a declared act's card draws, the keys of `p` beside them) - ((), []) for a tool no card declares."
     from .connectorcatalog import action_for
@@ -406,7 +409,7 @@ def unshown(p: dict) -> str:
     fs, hid = _hidden(p)
     return f"{p['type']}'s card shows only {', '.join(fs)} - {', '.join(hid)} would run unseen under it; propose it without them" if hid else ''
 # ...AND AN AGENT'S EXTRA FIELD IS LEFT OFF ITS CARD, NEVER A REFUSAL (the owner's design, 2026-11-25: "harmless extra fields are ignored" - a
-# post raised with its `hashtags` or an `alt` beside its words was refused whole, and came back to him as prose): what the card does not draw
+# post raised with its `hashtags` beside its words was refused whole, and came back to him as prose): what the card does not draw
 # is dropped where the card is raised (queue), so it is neither shown nor run - a stored one is still refused at the press (validate)
 def shown_only(p: dict) -> dict:
     hid = set(_hidden(p)[1])

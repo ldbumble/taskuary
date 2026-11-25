@@ -4239,6 +4239,7 @@
     },
     {
       "type": "linkedin",
+      "hosts": ["linkedin.com"],
       "title": "LinkedIn",
       "group": "Social",
       "planned": false,
@@ -4320,6 +4321,7 @@
     },
     {
       "type": "bluesky",
+      "hosts": ["bsky.app"],
       "title": "Bluesky",
       "group": "Social",
       "planned": false,
@@ -4441,6 +4443,7 @@
     },
     {
       "type": "reddit",
+      "hosts": ["reddit.com"],
       "title": "Reddit",
       "group": "Social",
       "planned": false,
@@ -4587,6 +4590,7 @@
     },
     {
       "type": "x",
+      "hosts": ["x.com", "twitter.com"],
       "title": "X (Twitter)",
       "group": "Social",
       "planned": false,

@@ -278,13 +278,11 @@ def as_left(p: dict, final_text, fields: dict = None) -> dict:
 def _ran(res) -> dict:
     """An executor's answer as the card reads it: (headline, body), or the {rows, columns} a connector returns - its first row's
     link the place it landed. Unpacking that dict as a pair read its two KEYS: a LinkedIn post said "rows" / "columns"."""
-    if isinstance(res, dict):
-        rows = res.get('rows') or []
-        first = rows[0] if rows and isinstance(rows[0], dict) else {}
-        return {k: v for k, v in {'headline': str(res.get('headline') or f"{len(rows)} row{'s' * (len(rows) != 1)}")[:200],
-                                  'output': json.dumps(rows, default=str)[:2000], 'url': first.get('url') or ''}.items() if v}
-    head, body = res
-    return {'headline': str(head)[:200], 'output': (body or '')[:2000]}
+    from .reports import pair
+    head, body = pair(res)
+    rows = res.get('rows') or [] if isinstance(res, dict) else []
+    url = rows[0].get('url') or '' if rows and isinstance(rows[0], dict) else ''
+    return {'headline': str(head)[:200], **({'output': body[:2000]} if body or not isinstance(res, dict) else {}), **({'url': url} if url else {})}
 
 
 def receipt(rv: dict, final_text, out: dict, fields: dict = None) -> str:

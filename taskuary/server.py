@@ -16,7 +16,7 @@ from . import buttons, config, failures, words
 from . import store as store_mod
 from .store import SQLiteStore, by_sentence, is_goal, task_ref
 from .ingest import ingest_message, split_message, task_from_message
-from .reports import (PLANNED, REGISTRY, note_app_up, render_report, resolve_cfg, run_due_reports, run_one)
+from .reports import (PLANNED, REGISTRY, note_app_up, pair, render_report, resolve_cfg, run_due_reports, run_one)
 from . import agents as hub_agents
 from . import workstreams as hub_ws
 from . import cli_connections, pathcache
@@ -9441,7 +9441,7 @@ def tool_run(body: dict, request: Request):
             # The token decides who spoke. A tool payload cannot claim to be the owner or
             # another agent, even though the executor accepts an author for internal calls.
             tool_cfg['author'] = actor
-        head, out = REGISTRY[t](resolve_cfg(store, tool_cfg))
+        head, out = pair(REGISTRY[t](resolve_cfg(store, tool_cfg)))
     except Exception as e:
         # ...in the words every Taskuary tool's failure takes (agenttools.failed): a field it needs and was not given is named, never "'query'"
         from .agenttools import failed

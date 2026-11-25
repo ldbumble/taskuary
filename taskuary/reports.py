@@ -931,6 +931,16 @@ def _lazy(module, fn):
     except Exception: run.__doc__ = f'{module}.{fn}'
     return run
 
+
+def pair(res) -> tuple:
+    """AN EXECUTOR'S ANSWER AS (headline, body), WHICHEVER SHAPE IT GAVE: the pair itself, or the {rows, columns} a connector's own module
+    returns. Every reader of an executor reads it here - unpacked as a pair, a dict gave its two KEYS (walk 22, 2026-11-25: an agent's read of
+    linkedin_me answered headline "rows", output "columns"; before it, a LinkedIn post's card)."""
+    if not isinstance(res, dict): head, body = res; return head, body or ''
+    rows = res.get('rows') or []
+    return str(res.get('headline') or f"{len(rows)} row{'s' * (len(rows) != 1)}"), json.dumps(rows, default=str)
+
+
 REGISTRY = {'sqlite': run_sqlite, 'mssql': run_mssql, 'database': run_database,
             # the web as a source: plain REST, a key on a card, nothing new in the exe
             'exa': _research('exa'), 'tavily': _research('tavily'),

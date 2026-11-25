@@ -168,6 +168,24 @@ class OverTheWireTests(unittest.TestCase):
         finally:
             server.store.save_connector({'ConnectorId': qb['ConnectorId'], 'ConfigJson': before or '{}'}, 't')
 
+    def test_a_session_does_not_see_a_secret_its_card_never_declared(self):
+        """Red team #3: headers.Authorization, env.API_KEY, a dsn, a cookie, apiKey and the like were not on any card's secret list and an
+        agent's GET /api/connectors handed them over. Masked by their shape, at any depth; what names the card stays."""
+        import json
+        from taskuary import server
+        cfg = {'url': 'https://mcp.vendor.example/v1', 'headers': {'Authorization': 'Bearer hb-invented'}, 'env': {'API_KEY': 'ek-invented'},
+               'dsn': 'postgres://u:dp-invented@db.example/x', 'cookie': 'ck-invented', 'passphrase': 'pp-invented', 'apiKey': 'ak-invented',
+               'webhook_url': 'https://hooks.example/wh-invented', 'nested': {'accessToken': 'at-invented'}, 'region': 'eu'}
+        cid = server.store.save_connector({'Type': 'mcp', 'Name': 'Tools', 'ConfigJson': json.dumps(cfg)}, 't')
+        try:
+            hidden = next(x for x in c.get('/api/connectors', headers=AGENT).json()['data'] if x['ConnectorId'] == cid)
+            self.assertNotIn('-invented', hidden['ConfigJson'])
+            self.assertEqual({k: v for k, v in json.loads(hidden['ConfigJson']).items() if v}, {'url': cfg['url'], 'region': 'eu'})
+            mine = next(x for x in c.get('/api/connectors').json()['data'] if x['ConnectorId'] == cid)
+            self.assertEqual(json.loads(mine['ConfigJson']), cfg)                       # ...the owner's own card shows what he typed, as before
+        finally:
+            server.store._exec('DELETE FROM connector WHERE ConnectorId=?', (cid,))
+
 
 class WriteOnlyGoogleCardTests(unittest.TestCase):
     """The Gmail card's OAuth client secret and calendar refresh token, and the Sheets card's client secret, came back readable in

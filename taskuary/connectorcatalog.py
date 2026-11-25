@@ -4,7 +4,7 @@ here reads and decides itself which one the owner's threads are about (assistant
 matcher over each card's `match` names decided that until 2026-10-11 and is gone: "Federal Holiday - Monday
 October 12th" was a thread about Monday.com. The catalogue used to live only in the page's JavaScript, where
 the server could not read a word of it (2026-09-18)."""
-import json
+import json, re
 from functools import lru_cache
 from pathlib import Path
 
@@ -46,6 +46,31 @@ def secret_config() -> dict:
     for t, ks in write_only().items(): out[t] = tuple(dict.fromkeys((*out.get(t, ()), *ks)))
     return out
 def secret_keys(t) -> tuple: return secret_config().get(t, ())
+
+# ...AND A SECRET IT DOES NOT DECLARE IS ONE BY ITS SHAPE (red team #3): an MCP card's headers.Authorization, a local server's env.API_KEY,
+# a dsn, a webhook address sat in ConfigJson as text and went to an agent's GET /api/connectors. A credential's field name (camelCase,
+# dashes and all), everything in a headers or env map, and an address carrying a password are secret wherever they sit.
+_NAMES = frozenset({'secret', 'password', 'passwd', 'passphrase', 'token', 'cookie', 'cookies', 'authorization', 'dsn', 'conn_str',
+                    'connection_string', 'credential', 'credentials', 'webhook', 'webhook_url', 'apikey', 'bearer'})
+_ENDS = ('_secret', '_password', '_passwd', '_passphrase', '_token', '_key', '_cookie', '_dsn', '_credentials', '_conn_str', '_webhook_url')
+_MAPS = frozenset({'headers', 'http_headers', 'extra_headers', 'env', 'environment', 'env_vars'})
+_USERINFO = re.compile(r'^[a-z][\w+.-]*://[^/@\s:]*:[^/@\s]+@', re.I)
+
+def _snake(k) -> str: return re.sub(r'(?<=[a-z0-9])(?=[A-Z])', '_', str(k)).lower().replace('-', '_')
+def secret_name(k) -> bool: return (n := _snake(k)) in _NAMES or n.endswith(_ENDS)
+
+def map_secrets(x, f, declared=(), within=False, top=True):
+    """`x` (a card's config) with each secret string in it passed through `f`; a None from `f` drops it. Secret: a key the card declares
+    (top level), a key named as a credential, all of a headers/env map or a credential's own object, and an address with a password in it."""
+    if isinstance(x, list): return [w for o in x if (w := map_secrets(o, f, declared, within, False)) is not None or o is None]
+    if isinstance(x, str): return f(x) if x and (within or _USERINFO.match(x)) else x
+    if not isinstance(x, dict): return x
+    out = {}
+    for k, v in x.items():
+        s = within or (top and k in declared) or secret_name(k)
+        w = map_secrets(v, f, declared, s or (isinstance(v, dict) and _snake(k) in _MAPS), False)
+        if w is not None or v is None: out[k] = w
+    return out
 
 
 # A CARD NOT SIGNED IN SAYS SO IN PLAIN WORDS, WITH THE WAY TO IT (design round 6, D8: a post failed "save the app's Client ID and Client Secret

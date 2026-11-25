@@ -525,16 +525,8 @@ def ensure_tokens(read, write, server: dict) -> dict:
 # refresh tokens used to ride along, so an agent allowed to GET /api/connectors could read
 # them without opening the database. Strip only the secret-shaped keys; host/client_id stay
 # so a tool call can still name the card it is using. Owner GETs are not passed through this.
-_CONFIG_SECRETS = frozenset({
-    'password', 'token', 'api_key', 'app_key', 'client_secret', 'secret_key', 'secret_access_key',
-    'sender_password', 'user_password', 'connection_string', 'private_key', 'google_client_secret',
-    'google_refresh_token', 'refresh_token', 'access_key', 'bot_token',
-})
-
-
-def _secretish(k) -> bool:
-    k = str(k).lower()
-    return k in _CONFIG_SECRETS or k.endswith(('_secret', '_password', '_token', '_key'))
+# What is secret-shaped is the catalogue's one rule (connectorcatalog.map_secrets), the same one that seals them.
+from .connectorcatalog import map_secrets, secret_name as _secretish
 
 
 def masked_detail(detail):
@@ -558,17 +550,12 @@ def masked_detail(detail):
 
 
 def without_config_secrets(row: dict) -> dict:
-    """A connector row an agent may see: ConfigJson minus the keys that are credentials."""
+    """A connector row an agent may see: ConfigJson minus its credentials, at any depth - a headers or env map, a dsn, a key its card declares."""
     out = dict(row)
-    raw = out.get('ConfigJson')
-    if not raw: return out
-    try: cfg = json.loads(raw)
+    try: cfg = json.loads(out.get('ConfigJson') or '')
     except (TypeError, ValueError): return out
-    if not isinstance(cfg, dict): return out
-    cleaned = {k: v for k, v in cfg.items()
-               if str(k).lower() not in _CONFIG_SECRETS
-               and not str(k).lower().endswith(('_secret', '_password', '_token'))}
-    if cleaned != cfg: out['ConfigJson'] = json.dumps(cleaned)
+    if isinstance(cfg, dict) and (cleaned := map_secrets(cfg, lambda v: None, WRITE_ONLY_CONFIG.get(out.get('Type'), ()))) != cfg:
+        out['ConfigJson'] = json.dumps(cleaned)
     return out
 
 

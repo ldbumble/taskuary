@@ -111,20 +111,28 @@ class Holding(unittest.TestCase):
     def pending(self): return self.s._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action' AND Status='pending'", (self.tid,))
     def denied(self, out): return out['hookSpecificOutput']['permissionDecision'] == 'deny'
 
-    def test_off_every_act_is_refused_and_a_look_still_passes(self):
-        turn_on(self.s, False)
-        self.assertTrue(self.denied(self.check()))
-        self.assertIn('Agent Desktop is off', self.check()['hookSpecificOutput']['permissionDecisionReason'])
+    def test_off_every_act_waits_on_one_card_to_let_it_and_a_look_still_passes(self):
+        # the owner, 2026-11-25: "it should find a way around it" - "Agent Desktop is off" left the agent to say so in words
+        turn_on(self.s, False); ad.mark(self.s, self.tid, False)
+        self.assertTrue(self.denied(self.check())); self.assertTrue(self.denied(self.check()))
+        self.assertIn("the owner's to press", self.check()['hookSpecificOutput']['permissionDecisionReason'])
         self.assertEqual(self.check('agent-desktop snapshot --app Notepad -i'), {})
-        self.assertEqual(self.pending(), [])
+        (card,) = self.pending()                                                             # ...one card, however often it is tried
+        self.assertEqual(json.loads(card['DraftText'])['action'], 'use_desktop'); self.assertIn('let this task use your desktop', card['Reason'])
+        with installed(): proposals.execute(self.s, card, 'owner')
+        self.assertTrue(ad.wanted(self.s.get_task(self.tid))); self.assertTrue(ad.card(self.s)['Active'])
+        self.assertEqual(self.check(v={'irreversible': False, 'sure': True, 'what': 'types'}), {})
 
-    def test_an_unmarked_task_is_refused_even_with_the_card_on(self):
+    def test_an_unmarked_task_waits_on_the_card_even_with_the_card_on(self):
         ad.mark(self.s, self.tid, False)
         out = self.check(v={'irreversible': False, 'sure': True, 'what': 'types'})
-        self.assertTrue(self.denied(out)); self.assertIn('not marked "needs desktop"', out['hookSpecificOutput']['permissionDecisionReason'])
+        self.assertTrue(self.denied(out)); self.assertEqual(len(self.pending()), 1)          # ...his press marks it; nothing runs before
         self.assertEqual(self.check('agent-desktop list-apps'), {})                          # a look is still only a look
         ad.mark(self.s, self.tid, True)
         self.assertEqual(self.check(v={'irreversible': False, 'sure': True, 'what': 'types'}), {})
+
+    def test_an_agent_cannot_ask_for_the_desktop_itself(self):
+        self.assertEqual(proposals.parse(proposals.MARK + ' {"action": "use_desktop"}'), [])
 
     def test_a_strangers_task_never_drives_the_desktop(self):
         with mock.patch('taskuary.origin.of_task', return_value=('stranger', 'a sender nobody vouched for')):

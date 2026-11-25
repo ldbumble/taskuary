@@ -75,6 +75,14 @@ def offered(store, tid: int, pick: str = '') -> bool:
     return general.browser_offered(store, tid, pick)
 
 
+def let(store, tid: int, actor: str = 'owner') -> dict:
+    "His press on \"Let this task use your desktop\": the task marked, and the Agent Desktop card switched on where it was off."
+    if not installed(): raise RuntimeError('Agent Desktop is not installed on this computer - nothing was changed')
+    if (c := card(store)) and not c.get('Active'): store.save_connector({'ConnectorId': c['ConnectorId'], 'Active': 1}, actor)
+    mark(store, tid, True, actor)
+    return {'desktop': True, 'said': 'This task may use your desktop now.'}
+
+
 def mark(store, tid: int, want: bool = True, actor: str = 'owner') -> bool:
     "Mark (or unmark) a task \"needs desktop\". True when it now carries the mark."
     if not store.get_task(tid): raise ValueError('task not found')
@@ -277,15 +285,21 @@ def check(store, tid: int, sid: str, cmd: str, brain=None) -> dict:
     from . import origin
     todo = acts(cmd)
     if not todo: return {}
-    if not on(store): return _deny('Agent Desktop is off on this computer - the owner turns it on under Connections. Do not drive desktop '
-                                   'apps another way; say what you would have done instead.')
+    if not installed(): return _deny('Agent Desktop is not installed on this computer, so nothing was done. Do not drive desktop apps another '
+                                     'way; say what you would have done instead.')
     try: stranger = origin.of_task(store, tid)[0] == 'stranger'
     except Exception: stranger = True                                  # unreadable is not a vouch
     if stranger: return _deny('This task carries a message from someone the owner has not vouched for, so it does not drive the '
                               "owner's desktop. Say what you would have done instead.")
-    if not wanted(store.get_task(tid)):
-        return _deny('This task is not marked "needs desktop", so it does not drive the owner\'s desktop. Say in one line that the owner can '
-                     'mark it "needs desktop" if the work needs a desktop app, and what you would have done there.')
+    # ...OFF, OR THIS TASK NOT MARKED: ONE CARD, "Let this task use your desktop" (the owner, 2026-11-25: "it should find a way around it") -
+    # his press marks the task (and switches the card on): only a marked task gets the desktop still (the owner, 2026-10-31)
+    if not on(store) or not wanted(store.get_task(tid)):
+        from . import proposals
+        from .selfclose import CARD_TAIL
+        q = proposals.queue(store, tid, {'action': 'use_desktop', 'why': ' '.join(a['verb'] for a in todo)[:120]}, 'taskuary', refused=(miss := []))
+        if not q: return _deny(f'{NOT_RUN}: this task does not use the owner\'s desktop - {miss[0] if miss else "it was not put to him"}. '
+                               'Say what you would have done instead.')
+        return _deny(f"{NOT_RUN}: this task does not use the owner's desktop yet. Letting it: {CARD_TAIL}")
     ctls = [control(a) for a in todo]
     for a, c, v in zip(todo, ctls, judge(store, todo, ctls, brain)):
         if not v['hold']: continue

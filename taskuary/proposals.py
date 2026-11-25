@@ -110,6 +110,9 @@ ACTIONS = {
     # we save this"): the card shows the script whole, and the owner's press is the save (workflows.save_script_routine) - nothing is
     # saved or run before it, and it is the one door by which an agent's script ever reaches a schedule
     'save_routine': ('save this routine or report', ('title',), None),
+    # A DESKTOP ACT ON A TASK NOT MARKED "needs desktop", OR WITH AGENT DESKTOP OFF (the owner, 2026-11-25): raised by the desktop hook, never an
+    # agent's marker - his press marks the task (agentdesktop.let); only a marked task gets the desktop (the owner, 2026-10-31)
+    'use_desktop': ('let this task use your desktop', (), None),
 }
 FAILED_NOTE = 'failed'      # a pressed act that failed: settled, its error kept (ActError) - its agent sets up what goes next
 HELD_ACTS = ('browser_act', 'shell_act', 'desktop_act')     # raised by a hook before the act ran - never an agent's marker
@@ -131,7 +134,7 @@ def _gate(a: str):
 # WHAT NO AGENT MAY ASK FOR, AND THE MARKS NONE MAY PUT ON ITS OWN ASK - one list for both doors: the marker (parse) and the tool
 # (agenttools.proposal_of). They were two, and had drifted (the spine audit, 2026-11-09): the tool's did not name the held steps, so an agent
 # could file a "held step" of its own - a command of its choosing, on the card the owner reads as one Taskuary stopped
-NOT_ASKED = ('merge_pr', 'close_item', 'repair_workflow', 'change_setup', *HELD_ACTS)
+NOT_ASKED = ('merge_pr', 'close_item', 'repair_workflow', 'change_setup', 'use_desktop', *HELD_ACTS)
 MARKS = ('closeout', 'flow_run')
 
 # A POST IS DRAWN AS THE POST (the owner, 2026-11-05: "it's not showing the post and the image as a linkedin post and asking me if i want to
@@ -1195,6 +1198,9 @@ def _run(store, rv: dict, p: dict, tid, a: str, actor: str, edited, skip_checks:
         workflows.save(store, {'SourceId': int(p['source_id']), 'ConfigPatch': p['patch']}, actor)      # ...its editor's own save
         out = {'source': int(p['source_id']), 'changed': str(p.get('changes') or '')[:1200]}
     elif a in HELD_ACTS: out = _gate(a).perform(store, tid, p)
+    elif a == 'use_desktop':
+        from . import agentdesktop
+        out = agentdesktop.let(store, tid, actor)
     elif a == 'close_item':
         from . import trackers
         out = trackers.close_out(store, p)

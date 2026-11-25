@@ -2,7 +2,7 @@
 // bold star counts - and showing the SOURCE of that made a 106-line report unreadable. Report
 // bodies only: an email that happens to contain an asterisk is not a document.
 import React from "react";
-import ReactMarkdown from "react-markdown";
+import ReactMarkdown, { defaultUrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { findAndReplace } from "mdast-util-find-and-replace";
 import { Box, Button, Dialog, DialogContent, DialogTitle, IconButton } from "@mui/material";
@@ -61,6 +61,10 @@ export function LinkPopups({ children }) {
 const fileName = (u) => { const n = String(u).split(/[?#]/)[0].split("/").pop() || "PDF"; try { return decodeURIComponent(n); } catch { return n; } };
 // `onTask` (the chat's): a task link opens it as a press of its rail row does, and a bare ref keeps its own words
 const A = ({ href, children, onTask }) => {
+  // ...A FILE OF THIS TASK'S, LINKED IN THE WORDS, IS THAT FILE (walk 20: [x.html](<C:/.../outputs/TQ-0003/x.html>) was emptied by the markdown's
+  // URL check, and the empty link opened a second Taskuary): the road a path named in a code span takes (LocalPath), an emptied link its words
+  const at = React.useContext(LocalFiles), lf = at && localFile(href, at.tid);
+  if (lf) href = lf.url;
   // ...BY ITS ROAD (appLinks.linkRoad, the owner 2026-11-02): the web alone opens a new tab - the system browser, from the desktop window -
   // and the app's own address, written out whole or as a path, stays in the window like its #links
   const road = linkRoad(href), own = ownPath(href) || "", hash = own.includes("#") ? own.slice(own.indexOf("#")) : href;
@@ -80,6 +84,7 @@ const A = ({ href, children, onTask }) => {
   const pop = React.useContext(LinkPop), web = !!pop && road === "outside" && isWebLink(href);
   if (file) href = attUrl({ url: own }, true);
   else if (page && outside) href = page;
+  if (!String(href ?? "").trim()) return <>{children}</>;
   return (<>
     <a href={href} target={road === "outside" ? "_blank" : undefined} data-tq-file-link={file ? "" : undefined} data-tq-web-link={web ? "" : undefined} aria-expanded={pdf ? view : undefined} data-tq-road={road} rel="noreferrer" style={{ color: "var(--tq-link, #55697a)", fontWeight: 600, textDecoration: "none" }}
       data-tq-task-link={m ? m[1] : undefined}
@@ -184,7 +189,7 @@ export const Md = ({ text, onTask = null, outside = false }) => {
   const within = React.useContext(Outside);
   return (
   <Outside.Provider value={outside || within}><Box sx={sx} className="tq-md">
-    <ReactMarkdown remarkPlugins={PLUGINS}
+    <ReactMarkdown remarkPlugins={PLUGINS} urlTransform={(u) => (at && localFile(u, at.tid) ? u : defaultUrlTransform(u))}
       components={{ a: onTask ? (p) => <A {...p} onTask={onTask} /> : A, img: Img, td: Td, pre: Pre, code: Code, table: FitTable }}>
       {/* a Codex citation marker reads as the file's name wherever an answer is shown; the chat makes it a file (taskOutputs.js) */}
       {/* ...and in the chat a task it names is a link that opens it (linkRefs); a path into the task's own folder, the file (Code) */}

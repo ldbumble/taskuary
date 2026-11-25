@@ -61,12 +61,14 @@ export const localFile = (raw, tid) => {
   const rel = outputOf(s, tid);
   return rel ? { rel, name: baseName(rel), url: outputUrl(tid, rel), image: IMAGE.has(ext(rel)) } : null;
 };
-// ...and one named bare in the words is put in a code span, for that span to be drawn as the file (outside code spans only)
+// ...and one named bare in the words is put in a code span, for that span to be drawn as the file (outside code spans and a link's own
+// address - `[x](<C:/...>)` is a link already, md.jsx's A)
 const LOCAL = new RegExp(`(?:file:/+)?(?:[A-Za-z]:[\\\\/]|/)${STOP}*?[\\\\/]scratch[\\\\/]outputs[\\\\/]TQ-\\d+[\\\\/]${STOP}+`, "gi");
-export const codeLocalPaths = (text, tid) => outsideCode(String(text ?? ""), (bit) => bit.replace(LOCAL, (all) => {
+const LINKED = /(\]\(<[^>\n]*>\)|\]\([^)\s]*\))/;
+export const codeLocalPaths = (text, tid) => outsideCode(String(text ?? ""), (bit) => bit.split(LINKED).map((x, i) => i % 2 ? x : x.replace(LOCAL, (all) => {
   const tail = /[.,;:!?*_]+$/.exec(all)?.[0] || "", path = all.slice(0, all.length - tail.length);
   return localFile(path, tid) ? `\x60${path}\x60${tail}` : all;
-}));
+})).join(""));
 
 // the row the page draws for a file an answer named: the server's own row when the task's listing has it (outputs.row), else one
 // built from the name, marked `missing` once the listing is known and the file is not in it

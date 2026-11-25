@@ -526,6 +526,12 @@ def _failed_now(store, tid: int) -> str:
     return got[1] if got and got[0] >= _turn_began(store, tid) else ''
 
 
+def _asking(store, tid: int) -> bool:
+    "Whether the task's agent's own question to the owner stands: asked in this turn (ask_owner's mark), or asked before and not yet answered."
+    from . import selfclose, taskstate
+    return selfclose.asks_now(tid) or bool(taskstate.open_question(store, tid))
+
+
 def _card_call(store, tid: int, name: str, args: dict, doors: dict, skip=()) -> str:
     args = _arguments(args)
     # ...ONE item is one card, as if given whole (2026-11-17: a lone break_out stood as "1 step - review a few, then do them all", "Approve all 1")
@@ -535,6 +541,12 @@ def _card_call(store, tid: int, name: str, args: dict, doors: dict, skip=()) -> 
         raise ValueError(refusal(f'not ticked: {bad} failed in this turn', 'tick it once that is done; say in your answer what is still left'))
     from . import card
     raises = TOOLS[name][0] == 'propose'
+    # A QUESTION TO HIM HOLDS THE TURN THERE (the owner's live task, 2026-11-25: "it asked a question, then underneath it created the post that was
+    # greyed out ... if it asks a question it has to wait there"): a card raised under the agent's own standing question was greyed by his answer
+    # to it. Nothing is raised while it stands; a card raised before it stays as it is
+    if raises and _asking(store, tid):
+        raise ValueError(refusal('your question to the owner stands - nothing was raised', 'wait for his answer, then raise it; if this card does '
+                                 'not hang on the question, take the question back with ask_owner withdraw: true and raise it'))
     then, args = ((args or {}).get('then'), {k: v for k, v in (args or {}).items() if k != 'then'}) if raises else (None, args)
     try:
         with (card.raising(store, tid, then) if raises else contextlib.nullcontext()):
@@ -830,7 +842,9 @@ def _call(store, tid: int, name: str, args: dict, doors: dict, skip=()) -> str:
     if name == 'ask_owner':
         from . import selfclose, workerstate
         if a.get('withdraw') is True:
-            gone = workerstate.let_go(store, tid, 'the agent took the question back')
+            had, gone = selfclose.asks_now(tid), workerstate.let_go(store, tid, 'the agent took the question back')
+            selfclose.drop_asks(tid)
+            if had and not gone: gone = ['the question you asked in this turn']
             return f"Withdrawn: {'; '.join(gone)}" if gone else 'No question of yours stands on the task - nothing to withdraw.'
         if not str(a.get('question') or '').strip(): raise ValueError('`question` is empty - write the one thing you need from the owner')
         selfclose.keep_mark(tid, 'ask', selfclose.ask_mark(a['question'], a.get('choices') if isinstance(a.get('choices'), list) else ()))

@@ -726,6 +726,8 @@ def keep_mark(tid, kind: str, line: str) -> None:
     got = _MARKS.setdefault(int(tid), [])
     if kind == 'summary': got[:] = [x for x in got if x[0] != 'summary']
     got.append((kind, line))
+def asks_now(tid) -> bool: return any(k == 'ask' for k, _l in _MARKS.get(int(tid), ()))
+def drop_asks(tid) -> None: _MARKS[int(tid)] = [x for x in _MARKS.get(int(tid), []) if x[0] != 'ask']
 def take_marks(tid) -> str:
     "The marks this task's tool calls left since the last take, as lines to end the answer with - '' with none."
     return '\n\n'.join(l for _k, l in _MARKS.pop(int(tid), []))

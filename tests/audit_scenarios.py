@@ -513,11 +513,16 @@ def on(*backends):
 ASK = '[[TASKUARY-ASK]]'
 
 
+# ...a turn whose card's Send is all that is left says so as it ends (agenttools end_turn): his Send wakes nobody (general.approved), and the
+# agent's own "nothing left" is what lights Mark done once it went (rulebook._recommended, the owner 2026-11-15) - never his reply alone
+DONE_AT_SEND = ('end_turn', {'did': 'The reply waits for your Send.', 'nothing_left': True})
+
+
 def a_question_answered(r: Run):
     "(a) A colleague asks a question -> the agent's reply card -> Send -> its card says it went, and no turn says it again (general.approved)."
     r.arrive({'intent': 'reply_only', 'kind': 'task', 'title': 'Erin asks if you are free Tuesday'}, body='Are you free Tuesday at 3 for the budget review?')
     r.turn('I checked your calendar: Tuesday 3pm is free. The reply to Erin waits for your Send.',
-           ('propose_reply', {'text': 'Hi Erin - yes, Tuesday at 3 works.'}))
+           ('propose_reply', {'text': 'Hi Erin - yes, Tuesday at 3 works.'}), DONE_AT_SEND)
     r.send()
     assert r.quiet(label='sent: its card says it went'), 'a Send of his words with no step after it wakes nobody'
 
@@ -535,7 +540,7 @@ def b_email_rewritten(r: Run):
     r.type('make it shorter and say the totals are up 4%')
     r.turn("Shorter, with the totals - it takes the first one's place and waits for your Send.",
            ('propose_email', {'to': PAULA, 'subject': 'October report', 'text': 'Paula - October report attached; totals are up 4%. Alex',
-                              'attach': ['october-report.pdf'], 'replaces': str(first)}))
+                              'attach': ['october-report.pdf'], 'replaces': str(first)}), DONE_AT_SEND)
     r.send()
     assert r.quiet(label='sent: its card says it went'), 'a Send of his words with no step after it wakes nobody'
 
@@ -557,7 +562,7 @@ def c_bug_pushed(r: Run):
            fix, ('propose_land', {'how': 'push', 'why': 'the refund fix, one commit on master'}))
     r.press(f'/api/tasks/{r.tid}/landing', {'how': 'push'}, label='press Push')
     r.turn('It is on origin/master (checked the remote head). The reply to Ray waits for your Send.',
-           ('propose_reply', {'text': 'Hi Ray - fixed: refunds no longer add tax. It is live on master.'}))
+           ('propose_reply', {'text': 'Hi Ray - fixed: refunds no longer add tax. It is live on master.'}), DONE_AT_SEND)
     r.send()
     assert r.quiet(label='sent: its card says it went'), 'a Send of his words with no step after it wakes nobody'
 
@@ -587,7 +592,7 @@ def e_three_asks(r: Run):
            ('todos', {'add': ['Send Gail the Q3 totals', 'Book room 4 for Thursday', 'Pick the vendor']}))
     r.type('Payworth')
     r.turn('The reply to Gail with all three answers waits for your Send.',
-           ('propose_reply', {'text': 'Hi Gail - Q3 totals: 1.2M. Room 4 is booked for Thursday. We go with Payworth. Alex'}))
+           ('propose_reply', {'text': 'Hi Gail - Q3 totals: 1.2M. Room 4 is booked for Thursday. We go with Payworth. Alex'}), DONE_AT_SEND)
     r.send()
     assert r.quiet(label='sent: its card says it went'), 'a Send of his words with no step after it wakes nobody'
 
@@ -607,7 +612,7 @@ def g_invite_clash(r: Run):
     r.arrive({'intent': 'reply_only', 'kind': 'task', 'title': 'Budget sync invite'}, subject='Invitation: Budget sync', body='Join us',
              invite=True, cal=r.invite, mail_meta={'invite': True, 'cal': r.invite})
     r.turn('It clashes with the Budget review at 2pm; the card proposes 4pm instead and waits for your press.',
-           ('answer_invite', {'answer': 'propose', 'note': 'I am in the budget review then - would 4pm work?'}))
+           ('answer_invite', {'answer': 'propose', 'note': 'I am in the budget review then - would 4pm work?'}), DONE_AT_SEND)
     r.send()
     assert r.quiet(label='sent: its card says it went'), 'a Send of his words with no step after it wakes nobody'
 
@@ -694,7 +699,7 @@ def j_answered_outside(r: Run):
     assert [(c['passed'], c['turn']) for c in r.cards()] == [(True, 0)], r.cards()
     r.turn('I see you answered Erin yourself - nothing left on the venue.')
     r.arrive({'intent': 'reply_only', 'kind': 'task', 'refines': False}, body='Great - and what time does it open?', label='Erin writes again')
-    r.turn('The reply about the opening time waits for your Send.', ('propose_reply', {'text': 'It opens at 9am.'}))
+    r.turn('The reply about the opening time waits for your Send.', ('propose_reply', {'text': 'It opens at 9am.'}), DONE_AT_SEND)
     r.send()
     assert r.quiet(label='sent: its card says it went'), 'a Send of his words with no step after it wakes nobody'
 
@@ -837,7 +842,7 @@ def w_owed_answer(r: Run):
     r.arrive({'intent': 'reply_only', 'kind': 'task', 'refines': False}, from_name='Gail Moreno', from_email='gail@northwind.example',
              body='Quick one - did you hear back from any caterers?', label='arrive again: Gail asks before the reply went')
     prompt = r.at_work(('propose_reply', {'text': 'Hi Gail - three options for 40: Harbor Kitchen $780, Elm Street Catering $1,050, Bluebird from $1,200. '
-                                                  'None of them has written back yet.'}))
+                                                  'None of them has written back yet.'}), DONE_AT_SEND)
     # ...what is owed reaches the agent with the new question: the options it drafted, as he sees them
     assert 'Harbor Kitchen' in prompt, f'{r.backend}: the turn after her second mail is told what it still owes her: {prompt[-1500:]!r}'
     r.answer('One reply to Gail: the three options, then that no caterer has answered yet.')

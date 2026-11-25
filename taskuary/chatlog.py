@@ -1209,9 +1209,14 @@ def migrate(store, tid: int, legacy=None) -> bool:
     if migrated(store, tid) or not backed_up(store): return False
     got = legacy if legacy is not None else _legacy(store, tid)
     live = set((cardqueue.state(store, int(tid)) or {}).get('live') or [])
+    # ...A LIST THAT HELD NOTHING HE SAW HAS NOTHING TO FREEZE (a new coding task read as its first start began: the old list drew no line yet,
+    # the freeze wiped the line the press had heard, and his line stood by the box for good under the task's title, answered): the log is the record
+    bare = lambda x: x['kind'] == 'turn' and x.get('state') in LIVE and not (x.get('steps') or x.get('text') or x.get('cards'))
+    items = [] if all(bare(x) for x in got.get('items') or []) else got['items']
     with store.lock:
         if migrated(store, tid): return False
-        store.cx.execute('DELETE FROM chatlog WHERE TaskId=?', (int(tid),))          # ...what dual-write wrote before is the warm-up: the list is the record
+        # ...what dual-write wrote before is the warm-up: the list is the record
+        if items: store.cx.execute('DELETE FROM chatlog WHERE TaskId=?', (int(tid),))
         prev, seen_live = 0., False
         def row(kind, key, body, parent=None, state=None):
             nonlocal prev
@@ -1220,7 +1225,7 @@ def migrate(store, tid: int, legacy=None) -> bool:
             cur = store.cx.execute('INSERT OR IGNORE INTO chatlog (TaskId, Key, Kind, Parent, At, Src, Body, State) VALUES (?,?,?,?,?,?,?,?)',
                                    (int(tid), key, kind, parent, at or time.time(), 'legacy', json.dumps(body, default=str), state))
             return cur.lastrowid
-        for x in got.get('items') or []:
+        for x in items:
             body = {k: v for k, v in x.items() if k not in ('id', 'kind', 'state', 'steps', 'cards', 'opening', 'doing') and not k.startswith('_')}   # (what a turn does this moment is read live: _now)
             if x['kind'] != 'turn':
                 st = x.get('status') if x['kind'] == 'card' else None

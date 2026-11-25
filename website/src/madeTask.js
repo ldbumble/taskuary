@@ -36,12 +36,16 @@ export function routineSource(row, cfg, { types = {}, edit = "Edit", kind = "rep
 // AN IDEA'S SOURCE IS THE EVIDENCE IT RESTS ON (the owner, 2026-11-24): the message it was raised on, why, and each mail or task it cites - a link
 // into the app (#msg=, #task=)
 export const citeHref = (ref) => { const m = /^(msg|task)(\d+)$/.exec(String(ref || "")); return m ? `#${m[1]}=${m[2]}` : null; };
+// ...and a look's idea by the person and the thread it is about (`on`, the newest message it cites - lookout._about): "Draft a reply on the
+// existing thread" named neither (the owner, 2026-11-25); an attachment opens as its message (`link`)
 export function ideaSource(card) {
   const a = card?.action || {}, mid = a.mid || card?.mid, who = a.who || (card?.who !== "Advisor" ? card?.who : "");
-  const cites = (a.type === "lookout" && Array.isArray(a.evidence) ? a.evidence : []).map((e) => ({ label: e?.label || e?.ref, href: citeHref(e?.ref) })).filter((e) => e.href);
+  const cites = (a.type === "lookout" && Array.isArray(a.evidence) ? a.evidence : []).map((e) => ({ label: e?.label || e?.ref, href: citeHref(e?.link || e?.ref) })).filter((e) => e.href);
   const links = [...(mid ? [{ label: who ? `${who}'s message` : "the message", href: `#msg=${mid}` }] : []), ...cites,
     ...(a.tid || card?.tid ? [{ label: "its task", href: `#task=${a.tid || card.tid}` }] : [])];
-  return { head: "What it rests on", links, rows: [["Based on", a.source?.label && !mid ? a.source.label : ""], ["Why", a.why || card?.why || ""]].filter(([, v]) => v) };
+  // ...Based on: its source, else the thread it is about, as its cite says it (the day, the sender, the subject), else by its sender
+  const on = a.on?.mid ? cites.find((e) => e.href === `#msg=${a.on.mid}`)?.label || (a.on.who ? `${a.on.who}'s message` : "") : "";
+  return { head: "What it rests on", links, rows: [["Based on", a.source?.label && !mid ? a.source.label : mid ? "" : on], ["Why", a.why || card?.why || ""]].filter(([, v]) => v) };
 }
 
 // a tree of {type, props, children} -> {title, root, elements}: one column, a hairline between its blocks (viewSpec.css)
@@ -77,8 +81,10 @@ export function reportView(text, name = "") {
 }
 
 // an Advisor's idea: what it noticed and what to do, and its pitch - what it rests on is its Came from (ideaSource)
+// ...and the thread it is about under the pitch, as the card off the table says it (ideaSource's Based on): the page opens on this turn with its
+// Came from folded to an arrow, and "Draft a reply on the existing thread" named no thread and nobody (the owner, 2026-11-25)
 export function ideaView(card) {
-  const a = card?.action || {}, look = a.type === "lookout";
+  const a = card?.action || {}, look = a.type === "lookout", on = look && (ideaSource(card).rows.find(([k]) => k === "Based on") || [])[1];
   return view("", [words(String((look ? a.next_step || a.suggest : a.suggest) || "").trim() || card?.title || "", card?.title),
-    look && a.pitch && words(`**Pitch** - ${a.pitch}`)]);
+    look && a.pitch && words(`**Pitch** - ${a.pitch}`), on && words(`**Based on** - ${on}`)]);
 }

@@ -1841,7 +1841,9 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
   const cameIn = answering || newestFirst(inbound)[0]
     || (detail?.raised && newestFirst((detail?.earlier || []).filter((m) => m.Status !== "context" && m.Direction !== "out"))[0]) || null;
   // ...an item Taskuary made: its source in a line or two, and the run - Taskuary's, done - with what it says
-  const madeTabs = () => ({ from: { lines: [made.source?.head, ...(made.source?.rows || []).map(([k, v]) => `${k}: ${String(v).slice(0, 120)}`)].filter(Boolean), foot: "" },
+  // ...its rows, then what it cites by name - the closed tab said "What it rests on" and nothing it rests on (the owner, 2026-11-25)
+  const madeTabs = () => ({ from: { lines: [made.source?.head, ...(made.source?.rows || []).map(([k, v]) => `${k}: ${String(v).slice(0, 120)}`),
+    ...(made.source?.links || []).map((l) => l.label)].filter(Boolean), foot: "" },
     agent: agentStatus({ name: "Taskuary", word: "ran", said: String(made.said || "").slice(0, 240) }) });
   const tabLines = () => !twoUp || !t ? {} : made ? madeTabs() : {
     from: fromStatus({ channel: cameIn ? cameFrom(cameIn) || channelName(cameIn.Channel) : sources[0] ? channelName(sources[0].channel) : "",

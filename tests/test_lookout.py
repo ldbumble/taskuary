@@ -112,6 +112,19 @@ def test_a_quote_not_in_what_it_read_or_a_number_it_cannot_back_drops_the_idea_a
     assert row['idea_kind'] == 'money' and row['title'] == i['Text']
 
 
+def test_an_idea_carries_the_person_and_the_thread_it_is_about_and_an_attachment_opens_as_its_mail():
+    """The owner, 2026-11-25: an idea read "Draft a reply on the existing thread asking for confirmation" and its page named neither the thread
+    nor whom it would go to. The idea keeps the newest message it cites and its sender (`on`), apart from the mail it was raised on (`mid`,
+    whose task its work joins); a cited attachment carries its message to open."""
+    s, ids = world()
+    a, b = ids['dup']
+    att = s.add_attachment({'MessageId': b, 'Name': 'invoice-4471.pdf'})
+    llm = brain({'ideas': [idea('money', 'Vendor billing sent invoice 4471 twice', [f'msg{a}', f'msg{b}'])]})
+    act = json.loads(s.get_idea(lookout.tick(s, llm, force=True)['raised'][0])['ActionJson'])
+    assert act['on'] == {'mid': b, 'who': 'Vendor billing'} and 'mid' not in act, act
+    assert lookout._evidence(s, {'refs': [f'att{att}'], 'quotes': []})[0]['link'] == f'msg{b}'
+
+
 def test_an_idea_opens_on_the_whole_prompt_its_look_was_sent_and_the_rail_carries_it_once():
     """THE WHOLE PROMPT (the owner, 2026-11-24: "shouldn't the input show the whole thing as just the beginning and ... as any long prompt?"):
     the idea's chat opens on what the look was actually sent - its instructions and the window, the lens it took - never its family's one line."""

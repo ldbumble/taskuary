@@ -288,6 +288,21 @@ def test_a_card_pressed_on_its_tab_behind_the_front_stands_beside_its_run_never_
     assert [(t['name'], t['done'], t['front']) for t in run] == [('X', False, True), ('LinkedIn', False, False), ('Reddit', True, False)]
 
 
+def test_a_tab_he_said_no_to_is_marked_so_never_as_one_that_went():
+    """The card gallery, 2026-11-25: three emails in a line - one sent, the next dropped - and the dropped one's tab was ticked like the sent
+    one. A card settled without going (his no, a press that failed) says so on its tab (`no`); one that went, or still waits, does not."""
+    from taskuary import cardqueue, conversation, general
+    s, tid = world()
+    conversation.hear(s, tid, turn=True)
+    ids = [s.add_review({'TaskId': tid, 'Kind': 'action', 'Status': 'pending', 'Origin': 'agent', 'Reason': 'the post you asked for',
+                         'DraftText': json.dumps({'action': 'run_tool', 'type': t, 'text': 'We shipped the ledger export.'})}) for t in ('x_post', 'linkedin_post', 'reddit_post')]
+    s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'Three posts are set up.')
+    chatlog.read(s, tid)
+    s.decide_review(ids[0], 'approved', None, 'owner'); s.decide_review(ids[1], 'rejected', None, 'owner'); cardqueue._SEEN.clear()
+    [run] = cardqueue.tabs(s, cardqueue.state(s, tid))
+    assert [(t['name'], t['done'], bool(t.get('no'))) for t in run] == [('X', True, False), ('LinkedIn', True, True), ('Reddit', False, False)]
+
+
 def test_every_tool_call_is_one_row_in_plain_words_and_summary_folds_them_to_one_line():
     """"BETTER SHOWING WHAT TOOLS ARE RUN, BUT NOT A BILLION DETAILS" (the owner, 2026-11-19): each call one row of what it did and on what,
     its outcome in a few words, its output capped behind it; summary - one line that opens. ONE ROW PER CALL, ALWAYS (2026-11-23): the same

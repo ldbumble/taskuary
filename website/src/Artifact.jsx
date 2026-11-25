@@ -69,7 +69,7 @@ export function ReviewCard({ id = "", kind = "", state = "waiting", label: title
 
 // A RUN OF CARDS IS ONE CARD WITH TABS (the owner, 2026-11-25: "a little carousel thing on top that scrolls from one to the other"): a tab a
 // card, named by where it goes, the one shown marked and a settled one ticked; under them each card as it is (`children`, one per tab, in its
-// order), side by side, the shown one slid into view. A press on a card is that card's alone; once it is settled the line slides on to the next
+// order), side by side, the shown one slid into view. One he said no to, or whose press failed, is crossed, never ticked (`no`). A press on a card is that card's alone; once it is settled the line slides on to the next
 // that waits, after a beat that lets its outcome be read. The height follows the card shown, so nothing under it jumps
 const SLIDE = 280, SETTLE = 650, GAP = 24;
 const useLayout = typeof window === "undefined" ? useEffect : useLayoutEffect;
@@ -99,11 +99,11 @@ export function CardLine({ tabs, children }) {
         <Box sx={{ display: "flex", alignItems: "center", minWidth: 0, overflow: "hidden" }}>
           {tabs.map((t, i) => <React.Fragment key={t.key}>{i > 0 && <Box component="span" aria-hidden sx={{ color: FAINT, fontSize: 12, px: 0.25 }}>·</Box>}
             <Box component="button" type="button" role="tab" aria-selected={i === at} tabIndex={i === at ? 0 : -1} data-tq-line-tab={t.key}
-              data-tq-tab-state={t.done ? "done" : "waiting"} onClick={() => go(i)} title={t.name}
+              data-tq-tab-state={t.no ? "not-done" : t.done ? "done" : "waiting"} onClick={() => go(i)} title={t.no ? `${t.name} - not done` : t.name}
               sx={{ ...FOCUS_RING, font: "inherit", fontSize: 12.5, lineHeight: 1.6, cursor: "pointer", bgcolor: "transparent", border: 0, px: 0.5, py: 0.125, minWidth: 0,
                 maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", borderBottom: "2px solid", borderRadius: 0,
                 borderColor: i === at ? ACCENT : "transparent", fontWeight: i === at ? 700 : 500, color: i === at ? INK : t.done ? FAINT : DIM,
-                transition: "color 160ms ease, border-color 160ms ease", "&:hover": { color: INK } }}>{t.done ? `✓ ${t.name}` : t.name}</Box></React.Fragment>)}
+                transition: "color 160ms ease, border-color 160ms ease", "&:hover": { color: INK } }}>{t.no ? `✗ ${t.name}` : t.done ? `✓ ${t.name}` : t.name}</Box></React.Fragment>)}
         </Box>
         <Typography data-tq-card-queue="" component="span" sx={{ ml: "auto", pl: 1, flexShrink: 0, fontSize: 11.5, color: FAINT }}>{`${at + 1} of ${tabs.length}`}</Typography>
       </Box>

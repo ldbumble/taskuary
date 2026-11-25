@@ -29,6 +29,14 @@ const post = ([type], i) => ({ ReviewId: 41 + i, TaskId: 7, Kind: "action", Stat
   DraftText: JSON.stringify({ action: "run_tool", type, text: "We shipped the ledger export." }) });
 const tabsOf = (done = [], front = 0) => NETS.map(([, name], i) => ({ key: String(41 + i), rids: [41 + i], name, done: done.includes(i), front: i === front }));
 
+// The card gallery, 2026-11-25: after Don't send, the dropped email's tab read "✓ gail@..." - ticked like the one that went
+test("a tab he said no to is crossed, never ticked like one that went", async () => {
+  const { line } = await P, tabs = tabsOf([0, 1], 2).map((t, i) => (i === 1 ? { ...t, no: true } : t));
+  const html = line(tabs, NETS.map(post));
+  assert.deepEqual([...html.matchAll(/data-tq-line-tab="[^"]*"[^>]*>([^<]*)</g)].map((m) => m[1]), ["✓ X", "✗ LinkedIn", "Reddit"]);
+  assert.deepEqual([...html.matchAll(/data-tq-tab-state="([^"]*)"/g)].map((m) => m[1]), ["done", "not-done", "waiting"]);
+});
+
 test("three cards waiting in line are one card: a tab each, the shown one marked, 1 of 3, each tab the one review card", async () => {
   const { line } = await P, html = line(tabsOf(), NETS.map(post));
   assert.equal((html.match(/role="tab"/g) || []).length, 3);

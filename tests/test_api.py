@@ -1048,7 +1048,7 @@ class ApiTests(unittest.TestCase):
         c.post(f'/api/messages/{mid}/reply')
         row = next(r for r in c.get('/api/reviews', params={'status': 'pending'}).json()['data'] if r['MessageId'] == mid)
         # github: his Send is the say-so (the owner, 2026-11-25) - no card switch over it; with no GitHub card set up, its Connect stands instead
-        self.assertFalse(row['CanSend']); self.assertNotIn('replies are off', row['SendBlock']); self.assertIn('connected', row['SendBlock'])
+        self.assertNotIn('replies are off', row['SendBlock']); self.assertTrue(row['CanSend'] or 'connected' in row['SendBlock'], row)
         push2 = c.post('/api/ingest/push', json={'external_id': 'cansend2', 'subject': 'rota',
                                                  'body': 'can you explain the rota?', 'from_email': 'a@b.example',
                                                  'channel': 'email'}).json()

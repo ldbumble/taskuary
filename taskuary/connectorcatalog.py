@@ -99,6 +99,9 @@ def signed_in(c: dict, srcs=()) -> bool:
                 or keyless(c.get('Type')) or any(s.get('Active') and s.get('ConnectorId') == c.get('ConnectorId') for s in srcs or ()))
 
 
+def set_up(c: dict, srcs=()) -> bool: return signed_in({**(c or {}), 'Active': 1}, srcs)     # ...holds what it needs, switched on or off
+
+
 def lapsed(err) -> bool:
     """The system refused the sign-in the card holds: the lapse lines this app writes (msauth, googlecal and chatgptauth's "sign-in has
     lapsed", imapmail.GOOGLE_REFUSED, teamsweb.SIGNED_OUT) and OAuth's own refusal code. Gmail's raw "invalid_grant" missed the page's

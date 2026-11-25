@@ -541,7 +541,9 @@ def connect_fix(store, kind) -> dict | None:
     if not card: return None
     srcs = store.list_sources() if hasattr(store, 'list_sources') else ()
     mine = [c for c in cards if str(c.get('Type') or '').lower() == k]
-    if any(connectorcatalog.state(c, srcs)['state'] in ('connected', 'failing') for c in mine): return None
+    # ...and one set up and switched off takes it too: his press switches it on (proposals._run, the owner 2026-11-25)
+    if any(connectorcatalog.state(c, srcs)['state'] in ('connected', 'failing') or not c.get('Active') and connectorcatalog.set_up(c, srcs)
+           for c in mine): return None
     name, st = card.get('title') or k, (connectorcatalog.state(mine[0], srcs)['state'] if mine else 'off')
     says = {'signed_out': f'{name} needs you to sign in again', 'not_signed_in': f"{name} isn't signed in"}.get(st, f"{name} isn't connected")
     return {'says': says, 'label': f'Connect {name}', 'href': f'#connector={k}', 'waits': 'the draft waits here - copy it to post it yourself'}
@@ -557,6 +559,10 @@ def review_connect(store, r: dict, memo: dict = None) -> dict | None:
         from . import connectorcatalog
         act = connectorcatalog.action_for(p.get('type')) if p.get('action') == 'run_tool' else None
         k = act['card'] if act else None
+        # ...and any call on a connection switched off: Connect where it is not set up, else his press switches it on
+        if not k and p.get('action') == 'run_tool' and str(p.get('connector_id') or '').isdigit():
+            c = store.get_connector(int(p['connector_id'])) or {}
+            k = None if c.get('Active') else str(c.get('Type') or '').lower() or None
     # ...a bare review row (rv.*) carries no Channel: the mail it answers says it
     else:
         m = store.get_message(r['MessageId']) if r.get('MessageId') and not (r.get('Channel') or p.get('channel')) else None

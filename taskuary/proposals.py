@@ -1227,5 +1227,8 @@ def _run(store, rv: dict, p: dict, tid, a: str, actor: str, edited, skip_checks:
             if p.get('type') in MEDIA: cfg['image_path'] = str(outputs.named(int(tid), p['image']))
             else: cfg.pop('image', None)          # ...a network Taskuary uploads no picture to posts the words; the card said so
         if (bad := unknown_tool(p.get('type'))): raise RuntimeError(f'{bad} - nothing was run')       # ...a card from before the gate refused it
+        # ...ON A CONNECTION SWITCHED OFF, HIS PRESS SWITCHES IT ON (the owner, 2026-11-25: "it should find a way around it"): the card said so
+        if str(p.get('connector_id') or '').isdigit() and (c := store.get_connector(int(p['connector_id']))) and not c.get('Active'):
+            store.save_connector({'ConnectorId': c['ConnectorId'], 'Active': 1}, actor)
         out = _ran(REGISTRY[p['type']](resolve_cfg(store, {**cfg, '_write': True})))
     return out

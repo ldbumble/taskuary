@@ -9302,9 +9302,15 @@ def tool_run(body: dict, request: Request):
                                          "work it with your session's own tools, or on one of his systems", see=('list_systems', 'lists them')))
     # ...AN AGENT'S POST ON A NETWORK NOT CONNECTED is its card all the same, Connect where Post would be (outbound.review_connect): "the
     # connection is off - turn it on" sent the agent to say in words what the card's own Connect does (design round 2, 2026-11-18)
-    from . import connectorcatalog
-    if not conn.get('Active') and connectorcatalog.action_for(t) and guard.scope_of(cfg['server'], request.headers) == guard.AGENT:
-        return _agent_proposes(request, t, conn, body, scopes.reaches(t, body) or f'{t} reaches people')
+    # ...AND ANY CALL ON A CONNECTION SWITCHED OFF is a card whose press switches it on and runs it - its Connect where it is not set up
+    # (the owner, 2026-11-25: "it should find a way around it"): one card per connection per task, never a pile of them
+    if not conn.get('Active') and conn.get('Type') != 'handbook' and guard.scope_of(cfg['server'], request.headers) == guard.AGENT:
+        name = conn.get('Name') or t
+        if str((body or {}).get('task_id') or '').isdigit() and (up := _off_card(int(body['task_id']), conn['ConnectorId'])):
+            return JSONResponse({'ok': True, 'queued': True, 'already': True, 'review': up,
+                                 'says': f"The card for {name}, which is switched off, is already up on this task - nothing was run. Go on with "
+                                         "the rest; it runs when he presses it."}, status_code=202)
+        return _agent_proposes(request, t, conn, body, scopes.reaches(t, body) or f"runs on {name}, which is switched off - his press switches it on")
     if not conn.get('Active') and conn.get('Type') == 'handbook':
         from .handbook import OFF
         raise HTTPException(403, OFF)
@@ -9369,6 +9375,15 @@ def _mcp_tool(conn, body):
 
 # what an agent may not put on a proposal: where it runs is the card's, and a workflow's own resume or a close-out is Taskuary's
 _NOT_PROPOSED = ('task_id', 'why', 'action', 'flow_run', 'closeout', '_write')
+
+def _off_card(tid: int, cid: int) -> int | None:
+    "The card waiting on task `tid` for a call on connection `cid` - the one a second call on it while it is off stands behind."
+    for r in store._rows("SELECT ReviewId, DraftText FROM review WHERE TaskId=? AND Kind='action' AND Status='pending' ORDER BY ReviewId", (tid,)):
+        try: p = json.loads(r.get('DraftText') or '{}')
+        except ValueError: continue
+        if p.get('action') == 'run_tool' and str(p.get('connector_id')) == str(cid): return r['ReviewId']
+    return None
+
 
 def _agent_proposes(request: Request, t: str, conn: dict, body: dict, why: str):
     """An agent's call that would reach a person, filed as a run_tool proposal on its OWN task (proposals.queue): 202 with the review

@@ -455,6 +455,34 @@ class ReadingOutside(unittest.TestCase):
         self.assertEqual((bool(held), never), (True, ''))
         self.assertEqual(rg.of_command(self.s, self.tid, f'dd if=data.bin of=copy.bin', self.work), ([], ''))
 
+    def test_a_folder_named_by_what_the_shell_fills_in_is_that_folder(self):
+        """Walk 21: `grep -r token ~` was refused, but `grep -rl token $HOME` ran with no card - an agent outside its sandbox searched the
+        owner's home folder. A bare variable was read as no path at all. Whatever the shell fills in - a home variable in any spelling, `~user`,
+        `$(...)`, a backtick, [Environment]'s folders, Join-Path - is judged as the folder it will be, and one this cannot fill in is held."""
+        from pathlib import Path
+        from taskuary import readgate as rg
+        ssh = Path.home() / '.ssh'; ssh.mkdir(exist_ok=True); (ssh / 'id_ed25519').touch(); Path(self.secret).touch()
+        me = Path.home().name
+        for cmd in ('grep -rl token $HOME', 'grep -rl token "$HOME"', 'grep -r token ${HOME}', "grep -r token '$HOME'/..", 'grep -r token $HOME/..',
+                    'cd $HOME && grep -rl token .', 'Select-String -Path $env:USERPROFILE -Pattern token', 'findstr /s token %USERPROFILE%',
+                    'grep -r token $env:HOMEDRIVE$env:HOMEPATH', f'grep -r token ~{me}', 'h=$HOME; grep -rl token $h',
+                    'Get-ChildItem $HOME -Recurse | Select-String token', 'Get-Content (Join-Path $HOME ".ssh/id_ed25519")',
+                    'grep -r token $PWD/' + '/'.join(['..'] * len(Path(self.work).parts))):
+            self.assertEqual(rg.of_command(self.s, self.tid, cmd, self.work), ([], rg.NEVER), cmd)
+        # ...a value this cannot fill in is unknown: held for his press, never passed
+        for cmd in ('grep -rl token $(printenv HOME)', 'grep -rl token `printenv HOME`', 'x=$(printenv HOME); grep -rl token $x',
+                    'Get-ChildItem ([Environment]::GetFolderPath("UserProfile")) -Recurse', 'grep -r token $env:NOPE_NOT_SET', 'type %NOPE_NOT_SET%'):
+            held, never = rg.of_command(self.s, self.tid, cmd, self.work)
+            self.assertEqual((bool(held), never), (True, ''), cmd)
+        # ...listing it is his card, as `ls ~` is
+        for cmd in ('ls $HOME', 'Get-ChildItem $env:USERPROFILE', 'dir %USERPROFILE%'):
+            held, never = rg.of_command(self.s, self.tid, cmd, self.work)
+            self.assertEqual((bool(held), never), (True, ''), cmd)
+        # ...and a word that is a value, not a place, still names nothing
+        for cmd in ('for f in a b; do echo $f; done', 'n=5; echo $n', 'echo "total $(date)"', 'Write-Host "Found $($rows.Count) rows"',
+                    'cat "$TASKUARY_OUTPUTS/total.txt"', 'ls $PWD', '[Math]::Round(2.5)'):
+            self.assertEqual(rg.of_command(self.s, self.tid, cmd, self.work), ([], ''), cmd)
+
     def test_a_sign_in_place_stays_closed_inside_a_work_folder_or_behind_a_glob(self):
         """The never-list was judged after the work area and after a glob was cut to its folder: a task whose checkout is the home folder
         (a dotfiles repository) read the sign-ins in it freely, and once the owner let a task read his home folder, `cat ~/.s*/<key>`

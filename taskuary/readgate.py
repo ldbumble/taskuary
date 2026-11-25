@@ -49,7 +49,7 @@ LIST_TOOLS = ('LS', 'Glob')
 def listed(paths): return [Listed(p) if isinstance(p, str) else p for p in paths]
 # ...the programs that list names, and those that only filter the names piped to them: a line of these alone reads no file's contents
 _LISTS = {'ls', 'dir', 'tree', 'du', 'stat', 'find', 'get-childitem', 'gci', 'get-item', 'gi', 'test-path', 'resolve-path', 'realpath', 'pwd'}
-_NAMES = {'', '=', 'head', 'tail', 'sort', 'uniq', 'wc', 'grep', 'egrep', 'fgrep', 'findstr', 'select-string', 'sls', 'where-object', 'where',
+_NAMES = {'', '=', 'head', 'tail', 'sort', 'uniq', 'wc', 'grep', 'egrep', 'fgrep', 'findstr', 'where-object', 'where',
           '?', 'select-object', 'select', 'sort-object', 'measure-object', 'measure', 'format-table', 'ft', 'format-list', 'fl', 'out-string',
           'more', 'less', 'cut', 'tr', 'echo', 'write-output', 'write-host', 'cd', 'chdir', 'set-location', 'sl', 'pushd', 'popd', 'true'}
 _RUNS_ON = ('-exec', '-execdir', '-ok', '-okdir')            # find's own way of reading what it found
@@ -247,17 +247,34 @@ def _expand(t: str, cwd: str, env: dict) -> str | None:
         if v is None and n == 'home': v = os.path.expanduser('~')
         if v is None: raise KeyError(n)
         return v
-    if re.search(r'\$\{(?:env:)?\w+[^\w}]', t): return None          # `${HOME:-/x}` and its kin pick their value at run time: unread, held
+    if re.search(r'\$\{(?:env:)?\w+[^\w}]', t) or _RUNS.match(t): return None    # `${HOME:-/x}`, `$(...)` and their kin pick it at run time: held
     try: t = _VAR.sub(sub, t)
     except KeyError: return None
-    return os.path.expanduser(t)
+    # ...`~name` is that user's home, beside his own on Windows (where Python leaves it be): one it cannot find is unknown
+    if not (m := re.match(r'^~([\w.-]+)', t := os.path.expanduser(t))): return t
+    return os.path.join(os.path.dirname(os.path.expanduser('~')), m[1]) + t[m.end():] if os.name == 'nt' else None
+
+
+# ...a word whose value only a run can give: `$(...)`'s `$` (cut from its command), a backtick's command, a call on [Environment]
+_RUNS = re.compile(r'^\$$|^`\w|^\[(?:System\.)?Environment\]::', re.I)
+_PRINTS = {'=', 'echo', 'printf', 'write-output', 'write-host'}      # ...programs that show their words and open none
 
 
 def _pathish(t: str) -> bool:
-    """Drive-rooted, Git Bash's /c/, ~, a variable with a path after it, a rooted POSIX path - or a relative one that climbs out with `..`.
-    A bare `$f` is a loop's word, not a place."""
-    if re.match(r'^[A-Za-z]:[\\/]|^~(?=[\\/]|$)|^[$%].*[\\/]', t) or '..' in re.split(r'[\\/]', t): return True
+    """Drive-rooted, Git Bash's /c/, ~ or ~user, a variable with a path after it, a rooted POSIX path - or a relative one that climbs out
+    with `..`. A bare variable is judged by its value (_filled)."""
+    if re.match(r'^[A-Za-z]:[\\/]|^~[\w.-]*(?=[\\/]|$)|^[$%].*[\\/]', t) or '..' in re.split(r'[\\/]', t): return True
     return t.startswith('/') and (bool(re.match(r'^/[A-Za-z](?=/|$)', t)) if os.name == 'nt' else True)      # ...`/` itself, the root of all
+
+
+def _filled(t: str, cwd: str, env: dict) -> bool:
+    """Is a word the shell fills in a path? Walk 21: `grep -rl token $HOME` ran unasked, its bare variable read as no path at all. Judged by
+    the value it will have - `$HOME`, `%USERPROFILE%`, `$env:HOMEDRIVE$env:HOMEPATH` - and one only a run can give, or an environment's
+    variable that is not set, is unknown: held. A bare `$f` that is no environment's is a loop's word, not a place."""
+    if _RUNS.match(t): return True
+    if not _VAR.search(t): return False
+    if (e := _expand(t, cwd, env)) is None: return bool(re.search(r'\$\{?env:|%\w+%', t, re.I))
+    return _pathish(e) or os.path.isabs(e)
 
 
 def _quoted(cmd: str) -> list:
@@ -314,7 +331,7 @@ def command_paths(cmd: str, cwd: str = '', env: dict = None, made: list = None, 
         # ...a PowerShell array's items are its words, never one name with a comma on it (`@("$env:USERPROFILE\Desktop", ...)` held "Read \", in
         # Desktop"), and a segment that opens on a value is an expression - its first word a path like the rest, not a program
         w = [x for x in (y.rstrip(',') for y in words(seg)) if x]
-        if seg.lstrip()[:1] in ('"', "'", '$', '@') and w and not re.match(r'^\$?[A-Za-z_]\w*\s*=', seg.lstrip()): w = ['', *w]
+        if seg.lstrip()[:1] in ('"', "'", '$', '@', '[') and w and not re.match(r'^\$?[A-Za-z_]\w*\s*=', seg.lstrip()): w = ['', *w]
         while w and (re.match(r'^[A-Za-z_]\w*=', w[0]) or w[0].lower() in ('&', 'sudo', 'time', 'nohup', 'command', 'exec', 'call', 'then', 'do', 'if', 'else')): w = w[1:]
         if not w: continue
         tool = re.sub(r'\.(exe|cmd|ps1|bat)$', '', os.path.basename(w[0].replace('\\', '/')).lower())
@@ -326,6 +343,9 @@ def command_paths(cmd: str, cwd: str = '', env: dict = None, made: list = None, 
         lists = tool in _LISTS and not any(x in _RUNS_ON for x in w)
         reads = reads or not (lists or tool in _NAMES)
         shot = (a := _head(w)) is not None and next((x.lower() for x in a if not x.startswith('-')), '') == 'screenshot'
+        if tool == 'join-path': w = [w[0], os.sep.join(x for x in w[1:] if not x.startswith('-'))]     # ...the one path it builds
+        # ...a `$(...)` that is a word of its own, never one inside a string's text (`"rows: $((Import-Csv $p).Count)"`)
+        sub = bool(re.search(r'(?:^|\s)' + '"' * (seg.count('"') % 2) + r'\$\s*$', seg))
         code = re.sub(r'[\d.]+$', '', tool) in ('python', 'py', 'node', 'ruby', 'perl', 'deno') and any(x in ('-c', '-e') for x in w[1:3])
         # ...an inline script's text is read word by word for the paths in it: its words are mostly data, so one is a path only where one is
         # there (below) - `open('~/.ssh/id_rsa')` in it is read as ever
@@ -338,6 +358,7 @@ def command_paths(cmd: str, cwd: str = '', env: dict = None, made: list = None, 
             x = re.sub(r'^\d?[<>]+&?', '', x)
             # ...an option's value is read as its own word, and so is a `name=value` operand's (`dd if=<home>/config.toml`, red team #3)
             if x.startswith('-') or re.match(r'^[A-Za-z_][\w.-]*=', x): x = x.split('=', 1)[1] if '=' in x else ''
+            if x == '$' and not sub: continue
             if (v := _VAR.fullmatch(x)) and (v[1] or v[2]).lower() in env: x = env[(v[1] or v[2]).lower()]
             # ...after a `cd` away, a plain name that is there is read there (`cd ~ && cat .ssh/x`)
             near = here != cwd and here and x and not x.startswith('-') and os.path.exists(os.path.join(here, x))
@@ -347,7 +368,7 @@ def command_paths(cmd: str, cwd: str = '', env: dict = None, made: list = None, 
             if re.match(r'^file:', x, re.I): x = re.sub(r'^/(?=[A-Za-z]:)', '', unquote(re.sub(r'^file:(//(localhost)?)?', '', x, flags=re.I)))
             # ...and Taskuary's own address as a session is handed it ($TASKUARY_URL/api/...) is a web address, never a file: a read-only curl
             # of its own API was held as "a path it builds from a variable", a card each time the agent looked (the roads audit, 2026-11-19)
-            if not x or '://' in x or _OWN.match(x) or re.match(r'^/\w$', x) or re.match(r'^(/dev/|\d$)', x) or not (near or _pathish(x)): continue
+            if not x or '://' in x or _OWN.match(x) or re.match(r'^/\w$', x) or re.match(r'^(/dev/|\d$)', x) or not (near or _pathish(x) or tool not in _PRINTS and _filled(x, here, env)): continue
             e = _expand(x, here, env)
             if e is None:
                 if not code: out.append(None)        # ...in a script's text a name it does not know is mostly not a path at all

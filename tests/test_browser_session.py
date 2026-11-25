@@ -54,7 +54,7 @@ class AskingForOneTests(unittest.TestCase):
         self.assertIn('agent-browser', said)
         self.assertIn('skills get core', said)          # the CLI documents its own commands
         self.assertIn('NEVER type a password', said)    # ...and the owner types those, in the pane
-        self.assertIn('$TASKUARY_URL', said)             # reuse this server; never start another port
+        self.assertNotIn('$TASKUARY_URL', said); self.assertNotIn('--link', said)   # ...never pointed at the owner's own door (walk 19, M5)
         self.assertIn('NEVER use --session, --headed', said)
         # ...and it is told to LOOK with the accessibility tree, which is what the browser already
         # knows about its own page - an order of magnitude cheaper than the same page as pixels.

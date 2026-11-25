@@ -36,12 +36,15 @@ class ThreadIsAHint(unittest.TestCase):
         self.assertIn('"thread_task": {"tid": %d' % tid, seen[-1][1])
         self.assertEqual(len(s.list_tasks()), 1)
 
-    def test_the_schema_offers_new_job_only_on_a_thread_with_a_task(self):
+    def test_the_schema_is_one_for_every_mail_so_its_prefix_caches(self):
+        # the triage cost round, 2026-11-25: the schema is the very start of what the API caches, and it grew keys on a thread - every reply
+        # paid for the whole guide again. One schema for every mail; a key is read only against what that mail was shown
         s = MemoryStore(); seen = []
         tid = mail(s, 'a', ASK, brain(seen))['task_id']
-        self.assertNotIn('new_job', seen[-1][2]['schema']['properties'], 'a fresh mail has no thread task to differ from')
+        fresh = seen[-1][2]['schema']
         mail(s, 'b', 'Any news on this?', brain(seen), at='2026-10-26 10:00:00')
-        self.assertIn('new_job', seen[-1][2]['schema']['properties'])
+        self.assertEqual(seen[-1][2]['schema'], fresh)
+        self.assertIn('new_job', fresh['properties'])
         self.assertIn('new_job', triage.SHIPPED, 'the guide says when to answer it')
 
     def test_a_different_job_on_the_thread_opens_its_own_task_and_leaves_the_old_one_a_note(self):
@@ -114,7 +117,6 @@ class ChatRoomAsksOnce(unittest.TestCase):
         mid = first['message_id']
         new = self.line(s, 'c2', 'separate thing: can you add Ray Colton to the portal admins?',
                         brain(seen, relationship='new', title='Add Ray Colton to portal admins'), '2026-10-26 09:05:00')
-        self.assertNotIn('new_job', seen[-1][2]['schema']['properties'], 'judged once, by relationship')
         self.assertNotEqual(new['task_id'], first['task_id'])
         thanks = lambda *a, **k: json.dumps({'intent': 'fyi', 'why': 'thanks', 'relationship': 'answers', 'related_message_ids': [mid], 'same_problem': True})
         t = self.line(s, 'c3', 'thanks, the export works now', thanks, '2026-10-26 09:30:00')

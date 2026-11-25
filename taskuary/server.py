@@ -7492,7 +7492,19 @@ def report_rerun(sid: int, request: Request):
     run the Advisor or any report by it (the red team, 2026-11-24, T7)."""
     dock = store.get_setting('assistant_dock_task_id')
     if guard.scope_of(cfg['server'], request.headers) != guard.OWNER and not (str(dock or '').isdigit() and guard.owns_task(cfg['server'], request.headers, int(dock))):
-        raise HTTPException(403, "agents cannot do this: running a report again is the owner's press, or the Assistant's")
+        # ...A TASK'S AGENT ASKS, ON ONE CARD (the owner, 2026-11-25: "for security issues, wouldn't you ask the user to allow it?"): a run of
+        # his own saved report or routine hands nothing to the agent but its result - his press runs it, as his Run now does
+        tid = guard.session_tid(cfg['server'], request.headers)
+        src = store.get_source(sid)
+        if tid is None or not store.get_task(tid) or not src or src.get('Channel') != 'report':
+            raise HTTPException(403, "agents cannot do this: running a report again is the owner's press, or the Assistant's")
+        from . import proposals
+        from .selfclose import CARD_TAIL
+        try: title = json.loads(src.get('ConfigJson') or '{}').get('title') or src.get('Address')
+        except ValueError: title = src.get('Address')
+        q = proposals.queue(store, tid, {'action': 'rerun_report', 'source_id': sid, 'title': str(title or f'report {sid}')}, 'taskuary', refused=(miss := []))
+        if not q: raise HTTPException(422, f"not run: {miss[0] if miss else 'it was not put to him'}")
+        return JSONResponse({'ok': True, 'queued': True, 'review': q['reviewId'], 'says': f'Not run yet: running "{title}" again: {CARD_TAIL}'}, status_code=202)
     return _rerun_report(sid)
 
 

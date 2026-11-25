@@ -505,3 +505,21 @@ class ACardRunsWhatItShows(unittest.TestCase):
         self.assertTrue(r.json()['changed'], r.text); self.assertEqual(sent, [])
         self.assertEqual(s.get_review(rid)['Status'], 'pending')
         self.assertIsNone(proposals.unlike_shown(s.get_review(rid), {'to': ['taker@outsider.example']}, 'approve'), 'the card as it stands now goes')
+
+
+class ARunOfHisReportIsAskedOnOneCard(unittest.TestCase):
+    """The owner, 2026-11-25: "for security issues, wouldn't you ask the user to allow it?" - a task's agent asking to run one of his saved
+    reports or routines was a flat 403. A run hands it nothing but the result, so it is one card; his press is his Run now."""
+    def test_the_agent_asks_and_his_press_runs_it(self):
+        s = server.store
+        tid = s.create_task({'Title': 'Check the nightly export', 'Kind': 'general', 'Status': 'open'}, 'owner')
+        sid = s.save_source({'Channel': 'report', 'Address': 'Nightly export', 'Owner': 'o', 'Active': 1,
+                             'ConfigJson': json.dumps({'type': 'agent', 'title': 'Nightly export'})}, 'o')
+        with mock.patch.object(server, '_rerun_report', return_value={'ok': True, 'title': 'Nightly export'}) as run:
+            r = c.post(f'/api/reports/{sid}/rerun', headers=agent(tid))
+            self.assertEqual(r.status_code, 202, r.text); run.assert_not_called()
+            rv = s.get_review(r.json()['review'])
+            self.assertIn('run "Nightly export" now', rv['Reason'])
+            proposals.execute(s, rv, 'owner')
+        run.assert_called_once_with(sid, by='owner')
+        self.assertEqual(c.post(f'/api/reports/{sid}/rerun', headers=agent()).status_code, 403)       # ...on no task of its own: no card

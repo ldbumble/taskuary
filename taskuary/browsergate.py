@@ -1239,6 +1239,7 @@ def _perform(store, tid: int, p: dict, run=None) -> dict:
 # same push again. One sentence for every road a no comes by (a dismissed card, the held steps of a turn, the Allow/Reject buttons)
 OWNER_NO = ("That is the owner's own answer, not a block of Taskuary's. Do not try it another way and do not ask for the same step again - "
             'carry on without it, and ask only if you need to know what they want instead.')
+MOVED_ON = 'the page moved on'             # how a hand-over the watch closed is answered (pagestep.sync reads it as done)
 def not_approved(what) -> str: return f'The owner did not approve it: {what} was NOT done. {OWNER_NO}'
 def declined(store, tid: int, p: dict) -> None:
     from . import gate
@@ -1400,7 +1401,7 @@ def pressed(store, tid: int, rid: str, now: dict) -> bool:
     """The page moved past the step without his I'm done. Nobody saw who moved it - a site's error page moves it too (walk 7, 2026-11-23:
     "You did the step on" a page that had turned into a browser error, he had pressed nothing) - so it is never said as his: the agent is told
     what the page shows now, to look and go on, and the chat says the page moved. Only his I'm done (done) is his."""
-    h = _close(store, tid, rid, 'the page moved on', by='taskuary')
+    h = _close(store, tid, rid, MOVED_ON, by='taskuary')
     if not h: return False
     title = ' '.join(str(now.get('title') or '').split())[:160]
     shows = f'"{title}" ({now.get("href")})' if title else str(now.get('href') or 'another page')

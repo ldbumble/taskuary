@@ -112,11 +112,11 @@ def _units(store, tid: int, past: set) -> list:
     # ...A STEP HELD WHILE A PRESSED ACT IS UNDER WAY IS THAT ACT'S OWN NEXT PRESS (his live app, 2026-11-23: Post via the browser on the X card, the
     # agent signed in and wrote the post, and the gate held its final Post - queued as a card of its own behind the Reddit and LinkedIn cards, so
     # Reddit stood in front, the browser said nothing waited on him, and the agent ended on "I'll bring you the link"): it is a row of the card
-    # he pressed (its `card`, written as it was held - proposals.queue), drawn on that card (step) - one a card no longer under way left
+    # he pressed (its `card`, written as it was held - proposals.queue), drawn on that card (step) - one a card taken back or failed left
     # waiting stands as a card of its own
     for r in store._rows("SELECT * FROM review WHERE TaskId=? ORDER BY ReviewId", (int(tid),)):
         if r['ReviewId'] in past or obsolete_read(store, tid, r): continue
-        if r['Kind'] == 'action' and (p := _p(r)).get('action') == 'browser_act' and (u := by.get(f"rv{p.get('card')}")) and (r['Status'] != 'pending' or handed(u['rows'][0])):
+        if r['Kind'] == 'action' and (p := _p(r)).get('action') in ('browser_act', 'page_step') and (u := by.get(f"rv{p.get('card')}")) and (r['Status'] != 'pending' or u['rows'][0]['Status'] in ('approved', 'edited')):
             u['rids'].append(r['ReviewId']); u['rows'].append(r); continue
         # ...a settled one by what it was while it waited: its run tells how many came together ("2 of 3")
         if r['Status'] != 'pending' and not r.get('DecidedAt'): continue

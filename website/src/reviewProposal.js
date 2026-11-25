@@ -87,6 +87,7 @@ export const reviewText = (review) => {
   // the WHAT is the context line already (proposals.queue's Reason); the box is the exact command Approve runs, once - with no AI the card
   // said "agent-browser click @e12" three times over (2026-10-25)
   if (["browser_act", "shell_act", "desktop_act"].includes(proposal?.action)) return proposal.command ? `Approve runs: ${proposal.command}` : proposal.what || "";
+  if (proposal?.action === "page_step") return "";             // ...his step is the card's own line: no box of words under it
   if (PAGES.has(proposal?.action) && proposal.text) return proposal.text;
   // ...AND NO CARD SHOWS ITS OWN JSON (the card round, 2026-11-12: a setting's change stood as `{"action": "settings", "changes": [...]}` in a
   // box he could type into): any other proposal's box holds what it carries, in words - or nothing, and the card draws no box (`bare`)
@@ -220,6 +221,20 @@ export const proposalPresentation = (review) => {
   };
   // A HELD BROWSER ACT (browsergate.py, 2026-10-25): what the agent's browser would do and on which page, in words - Approve runs that
   // exact command there, so the words are read-only like a tool run's
+  // A STEP ON THE AGENT'S PAGE ONLY HE CAN DO (pagestep.py, the owner 2026-11-25: "the browser should be treated like a card, so only one at a
+  // time"): what he does and on which site, in the words it was handed over with - its press is his I'm done, the step's own hand-back
+  if (proposal?.action === "page_step") return {
+    kind: "action",
+    title: "Your step on the agent's page",
+    context: "",
+    lead: upFirst(String(proposal.what || "A step on the page only you can do")), leadWhy: "The page is open beside this card - do the step there, then press I'm done.",
+    destinationLabel: "On",
+    destination: proposal.site || "",
+    approveLabel: "I'm done",
+    busyLabel: "handing back…",
+    rejectLabel: "Dismiss",
+    readOnly: true, bare: true,
+  };
   if (proposal?.action === "browser_act") return {
     kind: "action",
     title: "The agent's browser waits for your yes",

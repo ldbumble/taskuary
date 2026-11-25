@@ -895,7 +895,7 @@ HAND_LINE = ("Anything on a page only the owner can do - a sign-in or a code you
              "he knows - call hand_over (`what`: the step in a few words, as the page shows it; `site`: the domain, for a sign-in) with that "
              "tab left on the page, and go on with the rest of the job: Taskuary signs in by itself where it can, else hands him one card, "
              "and tells you when it is done. ")
-HANDED = ("Handed to the owner as one card on this page: \"{what}\". Go on with the rest of the job and leave that tab as it is; you are told "
+HANDED = ("Handed to the owner as one card: \"{what}\". {place} Go on with the rest of the job and leave that tab as it is; you are told "
           "when he presses I'm done.")
 SIGNING = 'Taskuary is signing in to {site} with what it keeps; you are told when it is in. Go on with the rest of the job and leave that tab as it is.'
 def handing(store, tid: int) -> dict | None:
@@ -962,7 +962,11 @@ def hand_over(store, tid: int, what: str = '', site: str = '', sid: str = None, 
     else: your_turn(store, tid, sid, what, watch=watch, ended=ended)
     # ...nothing raised for him: the saved sign-in is going in (signin._auto), and its end tells the agent
     if not (h := handing(store, tid)): return {'ok': True, 'auto': True, 'says': SIGNING.format(site=signin.clean_claim(site) or 'the site')}
-    return {'ok': True, 'says': HANDED.format(what=h.get('Text') or what or 'the step on the page')}
+    # ...and where its card stands, as the line has it (pagestep: on his screen with its page, or in line behind what waits) - never a card
+    # claimed that is not drawn
+    from . import pagestep
+    pagestep.sync(store, tid)
+    return {'ok': True, 'says': HANDED.format(what=h.get('Text') or what or 'the step on the page', place=pagestep.place(store, tid, h['RequestId']))}
 
 
 def page_url(sid: str) -> str:

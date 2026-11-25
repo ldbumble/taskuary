@@ -57,14 +57,14 @@ def asking(store, task: dict, session=None) -> dict | None:
     """WHAT THE AGENT ASKS THE OWNER, as every chat draws it - the general payload and the coding one alike (the audit, 2026-11-10: a coding agent's
     [[TASKUARY-ASK]] over ACP was recorded and drawn nowhere): its live run's open request, else - an agent at rest, idled out or after a restart -
     its saved question, `resting`: typing answers it as the next turn. A step handed over on a page that has closed since says so (browsergate)."""
-    from . import acpcoding, browsergate, general
+    from . import acpcoding, browsergate, general, pagestep
     tid = task['TaskId']
-    if (s := session or workerstate._live(tid)): return browsergate.shown_ask(workerstate.asking_of(store, s))
+    if (s := session or workerstate._live(tid)): return pagestep.shown(store, tid, browsergate.shown_ask(workerstate.asking_of(store, s)))
     rests = general.handles(task) or acpcoding.idled(tid, store)
     # ...a task he closed asks nothing (walk 5, 2026-11-22: "Answer the agent's question..." stood in the box of a task he had marked done) - his
     # typing reopens it, as a new line
     if task.get('Status') in ('done', 'dropped'): return None
-    return browsergate.shown_ask({**q, 'resting': True}) if rests and (q := open_question(store, tid)) else None
+    return pagestep.shown(store, tid, browsergate.shown_ask({**q, 'resting': True})) if rests and (q := open_question(store, tid)) else None
 
 
 def browser_acts(store, tid: int) -> list:
@@ -72,7 +72,7 @@ def browser_acts(store, tid: int) -> list:
     from . import cardqueue, proposals
     held = cardqueue.held(store, tid)
     return [r for r in store._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action' AND Status='pending' ORDER BY ReviewId", (tid,))
-            if proposals._action(r) in proposals.HELD_ACTS and r['ReviewId'] not in held]
+            if proposals._action(r) in proposals.HELD_ACTS and proposals._action(r) != 'page_step' and r['ReviewId'] not in held]
 
 
 def needs_owner(ask: dict | None, acts: list = (), sid: str = '') -> bool:

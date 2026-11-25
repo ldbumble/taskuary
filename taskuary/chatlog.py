@@ -977,6 +977,9 @@ def advance(store, tid: int) -> None:
     from .processing_unread import OWNER_ACTORS
     from .wrapup import OWNER_SID
     tid = int(tid)
+    # ...and each step handed to him on a page has its card in that line, settled as the step ends (pagestep.sync)
+    from . import pagestep
+    pagestep.sync(store, tid)
     q = cardqueue.state(store, tid)
     with store.lock:
         rows = {r['Key']: dict(r) for r in store.cx.execute("SELECT * FROM chatlog WHERE TaskId=? AND Kind='card'", (tid,))}
@@ -987,7 +990,8 @@ def advance(store, tid: int) -> None:
     # the agent's final Post held, and nothing to press anywhere - the card he had pressed stood "approved" over a step the line kept behind
     # it): the card waits again, carrying the step (`step`), until the step is pressed, taken back or moved past
     sp = cardqueue.step(q['units'][0]) if front else None
-    step = {'review': sp['ReviewId'], 'what': cardqueue._flat(cardqueue._p(sp).get('what') or cardqueue._p(sp).get('command'), 300)} if sp else None
+    step = {'review': sp['ReviewId'], 'what': cardqueue._flat(cardqueue._p(sp).get('what') or cardqueue._p(sp).get('command'), 300),
+            **({'press': 'done'} if cardqueue._p(sp).get('action') == pagestep.ACT else {})} if sp else None
     # ...every card that stood reads as its review does now: pressed, withdrawn, moved past - in its place
     for k, r in list(rows.items()):
         rv = by.get(json.loads(r['Body']).get('review'))

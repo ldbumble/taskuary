@@ -92,16 +92,16 @@ SHELL = [_fn('run_command', "Run a shell command in your working folder (PowerSh
 LOCAL = {t['function']['name'] for t in (*BROWSER, SHOW, *FILES, *WRITE, *WEB, *SHELL)}
 # ONE LINE A TOOL (the owner, 2026-11-15: "MCP-style tools with simple JSON ... All methods can be searched later"): as agenttools.SHORT for
 # Taskuary's own - the whole words of each are kept (FULL) and read with find_tools
-SHORT = {'browser_open': "Open a web page in this task's browser.",
+SHORT = {'browser_open': "Open a page in this task's browser.",
          'browser_look': 'Read the page the browser is on: its elements with refs (@e1); full=true for its text.',
          'browser_click': 'Click an element by its ref.', 'browser_fill': 'Type text into a box by its ref (never a password).',
-         'browser_press': 'Press a key in the page (Enter, Tab).', 'browser_signup': 'Send the sign-up form here; Taskuary makes the password.', 'browser_screenshot': 'Save a picture of the page; answers with its path.',
+         'browser_press': 'Press a key in the page (Enter, Tab).', 'browser_signup': 'Send the sign-up form; Taskuary makes the password.', 'browser_screenshot': 'Save a picture of the page; answers with its path.',
          'show': 'Show the owner files in this chat, by path.', 'files_list': 'List a folder (default: your working folder).',
-         'file_read': 'Read a file as text (also PDF, Word, Excel).',
-         'file_write': 'Write a new file whole (docx/xlsx/pdf/pptx, charts too).',
-         'file_edit': 'Change a file in place, one exact piece (a sheet keeps its formulas, a document its look).',
+         'file_read': 'A file as text (also PDF, Word, Excel).',
+         'file_write': 'A new file, whole (docx/xlsx/pdf/pptx, charts too).',
+         'file_edit': 'Change one exact piece of a file; formulas and look kept.',
          'web_search': 'Search the web.', 'web_fetch': 'Read one public web page or file by its address.',
-         'run_command': 'Run a shell command in your working folder.'}
+         'run_command': 'A shell command in your folder.'}
 FULL = {}
 def _short(tools: list):
     "Each of `tools` (in place) listed by its line and lean parameters, its whole words kept in FULL."

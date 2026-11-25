@@ -730,13 +730,13 @@ export const TerminalPreview = ({ sid, height = 280, onOpen }) => {
 // OVER the terminal until dismissed. Every slot is laid out by the one rule (paneLayout): beside the chat, a chip only at a phone's width.
 // `stack` (an agent's conversation, GeneralWorkspace): once seen the view stays on its last frame when it closes; with no browser showing,
 // the task's kept last view (LastView). `held`, `turn`,
-// `onHandBack`, `onDecided`: what waits on the owner, drawn on the view (BrowserPane). `onView(bool)`: whether the view is on screen to
+// `onDecided`: what waits on the owner, drawn on the view (BrowserPane). `onView(bool)`: whether the view is on screen to
 // draw them - when it is not (a phone's chip), the conversation keeps their cards.
 // `quiet` (a chat task's conversation, 2026-11-05): the browser is drawn only while `need` - the owner has a part on the page (needsOwner)
 // - and then BESIDE the chat, as every pane is (paneLayout); no last frame, no kept view, no "closed" line: the agent's answer is in the chat.
 export const SessionPane = ({ sid, height = "70vh", onExit, children, autoFocus = true,
                              canFull = false, yourTurn = false, idle = false, stack = false, taskId = null, held = [], turn = null,
-                             onHandBack, onDecided, onView, quiet = false, need = false }) => {
+                             onDecided, onView, quiet = false, need = false }) => {
   const slot = useRef(null);
   const [browser, setBrowser] = useState({ open: false, url: "" });
   const [width, setWidth] = useState(0);
@@ -895,7 +895,7 @@ export const SessionPane = ({ sid, height = "70vh", onExit, children, autoFocus 
           </Box>
           <Box sx={{ flex: 1, minWidth: 0, minHeight: 0, display: "flex", flexDirection: "column", "& > *": { flex: 1, minHeight: 0 } }}>
             <BrowserPane sid={sid} taskId={taskId} url={browser.url || (ended ? lastPage.current : "")} open={browser.open} filling={!!browser.filling}
-              yourTurn={yourTurn} onFold={() => fold(true)} clearRight={canFull} waiting={held} turn={turn} onHandBack={onHandBack} onDecided={onDecided}
+              yourTurn={yourTurn} onFold={() => fold(true)} clearRight={canFull} waiting={held} turn={turn} onDecided={onDecided}
               ended={ended} />
           </Box>
         </>

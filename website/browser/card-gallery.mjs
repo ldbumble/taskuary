@@ -81,6 +81,11 @@ const SHAPES = {
   reply: async () => { const t = await task("Erin asks for the plans", "Answer Erin.", { mail: "Hi Alex, could you send me the vendor plans before Friday? Thanks, Erin" });
     await agent(t, "propose", { kind: "reply", text: "Hi Erin,\n\nYes - the three plans are below, and I would go with Payworth Basic.\n\nAlex" });
     await end(t, "The reply to Erin is set up."); return t; },
+  // ...one letter written two ways is ONE card with a Version pick (agenttools._many, review.Versions): the second picked, the box follows
+  replyversions: async () => { const t = await task("Erin asks to move the review", "Answer Erin.", { mail: "Hi Alex, could we move the vendor review to Thursday 2pm? Erin" });
+    await agent(t, "propose", { kind: "reply", items: [{ text: "Hi Erin,\n\nYes - Thursday 2pm works. I will move the invite.\n\nAlex" },
+      { text: "Hi Erin,\n\nThursday is full for me - can we keep Friday at 10?\n\nAlex" }] });
+    await end(t, "Two versions of the reply to Erin - a yes and a no; pick one."); return { ...t, press: [[(page) => page.select("[data-tq-act-choice=version]", "1").then((v) => `picked version ${v}`), "picked", 1500]] }; },
   chatreply: async () => { const t = await task("Erin asks on WhatsApp", "Answer Erin.", { mail: "Are the plans ready?", channel: "whatsapp" });
     await agent(t, "propose", { kind: "reply", text: "Yes - the plans are on their way, Erin." }); await end(t, "The reply is set up."); return t; },
   post: async () => { const t = await task("LinkedIn post, connected", "Post about the expense tools on LinkedIn."); await files(t, "expense-tools.png");
@@ -89,6 +94,15 @@ const SHAPES = {
   postbrowser: async () => { const t = await task("X post, not connected", "Post about the expense tools on X."); await files(t, "expense-tools.png");
     await agent(t, "propose", { kind: "post", network: "x", text: "Three expense tools, compared for a 40-person team.", picture: "expense-tools.png" });
     await end(t, "The X post is set up."); return { ...t, press: [[/^Connect X/, "connect"]] }; },
+  // ...and put up through the browser: his press hands it to the agent's browser (proposals.via_browser), and each step of HIS on the way - the
+  // page handed to him (hand_over), then the site's own Post held for his Approve (browsergate) - is drawn on that same card as its next press
+  postvia: async () => { const t = await task("X post through the browser", "Post about the expense tools on X.");
+    await agent(t, "propose", { kind: "post", network: "x", text: "Three expense tools, compared for a 40-person team." });
+    await end(t, "The X post is set up."); await fx("session", { taskId: t.taskId, url: "https://x.example/compose" });
+    const step = (what, f) => [async () => { await f(); return what; }, what.split(" ")[0], 3500];
+    return { ...t, press: [[/^Post via the browser$/, "handed", 3000],
+      step("handover the sign-in", () => agent(t, "hand_over", { what: "sign in to X", site: "x.example" })), [/^I.m done$/, "done", 3500],
+      step("held the site's Post", () => fx("browserhold", { taskId: t.taskId, what: "Press Post on x.example", site: "x.example" })), [/^Approve$/, "approved", 4000]] }; },
   reddit: async () => { const t = await task("Reddit post", "Ask r/smallbusiness which expense tool they use.");
     await agent(t, "propose", { kind: "post", network: "reddit", subreddit: "smallbusiness", title: "Which expense tool for a 40-person team?", text: "We are choosing between three. What mattered most to you?" });
     await end(t, "The Reddit post is set up."); return t; },
@@ -103,11 +117,12 @@ const SHAPES = {
   pr: async () => { const { repo } = await fx("checkout", { git: GIT }); const t = await task("Rounding fix as a pull request", `Fix the rounding and open a PR. My checkout is at ${repo}`);
     await fx("checkout", { git: GIT, repo, branch: "fix-rounding" });
     await agent(t, "propose", { kind: "act", action: "open_pr", cwd: repo, repo: "northwind/ledger", title: "Keep cents in totals", body: "Rounds to two places.\n\n- totals.py: round(sum(a), 2)", why: "the rounding fix" });
-    await end(t, "The pull request is set up."); return t; },
-  // ...the same asked for with no checkout of his on the task: an act on GitHub's side alone
+    await end(t, "The pull request is set up."); return { ...t, press: [[/^Approve$/, "opened", 6000]] }; },
+  // ...the same asked for with no checkout of his on the task: REFUSED at the raise (ci.pr_why - a card that cannot go is never shown), and
+  // the agent's turn says so and asks for the one thing missing - the step line reads that it could not be set up
   prbare: async () => { const t = await task("A pull request, no checkout", "Open the PR for the rounding fix on the ledger.");
     await agent(t, "propose", { kind: "act", action: "open_pr", repo: "northwind/ledger", title: "Keep cents in totals", body: "Rounds to two places.\n\n- totals.py: round(sum(a), 2)", why: "the rounding fix" });
-    await end(t, "The pull request is set up."); return t; },
+    await end(t, "No pull request is set up yet: I do not know which checkout holds the rounding fix. Where is it on your machine?"); return t; },
   comment: async () => { const t = await task("Close the loop on the issue", "Tell them it is fixed.", { source: "https://github.com/northwind/ledger/issues/12" });
     await agent(t, "propose", { kind: "act", action: "comment_issue", repo: "northwind/ledger", number: 12, body: "Fixed in the totals branch - the export rounds to cents now. Thanks for the report.", why: "close the loop" });
     await end(t, "The comment is set up."); return { ...t, press: [[/^Comment$/, "commented"]] }; },
@@ -118,6 +133,12 @@ const SHAPES = {
   jira: async () => { const t = await task("Comment on the ledger ticket", "Tell Erin on the ticket that it is deployed."); const w = await fx("world", { connect: ["jira"], lands: ["jira_comment"] });
     await agent(t, "propose", { kind: "act", action: "run_tool", type: "jira_comment", connector_id: w.connectors.jira, item: "NW-12", body: "Deployed this morning - the totals are right again.", why: "she asked" });
     await end(t, "The comment on NW-12 is set up."); return { ...t, press: [[/^Post comment$/, "commented"]] }; },
+  // ...a write on his books: read against them before its card is drawn (reports.CHECKS) - the vendor and account by name, each with its id
+  qbobill: async () => { const t = await task("Enter the Payworth bill", "Enter Payworth's November invoice in QuickBooks.");
+    const w = await fx("world", { connect: ["quickbooks"], lands: ["quickbooks_bill"], books: { Vendor: { Payworth: 58 }, Account: { "Software subscriptions": 7 } } });
+    await agent(t, "propose", { kind: "act", action: "run_tool", type: "quickbooks_bill", connector_id: w.connectors.quickbooks, vendor: "Payworth", amount: "200",
+      account: "Software subscriptions", date: "2026-11-24", memo: "November - Basic plan, 40 seats", doc_number: "PW-1124", why: "the November invoice" });
+    await end(t, "The Payworth bill is set up for your press."); return { ...t, press: [[/^Approve$/, "approved"]] }; },
   // ...a write on one of his systems asked for through run_system: held as a card, whatever its type
   syswrite: async () => { const t = await task("Move the ticket to Done", "Move NW-12 to Done."); const w = await fx("world", { connect: ["jira"], lands: ["jira_move"] });
     await agent(t, "run_system", { type: "jira_move", connector_id: w.connectors.jira, item: "NW-12", status: "Done" });
@@ -185,6 +206,7 @@ try {
       buttons: [...pg.querySelectorAll(".tq-aui-viewport button")].filter(seen).map((b) => (b.innerText.trim() || b.getAttribute("aria-label") || "").replace(/\s+/g, " ") + (b.disabled ? " (off)" : "")).filter(Boolean).join(" | "),
       junk: ["could not be drawn", "{\"", "TASKUARY-", "[object Object]", "undefined", "NaN", "```", "no preview"].filter((w) => text.includes(w)), overflow: [...new Set(wide)].slice(0, 6),
       imgs: [...pg.querySelectorAll("img")].filter(seen).map((i) => `${(i.getAttribute("src") || "").split("/").slice(-1)[0].slice(0, 40)}:${i.naturalWidth ? "ok" : "BROKEN"}`).join(","),
+      focus: (({ tagName: n, className: c } = document.activeElement || {}) => `${String(n || "").toLowerCase()}.${String(c || "").split(" ")[0]}`)(),
       video: [...pg.querySelectorAll("video")].map((v) => `video ${v.videoWidth}x${v.videoHeight} ready=${v.readyState}`).join(","), pageX: document.documentElement.scrollWidth > innerWidth + 2 }; });
   // WHAT HE SEES, THEN ALL OF IT: `name` as the page stands in a window 1000 tall - nothing resized or scrolled by this, so a card drawn off
   // the screen or a blank chat is in the shot - and, where the chat is longer than its window, `name-all` with the window grown to hold it
@@ -218,6 +240,7 @@ try {
   const open = async (tid, w = 1440, theme = "light") => {
     await page.evaluate(() => { location.hash = ""; }); await sleep(250);
     await page.emulateMediaFeatures([{ name: "prefers-color-scheme", value: theme }]); await page.setViewport({ width: w, height: 1000 }); await sleep(300);
+    await page.mouse.move(0, 0);       // ...the pointer off the page: left where the last viewer's picture was, it hovered the next card in its shot
     for (const again of [false, true]) {
       if (again) { await page.goto(`${h.ui}/#task=${tid}`, { waitUntil: "domcontentloaded" }); await page.reload({ waitUntil: "domcontentloaded" }); }
       else await page.evaluate((id) => { location.hash = `task=${id}`; }, tid);
@@ -271,7 +294,7 @@ try {
       if (t.press?.length) await open(t.taskId, 1440, "light");
       await t.before?.();
       for (const [re, name, wait = 3500] of t.press || []) {
-        const did = re === null ? "waited" : await press(re);
+        const did = re === null ? "waited" : typeof re === "function" ? await re(page) : await press(re);
         await sleep(wait); said.push(`    ${name}: ${did} -> ${JSON.stringify({ chat: await shot(`${k}-${name}`), ...(await read()) })}`);
       }
       await t.after?.();

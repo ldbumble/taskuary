@@ -28,10 +28,10 @@ const btn = { ...mono, fontSize: 10.5, lineHeight: 1, px: 0.9, py: 0.45, borderR
 // connects only while that says open (a caller that does not poll leaves it true and always tries).
 // `filling`: Taskuary is typing a sign-in into this page (browserview.filling) - the picture holds, and the pane says why
 // `waiting`: acts of this browser the hold keeps for the owner's press (browserSplit.heldOn) - Approve / Dismiss on the view itself.
-// `turn`: the agent handed the page over (browserSplit.isTurn) - "Your turn" with the hand-back on the view. `ended`: the browser closed;
+// `turn`: the agent handed the page over (browserSplit.isTurn) - "Your turn" said on the view; its press is its card's. `ended`: the browser closed;
 // the pane stays on its last frame (GeneralWorkspace's view outlives the browser), said as such.
 export default function BrowserPane({ sid, taskId, url: url0 = "", open = true, onFold, overlay = false, yourTurn = false, clearRight = false,
-  filling = false, waiting = [], turn = null, onHandBack, onDecided, ended = false }) {
+  filling = false, waiting = [], turn = null, onDecided, ended = false }) {
   const box = useRef(null), canvas = useRef(null), sendRef = useRef(null), img = useRef(null), fit = useRef(null);
   const { devMode } = useAgents();
   const [live, setLive] = useState(false);
@@ -287,7 +287,7 @@ Take over to drive it yourself; close the session to close it."
         {note && <Typography title={note.t} sx={{ ...mono, fontSize: 10, flexShrink: 1, minWidth: 0, maxWidth: "45%",
           overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
           color: note.bad ? CATPPUCCIN.red : CATPPUCCIN.green }}>{note.t}</Typography>}
-        {/* ...but not while the agent has handed him the page: its bar's "I'm done" is that step's one press, and this stood beside it as a
+        {/* ...but not while the agent has handed him the page: its card's "I'm done" is that step's one press, and this stood beside it as a
             second, greyed one (the overnight walk, 2026-11-11). THIS BUTTON ONLY EVER MEANS TAKE OVER (the Claude walk, 2026-11-19: its "I'm
             done" let go of the page and told nobody, beside the turn's real one) - driving, it gives the page back, in those words */}
         {!turn && <Box component="button" onClick={() => (driving ? setDriving(false) : takeOver())}
@@ -383,7 +383,7 @@ ${t.active ? "the tab the agent is working on - shown now" : driving ? "show thi
           <Typography sx={{ ...sans, position: "absolute", left: 8, bottom: 6, fontSize: 11, color: CATPPUCCIN.yellow,
             bgcolor: "#000000aa", px: 0.75, py: 0.25, borderRadius: 1, pointerEvents: "none" }}>
             {/* ...only over a page that has drawn: "click the page and type" stood over a pane with no frame in it (2026-11-04) */}
-            {!live ? "Loading the page…" : handed.current ? "your turn — click the page and type; scroll it for a button below the edge" : "you are driving — the agent's next command still runs; press I'm done when finished"}
+            {!live ? "Loading the page…" : handed.current ? "your turn — click the page and type; scroll it for a button below the edge" : "you are driving — the agent's next command still runs; press Give it back when finished"}
           </Typography>
         )}
         {asked && !driving && (
@@ -404,7 +404,7 @@ ${t.active ? "the tab the agent is working on - shown now" : driving ? "show thi
       {!!waiting.length && <Box data-tq-browser-waits="" sx={bar}>
         <Typography sx={barText}><Box component="span" sx={{ color: CATPPUCCIN.yellow, fontWeight: 600 }}>Waits for your Approve in the chat: </Box>
           {waiting.map((h) => h.what).join("; ")}</Typography></Box>}
-      {turn && <TurnBar turn={turn} url={url} onHandBack={onHandBack} short={short} />}
+      {turn && <TurnBar turn={turn} url={url} short={short} />}
     </Box>
   );
 }
@@ -414,40 +414,28 @@ const bar = { display: "flex", alignItems: "center", flexWrap: "wrap", gap: 1, p
   borderTop: `1px solid ${CATPPUCCIN.yellow}88` };
 const barText = { fontSize: 12.5, color: "var(--tq-muted, #e1dcd5)", flex: "1 1 220px", minWidth: 0, lineHeight: 1.4 };
 // ...the hand-over's words and presses in the app's own face: they are his to read, not the page's address bar (design round 5)
-const press = { ...btn, ...sans, fontSize: 12, px: 1.25, py: 0.6 };
 const failed = (e, data) => data?.send_error || e?.response?.data?.detail || (e ? "That did not go through - nothing was done. Try again." : "");
 
 
-// THE OWNER'S TURN (browserview.your_turn): the page is theirs to click and type on (yourTurn hands it over), and Done hands it back -
-// their press, never words in their name: Taskuary tells the agent, which looks at the page and goes on (browsergate.done).
+// THE OWNER'S TURN (browserview.your_turn): the page is theirs to click and type on (yourTurn hands it over). ITS ONE PRESS IS ITS CARD'S
+// (pagestep, 2026-11-25): the step is a card in the chat with its I'm done, so this bar says only what the step is - a second I'm done here
+// stood beside the card's, two presses for one step (the card gallery, g4). Every hand-over is watched and goes on by itself when the page moves on.
 export const SHORT_PANE = 360;
-function TurnBar({ turn, url = "", onHandBack, short = false }) {
-  const [busy, setBusy] = useState(false), [err, setErr] = useState("");
-  const back = async () => {
-    if (busy) return;
-    setBusy(true); setErr("");
-    try { await onHandBack?.(); } catch (e) { setErr(failed(e)); setBusy(false); }
-  };
-  useEffect(() => { setBusy(false); setErr(""); }, [turn?.request_id]);
-  // every hand-over is watched and goes on by itself when the page moves on (the owner, 2026-11-05) - Done stays, quiet, for a page Taskuary
-  // cannot read. A press is never handed over here: it is a card in the chat (browsergate, 2026-11-18)
+function TurnBar({ turn, url = "", short = false }) {
   return (
     <Box data-tq-browser-turn={turn.request_id} data-tq-browser-turn-short={short ? "" : undefined}
       sx={short ? { ...bar, flexWrap: "nowrap", py: 0.4 } : bar}>
       <Typography sx={short ? { ...barText, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } : barText}
-        title={short ? `${turn.text || "Your turn in the browser"} - do it on the page, and the agent goes on when it moves on` : undefined}>
+        title={short ? `${turn.text || "Your turn in the browser"} - do it on the page, then press I'm done on its card` : undefined}>
         <Box component="span" sx={{ color: CATPPUCCIN.yellow, fontWeight: 600 }}>{turn.text || "Your turn in the browser"}</Box>
-        {!short && <Box component="span" sx={{ color: "var(--tq-warning, #a8a196)" }}> · do it on the page, and the agent goes on when it moves on</Box>}
+        {!short && <Box component="span" sx={{ color: "var(--tq-warning, #a8a196)" }}> · do it on the page, then press I'm done on its card</Box>}
       </Typography>
       {/* ...AND IN HIS OWN BROWSER WHERE THIS ONE IS REFUSED (the owner, 2026-11-13: a registrar's "Verifying you are human" spun forever in the
           agent's browser - a check that turns away an automated browser even with a person at it, and Approve could not get past it): the
-          same page in his everyday browser, where he does the step; his I'm done hands it back */}
+          same page in his everyday browser, where he does the step; his I'm done on its card hands it back */}
       {/^https?:\/\//i.test(url) && <Box component="a" href={url} target="_blank" rel="noreferrer" data-tq-browser-own=""
-        title="If the page will not let you through here - a check that you are human that never ends - do the step in your own browser, then press I'm done"
+        title="If the page will not let you through here - a check that you are human that never ends - do the step in your own browser, then press I'm done on its card"
         sx={{ ...mono, fontSize: 11, color: "var(--tq-link, #8fb3d9)", whiteSpace: "nowrap", "&:hover": { textDecoration: "underline" } }}>Open in my browser</Box>}
-      <Box component="button" onClick={back} disabled={busy} sx={press}
-        title="The agent looks at the page as you left it and carries on">{busy ? "handing back…" : "I'm done"}</Box>
-      {err && <Typography role="alert" sx={{ ...mono, fontSize: 10.5, color: CATPPUCCIN.red, flexBasis: "100%" }}>{err}</Typography>}
     </Box>
   );
 }

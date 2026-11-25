@@ -416,6 +416,13 @@ def grant(store, fr: dict, actor: str) -> bool:
     store.audit('report', int(sid), 'always_approved', actor, detail={'step': step.get('id'), 'key': key})
     return True
 
+def write_steps(store, sid, cfg: dict) -> list:
+    """Every step of saved routine or report `sid` that writes to a connected system, as saved - its setup page's "Approve this write"
+    (the owner, 2026-11-25), whose press is grant with this `key`, the same yes as the run card's "Always approve this step"."""
+    from . import proposals, scopes
+    return [{'step': x.get('id'), 'key': step_key(x), 'type': x.get('type'), 'what': proposals.tool_words(store, x), 'approved': standing(store, sid, x)}
+            for x in steps_of(cfg) if x.get('kind') == 'source' and writes(x.get('type')) and scopes.reaches(x.get('type'), x)]
+
 def standing_list(store) -> list:
     "[{kind: 'routine_write', key, label, via}] - every routine step he always approved, for Settings -> Agent permissions (beside who he trusted)."
     out = []

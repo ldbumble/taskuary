@@ -2308,6 +2308,27 @@ def trusted_remove(body: UntrustBody, request: Request):
     return {'ok': True}
 
 
+# APPROVE THIS WRITE ON SETUP (the owner, 2026-11-25): a routine's or report's write step, approved where it is set up - the one grant the run
+# card's "Always approve this step" makes (verdicts.decide), so its scheduled runs write without a card. Taken back with /api/trusted/remove
+@app.get('/api/sources/{sid}/writes')
+def source_writes(sid: int):
+    from . import flow, workflows
+    if not (src := store.get_source(sid)): raise HTTPException(404, 'that routine or report is not on file')
+    return {'data': flow.write_steps(store, sid, workflows.cfg_of(src))}
+
+class AlwaysBody(BaseModel):
+    step: str
+    key: str
+
+@app.post('/api/sources/{sid}/always')
+def source_always(sid: int, body: AlwaysBody, request: Request):
+    from . import flow
+    _owner_only(request, "approving a write is the owner's")
+    if not flow.grant(store, {'source_id': sid, 'step': body.step, 'key': body.key}, ACTOR):
+        raise HTTPException(409, 'that step changed since this page read it - save it, then approve it')
+    return {'ok': True}
+
+
 def _trusted_starts(task_id: int, lifted: bool = True) -> str:
     """TRUST STARTS THE AGENT (the owner, 2026-11-11): the hold is gone, and what waited is worked as on any task. The one question is what its
     agent was never given (conversation.not_given): that goes to it as a line that joined the thread does (ingest.thread_moved: one turn for all

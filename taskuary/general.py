@@ -1274,9 +1274,14 @@ def with_failure(store, tid: int, msgs: list) -> list:
 # before took its first line from it at 11:11, and its chat drew his lines to that person from yesterday and 11:08 - filed on other tasks - on top
 ON_THREAD = ("IFNULL(m.ConversationId,'')<>'' AND EXISTS (SELECT 1 FROM message t WHERE t.TaskId=? AND t.ConversationId=m.ConversationId "
              "AND IFNULL(t.SentAt,t.CreatedAt)<=IFNULL(m.SentAt,m.CreatedAt))")
-ROOM_OWN = ("SELECT m.* FROM message m WHERE (IFNULL(m.Direction,'in')='out' OR m.Status='context') AND IFNULL(m.TaskId,0)<>? "
-            "AND m.Status NOT IN ('history','skipped') AND IFNULL(m.Channel,'')<>'report' AND " + ON_THREAD +
-            " AND IFNULL(m.SentAt,m.CreatedAt)>=? ORDER BY m.SentAt, m.MessageId")
+# ...READ FROM THE TASK'S OWN THREADS, never the whole mailbox (the owner, 2026-11-25: "hitting Next is still a bit slow"): ON_THREAD asked, of
+# every line he ever sent, whether this task held an earlier line of its thread - ~140 ms a read on a real store, on every open and every chat
+# read of every task. The same lines: a thread's line no earlier than this task's first line on it
+# ...a SELECT from its first word, never a WITH: the store reads a SELECT off the writer's lock (store._rows)
+ROOM_OWN = ("SELECT m.* FROM (SELECT ConversationId c, MIN(IFNULL(SentAt,CreatedAt)) a FROM message WHERE TaskId=? AND IFNULL(ConversationId,'')<>'' "
+            "GROUP BY ConversationId) th JOIN message m ON m.ConversationId=th.c WHERE (IFNULL(m.Direction,'in')='out' OR m.Status='context') "
+            "AND IFNULL(m.TaskId,0)<>? AND m.Status NOT IN ('history','skipped') AND IFNULL(m.Channel,'')<>'report' "
+            "AND IFNULL(m.SentAt,m.CreatedAt)>=th.a AND IFNULL(m.SentAt,m.CreatedAt)>=? ORDER BY m.SentAt, m.MessageId")
 def room_own(store, tid: int) -> list:
     "The owner's own lines on task `tid`'s thread filed elsewhere (another task in the room, or none), since the task began - as JOINED rows."
     t0 = str((store.get_task(tid) or {}).get('CreatedAt') or '')

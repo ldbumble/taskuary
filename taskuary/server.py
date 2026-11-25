@@ -2741,10 +2741,11 @@ def _assistant_payload(task_id: int, session=None):
             'turnOutputs': [o for cards in [outputs.on_cards(store, task_id)] for o in outputs.turn_versions(task_id) if o.get('name') not in cards],
             # ONE ENTRY PER CLI, and only the installed ones: this listed a provider per worker
             # profile, so five profiles on Claude read as five brains (the owner, 2026-09-18).
-            'providers': general.brain_options(store, keep=general.default_pick(store, task)),
+            'providers': general.brain_options(store, keep=(pick := general.default_pick(store, task))),
             # what the chat WOULD run on if nobody picks: the picker showed providers[0] instead,
             # which is always a CLI, so a task with no session nominated a coding agent (TQ-0420)
-            'defaultPick': general.default_pick(store, task),
+            # ...read once: the reading judges who the task's people are (brainroute.facts), a few database reads a time
+            'defaultPick': pick,
             # a walk whose session is still being opened is WORK IN FLIGHT, not an idle conversation
             'starting': task_id in general.OPENING,
             # THE RAISED HAND, where the owner is standing. The agent's question and the answers it

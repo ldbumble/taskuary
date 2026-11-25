@@ -124,7 +124,19 @@ def transcribe(store, data: bytes, mime: str = 'audio/ogg', name: str = 'audio.o
         if not key: raise RuntimeError(f'{LABELS[t]}: no API key saved')
         text, model = {'assemblyai': _assemblyai, 'speechmatics': _speechmatics, 'gladia': _gladia, 'azure_speech': _azure}[t](cfg, key, data, mime, name, terms)
     else: raise RuntimeError(f'unknown voice connector type {t!r}')
-    return {'text': (text or '').strip(), 'provider': t, 'model': model}
+    text = (text or '').strip()
+    return {'text': '', 'provider': t, 'model': model, 'silent': True} if echoed(text, terms) else {'text': text, 'provider': t, 'model': model}
+
+
+# ...NOR IS OUR OWN HINT HEARD BACK AS SPEECH (the owner, 2026-11-24: a silent voice note came in as the shared vocabulary and nothing else): a
+# clip the loudness gate cannot measure (a phone's ogg/opus) reaches the recogniser, which handed a silence back as the very terms we biased it
+# with. A transcript made only of those terms is our own words, not his - every provider, one check
+def echoed(text: str, terms) -> bool:
+    "True when `text` is nothing but the vocabulary we sent (or the no-speech sentinel) - no word of its own."
+    if not text or text.lower().strip(' .') in (NO_SPEECH, NO_SPEECH.strip('[]')): return bool(text)
+    vocab = {w for t in terms for w in re.findall(r"[\w'&.-]+", t.lower())} | {'words', 'that', 'may', 'come', 'up'}
+    said = re.findall(r"[\w'&-]+", text.lower())
+    return bool(terms) and bool(said) and all(w in vocab for w in said)
 
 
 def wav_level(data: bytes):

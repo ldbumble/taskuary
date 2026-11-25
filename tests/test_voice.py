@@ -548,3 +548,16 @@ class LocalWhisperCard(unittest.TestCase):
         with mock.patch.dict(sys.modules, {'faster_whisper': None}), self.assertRaises(Missing) as e:
             voice._local({}, b'x', 'a.webm')
         self.assertEqual(e.exception.package, 'faster_whisper')
+
+
+class HintIsNotHeard(unittest.TestCase):
+    """The owner, 2026-11-24: a silent voice note from the phone (ogg/opus - no loudness the gate can measure) came in as the shared vocabulary
+    and nothing else: the recogniser handed the silence back as the very terms we biased it with. Our own hint is never his words."""
+    def test_a_transcript_of_only_our_vocabulary_is_silence_and_one_with_a_word_of_its_own_is_kept(self):
+        s = _voice_store('groq_stt'); voice.save_vocabulary(s, ['Northwind', 'Erin Blake', 'Payworth', 'PTO'])
+        for said, kept in (('Northwind, Erin Blake, Payworth, PTO', ''), ('Northwind Erin Blake.', ''), ('[no speech]', ''),
+                           ('Ask Erin Blake about the Payworth invoice.', 'Ask Erin Blake about the Payworth invoice.')):
+            with mock.patch.object(voice.requests, 'post', return_value=R(200, {'text': said})):
+                self.assertEqual(voice.transcribe(s, b'OggS', 'audio/ogg', 'note.ogg')['text'], kept, said)
+        with mock.patch.object(voice.requests, 'post', return_value=R(200, {'text': 'Northwind, Erin Blake, Payworth, PTO'})):
+            self.assertTrue(voice.note_body(s, b'OggS', 'audio/ogg', 'note.ogg')[0].startswith('(nothing audible)'))

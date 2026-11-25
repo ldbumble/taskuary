@@ -83,6 +83,10 @@ def record(store, tid: int) -> dict:
 
 
 def _save(store, tid: int, r: dict): store.set_setting(f'{KEY}:{int(tid)}', json.dumps(r), 'system')
+def keep_then(store, tid: int, then: str):
+    "The agent's own step after his press on the landing question it just raised (card.raising) - '' for none."
+    if (r := record(store, tid)).get('proposal'):
+        r['proposal'] = {**{k: v for k, v in r['proposal'].items() if k != 'then'}, **({'then': then} if then else {})}; _save(store, tid, r)
 
 
 def mark_start(store, tid: int, cwd: str) -> dict | None:
@@ -785,8 +789,15 @@ def _landed(store, tid, how, said_, actor, at_sha='', **extra) -> dict:
     # (the owner, 2026-11-09: "when you hit approve the agent continues and says what it did and what the next steps are")
     if how not in PUSH_HOW:
         from .browsergate import NEXT
-        _hand_back(store, tid, f"{said_} The owner pressed {HOW[how]} on your branch. {NEXT}")
+        _went(store, tid, f"{said_} The owner pressed {HOW[how]} on your branch. {NEXT}")
     return {'ok': True, 'how': how, 'says': said_, **extra}
+
+
+def _went(store, tid, text):
+    "What his press landed, to the agent: woken only where its proposal named a step of its own after it (card.carries_on), else said in its next turn."
+    from . import card, events, general
+    if card.carries_on(record(store, tid).get('proposal')) or general.at_work(int(tid)): return _hand_back(store, tid, text)
+    events.note(store, int(tid), text)
 
 
 def _push(store, tid, s, how, actor) -> dict:
@@ -813,11 +824,10 @@ def _push(store, tid, s, how, actor) -> dict:
                                'url': f"https://github.com/{s['repo']}/commit/{tip}" if s['repo'] else '', 'checks': None, 'checked_at': None}, actor)
     said_ = f"Pushed {plural(p['ahead'], 'commit')} to origin/{base} ({tip[:7]})" + (f" and deployed it to {p['deploy']}." if went == 'deploy' else '.') + refused
     out = _landed(store, tid, went, said_, actor, tip, **({'deploy': p['deploy']} if went == 'deploy' else {}))
-    # ...the press was the go-ahead the agent waits on: its next turn checks it and finishes
-    _hand_back(store, tid, f"{said_} The owner pressed {HOW[how]} on your proposal. " + (
-        "Check it is live, then finish." if went == 'deploy' else
-        f"Do what the refusal needs, then deploy {tip[:7]} to {p['deploy']} with your own `git push` - it is held for the owner's press - or say in a line why you cannot."
-        if refused else "Finish the task."))
+    # ...a deploy refused is handed back; what went wakes it only where it named a step of its own after the press (_went)
+    (_hand_back if refused else _went)(store, tid, f"{said_} The owner pressed {HOW[how]} on your proposal." + (
+        f" Do what the refusal needs, then deploy {tip[:7]} to {p['deploy']} with your own `git push` - it is held for the owner's press - or say in a line why you cannot."
+        if refused else ''))
     return out
 
 

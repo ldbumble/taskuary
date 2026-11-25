@@ -13,7 +13,7 @@ codex_args). The CLI verbs in cli.py stay for a CLI with no MCP.
 
 Results that carry other people's words are fenced (terminal.fence), scrubbed (redact.scrub) and capped, with the cut said in words.
 """
-import json, re, time
+import contextlib, json, re, time
 from loguru import logger
 
 from . import words
@@ -138,17 +138,16 @@ TOOLS = {
     'end_turn': ('own', "Call once as your turn ends: where the task stands, shown on its page. name: the task in 3-6 words. about: 2-3 "
                         "sentences: who asked, for whom. did: the result first, then what you did. "
                         "on_you: steps only the owner can take that no card or question carries, each with why. nothing_left: goal met and "
-                        "checked. answer_is_result: your words are what was asked. after_press: send only if a step of yours "
-                        "follows his press (his Send alone is none), or handoff. retry: another try may work. corrections: [{kind: "
+                        "checked. answer_is_result: your words are what was asked. retry: another try may work. corrections: [{kind: "
                         "redraft|ask, review: draft id|null, said: his words}].",
                  _S({'name': _STR, 'about': _STR, 'did': _STR, 'on_you': {'type': 'array', 'items': _STR}, 'nothing_left': {'type': 'boolean'},
-                     'answer_is_result': {'type': 'boolean'}, 'after_press': {'type': 'string', 'enum': ['send', 'handoff']},
-                     'retry': {'type': 'boolean'}, 'corrections': {'type': 'array', 'items': {'type': 'object'}},
+                     'answer_is_result': {'type': 'boolean'}, 'retry': {'type': 'boolean'}, 'corrections': {'type': 'array', 'items': {'type': 'object'}},
                      'check_back': {'type': 'object', 'properties': {'when': _STR, 'what': _STR}}}, ('did',)), ('GET', '/api/tasks/1')),
     'ask_owner': ('own', "Ask the owner the one fact or decision only they can give, with your recommended answer. It stands "
                          "until answered, closed or withdrawn; the answer comes to you. choices: short answers for a pick. "
                          "withdraw: true takes your standing question back.",
-                  _S({'question': _STR, 'choices': {'type': 'array', 'items': _STR}, 'withdraw': {'type': 'boolean'}}), ('GET', '/api/tasks/1')),
+                  _S({'question': _STR, 'choices': {'type': 'array', 'items': _STR}, 'withdraw': {'type': 'boolean'},
+                      'card': {'type': 'string', 'description': 'the card it is about (rv<id>), if any'}}), ('GET', '/api/tasks/1')),
     'playbooks': ('read', "How this company does each kind of job, written by the owner: with no `name`, the list of playbooks and when each "
                           "applies; with a `name`, that playbook whole. Read-only.",
                   _S({'name': _STR}), ('GET', '/api/tasks/1')),
@@ -534,9 +533,13 @@ def _card_call(store, tid: int, name: str, args: dict, doors: dict, skip=()) -> 
         args = {**{k: v for k, v in args.items() if k != 'items'}, **args['items'][0]}
     if name == 'tick' and (args or {}).get('done', True) is not False and (bad := _failed_now(store, tid)):
         raise ValueError(refusal(f'not ticked: {bad} failed in this turn', 'tick it once that is done; say in your answer what is still left'))
+    from . import card
+    raises = TOOLS[name][0] == 'propose'
+    then, args = ((args or {}).get('then'), {k: v for k, v in (args or {}).items() if k != 'then'}) if raises else (None, args)
     try:
-        if TOOLS[name][0] == 'propose' and isinstance((args or {}).get('items'), list): out = _many(store, tid, name, args, doors)
-        else: out = _call(store, tid, name, args, doors, skip)
+        with (card.raising(store, tid, then) if raises else contextlib.nullcontext()):
+            if raises and isinstance((args or {}).get('items'), list): out = _many(store, tid, name, args, doors)
+            else: out = _call(store, tid, name, args, doors, skip)
     except ValueError:
         if TOOLS[name][0] == 'propose': _failed(store, tid, name)
         raise
@@ -563,6 +566,9 @@ ITEMS = {'type': 'array', 'items': {'type': 'object'},
 # ...on the one review tool (an email, a post, a close, a SQL write, an API call) - an invite answers one meeting, the landing question is one
 # per checkout
 TOOLS['propose'][2]['properties']['items'] = ITEMS
+# ...and on every card a tool raises, the agent's own step after his press (card.raising): that press wakes it only where it names one
+for _t in TOOLS.values():
+    if _t[0] == 'propose': _t[2]['properties']['then'] = {'type': 'string', 'description': 'your own step after his press, if any'}
 def _many(store, tid: int, name: str, args: dict, doors: dict) -> str:
     from . import bulkcard
     base, items = {k: v for k, v in args.items() if k != 'items'}, [x for x in args['items'] if isinstance(x, dict)]
@@ -800,7 +806,7 @@ def _call(store, tid: int, name: str, args: dict, doors: dict, skip=()) -> str:
     if name == 'new_task': return _j(doors['new_task'](tid, a))
     if name == 'end_turn':
         from . import selfclose
-        keep = {k: a[k] for k in ('name', 'about', 'did', 'on_you', 'nothing_left', 'answer_is_result', 'after_press', 'retry', 'corrections') if k in a}
+        keep = {k: a[k] for k in ('name', 'about', 'did', 'on_you', 'nothing_left', 'answer_is_result', 'retry', 'corrections') if k in a}
         selfclose.keep_mark(tid, 'summary', selfclose.summary_mark(keep))
         # ...ITS CHECK-BACK SET NOW, THROUGH THE check_back TOOL'S OWN DOOR (walk 14, 2026-11-24): kept unread and answered "Kept", a
         # "Thursday 26 November" it could not read was set nowhere at filing, while the agent told the owner "On Thursday, I'll check"
@@ -812,6 +818,10 @@ def _call(store, tid: int, name: str, args: dict, doors: dict, skip=()) -> str:
             return f"Withdrawn: {'; '.join(gone)}" if gone else 'No question of yours stands on the task - nothing to withdraw.'
         if not str(a.get('question') or '').strip(): raise ValueError('`question` is empty - write the one thing you need from the owner')
         selfclose.keep_mark(tid, 'ask', selfclose.ask_mark(a['question'], a.get('choices') if isinstance(a.get('choices'), list) else ()))
+        # ...asked about a card of this task, his press on that card answers it (card.asked_about)
+        if (k := str(a.get('card') or '').strip().lower().removeprefix('rv')).isdigit() and (store.get_review(int(k)) or {}).get('TaskId') == int(tid):
+            from .card import ASKED
+            store.audit('review', int(k), ASKED, 'agent', 'agent', {'question': ' '.join(str(a['question']).split())})
         return 'Asked - it stands on the task as their question, and their answer comes to you. Go on with what does not hang on it.'
     if name == 'playbooks':
         from . import playbooks

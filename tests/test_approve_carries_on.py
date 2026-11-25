@@ -5,7 +5,8 @@ import json, re, threading, time, unittest
 from types import SimpleNamespace
 from unittest import mock
 
-from taskuary import cardqueue, events, general, landing, proposals, sessionrecord, shellgate as sg, terminal as term, verdicts, waitroom, workerstate as ws
+from taskuary import (agenttools, card, cardqueue, events, general, landing, proposals, selfclose, sessionrecord, shellgate as sg, terminal as term,
+                      verdicts, waitroom, workerstate as ws)
 from taskuary.store import MemoryStore
 from taskuary.testing import Factory
 
@@ -18,15 +19,18 @@ def told_with(s, tid, *said) -> str:
     return '\n'.join([*map(str, said), events.take(s, tid)[0]])
 
 
-def acted_card(s, tid) -> int:
-    "An act he pressed Approve on (a held run, a tool's step) - its yes is the step the agent is parked on."
-    rid = s.add_review({'TaskId': tid, 'Kind': 'action', 'Status': 'pending', 'DraftText': json.dumps({'action': 'run_tool'})})
+THEN = 'post the run log on the issue'          # ...the agent's own step after his press, as it raised the card (card.raising)
+
+
+def acted_card(s, tid, then=THEN) -> int:
+    "An act he pressed Approve on (a held run, a tool's step), raised with the agent's own step after it."
+    rid = s.add_review({'TaskId': tid, 'Kind': 'action', 'Status': 'pending', 'DraftText': json.dumps({'action': 'run_tool'}), 'NextStep': then})
     s.decide_review(rid, 'approved', None, 'owner'); return rid
 
 
-def sent_card(s, tid) -> int:
+def sent_card(s, tid, then=None) -> int:
     "A card he pressed Send on, as the store writes it: its event is what the agent hears of the press (events.card)."
-    rid = s.add_review({'TaskId': tid, 'Kind': 'draft_reply', 'Status': 'pending', 'DraftText': 'Confirmed.'})
+    rid = s.add_review({'TaskId': tid, 'Kind': 'draft_reply', 'Status': 'pending', 'DraftText': 'Confirmed.', 'NextStep': then})
     s.decide_review(rid, 'approved', 'Confirmed.', 'owner'); return rid
 
 
@@ -88,9 +92,10 @@ class EveryYesCarriesOn(unittest.TestCase):
     def setUp(self):
         self.s = MemoryStore(); self.tid = Factory(self.s).task('Post the release note'); general._WOKEN.clear()
 
-    def action(self, p):
-        rid = Factory(self.s).review(self.tid, kind='action', reason='The agent asks', draft=json.dumps(p))
-        return self.s.get_review(rid if isinstance(rid, int) else rid['ReviewId'])
+    def action(self, p, tid=None, then=THEN):
+        rid = Factory(self.s).review(tid or self.tid, kind='action', reason='The agent asks', draft=json.dumps(p))
+        rid = rid if isinstance(rid, int) else rid['ReviewId']; self.s.set_review_next_step(rid, then)
+        return self.s.get_review(rid)
 
     def test_a_card_approved_on_a_live_agent_is_its_next_prompt_by_taskuary(self):
         rv = self.action({'action': 'comment_issue', 'body': 'Fixed in the next release.'})
@@ -115,20 +120,20 @@ class EveryYesCarriesOn(unittest.TestCase):
             while not told and time.time() < end: time.sleep(.01)
         [(text, kw)] = told
         self.assertFalse(kw.get('as_owner', True)); self.assertIn('he approved it', told_with(self.s, self.tid, text))
-        self.assertFalse(general.follow_up(self.s, self.tid, 'send', said='again'), 'once per answer')
+        self.assertFalse(general.follow_up(self.s, self.tid, said='again'), 'once per answer')
 
     def test_a_wake_that_never_started_leaves_the_next_press_to_start_it(self):
-        self.s.add_comment(self.tid, 'assistant', general.SUMMARY_TYPE, json.dumps({'did': 'drafted the reply', 'after_press': 'send'}))   # ...a step follows
+        self.s.add_comment(self.tid, 'assistant', general.ASSISTANT_TYPE, 'The reply is ready - press Send.')
         tried, told = [], []
         def start(*a, **kw):
             tried.append(1)
             if len(tried) == 1: raise RuntimeError('no AI is connected')
             return SimpleNamespace(send_prompt=lambda text, **k: told.append(text))
         with mock.patch.object(general, 'start_session', side_effect=start), mock.patch.object(general, 'handles', return_value=True):
-            self.assertEqual(general.approved(self.s, self.tid, 'Send', 'the reply was sent', review=sent_card(self.s, self.tid)), 'woke')
+            self.assertEqual(general.approved(self.s, self.tid, 'Send', 'the reply was sent', review=sent_card(self.s, self.tid, THEN)), 'woke')
             end = time.time() + 5
             while self.s.list_comments(self.tid, internal=True)[-1]['CommentId'] in general._WOKEN and time.time() < end: time.sleep(.01)
-            self.assertEqual(general.approved(self.s, self.tid, 'Approve', 'the note was posted', review=sent_card(self.s, self.tid)), 'woke', 'the first woke nobody')
+            self.assertEqual(general.approved(self.s, self.tid, 'Approve', 'the note was posted', review=sent_card(self.s, self.tid, THEN)), 'woke', 'the first woke nobody')
             end = time.time() + 5
             while not told and time.time() < end: time.sleep(.01)
         self.assertEqual(len(told), 1); self.assertIn('he approved it', told_with(self.s, self.tid, told[0]))
@@ -189,7 +194,7 @@ class EveryYesCarriesOn(unittest.TestCase):
 
     def test_a_branch_landed_is_handed_back_to_its_agent(self):
         tid = self.ended()
-        with mock.patch.object(landing, 'record', return_value={}), mock.patch.object(landing, '_save'), mock.patch('taskuary.waitroom.deliver', return_value={}):
+        with mock.patch.object(landing, 'record', return_value={'proposal': {'how': 'pr', 'then': 'say the PR is up'}}), mock.patch.object(landing, '_save'),              mock.patch('taskuary.waitroom.deliver', return_value={}):
             landing._landed(self.s, tid, 'pr', 'Pushed fix-export and opened pull request #12 into main: ' + SAID, 'owner')
         [n] = self.s.waiting_notes(tid)
         self.assertEqual(n['CreatedBy'], 'router'); self.assertIn('Open a PR', n['Note'])
@@ -198,8 +203,7 @@ class EveryYesCarriesOn(unittest.TestCase):
         """The north-star audit, 2026-11-10: an approved merge or comment on a coding task whose session had ended was told nobody, and
         nothing said so - while a landing on the same task reopened its agent through the waiting room. One road (general.to_agent) now."""
         tid = self.ended()
-        rid = Factory(self.s).review(tid, kind='action', reason='The agent asks', draft=json.dumps({'action': 'comment_issue', 'body': 'Fixed.'}))
-        rv = self.s.get_review(rid if isinstance(rid, int) else rid['ReviewId'])
+        rv = self.action({'action': 'comment_issue', 'body': 'Fixed.'}, tid)
         with mock.patch.object(proposals, 'execute', return_value={'commented': 'northwind/ledger#7', 'url': SAID}), \
              mock.patch('taskuary.waitroom.deliver', return_value={'delivered': 1, 'state': 'restarted'}) as reopened:
             self.assertTrue(verdicts.decide(self.s, rv, 'approve')['ok'])
@@ -208,7 +212,7 @@ class EveryYesCarriesOn(unittest.TestCase):
         reopened.assert_called()
 
     def test_a_landing_no_agent_worked_says_so_and_starts_nobody(self):
-        with mock.patch.object(landing, 'record', return_value={}), mock.patch.object(landing, '_save'), mock.patch('taskuary.waitroom.deliver') as went:
+        with mock.patch.object(landing, 'record', return_value={'proposal': {'how': 'merge', 'then': 'deploy it'}}), mock.patch.object(landing, '_save'),              mock.patch('taskuary.waitroom.deliver') as went:
             landing._landed(self.s, self.tid, 'merge', 'Merged fix-export into main.', 'owner')
         went.assert_not_called(); self.assertEqual(self.s.waiting_notes(self.tid), [])
         said = [c for c in self.s.list_comments(self.tid) if 'none was told' in c['Body']]
@@ -225,10 +229,9 @@ class OneRoadIntoTheAgent(unittest.TestCase):
         from taskuary import browsergate
         told = []
         sess = SimpleNamespace(sid='run1', task_id=self.tid, alive=True, send_prompt=lambda text, **kw: told.append((text, kw)))
-        self.s.add_comment(self.tid, 'assistant', general.SUMMARY_TYPE, json.dumps({'did': 'drafted the reply', 'after_press': 'send'}))   # ...a step follows
         with mock.patch.dict(term.SESSIONS, {'run1': sess}, clear=True), mock.patch.object(waitroom, 'tick', side_effect=AssertionError('no clock')):
             t0 = time.time()
-            self.assertEqual(general.approved(self.s, self.tid, 'Send', 'the reply was sent', review=sent_card(self.s, self.tid)), 'told')
+            self.assertEqual(general.approved(self.s, self.tid, 'Send', 'the reply was sent', review=sent_card(self.s, self.tid, THEN)), 'told')
             browsergate._tell(self.s, self.tid, "The owner pressed I'm done: they say they finished the step.", wake=True)
             end = time.time() + 5
             while len(told) < 2 and time.time() < end: time.sleep(.01)
@@ -294,6 +297,7 @@ class ParkedOnItsOwnQuestion(unittest.TestCase):
         with mock.patch.dict(term.SESSIONS, {'a': sess}, clear=True), mock.patch.object(term, 'in_box', return_value=None), \
              mock.patch.object(term, 'SEED_CHUNK_GAP', 0), mock.patch.object(term, 'SEED_ENTER', 0), mock.patch.object(term, 'chooser_in', return_value=False):
             self.asked(sess)
+            landing._save(self.s, self.tid, {'proposal': {'how': 'merge', 'then': 'deploy it'}})
             landing._landed(self.s, self.tid, 'merge', 'Merged the branch into main (f0ce6ca).', 'owner')
             end = time.time() + 5
             while not ''.join(typed).strip() and time.time() < end: time.sleep(.01)
@@ -505,7 +509,8 @@ class AFailedPressIsHandedBack(unittest.TestCase):
     def card(self, tid, query, action='run_tool', **p):
         d = {'action': action, 'type': 'database', 'query': query} if action == 'run_tool' else {'action': action, **p}
         rid = Factory(self.s).review(tid, kind='action', reason='The agent asks', draft=json.dumps(d))
-        return self.s.get_review(rid if isinstance(rid, int) else rid['ReviewId'])
+        rid = rid if isinstance(rid, int) else rid['ReviewId']; self.s.set_review_next_step(rid, THEN)
+        return self.s.get_review(rid)
 
     def press(self, rv):
         with mock.patch('taskuary.waitroom.deliver', return_value={'delivered': 1, 'state': 'restarted'}):
@@ -695,7 +700,7 @@ class OneCardAtATime(unittest.TestCase):
         ids = [self.email(tid, f'{n}@northwind.example', f'{n.title()} - the pack is attached.') for n in ('erin', 'gail', 'paula')]
         told = []
         with mock.patch.object(general, 'to_agent', lambda st, t, said, actor='owner', heard=None, **k: told.append(said) or (heard and heard('woke')) or 'woke'), \
-             mock.patch.object(general, 'carries_on', return_value=True), mock.patch('taskuary.learning.learn_from'), \
+             mock.patch('taskuary.card.carries_on', return_value=True), mock.patch('taskuary.learning.learn_from'), \
              mock.patch.object(outbound, 'send_out', side_effect=lambda st, ch, to, *a, **k: {'channel': ch, 'to': to, 'cc': []}), \
              mock.patch.object(outbound, 'send_block', return_value=''):
             for i, rid in enumerate(ids):
@@ -936,25 +941,79 @@ class ASendIsSaidByItsCard(unittest.TestCase):
     def setUp(self):
         self.s = MemoryStore(); self.tid = self.s.create_task({'Title': 'Reply to Gail', 'Kind': 'general', 'Status': 'open'}, 'owner')
 
-    def test_a_send_at_work_or_with_no_summary_starts_no_turn_and_one_that_said_a_step_follows_wakes_it(self):
-        rid = sent_card(self.s, self.tid)
+    def test_a_send_with_no_then_starts_no_turn_whatever_its_turn_said_and_one_with_then_wakes_it(self):
+        """d6e6a670a trimmed end_turn's after_press text and every Send woke the agent to say it went: whether a press wakes is now the card's
+        own `then`, never a word in the turn's summary - a summary that still says after_press wakes nobody."""
+        rid, step = sent_card(self.s, self.tid), sent_card(self.s, self.tid, 'tell Ray the date is fixed')
+        self.s.add_comment(self.tid, 'assistant', general.SUMMARY_TYPE, json.dumps({'did': 'drafted it', 'after_press': 'send'}))
         with mock.patch.object(general, 'to_agent', return_value='told') as told:
-            with mock.patch.object(general, 'at_work', return_value=True):
-                self.assertEqual(general.approved(self.s, self.tid, 'Send', 'the reply was sent', review=rid), '')    # ...busy at the press
-            self.assertEqual(general.approved(self.s, self.tid, 'Send', 'the reply was sent', review=rid), '')        # ...at rest, no summary
+            for busy in (True, False):
+                with mock.patch.object(general, 'at_work', return_value=busy):
+                    self.assertEqual(general.approved(self.s, self.tid, 'Send', 'the reply was sent', review=rid), '', f'at work: {busy}')
             told.assert_not_called()
-            self.s.add_comment(self.tid, 'assistant', general.SUMMARY_TYPE, json.dumps({'did': 'drafted it', 'after_press': 'send'}))
-            self.assertEqual(general.approved(self.s, self.tid, 'Send', 'the reply was sent', review=rid), 'told')    # ...a step of its own follows
+            self.assertEqual(general.approved(self.s, self.tid, 'Send', 'the reply was sent', review=step), 'told')    # ...a step of its own follows
+        self.assertNotIn('after_press', agenttools.TOOLS['end_turn'][1] + json.dumps(agenttools.TOOLS['end_turn'][2]) + selfclose.SUMMARY_LINE)
 
-    def test_a_send_never_answers_the_question_its_agent_is_parked_on_and_an_approved_act_does(self):
-        """Walk 20: a reply card to a vendor and ONE question on what headcount to share, in the same turn - Send woke the agent with its
-        question still open, and it narrated the Send under the card. His words sent to someone else are not his answer to it; an approved
-        act it is parked on is its step following."""
+    def test_a_send_never_answers_a_question_on_something_else_and_answers_the_one_asked_about_its_card(self):
+        """Walk 20: a reply card to a vendor and ONE question on what headcount to share, in the same turn - his words sent to someone else are
+        not his answer to it. A question asked ABOUT the card (ask_owner's `card`) is: left standing, it stayed on the task after the letter went."""
         rid, sess = sent_card(self.s, self.tid), SimpleNamespace(sid='run1', task_id=self.tid, alive=True, waiting=lambda: True)
+        head, drafted = 'What headcount should I share with them?', 'Should the reply to Gail go out as drafted?'
         act = acted_card(self.s, self.tid)
         with mock.patch.object(general, 'to_agent', return_value='told') as told, mock.patch.dict(term.SESSIONS, {'run1': sess}, clear=True), \
              mock.patch.object(general, 'at_work', return_value=False):
-            self.assertTrue(ws.record(self.s, self.tid, 'run1', 'input_needed', text='What headcount should I share with them?', source='api'))
+            agenttools.call(self.s, self.tid, 'ask_owner', {'question': drafted, 'card': f'rv{rid}'}, {})
+            for q in (head, drafted): self.assertTrue(ws.record(self.s, self.tid, 'run1', 'input_needed', text=q, source='api'))
             self.assertEqual(general.approved(self.s, self.tid, 'Send', 'the reply was sent', review=rid), '')       # ...the Send is its card's
             told.assert_not_called()
-            self.assertEqual(general.approved(self.s, self.tid, 'Approve', 'it ran', review=act), 'told')            # ...an act it waits on
+            self.assertEqual([r['text'] for r in ws.status(self.s, self.tid)['requests']], [head], 'his Send answered the one about its card')
+            self.assertEqual(general.approved(self.s, self.tid, 'Approve', 'it ran', review=act), 'told')            # ...an act with a step after it
+
+    def test_an_approved_merge_with_then_deploy_wakes_it_once_and_one_without_wakes_nobody(self):
+        quiet, merge = acted_card(self.s, self.tid, None), acted_card(self.s, self.tid, 'deploy, then reply that it is live')
+        self.s.add_comment(self.tid, 'assistant', general.ASSISTANT_TYPE, 'The merge is set up.'); general._WOKEN.clear()
+        told = []
+        with mock.patch.object(general, 'start_session', return_value=SimpleNamespace(send_prompt=lambda text, **k: told.append(text))), \
+             mock.patch.object(general, 'handles', return_value=True):
+            self.assertEqual(general.approved(self.s, self.tid, 'Approve', 'it ran', review=quiet), '')
+            self.assertEqual(general.approved(self.s, self.tid, 'Approve', 'merged', review=merge), 'woke')
+            end = time.time() + 5
+            while not told and time.time() < end: time.sleep(.01)
+        self.assertEqual(len(told), 1)
+
+
+@pytest.mark.parametrize('road', ['tool', 'cli', 'marker'])
+def test_then_is_kept_on_the_card_whatever_road_raised_it_and_a_rewrite_without_it_clears_it(road):
+    """One rule on every road a card is raised by - an agent's tool (general CLI, Codex, API agents over MCP), `taskuary --reply/--draft --then`
+    (the CLI's endpoint, server._raising) and a TASKUARY-PROPOSE mark - kept on the card itself, so a restart between the card and his press
+    keeps it. A later raise of the same card speaks for it: rewritten with no `then`, its press wakes nobody."""
+    s = MemoryStore(); tid = Factory(s).task('Write the onboarding playbook')
+    text = '# Onboarding\nwhen: a new hire starts\nDay one: the laptop.'
+    doors = {'propose': lambda t, p: {'ok': bool(q := proposals.queue(s, t, p)), 'review': q and q['reviewId']}}
+    def raise_(then, words):
+        p = {'action': 'write_playbook', 'slug': 'onboarding', 'text': words}
+        if road == 'tool': agenttools.call(s, tid, 'propose', {'kind': 'act', **p, **({'then': then} if then else {})}, doors)
+        elif road == 'marker': proposals.queue(s, tid, {**p, **({'then': then} if then else {})})
+        else:
+            with card.raising(s, tid, then): proposals.queue(s, tid, p)
+        return s._rows("SELECT * FROM review WHERE TaskId=? ORDER BY ReviewId DESC", (tid,))[0]
+    first = raise_('tell Erin it is up', text)
+    assert card.then_of(s.get_review(first['ReviewId'])) == 'tell Erin it is up' and card.carries_on(s.get_review(first['ReviewId']))
+    general._WOKEN.clear()                                    # ...a restart: nothing held in memory, the card still says it
+    s.decide_review(first['ReviewId'], 'approved', None, 'owner')
+    with mock.patch.object(general, 'to_agent', return_value='woke') as told:
+        assert general.approved(s, tid, 'Approve', 'saved', review=first['ReviewId']) == 'woke'
+        assert not card.carries_on(again := s.get_review(raise_('', text + ' The badge.')['ReviewId']))
+        s.decide_review(again['ReviewId'], 'approved', None, 'owner')
+        assert general.approved(s, tid, 'Approve', 'saved', review=again['ReviewId']) == ''
+    assert told.call_count == 1
+
+
+def test_a_landing_wakes_its_agent_only_where_its_proposal_named_a_step_after_it():
+    s = MemoryStore(); tid = Factory(s).task('Fix the export', kind='coding'); s.add_transcript(tid, 'run1', 'Fixed the export.', 'claude', HELD)
+    for then, woken in (('', False), ('check the deploy is live', True)):
+        landing._save(s, tid, {'proposal': {'how': 'merge', **({'then': then} if then else {})}})
+        with mock.patch('taskuary.waitroom.deliver', return_value={}), mock.patch.object(general, 'at_work', return_value=False):
+            landing._landed(s, tid, 'merge', f'Merged fix-export into main ({then or "quiet"}).', 'owner')
+        assert bool(s.waiting_notes(tid)) is woken, then
+        if not woken: assert 'quiet' in events.take(s, tid)[0], 'what landed unwoken is still said in its next turn'

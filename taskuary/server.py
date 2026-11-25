@@ -5359,7 +5359,6 @@ def handoff(task_id: int, body: HandoffBody):
             sent = outbound.send_out(store, body.channel, body.to, subject, text)
     except HTTPException: raise
     except Exception as e: raise HTTPException(422, str(e)[:400])
-    from . import general
     from .general import HANDED_OFF
     store.add_comment(task_id, ACTOR, 'human', f'{HANDED_OFF}{body.to} by {body.channel}:\n{text}')
     # FORWARD ONLY (the owner, 2026-10-18): handing it on used to close the task too, and nobody then saw whether the person
@@ -5370,7 +5369,6 @@ def handoff(task_id: int, body: HandoffBody):
     from . import funnel
     funnel.invalidate()
     store.audit('task', task_id, 'handoff', ACTOR, detail={'to': body.to, 'channel': body.channel, 'closed': False})
-    general.follow_up(store, task_id, 'handoff', ACTOR)
     return {'sent': sent, 'text': text, 'status': st}
 
 @app.get('/api/runs/live')
@@ -6052,7 +6050,12 @@ class AgentFile(BaseModel): name: str; data: str = ''; attachment: int | None = 
 class AgentReplyBody(BaseModel):
     task_id: int; text: str = ''; agent: str = 'agent'; files: list[AgentFile] = []; follow_up: bool = False; to: str = ''; answers: int | None = None
     # ...who hears it, the agent's call (2026-11-06): the sender alone, or who else is copied, and the one line why (wrapup.agent_reply)
-    only: bool = False; cc: list[str] | None = None; why_to: str = ''
+    only: bool = False; cc: list[str] | None = None; why_to: str = ''; then: str | None = None
+
+def _raising(tid: int, then: str | None):
+    "`taskuary --reply/--draft --then`: the card it writes keeps the agent's own step after his press (card.raising); a tool's own call says it there."
+    from . import card
+    return contextlib.nullcontext() if then is None else card.raising(store, tid, then)
 
 def _agent_files(files, tid: int):
     "(name, bytes[, attachment id]) of each file an agent hands over - a mail's file only when it is on this task's own mail (agenttools.mail_file)."
@@ -6076,10 +6079,13 @@ def agent_reply(body: AgentReplyBody, request: Request):
     from . import wrapup
     _own_task_only(request, body.task_id)
     if not store.get_task(body.task_id): raise HTTPException(404, 'no such task')
-    return wrapup.agent_reply(store, body.task_id, body.text, body.agent, files=_agent_files(body.files, body.task_id), follow_up=body.follow_up, to=body.to,
-                              answers=body.answers, only=body.only, cc=body.cc, why_to=body.why_to)
+    with _raising(body.task_id, body.then):
+        return wrapup.agent_reply(store, body.task_id, body.text, body.agent, files=_agent_files(body.files, body.task_id), follow_up=body.follow_up, to=body.to,
+                                  answers=body.answers, only=body.only, cc=body.cc, why_to=body.why_to)
 
-class AgentDraftBody(BaseModel): task_id: int; text: str; to: str = ''; subject: str = ''; slot: str = ''; agent: str = 'agent'; files: list[AgentFile] = []; cc: list[str] = []; mailbox: str = ''; guessed: list[str] = []
+class AgentDraftBody(BaseModel):
+    task_id: int; text: str; to: str = ''; subject: str = ''; slot: str = ''; agent: str = 'agent'; files: list[AgentFile] = []; cc: list[str] = []
+    mailbox: str = ''; guessed: list[str] = []; then: str | None = None
 
 @app.post('/api/agent/draft')
 def agent_draft(body: AgentDraftBody, request: Request):
@@ -6089,7 +6095,8 @@ def agent_draft(body: AgentDraftBody, request: Request):
     if not store.get_task(body.task_id): raise HTTPException(404, 'no such task')
     from . import wrapup
     files = _agent_files(body.files, body.task_id)
-    out = slots.draft(store, body.task_id, body.text, body.to, body.subject, body.slot, body.agent, cc=body.cc, mailbox=body.mailbox, guessed=body.guessed)
+    with _raising(body.task_id, body.then):
+        out = slots.draft(store, body.task_id, body.text, body.to, body.subject, body.slot, body.agent, cc=body.cc, mailbox=body.mailbox, guessed=body.guessed)
     if out.get('ok') and files: out = {**out, **wrapup.attach_files(store, out['review_id'], files, body.agent)}
     return {**out, **wrapup.carries(store, out['review_id'])} if out.get('ok') and out.get('review_id') else out
 

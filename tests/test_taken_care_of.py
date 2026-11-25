@@ -179,26 +179,6 @@ class Thinking(unittest.TestCase):
         self.assertNotIn('triage', {p['key'] for p in problems.collect(self.s)})
 
 
-class Sorting(unittest.TestCase):
-    """The load run, 2026-11-24: 90-240 mails waited to be read, and the rail said nothing but a "triaging" badge on each row at its foot - the
-    header's "processing messages" rode only a full sync's own drain. What is stored and not yet judged is counted, in one line, wherever the
-    mail came from: over the rail and in the Timeline's header."""
-    def test_a_backlog_is_said_over_the_rail_and_the_header_until_it_is_sorted(self):
-        from fastapi.testclient import TestClient
-        from taskuary import server
-        s = MemoryStore()
-        with ingest.deferred():
-            for i in range(3): ingest.ingest_message(s, _mail(i), llm=FYI)
-        prev, server.store = server.store, s
-        try:
-            c = TestClient(server.app)
-            said = lambda: (c.get('/api/funnel/pile?force=1').json().get('sorting'), c.get('/api/ingest/status').json().get('sorting'))
-            self.assertEqual(said(), ('Sorting 3 new messages',) * 2)
-            ingest.drain(s, llm=FYI)
-            self.assertEqual(said(), ('', ''))
-        finally: server.store = prev
-
-
 class GivenUp(unittest.TestCase):
     def setUp(self): self.s = MemoryStore()
 

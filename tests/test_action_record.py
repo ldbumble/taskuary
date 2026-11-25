@@ -28,6 +28,13 @@ class WhatAnAgentMayAsk(unittest.TestCase):
                 with self.assertRaises(ValueError): agenttools.proposal_of(ask)
                 self.assertEqual(proposals.parse(f'{proposals.MARK} {json.dumps(ask)}'), [])
 
+    def test_what_the_marker_takes_the_tool_takes(self):
+        # a push straight onto the base was the mark's to ask and the tool's "owner's own act" - the agent left nothing to ask with
+        for a in set(proposals.ACTIONS) - set(proposals.NOT_ASKED):
+            with self.subTest(a):
+                self.assertEqual(proposals.parse(f'{proposals.MARK} {json.dumps({"action": a})}')[0]['action'], a)
+                self.assertEqual(agenttools.proposal_of({'action': a, 'text': '# T\nwhen: w\nsteps: s'})['action'], a)
+
     def test_neither_lets_an_agent_mark_its_own_ask(self):
         ask = {'action': 'comment_issue', 'body': 'Fixed in the next release.', 'closeout': True, 'flow_run': {'run': 1}}
         want = {'action': 'comment_issue', 'body': 'Fixed in the next release.'}

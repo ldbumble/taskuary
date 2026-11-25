@@ -1093,11 +1093,12 @@ def unvouched(store, tid: int, args: dict) -> bool:
 
 def proposal_of(args: dict) -> dict:
     """The proposal an agent may file, cut to what it may say - by proposals.parse's own list (NOT_ASKED, MARKS): never a close-out, a
-    workflow's own resume, or an act only Taskuary raises. A push past review is not this door's either."""
+    workflow's own resume, or an act only Taskuary raises. A push straight onto the base is asked here as by the mark (the landing card, or
+    a card for his press): refused at this door alone, the agent was told "the owner's own act" and had nothing left to ask with."""
     from .proposals import HELD_ACTS, MARKS, NOT_ASKED
     a = str((args or {}).get('action') or '').strip()
     if a in HELD_ACTS: raise ValueError(f'{a} is raised by Taskuary itself when it holds a step - it cannot be proposed. Run the step: Taskuary holds it and asks the owner')
-    if a in (*NOT_ASKED, 'push_direct'): raise ValueError(f'{a} is the owner\'s own act - it cannot be proposed')
+    if a in NOT_ASKED: raise ValueError(f'{a} is the owner\'s own act - it cannot be proposed')
     # ...and a playbook that could never be saved is said to the agent NOW, so it writes it again itself - it was queued, the owner pressed
     # Approve, and only then read "a playbook needs a title" with the agent long gone (the recorded walk, 2026-11-10)
     if a == 'write_playbook':

@@ -467,7 +467,7 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
           {/* ...THE CHAT'S OWN BOX (AgentSummary.PromptBox): paperclip, words, mic, Send - typing and Send make the task, start its agent and open
               its chat. With no AI connected it says so, with the way to connect one */}
           <PromptBox text={words} setText={setText} pics={pics} busy={busy} onSend={submit} label={aboutLabel} title={verb} autoFocus
-            placeholder={kind === "chat" ? "build me a website · a report on overdue invoices every Monday · draft a reply to Erin" : "why did Site 3's census move four points in July?"}
+            placeholder={kind === "chat" ? "build a website · an overdue-invoices report · reply to Erin" : "why did Site 3's census move four points in July?"}
             sendOff={noAi} extra={!noAi && !!generalBrains.length && <SwitchAi ask={aiAsk} title="The AI this job starts on - pick another AI or model"
               onPick={({ pick, model }) => setAi({ pick, model })} />} />
           {!!sentLine && <Box data-tq-new-sent="" sx={{ mt: 1.25 }}>

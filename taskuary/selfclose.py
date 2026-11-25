@@ -344,14 +344,11 @@ REPLY_LINE = (f'REPLYING FOR THE OWNER: the answer the person who asked will get
 # each turn closes on a block the page draws as three parts - what the task wants, what the agent did, what is on the owner (the parser
 # is Task 3.5's). Not `SUMMARY:`, which the brief already uses as the task-summary label.
 SUMMARY_OPEN, SUMMARY_CLOSE = '[[TASKUARY-SUMMARY]]', '[[/TASKUARY-SUMMARY]]'
-AFTER_PRESS = ('send', 'handoff')
 SUMMARY_LINE = (f'ENDING EVERY TURN: close with {SUMMARY_OPEN}{{"name": "<the task in three to six words, as a to-do list names it>", "about": "<two or three plain sentences from the whole thread: which '
                 f'conversation, what about, who asked, for whom, why - naming only people it shows in that role>", "did": "<the RESULT ITSELF '
                 f'first (the path, link, figure or name), then what you did; any part unmet or unchecked>", "on_you": ["<a step for what they '
                 f'asked that only they can take and no card or question can carry, a line each with why, said nowhere in your words above; [] when nothing_left>"],"nothing_left": <true only when the goal '
-                f'is met and you checked it>, "answer_is_result": <true when your words above ARE what was asked>, "after_press": <"send" only if a step of '
-                f'your own is left after the owner presses what you set up (deploy once he approves the merge; his Send finishing the job is not one) - that press wakes you once; "handoff" '
-                f'only if you carry on once he hands this to a person; else leave it out: a press with nothing after it never wakes you>, "retry": <true when what '
+                f'is met and you checked it>, "answer_is_result": <true when your words above ARE what was asked>, "retry": <true when what '
                 f'stopped you may work on another try (a page that did not load, a site that did not answer) - never ask the owner to send a message to try again>}}'
                 f'{SUMMARY_CLOSE} - valid JSON, plain words, no secret, "you" to the owner. A fact only they have (a phone number, a choice) is your one question, and a payment or other press of theirs is set up to its last press as a card: these are never an on_you step. When their newest message CORRECTS you, add "corrections": '
                 f'[{{"kind": "redraft" (their words for the draft) or "ask" (you misread the task), "review": <the draft\'s id or null>, '
@@ -393,8 +390,6 @@ def summary_marker(text: str, letters=()) -> tuple:
     if (name := ' '.join(str(j.get('name') or '').split())[:80]): out['name'] = name
     # ...and the agent's own say on whether its prose is the deliverable (GeneralWorkspace: agentSummary.answerShown) - kept only when it said
     if isinstance(j.get('answer_is_result'), bool): out['answer_is_result'] = j['answer_is_result']
-    # ...and the one press it waits on to carry on (general.follow_up): that press starts its next turn
-    if j.get('after_press') in AFTER_PRESS: out['after_press'] = j['after_press']
     # ...and that what stopped it is worth another go: the page draws Try again under the turn (GeneralWorkspace), his press the go-ahead
     if j.get('retry') is True: out['retry'] = True
     if isinstance(j.get('on_you'), list): out['on_you'] = list(dict.fromkeys(x for x in (flat(o, ON_YOU_MAX) for o in j['on_you'] if isinstance(o, str)) if x))[:6]

@@ -1311,12 +1311,11 @@ class TheList(unittest.TestCase):
         up ...") stood as his bubble; he typed while that turn worked, and a second head was left spinning under the finished answer."""
         from taskuary import verdicts, waitroom
         self.say('Draft it.', 'l-one'); self.rest()
-        import json as _j      # ...its turn said it goes on once he presses (a press wakes only then - the owner, 2026-11-22)
-        self.s.add_comment(self.tid, 'assistant', general.SUMMARY_TYPE, _j.dumps({'did': 'Wrote the playbook.', 'after_press': 'send'}))
         self.brain.delay = HOLD
         self.assertEqual(verdicts.in_words({'playbook': 'vendor-review', 'path': '/home/alex/notes/vendor-review.md', 'steps': [1, 2]}),
                          'playbook: vendor-review, path: vendor-review.md')                    # words: no JSON, no folder of his
-        rid = self.s.add_review({'TaskId': self.tid, 'Kind': 'action', 'Status': 'pending', 'DraftText': '{}', 'Reason': 'write playbook'})
+        rid = self.s.add_review({'TaskId': self.tid, 'Kind': 'action', 'Status': 'pending', 'DraftText': '{}', 'Reason': 'write playbook',
+                                 'NextStep': 'tell Gail it is up'})          # ...a step of its own follows his press (card.carries_on)
         self.s.decide_review(rid, 'approved', '{}', 'owner')          # ...the press: its card's event is what the woken turn is told
         self.assertTrue(general.approved(self.s, self.tid, 'Approve', 'write playbook - playbook: vendor-review', review=rid))
         self.at_work()

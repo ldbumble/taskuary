@@ -275,8 +275,10 @@ class LandingTests(unittest.TestCase):
         self.assertEqual((p['tip'], p['ahead']), (self.sha('master'), 2))
 
     def test_the_agent_proposes_push_and_deploy_and_the_press_pushes_both(self):
+        from taskuary import card
         self.on_master_with_origin(); tip = self.sha('master')
-        landing.propose(self.s, self.tid, 'push', 'the fix counts once it is live', deploy='deploy')
+        with card.raising(self.s, self.tid, 'check it is live, then reply that it is'):      # ...the agent's own step after his press
+            landing.propose(self.s, self.tid, 'push', 'the fix counts once it is live', deploy='deploy')
         s = landing.state(self.s, self.tid)
         self.assertEqual([a['how'] for a in s['answers']], ['push', 'deploy']); self.assertEqual(s['proposal']['how'], 'deploy')
         self.assertFalse(git(self.remote, 'branch', '--list', 'deploy'), 'proposing pushes nothing')
@@ -285,7 +287,7 @@ class LandingTests(unittest.TestCase):
             out = landing.land(self.s, self.tid, 'deploy')
         self.assertTrue(out['ok']); self.assertIn('deployed it to deploy', out['says'])
         self.assertEqual((git(self.remote, 'rev-parse', 'master'), git(self.remote, 'rev-parse', 'deploy')), (tip, tip))
-        self.assertIn('Check it is live', told.call_args[0][2], 'the press is the go-ahead the agent waited on')
+        self.assertIn('pressed Push & deploy', told.call_args[0][2], 'its `then` names a step after the press: it is told')
         s = landing.state(self.s, self.tid)
         self.assertFalse(s['ask']); self.assertEqual(s['landed']['how'], 'deploy')
         # ...and the next task in this repo is offered the same deploy branch without the agent naming it

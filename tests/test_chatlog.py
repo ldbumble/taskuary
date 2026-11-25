@@ -498,6 +498,31 @@ def test_a_reply_rewritten_in_place_by_the_next_turn_stands_under_that_turn():
     items = chatlog.read(s, tid)['items']
     at = {c['review']: i for i, x in enumerate(items) for c in x.get('cards') or []}
     assert [x['kind'] for x in items] == ['arrival', 'turn', 'turn'] and at.get(rid) == 2, (at, [x['kind'] for x in items])
+    # ...AND WHAT IT SAID BEFORE STAYS IN THE FIRST TURN, greyed with its own words (the owner's plan, 2026-11-25): nothing he saw vanishes
+    [old] = items[1].get('cards') or [None]
+    assert old and old['review'] == rid and old['status'] == 'passed' and 'a menu of tools' not in old['was']['text'], old
+    [new] = items[2]['cards']
+    assert new['status'] == 'pending' and 'a menu of tools' in new['was']['text']
+    chatlog.settled(); cardqueue._SEEN.clear()
+    again = chatlog.read(s, tid)['items']
+    assert [(c['id'], c['status']) for x in again for c in x.get('cards') or []] == [(old['id'], 'passed'), (new['id'], 'pending')], 'read again, it stays'
+
+
+def test_a_turn_a_message_began_after_another_turn_keeps_why_it_began():
+    """The coordinator's live shape (2026-11-25): Marcus's mail came in while nothing worked and was drawn at the foot; the turn begun next never
+    heard it - it was typed into the session once that turn ended, and began the second, and nothing said what began it. What is drawn never
+    moves (the mail stays where it came), and the turn it began keeps why it began: the message by id (data, drawn nowhere). Invented people."""
+    from taskuary import conversation
+    s, tid = world()
+    mid = s.add_message({'TaskId': tid, 'ExternalId': 'mr9', 'Channel': 'email', 'FromName': 'Marcus Reed', 'FromEmail': 'marcus@northwind.example',
+                         'ToEmail': 'alex@northwind.example', 'Subject': 'Harness', 'BodyText': 'One more question. Marcus', 'Status': 'routed'})
+    chatlog.came_in(s, tid)
+    chatlog.put(s, tid, 'turn', 't:first', {'started': 1.0, 'text': 'Looked up the tools.'}, state='done')     # ...a turn that never heard it
+    assert [x['kind'] for x in chatlog.read(s, tid)['items']] == ['arrival', 'turn']
+    conversation.hear(s, tid, turn=True)
+    items = chatlog.read(s, tid)['items']
+    assert [x['kind'] for x in items] == ['arrival', 'turn', 'turn'], [x['kind'] for x in items]
+    assert items[0]['id'] == f'm:{mid}' and items[2]['why'] == {'mail': [str(mid)]}, items[2]
 
 
 def test_the_agents_own_words_are_the_question_the_marker_only_marks_the_wait():

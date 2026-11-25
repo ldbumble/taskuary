@@ -554,7 +554,9 @@ def tool_words(store, p: dict) -> str:
 def queue(store, task_id: int, p: dict, actor='agent', refused: list | None = None, unheard: bool = False) -> dict | None:
     """ONE proposal through the gate: a pending review when it validates, a recorded refusal (None) when not - its reason appended to
     `refused`, so the agent that proposed it is told why and can fix it (refusal_line). `unheard`: no answer goes back to it now (collect)."""
-    from . import trackers
+    from . import card, trackers
+    # ...its `then`, the agent's own step after the press, is the card's (card.carries_on) - never part of what is run or compared
+    then, p = card.then_of(p), {k: v for k, v in p.items() if k != 'then'}
     # an agent's comment or move on "the ticket" means the item this task came from: named on the proposal, so the card says which
     if p.get('action') == 'run_tool' and p.get('type') in trackers.TYPES and not str(p.get('item') or '').strip():
         it = trackers.item_of(store, task_id)
@@ -656,7 +658,7 @@ def queue(store, task_id: int, p: dict, actor='agent', refused: list | None = No
               + (f" - {p['why']}" if p.get('why') else '') if p['action'] in HELD_ACTS else
               f"finishing it: {'merge pull request #' + str(p.get('number')) if p['action'] == 'merge_pr' else trackers.words(p) if p['action'] == 'close_item' else 'close the issue it came from'}"
               if p.get('closeout') else f"the {'workflow asks' if actor == 'workflow' else 'agent proposes'} to {said}" + (f" - {p['why'][:200]}" if p.get('why') else ''))
-    rid = store.add_review({'TaskId': task_id, 'Kind': 'action', 'Status': 'pending', 'DraftText': json.dumps(p), 'Reason': reason})
+    rid = store.add_review({'TaskId': task_id, 'Kind': 'action', 'Status': 'pending', 'DraftText': json.dumps(p), 'Reason': reason, 'NextStep': then[:300] or None})
     store.audit('review', rid, 'proposed', actor, detail={'action': p['action']})
     logger.info(f'task {task_id}: proposal queued - {p["action"]} (rv{rid})')
     return {'reviewId': rid, 'action': p['action']}

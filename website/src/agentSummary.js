@@ -1,7 +1,5 @@
 // WHERE THE OWNER STANDS AFTER A TURN (general.SUMMARY_TYPE, Task 3.5): each answer may carry `summary` = {about, did, on_you, nothing_left},
 // drawn as "What this is about" / "What I did" / "Next steps" (AgentSummary.jsx). No React, so it runs under bare node.
-import { asUtc } from "./dates.js";
-
 // a reply drafted and not yet sent - an action (a playbook, a held browser act) or a slot email is not one
 const isDraft = (r) => !!r && r.Kind !== "action" && r.Kind !== "slot" && r.Status === "pending";
 
@@ -57,61 +55,3 @@ const answerWords = (w) => { const t = String(w || "").trim(); return !!t && (t.
 // walk, 2026-11-17), so none is made - and a turn that said nothing is left has nothing left to draw
 export const answerShown = (summary, words) => !String(words || "").trim() ? false
   : typeof summary?.answer_is_result === "boolean" ? summary.answer_is_result : answerWords(words);
-
-// A DRAFT UNDER ITS OWN TURN (latest-wins): the chat payload says, per pending draft, the turn that wrote it (`turn`, its message id) and whether
-// it is `stale` - made before the owner's newest message - with its time. A stale one stays on its turn with a quiet line, and never stands
-// under the newest turn's Next steps. Read with defaults, so a payload without them draws as before
-export const draftTurn = (r) => r?.turn ?? r?.Turn ?? null;
-export const staleDraft = (r) => !!(r?.stale ?? r?.Stale);
-const pendingReply = (r) => r?.Status === "pending" && r.Kind !== "action" && r.Kind !== "slot" && String(r.DraftText || "").trim();
-// ...the newest turn's Next steps hold the drafts only while one of them is fresh
-export const freshNext = (reviews) => { const ps = (reviews || []).filter(pendingReply); return !ps.length || ps.some((r) => !staleDraft(r)); };
-// EVERY OTHER CARD OF THE TASK IN THE TURN THAT RAISED IT (TaskPage's turnCards: a held steps' card, a reply that went, an ask that waits).
-// THE SERVER NAMES IT (the payload's `turns`, by the review `rid`; the spine audit, 2026-11-09), in a coding chat too (codingchat.cards): read by
-// times on the page, an answer stamped when its turn ENDS put a step held while the second turn worked into the first. Named with no answer
-// yet: null. A turn the thread does not draw is no place to stand - the newest agent turn begun at or before it (`turnOf`)
-const msOf = (x) => (x instanceof Date ? +x : +(String(x).includes("Z") ? new Date(x) : asUtc(String(x))));
-export const turnOf = (messages, at) => {
-  const turns = (messages || []).filter((m) => m?.role === "assistant" && m.id), t = msOf(at);
-  return turns.length ? (turns.filter((m) => m.createdAt && msOf(m.createdAt) <= t).at(-1) || turns.at(-1)).id : null;
-};
-// ...and NEVER AT THE FOOT (the owner, 2026-11-10: "it's just a row in the chat"): a card the server names no answered turn for was raised by the
-// turn still at work - the newest - and one whose named turn is not drawn stands by its time
-// ...`byRow`: a card that stands where something before it stood - a replaced draft's record - goes by its time among every row (rowOf)
-export const placeCards = (cards, messages, turns) => { const ids = new Set((messages || []).map((m) => m.id));
-  const newest = (messages || []).filter((m) => m?.role === "assistant" && m.id).at(-1)?.id || null;
-  return (cards || []).map((c) => { const named = turns && c.rid != null ? turns[c.rid] ?? null : undefined;
-    return { ...c, after: named && ids.has(named) ? named : c.byRow ? rowOf(messages, c.at) : named === null ? newest : turnOf(messages, c.at) }; }); };
-// THE ROW A DRAFT STANDS AFTER, BY TIME (the owner, 2026-11-10: "i asked it to rewrite a email, it reqrote in place then put it under the prompt"):
-// the last row of the chat - the mail come in, a line of his, an answer - drawn at or before it. A reply drafted on arrival stood at the chat's
-// foot, so the line he typed went over it and the card jumped under his line; under the mail it answers it stays where it was
-// ...a row with no time yet - the turn at work, drawn before its answer is filed - is as old as the row before it: a draft written while it works
-// is its own, never his line's (the recorded walk, 2026-11-10: the new card stood under his line, over the turn's head, then jumped into the turn)
-// ...and AN ANSWER IS AS OLD AS ITS TURN'S START, the row before it: it is stamped when the turn ENDS, so the moment it was filed - before the
-// server named it the draft's turn - the draft its turn wrote read as older and stood a beat over its head (the recorded walk, 2026-11-10)
-export const rowOf = (messages, at) => { const t = msOf(at); let was = -Infinity, id = null;
-  for (const m of messages || []) { if (!m?.id) continue; const own = m.createdAt ? msOf(m.createdAt) : was;
-    if ((m.role === "assistant" ? was : own) <= t) id = m.id; was = own; }
-  return id; };
-// ...a reply, or an email the task owes (a slot's card, slots.draft) - both are the draft card the owner rewrites by prompting
-const letter = (r) => r?.Status === "pending" && r.Kind !== "action" && String(r.DraftText || "").trim();
-const waitingDraft = (reviews) => (reviews || []).filter(letter).sort((a, b) => a.ReviewId - b.ReviewId).at(-1) || null;
-// ...the waiting draft's place: the turn that wrote it where the chat draws that turn, else its row by time
-export const draftHome = (reviews, messages) => {
-  const r = waitingDraft(reviews), t = r && draftTurn(r);
-  if (!r) return null;
-  return t != null && (messages || []).some((m) => String(m.id) === String(t)) ? String(t) : rowOf(messages, r.CreatedAt);
-};
-// ...AND OLD NEWS FROM THE PRESS (the owner, 2026-11-10: "The second you write ptompt on email action it should go gray"): a line of his newer
-// than the draft - in the thread, as the runtime draws it the paint he presses, or held on the page (`pressed`, ms) - or the server's word that
-// one came (`stale`). Greyed where it stands, its words as they were and its Send off; what the agent writes after is a new card in its turn
-const ownLine = (m) => m?.role === "user" && !(m.brief || m.metadata?.custom?.brief || m.press || m.metadata?.custom?.press);
-export const draftPassed = (reviews, messages, pressed = 0) => {
-  const r = waitingDraft(reviews);
-  if (!r) return false;
-  const t = msOf(r.CreatedAt);
-  return staleDraft(r) || (pressed > t) || (messages || []).some((m) => ownLine(m) && m.createdAt && msOf(m.createdAt) > t);
-};
-// ...the payload's `drafts` (general.draft_turns: {review, turn, at, stale, before}) read onto the reviews they name
-export const withTurns = (reviews, drafts) => (drafts?.length ? (reviews || []).map((r) => { const d = drafts.find((x) => x?.review === r?.ReviewId);
-  return d ? { ...r, turn: d.turn, stale: !!d.stale, drafted_at: d.at, before: d.before } : r; }) : reviews || []);

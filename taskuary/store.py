@@ -196,7 +196,7 @@ def _fold(value):
     return str(value or '').casefold()
 
 
-REVIEW_COLS = ('TaskId', 'MessageId', 'RunId', 'Kind', 'DraftText', 'FinalText', 'Status', 'Reason', 'Deliver', 'Origin')
+REVIEW_COLS = ('TaskId', 'MessageId', 'RunId', 'Kind', 'DraftText', 'FinalText', 'Status', 'Reason', 'Deliver', 'Origin', 'NextStep')
 EMPTY_DRAFT = 'the draft came back empty'     # update_review_draft's refusal: the card's plain line reads it (sendState.draftState)
 POLICY_COLS = ('Name', 'Kind', 'Pattern', 'Action', 'Reason', 'SortOrder', 'Active', 'Mailbox')
 SOURCE_COLS = ('Channel', 'Address', 'Owner', 'ConnectorId', 'Active', 'ConfigJson')
@@ -1328,6 +1328,13 @@ class SQLiteStore:
             if 'NotNeeded' not in rvcols: self.cx.execute('ALTER TABLE review ADD COLUMN NotNeeded TEXT')
             # ...and the BULK CARD it is one row of (bulkcard.py): many of the same act raised together, one card, one press for them all
             if 'Batch' not in rvcols: self.cx.execute('ALTER TABLE review ADD COLUMN Batch TEXT')
+            # ...and THE AGENT'S OWN STEP AFTER HIS PRESS (`then`, card.raising): his press wakes it only where there is one (general.carries_on).
+            # A card left pending under a turn whose summary said `after_press: send` keeps that, once
+            if 'NextStep' not in rvcols:
+                self.cx.execute('ALTER TABLE review ADD COLUMN NextStep TEXT')
+                self.cx.execute("UPDATE review SET NextStep='send' WHERE Status IN ('pending','held') AND TaskId IN (SELECT c.TaskId FROM comment c "
+                                "WHERE c.ActorType='assistant_summary' AND c.Body LIKE '%\"after_press\": \"send\"%' AND c.CommentId=(SELECT MAX(CommentId) "
+                                "FROM comment WHERE TaskId=c.TaskId AND ActorType IN ('assistant_summary','assistant_agent')))")
             # ...and WHAT FILED IT ('triage': a reply triage owes; 'chase': the owner's chase), where its kind does not say. It was read off
             # the first words of Reason - the line the card shows the owner, which a redraft rewrites (the spine audit, 2026-11-09). The rows
             # filed under those words are marked once, here
@@ -6033,6 +6040,9 @@ class SQLiteStore:
     def set_review_not_needed(self, rid, why):
         self._exec("UPDATE review SET NotNeeded=? WHERE ReviewId=? AND Status='pending'", (by_sentence(why, 300) or None, rid))
         self._review_changed(rid)
+    def set_review_next_step(self, rid, then):
+        "The agent's own step after his press on review `rid` (card.raising), None for none."
+        self._exec('UPDATE review SET NextStep=? WHERE ReviewId=?', (then or None, rid))
     def review_act_failed(self, rid, error, by):
         "An act's press that failed: kept on the review, which still waits - with who pressed and when, as a failed send keeps them (finish_review_delivery)."
         self._exec("UPDATE review SET ActError=?, DecidedBy=?, DecidedAt=? WHERE ReviewId=? AND Status IN ('pending','held','superseded')", (str(error or '')[:300] or None, by, _now(), rid))

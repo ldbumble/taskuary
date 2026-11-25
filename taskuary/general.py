@@ -981,8 +981,8 @@ NOT_GONE = ('failed', 'unknown')
 # ...and one a restart cut while it ran (verdicts.cut_acts): it MAY have gone - never "nothing of it was done", never done again unasked
 ACT_CUT = 'Cut short when Taskuary restarted while this ran - it may have been done. Check before pressing it again.'
 def failed_act(r) -> bool: return r.get('Kind') == 'action' and r['Status'] == 'superseded' and bool(r.get('ActError'))
-# A PRESS THE AGENT SAID IT WAITS ON WAKES IT, ONCE (the owner, 2026-11-08): a press is otherwise a line it hears with the owner's next one -
-# but a turn that asked for Send or a hand-off and said it would follow up (its summary's `after_press`) is started again by that press
+# A PRESS ON A CARD WHOSE `then` NAMES THE AGENT'S OWN NEXT STEP WAKES IT, ONCE (card.carries_on): a press is otherwise a line it hears with
+# the owner's next one
 # ...AND A PRESS ON A CARD IS SAID BY ITS CARD (the owner's rules, part 4: "a card says what it did, never repeated as a chat line"): woken by
 # Send, the agent wrote "Your email to Erin has been sent" under the card reading Sent - told to say in a line what the press did (NEXT, the
 # browser's word, where no card shows it)
@@ -1000,30 +1000,20 @@ def _last_said(store, tid) -> tuple:
         last = next((c for c in reversed(store.list_comments(int(tid), internal=True)) if c.get('ActorType') in (SUMMARY_TYPE, ASSISTANT_TYPE)), None)
         return last, (json.loads(last['Body']) if last and last.get('ActorType') == SUMMARY_TYPE else None)
     except (TypeError, ValueError): return last, None
-def carries_on(store, tid, said: bool = False) -> bool:
-    """Its agent goes on once the owner presses what it set up: its last turn's summary says so (after_press 'send'), or there is none to say
-    otherwise - an approved merge is where it deploys. Only a summary that named no next step keeps it quiet. One rule on every road: a coding
-    turn's end_turn is filed as a chat's is (file_summary).
-    `said`: the press SENT his words to someone (a reply, a mail, a post) - the card says it went, so silence is no next step: only an agent
-    that said a step of its own follows goes on (the owner, 2026-11-25, twice in one night: "You sent Gabi..." under the card that read Sent)"""
-    s = _last_said(store, tid)[1]
-    return s.get('after_press') == 'send' if isinstance(s, dict) else not said
 
 
 # a thread's body run in a context of its own: what it sets (origin.OWNER_SPEAKS) never outlives it where a road runs it in place (Windows CI,
 # 2026-11-24: an inline thread left "his press" set, and a later turn Taskuary began on a stranger's task was not held)
 def _own_context(f): return lambda: contextvars.copy_context().run(f)
-def follow_up(store, tid, press: str, actor: str = 'owner', said: str = None, heard=None) -> bool:
-    """Start one turn on task `tid` when its agent's newest summary waits on `press` ('send', 'handoff') - or, with `said` (approved), after
-    any answer of its own, `said` its prompt. True when one was started, or `said` joined one starting. `heard()` runs once the prompt is in -
-    never for a start that failed."""
-    last, summ = _last_said(store, tid)
+def follow_up(store, tid, actor: str = 'owner', said: str = '', heard=None) -> bool:
+    """Start one turn on task `tid` after an answer of its agent's own, `said` its prompt - once per answer. True when one was started, or
+    `said` joined one starting. `heard()` runs once the prompt is in - never for a start that failed."""
+    last = _last_said(store, tid)[0]
     if not last: return False
     with _WAKE_LOCK:
         if last['CommentId'] in _WOKEN:
-            if said is not None and int(tid) in _STARTING: _STARTING[int(tid)].append((said, heard)); return True
+            if int(tid) in _STARTING: _STARTING[int(tid)].append((said, heard)); return True
             return False
-        if said is None and (not isinstance(summ, dict) or summ.get('after_press') != press): return False
         _WOKEN.add(last['CommentId']); _STARTING[int(tid)] = [(said or FOLLOW_UP, heard)]
     @_own_context
     def go():
@@ -1037,7 +1027,7 @@ def follow_up(store, tid, press: str, actor: str = 'owner', said: str = None, he
         # every later press was silent - the spine audit, 2026-11-09)
         except Exception as e:
             with _WAKE_LOCK: _STARTING.pop(int(tid), None)
-            _WOKEN.discard(last['CommentId']); logger.warning(f'task {tid}: the follow-up after {press} did not start - {e}'); return
+            _WOKEN.discard(last['CommentId']); logger.warning(f'task {tid}: the follow-up after a press did not start - {e}'); return
         for _w, h in got:
             try: h and h()
             except Exception as e: logger.warning(f'task {tid}: the follow-up began, its mark was not kept - {e}')
@@ -1101,7 +1091,7 @@ def to_agent(store, tid: int, said: str, actor: str = 'owner', heard=None, *, fr
         waitroom.add(store, tid, told, 'router'); events.commit(store, tid, upto)
         if heard: heard('told')
         return 'told'
-    if wake and t and handles(t) and follow_up(store, tid, 'send', actor, said='', heard=heard and (lambda: heard('woke'))): return 'woke'
+    if wake and t and handles(t) and follow_up(store, tid, actor, heard=heard and (lambda: heard('woke'))): return 'woke'
     # ...AND WHERE NO AGENT EVER WORKED IT, ITS AGENT IS STARTED ON THEM (a join of the same work): kept nowhere, they vanished (rule 4)
     if start and t and not starting(tid):
         from . import kinds
@@ -1151,11 +1141,13 @@ def approved(store, tid: int, press: str, what: str, actor: str = 'owner', revie
     # nothing comes after the press hears it in its next turn, the card's event still past its cursor
     # ...and words he SENT are said by their card (a reply, a mail, a post): at work or at rest, the agent hears them in its next turn unless it
     # said a step follows - one at work was handed the Send by the waiting room as it stopped, and answered it under the card (2026-11-25).
-    # An act it is parked on a question about (_asking) is its step following; words he sent to someone else never answer its question
-    # (walk 20: the Send to a vendor woke an agent whose question on what headcount to share was still open)
-    from . import workerstate as ws
-    said = bool(review) and (store.get_review(int(review)) or {}).get('Kind') != 'action'
-    if (said or not at_work(int(tid))) and not carries_on(store, tid, said=said) and (said or not _asking(store, ws._live(int(tid)))): return ''
+    # A step follows only where the card's own `then` names one (card.carries_on) - the same on every road, and after a restart
+    from . import card, workerstate as ws
+    rv = store.get_review(int(review)) if review else None
+    said = bool(rv) and rv.get('Kind') != 'action'
+    # ...and his Send IS the answer to what its agent asked about that card (the owner's ruling, card.asked_about)
+    if said and (qs := card.asked_about(store, rv['ReviewId'])): ws.let_go(store, tid, 'answered by his Send', only=qs)
+    if not card.carries_on(rv) and (said or not at_work(int(tid))): return ''
     # ...WHAT WENT IS ITS CARD'S EVENT (events.card, written as the store wrote the card): this only wakes the agent to hear it
     mark = review and (lambda how: store.audit('review', int(review), TOLD, actor, 'system', {'task': int(tid), 'how': how}))
     return to_agent(store, tid, '', actor, heard=mark, pressed=True)
@@ -1190,27 +1182,6 @@ def own_replies(store, tid: int, since: str = None) -> list:
     rows = store._rows("SELECT * FROM message m WHERE (IFNULL(m.Direction,'in')='out' OR m.Status='context') AND m.CreatedAt>? "
                        "AND m.Status NOT IN ('history','skipped') AND (m.TaskId=? OR " + ON_THREAD + ") ORDER BY m.SentAt, m.MessageId", (since, tid, tid))
     return [x for x in rows if not ours(x)]
-def draft_turns(store, tid: int) -> list:
-    """Each pending reply draft and the turn it belongs to, for the chat: {review, turn ('comment-<id>' of the answer that left it, None before
-    any did), at (when it was drafted), stale (a later turn answered a newer message and left it untouched), before (that message's time)}."""
-    rows = store.list_comments(tid, internal=True)
-    ins = sorted([str(c.get('CreatedAt') or '') for c in rows if c.get('ActorType') == USER_TYPE] + [str(x['JoinedAt']) for x in store._rows(JOINED, (tid,))])
-    outs = [c for c in rows if c.get('ActorType') == ASSISTANT_TYPE]
-    out = []
-    for rv in store._rows("SELECT ReviewId, CreatedAt FROM review WHERE TaskId=? AND Status='pending' AND Kind IN ('draft_reply','draft') "
-                          "AND IFNULL(DraftText,'')<>'' ORDER BY ReviewId", (tid,)):
-        s = wrapup.left_by(store, rv['ReviewId']); at = str((s or rv).get('CreatedAt') or '')
-        later = next((i for i in ins if i > at), None)
-        # ...the first answer after it wrote it only with no line in between: an answer after the owner's line is that line's, and a draft made
-        # before it - on arrival - jumped from under the mail to that answer's Next steps (the recorded walk, 2026-11-10)
-        turn = s['CommentId'] if s else next((c['CommentId'] for c in outs if str(c.get('CreatedAt') or '') >= at
-                                               and not (later and later < str(c.get('CreatedAt') or ''))), None)
-        # ...STALE ONLY UNTIL THE AGENT HAS READ WHAT CAME AFTER IT (the owner, 2026-11-08: "it says draft is still applicable but i can't send
-        # it"): each turn hears the draft waiting and withdraws or rewrites one the newest message undoes (its events, WITHDRAW_LINE), so a
-        # draft still pending after a later turn is one the agent KEPT - current, with its Send. Until that turn it reads "before your last message"
-        stale = bool(later) and not any(str(c.get('CreatedAt') or '') > later and c['CommentId'] != turn for c in outs)
-        out.append({'review': rv['ReviewId'], 'turn': f'comment-{turn}' if turn else None, 'at': at, 'stale': stale, 'before': later if stale else None})
-    return out
 
 
 def mail_row(store, x: dict, n: int = 3000) -> dict:
@@ -1673,8 +1644,7 @@ def _act(store, tid: int, what: str, f, *a, default=None, **k):
 
 
 # A TURN'S END_TURN IS FILED ONE WAY ON EVERY ROAD - a chat's answer (_file) and an ACP coding turn's end (acpcoding._turn) call these. Only the
-# chat drained it: a coding agent's end_turn answered "Kept - it shows on the task" and was filed nowhere, so nothing read its after_press or
-# nothing_left, and its Send woke it on every card (the owner, 2026-11-25: "You sent ..." under the card that read Sent)
+# chat drained it: a coding agent's end_turn answered "Kept - it shows on the task" and was filed nowhere, so nothing read its nothing_left
 def with_marks(tid, reply: str) -> str:
     "The answer ended with what this task's end_turn and ask_owner calls kept since the last take (selfclose.take_marks)."
     from . import selfclose

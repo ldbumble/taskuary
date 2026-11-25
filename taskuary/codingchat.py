@@ -311,7 +311,7 @@ def owned(store, tid: int, ss: list) -> list:
 
 
 def cards(store, tid: int, ss: list) -> dict:
-    """WHERE EACH CARD STANDS IN THE CODING CHAT, BY ITS TURN - the general payload's `turns`, `drafts` and `published` (general.draft_turns), read off this record:
+    """WHERE EACH CARD STANDS IN THE CODING CHAT, BY ITS TURN - `turns`, `drafts` and `published`, read off this record:
     the page compared times itself and named its turns by position, so nothing here could name one (2026-11-11). A card is of the turn whose step
     was newest when it was raised, named as the page names that step (`sid#n`, its place in what `chat` hands it - chatStream.chatRows); raised on
     arrival, or after his line before the turn's first step: none. A draft is stale once his line came after it and no step of the agent's since."""

@@ -371,6 +371,7 @@ def main():
     ap.add_argument('--slot', default='', help='the checklist slot this email fills (the id after --slot in your checklist)')
     ap.add_argument('--to', default='', help='who it goes to: with --draft, when no slot names them; with --reply, the person on this '
                                              'task you are answering or asking (a name or address)')
+    ap.add_argument('--then', default='', help='with --reply or --draft: your own step after his press, if any')
     ap.add_argument('--answers', type=int, metavar='N', help='with --reply: the message number (#N) of the mail it replies to - the one that holds '
                                                          'the ask, or an earlier mail when that is the right next step')
     ap.add_argument('--only', action='store_true', help="with --reply: to that mail's sender alone, nobody copied (something sensitive)")
@@ -473,9 +474,10 @@ def main():
         who = os.environ.get('TASKUARY_AGENT') or 'agent'
         got = (_post('/api/agent/draft', {'task_id': int(tid), 'text': text, 'to': args.to, 'subject': args.subject, 'slot': args.slot,
                                           'agent': who, 'files': files, 'cc': args.cc or [], 'mailbox': args.sender,
-                                          'guessed': args.guessed or []}, stranger) if drafting
+                                          'guessed': args.guessed or [], 'then': args.then}, stranger) if drafting
                else _post('/api/agent/reply', {'task_id': int(tid), 'text': text, 'agent': who, 'files': files, 'follow_up': args.follow_up,
-                                                'to': args.to, 'answers': args.answers, 'only': args.only, 'cc': args.cc, 'why_to': args.why_to}, stranger))
+                                                'to': args.to, 'answers': args.answers, 'only': args.only, 'cc': args.cc, 'why_to': args.why_to,
+                                                'then': args.then}, stranger))
         if not got: return
         r, out = got
         # ...saying to WHOM it was saved: "reply saved" alone let a question meant for one requester sit as an answer to another (2026-11-02)

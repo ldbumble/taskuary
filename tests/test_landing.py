@@ -559,6 +559,17 @@ class NamedCheckoutTests(unittest.TestCase):
         self.assertEqual(shellgate.replay(p)[1:], ['-c', p['command']], "the agent's Bash tool's own road")
         self.assertEqual(git(self.remote, 'rev-parse', 'master'), git(self.cwd, 'rev-parse', 'master'))
 
+    def test_a_pull_request_card_reads_its_branch_from_the_checkout_he_named(self):
+        """The card gallery, 2026-11-25: a general agent's pull request from the checkout he named showed its body alone - no branch, no
+        repository. Its card reads them off that checkout (ci.pr_plan); a folder he never named gives it nothing."""
+        from taskuary import ci
+        git(self.cwd, 'checkout', '-q', '-b', 'fix-rounding'); self.fix()
+        plan = ci.pr_plan(self.s, self.tid, {'cwd': self.cwd, 'repo': 'northwind/ledger', 'title': 'Keep cents in totals'})
+        self.assertEqual((plan['branch'], plan['base'], plan['repo']), ('fix-rounding', 'master', 'northwind/ledger'))
+        self.assertTrue(plan['title'].endswith('] Keep cents in totals'))
+        other = tempfile.mkdtemp(); git(other, 'init', '-q', '-b', 'side'); commit(other, 'x.py', 'x\n')
+        self.assertEqual(ci.pr_plan(self.s, self.tid, {'cwd': other})['branch'], '')
+
     def test_propose_push_with_no_folder_takes_the_one_he_named(self):
         self.fix()
         out = landing.from_proposal(self.s, self.tid, {'action': 'push', 'why': 'the rounding fix'})

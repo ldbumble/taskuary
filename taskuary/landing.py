@@ -491,10 +491,7 @@ def from_proposal(store, tid: int, p: dict) -> dict | None:
     "A proposed git act as the landing card's question (propose) - None when it is not one, or the task has nothing to land."
     a = str((p or {}).get('action') or '').strip()
     if a not in GIT_ACTS: return None
-    # ...his named checkout, where it is one - a pull request or a land that names it as a push does (the card gallery, 2026-11-25: an open_pr
-    # naming his checkout went past the card that knows its branch and repository)
-    cwd = str(p.get('cwd') or p.get('folder') or p.get('path') or '')
-    if a in ('push', 'deploy') or cwd: adopt(store, tid, cwd)
+    if a in ('push', 'deploy'): adopt(store, tid, str(p.get('cwd') or p.get('folder') or p.get('path') or ''))   # ...his named checkout, where it is one
     s = state(store, tid)
     if a in ('push', 'deploy') and not s:
         from .agenttools import refusal

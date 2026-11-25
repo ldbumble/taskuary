@@ -202,6 +202,22 @@ def test_an_agent_with_work_not_pushed_is_named_so(s):
     assert rulebook.facts(s, it, _verbs('close', 'review_changes'))['state'] == 'agent_done'
 
 
+def test_a_finished_agent_whose_reply_asked_them_reads_the_wait_as_its_header_does(s):
+    """Walk 21: the agent's reply asked for demo times and he pressed Send - the header read "waiting for Erin's input", the rail row
+    under it "Finished at 5:43 AM; nothing since." The row reads the wait the header reads (taskstate.standing)."""
+    from taskuary import taskstate
+    f = Factory(s)
+    t = f.task(title='Vendor demo', kind='general')
+    m = f.message(task_id=t, subject='Demo next week?', from_name=ERIN[0], from_email=ERIN[1], sent_at=at(h=2), conversation_id='c9')
+    s._exec("INSERT INTO worker_event (TaskId, Sid, Kind, Text, CreatedAt) VALUES (?, 's1', 'turn_end', 'Drafted the reply.', ?)", (t, at(h=1)))
+    s._exec("UPDATE message SET CreatedAt=? WHERE MessageId=?", (at(h=2), m))
+    s._exec("UPDATE task SET AskedWatch='reply', AskedSeenMid=?, AskedWatchAt=? WHERE TaskId=?", (m, at(h=1), t))     # ...his Send, after her mail
+    it = {'key': f'agent:{t}', 'kind': 'agentdone', 'lane': 'done', 'tid': t}
+    with mock.patch('taskuary.origin.keeps_him', return_value=None):         # ...a colleague, no hold
+        assert taskstate.standing(s, t)['waits_on'] == 'them', taskstate.standing(s, t)
+        assert rulebook.facts(s, it, _verbs('close', 'chase'))['state'] == 'waiting'
+
+
 def test_waiting_on_someone_is_named_late_after_three_working_days_and_chase_is_always_on_its_row(s):
     f = Factory(s)
     t = f.task(title='Vendor W-9', kind='task', status='waiting'); s._exec("UPDATE task SET WaitingOn='ray.colton@northwind.example' WHERE TaskId=?", (t,))

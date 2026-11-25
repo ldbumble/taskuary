@@ -163,7 +163,7 @@ def waited(store, item, t: dict) -> tuple:
     """(who, working days) a task waiting on someone else has waited: since the owner last wrote on it, else since it was set waiting."""
     from . import waiton
     from .processing_unread import holder_name
-    who = (waiton.name_of(t['WaitingOn']) if t.get('WaitingOn') else holder_name(t.get('Assignee'))) or ''
+    who = next((w['who'] for w in waiton.on_them(store, t)), '') or holder_name(t.get('Assignee')) or ''      # ...whom the header names (on_them)
     out = store._one("SELECT SentAt, CreatedAt FROM message WHERE TaskId=? AND Direction='out' ORDER BY IFNULL(SentAt,CreatedAt) DESC LIMIT 1",
                      (int(t['TaskId']),)) or {}
     since = _dt(out.get('SentAt') or out.get('CreatedAt')) or _dt(t.get('WaitingSince')) or _dt(t.get('UpdatedAt')) or _dt(t.get('CreatedAt'))
@@ -255,8 +255,13 @@ def state(store, item: dict, verbs: list) -> tuple:
             clash = calwrite.clash_line(store, c['start'], c['end'], skip=c.get('subject') or '') if c.get('start') and not c.get('all_day') else ''
         except Exception as e: logger.debug(f'rulebook: no clash read - {e}'); clash = ''
         return ('invite_clash', {'clash': _cut(clash[:1].upper() + clash[1:], 58)}) if clash else ('invite_free', {})
-    if kind in ('agentdone', 'wrapup'):
-        if tid and 'review_changes' in offered and changes_waiting(store, tid): return 'unpushed', {}
+    if kind in ('agentdone', 'wrapup') and tid and 'review_changes' in offered and changes_waiting(store, tid): return 'unpushed', {}
+    # ...AND A FINISHED AGENT WHOSE TASK WAITS ON SOMEBODY'S ANSWER IS THAT WAIT (walk 21: "waiting for Jordan's input" in the header over a row
+    # reading "Finished at 5:43 AM; nothing since"): one reading of who moves next, taskstate.standing, as the header's
+    if kind in ('agentdone', 'wrapup') and tid and lane != 'theirs':
+        from . import taskstate
+        if taskstate.standing(store, int(tid))['waits_on'] == 'them': lane = 'theirs'
+    if kind in ('agentdone', 'wrapup') and lane != 'theirs':
         # ...its reason the newest of what ended it - the agent's last word, or the owner's reply that went - with nothing come in since
         try: sent = store.sent_reply(task_id=int(tid)) if tid else None
         except Exception: sent = None

@@ -244,4 +244,4 @@ class TypingIsTheStart(unittest.TestCase):
         try: general.take_line(server.store, code, 'Look at the import.', line_id='l-code')
         except Exception: pass                                                                        # (no coding tool here either)
         self.assertEqual(_task(code)['Kind'], 'coding')
-        self.assertEqual(c.get(f'/api/tasks/{code}/assistant').status_code, 422)
+        self.assertEqual(c.get(f'/api/tasks/{code}/assistant').status_code, 200)   # ...one chat for every task (2026-11-25): a coding task's is read as any other's

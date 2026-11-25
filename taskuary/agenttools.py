@@ -587,10 +587,19 @@ TOOLS['propose'][2]['properties']['items'] = ITEMS
 # ...and on every card a tool raises, the agent's own step after his press (card.raising): that press wakes it only where it names one
 for _t in TOOLS.values():
     if _t[0] == 'propose': _t[2]['properties']['then'] = {'type': 'string', 'description': 'your own step after his press, if any'}
+def _take_back(store, tid: int, doors: dict, old, stand: list) -> None:
+    "The one unsent card `old` names (its id, or who or what it was to), withdrawn - never one of `stand`, the cards the call itself stands as."
+    from . import verdicts
+    k = str(old).casefold().removeprefix('rv')
+    hit = [r['rid'] for r in verdicts.unsent(store, tid) if r['rid'] not in stand and (r['rid'] == int(k) if k.isdigit() else k in r['to'].casefold() or k in r['what'].casefold())]
+    if len(hit) == 1: doors['withdraw'](tid, 'a new proposal takes its place', str(hit[0]))
 def _many(store, tid: int, name: str, args: dict, doors: dict) -> str:
     from . import bulkcard
-    base, items = {k: v for k, v in args.items() if k != 'items'}, [x for x in args['items'] if isinstance(x, dict)]
+    base, items = {k: v for k, v in args.items() if k not in ('items', 'replaces')}, [x for x in args['items'] if isinstance(x, dict)]
     if not items: raise ValueError('`items` holds no objects - give each item its own fields')
+    # ...ITS `replaces` IS THE CALL'S, TAKEN BACK ONCE, AFTER (a real Codex run, 2026-11-25): shared by every item, the card one item had just
+    # raised again was withdrawn by the next, and the call answered "nothing was filed" over a card it had taken off his screen
+    old = args.get('replaces') if not any('replaces' in it for it in items) else None
     if len(items) > 500: raise ValueError(f'{len(items)} items is past what one card holds (500) - split them, or narrow the list')
     key, top = bulkcard.new_key(), (store._one('SELECT MAX(ReviewId) AS m FROM review') or {}).get('m') or 0
     refused, went, held, mine, says = [], [], [], [], []
@@ -616,13 +625,17 @@ def _many(store, tid: int, name: str, args: dict, doors: dict) -> str:
     # card because it's one action to multiple people. If separate emails need to be sent they should come one after another ... this is something
     # the agent should decide which tool to use"): how it calls is its choice - `items` is one act to many, separate calls are separate cards.
     # A count decided it before (five or more), so the same three emails were one card or three by nothing the agent chose
-    mine = [r['ReviewId'] for r in store._rows(f"SELECT ReviewId FROM review WHERE TaskId=? AND ReviewId>? AND Status='pending' AND ReviewId IN ({','.join('?' * len(mine))})",
-                                               (int(tid), top, *mine))] if mine else []
+    # ...AND A CARD AN ITEM RAISED AGAIN STANDS FOR IT (the same card raised twice is one card): counted as on his screen - only one this call
+    # filed is new, and only new ones are batched
+    stand = [r['ReviewId'] for r in store._rows(f"SELECT ReviewId FROM review WHERE TaskId=? AND Status='pending' AND ReviewId IN ({','.join('?' * len(mine))})",
+                                                (int(tid), *mine))] if mine else []
+    mine = [r for r in stand if r > top]
+    if old and stand: _take_back(store, tid, doors, old, stand)
     # ...and only MANY OF THE SAME THING is one card (the owner, 2026-11-20): posts for different networks are different things - each its own
     # card in the row, with its own picture - however many there are
     bulk = len(mine) > 1 and len({str({**base, **it}.get('type') or {**base, **it}.get('network') or '') for it in items}) <= 1
     if bulk: store._exec(f"UPDATE review SET Batch=? WHERE ReviewId IN ({','.join('?' * len(mine))})", (key, *mine))
-    n = len(mine)
+    n = len(stand)
     card = ('They stand as ONE card: the owner does them all with one press; you hear the whole run once.' if bulk
             else f'They stand one at a time, {n} in a row: the owner sees each in turn and presses it; you hear how they went once the last is answered, or at once if a press fails.')
     shown = ((f"{len(went)} of {len(items)} sent at once - a routine's email to what its owner saved into it goes without a press; say they went."

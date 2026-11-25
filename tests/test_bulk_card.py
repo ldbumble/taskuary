@@ -374,6 +374,21 @@ def test_its_agent_takes_back_a_bulk_card_by_the_ids_it_was_told():
     assert {s.get_review(x)['Status'] for x in rids} == {'closed_unsent'}
     assert cardqueue.state(s, tid)['units'][0]['rids'] == [note], 'the note to Gail is the next card'
 
+
+def test_a_calls_replaces_never_takes_back_a_card_one_of_its_items_stands_as():
+    """A real Codex run, 2026-11-25: two post cards raised, then the same two again as `items` with `replaces` the first. Shared by every item,
+    the second item withdrew the card the first had just raised again, and the call answered "nothing was filed" over a card it took off his
+    screen. A card raised again stands for its item, and `replaces` takes back only a card none of them stands as."""
+    s, tid = world()
+    x, li = 'Approvals at Northwind are simpler now.', 'When you submit an expense you should know what happens next.'
+    with mock.patch.object(server, 'store', s):
+        a, b = call(tid, 'propose', kind='post', network='x', text=x)['review'], call(tid, 'propose', kind='post', network='linkedin', text=li)['review']
+        out = call(tid, 'propose', kind='post', items=[{'network': 'x', 'text': x}, {'network': 'linkedin', 'text': li}], replaces=str(a))
+        assert out['ok'] and out['on_the_card'] == 2, out
+        assert [s.get_review(r)['Status'] for r in (a, b)] == ['pending', 'pending']
+        out = call(tid, 'propose', kind='post', items=[{'network': 'x', 'text': x + ' Live Monday.'}], replaces=str(a))
+        assert out['ok'] and s.get_review(a)['Status'] == 'closed_unsent', 'a card none of them stands as is taken back, once'
+
 def test_two_presses_at_once_are_one_run_and_one_true_telling():
     """Pressed on the phone and the desk in the same moment: both presses started a run, each row went once (its own road refuses a second),
     and the agent was told twice - each telling "5 done, 5 failed" over ten issues that had all closed."""

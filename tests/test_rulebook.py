@@ -218,6 +218,22 @@ def test_a_finished_agent_whose_reply_asked_them_reads_the_wait_as_its_header_do
         assert rulebook.facts(s, it, _verbs('close', 'chase'))['state'] == 'waiting'
 
 
+def test_a_finished_agent_whose_turn_left_a_step_on_him_is_no_finished_and_nothing_since(s):
+    """Walk 21: the agent marked the reply not needed and left him one step ("move the invite to 2 pm"); the header read "waiting for your
+    input", the rail row "Finished at 6:12 AM; nothing since." with Mark done lit. The row reads where the task stands: no such line."""
+    from taskuary import general, taskstate
+    f = Factory(s)
+    t = f.task(title='Friday budget review', kind='general')
+    s._exec("INSERT INTO worker_event (TaskId, Sid, Kind, Text, CreatedAt) VALUES (?, 's1', 'turn_end', 'Marked the reply not needed.', ?)", (t, at(h=1)))
+    s.add_comment(t, 'agent', general.SUMMARY_TYPE, json.dumps({'did': 'Marked the reply not needed', 'on_you': ['Move the invite to 2 pm Friday'],
+                                                                'nothing_left': False}))
+    it = {'key': f'agent:{t}', 'kind': 'agentdone', 'lane': 'done', 'tid': t}
+    with mock.patch('taskuary.origin.keeps_him', return_value=None):
+        assert taskstate.standing(s, t)['waits_on'] == 'you'
+        f_ = rulebook.facts(s, it, _verbs('close'))
+        assert f_['state'] == 'agent_done' and 'nothing since' not in (f_.get('line') or ''), f_
+
+
 def test_waiting_on_someone_is_named_late_after_three_working_days_and_chase_is_always_on_its_row(s):
     f = Factory(s)
     t = f.task(title='Vendor W-9', kind='task', status='waiting'); s._exec("UPDATE task SET WaitingOn='ray.colton@northwind.example' WHERE TaskId=?", (t,))

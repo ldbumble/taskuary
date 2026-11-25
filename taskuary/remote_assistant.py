@@ -1148,13 +1148,6 @@ def respond(store, channel: str, chat: str, question: str, connector_id: int, po
             if act:
                 send(store, channel, chat, run_act(store, act, item), connector_id)
                 return
-            # ...and on an fyi batch a number names one of the lines we printed: open that one - the item on
-            # the table, its own text and its own options under it - as the desktop's "Talk about it" does
-            key = next((k for k, line in member_lines(item) if picked and line == question), None)
-            if key:
-                nxt = concierge.surface(store, key, actor='owner')
-                send(store, channel, chat, turn_text(nxt, store=store, full=True), connector_id)
-                return
             # MORE, picked: the rest of what the card folds, then the same choices again without it
             if picked and question == MORE:
                 again = [w for w in offered if w != MORE]
@@ -2100,9 +2093,8 @@ def choices(out: dict) -> list:
 
 
 def member_lines(item: dict | None) -> list:
-    """An fyi batch's members as (key, line): the line the phone prints, numbered, and what a number
-    answers. The desktop opens one member with "Talk about it"; a chat had the four lines and no door
-    into any of them (the owner, 2026-09-20: "how do you dig into one specific one?")."""
+    """An fyi batch's members as (key, line): the line the phone prints. A line is read, never a choice: the batch's one move is Got it
+    (the owner, 2026-11-25 - a number that opened one member, the desktop's old "Talk about it", went)."""
     from . import funnel
     if not item or item.get('kind') != 'fyis': return []
     rows = [(m.get('key'), ' '.join(x for x in (funnel.CHANNEL_MARKS.get(str(m.get('channel') or ''), ''),
@@ -3010,13 +3002,11 @@ def turn_text(out: dict, lead: str = '', store=None, extra: list = None, full: b
         # THE ITEMS, one per line, and nothing else: the say line restated them as one run-on sentence and
         # the status line added "fyi - people told you things" under it, and on a phone that read as
         # nothing at all (the owner, 2026-09-18: "don't need random summary, just show the items")
-        # ...each NUMBERED, so a number opens that one (respond): the desktop's "Talk about it" door
         members = member_lines(item)
         # ...and how many of how many: "4 fyi" over a rail holding fourteen read as all of them (F26)
         total = fyi_total(store, item)
-        # ...LED BY GOT IT (the owner, 2026-10-22): the way on is 1, the lines 2 on - numbered in the order the poll and the buttons carry them
-        head = '\n'.join([f"{mark} {len(members)}{f' of {total}' if total > len(members) else ''} fyi · nothing to do", f'1 · {GOT_IT}']
-                         + [f'{i} · {line}' for i, (_k, line) in enumerate(members, 2)])
+        # ...read, not numbered: the way on, Got it, is the first choice under them (the owner, 2026-10-22; the lines stopped opening, 2026-11-25)
+        head = '\n'.join([f"{mark} {len(members)}{f' of {total}' if total > len(members) else ''} fyi · nothing to do"] + [f'• {line}' for _k, line in members])
     if item: head = _placed(head, position(store, item))
     if item and len(item.get('questions') or []) > 1:
         from . import concierge
@@ -3039,7 +3029,7 @@ def turn_text(out: dict, lead: str = '', store=None, extra: list = None, full: b
         hand = {concierge.CHIP_WORDS[v] for v in _HAND}
         out = {**out, 'chips': [c for c in out.get('chips') or [] if not (isinstance(c, dict) and c.get('verb') in _HAND)],
                'options': [o for o in out.get('options') or [] if str(o) not in hand]}
-    words, first = choices(out), len(member_lines(item)) + (2 if item.get('kind') == 'fyis' else 1)
+    words = choices(out)
     prop = out.get('proposal') if (out.get('proposal') or {}).get('status', 'proposed') == 'proposed' else None
     # THE FILES AN AGENT MADE for this task, named on the card and one tap from the phone (A14) - not under a question being asked
     files = task_files(store, item) if item and not out.get('proposal') else []
@@ -3102,11 +3092,9 @@ def turn_text(out: dict, lead: str = '', store=None, extra: list = None, full: b
         # card's button, and on the phone it arrives as a word like any other): two ways to say the
         # same move, numbered separately, is the thing that made the desktop drop a button in the
         # first place.
-        # ...said ONCE, as the card's first line (Got it, 1): whatever the walk named it, it is not offered again under the lines
-        words = [w for w in words if w not in next_words]
+        # ...said ONCE, as the first choice (Got it, 1): whatever the walk named it, it is not offered again under another name
+        words = [GOT_IT] + [w for w in words if w not in next_words]
         _offer([(GOT_IT, {'t': 'next', **_drawn_at(item)})])
-    # ...and what a NUMBER does, said plainly. "Open one" describes a door on a screen that is not
-    # here; on a phone the number is the only way to see what the line is actually about.
     # A plain answer with nothing on the table offered "Reply with one of: 1 · Next" under every reply - three
     # lines of menu for the one word the owner can always type (2026-09-24 audit). The desktop's lone Next is
     # one small button; on a phone it is noise.
@@ -3129,10 +3117,7 @@ def turn_text(out: dict, lead: str = '', store=None, extra: list = None, full: b
     if item and not out.get('proposal') and not agent_answers(item) and (cp := card_picks(store, item)):
         _offer(cp); words = [w for w, _a in cp] + words
     words = list(dict.fromkeys(words))         # one Next, never "2 · Next" and "4 · Next" (F14)
-    lead_in = ('Reply with a number to read that message in full, or:' if item.get('kind') == 'fyis'
-               else 'Reply with a number to open one, or:') if first > 1 else 'Reply with one of:'
-    opts = (lead_in + '\n'
-            + '\n'.join(f'{i} · {w}' for i, w in enumerate(words, first))) if words else ''
+    opts = ('Reply with one of:\n' + '\n'.join(f'{i} · {w}' for i, w in enumerate(words, 1))) if words else ''
     shown = move_block(store, item, draft) if story else decision_block(store, item) if store is not None else ''
     return _once('\n\n'.join(x for x in (lead.strip(), head, advice_line(out, said), shown, opts) if x))
 

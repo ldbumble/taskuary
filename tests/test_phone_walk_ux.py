@@ -317,21 +317,23 @@ class FyiGroupOnAPhoneTests(unittest.TestCase):
         return remote_assistant.turn_text({'item': self.ITEM, 'say': '2 things people told you',
                                            'chips': [{'label': concierge.CHIP_WORDS[v]} for v in chips]})
 
-    def test_a_number_is_told_what_it_does(self):
+    def test_the_lines_are_read_and_a_number_is_a_move(self):
+        """One move (the owner, 2026-11-25): the lines are read, never numbered - a number that opened one went."""
         text = self.turn(('not_ours_sender',))
-        self.assertIn('Reply with a number to read that message in full', text)
-        self.assertIn('1 · ', text); self.assertIn('2 · ', text)
+        self.assertIn('• 📧 bank@vendor.example - Balance Reporting', text)
+        self.assertIn('Reply with one of:\n1 · Got it\n2 · Ignore this sender', text)
+        self.assertNotIn('read that message in full', text)
 
     def test_the_way_on_is_offered_even_though_the_card_keeps_it_in_a_button(self):
         from taskuary import concierge
         self.assertNotIn('next', concierge.CHIPS['fyis'], 'the desktop card still keeps its own button')
         text = self.turn(('not_ours_sender', 'block_sender'))
         self.assertIn('1 · Got it', text, 'an FYI is passed with Got it (A8), and the batch leads with it (2026-10-22)')
-        self.assertIn('4 · Ignore this sender', text); self.assertEqual(text.count('Got it'), 1)
+        self.assertIn('2 · Ignore this sender', text); self.assertEqual(text.count('Got it'), 1)
 
     def test_it_is_offered_even_when_the_walk_sends_no_chips(self):
         text = self.turn(())
-        self.assertIn('1 · Got it\n2 · ', text)
+        self.assertTrue(text.endswith('Reply with one of:\n1 · Got it'), text)
 
     def test_an_ordinary_card_still_says_open_one(self):
         text = remote_assistant.turn_text({'item': {'kind': 'report', 'key': 'report:1'},

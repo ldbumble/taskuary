@@ -19,7 +19,6 @@ import InsertChartOutlinedIcon from "@mui/icons-material/InsertChartOutlined";
 import api from "./api.js";
 import { gistFor, sortedSays } from "./fyiRow.js";
 import { dangerLine } from "./strangerLine.js";
-import { canUnsubscribe, unsubscribeFrom } from "./unsubscribe.js";
 import { runOperation } from "./taskOps.js";
 import { ChannelIcon, DraftField, LinkedText, TaskuaryMark, channelColor, cleanText, fmtDateTime, fmtTime12 } from "./ui.jsx";
 import { openAppLink } from "./appLinks.js";
@@ -63,7 +62,6 @@ import { useShare } from "./Share.jsx";
 import ItemSections, { ItemLay, ItemPart, startItem } from "./ItemSections.jsx";
 import { arrivalHand, arrivalMoves, handToItem, whoName } from "./itemHand.js";
 import TaskPage from "./TaskPage.jsx";   // what Taskuary made is drawn by the one task page (useMade)
-import { PaneMoves } from "./TaskRow.jsx";   // an FYI's Came from carries its pane's moves as a task's does
 import { TYPE_LABELS } from "./reportWords.js";
 import { SECTIONS as STEPS } from "./taskLayout.js";   // a task's sections, by name (ItemSections)
 import { WorkstreamLabel } from "./Workstream.jsx";   // the idea's workstream, a small label (the owner, 2026-11-01)
@@ -374,13 +372,7 @@ const TASK_ACTS = [["not_a_task", "remove"], ["handoff", "forward"], ["reshape",
 // a card's word that is the Advisor's to light, never one of the row's own leads (the owner, 2026-10-27: Pause this report on a report)
 const QUIET = new Set(["report_off"]);
 
-// `stages`: { verb: pane } - a word that rides one of the item's own panes instead of the bar (an FYI's Should be a task on its Came from,
-// where a task's Not a task stands: actionRow.splitRow `only`)
-// `tuck`: words that wait in the ▾ unless lit (actionRow.pill) - a phish's Send to agent (dangerTuck)
-// A PHISH FILED FYI IS PUT DOWN, NOT HANDED ON (the owner, 2026-10-30): Send to agent stood as its main move; Not ours is lit now
-// (rulebook fyi_danger) and the agent's words wait in the ▾ - an FYI with no danger keeps its row as it was
-export const dangerTuck = (card) => (card?.kind === "fyi" && card.danger ? ["regular_agent", "coding_agent"] : []);
-export function Foot({ verb, then, where, covers = [], close, onDone, more, promote, extra = [], inline = false, openTask, taskId, moves = false, stages = {}, tuck = [] }) {
+export function Foot({ verb, then, where, covers = [], close, onDone, more, promote, extra = [], inline = false, openTask, taskId, moves = false }) {
   const nav = React.useContext(CardNav);
   const shut = useClose(close || {}, onDone);
   const [open, setOpen] = useState(false);
@@ -400,10 +392,9 @@ export function Foot({ verb, then, where, covers = [], close, onDone, more, prom
   // the task page's acts - sit behind More. The card's own move (its Foot `verb`) stays in the card.
   // ...and in a task's three sections on a desk, EVERY one rides the pane the item is about (ItemLay: actionRow.splitRow `all`) - the bar keeps
   // Back and Next, as under a task (the owner, 2026-10-31)
-  const lay = React.useContext(ItemLay), staged = words.find((a) => stages[a.verb]);
-  const laid = lay || (staged ? { only: stages[staged.verb] } : null);
+  const laid = React.useContext(ItemLay);
   const asVerb = (a, group) => ({ id: `w:${a.verb || a.label}`, group, tone: "s", label: a.label, title: a.title, disabled: a.disabled,
-    ...(stages[a.verb] ? { stage: stages[a.verb] } : {}), ...(laid ? { laid } : {}), ...(tuck.includes(a.verb) ? { tucked: true } : {}), run: (e, anchor) => a.onClick?.({ currentTarget: anchor || e?.currentTarget }) });
+    ...(laid ? { laid } : {}), run: (e, anchor) => a.onClick?.({ currentTarget: anchor || e?.currentTarget }) });
   useVerbs("foot", rowed ? [
     // a move that IS the way on - a batch's "All read, next" (`moves`) - is the row's Next itself (the design, phase A: the batch verb in
     // the Next group), so the batch shows one way on, and the Advisor's lit Next is it
@@ -1134,13 +1125,6 @@ export function MessageCard({ card, onDone, onOpenTask, onTimeline, onSurface, o
     setBusy("");
   };
   const asks = card.kind !== "fyi";
-  // a list's way off it (unsubscribe.js): the whole item IS the list's mail, so its Unsubscribe rides the row with the item's verbs,
-  // and the press folds the card wearing it as its badge
-  const unsub = async () => {
-    setBusy("unsubscribe"); setErr("");
-    try { await unsubscribeFrom(api, card.mid); onDone?.(btn("unsubscribe")); } catch (e) { setErr(failOf(e)); }
-    setBusy("");
-  };
   // ...read off what is connected, like the row (concierge.chips_for): the card offered Send to coding agent with no coding tool, so the
   // card and the row disagreed and the press failed (the re-audit, 2026-10-18)
   const canCode = useCapabilities().coding;
@@ -1299,8 +1283,7 @@ export function MessageCard({ card, onDone, onOpenTask, onTimeline, onSurface, o
   if (table != null && card.kind === "fyi") return (
     <FyiSections card={card} table={table} items={thread} err={err}
       msgs={<>{thread.map((it) => <FyiMessage key={it.key || it.mid} item={it}>{it.mid && <FullText mid={it.mid} revision={it === card ? card.presentation_revision : undefined} />}</FyiMessage>)}</>}
-      foot={<Foot openTask={onOpenTask} close={card} onDone={onDone} stages={{ mine: "from" }} tuck={dangerTuck(card)}
-        extra={canUnsubscribe(card) ? [{ verb: "unsubscribe", label: btn("unsubscribe"), title: btnHint("unsubscribe"), onClick: unsub, disabled: !!busy }] : []}
+      foot={<Foot openTask={onOpenTask} close={card} onDone={onDone}
         covers={[...(own || mineAlone ? (suggestedKind === "coding" ? ["coding_agent", "coder"] : ["regular_agent"]) : ["reply"]), ...(mineAlone ? ["reply", "not_ours"] : [])]}
         where={<Where card={card} onOpenTask={onOpenTask} onTimeline={onTimeline} />} />} />
   );
@@ -1318,8 +1301,7 @@ export function MessageCard({ card, onDone, onOpenTask, onTimeline, onSurface, o
           then={own || mineAlone ? `starts ${suggestedKind === "coding" ? "a coding agent" : "an agent"} on it; it comes back here when it stops.`
             : "writes one for you to approve here - nothing is sent."} />
       ) : card.kind === "fyi" && <><DangerNote danger={card.danger} aim={card.danger_aim} /><div className="tq-card-note">{sortedSays(card).note || "Nothing to decide - it only wants you to know."}</div></>}
-      <Foot openTask={onOpenTask} close={card} onDone={onDone} tuck={dangerTuck(card)}
-        extra={card.kind === "fyi" && canUnsubscribe(card) ? [{ verb: "unsubscribe", label: btn("unsubscribe"), title: btnHint("unsubscribe"), onClick: unsub, disabled: !!busy }] : []}
+      <Foot openTask={onOpenTask} close={card} onDone={onDone}
         covers={[...(own || mineAlone ? (suggestedKind === "coding" ? ["coding_agent", "coder"] : ["regular_agent"]) : ["reply"]), ...(mineAlone ? ["reply", "not_ours"] : [])]}
         where={<Where card={card} onOpenTask={onOpenTask} onTimeline={onTimeline} />} />
       {askOpen && <AgentAsk coding={suggestedKind === "coding"} what={card.mid ? "It gets the message and its attachments." : "It gets the task and its messages."}
@@ -1562,8 +1544,6 @@ function FyiSections({ card, table, items, msgs, foot, err, next }) {
     sections={[
       { key: "from", n: 1, name: STEPS[0].name, lines: [plural(n, "message"), ...items.slice(0, 3).map((i) => `${whoName(i.who)}: “${i.title || ""}”`)],
         foot: says.foot,
-        // ...and triage's miss said where a task's Not a task is (the owner, 2026-10-29): Should be a task, from the row's own verbs
-        ...(batch ? {} : { moves: <PaneMoves sec="from" /> }),
         // ...the handful as ONE list in one card (the owner, 2026-10-28: "too much space in fyi"): a hairline between messages, not a card each
         body: <><ItemPart className="tq-item-msgs" sx={{ py: 0.25 }}>{msgs}</ItemPart><CardErr err={err} /></> }]}
       moves={<ItemPart data-tq-fyi-close="">
@@ -1576,12 +1556,9 @@ function FyiSections({ card, table, items, msgs, foot, err, next }) {
 // how many fyi a card can show whole before every line folds to one (FyisCard)
 const FOLD_AT = 6;
 
-export function FyisCard({ card, onDone, onSurface, onTimeline, onAgent, table = null, movedTo = {}, onOpenRef = null }) {
+export function FyisCard({ card, onDone, onTimeline, onAgent, table = null, movedTo = {}, onOpenRef = null }) {
   const noAi = cannotStart(useCapabilities());                 // no AI: Send to agent greyed, saying why (trust audit F3)
   const [open, setOpen] = useState(null);
-  const [busy, setBusy] = useState("");
-  const [err, setErr] = useState("");
-  const [left, setLeft] = useState({});                      // the lines whose list was left: the press is a badge on that line
   // ...off the table (a card in the chat, no box of its own to take a chip) Send to agent opens the agent box under that line (RunForm.AgentAsk)
   const [asking, setAsking] = useState(null);
   const items = (card.items || []).map((i) => (movedTo[i.key] && !i.tid ? { ...i, tid: movedTo[i.key].tid } : i));
@@ -1591,28 +1568,11 @@ export function FyisCard({ card, onDone, onSurface, onTimeline, onAgent, table =
   // it does 4 fyi or 10 fyis at one time"). So past FOLD_AT the lines fold: one apiece, and the
   // gist and the doors appear on the one you open.
   const folded = items.length > FOLD_AT;
-  // a reply is the one immediate road (PW-126): the draft is written now, nothing is sent, nothing is marked
-  const reply = async (i) => {
-    setBusy(i.key); setErr("");
-    try { const data = await openReply(api, i.mid); onSurface?.(data.reviewId ? `review:${data.reviewId}` : null, data.drafting ? "Drafting a reply…" : "Reply opened - write it, or Draft with AI"); }
-    catch (e) { setErr(failOf(e)); }
-    setBusy("");
-  };
-  // one line's list, left from under that line (unsubscribe.js) - never the handful's, and never marking it read: All read does that
-  const unsub = async (i) => {
-    setBusy(i.key); setErr("");
-    try { await unsubscribeFrom(api, i.mid); setLeft((l) => ({ ...l, [i.key]: true })); } catch (e) { setErr(failOf(e)); }
-    setBusy("");
-  };
   // ...ON THE TABLE THE LINE'S ONE MOVE PUTS IT ON THE AGENT TAB'S BOX, the handful a chip each, the pressed one first (itemHand.arrivalHand)
   const ask = (i) => { if (!(table != null && handToItem(card.key, arrivalHand(i, items, movedTo, onAgent)))) setAsking(i.key); };
   const actsOf = (i) => (<>
             <div className="tq-card-actions tq-fyi-acts">
-              {/* ...Reply where somebody reads one (the item's `replies`, the server's): a code host's or a billing mailer's line has none */}
-              {i.mid && i.replies && <Button size="small" variant="outlined" disabled={!!busy} onClick={() => reply(i)} title={btnHint("reply")} sx={quiet}>{btn("reply")}</Button>}
-              {arrivalMoves(i).map((v) => <Button key={v} size="small" variant="outlined" disabled={!!busy || !!noAi} onClick={() => ask(i)} title={noAi || btnHint(v)} sx={quiet}>{btn(v)}</Button>)}
-              {canUnsubscribe(i) && (left[i.key] ? <span className="tq-pressed" data-tq-pressed={btn("unsubscribe")}>✓ {btn("unsubscribe")}</span>
-                : <Button size="small" variant="outlined" disabled={!!busy} onClick={() => unsub(i)} title={btnHint("unsubscribe")} sx={quiet}>{btn("unsubscribe")}</Button>)}
+              {arrivalMoves(i).map((v) => <Button key={v} size="small" variant="outlined" disabled={!!noAi} onClick={() => ask(i)} title={noAi || btnHint(v)} sx={quiet}>{btn(v)}</Button>)}
             </div>
           {asking === i.key && (
             <AgentAsk key={i.key} what="It gets the message and its attachments."
@@ -1627,7 +1587,7 @@ export function FyisCard({ card, onDone, onSurface, onTimeline, onAgent, table =
   // together"): Came from open on every message of the handful at once - each one line, who, what and when, and a line of its words - and
   // the one pressed opened whole with its own moves under it, as on the card; Agent and Close out the slim tabs, All read, next the row's
   if (table != null) return (
-    <FyiSections card={card} table={table} items={items} err={err} foot={foot} next={{ label: btn("next", "batch"), title: btnHint("next", "batch") }}
+    <FyiSections card={card} table={table} items={items} foot={foot} next={{ label: btn("next", "batch"), title: btnHint("next", "batch") }}
       msgs={items.map((i) => (
         <FyiMessage key={i.key} item={i} open={open === i.key} onHead={() => setOpen((o) => (o === i.key ? null : i.key))} moved={movedTo[i.key]} onRef={onOpenRef}>
           {i.mid ? <FullText mid={i.mid} revision={i.presentation_revision || card.presentation_revision} /> : gistFor(i) && <div className="tq-card-full">{gistFor(i)}</div>}
@@ -1637,7 +1597,7 @@ export function FyisCard({ card, onDone, onSurface, onTimeline, onAgent, table =
   );
   return (
     <CardShell card={card} kicker={`${items.length} fyi`}
-      lead={<Lead text={`${plural(items.length, "message")} just want${items.length === 1 ? "s" : ""} you to know something.`} />} err={err}>
+      lead={<Lead text={`${plural(items.length, "message")} just want${items.length === 1 ? "s" : ""} you to know something.`} />}>
       {/* THE BOX, like every card's: one line per message - who, what, and its first line - and nothing
           else. The two doors each line wore ("Full message", "Talk about it") made four fyi a card of
           eight buttons (the owner, 2026-09-23: "you never redesigned the fyi cards"). A line is the

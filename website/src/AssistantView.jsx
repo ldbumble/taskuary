@@ -1049,7 +1049,7 @@ function Line({ m, lastBrief = false, live, last, moves = false, actions, fresh,
     brief: <BriefCard card={m.card} onStart={actions.start} />,
     // SET UP TASKUARY is the two cards, not the 13-stop walk (the owner, 2026-10-14: "what is this garbage ... where are the cards")
     firstrun: <FirstRun revisit onChanged={actions.reload} onWalk={() => actions.start(null)} />,
-    fyis: <FyisCard card={c} onDone={actions.done} onSurface={actions.surface} onTimeline={actions.timeline} onAgent={actions.agent} table={table}
+    fyis: <FyisCard card={c} onDone={actions.done} onTimeline={actions.timeline} onAgent={actions.agent} table={table}
       movedTo={actions.movedTo} onOpenRef={actions.openRef} />,
   }[kind] : null;
   // A STOP THE WALK HAS MOVED PAST is a finished step, not something the assistant said. Falling

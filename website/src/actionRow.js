@@ -388,7 +388,7 @@ export const typeOf = (v) => (v?.unblocks ? "act" : TYPE_OF[String(v?.id || "").
 // `pressable`: on the narrowest row the lead is never a greyed one (the owner, 2026-10-28: a phone's one move was a disabled "Send to agent") -
 // the lit move stays (its busy word is its state), any other is the first pressable one, and with none it is the ▾ alone.
 // An empty slot is neither a move nor a menu item: it only holds the Send's width on a wide row.
-// ...and never a `tucked` one unless lit: a phish's Send to agent waits in the ▾ (the owner, 2026-10-30), at every width
+// ...and never a `tucked` one unless lit: a sent reply's Hand it to a person waits in the ▾, at every width
 export const leadOf = (row, pressable = true) => {
   const ok = (v) => !v.slot && !v.tucked && !(pressable && v.disabled);
   return [...row.decide, ...row.agent, ...row.more].find((v) => v.tone === "p" && !v.slot) || row.decide.find(ok) || (pressable ? row.agent.find(ok) : row.agent[0]) || null;
@@ -501,9 +501,8 @@ export const shortParts = (m) => ({ ...m, back: m.backShort ?? m.back, next: m.n
 // The row draws the rest and hands the stage moves here, by pane (putSpineVerbs, useSpineVerbs)
 const CHAT_STAGE = new Set(["reply", "redraft", "chase", "accept_invite", "decline_invite", "propose_time", "find_time", "hand"]);
 const FROM_STAGE = new Set(["nat", "remind", "watch"]);
-// ...a verb may name its pane itself (`stage`): an FYI's Should be a task rides its Came from, where a task's Not a task does
 export const stageOf = (v) => { const k = String(v?.id || "").split(":").pop(), t = typeOf(v);
-  return v?.stage || (CHAT_STAGE.has(k) ? "agent" : FROM_STAGE.has(k) ? "from" : t === "agent" && k !== "diff" ? "agent" : ""); };
+  return (CHAT_STAGE.has(k) ? "agent" : FROM_STAGE.has(k) ? "from" : t === "agent" && k !== "diff" ? "agent" : ""); };
 const NONE = [], ITEM_OWN = new Set(["mine"]);
 let spineVerbs = {}, spineSig = "";
 const spineSubs = new Set(), spineSub = (f) => { spineSubs.add(f); return () => spineSubs.delete(f); }, spineDraw = () => spineSubs.forEach((f) => f());
@@ -524,10 +523,6 @@ export function splitRow(row, on, desk = false) {
   const unbar = (xs) => xs.filter((v) => !v.bar);
   const item = () => { const { move, change, share } = pillsOf(row); return [...unbar(move), ...unbar([...change, ...share]).map((v) => ({ ...v, quiet: true }))]; };
   if (!on) return desk ? { row: barred, by: { item: item() } } : { row, by: {} };
-  // ...an item that lays ONE pane of its own (`only`: an FYI's Came from) takes that pane's moves off the bar - and the rest go to the item's row
-  if (on.only) { const { move, change } = pillsOf(row), here = [...move, ...change].filter((v) => stageOf(v) === on.only), off = (xs) => xs.filter((v) => !here.includes(v));
-    if (desk) return { row: barred, by: { [on.only]: here, item: item().filter((v) => !here.some((h) => h.id === v.id)) } };
-    return { row: { ...row, decide: off(row.decide), agent: off(row.agent), more: off(row.more) }, by: { [on.only]: here } }; }
   // ...and one laid on the desk in a task's three sections (ItemSections: a report, a dashboard, an FYI) puts EVERY move on the pane it is about,
   // as a task's ride its panes (the owner, 2026-10-31: "i thought we moved all buttons to the agent canvas?? report should be white with buttons
   // on it"): the move pill's first, then what was the Change pill and Share, quiet as a task's own moves are (`quiet`: PaneMoves, SpineMoves)

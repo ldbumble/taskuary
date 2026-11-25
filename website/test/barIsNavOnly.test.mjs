@@ -25,14 +25,6 @@ test("an FYI batch on the desk: its bar is Back and All read, next - a stray mov
   assert.deepEqual(by.item.map((x) => x.id), ["chat:not_ours_kind"], "the move is the item's, on its own row");
 });
 
-test("an item laying one pane: that pane's moves on it, the rest on the item's row - the bar keeps only the walk", () => {
-  const list = [v("next", "next"), v("w:mine", "decide", { stage: "from" }), v("w:regular_agent", "decide"), v("w:not_ours", "more")];
-  const { row, by } = splitRow(rowOf({ ref: "", list }), { only: "from" }, true);
-  assert.deepEqual(ids(row), []);
-  assert.deepEqual(by.from.map((x) => x.id), ["w:mine"]);
-  assert.deepEqual(by.item.map((x) => x.id).sort(), ["w:not_ours", "w:regular_agent"]);
-});
-
 test("nothing on the table: Back, New and Change my setup - New is the sidebar's own door, and Set something up is gone", () => {
   const list = [v("back", "back"), v("chat:newtask", "decide", { label: "New", bar: true }), v("chat:tour", "decide", { label: "Change my setup", bar: true }),
     v("chat:walk", "decide", { label: "Walk me through my tasks" })];

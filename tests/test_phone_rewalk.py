@@ -327,7 +327,8 @@ class AlikeFyiTests(PhoneCase):
         for _ in range(3): self.f.filed_fyi(subject='New expense policy PDF')
         self.f.filed_fyi(subject='Office closed Monday')
         self.ph.ready()
-        btns = [b for b in self.ph.walk()[-1][1] if 'expense policy' in b]          # the walk brings FYI together, four at a time
+        # the walk brings FYI together, four at a time - its lines read in the text (no choice since 2026-11-25), each told apart
+        btns = [l for l in self.ph.walk()[-1][0].split('\n') if l.startswith('• ') and 'expense policy' in l]
         self.assertEqual(len(btns), 3, btns); self.assertEqual(len(set(btns)), 3, btns)
         self.assertFalse([b for b in btns if re.search(r'\(\d\)$|just now', b)], btns)
         self.assertEqual(sorted(re.search(r'\((\d) of 3\)$', b).group(1) for b in btns), ['1', '2', '3'], btns)

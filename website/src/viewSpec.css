@@ -146,6 +146,9 @@
    title on top and its blocks laid flat inside it, a hairline between those stacked one under another; never a stack of separate boxes. A
    number reads as theirs does: its label muted over it, the value large, how it moved small beside it */
 :root .tq-dash.tq-view { --d-surface: var(--tq-frame-bg); }   /* ...its surfaces (a sticky table head, a dot's ring) the frame's own, light and dark */
+/* ...and its hairlines a step from that frame toward its ink, light and dark (walk 19: the dashboard's dark grid, made for its near-black page,
+   drew heavy black dashes across a chart on the lighter dark frame - louder than the bars) */
+:root .tq-dash.tq-view { --d-grid: color-mix(in srgb, var(--d-ink) 10%, var(--d-surface)); --d-axis: color-mix(in srgb, var(--d-ink) 18%, var(--d-surface)); }
 .tq-dash.tq-view { --v-pad: 20px; padding: var(--v-pad); gap: 18px; }
 .tq-dash.tq-view.tq-turn-frame { overflow: visible; }   /* ...a chart's tooltip at its edge is never cut by the frame */
 .tq-view .tq-view-card.flush { margin: 0 calc(-1 * var(--v-pad)); max-width: none; }   /* ...a table runs to the frame's edges */

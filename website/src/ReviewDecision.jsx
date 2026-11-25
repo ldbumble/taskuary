@@ -29,6 +29,13 @@ import { interruptOf, resolveInterrupt } from "./approvalInterrupt.js";
 import { draftState, failureHead, failureWhy, replySendFailure, reviewDeliveryState, savedSendFailure, sendFix } from "./sendState.js";
 import { failLine, landed, landedSend, press } from "./press.js";
 import { openAppLink } from "./appLinks.js";
+import { setupType } from "./connectSetup.js";
+// ...the connection's own setup under the card that needs it: the Connections page's code, loaded only when a Connect is pressed
+const ConnectSetup = React.lazy(() => import("./ConnectSetup.jsx"));
+const setupUnder = (href, onClose, onConnected) => href && <React.Suspense fallback={null}>
+  <ConnectSetup href={href} onClose={onClose} onConnected={() => { onClose(); onConnected(); }} /></React.Suspense>;
+// Connect brings the connection's setup up under the card, where it is one connection's card; any other link still opens where it points
+const connectRun = (href, setAt) => () => (setupType(href) ? setAt((x) => (x ? "" : href)) : openAppLink(href));
 import { FOCUS_RING, pressable } from "./pressable.js";
 import { runOperation } from "./taskOps.js";
 import { draftCanSend, useCapabilities } from "./capabilities.js";
@@ -193,6 +200,7 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
   // ...said by the send that was pressed: Close out has two, and "Sending…" stood on both
   const [pressedHere, setPressed] = useState("approve"), pressed = mark?.pressed || pressedHere;
   const [err, setErr] = useState("");
+  const [setupAt, setSetupAt] = useState("");      // the connection whose setup stands under the card (ConnectSetup): its Connect pressed
   const [sendErr, setSendErr] = useState("");       // approved, but the channel refused it
   // ...and after a reload the review says so itself (savedSendFailure) - until the owner closes the line, or presses again
   const [shutErr, setShutErr] = useState(false);
@@ -523,10 +531,11 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
   // ITS CHANNEL IS NOT CONNECTED (the owner, 2026-11-08): the card says so and its one move is Connect, which opens that connection's card -
   // the draft waits as it is, and Send is back once it is connected (server: outbound.connect_fix, `Connect` on the review) - and a mail card
   // that is connected but cannot send says why the same way, its fix as the move (`waits` is its own end of the line)
-  const connect = !proposal && !delivery.frozen ? r.Connect : null;
+  // ...and an act on a connection not set up (outbound.review_connect, the owner 2026-11-25): its Connect where its Approve would be
+  const connect = (!proposal || proposalFrom(r)?.action === "run_tool") && !delivery.frozen ? r.Connect : null;
   const moves = r.Status !== "pending" || look === "sent" ? [] : [
     ...(connect ? [
-      { id: no("connect"), label: connect.label, tone: "p", disabled: off, run: () => openAppLink(connect.href), title: `${connect.says} - opens its connection` },
+      { id: no("connect"), label: connect.label, tone: "p", disabled: off, run: connectRun(connect.href, setSetupAt), title: `${connect.says} - sets up its connection here` },
       // ...and a card that is connected but cannot send keeps the Copy it drew before (`waits`): the draft can still go out by hand
       ...(connect.waits ? [{ id: no("copy"), label: copied ? `✓ ${btn("copy", "done")}` : btn("copy"), tone: "s", disabled: off || !words.trim(), run: copyIt, title: copyTitle }] : []),
     ] : delivery.frozen ? [
@@ -721,6 +730,7 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
       under={shut ? done?.command && <details><summary style={{ fontSize: 12, color: DIM, cursor: "pointer" }}>What it runs</summary>
         <Typography component="code" variant="caption" sx={{ whiteSpace: "pre-wrap", color: DIM, display: "block" }}>{done.command}</Typography></details> : <>
         {connect && <Typography data-tq-not-connected="" variant="body2" sx={{ color: DIM, mt: 0.75 }}>{connect.says} - {connect.waits || "the draft waits here until it is"}.</Typography>}
+        {connect && setupUnder(setupAt, () => setSetupAt(""), () => decide("approve"))}
         {fillLine && <Alert severity="warning" data-tq-fill-in="" sx={{ mt: 0.75 }} onClose={() => setFillIn(false)}>{fillLine} - nothing was sent.</Alert>}
         {asked && <BlankAsk line={asked.line} onCancel={() => setAsked(null)}
           onSend={() => (asked.both ? decideBoth(asked.verb, asked.close, true) : decide(asked.verb, asked.anyway, asked.close, true))} />}
@@ -793,7 +803,7 @@ export function ActReview({ row: was, tid, live = true, onChanged, past = false 
   const held = answered && !settled.mine ? "held" : "";
   const p = row?.post || {}, act = actionFor(p.type), st = stateOf(row, live), tk = textKey(act);
   const [text, setText] = useState(String(p[tk] || "")), [vals, setVals] = useState(() => valuesOf(act, p)), [copied, setCopied] = useState(false);
-  const [pressing, setBusy] = useState(""), [err, setErr] = useState(""), [viewing, setViewing] = useState(null);
+  const [pressing, setBusy] = useState(""), [err, setErr] = useState(""), [viewing, setViewing] = useState(null), [setupAt, setSetupAt] = useState("");
   const done = answered && settled.mine && ["approved", "edited"].includes(settled.Status) ? settled : null;
   const busy = pressing || held;
   if (!act) return null;
@@ -842,7 +852,7 @@ export function ActReview({ row: was, tid, live = true, onChanged, past = false 
   const pressRow = gone || !st.live ? [] : row?.connect ? [
     ...(post ? [{ id: "browser", label: busy === "browser" ? "Handing it over…" : "Post via the browser", tone: "p", spin: busy === "browser", disabled: !ok || !text.trim(), run: viaBrowser,
       attrs: { "data-tq-act-browser": "" } }] : []),
-    { id: "connect", label: row.connect.label, tone: post ? "s" : "p", run: () => openAppLink(row.connect.href), attrs: { "data-tq-act-connect": "" } },
+    { id: "connect", label: row.connect.label, tone: post ? "s" : "p", run: connectRun(row.connect.href, setSetupAt), attrs: { "data-tq-act-connect": "" } },
     { id: "copy", label: copied ? `✓ ${btn("copy", "done") || "Copied"}` : btn("copy"), tone: "s", disabled: !text.trim(), title: hint("copy"), attrs: { "data-tq-act-copy": "" },
       run: () => { try { navigator.clipboard?.writeText(text); setCopied(true); } catch { /* the words stay on the card */ } } }, dismiss]
     : [{ id: "approve", label: busy === "approve" ? w.busy : w.press, tone: "p", spin: busy === "approve", disabled: !ok, run: () => decide("approve"),
@@ -857,6 +867,7 @@ export function ActReview({ row: was, tid, live = true, onChanged, past = false 
       fields={fields} press={pressRow} after={after} failed={failed} onView={setViewing}
       tail={st.live && !gone && row?.connect && <Typography data-tq-not-connected="" sx={{ fontSize: 11.5, color: FAINT }}>{row.connect.says}{post
         ? " - Post via the browser has the agent put it up there, and its last Post waits for you" : row.connect.waits ? ` - ${row.connect.waits}` : ""}</Typography>}
-      under={<FileDialog file={viewing} onClose={() => setViewing(null)} />} />
+      under={<>{row?.connect && st.live && !gone && setupUnder(setupAt, () => setSetupAt(""), () => decide("approve"))}
+        <FileDialog file={viewing} onClose={() => setViewing(null)} /></>} />
   </MovedPast>);
 }

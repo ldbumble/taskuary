@@ -838,11 +838,12 @@ class DemoDashboardTests(unittest.TestCase):
         # they ran before the agents' day and the tour were seeded: the rail read "Open now 12" beside nineteen open tasks (the walk, 2026-11-15)
         from taskuary import dashboards
         s = MemoryStore(); demo.seed(s)
-        n = sum(r['state'] == 'open' for r in dashboards._tasks(s, 90))
+        rs = dashboards._tasks(s, 90); n,mine = sum(r['state'] == 'open' for r in rs),sum(r['waits_on'] == 'you' for r in rs)
         heads = [m['Subject'] for m in s._rows("SELECT Subject FROM message WHERE Channel='report' AND Status NOT IN ('skipped','expired') ORDER BY MessageId")]
         # ...the built-in's headline is what came in, what became work and what got done; what waits on her is in its body
         bodies = [m['BodyText'] for m in s._rows("SELECT BodyText FROM message WHERE Channel='report' AND Status NOT IN ('skipped','expired') AND Subject LIKE 'Taskuary at a glance%'")]
-        self.assertTrue(any(f'Waiting on you: {n}' in b for b in bodies), n)
+        # ...what waits on her is whose move the rail says it is (taskstate.standing), not every open task
+        self.assertTrue(mine and any(f'Waiting on you: {mine}' in b for b in bodies), (mine, n))
         self.assertTrue(any(h.startswith('Taskuary at a glance — Came in ') for h in heads), heads)
         self.assertTrue(any(h.startswith('Northwind desk') and f'Open tasks {n}' in h for h in heads), (n, heads))
         # ...and nothing made after the dashboards changed its number: the walks and the static demo know the morning's messages by them

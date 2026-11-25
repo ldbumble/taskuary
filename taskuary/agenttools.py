@@ -117,6 +117,13 @@ TOOLS = {
              _S({'title': _STR, 'root': _STR, 'elements': {'type': 'object', 'additionalProperties': __import__('taskuary.viewspec', fromlist=['x']).element_schema()},
                  'state': {'type': 'object'}, 'files': {'type': 'array', 'items': _STR}}),
              ('GET', '/api/tasks/1')),
+    # ...and A PICTURE, drawn by the owner's image model (images.pick: an image card, or an AI card whose models include one) - the one road to
+    # images.run_image_generate an agent has; with nothing to draw with, its answer is his Connect card (the owner, 2026-11-25)
+    'draw_image': ('own', "Draw a picture from `prompt` with the owner's image model; it lands in this task's outputs and shows in this "
+                          "chat. `size`: 1024x1024, 1024x1536 (tall) or 1536x1024 (wide). With no image model connected, nothing is drawn and"
+                          " his chat shows the card that connects one.",
+                   _S({'prompt': _STR, 'size': {'type': 'string', 'enum': ['1024x1024', '1024x1536', '1536x1024']}}, ('prompt',)),
+                   ('GET', '/api/tasks/1')),
     'tick': ('own', "Tick (done=true) or untick one of this task's to-dos: `item` is its id, the one in brackets after it.",
              _S({'item': _STR, 'done': {'type': 'boolean'}}, ('item',)), ('POST', '/api/agent/tick')),
     # ...and the list itself (the owner, 2026-11-09: "no new table - triage's to-do list IS the issue list")
@@ -347,6 +354,7 @@ SHORT = {
     'web_search': "Search the web through this task's AI card.",
     'show': 'Draws bar, line and pie charts, tables, number tiles and checklists inline in this chat, with sliders, toggles, selects and '
             'dates that recompute them live and choices whose pick comes back to you - or shows files you made.',
+    'draw_image': "Draw a picture from a prompt with the owner's image model; it lands in this task and shows in this chat.",
     'tick': "Tick or untick a to-do: `item` is its id.",
     'todos': "Add, reword or merge this task's to-dos.",
     # end_turn and ask_owner are listed with their whole words: the fields ARE how they are used
@@ -776,6 +784,15 @@ def _call(store, tid: int, name: str, args: dict, doors: dict, skip=()) -> str:
             try: session_artifacts.view(store, tid, said[-1].partition(viewspec.MARK)[2])
             except (OSError, ValueError) as e: logger.warning(f'the view shown on task {tid} was not kept - {e}')
         return ' '.join(said)
+    if name == 'draw_image':
+        from . import images, outbound
+        # ...nothing to draw with is his one Connect card in this chat (outbound.connect_fix, the card a post on a network not connected shows)
+        if fix := outbound.connect_fix(store, 'images'):
+            card = _call(store, tid, 'show', {'title': fix['says'], 'root': 'go', 'elements': {'go': {'type': 'button', 'props': {'label': fix['label'], 'open': fix['href']}}}}, doors)
+            return f"Nothing was drawn: {fix['says'].lower()}. His chat shows the card that connects one ({fix['label']}); the picture can be drawn once he has. {card}"
+        try: out = images.run_image_generate(store, a, task_id=tid)
+        except RuntimeError as e: raise ValueError(refusal(f'nothing was drawn - {e}', 'say what the image model answered, or try again with another prompt'))
+        return f"Drew {out['name']} with {out['label']}. " + show_files(store, tid, [out['file']])
     if name == 'tick': return _j(doors['tick'](tid, str(a['item']), a.get('done', True) is not False))
     if name == 'check_back': return _j(doors['check_back'](tid, str(a.get('when') or ''), str(a.get('what') or '')))
     if name == 'todos': return _j(doors['todos'](tid, a))

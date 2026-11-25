@@ -46,16 +46,37 @@ def _cfg(c) -> dict: return json.loads(c.get('ConfigJson') or '{}')
 
 
 def pick(store):
-    """The first active image card that can actually run - a key where one is needed."""
-    for c in store.list_connectors():
+    """The first active image card that can actually run - a key where one is needed - else an AI card that can draw (_drawing_ai)."""
+    cs = store.list_connectors()
+    for c in cs:
         if c['Type'] in IMAGE_TYPES and c['Active'] and (c['HasSecret'] or c['Type'] not in NEEDS_KEY):
             return store.get_connector(c['ConnectorId'], with_secret=True)
+    return _drawing_ai(store, cs)
+
+
+# AN AI CARD WHOSE MODELS INCLUDE AN IMAGE MODEL DRAWS (the owner, 2026-11-25: on an install with only an access-code gateway, a picture asked
+# for ended "no image-generation service is connected - paste this prompt into another app", while his gateway served one): any OpenAI-compatible
+# AI card whose own model list gives a model the image-generation mode (llm.connector_models, the list Settings and the chooser read) is drawn
+# through as an OpenAI-compatible image server, on its own address and key - by the mode its endpoint states, never a model's name or a provider
+def _drawing_ai(store, cs):
+    from . import llm
+    for c in cs:
+        if c['Type'] not in llm.OPENAI_COMPATIBLE or not (c['Active'] and c['HasSecret']): continue
+        if not (ms := (llm.connector_models(store, c['ConnectorId']) or {}).get('images')): continue
+        full = store.get_connector(c['ConnectorId'], with_secret=True)
+        try: base = llm.compat_base(full['Type'], _cfg(full))
+        except ValueError: continue
+        label = f"{full.get('Name') or full['Type']} · {ms[0]}"
+        return {**full, 'Type': 'image_server', 'Label': label, 'ConfigJson': json.dumps({'base_url': base, 'model': ms[0], 'label': label})}
     return None
+
+
+def label_of(c) -> str: return c.get('Label') or LABELS.get(c['Type'], c['Type'])
 
 
 def ready(store) -> dict:
     c = pick(store)
-    return {'ready': bool(c), 'provider': c['Type'] if c else None, 'label': LABELS.get(c['Type']) if c else None}
+    return {'ready': bool(c), 'provider': c['Type'] if c else None, 'label': label_of(c) if c else None}
 
 
 def generate(store, prompt: str, size: str = '1024x1024', c: dict = None) -> dict:
@@ -66,13 +87,13 @@ def generate(store, prompt: str, size: str = '1024x1024', c: dict = None) -> dic
     c = c or pick(store)
     if not c: raise RuntimeError(NO_CONNECTOR)
     t, cfg, key = c['Type'], _cfg(c), c.get('Secret') or ''
-    if t in NEEDS_KEY and not key: raise RuntimeError(f'{LABELS.get(t, t)}: no API key saved')
+    if t in NEEDS_KEY and not key: raise RuntimeError(f'{label_of(c)}: no API key saved')
     size = size if size in SIZES else '1024x1024'
     shape = shape_of(t)
     if not shape: raise RuntimeError(f'unknown image connector type {t!r}')
     data, mime, model = globals()[f'_{shape}'](t, cfg, key, prompt, size)
-    if not data: raise RuntimeError(f'{LABELS.get(t, t)} returned no image')
-    return {'data': data, 'mime': mime or 'image/png', 'provider': t, 'model': model, 'prompt': prompt}
+    if not data: raise RuntimeError(f'{label_of(c)} returned no image')
+    return {'data': data, 'mime': mime or 'image/png', 'provider': t, 'label': label_of(c), 'model': model, 'prompt': prompt}
 
 
 def _fail(r, who):
@@ -113,7 +134,7 @@ def _openai(t, cfg, key, prompt, size):
         base = (cfg.get('base_url') or COMPAT[t][0]).rstrip('/')
         url, headers = f'{base}/images/generations', ({'Authorization': f'Bearer {key}'} if key else {})
     r = requests.post(url, headers=headers, json=body, timeout=300)
-    if r.status_code >= 300: _fail(r, LABELS.get(t, t))
+    if r.status_code >= 300: _fail(r, cfg.get('label') or LABELS.get(t, t))
     items = (r.json() or {}).get('data') or []
     if not items: return b'', '', model
     first = items[0]
@@ -224,7 +245,7 @@ def _runway(t, cfg, key, prompt, size):
 def test(store, c) -> str:
     """Generate the smallest thing that proves the key works, and keep nothing."""
     out = generate(store, 'a single small grey square on a white background', c=c)
-    return f"{LABELS.get(out['provider'], out['provider'])} drew a {len(out['data']):,}-byte image with {out['model']}"
+    return f"{out['label']} drew a {len(out['data']):,}-byte image with {out['model']}"
 
 
 def run_image_generate(store, args: dict, message_id: int = None, task_id: int = None, **_) -> dict:
@@ -245,14 +266,14 @@ def run_image_generate(store, args: dict, message_id: int = None, task_id: int =
         d = outputs.folder(int(tid)); d.mkdir(parents=True, exist_ok=True)
         (d / name).write_bytes(out['data'])
         logger.info(f"images: {out['provider']} drew {len(out['data']):,} bytes into task {tid}'s outputs")
-        return {'file': str(d / name), 'name': name, 'provider': out['provider'], 'model': out['model'],
+        return {'file': str(d / name), 'name': name, 'provider': out['provider'], 'label': out['label'], 'model': out['model'],
                 'bytes': len(out['data']), 'prompt': out['prompt']}
     path = artifacts.attachment_dir(int(mid)) / name
     path.write_bytes(out['data'])
     aid = store.add_attachment({'MessageId': int(mid), 'Name': name, 'ContentType': out['mime'],
                                 'Size': len(out['data']), 'Inline': 1, 'Path': str(path)})
     logger.info(f"images: {out['provider']} drew {len(out['data']):,} bytes for message {mid}")
-    return {'attachment_id': aid, 'name': name, 'provider': out['provider'], 'model': out['model'],
+    return {'attachment_id': aid, 'name': name, 'provider': out['provider'], 'label': out['label'], 'model': out['model'],
             'bytes': len(out['data']), 'prompt': out['prompt']}
 
 
@@ -262,4 +283,4 @@ def run_image_tool(cfg: dict) -> tuple:
     which takes the store first, so every agent's call failed on a missing argument and no picture was ever drawn (TQ-1251)."""
     out = run_image_generate(cfg['store'], cfg, message_id=cfg.get('message_id'), task_id=cfg.get('task_id'))
     where = f"TQ-{int(cfg['task_id']):04d}'s outputs" if out.get('file') else f"message {cfg.get('message_id')}"
-    return f"drew {out['name']} with {LABELS.get(out['provider'], out['provider'])} into {where}", json.dumps(out)
+    return f"drew {out['name']} with {out['label']} into {where}", json.dumps(out)

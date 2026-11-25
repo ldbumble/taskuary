@@ -200,6 +200,11 @@ def gateway_base(cfg: dict) -> str:
     return gateway_url((cfg or {}).get('base_url') or OPENAI_COMPATIBLE['hipaa_ai'][0])
 
 
+def compat_base(t, cfg: dict) -> str:
+    "An OPENAI_COMPATIBLE card's address: the gateway's for hipaa_ai (gateway_base), else its own base_url over the provider's."
+    return gateway_base(cfg) if t == 'hipaa_ai' else ((cfg or {}).get('base_url') or OPENAI_COMPATIBLE[t][0]).rstrip('/')
+
+
 def gateway_problem(cfg: dict, key: str) -> str:
     """'' when the gateway answers this access code on its model list, else the one thing to fix, in the owner's words:
     no address, an address that does not answer, an address that is not the gateway, or a code the gateway turned away.
@@ -1106,6 +1111,19 @@ def list_models(t, cfg: dict, key: str) -> list:
     return [m for m in _list_models(t, cfg, key) if not _NOT_A_BRAIN.search(m)]
 
 
+def image_models(t, cfg: dict, key: str) -> list:
+    """The image-generation models an OpenAI-compatible endpoint serves, by the MODE its own model list gives each (a LiteLLM gateway's
+    /model/info: mode image_generation) - never by a model's name. [] for an endpoint that keeps no such list or answers nothing."""
+    if t not in OPENAI_COMPATIBLE: return []
+    try:
+        r = requests.get(f'{compat_base(t, cfg)}/model/info', headers={'Authorization': f'Bearer {key}'} if key else {},
+                         timeout=GATEWAY_WAIT if t == 'hipaa_ai' else 15, allow_redirects=False)
+        rows = (_json(r) or {}).get('data') if r.status_code == 200 else None
+    except Exception: return []
+    return sorted({m['model_name'] for m in rows or () if isinstance(m, dict) and m.get('model_name')
+                   and (m.get('model_info') or {}).get('mode') == 'image_generation'})
+
+
 MODELS_TTL, _models_cache = 600, {}      # a provider's list, per connector, for ten minutes - a cache, not a setting
 
 
@@ -1122,6 +1140,8 @@ def connector_models(store, cid: int) -> dict | None:
     except ValueError: conf = {}
     try: out = {'models': list_models(c['Type'], conf, c.get('Secret') or '')}
     except Exception as e: return {'models': [], 'error': str(e)[:200]}
+    # ...and what it can DRAW with, beside what it can chat with: images.pick draws through an AI card whose list has an image model
+    if ims := image_models(c['Type'], conf, c.get('Secret') or ''): out['images'] = ims
     _models_cache[cid] = (time.time(), out)
     return out
 
@@ -1147,7 +1167,7 @@ def _list_models(t, cfg: dict, key: str) -> list:
     else:
         base = {'openai': 'https://api.openai.com/v1', 'openrouter': 'https://openrouter.ai/api/v1', 'meta': 'https://api.meta.ai/v1',
                 'ollama': 'http://127.0.0.1:11434/v1'}.get(t) or (OPENAI_COMPATIBLE.get(t) or ('',))[0]
-        base = gateway_base(cfg) if t == 'hipaa_ai' else (cfg.get('base_url') or base).rstrip('/')
+        base = compat_base(t, cfg) if t in OPENAI_COMPATIBLE else (cfg.get('base_url') or base).rstrip('/')
         if t == 'ollama' and base.endswith('11434'): base += '/v1'
         if not base: return []
         url, h, k = f'{base}/models', ({'Authorization': f'Bearer {key}'} if key else {}), 'data'
@@ -1315,8 +1335,7 @@ def endpoint(t, cfg: dict, key: str) -> tuple:
         urls, model = [f'{base}/v1/chat/completions'], cfg['model']
         headers = {'Authorization': f'Bearer {key}'} if key else {}
     elif t in OPENAI_COMPATIBLE:
-        default_base, default_model = OPENAI_COMPATIBLE[t]
-        base = gateway_base(cfg) if t == 'hipaa_ai' else (cfg.get('base_url') or default_base).rstrip('/')
+        base, default_model = compat_base(t, cfg), OPENAI_COMPATIBLE[t][1]
         if not base: raise RuntimeError('no gateway address on its card - add the one you were sent with your access code')
         urls = [f'{base}/chat/completions']
         headers, model = {'Authorization': f'Bearer {key}'}, cfg.get('model') or default_model

@@ -529,6 +529,11 @@ def connect_fix(store, kind) -> dict | None:
         # ...its button opens the mailbox's own card - one set up and switched off, else Email's section, where each mailbox has its card
         had = next((str(c.get('Type')).lower() for c in cards if str(c.get('Type') or '').lower() in (*MAILBOXES, *HOSTS)), '')
         return {'says': 'No mailbox is connected', 'label': 'Connect email', 'href': f'#connector={had}' if had else MAIL[1]}
+    # ...and A PICTURE with nothing that can draw it (images.pick: no image card, no AI card whose models include an image model) is the images
+    # section's Connect - "paste this prompt into another app" was the agent's own way round a missing card (the owner, 2026-11-25)
+    if k == 'images':
+        from . import images
+        return None if images.pick(store) else {'says': 'No image model is connected', 'label': 'Connect an image model', 'href': words.href('images')}
     # ...an act's network by the Connections page's own rule (connectorcatalog.signed_in): a LinkedIn card switched on and never signed in
     # had Post to LinkedIn lit over it (the walks, 2026-11-18)
     # ...BY ITS ONE STATE (connectorcatalog.state; the judge's look, 2026-11-20: a LinkedIn card signed in once and since signed out kept "Post to

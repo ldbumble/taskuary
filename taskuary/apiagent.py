@@ -532,7 +532,7 @@ def tools_for(tid: int, sid: str, browser: bool, stranger: bool = False, post=No
 LATER = frozenset({'read_attachment', 'search_knowledge', 'owner_memory', 'calendar', 'list_systems', 'run_system', 'remind', 'ask_stronger',
                    'note_peers', 'note_lead', 'use_repo', 'find_repos', 'propose_land', 'withdraw_draft', 'keep_card', 'sign_form', 'answer_invite', 'set_up_meeting', 'share',
                    'search_tasks', 'person', 'past_figures', 'guide', 'todos', 'check_back', 'playbooks', 'browser_look', 'browser_click', 'browser_fill', 'browser_press',
-                   'browser_screenshot', 'web_fetch', 'files_list', 'reply_not_needed', 'my_task', 'new_task'}) - set(ALWAYS_LOAD)
+                   'browser_screenshot', 'web_fetch', 'files_list', 'reply_not_needed', 'my_task', 'new_task', 'draw_image'}) - set(ALWAYS_LOAD)
 BROWSER_MORE = ('browser_look', 'browser_click', 'browser_fill', 'browser_press', 'browser_signup', 'browser_screenshot', 'hand_over')
 LOAD = 'find_tools'
 DEFERRED = {}                  # (tid, sid) -> {name: schema} of the tools this turn named but has not loaded

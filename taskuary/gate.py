@@ -45,6 +45,8 @@ TABLE = {
     'never':   Row(None, "Taskuary's own data and the places sign-ins are kept are never read by an agent - not even with the owner's yes. Go on "
                    'without it, and say what you needed if it matters', 'READS', "Taskuary's own data or where sign-ins are kept"),
     'writes':  Row(True, "it is outside this task's own folders", 'WRITES', "outside this task's own folders"),
+    'settings': Row(True, 'your next session or git command runs it or reads it as settings', 'CHANGES SETTINGS',
+                    "that a later session or git command runs (git hooks and config, a CLI's settings and hooks)"),
     'unwritable': Row(None, "Taskuary's own data and settings, and the places sign-ins are kept, are never changed by an agent - not even with the "
                       "owner's yes. Write in this task's own folders instead", 'WRITES', "to Taskuary's own data or where sign-ins are kept"),
     'fills':   Row(False, '', 'FILLS', 'a form - types, ticks or chooses in its boxes (the press that sends it is judged on its own)'),

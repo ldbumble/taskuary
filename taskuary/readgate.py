@@ -155,7 +155,7 @@ def opened(store, tid, p: dict) -> bool:
     from . import floor, shellgate
     if p.get('action') != 'shell_act' or not p.get('reads'): return False
     cwd = p.get('cwd') or ''
-    if p.get('command') and shellgate.acts(p['command'], cwd): return False
+    if p.get('command') and shellgate.acts(p['command'], cwd) or TABLE['settings'].why in str(p.get('why') or ''): return False
     ok, nev = own(store, tid, cwd) + _open(), [_n(x) for x in floor.kept_secret()]
     return all(not any(_in(_n(f), r) for r in nev) and any(_in(_n(f), r) for r in ok) for f in p['reads'])
 
@@ -179,9 +179,13 @@ def judge(store, tid, paths, cwd: str = '', write: bool = False) -> tuple:
     mine, nev, sids = own(store, tid, cwd), [_n(p) for p in floor.kept_secret()], () if write else _sids(store, tid)
     ok = granted(store, tid) + ([_n(tempfile.gettempdir())] if write else _open())
     verb, why = ('write', TABLE['writes'].why) if write else ('read', WHY)
-    held, blind = {}, False
+    held, blind, out = {}, False, []
     for raw in paths or []:
         if raw is None: blind = True; continue
+        # ...WHAT A LATER SESSION RUNS IS NEVER JUST WORK (red team #2, T2): a git hook, git's config, a CLI's settings or hooks - the floor's
+        # one list (floor._is_conf), on every road - waits for his press even in the agent's own checkout; his yes lets that one file be written
+        if write and floor._is_conf(c := floor._norm(raw)) and not any(_in(_n(raw), _n(g)) for g in granted(store, tid)):
+            out.append(settings(f'write {os.path.basename(c)}', _n(raw))); continue
         p, pat = _n(_cut(raw)), _n(raw)
         # ...a never-place is never the work's: only a work folder INSIDE it (the task's scratch, outputs, mail in Taskuary's home) lets a
         # read there through - a checkout at the home folder does not open the sign-ins in it. A glob that can reach one is that one
@@ -192,9 +196,14 @@ def judge(store, tid, paths, cwd: str = '', write: bool = False) -> tuple:
         p = os.path.realpath(os.path.expanduser(_cut(str(raw))))     # ...said as the owner's own spelling of it, never case-folded
         folder = p if os.path.isdir(p) else os.path.dirname(p)
         held.setdefault(folder, []).append('' if folder == p else os.path.basename(p))
-    out = [{'tool': verb, 'kind': 'reads', 'what': _said(f, ns, verb), 'why': why, 'where': f, 'folder': f} for f, ns in held.items()]
+    out += [{'tool': verb, 'kind': 'reads', 'what': _said(f, ns, verb), 'why': why, 'where': f, 'folder': f} for f, ns in held.items()]
     if blind: out.append({'tool': verb, 'kind': 'reads', 'what': f'{verb} files at a path it builds from a variable', 'why': why, 'where': '', 'folder': ''})
     return out, ''
+
+
+def settings(what: str, path: str = '') -> dict:
+    "One held step that changes what a later session or git command runs (TABLE 'settings'): `path` the file his yes lets it write."
+    return {'tool': 'write', 'kind': 'settings', 'what': what, 'why': TABLE['settings'].why, 'where': path, 'folder': path}
 
 
 def _cut(p: str) -> str:
@@ -358,8 +367,11 @@ def env_for(store, tid, cwd: str = '') -> dict:
 
 def of_command(store, tid, cmd: str, cwd: str = '') -> tuple:
     "(held, never) for a shell line."
+    from . import floor
     made, ws = [], []
     ps = command_paths(cmd, cwd, env_for(store, tid, cwd), made, ws)
     wrote(tid, made)                                  # ...the picture it takes is its own work, read back without asking (wrote)
     (held, never), (wheld, wnever) = judge(store, tid, ps, cwd), judge(store, tid, ws, cwd, write=True)
-    return held + wheld, never or wnever
+    # ...and a line that writes one of them, or sets git's own config that runs a program - the floor's reading of a shell line (T2)
+    conf = [settings(why.removeprefix('it ')) for why in [floor._write_hit(str(cmd or ''), cwd)] if why]
+    return held + wheld + conf, never or wnever

@@ -405,6 +405,16 @@ export const rowOfTask = (items, n) => (items || []).find((i) => Number(i.tid) =
 // ...`closed`: a hit on a task closed or let go, drawn as the closed card it is - with no row on the rail (pulledRow), never one drawn at the
 // press and taken off a beat later when its card came back closed (the owner, live 2026-11-20)
 export const madeRow = (tid, title, closed = false) => ({ key: `task:${tid}`, kind: "task", tid: Number(tid), title: String(title || "").slice(0, 300), ...(closed ? { closed: true } : {}) });
+// ...AND A ROUTINE'S RUN IS ITS NEW TASK AT THE PRESS, as New's is (the owner, live 2026-11-25: "I hit Run on the routine for posting, it first opened
+// one I closed, then created a new one"): opened by its #task= link alone, no rail row held the run yet, so the routine's page went down at the press
+// and the task under it - the run before, closed - stood there until the new one's read came. `openTask`: the canvas's (TaskHubPage.openTask); a page
+// with none follows the link. False when the run made no task (a report runs in the background)
+export const openRun = (data, openTask, link) => {
+  const tid = Number(data?.task_id) || 0;
+  if (!tid) return false;
+  if (openTask) openTask(tid, { row: madeRow(tid, data.title) }); else link(`task=${tid}`);
+  return true;
+};
 // NEXT TURNS BLUE AS SOON AS THE MOVE SAVES (the owner, 2026-11-06): a light walk answer (no rail rides) carries the walk's whole word -
 // below included - and the rail on screen takes it until its own read lands, so a second press draws its row and Back stands at once
 export const withWalk = (pile, walk) => (pile && walk && "below" in walk ? { ...pile, walk } : pile);

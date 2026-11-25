@@ -43,6 +43,7 @@ import { useCapabilities } from "./capabilities.js";
 import DashboardEditor from "./DashboardEditor.jsx";
 import { plural } from "./timeWords.js";
 import { openAppLink } from "./appLinks.js";
+import { openRun } from "./funnelPile.js";
 import { routeOfHash } from "./canvasLinks.js";
 import { NewPlaybook, PB_EMPTY, PB_OPEN, PlaybookDetail, PlaybookRow, RecentlyDeleted as PlaybooksDeleted, pbOpen, usePlaybooks } from "./PlaybookShelf.jsx";
 import { NEW_PB, takePlaybookAsk } from "./playbookOpen.js";
@@ -347,7 +348,7 @@ const LINE_CHIP = { timeline: "Reports", alert: "reached you", send: "sent out",
 
 // `browse` (the assistant canvas, CanvasBrowse.jsx): Reports and Workflows are the sections, each report its tab row, and
 // one report its own editor - drawn through the canvas's frame instead of this tab's rail.
-export default function ReportsView({ browse = null, browseState = {}, onBrowseState = null }) {
+export default function ReportsView({ onOpenTask = null, browse = null, browseState = {}, onBrowseState = null }) {
   const [sources, setSources] = useState(null);
   const pbs = usePlaybooks();          // the third shelf: Reports / Workflows / Playbooks (PlaybookShelf.jsx)
   const [types, setTypes] = useState([]);
@@ -422,8 +423,8 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
     press.start(sid, runSig(lastRuns[sid]));
     try {
       const { data } = await api.post(`/api/reports/${sid}/rerun`);
-      // a workflow run IS a task: open it where the agent and its browser can be watched (the owner, 2026-10-08)
-      if (data.task_id) { press.done(sid); openAppLink(`task=${data.task_id}`); }
+      // a workflow run IS a task: open it where the agent and its browser can be watched (the owner, 2026-10-08) - drawn at the press (openRun)
+      if (openRun(data, onOpenTask, openAppLink)) press.done(sid);
       // ...a report runs in the background: its row reads Running… until its last run moves on, and that line says what came of it
     } catch (e) { press.fail(sid, e?.response?.data?.detail || "It could not be started - press Run now again."); }
     load();
@@ -576,7 +577,7 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
         reload={load} onBack={() => { setDashDraft(null); onBack(); }} onSaved={(sid) => { setDashDraft(null); onSaved(sid); }} />
     : agentWorkflow
     ? <WorkflowEditor key={String(bucketNow)} sourceId={openId} sources={sources} connectors={connectors} types={types} draft={draft}
-        reload={load} onBack={onBack} onSaved={saved(onSaved)} note={wizardNote}
+        reload={load} onOpenTask={onOpenTask} onBack={onBack} onSaved={saved(onSaved)} note={wizardNote}
         lastRun={openId != null && lastRuns[openId] ? (more) => <LastRun r={lastRuns[openId]} sid={openId} flush {...more} /> : null}
         lastRunRec={openId != null ? lastRuns[openId] : null}
         fixRun={fixRun?.sid === openId ? fixRun.runId : browse && browseState.fix && browseState.open === openId ? browseState.fix : null}

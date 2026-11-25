@@ -9,7 +9,7 @@ const src = (f) => readFileSync(fileURLToPath(new URL(`../src/${f}`, import.meta
 // one, Back returns; every step client state, one detail mounted at a time, and the open card is the next turn's subject.
 test("each of the four views draws through the canvas's frame when it is handed `browse`", () => {
   for (const [file, sig] of [["ConnectorsView.jsx", "export default function ConnectorsView({ onNavigate, browse = null, browseState = {}, onBrowseState = null })"],
-    ["ReportsView.jsx", "export default function ReportsView({ browse = null, browseState = {}, onBrowseState = null })"],
+    ["ReportsView.jsx", "export default function ReportsView({ onOpenTask = null, browse = null, browseState = {}, onBrowseState = null })"],
     ["SettingsView.jsx", "export default function SettingsView({ onNavigate, browse = null, browseState = {}, onBrowseState = null, area = \"settings\" })"],
     ["HubView.jsx", "export default function HubView({ onOpenTask, browse = null, browseState = {}, onBrowseState = null })"]]) {
     const s = src(file);

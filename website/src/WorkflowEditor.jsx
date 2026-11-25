@@ -15,6 +15,7 @@ import { effortChoices, keepEffort, modelChoices } from "./workflowBrain.js";
 import WorkflowSteps from "./WorkflowSteps.jsx";
 import { REPAIR, REPORT_WORDS, asReport, asSteps, askFor, diffKeys, firstMissing, onlyReads, outputsOf, toSaved } from "./workflowFlow.js";
 import { openAppLink } from "./appLinks.js";
+import { openRun } from "./funnelPile.js";
 import { useScheduleWords } from "./reportWords.js";
 
 const parse = (s) => { try { return JSON.parse(s || "{}"); } catch { return {}; } };
@@ -90,7 +91,7 @@ export const SchedulePicker = ({ sched, setSched, cron = "" }) => (
 
 
 export default function WorkflowEditor({ sourceId, sources, connectors, types, draft, reload, onBack, onSaved, note, composer, lastRun,
-  lastRunRec, fixRun, onFixTaken, onReport }) {
+  lastRunRec, fixRun, onFixTaken, onReport, onOpenTask = null }) {
   const cur = sources.find((s) => s.SourceId === sourceId) || null;
   const [cfg, setCfg] = useState(() => ({ type: "agent", access: "write", ...(cur ? parse(cur.ConfigJson) : draft || {}) }));
   const [sched, setSched] = useState(() => scheduleOf(cur ? parse(cur.ConfigJson) : draft || {}));
@@ -183,7 +184,7 @@ export default function WorkflowEditor({ sourceId, sources, connectors, types, d
     setBusy("run");
     try {
       const { data } = await api.post(`/api/reports/${sid}/rerun`);
-      if (data.task_id) { openAppLink(`task=${data.task_id}`); return; }
+      if (openRun(data, onOpenTask, openAppLink)) return;
       setMsg({ ok: true, text: `${data.title || "It"} is running.` });
     } catch (e) { setMsg({ ok: false, text: e?.response?.data?.detail || "It could not be started." }); }
     finally { setBusy(""); }

@@ -386,7 +386,8 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
   const envelopeEdits = (verb) => verb !== "approve" || proposal || delivery.frozen ? {}
     : isEmail ? { bcc: bccNow, subject: subj != null && subj !== subjFiled ? subj : null }
     : newMeeting ? { subject: subj != null && subj !== subjFiled ? subj : null } : {};
-  const decide = async (verb, anyway = false, close = undefined, blanksOk = false) => {
+  // `always`: "Always approve this step" on a routine's write card - it runs now, and that step as saved runs unpressed after (flow.grant)
+  const decide = async (verb, anyway = false, close = undefined, blanksOk = false, always = false) => {
     if (delivery.active || (delivery.frozen && verb !== "approve")) return;
     if (verb === "approve" && !blanksOk && askBlank({ verb, anyway, close })) return;
     setAsked(null);
@@ -404,6 +405,7 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
           // ...Send and close says so WITH the send: the server closes as it goes, before the task's agent is told it went - told first, a
           // parked agent was working again by the time the page asked for the close, and the task stayed open (the agent walk, 2026-11-10)
           ...(closesIt && shut && verb === "approve" ? { closes: true } : {}),
+          ...(always && verb === "approve" ? { always: true } : {}),
           // ...a change card's boxes he changed, by their keys (workflows.edit_change): what he edited is what is saved
           ...(verb === "approve" && Object.keys(changedWords).length ? { fields: changedWords } : {}) }), data = out.data;
       // NO ANSWER IN A MINUTE is not "nothing was sent": the server may be sending still. The card reads the review again and its
@@ -556,6 +558,9 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
         why: proposal.kind === "closeout" && blocked ? gh.reason.split(" - ")[0] : "",
         title: proposal.kind === "closeout" && blocked ? gh.reason : proposal.kind === "playbook" ? "Save this process in Reports → Playbooks; nothing is sent to the sender"
           : proposal.kind === "closeout" ? `${proposal.approveLabel} - the text above goes with it` : "Run the proposed action; nothing is sent to the sender" },
+      // ...A ROUTINE'S OWN WRITE STEP can be approved for good (the owner, 2026-11-25): this step, as saved, runs unpressed on its later runs
+      ...(proposalFrom(r)?.flow_run?.key ? [{ id: no("always"), label: "Always approve this step", tone: "s", disabled: off, run: () => decide("approve", false, undefined, false, true),
+        title: "Run it now, and let this routine run this exact step without asking again - take it back under Settings → Agent permissions" }] : []),
     ] : !canSendIt ? [
       // NO CLOSE UNDER A DRAFT THAT CANNOT LEAVE (the owner, 2026-10-22: "there should be no mark done under reply if you can't send
       // out message ... mark done is on the tasks"): the draft is there to copy, Redraft beside it, and the task's own Mark done closes

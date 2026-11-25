@@ -351,7 +351,8 @@ def test_testing_a_write_step_dry_runs_it():
     steps = [{'id': 's1', 'kind': 'source', 'label': 'Put', 'type': 'smb_write', 'path': 'out/{{run.date}}.csv'}]
     with mock.patch.object(server, 'store', s):
         r = TestClient(server.app).post('/api/workflows/step-test', json={'flow': steps, 'index': 0}).json()
-    assert r['status'] == 'dry' and r['head'] == 'would run smb_write' and '"path": "out/20' in r['body']
+    # ...and says it would wait: a write to a connected system waits for his press, whatever the card's Authority (the owner, 2026-11-25)
+    assert r['status'] == 'dry' and r['head'] == 'would wait for your yes: smb_write' and '"path": "out/20' in r['body']
 
 
 # ── repair: a workflow is a goal ────────────────────────────────────────────────────────────────────────────────────────

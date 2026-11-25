@@ -110,12 +110,13 @@ class ARedditPostFromItsInboxCard(unittest.TestCase):
 
 
 class WhatReaches(unittest.TestCase):
-    def test_every_executor_is_a_decision(self):
-        "A new executor is either a read, a write that reaches nobody, or a send - never inherited."
-        undecided = [t for t in REGISTRY if not t.startswith('_') and scopes.needs(t) != 'read'
-                     and t not in scopes.REACHES and t not in scopes.QUIET_WRITES]
-        self.assertEqual(undecided, [])
-        self.assertFalse(set(scopes.REACHES) & scopes.QUIET_WRITES)
+    def test_every_write_to_a_connector_waits_for_his_press(self):
+        """The owner, 2026-11-25: "to write to the systems or any connector should require approval mechanically". Every executor that is
+        not a read (scopes.ACTIONS) waits, an unclassified one included - only Taskuary's own store is written unpressed."""
+        quiet = [t for t in REGISTRY if not t.startswith('_') and t not in ('mcp', 'graphql') and scopes.needs(t) != 'read'
+                 and t not in scopes.OWN_STORE and not scopes.reaches(t)]
+        self.assertEqual(quiet, [])
+        self.assertTrue(scopes.reaches('some_new_executor'))
 
     def test_mcp_reaches_unless_its_server_says_read_only(self):
         self.assertTrue(scopes.reaches('mcp', {}, None))
@@ -128,8 +129,11 @@ class WhatReaches(unittest.TestCase):
         self.assertTrue(scopes.reaches('graphql', {'query': 'mutation{addComment(input:{subjectId:"1",body:"hi"}){clientMutationId}}'}))
         self.assertTrue(scopes.reaches('graphql', {'query': '  # first a comment\n mutation Add { x }'}))
 
-    def test_a_file_save_and_a_bill_do_not_reach(self):
-        for t in ('sharepoint_save', 'onedrive_save', 'quickbooks_bill', 'sftp_put'): self.assertEqual(scopes.reaches(t), '', t)
+    def test_a_file_save_a_bill_and_a_record_wait_and_their_reads_do_not(self):
+        for t in ('sharepoint_save', 'onedrive_save', 'quickbooks_bill', 'quickbooks_expense', 'sftp_put', 'sftp_move', 'smb_write', 'smb_move',
+                  'intacct_create', 'intacct_update', 'zoho_invoice_draft', 'winrm'): self.assertTrue(scopes.reaches(t), t)
+        for t in ('quickbooks_vendors', 'intacct', 'sftp_get', 'smb_read', 'sharepoint_file', 'calendar', 'google_sheets', 'hub_write'):
+            self.assertEqual(scopes.reaches(t), '', t)
 
     def test_an_agents_unannotated_mcp_tool_waits(self):
         s = server.store
@@ -150,9 +154,10 @@ class WhatReaches(unittest.TestCase):
         s.save_connector({'ConnectorId': card['ConnectorId'], 'Active': 0}, 'test')
 
 
-class AFileIsNotAMessage(unittest.TestCase):
-    """The owner, 2026-10-25: agents may save to SharePoint or OneDrive through a card with write Authority, with no press - and say
-    where it landed."""
+class AFileSavedIsAWrite(unittest.TestCase):
+    """The owner, 2026-11-25: "why would file uploads ... have their own rules? ... to write to the systems or any connector should require
+    approval mechanically". An agent's save to SharePoint waits as a card even at write Authority - nothing is put before his press - and
+    the press saves it and says where it landed. (It ran unpressed at write before, 2026-10-25.)"""
     def setUp(self):
         s = server.store
         self.card = s.get_connector_by_type('sharepoint')
@@ -161,15 +166,17 @@ class AFileIsNotAMessage(unittest.TestCase):
 
     def tearDown(self): server.store.save_connector({'ConnectorId': self.card['ConnectorId'], 'Active': 0, 'Scope': ''}, 'test')
 
-    def test_an_agent_saves_to_sharepoint_at_write_and_is_told_where(self):
+    def test_an_agents_save_at_write_waits_for_his_press_and_the_press_saves_it(self):
+        tid = server.store.create_task({'Title': 'File the Q3 summary', 'Kind': 'general', 'Status': 'open'}, 'owner')
         put = mock.Mock(status_code=201, json=lambda: {'name': 'summary.md', 'webUrl': 'https://northwind.example/sites/Ops/summary.md'})
         with mock.patch('taskuary.sharepoint._token', return_value='tok'), mock.patch('taskuary.sharepoint.site_id', return_value='sid'), \
              mock.patch('taskuary.sharepoint.requests.put', return_value=put) as p:
-            r = c.post('/api/tools/run', headers=agent(), json={'type': 'sharepoint_save', 'site': 'northwind.example/sites/Ops',
-                                                                'path': 'Shared Documents/summary.md', 'text': '# Q3'})
-        j = r.json()
-        self.assertEqual(r.status_code, 200); self.assertTrue(j['ok'], j)
-        self.assertIn('https://northwind.example/sites/Ops/summary.md', j['output'])
+            r = c.post('/api/tools/run', headers=agent(tid), json={'type': 'sharepoint_save', 'site': 'northwind.example/sites/Ops', 'task_id': tid,
+                                                                   'path': 'Shared Documents/summary.md', 'text': '# Q3'})
+            self.assertEqual(r.status_code, 202, r.text); self.assertTrue(r.json()['queued'])
+            self.assertFalse(p.called, 'nothing is saved before his press')
+            out = proposals.execute(server.store, server.store.get_review(r.json()['review']), 'owner')
+        self.assertIn('https://northwind.example/sites/Ops/summary.md', json.dumps(out))
         self.assertEqual(p.call_args.kwargs['data'], b'# Q3')
         self.assertEqual(p.call_args.kwargs['params'], {'@microsoft.graph.conflictBehavior': 'rename'})   # never overwrites
 

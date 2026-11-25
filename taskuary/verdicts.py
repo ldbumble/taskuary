@@ -655,10 +655,19 @@ def _post_with_closeout(store, closeout: dict, reply: dict, text: str, actor: st
 QUIET = contextvars.ContextVar('verdicts_quiet', default=False)
 
 
-def decide(store, rv: dict, verb_in: str, *a, closes: bool = False, **kw) -> dict:
+def decide(store, rv: dict, verb_in: str, *a, closes: bool = False, always: bool = False, **kw) -> dict:
     """_decide, and a yes that went wakes the task's agent where its last turn said it waits on that Send (general.follow_up).
-    `closes`: Send and close - the task's close, through its one gate, as the send went (out['shut'])."""
+    `closes`: Send and close - the task's close, through its one gate, as the send went (out['shut']).
+    `always`: his "Always approve this step" on a routine's write card - it runs now, and that step of that routine as saved runs unpressed
+    from then on (flow.grant). Only a routine's own step carries one; on any other card it is refused before anything runs."""
+    from .proposals import _draft
+    fr = _draft(rv).get('flow_run') if always else None
+    if always and (verb_in != 'approve' or not isinstance(fr, dict) or not fr.get('key')):
+        return {'ok': False, 'status': rv.get('Status'), 'sent': None, 'send_error': 'only a routine\'s own write step can be always approved - nothing was run'}
     out = _decide(store, rv, verb_in, *a, **kw)
+    if always and out.get('ok'):
+        from . import flow
+        out['always'] = flow.grant(store, fr, a[2] if len(a) > 2 else kw.get('actor', 'owner'))
     # ...his answer on a proposed card is written down for the one rule (gate): the same card raised again after his no is refused as his.
     # A held act's own gate writes its own (perform, declined)
     if out.get('ok') and rv.get('Kind') == 'action' and rv.get('TaskId') and verb_in in ('approve', 'edit', 'reject'):

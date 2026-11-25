@@ -1052,7 +1052,7 @@ REGISTRY = {'sqlite': run_sqlite, 'mssql': run_mssql, 'database': run_database,
             # files & sheets people already keep: a Google Sheet, a SharePoint list, a file in a library
             'google_sheets': _lazy('sheets', 'run_google_sheets'),
             'sharepoint_list': _lazy('sharepoint', 'run_sharepoint_list'), 'sharepoint_file': _lazy('sharepoint', 'run_sharepoint_file'),
-            # ...and an agent's file saved into a library or onto the owner's OneDrive: a write that reaches nobody (scopes.QUIET_WRITES)
+            # ...and an agent's file saved into a library or onto the owner's OneDrive: a write, so an agent's waits for his press (scopes.reaches)
             'sharepoint_save': _lazy('sharepoint', 'run_sharepoint_save'), 'onedrive_save': _lazy('sharing', 'run_onedrive_save'),
             # the knowledge base: documents indexed in this store (knowledge.py) - searched, and refreshed on a schedule
             'kb_search': _lazy('knowledge', 'run_kb_search'), 'kb_reindex': _lazy('knowledge', 'run_kb_reindex'),

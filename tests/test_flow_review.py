@@ -130,7 +130,7 @@ def test_an_approved_write_is_that_step_done_and_the_run_goes_on_below_it():
     assert out['waiting']
     rv = s._one("SELECT * FROM review WHERE TaskId=? AND Kind='action'", (tid,))
     p = json.loads(rv['DraftText'])
-    assert p['flow_run'] == {'source_id': src['SourceId'], 'run_id': out['run_id'], 'step': 's1'}
+    assert p['flow_run'] == {'source_id': src['SourceId'], 'run_id': out['run_id'], 'step': 's1', 'key': flow.step_key(json.loads(src['ConfigJson'])['flow'][0])}
     ran = []
     with mock.patch.dict(reports.REGISTRY, {'smb_write': lambda cfg: (ran.append(cfg) or 'wrote 1 file', '')}), \
             mock.patch.object(workflows, '_spawn', lambda f: f()):

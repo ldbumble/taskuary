@@ -1060,6 +1060,18 @@ class APostIsAKindOfTheOneReviewTool(unittest.TestCase):
         self.assertEqual(cardqueue.state(self.s, self.tid)['live'], [rvs[0]['ReviewId']])
         self.assertEqual(cardqueue.held(self.s, self.tid), {rvs[1]['ReviewId'], rvs[2]['ReviewId']})
 
+    def test_a_post_that_replaces_its_network_never_takes_back_the_card_it_just_raised(self):
+        """The owner's live task, 2026-11-25: his answer greyed the Reddit card; the agent raised it again with `replaces: "Reddit"`, and the
+        new card - the only Reddit one still unsent - was withdrawn by its own call ("it then got rid of that image")."""
+        tool(self.tid, 'propose', kind='post', network='reddit', subreddit='smallbusiness', title='Three tools', text='What we found.',
+             picture='tools-compared.png')
+        old, = self.cards(); self.s.decide_review(old['ReviewId'], 'superseded', None, 'taskuary', note='set aside when you moved on')
+        said, err = tool(self.tid, 'propose', kind='post', network='reddit', subreddit='smallbusiness', title='Three tools',
+                         text='What we found. Disclosure: none.', picture='tools-compared.png', replaces='Reddit')
+        self.assertFalse(err, said)
+        new, = self.cards(); self.assertIn('Disclosure', json.loads(new['DraftText'])['text'])
+        self.assertNotEqual(json.loads(said).get('replaced'), new['ReviewId'])
+
     def test_a_network_with_no_post_card_says_which_there_are(self):
         said, err = tool(self.tid, 'propose', kind='post', network='myspace', text='Hi')
         self.assertTrue(err); self.assertIn('no post card', said); self.assertIn('linkedin', said); self.assertFalse(self.cards())

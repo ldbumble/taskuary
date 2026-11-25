@@ -1013,9 +1013,12 @@ def replaced(store, doors, tid: int, was: list, out, old, why: str):
     from . import verdicts
     o = json.loads(out.body) if hasattr(out, 'body') else out
     if not old or not (isinstance(o, dict) and o.get('ok')): return o
+    # ...THE NEW CARD IS NEVER THE ONE IT TAKES BACK, BY WHATEVER KEY ITS DOOR NAMED IT (the owner's live task, 2026-11-25): a post's door answers
+    # `review`, not `review_id`, so nothing was kept - "replaces: Reddit" withdrew the Reddit card it had just raised, picture and all
+    new = o.get('review_id') or o.get('review')
     # ...an email to the same person was rewritten in its own review: withdrawing `old` then took back the new one with it
-    if str(old).casefold().removeprefix('rv') == str(o.get('review_id')): return {**o, 'replaced': o['review_id']}
-    w = doors['withdraw'](tid, why, str(old), keep=o.get('review_id') or 0)
+    if str(old).casefold().removeprefix('rv') == str(new): return {**o, 'replaced': new}
+    w = doors['withdraw'](tid, why, str(old), keep=new or 0)
     w = json.loads(w.body) if hasattr(w, 'body') else w
     if w.get('ok'): return {**o, 'replaced': w.get('review_id')}
     # ...this very call already took its place (a new reply supersedes the old one itself): "nothing unsent to withdraw" read to the agent

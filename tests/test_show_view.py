@@ -40,7 +40,7 @@ class TheCheck(unittest.TestCase):
         bad(one('iframe', {'src': 'https://vendor.example'}), r"type 'iframe' is not one of table, stats")
         bad(one('text', {'text': 'hi', 'color': 'red'}), 'props has color - a text takes text')
         bad(one('text', {}), 'props needs text')
-        bad(one('chart', {'kind': 'radar', 'points': [{'label': 'x', 'value': 1}]}), 'must be one of bar, line, pie')
+        bad(one('chart', {'kind': 'radar', 'points': [{'label': 'x', 'value': 1}]}), 'must be one of bar, line, area, pie')
         bad(one('chart', {'points': [{'label': 'x', 'value': '1'}]}), r'points\[0\]\.value must be a number')
         bad(one('table', {'columns': ['a'], 'rows': [[1, 2]]}), 'at most 1 cells')
         bad(one('table', {'columns': ['a'], 'rows': [{'b': 1}]}), 'not among the columns')

@@ -289,10 +289,10 @@ async def _lifespan(_app):
         from . import dashboards                                   # ...and a saved dashboard's cuts on them
         if (n := dashboards.migrate_priorities(store)): logger.info(f'{n} dashboard(s) now cut on regular / important / urgent')
     except Exception as e: logger.warning(f'priority rename skipped: {e}')
-    try:                           # ...and the built-in dashboard's AI-use tiles, once (2026-11-06)
+    try:                           # ...and the built-in dashboard as it is drawn now
         from . import dashboards
-        if (n := dashboards.migrate_ai_tiles(store)): logger.info(f'AI-use tiles added to {n} dashboard(s)')
-        if (n := dashboards.migrate_ai_tiles_up(store)): logger.info(f'AI-use tiles moved up in {n} dashboard(s)')   # ...and up top (2026-11-07)
+        # ...every earlier layout of it nobody edited, today's (2026-11-24: what the AI spent; the AI-use tiles of 2026-11-06 and -07 with it)
+        if (n := dashboards.migrate_glance(store)): logger.info(f'{n} unedited built-in dashboard(s) now draw what the AI spent')
     except Exception as e: logger.warning(f'AI-use tiles not added: {e}')
     try:                           # ...and a change card waiting from before, drawn as its new words (2026-11-24)
         from . import proposals

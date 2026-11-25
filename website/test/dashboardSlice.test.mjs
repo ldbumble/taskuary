@@ -3,7 +3,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { OTHER, aggregate, componentRows, daysAgo, delta, fmt, groupBy, inRange, inSegment, itemLink, segmentValues, seriesSlots,
-  snapshotOf, sortRows, spanOf4, stacked, timeSeries } from "../src/dashboard/slice.js";
+  slices, snapshotOf, sortRows, spanOf4, stacked, timeSeries, withoutSeries, clampDays } from "../src/dashboard/slice.js";
 import { canvasRequestFromHash, hashFor } from "../src/canvasLinks.js";
 import { DRAFT_HASH } from "../src/draftHandoff.js";
 import { DASH, placeHref } from "../src/words.js";
@@ -122,4 +122,33 @@ test("a shared dashboard carries its tiles as lines and the rows it drew - sever
   assert.equal(snap.text, "Open tasks: 1", "the tile over the spec's own range, not a filter the page had set");
   assert.deepEqual(snap.data.map((r) => r.source), ["Tasks", "Tasks", "Mail"]);
   assert.deepEqual(snapshotOf({ components: [] }, { sources: { t: { rows: [{ a: 1 }] } } }, NOW), { text: "", data: [{ a: 1 }] }, "one source: its rows as they are");
+});
+
+// ── what the AI spent (the owner, 2026-11-24): tokens per task, a legend that switches a series off, a pie's shares, the range slider ──
+test("per averages each value's own number - tokens per task - and a row with no task is no one's", () => {
+  const rows = [{ t: 1, v: 10, day: "2026-10-23" }, { t: 1, v: 30, day: "2026-10-22" }, { t: 2, v: 20, day: "2026-10-22" }, { t: null, v: 999, day: "2026-10-22" }];
+  assert.equal(aggregate(rows, "sum", "v", "t"), 30);
+  assert.equal(aggregate(rows, "count", null, "t"), 1.5);
+  assert.equal(aggregate([], "sum", "v", "t"), null);
+  // ...per day too (a stat's sparkline), a day with no task blank rather than nought
+  const ts = timeSeries(rows, "day", "sum", "v", { days: 3, now: new Date("2026-10-23T10:00:00"), per: "t" });
+  assert.deepEqual(ts.map((p) => p.value), [null, 25, 10]);
+});
+
+test("a legend entry pressed takes its series out of every column, the rest keeping theirs", () => {
+  const rows = [{ d: "2026-10-22", who: "Triage", n: 5 }, { d: "2026-10-22", who: "Tasks", n: 50 }, { d: "2026-10-23", who: "Triage", n: 2 }];
+  const st = stacked(rows, "d", "who", "sum", "n", { days: 2, now: new Date("2026-10-23T10:00:00") });
+  const off = withoutSeries(st, new Set(["Tasks"]));
+  assert.deepEqual(off.series, ["Triage"]);
+  assert.deepEqual(off.keys, st.keys, "every day still drawn, a quiet one at nought");
+  assert.equal(off.cells["2026-10-22"].Tasks, undefined);
+  assert.equal(off.cells["2026-10-22"].Triage.value, 5);
+  assert.equal(withoutSeries(st, new Set()), st);
+});
+
+test("a pie's slices are shares of the whole, a nought or a negative no slice; the slider's days are whole, one to ninety", () => {
+  const got = slices([{ key: "Triage", value: 30 }, { key: "Tasks", value: 90 }, { key: "Advisor", value: 0 }, { key: "Bad", value: -4 }]);
+  assert.equal(got.total, 120);
+  assert.deepEqual(got.slices.map((g) => [g.key, g.share]), [["Triage", 0.25], ["Tasks", 0.75]]);
+  assert.deepEqual([clampDays("14"), clampDays(0), clampDays(400), clampDays(6.6), clampDays("x")], [14, 1, 90, 7, 1]);
 });

@@ -1332,7 +1332,8 @@ def opens(store) -> dict | None:
     Taskuary at a glance, the one every install comes with - else the agent's finished post while it is open, else the first open task."""
     if not enabled() or os.environ.get(OPENS_ENV, '1') == '0' or store is None: return None
     from .dashboards import GLANCE
-    if (d := next((s for s in store.list_sources() if s.get('Channel') == 'report' and s.get('Name') == GLANCE['title']), None)):
+    # ...found by its title, which a report keeps as its Address (2026-11-24: matched on a Name no source has, the demo opened on a task)
+    if (d := next((s for s in store.list_sources() if s.get('Channel') == 'report' and s.get('Address') == GLANCE['title']), None)):
         return {'report': d['SourceId']}
     live = [t for t in store.list_tasks() if t.get('Status') not in ('done', 'dropped')]
     t = next((t for t in live if t.get('Title') == SHOWCASE), None) or next(iter(live), None)
@@ -1464,8 +1465,11 @@ SESSIONS = ((38, 'finished'), (12, 'finished'), (55, 'failed'), (21, 'finished')
 def seed_history_work(store, f, past) -> None:
     import uuid
     at = lambda s, mins: (datetime.strptime(s, '%Y-%m-%d %H:%M:%S') + timedelta(minutes=mins)).strftime('%Y-%m-%d %H:%M:%S')
-    for tid, _m, when, _c, _v in past:            # closed a few hours after it arrived, not at the moment the demo was built
-        store._exec("UPDATE task SET ClosedAt=? WHERE TaskId=? AND Status='done'", (at(when, 150), tid))
+    # closed a few hours after it arrived, not at the moment the demo was built - or a day or two later, as work is: every one closed the
+    # same day put the week's done tasks on the days the mail came and none today, one odd hump on the dashboard's sparkline (2026-11-24)
+    latest = (datetime.now() - timedelta(minutes=40)).strftime('%Y-%m-%d %H:%M:%S')
+    for i, (tid, _m, when, _c, _v) in enumerate(past):
+        store._exec("UPDATE task SET ClosedAt=? WHERE TaskId=? AND Status='done'", (min(at(when, 150 + (i % 3) * 1440), latest), tid))
     replies = [p for p in past if p[4] == 'reply']
     for (tid, mid, when, _c, _v), hrs in zip(replies, REPLY_HOURS):
         rid = f.review(tid, mid, status='approved', draft='Done.', final='Done.')
@@ -1480,12 +1484,26 @@ def seed_history_work(store, f, past) -> None:
 
 # WHAT THE AI USED (aiusage.py): the demo has no AI, so each task's calls are written out - triage on the quick model, a draft or a
 # summary on the normal one, and on the asks an agent worked a run on the normal or hard model, with tokens and minutes that look like
-# a real week's. Derived from the task id, so every demo draws the same numbers.
-AI_MODELS = {'light': 'claude-haiku-4-5', 'standard': 'claude-sonnet-4-5', 'strong': 'claude-opus-4-1'}
+# a real week's. Derived from the task id, so every demo draws the same numbers. The calls go through the Anthropic API card, so they have
+# a list price (aiprices.json); a coding run is Claude Code on her plan, so it has none - as in a real office.
+AI_MODELS = {'light': 'claude-haiku-4-5', 'standard': 'claude-sonnet-4-5', 'strong': 'claude-opus-4-5'}
+# ...and THE WEEKS AROUND THE TASKS (the owner, 2026-11-24: "a believable week"): the mail triaged and filed, the Advisor's looks, the
+# Assistant's answers, agent work on asks long closed and a memory pass - two weeks of it with a working week's rhythm, so a day, a week
+# and the one before it compare as a real office's do
+WEEKDAY = (1.0, 1.1, 1.05, 0.95, 0.8, 0.25, 0.15)          # Monday to Sunday
+
+
+def _usage_row(store, at, job, tier, i, o, pick, **kw) -> None:
+    from .kinds import AGENT
+    store.add_brain_route({'At': at.strftime('%Y-%m-%d %H:%M:%S'), 'Job': job, 'Pick': pick, 'Model': '', 'Tier': tier, 'Rule': 'demo',
+                           'Why': 'Written for the demo - no AI ran', 'Outcome': 'ok', 'Ran': AI_MODELS[tier], 'TokensIn': i,
+                           'Cached': int(i * (0.6 if job in AGENT else 0.3)), 'TokensOut': o, 'Ms': kw.pop('ms', 4000 + o * 8), 'Calls': 1, **kw})
 
 
 def seed_ai_usage(store) -> int:
-    """Route rows with usage for every task that has none yet. Returns how many were written."""
+    """Route rows with usage for every task that has none yet, and the two weeks of work on no task once. Returns how many were written."""
+    from .kinds import AGENT
+    api = f"connector:{c['ConnectorId']}" if (c := store.get_connector_by_type('anthropic')) else 'cli:claude'
     n, have = 0, {r['TaskId'] for r in store._rows('SELECT DISTINCT TaskId FROM brainroute WHERE TaskId IS NOT NULL')}
     for t in store._rows("""SELECT t.TaskId, t.Kind, COALESCE((SELECT MIN(m.SentAt) FROM message m WHERE m.TaskId=t.TaskId), t.CreatedAt) Born
                             FROM task t ORDER BY t.TaskId"""):
@@ -1493,21 +1511,33 @@ def seed_ai_usage(store) -> int:
         if tid in have: continue
         try: born = datetime.strptime(str(t['Born'] or '')[:19].replace('T', ' '), '%Y-%m-%d %H:%M:%S')
         except ValueError: born = datetime.now()
-        from .kinds import AGENT
         k = tid * 7919
         calls = [('triage', 'light', 2600 + k % 2400, 140 + k % 160, 1800 + k % 2600, 0)]
         if tid % 3: calls.append(('draft', 'standard', 5200 + k % 5000, 380 + k % 420, 6500 + k % 7000, 4))
         if t['Kind'] in AGENT or tid % 4 == 0:
-            hard = tid % 5 == 0
             job = 'coding' if t['Kind'] == 'coding' else 'general'
-            calls.append((job, 'strong' if hard else 'standard', 60000 + k % 340000, 4000 + k % 22000, (6 + k % 40) * 60000, 9))
+            calls.append((job, 'strong' if tid % 5 == 0 else 'standard', 40000 + k % 160000, 3000 + k % 12000, (6 + k % 40) * 60000, 9))
             calls.append(('summary', 'light', 3800 + k % 3000, 260 + k % 200, 2400 + k % 1800, 60))
         for job, tier, i, o, ms, after in calls:
-            at = (born + timedelta(minutes=after)).strftime('%Y-%m-%d %H:%M:%S')
-            store.add_brain_route({'At': at, 'Job': job, 'TaskId': tid, 'Pick': 'cli:claude', 'Model': '', 'Tier': tier, 'Rule': 'demo',
-                                   'Why': 'Written for the demo - no AI ran', 'Outcome': 'ok', 'Ran': AI_MODELS[tier], 'TokensIn': i,
-                                   'Cached': int(i * 0.6) if job in AGENT else 0, 'TokensOut': o, 'Ms': ms, 'Calls': 1,
-                                   'Sid': f'demo-run-{tid}' if job in AGENT else None})
+            _usage_row(store, born + timedelta(minutes=after), job, tier, i, o, 'cli:claude' if job == 'coding' else api, TaskId=tid, ms=ms,
+                       Sid=f'demo-run-{tid}' if job in AGENT else None)
+            n += 1
+    if store._rows("SELECT 1 FROM brainroute WHERE Job IN ('advisor', 'assistant') LIMIT 1"): return n
+    now, today = datetime.now(), datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    for d in range(14):
+        day = today - timedelta(days=d)
+        w, k = WEEKDAY[day.weekday()], (d + 3) * 2654435761 % 1000
+        jit = lambda s: 0.85 + ((k * (s + 7)) % 300) / 1000      # 0.85 to 1.15, the same every demo
+        calls = [('triage', 'triage.classify', 'light', 6 * 60 + 50 + h * 23, int(6500 * jit(h)), 260, api) for h in range(round(42 * w * jit(1)))]
+        calls += [('advisor', 'advisor.run', 'standard', 7 * 60 + 40 + h * 150, int(62000 * jit(h + 2)), 2600, api) for h in range(max(1, round(4 * w)))]
+        calls += [('assistant', None, 'standard', 9 * 60 + 15 + h * 45, int(30000 * jit(h + 4)), 1500, api) for h in range(round(12 * w * jit(2)))]
+        # ...the week before had its own asks worked, which are not tasks here: their agent work is said here instead
+        calls += [('general', None, 'standard', 9 * 60 + h * 47, int(170000 * jit(h + 6)), 9000, api) for h in range(round((8 if d < 7 else 11) * w * jit(3)))]
+        calls += [('coding', None, 'standard', 10 * 60 + h * 67, int(260000 * jit(h + 8)), 14000, 'cli:claude') for h in range(round(3 * w))]
+        calls += [('memory', 'memory.reflect', 'light', 21 * 60, 2600, 300, api)]
+        for h, (job, caller, tier, mins, i, o, pick) in enumerate(calls):
+            if (at := day + timedelta(minutes=mins)) > now: continue
+            _usage_row(store, at, job, tier, i, o, pick, Caller=caller, **({'Sid': f'demo-week-{d}-{h}', 'ms': (8 + h % 30) * 60000} if job in AGENT else {}))
             n += 1
     return n
 

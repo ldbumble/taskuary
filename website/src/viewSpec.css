@@ -203,11 +203,3 @@
 .tq-view-said { font-size: 13px; color: var(--d-muted); }
 /* A VALUE THAT COULD NOT BE WORKED OUT says so where it stands, in plain words - the view around it still draws */
 .tq-view-err { font-size: 12.5px; line-height: 1.4; color: var(--v-warn); overflow-wrap: anywhere; }
-/* a pie: the ring beside its legend, stacking where the view is narrow */
-.tq-view-pie { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
-.tq-view-pie svg { width: 132px; height: 132px; flex: none; }
-.tq-view-pie ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; flex: 1; min-width: 160px; font-size: 13.5px; }
-.tq-view-pie li { display: grid; grid-template-columns: 10px 1fr auto 3.2em; align-items: center; gap: 8px; color: var(--d-ink2); }
-.tq-view-pie li i { width: 10px; height: 10px; border-radius: 3px; }
-.tq-view-pie li b { color: var(--d-ink); font-weight: 600; font-variant-numeric: tabular-nums; }
-.tq-view-pie li em { font-style: normal; color: var(--d-muted); text-align: right; font-variant-numeric: tabular-nums; }

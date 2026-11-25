@@ -60,17 +60,31 @@ def for_message(store, rids, mid) -> None:
     for rid in (rids or ()) if mid else ():
         try: store.set_brain_route(rid, MessageId=int(mid))
         except Exception as e: logger.debug(f'aiusage: route {rid} not given its message - {e}')
+# WHO THE AI WORKED FOR (the owner, 2026-11-24: "spend per day ... per triage/advisor/tasks/assistant"): every row lands on one of these,
+# by its asker when it named one (CALLERS) and else by the job its brain was built for - stored facts, the same answer every run
+WHO = ('Triage', 'Advisor', 'Tasks', 'Assistant', 'Other')
+_WHO_ASKER = {'triage': 'Triage', 'rank': 'Triage', 'sent': 'Triage', 'advisor': 'Advisor', 'reports': 'Other', 'memory': 'Other'}
+_WHO_JOB = {'triage': 'Triage', 'rank': 'Triage', 'judge': 'Triage', 'advisor': 'Advisor', 'assistant': 'Assistant',
+            'general': 'Tasks', 'coding': 'Tasks', 'quick_work': 'Tasks', 'draft': 'Tasks', 'summary': 'Tasks'}
+
+
+def who(job, caller='') -> str:
+    "Which of WHO a call was for: the asker's word first (a report triaging its own run is the report's), else its job's."
+    return _WHO_ASKER.get(str(caller or '').split('.')[0]) or _WHO_JOB.get(job or 'triage', 'Other')
+
+
 TIER_WORDS = {'light': 'quick', 'standard': 'normal', 'strong': 'hard', 'fixed': 'as set', 'held': 'held'}
 RUN_JOBS = ('general', 'coding', 'quick_work')       # an agent's work: one row is a run, not one message's answer
 
 
-def note(model: str = '', i=None, cached=None, o=None) -> None:
-    "What one answer used, into the call's meter - nothing when no meter is open (a call made outside build_llm)."
+def note(model: str = '', i=None, cached=None, o=None, cost=None) -> None:
+    "What one answer used, into the call's meter - nothing when no meter is open (a call made outside build_llm). `cost`: dollars, as the provider said."
     m = _METER.get()
     if m is None: return
     if isinstance(model, str) and model: m['model'] = model
     for k, v in (('in', i), ('cached', cached), ('out', o)):
         if v is not None: m[k] = m.get(k, 0) + int(v)
+    if cost is not None: m['cost'] = round(m.get('cost', 0) + cost, 6)
 
 
 def fell(asked: str) -> None:
@@ -92,15 +106,24 @@ def anthropic(r) -> None:
          _n(u, 'input_tokens') + _n(u, 'cache_creation_input_tokens') + hit, hit, _n(u, 'output_tokens'))
 
 
-def openai(j: dict) -> None:
-    "An OpenAI-style answer: chat completions (prompt/completion_tokens) or the Responses API (input/output_tokens)."
+def _usd(v):
+    try: f = float(v)
+    except (TypeError, ValueError): return None
+    return f if f >= 0 and f == f and f != float('inf') else None
+
+
+def openai(j: dict, headers=None) -> None:
+    """An OpenAI-style answer: chat completions (prompt/completion_tokens) or the Responses API (input/output_tokens) - and what it cost where
+    the provider says: a LiteLLM gateway (the HIPAA AI card) in its x-litellm-response-cost header, OpenRouter in the usage's own `cost`."""
     u = (j or {}).get('usage') if isinstance(j, dict) else None
     if not isinstance(u, dict): return
+    said = _usd((headers or {}).get('x-litellm-response-cost'))
+    cost = said if said is not None else _usd(u.get('cost'))
     chat = 'prompt_tokens' in u
     d = u.get('prompt_tokens_details' if chat else 'input_tokens_details') or {}
     # ...a gateway in front of Claude or Gemini may say its cache read the Anthropic way beside it (LiteLLM's cache_read_input_tokens)
     note(j.get('model') or '', _n(u, 'prompt_tokens' if chat else 'input_tokens'), _n(d, 'cached_tokens') or _n(u, 'cache_read_input_tokens'),
-         _n(u, 'completion_tokens' if chat else 'output_tokens'))
+         _n(u, 'completion_tokens' if chat else 'output_tokens'), cost)
 
 
 def claude_result(j: dict) -> None:
@@ -261,6 +284,54 @@ def coding_turn(store, tid, sid: str, cli: str, started: str, ms: int, use: dict
         logger.debug(f'aiusage: an ACP turn of {sid} not counted - {e}'); return None
 
 
+# ── WHAT A CALL COST (the owner, 2026-11-24: "spend is cost, not tokens") ─────────────────────────────────────────────────────────
+# In this order: what the provider said it cost (Cost, kept as the answer came back); else its tokens at the model's list price
+# (aiprices.json, LiteLLM's table); else nothing - "price unknown", never a guess. A CLI on its plan and the ChatGPT plan cost nothing per
+# call ("on your plan"), a model on this machine nothing at all ("local").
+BILLING = ('reported', 'priced', 'plan', 'local', 'unknown')
+_PLAN_TYPES, _LOCAL_TYPES = ('chatgpt',), ('ollama',)
+
+
+@functools.lru_cache(maxsize=1)
+def prices() -> dict:
+    import json
+    from pathlib import Path
+    return json.loads((Path(__file__).with_name('aiprices.json')).read_text(encoding='utf-8'))['per_million_usd']
+
+
+def price_of(model) -> list | None:
+    "[input, output, cached read] dollars per million tokens for a model id as a brain names it ('anthropic/claude-sonnet-4-5@high'), or None."
+    m = str(model or '').strip().split('@')[0].rsplit('/', 1)[-1].lower()
+    return prices().get(m) if m else None
+
+
+def billing_of(store, pick: str, said: dict = None) -> str:
+    "How a brain is paid for: 'plan' (a CLI, the ChatGPT plan), 'local' (Ollama), else 'metered' - per call, by the provider."
+    said = {} if said is None else said
+    if (k := ('bill', pick)) in said: return said[k]
+    from .harness import card_id
+    cid = card_id(pick) if pick else None
+    if cid is None and str(pick or '').startswith('connector:') and pick[10:].isdigit(): cid = int(pick[10:])
+    if cid is None: out = 'plan' if str(pick or '').startswith('cli:') else 'metered'
+    else:
+        try: t = (store.get_connector(int(cid)) or {}).get('Type') or ''
+        except Exception: t = ''
+        out = 'plan' if t in _PLAN_TYPES else 'local' if t in _LOCAL_TYPES else 'metered'
+    said[k] = out
+    return out
+
+
+def cost(store, r: dict, said: dict = None) -> tuple:
+    "(dollars or None, how it is known - one of BILLING) for one route row."
+    if r.get('Cost') is not None: return round(float(r['Cost']), 6), 'reported'
+    how = billing_of(store, r.get('Pick') or '', said)
+    if how != 'metered': return None, how
+    p, i, c, o = price_of(r.get('Ran') or r.get('Model')), r.get('TokensIn'), r.get('Cached') or 0, r.get('TokensOut')
+    if not p or (i is None and o is None): return None, 'unknown'
+    hit = min(c, i or 0)
+    return round(((max(0, (i or 0) - hit)) * p[0] + hit * (p[2] if len(p) > 2 else p[0]) + (o or 0) * p[1]) / 1e6, 6), 'priced'
+
+
 # ── what was used, as rows: the task's fold and the dashboard's dataset ───────────────────────────────────────────────────────────
 def _brain(store, pick, said):
     if pick not in said:
@@ -274,16 +345,18 @@ def row(store, r: dict, said: dict = None) -> dict:
     "One route row in plain words: when, the job, the brain and model, quick/normal/hard, tokens and seconds (None where uncounted)."
     from .brainroute import JOB_WORDS
     from .llm import fallback_line
-    brain, ms = _brain(store, r.get('Pick') or '', {} if said is None else said), r.get('Ms')
+    said = {} if said is None else said
+    brain, ms = _brain(store, r.get('Pick') or '', said), r.get('Ms')
+    usd, how = cost(store, r, said)
     i, o, c = r.get('TokensIn'), r.get('TokensOut'), r.get('Cached')
     # TOKENS ARE THE NEW ONES: every step of an agent's loop re-sends the whole conversation and the provider reads most of it back from
     # its cache - counted in, a ten-minute task read as millions (2026-11-18). What the cache read is said apart ('cached').
     return {'id': r['Id'], 'at': r.get('At') or '', 'day': str(r.get('At') or '')[:10], 'task_id': r.get('TaskId'),
-            'job': r.get('Job') or '', 'brain': brain,
+            'job': r.get('Job') or '', 'who': who(r.get('Job'), r.get('Caller')), 'brain': brain,
             'what': 'a question the agent asked a stronger model' if r.get('Rule') == 'agent asked' else JOB_WORDS.get(r.get('Job'), r.get('Job') or ''),
             'model': r.get('Ran') or r.get('Model') or brain, 'tier': TIER_WORDS.get(r.get('Tier'), r.get('Tier') or ''),
             'tokens_in': i, 'cached': c, 'tokens_out': o, 'tokens': None if i is None and o is None else max(0, (i or 0) - (c or 0)) + (o or 0),
-            'seconds': None if ms is None else round(ms / 1000, 1), 'calls': r.get('Calls') or (1 if ms is not None else 0),
+            'seconds': None if ms is None else round(ms / 1000, 1), 'calls': r.get('Calls') or (1 if ms is not None else 0), 'cost': usd, 'billing': how,
             'run': bool(r.get('Sid')) or (r.get('Job') in RUN_JOBS and r.get('Rule') != 'agent asked'), 'outcome': r.get('Outcome') or 'ok',
             **({'fell_back': fallback_line(r['FellFrom'], r.get('Ran'))} if r.get('FellFrom') and r.get('Ran') else {})}
 
@@ -294,7 +367,7 @@ def for_task(store, tid: int, limit: int = 200) -> dict:
     rows = [row(store, r, said) for r in store.brain_routes(int(tid), limit=limit)]
     tot = lambda k: sum(x[k] or 0 for x in rows) if any(x[k] is not None for x in rows) else None
     return {'rows': rows, 'total': {'calls': len(rows), 'tokens': tot('tokens'), 'tokens_in': tot('tokens_in'), 'tokens_out': tot('tokens_out'),
-                                    'cached': tot('cached'), 'seconds': tot('seconds')}}
+                                    'cached': tot('cached'), 'seconds': tot('seconds'), 'cost': tot('cost')}}
 
 
 def dataset(store, days) -> list:
@@ -305,8 +378,9 @@ def dataset(store, days) -> list:
     for r in store.brain_routes_since(since):
         if r.get('Pick') == 'demo' and r.get('TokensIn') is None: continue          # the demo's scripted answers used nothing
         x = row(store, r, said)
-        base = {k: x[k] for k in ('day', 'job', 'what', 'brain', 'model', 'tier')}
-        nums = {'tokens_in': x['tokens_in'], 'tokens_out': x['tokens_out'], 'cached': x['cached'], 'tokens': x['tokens'], 'seconds': x['seconds']}
+        base = {k: x[k] for k in ('day', 'job', 'who', 'what', 'brain', 'model', 'tier', 'billing')}
+        nums = {'tokens_in': x['tokens_in'], 'tokens_out': x['tokens_out'], 'cached': x['cached'], 'tokens': x['tokens'], 'seconds': x['seconds'],
+                'cost': x['cost']}
         if x['run']:
             out.append({**base, 'task_id': x['task_id'], 'kind': 'agent run', 'calls': max(1, x['calls']), **nums,
                         'minutes': None if x['seconds'] is None else round(x['seconds'] / 60, 1)}); continue
@@ -314,5 +388,5 @@ def dataset(store, days) -> list:
         g = roll.setdefault(k, {**base, 'task_id': None, 'kind': 'one call', 'calls': 0, **{n: None for n in nums}, 'minutes': None})
         g['calls'] += max(1, x['calls'])
         for n, v in nums.items():
-            if v is not None: g[n] = round((g[n] or 0) + v, 1) if n == 'seconds' else (g[n] or 0) + v
+            if v is not None: g[n] = round((g[n] or 0) + v, 1 if n == 'seconds' else 6) if n in ('seconds', 'cost') else (g[n] or 0) + v
     return sorted(out + list(roll.values()), key=lambda x: x['day'], reverse=True)

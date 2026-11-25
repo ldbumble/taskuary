@@ -14,7 +14,7 @@ def _number():
 # ...the types themselves, read when a view is made instead of riding in every turn's tool list (the night run, 2026-11-09)
 SHOW_TYPES = ("THE `show` TYPES: every type takes title? and description?; each block draws as its own card, its children under it. "
               "grid {cols: 1-4} (its children side by side, stacking on a phone), stats {items: [{label, value, format?, note?, trend?: "
-              "{dir: up|down|neutral, text}}]}, chart {kind: bar|line|pie, format?, points: [{label, value, highlight?}] | rows: records, "
+              "{dir: up|down|neutral, text}}]}, chart {kind: bar|line|area|pie, format?, points: [{label, value, highlight?}] | rows: records, "
               "y?: the number column, x?: the label column}, table {columns?: [name | {label, format}], rows: lists, or records [{column: "
               "value}] whose keys are the columns}, checklist {items: [{text, done}]}, list {items}, steps {items}, text {text: markdown}, note "
               "{tone: info|success|warning, text}, badge {text, variant?: default|secondary|outline|success|warning}, button {label, verb: a "

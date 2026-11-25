@@ -3,7 +3,7 @@
 // tooltip on every mark that the table view also carries (docs/notes/dashboards.md). Text wears the ink; marks wear the slots.
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { DASH } from "../words.js";
-import { OTHER, aggregate, delta, fmt, itemLink, signed, sortRows, timeSeries } from "./slice.js";
+import { OTHER, aggregate, delta, fmt, fmtOf, itemLink, slices, sortRows, timeSeries, withoutSeries } from "./slice.js";
 
 export const slotColor = (i) => (i === undefined || i === null || i < 0 ? "var(--d-other)" : `var(--d-s${(i % 6) + 1})`);
 const label = (k) => (k === OTHER ? DASH.other : k);
@@ -30,7 +30,8 @@ function useTip() {
   const show = (e, body) => {
     const card = e.currentTarget.closest(".tq-dash-card"); if (!card) return;
     const r = card.getBoundingClientRect(), x = (e.clientX ?? r.left + r.width / 2) - r.left, y = (e.clientY ?? r.top + 40) - r.top;
-    setTip({ x: Math.min(x + 12, r.width - 150), y: Math.max(8, y - 12), body });
+    // ...kept inside the card: near its foot it opens upward, never under the next card
+    setTip({ x: Math.min(x + 12, r.width - 150), y: Math.max(8, Math.min(y - 12, r.height - 130)), body });
   };
   return [tip && <div className="tq-dash-tip" style={{ left: tip.x, top: tip.y }} role="status">{tip.body}</div>, show, () => setTip(null)];
 }
@@ -56,47 +57,62 @@ export function Card({ c, w, children, table, stale, onPress, className = "" }) 
 }
 
 // ── the number ───────────────────────────────────────────────────────────────────────────────────────────
+// a gradient's id, one per drawing: two tiles on a page never share one
+let gradients = 0;
+const useGradient = () => { const ref = useRef(null); if (ref.current === null) ref.current = `tq-dash-g${++gradients}`; return ref.current; };
+const Fade = ({ id }) => (
+  <defs><linearGradient id={id} x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0%" style={{ stopColor: "var(--d-s1)", stopOpacity: 0.26 }} /><stop offset="100%" style={{ stopColor: "var(--d-s1)", stopOpacity: 0 }} />
+  </linearGradient></defs>
+);
+
 function Spark({ points }) {
+  const id = useGradient();
   const vals = points.map((p) => p.value ?? 0), max = Math.max(1, ...vals), n = Math.max(1, vals.length - 1);
-  const xy = vals.map((v, i) => [(i / n) * 100, 28 - (v / max) * 26]);
+  const xy = vals.map((v, i) => [(i / n) * 100, 34 - (v / max) * 30]);
   if (vals.length < 2) return null;
-  const last = xy[xy.length - 1], line = xy.map(([x, y]) => `${x},${y}`).join(" ");
+  const line = xy.map(([x, y]) => `${x},${y}`).join(" ");
   return (
-    <svg className="tq-dash-spark" viewBox="0 0 100 30" preserveAspectRatio="none" aria-hidden="true">
-      <polygon className="ar" points={`0,30 ${line} 100,30`} />
+    <svg className="tq-dash-spark" viewBox="0 0 100 36" preserveAspectRatio="none" aria-hidden="true">
+      <Fade id={id} />
+      <polygon points={`0,36 ${line} 100,36`} fill={`url(#${id})`} />
       <polyline className="ln" points={line} />
-      <rect className="now" x={last[0] - 1.2} y={last[1] - 1.2} width="2.4" height="2.4" rx="1.2" />
     </svg>
   );
 }
 
 // a value and its unit: the unit is set smaller, in the muted ink, so the number stays the thing read
 const Value = ({ v, unit, of }) => (
-  <div className="tq-dash-value">{fmt(v)}{unit && v !== null && v !== undefined && <span className="u">{unit}</span>}{of}</div>
+  <div className="tq-dash-value">{fmtOf({ unit })(v)}{unit && unit !== "$" && v !== null && v !== undefined && <span className="u">{unit}</span>}{of}</div>
 );
 // the change: its sign, coloured only when a direction is good ("good": "none" is a measure with no better way), and its share
-const Delta = ({ d, good, days }) => {
-  const g = good === "down" ? -1 : good === "none" ? 0 : 1, dir = !d.change || !g ? "" : d.change * g > 0 ? "up" : "down";
+// ...a pill: its arrow the direction, its colour whether that is good, its figure the share where there is one to take it of
+const Delta = ({ d, good, days, f = fmt }) => {
+  const g = good === "down" ? -1 : good === "none" ? 0 : 1, dir = !d.change || !g ? "flat" : d.change * g > 0 ? "up" : "down";
+  const by = d.pct !== null ? `${Math.abs(d.pct * 100) < 10 ? (Math.abs(d.pct) * 100).toFixed(1) : Math.round(Math.abs(d.pct) * 100)}%` : f(Math.abs(d.change));
   return (
-    <div className="tq-dash-delta"><b className={dir}>{signed(d.change)}{d.pct !== null && d.change ? ` (${Math.round(Math.abs(d.pct) * 100)}%)` : ""}</b>
-      <span>vs the {days} days before</span></div>
+    <div className="tq-dash-delta"><b className={`pill ${dir}`}>{d.change > 0 ? "▲" : d.change < 0 ? "▼" : "•"} {d.change ? by : "0"}</b>
+      <span>{DASH.vs_before.replace("{n}", days)}</span></div>
   );
 };
 
-export function StatTile({ c, rows, all, date, days, now, onDrill, stale }) {
-  const v = aggregate(rows, c.agg, c.y), d = delta(all, date, days, c.agg, c.y, now);
-  const pts = date ? timeSeries(rows, date, c.agg, c.y, { days: days || 30, now }) : [];
+// ...and under it, small, what else it says (`also`: its tokens under the dollars) - a figure that comes to nothing is not said
+export function StatTile({ c, rows, all, also = [], date, days, now, onDrill, stale }) {
+  const v = aggregate(rows, c.agg, c.y, c.per), d = delta(all, date, days, c.agg, c.y, now, c.per);
+  const pts = date ? timeSeries(rows, date, c.agg, c.y, { days: days || 30, now, per: c.per }) : [];
+  const more = also.filter((a) => a.value);
   return (
     <Card c={c} w={1} stale={stale} className="tq-dash-stat" onPress={() => onDrill({ title: c.title, rows })}>
       <Value v={v} unit={c.unit} />
-      {d ? <Delta d={d} good={c.good} days={days} /> : <div className="tq-dash-delta"><span>{date ? DASH.no_change : DASH.right_now}</span></div>}
+      {d ? <Delta d={d} good={c.good} days={days} f={fmtOf(c)} /> : <div className="tq-dash-delta"><span>{date ? DASH.no_change : DASH.right_now}</span></div>}
+      {more.length > 0 && <div className="tq-dash-also">{more.map((a) => <span key={a.label}><b>{fmt(a.value)}</b> {a.label}</span>)}</div>}
       {pts.length > 1 && <Spark points={pts} />}
     </Card>
   );
 }
 
 export function Progress({ c, rows, onDrill, stale }) {
-  const v = aggregate(rows, c.agg, c.y) ?? 0, t = Number(c.target) || 0, pct = t ? Math.max(0, Math.min(1, v / t)) : 0;
+  const v = aggregate(rows, c.agg, c.y, c.per) ?? 0, t = Number(c.target) || 0, pct = t ? Math.max(0, Math.min(1, v / t)) : 0;
   const left = Math.max(0, t - v);
   return (
     <Card c={c} w={1} stale={stale} className="tq-dash-stat" onPress={() => onDrill({ title: c.title, rows })}>
@@ -136,7 +152,7 @@ export function Bars({ c, groups, onDrill, stale }) {
                 <div className="bar" style={{ "--f": (g.value ?? 0) / max, ...(c.inline ? {} : { width: `${((g.value ?? 0) / max) * 100}%` }), ...(g.other ? { background: "var(--d-other)" } : {}) }} />
                 {c.inline && <span className="val">{f(g.value)}</span>}
               </button>
-              {!c.inline && <span className="val">{fmt(g.value)}{pct(g) && <span className="pct">{pct(g)}</span>}</span>}
+              {!c.inline && <span className="val">{f(g.value)}{pct(g) && <span className="pct">{pct(g)}</span>}</span>}
             </React.Fragment>
           ))}
         </div>
@@ -148,8 +164,11 @@ export function Bars({ c, groups, onDrill, stale }) {
 
 // ── stacked columns: categories (or days) split by a second column ─────────────────────────────────────────
 // ...an agent's view (ViewSpec) asks for its own figures (`c.fmt`) and one column picked out (`st.on`)
-export function Stacked({ c, st, slots, onDrill, stale }) {
-  const [tipEl, show, hide] = useTip(), f = c.fmt || fmt, hi = !!st.on?.size;
+export function Stacked({ c, st: all, slots, onDrill, stale }) {
+  const [tipEl, show, hide] = useTip(), f = c.fmt || fmt, hi = !!all.on?.size;
+  // ...a legend entry pressed switches its series off and on: the columns and their axis are what is left (withoutSeries)
+  const [off, setOff] = useState(() => new Set()), st = withoutSeries(all, off);
+  const flip = (s) => setOff((o) => { const n = new Set(o); if (n.has(s)) n.delete(s); else if (n.size < all.series.length - 1) n.add(s); return n; });
   const tot = (k) => st.series.reduce((a, s) => a + (st.cells[k][s]?.value ?? 0), 0);
   const max = niceMax(Math.max(1, ...st.keys.map(tot)));       // the axis's top is a round number, and its ticks say it
   const color = (s) => (s === OTHER ? "var(--d-other)" : slotColor(slots[s]));
@@ -158,14 +177,16 @@ export function Stacked({ c, st, slots, onDrill, stale }) {
     rows={st.keys.map((k) => [keyLabel(k, st.dated), ...st.series.map((s) => st.cells[k][s]?.value ?? 0), tot(k)])} />;
   return (
     <Card c={c} w={c.w || 2} stale={stale} table={table}>
-      {st.series.length > 1 && <div className="tq-dash-legend">{st.series.map((s) => <span key={s}><i style={{ background: color(s) }} />{label(s)}</span>)}</div>}
+      {all.series.length > 1 && <div className="tq-dash-legend" role="group" aria-label={DASH.series}>{all.series.map((s) => (
+        <button type="button" key={s} aria-pressed={!off.has(s)} onClick={() => flip(s)} title={off.has(s) ? DASH.show_series : DASH.hide_series}>
+          <i style={{ background: color(s) }} />{label(s)}</button>))}</div>}
       {!st.keys.length || !st.series.length ? <div className="tq-dash-none">{DASH.no_rows}</div> : (<div className="tq-dash-plot">
         <div className="tq-dash-yax" aria-hidden="true">{[1, 0.5, 0].map((q) => <span key={q} style={{ top: `${(1 - q) * 100}%` }}>{f(max * q)}</span>)}</div>
         <div className="tq-dash-plotbody">
         <div className={`tq-dash-cols${hi ? " hi" : ""}`}>
           {st.keys.map((k) => (
             <div key={k} className={`tq-dash-col${st.on?.has(k) ? " pick" : ""}`} tabIndex={0} role="button" aria-label={`${keyLabel(k, st.dated)}: ${f(tot(k))}`}
-              onPointerMove={(e) => show(e, <TipRows f={f} k={keyLabel(k, st.dated)} rows={[...st.series.filter((s) => st.cells[k][s]).map((s) => [label(s), st.cells[k][s].value, color(s)]).reverse(), ...(st.series.length > 1 ? [["total", tot(k)]] : [])]} />)}
+              onPointerMove={(e) => show(e, <TipRows f={f} k={keyLabel(k, st.dated)} rows={[...st.series.filter((s) => st.cells[k][s]?.value).map((s) => [label(s), st.cells[k][s].value, color(s)]).reverse(), ...(st.series.length > 1 ? [["total", tot(k)]] : [])]} />)}
               onPointerLeave={hide} onBlur={hide}
               onClick={(e) => { const s = e.target?.dataset?.s; const cell = s && st.cells[k][s];
                 onDrill({ title: `${c.title} · ${keyLabel(k, st.dated)}${cell ? ` · ${label(s)}` : ""}`, rows: cell ? cell.rows : st.series.flatMap((x) => st.cells[k][x]?.rows || []) }); }}
@@ -182,11 +203,50 @@ export function Stacked({ c, st, slots, onDrill, stale }) {
   );
 }
 
+// ── a pie: shares of one whole, a ring with the whole in its middle and a legend that says each slice's value and share. The one pie
+// every surface draws - a dashboard's tile, and an agent's chart in its chat (ViewSpec)
+// THE TOTAL FITS ITS HOLE (2026-11-24: "$34.83" touched the ring): the hole is 68 of the ring's 100 across (r 40 less half a 12 stroke, twice),
+// 87px of a 128px ring - the figure gets 78px of it, at a figure's width of about 0.62em, and never more than 21px
+export const holeFont = (s) => `${Math.max(10, Math.min(21, Math.floor(78 / (0.62 * Math.max(1, String(s).length)))))}px`;
+export function PieBody({ groups, f = fmt, onPick }) {
+  const { total, slices: ss } = slices(groups), R = 40, C = 2 * Math.PI * R, W = 12, said = f(total);
+  let at = 0;
+  if (!ss.length) return <div className="tq-dash-none">{DASH.no_rows}</div>;
+  return (
+    <div className="tq-dash-pie">
+      <div className="ring">
+        <svg viewBox="0 0 100 100" role="img" aria-label={ss.map((g) => `${label(g.key)} ${f(g.value)}`).join(", ")}>
+          <circle cx="50" cy="50" r={R} fill="none" className="track" strokeWidth={W} />
+          {ss.map((g, i) => { const len = g.share * C, gap = ss.length > 1 ? Math.min(1.6, len / 3) : 0, from = at; at += len;
+            return <circle key={g.key} className="slice" cx="50" cy="50" r={R} fill="none" stroke={g.other ? "var(--d-other)" : slotColor(g.slot ?? i)} strokeWidth={W}
+              strokeDasharray={`${Math.max(0, len - gap)} ${C - Math.max(0, len - gap)}`} strokeDashoffset={-from} transform="rotate(-90 50 50)"
+              style={{ "--n": i }} onClick={onPick ? () => onPick(g) : undefined} />; })}
+        </svg>
+        <div className="mid"><b style={{ fontSize: holeFont(said) }}>{said}</b><span>{DASH.total}</span></div>
+      </div>
+      <ul>{ss.map((g, i) => <li key={g.key} className={onPick ? "go" : ""} onClick={onPick ? () => onPick(g) : undefined}>
+        <i style={{ background: g.other ? "var(--d-other)" : slotColor(g.slot ?? i) }} /><span title={label(g.key)}>{label(g.key)}</span>
+        <b>{f(g.value)}</b><em>{Math.round(g.share * 100)}%</em></li>)}</ul>
+    </div>
+  );
+}
+
+export function Pie({ c, groups, onDrill, stale }) {
+  const f = c.fmt || fmt;
+  const table = <TwinTable head={[cleanCol(c.x), c.agg && c.agg !== "count" ? `${c.agg} ${cleanCol(c.y)}` : "count", "share"]}
+    rows={slices(groups).slices.map((g) => [label(g.key), g.value, `${Math.round(g.share * 100)}%`])} />;
+  return (
+    <Card c={c} w={c.w || 2} stale={stale} table={table}>
+      <PieBody groups={groups} f={f} onPick={(g) => onDrill({ title: `${c.title} · ${label(g.key)}`, rows: g.rows })} />
+    </Card>
+  );
+}
+
 // ── a value over time: line or area, one series, a crosshair that finds the day ────────────────────────────
 export const runLength = (s) => s.slice(1).reduce((a, p, i) => a + Math.hypot(p[0] - s[i][0], p[1] - s[i][1]), 0);
 function niceMax(v) { if (v <= 0) return 1; const p = 10 ** Math.floor(Math.log10(v)), m = v / p; return (m <= 1 ? 1 : m <= 2 ? 2 : m <= 5 ? 5 : 10) * p; }
 export function Line({ c, points, onDrill, stale }) {
-  const [ref, w] = useWidth(), [hover, setHover] = useState(null), f = c.fmt || fmt;
+  const [ref, w] = useWidth(), [hover, setHover] = useState(null), f = c.fmt || fmt, id = useGradient();
   const H = Number(c.h) || 170, L = 34, R = 34, T = 10, B = 22, iw = Math.max(10, w - L - R), ih = H - T - B;
   const vals = points.map((p) => p.value).filter((v) => v !== null), top = niceMax(Math.max(0, ...vals));
   const x = (i) => L + (points.length < 2 ? iw / 2 : (i / (points.length - 1)) * iw), y = (v) => T + ih - (v / top) * ih;
@@ -204,7 +264,8 @@ export function Line({ c, points, onDrill, stale }) {
           <svg className="tq-dash-svg" width={w} height={H} role="img" aria-label={`${c.title}, ${points.length} days`}>
             {[0, 0.5, 1].map((k) => <g key={k}><line className={k === 0 ? "axis" : "grid"} x1={L} x2={L + iw} y1={y(top * k)} y2={y(top * k)} />
               <text x={L - 6} y={y(top * k) + 4} textAnchor="end">{f(top * k)}</text></g>)}
-            {c.kind === "area" && segs.map((s, i) => <path key={`a${i}`} className="ar" d={`M${s[0][0]},${y(0)} ${s.map(([a, b]) => `L${a},${b}`).join(" ")} L${s[s.length - 1][0]},${y(0)} Z`} />)}
+            {c.kind === "area" && <Fade id={id} />}
+            {c.kind === "area" && segs.map((s, i) => <path key={`a${i}`} className="ar" fill={`url(#${id})`} d={`M${s[0][0]},${y(0)} ${s.map(([a, b]) => `L${a},${b}`).join(" ")} L${s[s.length - 1][0]},${y(0)} Z`} />)}
             {/* ...drawn in along its own measured length (--len), never pathLength="1": a browser that scales the dash by the first
                 segment's length stopped the draw-in there, the rest of the line never showing (2026-11-07) */}
             {segs.map((s, i) => s.length > 1 ? <polyline key={i} className="ln" style={{ "--len": Math.ceil(runLength(s)) + 1 }} points={s.map(([a, b]) => `${a},${b}`).join(" ")} />

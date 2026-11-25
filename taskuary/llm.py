@@ -1458,7 +1458,7 @@ def make_llm(t, cfg: dict, key: str):
                         if not _THINK_REFUSED.search(said): _no_effort(ek, said)
                         r = post_retrying(url, headers, body, (CONNECT_TIMEOUT, READ_TIMEOUT))
                     if r.status_code == 200:
-                        aiusage.openai(r.json()); heard(r)
+                        aiusage.openai(r.json(), getattr(r, 'headers', None)); heard(r)
                         ch = (r.json().get('choices') or [{}])[0]
                         said = said_text(ch.get('message') or {})
                         if cut_by_thinking(r.json()): _THINKS.add(ek); raise _Empty('length')
@@ -1528,7 +1528,7 @@ def make_llm(t, cfg: dict, key: str):
                 if r.status_code in (400, 422) and body.pop('reasoning_effort', None) and _EFFORT_REFUSED.search(r.text or ''):
                     r = post_retrying(url, headers, body, (CONNECT_TIMEOUT, READ_TIMEOUT))
                 if r.status_code == 200:
-                    aiusage.openai(r.json()); heard(r)
+                    aiusage.openai(r.json(), getattr(r, 'headers', None)); heard(r)
                     return (r.json().get('choices') or [{}])[0].get('message') or {}
                 last = r
                 if r.status_code == 404: break
@@ -1556,7 +1556,7 @@ def make_llm(t, cfg: dict, key: str):
         r = post_retrying(urls[0], headers, body, (CONNECT_TIMEOUT, READ_TIMEOUT))
         if budget_spent(r): raise BudgetSpent(BUDGET_LINE.format(name='HIPAA AI' if t == 'hipaa_ai' else t))
         if r.status_code != 200: _NO_SEARCH.add(ek); raise refused(t, r, urls[0], model)
-        aiusage.openai(r.json())
+        aiusage.openai(r.json(), getattr(r, 'headers', None))
         m = (r.json().get('choices') or [{}])[0].get('message') or {}
         cites = list(dict.fromkeys(str((a.get('url_citation') or a).get('url') or '') for a in m.get('annotations') or [] if isinstance(a, dict)))
         said = said_text(m).strip()
@@ -1752,7 +1752,7 @@ def _responses_web(t, cfg, headers, model, system, user, images, max_tokens, eff
             _no_effort((t, url, model), r.text); r = post_retrying(url, headers, body, 180)
     except requests.RequestException as e: _log_web(t, e); return None
     if r.status_code != 200: _log_web(t, f'{r.status_code} {r.text[:200]}'); return None
-    out = r.json(); aiusage.openai(out)
+    out = r.json(); aiusage.openai(out, getattr(r, 'headers', None))
     for o in out.get('output') or []:
         if o.get('type') != 'web_search_call': continue
         act = o.get('action') or {}

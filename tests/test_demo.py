@@ -618,8 +618,12 @@ class TheDemoOpensOnItsTourTests(unittest.TestCase):
             if got and said and said[0] < got[0]: late.append((t['Title'], got[0], said[0]))
         self.assertEqual(late, [])
 
-    def test_the_first_view_opens_on_an_agents_finished_work_never_the_greeting(self):
+    def test_the_first_view_opens_on_the_built_in_dashboard_else_an_agents_finished_work_never_the_greeting(self):
+        from taskuary.dashboards import GLANCE
         s, _ = self.seeded()
+        glance = next(x for x in s.list_sources() if x.get('Channel') == 'report' and x.get('Address') == GLANCE['title'])
+        with on(): self.assertEqual(demo.opens(s), {'report': glance['SourceId']})
+        s._exec('UPDATE source SET Active=0 WHERE SourceId=?', (glance['SourceId'],))      # ...and without it, the agent's finished post
         post = next(t for t in s.list_tasks() if t['Title'] == demo.SHOWCASE)
         with on(): self.assertEqual(demo.opens(s), {'tid': post['TaskId']})
         with on(), mock.patch.dict(os.environ, {demo.OPENS_ENV: '0'}): self.assertIsNone(demo.opens(s))
@@ -836,7 +840,10 @@ class DemoDashboardTests(unittest.TestCase):
         s = MemoryStore(); demo.seed(s)
         n = sum(r['state'] == 'open' for r in dashboards._tasks(s, 90))
         heads = [m['Subject'] for m in s._rows("SELECT Subject FROM message WHERE Channel='report' AND Status NOT IN ('skipped','expired') ORDER BY MessageId")]
-        self.assertTrue(any(h.startswith('Taskuary at a glance') and f'Open now {n}' in h for h in heads), (n, heads))
+        # ...the built-in's headline is what the AI spent, what a task cost and what got done; its open count is in its body
+        bodies = [m['BodyText'] for m in s._rows("SELECT BodyText FROM message WHERE Channel='report' AND Status NOT IN ('skipped','expired') AND Subject LIKE 'Taskuary at a glance%'")]
+        self.assertTrue(any(f'Open now: {n}' in b for b in bodies), n)
+        self.assertTrue(any(h.startswith('Taskuary at a glance — AI spend $') for h in heads), heads)
         self.assertTrue(any(h.startswith('Northwind desk') and f'Open tasks {n}' in h for h in heads), (n, heads))
         # ...and nothing made after the dashboards changed its number: the walks and the static demo know the morning's messages by them
         self.assertEqual(s.get_message(45)['TaskId'], next(t['TaskId'] for t in s.list_tasks() if 'LinkedIn' in (t.get('Title') or '')))

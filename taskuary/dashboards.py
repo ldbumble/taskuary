@@ -19,11 +19,11 @@ from .store import task_ref
 
 # kind -> (bindings it cannot draw without, the width it takes on a four-column grid)
 KINDS = {'stat': ((), 1), 'progress': (('target',), 1), 'line': (('x',), 2), 'area': (('x',), 2), 'bar': (('x',), 2),
-         'stacked': (('x', 'series'), 2), 'table': ((), 4), 'list': (('label',), 2)}
+         'stacked': (('x', 'series'), 2), 'pie': (('x',), 2), 'table': ((), 4), 'list': (('label',), 2)}
 AGGS = ('count', 'sum', 'avg', 'median', 'min', 'max')
 RANGES = (7, 30, 90, 0)            # days back; 0 is everything the sources returned
 MAX_SOURCES, MAX_COMPONENTS, ROWS = 8, 20, 2000
-COLUMN_KEYS = ('x', 'y', 'series', 'label', 'meta', 'value', 'date')
+COLUMN_KEYS = ('x', 'y', 'series', 'label', 'meta', 'value', 'date', 'per')
 
 
 def is_dashboard(cfg) -> bool: return isinstance(cfg, dict) and cfg.get('type') == 'dashboard'
@@ -144,31 +144,37 @@ DATASETS = {'tasks': (_tasks, 'task_id, ref, title, kind, status, state (open|cl
             'flow': (_flow, 'message_id, task_id, day (date), channel, stage (Came in|Triaged|On a task|Task closed - one row per stage reached)'),
             'agent_runs': (_agent_runs, 'run_id, task_id, ref, day (date), agent, status, outcome (finished|failed|stopped|waiting on you|working), minutes'),
             'replies': (_replies, 'task_id, day (date the reply was decided), channel, status, hours (ask to answer)'),
-            'ai_usage': (_ai_usage, 'day (date), task_id (agent runs only), kind (agent run|one call), job, what (the job in words), brain, model, '
+            'ai_usage': (_ai_usage, 'day (date), task_id (agent runs only), kind (agent run|one call), job, '
+                                    'who (Triage|Advisor|Tasks|Assistant|Other - who the AI worked for), what (the job in words), brain, model, '
+                                    'cost (US dollars; blank where none is known), billing (reported|priced|plan|local|unknown - how the cost is known), '
                                     'tier (quick|normal|hard|as set), calls, tokens_in, cached, tokens_out, tokens (in + out), seconds, minutes')}
 
 
 # ── the built-in dashboard: what the End of day checkup is to reports. Every install gets it (store.SEEDED_REPORTS), and New
 # dashboard offers it again in one press. It reads ONLY this app's own tables, so it draws for anybody, with nothing connected.
 # ...and what the AI used (the owner, 2026-11-06: "dashboard of the taskuary thing included in current one the token usage and per
-# model"): tokens per model per day, by job, an agent run's tokens and time, and how many calls were quick, normal or hard
-AI_TILES = [
-    {'kind': 'stacked', 'title': 'AI tokens by model, per day', 'said': 'Tokens per model per day, stacked', 'source': 'ai', 'x': 'day',
-     'series': 'model', 'agg': 'sum', 'y': 'tokens', 'w': 2},
-    {'kind': 'bar', 'title': 'AI tokens by job', 'said': 'Tokens by what the AI was doing, top 8 jobs', 'source': 'ai', 'x': 'what', 'agg': 'sum',
-     'y': 'tokens', 'limit': 8, 'w': 2},
-    {'kind': 'stat', 'title': 'Tokens per agent run', 'said': 'The median tokens one agent run uses', 'source': 'ai', 'agg': 'median', 'y': 'tokens',
-     'where': {'kind': 'agent run'}, 'good': 'none'},
-    {'kind': 'stat', 'title': 'Minutes per agent run', 'said': 'The median minutes one agent run takes', 'source': 'ai', 'agg': 'median', 'y': 'minutes',
-     'unit': 'min', 'where': {'kind': 'agent run'}, 'good': 'none'},
-    {'kind': 'bar', 'title': 'AI calls: quick, normal or hard', 'said': 'How many AI calls were quick, normal or hard, in that order', 'source': 'ai',
-     'x': 'tier', 'agg': 'sum', 'y': 'calls', 'order': ['quick', 'normal', 'hard'], 'w': 1}]
-# ...and the total, in the top row (the owner, 2026-11-07: "I don't see the token count?" - the AI tiles came last, below the fold).
-# The ai_usage rows carry tokens and time, no price, so there is no cost to show beside it
-AI_TOKENS = {'kind': 'stat', 'title': 'AI tokens', 'said': 'How many tokens the AI used', 'source': 'ai', 'agg': 'sum', 'y': 'tokens', 'good': 'none'}
-AI_SOURCE_KEY = 'ai'
+# model"): the tokens per model per day, under what they cost
 _own = lambda key, label, dataset, date: {'key': key, 'label': label, 'type': 'taskuary_data', 'dataset': dataset, 'days': 90, 'date': date}
-_by_model, _by_job, _per_run, _run_minutes, _calls = AI_TILES
+_by_model = {'kind': 'stacked', 'title': 'AI tokens by model, per day', 'said': 'Tokens per model per day, stacked', 'source': 'ai', 'x': 'day',
+             'series': 'model', 'agg': 'sum', 'y': 'tokens', 'w': 2}
+# WHAT THE AI SPENT, AND FOR WHOM (the owner, 2026-11-24: "spend per day over last 7 days. then cost per task average. per
+# triage/advisor/tasks/assistant. Then how many tasks were completed" - "spend is cost, not tokens"): dollars per day split by who they were
+# for, each one's share, what one task's agent work costs, and the tasks done - its tokens under the dollars, what ran on a plan and what had
+# no price said apart (aiusage.cost)
+_WHO = ['Triage', 'Advisor', 'Tasks', 'Assistant', 'Other']
+SPEND_TILES = [
+    {'kind': 'stat', 'title': 'AI spend', 'said': 'What the AI cost, in dollars, with its tokens under it', 'source': 'ai', 'agg': 'sum', 'y': 'cost',
+     'unit': '$', 'good': 'down', 'also': [{'label': 'tokens', 'agg': 'sum', 'y': 'tokens'},
+                                           {'label': 'tokens on your plan', 'agg': 'sum', 'y': 'tokens', 'where': {'billing': 'plan'}},
+                                           {'label': 'tokens with no price', 'agg': 'sum', 'y': 'tokens', 'where': {'billing': 'unknown'}}]},
+    {'kind': 'stat', 'title': 'Cost per task', 'said': "What one task's agent work costs, on average", 'source': 'ai', 'agg': 'sum', 'y': 'cost',
+     'per': 'task_id', 'unit': '$', 'where': {'kind': 'agent run'}, 'good': 'down',
+     'also': [{'label': 'tokens a task', 'agg': 'sum', 'y': 'tokens', 'per': 'task_id', 'where': {'kind': 'agent run'}}]},
+    {'kind': 'stacked', 'title': 'AI spend per day', 'said': 'Dollars per day, split by triage, the Advisor, tasks and the Assistant',
+     'source': 'ai', 'x': 'day', 'series': 'who', 'agg': 'sum', 'y': 'cost', 'unit': '$', 'order': _WHO, 'w': 2},
+    {'kind': 'pie', 'title': 'AI spend by who', 'said': "Each one's share of the dollars: triage, the Advisor, tasks and the Assistant",
+     'source': 'ai', 'x': 'who', 'agg': 'sum', 'y': 'cost', 'unit': '$', 'order': _WHO, 'w': 2}]
+_spend, _per_task, _spend_by_day, _spend_by_who = SPEND_TILES
 GLANCE = {'type': 'dashboard', 'title': 'Taskuary at a glance', 'daily_at': '07:00',
           'sources': [_own('mail', 'What came in', 'mail', 'day'), _own('flow', 'How far it got', 'flow', 'day'),
                       _own('tasks', 'Tasks', 'tasks', 'arrived'), _own('closed', 'Tasks closed', 'tasks', 'closed'),
@@ -177,37 +183,60 @@ GLANCE = {'type': 'dashboard', 'title': 'Taskuary at a glance', 'daily_at': '07:
           'filters': {'range': 7, 'segment': 'channel'},
           # four columns with every row filled: a 1-wide tile is a number, a 2-wide one a chart
           'components': [
-              # the numbers first: what came in, what it became, what is still open, and what the AI used
-              {'kind': 'stat', 'title': 'Came in', 'said': 'How many messages came in', 'source': 'mail', 'agg': 'count'},
-              {'kind': 'stat', 'title': 'New tasks', 'said': 'How many new tasks arrived', 'source': 'tasks', 'agg': 'count'},
+              # the four that matter most: what the AI cost, what a task costs, what got done, and what is still open
+              _spend, _per_task,
+              {'kind': 'stat', 'title': 'Tasks completed', 'said': 'How many tasks were done', 'source': 'closed', 'agg': 'count',
+               'where': {'status': 'done'}, 'good': 'up'},
               {'kind': 'stat', 'title': 'Open now', 'said': 'How many tasks are open right now, lower is better', 'source': 'tasks',
                'agg': 'count', 'where': {'state': 'open'}, 'range': False, 'good': 'down'},
-              AI_TOKENS,
-              # ...how fast the owner answers and the week's close against its target, beside the funnel (four bars: a tile's height)
+              # ...what the AI spent, per day and for whom
+              _spend_by_day, _spend_by_who,
+              # ...what came in and how fast it was answered
+              {'kind': 'stat', 'title': 'Came in', 'said': 'How many messages came in', 'source': 'mail', 'agg': 'count'},
+              {'kind': 'stat', 'title': 'New tasks', 'said': 'How many new tasks arrived', 'source': 'tasks', 'agg': 'count'},
               {'kind': 'stat', 'title': 'Median reply time', 'said': 'The median hours from an ask to my reply, lower is better',
                'source': 'replies', 'agg': 'median', 'y': 'hours', 'unit': 'h', 'good': 'down'},
-              {'kind': 'progress', 'title': 'Closed this week', 'said': 'Tasks closed in the last 7 days, toward a target of 15',
-               'source': 'closed', 'agg': 'count', 'where': {'state': 'closed'}, 'range': 7, 'target': 15},
-              {'kind': 'bar', 'title': 'How far it got', 'said': 'How far what came in got, stage by stage, each as a share of what came in',
-               'source': 'flow', 'x': 'stage', 'order': list(STAGES), 'share': True, 'w': 2},
-              # ...then the days: what came in beside the tokens it took, what the agents did beside what the AI was doing
-              {'kind': 'stacked', 'title': 'What came in, by channel', 'said': 'Messages in per day, split by channel, stacked',
-               'source': 'mail', 'x': 'day', 'series': 'channel', 'w': 2},
-              _by_model,
-              {'kind': 'stacked', 'title': 'Agent sessions, and how they ended', 'said': 'Agent sessions per day, split by how they ended',
-               'source': 'agents', 'x': 'day', 'series': 'outcome', 'w': 2},
-              _by_job,
-              # ...an agent's time and tokens
               {'kind': 'stat', 'title': 'Agent time per session', 'said': 'The median minutes an agent session takes',
                'source': 'agents', 'agg': 'median', 'y': 'minutes', 'unit': 'min', 'good': 'none'},
-              _per_run, _run_minutes, _calls,
-              # ...the rankings
+              # ...then the days: what got done beside how far what came in got
+              {'kind': 'stacked', 'title': 'Tasks closed per day', 'said': 'Tasks closed per day, split by done or dropped',
+               'source': 'closed', 'x': 'closed', 'series': 'status', 'where': {'state': 'closed'}, 'order': ['done', 'dropped'], 'w': 2},
+              {'kind': 'bar', 'title': 'How far it got', 'said': 'How far what came in got, stage by stage, each as a share of what came in',
+               'source': 'flow', 'x': 'stage', 'order': list(STAGES), 'share': True, 'w': 2},
+              {'kind': 'stacked', 'title': 'What came in, by channel', 'said': 'Messages in per day, split by channel, stacked',
+               'source': 'mail', 'x': 'day', 'series': 'channel', 'w': 2},
+              {'kind': 'stacked', 'title': 'Agent sessions, and how they ended', 'said': 'Agent sessions per day, split by how they ended',
+               'source': 'agents', 'x': 'day', 'series': 'outcome', 'w': 2},
+              _by_model,
               {'kind': 'bar', 'title': 'Open work by kind', 'said': 'Open tasks right now, by kind', 'source': 'tasks', 'x': 'kind',
                'where': {'state': 'open'}, 'range': False, 'w': 2},
-              {'kind': 'bar', 'title': 'Who writes most', 'said': 'Who sends the most messages, top 8', 'source': 'mail', 'x': 'sender', 'limit': 8, 'w': 2},
-              # ...and the detail: the asks that have waited longest on the owner, each opening its task
+              # ...and the detail: the asks that have waited longest on the owner, each opening its task, beside who writes most
               {'kind': 'list', 'title': 'Waiting longest on you', 'said': 'The open tasks that have waited longest on me, with how long, at most 6',
-               'source': 'tasks', 'label': 'title', 'meta': 'waiting', 'where': {'status': 'open'}, 'range': False, 'sort': 'arrived', 'limit': 6, 'w': 4}]}
+               'source': 'tasks', 'label': 'title', 'meta': 'waiting', 'where': {'status': 'open'}, 'range': False, 'sort': 'arrived', 'limit': 6, 'w': 2},
+              {'kind': 'bar', 'title': 'Who writes most', 'said': 'Who sends the most messages, top 6', 'source': 'mail', 'x': 'sender', 'limit': 6, 'w': 2}]}
+# A SAVED BUILT-IN NOBODY EDITED FOLLOWS THE BUILT-IN: the print of every earlier GLANCE's tiles (glance_print), read off this file's history -
+# the copy from before the AI tiles, the one they were added to the end of (2026-11-06), moved up (2026-11-07), and the two token layouts of
+# 2026-11-24. It replaces the once-only migrations that added and moved the AI tiles. An edited copy keeps its own.
+GLANCE_WAS = ('ee4598be5e96', '41927d8d3f03', '724ff7395bdd', '244ba8c05e99', '4b0277c8fdfb')
+
+
+def glance_print(comps) -> str:
+    import hashlib
+    return hashlib.sha1(json.dumps([{k: v for k, v in c.items() if k not in ('said', 'source')} for c in comps if isinstance(c, dict)],
+                                   sort_keys=True).encode()).hexdigest()[:12]
+
+
+def migrate_glance(store) -> int:
+    """Every saved Taskuary at a glance still drawn as an earlier version drew it becomes today's, its schedule and filters kept."""
+    n = 0
+    for src in store.list_sources(active_only=False):
+        cfg = cfg_of(src)
+        if src.get('Channel') != 'report' or not is_dashboard(cfg) or glance_print(cfg.get('components') or []) not in GLANCE_WAS: continue
+        store.save_source({'SourceId': src['SourceId'], 'ConfigJson': json.dumps({**cfg, 'sources': GLANCE['sources'], 'components': GLANCE['components']})}, 'migrate')
+        n += 1
+    return n
+
+
 TEMPLATES = {'glance': {'title': GLANCE['title'], 'config': GLANCE,
                         'explain': 'What came in and from where, how far it got, what is still open, how fast you answer and what your '
                                    'agents did - from this app\'s own records, so there is nothing to connect.'}}
@@ -216,7 +245,7 @@ TEMPLATES = {'glance': {'title': GLANCE['title'], 'config': GLANCE,
 # ── A TILE IS ONE SENTENCE (the owner, 2026-11-06, of the field grid that set a component up: "it's not generalized ... maybe we
 # should just use text to say what it shows"). The owner writes what a tile shows; the AI binds it to the sources' real columns once
 # (compose.compose_tile) and the sentence stays on the tile as its `said`. A tile saved before then gets one written from its config.
-TILE_KEYS = ('kind', 'title', 'said', 'source', 'agg', 'y', 'where', 'range', 'good', 'unit', 'target', 'x', 'series', 'limit', 'order', 'share',
+TILE_KEYS = ('kind', 'title', 'said', 'source', 'agg', 'y', 'per', 'also', 'where', 'range', 'good', 'unit', 'target', 'x', 'series', 'limit', 'order', 'share',
              'label', 'meta', 'sort', 'columns', 'w')
 _AGG_SAID = {'sum': 'the total', 'avg': 'the average', 'median': 'the median', 'min': 'the lowest', 'max': 'the highest'}
 def _col(k): return str(k or '').replace('_', ' ').strip()
@@ -349,70 +378,6 @@ def three_priorities(spec: dict) -> dict:
     return out
 
 
-def with_ai_tiles(spec: dict) -> dict:
-    """A saved Taskuary at a glance with the AI-use source and tiles added (2026-11-06) - the same spec when it already reads ai_usage,
-    is not the built-in, or has no room under the caps."""
-    if not is_dashboard(spec) or spec.get('title') != GLANCE['title']: return spec
-    srcs, comps = spec.get('sources') or [], spec.get('components') or []
-    if any(isinstance(s, dict) and s.get('dataset') == 'ai_usage' for s in srcs): return spec
-    key = AI_SOURCE_KEY if AI_SOURCE_KEY not in {_key(s, i) for i, s in enumerate(srcs, 1) if isinstance(s, dict)} else 'ai_used'
-    if len(srcs) + 1 > MAX_SOURCES or len(comps) + len(AI_TILES) > MAX_COMPONENTS: return spec
-    src = {**next(s for s in GLANCE['sources'] if s['key'] == AI_SOURCE_KEY), 'key': key}
-    return {**spec, 'sources': [*srcs, src], 'components': [*comps, *({**c, 'source': key} for c in AI_TILES)]}
-
-
-AI_TILES_KEY = 'glance_ai_tiles_added'
-
-
-def migrate_ai_tiles(store) -> int:
-    """An existing install's Taskuary at a glance gets the AI-use tiles, once: an owner who removes them later is not given them again."""
-    if store.get_setting(AI_TILES_KEY): return 0
-    n = 0
-    for src in store.list_sources(active_only=False):
-        cfg = cfg_of(src)
-        if src.get('Channel') == 'report' and (new := with_ai_tiles(cfg)) != cfg:
-            store.save_source({'SourceId': src['SourceId'], 'ConfigJson': json.dumps(new)}, 'migrate'); n += 1
-    store.set_setting(AI_TILES_KEY, '1', 'migrate')
-    return n
-
-
-# a tile matched by what it shows, whatever its sentence or its source's name (and its width, `w=False`: the AI calls bar narrowed)
-def _shape(c, w=True): return json.dumps({k: v for k, v in c.items() if k not in ('said', 'source', *(() if w else ('w',)))}, sort_keys=True)
-
-
-def ai_tiles_up(spec: dict) -> dict:
-    """A saved Taskuary at a glance whose AI-use tiles still sit at its end (migrate_ai_tiles) with them moved up and the AI tokens total
-    in its top row (2026-11-07): an unedited copy becomes today's GLANCE, an edited one keeps its own tiles in its own order with the
-    total after its first three numbers and the AI tiles after the rest of them. The same spec when it is not the built-in, already
-    shows the total, or its AI tiles are not where they were put (the owner moved them)."""
-    if not is_dashboard(spec) or spec.get('title') != GLANCE['title']: return spec
-    comps, n = spec.get('components') or [], len(AI_TILES)
-    key = next((_key(s, i) for i, s in enumerate(spec.get('sources') or [], 1) if isinstance(s, dict) and s.get('dataset') == 'ai_usage'), None)
-    if not key or not all(isinstance(c, dict) for c in comps) or any(_shape(c) == _shape(AI_TOKENS) for c in comps): return spec
-    rest, ai = comps[:-n], comps[-n:]
-    if [_shape(c, False) for c in ai] != [_shape(c, False) for c in AI_TILES]: return spec
-    if sorted(map(_shape, rest)) == sorted(_shape(c) for c in GLANCE['components'] if c['source'] != AI_SOURCE_KEY):
-        return {**spec, 'components': [{**c, 'source': key} if c['source'] == AI_SOURCE_KEY else c for c in GLANCE['components']]}
-    top = next((i for i, c in enumerate(rest) if c.get('kind') not in ('stat', 'progress')), len(rest)); k = min(top, 3)
-    total = [{**AI_TOKENS, 'source': key}] if len(comps) < MAX_COMPONENTS else []
-    return {**spec, 'components': [*rest[:k], *total, *rest[k:top], *ai, *rest[top:]]}
-
-
-AI_UP_KEY = 'glance_ai_tiles_up'
-
-
-def migrate_ai_tiles_up(store) -> int:
-    """ai_tiles_up on every saved dashboard, once: an owner who moves the tiles back down later is not overridden."""
-    if store.get_setting(AI_UP_KEY): return 0
-    n = 0
-    for src in store.list_sources(active_only=False):
-        cfg = cfg_of(src)
-        if src.get('Channel') == 'report' and (new := ai_tiles_up(cfg)) != cfg:
-            store.save_source({'SourceId': src['SourceId'], 'ConfigJson': json.dumps(new)}, 'migrate'); n += 1
-    store.set_setting(AI_UP_KEY, '1', 'migrate')
-    return n
-
-
 def migrate_priorities(store) -> int:
     """Every saved dashboard, once each: how many changed (0 when none needed it - a second run is a no-op)."""
     n = 0
@@ -486,6 +451,10 @@ def validate(spec: dict, store=None) -> tuple:
         if r is not None and r is not False and (isinstance(r, bool) or r not in RANGES[:-1]):
             return False, f'{name}: its own "range" is false (what is true now) or one of {", ".join(map(str, RANGES[:-1]))} days'
         if c.get('order') is not None and not isinstance(c['order'], list): return False, f'{name}: "order" is a list of its x values'
+        if c.get('per') is not None and not (isinstance(c['per'], str) and c['per']): return False, f'{name}: "per" is the column it averages over'
+        if c.get('also') is not None and not (isinstance(c['also'], list) and all(isinstance(a, dict) and a.get('label') and (a.get('agg') or 'count') in AGGS
+                                                                                for a in c['also'])):
+            return False, f'{name}: "also" is a list of figures, each a label and its own agg, y and where'
         for k in ('target', 'limit'):
             if c.get(k) is not None and (isinstance(c[k], bool) or _num(c[k]) is None): return False, f'{name}: "{k}" is a number'
         if c.get('w') is not None and c['w'] not in (1, 2, 3, 4): return False, f'{name}: "w" is 1 to 4 columns'
@@ -561,7 +530,14 @@ def in_range(rows, date_col, days, now=None):
 def where(rows, w): return [r for r in rows if all(str(r.get(k)) == str(v) for k, v in (w or {}).items())]
 
 
-def aggregate(rows, agg='count', y=None):
+def aggregate(rows, agg='count', y=None, per=None):
+    """The rows' one number - or, `per` a column, the average of that number over each of its values (tokens per task): blank ones left out."""
+    if per:
+        by = {}
+        for r in rows:
+            if r.get(per) not in (None, ''): by.setdefault(str(r[per]), []).append(r)
+        vals = [v for v in (aggregate(g, agg, y) for g in by.values()) if v is not None]
+        return sum(vals) / len(vals) if vals else None
     if (agg or 'count') == 'count': return len(rows)
     vals = [v for v in (_num(r.get(y)) for r in rows) if v is not None]
     if not vals: return None
@@ -571,6 +547,16 @@ def aggregate(rows, agg='count', y=None):
 
 # a component's own window: "range": 7 is always the last week (a weekly target), whatever range the page is on
 def span(c, days): return c['range'] if isinstance(c.get('range'), int) and not isinstance(c.get('range'), bool) else days
+
+
+def money(v) -> str:
+    "Dollars as a person reads them: $0.42, $54.20, $1,234, $12.3K."
+    if v is None: return '-'
+    a = abs(v)
+    return f'${v / 1e6:.1f}M' if a >= 1e6 else f'${v / 1e3:.1f}K' if a >= 1e4 else f'${v:,.0f}' if a >= 1000 or float(v).is_integer() else f'${v:,.2f}'
+
+
+def fmt_of(c): return money if (c or {}).get('unit') == '$' else fmt
 
 
 def fmt(v) -> str:
@@ -588,16 +574,23 @@ def tile_rows(spec: dict, data: dict, c: dict, days: int) -> list:
     return where(in_range(rows, date, span(c, days)), c.get('where'))     # "range": false counts what is true now
 
 
+def also(spec: dict, data: dict, c: dict, days: int) -> list:
+    """[(figure, value)] a stat says under its number (`also`: a label and its own agg, y, per and where) - over the tile's window, never its where."""
+    base = {**c, 'where': None}
+    return [(a, aggregate(where(tile_rows(spec, data, base, days), a.get('where')), a.get('agg'), a.get('y'), a.get('per')))
+            for a in c.get('also') or [] if isinstance(a, dict)]
+
+
 def _days(spec): return int(_num((spec.get('filters') or {}).get('range')) or 0)
 
 
 def numbers(spec: dict, data: dict) -> list:
     """[(tile, value)] for every stat tile, over the dashboard's default range - the value as counted, None where nothing was."""
-    return [(c, aggregate(tile_rows(spec, data, c, _days(spec)), c.get('agg'), c.get('y')))
+    return [(c, aggregate(tile_rows(spec, data, c, _days(spec)), c.get('agg'), c.get('y'), c.get('per')))
             for c in spec.get('components') or [] if c.get('kind') == 'stat']
 
 
-def _says(c, v): return fmt(v) + (f" {c['unit']}" if c.get('unit') and v is not None else '')
+def _says(c, v): return money(v) if c.get('unit') == '$' else fmt(v) + (f" {c['unit']}" if c.get('unit') and v is not None else '')
 
 
 def headline(spec: dict, data: dict, nums: list = None) -> list:
@@ -622,9 +615,11 @@ def _panel(spec, data, c, days) -> list:
     """The lines one component says: a number, a goal against its target, or the rows its chart, list or table draws."""
     rows, t, agg, y = tile_rows(spec, data, c, days), c.get('title') or c.get('kind'), c.get('agg'), c.get('y')
     k = c.get('kind')
-    if k == 'stat': return [f'{t}: {_says(c, aggregate(rows, agg, y))}']
+    if k == 'stat':
+        more = ', '.join(f'{fmt(v)} {a.get("label") or ""}'.strip() for a, v in also(spec, data, c, days) if v)
+        return [f'{t}: {_says(c, aggregate(rows, agg, y, c.get("per")))}' + (f' ({more})' if more else '')]
     if k == 'progress':
-        v, goal = aggregate(rows, agg, y) or 0, _num(c.get('target')) or 0
+        v, goal = aggregate(rows, agg, y, c.get('per')) or 0, _num(c.get('target')) or 0
         return [f"{t}: {fmt(v)} of {fmt(goal)}" + (f' ({round(100 * min(1, v / goal))}%)' if goal else '')]
     if k == 'list':
         if s := c.get('sort'):
@@ -636,9 +631,10 @@ def _panel(spec, data, c, days) -> list:
     if k == 'stacked':
         by = {}
         for r in rows: by.setdefault(_key_of(r.get(c.get('x'))), []).append(r)
-        return [f'{t}:', *(f"{x}: " + ', '.join(f'{s} {fmt(v)}' for s, v in _groups(rs, c.get('series'), agg, y)) for x, rs in sorted(by.items()))]
-    gs = _groups(rows, c.get('x'), agg, y, int(_num(c.get('limit')) or 8), c.get('order')) if k == 'bar' else sorted(_groups(rows, c.get('x'), agg, y))
-    return [f'{t}:', *(f'{x}: {fmt(v)}' for x, v in gs)] if gs else [f'{t}: nothing']
+        f = fmt_of(c)
+        return [f'{t}:', *(f"{x}: " + ', '.join(f'{s} {f(v)}' for s, v in _groups(rs, c.get('series'), agg, y)) for x, rs in sorted(by.items()))]
+    gs = _groups(rows, c.get('x'), agg, y, int(_num(c.get('limit')) or 8), c.get('order')) if k in ('bar', 'pie') else sorted(_groups(rows, c.get('x'), agg, y))
+    return [f'{t}:', *(f'{x}: {fmt_of(c)(v)}' for x, v in gs)] if gs else [f'{t}: nothing']
 
 
 def without(srcs) -> str:

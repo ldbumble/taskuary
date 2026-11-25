@@ -735,6 +735,25 @@ class OneCardAtATime(unittest.TestCase):
         self.assertIn(f'Card rv{first} (the email to gail@northwind.example): he turned it down', said); self.assertIn(f'Card rv{second} ', said)
         self.assertEqual((cardqueue.state(self.s, tid)['live'], cardqueue.held(self.s, tid)), ([second], set()), 'the press brings the next at once')
 
+    def test_a_run_of_posts_is_one_card_with_a_tab_each_and_a_press_settles_its_own(self):
+        """The owner, 2026-11-25: three posts waiting in line are one card with a tab each ("X · LinkedIn · Reddit", "1 of 3"); a press on any
+        tab settles that card alone, the next that waits comes to the front, and the run keeps counting all three - settled ones ticked."""
+        tid = Factory(self.s).task('Announce the release'); self.answered(tid, 'Three posts are set up.', '2000-01-01 00:00:00')
+        ids = [self.s.add_review({'TaskId': tid, 'Kind': 'action', 'Status': 'pending', 'Reason': 'the post you asked for',
+                                  'DraftText': json.dumps({'action': 'run_tool', 'type': t, 'text': 'We shipped the ledger export.'})})
+               for t in ('x_post', 'linkedin_post', 'reddit_post')]
+        def tabs():
+            q = cardqueue.state(self.s, tid); [run] = cardqueue.tabs(self.s, q)
+            return [(t['name'], t['done'], t['front']) for t in run], (q['n'], q['of'])
+        self.assertEqual(tabs(), ([('X', False, True), ('LinkedIn', False, False), ('Reddit', False, False)], (1, 3)))
+        self.s.decide_review(ids[2], 'rejected', None, 'owner')         # ...a press on a tab behind the front: that card alone
+        self.assertEqual(tabs(), ([('X', False, True), ('LinkedIn', False, False), ('Reddit', True, False)], (1, 3)))
+        self.s.decide_review(ids[0], 'rejected', None, 'owner')
+        self.assertEqual(tabs(), ([('X', True, False), ('LinkedIn', False, True), ('Reddit', True, False)], (2, 3)), 'the next that waits is in front')
+        self.assertEqual(cardqueue.state(self.s, tid)['live'], [ids[1]])
+        self.s.decide_review(ids[1], 'rejected', None, 'owner')
+        self.assertEqual(tabs()[0], [('X', True, False), ('LinkedIn', True, False), ('Reddit', True, False)], 'the run stays one card once all are settled')
+
     def test_a_no_with_nothing_behind_it_wakes_nobody(self):
         tid = Factory(self.s).task('Answer Gail'); self.answered(tid, 'The letter is set up.', '2000-01-01 00:00:00')
         only = self.email(tid, 'gail@northwind.example', 'Gail - the rate is 4%.')

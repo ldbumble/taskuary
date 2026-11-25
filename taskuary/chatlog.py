@@ -1042,8 +1042,21 @@ def advance(store, tid: int) -> None:
         if rv.get('DecidedBy') not in OWNER_ACTORS and c['status'] != 'failed':
             if c['status'] not in ('passed', 'superseded') or not _was_front(by, rv): continue
             c = {**c, 'status': 'passed'}
-        t = _raised(store, rid) or (_turn_at(store, tid, rv.get('CreatedAt')) or {}).get('Id')
+        # ...AND ONE PRESSED ON ITS TAB WHILE IT WAITED BEHIND THE FRONT (CardLine, 2026-11-25) beside the run's cards, where the run is one
+        # card - never in the turn open at the press, which moved the run's one card down the chat to it
+        t = _run_home(q, rid, rows) or _raised(store, rid) or (_turn_at(store, tid, rv.get('CreatedAt')) or {}).get('Id')
         put(store, tid, 'card', f'r:{rid}', c, parent=t, state=c['status'], src=f'review:{rid}')
+
+
+def _run_home(q: dict, rid: int, rows: dict):
+    """The turn the run that review `rid` is a tab of stands in (cardqueue.state's `runs`): its front's row's, else its newest row's - where the
+    page draws it (cardLine.lineRuns). None for a card of no run, or of one with no row yet."""
+    for r in q.get('runs') or []:
+        if len(r) < 2 or not any(rid in u['rids'] for u in r): continue
+        had = [u for u in r if f"r:{u['rids'][0]}" in rows and rid not in u['rids']]
+        u = next((u for u in had if u['done'] is None), None) or (had[-1] if had else None)
+        return rows[f"r:{u['rids'][0]}"]['Parent'] if u else None
+    return None
 
 
 def _words(card: dict) -> str:
@@ -1490,7 +1503,9 @@ def beside(store, tid: int, out: list, at_work: bool, hold_, ending: bool = Fals
     sid = getattr(lv, 'sid', '') or getattr(live, 'sid', '') or ''
     return {'pending': pend, 'needsOwner': taskstate.needs_owner(ask, taskstate.browser_acts(store, tid), sid), 'now': now, 'later': later, 'dropped': [d for d in dropped if d], 'working': at_work,
             'started': general.turn_started(tid) if at_work else None, 'asking': ask, 'permissions': perms, 'live': codingchat.live_of(lv),
-            'letters': letters, 'idle': idle, 'queue': {'live': q['live'], 'held': q['held'], 'line': cardqueue.line(q)},
+            # ...and its runs, each one card with a tab per card (cardqueue.tabs) - none on a task a stranger's words hold: no card waits there
+            'letters': letters, 'idle': idle, 'queue': {'live': q['live'], 'held': q['held'], 'line': cardqueue.line(q),
+                                                         'runs': [] if hold_ and origin.keeps_him(store, tid) else cardqueue.tabs(store, q)},
             'hold': hold_ and {**{k: hold_[k] for k in ('line', 'person', 'org')},
                                **({'line': origin.JOINED_LINE.format(who=hold_['who'])} if turns else {})},
             'published': published, 'ran': bool(turns)}

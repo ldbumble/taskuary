@@ -93,6 +93,7 @@ def check(store, tid: int, sid: str, cmd: str = '', cwd: str = '', shell: str = 
     if run:
         if browsergate.names(cmd, agentdesktop.EXE): return agentdesktop.check(store, tid, sid, cmd, brain)
         return browsergate.check(store, tid, sid, cmd, brain, cwd)
+    if cmd and (no := browsergate.devtools(cmd)): return deny(no)
     reads, never = readgate.judge(store, tid, paths, cwd, write) if paths is not None else readgate.of_command(store, tid, cmd, cwd)
     if never: return deny(never)
     if not reads and not (cmd and shellgate.acts(cmd, cwd)): return {}
@@ -282,11 +283,12 @@ def tool_call(tc: dict, ctx: dict) -> tuple:
     """(answer, why) for one ACP toolCall. ctx: store, task_id, cli, cwd, sid, owner_asks."""
     t, store = tool_of(tc), ctx.get('store')
     if t['server']: return _mcp(store, ctx.get('cli') or '', t['server'], t['tool'])
-    from . import readgate, shellgate
+    from . import browsergate, readgate, shellgate
     raw = _raw(tc)
     cwd, tid = str(raw.get('cwd') or ctx.get('cwd') or ''), ctx.get('task_id')
     paths, w = _paths(tc, cwd), _writes(tc)
     if not t['command'] and paths is None: return ALLOWED, ''          # ...a press in the browser or on the desktop is held where it runs
+    if t['command'] and (no := browsergate.devtools(t['command'])): return REFUSED, no
     reads, never = readgate.judge(store, tid, paths, cwd, w) if paths is not None else readgate.of_command(store, tid, t['command'], cwd)
     if never: return REFUSED, never
     todo = (shellgate.acts(t['command'], cwd) if t['command'] else []) + reads
@@ -447,7 +449,7 @@ def asks(name: str, cmd: str) -> tuple:
     "(is it a press to judge, must the server see it at all): a look runs untouched; an open goes by the server, which brings the page up."
     from . import agentdesktop, browsergate
     if name == agentdesktop.EXE: return (bool(agentdesktop.acts(cmd)),) * 2
-    act = bool(browsergate.acts(cmd))
+    act = bool(browsergate.acts(cmd) or browsergate.refused(cmd))       # ...a refusal is an act: Taskuary unreachable, it fails closed
     return act, act or bool(browsergate.opens(cmd))
 
 

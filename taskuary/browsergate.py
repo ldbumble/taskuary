@@ -161,10 +161,11 @@ def _head(argv: list, exe: str = EXE) -> list | None:
     return a[1:] if a and _is_exe(a[0], exe) else None
 
 
-def acts(cmd: str) -> list:
+def acts(cmd: str, seen=None) -> list:
     """Every agent-browser call in a shell command that is not only a look: [{'args': [...], 'verb': 'click'}]. A command
     that names agent-browser where it cannot be read (a quote left open, a call inside another shell's string that will not
-    parse) is one act with verb '?' - held to the model like any other, never let through for being hard to read."""
+    parse) is one act with verb '?' - held to the model like any other, never let through for being hard to read. `seen`: the sites
+    this session has been on - an address carrying a query to any other is judged (sends)"""
     if not names(cmd): return []
     segs = _segments(cmd)
     if segs is None: return [{'args': [], 'verb': '?', 'raw': str(cmd)[:400]}]
@@ -192,13 +193,101 @@ def acts(cmd: str) -> list:
         # whatever a box holds, a password the sign-in vault just filled included - checked against the page (check)
         # ...and the address a new tab opens, or `read <url>` FETCHES (agent-browser's grammar: a read with no address is the tab's text), is
         # read as open's is - the same magic link passed ungated as a read (the browser-read round, 2026-11-18)
-        to = (nxt if verb in NAVS else next((t for t in a[i + 1:] if re.match(r'^https?://', t, re.I)), '') if verb == 'read'
-              else a[i + 2] if verb == 'tab' and nxt.lower() == 'new' and i + 2 < len(a) else None)
-        if to is not None and carries(to): verb = 'navigate'
+        to = _dest(a, i)
+        if to is not None and (carries(to) or seen is not None and sends(to, seen)): verb = 'navigate'
         elif verb == 'get' and nxt.lower() == 'value': out.append({'args': a, 'verb': 'get value', 'read': True}); continue
         elif verb in LOOKS or (verb == 'find' and _find_action(a[i:]) in FIND_LOOKS): continue
         if verb: out.append({'args': a, 'verb': verb, **({'nl': True} if broke(a) else {})})
     return out
+
+
+def _dest(a: list, i: int):
+    "The address agent-browser's words `a` (its verb at `i`) take a tab to: open/goto/navigate's, a new tab's, the page `read <url>` fetches - else None."
+    verb, nxt = a[i].lower() if i < len(a) else '', a[i + 1] if i + 1 < len(a) else ''
+    return (nxt if verb in NAVS else next((t for t in a[i + 1:] if re.match(r'^([a-z][\w+.-]*://|(view-source:)?file:)', t, re.I)), '') if verb == 'read'
+            else a[i + 2] if verb == 'tab' and nxt.lower() == 'new' and i + 2 < len(a) else None)
+
+
+def dests(cmd: str) -> list:
+    "Every address an agent-browser line takes a tab to (_dest), in order."
+    out = []
+    for argv in (_segments(cmd) or []) if names(cmd) else []:
+        a = _head(argv)
+        if a is None: out += [d for t in argv[1:] if names(t) and ' ' in t.strip() for d in dests(t)]; continue
+        i = 0
+        while i < len(a) and a[i].startswith('-'): i += 2 if a[i] in VALUED and '=' not in a[i] else 1
+        if (to := _dest(a, i)) is not None: out.append(to)
+    return out
+
+
+# ── WHERE THE AGENT'S BROWSER NEVER GOES, AND WHAT IT NEVER TOUCHES (red team #2, T4) ──────────────────────────────────────────────────
+# By the address's own parts, never its words: a file on this computer (file:, view-source:file:), the cloud's metadata and link-local
+# addresses (169.254.x, fe80::, fd00:ec2::254 - however the number is spelled), Taskuary's own address, and a browser's DevTools port - the
+# session's Chrome answers there unauthenticated, so reaching it is driving Chrome past this gate. The agent's own DevTools address
+# (`get cdp-url`, `connect`, `--cdp`) is the same door
+_META = ('metadata.google.internal', 'metadata.goog', 'metadata', 'instance-data')
+def _ip(host: str):
+    "The address a host names, however its number is spelled (2852039166, 0xa9fea9fe, 169.254.43518, [::ffff:169.254.169.254]) - None for a name."
+    import ipaddress, socket
+    h = str(host or '').strip('[]').lower()
+    try: ip = ipaddress.ip_address(int(h, 16) if re.fullmatch(r'0x[0-9a-f]+', h) else int(h) if h.isdigit() else h)
+    except ValueError:
+        try: ip = ipaddress.ip_address(socket.inet_ntoa(socket.inet_aton(h)))
+        except (OSError, ValueError): return None
+    return getattr(ip, 'ipv4_mapped', None) or ip
+
+
+def _ports() -> set:
+    "Taskuary's own port and every live browser session's DevTools port."
+    from . import browserview, config
+    with browserview._PORTS_LOCK: ps = set(browserview._PORTS.values())
+    return ps | {int(config.load()['server'].get('port') or 7787)}
+
+
+def barred(url: str) -> str:
+    "Why the agent's browser may not go to `url` ('' when it may)."
+    u = str(url or '').strip()
+    if re.match(r'^(view-source:)?file:', u, re.I): return 'it is a file on this computer'
+    try: p = urlsplit(u if '://' in u else 'http://' + u); host, port = (p.hostname or '').rstrip('.'), p.port
+    except ValueError: return 'it is an address that cannot be read'
+    ip = _ip(host)
+    if host in _META or ip is not None and (ip.is_link_local or str(ip) == 'fd00:ec2::254'): return "it is the cloud's metadata or a link-local address"
+    if port and (ip is not None and (ip.is_loopback or ip.is_unspecified) or host == 'localhost' or host.endswith('.localhost')) and port in _ports():
+        return "it is Taskuary's own address or a browser's DevTools port"
+    return ''
+
+
+def refused(cmd: str) -> str:
+    "Why this agent-browser line is refused outright, on any answer ('' when it is not): an address it may not open, or the DevTools door."
+    if not names(cmd): return ''
+    for argv in _segments(cmd) or []:
+        a = _head(argv) or []
+        w = [t.lower() for t in _own_args(a)]
+        if any(t.split('=', 1)[0] == '--cdp' for t in a) or w[:2] == ['get', 'cdp-url'] or w[:1] == ['connect']:
+            return "the browser's DevTools address is never the agent's - it drives this task's browser through agent-browser's own commands"
+    return next((f'{d} is not opened: {why}' for d in dests(cmd) if (why := barred(d))), '')
+
+
+def devtools(cmd: str) -> str:
+    "Why a shell line is refused for reaching a browser's DevTools - its port by number, or the variable that holds it ('' when it does not)."
+    from . import browserview
+    with browserview._PORTS_LOCK: ps = set(browserview._PORTS.values())
+    if re.search(r'AGENT_BROWSER_CDP', str(cmd or ''), re.I) or any(re.search(rf':{p}(?!\d)', str(cmd or '')) for p in ps):
+        return f"{NOT_RUN}: the browser's DevTools port is never the agent's - drive this task's browser through agent-browser's own commands."
+    return ''
+
+
+VISITED: dict = {}           # sid -> the sites its browser has been on (sends): a query to one of them is the work going on there
+def _site(url: str) -> str:
+    try: return (urlsplit(str(url or '')).hostname or '').lower().removeprefix('www.')
+    except ValueError: return ''
+
+
+def sends(url: str, seen) -> bool:
+    "Does this address carry a query or a fragment to a site this session has not been on? Data handed out that way is judged, as a click is."
+    try: u = urlsplit(str(url or ''))
+    except ValueError: return True
+    return bool(u.query or u.fragment) and _site(url) not in seen
 
 
 def helps(args: list) -> bool:
@@ -681,8 +770,10 @@ def _check(store, tid: int, sid: str, cmd: str, brain=None, cwd: str = '') -> di
     if (shut := closes(cmd)) and (his := owner_tab(store, tid, sid) if shut == 'tab' else ', '.join(owner_tabs(store, tid, sid).values())):
         return _deny(f"{NOT_RUN}: that would close the owner's tab - your step on {his} waits on him there. Leave it open and go on in another tab; "
                      "you are told when he is done.")
-    todo = acts(cmd)
-    if not todo or all(typing(a) for a in todo): return {}
+    if (no := refused(cmd)): return _deny(f'{NOT_RUN}: {no}.')
+    seen = VISITED.setdefault(str(sid), set()) | {_site((_PAGES.get(str(sid)) or {}).get('url'))}
+    todo = acts(cmd, seen)
+    if not todo or all(typing(a) for a in todo): VISITED[str(sid)].update(_site(d) for d in dests(cmd)); return {}
     pg, said, vs = page(sid), asked(store, tid), None
     if pg.get('url'): left_page(store, tid, sid, pg['url'])
     _saw(sid, todo, pg)
@@ -738,6 +829,7 @@ def _check(store, tid: int, sid: str, cmd: str, brain=None, cwd: str = '') -> di
         from .selfclose import CARD_TAIL
         return _deny(f"{HELD}: {v['what']} ({v['why']}). {CARD_TAIL}" + stands(store, tid))
     if (browserview.ENDED_ON.get(str(sid)) or ('',))[0] == 'failed': browserview.ended_on(sid)     # it went on past the failure
+    VISITED.setdefault(str(sid), set()).update(_site(d) for d in dests(cmd))
     # ...and a press that went to a site is the agent's own act there: a code that site mails now comes back to it (signin.acting), and a
     # password a box of the form holds is kept before the press sends it (signin.pressing) - nothing a site was sent is lost
     if any(not setting(a) and not a.get('read') for a in todo):

@@ -110,7 +110,17 @@ def lapsed(err) -> bool:
     from .teamsweb import SIGNED_OUT
     s = str(err or '')
     return any(m in s for m in ('sign-in has lapsed', 'invalid_grant', GOOGLE_REFUSED, SIGNED_OUT))
-def signed_out(c: dict) -> bool: return bool((c or {}).get('Active') and lapsed(c.get('LastError')))
+def signed_out(c: dict) -> bool:
+    """...and a key or token the system answered 401 to (say._status reads the code): a revoked GitHub token read "last test failed" on
+    its card (2026-11-25). Not on a card whose own sign-in renews itself - its renewal says "lapsed" when it fails, and a 401 over a
+    renewed sign-in is the service's trouble (a Microsoft outage, 2026-11-12)."""
+    if not (c or {}).get('Active'): return False
+    from .say import _status
+    err = c.get('LastError')
+    try: cfg = json.loads(c.get('ConfigJson') or '{}') or {}
+    except (TypeError, ValueError): cfg = {}
+    renews = isinstance(cfg, dict) and (cfg.get('auth') == 'user' or bool(cfg.get('google_refresh_token')))
+    return lapsed(err) or bool(err and not renews and _status(RuntimeError(err)) == 401)
 
 
 LINES = {'connected': 'Connected', 'not_signed_in': 'Not signed in', 'signed_out': 'Needs sign-in',

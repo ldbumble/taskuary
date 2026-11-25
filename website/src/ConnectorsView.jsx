@@ -2818,12 +2818,21 @@ function SyncNow({ conn, mine, sync, reload }) {
 
 // ONE CONNECTION'S OWN CARD, by its kind (connectSetup.cardKind) - the Connections page's, and the one a card's Connect brings up under it
 // (ConnectSetup, `inline`). `onConnected`: its Test passed or its sign-in came back - the card that asked goes on.
+// A SIGN-IN THE SYSTEM TURNED DOWN SAYS SO ON THE CARD (the owner, 2026-11-25: the bell said it, the card did not): the server's state
+// (connectorcatalog.signed_out, the bell's own fact) heads the card, and its own sign-in - the button or the token box - is lit, till it works
+export const LAPSED_LINE = "Sign-in expired - sign in again";
 export function ConnectionCard({ conn, sources, byType, inline = false, ...p }) {
   const k = cardKind(conn.Type, { data: DATA_META, tools: AGENT_TOOLS }, inline), own = { conn, reload: p.reload, onBack: p.onBack, onCreated: p.onCreated };
-  return k === "mssql" ? <MssqlDetail {...own} /> : k === "winrm" ? <WinrmDetail {...own} /> : k === "reason" ? <ReasonDetail {...own} />
+  const out = connStateOf(conn) === "signed_out", ref = useRef(null);
+  useEffect(() => (out && ref.current ? lightStep(ref.current) : undefined), [out, conn.ConnectorId]);
+  const card = k === "mssql" ? <MssqlDetail {...own} /> : k === "winrm" ? <WinrmDetail {...own} /> : k === "reason" ? <ReasonDetail {...own} />
     : k === "desktop" ? <DesktopDetail {...own} /> : k === "tool" ? <AgentToolDetail {...own} />
     : k === "data" ? <DataDetail {...own} meta={DATA_META[conn.Type]} sources={sources} byType={byType} onConnected={p.onConnected} />
     : <ChannelDetail {...p} conn={conn} sources={sources} simple={k === "mail"} />;
+  return (<Box ref={ref} data-tq-card-signed-out={out ? conn.Type : undefined}>
+    {out && <Typography variant="body2" data-tq-lapsed="" sx={{ maxWidth: 980, mx: "auto", mb: 1, fontWeight: 600, color: "var(--tq-danger, #6b2733)" }}>
+      {LAPSED_LINE}</Typography>}
+    {card}</Box>);
 }
 
 export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, onBack: leave, onCreated, onNavigate, simple = false, onConnected, chatsAsk = null }) {
@@ -2834,7 +2843,8 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
   const m = metaOf(conn) || { fields: [], howto: [] };
   const isAI = m.channel === "ai";
   const [tab, setTab] = useState("Setup");
-  const [step, setStep] = useState(conn.HasSecret ? (conn.LastSyncAt ? 2 : 1) : 0);
+  // ...a sign-in turned down opens on Credentials, where the token goes again (ConnectionCard lights it)
+  const [step, setStep] = useState(conn.HasSecret && connStateOf(conn) !== "signed_out" ? (conn.LastSyncAt ? 2 : 1) : 0);
   const [cfg, setCfg] = useState(parse(conn.ConfigJson));
   const [cfgSaved, setCfgSaved] = useState(cfg);     // what the boxes held when they were last saved: typed past it is unsaved
   const [secret, setSecret] = useState("");
@@ -4583,7 +4593,7 @@ const ChatGptSignIn = ({ conn, cfg, reload }) => {
   const [state, setState] = useState("");      // "" | ok | error
   const [detail, setDetail] = useState("");
   const [busy, setBusy] = useState(false);
-  const signedIn = cfg.auth === "user" && conn.HasSecret;
+  const signedIn = cfg.auth === "user" && conn.HasSecret && !conn.SignedOut;     // a lapsed one offers its Sign in again
   useEffect(() => {
     if (!flow) return undefined;
     let alive = true;

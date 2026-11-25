@@ -36,3 +36,18 @@ def test_vectors_are_kept_by_key_and_redone_when_the_text_changes():
     textsim.vectors(s, e, [('task:1', 'alpha one'), ('task:2', 'beta')])
     textsim.vectors(s, e, [('task:1', 'alpha two'), ('task:2', 'beta')])
     assert e.calls == [['alpha one', 'beta'], ['alpha two']]
+
+
+def test_two_tasks_picked_over_the_same_lists_share_the_lists_as_one_cached_head():
+    """The light model's pick reads ~400 closed titles and the Hub's posts - the same for every task until one closes. With the task in
+    front, every pick was a new prompt from its first line (8% of a week's 'rank' tokens cached); the task now comes last."""
+    seen = []
+    def brain(system, user, **kw): seen.append(system + user); return '{"picks": []}'
+    groups = {'repo': [('repo:northwind/ledger', 'northwind/ledger: the GL')], 'hub': [(f'lore:{i}', f'[ops] note {i} on the import') for i in range(60)],
+              'past': [(f'task:{i}', f'Closed task {i}: reconcile the Payworth invoice batch') for i in range(200)]}
+    with fake_embed.no_embedder():
+        for q in ('Reconcile the October Payworth invoice', 'Set up the Trainly seats for the new starter'):
+            textsim.pick(MemoryStore(), q, groups, brain=brain)
+    a, b = seen
+    common = next(i for i, (x, y) in enumerate(zip(a, b)) if x != y)
+    assert common >= 0.9 * len(a) and a.endswith('Reconcile the October Payworth invoice'), 'the lists are the head, the task its own tail'

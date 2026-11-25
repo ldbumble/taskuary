@@ -380,6 +380,16 @@ def verdict_schema(candidates=None, playbooks=None, same=False, goals=False, cod
             'schema': {'type': 'object', 'additionalProperties': False, 'required': list(p), 'properties': p}}
 
 
+# THE SAME SCHEMA ON EVERY MAIL (cost, 2026-11-24): OpenAI reads a structured-output schema as the head of the prompt, before the system, so a
+# schema that grew a key on a thread's reply (same_as, new_job, relationship...) made every byte after it a new prompt - one mail in five on a
+# thread, and the whole cached guide was billed again for it and the mail after. Every key a mail may carry is on the wire for all of them:
+# each one is read only against what that mail was shown (same_ids, home, candidates... in classify_intent), so a key it had no reason to
+# answer lands nowhere. Only what is the install's own - its menus, coding, the answer's shape - still shapes it.
+def wire_schema(playbooks=None, coding=True, workflows=None, notes=False, workstreams=False, lean=True) -> dict:
+    return verdict_schema([], playbooks, same=True, goals=True, coding=coding, workflows=workflows, earlier=True, thread_task=True,
+                          notes=notes, workstreams=workstreams, watched=True, lean=lean, notices=True)
+
+
 INTENT_SYSTEM = SHIPPED
 
 def addressed_to_you(msg: dict, mine=()) -> str:
@@ -810,8 +820,10 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
             # ...the keys on the tasks it carries too (agent_on_it, open_todos): a nested field is as unexplained as a top-level one
             held = {k for k, v in (thread or {}).items() if v} | {k for v in (thread or {}).values() for e in (v if isinstance(v, list) else [v])
                                                                   if isinstance(e, dict) for k in ON_TASKS if e.get(k)}
-            unsaid = [t for k, t in FIELDS.items() if k in held and k not in base]
-            if unsaid: base += '\n\nTHE PAYLOAD ALSO CARRIES:\n' + '\n'.join(unsaid)
+            # ...told in this mail's own part (below), never the cached one: which keys a mail carries is the mail's, and a guide that grew
+            # a paragraph on a thread's reply was a new prompt from its first block on (cost, 2026-11-24)
+            unsaid, guide = [t for k, t in FIELDS.items() if k in held and k not in base], base
+            if unsaid: base += '\n\nTHE PAYLOAD ALSO CARRIES:\n' + '\n'.join(unsaid)       # ...what every check below reads as said
             # ...and the same for what the ANSWER must carry. A generated document describes how to
             # judge and never restates the output shape, so asking for it again here is not
             # overriding the owner - it is the half of the prompt the document was never writing.
@@ -822,7 +834,7 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
             # fell back to the raw body (TQ-0665, three times in eight replays). A SHAPE cannot
             # argue with the owner's judgement, so nothing is lost by asking for it at the end.
             shape = '"title"' not in base
-            system = base + (f"\n\nOperator's document:\n{soul[:SOUL_CHARS]}" if soul else '')
+            system = guide + (f"\n\nOperator's document:\n{soul[:SOUL_CHARS]}" if soul else '')
             # the job weighs importance - what this arrival means to what the owner is accountable for;
             # it defines no intent, and the document says so in its own first line
             if job: system += f"\n\nThe owner's job (their own document - what they are responsible for, who they serve, what to protect; weigh how much this matters with it):\n{job[:JOB_CHARS]}"
@@ -855,7 +867,7 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
             # THE CACHED CONTEXT, THEN THE NEW MAIL (the owner, 2026-11-10: "keep the triage context cached and then just the new info should
             # query it"): the guide and the owner's documents (the same for hours), the playbooks, workstreams and workflows (for days), the
             # learned memory (a line added at 3pm re-bills only itself) - each a cached block (llm.stable) - and only what follows is this mail's
-            fixed, menus, system = system[:cut], system[cut:], ''
+            fixed, menus, system = system[:cut], system[cut:], base[len(guide):]
             # WHAT IS THIS MESSAGE'S OWN comes after what every message shares (the owner, 2026-11-10: "32 million tokens?"): the guide, the
             # owner's documents and memory, the playbooks, workstreams and workflows are the same bytes on every mail - the prefix a provider
             # caches - and the evidence picked for this sender and the report's brief differ each time, so they follow
@@ -947,10 +959,7 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
             # what was left out. Both exist because neither reaches every brain (TQ-0665).
             from .llm import ask_json, stable
             system = stable(fixed, menus, memory, rest=system, ttl='1h')
-            answer = ask_json(llm, system, user, want=verdict_schema(candidates, playbooks, same=bool(same_ids), goals=bool(goal_steps),
-                                                                     coding=coding, workflows=workflows, earlier=bool(earlier_ids), thread_task=bool(home),
-                                                                     notes=bool(note_ids), workstreams=bool(workstreams), watched=watched, lean=lean,
-                                                                     notices=bool(notice_ids)),
+            answer = ask_json(llm, system, user, want=wire_schema(playbooks, coding, workflows, bool(note_ids), bool(workstreams), lean),
                               need=('title',), **({'max_tokens': TRIAGE_TOKENS} if takes_tokens(llm) else {}),
                               **({'images': images} if images else {}))
             raw_answer, j = answer.raw, answer.data

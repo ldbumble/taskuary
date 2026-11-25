@@ -156,17 +156,28 @@ def _keep(key, out: dict, ttl: int, made: bool = True) -> None:
         while len(_recalled) > RECALL_KEPT: _recalled.pop(next(iter(_recalled)))
 
 
+def past_pool(store, tid=None) -> list:
+    """The closed tasks recall's pick reads, in the order they closed, from the day the DONE_POOL-th newest closed: a close adds a line at the
+    end and the window's front moves once a day, so the next pick reads the list from the provider's cache (newest first, every close
+    renumbered all of it)."""
+    at = lambda d: str(d.get('ClosedAt') or d.get('UpdatedAt') or '')
+    done = sorted((d for d in store.list_tasks(status='done') if d['TaskId'] != tid), key=lambda d: (at(d), d['TaskId']))
+    if len(done) > DONE_POOL: day = at(done[-DONE_POOL])[:10]; done = [d for d in done if at(d)[:10] >= day]
+    return done
+
+
 def _judge(store, tid, about: str, repo) -> dict | None:
     "The picks for `about`, or None where nothing could judge (textsim.pick)."
     from . import handbook
     hub = store.lore_posts(limit=store.LORE_POOL, sort='top') if handbook.enabled(store) else []
-    done = [d for d in store.list_tasks(status='done')[:DONE_POOL] if d['TaskId'] != tid]
+    done = past_pool(store, tid)
     from .repochoice import known
     try: repos = [] if repo else known(store)
     except Exception as e: logger.debug(f'context: no repositories to recall - {e}'); repos = []
-    got = textsim.pick(store, about, {'hub': [(f"lore:{p['LoreId']}", handbook.entry_line(p)) for p in hub],
-                                      'past': [(f"task:{d['TaskId']}", d.get('Title') or '') for d in done],
-                                      'repo': [(f"repo:{r['repo']}", f"{r['repo']}: {r['about']}") for r in repos]},
+    # ...the least often changing list first - the repositories, the Hub, then the closed tasks a close adds to: the cached head (textsim.pick)
+    got = textsim.pick(store, about, {'repo': [(f"repo:{r['repo']}", f"{r['repo']}: {r['about']}") for r in repos],
+                                      'hub': [(f"lore:{p['LoreId']}", handbook.entry_line(p)) for p in hub],
+                                      'past': [(f"task:{d['TaskId']}", d.get('Title') or '') for d in done]},
                        RECALL_HUB, about={'hub': handbook.HUB_LIST, 'past': PAST_LIST, 'repo': REPO_LIST}, task_id=tid)
     if got is None: return None
     by = {f"lore:{p['LoreId']}": p for p in hub}

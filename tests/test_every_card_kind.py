@@ -1,0 +1,260 @@
+"""EVERY KIND OF CARD, ONE LIFECYCLE (the owner, 2026-11-25: "are you only testing posting and PRs? what about other action cards? ... future ones
+should work as well, so think for all types of action cards. Make these design fixes so we don't have these issues in general").
+
+Whatever a card carries - an act Taskuary knows (every proposals.ACTIONS entry), a write on a connector (every executor in reports.REGISTRY
+that scopes.ACTIONS does not call a read), a letter, a bulk card, the landing question, a post put up through the browser, a step handed to
+him on a page - it goes the same way:
+
+    raised -> drawn as ONE card with its press -> his press executes it once -> its outcome stands on the card -> the agent is woken only
+    where the card carries its own next step (`then`); a press whose execution FAILS stays on its card with why, and wakes its agent once.
+
+THE KINDS ARE READ OFF THE CODE, NEVER LISTED: a new action or executor added later is a new case here by itself. Each kind's far side is
+stood in at the one seam its press runs through (proposals._run for an act, reports.REGISTRY for an executor, outbound.send_out for a
+letter), so nothing leaves the machine; the raise, the line, the chat's list, the press route and the wake are the real code. Invented people."""
+import json, time
+from unittest import mock
+
+import pytest
+from fastapi.testclient import TestClient
+
+from taskuary import (bulkcard, card, cardqueue, chatlog, conversation, general, landing, outbound, pagestep, proposals, reports, scopes, server,
+                      workerstate as ws)
+from taskuary.store import MemoryStore
+
+c = TestClient(server.app)
+OWNER = {'X-Taskuary-Token': 'pytest-owner-token'}
+ACTS = sorted(proposals.ACTIONS)                                        # every act a card can carry
+WRITES = sorted(t for t in reports.REGISTRY if scopes.needs(t) != 'read' and t not in reports.PLANNED and t not in scopes.NEVER_AGENT)
+REFUSED = 'the far side refused it: the account is closed'
+
+
+class World:
+    "One owner's Taskuary in memory: one task its agent works, every wake of that agent kept."
+    def __init__(self):
+        self.s = MemoryStore(); self.woken = []
+        self.tid = self.s.create_task({'Title': 'Close the month', 'Kind': 'general', 'Status': 'open', 'OriginBase': 'owner'}, 'owner')
+        conversation.hear(self.s, self.tid, turn=True)
+        self.s.add_comment(self.tid, 'assistant', general.ASSISTANT_TYPE, 'It is set up for your press.')
+        self._on = [mock.patch.object(server, 'store', self.s),
+                    mock.patch.object(general, 'to_agent', lambda st, t, said='', actor='owner', heard=None, **k: self.woken.append(said) or (heard and heard('woke')) or 'woke')]
+        for m in self._on: m.start()
+        general._WOKEN.clear()
+
+    def close(self):
+        for m in self._on: m.stop()
+
+    def act(self, p: dict, then: str = '') -> int:
+        "An act's card as the store keeps it (proposals.queue's own row)."
+        return self.s.add_review({'TaskId': self.tid, 'Kind': 'action', 'Status': 'pending', 'Origin': 'agent', 'DraftText': json.dumps(p),
+                                  'Reason': f"the agent proposes to {proposals.ACTIONS[p['action']][0]}", 'NextStep': then or None})
+
+    def cards(self) -> dict:
+        cardqueue._SEEN.clear()
+        return {k['review']: k for x in chatlog.read(self.s, self.tid)['items'] for k in ([x] if x['kind'] == 'card' else x.get('cards') or [])}
+
+    def press(self, rid: int, verb='approve', text=None) -> dict:
+        out = c.post(f'/api/reviews/{rid}/decide', headers=OWNER, json={'verb': verb, **({'final_text': text} if text is not None else {})})
+        end = time.time() + .4
+        while time.time() < end and not self.woken: time.sleep(.02)
+        return out.json()
+
+    def lifecycle(self, rid: int, ran: list, wakes: int):
+        "Drawn with its press -> pressed once -> its outcome on the card -> `wakes` wakes; a second press runs nothing."
+        drawn = self.cards().get(rid)
+        assert drawn and drawn['status'] == 'pending', f'not drawn as a card to press: {drawn}'
+        mine = next(k for k in card.waiting(self.s, self.tid) if rid in k['rids'])
+        assert mine['state'] == 'pending' and 'approve' in mine['presses'], mine
+        out = self.press(rid)
+        assert out.get('ok'), out
+        assert len(ran) == 1, f'executed {len(ran)} times'
+        after = self.cards().get(rid)
+        assert after and after['status'] in ('approved', 'edited', 'sent'), f'its outcome is not on its card: {after}'
+        assert card.did(self.s, card.of_review(self.s, self.s.get_review(rid))), 'the press says nothing of what it did'
+        self.press(rid)
+        assert len(ran) == 1, 'a second press ran it again'
+        assert len(self.woken) == wakes, f'woke its agent {len(self.woken)} times, not {wakes}: {self.woken}'
+
+    def failure(self, rid: int):
+        "A press whose execution fails: kept on its card with why, its agent woken once."
+        out = self.press(rid)
+        assert not out.get('ok') and REFUSED[:24] in str(out.get('send_error')), out
+        rv = self.s.get_review(rid)
+        assert REFUSED[:24] in str(rv.get('ActError') or rv.get('Reason') or ''), f'the failure is not kept on its card: {rv}'
+        assert self.cards().get(rid), 'the failed card is gone from the chat'
+        assert len(self.woken) == 1, f'a failed press woke its agent {len(self.woken)} times'
+
+
+@pytest.fixture
+def w():
+    world = World()
+    yield world
+    world.close()
+
+
+def _filled(a: str) -> dict:
+    "A proposal of act `a` with every field its declaration requires."
+    return {'action': a, **{k: 'x' for k in proposals.ACTIONS[a][1]}, **({'sid': 'run1', 'request': 'yourturn:x'} if a in proposals.HELD_ACTS else {})}
+
+
+@pytest.mark.parametrize('a', ACTS)
+@pytest.mark.parametrize('then', ['', 'tell Erin it is done'])
+def test_every_act_is_drawn_pressed_once_says_what_it_did_and_wakes_only_for_its_then(w, a, then):
+    ran = []
+    with mock.patch.object(proposals, 'validate', return_value=(True, '')), mock.patch.object(pagestep, 'sync'), \
+         mock.patch.object(proposals, '_run', side_effect=lambda *x, **k: ran.append(1) or {'done': True}):
+        rid = w.act(_filled(a), then)
+        # ...a held step's own gate tells its agent what it ran (perform), so its press goes through no wake of its own here
+        w.lifecycle(rid, ran, wakes=1 if then and a not in proposals.HELD_ACTS else 0)
+
+
+@pytest.mark.parametrize('a', ACTS)
+def test_every_act_that_fails_at_its_press_keeps_the_failure_on_its_card_and_wakes_its_agent_once(w, a):
+    def fails(*x, **k): raise RuntimeError(REFUSED)
+    with mock.patch.object(proposals, 'validate', return_value=(True, '')), mock.patch.object(pagestep, 'sync'), \
+         mock.patch.object(proposals, '_run', side_effect=fails):
+        w.failure(w.act(_filled(a)))
+
+
+def _connected(w, t: str) -> int:
+    "The connection executor `t` runs on, switched on as an agent tool."
+    kind = reports.card_of(t)
+    conn = w.s.get_connector_by_type(kind) or {'ConnectorId': w.s.save_connector({'Type': kind, 'Name': kind, 'Active': 1}, 'owner')}
+    w.s.save_connector({'ConnectorId': conn['ConnectorId'], 'Active': 1, 'Roles': 'tool', 'Scope': 'admin', 'Secret': 'stand-in'}, 'owner')
+    return conn['ConnectorId']
+
+
+def _write(w, t: str) -> dict:
+    """A write of type `t` as its own declaration shapes it: the fields its card draws where the catalogue declares one (connectorcatalog),
+    the item a tracker's act is on, an MCP call's tool - else its words."""
+    from taskuary import connectorcatalog as cat, trackers
+    p = {'action': 'run_tool', 'type': t, 'connector_id': _connected(w, t)}
+    if (act := cat.action_for(t)):
+        fill = {'choice': lambda f: f['choices'][0]['value'], 'image': lambda f: None}
+        named = {'repo': 'northwind/ledger', 'number': '12', 'subreddit': 'accounting'}
+        p.update({f['key']: v for f in act['fields'] if (v := named.get(f['key']) or fill.get(f['type'], lambda f: 'Posted from the month-end close.')(f)) is not None})
+    else: p['text'] = 'Posted from the month-end close.'
+    if t in trackers.TYPES:                                       # ...the item it is on, and what its verb needs (trackers.NEED)
+        tracker, verb = trackers.TYPES[t][:2]
+        p.update({'item': '1234567' if tracker == 'monday' else 'NW-12', **({need: 'Done'} if (need := trackers.NEED.get(verb)) else {})})
+    if t == 'mcp': p['tool'] = 'add_note'
+    return p
+
+
+@pytest.mark.parametrize('t', WRITES)
+def test_every_write_on_a_connector_waits_as_one_card_and_its_press_runs_it_once(w, t):
+    ran = []
+    with mock.patch.dict(reports.REGISTRY, {t: lambda cfg: ran.append(cfg) or ('done', 'it went')}), \
+         mock.patch.object(reports, 'resolve_cfg', side_effect=lambda store, cfg: dict(cfg)), mock.patch.object(reports, 'checked', side_effect=lambda store, p: p):
+        rid = w.act(_write(w, t))
+        assert not ran, 'it ran before his press'
+        w.lifecycle(rid, ran, wakes=0)
+
+
+@pytest.mark.parametrize('t', WRITES)
+def test_every_write_that_its_system_refuses_stays_on_its_card_and_wakes_its_agent_once(w, t):
+    def fails(cfg): raise RuntimeError(REFUSED)
+    with mock.patch.dict(reports.REGISTRY, {t: fails}), mock.patch.object(reports, 'resolve_cfg', side_effect=lambda store, cfg: dict(cfg)):
+        w.failure(w.act(_write(w, t)))
+
+
+# ── the kinds that are no act of a catalogue: a letter, many of one, the work's own question, the browser's road, his step on a page ──────
+def _letter(w, to='erin@northwind.example', then='') -> int:
+    return w.s.add_review({'TaskId': w.tid, 'Kind': 'slot', 'Status': 'pending', 'DraftText': 'Hi Erin - the October close is done. Alex', 'NextStep': then or None,
+                           'Reason': 'assistant wrote this email', 'Deliver': json.dumps({'channel': 'email', 'to': [to], 'subject': 'October close'})})
+
+
+@pytest.mark.parametrize('then', ['', 'file her answer'])
+def test_a_letter_is_drawn_sent_once_and_wakes_only_for_its_then(w, then):
+    sent = []
+    with mock.patch.object(outbound, 'send_out', lambda *a, **k: sent.append(k.get('to')) or {'channel': 'email', 'to': k.get('to') or []}), \
+         mock.patch.object(outbound, 'send_block', lambda *a, **k: ''):
+        rid = _letter(w, then=then)
+        drawn = w.cards().get(rid)
+        assert drawn and drawn['status'] == 'pending', drawn
+        out = w.press(rid, text='Hi Erin - the October close is done. Alex')
+        assert out.get('ok') and len(sent) == 1, out
+        assert w.cards()[rid]['status'] in ('approved', 'edited', 'sent')
+        w.press(rid, text='Hi Erin - the October close is done. Alex')
+        assert len(sent) == 1 and len(w.woken) == (1 if then else 0), w.woken
+
+
+def test_a_letter_that_does_not_go_stays_on_its_card_and_wakes_its_agent_once(w):
+    def fails(*a, **k): raise RuntimeError(REFUSED)
+    with mock.patch.object(outbound, 'send_out', fails), mock.patch.object(outbound, 'send_block', lambda *a, **k: ''):
+        rid = _letter(w)
+        out = w.press(rid, text='Hi Erin - the October close is done. Alex')
+        assert not out.get('ok') or out.get('send_error'), out
+        assert w.s.get_review(rid)['Status'] == 'pending' and w.cards().get(rid), 'the letter that did not go still stands for his Send'
+        assert len(w.woken) == 1, w.woken
+
+
+def test_a_bulk_card_is_one_card_whose_one_press_does_every_row_once(w):
+    sent = []
+    rids = [_letter(w, to=f'owner{i}@cedar.example') for i in range(3)]
+    key = bulkcard.new_key()
+    w.s._exec(f"UPDATE review SET Batch=? WHERE ReviewId IN ({','.join('?' * len(rids))})", (key, *rids))
+    with mock.patch.object(outbound, 'send_out', lambda *a, **k: sent.append(k.get('to')) or {'channel': 'email', 'to': k.get('to') or []}), \
+         mock.patch.object(outbound, 'send_block', lambda *a, **k: ''):
+        assert len(cardqueue.state(w.s, w.tid)['units']) == 1, 'many of one act are one card'
+        st = bulkcard.run(w.s, key, wait=True)
+        assert (st['done'], st['failed']) == (3, 0) and len(sent) == 3, st
+        try: bulkcard.run(w.s, key, wait=True)
+        except ValueError: pass
+        assert len(sent) == 3 and not w.woken, 'pressed again, nothing more went; all went, nobody woken'
+
+
+def test_a_post_put_up_through_the_browser_keeps_every_further_press_on_its_one_card(w):
+    """Not connected: his press hands the post to the agent's browser; the sign-in it needs and the site's final Post are HIS, each drawn on
+    that same card as its next press - never a second card, never nothing to press."""
+    x = w.act({'action': 'run_tool', 'type': 'x_post', 'text': 'We close the month in four days.'})
+    assert w.cards()[x]['status'] == 'pending'
+    assert proposals.via_browser(w.s, x, '')['ok'] and len(w.woken) == 1, 'his press hands it to its agent, once'
+    assert not w.cards()[x].get('step'), 'handed: nothing of his to press yet'
+    ws.record(w.s, w.tid, 'run1', 'input_needed', request_id='yourturn:signin-x', text='Your turn in the browser on x.example: sign in to X', source='api')
+    got = w.cards()
+    signin = pagestep.card_of(w.s, w.tid, 'yourturn:signin-x')
+    assert got[x]['status'] == 'pending' and got[x]['step'] == {'review': signin['ReviewId'], 'what': 'Your turn in the browser on x.example: sign in to X', 'press': 'done'}, got[x]
+    assert signin['ReviewId'] not in got, 'his sign-in is on the post\'s card, never a card beside it'
+    ws.record(w.s, w.tid, 'run1', 'answered', request_id='yourturn:signin-x', text="I'm done", source='owner')
+    assert not w.cards()[x].get('step') and w.s.get_review(signin['ReviewId'])['Status'] == 'approved'
+    held = proposals.queue(w.s, w.tid, {'action': 'browser_act', 'sid': 'run1', 'args': ['click', '@e20'], 'what': 'Publish your post on X'})['reviewId']
+    got = w.cards()
+    assert got[x]['step']['review'] == held and held not in got
+    with mock.patch.object(proposals, '_run', side_effect=lambda *a, **k: cardqueue.done(w.s, w.tid, 'Posted on x.example') and {'performed': 'Publish'}):
+        assert w.press(held).get('ok')
+    got = w.cards()
+    assert got[x]['status'] == 'approved' and not got[x].get('step') and held not in got and not cardqueue.state(w.s, w.tid)['units']
+
+
+def test_a_step_handed_to_him_on_a_page_is_a_card_in_the_line_one_at_a_time_and_his_done_settles_it(w):
+    """The owner's live task, 2026-11-25: the agent wrote "I also opened a sign-in card for whois.com", the pane read "opening browser", and no
+    card stood. The step is a card of the one line: behind another card it waits its turn - its page with it - and the agent is told where
+    it stands; in front it is drawn with its I'm done, which closes it and tells its agent once."""
+    from taskuary import browsergate, taskstate
+    letter = _letter(w)
+    ws.record(w.s, w.tid, 'run1', 'input_needed', request_id='yourturn:whois', text='Your turn in the browser on whois.example: sign in to see your domain', source='api')
+    got = w.cards(); step = pagestep.card_of(w.s, w.tid, 'yourturn:whois')
+    assert step and step['ReviewId'] not in got and got[letter]['status'] == 'pending', 'one card at a time: the letter is in front'
+    said = pagestep.place(w.s, w.tid, 'yourturn:whois')
+    assert 'in line, 2 of 2' in said and 'erin@northwind.example' in said, said
+    ask = {'request_id': 'yourturn:whois', 'ask': 'turn', 'text': 'sign in'}
+    assert pagestep.shown(w.s, w.tid, ask) is None, 'no page is put to him beside the card that waits'
+    w.s.decide_review(letter, 'rejected', None, 'owner')
+    got = w.cards()
+    assert got[step['ReviewId']]['status'] == 'pending' and pagestep.shown(w.s, w.tid, ask) == ask, 'in front: its card and its page'
+    assert 'on his screen now' in pagestep.place(w.s, w.tid, 'yourturn:whois')
+    with mock.patch.object(browsergate, 'done', side_effect=lambda st, t, rid: bool(ws.record(st, t, 'run1', 'answered', request_id=rid, text="I'm done", source='owner')) or True) as done:
+        assert w.press(step['ReviewId']).get('ok')
+        w.press(step['ReviewId'])
+    assert done.call_count == 1 and w.cards()[step['ReviewId']]['status'] == 'approved'
+    assert not [k for k in card.waiting(w.s, w.tid) if k['state'] == 'pending'], 'nothing is owed once he is done'
+
+
+def test_the_landing_question_wakes_its_agent_only_where_its_proposal_named_a_step_after_it(w):
+    for then, woken in (('', 0), ('check the deploy is live', 1)):
+        w.woken.clear()
+        landing._save(w.s, w.tid, {'proposal': {'how': 'merge', **({'then': then} if then else {})}})
+        with mock.patch('taskuary.waitroom.deliver', return_value={}), mock.patch.object(general, 'at_work', return_value=False), \
+             mock.patch.object(landing, '_hand_back', side_effect=lambda st, t, text: w.woken.append(text)):
+            landing._landed(w.s, w.tid, 'merge', 'Merged fix-export into main.', 'owner')
+        assert len(w.woken) == woken, (then, w.woken)

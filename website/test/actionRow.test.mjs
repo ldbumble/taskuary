@@ -357,9 +357,10 @@ test("the draft's own Send is never on the bar and leaves no empty slot; advised
   const later = rowOf({ ref: "", list }, { verb: "defer", label: "Remind me" });
   assert.deepEqual(later.more.filter((x) => x.tone === "p").map((x) => x.id), ["remind"], "an advised Remind me is filled where it stands");
   assert.deepEqual(ids(later), ids(quiet)); assert.equal(later.lit, "");
-  // ...and the draft's own buttons under it are outlined while the row carries the item, but the one the Advisor lit
-  assert.match(fs.readFileSync(path.join(process.cwd(), "src", "ReviewDecision.jsx"), "utf8"), /lit=\{lit\} quiet=\{toRow\}/);
-  assert.match(fs.readFileSync(path.join(process.cwd(), "src", "Artifact.jsx"), "utf8"), /const filled = v\.id === lit \|\| \(!anyLit && !quiet && v\.tone === "p"\);/);
+  // ...and the draft's own press named by what it does is filled on its card, whatever the row carries (the card gallery, 2026-11-25: the row
+  // draws no card's press, so Comment and Approve stood outlined) - unless the Advisor lit another of its buttons
+  assert.match(fs.readFileSync(path.join(process.cwd(), "src", "ReviewDecision.jsx"), "utf8"), /lit=\{lit\} press=\{presses\}/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "src", "Artifact.jsx"), "utf8"), /const filled = v\.id === lit \|\| \(!anyLit && v\.tone === "p"\);/);
 });
 
 // issue 263 / the UI audit (2026-10-21): two mounted copies of one card registered under one name, cleared each other's verbs on

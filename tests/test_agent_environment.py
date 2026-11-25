@@ -30,6 +30,18 @@ class TheEnvironmentAChildGetsTests(unittest.TestCase):
         self.assertTrue(env['HOME'])
         self.assertEqual(env['CODEX_HOME'], os.path.join(str(Path.home()), '.codex'))
 
+    def test_the_owners_own_secrets_in_the_apps_environment_never_reach_a_session(self):
+        """Red team #2, T3: a trusted session inherited every variable the app was started with, for its agent to print - a vendor's key,
+        a database password, a registry token. What an AI or the code host signs in with stays, and so does what a profile sets itself."""
+        from taskuary import terminal
+        mine = {'STRIPE_SECRET_KEY': 'sk_live_x', 'PAYWORTH_API_KEY': 'pw-1', 'DB_PASSWORD': 'hunter2', 'NPM_TOKEN': 'npm-1', 'SLACK_BOT_TOKEN': 'xoxb-1'}
+        kept = {'ANTHROPIC_API_KEY': 'a', 'OPENAI_API_KEY': 'o', 'GH_TOKEN': 'g', 'AWS_SECRET_ACCESS_KEY': 'w', 'PATH': os.environ.get('PATH', ''), 'KEYBOARD': 'us'}
+        with mock.patch.dict(os.environ, {**mine, **kept}):
+            for env in (agents.child_env(), agents.spawn_env({}), terminal.clean_env(), agents.spawn_env({'env': {'ACME_API_KEY': 'his'}})):
+                self.assertFalse(set(mine) & set(env), set(mine) & set(env))
+                self.assertTrue(set(kept) <= set(env), set(kept) - set(env))
+            self.assertEqual(agents.spawn_env({'env': {'ACME_API_KEY': 'his'}})['ACME_API_KEY'], 'his', "a profile's own variable is his setting")
+
     def test_an_environment_that_already_says_where_home_is_keeps_its_answer(self):
         with mock.patch.dict(os.environ, {'HOME': '/somewhere/else', 'CODEX_HOME': '/opt/codex'}):
             env = agents.child_env()

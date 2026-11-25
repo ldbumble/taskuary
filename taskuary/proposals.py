@@ -190,6 +190,11 @@ def via_browser(store, rid: int, text: str, actor: str = 'owner', fields: dict =
     try: p = json.loads(rv.get('DraftText') or '{}')
     except ValueError: p = {}
     if not is_post(p): return {'ok': False, 'why': 'Only a post goes through the browser.'}
+    # ...and only one whose network is not connected (the owner, 2026-11-25: "if you can't connect then use the browser site"): a connected
+    # card's one road is its connection - the press its card shows
+    from .outbound import review_connect
+    if rv.get('Status') == 'pending' and not review_connect(store, rv):
+        return {'ok': False, 'why': f"{POSTS[p['type']]} is connected - {(cat.action_for(p['type']) or {}).get('press') or 'its press'} posts it."}
     try: p = _edited(p, text, fields)
     except ValueError as e: return {'ok': False, 'why': str(e)}
     words = str(p.get('text') or '').strip()

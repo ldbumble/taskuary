@@ -1145,8 +1145,9 @@ def approved(store, tid: int, press: str, what: str, actor: str = 'owner', revie
     from . import card, workerstate as ws
     rv = store.get_review(int(review)) if review else None
     said = bool(rv) and rv.get('Kind') != 'action'
-    # ...and his Send IS the answer to what its agent asked about that card (the owner's ruling, card.asked_about)
-    if said and (qs := card.asked_about(store, rv['ReviewId'])): ws.let_go(store, tid, 'answered by his Send', only=qs)
+    # ...and his press IS the answer to what its agent asked about that card (the owner's ruling, card.asked_about) - a post's and an act's
+    # as a letter's: "should the post go out as drafted?" stood on the task after the post went
+    if rv and (qs := card.asked_about(store, rv['ReviewId'])): ws.let_go(store, tid, 'answered by his press on its card', only=qs)
     if not card.carries_on(rv) and (said or not at_work(int(tid))): return ''
     # ...WHAT WENT IS ITS CARD'S EVENT (events.card, written as the store wrote the card): this only wakes the agent to hear it
     mark = review and (lambda how: store.audit('review', int(review), TOLD, actor, 'system', {'task': int(tid), 'how': how}))

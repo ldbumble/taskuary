@@ -139,8 +139,9 @@ def test_the_board_door_binds_a_stranger_s_note_to_its_own_task():
     r = c.post('/api/board/notes', json={'body': 'hello', 'task_id': other, 'cwd': 'C:/repo'},
                headers={'X-Taskuary-Token': guard.stranger_token(SRV(), t)})
     assert r.status_code == 200 and r.json()['TaskId'] == t
-    # the agent token and the owner are as before: the task they name
-    a = c.post('/api/board/notes', json={'body': 'hi', 'task_id': other}, headers={'X-Taskuary-Token': SRV()['agent_token']})
+    # ...an agent's session speaks for the task its proof names, whatever its body says (T7); the owner for the task he names
+    a = c.post('/api/board/notes', json={'body': 'hi', 'task_id': t},
+               headers={'X-Taskuary-Token': SRV()['agent_token'], guard.TASK_HDR: guard.task_proof(SRV(), other)})
     assert a.status_code == 200 and a.json()['TaskId'] == other
     assert c.post('/api/board/notes', json={'body': 'hi', 'task_id': other}).json()['TaskId'] == other
 

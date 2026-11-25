@@ -112,15 +112,18 @@ KIND_HINT = {'working': 'what it is doing right now', 'note': 'anything the next
 
 
 def post(store, body: str, kind: str = 'note', agent: str = '', cwd: str = '', tid: int = None,
-         files: str = '', sid: str = None) -> dict:
+         files: str = '', sid: str = None, owner: bool = False) -> dict:
     """One note on the wall. Everything but the words is optional: an agent that knows only what
     it wants to say still gets to say it. `sid` is the session that speaks: its notes are live while
-    it is, and leave every live surface when it ends (PW-178)."""
+    it is, and leave every live surface when it ends (PW-178). `owner`: the owner himself wrote it - only then may it be signed as his
+    (OWNER_AGENTS): an agent's note signed 'owner' seeded every other session as his durable guidance (the red team, 2026-11-24, T6)."""
     body = ' '.join(str(body or '').split())[:1200]
     if not body: raise ValueError('a note with no words is not a note')
     kind = str(kind or 'note').lower().strip()
     if kind not in KINDS + (SUMMARY,): raise ValueError(f"kind must be one of {', '.join(KINDS)}")
-    nid = store.add_note({'TaskId': tid, 'Agent': agent or 'agent', 'Cwd': norm(cwd), 'Kind': kind,
+    agent = ' '.join(str(agent or '').split()) or 'agent'
+    if not owner and agent.lower() in OWNER_AGENTS: agent = 'agent'
+    nid = store.add_note({'TaskId': tid, 'Agent': agent, 'Cwd': norm(cwd), 'Kind': kind,
                           'Body': body, 'Files': files or '', 'Sid': sid or None})
     return dict(store.get_note(nid))
 

@@ -14,8 +14,8 @@ SRV = config.load()['server']
 
 
 def agent(tid=None):
-    h = {'X-Taskuary-Token': SRV['agent_token']}
-    return {**h, guard.TASK_HDR: guard.task_proof(SRV, tid)} if tid else h
+    "A session's headers: the agent token and the proof of the task it is on - one that names no task in its body proves a task of its own."
+    return {'X-Taskuary-Token': SRV['agent_token'], guard.TASK_HDR: guard.task_proof(SRV, tid or 999996)}
 
 
 def owner(): return {'X-Taskuary-Token': SRV.get('token') or ''}

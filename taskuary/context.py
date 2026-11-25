@@ -164,9 +164,10 @@ def _judge(store, tid, about: str, repo) -> dict | None:
     from .repochoice import known
     try: repos = [] if repo else known(store)
     except Exception as e: logger.debug(f'context: no repositories to recall - {e}'); repos = []
-    got = textsim.pick(store, about, {'hub': [(f"lore:{p['LoreId']}", handbook.entry_line(p)) for p in hub],
-                                      'past': [(f"task:{d['TaskId']}", d.get('Title') or '') for d in done],
-                                      'repo': [(f"repo:{r['repo']}", f"{r['repo']}: {r['about']}") for r in repos]},
+    # ...the least often changing list first - the repositories, the Hub, then the closed tasks a close adds to: the cached head (textsim.pick)
+    got = textsim.pick(store, about, {'repo': [(f"repo:{r['repo']}", f"{r['repo']}: {r['about']}") for r in repos],
+                                      'hub': [(f"lore:{p['LoreId']}", handbook.entry_line(p)) for p in hub],
+                                      'past': [(f"task:{d['TaskId']}", d.get('Title') or '') for d in done]},
                        RECALL_HUB, about={'hub': handbook.HUB_LIST, 'past': PAST_LIST, 'repo': REPO_LIST}, task_id=tid)
     if got is None: return None
     by = {f"lore:{p['LoreId']}": p for p in hub}

@@ -82,8 +82,8 @@ def rank(store, query: str, items: list, k: int = None, least: float = None):
 # about that very system), and past tasks on the same system reached the agent only from the same sender. A light model reads the
 # numbered lists instead - a judgement of meaning, one call for every list, never a count of shared words
 PICK_LINE = 160
-PICK_SYSTEM = ('An agent is about to work a task. Below it are numbered lists of what is already known - each list says what it holds. '
-               'Pick the entries that bear on THIS task: the same system, the same kind of problem, where its data or code lives. Best '
+PICK_SYSTEM = ('An agent is about to work a task. Below are numbered lists of what is already known - each list says what it holds - '
+               'and then the task. Pick the entries that bear on THIS task: the same system, the same kind of problem, where its data or code lives. Best '
                'first, at most {k} from each list, none from a list where nothing fits - a shared word alone is not a fit. '
                'Answer JSON {{"picks": ["<id>", ...]}} with the ids as written.')
 
@@ -105,7 +105,9 @@ def pick(store, query: str, groups: dict, k: int = 5, about: dict = None, task_i
     lists = '\n\n'.join(f"{g.upper()} - {(about or {}).get(g) or g}:\n" + '\n'.join(f"{g.upper()}{i}. {_norm(t)[:PICK_LINE]}" for i, (_k, t) in enumerate(items, 1))
                         for g, items in groups.items() if items)
     try:
-        a = llm.ask_json(brain, PICK_SYSTEM.format(k=k), f'THE TASK:\n{_norm(query)[:kbembed.QUERY_CHARS]}\n\n{lists}',
+        # ...the lists FIRST and the task last: the same for every task until one closes or a note is added, so the next task's call reads
+        # them from the provider's cache (cost, 2026-11-24: ~13K tokens a pick, 8% of them cached with the task in front)
+        a = llm.ask_json(brain, PICK_SYSTEM.format(k=k), f'{lists}\n\nTHE TASK:\n{_norm(query)[:kbembed.QUERY_CHARS]}',
                          want={'type': 'object', 'properties': {'picks': {'type': 'array', 'items': {'type': 'string'}}}, 'required': ['picks']})
     except Exception as e: logger.info(f'textsim: the model did not pick - {e}'); return None
     got = (a.data or {}).get('picks') if isinstance(a.data, dict) else None

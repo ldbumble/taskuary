@@ -47,7 +47,7 @@ def reader(jobs: dict, calls: list = None):
     def job_of(t): return next((j for j, marks in jobs.items() if any(m.lower() in str(t).lower() for m in marks)), None)
     def brain(system, user, **kw):
         if calls is not None: calls.append(user)
-        task, _, lists = user.partition('\n\n')
+        lists, _, task = user.rpartition('\n\nTHE TASK:\n')
         j = job_of(task)
         ids = [m.group(1) for m in re.finditer(r'(?m)^([A-Z]+\d+)\. (.*)$', lists) if j and job_of(m.group(2)) == j]
         return json.dumps({'picks': ids})

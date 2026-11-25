@@ -418,6 +418,8 @@ class ACPCoding:
         self.busy, self.seeding, self.accepted, self.stop_reason, self.turn_at = True, False, True, None, pressed or time.time()
         self.seeded = self.seeded or text
         self.witness.note({'k': 'turn'})
+        from . import selfclose
+        if self.task_id: selfclose.take_marks(self.task_id)      # ...a turn stopped before its end was read leaves no end_turn for this one
         # ...A LINE STOPPED TWICE IS STILL ANSWERED (decided 2026-11-12, "nothing he typed is dropped"): the turn his first stop began for it
         # was stopped too, before a word - his second stop stands, and the line rides on the next turn he starts
         again = text.startswith(STOPPED_ON)
@@ -484,6 +486,14 @@ class ACPCoding:
             ws.record(self.store, self.task_id, self.sid, 'stopped', text=said[:4000], source='acp')
             if again and not str(said or '').strip(): self._owed = [asked[len(STOPPED_ON):].strip()]
             return self._unanswered() or self._idle(said, turn=False)
+        # ...ITS END_TURN AND ask_owner FILED AS A CHAT'S ARE (general.read_summary, summary_ends, file_summary): its summary is the task's, its
+        # question the turn end's below (hooks: Stop) - kept and filed nowhere, its after_press and nothing_left were read by nothing
+        if ok and self.store and self.task_id:
+            try:
+                said, summ = general.read_summary(self.store, self.task_id, general.with_marks(self.task_id, said))
+                general.summary_ends(self.store, self.task_id, summ, selfclose.ask_markers(said)[1])
+                general.file_summary(self.store, self.task_id, summ)
+            except Exception as e: logger.warning(f'acp coding {self.sid}: its turn summary was not filed - {e}')     # ...its turn still ends
         # ...and a turn that said nothing takes the chat's road (general.could_not, woke_for_silence): woken once, then its one question
         if ok and (asked := general.could_not(self, said)) != said:
             said = asked; self._record({'sessionUpdate': 'agent_message_chunk', 'content': {'type': 'text', 'text': said}})

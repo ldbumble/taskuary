@@ -850,3 +850,25 @@ def test_stop_while_it_asks_closes_the_card_and_no_press_is_offered_for_a_turn_t
     time.sleep(1.5)
     assert t.turns == 1 and not t.busy and not permissions.pending(tid, s), 'a Stop is a stop: nothing starts the agent again'
     assert t.stop_reason == 'cancelled'
+
+
+@pytest.mark.parametrize('end, wakes', [({'after_press': 'send', 'nothing_left': False}, True), ({'nothing_left': True}, False)])
+def test_a_coding_turns_end_turn_is_filed_as_a_chats_and_its_send_wakes_it_only_where_it_said_a_step_follows(world, monkeypatch, end, wakes):
+    """A coding agent's end_turn answered "Kept - it shows on the task" and only a chat's answer filed it (general._file): over ACP it sat in
+    selfclose's marks, read by nothing, so every Send woke it - the owner, 2026-11-25, a coding task: "You sent ..." under the card that read
+    Sent. Its turn's end files it as a chat's does (general.file_summary): a Send wakes it only where it said a step follows, and where it said
+    nothing is left the Send wakes nobody and Mark done is lit."""
+    from taskuary import agenttools, rulebook
+    from test_approve_carries_on import sent_card
+    s, tid, repo = world
+    monkeypatch.setenv('FAKE_ACP_THINK', '0.8')
+    t = open_(s, tid, repo, seed=''); assert until(lambda: t.client and not t.busy)
+    general.take_line(s, tid, 'Comment the totals function, then draft Ray the reply.', line_id='l-end')
+    assert until(lambda: t.in_turn)                  # ...its prompt is at the agent: the call is made in its turn
+    assert agenttools.call(s, tid, 'end_turn', {'did': 'The reply to Ray waits for your Send.', **end}, {}).startswith('Kept')
+    assert idle(t, 1)
+    filed = [json.loads(c['Body']) for c in s.list_comments(tid, internal=True) if c.get('ActorType') == general.SUMMARY_TYPE]
+    assert filed and filed[-1]['did'] == 'The reply to Ray waits for your Send.', 'its end_turn is the task\'s summary'
+    assert filed[-1].get('after_press') == end.get('after_press') and filed[-1]['nothing_left'] is end['nothing_left']
+    assert bool(general.approved(s, tid, 'Send', 'the reply was sent', review=sent_card(s, tid))) is wakes
+    if not wakes: assert rulebook.recommended_task(s, tid)['verb'] == 'close', 'its own "nothing left" lights Mark done'

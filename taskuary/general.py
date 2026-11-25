@@ -996,14 +996,12 @@ def _last_said(store, tid) -> tuple:
     except (TypeError, ValueError): return last, None
 def carries_on(store, tid, said: bool = False) -> bool:
     """Its agent goes on once the owner presses what it set up: its last turn's summary says so (after_press 'send'), or there is none to say
-    otherwise - a coding session files none, and an approved merge is where it deploys. Only a summary that named no next step keeps it quiet.
+    otherwise - an approved merge is where it deploys. Only a summary that named no next step keeps it quiet. One rule on every road: a coding
+    turn's end_turn is filed as a chat's is (file_summary).
     `said`: the press SENT his words to someone (a reply, a mail, a post) - the card says it went, so silence is no next step: only an agent
     that said a step of its own follows goes on (the owner, 2026-11-25, twice in one night: "You sent Gabi..." under the card that read Sent)"""
     s = _last_said(store, tid)[1]
-    if isinstance(s, dict): return s.get('after_press') == 'send'
-    # ...but a coding agent files no summary to name a step with, nor one that lights Mark done: unwoken, its task stood agent done with
-    # nothing lit (the audit corpus, CI 2026-11-25), so its Send wakes it as before
-    return not said or not handles(store.get_task(int(tid)))
+    return s.get('after_press') == 'send' if isinstance(s, dict) else not said
 
 
 # a thread's body run in a context of its own: what it sets (origin.OWNER_SPEAKS) never outlives it where a road runs it in place (Windows CI,
@@ -1665,6 +1663,62 @@ def _act(store, tid: int, what: str, f, *a, default=None, **k):
         try: store.add_comment(tid, 'assistant', 'agent', f"{what[:1].upper()}{what[1:]} did not work: {plain_failure(e)}")
         except Exception: pass
         return default
+
+
+# A TURN'S END_TURN IS FILED ONE WAY ON EVERY ROAD - a chat's answer (_file) and an ACP coding turn's end (acpcoding._turn) call these. Only the
+# chat drained it: a coding agent's end_turn answered "Kept - it shows on the task" and was filed nowhere, so nothing read its after_press or
+# nothing_left, and its Send woke it on every card (the owner, 2026-11-25: "You sent ..." under the card that read Sent)
+def with_marks(tid, reply: str) -> str:
+    "The answer ended with what this task's end_turn and ask_owner calls kept since the last take (selfclose.take_marks)."
+    from . import selfclose
+    return f'{reply}\n\n{said}' if (said := selfclose.take_marks(tid)) else reply
+def read_summary(store, tid: int, reply: str, drafted: str = '') -> tuple:
+    """(the answer with its summary block read out - its `did` where nothing else was said, the summary or None), the task named as it says.
+    `drafted`: a letter this answer wrote, whose lines - like every letter of the task's - are never words of the summary (without_letters)."""
+    from . import selfclose
+    # ...any letter of the task, not only one still pending: his line sets a waiting draft aside as it is heard (conversation.hear), and its
+    # words leaked into the summary of the very turn that heard it (CI, 2026-11-12)
+    letters = [drafted, *(r['DraftText'] for r in store._rows("SELECT DraftText FROM review WHERE TaskId=? AND (Status='pending' OR Kind IN ('draft_reply','draft','slot'))",
+                                                              (tid,)))]
+    reply, summ = selfclose.summary_marker(reply, [x for x in letters if x])
+    if summ: reply = reply or summ['did']
+    if summ and summ.get('name'): _act(store, tid, 'naming the task', take_name, store, tid, summ['name'])
+    return reply, summ
+def summary_ends(store, tid: int, summ, asks=()) -> None:
+    "What a turn that left nothing on him ends, before its end is drawn: the steps it went without, its wait, and the playbook question."
+    # ...a turn that left nothing on him finished the steps it went without. Its earlier question to him stands all the same until he
+    # answers it, the task closes or the agent takes it back (workerstate.let_go) - never because this turn did not ask it again
+    if asks or not (summ and summ.get('nothing_left')): return
+    from . import proposals, waiton, wrapup
+    try: proposals.finished_without(store, tid)
+    except Exception as e: logger.debug(f'task {tid}: the steps it finished without stayed lit - {e}')
+    # ...and an answer it waited on, read in this turn, is the end of that wait: nothing is left (waiton.settle - any other turn leaves it)
+    try: waiton.settle(store, tid, over=True)
+    except Exception as e: logger.debug(f'task {tid}: its wait was not ended - {e}')
+    # ...and the playbook question is asked NOW, with the cards this turn raised, before its end is drawn: in the line behind them
+    # from the first frame, so the card in front never offers a close over it (his live app, 2026-11-23 - asked by the close, it
+    # closed the task and opened it again for the playbook). Once a task
+    if not store._one("SELECT 1 AS x FROM audit WHERE EntityType='task' AND EntityId=? AND Action='playbook_asked'", (tid,)):
+        store.audit('task', tid, 'playbook_asked', 'assistant')
+        try: wrapup.chat_playbook(store, tid)
+        except Exception as e: logger.debug(f'task {tid}: no playbook asked at its end - {e}')
+def file_summary(store, tid: int, summ, rid=None) -> None:
+    "The turn's summary filed as the task's (SUMMARY_TYPE) - after its answer `rid` where the road files one - with what it says learned."
+    if not summ: return
+    take_corrections(store, tid, summ.pop('corrections', None))     # learned quietly, never drawn
+    take_check(store, tid, summ.pop('check_back', None))
+    # ...and WHICH draft this turn left - its id, never its words: what goes to the sender lives in the draft alone (2026-11-04). Once a
+    # newer entry comes, the turn is history and that draft stays in it read-only (the owner, 2026-11-05: "it's there but no longer
+    # clickable. it was a draft that is part of the history of the chat")
+    # ...and the draft's words as this turn left them, in a table of their own (store.snap_draft): the next turn rewrites it in place.
+    # A turn that left it untouched names none (`[]`), so one draft is drawn once per turn that wrote it, with that turn's words
+    if rid is not None:
+        try:
+            rv = store.pending_review(tid)
+            if rv and str(rv.get('DraftText') or '').strip(): summ['drafted'] = [{'review': int(rv['ReviewId'])}] if store.snap_draft(int(rv['ReviewId']), rid) else []
+        except Exception as e: logger.debug(f'task {tid}: the turn draft was not kept with it - {e}')
+    store.add_comment(tid, 'assistant', SUMMARY_TYPE, json.dumps(summ))
+    if 'on_you' in summ: store.set_on_you(tid, summ['on_you'], 'assistant')     # no list said: the steps stay as they are
 
 
 def _files_to_attach(store, tid: int, named: list, paths: list) -> list:
@@ -3352,9 +3406,9 @@ class GeneralSession:
         """File one turn's answer: its markers read, its draft, question or close raised, the reply kept as the task's comment.
 """
         src = 'api'
-        from . import agenttools, selfclose as _marks
+        from . import agenttools
         late = agenttools.made_late(self.store, self.task_id, self.trace, agenttools.heard(self.task_id))     # ...a call that never reached us
-        if (said := _marks.take_marks(self.task_id)): reply = f'{reply}\n\n{said}'      # ...what its end_turn and ask_owner calls said (agenttools)
+        reply = with_marks(self.task_id, reply)      # ...what its end_turn and ask_owner calls said (agenttools)
         let_go_retry(self.store, self.task_id)     # ...the AI answered: no try is owed any more (queue_retry)
         # ...AND THE ANSWER IS FILED WHATEVER ONE OF ITS ACTS DOES (the agent audit, 2026-11-22: a draft, withdraw or Hub step that raised threw the
         # whole answer away and filed the turn as failed - Try again then ran the job again): each act runs under `act`, and one that fails is
@@ -3414,13 +3468,7 @@ class GeneralSession:
                     events.note(self.store, self.task_id, f"the email you drafted{' to ' + attrs['to'] if attrs.get('to') else ''} has no address: {out['to_missing']}")
         reply, ticks = selfclose.tick_markers(reply)          # the to-dos it finished, on the road `taskuary --tick` takes
         # ...and where the owner stands, taken out of the answer - with no line of a letter waiting on them in it (selfclose.without_letters)
-        # ...any letter of the task, not only one still pending: his line sets a waiting draft aside as it is heard (conversation.hear), and its
-        # words leaked into the summary of the very turn that heard it (CI, 2026-11-12)
-        letters = [drafted, *(r['DraftText'] for r in self.store._rows("SELECT DraftText FROM review WHERE TaskId=? AND (Status='pending' OR Kind IN ('draft_reply','draft','slot'))",
-                                                                       (self.task_id,)))]
-        reply, summ = selfclose.summary_marker(reply, [x for x in letters if x])
-        if summ: reply = reply or summ['did']
-        if summ and summ.get('name'): act('naming the task', take_name, self.store, self.task_id, summ['name'])
+        reply, summ = read_summary(self.store, self.task_id, reply, drafted or '')
         if ticks:
             from .store import agent_tick
             for i in ticks:
@@ -3457,24 +3505,7 @@ class GeneralSession:
         # the worker's own lifecycle, as events (PW-225): the turn ended; and if it asked, the exact question
         try:
             from . import workerstate as ws
-            # ...a turn that left nothing on him finished the steps it went without. Its earlier question to him stands all the same until he
-            # answers it, the task closes or the agent takes it back (workerstate.let_go) - never because this turn did not ask it again
-            if not asks and summ and summ.get('nothing_left'):
-                from . import proposals as _props
-                try: _props.finished_without(self.store, self.task_id)
-                except Exception as e: logger.debug(f'task {self.task_id}: the steps it finished without stayed lit - {e}')
-                # ...and an answer it waited on, read in this turn, is the end of that wait: nothing is left (waiton.settle - any other turn leaves it)
-                from . import waiton
-                try: waiton.settle(self.store, self.task_id, over=True)
-                except Exception as e: logger.debug(f'task {self.task_id}: its wait was not ended - {e}')
-                # ...and the playbook question is asked NOW, with the cards this turn raised, before its end is drawn: in the line behind them
-                # from the first frame, so the card in front never offers a close over it (his live app, 2026-11-23 - asked by the close, it
-                # closed the task and opened it again for the playbook). Once a task
-                if not self.store._one("SELECT 1 AS x FROM audit WHERE EntityType='task' AND EntityId=? AND Action='playbook_asked'", (self.task_id,)):
-                    self.store.audit('task', self.task_id, 'playbook_asked', 'assistant')
-                    from . import wrapup as _wrap
-                    try: _wrap.chat_playbook(self.store, self.task_id)
-                    except Exception as e: logger.debug(f'task {self.task_id}: no playbook asked at its end - {e}')
+            summary_ends(self.store, self.task_id, summ, asks)
             ws.record(self.store, self.task_id, self.sid, 'turn_end', text=reply[:4000], source=src)
             # ...each question of the reply as one group, so the owner answers them together (workerstate.answer_group) - WITH THE CHOICES THE
             # AGENT OFFERED (walk 13: passed to ask_owner, written into the answer as prose and never pressable): a button each, his press his
@@ -3527,21 +3558,7 @@ class GeneralSession:
         # ...and every other live task using a file it changed hears of it (sharedfiles, design round 6 D7)
         try: sharedfiles.turn_ended(self.store, self.task_id, self.trace, t0, made)
         except Exception as e: logger.warning(f'task {self.task_id}: the tasks sharing its files were not told of its changes - {e}')
-        if summ:
-            take_corrections(self.store, self.task_id, summ.pop('corrections', None))     # learned quietly, never drawn
-            take_check(self.store, self.task_id, summ.pop('check_back', None))
-            # ...and WHICH draft this turn left - its id, never its words: what goes to the sender lives in the draft alone (2026-11-04). Once a
-            # newer entry comes, the turn is history and that draft stays in it read-only (the owner, 2026-11-05: "it's there but no longer
-            # clickable. it was a draft that is part of the history of the chat")
-            # ...and the draft's words as this turn left them, in a table of their own (store.snap_draft): the next turn rewrites it in place.
-            # A turn that left it untouched names none (`[]`), so one draft is drawn once per turn that wrote it, with that turn's words
-            try:
-                rv = self.store.pending_review(self.task_id)
-                if rv and str(rv.get('DraftText') or '').strip():
-                    summ['drafted'] = [{'review': int(rv['ReviewId'])}] if self.store.snap_draft(int(rv['ReviewId']), rid) else []
-            except Exception as e: logger.debug(f'task {self.task_id}: the turn draft was not kept with it - {e}')
-            self.store.add_comment(self.task_id, 'assistant', SUMMARY_TYPE, json.dumps(summ))
-            if 'on_you' in summ: self.store.set_on_you(self.task_id, summ['on_you'], 'assistant')     # no list said: the steps stay as they are
+        file_summary(self.store, self.task_id, summ, rid)
         try: reply_needs(self.store, self.task_id, asks, summ)
         except Exception as e: logger.debug(f'task {self.task_id}: what the owed reply needs was not kept on it - {e}')
         # the turn's working - its tool calls and thinking - was thrown away with the next turn; it is the record now

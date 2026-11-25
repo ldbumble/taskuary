@@ -646,8 +646,8 @@ def test_a_task_from_before_the_chat_draws_its_stored_report_as_one_answer():
 
 def test_a_message_in_the_chat_carries_its_files_both_chats_alike():
     """The owner, 2026-11-08: a WhatsApp screenshot and a voice note came in, and the chat's bubble showed only the words. Each message the
-    chat draws names its message and how many files rode on it, so the bubble draws them - the general chat and the coding chat by one road."""
-    from taskuary import codingchat, general
+    chat draws names its message and how many files rode on it, so the bubble draws them - every chat by one road (general.mail_row)."""
+    from taskuary import general
     from taskuary.store import MemoryStore
     s = MemoryStore()
     tid = s.create_task({'Title': 'Login page broken', 'Kind': 'task', 'Status': 'open'}, 'owner')
@@ -656,8 +656,8 @@ def test_a_message_in_the_chat_carries_its_files_both_chats_alike():
     s.add_attachment({'MessageId': mid, 'ExternalId': 'x:1', 'Name': 'shot.jpg', 'ContentType': 'image/jpeg', 'Size': 9, 'Inline': 1, 'Path': '/a/shot.jpg'})
     [x] = general.shown_history(s, tid)[0]['mail']
     assert (x['mid'], x['files'], x['words']) == (mid, 1, 'This seems to be not working')
-    [y] = codingchat.mails(s, tid)
-    assert {k: y[k] for k in x} == x and y['joined']
+    [y] = [general.mail_row(s, m) for m in s._rows(general.JOINED, (tid,))]
+    assert {k: y[k] for k in x} == x
 
 
 def test_a_chat_turn_tells_its_task_s_tabs_as_it_moves():

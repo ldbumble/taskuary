@@ -12,10 +12,18 @@ import sqlite3
 from datetime import datetime, timedelta
 from unittest import mock
 
-from taskuary import evening, problems, reports
+import pytest
+
+from taskuary import evening, problems, reports, scopes
 from taskuary.msauth import LAPSED
 from taskuary.reports import REGISTRY
 from taskuary.store import MemoryStore
+
+
+@pytest.fixture(autouse=True)
+def stand_ins_read():
+    "The stand-in sources here read: declared so, as every real one is (scopes.ACTIONS) - an undeclared one would wait as a write (flow.held_writes)."
+    with mock.patch.dict(scopes.ACTIONS, {'_ok': 'read', '_down': 'read'}): yield
 
 
 def _ago(hours=1): return (datetime.now() - timedelta(hours=hours)).strftime('%Y-%m-%d %H:%M:%S')

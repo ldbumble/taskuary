@@ -66,7 +66,7 @@ def of(store, cid: int) -> list:
         cfg = _cfg(s.get('ConfigJson'))
         steps = [x for x in cfg.get('flow') or [] if isinstance(x, dict) and x.get('kind') == 'source']
         if _reads(cfg, c, default) or any(_reads(x, c, default) for x in steps):
-            found['workflow' if workflows.is_workflow(s) or flow.is_flow(cfg) else 'report'].append(cfg.get('title') or s.get('Address') or '')
+            found['workflow' if workflows.is_workflow(s) or (flow.is_flow(cfg) and not flow.report_steps(cfg)) else 'report'].append(cfg.get('title') or s.get('Address') or '')
     pick, knobs = f'connector:{cid}', settings_schema.knobs()
     for k, v in store.get_settings().items():
         if pick in {x.strip() for x in str(v or '').split(',')}: found['brain'].append(BRAIN_WORDS.get(k) or (knobs.get(k) or {}).get('label') or k)

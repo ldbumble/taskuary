@@ -1199,7 +1199,7 @@ def own_replies(store, tid: int, since: str = None) -> list:
 
 
 def mail_row(store, x: dict, n: int = 3000) -> dict:
-    """One message that came in (a JOINED row), as the chat draws it - the general chat and the coding one alike (codingchat.mails): who,
+    """One message that came in (a JOINED row), as the chat draws it - every chat alike, a coding task's too: who,
     channel, when, their own words, and `mid` with how many `files` rode on it, which the bubble draws under the words (the owner,
     2026-11-08: a screenshot and a voice note came in, and the chat showed only the words).
 

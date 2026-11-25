@@ -964,6 +964,8 @@ class CoreTests(unittest.TestCase):
         self.assertTrue(is_due({'every_minutes': 30}, (now - timedelta(minutes=45)).isoformat(sep=' ')))
         self.assertFalse(is_due({'every_minutes': 30}, (now - timedelta(minutes=5)).isoformat(sep=' ')))
         s = MemoryStore()
+        from taskuary import scopes                       # ...a stand-in that reads, declared so (an undeclared one waits as a write)
+        p = mock.patch.dict(scopes.ACTIONS, {'_t': 'read'}); p.start(); self.addCleanup(p.stop)
         REGISTRY['_t'] = lambda cfg: ('3 rows', 'a\nb\nc')
         try:
             # a run its triage line sends (2026-10-16) that triage calls informational is filed, never a task

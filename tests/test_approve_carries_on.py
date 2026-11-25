@@ -103,7 +103,7 @@ class EveryYesCarriesOn(unittest.TestCase):
              mock.patch('taskuary.workerstate._live', return_value=object()), mock.patch('taskuary.waitroom.deliver', return_value={}):
             self.assertTrue(verdicts.decide(self.s, rv, 'approve')['ok'])
         [n] = self.s.waiting_notes(self.tid)
-        self.assertEqual(n['CreatedBy'], 'router', 'Taskuary\'s note - never drawn as the owner\'s (codingchat.waiting, waitroom.batch)')
+        self.assertEqual(n['CreatedBy'], 'router', 'Taskuary\'s note - never drawn as the owner\'s (chatlog.beside, waitroom.batch)')
         self.assertIn('he approved it', n['Note']); self.assertIn(SAID, n['Note'])
         # ...and nothing invites a line about a link that did not come (agent walk 2, 2026-11-10: "No link came back with it", after every Send)
         self.assertNotIn('if it gave one', n['Note'])

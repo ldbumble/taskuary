@@ -459,10 +459,10 @@ class TheWorldTests(unittest.TestCase):
             for _ in range(500):
                 if not r.busy: break
                 time.sleep(0.01)
-            chat = codingchat.chat(s, tid)
-            kinds = [u['sessionUpdate'] for u in chat['sessions'][-1]['updates']]
+            kinds = [u['sessionUpdate'] for u in codingchat.sessions(s, tid)[-1]['updates']]
             self.assertIn('tool_call', kinds); self.assertIn('agent_message_chunk', kinds)
-            self.assertEqual((chat['asking'] or {}).get('text'), demo.TRANSCRIPT[-1][0])
+            from taskuary import chatlog
+            self.assertEqual((chatlog.serve(s, tid)['asking'] or {}).get('text'), demo.TRANSCRIPT[-1][0])
             r.close()
 
     def test_a_replay_says_when_it_moves(self):

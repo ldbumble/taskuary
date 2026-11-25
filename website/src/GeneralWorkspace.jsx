@@ -771,7 +771,7 @@ function AssistantThread({ task, onAsked, onStop, selectionRef, attachmentsRef, 
               <div className="tq-aui-welcome-copy">Research, plan, write, analyze, or coordinate. This conversation stays on the task.</div></div></div>}
             <RetryCtx.Provider value={retry}><StopTriesCtx.Provider value={stopTries}><AgainCtx.Provider value={again}><WaitOnCtx.Provider value={waitingOn(list)}><Conversation items={merged.items} nodes={turnCards || []} posts={nextAt?.cards || []} reviews={nextAt?.reviews || []} next={askedFirst(asking, nextAt?.reviews) ? null : nextAt?.next || null}
               landing={landNode} landAt={landAt} name={turnName} tid={task.TaskId} onChanged={nextAt?.refresh} ask={askNode} askAt={askAt} queue={list?.queue || null} /></WaitOnCtx.Provider></AgainCtx.Provider></StopTriesCtx.Provider></RetryCtx.Provider>
-            {/* WHAT THE SOURCE WAITS ON THE OWNER FOR, while it works too (`cards`): a coding agent's permission cards, its screen while it asks */}
+            {/* WHAT THE SOURCE WAITS ON THE OWNER FOR, while it works too (`cards`): the agent's permission cards, a CLI's screen while it asks */}
             {cards}
             {/* ...under everything only while the list names no turn for it (a read behind, a chat with no turn yet) */}
             {!askAt && askNode}
@@ -832,8 +832,8 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
   made = null }) {
   // `made`: { list, start } - an item Taskuary made (madeTask): its chat is its own list, nothing on the server to read or poll yet, and its box
   // starts the agent on it. The same chat, rows, cards and box as every task's
-  // ...drawn on its first frame from what is held of it (chatOf); a coding task's chat stands on its list alone
-  const first = () => (made ? { messages: [], made: true } : chatSource(task, term) === "coding" ? { messages: [] } : chatOf(task.TaskId));
+  // ...drawn on its first frame from what is held of it (chatOf) - a coding task's as every task's (the owner, 2026-11-25: "exactly the same")
+  const first = () => (made ? { messages: [], made: true } : chatOf(task.TaskId));
   const [data, setData] = useState(first);
   const [connectorId, setConnectorId] = useState(() => String(pickFor(first())?.id || ""));
   const [model, setModel] = useState(() => { const d = first(), p = pickFor(d); return p ? d?.session?.model || p.model || "" : ""; });
@@ -866,7 +866,7 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
   const defaults = useChatDefaults(), own = useOwnDetail(task.TaskId);
   const level = chat ? detailFor({ source, settings: defaults, own }) : "steps";
   // ...and the CLI that runs, what it asks and what it waits on his press for: the list's own (conversation.items `live`, `asking`, `permissions`)
-  const cli = coding ? conv.list?.live || null : null;
+  const cli = conv.list?.live || null;
   attachmentsRef.current = pics.imgs;
 
   // asked once, and only once: the marker is cleared on the server as the question goes
@@ -895,13 +895,13 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
     setData(first()); setError(""); pics.clear();
     // Looking at a general task is not sending it to an agent. Load saved state only; the first
     // actual message (or an explicit Send to agent action) starts the regular agent.
-    if (coding || made) return () => { live = false; };
+    if (made) return () => { live = false; };
     // ...the read asked ahead with the task, still on its way, is drawn the moment it lands - unless this view's own, newer, landed first
     let own = false;
     if (!first()) aheadChat(task.TaskId)?.then((d) => { if (live && !own && d) accept(d); });
     api.get(`/api/tasks/${task.TaskId}/assistant`).then((r) => { own = true; if (live) accept(r.data); }).catch((e) => live && setError(errText(e)));
     return () => { live = false; };
-  }, [accept, task.TaskId, coding]);
+  }, [accept, task.TaskId]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   const updateProvider = async (nextId, nextModel = model) => {
     setConnectorId(String(nextId)); setModel(nextModel); setError("");
@@ -920,11 +920,11 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
   }, [task.TaskId, coding, conv.load]);
   /* On screen, the agent's CLI stays open: the server reaps one nobody touches for 30 minutes, and this is the touch. Nothing starts here. */
   useEffect(() => {
-    if (coding || made) return undefined;
+    if (made) return undefined;
     const seen =() => { if (!document.hidden) api.post(`/api/tasks/${task.TaskId}/assistant/seen`).catch(() => {}); };
     seen(); const t = setInterval(seen, 60000);
     return () => clearInterval(t);
-  }, [task.TaskId, coding]);
+  }, [task.TaskId]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   /* An answer written while you were somewhere else. The run no longer dies when this pane
      goes away, so when it comes back the conversation may be mid-sentence - or already have
@@ -974,9 +974,9 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
   // Continue note waited for the next poll to show (the owner, 0.3.9.51: "I did Continue, filled it out and nothing happened")
   const refresh = useCallback(() => {
     conv.load();
-    if (coding || made) return;
+    if (made) return;
     api.get(`/api/tasks/${task.TaskId}/assistant`).then((r) => accept(r.data)).catch(() => {});
-  }, [accept, task.TaskId, coding, conv.load, made]);
+  }, [accept, task.TaskId, conv.load, made]);
   // A SESSION ANOTHER DOOR STARTED (`liveSid`, the page's live one): the canvas's Continue card, the Assistant, the phone. The page
   // adopted it, but this conversation had loaded before it existed and polls only while it knows of a turn, so a Continue with a note
   // showed the old turns under an agent that had already asked its question (the agents walk, 2026-10-26). Read again when they differ.
@@ -1034,15 +1034,15 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
   // ...and what a coding source reads once a line is in: its own sessions (the line itself goes the one road, holdText)
   const road = coding ? () => { onChanged?.(); conv.load(); } : null;
   // ...its screen is a card only on the pty road, and only while it asks (codingchat.live_of `asking`); over ACP Stop ends the turn
-  const acp = cli?.transport === "acp", screenAsks = coding && !!cli?.asking && !acp && !!cli?.sid, perms = coding ? conv.list?.permissions || [] : [];
-  const codingCards = coding ? <>
+  const acp = cli?.transport === "acp", screenAsks = !!cli?.asking && !acp && !!cli?.sid, perms = conv.list?.permissions || [];
+  const liveCards = <>
     {/* WHAT THE AGENT WAITS ON THE OWNER'S PRESS FOR (permissions.py), answered here or on a bound chat: on the row of the call it is about
         (PermitProvider), a card of its own only for one no row in the chat names (chatStream.asksOff) */}
     <PermissionCards taskId={task.TaskId} items={asksOff(perms, conv.list?.items)} onAnswered={conv.load} />
     {/* THE AGENT'S SCREEN, WHILE IT ASKS: the live terminal in the stream, answered there; gone once it stops asking */}
     {screenAsks && <div className="tq-cc-screen" data-tq-chat-screen="" role="group" aria-label="The agent's screen is asking something">
       <div className="tq-cc-screen-head">The agent's screen is asking something</div>
-      <TerminalPane sid={cli.sid} height="300px" onExit={conv.load} /></div>}</> : null;
+      <TerminalPane sid={cli.sid} height="300px" onExit={conv.load} /></div>}</>;
   const closedTask = ["done", "dropped"].includes(String(task.Status || ""));
   // WHO is on this task, what its turn has done so far, and when the turn began - all three read
   // off what this pane already has (agentWork.js).
@@ -1120,7 +1120,7 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
         chat={chat} reading={chat && readingOf(data?.thread || task?.ThreadJson)?.asking
           ? <div className="tq-aui-ask" data-tq-chat-ask="">{readingOf(data?.thread || task?.ThreadJson).asking}</div> : null}
         came={chat ? came : null} closedLine={chat ? closedLine : ""} queued={chat ? queued : null} stopTries={chat ? stopTries : null} hold={conv.list?.hold || null} trustOnRow={trustOnRow} idle={conv.list?.idle || ""} onTrusted={() => { conv.load(); onAnswered?.(); onChanged?.(); }}
-        road={road} cards={codingCards} landing={chat ? landing : null} turnCards={chat ? turnCards : null} start={made?.start || null}
+        road={road} cards={liveCards} landing={chat ? landing : null} turnCards={chat ? turnCards : null} start={made?.start || null}
         // ...THE BOX SAYS WHAT THE HEADER SAYS (the owner's live task, 2026-11-12: "Write to pick the session back up" under a turn at work - its
         // session was being opened again for his line): "working" is the list's one fact, whatever process is up yet
         placeholder={coding ? (closedTask && !convWorks ? "Write to pick it back up…" : cli || convWorks || !conv.list?.ran ? MESSAGE : "Write to pick the session back up…") : ""}

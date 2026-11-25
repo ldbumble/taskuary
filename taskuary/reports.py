@@ -2170,6 +2170,17 @@ def _run_report_source(store, src: dict, cfg: dict, llm=None, trigger: str = 'sc
         from . import dashboards
         return dashboards.file_run(store, src, cfg, trigger)
     logger.debug(f'report run: {title} ({cfg.get("type", "rest")}, ai={bool(cfg.get("ai_prompt"))})')
+    # A REPORT THAT WRITES TO A SYSTEM RUNS THAT WRITE ONLY WHERE HE ALWAYS APPROVED IT (the owner, 2026-11-25: "saved report can write on
+    # schedule if you authorize it on setup"): a write step he has not is a routine's write - its run is a task, and the write its card with
+    # "Always approve this step" on it (flow.grant); once pressed, its runs land here as every report's do
+    from . import flow
+    if flow.held_writes(store, src.get('SourceId'), cfg):
+        out = workflows.run(store, src, actor='schedule' if trigger == 'schedule' else 'owner', trigger=trigger)
+        if out.get('busy'):
+            return {'message_id': None, 'subject': f"{title} - not started: {out['ref']} is still working", 'files': 0, 'said': 0,
+                    'summary': f"the last run, {out['ref']}, is still working - one run at a time", 'task_id': out['task_id']}
+        return {'message_id': None, 'subject': f"{title} → {out['ref']} (its write waits for your yes)", 'files': 0, 'said': 0, 'flow': True,
+                'summary': f"its write waits for your yes on {out['ref']} ({trigger})", 'task_id': out['task_id']}
     if cfg.get('type') == 'zoho_monthly_invoices':
         from .invoice_workflow import run_report
         return run_report(store, src, cfg)

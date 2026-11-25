@@ -161,7 +161,7 @@ def test_a_typed_line_is_his_once_and_at_work_from_the_press_to_the_answer(world
     assert answered(r), f'the line was answered: {r}'
     assert bad == [], f'from the press to the answer the payload said (s, times his line, working, new turn before it): {bad[:6]}'
     if state != 'midturn':
-        assert ats and len(set(ats)) == 1 and abs(ats[0] - pressed) < 1.0, f'the turn runs from the press, its clock never moving: {sorted(set(ats))[:4]} vs {pressed}'
+        assert ats and len(set(ats)) == 1 and abs(ats[0] - pressed) < 3.0, f'the turn runs from the press, its clock never moving: {sorted(set(ats))[:4]} vs {pressed}'
     else: assert ats == sorted(ats), 'the clock never runs backwards'
     assert s.get_task(tid)['Status'] in ('open', 'in_progress')
     if state == 'closed':

@@ -103,6 +103,12 @@ def scrub(text) -> str:
     return out
 
 
+def scrub_parts(c):
+    "A message's content as it may leave: a string scrubbed, or each text part of a list - a picture's part goes as it is."
+    if isinstance(c, list): return [{**p, 'text': scrub(p['text'])} if isinstance(p, dict) and isinstance(p.get('text'), str) else p for p in c]
+    return scrub(c)
+
+
 def scrub_all(o):
     "Every string value in a JSON-shaped value scrubbed: an answer read as data stays the same shape."
     if isinstance(o, str): return scrub(o)

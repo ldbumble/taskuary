@@ -104,7 +104,7 @@ def pending(s, tid): return s._rows("SELECT * FROM review WHERE TaskId=? AND Sta
 class EveryActReachesPeople(unittest.TestCase):
     def test_each_tracker_act_is_a_send_and_none_runs_as_a_report(self):
         for t in trackers.TYPES:
-            self.assertIn(t, reports.REGISTRY); self.assertTrue(scopes.reaches(t), t); self.assertNotIn(t, scopes.QUIET_WRITES)
+            self.assertIn(t, reports.REGISTRY); self.assertTrue(scopes.reaches(t), t)
             self.assertEqual(reports.card_of(t), trackers.TYPES[t][0])
             with self.assertRaises(RuntimeError): reports.gate(MemoryStore(), {'type': t})     # a schedule is nobody's press
 

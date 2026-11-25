@@ -39,8 +39,6 @@ STEP_KEYS = ('id', 'kind', 'label', 'only_if')
 ONLY_IF = ('yes', 'no', 'rows', 'empty')
 OUTPUTS = ('text', 'yes_no', 'fields')
 BODY_CAP, MAX_STEPS = 4000, 20
-# a step of kind `source` reads these as data even though scopes has no verb for them (an unknown verb counts as a write there)
-READS = ('taskuary', 'calendar', 'google_sheets', 'sharepoint_list', 'sharepoint_file', 'stooq')
 NOT_A_STEP = ('agent', 'assistant', 'zoho_monthly_invoices', 'image_generate')   # the agent is its own kind; the others are whole jobs
 AI_TYPES = ('digest',)          # a read the reports road runs with a model inside it (the sent-words judge): counted as AI
 # what a step connects with is the step's as saved: a token in one would let a row or a mail choose where the card's credentials
@@ -186,8 +184,9 @@ def pasted_sql(s: dict) -> list: return [r for k in SQL_KEYS for r in _refs(s.ge
 
 
 def writes(t: str) -> bool:
+    "Does a step of this type change something - its line in scopes.ACTIONS, the one table (an unclassified one does)?"
     from . import scopes
-    return t not in READS and scopes.needs(t) != 'read'
+    return scopes.needs(t) != 'read'
 
 
 def validate(store, flow, strict: bool = False) -> tuple:
@@ -335,7 +334,7 @@ def _skip(step, ctx) -> str:
 
 # ── one step ────────────────────────────────────────────────────────────────────────────────────────────────────────────
 def _source(store, step, ctx, llm, tid, dry, warns, title):
-    from . import artifacts, proposals, reports
+    from . import artifacts, proposals, reports, scopes
     raw = {k: v for k, v in step.items() if k not in STEP_KEYS and not str(k).startswith('_')}
     if pasted_sql(raw): raise RuntimeError(SQL_PASTE)       # saved before validate refused it: what a step read never rewrites a query
     if pasted_code(raw): raise RuntimeError(CODE_PASTE)
@@ -343,20 +342,80 @@ def _source(store, step, ctx, llm, tid, dry, warns, title):
     # the script as 116 and its total was a quarter short, said as the total. A step keeps what its read returned (wide_rows), each reader
     # caps it as it must - an AI prompt saying where it was cut (render), the run's record at BODY_CAP - and a script takes it whole
     cfg = {**render(raw, ctx, warns, reports.WIDE_CHARS if code_keys(raw) else None), **{k: raw[k] for k in (*fixed_keys(), *code_keys(raw)) if k in raw}}
-    t, w = cfg.get('type'), writes(cfg.get('type'))
-    try: reports.gate(store, cfg)
+    t, w, run = cfg.get('type'), writes(cfg.get('type')), ctx['run']
+    try: reports.gate(store, cfg); why = ''
     except PermissionError as e:
         if not w: raise
-        if dry: return {'status': 'dry', 'head': f'would wait for your yes: {t}', 'why': str(e)[:300], 'body': json.dumps(cfg, indent=1, default=str)}
-        # below the card's authority a write is the owner's to approve - the same review an agent's run_tool proposal is
-        run = ctx['run']
-        fr = {'flow_run': {'source_id': run['source_id'], 'run_id': run['run_id'], 'step': step.get('id')}} if run.get('run_id') else {}
+        why = str(e)
+    # A WRITE WAITS FOR HIS PRESS (the owner, 2026-11-25: "to write to the systems or any connector should require approval mechanically") -
+    # unless he always approved THIS step of THIS routine as saved (standing). His own saved script is not a connector's (scopes.reaches)
+    if not why and w and scopes.reaches(t, cfg) and not standing(store, run.get('source_id'), step):
+        why = WAITS
+    if why:
+        if dry: return {'status': 'dry', 'head': f'would wait for your yes: {t}', 'why': why[:300], 'body': json.dumps(cfg, indent=1, default=str)}
+        # ...the same review an agent's run_tool proposal is; `key` is the step as saved, which his "always" press keeps (grant)
+        fr = {'flow_run': {'source_id': run['source_id'], 'run_id': run['run_id'], 'step': step.get('id'), 'key': step_key(step)}} if run.get('run_id') else {}
         p = proposals.queue(store, tid, {'action': 'run_tool', **cfg, 'why': f"workflow {title} step {step.get('label') or step.get('id')}", **fr}, 'workflow')
-        if not p: raise RuntimeError(f'{e} - and the proposal to run it was refused')
-        return {'status': 'waiting', 'head': 'waiting for your yes', 'why': str(e)[:300], 'review_id': p['reviewId']}
+        if not p: raise RuntimeError(f'{why} - and the proposal to run it was refused')
+        return {'status': 'waiting', 'head': 'waiting for your yes', 'why': why[:300], 'review_id': p['reviewId']}
     if dry and w: return {'status': 'dry', 'head': f'would run {t}', 'body': json.dumps(cfg, indent=1, default=str)}
     with reports.wide_rows(): head, body = reports.executor_for(t)(reports.resolve_cfg(store, cfg))
     return {'head': str(head)[:300], 'body': body or '', 'rows': len(artifacts.rows_from_body(body or ''))}
+
+
+# ── his standing yes: "always approve this step for this routine" ───────────────────────────────────────────────────────────────────────
+# The owner, 2026-11-25: "for a routine that writes to a system we can have a saved 'always approved' option for this specific call". Kept per
+# routine, per step AS SAVED: the executor, its connection, its target and every other key it holds, before any output is pasted in. A step
+# changed (another folder, another card, a repair) is another key, so it waits again; an agent's own call during the run is never a step.
+STANDING, WAITS = 'routine_writes', 'a write to a connected system waits for your press'
+def step_key(step: dict) -> str:
+    "The step as saved, as one key: what it runs, on which connection, and a hash of the whole step (its label aside)."
+    bare = {k: v for k, v in (step or {}).items() if k != 'label'}
+    return f"{bare.get('type') or ''}:{bare.get('connector_id') or ''}:" + hashlib.sha256(json.dumps(bare, sort_keys=True, default=str).encode()).hexdigest()[:24]
+
+def _standing(store) -> dict:
+    try: got = json.loads(store.get_setting(STANDING) or '{}')
+    except (TypeError, ValueError): got = {}
+    return got if isinstance(got, dict) else {}
+
+def standing(store, sid, step: dict) -> bool:
+    "Did he always approve this step of routine `sid`, exactly as it is saved now?"
+    return bool(sid) and step_key(step) in (_standing(store).get(str(sid)) or {})
+
+def grant(store, fr: dict, actor: str) -> bool:
+    """His "always" press on a routine's write card: that step of that routine runs unpressed from now on - only while the saved step still
+    has the key the card was raised under (a step edited since is another step)."""
+    sid, key = str((fr or {}).get('source_id') or ''), str((fr or {}).get('key') or '')
+    src = store.get_source(int(sid)) if sid.isdigit() else None
+    if not src or not key: return False
+    from . import workflows
+    step = next((x for x in steps_of(workflows.cfg_of(src)) if x.get('id') == fr.get('step')), None)
+    if not step or step_key(step) != key: return False
+    allx = _standing(store)
+    allx.setdefault(sid, {})[key] = {'step': step.get('id'), 'label': step.get('label') or step.get('type') or '', 'at': datetime.now().strftime('%Y-%m-%d %H:%M')}
+    store.set_setting(STANDING, json.dumps(allx), actor)
+    store.audit('report', int(sid), 'always_approved', actor, detail={'step': step.get('id'), 'key': key})
+    return True
+
+def standing_list(store) -> list:
+    "[{kind: 'routine_write', key, label, via}] - every routine step he always approved, for Settings -> Agent permissions (beside who he trusted)."
+    out = []
+    for sid, ks in _standing(store).items():
+        src = store.get_source(int(sid)) if str(sid).isdigit() else None
+        name = (src or {}).get('Address') or f'routine {sid}'
+        out += [{'kind': 'routine_write', 'key': {'source_id': sid, 'key': k}, 'label': f"{name}: {v.get('label') or k}", 'via': 'always approved'}
+                for k, v in (ks or {}).items()]
+    return out
+
+def revoke(store, key: dict, actor: str) -> bool:
+    "Takes one standing yes back: that step's next write waits for his press again."
+    allx, sid, k = _standing(store), str((key or {}).get('source_id') or ''), str((key or {}).get('key') or '')
+    if k not in (allx.get(sid) or {}): return False
+    del allx[sid][k]
+    if not allx[sid]: del allx[sid]
+    store.set_setting(STANDING, json.dumps(allx), actor)
+    store.audit('report', int(sid) if sid.isdigit() else 0, 'always_approved_removed', actor, detail={'key': k})
+    return True
 
 
 def _yes(v):

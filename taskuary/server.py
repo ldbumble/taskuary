@@ -617,6 +617,7 @@ class DecideBody(BaseModel):
     closes: bool = False             # Send and close: the task's close as the send goes, before its agent is told (verdicts.decide)
     steps: list[int] | None = None   # a turn's held steps pressed as one card: this one first, the rest in order (shellgate.approve_steps)
     shown: dict | None = None        # the card as the page drew it - an action's proposal, a letter's {to}: the press runs only that (press_review)
+    always: bool = False             # "Always approve this step": a routine's write card, run now and unpressed from then on (verdicts.decide)
 class CodeBody(BaseModel):
     repo: str | None = None; agent: str | None = None
     model: str | None = None; instruction: str | None = None
@@ -2290,8 +2291,8 @@ def _vouch(task_id: int, scope: str = '') -> tuple:
 @app.get('/api/trusted')
 def trusted_list():
     "Every sender and organisation the owner trusted (senders.trusted) - Settings -> Agent permissions, with Remove."
-    from . import senders
-    return {'data': senders.trusted(store)}
+    from . import flow, senders
+    return {'data': senders.trusted(store) + flow.standing_list(store)}      # ...and every routine step he always approved (flow.grant)
 
 class UntrustBody(BaseModel):
     kind: str
@@ -2301,7 +2302,9 @@ class UntrustBody(BaseModel):
 def trusted_remove(body: UntrustBody, request: Request):
     from . import senders
     _owner_only(request, "taking back a trust is the owner's")
-    if not senders.untrust(store, body.kind, body.key, ACTOR): raise HTTPException(404, 'that trust is not on file - it was taken back already')
+    from . import flow
+    if not (flow.revoke(store, body.key, ACTOR) if body.kind == 'routine_write' else senders.untrust(store, body.kind, body.key, ACTOR)):
+        raise HTTPException(404, 'that trust is not on file - it was taken back already')
     return {'ok': True}
 
 
@@ -2403,6 +2406,8 @@ def _task_detail(task_id: int, rev: str = '', opened: bool = False, whole: bool 
     from . import card
     closes = card.may_close(store, task_id)
     held = set(q['held'])
+    # ...but each is a tab of the one card its run is (cardqueue.tabs), drawn there by its own card - its rows apart, so nothing else takes it
+    d['heldReviews'] = [r for r in d['reviews'] if r['ReviewId'] in held]
     d['reviews'] = [r for r in d['reviews'] if r['ReviewId'] not in held and not cardqueue.obsolete_read(store, task_id, r)]
     # ...and on a task a stranger's words hold, no card waits for a press until he trusts them: the hold and its Trust are the one move
     # (the judge's browser round, 2026-11-19: the reply drafted on a stranger's mail stood as the email card where the hold belonged)
@@ -2411,7 +2416,7 @@ def _task_detail(task_id: int, rev: str = '', opened: bool = False, whole: bool 
     # words, never Send on the reply to the known person (the ruling, 2026-11-19)
     if _origin.keeps_him(store, task_id):
         past_ = set(q['past'])
-        d['reviews'] = [r for r in d['reviews'] if r.get('Status') != 'pending' or r['ReviewId'] in past_]
+        d['reviews'] = [r for r in d['reviews'] if r.get('Status') != 'pending' or r['ReviewId'] in past_]; d['heldReviews'] = []
     d['queue'] = {'live': q['live'], 'held': q['held'], 'closes': closes}       # ...the page's reply door reads it: none beside a front that is another card
     # ...and what the chat moved past reads as it will once its agent hears that (proposals.written_past): greyed in place, from this read on
     from .proposals import SET_ASIDE
@@ -5568,7 +5573,7 @@ def press_review(st, rid: int, body: DecideBody, background: BackgroundTasks = N
                                       else f"Press {buttons.label('redraft')} to write it with the latest context before approving."))}
     return land(st, rv, body.verb, body.final_text, body.note, ACTOR,
                 learn_async=(background.add_task if background is not None else None), cc=body.cc, reply_text=body.reply_text, anyway=body.anyway, fields=body.fields,
-                blanks_ok=body.blanks_ok, bcc=body.bcc, subject=body.subject, closes=body.closes)
+                blanks_ok=body.blanks_ok, bcc=body.bcc, subject=body.subject, closes=body.closes, always=body.always)
 
 # A BULK CARD (bulkcard.py): one press does every act on it, by each act's own road, in the background - its progress read here, drawn as a bar.
 # The owner's alone: no agent door (guard.AGENT_WRITES) lists it
@@ -9399,7 +9404,8 @@ def tool_run(body: dict, request: Request):
     # check on purpose: at read, the proposal was always the road, and the refusal only said so.
     if guard.scope_of(cfg['server'], request.headers) == guard.AGENT:
         tool = _mcp_tool(conn, body) if t == 'mcp' else None
-        if why := scopes.reaches(t, body, tool): return _agent_proposes(request, t, conn, body, why)
+        why = scopes.reaches(t, body, tool)
+        if why and t in scopes.REACHES: return _agent_proposes(request, t, conn, body, why)
         # ...and a change above the card's Authority is the same proposal (docsync.agent_systems tells the agent so): the 403 below said
         # "raise it under the card", a step only the owner can take, and lit nothing for them to press. So is a call on a connection he
         # never marked as an agent tool: "not marked as an agent tool (its card -> Role)" was the same sentence the agent could only pass on
@@ -9408,6 +9414,11 @@ def tool_run(body: dict, request: Request):
         if not scopes.allows(conn, t):
             return _agent_proposes(request, t, conn, body, f"needs {scopes.needs(t)} Authority on {conn.get('Name') or t}, which is set to "
                                                            f"{scopes.scope_of(conn)}")
+        # ...AND EVERY OTHER WRITE, at any Authority (the owner, 2026-11-25: "to write to the systems or any connector should require approval
+        # mechanically"): a file saved, a bill, a record, a command on a box. A SQL statement that changes a table is one by its grammar
+        # (db.read_only), and its card's press commits it (proposals._run) - the agent's own call only ever reads
+        if t in ('mssql', 'database') and _sql_writes(body): why = f"changes rows on {conn.get('Name') or t}"
+        if why: return _agent_proposes(request, t, conn, body, why)
     try:
         scopes.require(conn, t)
     except PermissionError as e:
@@ -9419,7 +9430,7 @@ def tool_run(body: dict, request: Request):
         # ...and the card checked above is the card that runs: query_only drops connector_id, which fell back to the first of the type
         tool_cfg = {**query_only(body), 'type': t, 'connector_id': conn['ConnectorId']}
         # SQL commits only on a card the owner raised to write; at read, the batch is rolled back (mssql.run_query)
-        if t in ('mssql', 'database'): tool_cfg['_write'] = scopes.rank(scopes.scope_of(conn)) >= scopes.rank('write')
+        if t in ('mssql', 'database'): tool_cfg['_write'] = guard.scope_of(cfg['server'], request.headers) != guard.AGENT and scopes.rank(scopes.scope_of(conn)) >= scopes.rank('write')
         if t in hub_tools:
             # The token decides who spoke. A tool payload cannot claim to be the owner or
             # another agent, even though the executor accepts an author for internal calls.
@@ -9432,6 +9443,13 @@ def tool_run(body: dict, request: Request):
         return {'ok': False, 'error': failed(t, e)}               # ...bounded there, its next step kept
     store.audit('tool', (conn or {}).get('ConnectorId', 0), 'run', actor, detail={'type': t, 'headline': str(head)[:200]})
     return {'ok': True, 'headline': head, 'output': (out or '')[:20000]}
+
+def _sql_writes(body) -> bool:
+    "Does this statement do more than read, by its grammar (db.read_only)? An empty one is the executor's to refuse."
+    from .db import read_only
+    if not str((q := (body or {}).get('query')) or '').strip(): return False
+    try: read_only(q); return False
+    except ValueError: return True
 
 def _mcp_tool(conn, body):
     """The MCP tool an agent named, as its own server describes it - None when the server cannot be asked or does not list it, which

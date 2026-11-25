@@ -287,21 +287,23 @@ def refused(cmd: str) -> str:
     return next((f'{d} is not opened: {why}' for d in dests(cmd) if (why := barred(d))), '')
 
 
-# A CONNECTED SERVICE'S SITE IS NOT THE AGENT'S ROAD TO IT (the owner, 2026-11-25: "we are trying to post to twitter but the browser is asking
-# about linkedin" - its LinkedIn card connected, the agent opened linkedin.com/feed, landed on LinkedIn's sign-in, and that page was handed to
-# him beside the post cards). One rule for every card that names its site (connectorcatalog `hosts`) and declares an act: while its
-# connection can act (outbound.connect_fix - the answer its card's button is drawn from) the page is not opened, and the answer is that fact
+# A CONNECTED SERVICE'S ACT IS ITS CARD'S, NEVER ITS SITE'S (the owner, 2026-11-25: "we are creating posts here not reading them. If the create
+# fails or if I ask the agent to see if it's already posted it, or if it can read my posts, then it should read it"). Its site is opened and
+# read like any other; what its card does - a press there the gate would hold (_check) - is answered with that fact, never held as a second
+# card. One rule for every card that names its site (connectorcatalog `hosts`) and declares an act, while its connection can act
+# (outbound.connect_fix - the answer its card's button is drawn from)
 def _carded(url) -> dict | None:
     from . import connectorcatalog as cat
     u = str(url or '').strip()
     c = cat.site_card(_site(u if '://' in u else 'http://' + u))
     return c if c and c.get('actions') else None
 def card_site(store, url) -> str:
-    "'' unless `url` is on the site of a service whose card is connected - then that fact, as the agent is told it."
+    "'' unless `url` is on the site of a service whose card is connected - then that fact, as the agent is told it for an act there."
     from . import outbound
     if not (c := _carded(url)) or outbound.connect_fix(store, c['type']): return ''
     press = ', '.join(a['press'] for a in c['actions'] if a.get('press'))
-    return f"{c.get('title') or c['type']} is connected: its card does it ({press}) through the connection at the owner's press - its site is not opened in the browser"
+    return (f"{c.get('title') or c['type']} is connected: what goes there is its card ({press}), done through the connection at the owner's "
+            "press - not this press on its site, which you may still open and read")
 # ...AND WHERE IT IS NOT CONNECTED, THE CARD COMES FIRST AND ITS SIGN-IN AT HIS PRESS (the owner, 2026-11-22: "card first, sign-in at the press";
 # the real runs of 2026-11-25: asked for posts with X not set up, Codex and Claude each opened x.com and handed him "Sign in to X" with no
 # card raised at all). A page of such a service is his step only once his press on its card handed the act to the agent (cardqueue.handed)
@@ -842,7 +844,6 @@ def _check(store, tid: int, sid: str, cmd: str, brain=None, cwd: str = '') -> di
         return _deny(f"{NOT_RUN}: that would close the owner's tab - your step on {his} waits on him there. Leave it open and go on in another tab; "
                      "you are told when he is done.")
     if (no := refused(cmd)): return _deny(f'{NOT_RUN}: {no}.')
-    if (fact := next((w for d in dests(cmd) if (w := card_site(store, d))), '')): return _deny(f'{NOT_RUN}: {fact}.')
     seen = VISITED.setdefault(str(sid), set()) | {_site((_PAGES.get(str(sid)) or {}).get('url'))}
     todo = acts(cmd, seen)
     if not todo or all(typing(a) for a in todo): VISITED[str(sid)].update(_site(d) for d in dests(cmd)); return {}
@@ -870,6 +871,7 @@ def _check(store, tid: int, sid: str, cmd: str, brain=None, cwd: str = '') -> di
         if vs is None: vs = iter(judge(store, [x for x in todo[i:] if not x.get('read') and not typing(x)], pg, brain, said=said))
         v = next(vs)
         if not v['hold']: continue
+        if (fact := card_site(store, pg['url'])): return _deny(f'{NOT_RUN}: {fact}.')
         args = _own_args(a['args'])
         if not args: return _deny(f"{NOT_RUN}: a browser command it could not read. Run each agent-browser command on its own line.")
         if not pg['url']: return _deny(NO_PAGE.format(held=NOT_RUN))

@@ -160,8 +160,9 @@ meaning and model calls that plain data could answer listed with file and line.
 
 How a card is raised, pressed and handed off never changes without the owner's written OK. Each
 rule below is pinned by a plain test in `tests/contract/` (the real tools and routes, no browser,
-no model); `tests/contract/LOCK` holds the hash of those files and of this section, and
-`tests/test_contract_lock.py` fails when either differs. A contract test that fails is a broken
+no model); `tests/contract/LOCK` holds the hash of those files, of this section and of what every
+agent is told about its cards (`taskuary/templates/agents.md`), and `tests/test_contract_lock.py` fails
+when any of them differs. A contract test that fails is a broken
 product: fix the code, never the test.
 
 1. **Raise.** The agent supplies the content; Taskuary builds one valid card and picks the road
@@ -171,15 +172,17 @@ product: fix the code, never the test.
    is answered with the exact fix. A field the card does not draw is ignored.
 2. **Press.** Approve or Send executes exactly what was shown, once. A second press does nothing.
    A card changed after it was shown does not run. A press after the agent stopped still executes.
-   A failed execution stays on its card and its agent is told once. His no is told to the agent as
-   his own.
-3. **Wake.** A press wakes the agent only if the card carries its `then`. A press with no `then`
-   wakes nobody, and answers the question the agent asked about that card.
+   A failed execution stays on its card, with the way past it, and its agent is woken once with what
+   failed and why. His no is told to the agent as his own.
+3. **Wake.** His press executes without waking the agent, at work or at rest, unless the card
+   carries its `then` or the execution fails. A press with no `then` that went wakes nobody, and
+   answers the question the agent asked about that card; a bulk card's run is the same, once.
 4. **Question.** The agent's question stands until he answers; no card is raised under it, in
    that turn or after, until he answers; his answer reaches the agent once.
 5. **Hand-off on a page.** A step handed to him shows that step; his "I'm done" wakes the agent
-   once. A connected service's site is never opened or handed over for what its card does; where
-   it is not connected its card comes first, and its sign-in is his step only after his press. No
+   once. The agent may open and read a connected service's site, and hand him its sign-in where
+   reading needs it; posting or sending there goes only through its card. Where a service is not
+   connected its card comes first, and its sign-in is his step only after his press. No
    sign-in is put to him beside a card that waits: one thing is asked at a time, and what the
    browser shows belongs to the card on his screen.
 6. **The turn's end.** Exactly one of needs-him / done / working. The chat shows words, cards and
@@ -191,3 +194,10 @@ product: fix the code, never the test.
    one press, exactly as shown; separate calls are separate cards, one after another. Files handed
    over in one call are one artifact holding all of them. A review card and a file artifact are
    drawn by the same component (`website/src/Artifact.jsx`).
+9. **Every write waits for his press.** An agent's call that writes, changes, creates, deletes or
+   sends on any connector is a card, at any Authority; nothing runs before his press. What is a
+   write is the executor's line in `scopes.ACTIONS` - one not listed is a write; a read (a query, a
+   search, a report pulling data) runs with no card. Only Taskuary's own store is written unpressed.
+   A routine's write step waits too, unless he pressed "Always approve this step" on it: that
+   routine's step, exactly as saved, then runs unpressed; any other target, executor or an agent's
+   own call during the run is a card as usual. Taken back under Settings → Agent permissions.

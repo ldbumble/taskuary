@@ -2,6 +2,94 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.4.4.3 - 2026-11-25
+
+- The browser's DevTools port is never in the agent's shell
+- Only the receiving host's own top-most stamp verifies a sender
+- An untrusted machine's notice on his own task reaches no agent
+- A letter goes only to the recipients its card showed
+- How the owner signs, told to an agent, waits for his press
+- A push, a pull request or a merge is always a card for his press: 'Agents may push / deploy' decides only whether an agent goes without one
+- A stranger's session never hands the CLI's sign-in to its tools
+- A card's buttons are the card's own, wherever its press is named
+- A database read is the database's own word where it has one
+- The rail the Assistant reads says where each task stands, and counts his by it
+- The end-of-day brief calls an invite handled only when he answered it
+- A page asks to open an address only on a press in the page itself
+- A finished agent's row says no "nothing since" while his or its agent's move is next
+- A comment on, or the close of, the issue a task came from is a card for his press whatever the GitHub card's switches say
+- The propose tool takes a push straight onto the base, as the mark in an answer does
+- An Advisor idea names the thread and the person it is about, where its page opens
+- Show less on a long line shuts it in place instead of blanking the chat
+- An agent's call on a connection not marked as an agent tool is a card for his press
+- An agent's calendar read with reading the calendar switched off raises his card to switch it on
+- An agent's tool call on a connection switched off, or on no card at all, says what it can do next
+- A stranger's session told no by the floor is told the way on
+- A box's value the browser gate will not read is refused with the way on
+- A reply a later turn rewrote in place stands under that turn
+- The coding chat names a draft's turn by when its words were written
+- A settings card for a switch no card may turn says to ask for the act instead
+- Playbooks or the Hub switched off is said as his choice, and the agent goes on without it
+- A reply on a GitHub thread goes on his Send, as the comment card does: the card switch over it is gone
+- An agent's call on a connection switched off is one card whose press switches it on and runs it
+- A desktop act with Agent Desktop off, or on a task not marked "needs desktop", waits on one card to let this task use it
+- New work asked for on a task he never spoke on is one card, "Start <title> as its own task"
+- A browser asked of an AI that cannot use one is one card, "Run this task on <the AI that can>"
+- A press wakes the agent only where its card names a step of the agent's own after it
+- A card's Connect on a connection not set up brings that connection's own setup up under the card
+- A task's agent asking to run one of his reports or routines now is one card, his press his Run now
+- A checkout outside the folders agents look in, or over his own pick, is one card for his press
+- A card a later turn rewrote keeps its earlier words greyed where they stood, and a turn keeps why it began
+- Delete card placement by turn ids and times that nothing draws from any more
+- A Codex agent may write its task's outputs folder: what it makes there reaches the task and its cards
+- A view of only words is no view, and a view refused beside a picture never takes the picture down
+- A routine's run is told the routine's words and facts, never a rule of the code's
+- A file on a card is taken from wherever its agent may read it: copied into the task's folder and that copy carried
+- Memory is kept only on a turn his own words or press began
+- Every command an agent runs reads and writes UTF-8 on Windows
+- A run at work hears its routine's new words: one event on each open run when they change
+- Waiting for his input is a card for his press or the agent's question to him, nothing else
+- Streamed words held behind a first token are written once they settle, not at the agent's next step
+- A routine's Run opens its new run's task at the press, never the run before it
+- An agent adds a note and files to a task he named: add_to_task
+- An arrival in the list has one move: Send to agent, which puts it on the box as a chip
+- The owner token lives in the running server's memory alone
+- The agent's context says who reads its words: the owner, by name
+- A sign-up he asked for may use his own name, company and mailbox - sent on his card
+- No "Email from You" for a draft he never sent, and no "Running on no AI"
+- A learned habit takes three of the same press on the same sender or topic
+- add_to_task reads as what it did in the chat's steps: "Added a note to TQ-0008"
+- A stranger's notice kept from the agent says so on itself, in one line
+- A card raised with replaces never takes back itself: the post door names its new card review, and that one is kept
+- A field a card does not draw is left off it, never a refusal of the whole card
+- A post card over its network's limit is refused to its agent, counted as the network counts it
+- A post over its network's limit is refused when raised, counted as the network counts
+- An agent's browser is not taken to the site of a service whose card is connected
+- No sign-in is put to the owner beside a card that waits, nor for a connected service
+- Keep SSNs and dates of birth out of everything Taskuary sends to a model
+- A post's picture description rides on its card, and a field its network has not is left off, not refused
+- A connected post never goes by the browser, and a press on any card answers the question asked about it
+- A card's Connect brings up that connection's own kind of card, and goes on once the setup is saved
+- An FYI has one move everywhere: Send to agent
+- A question to the owner holds the turn: no card is raised under it until his answer
+- A report whose rows changed answers again, and draws a chart only when its answer asks for one
+- One call with items is one card whatever its count; separate calls are separate cards
+- The chat draws what the agent handed over and the cards it raised; files it only worked with stay in the task's files
+- A topic's one-off presses are grouped by what the line is about, a sender's by that sender
+- The basic interactions are locked: thirty contract tests, their hash, and the rules in CLAUDE.md
+- Where a network is not connected its card comes first: its sign-in is the owner's step only after his press
+- Lock card-first for a network not connected: the contract's thirty-first test, its hash and its line in CLAUDE.md
+- Every agent is told what its screen is: cards for what he sends, artifacts for what he looks at
+- A connected service's site is the agent's to open and read; its post goes through its card
+- A call's `replaces` is taken back once, never from a card one of its items stands as
+- A CLI turn with a picture goes to the agent as parts again, its words scrubbed
+- AGENTS.md: versions of one thing are one card when they are for him to pick from
+- Every write to a connector waits for his press; a routine's step runs unpressed only where he always approved it
+- His press executes without waking the agent unless its card names a next step or the execution fails
+- Cards waiting in line are one card with a tab each
+- Lock it: every connector write is a card, his press does it, a failure wakes once - five contract tests, their hash, rule 9
+- His words over an FYI still do what its buttons used to: filed, made a task, a sender ruled out
+
 ## 0.4.4.2 - 2026-11-25
 
 - The browser's DevTools port is never in the agent's shell

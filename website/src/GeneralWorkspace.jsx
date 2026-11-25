@@ -69,7 +69,8 @@ import AssessmentOutlinedIcon from "@mui/icons-material/AssessmentOutlined";
 import PersonOutlineIcon from "@mui/icons-material/PersonOutline";
 import BoltIcon from "@mui/icons-material/Bolt";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
-import Artifact from "./Artifact.jsx";
+import Artifact, { CardLine } from "./Artifact.jsx";
+import { lineRuns } from "./cardLine.js";
 
 const errText = (e) => e?.response?.data?.detail || e?.message || "The assistant could not respond.";
 const textOf = (message) => (message?.content || []).filter((p) => p.type === "text").map((p) => p.text).join("\n").trim();
@@ -519,10 +520,9 @@ const wasCard = (c, rv) => <ReviewDecision key={c.id} past review={c.what !== "a
 /* `items`: the server's list, with this page's own lines the server has not answered for yet (`mine`) already merged in by their names.
    `nodes`: the cards the page draws, by the review each is of ([{key, rid, node}]); `next`: the reply that waits, at the card it is. */
 function Conversation({ items, nodes = [], posts = [], reviews = [], next = null, landing: landed = null, landAt, name, tid, onChanged, ask = null, askAt = "", queue = null }) {
-  // ONE CARD AT A TIME (cardqueue.py): what waits behind the card that stands is drawn nowhere - the landing question too - and the card that
-  // stands says, over itself, how many come and which is next ("1 of 2 · next: the email to Erin")
-  const held = new Set(queue?.held || []), live = new Set(queue?.live || []), landing = held.has("land") ? null : landed;
-  const qLine = () => (queue?.line && !used.has("queue") && used.add("queue") ? [<div key="queue" className="tq-aui-hint" data-tq-card-queue="" role="note">{queue.line}</div>] : []);
+  // ONE CARD AT A TIME (cardqueue.py): what waits behind the card that stands is drawn nowhere on its own - the landing question too - and the
+  // cards that came in a run are ONE card with a tab each (CardLine; the owner, 2026-11-25), standing at the row of the one in front (lineRuns)
+  const held = new Set(queue?.held || []), landing = held.has("land") ? null : landed;
   // THE WORK'S CARD IS PART OF THE AGENT TURN THAT DID IT, or not drawn at all (the owner, 2026-11-13: "stop putting worked on master at the
   // bottom ... it's part of the agent turn or doesn't belong at all"): the turn its newest change came in (landing.landingTurn); until the card
   // has read its state it is mounted hidden, so it can say when
@@ -533,13 +533,19 @@ function Conversation({ items, nodes = [], posts = [], reviews = [], next = null
   // ...and what a card it draws carries - a post's picture, an email's attachment - is that card's alone, never a file of a turn again (carried)
   const owned = carried([...posts, ...reviews].filter((r) => listed.has(r.ReviewId)));
   const rv = (id) => reviews.find((r) => r.ReviewId === id);
-  const draw = (cs) => (cs || []).flatMap((c) => {
+  // ...a card's own row, never an earlier version of it (drawn from its own words where it stood)
+  const version = (c) => isPastCard(c) && stands.has(c.review);
+  const rowOf = new Map(items.flatMap((x) => (x.kind === "card" ? [x] : x.kind === "turn" ? x.cards || [] : [])).filter((c) => !version(c)).map((c) => [String(c.review), c]));
+  const runs = lineRuns(queue?.runs, new Set(rowOf.keys())), runOf = new Map(runs.flatMap((r) => r.tabs.flatMap((t) => t.rids.map((id) => [String(id), r]))));
+  // ...each tab is the card it was, drawn by the same road as one alone - one held behind the front from its review, the card it is when it comes
+  const pane = (t) => <React.Fragment key={t.key}>{t.key === "land" ? landed : one(rowOf.get(t.key) || { id: `held:${t.key}`, review: Number(t.key), status: "pending" }, true)}</React.Fragment>;
+  const one = (c, inLine = false) => {
     // ...a draft no longer to press carries what it said (`was`); one he said no to says so. Either takes its review's node with it only where
     // the review has no card of its own left in the list (chatStream.standing) - an earlier version is drawn from its own words beside it
     const past = isPastCard(c) || c.status === "passed", claim = () => nodes.forEach((n) => { if (n.rid === c.review) used.add(n.key); });
     if (isPastCard(c) && c.status === "rejected") { if (!stands.has(c.review)) claim(); return [<NotSent key={c.id} c={c} />]; }
     if (isPastCard(c) && stands.has(c.review)) return [wasCard(c, rv(c.review))];
-    if (held.has(c.review) && !past) return [];
+    if (held.has(c.review) && !past && !inLine) return [];
     const got = nodes.filter((n) => n.rid === c.review && !used.has(n.key)), post = posts.find((p) => p.ReviewId === c.review);
     got.forEach((n) => used.add(n.key));
     // ...a card moved past is its own card with `past`: greyed in its place, nothing to press
@@ -548,11 +554,15 @@ function Conversation({ items, nodes = [], posts = [], reviews = [], next = null
     // again under it as the act's own card reading "Not posted · dismissed" (the card round, 2026-11-12)
     const out = [...got.map((n) => <React.Fragment key={n.key}>{past ? React.cloneElement(n.node, { past: true }) : n.node}</React.Fragment>),
       ...(post && !got.length && !used.has(`post:${c.review}`) && used.add(`post:${c.review}`) ? [<ActReview key={`post:${c.review}`} row={post} tid={tid} onChanged={onChanged} past={past} />] : [])];
-    return out.length && live.has(c.review) && c.status === "pending" ? [...qLine(), ...out] : out;
+    return out;
+  };
+  const draw = (cs) => (cs || []).flatMap((c) => {
+    const r = !version(c) && runOf.get(String(c.review));
+    if (!r) return one(c);
+    return String(c.review) === r.at ? [<CardLine key={`line:${r.tabs[0].key}`} tabs={r.tabs}>{r.tabs.map(pane)}</CardLine>] : [];
   });
-  // A TURN'S CARDS, ITS LAST THING: what the log placed in it - a reply, a letter, an act - then the work's card
-  const cardsOf = (x) => [...draw(x.cards),
-    ...(x.id === landIn ? [...(live.has("land") ? qLine() : []), <React.Fragment key="landing">{landing}</React.Fragment>] : [])];
+  // A TURN'S CARDS, ITS LAST THING: what the log placed in it - a reply, a letter, an act - then the work's card (a tab of a run's card, there)
+  const cardsOf = (x) => [...draw(x.cards), ...(x.id === landIn && !runOf.has("land") ? [<React.Fragment key="landing">{landing}</React.Fragment>] : [])];
   const rows = items.map((x, i) => {
     const prev = items[i - 1];
     // ...A TURN AT WORK ALWAYS DRAWS ITS HEAD (2026-11-17: one that carried on after the agent's first message folded into the turn above - no
@@ -574,7 +584,7 @@ function Conversation({ items, nodes = [], posts = [], reviews = [], next = null
     {/* ...EVERY CARD IS A ROW THE LOG PLACED (chatlog.advance - one road): under everything only the page's own block, a hand-off or a
         write-up he opened, never a card of the line */}
     {!!next && <Box data-tq-next-steps="" className="tq-aui-summary" sx={{ mt: 1, mx: { xs: 1, sm: 2 } }}>{next}</Box>}
-    {!landIn && landing && <div hidden>{landing}</div>}</MoreCardsCtx.Provider>;
+    {!landIn && landing && !runOf.has("land") && <div hidden>{landing}</div>}</MoreCardsCtx.Provider>;
 }
 /* WHAT WAITS FOR THE AGENT, BY THE BOX: accepted, not yet handed over - never in the conversation until it is (the heard rule).
    ...A ROW IS NOT MARKED [data-tq-held] (seen 2026-11-11: with lines waiting, the task's card stood 8 px under the canvas's head): that name

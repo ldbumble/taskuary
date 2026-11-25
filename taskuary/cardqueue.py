@@ -229,27 +229,57 @@ def _stood(u: dict) -> bool:
 
 def _state(store, tid: int) -> dict:
     """The line on task `tid`: {'live': the front's ids or [], 'held': ids that wait behind it, 'n': the front's place in the run it is one
-    of, 'of': that run's length, 'next': what comes next in words, 'units', 'past': the cards the chat moved past (proposals.written_past)}."""
+    of, 'of': that run's length, 'next': what comes next in words, 'units', 'runs': every run of the cards that stood (_runs), 'past': the
+    cards the chat moved past (proposals.written_past)}."""
     from .proposals import written_past
     us = _units(store, tid, past := written_past(store, int(tid)))
     waiting = [u for u in us if u['done'] is None]
-    if not waiting: return {'live': [], 'held': [], 'n': 0, 'of': 0, 'next': '', 'units': [], 'past': past}
+    # ...the run it is one of: each card that stood for his press, raised while the one before it still waited or with nothing of his between
+    runs = _runs(store, tid, [u for u in us if _stood(u)])
+    if not waiting: return {'live': [], 'held': [], 'n': 0, 'of': 0, 'next': '', 'units': [], 'runs': runs, 'past': past}
     front = waiting[0]
-    # ...the run it is one of: the cards before it that were raised while the one before them still waited - each one that stood for his press
-    us = [u for u in us if _stood(u)]
-    i = us.index(front); n = 1
-    # ...AND ON THROUGH THE CARDS ITS AGENT RAISES AFTER A PRESS, while nothing of his came between (decided 2026-11-20: "2 of 7" went on as
-    # "1 of 6" when the agent wrote the next letters after his Send): only his line or a message that came in begins a new run
-    ins = sorted(r['At'] for r in store._rows("SELECT At FROM heard WHERE TaskId=? AND Kind IN ('line','mail')", (int(tid),)))
-    between = lambda a, b: any(a < x < b for x in ins)
-    while i - n >= 0 and (us[i - n + 1]['at'] <= (us[i - n]['done'] or float('inf')) + 1
-                          or not between(us[i - n]['done'] or 0., us[i - n + 1]['at'])): n += 1
+    run = next(r for r in runs if any(x is front for x in r))
+    n = next(i for i, x in enumerate(run) if x is front) + 1
     held = [x for u in waiting[1:] for x in u['rids']]
     # ...AND EACH PRESS BRINGS THE NEXT AT ONCE (the owner, 2026-11-20: asked to post to three platforms, one card stood and the rest never
     # appeared - the next was held while the agent went on from the press, and a turn that went on longer hid it): every card raised stands
     # queued, the front is drawn, and its agent hears the row once it is over (row_over)
     live = front['rids']
-    return {'live': live, 'held': held, 'n': n, 'of': n + len(waiting) - 1, 'next': what(store, waiting[1]) if len(waiting) > 1 else '', 'units': waiting, 'past': past}
+    return {'live': live, 'held': held, 'n': n, 'of': len(run), 'next': what(store, waiting[1]) if len(waiting) > 1 else '', 'units': waiting,
+            'runs': runs, 'past': past}
+
+
+def _runs(store, tid: int, us: list) -> list:
+    """The cards that stood, oldest first, cut into runs: a card is one of the run before it when it was raised before that one was settled,
+    AND ON THROUGH THE CARDS ITS AGENT RAISES AFTER A PRESS while nothing of his came between (decided 2026-11-20: "2 of 7" went on as "1 of 6"
+    when the agent wrote the next letters after his Send) - only his line or a message that came in begins a new run."""
+    ins = sorted(r['At'] for r in store._rows("SELECT At FROM heard WHERE TaskId=? AND Kind IN ('line','mail')", (int(tid),)))
+    def linked(a, b): return b['at'] <= (a['done'] or float('inf')) + 1 or not any((a['done'] or 0.) < x < b['at'] for x in ins)
+    out = []
+    for u in us:
+        if out and linked(out[-1][-1], u): out[-1].append(u)
+        else: out.append([u])
+    return out
+
+
+# A RUN OF CARDS IS ONE CARD WITH TABS (the owner, 2026-11-25: "a little carousel thing on top that scrolls from one to the other"): each tab is
+# the card it was, named by where it goes - the network a post goes to, whom a letter goes to - with whether it is settled and which is in front
+def tabs(store, s: dict) -> list:
+    "Each run of two or more on the line `s` (state): [[{'key', 'rids', 'name', 'done', 'front'}]], oldest first."
+    f = s['units'][0] if s['units'] else None
+    return [[{'key': str(u['rids'][0]), 'rids': u['rids'], 'name': tab(store, u), 'done': u['done'] is not None, 'front': u is f} for u in r]
+            for r in s['runs'] if len(r) > 1]
+
+
+def tab(store, u: dict) -> str:
+    "A card's name on its tab: 'LinkedIn', 'Erin Blake', else what it is ('Push')."
+    from .proposals import POSTS
+    r = (_waits(u) or u['rows'] or [{}])[0]
+    if r.get('Kind') == 'action' and not r.get('Batch') and (net := POSTS.get(_p(r).get('type'))): return net
+    if r.get('Kind') not in (None, 'action') and not r.get('Batch') and (to := to_whom(store, r)): return to
+    w = what(store, u)
+    w = w[4:] if w.startswith('the ') else w
+    return w[:1].upper() + w[1:]
 
 
 

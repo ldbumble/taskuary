@@ -225,6 +225,11 @@ class NoSsnOrBirthDateLeavesTests(unittest.TestCase):
         lv._send(INTAKE)
         self.assertMasked(json.loads(wrote[0])['message']['content'])
         self.assertMasked(acp.blocks(INTAKE)[0]['text'])
+        # ...a turn with a picture dropped on the box goes as parts: its words scrubbed, the picture and the parts' shape as they were
+        pic = {'type': 'image', 'source': {'type': 'base64', 'media_type': 'image/png', 'data': 'iVBORw0KGgo'}}
+        lv._send([pic, {'type': 'text', 'text': INTAKE}])
+        sent = json.loads(wrote[1])['message']['content']
+        self.assertEqual(sent[0], pic); self.assertMasked(sent[1]['text'])
 
     def test_a_line_typed_into_a_live_session(self):
         import threading

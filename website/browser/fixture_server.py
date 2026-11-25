@@ -429,12 +429,13 @@ def _install_fresh_routes(app, store):
             def refused(_cfg): raise RuntimeError("LinkedIn refused the post: the token has expired - sign in again on its card.")
             reports.REGISTRY[body["refuses"]] = refused
         # ...`connect`: the network's card connected, its act landing on a stand-in that answers with where it went
-        cid = None
-        if body.get("connect"):
+        # ...several at once (a list): each post goes on its own network's card (browser/card-line.mjs)
+        cids = {}
+        for net in ([body["connect"]] if isinstance(body.get("connect"), str) else body.get("connect") or []):
             from taskuary import reports
-            c = store.get_connector_by_type(body["connect"])
-            cid = store.save_connector({"ConnectorId": c["ConnectorId"], "Active": 1, "Secret": "fixture-token", "Roles": "tool"}, "owner")
-            reports.REGISTRY[f"{body['connect']}_post"] = lambda cfg: {"rows": [{"url": "https://social.example/alex/posts/1"}], "columns": ["url"]}
+            c = store.get_connector_by_type(net)
+            cids[net] = store.save_connector({"ConnectorId": c["ConnectorId"], "Active": 1, "Secret": "fixture-token", "Roles": "tool"}, "owner")
+            reports.REGISTRY[f"{net}_post"] = lambda cfg: {"rows": [{"url": "https://social.example/alex/posts/1"}], "columns": ["url"]}
         # ...`stands_in`: a network never set up whose Test and post answer from a stand-in - its setup filled under the card passes for real
         if body.get("stands_in"):
             from taskuary import reports
@@ -442,7 +443,10 @@ def _install_fresh_routes(app, store):
             reports.REGISTRY[f"{t}_me"] = lambda cfg: {"rows": [{"handle": "alex.social.example", "followers": 12, "posts": 3}], "columns": ["handle"]}
             reports.REGISTRY[f"{t}_post"] = lambda cfg: {"rows": [{"url": "https://social.example/alex/posts/1"}], "columns": ["url"]}
         for r in body.get("rows") or []:
-            if cid and isinstance(r.get("DraftText"), dict): r["DraftText"] = {**r["DraftText"], "connector_id": cid}
+            d = r.get("DraftText")
+            if cids and isinstance(d, dict):
+                cid = cids.get(str(d.get("type") or "").removesuffix("_post")) or next(iter(cids.values()))
+                r["DraftText"] = {**d, "connector_id": cid}
         # ...the agent's turn that set the cards up, as a chat with turns holds them (each card stands in the turn that raised it)
         from taskuary import general
         store.add_comment(tid, general.BRIEF_ACTOR, general.USER_TYPE, body.get("ask") or "Set it up for my press.")

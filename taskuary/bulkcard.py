@@ -130,4 +130,10 @@ def told(store, key: str, st: dict, actor: str = 'owner') -> str:
         for rid in st.get('rows', {}): store.audit('review', int(rid), general.TOLD, actor, 'system', {'task': st['tid'], 'how': how, 'batch': key})
     # ...an event on the task (general.to_agent -> events.note), with each card's own state beside it (events.card)
     if not st.get('tid'): return ''
+    # ...WOKEN ONLY WHERE SOMETHING FAILED OR ITS CARD NAMES A NEXT STEP (the owner, 2026-11-25: his approval "sends it without further
+    # triggering the agent unless it fails of course or there are next steps") - general.approved's rule; else it is said in its next turn
+    from . import card, events
+    rs = rows(store, key)
+    if not any(v not in ('ok', 'left') for v in st.get('rows', {}).values()) and not any(card.carries_on(r) for r in rs):
+        events.note(store, int(st['tid']), summary(store, key, st)); return ''
     return general.to_agent(store, st['tid'], summary(store, key, st), actor, heard=heard)

@@ -67,12 +67,9 @@ def sync_connections(store, actor='system'):
         srv = config.load().get('server') or {}
         auth = ' (header X-Taskuary-Token)' if srv.get('token') else ''
         kinds = '|'.join(sorted({k for _, ks in have for k in ks}))
-        books = ' WRITES to the books (quickbooks_bill, quickbooks_expense) are never yours to run directly: propose one - TASKUARY-PROPOSE ' \
-                '{"action": "run_tool", "type": "quickbooks_bill", "vendor": ..., "amount": ..., "account": ..., "date": ..., "memo": ..., ' \
-                '"doc_number": ...} in your session - and the owner approves it on the task.' if any(c['Type'] == 'quickbooks' for c, _ in have) else ''
         lines.append(f"- To USE one of the systems above, POST http://{srv.get('host', '127.0.0.1')}:{srv.get('port', 7787)}/api/tools/run{auth} "
                      f'with {{"type": "{kinds}", ...}} - saved credentials are filled in for you; if several cards have that type, pass '
-                     f'"connector_id": <the id named above>; the raw output comes back.{books}')
+                     f'"connector_id": <the id named above>; a read\'s raw output comes back, and a write waits on the task for his press.')
     block = '\n'.join(lines) or '_(no connections yet — add them in the Connections tab)_'
     head, rest = doc.split(CONN_START, 1)
     _, tail = rest.split(CONN_END, 1)
@@ -132,8 +129,8 @@ def agent_systems(store, tooled: bool = True) -> str:
             # the owner, 2026-10-25: never sent without their press - so the agent is told the call waits, not that it failed
             # ...and a change above a card's Authority is the same wait (server.tool_run): one road, so the agent is never told to
             # write a TASKUARY-PROPOSE line for what its own call already files
-            "A call that would send, post, pay or order, an MCP tool not marked read-only, and a change above a system's AUTHORITY (the "
-            "owner's ceiling on it) waits on the task as his card; at write, a change goes through.")
+            "A call that changes anything on a system - a write, a send, a post, a payment, an MCP tool not marked read-only - waits on "
+            "the task as his card; a read runs at once.")
 
 
 # WHAT GOES OUT ON HIS CONNECTED CARDS, AS FACTS (the prompt rebuild, 2026-11-23, took the list of them out with the rules round it, and an

@@ -37,10 +37,19 @@ def emails(n): return [{'to': f'owner{i}@cedar.example', 'subject': f'Interest i
                        for i in range(n)]
 
 
-def press(s, key, skip=(), told=None):
+def hears(told, woke=None):
+    """What its agent hears of a run, into `told`: woken with it (general.to_agent, also into `woke`), or handed it in its next turn
+    (events.note) - a run that all went and names no next step wakes nobody (the owner, 2026-11-25)."""
+    note = events.note
+    def wake(st, t, said, actor='owner', heard=None, **k):
+        told.append(said); woke is not None and woke.append(said); return (heard and heard('woke')) or 'woke'
+    return mock.patch.multiple(general, to_agent=wake), mock.patch.object(events, 'note', lambda st, t, text: told.append(text) or note(st, t, text))
+
+
+def press(s, key, skip=(), told=None, woke=None):
     told = [] if told is None else told
-    with mock.patch.object(general, 'to_agent', lambda st, t, said, actor='owner', heard=None: told.append(said) or (heard and heard('woke')) or 'woke'):
-        return bulkcard.run(s, key, skip, wait=True), told
+    a, b = hears(told, woke)
+    with a, b: return bulkcard.run(s, key, skip, wait=True), told
 
 
 class GitHub:
@@ -111,12 +120,14 @@ def test_cancel_stops_the_rest_and_what_was_not_run_still_waits_on_the_card():
     with mock.patch.object(server, 'store', s):
         out = call(tid, 'propose', action='run_tool', type='github_close', repo=REPO, why='duplicates', items=[{'number': n} for n in range(1, 41)])
     gh, told = GitHub(delay=0.05), []
-    with mock.patch.object(github.requests, 'patch', gh.patch), mock.patch.object(general, 'to_agent', lambda st, t, said, actor='owner', heard=None: told.append(said) or (heard and heard('woke')) or 'woke'):
+    w1, w2 = hears(told)
+    with mock.patch.object(github.requests, 'patch', gh.patch), w1, w2:
         bulkcard.run(s, out['batch'])
         end = time.time() + 20
         while bulkcard.state(s, out['batch'])['done'] < 5 and time.time() < end: time.sleep(0.01)
         bulkcard.cancel(s, out['batch'])
         while bulkcard.state(s, out['batch'])['state'] != 'stopped' and time.time() < end: time.sleep(0.02)
+        while not told and time.time() < end: time.sleep(0.02)
     st = bulkcard.state(s, out['batch'])
     assert st['state'] == 'stopped' and 5 <= st['done'] < 40
     waiting = [r for r in bulkcard.rows(s, out['batch']) if r['Status'] == 'pending']
@@ -221,7 +232,7 @@ def test_two_presses_at_once_are_one_run_and_its_agent_hears_it_once():
     sent, told, slow = [], [], bulkcard.running
     def send(*a, **k): time.sleep(0.02); sent.append(k.get('to')); return {'channel': 'email', 'to': k.get('to') or []}
     with mock.patch.object(outbound, 'send_out', send), mock.patch.object(outbound, 'send_block', lambda *a, **k: ''), \
-         mock.patch.object(general, 'to_agent', lambda st, t, said, actor='owner', **k: told.append(said) or 'woke'), \
+         hears(told)[0], hears(told)[1], \
          mock.patch.object(bulkcard, 'running', lambda *a: (slow(*a), time.sleep(0.05))[0]):      # ...both presses read it before either marks it
         presses = [threading.Thread(target=bulkcard.run, args=(s, out['batch'])) for _ in range(2)]
         for t in presses: t.start()
@@ -374,6 +385,21 @@ def test_its_agent_takes_back_a_bulk_card_by_the_ids_it_was_told():
     assert {s.get_review(x)['Status'] for x in rids} == {'closed_unsent'}
     assert cardqueue.state(s, tid)['units'][0]['rids'] == [note], 'the note to Gail is the next card'
 
+
+def test_a_calls_replaces_never_takes_back_a_card_one_of_its_items_stands_as():
+    """A real Codex run, 2026-11-25: two post cards raised, then the same two again as `items` with `replaces` the first. Shared by every item,
+    the second item withdrew the card the first had just raised again, and the call answered "nothing was filed" over a card it took off his
+    screen. A card raised again stands for its item, and `replaces` takes back only a card none of them stands as."""
+    s, tid = world()
+    x, li = 'Approvals at Northwind are simpler now.', 'When you submit an expense you should know what happens next.'
+    with mock.patch.object(server, 'store', s):
+        a, b = call(tid, 'propose', kind='post', network='x', text=x)['review'], call(tid, 'propose', kind='post', network='linkedin', text=li)['review']
+        out = call(tid, 'propose', kind='post', items=[{'network': 'x', 'text': x}, {'network': 'linkedin', 'text': li}], replaces=str(a))
+        assert out['ok'] and out['on_the_card'] == 2, out
+        assert [s.get_review(r)['Status'] for r in (a, b)] == ['pending', 'pending']
+        out = call(tid, 'propose', kind='post', items=[{'network': 'x', 'text': x + ' Live Monday.'}], replaces=str(a))
+        assert out['ok'] and s.get_review(a)['Status'] == 'closed_unsent', 'a card none of them stands as is taken back, once'
+
 def test_two_presses_at_once_are_one_run_and_one_true_telling():
     """Pressed on the phone and the desk in the same moment: both presses started a run, each row went once (its own road refuses a second),
     and the agent was told twice - each telling "5 done, 5 failed" over ten issues that had all closed."""
@@ -381,7 +407,8 @@ def test_two_presses_at_once_are_one_run_and_one_true_telling():
     with mock.patch.object(server, 'store', s):
         out = call(tid, 'propose', action='run_tool', type='github_close', repo=REPO, why='duplicates', items=[{'number': n} for n in range(1, 11)])
     gh, told, go = GitHub(delay=0.02), [], threading.Barrier(2)
-    with mock.patch.object(github.requests, 'patch', gh.patch), mock.patch.object(general, 'to_agent', lambda st, t, said, actor='owner', **k: told.append(said) or 'woke'):
+    w1, w2 = hears(told)
+    with mock.patch.object(github.requests, 'patch', gh.patch), w1, w2:
         def press_it():
             go.wait()
             try: bulkcard.run(s, out['batch'], wait=True)
@@ -477,3 +504,19 @@ def test_a_card_next_in_line_names_its_person_not_their_address():
     from taskuary import peoplesearch
     with mock.patch.object(peoplesearch, 'known', lambda store, kind: [{'to': 'erin@northwind.example', 'name': 'Erin Blake'}]):
         assert cardqueue.what(s, u) == 'the email to Erin Blake'
+
+
+def test_a_bulk_run_that_all_went_wakes_nobody_and_one_with_a_failure_wakes_its_agent_once():
+    """The owner, 2026-11-25: his approval "sends it without further triggering the agent unless it fails of course or there are next steps".
+    Ten issues closed: the agent is woken by nothing and hears the run in its next turn; a run where one was refused wakes it once, with why."""
+    s, tid = world()
+    with mock.patch.object(server, 'store', s):
+        out = call(tid, 'propose', action='run_tool', type='github_close', repo=REPO, why='stale', items=[{'number': n} for n in range(1, 6)])
+    told, woke = [], []
+    with mock.patch.object(github.requests, 'patch', GitHub().patch): press(s, out['batch'], told=told, woke=woke)
+    assert woke == [] and len(told) == 1 and '5 done, 0 failed' in told[0], (told, woke)
+    with mock.patch.object(server, 'store', s):
+        out = call(tid, 'propose', action='run_tool', type='github_close', repo=REPO, why='stale', items=[{'number': n} for n in range(6, 9)])
+    told, woke = [], []
+    with mock.patch.object(github.requests, 'patch', GitHub(bad={7}).patch): press(s, out['batch'], told=told, woke=woke)
+    assert len(woke) == 1 and '1 failed' in woke[0] and 'issue was deleted' in woke[0], woke

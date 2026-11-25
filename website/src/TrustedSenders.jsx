@@ -1,5 +1,6 @@
 // WHO YOU TRUSTED (Settings -> Agent permissions; the readiness review, 2026-11-14): a Trust press was kept for good and nothing listed or undid
-// it. Each sender and organisation the owner trusted (senders.trusted), with Remove: their next message waits behind Trust again.
+// it. Each sender and organisation the owner trusted (senders.trusted), with Remove: their next message waits behind Trust again - and each
+// routine step he always approved (flow.standing_list), whose next write waits for his press once removed.
 import React, { useEffect, useState } from "react";
 import { Box, Button, Typography } from "@mui/material";
 import api from "./api";
@@ -23,9 +24,10 @@ export default function TrustedSenders() {
   if (!rows?.length) return null;
   return (
     <Box data-tq-trusted="" sx={{ py: 1.5 }}>
-      <Typography sx={{ color: INK, fontWeight: 600, fontSize: 13.5 }}>People and organisations you trusted</Typography>
+      <Typography sx={{ color: INK, fontWeight: 600, fontSize: 13.5 }}>Who and what you trusted</Typography>
       <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 0.5 }}>
-        Their messages start an agent by themselves. Remove one and their next message waits for your Trust again.</Typography>
+        A person or organisation's messages start an agent by themselves; a routine step you always approved runs without asking.
+        Remove one and it waits for your press again.</Typography>
       {rows.map((r) => (
         <Box key={id(r)} data-tq-trusted-row="" sx={{ display: "flex", alignItems: "center", gap: 1.5, py: 1, borderBottom: `1px solid ${BORDER}` }}>
           <Box sx={{ flex: 1, minWidth: 0 }}>

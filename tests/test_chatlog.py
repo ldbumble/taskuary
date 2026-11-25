@@ -265,6 +265,29 @@ def test_a_card_pressed_after_later_turns_turns_sent_where_it_stood():
     assert s._rows("SELECT Id, Parent FROM chatlog WHERE TaskId=? AND Key=?", (tid, f'r:{rid}'))[0] == where, 'nothing moved'
 
 
+def test_a_card_pressed_on_its_tab_behind_the_front_stands_beside_its_run_never_in_the_turn_open_at_the_press():
+    """THE CARD LINE (the owner, 2026-11-25): three posts raised in one turn are one card with a tab each. He opens the third's tab two turns
+    later and posts it while the first still waits: its row goes beside the run's - the page draws the run there - never into the turn open
+    at the press, which carried the one card down the chat (recorded: it jumped 250 px and lost the tab he was on). Invented posts."""
+    from taskuary import cardqueue, conversation, general
+    s, tid = world()
+    conversation.hear(s, tid, turn=True)
+    ids = [s.add_review({'TaskId': tid, 'Kind': 'action', 'Status': 'pending', 'Origin': 'agent', 'Reason': 'the post you asked for',
+                         'DraftText': json.dumps({'action': 'run_tool', 'type': t, 'text': 'We shipped the ledger export.'})}) for t in ('x_post', 'linkedin_post', 'reddit_post')]
+    s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'Three posts are set up.')
+    chatlog.read(s, tid)
+    home = s._rows("SELECT Parent FROM chatlog WHERE TaskId=? AND Key=?", (tid, f'r:{ids[0]}'))[0]['Parent']
+    assert not s._rows("SELECT 1 AS x FROM chatlog WHERE TaskId=? AND Key=?", (tid, f'r:{ids[2]}')), 'held behind the front: no row of its own'
+    for n in (2, 3):
+        conversation.hear(s, tid, turn=True); s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, f'Noted {n}.')
+    chatlog.read(s, tid)
+    s.decide_review(ids[2], 'approved', None, 'owner'); cardqueue._SEEN.clear()
+    chatlog.read(s, tid)
+    assert s._rows("SELECT Parent FROM chatlog WHERE TaskId=? AND Key=?", (tid, f'r:{ids[2]}'))[0]['Parent'] == home
+    [run] = cardqueue.tabs(s, cardqueue.state(s, tid))
+    assert [(t['name'], t['done'], t['front']) for t in run] == [('X', False, True), ('LinkedIn', False, False), ('Reddit', True, False)]
+
+
 def test_every_tool_call_is_one_row_in_plain_words_and_summary_folds_them_to_one_line():
     """"BETTER SHOWING WHAT TOOLS ARE RUN, BUT NOT A BILLION DETAILS" (the owner, 2026-11-19): each call one row of what it did and on what,
     its outcome in a few words, its output capped behind it; summary - one line that opens. ONE ROW PER CALL, ALWAYS (2026-11-23): the same

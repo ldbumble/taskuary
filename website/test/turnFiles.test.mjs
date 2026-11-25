@@ -84,4 +84,11 @@ test("picking a row shows that file in the one preview", async () => {
   items()[3].onPick();
   assert.deepEqual(shown(), ["Site 4.xlsx"], "one preview, now the one he picked");
   assert.deepEqual(items().map((x) => !!x.picked), NINE.map((_, i) => i === 3));
+  // ...and a row with no preview of its own shows Preview's line that there is none - walk 19: pressing the pptx and xlsx rows opened nothing
+  draw = () => { at = 0; tree = expand(TurnFiles({ files: MADE })); }; slots = []; draw();
+  items()[0].onPick(); assert.deepEqual(shown(), ["Budget review.pptx"]);
+  items()[2].onPick(); assert.deepEqual(shown(), ["Monthly spend.xlsx"]);
 });
+const MADE = [{ path: "Budget review.pptx", name: "Budget review.pptx", kind: "output", preview: null, url: "/api/task-outputs/5/Budget%20review.pptx" },
+  { path: "Budget summary.pdf", name: "Budget summary.pdf", kind: "output", preview: "pdf", url: "/api/task-outputs/5/Budget%20summary.pdf" },
+  { path: "Monthly spend.xlsx", name: "Monthly spend.xlsx", kind: "output", preview: null, url: "/api/task-outputs/5/Monthly%20spend.xlsx" }];

@@ -15,12 +15,14 @@ import { INK } from "./theme.jsx";
 const isPic = (f) => /^image\//.test(f?.content_type || "") && !/svg/.test(f?.content_type || "");
 const Download = ({ f, save, ...rest }) => <Button size="small" href={attUrl(f, true)} data-tq-download="" onClick={(e) => { e.preventDefault(); save(f); }} {...rest}>Download</Button>;
 
-// ...what the file is, drawn: the picture itself or its preview - the one body a single file and a group's picked row both show
-const Body = ({ f, onView }) => isPic(f)
+// ...what the file is, drawn: the picture itself or its preview - the one body a single file and a group's picked row both show. A group's
+// row with no preview of its own (a deck, a workbook on an install with no openpyxl) shows what its "open" did before files were grouped -
+// Preview's own line that there is none (walk 19: pressing the pptx and xlsx rows opened nothing)
+const Body = ({ f, onView, picked }) => isPic(f)
   ? <div className="tq-published-picture" {...(mediaFit(f) ? { "data-tq-natural": "" } : {})}>
       <img src={attUrl(f)} alt={f.name} width={f.dims?.[0]} height={f.dims?.[1]} onClick={() => onView(f)}
         style={{ cursor: "zoom-in", objectFit: "contain", ...(mediaFit(f)?.media || { maxHeight: 320 }) }} /></div>
-  : f.preview ? <Preview key={f.path} page={f} /> : null;
+  : f.preview || picked ? <Preview key={f.path} page={f} /> : null;
 
 export default function TurnFiles({ files }) {
   const [viewing, setViewing] = useState(null), [pick, setPick] = useState(null), [err, save, saved] = useSave();
@@ -48,7 +50,7 @@ export default function TurnFiles({ files }) {
               </Box>
               <Items items={items} />
             </Box>
-            <Body f={f} onView={setViewing} />
+            <Body f={f} onView={setViewing} picked />
           </Artifact>}
       {err && <div className="tq-published-note" data-tq-file-error="">{err}</div>}
       {saved && <div className="tq-published-note" data-tq-file-saved="">{saved}</div>}

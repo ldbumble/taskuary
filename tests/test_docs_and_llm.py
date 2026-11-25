@@ -294,44 +294,34 @@ class DigestReportTests(unittest.TestCase):
         with mock.patch.object(reports, 'executor_for', return_value=lambda c: ('1 row', rows[0])), mock.patch.object(reports, 'gate'),              mock.patch.object(reports, 'resolve_cfg', side_effect=lambda st, c: c), mock.patch.object(reports, 'report_llm', side_effect=lambda st, c, l: l):
             run = lambda: reports.render_report(s, cfg, asked, notes=[], mark='report_read_mark:7')[1]
             assert run().startswith('Two invoices') and run().startswith(reports.UNCHANGED) and asked.call_count == 1
-            rows[0] += chr(10) + chr(10).join(f'{n},2026-11-03' for n in range(8, 8 + reports.SMALL_ROWS + 1))       # more than a few rows
+            rows[0] += chr(10) + '8,2026-11-03'                                                                      # a new row
             assert run().startswith('Two invoices') and asked.call_count == 2
             assert reports.render_report(s, cfg, asked, notes=[])[1].startswith('Two invoices') and asked.call_count == 3     # Run now
 
-    def test_a_small_change_keeps_the_last_report_and_lists_what_changed_and_a_big_one_a_stack_or_a_new_day_writes_it_again(self):
-        """The owner, 2026-11-11: "if it's only a small thing can we use the same report and say only these things were updated". The
-        list is built by code from the changed rows; the report says which it was - updated since when, or rebuilt and why."""
+    def test_a_rerun_whose_rows_changed_is_one_fresh_answer_never_the_old_one_under_a_row_diff(self):
+        """His live app, 2026-11-25: an error check re-ran with one run in and one out, and landed as "Since 01:32, 2 entries
+        changed; the summary below is the one from 01:32", the changed rows as prose, the old verdict, and a chart of the one
+        row left - "separate items, very unclear". Changed rows are answered again; what the answer does not ask for is not drawn."""
         import json
-        from datetime import datetime, timedelta
         from taskuary.store import MemoryStore
-        from taskuary import reports
-        s, asked, rows = MemoryStore(), mock.Mock(side_effect=lambda *a, **k: f'Summary {asked.call_count}.'), ['invoice,due', '7,2026-11-01']
-        cfg, mark, NL = {'type': 'rest', 'ai_prompt': 'Say what is overdue.'}, 'report_read_mark:7', chr(10)
-        with mock.patch.object(reports, 'executor_for', return_value=lambda c: (f'{len(rows) - 1} rows', NL.join(rows))), mock.patch.object(reports, 'gate'), \
+        from taskuary import artifacts, reports
+        js = lambda i, ok, name: json.dumps({'runId': i, 'process': name, 'runtime': 5.36, 'success': ok})
+        s, rows = MemoryStore(), [js(41, 0, 'Ledger Export')]
+        asked = mock.Mock(side_effect=['Ledger Export failed in run 41.', 'All clear: every run since 01:00 succeeded.'])
+        cfg, mark = {'type': 'rest', 'ai_prompt': 'Check the process runs for errors.'}, 'report_read_mark:7'
+        with mock.patch.object(reports, 'executor_for', return_value=lambda c: (f'{len(rows)} rows', chr(10).join(rows))), mock.patch.object(reports, 'gate'), \
              mock.patch.object(reports, 'resolve_cfg', side_effect=lambda st, c: c), mock.patch.object(reports, 'report_llm', side_effect=lambda st, c, l: l):
-            run = lambda: reports.render_report(s, cfg, asked, notes=[], mark=mark)[1].split(reports.RAW_MARK)[0]
-            assert run() == 'Summary 1.' and asked.call_count == 1                         # the first run writes it, and says nothing more
-            at = reports.kept_report(s, mark)['at'][11:16]
-            rows.append('8,2026-11-03'); rows.remove('7,2026-11-01')                       # one row in, one out: the report stands
+            run = lambda: reports.render_report(s, cfg, asked, notes=[], mark=mark)[1]
+            assert run().startswith('Ledger Export failed') and asked.call_count == 1
+            rows[:] = [js(42, 1, 'Vendor Sync')]                                           # one run in, one out
             got = run()
-            assert asked.call_count == 1 and got.startswith(f'Since {at}, 2 entries changed;') and got.endswith('Summary 1.')
-            assert 'New: 8,2026-11-03' in got and 'No longer listed: 7,2026-11-01' in got
-            assert run().startswith(reports.UNCHANGED) and asked.call_count == 1            # the same rows again: still no call
-            rows += [f'{n},2026-11-05' for n in range(20, 20 + reports.SMALL_ROWS)]         # a big change: written again, saying so
-            got = run()
-            assert asked.call_count == 2 and got.startswith('Summary 2.') and f'Rebuilt: {reports.SMALL_ROWS + 2} rows changed since {at}.' in got
-            for n in range(reports.MAX_UPDATES):                                             # small updates stack on one summary...
-                rows.append(f'{40 + n},2026-11-06'); assert run().startswith('Since ') and asked.call_count == 2
-            rows.append('50,2026-11-07')                                                     # ...and past the stack it is written again
-            got = run()
-            assert asked.call_count == 3 and f'Rebuilt: {reports.MAX_UPDATES} small updates had stacked up' in got
-            k = reports.kept_report(s, mark)                                                 # a day later, however small the change
-            s.set_setting(f'{mark}:kept', json.dumps({**k, 'at': (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d %H:%M:%S')}), 't')
-            rows.append('51,2026-11-08')
-            got = run()
-            assert asked.call_count == 4 and 'Rebuilt: the last full report was from' in got
-            cfg['ai_prompt'] = 'Say what is overdue, shortest first.'; rows.append('52,2026-11-08')
-            assert 'Rebuilt: its instruction changed.' in run() and asked.call_count == 5
+            said = got.split(reports.RAW_MARK)[0]
+            assert asked.call_count == 2 and said == 'All clear: every run since 01:00 succeeded.'
+            assert 'Since ' not in said and 'New:' not in said and 'No longer listed' not in said and 'Ledger Export' not in said
+            mid = s.add_message({'Channel': 'report', 'Subject': 'Process check', 'BodyText': got, 'Status': 'feed'})
+            artifacts.attach_report_output(s, mid, 'Process check', got)
+            assert [a['Name'][-4:] for a in s.list_attachments(mid)] == ['xlsx']           # the rows, and no chart nobody asked for
+            assert run().startswith(reports.UNCHANGED) and asked.call_count == 2           # the same rows again: still no call
 
 
 class LocalAndOpenRouterTests(unittest.TestCase):
@@ -651,11 +641,3 @@ class TransientBrainTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
-
-
-def test_a_reports_changed_rows_read_as_words_never_raw_json():
-    """His live app, 2026-11-23: a report's changed rows stood as raw JSON objects under "Updated since"."""
-    from taskuary import reports
-    said = reports._row_words('{"runId": 41, "runTime": "2026-11-23 11:39", "processName": "vendor_sync", "error": "Vendor already exists: Northwind"}')
-    assert said == 'run id 41 · run time 2026-11-23 11:39 · process name vendor_sync · error Vendor already exists: Northwind'
-    assert '{' not in said and '"' not in said

@@ -3460,6 +3460,10 @@ class GeneralSession:
                 from . import proposals as _props
                 try: _props.finished_without(self.store, self.task_id)
                 except Exception as e: logger.debug(f'task {self.task_id}: the steps it finished without stayed lit - {e}')
+                # ...and an answer it waited on, read in this turn, is the end of that wait: nothing is left (waiton.settle - any other turn leaves it)
+                from . import waiton
+                try: waiton.settle(self.store, self.task_id, over=True)
+                except Exception as e: logger.debug(f'task {self.task_id}: its wait was not ended - {e}')
                 # ...and the playbook question is asked NOW, with the cards this turn raised, before its end is drawn: in the line behind them
                 # from the first frame, so the card in front never offers a close over it (his live app, 2026-11-23 - asked by the close, it
                 # closed the task and opened it again for the playbook). Once a task

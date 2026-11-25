@@ -110,15 +110,20 @@ def _wrote_since(store, tid: int, at, theirs) -> dict | None:
     return next((m for m in rows if theirs(m)), None)
 
 
-def settle(store, tid: int) -> None:
-    """THE WAIT ENDS WITH THE AGENT'S TURN THAT READ THEIR LINE (walk 17, K2): their reply wakes the agent and the task is its again, but only that
-    turn's end closes the wait - a turn that still waits says so again (declare: the wait stands from then). A turn begun before their line
-    never heard it, and settles nothing. Called at each turn's end (workerstate.record)."""
+def settle(store, tid: int, over: bool = False) -> None:
+    """THE TURN THAT READ THEIR LINE NEVER ENDS THE WAIT BY ITSELF (walk 19, M2: Erin's holding reply was read, the turn ended, and the wait
+    went with it - her real answer, on a new thread, was filed as FYI). Their line is read: the wait stands from it, and their next line wakes the
+    task again. Only `over` ends it - the turn's own end said nothing is left (general: its summary's nothing_left) - or the task's close, or a
+    new wait. A turn begun before their line never heard it, and settles nothing. Called at each turn's end (workerstate.record)."""
     t = store.get_task(int(tid)) or {}
     began = str((store.last_worker_event(int(tid), kinds=('working',)) or {}).get('CreatedAt') or '')
     for w in on_them(store, t):
         if not w['answered'] or str(w['answered'].get('CreatedAt') or '') > began: continue
-        store._exec('UPDATE task SET ' + w['field'] + '=NULL WHERE TaskId=?', (int(tid),))
+        if over: store._exec('UPDATE task SET ' + w['field'] + '=NULL WHERE TaskId=?', (int(tid),))
+        else: store._exec('UPDATE task SET ' + SINCE[w['field']] + '=? WHERE TaskId=?', (str(w['answered']['CreatedAt']), int(tid)))
+
+
+SINCE = {'WaitingOn': 'WaitingSince', 'AskedWatch': 'AskedWatchAt'}      # ...from when each wait counts their lines as new
 
 
 def is_them(key: str, msg: dict) -> bool:
@@ -152,7 +157,7 @@ def declare(store, tid: int, who: str, agent: str = 'agent') -> dict:
 def arrived(store, tid: int, msg: dict, mid: int = None, actor: str = 'router') -> bool:
     """A line landed on the task. From the person it waits on: the task is open again and its agent's - the owner's news,
     with Continue leading where an agent left a session (processing_unread.card_for: `woke`) - and the Advisor reads it
-    afresh. The wait itself ends with the agent's turn that read it (settle): a holding reply is no answer (walk 17, K2).
+    afresh. The wait itself stands until that agent's turn says nothing is left (settle): a holding reply is no answer (walks 17, 19).
     From anyone else: nothing about the wait changes. True when it woke."""
     t = store.get_task(tid) or {}
     key = waiting(t)

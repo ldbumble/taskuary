@@ -550,8 +550,9 @@ class TheDeadCatchAllRowTests(unittest.TestCase):
 
 
 class UnheardVoiceNoteTests(unittest.TestCase):
-    """F22: a voice note with no voice connector named the place twice, got no thumb, and its answer had nothing to tap."""
-    def test_one_place_named_a_thumb_and_the_choices_kept(self):
+    """F22: a voice note with no voice connector named the place twice and got no thumb. And its line never sends the last card's choices
+    again (the owner, 2026-11-25: "if it errors or nothing records, nothing happens") - the list they named stays answerable as it was."""
+    def test_one_place_named_a_thumb_and_no_choices_sent_again(self):
         from taskuary import remote_assistant, voice, words
         s = MemoryStore()
         c = s.get_connector_by_type('whatsapp', with_secret=True)
@@ -564,6 +565,8 @@ class UnheardVoiceNoteTests(unittest.TestCase):
             messengers._unheard(s, 'whatsapp', chat, c, RuntimeError(voice.NO_CONNECTOR), 'WAMID.1')
         thumb.assert_called_once()
         self.assertEqual(thumb.call_args.args[3], 'WAMID.1')
-        body, poll = got[-1]
+        (body, poll), = got
         self.assertEqual(body.count(words.name('voice')), 1, body)
-        self.assertEqual(poll, ['Mark done', 'Next'])
+        self.assertFalse(poll, 'no poll sent again under the line')
+        kept = s.get_setting(f'{remote_assistant.OFFERED_KEY}:whatsapp:{chat}')
+        self.assertEqual(json.loads(kept), ['Mark done', 'Next'], 'still answerable as it was')

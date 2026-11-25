@@ -561,8 +561,9 @@ def _read_media(path: str):
 
 def _unheard(store, channel: str, chat: str, c, e, message_id=None):
     """Say in the chat that a voice note could not be heard - instead of the note simply never arriving. The note gets its thumb like
-    any message the doorway took, the place that fixes it is named once (the reason already names it when no connector is set up),
-    and the choices under the last card come with the line - the note answered nothing, so they still stand (F22)."""
+    any message the doorway took, and the place that fixes it is named once (the reason already names it when no connector is set up).
+    NOTHING ELSE MOVES (the owner, 2026-11-25: "you have to hit send after a voice note, so if it errors or nothing records, nothing
+    happens"): the note answered nothing, so the card it came under still stands where it was - its choices are never sent again."""
     from . import remote_assistant, words
     logger.warning(f'{channel}: a voice note to Taskuary was not transcribed - {e}')
     if message_id:
@@ -572,10 +573,8 @@ def _unheard(store, channel: str, chat: str, c, e, message_id=None):
     # ...the place named ONCE, however the reason spells it: "add one under Connections > Voice" got "under Connections → AI — voice" again
     told = place in why or place.split(' → ')[0] in why
     said = f"I could not hear that voice note - {why}." + (' Type it instead.' if told else f" Type it, or add a voice connector under {place}.")
-    try: live = json.loads(store.get_setting(f'{remote_assistant.OFFERED_KEY}:{channel}:{chat}') or '[]') or []
-    except ValueError: live = []
     remote_assistant.owner_spoke(store, channel, chat)          # the owner sent it: this is their conversation, and it is answered
-    try: remote_assistant.send(store, channel, chat, said, c.get('ConnectorId'), **({'choices': live} if live else {}))
+    try: remote_assistant.send(store, channel, chat, said, c.get('ConnectorId'))
     except Exception as e2: logger.warning(f'{channel}: could not say so either - {e2}')
 
 

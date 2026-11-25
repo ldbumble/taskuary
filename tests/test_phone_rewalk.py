@@ -284,9 +284,16 @@ class UnheardVoiceTests(PhoneCase):
         with mock.patch.object(voice, 'transcribe', side_effect=RuntimeError(why)) if why else mock.patch.object(voice, 'transcribe', wraps=voice.transcribe):
             got = self.ph.voice()
         (said, btns), = got
-        self.assertEqual(btns, self.card[-1][1], 'the card\'s choices still stand')
+        # ...and NOTHING ELSE MOVES (the owner, 2026-11-25: "you have to hit send after a voice note, so if it errors or nothing records,
+        # nothing happens"): the card's choices are never sent again under the line - a poll of Send/Edit/Stop with no task named on it
+        self.assertEqual(btns, [], 'the card it came under is not sent again')
         self.assertEqual(getattr(self.ph, 'reacted', 0), 1, 'the note gets its thumb')
         return said
+
+    def test_a_note_with_no_words_in_it_sends_nothing(self):
+        from taskuary import voice
+        with mock.patch.object(voice, 'transcribe', return_value={'text': '   '}):
+            self.assertEqual(self.ph.voice(), [], 'a silent note: nothing said, nothing offered again')
 
     def test_no_voice_connector_names_the_place_once(self):
         said = self._heard()

@@ -72,8 +72,13 @@ class FileRoutesTests(unittest.TestCase):
         got = page.get('/api/tasks')
         cookie = got.headers.get('set-cookie') or ''
         self.assertIn(f'{server.FILE_COOKIE}=', cookie); self.assertIn('HttpOnly', cookie); self.assertIn('SameSite=strict', cookie)
+        # ...a value keyed by the owner token that opens file reads alone - never the token itself (red team #3), which a cookie jar would hold
+        self.assertNotIn(tok, cookie)
         bare.cookies.set(server.FILE_COOKIE, tok)
+        self.assertEqual(bare.get(url, params={'download': 'true'}).status_code, 401)
+        bare.cookies.set(server.FILE_COOKIE, got.cookies[server.FILE_COOKIE])
         self.assertEqual(bare.get(url, params={'download': 'true'}).status_code, 200)
+        self.assertEqual(TestClient(server.app, headers={'X-Taskuary-Token': got.cookies[server.FILE_COOKIE]}).get('/api/tasks').status_code, 401)
         self.assertEqual(TestClient(server.app, headers={'X-Taskuary-Token': ''}).get(url).status_code, 401)   # ...and nothing else opens it
 
     def test_open_is_inline_for_what_the_page_draws_and_attachment_for_the_rest(self):

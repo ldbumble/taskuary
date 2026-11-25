@@ -512,7 +512,7 @@ async def token_gate(request: Request, call_next):
         # ...and an OAuth callback is a redirect from the provider's site: no header can ride on it.
         # It proves itself with the one-time state it was issued (quickbooks_authorize), not the token.
         file_read = request.url.path.startswith(FILE_READS)
-        if not (file_read and guard.token_matches(request.cookies.get(FILE_COOKIE), tok)) \
+        if not (file_read and guard.token_matches(request.cookies.get(FILE_COOKIE), guard.file_key(cfg['server']))) \
                 and request.url.path not in OAUTH_RETURNS and not _outside_door(request.url.path):
             # In JSON, like every other refusal: an HTML body left `detail` undefined, so a tab that
             # was open across a token change answered every click with whichever screen's generic
@@ -548,8 +548,8 @@ async def token_gate(request: Request, call_next):
     resp = await call_next(request)
     # ...the owner's page, proven by its header, is handed the cookie its pictures and downloads are read by: same-site only, out of script's reach
     if tok and scope == guard.OWNER and guard.token_matches(presented, tok) and not request.url.path.startswith(FILE_READS) \
-            and not guard.token_matches(request.cookies.get(FILE_COOKIE), tok):
-        resp.set_cookie(FILE_COOKIE, tok, httponly=True, samesite='strict', path='/api/')
+            and not guard.token_matches(request.cookies.get(FILE_COOKIE), fk := guard.file_key(cfg['server'])):
+        resp.set_cookie(FILE_COOKIE, fk, httponly=True, samesite='strict', path='/api/')
     return resp
 
 

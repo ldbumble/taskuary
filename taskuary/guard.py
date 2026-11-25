@@ -267,6 +267,12 @@ def _key(server: dict, label: str) -> bytes:
     k = str(server.get('token') or server.get('agent_token') or '')
     return hmac.new(k.encode(), f'taskuary {label}'.encode(), hashlib.sha256).digest() if server.get('agent_token') else b''
 
+def file_key(server: dict) -> str:
+    """The cookie a page's pictures and downloads are read by (server.FILE_COOKIE): keyed by the owner token, never the token itself (red team
+    #3): a file read's cookie opens file reads, and nothing else. '' with no owner token - every caller is the owner then (scope_of)."""
+    t = str(server.get('token') or '')
+    return hmac.new(t.encode(), b'taskuary file reads', hashlib.sha256).hexdigest() if t else ''
+
 _PROOF = re.compile(r'p1\.(\d{1,12})\.[0-9a-f]{32}')
 
 def task_proof(server: dict, tid) -> str:

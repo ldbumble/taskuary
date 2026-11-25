@@ -4779,14 +4779,15 @@ def no_brain() -> str:
 
 
 def handoff_task(store, text: str, kind: str = 'coding', actor: str = 'owner', title: str = None, dock_tid: int = None, repo: str = None,
-                 said: str = None, door: str = '', files=None) -> dict:
+                 said: str = None, door: str = '', files=None, pick: str = None, model: str = None) -> dict:
     """THE ONE START FROM THE OWNER'S WORDS (F1, the walks 2026-11-18): New's box (server /api/start), the Assistant's hand-off (the confirmed
     `task.create_from_text`), a phone's - each hands his words and files here, and the task is made and its agent started only then (PW-124).
     What the work is - a code fix, a routine, a report, research - is the agent's to do with its tools; nothing here picks a form. A start
     that cannot happen says why before anything is made. HIS ASK NEVER PASSES TRIAGE (the owner, 2026-11-22; every door since 2026-11-23):
     nothing reads it for a join, a summary, to-dos or a difficulty first - it is a task of its own, and its agent reads his words.
     `door`: '' for the Assistant's chat, whose talk rides to the agent as Taskuary's brief - else where he typed it ("New"), with no chat.
-    `said`: his words as typed, where `text` is a rewording; `files`: what he attached to them, a field beside them (store.files_json)."""
+    `said`: his words as typed, where `text` is a rewording; `files`: what he attached to them, a field beside them (store.files_json).
+    `pick`/`model`: the AI he chose for it on New's chooser, None for the one routing picks."""
     job = str(text or '').strip()
     if not job: raise ValueError('say what the agent should do')
     # ...DEVELOPER MODE OFF, A CODING JOB IS A GENERAL AGENT'S, as at the dispatch door (server._dispatch_one): refused here instead, New said
@@ -4809,7 +4810,7 @@ def handoff_task(store, text: str, kind: str = 'coding', actor: str = 'owner', t
         # read before the first turn it said "agent done" with Mark done lit, over an agent that had not begun): a start in flight, as
         # every other start is (OPENING), until the first turn ends
         general.OPENING.add(made['taskId'])
-        try: session = general.start_session(store, made['taskId'], actor=actor)
+        try: session = general.start_session(store, made['taskId'], actor=actor, pick=pick, model=model)
         except Exception: general.OPENING.discard(made['taskId']); raise
         def first_turn():
             try:

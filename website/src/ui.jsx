@@ -768,12 +768,12 @@ const agentsOf = (data) => ({
   // ...and WHICH BRAIN each row runs on - every coding task's is the one coding agent (the owner, 2026-09-16).
   brains: data.brains || {}, brainList: data.brain_list || [], brainModels: data.brain_models || {},
   // the brains a NON-coding hand-off may choose: one per installed CLI, then the API connectors
-  generalBrains: data.general_brains || [],
+  generalBrains: data.general_brains || [], generalRuns: data.general_runs || null,      // ...and what Auto starts one on (New's chooser)
   // ...and every AI a CODING task can run on - each CLI and each active AI card - with what a start naming none runs (resolve_brain)
   codingOptions: data.coding_options || [], codingPick: data.coding_pick || "",
 });
 // agentsRead: [] read is "no AI connected"; [] not yet read is nothing yet. codingReady: a coding agent can start (agents.coding_ready)
-const AGENTS_UNREAD = { agents: [], models: {}, kinds: {}, brains: {}, brainList: [], brainModels: {}, generalBrains: [], codingOptions: [], codingPick: "", agentsRead: false, codingReady: false, devMode: false };
+const AGENTS_UNREAD = { agents: [], models: {}, kinds: {}, brains: {}, brainList: [], brainModels: {}, generalBrains: [], generalRuns: null, codingOptions: [], codingPick: "", agentsRead: false, codingReady: false, devMode: false };
 export const useAgents = () => {
   const [v, setV] = useState(() => agentsLast || AGENTS_UNREAD);
   useEffect(() => {

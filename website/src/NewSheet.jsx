@@ -44,6 +44,7 @@ import { aiFor, capabilities, useCapabilities } from "./capabilities.js";
 import { PromptBox } from "./AgentSummary.jsx";
 import { FOCUS_RING, pressable } from "./pressable.js";
 import { madeRow } from "./funnelPile.js";
+import SwitchAi from "./SwitchAi.jsx";
 
 // what the card IS, as its title: New's own box asks, and a card the Assistant wrote from it says what it made of the words
 const TITLE = { chat: "What do you need?", agent: "An agent's job", workflow: "A routine", report: "A report", dashboard: "A dashboard",
@@ -207,10 +208,15 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
   const [mode, setMode] = useState("draft");
   const pics = usePromptImages({ files: true });          // ...a pasted, dropped or picked file of any kind, as every box takes (2026-11-16)
   // agent
-  // NOTHING TO PICK (the owner, TQ-1397: "you ask the agent what you need and it should do it ... never, ever be stuck on a repo thing"): no
-  // agent, AI, model or repository picker - Settings names the AI, and a live session opens in its task's own folder and picks its repository
-  // itself (repochoice.block). A list that never loaded held a tester's Start for five minutes
-  const { agentsRead, codingReady, devMode } = useAgents();
+  // NOTHING THAT MUST BE PICKED (the owner, TQ-1397: "you ask the agent what you need and it should do it ... never, ever be stuck on a repo
+  // thing"): no agent or repository picker - a live session opens in its task's own folder and picks its repository itself (repochoice.block).
+  // ...BUT THE AI IS HIS TO CHOOSE (the owner, 2026-11-24: "in New I asked for a certain model astra, the agent did not start with it? ... we
+  // already have the component ... on top of each task"): the task header's own chooser (SwitchAi), on Auto - what routing picks - until he
+  // picks another, and its agent starts on exactly that AI and model. A list not read yet never holds the Send: Auto is always a start
+  const { agentsRead, codingReady, devMode, generalBrains, generalRuns } = useAgents();
+  const [ai, setAi] = useState({ pick: "", model: "" }), aiRef = useRef(ai);
+  aiRef.current = ai;
+  const aiAsk = { generalBrains, current: ai.pick, model: ai.model, auto: generalRuns || {} };
   // "terminal" = a CLI on a keyboard, "general" = a general agent with no repository. Held here rather
   // than inferred from the words: a question landing in a terminal by ACCIDENT is exactly what
   // newTask.planTask exists to stop, and it will not guess for us.
@@ -317,7 +323,7 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
           // `needs_repo` with started: false, and this announced "is on it in a live session" over
           // the top of it (the owner, 2026-09-22: "hit the new button with coding agent but it did
           // not start"). One reading of a dispatch answer, the same one every other surface uses.
-          ({ data: out } = await api.post(`/api/tasks/${data.taskId}/dispatch`, general ? { kind: "general" } : {}));
+          ({ data: out } = await api.post(`/api/tasks/${data.taskId}/dispatch`, general ? { kind: "general", pick: aiRef.current.pick || null, model: aiRef.current.model || null } : {}));
         } catch (e) {
           // ...and the line says the task is there: "nothing started" over a task already filed sent the owner to press again
           throw { response: { data: { detail: `${data.ref} is filed but did not start - ${String(e?.response?.data?.detail || "the start was refused").replace(/\.$/, "")}. Press ${verb} to try it again.` } } };
@@ -330,7 +336,7 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
         // concierge.handoff_task), its task opens with its agent at work. They went through the Assistant's model, which picked a form - "send
         // me this every Monday" with a CSV landed on an empty SQL report, his words and file gone. What the work is is the agent's to do
         setSentLine(about); setText("");          // ...his words move from the box to his line; a start that fails puts them back
-        const { data } = await api.post("/api/start", { text: about, images: pics.paths || [] })
+        const { data } = await api.post("/api/start", { text: about, images: pics.paths || [], ...aiRef.current })
           .catch((e) => { setText(about); throw e; }).finally(() => setSentLine(""));
         setText(""); pics.clear(); setOk(`${data.ref} — ${data.joined ? "already that work: its agent was told." : "an agent is on it."}`);
         onDone?.(); openIt(data.taskId);
@@ -462,7 +468,8 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
               its chat. With no AI connected it says so, with the way to connect one */}
           <PromptBox text={words} setText={setText} pics={pics} busy={busy} onSend={submit} label={aboutLabel} title={verb} autoFocus
             placeholder={kind === "chat" ? "build me a website · a report on overdue invoices every Monday · draft a reply to Erin" : "why did Site 3's census move four points in July?"}
-            sendOff={noAi} />
+            sendOff={noAi} extra={!noAi && !!generalBrains.length && <SwitchAi ask={aiAsk} title="The AI this job starts on - pick another AI or model"
+              onPick={({ pick, model }) => setAi({ pick, model })} />} />
           {!!sentLine && <Box data-tq-new-sent="" sx={{ mt: 1.25 }}>
             {/* ...as the chat draws his line - its own bubble, in the chat's one column (walk 8, 2026-11-20: outside the chat the message grid's 66 px
                 gutter took it, and his ask stood one word wide down the page) */}

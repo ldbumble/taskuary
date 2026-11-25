@@ -446,8 +446,8 @@ def test_a_yes_its_agent_was_handed_is_said_once_not_again_under_what_the_owner_
     s = MemoryStore()
     tid = s.create_task({'Title': 'Post the Payworth notice', 'Kind': 'general', 'Status': 'open'}, 'owner')
     s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'Set up the post - press Approve, then I share its link with Erin.')
-    s.add_comment(tid, 'assistant', general.SUMMARY_TYPE, json.dumps({'did': 'Set up the post.', 'after_press': 'send'}))
-    told, kept = [], s.add_review({'TaskId': tid, 'Kind': 'action', 'Status': 'pending', 'DraftText': '{}', 'Reason': 'post it'})
+    told, kept = [], s.add_review({'TaskId': tid, 'Kind': 'action', 'Status': 'pending', 'DraftText': '{}', 'Reason': 'post it',
+                                   'NextStep': 'share its link with Erin'})
     time.sleep(1.1)
     s.decide_review(kept, 'approved', '{}', 'owner')
     with mock.patch.object(general, 'to_agent', side_effect=lambda st, t, said, actor='owner', heard=None, **kw: told.append(said) or (heard and heard('told')) or 'told'):

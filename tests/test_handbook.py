@@ -117,6 +117,18 @@ class WhoMayWrite(unittest.TestCase):
         finally:
             server.store.save_connector({'ConnectorId': card['ConnectorId'], 'Scope': '', 'Active': 1}, 'owner')
 
+    def test_the_hub_switched_off_is_his_choice_and_the_agent_goes_on(self):
+        # "the Hub is off - turn its card on under Connections" was passed on to him as a step, over a Hub that ships on and he turned off
+        card = server.store.get_connector_by_type('handbook')
+        server.store.save_connector({'ConnectorId': card['ConnectorId'], 'Active': 0}, 'owner')
+        try:
+            r = c.post('/api/hub', json={'title': 'x', 'why_earned': 'The agent compared three approaches and verified it.'}, headers=AGENT)
+            self.assertEqual(r.status_code, 403)
+            self.assertIn("the owner's choice", r.json()['detail']); self.assertIn('Go on without it', r.json()['detail'])
+            self.assertNotIn('turn', r.json()['detail'])
+        finally:
+            server.store.save_connector({'ConnectorId': card['ConnectorId'], 'Active': 1}, 'owner')
+
     def test_an_agent_may_write_at_the_default(self):
         self.assertEqual(c.post('/api/hub', json={'title': 'agents fill this by design',
                                                   'why_earned': 'The agent compared three approaches and verified the winning behavior.'},

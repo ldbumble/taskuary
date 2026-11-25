@@ -128,8 +128,9 @@ class OnePress(unittest.TestCase):
         # the chat's card offered Connect for a post whose LinkedIn was switched off after it was set up; the task's review list - the road
         # a bulk card's rows and a review drawn on its own take to the same ActionCard - had no Connect for an act, so that card offered
         # Post to LinkedIn and the press failed on a network nothing had connected. One fact, one answer (outbound.review_connect)
+        # ...a network never set up (one set up and switched off takes the press, which switches it on - the owner, 2026-11-25)
         rv = self.propose(text='Northwind is at the spring hiring fair on Friday.')
-        server.store.save_connector({'ConnectorId': self.card['ConnectorId'], 'Active': 0}, 'test')
+        server.store._exec("UPDATE connector SET Secret=NULL, Active=0 WHERE ConnectorId=?", (self.card['ConnectorId'],))
         chat = next(x for x in c.get(f'/api/tasks/{self.tid}/assistant').json()['cards'] if x['ReviewId'] == rv['ReviewId'])
         self.assertTrue(chat['connect'])
         listed = next(r for r in c.get('/api/reviews', params={'status': 'pending'}).json()['data'] if r['ReviewId'] == rv['ReviewId'])
@@ -143,7 +144,7 @@ class OnePress(unittest.TestCase):
         # and the card stays waiting with its Connect - the same answer for every network (outbound.review_connect)
         net = LinkedIn()
         rv = self.propose(text='Northwind is at the spring hiring fair on Friday.')
-        server.store.save_connector({'ConnectorId': self.card['ConnectorId'], 'Active': 0, 'ConfigJson': '{}'}, 'test')
+        server.store._exec("UPDATE connector SET Secret=NULL, Active=0, ConfigJson='{}' WHERE ConnectorId=?", (self.card['ConnectorId'],))
         with stubbed(net):
             out = verdicts.decide(server.store, rv, 'approve', 'Northwind is at the spring hiring fair on Friday.')
         self.assertFalse(out['ok']); self.assertEqual(net.calls, [])

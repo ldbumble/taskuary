@@ -14,6 +14,7 @@ them by ONE road (`press`): a review through the desk's own door (server.press_r
 question or a page step through workerstate.answer. The desk, the phone and the Assistant read and press here; `settled` is what the agent's
 events read of the presses since its cursor."""
 import json
+from contextlib import contextmanager
 
 from . import cardqueue as cq
 
@@ -316,3 +317,47 @@ def settled(store, tid, since: str = '') -> list:
     rows = store._rows("SELECT * FROM review WHERE TaskId=? AND Status NOT IN ('pending','held') AND DecidedAt>? ORDER BY DecidedAt, ReviewId",
                        (int(tid), str(since or '')))
     return [{**c, 'did': did(store, c)} for c in (of_review(store, r) for r in rows if cq.in_line({**r, 'Status': 'pending', 'DecideNote': None}))]
+
+
+# WHETHER HIS PRESS WAKES THE AGENT IS ITS CARD'S, NOT ITS TURN'S (the owner, said ~40 times): a press whose end is the act itself - a Send -
+# wakes nobody; the agent goes on only where a step of its OWN follows, which it gave as the card's `then` when it raised it. It was a word in
+# the turn's end_turn whose meaning lived only in that tool's text, and a trim of the text made every Send wake it to say it went (d6e6a670a)
+def then_of(c) -> str:
+    "The agent's own step after his press on card `c` - a review row (NextStep) or the landing question's proposal (then) - '' for none."
+    return ' '.join(str((c or {}).get('NextStep') or (c or {}).get('then') or '').split())
+
+
+def carries_on(c) -> bool: return bool(then_of(c))
+
+
+# ...and a question its agent asked ABOUT a card (ask_owner's `card`) is answered by his press on it: left standing, "Should it go out as
+# drafted?" stayed on the task after the letter went. A question beside a card on something else stays his (walk 20: a vendor's reply and
+# what headcount to share with them, in one turn)
+ASKED = 'asked_about'
+def asked_about(store, rid) -> list:
+    "The questions task's agent asked about review `rid`, in its words."
+    rows = [r for r in store.list_audit('review', int(rid)) if r.get('Action') == ASKED]
+    out = []
+    for r in rows:
+        try: d = r['Detail'] if isinstance(r.get('Detail'), dict) else json.loads(r.get('Detail') or '{}')
+        except ValueError: d = {}
+        if d.get('question'): out.append(d['question'])
+    return out
+
+
+def _standing(store, tid) -> tuple:
+    from . import landing
+    rows = store._rows("SELECT ReviewId, DraftText, DraftAt FROM review WHERE TaskId=? AND Status IN ('pending','held')", (int(tid),))
+    return {r['ReviewId']: (r['DraftText'], r['DraftAt']) for r in rows}, landing.record(store, int(tid)).get('proposal')
+
+
+@contextmanager
+def raising(store, tid, then):
+    """Run a call that raises cards on task `tid`: each card it raised or rewrote keeps `then` - none clears it, the newest raise speaks - the
+    landing question's too. Read back by `carries_on`, after a restart as before it."""
+    from . import landing
+    was = _standing(store, tid)
+    yield
+    now, then = _standing(store, tid), ' '.join(str(then or '').split())[:300]
+    for rid in [k for k, v in now[0].items() if was[0].get(k) != v]: store.set_review_next_step(rid, then)
+    if now[1] and now[1] != was[1]: landing.keep_then(store, int(tid), then)

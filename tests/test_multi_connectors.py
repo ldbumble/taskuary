@@ -161,16 +161,15 @@ class TwoGithubAccounts(unittest.TestCase):
         self.assertEqual(s.github_for('northwind/portal', with_secret=True)['Secret'], 'pat-two')
         self.assertEqual(s.github_for('Northwind/Ledger', with_secret=True)['Secret'], 'pat-one')
         self.assertEqual(s.github_for('org/app')['ConnectorId'], self.one, 'an unknown repo falls back to the default card')
-        self.assertEqual((s.github_replies_ok('northwind/portal'), s.github_replies_ok('northwind/ledger')), (True, False))
 
     def test_a_comment_goes_out_with_the_token_and_switch_of_the_repos_card(self):
         msg = {'Channel': 'github', 'ConversationId': 'gh:northwind/portal#7', 'ExternalId': 'gh:northwind/portal#7'}
         with mock.patch('taskuary.github.comment_issue', return_value='https://github.example/c/1') as post:
             outbound.reply_to_message(self.store, msg, 'Fixed in the next release.')
         self.assertEqual(post.call_args.args[:3], ('pat-two', 'northwind/portal', 7))
-        # ...and the first card's switch is off, so its repo is refused
-        with self.assertRaises(outbound.Fixable):
+        with mock.patch('taskuary.github.comment_issue', return_value='https://github.example/c/2') as post:
             outbound.reply_to_message(self.store, {**msg, 'ConversationId': 'gh:northwind/ledger#3', 'ExternalId': 'gh:northwind/ledger#3'}, 'x')
+        self.assertEqual(post.call_args.args[:3], ('pat-one', 'northwind/ledger', 3))
 
     def test_ci_reads_a_pr_with_the_token_of_the_repos_card(self):
         from taskuary import ci

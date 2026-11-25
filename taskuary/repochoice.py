@@ -195,9 +195,15 @@ def allowed(store, path: str, tid=None) -> bool:
             or bool(tid) and any(inside(path, n) for n in named(store, int(tid))))
 
 
-def use(store, tid: int, target: str, why: str = '', actor: str = 'agent') -> dict:
+class Asks(PermissionError):
+    "A pick only his yes makes - a checkout outside the folders agents look in, or one over his own pick: `path` is what his card's press takes."
+    def __init__(self, why: str, path: str): super().__init__(why); self.path = path
+
+
+def use(store, tid: int, target: str, why: str = '', actor: str = 'agent', mine: bool = False) -> dict:
     """use_repo: the agent's pick of the checkout, validated, recorded on the task and taken by its live session. ValueError for a pick
-    the agent can correct; PermissionError for one it may not make."""
+    the agent can correct; PermissionError for one it may not make; Asks for one his press makes (the owner, 2026-11-25: "for security issues,
+    wouldn't you ask the user to allow it?") - `mine`: his press on that card, the pick his own."""
     from . import blackboard as bb, docsync, landing, live, proof, terminal as term
     from .agents import coding_role
     t = store.get_task(int(tid))
@@ -208,22 +214,22 @@ def use(store, tid: int, target: str, why: str = '', actor: str = 'agent') -> di
     if origin.of_task(store, int(tid))[0] == 'stranger':
         raise PermissionError("a stranger's task stays in its own folder - the owner picks its code with Change where the code is")
     pinned = term.repo_tag(t)
-    if pinned == term.NO_REPO: raise PermissionError('the owner marked this task as not code work - do it from your folder, or ask them')
-    if pinned: raise PermissionError(f'the owner set this task\'s code to {pinned} - work there; to move it, ask them (Change where the code is)')
     path, name = resolve(store, target)
     if not is_checkout(path):
         from .agenttools import echo, refusal
         raise ValueError(refusal(f'{echo(path)} is not a git checkout', 'pick the folder that holds .git', see=('find_repos', 'lists them')))
-    if not allowed(store, path, tid):
-        from .settings_schema import link
-        raise PermissionError(f"{path} is outside the folders agents may look in for code ({', '.join(folders(store)) or 'none set'}) and not one "
-                              f"the owner named on this task - he names it here, or adds it under {link(FOLDERS_KEY)}")
+    if not mine and pinned == term.NO_REPO: raise Asks('the owner marked this task as not code work', path)
+    if not mine and pinned: raise Asks(f"the owner set this task's code to {pinned}", path)
+    if not mine and not allowed(store, path, tid):
+        raise Asks(f"{path} is outside the folders agents may look in for code ({', '.join(folders(store)) or 'none set'})", path)
+    if mine and pinned: store.tag_task(tid, f'repo:{pinned}', False, actor)     # ...his press is his own pick: it takes the old one's place
     added = ''
     if not name:
         name = remote_of(path)[0] or os.path.basename(os.path.normpath(path))
         added = f'Agent added {name} (found at {path})'
         docsync.update_repo_map(store, [{'full_name': name, 'description': added}], actor='agent')
     if name not in _paths(store) and (role := coding_role(store)): term.remember_path(store, role, name, path)
+    if mine and pinned: store.tag_task(tid, f'repo:{name}', True, actor)
     for x in re.split(r'[\s,]+', str(t.get('Tags') or '')):
         if x.startswith(AGENT_TAG) and x != AGENT_TAG + name: store.tag_task(tid, x, False, actor)
     store.tag_task(tid, AGENT_TAG + name, True, actor)

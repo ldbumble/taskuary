@@ -217,12 +217,14 @@ def in_words(e: dict) -> bool:
     return e.get('Kind') == 'input_needed' and e.get('Source') != 'screen' and ask_of(r)['ask'] == 'question' and not r.startswith(READY)
 
 
-def let_go(store, tid: int, why: str) -> list:
+def let_go(store, tid: int, why: str, only=None) -> list:
     """THE AGENT'S QUESTION TO HIM STANDS UNTIL HE ANSWERS IT (a press, his line, his answer outside - line_answers), THE TASK CLOSES, OR THE AGENT
-    TAKES IT BACK (the owner, 2026-11-24) - never because a later turn did not ask it again. This is the last two: each question in words still
-    open on the task's run is answered by `why` (concierge.close_task; ask_owner's `withdraw`). [the texts let go]."""
+    TAKES IT BACK (the owner, 2026-11-24) - never because a later turn did not ask it again. Each question in words still open on the task's
+    run - or `only` those of these words (card.asked_about: his press on the card is their answer) - is answered by `why` (concierge.close_task;
+    ask_owner's `withdraw`; general.approved). [the texts let go]."""
     sid = current_sid(store, int(tid))
-    out = [e for e in open_requests(events(store, int(tid), sid) if sid else []) if in_words(e)]
+    keep = None if only is None else {' '.join(str(q).split()) for q in only}
+    out = [e for e in open_requests(events(store, int(tid), sid) if sid else []) if in_words(e) and (keep is None or ' '.join(str(e.get('Text') or '').split()) in keep)]
     for e in out: record(store, int(tid), sid, 'answered', request_id=e['RequestId'], text=why, source='taskuary')
     return [e['Text'] for e in out]
 

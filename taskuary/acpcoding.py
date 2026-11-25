@@ -487,7 +487,7 @@ class ACPCoding:
             if again and not str(said or '').strip(): self._owed = [asked[len(STOPPED_ON):].strip()]
             return self._unanswered() or self._idle(said, turn=False)
         # ...ITS END_TURN AND ask_owner FILED AS A CHAT'S ARE (general.read_summary, summary_ends, file_summary): its summary is the task's, its
-        # question the turn end's below (hooks: Stop) - kept and filed nowhere, its after_press and nothing_left were read by nothing
+        # question the turn end's below (hooks: Stop) - kept and filed nowhere, its nothing_left was read by nothing
         if ok and self.store and self.task_id:
             try:
                 said, summ = general.read_summary(self.store, self.task_id, general.with_marks(self.task_id, said))

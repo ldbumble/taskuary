@@ -110,6 +110,21 @@ ACTIONS = {
     # we save this"): the card shows the script whole, and the owner's press is the save (workflows.save_script_routine) - nothing is
     # saved or run before it, and it is the one door by which an agent's script ever reaches a schedule
     'save_routine': ('save this routine or report', ('title',), None),
+    # A DESKTOP ACT ON A TASK NOT MARKED "needs desktop", OR WITH AGENT DESKTOP OFF (the owner, 2026-11-25): raised by the desktop hook, never an
+    # agent's marker - his press marks the task (agentdesktop.let); only a marked task gets the desktop (the owner, 2026-10-31)
+    'use_desktop': ('let this task use your desktop', (), None),
+    # NEW WORK ASKED FOR ON A TASK HE NEVER SPOKE ON (the owner, 2026-11-25): raised by the new_task door, never an agent's marker - his press
+    # makes the task and starts its agent (server.new_task_from); a stranger's task never gets one
+    'start_task': ('start this as a task of its own', ('title', 'ask'), None),
+    # A BROWSER ASKED OF AN AI THAT CANNOT USE ONE (the owner, 2026-11-25): raised by Taskuary (general.browser_card), never an agent's marker -
+    # his press hands the task to that AI and picks the work up there, Continue's own road (server.continue_work)
+    'switch_ai': ('run this task on another AI', ('pick',), None),
+    # A TASK'S AGENT ASKING FOR ONE OF HIS REPORTS OR ROUTINES TO RUN NOW (the owner, 2026-11-25): raised by its door, never an agent's marker -
+    # his press is his Run now (server._rerun_report)
+    'rerun_report': ('run a report or routine of yours now', ('source_id',), None),
+    # A CHECKOUT ONLY HIS YES PICKS (repochoice.Asks, the owner 2026-11-25): raised by the use_repo door, never an agent's marker - his press makes
+    # it this task's code, as his Change does (repochoice.use, mine)
+    'use_repo': ('work in this checkout on this task', ('path',), None),
 }
 FAILED_NOTE = 'failed'      # a pressed act that failed: settled, its error kept (ActError) - its agent sets up what goes next
 HELD_ACTS = ('browser_act', 'shell_act', 'desktop_act')     # raised by a hook before the act ran - never an agent's marker
@@ -131,7 +146,7 @@ def _gate(a: str):
 # WHAT NO AGENT MAY ASK FOR, AND THE MARKS NONE MAY PUT ON ITS OWN ASK - one list for both doors: the marker (parse) and the tool
 # (agenttools.proposal_of). They were two, and had drifted (the spine audit, 2026-11-09): the tool's did not name the held steps, so an agent
 # could file a "held step" of its own - a command of its choosing, on the card the owner reads as one Taskuary stopped
-NOT_ASKED = ('merge_pr', 'close_item', 'repair_workflow', 'change_setup', *HELD_ACTS)
+NOT_ASKED = ('merge_pr', 'close_item', 'repair_workflow', 'change_setup', 'use_desktop', 'start_task', 'switch_ai', 'rerun_report', 'use_repo', *HELD_ACTS)
 MARKS = ('closeout', 'flow_run')
 
 # A POST IS DRAWN AS THE POST (the owner, 2026-11-05: "it's not showing the post and the image as a linkedin post and asking me if i want to
@@ -275,7 +290,7 @@ def receipt(rv: dict, final_text, out: dict, fields: dict = None) -> str:
     return json.dumps({**(as_left(p, final_text, fields) if p.get('action') in ('run_tool', *CHANGES) else p), 'result': out}, default=str)
 
 # What a proposal may touch: routing and visibility only. Never a permission that lets anything OUT
-# (agent_push_enabled, github_replies_ok, reply channels), never a token, key, model or document.
+# (agent_push_enabled, reply channels), never a token, key, model or document.
 SETTING_ALLOW = {
     'coding_auto_enabled': 'start the coding agent automatically on new coding work',
     'intent_classify_enabled': 'let the brain classify inbound mail at all',
@@ -300,9 +315,10 @@ SETTING_VALUES = {'answer_to_agent': ('auto', 'ask', 'off')}   # timeline_fade r
 SWITCHES = {'playbooks_enabled': ('Use playbooks', words.name('sorting'), words.href('sorting') + '&key=playbooks_enabled')}
 def _switch_ok(store, name) -> bool: return not name or store.get_setting(name, '1') == '1'
 def switch_off(name) -> str:
-    "The switch `name` said as the owner finds it, with its link: what an agent passes on, never a place of its own guessing."
-    label, where, href = SWITCHES[name]
-    return f'"{label}" is off on {where} - [open it]({href}); only the owner turns it on'
+    """The switch `name` said as the owner finds it - and as HIS CHOICE (the owner, 2026-11-25: "it should find a way around it"): "only the
+    owner turns it on" was passed on to him as a step, over a switch that ships on and that he turned off."""
+    label, where, _ = SWITCHES[name]
+    return f'"{label}" is off on {where} - the owner\'s choice; nothing waits on it, so go on without it'
 
 
 def parse(text: str) -> list:
@@ -538,7 +554,9 @@ def tool_words(store, p: dict) -> str:
 def queue(store, task_id: int, p: dict, actor='agent', refused: list | None = None, unheard: bool = False) -> dict | None:
     """ONE proposal through the gate: a pending review when it validates, a recorded refusal (None) when not - its reason appended to
     `refused`, so the agent that proposed it is told why and can fix it (refusal_line). `unheard`: no answer goes back to it now (collect)."""
-    from . import trackers
+    from . import card, trackers
+    # ...its `then`, the agent's own step after the press, is the card's (card.carries_on) - never part of what is run or compared
+    then, p = card.then_of(p), {k: v for k, v in p.items() if k != 'then'}
     # an agent's comment or move on "the ticket" means the item this task came from: named on the proposal, so the card says which
     if p.get('action') == 'run_tool' and p.get('type') in trackers.TYPES and not str(p.get('item') or '').strip():
         it = trackers.item_of(store, task_id)
@@ -629,14 +647,18 @@ def queue(store, task_id: int, p: dict, actor='agent', refused: list | None = No
                   f"create the {p.get('kind') or 'routine'} \"{p['title']}\", to run {p['runs']}" + (f" - built from {p['based_on']}" if p.get('based_on') else ''))
             if p['action'] == 'save_routine'
             else f"change the routine \"{p['title']}\"" if p['action'] == 'repair_workflow' and actor != 'workflow'
-            else f"change the {p.get('kind') or 'report'} \"{p['title']}\"" if p['action'] == 'change_setup' else why)
+            else f"change the {p.get('kind') or 'report'} \"{p['title']}\"" if p['action'] == 'change_setup'
+            else f"start \"{p['title']}\" as its own task" if p['action'] == 'start_task'
+            else f"run this task on {p.get('ai') or p['pick']}" if p['action'] == 'switch_ai'
+            else f"run \"{p.get('title') or p['source_id']}\" now" if p['action'] == 'rerun_report'
+            else f"work in {p['path']} on this task" if p['action'] == 'use_repo' else why)
     # ...nor a held browser act: the agent did not propose it, it tried it, and the hook stopped it (browsergate.check)
     # ...a shell step by what it does, never its raw line: the card folds the command under "Show the command"
     reason = (f"held before it ran, {HELD_IN[p['action']]}: {p.get('what') or ('a step' if p['action'] == 'shell_act' else p.get('command'))}"
               + (f" - {p['why']}" if p.get('why') else '') if p['action'] in HELD_ACTS else
               f"finishing it: {'merge pull request #' + str(p.get('number')) if p['action'] == 'merge_pr' else trackers.words(p) if p['action'] == 'close_item' else 'close the issue it came from'}"
               if p.get('closeout') else f"the {'workflow asks' if actor == 'workflow' else 'agent proposes'} to {said}" + (f" - {p['why'][:200]}" if p.get('why') else ''))
-    rid = store.add_review({'TaskId': task_id, 'Kind': 'action', 'Status': 'pending', 'DraftText': json.dumps(p), 'Reason': reason})
+    rid = store.add_review({'TaskId': task_id, 'Kind': 'action', 'Status': 'pending', 'DraftText': json.dumps(p), 'Reason': reason, 'NextStep': then[:300] or None})
     store.audit('review', rid, 'proposed', actor, detail={'action': p['action']})
     logger.info(f'task {task_id}: proposal queued - {p["action"]} (rv{rid})')
     return {'reviewId': rid, 'action': p['action']}
@@ -1194,6 +1216,22 @@ def _run(store, rv: dict, p: dict, tid, a: str, actor: str, edited, skip_checks:
         workflows.save(store, {'SourceId': int(p['source_id']), 'ConfigPatch': p['patch']}, actor)      # ...its editor's own save
         out = {'source': int(p['source_id']), 'changed': str(p.get('changes') or '')[:1200]}
     elif a in HELD_ACTS: out = _gate(a).perform(store, tid, p)
+    elif a == 'start_task':
+        from .server import new_task_from                  # ...the new_task door's own road, made and started on his press
+        out = new_task_from(int(tid), str(p['title']), str(p['ask']), str(p.get('kind') or 'general'), str(p.get('model') or ''),
+                            str(p.get('repo') or ''), actor)
+    elif a == 'use_repo':
+        from . import repochoice
+        out = repochoice.use(store, int(tid), str(p['path']), str(p.get('why') or ''), actor, mine=True)
+    elif a == 'rerun_report':
+        from .server import _rerun_report                    # ...his Run now, on his press
+        out = _rerun_report(int(p['source_id']), by=actor)
+    elif a == 'switch_ai':
+        from .server import ContinueBody, continue_work      # ...the task head's own hand-over (SwitchAi), on his press
+        out = {'ai': p.get('ai') or p['pick'], **{k: v for k, v in continue_work(int(tid), ContinueBody(pick=p['pick'])).items() if k in ('continued', 'kind')}}
+    elif a == 'use_desktop':
+        from . import agentdesktop
+        out = agentdesktop.let(store, tid, actor)
     elif a == 'close_item':
         from . import trackers
         out = trackers.close_out(store, p)
@@ -1226,5 +1264,8 @@ def _run(store, rv: dict, p: dict, tid, a: str, actor: str, edited, skip_checks:
             if p.get('type') in MEDIA: cfg['image_path'] = str(outputs.named(int(tid), p['image']))
             else: cfg.pop('image', None)          # ...a network Taskuary uploads no picture to posts the words; the card said so
         if (bad := unknown_tool(p.get('type'))): raise RuntimeError(f'{bad} - nothing was run')       # ...a card from before the gate refused it
+        # ...ON A CONNECTION SWITCHED OFF, HIS PRESS SWITCHES IT ON (the owner, 2026-11-25: "it should find a way around it"): the card said so
+        if str(p.get('connector_id') or '').isdigit() and (c := store.get_connector(int(p['connector_id']))) and not c.get('Active'):
+            store.save_connector({'ConnectorId': c['ConnectorId'], 'Active': 1}, actor)
         out = _ran(REGISTRY[p['type']](resolve_cfg(store, {**cfg, '_write': True})))
     return out

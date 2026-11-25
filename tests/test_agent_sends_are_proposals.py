@@ -228,14 +228,33 @@ class AWriteAboveTheCardsAuthorityWaitsForThePress(unittest.TestCase):
         proposals.execute(server.store, server.store.get_review(r.json()['review']), 'owner')
         self.assertEqual(len(self.ran), 1)
 
-    def test_a_card_switched_off_or_none_at_all_says_the_way_on(self):
-        # "the intacct connection is off - turn it on" and "it is not an agent tool" were all the agent got: nothing it could do next
+    def test_a_read_on_a_connection_switched_off_is_one_card_whose_press_switches_it_on_and_runs_it(self):
+        # the owner, 2026-11-25: "if it says it can't do something it just leaves the user hanging - it should find a way around it"
+        from taskuary import outbound
+        server.store.save_connector({'ConnectorId': self.card['ConnectorId'], 'Active': 0, 'Secret': 'k'}, 'test')
+        with mock.patch.dict(REGISTRY, {'intacct': lambda cfg: self.ran.append(cfg) or ('1 row', 'VENDOR V-1')}):
+            r = c.post('/api/tools/run', headers=agent(self.tid), json={'type': 'intacct', 'object': 'VENDOR', 'task_id': self.tid})
+            self.assertEqual(r.status_code, 202, r.text); self.assertIn('switched off', r.json()['says']); self.assertEqual(self.ran, [])
+            again = c.post('/api/tools/run', headers=agent(self.tid), json={'type': 'intacct', 'object': 'APBILL', 'task_id': self.tid})
+            self.assertEqual((again.status_code, again.json()['review']), (202, r.json()['review']))       # ...one card, never a pile
+            self.assertIn('already up', again.json()['says'])
+            rv = server.store.get_review(r.json()['review'])
+            self.assertIsNone(outbound.review_connect(server.store, rv), 'set up and switched off: his press, not Connect')
+            proposals.execute(server.store, rv, 'owner')
+        self.assertEqual(len(self.ran), 1); self.assertTrue(server.store.get_connector(self.card['ConnectorId'])['Active'])
+
+    def test_one_never_set_up_stands_with_its_connect(self):
+        from taskuary import outbound
+        server.store.save_connector({'ConnectorId': self.card['ConnectorId'], 'Active': 0, 'Secret': ''}, 'test')
+        r = c.post('/api/tools/run', headers=agent(self.tid), json={'type': 'intacct', 'object': 'VENDOR', 'task_id': self.tid})
+        self.assertEqual(r.status_code, 202, r.text)
+        fix = outbound.review_connect(server.store, server.store.get_review(r.json()['review']))
+        self.assertTrue(fix and fix['href'] == '#connector=intacct', fix)
+
+    def test_no_card_at_all_says_the_way_on(self):
         from taskuary.agenttools import NEXT_STEP
-        server.store.save_connector({'ConnectorId': self.card['ConnectorId'], 'Active': 0}, 'test')
-        for t in ('intacct', 'local_file'):
-            with self.subTest(t):
-                r = c.post('/api/tools/run', headers=agent(self.tid), json={'type': t, 'object': 'VENDOR', 'task_id': self.tid})
-                self.assertEqual(r.status_code, 403, r.text); self.assertIn(NEXT_STEP, r.json()['detail'])
+        r = c.post('/api/tools/run', headers=agent(self.tid), json={'type': 'local_file', 'path': 'x', 'task_id': self.tid})
+        self.assertEqual(r.status_code, 403, r.text); self.assertIn(NEXT_STEP, r.json()['detail'])
 
     def test_with_no_task_the_refusal_says_how_and_not_to_raise_the_authority(self):
         r = c.post('/api/tools/run', headers=agent(), json={'type': 'intacct_create', 'object': 'APBILL', 'fields': {}})
@@ -486,3 +505,21 @@ class ACardRunsWhatItShows(unittest.TestCase):
         self.assertTrue(r.json()['changed'], r.text); self.assertEqual(sent, [])
         self.assertEqual(s.get_review(rid)['Status'], 'pending')
         self.assertIsNone(proposals.unlike_shown(s.get_review(rid), {'to': ['taker@outsider.example']}, 'approve'), 'the card as it stands now goes')
+
+
+class ARunOfHisReportIsAskedOnOneCard(unittest.TestCase):
+    """The owner, 2026-11-25: "for security issues, wouldn't you ask the user to allow it?" - a task's agent asking to run one of his saved
+    reports or routines was a flat 403. A run hands it nothing but the result, so it is one card; his press is his Run now."""
+    def test_the_agent_asks_and_his_press_runs_it(self):
+        s = server.store
+        tid = s.create_task({'Title': 'Check the nightly export', 'Kind': 'general', 'Status': 'open'}, 'owner')
+        sid = s.save_source({'Channel': 'report', 'Address': 'Nightly export', 'Owner': 'o', 'Active': 1,
+                             'ConfigJson': json.dumps({'type': 'agent', 'title': 'Nightly export'})}, 'o')
+        with mock.patch.object(server, '_rerun_report', return_value={'ok': True, 'title': 'Nightly export'}) as run:
+            r = c.post(f'/api/reports/{sid}/rerun', headers=agent(tid))
+            self.assertEqual(r.status_code, 202, r.text); run.assert_not_called()
+            rv = s.get_review(r.json()['review'])
+            self.assertIn('run "Nightly export" now', rv['Reason'])
+            proposals.execute(s, rv, 'owner')
+        run.assert_called_once_with(sid, by='owner')
+        self.assertEqual(c.post(f'/api/reports/{sid}/rerun', headers=agent()).status_code, 403)       # ...on no task of its own: no card

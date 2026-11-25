@@ -489,7 +489,6 @@ def can_reply(store, channel) -> bool:
     if not ch or ch in NEVER or no_sender(store, ch): return False
     if ch in SENDABLE and ch not in reply_channels(store): return False
     if _inbox_off(store, ch): return False
-    if ch == 'github': return store.github_replies_ok()
     if ch == 'email' and send_probe(store, ch): return False
     return True
 
@@ -501,7 +500,6 @@ def send_block(store, channel) -> str:
     ch = (channel or '').lower()
     if not ch: return 'this message has no channel to reply on'
     if ch in NEVER: return f'{ch} items cannot be replied to from here'
-    if ch == 'github': return '' if store.github_replies_ok() else 'GitHub replies are off (GitHub card)'
     if _inbox_off(store, ch): return f"replies are off for {INBOX_NAMES[ch]} (the Replies switch on its card)"
     if ch in SENDABLE and ch not in reply_channels(store):
         return f"replies are off for {ch} ({words.name('replies')})"
@@ -543,7 +541,9 @@ def connect_fix(store, kind) -> dict | None:
     if not card: return None
     srcs = store.list_sources() if hasattr(store, 'list_sources') else ()
     mine = [c for c in cards if str(c.get('Type') or '').lower() == k]
-    if any(connectorcatalog.state(c, srcs)['state'] in ('connected', 'failing') for c in mine): return None
+    # ...and one set up and switched off takes it too: his press switches it on (proposals._run, the owner 2026-11-25)
+    if any(connectorcatalog.state(c, srcs)['state'] in ('connected', 'failing') or not c.get('Active') and connectorcatalog.set_up(c, srcs)
+           for c in mine): return None
     name, st = card.get('title') or k, (connectorcatalog.state(mine[0], srcs)['state'] if mine else 'off')
     says = {'signed_out': f'{name} needs you to sign in again', 'not_signed_in': f"{name} isn't signed in"}.get(st, f"{name} isn't connected")
     return {'says': says, 'label': f'Connect {name}', 'href': f'#connector={k}', 'waits': 'the draft waits here - copy it to post it yourself'}
@@ -559,6 +559,10 @@ def review_connect(store, r: dict, memo: dict = None) -> dict | None:
         from . import connectorcatalog
         act = connectorcatalog.action_for(p.get('type')) if p.get('action') == 'run_tool' else None
         k = act['card'] if act else None
+        # ...and any call on a connection switched off: Connect where it is not set up, else his press switches it on
+        if not k and p.get('action') == 'run_tool' and str(p.get('connector_id') or '').isdigit():
+            c = store.get_connector(int(p['connector_id'])) or {}
+            k = None if c.get('Active') else str(c.get('Type') or '').lower() or None
     # ...a bare review row (rv.*) carries no Channel: the mail it answers says it
     else:
         m = store.get_message(r['MessageId']) if r.get('MessageId') and not (r.get('Channel') or p.get('channel')) else None
@@ -577,7 +581,6 @@ def block_fix(store, channel) -> dict | None:
     "its card"), the row gets the way there. None where nothing here lifts it - a Teams chat is answered in Teams."""
     ch = (channel or '').lower()
     if not ch or ch in NEVER: return None
-    if ch == 'github': return None if store.github_replies_ok() else {'label': 'Open the GitHub card', 'href': '#connector=github'}
     if _inbox_off(store, ch): return {'label': f'Open the {INBOX_NAMES[ch]} card', 'href': f'#connector={ch}'}
     if ch in SENDABLE and ch not in reply_channels(store): return dict(zip(('label', 'href'), REPLIES))
     if ch == 'email' and (why := send_probe(store, ch)):
@@ -1156,8 +1159,8 @@ def reply_to_message(store, msg: dict, body: str, to: list = None, cc: list = No
         if not chat: raise RuntimeError('this chat message has no room id to answer in')
         return chatservers.send(store, ch, chat, body, _source_connector_id(store, ch, chat))
     if ch == 'github':
-        # the answer is a PUBLIC comment on the issue/PR - so it goes only with the owner's
-        # explicit say-so (the GitHub card's 'Reply to issue/PR authors' switch)
+        # the answer is a PUBLIC comment on the issue/PR - so it goes only with the owner's explicit say-so: his Send on its card (the owner,
+        # 2026-11-25: "it should find a way around it" - a card switch over it left his Send dark and "Open the GitHub card" two presses away)
         # the CONVERSATION names the item bare ('gh:owner/repo#N'); the row's own id never is - the item is a revision
         # ('gh:owner/repo#N@<hash>', ingest.rev_id) and a comment 'gh:owner/repo#N:c<id>', so parsing it refused every reply (#205)
         ref = str(msg.get('ConversationId') or '') if str(msg.get('ConversationId') or '').startswith('gh:') else ext
@@ -1165,10 +1168,6 @@ def reply_to_message(store, msg: dict, body: str, to: list = None, cc: list = No
         repo, _, num = ref[3:].rpartition('#')
         if not (ref.startswith('gh:') and repo and num.isdigit()):
             raise RuntimeError('this github item carries no issue/PR reference to comment on')
-        # ...asked of the card that reaches this repo: two GitHub accounts are two cards, each with its own switch
-        if not store.github_replies_ok(repo):
-            raise Fixable("replying on GitHub is off - its card's 'Reply to issue/PR authors' lets Taskuary post comments",
-                          'Open the GitHub card', '#connector=github')
         connector_id = _source_connector_id(store, 'github', repo)
         c = store.get_connector(connector_id, with_secret=True) if connector_id else \
             store.get_connector_by_type('github', with_secret=True)

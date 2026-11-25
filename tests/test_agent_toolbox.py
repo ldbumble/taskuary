@@ -564,6 +564,24 @@ class NewTaskTool(unittest.TestCase):
         self.assertEqual(self.s._rows("SELECT * FROM review WHERE Status='pending'"), [])         # no card for a press
         self.assertIn('TQ-', said)
 
+    def test_on_a_task_he_never_spoke_on_it_is_one_card_his_press_starts(self):
+        # the owner, 2026-11-25: "it should find a way around it" - "not started: only the owner starts new work" left the agent to say so
+        from taskuary import proposals
+        tid = self.s.create_task({'Title': 'Renewal terms', 'Kind': 'general', 'Status': 'open'}, 'router')
+        self.s.add_message({'TaskId': tid, 'ExternalId': 'nt1', 'Channel': 'email', 'FromName': 'Gail Moreno', 'FromEmail': 'gail@northwind.example',
+                            'Subject': 'Renewal terms', 'BodyText': 'Can you also build a bed board?', 'SentAt': '2026-11-20 09:00:00', 'Status': 'routed'})
+        from taskuary import origin                                                      # ...a sender he knows: no stranger's task
+        with mock.patch.object(server, 'dispatch_task', return_value={'started': True}) as go,              mock.patch.object(origin, 'of_task', return_value=('trusted', None)):
+            said, err = tool(tid, 'new_task', title='Bed board', ask='Build a bed board tab.')
+            again, _ = tool(tid, 'new_task', title='Bed board', ask='Build a bed board tab.')
+            self.assertFalse(err, said); go.assert_not_called(); self.assertIn("the owner's to press", said)
+            (card,) = self.s._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action' AND Status='pending'", (tid,))
+            self.assertIn('start "Bed board" as its own task', card['Reason'])
+            proposals.execute(self.s, card, 'owner')
+            go.assert_called_once()
+        self.assertTrue(any(t['Title'] == 'Bed board' for t in self.s.list_tasks()))
+        self.assertEqual(proposals.parse(proposals.MARK + ' {"action": "start_task", "title": "x", "ask": "y"}'), [])   # ...never an agent's own
+
     def test_a_stranger_task_cannot_start_work(self):
         from taskuary import origin
         with mock.patch.object(origin, 'of_task', return_value=('stranger', None)), mock.patch.object(server, 'dispatch_task') as go:

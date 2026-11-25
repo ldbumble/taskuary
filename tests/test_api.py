@@ -114,7 +114,7 @@ class GithubIngestTests(unittest.TestCase):
             out = ingest_message(s, dict(ask), llm=reply_llm)
         self.assertEqual(out['status'], 'created')
         self.assertEqual(s.get_task(out['task_id'])['Kind'], 'reply'); self.assertIsNotNone(s.pending_review(out['task_id']))
-        self.assertIn('GitHub replies are off', s.feed()[0]['RouteReason'])
+        self.assertNotIn('GitHub replies are off', s.feed()[0]['RouteReason'])      # ...and nothing stands between it and his Send
         s2 = self._store(True)
         self.assertEqual(ingest_message(s2, dict(ask), llm=reply_llm)['status'], 'created')
         # the route row carries the classifier's verdict verbatim - the panel's why-it's-here line
@@ -123,9 +123,7 @@ class GithubIngestTests(unittest.TestCase):
     def test_approving_a_github_reply_posts_a_comment_only_when_allowed(self):
         from taskuary import outbound
         msg = {'Channel': 'github', 'ExternalId': 'gh:o/app#7', 'FromEmail': 'x@users.noreply.github.com'}
-        with self.assertRaises(RuntimeError):
-            outbound.reply_to_message(self._store(False), msg, 'answer')     # off: never posts
-        s = self._store(True)
+        s = self._store(False)                                              # ...his Send is the say-so, whatever a card switch said
         gh = next(x for x in s.list_connectors() if x['Type'] == 'github')
         s.save_connector({'ConnectorId': gh['ConnectorId'], 'Secret': 'ghp_x'}, 'o')
         seen = {}
@@ -1049,9 +1047,8 @@ class ApiTests(unittest.TestCase):
         mid = push['message_id']
         c.post(f'/api/messages/{mid}/reply')
         row = next(r for r in c.get('/api/reviews', params={'status': 'pending'}).json()['data'] if r['MessageId'] == mid)
-        self.assertFalse(row['CanSend'])                       # github, replies off: no send road
-        feedrow = next(r for r in c.get('/api/feed').json()['data'] if r['MessageId'] == mid)
-        self.assertFalse(feedrow['CanSend'])
+        # github: his Send is the say-so (the owner, 2026-11-25) - no card switch over it; with no GitHub card set up, its Connect stands instead
+        self.assertNotIn('replies are off', row['SendBlock']); self.assertTrue(row['CanSend'] or 'connected' in row['SendBlock'], row)
         push2 = c.post('/api/ingest/push', json={'external_id': 'cansend2', 'subject': 'rota',
                                                  'body': 'can you explain the rota?', 'from_email': 'a@b.example',
                                                  'channel': 'email'}).json()

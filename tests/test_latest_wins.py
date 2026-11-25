@@ -99,20 +99,6 @@ def test_withdraw_by_its_marker_and_by_the_cli_door():
     assert r.json() == {'ok': True, 'review_id': rid2}
 
 
-def test_a_draft_is_stale_until_the_agent_reads_what_came_after_it_and_kept_once_it_has():
-    """2026-11-08: a turn that heard the newer message and left the draft standing KEPT it ("the draft stays as it is") - the owner could
-    not send a draft the agent had just said still applies. A draft the newest message undoes is withdrawn by that turn (WITHDRAW_LINE)."""
-    s = MemoryStore(); tid, _, _, rid = the_owners_day(s)
-    a1 = s._one('SELECT CommentId FROM draft_snapshot WHERE ReviewId=?', (rid,))['CommentId']
-    # ...the owner wrote after it and nothing has answered yet: it reads "before your last message"
-    assert general.draft_turns(s, tid) == [{'review': rid, 'turn': f'comment-{a1}', 'at': '2026-11-06 14:48:00', 'stale': True, 'before': '2026-11-06 15:22:00'}]
-    with mock.patch.object(server, 'store', s):
-        assert server._assistant_payload(tid)['drafts'][0]['stale'] is True
-    # ...the agent's next turn read it and left the draft standing: kept, current, its Send back
-    at(s, 'comment', 'CommentId', s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'Nothing new - the draft stays as it is.'), '2026-11-06 15:23:00')
-    assert general.draft_turns(s, tid) == [{'review': rid, 'turn': f'comment-{a1}', 'at': '2026-11-06 14:48:00', 'stale': False, 'before': None}]
-
-
 def test_the_cli_and_tools_offer_withdraw():
     from taskuary import agenttools, cli, floor
     assert 'withdraw_draft' in cli.STRANGER_ACTS and '--withdraw-draft' in floor.TASKUARY_OK
@@ -221,9 +207,6 @@ def test_the_owners_line_this_turn_carries_is_not_quoted_in_its_facts_as_well():
     at(s, 'comment', 'CommentId', s.add_comment(tid, 'owner', general.USER_TYPE, note), '2099-01-01 00:00:00')
     assert general._prompt(s, tid)[1].count(note) == 1, 'a fresh turn: the conversation ends on it, said once'
     assert 'The owner marked it done.' in general._prompt(s, tid)[1]
-
-
-
 
 
 def test_a_withdraw_marker_never_takes_back_the_letter_its_own_turn_wrote():

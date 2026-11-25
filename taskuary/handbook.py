@@ -333,6 +333,11 @@ def publish_assistant_entries(store, task_id: int, reply: str, author: str = 'as
     return clean
 
 
+# ...AND OFF IS HIS CHOICE (the owner, 2026-11-25: "it should find a way around it"): it ships on, so off is his word - an agent told "turn its
+# card on" passed that on to him as a step; nothing waits on a Hub entry, so the way on is without one
+OFF = "The Hub is switched off - the owner's choice; nothing was filed or read. Go on without it."
+
+
 def enabled(store) -> bool:
     """The connector card's switch. Default ON - the handbook is only worth anything if it is
     being written while people are not thinking about it."""

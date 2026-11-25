@@ -348,6 +348,8 @@ def _heard(store, tid: int, new: list, at: float) -> None:
     tid = int(tid)
     mails = {str(x['MessageId']): x for x in _mail(store, tid)} if any(k == 'mail' for k, _ in new) else {}
     presses = {m['id'].split('-')[1]: m for m in general.press_lines(store, tid)} if any(k == 'press' for k, _ in new) else {}
+    # ...WHY A TURN BEGAN is kept on its row (data, drawn nowhere): the lines, messages and presses this hand-over took - none, a wake of its own
+    why = {k: [r for kk, r in new if kk == k] for k in ('line', 'mail', 'press') if any(kk == k for kk, _ in new)}
     # ...the turn his lines were heard for at a press is the one that now begins (ahead, below): it takes them already heard
     # ...and so is one a task's first read froze while its start was on its way (migrate: the old list drew it "starting" from the press)
     ahead = (o := open_turn(store, tid)) and o['State'] in LIVE and not _kids(store, o) and (json.loads(o['Body'] or '{}').get('ahead') or o.get('Src') == 'legacy')
@@ -367,7 +369,7 @@ def _heard(store, tid: int, new: list, at: float) -> None:
         # ...a turn heard once more (a press and his line taken in the same beat - CI, 2026-11-22) is the turn already in the log: it began when
         # it was first heard, and that stays its start
         elif k == 'turn' and not ahead and not _row(store, tid, f't:{r}'):
-            put(store, tid, 'turn', f't:{r}', {'started': at, 'ended': None, 'text': ''}, state='starting', src='heard', at=at)
+            put(store, tid, 'turn', f't:{r}', {'started': at, 'ended': None, 'text': '', 'why': why}, state='starting', src='heard', at=at)
     # ...HIS LINES HEARD AT A PRESS, THEIR TURN ON ITS WAY (general.stop_turn - the recorded stop, 2026-11-12: what waited is heard under the
     # stop, the turn that answers it at work from that moment): that turn stands under them from this read, never a beat of nothing under his line
     # ...AND EVERY LINE OF HIS HEARD HAS ITS TURN UNDER IT AT ONCE (the owner's rule: after his line, the turn at work is under it; audit parity b:
@@ -378,7 +380,7 @@ def _heard(store, tid: int, new: list, at: float) -> None:
     answered = lines and all(store._one("SELECT 1 AS x FROM chatlog WHERE TaskId=? AND Kind='turn' AND Key LIKE ? LIMIT 1", (tid, f't:{r}:%')) for r in lines)
     if not any(k == 'turn' for k, _ in new) and lines and not answered and not (open_turn(store, tid) or {}).get('State') in LIVE:
         if (old := _live(store, tid)): update(store, tid, old['Key'], state='done')
-        put(store, tid, 'turn', f't:{time.time_ns()}', {'started': at, 'ended': None, 'text': '', 'ahead': True}, state='starting', src='heard', at=at)
+        put(store, tid, 'turn', f't:{time.time_ns()}', {'started': at, 'ended': None, 'text': '', 'ahead': True, 'why': why}, state='starting', src='heard', at=at)
 
 
 def _live(store, tid: int):
@@ -967,7 +969,7 @@ def advance(store, tid: int) -> None:
     # ...every card that stood reads as its review does now: pressed, withdrawn, moved past - in its place
     for k, r in list(rows.items()):
         rv = by.get(json.loads(r['Body']).get('review'))
-        if not rv: continue
+        if not rv or k.count(':') > 1: continue          # ...an earlier version (r:<rid>:v<n>) is what it said then, for good
         st = _card(rv)['status']
         # ...A REPLY RAISED EMPTY AND WRITTEN AFTER HIS LINE IS THE CARD OF THE TURN THAT WROTE IT (the real walk 2, 2026-11-19: the agent asked,
         # he answered, and the letter its next turn wrote stood ABOVE his line, in the turn that had only asked): its words-less row was never
@@ -975,9 +977,15 @@ def advance(store, tid: int) -> None:
         # ...and so is one A LATER TURN REWROTE IN PLACE (the owner's live app, 2026-11-25: "why is there text after the card?"): it stood in the
         # first turn with the second's words, and the turn that wrote them drew after it - the words are the newest writer's, and so is the card.
         # His own edit (wrapup.OWNER_SID) is not a turn's: it stays where he edited it
-        if (st == 'pending' and _card(rv).get('was') and _words(json.loads(r['Body'])) != _words(_card(rv)) and rv.get('DraftSid') != OWNER_SID
+        # ...AND WHAT IT SAID BEFORE STAYS WHERE IT STOOD, greyed (the owner's plan, 2026-11-25): an earlier version is a row of its own, its words
+        # as he saw them (`was`) - the key moves to the version now standing, never the place (conversation_legacy's r:<rid>:c<n>, the same shape)
+        b = json.loads(r['Body'] or '{}')
+        if (st == 'pending' and _card(rv).get('was') and _words(b) != _words(_card(rv)) and rv.get('DraftSid') != OWNER_SID
                 and (o := open_turn(store, tid)) and o['Id'] != r.get('Parent')):
-            with store.lock: store.cx.execute('DELETE FROM chatlog WHERE Id=?', (r['Id'],)); store.cx.commit()
+            with store.lock:
+                store.cx.execute("UPDATE chatlog SET Key=?, State='passed', Body=?, Rev=Rev+1 WHERE Id=?",
+                                 (f"{k}:v{r['Id']}", json.dumps({**b, 'status': 'passed'}, default=str), r['Id']))
+                _bump(store, tid); store.cx.commit()
             rows.pop(k); continue
         # ...ONE TAKEN BACK BEFORE ITS TURN ENDED NEVER STOOD (drawn only then): its row goes, as nothing of it was ever on his screen
         if st not in ('pending', 'offer') and rv.get('DecidedBy') not in OWNER_ACTORS and (p := _above(store, r)) and p['State'] in LIVE:

@@ -1130,7 +1130,7 @@ def _send_block(channel, has_message=True) -> str:
     return outbound.send_block(store, channel)
 
 
-def _can_send(channel, has_message=True, gh_ok=None) -> bool:
+def _can_send(channel, has_message=True) -> bool:
     """Can an approved reply actually LEAVE on this channel? One answer for the whole app -
     outbound.can_reply - so the Approve button, triage and the agent's wrap-up cannot
     disagree. The UI turns an unsendable draft's Approve into 'No response required'."""
@@ -1223,7 +1223,7 @@ def processing_item_detail(item_id: str, kind: str = None, id: int = None, view_
         if detail.get('task'):
             detail['artifacts'] = [_artifact_row(a) for a in detail.get('artifacts') or []]
         if row is not None:
-            row['CanSend'] = _can_send(row.get('Channel'), True, store.github_replies_ok())
+            row['CanSend'] = _can_send(row.get('Channel'), True)
             row['SendBlock'] = '' if row['CanSend'] else _send_block(row.get('Channel'), True)
             result['detail_revision'] = processing_all._digest({key: value for key, value in result.items()
                                                                if key != 'detail_revision'})
@@ -2683,19 +2683,9 @@ def _assistant_payload(task_id: int, session=None):
                       'network': _proposals.POSTS.get(p['type']) or (_cat.by_type(act['card']) or {}).get('title') or act['card'],
                       'as': who or (c or {}).get('Name') or '',
                       'connect': outbound.review_connect(store, r) if r.get('Status') == 'pending' else None})
-    # ...AND SO IS EVERY OTHER CARD OF THE TASK (the spine audit, 2026-11-09): a held step, a proposal, a reply waiting or gone - each named
-    # with the answer it stands in, by that one rule. The page placed these itself, reading an answer's stamp as when its turn BEGAN: a step
-    # held while the second turn worked stood in the first. A reply's turn is the one that last left it (wrapup.left_by); None: no answer yet
-    from . import wrapup
-    turns = {}
-    for r in store._rows("SELECT ReviewId, Kind, CreatedAt FROM review WHERE TaskId=? AND Kind<>'slot' ORDER BY ReviewId", (task_id,)):
-        left = None if r['Kind'] == 'action' else wrapup.left_by(store, r['ReviewId'])
-        turns[str(r['ReviewId'])] = f"comment-{left['CommentId']}" if left else at_turn(r.get('CreatedAt'))
+    # ...every other card stands where the chat's log put it (chatlog.advance): the payload names no turn for one
     return {'messages': messages,
-            'cards': cards, 'turns': turns,
-            # WHICH TURN EACH PENDING DRAFT IS (general.draft_turns, 2026-11-06): drawn under its own turn - a stale one (made before the newest
-            # message, left untouched by the turn that answered it) with its time, never as the newest turn's Next steps
-            'drafts': general.draft_turns(store, task_id),
+            'cards': cards,
             # THE OWNER'S LINES NO TURN HAS TAKEN YET (general.wait_line, the owner 2026-11-07): kept as they were sent, drawn on every screen as
             # waiting for the agent, each at the time it was typed
             # ...and the turn they asked for, at work from the press: `working` and `turnStarted`, as the coding chat's payload says them
@@ -5359,7 +5349,6 @@ def handoff(task_id: int, body: HandoffBody):
             sent = outbound.send_out(store, body.channel, body.to, subject, text)
     except HTTPException: raise
     except Exception as e: raise HTTPException(422, str(e)[:400])
-    from . import general
     from .general import HANDED_OFF
     store.add_comment(task_id, ACTOR, 'human', f'{HANDED_OFF}{body.to} by {body.channel}:\n{text}')
     # FORWARD ONLY (the owner, 2026-10-18): handing it on used to close the task too, and nobody then saw whether the person
@@ -5370,7 +5359,6 @@ def handoff(task_id: int, body: HandoffBody):
     from . import funnel
     funnel.invalidate()
     store.audit('task', task_id, 'handoff', ACTOR, detail={'to': body.to, 'channel': body.channel, 'closed': False})
-    general.follow_up(store, task_id, 'handoff', ACTOR)
     return {'sent': sent, 'text': text, 'status': st}
 
 @app.get('/api/runs/live')
@@ -5836,7 +5824,7 @@ def hub_post(body: HubPostBody, request: Request):
     tab is the person the ladder exists to protect, not a caller to check."""
     from . import guard, handbook as hub
     if not hub.enabled(store):
-        raise HTTPException(403, 'the Hub is off - turn its card on under Connections')
+        raise HTTPException(403, hub.OFF)
     _require_hub_write(request)
     if guard.scope_of(cfg['server'], request.headers) == guard.AGENT and len((body.why_earned or '').strip()) < 20:
         raise HTTPException(422, 'agent Hub posts need why_earned: the concrete investigation or reasoning that earned the post')
@@ -6052,7 +6040,12 @@ class AgentFile(BaseModel): name: str; data: str = ''; attachment: int | None = 
 class AgentReplyBody(BaseModel):
     task_id: int; text: str = ''; agent: str = 'agent'; files: list[AgentFile] = []; follow_up: bool = False; to: str = ''; answers: int | None = None
     # ...who hears it, the agent's call (2026-11-06): the sender alone, or who else is copied, and the one line why (wrapup.agent_reply)
-    only: bool = False; cc: list[str] | None = None; why_to: str = ''
+    only: bool = False; cc: list[str] | None = None; why_to: str = ''; then: str | None = None
+
+def _raising(tid: int, then: str | None):
+    "`taskuary --reply/--draft --then`: the card it writes keeps the agent's own step after his press (card.raising); a tool's own call says it there."
+    from . import card
+    return contextlib.nullcontext() if then is None else card.raising(store, tid, then)
 
 def _agent_files(files, tid: int):
     "(name, bytes[, attachment id]) of each file an agent hands over - a mail's file only when it is on this task's own mail (agenttools.mail_file)."
@@ -6076,10 +6069,13 @@ def agent_reply(body: AgentReplyBody, request: Request):
     from . import wrapup
     _own_task_only(request, body.task_id)
     if not store.get_task(body.task_id): raise HTTPException(404, 'no such task')
-    return wrapup.agent_reply(store, body.task_id, body.text, body.agent, files=_agent_files(body.files, body.task_id), follow_up=body.follow_up, to=body.to,
-                              answers=body.answers, only=body.only, cc=body.cc, why_to=body.why_to)
+    with _raising(body.task_id, body.then):
+        return wrapup.agent_reply(store, body.task_id, body.text, body.agent, files=_agent_files(body.files, body.task_id), follow_up=body.follow_up, to=body.to,
+                                  answers=body.answers, only=body.only, cc=body.cc, why_to=body.why_to)
 
-class AgentDraftBody(BaseModel): task_id: int; text: str; to: str = ''; subject: str = ''; slot: str = ''; agent: str = 'agent'; files: list[AgentFile] = []; cc: list[str] = []; mailbox: str = ''; guessed: list[str] = []
+class AgentDraftBody(BaseModel):
+    task_id: int; text: str; to: str = ''; subject: str = ''; slot: str = ''; agent: str = 'agent'; files: list[AgentFile] = []; cc: list[str] = []
+    mailbox: str = ''; guessed: list[str] = []; then: str | None = None
 
 @app.post('/api/agent/draft')
 def agent_draft(body: AgentDraftBody, request: Request):
@@ -6089,7 +6085,8 @@ def agent_draft(body: AgentDraftBody, request: Request):
     if not store.get_task(body.task_id): raise HTTPException(404, 'no such task')
     from . import wrapup
     files = _agent_files(body.files, body.task_id)
-    out = slots.draft(store, body.task_id, body.text, body.to, body.subject, body.slot, body.agent, cc=body.cc, mailbox=body.mailbox, guessed=body.guessed)
+    with _raising(body.task_id, body.then):
+        out = slots.draft(store, body.task_id, body.text, body.to, body.subject, body.slot, body.agent, cc=body.cc, mailbox=body.mailbox, guessed=body.guessed)
     if out.get('ok') and files: out = {**out, **wrapup.attach_files(store, out['review_id'], files, body.agent)}
     return {**out, **wrapup.carries(store, out['review_id'])} if out.get('ok') and out.get('review_id') else out
 
@@ -6196,7 +6193,7 @@ def agent_browser(body: AgentBrowserBody, request: Request):
         from . import origin
         if origin.of_task(store, body.task_id)[0] == 'stranger':
             raise HTTPException(403, 'this task has no browser: it carries a message from someone the owner has not vouched for')
-        raise HTTPException(403, general.no_browser_line(store, road))
+        raise HTTPException(403, general.browser_card(store, body.task_id, road))
     try: return {'ok': True, **browserview.ask_open(str(s.sid), body.url)}
     except ValueError as e: raise HTTPException(422, str(e))
 
@@ -6248,53 +6245,71 @@ class AgentNewTaskBody(BaseModel): task_id: int; title: str = ''; ask: str = '';
 def agent_new_task(body: AgentNewTaskBody, request: Request):
     """The new_task tool: a separate job the owner asked for on this task, made a task of its own and started at once (the owner, 2026-11-17:
     "I think it should be able to create new task from the agent"). It is the owner's own work - made as New makes it, started by the task
-    page's own dispatch door - so nothing is held for a press: nothing leaves. Never from a stranger's task, nor one the owner never spoke on."""
-    from . import general, origin, repochoice
+    page's own dispatch door - so nothing is held for a press: nothing leaves. Never from a stranger's task; on one the owner never spoke on, a
+    card for his press."""
+    from . import general, origin
     _own_task_only(request, body.task_id)
     if not store.get_task(body.task_id): raise HTTPException(404, 'no such task')
-    if origin.of_task(store, body.task_id)[0] == 'stranger' or not general.owner_spoke(store, body.task_id):
-        raise HTTPException(403, 'not started: only the owner starts new work, and they have not asked for it on this task - say what you '
-                                 'would start in your answer instead.')
+    if origin.of_task(store, body.task_id)[0] == 'stranger':
+        raise HTTPException(403, "not started: this task carries a message from someone the owner has not vouched for, and a stranger's words "
+                                 'never start new work - say what you would start in your answer instead.')
     title, ask = ' '.join(str(body.title or '').split())[:120], str(body.ask or '').strip()
     if not title or not ask: raise HTTPException(422, 'give `title` (a line) and `ask` (the whole brief) - nothing was started')
     kind = str(body.kind or 'general').strip().lower()
     if kind not in task_kinds.AGENT: raise HTTPException(422, f'`kind` is general or coding, not {kind!r} - nothing was started')
+    # ...ON A TASK HE NEVER SPOKE ON, ONE CARD: "Start <title> as its own task" (the owner, 2026-11-25: "it should find a way around it") -
+    # it was a refusal the agent could only turn into words; his press makes it and starts it (new_task_from), the same road as this one
+    if not general.owner_spoke(store, body.task_id):
+        from . import proposals
+        from .selfclose import CARD_TAIL
+        p = {'action': 'start_task', 'title': title, 'ask': ask, 'kind': kind, **({'repo': body.repo} if body.repo else {}),
+             **({'model': body.model} if body.model else {})}
+        q = proposals.queue(store, body.task_id, p, 'taskuary', refused=(miss := []))
+        if not q: raise HTTPException(422, f"not started: {miss[0] if miss else 'it was not put to him'}")
+        return {'ok': True, 'queued': True, 'review': q['reviewId'], 'started': False,
+                'next': f'Not started: the owner has not asked for new work on this task. Starting "{title}": {CARD_TAIL}'}
+    return new_task_from(body.task_id, title, ask, kind, body.model, body.repo, body.agent)
+
+
+def new_task_from(from_tid: int, title: str, ask: str, kind: str = 'general', model: str = '', repo: str = '', agent: str = 'agent') -> dict:
+    "Make the task `title` asked from task `from_tid` and start its agent - the new_task tool's road, and the press on its card (proposals)."
+    from . import general, repochoice
     if kind == 'coding' and not hub_agents.developer_mode(store): kind = 'general'
     # ...ONE JOB IS ONE TASK (the stress round, 2026-11-18): the call repeated - a retry, a resumed session replaying its last step - made
     # a second task and a second agent beside the first. The same title from the same task, still open, is that task: answered as made,
     # and started only if its first start never went
     with _NEW_TASK_LOCK:
-        new = _made_from(body.task_id, title)
+        new = _made_from(from_tid, title)
         if new and (general.history(store, new) or general.starting(new) or getattr(hub_term.session_for(new), 'alive', False)):
             return {'ok': True, 'task': task_ref(new), 'title': title, 'already': True, 'started': True,
                     'next': f'{task_ref(new)} was already started from here and is working on it - nothing new was made'}
         # ...AND THE SAME WORK ALREADY OPEN ELSEWHERE IS THAT TASK (the owner's live app 2026-11-18): the ask arrives as a message does - triage
         # reads whether an open task is it (ingest.arrive_words), and its agent hears it there in Taskuary's words, never a line in his name
         from . import ingest
-        if not new and (same := (ingest.arrive_words(store, f'{title}. {ask}', 'taskuary', ACTOR, skip={body.task_id},
-                                                     said=f'From {task_ref(body.task_id)}: {ask}') or {}).get('tid')):
-            store.add_comment(body.task_id, body.agent, 'agent', f'Handed to {task_ref(same)}, which is already that work: {title}')
+        if not new and (same := (ingest.arrive_words(store, f'{title}. {ask}', 'taskuary', ACTOR, skip={from_tid},
+                                                     said=f'From {task_ref(from_tid)}: {ask}') or {}).get('tid')):
+            store.add_comment(from_tid, agent, 'agent', f'Handed to {task_ref(same)}, which is already that work: {title}')
             return {'ok': True, 'task': task_ref(same), 'title': title, 'already': True, 'started': True,
                     'next': f'{task_ref(same)} is already that same work - its agent was told; nothing new was made. Say so in one line'}
         made = not new
         if made:
             # ...the owner's ask, made at the door they asked from - the task they spoke on's ("agent" is no door: the Assistant named it one)
             from . import asks
-            via = asks.of(store.get_task(body.task_id)) or 'desktop'
-            new = store.create_task({'Title': title, 'Summary': ask, 'Kind': kind, 'AskedVia': via, 'OriginBase': 'owner'}, body.agent)
+            via = asks.of(store.get_task(from_tid)) or 'desktop'
+            new = store.create_task({'Title': title, 'Summary': ask, 'Kind': kind, 'AskedVia': via, 'OriginBase': 'owner'}, agent)
             from . import selfclose
             selfclose.claim(store, new, ACTOR)           # the owner's own work: its agent never closes it by itself
-            store.audit('task', new, 'create', body.agent, detail={'from_task': body.task_id, 'title': title})
+            store.audit('task', new, 'create', agent, detail={'from_task': from_tid, 'title': title})
     out = {'ok': True, 'task': task_ref(new), 'title': title, 'kind': kind}
     # ...a checkout named for what is not a coding task (developer mode off made it general) is said dropped, never silently
-    if body.repo and kind != 'coding': out['repo_not_set'] = f'{body.repo} was not set: {task_ref(new)} is a general task, which works in no checkout'
-    if body.repo and kind == 'coding':
-        try: repochoice.use(store, new, body.repo, f'named by the agent on {task_ref(body.task_id)}')
+    if repo and kind != 'coding': out['repo_not_set'] = f'{repo} was not set: {task_ref(new)} is a general task, which works in no checkout'
+    if repo and kind == 'coding':
+        try: repochoice.use(store, new, repo, f'named by the agent on {task_ref(from_tid)}')
         except (PermissionError, ValueError) as e: out['repo_not_set'] = str(e)
-    res = _start_new_task(new, kind, ask, body.model)
+    res = _start_new_task(new, kind, ask, model)
     # ...said on this task once it is known: "Started" was written before the start, and stood over one that was refused
-    if res['started']: store.add_comment(body.task_id, body.agent, 'agent', f'Started {task_ref(new)}: {title}')
-    elif made: store.add_comment(body.task_id, body.agent, 'agent', f"Made {task_ref(new)}: {title} - its agent did not start: {res['why']}")
+    if res['started']: store.add_comment(from_tid, agent, 'agent', f'Started {task_ref(new)}: {title}')
+    elif made: store.add_comment(from_tid, agent, 'agent', f"Made {task_ref(new)}: {title} - its agent did not start: {res['why']}")
     return {**out, **res}
 
 def _start_new_task(new: int, kind: str, ask: str, model: str) -> dict:
@@ -6430,6 +6445,12 @@ def agent_use_repo(body: AgentUseRepoBody, request: Request):
     _own_task_only(request, body.task_id)
     if not store.get_task(body.task_id): raise HTTPException(404, 'no such task')
     try: return repochoice.use(store, body.task_id, body.path_or_name, body.why)
+    except repochoice.Asks as e:            # ...a pick his yes makes: one card, his press the pick (the owner, 2026-11-25)
+        from . import proposals
+        from .selfclose import CARD_TAIL
+        q = proposals.queue(store, body.task_id, {'action': 'use_repo', 'path': e.path, 'why': str(body.why or '')[:200]}, 'taskuary', refused=(miss := []))
+        if not q: raise HTTPException(403, f"{e} - {miss[0] if miss else 'it was not put to him'}")
+        return {'ok': True, 'queued': True, 'review': q['reviewId'], 'says': f'Not taken yet: {e}. Working in {e.path}: {CARD_TAIL}'}
     except PermissionError as e: raise HTTPException(403, str(e))
     except ValueError as e: raise HTTPException(422, str(e))
 
@@ -7474,7 +7495,19 @@ def report_rerun(sid: int, request: Request):
     run the Advisor or any report by it (the red team, 2026-11-24, T7)."""
     dock = store.get_setting('assistant_dock_task_id')
     if guard.scope_of(cfg['server'], request.headers) != guard.OWNER and not (str(dock or '').isdigit() and guard.owns_task(cfg['server'], request.headers, int(dock))):
-        raise HTTPException(403, "agents cannot do this: running a report again is the owner's press, or the Assistant's")
+        # ...A TASK'S AGENT ASKS, ON ONE CARD (the owner, 2026-11-25: "for security issues, wouldn't you ask the user to allow it?"): a run of
+        # his own saved report or routine hands nothing to the agent but its result - his press runs it, as his Run now does
+        tid = guard.session_tid(cfg['server'], request.headers)
+        src = store.get_source(sid)
+        if tid is None or not store.get_task(tid) or not src or src.get('Channel') != 'report':
+            raise HTTPException(403, "agents cannot do this: running a report again is the owner's press, or the Assistant's")
+        from . import proposals
+        from .selfclose import CARD_TAIL
+        try: title = json.loads(src.get('ConfigJson') or '{}').get('title') or src.get('Address')
+        except ValueError: title = src.get('Address')
+        q = proposals.queue(store, tid, {'action': 'rerun_report', 'source_id': sid, 'title': str(title or f'report {sid}')}, 'taskuary', refused=(miss := []))
+        if not q: raise HTTPException(422, f"not run: {miss[0] if miss else 'it was not put to him'}")
+        return JSONResponse({'ok': True, 'queued': True, 'review': q['reviewId'], 'says': f'Not run yet: running "{title}" again: {CARD_TAIL}'}, status_code=202)
     return _rerun_report(sid)
 
 
@@ -9302,9 +9335,18 @@ def tool_run(body: dict, request: Request):
                                          "work it with your session's own tools, or on one of his systems", see=('list_systems', 'lists them')))
     # ...AN AGENT'S POST ON A NETWORK NOT CONNECTED is its card all the same, Connect where Post would be (outbound.review_connect): "the
     # connection is off - turn it on" sent the agent to say in words what the card's own Connect does (design round 2, 2026-11-18)
-    from . import connectorcatalog
-    if not conn.get('Active') and connectorcatalog.action_for(t) and guard.scope_of(cfg['server'], request.headers) == guard.AGENT:
-        return _agent_proposes(request, t, conn, body, scopes.reaches(t, body) or f'{t} reaches people')
+    # ...AND ANY CALL ON A CONNECTION SWITCHED OFF is a card whose press switches it on and runs it - its Connect where it is not set up
+    # (the owner, 2026-11-25: "it should find a way around it"): one card per connection per task, never a pile of them
+    if not conn.get('Active') and conn.get('Type') != 'handbook' and guard.scope_of(cfg['server'], request.headers) == guard.AGENT:
+        name = conn.get('Name') or t
+        if str((body or {}).get('task_id') or '').isdigit() and (up := _off_card(int(body['task_id']), conn['ConnectorId'])):
+            return JSONResponse({'ok': True, 'queued': True, 'already': True, 'review': up,
+                                 'says': f"The card for {name}, which is switched off, is already up on this task - nothing was run. Go on with "
+                                         "the rest; it runs when he presses it."}, status_code=202)
+        return _agent_proposes(request, t, conn, body, scopes.reaches(t, body) or f"runs on {name}, which is switched off - his press switches it on")
+    if not conn.get('Active') and conn.get('Type') == 'handbook':
+        from .handbook import OFF
+        raise HTTPException(403, OFF)
     if not conn.get('Active'):
         from .agenttools import refusal
         raise HTTPException(403, refusal(f"the {t} connection is off - only the owner turns it on, under {words.name('connections')}",
@@ -9366,6 +9408,15 @@ def _mcp_tool(conn, body):
 
 # what an agent may not put on a proposal: where it runs is the card's, and a workflow's own resume or a close-out is Taskuary's
 _NOT_PROPOSED = ('task_id', 'why', 'action', 'flow_run', 'closeout', '_write')
+
+def _off_card(tid: int, cid: int) -> int | None:
+    "The card waiting on task `tid` for a call on connection `cid` - the one a second call on it while it is off stands behind."
+    for r in store._rows("SELECT ReviewId, DraftText FROM review WHERE TaskId=? AND Kind='action' AND Status='pending' ORDER BY ReviewId", (tid,)):
+        try: p = json.loads(r.get('DraftText') or '{}')
+        except ValueError: continue
+        if p.get('action') == 'run_tool' and str(p.get('connector_id')) == str(cid): return r['ReviewId']
+    return None
+
 
 def _agent_proposes(request: Request, t: str, conn: dict, body: dict, why: str):
     """An agent's call that would reach a person, filed as a run_tool proposal on its OWN task (proposals.queue): 202 with the review

@@ -175,16 +175,17 @@ class UseRepoTests(unittest.TestCase):
         with self.assertRaises(ValueError): repochoice.use(self.s, self.tid, 'northwind/nowhere', 'a guess')
         self.assertFalse(any(x.startswith('agent-repo:') for x in str(self.s.get_task(self.tid).get('Tags') or '').split(',')))
 
-    def test_a_checkout_outside_the_allowed_folders_is_refused(self):
-        with self.assertRaises(PermissionError) as e: repochoice.use(self.s, self.tid, self.outside, 'found it')
-        # ...the setting itself linked, never its section's name (design round 5: "Settings -> Agents" opened the Settings home)
-        self.assertIn('(#settings=config&group=Agents&key=code_folders)', str(e.exception))
+    def test_a_checkout_outside_the_allowed_folders_is_his_card_to_allow(self):
+        # the owner, 2026-11-25: "for security issues, wouldn't you ask the user to allow it?" - it was a refusal naming a setting
+        with self.assertRaises(repochoice.Asks) as e: repochoice.use(self.s, self.tid, self.outside, 'found it')
+        self.assertEqual(e.exception.path, self.outside)
+        self.assertEqual(repochoice.use(self.s, self.tid, self.outside, 'found it', 'owner', mine=True)['repo'], 'org/app')     # ...his press
         self.s.set_setting(repochoice.FOLDERS_KEY, f'{self.code}\n{self.elsewhere}', 'owner')
         self.assertEqual(repochoice.use(self.s, self.tid, self.outside, 'found it')['repo'], 'org/app')
 
     def test_the_owners_pick_is_never_overruled_and_a_strangers_task_picks_nothing(self):
         self.s.tag_task(self.tid, 'repo:northwind/ledger', actor='owner')
-        with self.assertRaises(PermissionError): repochoice.use(self.s, self.tid, self.portal, 'better')
+        with self.assertRaises(repochoice.Asks): repochoice.use(self.s, self.tid, self.portal, 'better')        # ...only his card moves it
         other = self.fx.task(kind='coding')
         with mock.patch('taskuary.origin.of_task', return_value=('stranger', 'a new sender')), self.assertRaises(PermissionError):
             repochoice.use(self.s, other, self.ledger, 'theirs')
@@ -202,7 +203,11 @@ class UseRepoTests(unittest.TestCase):
             c = TestClient(server.app)
             r = c.post('/api/agent/use-repo', json={'task_id': self.tid, 'path_or_name': 'ledger', 'why': 'the export'})
             self.assertEqual((r.status_code, r.json()['repo']), (200, 'northwind/ledger'))
-            self.assertEqual(c.post('/api/agent/use-repo', json={'task_id': self.tid, 'path_or_name': self.outside, 'why': 'x'}).status_code, 403)
+            out = c.post('/api/agent/use-repo', json={'task_id': self.tid, 'path_or_name': self.outside, 'why': 'x'})     # ...his card, never a 403
+            self.assertEqual(out.status_code, 200); self.assertTrue(out.json()['queued']); self.assertIn("the owner's to press", out.json()['says'])
+            from taskuary import proposals
+            proposals.execute(self.s, self.s.get_review(out.json()['review']), 'owner')
+            self.assertIn('agent-repo:org/app', str(self.s.get_task(self.tid).get('Tags') or ''))
             self.assertEqual(c.get('/api/agent/repos', params={'task_id': self.tid, 'query': 'portal'}).json()['data'][0]['repo'], 'northwind/portal')
             c.put(f'/api/tasks/{self.tid}/repo', json={'repo': 'northwind/portal'})
         tags = str(self.s.get_task(self.tid).get('Tags') or '')

@@ -2,6 +2,50 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.4.4.0 - 2026-11-25
+
+- The browser's DevTools port is never in the agent's shell
+- Only the receiving host's own top-most stamp verifies a sender
+- An untrusted machine's notice on his own task reaches no agent
+- A letter goes only to the recipients its card showed
+- How the owner signs, told to an agent, waits for his press
+- A push, a pull request or a merge is always a card for his press: 'Agents may push / deploy' decides only whether an agent goes without one
+- A stranger's session never hands the CLI's sign-in to its tools
+- A card's buttons are the card's own, wherever its press is named
+- A database read is the database's own word where it has one
+- The rail the Assistant reads says where each task stands, and counts his by it
+- The end-of-day brief calls an invite handled only when he answered it
+- A page asks to open an address only on a press in the page itself
+- A finished agent's row says no "nothing since" while his or its agent's move is next
+- A comment on, or the close of, the issue a task came from is a card for his press whatever the GitHub card's switches say
+- The propose tool takes a push straight onto the base, as the mark in an answer does
+- An Advisor idea names the thread and the person it is about, where its page opens
+- Show less on a long line shuts it in place instead of blanking the chat
+- An agent's call on a connection not marked as an agent tool is a card for his press
+- An agent's calendar read with reading the calendar switched off raises his card to switch it on
+- An agent's tool call on a connection switched off, or on no card at all, says what it can do next
+- A stranger's session told no by the floor is told the way on
+- A box's value the browser gate will not read is refused with the way on
+- A reply a later turn rewrote in place stands under that turn
+- The coding chat names a draft's turn by when its words were written
+- A settings card for a switch no card may turn says to ask for the act instead
+- Playbooks or the Hub switched off is said as his choice, and the agent goes on without it
+- A reply on a GitHub thread goes on his Send, as the comment card does: the card switch over it is gone
+- An agent's call on a connection switched off is one card whose press switches it on and runs it
+- A desktop act with Agent Desktop off, or on a task not marked "needs desktop", waits on one card to let this task use it
+- New work asked for on a task he never spoke on is one card, "Start <title> as its own task"
+- A browser asked of an AI that cannot use one is one card, "Run this task on <the AI that can>"
+- A press wakes the agent only where its card names a step of the agent's own after it
+- A card's Connect on a connection not set up brings that connection's own setup up under the card
+- A task's agent asking to run one of his reports or routines now is one card, his press his Run now
+- A checkout outside the folders agents look in, or over his own pick, is one card for his press
+- A card a later turn rewrote keeps its earlier words greyed where they stood, and a turn keeps why it began
+- Delete card placement by turn ids and times that nothing draws from any more
+- A Codex agent may write its task's outputs folder: what it makes there reaches the task and its cards
+- A view of only words is no view, and a view refused beside a picture never takes the picture down
+- A routine's run is told the routine's words and facts, never a rule of the code's
+- A file on a card is taken from wherever its agent may read it: copied into the task's folder and that copy carried
+
 ## 0.4.3.9 - 2026-11-25
 
 - The answer a task waits on reaches an agent even where none worked it yet

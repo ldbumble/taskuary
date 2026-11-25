@@ -210,7 +210,7 @@ class Running(unittest.TestCase):
         self.assertEqual(self.picked({self.GIT + r'\usr\bin\bash.exe'}, {'git': self.GIT + r'\mingw64\bin\git.exe'}), self.GIT + r'\usr\bin\bash.exe')
         a, b, c, d, e = self.bash({wsl['bash']}, {'bash': wsl['bash']})
         with a, b, c, d, e: self.assertRaisesRegex(RuntimeError, 'no Git Bash', sg._argv, 'Bash', 'git push')
-        with a, b, c, d, e: self.assertEqual(sg._argv('PowerShell', 'git push')[-2:], ['-Command', 'git push'])
+        with a, b, c, d, e: self.assertEqual(sg._argv('PowerShell', 'git push')[-2:], ['-Command', sg.PS_UTF8 + 'git push'])
 
     def test_output_is_read_in_its_own_encoding(self):
         wsl = 'Windows Subsystem for Linux has no installed distributions.\r\nwsl.exe --install <Distro>\r\n'
@@ -221,6 +221,21 @@ class Running(unittest.TestCase):
         self.assertEqual(sg.failed(sg.text(wsl.encode('utf-16-le')), 1),
                          'The held step exited with code 1: Windows Subsystem for Linux has no installed distributions.')
         self.assertEqual(sg.failed('', 128), 'The held step failed: exit 128')
+
+    @unittest.skipUnless(os.name == 'nt', "Windows PowerShell's code pages")
+    def test_a_dash_survives_a_powershell_pipe_to_a_file(self):
+        "The owner, 2026-11-25: an agent's PowerShell wrote a Python's 'a – b' to a file as 'a ΓÇô b', and piped 'c — d' on as 'c ? d'."
+        import subprocess, sys, tempfile
+        from taskuary import agents
+        d = tempfile.mkdtemp(); f, run = os.path.join(d, 'out.txt'), os.path.join(d, 'run.py')
+        py = f'& "{sys.executable}" -c'
+        cmd = f"""{py} "print('a – b')" > '{f}'; 'c — d' | {py} "import sys; print(sys.stdin.read().strip())" >> '{f}'"""
+        # ...run by a script of the test's own (the suite lets no shell start from here): the argv and environment an agent's command gets
+        with open(run, 'w', encoding='utf-8') as fh:
+            fh.write(f'import subprocess, sys; sys.exit(subprocess.run({sg._argv("PowerShell", cmd)!r}, env={agents.child_env()!r}, '
+                     'stdin=subprocess.DEVNULL, timeout=60).returncode)')
+        self.assertEqual(subprocess.run([sys.executable, '-I', run], timeout=90).returncode, 0)
+        with open(f, encoding='utf-8-sig') as fh: self.assertEqual(fh.read().split(), ['a', '–', 'b', 'c', '—', 'd'])
 
 
 class Hook(unittest.TestCase):
@@ -778,7 +793,7 @@ def test_a_held_line_replays_in_the_shell_it_was_written_for():
         assert sg.replay({'command': bash, 'shell': 'Bash'}) == ['/usr/bin/bash', '-c', bash]
         assert sg.replay({'command': "bash -lc 'git push origin main'", 'shell': 'PowerShell'}) == ['/usr/bin/bash', '-lc', 'git push origin main']
     own = 'Get-ChildItem | Remove-Item -Recurse'
-    assert sg.replay({'command': own, 'shell': 'PowerShell'})[-2:] == ['-Command', own]
+    assert sg.replay({'command': own, 'shell': 'PowerShell'})[-2:] == ['-Command', sg.PS_UTF8 + own]
     # ...and the argv a brain gave as a list (Codex) is that argv, the program found where it was named
     with mock.patch.object(sg, '_shell_exe', return_value='C:/pwsh.exe'):
         assert sg.replay({'command': 'x', 'argv': ['powershell.exe', '-Command', 'git push']}) == ['C:/pwsh.exe', '-Command', 'git push']

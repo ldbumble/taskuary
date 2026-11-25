@@ -330,13 +330,13 @@ class SharedSessionTests(unittest.TestCase):
         store = MemoryStore(); tid = general_task(store)
         mid = store.add_message({'ExternalId': 'source-backed', 'Channel': 'email',
                                  'Subject': 'Please compare these', 'BodyText': 'Compare them'})
-        store.attach_message(mid, tid)
+        store.attach_message(mid, tid); store.update_task(tid, {'TrustedThrough': mid}, 'owner')     # a source he trusts: nothing is held
         session = general.GeneralSession(store, tid)
         session.pick, session.provider = 'cli:claude', 'claude'
         answer = 'Here is the comparison.\n[[TASKUARY-DONE]] Finished the comparison.'
         timer = mock.Mock()
         with mock.patch.object(llm, 'build_llm', return_value=lambda *a, **k: answer), mock.patch('taskuary.origin.launch_mode', return_value='full'), \
-             mock.patch('taskuary.origin.hold', return_value=None), mock.patch.object(general.threading, 'Timer', return_value=timer) as make_timer:
+             mock.patch.object(general.threading, 'Timer', return_value=timer) as make_timer:
             session.send_prompt('Compare them')
         make_timer.assert_not_called()
         self.assertNotIn(store.get_task(tid)['Status'], ('done', 'dropped'))

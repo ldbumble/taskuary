@@ -23,7 +23,7 @@ KINDS = {'stat': ((), 1), 'progress': (('target',), 1), 'line': (('x',), 2), 'ar
 AGGS = ('count', 'sum', 'avg', 'median', 'min', 'max')
 RANGES = (7, 30, 90, 0)            # days back; 0 is everything the sources returned
 MAX_SOURCES, MAX_COMPONENTS, ROWS = 8, 20, 2000
-COLUMN_KEYS = ('x', 'y', 'series', 'label', 'meta', 'value', 'date')
+COLUMN_KEYS = ('x', 'y', 'series', 'label', 'meta', 'value', 'date', 'per')
 
 
 def is_dashboard(cfg) -> bool: return isinstance(cfg, dict) and cfg.get('type') == 'dashboard'
@@ -144,7 +144,8 @@ DATASETS = {'tasks': (_tasks, 'task_id, ref, title, kind, status, state (open|cl
             'flow': (_flow, 'message_id, task_id, day (date), channel, stage (Came in|Triaged|On a task|Task closed - one row per stage reached)'),
             'agent_runs': (_agent_runs, 'run_id, task_id, ref, day (date), agent, status, outcome (finished|failed|stopped|waiting on you|working), minutes'),
             'replies': (_replies, 'task_id, day (date the reply was decided), channel, status, hours (ask to answer)'),
-            'ai_usage': (_ai_usage, 'day (date), task_id (agent runs only), kind (agent run|one call), job, what (the job in words), brain, model, '
+            'ai_usage': (_ai_usage, 'day (date), task_id (agent runs only), kind (agent run|one call), job, '
+                                    'who (Triage|Advisor|Tasks|Assistant|Other - who the AI worked for), what (the job in words), brain, model, '
                                     'tier (quick|normal|hard|as set), calls, tokens_in, cached, tokens_out, tokens (in + out), seconds, minutes')}
 
 
@@ -164,11 +165,22 @@ AI_TILES = [
     {'kind': 'bar', 'title': 'AI calls: quick, normal or hard', 'said': 'How many AI calls were quick, normal or hard, in that order', 'source': 'ai',
      'x': 'tier', 'agg': 'sum', 'y': 'calls', 'order': ['quick', 'normal', 'hard'], 'w': 1}]
 # ...and the total, in the top row (the owner, 2026-11-07: "I don't see the token count?" - the AI tiles came last, below the fold).
-# The ai_usage rows carry tokens and time, no price, so there is no cost to show beside it
+# The ai_usage rows carry tokens and time, no price - no card or provider hands this app one to keep - so what the AI spent is its tokens
 AI_TOKENS = {'kind': 'stat', 'title': 'AI tokens', 'said': 'How many tokens the AI used', 'source': 'ai', 'agg': 'sum', 'y': 'tokens', 'good': 'none'}
 AI_SOURCE_KEY = 'ai'
 _own = lambda key, label, dataset, date: {'key': key, 'label': label, 'type': 'taskuary_data', 'dataset': dataset, 'days': 90, 'date': date}
-_by_model, _by_job, _per_run, _run_minutes, _calls = AI_TILES
+_by_model, _, _, _run_minutes, _calls = AI_TILES
+# WHAT THE AI SPENT, AND FOR WHOM (the owner, 2026-11-24: "spend per day over last 7 days. then cost per task average. per
+# triage/advisor/tasks/assistant. Then how many tasks were completed"): the tokens per day split by who they were for, the range's total for
+# each, what one task's agent work comes to, and the tasks closed per day - done or dropped
+SPEND_TILES = [
+    {'kind': 'stacked', 'title': 'AI tokens per day, by who used them', 'said': 'Tokens per day, split by triage, the Advisor, tasks and the Assistant',
+     'source': 'ai', 'x': 'day', 'series': 'who', 'agg': 'sum', 'y': 'tokens', 'w': 2},
+    {'kind': 'bar', 'title': 'AI tokens by who used them', 'said': 'Tokens for triage, the Advisor, tasks and the Assistant, in that order',
+     'source': 'ai', 'x': 'who', 'agg': 'sum', 'y': 'tokens', 'order': ['Triage', 'Advisor', 'Tasks', 'Assistant', 'Other'], 'w': 2},
+    {'kind': 'stat', 'title': 'Tokens per task', 'said': "What one task's agent work comes to in tokens, on average", 'source': 'ai', 'agg': 'sum',
+     'y': 'tokens', 'per': 'task_id', 'where': {'kind': 'agent run'}, 'good': 'none'}]
+_spend_by_day, _spend_by_who, _per_task = SPEND_TILES
 GLANCE = {'type': 'dashboard', 'title': 'Taskuary at a glance', 'daily_at': '07:00',
           'sources': [_own('mail', 'What came in', 'mail', 'day'), _own('flow', 'How far it got', 'flow', 'day'),
                       _own('tasks', 'Tasks', 'tasks', 'arrived'), _own('closed', 'Tasks closed', 'tasks', 'closed'),
@@ -190,17 +202,21 @@ GLANCE = {'type': 'dashboard', 'title': 'Taskuary at a glance', 'daily_at': '07:
                'source': 'closed', 'agg': 'count', 'where': {'state': 'closed'}, 'range': 7, 'target': 15},
               {'kind': 'bar', 'title': 'How far it got', 'said': 'How far what came in got, stage by stage, each as a share of what came in',
                'source': 'flow', 'x': 'stage', 'order': list(STAGES), 'share': True, 'w': 2},
-              # ...then the days: what came in beside the tokens it took, what the agents did beside what the AI was doing
-              {'kind': 'stacked', 'title': 'What came in, by channel', 'said': 'Messages in per day, split by channel, stacked',
-               'source': 'mail', 'x': 'day', 'series': 'channel', 'w': 2},
-              _by_model,
-              {'kind': 'stacked', 'title': 'Agent sessions, and how they ended', 'said': 'Agent sessions per day, split by how they ended',
-               'source': 'agents', 'x': 'day', 'series': 'outcome', 'w': 2},
-              _by_job,
-              # ...an agent's time and tokens
+              # ...what the AI spent, per day and for whom
+              _spend_by_day, _spend_by_who,
+              # ...what one task, one run and one session take, and how hard the calls were
+              _per_task, _run_minutes,
               {'kind': 'stat', 'title': 'Agent time per session', 'said': 'The median minutes an agent session takes',
                'source': 'agents', 'agg': 'median', 'y': 'minutes', 'unit': 'min', 'good': 'none'},
-              _per_run, _run_minutes, _calls,
+              _calls,
+              # ...then the days: what came in beside what got closed, what the agents did beside the models they ran on
+              {'kind': 'stacked', 'title': 'What came in, by channel', 'said': 'Messages in per day, split by channel, stacked',
+               'source': 'mail', 'x': 'day', 'series': 'channel', 'w': 2},
+              {'kind': 'stacked', 'title': 'Tasks closed per day', 'said': 'Tasks closed per day, split by done or dropped',
+               'source': 'closed', 'x': 'closed', 'series': 'status', 'where': {'state': 'closed'}, 'w': 2},
+              {'kind': 'stacked', 'title': 'Agent sessions, and how they ended', 'said': 'Agent sessions per day, split by how they ended',
+               'source': 'agents', 'x': 'day', 'series': 'outcome', 'w': 2},
+              _by_model,
               # ...the rankings
               {'kind': 'bar', 'title': 'Open work by kind', 'said': 'Open tasks right now, by kind', 'source': 'tasks', 'x': 'kind',
                'where': {'state': 'open'}, 'range': False, 'w': 2},
@@ -208,6 +224,27 @@ GLANCE = {'type': 'dashboard', 'title': 'Taskuary at a glance', 'daily_at': '07:
               # ...and the detail: the asks that have waited longest on the owner, each opening its task
               {'kind': 'list', 'title': 'Waiting longest on you', 'said': 'The open tasks that have waited longest on me, with how long, at most 6',
                'source': 'tasks', 'label': 'title', 'meta': 'waiting', 'where': {'status': 'open'}, 'range': False, 'sort': 'arrived', 'limit': 6, 'w': 4}]}
+# A SAVED BUILT-IN NOBODY EDITED FOLLOWS THE BUILT-IN: the print of every earlier GLANCE's tiles (glance_print). An edited copy keeps its own.
+GLANCE_WAS = ('724ff7395bdd',)
+
+
+def glance_print(comps) -> str:
+    import hashlib
+    return hashlib.sha1(json.dumps([{k: v for k, v in c.items() if k not in ('said', 'source')} for c in comps if isinstance(c, dict)],
+                                   sort_keys=True).encode()).hexdigest()[:12]
+
+
+def migrate_glance(store) -> int:
+    """Every saved Taskuary at a glance still drawn as an earlier version drew it becomes today's, its schedule and filters kept."""
+    n = 0
+    for src in store.list_sources(active_only=False):
+        cfg = cfg_of(src)
+        if src.get('Channel') != 'report' or not is_dashboard(cfg) or glance_print(cfg.get('components') or []) not in GLANCE_WAS: continue
+        store.save_source({'SourceId': src['SourceId'], 'ConfigJson': json.dumps({**cfg, 'sources': GLANCE['sources'], 'components': GLANCE['components']})}, 'migrate')
+        n += 1
+    return n
+
+
 TEMPLATES = {'glance': {'title': GLANCE['title'], 'config': GLANCE,
                         'explain': 'What came in and from where, how far it got, what is still open, how fast you answer and what your '
                                    'agents did - from this app\'s own records, so there is nothing to connect.'}}
@@ -216,7 +253,7 @@ TEMPLATES = {'glance': {'title': GLANCE['title'], 'config': GLANCE,
 # ── A TILE IS ONE SENTENCE (the owner, 2026-11-06, of the field grid that set a component up: "it's not generalized ... maybe we
 # should just use text to say what it shows"). The owner writes what a tile shows; the AI binds it to the sources' real columns once
 # (compose.compose_tile) and the sentence stays on the tile as its `said`. A tile saved before then gets one written from its config.
-TILE_KEYS = ('kind', 'title', 'said', 'source', 'agg', 'y', 'where', 'range', 'good', 'unit', 'target', 'x', 'series', 'limit', 'order', 'share',
+TILE_KEYS = ('kind', 'title', 'said', 'source', 'agg', 'y', 'per', 'where', 'range', 'good', 'unit', 'target', 'x', 'series', 'limit', 'order', 'share',
              'label', 'meta', 'sort', 'columns', 'w')
 _AGG_SAID = {'sum': 'the total', 'avg': 'the average', 'median': 'the median', 'min': 'the lowest', 'max': 'the highest'}
 def _col(k): return str(k or '').replace('_', ' ').strip()
@@ -486,6 +523,7 @@ def validate(spec: dict, store=None) -> tuple:
         if r is not None and r is not False and (isinstance(r, bool) or r not in RANGES[:-1]):
             return False, f'{name}: its own "range" is false (what is true now) or one of {", ".join(map(str, RANGES[:-1]))} days'
         if c.get('order') is not None and not isinstance(c['order'], list): return False, f'{name}: "order" is a list of its x values'
+        if c.get('per') is not None and not (isinstance(c['per'], str) and c['per']): return False, f'{name}: "per" is the column it averages over'
         for k in ('target', 'limit'):
             if c.get(k) is not None and (isinstance(c[k], bool) or _num(c[k]) is None): return False, f'{name}: "{k}" is a number'
         if c.get('w') is not None and c['w'] not in (1, 2, 3, 4): return False, f'{name}: "w" is 1 to 4 columns'
@@ -561,7 +599,14 @@ def in_range(rows, date_col, days, now=None):
 def where(rows, w): return [r for r in rows if all(str(r.get(k)) == str(v) for k, v in (w or {}).items())]
 
 
-def aggregate(rows, agg='count', y=None):
+def aggregate(rows, agg='count', y=None, per=None):
+    """The rows' one number - or, `per` a column, the average of that number over each of its values (tokens per task): blank ones left out."""
+    if per:
+        by = {}
+        for r in rows:
+            if r.get(per) not in (None, ''): by.setdefault(str(r[per]), []).append(r)
+        vals = [v for v in (aggregate(g, agg, y) for g in by.values()) if v is not None]
+        return sum(vals) / len(vals) if vals else None
     if (agg or 'count') == 'count': return len(rows)
     vals = [v for v in (_num(r.get(y)) for r in rows) if v is not None]
     if not vals: return None
@@ -593,7 +638,7 @@ def _days(spec): return int(_num((spec.get('filters') or {}).get('range')) or 0)
 
 def numbers(spec: dict, data: dict) -> list:
     """[(tile, value)] for every stat tile, over the dashboard's default range - the value as counted, None where nothing was."""
-    return [(c, aggregate(tile_rows(spec, data, c, _days(spec)), c.get('agg'), c.get('y')))
+    return [(c, aggregate(tile_rows(spec, data, c, _days(spec)), c.get('agg'), c.get('y'), c.get('per')))
             for c in spec.get('components') or [] if c.get('kind') == 'stat']
 
 
@@ -622,9 +667,9 @@ def _panel(spec, data, c, days) -> list:
     """The lines one component says: a number, a goal against its target, or the rows its chart, list or table draws."""
     rows, t, agg, y = tile_rows(spec, data, c, days), c.get('title') or c.get('kind'), c.get('agg'), c.get('y')
     k = c.get('kind')
-    if k == 'stat': return [f'{t}: {_says(c, aggregate(rows, agg, y))}']
+    if k == 'stat': return [f'{t}: {_says(c, aggregate(rows, agg, y, c.get("per")))}']
     if k == 'progress':
-        v, goal = aggregate(rows, agg, y) or 0, _num(c.get('target')) or 0
+        v, goal = aggregate(rows, agg, y, c.get('per')) or 0, _num(c.get('target')) or 0
         return [f"{t}: {fmt(v)} of {fmt(goal)}" + (f' ({round(100 * min(1, v / goal))}%)' if goal else '')]
     if k == 'list':
         if s := c.get('sort'):

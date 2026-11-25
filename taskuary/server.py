@@ -293,6 +293,7 @@ async def _lifespan(_app):
         from . import dashboards
         if (n := dashboards.migrate_ai_tiles(store)): logger.info(f'AI-use tiles added to {n} dashboard(s)')
         if (n := dashboards.migrate_ai_tiles_up(store)): logger.info(f'AI-use tiles moved up in {n} dashboard(s)')   # ...and up top (2026-11-07)
+        if (n := dashboards.migrate_glance(store)): logger.info(f'{n} unedited built-in dashboard(s) now draw what the AI spent')   # (2026-11-24)
     except Exception as e: logger.warning(f'AI-use tiles not added: {e}')
     try:                           # ...and a change card waiting from before, drawn as its new words (2026-11-24)
         from . import proposals

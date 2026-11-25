@@ -60,6 +60,19 @@ def for_message(store, rids, mid) -> None:
     for rid in (rids or ()) if mid else ():
         try: store.set_brain_route(rid, MessageId=int(mid))
         except Exception as e: logger.debug(f'aiusage: route {rid} not given its message - {e}')
+# WHO THE AI WORKED FOR (the owner, 2026-11-24: "spend per day ... per triage/advisor/tasks/assistant"): every row lands on one of these,
+# by its asker when it named one (CALLERS) and else by the job its brain was built for - stored facts, the same answer every run
+WHO = ('Triage', 'Advisor', 'Tasks', 'Assistant', 'Other')
+_WHO_ASKER = {'triage': 'Triage', 'rank': 'Triage', 'sent': 'Triage', 'advisor': 'Advisor', 'reports': 'Other', 'memory': 'Other'}
+_WHO_JOB = {'triage': 'Triage', 'rank': 'Triage', 'judge': 'Triage', 'advisor': 'Advisor', 'assistant': 'Assistant',
+            'general': 'Tasks', 'coding': 'Tasks', 'quick_work': 'Tasks', 'draft': 'Tasks', 'summary': 'Tasks'}
+
+
+def who(job, caller='') -> str:
+    "Which of WHO a call was for: the asker's word first (a report triaging its own run is the report's), else its job's."
+    return _WHO_ASKER.get(str(caller or '').split('.')[0]) or _WHO_JOB.get(job or 'triage', 'Other')
+
+
 TIER_WORDS = {'light': 'quick', 'standard': 'normal', 'strong': 'hard', 'fixed': 'as set', 'held': 'held'}
 RUN_JOBS = ('general', 'coding', 'quick_work')       # an agent's work: one row is a run, not one message's answer
 
@@ -279,7 +292,7 @@ def row(store, r: dict, said: dict = None) -> dict:
     # TOKENS ARE THE NEW ONES: every step of an agent's loop re-sends the whole conversation and the provider reads most of it back from
     # its cache - counted in, a ten-minute task read as millions (2026-11-18). What the cache read is said apart ('cached').
     return {'id': r['Id'], 'at': r.get('At') or '', 'day': str(r.get('At') or '')[:10], 'task_id': r.get('TaskId'),
-            'job': r.get('Job') or '', 'brain': brain,
+            'job': r.get('Job') or '', 'who': who(r.get('Job'), r.get('Caller')), 'brain': brain,
             'what': 'a question the agent asked a stronger model' if r.get('Rule') == 'agent asked' else JOB_WORDS.get(r.get('Job'), r.get('Job') or ''),
             'model': r.get('Ran') or r.get('Model') or brain, 'tier': TIER_WORDS.get(r.get('Tier'), r.get('Tier') or ''),
             'tokens_in': i, 'cached': c, 'tokens_out': o, 'tokens': None if i is None and o is None else max(0, (i or 0) - (c or 0)) + (o or 0),
@@ -305,7 +318,7 @@ def dataset(store, days) -> list:
     for r in store.brain_routes_since(since):
         if r.get('Pick') == 'demo' and r.get('TokensIn') is None: continue          # the demo's scripted answers used nothing
         x = row(store, r, said)
-        base = {k: x[k] for k in ('day', 'job', 'what', 'brain', 'model', 'tier')}
+        base = {k: x[k] for k in ('day', 'job', 'who', 'what', 'brain', 'model', 'tier')}
         nums = {'tokens_in': x['tokens_in'], 'tokens_out': x['tokens_out'], 'cached': x['cached'], 'tokens': x['tokens'], 'seconds': x['seconds']}
         if x['run']:
             out.append({**base, 'task_id': x['task_id'], 'kind': 'agent run', 'calls': max(1, x['calls']), **nums,

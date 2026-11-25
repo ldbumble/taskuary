@@ -159,7 +159,7 @@ def test_the_built_in_dashboard_draws_the_ai_tiles_and_an_old_copy_gets_them_onc
     assert dashboards.validate(dashboards.GLANCE, s) == (True, '')
     data = dashboards.collect(s, dashboards.GLANCE)
     assert not dashboards.problems(dashboards.GLANCE, data)
-    assert dict(dashboards.headline(dashboards.GLANCE, data))['Tokens per agent run'] == '94.0K'
+    assert dict(dashboards.headline(dashboards.GLANCE, data))['Tokens per task'] == '94.0K'
     # an install seeded before 2026-11-06: its saved copy has no AI source
     old = {**dashboards.GLANCE, 'sources': [x for x in dashboards.GLANCE['sources'] if x['key'] != 'ai'],
            'components': [c for c in dashboards.GLANCE['components'] if c.get('source') != 'ai']}
@@ -519,3 +519,74 @@ def test_a_quota_refusal_is_the_providers_quota_in_plain_words_and_the_card_rest
     assert brainroute.spent(s, pick) == str(e.value), 'it rests: the next call says the same line at once, and a backup takes it'
     with mock.patch.object(llm, 'post_retrying') as post, pytest.raises(llm.BudgetSpent): brain('sys', 'again')
     post.assert_not_called()
+
+
+# ── what the AI spent, per day and for whom (the owner, 2026-11-24) ─────────────────────────────────────────────────────────────
+def _spend_store():
+    """A week of invented AI use: triage every day but one, the Advisor and the Assistant on two, agent runs on two tasks (one of them
+    worked twice), a draft, a report's own triage and a memory pass, and one call eight days ago - outside the week. Two closed, one dropped."""
+    from datetime import datetime, timedelta
+    s = MemoryStore()
+    day = lambda n: (datetime.now() - timedelta(days=n)).strftime('%Y-%m-%d 10:00:00')
+    t = [s.create_task({'Title': f'Ask {i}', 'Status': 'open', 'Kind': 'general'}, 'owner') for i in range(3)]
+    rows = [(n, 'triage', 'triage.classify', None, 1000, 0) for n in (0, 1, 2, 4, 5, 6)] + [
+        (1, 'advisor', 'advisor.run', None, 3000, 0), (3, 'advisor', 'advisor.lookout', None, 2000, 0),
+        (0, 'assistant', None, None, 4000, 0), (2, 'assistant', None, None, 6000, 0),
+        (1, 'general', None, t[0], 50000, 1), (4, 'general', None, t[0], 30000, 1), (2, 'coding', None, t[1], 20000, 1),
+        (5, 'draft', 'draft.reply', t[2], 1500, 0), (3, 'triage', 'reports.judge', None, 700, 0), (6, 'memory', 'memory.learn', None, 300, 0),
+        (8, 'triage', 'triage.classify', None, 99000, 0)]
+    for n, job, caller, tid, tok, run in rows:
+        s.add_brain_route({'At': day(n), 'Job': job, 'Caller': caller, 'TaskId': tid, 'Pick': 'cli:claude', 'Tier': 'light', 'Rule': 'x',
+                           'Outcome': 'ok', 'Ran': 'claude-sonnet-4-5', 'TokensIn': tok, 'TokensOut': 0, 'Ms': 1000, 'Calls': 1,
+                           **({'Sid': f'run-{n}-{tid}'} if run else {})})
+    for tid, st, n in ((t[0], 'done', 1), (t[1], 'done', 1), (t[2], 'dropped', 3)):
+        s._exec('UPDATE task SET Status=?, ClosedAt=? WHERE TaskId=?', (st, day(n), tid))
+    return s, t, day
+
+
+def test_every_call_lands_on_who_it_was_for_by_its_asker_else_its_job():
+    assert [aiusage.who(j, c) for j, c in (('triage', 'triage.classify'), ('triage', 'reports.judge'), ('judge', 'sent.judge'), ('advisor', None),
+                                           ('general', 'advisor.idea'), ('assistant', ''), ('coding', None), ('draft', 'draft.reply'),
+                                           ('memory', 'memory.learn'), (None, None))] == \
+        ['Triage', 'Other', 'Triage', 'Advisor', 'Advisor', 'Assistant', 'Tasks', 'Tasks', 'Other', 'Triage']
+
+
+def test_the_built_in_dashboard_says_the_weeks_spend_per_day_for_whom_per_task_and_what_closed():
+    s, t, day = _spend_store()
+    spec = dashboards.GLANCE
+    assert dashboards.validate(spec, s) == (True, '')
+    data = dashboards.collect(s, spec)
+    assert not dashboards.problems(spec, data)
+    panel = lambda title: dashboards._panel(spec, data, next(c for c in spec['components'] if c['title'] == title), 7)
+    # the week's total for each, in the owner's order - the call eight days ago is not in it
+    assert panel('AI tokens by who used them')[1:] == ['Triage: 6,000', 'Advisor: 5,000', 'Tasks: 101.5K', 'Assistant: 10.0K', 'Other: 1,000']
+    # ...per day, split by who (a day with no call of the Advisor's has no Advisor part)
+    days = dict(x.split(': ', 1) for x in panel('AI tokens per day, by who used them')[1:])
+    assert len(days) == 7 and days[day(6)[:10]] == 'Triage 1,000, Other 300' and days[day(3)[:10]] == 'Advisor 2,000, Other 700'
+    # one task's agent work on average: 50K + 30K and 20K over two tasks - a draft is not an agent run
+    nums = dict(dashboards.headline(spec, data))
+    assert nums['Tokens per task'] == '50.0K' and nums['AI tokens'] == '123.5K'
+    # ...and what closed, per day: done apart from dropped
+    assert panel('Tasks closed per day')[1:] == [f'{day(3)[:10]}: dropped 1', f'{day(1)[:10]}: done 2']
+
+
+def test_per_averages_each_values_own_number_and_leaves_the_blank_out():
+    rows = [{'t': 1, 'v': 10}, {'t': 1, 'v': 30}, {'t': 2, 'v': 20}, {'t': None, 'v': 999}, {'t': '', 'v': 999}]
+    assert dashboards.aggregate(rows, 'sum', 'v', 't') == 30 and dashboards.aggregate(rows, 'count', None, 't') == 1.5
+    assert dashboards.aggregate([], 'sum', 'v', 't') is None
+    assert dashboards.validate({'title': 'x', 'sources': [{'key': 'a', 'type': 'taskuary_data', 'dataset': 'tasks'}],
+                                'components': [{'kind': 'stat', 'source': 'a', 'per': 3}]})[0] is False
+
+
+def test_an_unedited_built_in_becomes_todays_and_an_edited_one_keeps_its_own():
+    s, _, _ = _spend_store()
+    was = [c for c in dashboards.GLANCE['components'] if c not in dashboards.SPEND_TILES]
+    row = next(r for r in s.list_sources(active_only=False) if r['Address'] == dashboards.GLANCE['title'])
+    cfg = lambda: dashboards.cfg_of(s.get_source(row['SourceId']))
+    s.save_source({'SourceId': row['SourceId'], 'ConfigJson': json.dumps({**dashboards.GLANCE, 'components': was, 'daily_at': '06:30'})}, 'owner')
+    with mock.patch.object(dashboards, 'GLANCE_WAS', (dashboards.glance_print(was),)):
+        assert dashboards.migrate_glance(s) == 1 and dashboards.migrate_glance(s) == 0
+        assert cfg()['components'] == dashboards.GLANCE['components'] and cfg()['daily_at'] == '06:30'
+        mine = [*was[:3], {'kind': 'stat', 'title': 'Mine', 'source': 'mail', 'agg': 'count'}]
+        s.save_source({'SourceId': row['SourceId'], 'ConfigJson': json.dumps({**dashboards.GLANCE, 'components': mine})}, 'owner')
+        assert dashboards.migrate_glance(s) == 0 and cfg()['components'] == mine

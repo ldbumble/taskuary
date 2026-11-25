@@ -598,7 +598,7 @@ DASHBOARD_COMPONENTS = (
     '"said" is the one plain sentence a person would write for the tile ("How many tasks are open right now, lower is better"): it is '
     'shown on the tile and the owner edits the tile by rewriting it.\n'
     '- "stat": one number. "agg": count|sum|avg|median|min|max, "y" for any agg but count, optional "where": {column: value}, '
-    '"good": "up"|"down" (which direction is good), optional "unit" (h, min, $). Its delta and sparkline come from the source\'s date. Lead with 2-4 of them.\n'
+    '"good": "up"|"down" (which direction is good), optional "unit" (h, min, $), optional "per": a column it is averaged over (tokens per task_id). Its delta and sparkline come from the source\'s date. Lead with 2-4 of them.\n'
     '- "progress": a number toward a "target" (same keys as stat, plus "target": <number>).\n'
     '- "line" / "area": a value over time. "x" = the date column, "agg", "y", optional "where". Never two measures on one chart.\n'
     '- "bar": ranked categories. "x" = the category column, "agg", "y", optional "limit" (default 8; the rest fold into Other),'

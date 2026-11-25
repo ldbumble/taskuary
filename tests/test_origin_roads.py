@@ -134,7 +134,10 @@ def test_a_headless_run_trims_its_env_only_when_the_profile_says_so(monkeypatch)
     monkeypatch.setenv('GH_TOKEN', 'y'); monkeypatch.setenv('ANTHROPIC_API_KEY', 'z')
     strict = agents.spawn_env({'strict_env': True}, {'TASKUARY_TASK': '7'})
     assert 'GH_TOKEN' not in strict and strict['ANTHROPIC_API_KEY'] == 'z' and strict['TASKUARY_TASK'] == '7'
-    assert agents.spawn_env({}, {'A': '1'}) == agents.child_env({**os.environ, 'A': '1'})
+    # ...an owner's run keeps the process's environment less the owner's own secrets (agents.ambient): a runner's PGPASSWORD is one
+    monkeypatch.setenv('PGPASSWORD', 'x')
+    mine = agents.spawn_env({}, {'A': '1'})
+    assert mine == agents.child_env({**agents.ambient(os.environ), 'A': '1'}) and 'PGPASSWORD' not in mine and mine['GH_TOKEN'] == 'y'
 
 
 # ── headless and general ─────────────────────────────────────────────────────────────────────────────────────────

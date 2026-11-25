@@ -603,6 +603,10 @@ async def run() -> None:
     if FRESH and os.environ.get("TASKUARY_FIXTURE_LOAD") == "1":
         from fixture_load import install as install_load
         install_load(app, store)
+    # ...the card gallery (card-gallery.mjs): a stand-in agent's task, files and far ends, never set in CI
+    if FRESH and os.environ.get("TASKUARY_FIXTURE_GALLERY") == "1":
+        from fixture_gallery import install as install_gallery
+        install_gallery(app, store)
     if not FRESH:
         from fixture_changes import install_processing_changes
         install_processing_changes(app, store)

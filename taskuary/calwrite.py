@@ -541,8 +541,13 @@ NO_CAL = 'No calendar is connected, so a meeting cannot be set up yet - connect 
 
 def within_days(within: str = '', first=None, last=None, today: date = None) -> tuple:
     """(first, last) day the times are looked for in: 'this_week' is today to Friday (a weekend looks at the week ahead), 'next_week'
-    Monday to Friday after it, else the range typed - never before today - else the coming week."""
+    Monday to Friday after it, else the range typed - never before today - else the coming week. `within` by its words however they are
+    spaced or cased ("next week", "Next-Week"); one that is neither is refused with what it takes - never read as the coming week (walk 22,
+    2026-11-25: "next week" fell through to today's week, and a meeting for next week went out proposing Wednesday and Thursday of this one)."""
     today = today or date.today()
+    within = '_'.join(re.split(r'[\s_-]+', str(within or '').strip().lower())).strip('_')
+    if within not in ('', 'this_week', 'next_week'):
+        raise ValueError(f"`within` {within!r} is not this_week or next_week - give one of them, or the meeting's own `start` and `end`")
     if within == 'next_week':
         mon = today + timedelta(days=7 - today.weekday()); return mon, mon + timedelta(days=4)
     if within == 'this_week':

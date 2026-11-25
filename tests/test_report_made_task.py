@@ -76,7 +76,7 @@ def test_send_to_agent_on_a_report_starts_its_agent_on_the_report_and_his_words(
     from taskuary import browserview, llm
     brain = Brain()
     monkeypatch.setattr(general, 'provider_options', lambda store: [{'pick': 'connector:1', 'label': 'Northwind AI', 'model': '', 'type': 'openai'}])
-    monkeypatch.setattr(general, 'default_pick', lambda store, task=None: 'connector:1')
+    monkeypatch.setattr(general, 'default_pick', lambda store, task=None, level=True: 'connector:1')
     monkeypatch.setattr(llm, 'build_llm', lambda *a, **k: brain)
     monkeypatch.setattr(browserview, 'installed', lambda: False)
     monkeypatch.setattr(browserview, 'can_set_up', lambda: False)

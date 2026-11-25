@@ -76,7 +76,7 @@ def world(tmp_path, monkeypatch, request):
             from taskuary import browserview, llm
             opt = {'pick': 'connector:1', 'label': 'Northwind AI', 'model': '', 'type': 'openai'}
             monkeypatch.setattr(general, 'provider_options', lambda store: [opt])
-            monkeypatch.setattr(general, 'default_pick', lambda store, task=None: 'connector:1')
+            monkeypatch.setattr(general, 'default_pick', lambda store, task=None, level=True: 'connector:1')
             monkeypatch.setattr(llm, 'build_llm', lambda *a, **k: Brain())
             monkeypatch.setattr(browserview, 'installed', lambda: False)
             monkeypatch.setattr(browserview, 'can_set_up', lambda: False)

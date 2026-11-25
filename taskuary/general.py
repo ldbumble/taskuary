@@ -1221,7 +1221,25 @@ def mail_row(store, x: dict, n: int = 3000) -> dict:
             'channel': x.get('Channel') or '', 'at': x.get('SentAt') or x.get('CreatedAt'), 'mid': x['MessageId'],
             'files': len(store.list_attachments(x['MessageId']) or []),
             'subject': str(x.get('Subject') or '').strip() if str(x.get('Channel') or 'email').lower() == 'email' else '',
-            'words': words[:n] or x.get('Subject') or ''}
+            **({'reply': p} if (p := replied(store, x)) else {}), 'words': words[:n] or x.get('Subject') or ''}
+
+
+def replied(store, x: dict) -> dict:
+    """The message `x` answers or quotes, as ingest kept it (ingest.with_parent): {who, at, text}, {} for none. A mail whose parent is on
+    its own task already is none - every reply on a mail thread names one, and the task shows it in its place."""
+    try: p = (json.loads(x.get('MailMetaJson') or '{}') or {}).get('reply_to') or {}
+    except (TypeError, ValueError): p = {}
+    if not isinstance(p, dict) or not p.get('text'): return {}
+    if str(x.get('Channel') or '').lower() == 'email' and p.get('ext') and x.get('TaskId') and \
+       (store.message_by_external(p['ext']) or {}).get('TaskId') == x['TaskId']: return {}
+    return {k: p[k] for k in ('who', 'at', 'text') if p.get(k)}
+
+
+def reply_line(p: dict) -> str:
+    "What an agent reads of it, their words fenced like the rest: 'in reply to <who> at <time>: <text>' - '' for none."
+    from .terminal import fence, named
+    return f"in reply to {named(p.get('who')) or 'an earlier message'}{' at ' + p['at'] if p.get('at') else ''}: {fence(p['text'])}" \
+        if (p or {}).get('text') else ''
 
 
 # A MAIL SYSTEM'S STAMP IS THE SAME WORDS OVER EVERYONE'S MAIL: an external-sender banner opens every outside mail word for word, whoever wrote
@@ -2133,7 +2151,8 @@ def prompt_parts(store, tid: int, turn: bool = False, upto: int = None) -> tuple
         long = reads and len(str(m.get('BodyText') or '')) > budget
         # ...SOMEONE ELSE'S WORDS BETWEEN THE MARKS, as the system prompt says they are (walk 10, 2026-11-23: the sender's mail was not)
         body = both_ends(str(m.get('BodyText') or ''), budget)
-        return (body if from_owner(store, m, own) else fence(body)) + (f"\n[cut to fit - read_message m{m['MessageId']} reads it whole]" if long else '') + file_line
+        return ''.join(f'{r}\n' for r in [reply_line(replied(store, m))] if r) + (body if from_owner(store, m, own) else fence(body)) \
+            + (f"\n[cut to fit - read_message m{m['MessageId']} reads it whole]" if long else '') + file_line
     from .terminal import fence, named
     from .wrapup import from_owner
     from .ingest import own_addresses

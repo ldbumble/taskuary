@@ -462,3 +462,73 @@ def test_trust_on_a_held_reply_task_starts_the_agent_that_writes_the_reply():
     finally:
         general.OPENING.discard(t)
         if was is not None: s.set_setting('general_auto_enabled', was, 't')
+
+
+# ── A QUOTED TEAMS LINE KEEPS WHAT IT QUOTES (the owner, 2026-11-25): Graph puts a quote in `attachments` as a messageReference - the quoted
+# message's id, its sender and a preview - and only a tag in the body. It came in as a bare "any news on this one", and the agent could not
+# tell which one ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+def _quoting(content=None, graph=None, before=()):
+    "Gail's line quoting message q1 in chat c1, polled through a stand-in Graph `graph` (url -> (status, json)); `before`: rows stored first."
+    import json
+    from taskuary import channels, general
+    s = _store(); channels._TEAMS_ME['alex@northwind.example'] = 'me-id'
+    for r in before: s.add_message(r)
+    att = {'id': 'q1', 'contentType': 'messageReference', 'content': json.dumps(content) if content is not None else None}
+    ms = [{'id': 'm2', 'chatId': 'c1', 'messageType': 'message', 'createdDateTime': '2026-11-20T10:00:00Z', 'attachments': [att],
+           'body': {'content': '<attachment id="q1"></attachment><p>Hi Alex, any news on this one please?</p>'},
+           'from': {'user': {'id': 'oid-7', 'displayName': 'Gail Moreno'}}}]
+    calls = []
+    def get(url, headers=None, params=None, timeout=None):
+        calls.append(url); code, j = (graph or {}).get(url, (404, {}))
+        return mock.Mock(status_code=code, json=lambda: j)
+    with mock.patch.object(channels, '_teams_delta', return_value=ms), mock.patch.object(channels, '_chat_meta', return_value=('crew', 'group')), \
+         mock.patch.object(channels, '_graph_user', return_value=('Gail Moreno', 'gail@vendor.example')), \
+         mock.patch.object(channels.requests, 'get', get), mock.patch.object(channels, 'hosted_images', return_value=[]):
+        channels.ingest_teams_chats(s, 'alex@northwind.example', 'tok', __import__('datetime').datetime(2026, 11, 20, 8))
+    r = s.message_by_external('teams:c1:m2')
+    return r, general.mail_row(s, r), calls
+
+Q1 = 'https://graph.microsoft.com/v1.0/chats/c1/messages/q1'
+QUOTED = {'id': 'q1', 'createdDateTime': '2026-11-18T14:05:00Z', 'from': {'user': {'id': 'oid-8', 'displayName': 'Ray Colton'}},
+          'body': {'content': '<p>The March export is missing the second site - can you rerun it?</p>'}}
+
+def test_a_teams_quote_rides_on_the_arrival_read_by_its_id():
+    _r, row, calls = _quoting({'messageId': 'q1', 'messagePreview': 'The March export is missing', 'messageSender': {'user': {'displayName': 'Ray Colton'}}},
+                              graph={Q1: (200, QUOTED)})
+    assert row['words'] == 'Hi Alex, any news on this one please?' and calls == [Q1]
+    assert row['reply']['who'] == 'Ray Colton' and row['reply']['text'] == 'The March export is missing the second site - can you rerun it?'
+    assert row['reply']['at'].startswith('2026-11-18')
+
+def test_a_teams_quote_carrying_only_the_id_is_fetched_and_one_graph_refuses_keeps_its_preview():
+    _r, row, _c = _quoting(None, graph={Q1: (200, QUOTED)})                       # no preview, no sender: read whole by its id
+    assert row['reply']['who'] == 'Ray Colton' and 'second site' in row['reply']['text']
+    _r, row, _c = _quoting({'messagePreview': 'The March export is missing', 'messageSender': {'user': {'displayName': 'Ray Colton'}}},
+                           graph={Q1: (403, {})})                                # an app outside the chat is refused: the preview stands
+    assert row['reply'] == {'who': 'Ray Colton', 'text': 'The March export is missing'}
+
+def test_a_teams_quote_of_a_stored_line_is_read_from_the_store():
+    stored = {'ExternalId': 'teams:c1:q1', 'Channel': 'teams', 'ConversationId': 'teams:c1', 'FromName': 'Ray Colton',
+              'SentAt': '2026-11-18 15:05:00', 'BodyText': 'Can you rerun the March export?', 'Status': 'routed'}
+    _r, row, calls = _quoting({'messagePreview': 'Can you rerun'}, before=[stored])
+    assert calls == [] and row['reply'] == {'who': 'Ray Colton', 'at': '2026-11-18 15:05:00', 'text': 'Can you rerun the March export?'}
+
+def test_a_slack_thread_reply_and_a_whatsapp_quote_name_what_they_answer():
+    from taskuary import channels, ingest
+    m = channels.slack_msg({'Address': 'C0123'}, {'ts': '1755700005.1', 'thread_ts': '1755700000.1', 'subtype': 'thread_broadcast', 'user': 'U9', 'text': 'done?'})
+    assert m['reply_to'] == {'ext': 'slack:C0123:1755700000.1'}
+    s = _store(); s.add_message({'ExternalId': 'slack:C0123:1755700000.1', 'Channel': 'slack', 'FromName': 'Erin Blake', 'BodyText': 'ship the fix', 'Status': 'routed'})
+    assert ingest.with_parent(s, m)['mail_meta']['reply_to']['text'] == 'ship the fix'
+    assert ingest.with_parent(s, {'reply_to': {'ext': 'whatsapp:j:none', 'text': 'which export?'}})['mail_meta']['reply_to'] == \
+        {'ext': 'whatsapp:j:none', 'text': 'which export?'}
+    assert 'mail_meta' not in ingest.with_parent(s, {'reply_to': {'ext': 'slack:C0123:unknown'}})          # nothing to show: nothing kept
+
+def test_a_mail_names_the_mail_it_answers_only_where_that_one_is_not_on_its_task():
+    import json
+    from taskuary import general, ingest
+    s = _store(); t1, t2 = (s.create_task({'Title': x, 'Kind': 'reply'}, 't') for x in ('a', 'b'))
+    s.add_message({'TaskId': t1, 'ExternalId': 'e1', 'ConversationId': 'cv', 'Channel': 'email', 'FromName': 'Erin Blake', 'BodyText': 'Rates for 2027?',
+                   'Status': 'routed', 'MailMetaJson': json.dumps({'mid': '<a1@vendor.example>'})})
+    meta = ingest.with_parent(s, {'conversation_id': 'cv', 'mail_meta': {'refs': ['<a1@vendor.example>']}})['mail_meta']
+    assert meta['reply_to']['text'] == 'Rates for 2027?' and meta['reply_to']['ext'] == 'e1'
+    row = lambda tid: {'TaskId': tid, 'Channel': 'email', 'MailMetaJson': json.dumps(meta)}
+    assert general.replied(s, row(t1)) == {} and general.replied(s, row(t2))['who'] == 'Erin Blake'

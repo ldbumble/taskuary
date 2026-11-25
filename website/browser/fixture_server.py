@@ -420,7 +420,9 @@ def _install_fresh_routes(app, store):
                                  "SourceRef": body.get("source") or None}, "owner")
         mid = store.add_message({"TaskId": tid, "ExternalId": f"fx-rows-{tid}", "Channel": body.get("channel") or "email", "FromName": "Erin Blake",
                                  "FromEmail": "erin@northwind.example", "ToEmail": "alex@northwind.example", "Subject": body.get("subject") or "Vendor plans",
-                                 "SentAt": "2026-11-24 08:00:00", "BodyText": body.get("mail") or "Hi Alex, could you send me the plans? Thanks, Erin", "Status": "routed"})
+                                 "SentAt": "2026-11-24 08:00:00", "BodyText": body.get("mail") or "Hi Alex, could you send me the plans? Thanks, Erin", "Status": "routed",
+                                 # ...`meta`: what the poller kept on it - the line it quotes (ingest.with_parent), a one-to-one mark
+                                 **({"MailMetaJson": json.dumps(body["meta"])} if body.get("meta") else {})})
         if body.get("github"):
             from taskuary import ci, github
             github.comment_issue = lambda *a, **k: "https://github.example/northwind/ledger/issues/12#issuecomment-1"

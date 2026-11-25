@@ -998,6 +998,7 @@ def _ingest(store, msg: dict, actor: str, llm, file_only: bool) -> dict:
     from . import agentchannels
     if fresh and agentchannels.swallows(store, msg): return {'status': 'agent_channel', 'task_id': None, 'message_id': None}
     if fresh and (count := LANDING.get()): count(msg)   # the running poll's tally: the sync line's "bringing in 37…" (channels._Tally)
+    if fresh: msg = with_parent(store, msg)
     if fresh and file_only:
         mid = store.add_message({**_fields(msg, None), 'Status': 'feed'})
         # a voice note nothing could transcribe is filed too - and the reason says so, not "a feed"
@@ -1928,6 +1929,30 @@ def _serve_step(store, msg: dict, sv: dict, intent: dict, actor: str, notes_note
 def answers(msg: dict):
     "The Message-ID a mail answers - In-Reply-To, the last of its refs - for arrivals and the owner's own mail alike (store.task_of_parent)."
     return next(reversed((msg.get('mail_meta') or {}).get('refs') or []), None)
+
+
+# THE MESSAGE AN ARRIVAL ANSWERS OR QUOTES, KEPT ON IT (the owner, 2026-11-25: a Teams line quoting an earlier one came in as a bare "would like
+# to follow up regarding this issue", and the agent could not tell which issue). Every channel names it its own way - Teams a messageReference
+# attachment, Slack a thread, WhatsApp a quote, a mail its In-Reply-To - and hands `reply_to` {ext | mid, who, at, text, fetch}: the stored
+# message first, else `fetch` (by its id at the source), else what the channel itself carried (a preview). Kept as meta `reply_to`.
+REPLY_CHARS = 600
+def with_parent(store, msg: dict) -> dict:
+    ref = dict(msg.get('reply_to') or ({'mid': a} if (a := answers(msg)) else {}))
+    if not ref: return msg
+    fetch, conv = ref.pop('fetch', None), msg.get('conversation_id')
+    from .store import meta_expr
+    row = (store.message_by_external(ref['ext']) if ref.get('ext') else
+           conv and ref.get('mid') and store._one(f'SELECT * FROM message WHERE ConversationId=? AND {meta_expr("mid")}=? ORDER BY MessageId DESC LIMIT 1',
+                                                  (conv, ref['mid'])))
+    got = {'ext': row.get('ExternalId'), 'who': row.get('FromName') or row.get('FromEmail'), 'at': row.get('SentAt'),
+           'text': row.get('OwnText') or row.get('BodyText')} if row else {}
+    if not row and fetch:
+        try: got = fetch() or {}
+        except Exception as e: logger.info(f'the message a reply answers could not be read at its source - {e}')
+    p = {k: str(v).strip() for k in ('ext', 'who', 'at', 'text') if (v := got.get(k) or ref.get(k)) and str(v).strip()}
+    if not p.get('text'): return msg
+    p['text'] = p['text'][:REPLY_CHARS]
+    return {**msg, 'mail_meta': {**(msg.get('mail_meta') or {}), 'reply_to': p}}
 
 
 def identity_route(store, msg: dict) -> dict:

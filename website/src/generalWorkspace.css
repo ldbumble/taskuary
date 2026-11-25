@@ -114,6 +114,9 @@
 .tq-aui-arrived { display: flex; flex-direction: column; gap: 3px; margin: 4px 0 12px; padding-top: 8px; border-top: 1px dashed var(--tq-border, #d6cfc2); font-size: 12.5px; line-height: 1.45; color: var(--tq-secondary, #5f5a50); }
 .tq-aui-arrived-head { color: var(--tq-warning, #8b6f3a); font-weight: 600; font-size: 11.5px; }
 .tq-aui-arrived-subject { color: var(--tq-text, #2b2925); font-weight: 600; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.tq-aui-arrived-reply { color: var(--tq-secondary, #5f5a50); font-size: 12px; border-left: 2px solid var(--tq-border, #d8d3c8); padding-left: 8px;
+  overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; }
+.tq-aui-arrived-reply-head { font-weight: 600; }
 .tq-aui-arrived-kept { color: var(--tq-secondary, #5f5a50); font-size: 11.5px; }
 .tq-aui-arrived-words { color: var(--tq-text, #3d3a33); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; white-space: pre-wrap; overflow-wrap: anywhere; }
 /* the ask, as the chat's first plain paragraph before any turn (GeneralWorkspace `reading`, the owner 2026-11-05: no boxes, no lines) */

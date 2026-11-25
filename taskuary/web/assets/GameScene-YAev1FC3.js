@@ -1,4 +1,8 @@
+<<<<<<<< HEAD:taskuary/web/assets/GameScene-YAev1FC3.js
 import{r as Xe,j as be,B as Ke,Y as $s,$ as Dh,a1 as _c,a3 as Zr,T as ci,X as jr,t as vc,ei as xc}from"./index-CagCchfD.js";/**
+========
+import{r as Xe,j as be,B as Ke,Y as $s,$ as Dh,a1 as _c,a3 as Zr,T as ci,X as jr,t as vc,ek as xc}from"./index-BlmbHkFX.js";/**
+>>>>>>>> worktree-agent-af13a6f53c6c53a2d:taskuary/web/assets/GameScene-D2R1rq8C.js
  * @license
  * Copyright 2010-2025 Three.js Authors
  * SPDX-License-Identifier: MIT

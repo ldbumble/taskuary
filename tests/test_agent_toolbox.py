@@ -1103,6 +1103,28 @@ class APostIsAKindOfTheOneReviewTool(unittest.TestCase):
         li, x = (json.loads(r['DraftText']) for r in self.cards())
         self.assertEqual((li['alt'], x['alt']), ('Three bars, one per tool',) * 2); self.assertNotIn('title', x)
 
+    def test_a_question_to_him_holds_the_turn_no_card_is_raised_under_it_until_his_answer(self):
+        """The owner's live task, 2026-11-25: the agent asked whether he held a position to disclose, then raised three post cards under the
+        question in the same turn - and his answer greyed them all ("if it asks a question it has to wait there"). A card raised before the
+        question stays; one after it is refused with what to do, and nothing is drawn; once he has answered, the next turn raises it."""
+        from taskuary import selfclose, taskstate
+        said, err = tool(self.tid, 'propose', kind='post', network='x', text='Three tools, compared.'); self.assertFalse(err, said)
+        tool(self.tid, 'ask_owner', question='Do you hold a position to disclose?', choices=['None'])
+        said, err = tool(self.tid, 'propose', kind='post', network='reddit', subreddit='smallbusiness', title='Three tools', text='What we found.')
+        self.assertTrue(err); self.assertIn('your question to the owner stands', said); self.assertIn('wait for his answer', said)
+        self.assertEqual([json.loads(r['DraftText'])['type'] for r in self.cards()], ['x_post'])
+        # ...filed unanswered, it still stands on the task for the next turn
+        selfclose.take_marks(self.tid)
+        with mock.patch.object(taskstate, 'open_question', return_value={'text': 'Do you hold a position to disclose?'}):
+            self.assertTrue(tool(self.tid, 'propose', kind='post', network='reddit', subreddit='smallbusiness', title='Three tools', text='What we found.')[1])
+        # ...his answer: the turn it wakes raises the card
+        said, err = tool(self.tid, 'propose', kind='post', network='reddit', subreddit='smallbusiness', title='Three tools', text='What we found. None.')
+        self.assertFalse(err, said); self.assertEqual(len(self.cards()), 2)
+        # ...and a question taken back in its own turn holds nothing
+        tool(self.tid, 'ask_owner', question='Which subreddit?')
+        self.assertIn('Withdrawn', tool(self.tid, 'ask_owner', withdraw=True)[0])
+        self.assertFalse(tool(self.tid, 'propose', kind='post', network='linkedin', text='We compared three tools.')[1])
+
     def test_a_network_with_no_post_card_says_which_there_are(self):
         said, err = tool(self.tid, 'propose', kind='post', network='myspace', text='Hi')
         self.assertTrue(err); self.assertIn('no post card', said); self.assertIn('linkedin', said); self.assertFalse(self.cards())

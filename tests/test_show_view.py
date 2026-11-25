@@ -144,7 +144,7 @@ class TheTool(unittest.TestCase):
 
     def test_it_reads_nothing_of_the_owners_so_a_strangers_task_may_show_one(self):
         theirs = self.s.create_task({'Title': 'Look at this', 'Status': 'open', 'OriginBase': 'stranger'}, 'triage')
-        text, err = tool(theirs, 'show', **one('text', {'text': 'What the sender asked, in three lines.'}))
+        text, err = tool(theirs, 'show', **one('list', {'items': ['What the sender asked', 'By when', 'For whom']}))
         self.assertFalse(err, text)
         _, err = tool(theirs, 'search_messages', words='renewal')
         self.assertTrue(err)
@@ -170,12 +170,35 @@ class TheTool(unittest.TestCase):
         kept = session_artifacts.confined(art['Path'])
         self.assertTrue(kept and kept.read_bytes().startswith(PNG))     # its own copy, kept after the scratch folder is cleared
         # ...and with a view in the same call, the view's mark is last, so the chat reads its spec whole (viewSpec.specIn)
-        text, err = tool(self.tid, 'show', files=[str(d / 'dark.png')], **one('text', {'text': 'Two palettes.'}))
+        text, err = tool(self.tid, 'show', files=[str(d / 'dark.png')], **one('stats', {'items': [{'label': 'Palettes', 'value': 2}]}))
         self.assertFalse(err, text)
         self.assertLess(text.index(agenttools.FILES_MARK), text.index(viewspec.MARK))
-        self.assertEqual(json.loads(text.split(viewspec.MARK)[1])['elements']['a']['type'], 'text')
+        self.assertEqual(json.loads(text.split(viewspec.MARK)[1])['elements']['a']['type'], 'stats')
         # ...and the general chat's payload places the copy under an answer, as a file it chose to show
         self.assertTrue(any(p['kind'] == 'shown' and p['name'] == 'dark.png' for p in server._assistant_payload(self.tid)['published']))
+
+    def test_a_picture_shown_with_a_view_of_only_its_words_is_the_picture_alone(self):
+        """His live app, 2026-11-25 ("really dumb visual that provides nothing"): a Codex agent showed the picture it drew together with a
+        view titled for it holding nothing but its alt text. The picture stands; a view of only words is no view - nothing drawn, nothing
+        kept, the agent told why - and a view refused beside files never takes the files down with it."""
+        import tempfile
+        from pathlib import Path
+        d = Path(tempfile.mkdtemp(dir=tempfile.gettempdir())); (d / 'gate.png').write_bytes(PNG + b'fake')
+        words = {'title': 'Install illustration', 'root': 'g', 'elements': {'g': {'type': 'grid', 'props': {}, 'children': ['alt', 'n']},
+                 'alt': {'type': 'text', 'props': {'text': '**Alt text**\n\nA robot waits outside a locked server room.'}},
+                 'n': {'type': 'note', 'props': {'text': 'For Erin Blake to look over.'}}}}
+        text, err = tool(self.tid, 'show', files=[str(d / 'gate.png')], **words)
+        self.assertFalse(err, text)
+        self.assertNotIn(viewspec.MARK, text)
+        self.assertIn('The view was not drawn - a view of only words', text)
+        self.assertLess(text.index('not drawn'), text.index(agenttools.FILES_MARK))          # ...ahead of the rows the chat reads to their "]"
+        self.assertEqual(json.loads(text.split(agenttools.FILES_MARK)[1])[0]['name'], 'gate.png')
+        self.assertFalse([a for a in self.s.list_task_artifacts(self.tid) if a.get('Kind') == 'view'])
+        text, err = tool(self.tid, 'show', files=[str(d / 'gate.png')], **one('marquee', {}))         # a bad view: the picture still stands
+        self.assertFalse(err, text); self.assertIn("type 'marquee' is not one of", text)
+        self.assertEqual(json.loads(text.split(agenttools.FILES_MARK)[1])[0]['name'], 'gate.png')
+        text, err = tool(self.tid, 'show', **words)                                          # ...and alone, it is refused with why
+        self.assertTrue(err); self.assertIn('a view of only words shows nothing your answer does not', text)
 
     # A DRAWN VIEW IS KEPT WITH THE TASK (2026-11-10): the CLI's log was its only copy - cleaned up, the table was gone from the chat
     def test_a_view_shown_in_a_turn_is_drawn_from_the_task_once_its_session_log_is_gone_and_never_twice(self):

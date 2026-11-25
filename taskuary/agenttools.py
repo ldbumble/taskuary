@@ -786,11 +786,18 @@ def _call(store, tid: int, name: str, args: dict, doors: dict, skip=()) -> str:
         from . import viewspec
         if not a.get('files') and not a.get('elements'): raise ValueError('give `files` (full paths of pictures or pages you made) or a view (`root` and `elements`)')
         # ...the files first: the chat reads a view's spec from its mark to the end of the answer (viewSpec.specIn)
-        said = [*([show_files(store, tid, a['files'])] if a.get('files') else []), *([viewspec.shown(a)] if a.get('elements') else [])]
+        said = [show_files(store, tid, a['files'])] if a.get('files') else []
+        # ...and the files stand whatever the view: one refused beside them took the pictures down with it. Its why goes ahead of their rows,
+        # which the chat reads to their last "]" (viewSpec.filesOf)
+        try: view = viewspec.shown(a) if a.get('elements') else ''
+        except ValueError as e:
+            if not said: raise
+            view, said = '', [f'The view was not drawn - {e}.', *said]
+        said += [view] if view else []
         # ...and the view kept on the task (session_artifacts.view): the trace that carries it is the CLI's log, which does not last
-        if a.get('elements'):
+        if viewspec.MARK in view:
             from . import session_artifacts
-            try: session_artifacts.view(store, tid, said[-1].partition(viewspec.MARK)[2])
+            try: session_artifacts.view(store, tid, view.partition(viewspec.MARK)[2])
             except (OSError, ValueError) as e: logger.warning(f'the view shown on task {tid} was not kept - {e}')
         return ' '.join(said)
     if name == 'draw_image':

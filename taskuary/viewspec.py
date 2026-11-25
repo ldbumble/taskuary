@@ -328,10 +328,14 @@ def check(spec) -> dict:
     return view
 
 
+# A VIEW OF ONLY WORDS SHOWS NOTHING (his live app, 2026-11-25: "really dumb visual that provides nothing" - a card titled for a picture
+# held only the picture's alt text, beside the picture itself): words in a box are the answer's words, and they are not drawn as a view
+WORDS = ('text', 'note', 'grid')
 def shown(spec) -> str:
     "The tool's answer: a line for the model, and the checked spec on one line after MARK for the chat. A refusal carries one that passes."
     try: view = check(spec)
     except ValueError as e: raise ValueError(f"{e}. A view that passes: {json.dumps(EXAMPLE, separators=(',', ':'))}") from e
+    if all(e['type'] in WORDS for e in view['elements'].values()): raise ValueError('a view of only words shows nothing your answer does not - say them there')
     # ...a view he can answer is one of its own: its id names it to the answer road, so the same choice shown twice is two questions
     if asks(view): view['id'] = __import__('uuid').uuid4().hex[:12]
     return f"Shown in the owner's chat. {MARK}{json.dumps(view, ensure_ascii=False, separators=(',', ':'))}" + \

@@ -699,7 +699,7 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
   return (
     <ReviewCard id={r.ReviewId} kind={proposal ? proposal.kind : isCal ? "calendar" : email ? "email" : "reply"} state={sp ? "sent" : done ? "done" : over ? "not-done" : going ? "going" : "waiting"}
       data-tq-card-frame="" {...(done ? { "data-tq-act-result": "" } : {})} {...(sp ? { "data-tq-sent-here": sp.id || "" } : {})}
-      label={proposal ? proposal.lead || proposal.title : kindLabel(r, meta, email)} fields={fields} lit={lit} quiet={toRow} press={presses} after={after}
+      label={proposal ? proposal.lead || proposal.title : kindLabel(r, meta, email)} fields={fields} lit={lit} press={presses} after={after}
       barRef={setMoves} nowrap={paired} {...(paired ? { "data-tq-two-sends": folded ? "folded" : "both" } : {})}
       tail={!shut && <>{foldMore(pairSend)}
         {/* WHY IT IS LIT, BESIDE IT (the owner, 2026-10-28): the Advisor's reason, said where its button is lit */}
@@ -855,7 +855,8 @@ export function ActReview({ row: was, tid, live = true, onChanged, past = false 
       note: img.manual && !gone ? `${row?.network || "This network"} gets the words from here - open the picture to save it, and add it yourself` : "" }] : []),
   ];
   const ok = !busy && actPressable(act, p, text, vals) && !over;
-  const dismiss = { id: "dismiss", label: "Dismiss", tone: "q", disabled: !!busy, run: () => decide("reject"), attrs: { "data-tq-act-dismiss": "" } };
+  // ...his no, as every card draws it (tone x)
+  const dismiss = { id: "dismiss", label: "Dismiss", tone: "x", disabled: !!busy, run: () => decide("reject"), attrs: { "data-tq-act-dismiss": "" } };
   const pressRow = gone || !st.live ? [] : row?.connect ? [
     ...(post ? [{ id: "browser", label: busy === "browser" ? "Handing it over…" : "Post via the browser", tone: "p", spin: busy === "browser", disabled: !ok || !text.trim(), run: viaBrowser,
       attrs: { "data-tq-act-browser": "" } }] : []),

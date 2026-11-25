@@ -37,7 +37,7 @@ export default function Artifact({ as = "div", label = null, press = null, wide 
 // `press`: [{id, label, tone: p | s | q | x, run, disabled, title, spin, hidden, attrs}] - p the press named by what it does, s the others, q a
 // quiet one (Dismiss), x a no in red. `after`: {mark, label, line, link: {href, text}} - what the press did. `items`: a bulk card's rows.
 export function ReviewCard({ id = "", kind = "", state = "waiting", label: title = null, face = "", fields = [], files = null, before = null, press = [],
-  lit = "", quiet = false, nowrap = false, tail = null, after = null, failed = "", under = null, items = null, barRef = null, onView = null, children, ...rest }) {
+  lit = "", nowrap = false, tail = null, after = null, failed = "", under = null, items = null, barRef = null, onView = null, children, ...rest }) {
   const live = fields.some((f) => f.editable), choices = fields.filter((f) => f.type === "choice");
   const anyLit = press.some((v) => v.id === lit && !v.hidden);
   return (
@@ -58,7 +58,7 @@ export function ReviewCard({ id = "", kind = "", state = "waiting", label: title
       {children}
       {after ? <After a={after} /> : (press.length > 0 || tail) && <Box ref={barRef} data-tq-moves="" data-tq-press-row="" {...(live ? {} : { "data-tq-read-only": "" })}
         sx={{ display: "flex", alignItems: "center", gap: 0.75, mt: 1, flexWrap: nowrap ? "nowrap" : "wrap", ...(nowrap ? { "& > button": { whiteSpace: "nowrap", flexShrink: 0 } } : {}) }}>
-        {press.map((v) => <Press key={v.id} v={v} lit={lit} anyLit={anyLit} quiet={quiet} />)}
+        {press.map((v) => <Press key={v.id} v={v} lit={lit} anyLit={anyLit} />)}
         {tail}
       </Box>}
       {failed && <Typography role="alert" data-tq-review-failed="" sx={{ pt: 0.75, fontSize: 12.5, color: ALERT_INK, overflowWrap: "anywhere" }}><MdLine text={failed} /></Typography>}
@@ -118,10 +118,11 @@ export function CardLine({ tabs, children }) {
   );
 }
 
-// ...one button of the press row: the lit one filled (the Advisor's pick, where it stands), else the press named by what it does - unless the
-// task's bar carries the pick (`quiet`); a folded one stays mounted, unseen, its width the one the fold measured
-function Press({ v, lit, anyLit, quiet }) {
-  const filled = v.id === lit || (!anyLit && !quiet && v.tone === "p");
+// ...one button of the press row: the lit one filled (the Advisor's pick, where it stands), else the press named by what it does - ON EVERY
+// CARD, AT EVERY WIDTH (the card gallery, 2026-11-25: Comment and Approve stood outlined where the task's bar "carried the pick" - a bar that
+// draws no card's press, and on a phone is not there); a folded one stays mounted, unseen, its width the one the fold measured
+function Press({ v, lit, anyLit }) {
+  const filled = v.id === lit || (!anyLit && v.tone === "p");
   return <Button size="small" disableElevation variant={filled ? "contained" : v.tone === "q" || v.tone === "x" ? "text" : "outlined"} color={v.tone === "x" ? "error" : "primary"}
     data-tq-press={String(v.id).split(":").pop()} disabled={!!v.disabled} onClick={v.run} title={v.title || undefined} style={v.hidden ? { display: "none" } : undefined}
     startIcon={v.spin ? <CircularProgress size={11} data-tq-sending="" color="inherit" /> : null} {...(v.attrs || {})}>{v.label}</Button>;

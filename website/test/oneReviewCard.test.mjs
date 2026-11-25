@@ -72,6 +72,19 @@ test("a GitHub comment is the same card: where it goes, its words his to change,
   assert.equal(press(html)[0], "Comment");
 });
 
+// The card gallery, 2026-11-25: Comment stood outlined on the GitHub comment card, Approve on a proposal at phone width - the card deferred to
+// the task's bar (`toRow`), which draws no card's press. The press named by what it does is the filled one on every card; the rest are not
+test("the primary press is the filled button on every card, with the task's bar or without", async () => {
+  const { card, held } = await P, filled = (html) => [...html.matchAll(/<button[^>]*class="[^"]*MuiButton-contained[^"]*"[^>]*>(?:<span[^>]*>.*?<\/span>)?([^<]*)</g)].map((m) => m[1]);
+  for (const more of [{}, { toRow: true }]) {
+    assert.deepEqual(filled(card(act({ action: "comment_issue", repo: "northwind/ledger", number: 12, body: "Fixed." }), more)), ["Comment"]);
+    assert.deepEqual(filled(card(act({ action: "settings", changes: [{ name: "poll_minutes", value: 10 }] }), more)), ["Approve"]);
+    assert.deepEqual(filled(card(reply(), more)), ["Send"]);
+  }
+  assert.deepEqual(filled(card(act({ action: "run_tool", type: "jira_comment", item: "OPS-4", body: "Done." }))), ["Post comment"]);
+  assert.deepEqual(filled(held([act({ action: "shell_act", sid: "s", command: "git push", about: "Push the fix" })])), ["Approve"]);
+});
+
 test("a Jira comment is the same card, its press Post comment", async () => {
   const { card } = await P, html = card(act({ action: "run_tool", type: "jira_comment", item: "OPS-4", body: "Done on our side." }));
   assert.equal(one(html), 1); assert.match(html, /data-tq-review-kind="tracker"/); assert.equal(press(html)[0], "Post comment");

@@ -39,7 +39,7 @@ test("an email is the one card: To, Subject and its words editable, its press Se
   const { card } = await P, html = card(reply());
   assert.equal(one(html), 1);
   assert.match(html, /data-tq-review-kind="email"/); assert.match(html, /data-tq-act-state="waiting"/);
-  assert.match(html, /data-tq-to-line=""/); assert.match(html, /data-tq-subject="" [^>]*value="Re: Plans"/);
+  assert.match(html, /data-tq-to-line=""/); assert.match(html, /<textarea[^>]*rows="1"[^>]*data-tq-subject=""[^>]*>Re: Plans<\/textarea>/, "one line that wraps where it is long - never an input cut at its start");
   assert.match(html, /<textarea[^>]*data-tq-draft=""[^>]*>Thanks Erin/);
   assert.ok(press(html).some((w) => /^Send/.test(w)), press(html).join("|"));
 });

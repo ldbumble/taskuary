@@ -142,6 +142,11 @@ const After = ({ a }) => (
 // editable (the owner, 2026-11-23: "all cards should be that way if there is text")
 const INLINE = { font: "inherit", fontSize: "inherit", fontWeight: "inherit", lineHeight: "inherit", color: "inherit", border: 0, background: "transparent", padding: 0,
   outline: 0, borderRadius: "4px", minWidth: "4ch", "&:focus-visible": { outline: `2px solid ${ACCENT}`, outlineOffset: 1 } };
+// ...AND A LINE OF HIS TO CHANGE WRAPS (the card gallery, 2026-11-25: at phone width a Reddit title and a subject showed only their start - an
+// <input> cannot wrap): one row that grows with its words, still one line - Enter and a pasted line break are kept out of it
+const OneLine = ({ f, sx, ...rest }) => (
+  <Box component="textarea" rows={1} aria-label={f.label} value={String(f.value ?? "")} onChange={(e) => f.onChange(e.target.value.replace(/\s*\n\s*/g, " "))}
+    onKeyDown={(e) => { if (e.key === "Enter") e.preventDefault(); }} sx={{ ...INLINE, display: "block", resize: "none", overflow: "hidden", fieldSizing: "content", ...sx }} {...rest} />);
 const Row = ({ f, children }) => (
   <Box data-tq-field-row={f.key} sx={{ display: "flex", alignItems: "baseline", gap: 0.8, mb: 0.75, minWidth: 0, flexWrap: "wrap" }}>
     {f.label && <Typography sx={{ ...LABEL, flexShrink: 0 }}>{f.label}</Typography>}{children}</Box>
@@ -190,12 +195,10 @@ function Field({ f, onView }) {
   if (f.type === "fold") return <Typography {...pressable(f.onToggle)} data-tq-show-command="" aria-expanded={!!f.open} sx={{ ...FOCUS_RING, display: "inline-block", fontSize: 11.5,
     color: "var(--tq-link, #55697a)", cursor: "pointer", fontWeight: 600, mb: f.open ? 0.5 : 0, "&:hover": { textDecoration: "underline" } }}>{f.label}</Typography>;
   if (f.type === "heading") return <Typography data-tq-act-heading={f.key} component="div" sx={{ fontSize: 14, fontWeight: 700, lineHeight: 1.5, color: INK, mb: 0.5, overflowWrap: "anywhere" }}>
-    {f.editable ? <Box component="input" data-tq-act-line={f.key} aria-label={f.label} placeholder={f.label} value={String(f.value ?? "")} onChange={(e) => f.onChange(e.target.value)}
-      sx={{ ...INLINE, display: "block", width: "100%" }} /> : f.value}</Typography>;
+    {f.editable ? <OneLine f={f} data-tq-act-line={f.key} placeholder={f.label} sx={{ width: "100%" }} /> : f.value}</Typography>;
   if (f.type === "line") return <Row f={f}>{f.editable
-    ? <Box component="input" data-tq-act-line={f.key} {...(f.key === "subject" ? { "data-tq-subject": "" } : {})} aria-label={f.label} placeholder={f.placeholder || (f.optional ? "none" : f.label)}
-        value={String(f.value ?? "")} onChange={(e) => f.onChange(e.target.value)}
-        sx={{ ...INLINE, ...FOCUS_RING, flex: 1, minWidth: 0, borderBottom: "1px dashed var(--tq-border, #d9e0d6)", fontSize: 13, fontWeight: 600, color: INK, py: 0.25,
+    ? <OneLine f={f} data-tq-act-line={f.key} {...(f.key === "subject" ? { "data-tq-subject": "" } : {})} placeholder={f.placeholder || (f.optional ? "none" : f.label)}
+        sx={{ ...FOCUS_RING, flex: 1, minWidth: 0, borderBottom: "1px dashed var(--tq-border, #d9e0d6)", fontSize: 13, fontWeight: 600, color: INK, py: 0.25,
           "&:focus": { borderBottomColor: "var(--tq-border-strong, #6f8a6e)" } }} />
     : <Typography variant="body2" sx={{ color: INK, fontWeight: 600, minWidth: 0, overflowWrap: "anywhere" }}>{f.value}</Typography>}</Row>;
   // ...the words: his to change in the one box every card writes in (DraftField: it grows, it marks a blank, a spinner while the AI writes) -

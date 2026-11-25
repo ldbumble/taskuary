@@ -1083,7 +1083,7 @@ class ApiTests(unittest.TestCase):
             self.assertEqual([f'review:{r}' in i['aliases'] for i in pile['items']], [True])
             # nine lanes now: 'broken' was added between approve and asked, so a failed check ranks
             # above a person's ask instead of behind every report (funnel.LANES)
-            self.assertEqual([l['n'] for l in pile['lanes']], [0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])   # fifteen since 'theirs' (2026-09-25)
+            self.assertEqual([l['n'] for l in pile['lanes']], [0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])   # sixteen since 'watching' (2026-11-25)
             nxt = c.post('/api/concierge/next', json={}).json()
             self.assertEqual(nxt['item']['rid'], r)
             self.assertEqual(nxt['say'], 'Next up: TQ-0001.')      # instant, and the card carries the facts (2026-10-21)

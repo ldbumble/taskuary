@@ -482,11 +482,13 @@ class ACardRunsWhatItShows(unittest.TestCase):
                                                                    'script': 'import os; os.remove("x")'}, 'agent', refused=miss))
         self.assertIn('never an agent', miss[0])
 
-    def test_a_field_its_card_does_not_draw_is_refused(self):
+    def test_a_field_its_card_does_not_draw_never_rides_on_it(self):
+        # ...dropped where the card is raised (proposals.shown_only, 2026-11-25): the card stands, and what it runs is only what it draws
         miss = []
-        self.assertIsNone(proposals.queue(server.store, self.tid, {'action': 'run_tool', 'type': 'linkedin_post', 'text': 'A good week.',
-                                                                   'script': 'print(1)', 'query': 'DROP TABLE x'}, 'agent', refused=miss))
-        self.assertIn('query, script', miss[0])
+        got = proposals.queue(server.store, self.tid, {'action': 'run_tool', 'type': 'linkedin_post', 'text': 'A good week.',
+                                                      'script': 'print(1)', 'query': 'DROP TABLE x'}, 'agent', refused=miss)
+        kept = json.loads(server.store.get_review(got['reviewId'])['DraftText'])
+        self.assertEqual(miss, []); self.assertNotIn('script', kept); self.assertNotIn('query', kept)
 
     def test_a_card_changed_after_it_was_shown_never_runs(self):
         s, ran = server.store, []

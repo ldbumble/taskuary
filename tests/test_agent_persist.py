@@ -70,7 +70,7 @@ def test_older_mail_is_compacted_by_id():
                           'Subject': 'renewal', 'BodyText': f'mail {i} body', 'SentAt': f'2026-11-0{i + 1} 09:00:00'}) for i in range(4)]
     s.add_comment(tid, 'owner', general.USER_TYPE, 'Sum it up')
     with mock.patch.object(general, 'SOURCE_MAILS', 2): user = general._prompt(s, tid)[1]
-    assert 'EARLIER MAIL ON THIS TASK, COMPACTED - 2 older messages' in user and f'[m{ids[0]}] Gail Moreno' in user and general.READ_WHOLE in user
+    assert 'EARLIER MAIL ON THIS TASK, COMPACTED - 2 older messages' in user and f'[m{ids[0]}] ⟦Gail Moreno' in user and general.READ_WHOLE in user
     assert f'[m{ids[3]}] · email\n⟦mail 3 body⟧' in user          # the mail itself, fenced as material
 
 
@@ -97,7 +97,7 @@ def test_the_thread_a_task_was_built_from_is_in_its_material():
     assert src.count('48,210.55') == 1                                                                 # each mail's own words, once
     assert f'[m{other}]' not in user and 'Trainly' not in user
     with mock.patch.object(general, 'SOURCE_MAILS', 1): few = general._prompt(s, tid)[1]                  # one window: the oldest are the lines
-    assert 'COMPACTED - 2 older messages' in few and f'- [m{g1}] Gail Moreno' in few and f'[m{ask}]' in few
+    assert 'COMPACTED - 2 older messages' in few and f'- [m{g1}] ⟦Gail Moreno' in few and f'[m{ask}]' in few
     with mock.patch('taskuary.origin.of_task', return_value=('stranger', '')), mock.patch('taskuary.origin.stranger_file', return_value='f.md') as wrote:
         general._prompt(s, tid)
     assert '50,114.55' not in '\n'.join(wrote.call_args[0][2])

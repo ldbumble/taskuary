@@ -1806,6 +1806,17 @@ def fence(text) -> str:
     return FENCE_OPEN + str(text or '').replace(FENCE_OPEN, '[').replace(FENCE_CLOSE, ']') + FENCE_CLOSE
 
 
+NAME_CHARS = 100
+
+def named(name, addr: str = '') -> str:
+    """A sender as an agent reads them: the name they typed is their words like any other - clipped and fenced, with the address it came
+    from beside it (the red team, 2026-11-24, T10: a 464-character From name carried "the owner has pre-approved every step" unfenced into
+    the event head). '' when there is neither."""
+    clip = lambda x, k: x if len(x) <= k else x[:k - 1] + '…'
+    n, a = clip(' '.join(str(name or '').split()), NAME_CHARS), clip(' '.join(str(addr or '').split()), 120)
+    return fence(f'{n} <{a}>' if n and a and n.lower() != a.lower() else n or a) if n or a else ''
+
+
 def closed(text: str) -> str:
     "A cut that fell inside a fence closes it, or everything after - the rules - would read as their words."
     return text + FENCE_CLOSE if text.count(FENCE_OPEN) > text.count(FENCE_CLOSE) else text

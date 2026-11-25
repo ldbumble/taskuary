@@ -123,11 +123,11 @@ def _flat(x, n: int) -> str:
 
 
 def _message(e) -> str:
-    from .terminal import fence
-    where = ', '.join(x for x in (f"by {e['channel']}" if e.get('channel') else '', f"subject \"{_flat(e['subject'], 140)}\"" if e.get('subject') else '') if x)
+    from .terminal import fence, named
+    where = ', '.join(x for x in (f"by {e['channel']}" if e.get('channel') else '', f"subject {fence(_flat(e['subject'], 140))}" if e.get('subject') else '') if x)
     if e.get('own'): head = f"The owner's own message on the thread, sent outside Taskuary (m{e.get('mid')}{', ' + where if where else ''})"
     elif e.get('mine'): head = f"The owner's ask (m{e.get('mid')})"
-    else: head = f"Message from {e.get('who') or 'someone'} (m{e.get('mid')}{', ' + where if where else ''})"
+    else: head = f"Message from {named(e.get('who'), e.get('addr')) or 'someone'} (m{e.get('mid')}{', ' + where if where else ''})"
     if e.get('elsewhere'): head += f", filed on {e['elsewhere']}"
     text = str(e.get('text') or '')
     return f"{head}:\n{text if e.get('own') or e.get('mine') else fence(text)}" + _files(e.get('files'))
@@ -201,7 +201,7 @@ def arrived(store, mid: int, tid: int = None) -> None:
     from .outbox import asked
     from .wrapup import from_owner
     mine = not own and from_owner(store, m)              # ...his ask, filed as the task's own row (New, the phone): his words, never fenced
-    body = dict(mid=mid, who=asked(m) or m.get('FromName') or m.get('FromEmail') or '', channel=m.get('Channel') or '', own=own, mine=mine,
+    body = dict(mid=mid, who=asked(m) or m.get('FromName') or '', addr='' if asked(m) else m.get('FromEmail') or '', channel=m.get('Channel') or '', own=own, mine=mine,
                 subject=str(m.get('Subject') or '').strip() if str(m.get('Channel') or 'email').lower() == 'email' else '',
                 text=_mail_text(store, m)[:3000], files=files[:8])
     if tid and not ours(tid): add(store, tid, 'message', f'message:{mid}', **body)

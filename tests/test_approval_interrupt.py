@@ -84,6 +84,15 @@ class InterruptTests(unittest.TestCase):
         data3, send3 = self.approve(s, rid, data2['interrupt']['refreshed'])               # the reviewed, current draft goes out
         self.assertTrue(data3['ok']); send3.assert_called_once()
 
+    def test_the_reviewed_draft_goes_out_on_a_machine_whose_clock_moves_between_presses(self):
+        """The same three presses where each stamp lands a second after the last (Windows CI, 2026-11-25): the refresh's withdrawn Redraft
+        press freed its audit Id, the next press took it, and its line was refused as the first one's record changed - the Send stood unsent."""
+        import itertools
+        from datetime import datetime, timedelta
+        tick = itertools.count()
+        with mock.patch('taskuary.store._now', lambda: str(datetime(2026, 9, 6, 12) + timedelta(seconds=next(tick)))):
+            self.test_the_previous_approval_is_never_applied_to_a_changed_draft()
+
     def test_a_reply_the_owner_sent_outside_supersedes_the_draft_and_the_click_says_so(self):
         s = MemoryStore(); tid, first, rid = thread(s)
         channels.retire_draft_answered_elsewhere(s, tid, {'ConversationId': 'AAQk-x', 'SentAt': '2026-09-06 11:00:00', 'Channel': 'email', 'BodyText': 'Sent it from Outlook.'})

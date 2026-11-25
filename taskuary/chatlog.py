@@ -89,6 +89,14 @@ def put(store, tid: int, kind: str, key: str, body: dict, parent=None, state=Non
     return n
 
 
+def forget(store, tid: int, key: str) -> None:
+    "Take row `key` off task `tid`'s log: what it recorded never happened (a press withdrawn as it was made)."
+    with store.lock:
+        if store.cx.execute('DELETE FROM chatlog WHERE TaskId=? AND Key=?', (int(tid), key)).rowcount: _bump(store, tid)
+        store.cx.commit()
+    _poke(store, tid)
+
+
 def _goes_on(store, tid: int, below: int) -> None:
     with store.lock: _goes_on_(store, tid, below)
 def _goes_on_(store, tid: int, below: int) -> None:

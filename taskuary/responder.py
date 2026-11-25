@@ -762,7 +762,13 @@ def to_agent(store, tid: int, nudge: str = None) -> str:
     # ...his press is written first: the turn it wakes reads it with what the owner did since its last answer
     store.audit('task', int(tid), 'redraft_asked', 'owner', 'human', {'said': said[:300]})
     got = general.to_agent(store, int(tid), REDRAFT.format(press=press, said=f', saying: "{said}"' if said else ''))
-    if not got: store._exec("DELETE FROM audit WHERE Id=(SELECT MAX(Id) FROM audit WHERE EntityType='task' AND EntityId=? AND Action='redraft_asked')", (int(tid),))
+    if not got:
+        aid = (store._one("SELECT MAX(Id) AS i FROM audit WHERE EntityType='task' AND EntityId=? AND Action='redraft_asked'", (int(tid),)) or {}).get('i')
+        store._exec('DELETE FROM audit WHERE Id=?', (aid,))
+        # ...and the line a read drew for it meanwhile: the next audit row takes its freed Id, and that press's line was refused as this one's
+        # record changed (chatlog._frozen, Windows CI 2026-11-25: a second stale Send stood unsent)
+        from . import chatlog
+        chatlog.forget(store, int(tid), f'p:{aid}')
     return got
 
 

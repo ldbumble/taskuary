@@ -1282,6 +1282,22 @@ def blocks(system, marks: int = 4, ttl: bool = True, seconds: bool = False):
 def cached(system, marks: int = 4): return blocks(system, marks) or str(system)
 
 
+# OPENAI'S OWN TWO CACHE FIELDS (cost, 2026-11-24): its cache is a prefix on the machine a request is routed to, by a hash of the prompt's first
+# tokens - and a 30-minute clock or a mail an hour after the last outlives the in-memory cache (5-10 minutes idle). `prompt_cache_key` routes
+# the calls that share a stable head to one place, named by that head's own bytes (no caller says what job it is); `prompt_cache_retention`
+# keeps it a day. A model that refuses either (a 400 naming it) is asked again without them, and never sent them again (_NO_CACHE_KW).
+CACHE_HEAD = 2_000         # characters of the stable head the key is named by
+_NO_CACHE_KW = set()
+
+
+def cache_fields(t: str, ek: tuple, system) -> dict:
+    "The two fields for an OpenAI call whose system has a head worth caching; {} for any other card or one that refused them."
+    if t != 'openai' or ek in _NO_CACHE_KW: return {}
+    head = ''.join(getattr(system, 'blocks', None) or [str(system or '')])[:CACHE_HEAD]
+    if len(head) < CACHE_FROM: return {}
+    return {'prompt_cache_key': 'tq-' + hashlib.sha1(head.encode('utf-8', 'replace')).hexdigest()[:16], 'prompt_cache_retention': '24h'}
+
+
 def endpoint(t, cfg: dict, key: str) -> tuple:
     """(urls, headers, model) an OpenAI-shaped card is asked at - its chat completions address(es), its auth header and its model. ONE
     ANSWER for make_llm's own calls and for the CLI harness its agent runs on (harness.py), so the two never reach different hosts."""
@@ -1444,12 +1460,15 @@ def make_llm(t, cfg: dict, key: str):
             nonlocal last
             for url in urls:
                 for tok_param in ('max_completion_tokens', 'max_tokens'):
-                    body = {'messages': msgs, tok_param: max_tokens, **({'model': model} if model else {}),
+                    body = {'messages': msgs, tok_param: max_tokens, **({'model': model} if model else {}), **cache_fields(t, ek, system),
                             **({'response_format': fmt} if fmt else {}), **({'reasoning_effort': thin or effort} if (thin or effort) and ek not in _NO_EFFORT else {})}
                     # a local model may spend its first call loading weights off disk, a reasoning deployment its time on a long
                     # prompt - room to answer, and a quick give-up on an endpoint that is not there
                     r = post_retrying(url, headers, body, (CONNECT_TIMEOUT, READ_TIMEOUT))
                     if unmarked(r, msgs): r = post_retrying(url, headers, body, (CONNECT_TIMEOUT, READ_TIMEOUT))
+                    if r.status_code in (400, 422) and 'prompt_cache' in (r.text or '') and body.pop('prompt_cache_key', None):
+                        body.pop('prompt_cache_retention', None); _NO_CACHE_KW.add(ek)
+                        r = post_retrying(url, headers, body, (CONNECT_TIMEOUT, READ_TIMEOUT))
                     # a spent budget first: it is no refused effort or format, and asking again in another shape only spends a request
                     if budget_spent(r): raise BudgetSpent(BUDGET_LINE.format(name='HIPAA AI' if t == 'hipaa_ai' else t))
                     # ...a proxy may turn it down with a 422 of its own (the gateway in front of another provider's model)

@@ -289,6 +289,27 @@ def test_each_card_type_carries_the_cache_the_way_its_provider_takes_it_and_a_re
     assert kinds == ['list', 'str', 'str'], 'asked again without the marker, and never marked again on this card'
 
 
+def test_an_openai_card_routes_a_shared_head_to_one_cache_kept_a_day_and_a_model_that_refuses_it_is_asked_without():
+    "A mail an hour after the last outlived OpenAI's in-memory cache; the calls that share a head name it, and it is kept 24h."
+    ok, bodies = {'choices': [{'message': {'content': '{}'}}], 'usage': {'prompt_tokens': 9, 'completion_tokens': 1}}, []
+    refused = _post({'error': {'message': "Unsupported parameter: 'prompt_cache_retention' is not supported with this model."}}, 400)
+    answers = iter([_post(ok), _post(ok), _post(ok), refused, _post(ok), _post(ok)])
+    def post(url, json=None, **kw): bodies.append(dict(json)); return next(answers)
+    llm._NO_CACHE_KW.clear()
+    with mock.patch('taskuary.llm.requests.post', side_effect=post):
+        brain = llm.make_llm('openai', {'model': 'gpt-5.4'}, 'k')
+        brain(llm.stable('guide ' * 1000, rest='mail one'), 'one'); brain(llm.stable('guide ' * 1000, rest='mail two'), 'two'); brain('short', 'x')
+        old = llm.make_llm('openai', {'model': 'gpt-4o-mini'}, 'k')
+        old('guide ' * 1000, 'one'); old('guide ' * 1000, 'two')
+    a, b, small, no, again, after = bodies
+    assert a['prompt_cache_key'] == b['prompt_cache_key'] and a['prompt_cache_retention'] == '24h', 'one key for one head'
+    assert 'prompt_cache_key' not in small and 'prompt_cache_key' in no
+    assert 'prompt_cache_key' not in again and 'prompt_cache_retention' not in after, 'asked again without, and never sent them again'
+    with mock.patch('taskuary.llm.requests.post', return_value=_post(ok)) as p:
+        llm.make_llm('openrouter', {}, 'k')('guide ' * 1000, 'one')
+    assert 'prompt_cache_key' not in p.call_args.kwargs['json'], 'only the card that takes them'
+
+
 def test_the_settings_page_reads_what_the_ai_did_today_and_the_ceiling():
     from fastapi.testclient import TestClient
     from taskuary import server

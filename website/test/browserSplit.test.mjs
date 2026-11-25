@@ -147,6 +147,8 @@ test("the view's Approve line names only a card the chat draws for his press, an
     { id: "r:9", kind: "card", review: 9, status: "pending" }] };
   assert.deepEqual([...pressable(ended)].sort(), [7, 9], "a greyed card is no card to press");
   assert.deepEqual([...pressable(null)], []);
+  // walk 22 (2026-11-25): the final Post of a card's browser road, held - it is that card's next press (`step`), so the view names it too
+  assert.deepEqual([...pressable({ items: [{ id: "r:2", kind: "card", review: 2, status: "pending", step: { review: 4, what: "Publish your post" } }] })].sort(), [2, 4]);
   const held = [{ id: 7, what: "Submit the sign-up on RentScope" }];
   assert.deepEqual(pageBars({ ask: "turn" }, held), { turn: { ask: "turn" }, held: [] }, "his turn on the page stands alone");
   assert.deepEqual(pageBars(null, held), { turn: null, held });

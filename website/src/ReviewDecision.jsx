@@ -801,7 +801,9 @@ export function SentReview(p) {
 // to change while it waits, its press named by the act ("Post to LinkedIn", "Create issue"). The press is the one decide road every proposal
 // takes (/api/reviews/{id}/decide -> proposals.execute); a post on a network not connected goes up through the agent's browser at his press,
 // its final Post held for him (the owner, 2026-11-22: "card first, sign-in at the press"). `past`: the chat moved past it, greyed (MovedPast)
-export function ActReview({ row: was, tid, live = true, onChanged, past = false }) {
+// `step`: {review, what} - the step of that browser road held for him now (chatlog.advance): THIS card's next press, drawn here (walk 22,
+// 2026-11-25: the final Post was held and nothing anywhere could be pressed)
+export function ActReview({ row: was, tid, live = true, onChanged, past = false, step = null }) {
   const given = past ? asLive(was) : was;
   // ...A PRESS ANSWERED IS THE CARD'S STATE AT ONCE (the card round, 2026-11-18): the status the server answered with stands over a row that still
   // says pending, until that row says it too - one answered elsewhere (`already`) holds greyed instead, its words not this card's to say
@@ -842,6 +844,14 @@ export function ActReview({ row: was, tid, live = true, onChanged, past = false 
     catch (e) { setErr(e?.response?.data?.detail || e?.message || "It could not be handed over."); }
     setBusy("");
   };
+  // ...the held step's own press: the one decide road, on the step's review - what it did is this card's next state, as the list says it
+  const decideStep = async (verb) => {
+    setBusy(`step:${verb}`); setErr("");
+    const o = await press(api, step.review, { verb }, 2);
+    setErr(landed(o) || o.kind === "already" ? "" : failLine(o, "done"));
+    if (o.kind !== "error") onChanged?.();
+    setBusy("");
+  };
   const set = (k) => (v) => setVals((x) => ({ ...x, [k]: v }));
   const has = (f) => f.value || f.editable;
   // ITS FIELDS FROM ITS DECLARATION: its picks under the label, a heading line bold, its other lines, its words, its picture once
@@ -865,14 +875,18 @@ export function ActReview({ row: was, tid, live = true, onChanged, past = false 
       run: () => { try { navigator.clipboard?.writeText(text); setCopied(true); } catch { /* the words stay on the card */ } } }, dismiss]
     : [{ id: "approve", label: busy === "approve" ? w.busy : w.press, tone: "p", spin: busy === "approve", disabled: !ok, run: () => decide("approve"),
       title: act.note || hint("approve", post ? "post" : "action"), attrs: { "data-tq-act-press": "" } }, dismiss];
-  const after = gone ? { mark: "approved", label: `✓ ${done ? (done.browser ? "Handed to the agent" : w.done) : st.said.startsWith("Handed") ? "Handed to the agent" : st.said}`,
+  const stepRow = step && gone && !past && st.said.startsWith("Handed") ? [
+    { id: "approve", label: btn("approve", "action"), tone: "p", spin: busy === "step:approve", disabled: !!busy, run: () => decideStep("approve"), attrs: { "data-tq-act-step": step.review } },
+    { ...dismiss, run: () => decideStep("reject") }] : null;
+  const after = stepRow ? null : gone ? { mark: "approved", label: `✓ ${done ? (done.browser ? "Handed to the agent" : w.done) : st.said.startsWith("Handed") ? "Handed to the agent" : st.said}`,
     line: done?.browser || st.said.startsWith("Handed") ? viaBrowserSaid(row?.network).replace(/^Handed to the agent - /, "") : "",
     ...(go ? { link: { href: go, text: `See it on ${row?.network}` } } : {}) }
     : !st.live && !st.failed ? { mark: "dismissed", label: `✗ ${st.said}` } : null;
   return (<MovedPast on={past}>
-    <ReviewCard id={row?.ReviewId} kind={act.kind} state={gone ? "done" : st.live ? "waiting" : "not-done"} data-tq-act={row?.ReviewId} data-tq-act-kind={act.kind}
+    <ReviewCard id={row?.ReviewId} kind={act.kind} state={stepRow ? "waiting" : gone ? "done" : st.live ? "waiting" : "not-done"} data-tq-act={row?.ReviewId} data-tq-act-kind={act.kind}
       face={post ? faceOf(row) : ""} label={post ? `${row?.as || `Your ${row?.network || ""} account`} · ${row?.network || "post"}` : act.title}
-      fields={fields} press={pressRow} after={after} failed={failed} onView={setViewing}
+      fields={fields} press={stepRow || pressRow} after={after} failed={failed || (stepRow && err) || ""} onView={setViewing}
+      before={stepRow && <Typography data-tq-act-step-says="" sx={{ fontSize: 12.5, color: INK, mb: 0.75 }}>Waiting for your press - the agent has it ready on the page: {step.what}</Typography>}
       tail={st.live && !gone && row?.connect && <Typography data-tq-not-connected="" sx={{ fontSize: 11.5, color: FAINT }}>{row.connect.says}{post
         ? " - Post via the browser has the agent put it up there, and its last Post waits for you" : row.connect.waits ? ` - ${row.connect.waits}` : ""}</Typography>}
       under={<>{row?.connect && st.live && !gone && setupUnder(setupAt, () => setSetupAt(""), () => decide("approve"))}

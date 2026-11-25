@@ -387,8 +387,7 @@ def test_the_final_post_held_in_the_browser_stands_on_the_card_he_pressed_in_fro
                                       'DraftText': json.dumps({'action': 'run_tool', 'type': kind, 'text': 'Strollers then and now.'})})
     x, rd, li = post('x_post'), post('reddit_post'), post('linkedin_post')
     with mock.patch.object(general, 'to_agent', return_value='woke'): proposals.via_browser(s, x, '')
-    held = s.add_review({'TaskId': tid, 'Kind': 'action', 'Status': 'pending', 'Reason': 'held before it ran: Publish your post on X',
-                         'DraftText': json.dumps({'action': 'browser_act', 'sid': 's1', 'args': ['click', '@e91'], 'site': 'x.example'})})
+    held = proposals.queue(s, tid, {'action': 'browser_act', 'sid': 's1', 'args': ['click', '@e91'], 'site': 'x.example', 'what': 'Publish your post on X'})['reviewId']
     st = cardqueue.state(s, tid)
     assert st['live'] == [x, held], st
     assert rd in st['held'] and li in st['held'] and held not in cardqueue.held(s, tid)

@@ -983,6 +983,11 @@ def advance(store, tid: int) -> None:
     by = {r['ReviewId']: r for r in store._rows('SELECT * FROM review WHERE TaskId=? ORDER BY ReviewId', (tid,))}
     front = [x for x in q['live'] if x != cardqueue.LAND]
     held = set(q['held'])
+    # ...AND THE HELD STEP OF A CARD'S BROWSER ROAD IS THAT CARD'S NEXT PRESS, DRAWN ON IT (walk 22, 2026-11-25: Post via the browser on the X card,
+    # the agent's final Post held, and nothing to press anywhere - the card he had pressed stood "approved" over a step the line kept behind
+    # it): the card waits again, carrying the step (`step`), until the step is pressed, taken back or moved past
+    sp = cardqueue.step(q['units'][0]) if front else None
+    step = {'review': sp['ReviewId'], 'what': cardqueue._flat(cardqueue._p(sp).get('what') or cardqueue._p(sp).get('command'), 300)} if sp else None
     # ...every card that stood reads as its review does now: pressed, withdrawn, moved past - in its place
     for k, r in list(rows.items()):
         rv = by.get(json.loads(r['Body']).get('review'))
@@ -1014,14 +1019,18 @@ def advance(store, tid: int) -> None:
         # aside first or the agent's rewrite did; which came first is a race, and no race decides what he sees
         if st == 'superseded' and rv.get('DecidedBy') not in OWNER_ACTORS: st = 'passed'
         if st == 'pending' and rv['ReviewId'] != (front[0] if front else None): st = 'passed' if rv['ReviewId'] in q['past'] else 'offer' if r['State'] == 'offer' else 'held'
+        if step and front and rv['ReviewId'] == front[0]: st = 'pending'
         if st != r['State']: update(store, tid, k, state=st, status=st)
     if front and (rv := by.get(front[0])) and f"r:{front[0]}" not in rows:
         # ...the turn that raised it (advance_soon kept it), else the one open now; a turn's card is drawn when that turn has ended
         # ...else the turn at work when it was raised, by its own time: a card is a turn's last thing, never loose where a turn was
         t = _raised(store, front[0]) or (open_turn(store, tid) or _turn_at(store, tid, rv.get('CreatedAt')) or {}).get('Id')
-        put(store, tid, 'card', f"r:{front[0]}", {**_card(rv), 'rids': front, 'line': cardqueue.line(q)}, parent=t,
-            state='pending', src=f"review:{front[0]}")
+        put(store, tid, 'card', f"r:{front[0]}", {**_card(rv), 'rids': front, 'line': cardqueue.line(q), 'step': step, **({'status': 'pending'} if step else {})},
+            parent=t, state='pending', src=f"review:{front[0]}")
     elif front and f"r:{front[0]}" in rows: update(store, tid, f"r:{front[0]}", line=cardqueue.line(q))
+    # ...its step on the card in front only: pressed, that card is done; taken back or moved past, the card is as it was
+    for k, r in rows.items():
+        if (want := step if front and k == f"r:{front[0]}" else None) != json.loads(r['Body'] or '{}').get('step'): update(store, tid, k, step=want)
     for rid, rv in by.items():
         if f'r:{rid}' in rows or rv['Status'] != 'pending' or cardqueue.in_line(rv) or rid in held: continue
         from .conversation import unwritten
@@ -1036,6 +1045,7 @@ def advance(store, tid: int) -> None:
         if froze and ep(rv.get('CreatedAt')) < froze - 1: continue       # ...what the old build drew was frozen as it was (migrate; a stamp is a whole second)
         if f'r:{rid}' in rows or rv['Status'] == 'pending' or (rv.get('Batch') and rid != min(x for x, y in by.items() if y.get('Batch') == rv['Batch'])): continue
         if cardqueue.obsolete_read(store, tid, rv): continue      # ...a held read the gate lets through now was never his to answer, answered or not
+        if cardqueue._p(rv).get('card') in by: continue           # ...a card's own step stood on that card, never as one of its own
         c = _card(rv)
         # ...pressed, failed, set aside because he wrote past it - or REPLACED BY ITS AGENT WHILE IT WAS THE CARD IN FRONT (it stood, whether or not
         # a read drew it before the rewrite): greyed where it stood. One that waited behind another never stood

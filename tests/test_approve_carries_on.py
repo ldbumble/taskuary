@@ -931,7 +931,8 @@ def test_the_screen_fact_says_what_waits_what_is_held_what_is_greyed_and_what_ha
     said = cardqueue.screen(s, tid)
     # ...each card of one by what it is, never its number (walk 11: the agent told him it drafted the reply "(rv2)")
     assert 'post on X' in said.split('Waiting for his press now:')[1].split('\n')[0] and 'The portal launches Monday.' in said, said
-    assert 'post on Reddit' in said.split('Not on his screen yet')[1].split('\n')[0], said
+    # ...and the one behind it is a tab of the same card, his to press (walk 22: told "not on his screen yet", an agent drew it again beside the cards)
+    assert 'post on Reddit' in said.split('On his screen now, a tab of the same card')[1].split('\n')[0] and 'Not on his screen yet' not in said, said
     assert 'the email to gail@northwind.example' in said.split('Sent')[1].split('\n')[0] and not re.search(r'\brv\d', said), said
     s._exec("UPDATE review SET CreatedAt='2000-01-01 00:00:01' WHERE ReviewId IN (?,?)", (x, reddit))
     general.wait_line(s, tid, 'Give me a button for each', line_id='l-each')                 # ...his line greys both, the moment it is sent

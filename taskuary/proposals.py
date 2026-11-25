@@ -575,9 +575,11 @@ def tool_words(store, p: dict) -> str:
 def queue(store, task_id: int, p: dict, actor='agent', refused: list | None = None, unheard: bool = False) -> dict | None:
     """ONE proposal through the gate: a pending review when it validates, a recorded refusal (None) when not - its reason appended to
     `refused`, so the agent that proposed it is told why and can fix it (refusal_line). `unheard`: no answer goes back to it now (collect)."""
-    from . import card, trackers
+    from . import card, cardqueue, trackers
     # ...its `then`, the agent's own step after the press, is the card's (card.carries_on) - never part of what is run or compared
     then, p = card.then_of(p), {k: v for k, v in p.items() if k != 'then'}
+    # ...and a browser step held while a card his press handed over is under way is that card's own next press (cardqueue.step)
+    if p.get('action') == 'browser_act': p = {**p, **({'card': fl['ReviewId']} if (fl := cardqueue.in_flight(store, int(task_id))) else {})}
     # an agent's comment or move on "the ticket" means the item this task came from: named on the proposal, so the card says which
     if p.get('action') == 'run_tool' and p.get('type') in trackers.TYPES and not str(p.get('item') or '').strip():
         it = trackers.item_of(store, task_id)

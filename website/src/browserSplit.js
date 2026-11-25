@@ -231,10 +231,11 @@ export const heldOn = (review, sid) => {
 
 // THE CARDS HIS PRESS IS ON NOW, BY THE CHAT'S OWN LIST (conversation.items): a card drawn there and not greyed. The view's "waits for your
 // Approve in the chat" names only these (walk 10, 2026-11-23: it named a held sign-up for 15 minutes while the turn at work drew no card -
-// a card comes as a turn's last thing - and again after an input had greyed it)
+// a card comes as a turn's last thing - and again after an input had greyed it). ...AND THE STEP A CARD CARRIES (`step`, chatlog.advance): the
+// last press of the browser road he sent it down, drawn on that card (walk 22: held, joined to the card he had pressed, and named nowhere)
 export const pressable = (list) => new Set((list?.items || [])
   .flatMap((x) => (x.kind === "card" ? [x] : x.kind === "turn" ? x.cards || [] : []))
-  .filter((c) => c.status === "pending" && c.review != null).map((c) => c.review));
+  .filter((c) => c.status === "pending" && c.review != null).flatMap((c) => [c.review, ...(c.step ? [c.step.review] : [])]));
 
 // ONE THING IN FRONT OF HIM AT A TIME (the owner's rule): his turn on the page, else the held step that waits for his Approve - never both
 export const pageBars = (turn, held = []) => (turn ? { turn, held: [] } : { turn: null, held });

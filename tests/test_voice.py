@@ -498,6 +498,50 @@ class HipaaGatewayHears(unittest.TestCase):
         g.assert_not_called(); self.assertEqual((out['text'], out['model']), ('', 'g-voice'))
         self.assertEqual(p.call_args[1]['json']['messages'][0]['content'][1]['input_audio']['format'], 'wav')
 
+    def info(self, *hear):
+        rows = [{'model_name': m, 'model_info': {'mode': 'chat', 'supports_audio_input': m in hear}} for m in
+                ('gemini-3.8-flash', 'claude-sonnet-5-5', 'gemini-4-hydrogen', 'gemini-4-neon', 'hipaa-ai')]
+        return R(200, {'data': rows + [{'model_name': 'hipaa-image', 'model_info': {'mode': 'image_generation'}}]}, {'Content-Type': 'application/json'})
+
+    def test_the_card_own_model_hears_at_low_effort_when_the_gateway_says_it_takes_audio(self):
+        "2026-11-25: a dictation took 149.5 s on the first 'flash' listed, thinking up to 1,535 tokens; the card's own model at low answers in 2-4 s"
+        hear = ('gemini-3.8-flash', 'gemini-4-hydrogen', 'gemini-4-neon', 'hipaa-ai')
+        for own, want in (('gemini-4-hydrogen@low', 'gemini-4-hydrogen'), ('gemini-4-neon', 'gemini-4-neon'),
+                          ('claude-sonnet-5-5', 'gemini-4-hydrogen'), ('', 'gemini-4-hydrogen')):
+            voice._GW_MODEL.clear()
+            s = _gateway_store({'base_url': 'https://gw.example', 'model': own})
+            with mock.patch.object(voice.requests, 'get', return_value=self.info(*hear)) as g, \
+                 mock.patch.object(voice.requests, 'post', return_value=self.chat('Book the room for Monday.')) as p:
+                out = voice.transcribe(s, b'webm', 'audio/webm', level=.2, seconds=3)
+            self.assertEqual((out['model'], p.call_args[1]['json']['model']), (want, want), own)
+            self.assertEqual(p.call_args[1]['json']['reasoning_effort'], 'low')
+            self.assertEqual([c[0][0] for c in g.call_args_list], ['https://gw.example/v1/model/info'])
+            self.assertEqual(p.call_args[1]['timeout'][0], voice.CONNECT, 'a dead route is given up on in seconds')
+
+    def test_a_gateway_that_refuses_the_effort_is_asked_once_more_without_it(self):
+        s = _gateway_store({'base_url': 'https://gw.example', 'voice_model': 'g'})
+        with mock.patch.object(voice.requests, 'post', side_effect=[R(400, {'error': 'reasoning_effort is not supported'}), self.chat('Call Erin.')]) as p:
+            out = voice.transcribe(s, b'webm', 'audio/webm', level=.2, seconds=3)
+        self.assertEqual((out['text'], p.call_count), ('Call Erin.', 2))
+        self.assertNotIn('reasoning_effort', p.call_args[1]['json'])
+
+    def test_a_call_stuck_in_the_gateway_is_asked_again_beside_it_and_the_first_answer_wins(self):
+        "148.2 s inside Vertex with no retry, while a twin three seconds later answered in 1.5 s: one request is slow, not the model"
+        import threading
+        s, gate, calls = _gateway_store({'base_url': 'https://gw.example', 'voice_model': 'g'}), threading.Event(), []
+        def post(*a, **kw):
+            calls.append(1)
+            if len(calls) == 1: gate.wait(5); return self.chat('stale')     # the stuck one
+            return self.chat('Send the ledger to Gail.')
+        with mock.patch.object(voice, 'HEDGE', .05), mock.patch.object(voice.requests, 'post', side_effect=post):
+            t = voice.time.time(); out = voice.transcribe(s, b'webm', 'audio/webm', level=.2, seconds=3)
+        gate.set()
+        self.assertEqual((out['text'], len(calls)), ('Send the ledger to Gail.', 2))
+        self.assertLess(voice.time.time() - t, 2, 'the twin answered; the stuck call was not waited for')
+        with mock.patch.object(voice, 'HEDGE', 5), mock.patch.object(voice.requests, 'post', return_value=self.chat('Fine.')) as p:
+            voice.transcribe(s, b'webm', 'audio/webm', level=.2, seconds=3)
+        self.assertEqual(p.call_count, 1, 'an answer in time sends no twin')
+
     def test_a_refused_code_says_so(self):
         s = _gateway_store({'base_url': 'https://gw.example', 'voice_model': 'g'})
         with mock.patch.object(voice.requests, 'post', return_value=R(401, {'error': 'no'})):

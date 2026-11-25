@@ -592,7 +592,7 @@ def block_fix(store, channel) -> dict | None:
     return None
 
 
-GUARD = ("this text still carries a {mark}...] placeholder. Credentials are taken out of PROMPTS "
+GUARD = ("this text still carries a {mark}...] placeholder. Credentials, SSNs and dates of birth are taken out of PROMPTS "
          "(redact.py), never out of the owner's own mail - so a placeholder in something addressed "
          "to a person means a prompt's text was reused as the message. Rewrite it from the thread.")
 

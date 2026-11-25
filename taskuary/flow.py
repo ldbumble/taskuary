@@ -481,7 +481,7 @@ def run_step(store, step, ctx, llm=None, task_id=None, dry=False, title='', src=
         except Exception as e:
             # an error is said on the task, kept on the run and handed to a repair: a driver that echoes its connection string
             # must not put the password in any of those (redact.scrub)
-            err = redact.scrub(str(e))[:600]
+            err = redact.secrets(str(e))[:600]
             logger.warning(f"workflow step {rec['label']!r} failed: {err}")
             rec.update(status='failed', error=err, head='failed', **({'app': app} if (app := app_fault(step, err)) else {}))
     rec['ms'] = int((time.time() - t0) * 1000)
@@ -828,7 +828,7 @@ def repair(store, cfg: dict, run: dict, llm, sid=None) -> dict:
     def finish(out, looked):
         if out.get('cause') == 'taskuary':           # the steps are right and the app is what broke: nothing here to repair
             return {**app_said(app_place(str(out.get('area') or ''), str(out.get('name') or '')[:80], step)),
-                    'why': redact.scrub(str(out.get('why') or ''))[:600], 'looked_at': looked}
+                    'why': redact.secrets(str(out.get('why') or ''))[:600], 'looked_at': looked}
         new = out.get('flow') or out.get('steps')
         ok, why = validate(store, new)
         if not ok: return {'error': f'The repair it wrote does not hold together: {why}. Try again, or fix the step by hand.'}
@@ -864,7 +864,7 @@ def _repair_now(store, src, cfg, tid, rid, stop, recs, llm, repairs):
     from . import buttons
     sid, bad = src['SourceId'], recs[-1]
     try: out = repair(store, cfg, {'steps': recs}, llm, sid)
-    except Exception as e: out = {'error': redact.scrub(str(e))[:300]}
+    except Exception as e: out = {'error': redact.secrets(str(e))[:300]}
     if out.get('cause') == 'taskuary':
         store.add_comment(tid, 'workflow', 'agent', f"Not repaired: the steps are right - {out['app']['name']} in Taskuary is what broke. {out.get('why') or ''}".strip())
         return out['app']

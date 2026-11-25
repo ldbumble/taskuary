@@ -2831,7 +2831,7 @@ def type_into(t, text: str, done=None, brief: bool = False):
     TYPED_LAND to take them OUT of it. Mid-turn that is right too - Claude queues a line submitted
     while it works. `done(ok)` hears the outcome; a line that never left the box is cleared out of it
     first (^U, never Esc: that interrupts the agent), so nothing half-said sits there under its turn."""
-    text = clean_typed(text)
+    text = redact.scrub(clean_typed(text))      # ...whatever is typed into a session goes on to its provider (redact.py)
     # ...`brief`: TASKUARY'S WORDS, NEVER THE OWNER'S (the owner, 2026-11-09: "i hit approve why was this then an input on the right side??"):
     # the note an approved step hands the agent drew as the owner's bubble. Only what the owner typed, or what came in on the task's thread,
     # is an input; over ACP the prompt is marked Taskuary's, on a pty it is kept as a seed the record reads as a brief (sessionrecord.mark_briefs)

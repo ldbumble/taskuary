@@ -125,5 +125,37 @@ class AShownLineCarriesNoPasswordTests(unittest.TestCase):
         self.assertNotIn('Hunter2', lookout.asked({'type': 'lookout', 'whole': True, 'window': f'TASKS: task{tid} open: {self.LINE}'}))
 
 
+class SsnAndDateOfBirthTests(unittest.TestCase):
+    """The owner, 2026-11-25: "SSN or birthdays are never sent to endpoints, even HIPAA AI". An SSN by its shape or its label, a date of
+    birth only by its label - a bare date is a meeting or a deadline. Invented numbers from the never-issued ranges (000, 666, 9xx)."""
+
+    def test_an_ssn_goes_by_its_shape_or_its_label(self):
+        for raw, want in [('SSN: 666-12-3456', 'SSN: [redacted:ssn]'), ('ssn 666123456', 'ssn [redacted:ssn]'),
+                          ('Social Security Number is 900 12 3456', 'Social Security Number is [redacted:ssn]'),
+                          ('my social: 000-11-2222', 'my social: [redacted:ssn]'), ('member 666-12-3456 on file', 'member [redacted:ssn] on file'),
+                          ('{"ssn": "900123456"}', '{"ssn": "[redacted:ssn]"}')]:
+            self.assertEqual(redact.scrub(raw), want)
+
+    def test_a_date_of_birth_goes_only_where_a_label_names_it(self):
+        for raw, want in [('DOB: 01/02/1980', 'DOB: [redacted:date-of-birth]'), ('date of birth 1980-01-02', 'date of birth [redacted:date-of-birth]'),
+                          ('Born on March 3, 1980', 'Born on [redacted:date-of-birth]'), ('birthday is 3rd of March', 'birthday is [redacted:date-of-birth]'),
+                          ('"dateOfBirth": "1979-12-31"', '"dateOfBirth": "[redacted:date-of-birth]"'), ('D.O.B. 02/14/1975', 'D.O.B. [redacted:date-of-birth]')]:
+            self.assertEqual(redact.scrub(raw), want)
+
+    def test_what_only_looks_like_one_stays(self):
+        for t in ('Meeting on 01/02/2026', 'due March 3, 2026', 'invoice 2026-11-25', 'call 555-123-4567', 'zip 12345-6789', 'order 123456789',
+                  'DOB unknown, call 02/03/2026?', 'born in 1980', 'a social event on May 3', 'revert da8dae0012345', 'ref 666-12-3456-7'):
+            self.assertEqual(redact.scrub(t), t)
+
+    def test_his_screen_and_store_keep_the_number_only_what_leaves_loses_it(self):
+        from taskuary import concierge
+        line = 'Patient DOB 04/05/1961, SSN 666-12-3456 - book the follow-up'
+        self.assertEqual(redact.shown(line), line); self.assertEqual(concierge.redact(line), line)
+        self.assertEqual(redact.secrets(line), line)
+        self.assertEqual(redact.scrub(line), 'Patient DOB [redacted:date-of-birth], SSN [redacted:ssn] - book the follow-up')
+        self.assertEqual(redact.scrub(redact.scrub(line)), redact.scrub(line))
+        self.assertTrue(redact.holds_placeholder(redact.scrub(line)), 'a reply copying it is refused at the send (outbound)')
+
+
 if __name__ == '__main__':
     unittest.main()

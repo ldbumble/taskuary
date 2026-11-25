@@ -1407,7 +1407,7 @@ def take_corrections(store, tid: int, corrections) -> int:
     only when quoted word for word from the owner's newest message, so "make it warmer" said as "warmer, please" was lost. It still needs an
     owner's message to correct from, words, and no credential in them (redact.scrub): what is learned is kept for good. Returns how many."""
     try:
-        from .redact import scrub
+        from .redact import secrets as scrub
         last = next((c for c in reversed(store.list_comments(tid, internal=True)) if c.get('ActorType') == USER_TYPE and not is_brief(c)), None)
         if not last: return 0
         kept = 0

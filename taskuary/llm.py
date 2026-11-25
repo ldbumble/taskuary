@@ -696,13 +696,31 @@ class _Scrubbed:
     `.last_pick` DURING a call, and a resumed CLI thread is carried on exactly those.
     """
     def __init__(self, brain): object.__setattr__(self, '_brain', brain)
-    def __call__(self, system, user, *a, **kw):
-        return self._brain(system.map(redact.scrub) if isinstance(system, Stable) else redact.scrub(system), redact.scrub(user), *a, **kw)
-    def __getattr__(self, k): return getattr(object.__getattribute__(self, '_brain'), k)
+    def __call__(self, system, user, *a, **kw): return self._brain(_scrubbed(system), redact.scrub(user), *a, **kw)
+    # ...AND ITS OTHER WAYS OUT, the same: an API agent's every step (apiagent.turn's `chat` - its tool answers, a page it read, his mail),
+    # its own web search, and a CLI's instructions warmed before the first call - each went past __call__ through __getattr__ as it was.
+    # Only where the brain has one: what it can do is read off it by name (apiagent.can, concierge's warm)
+    def __getattr__(self, k):
+        f = getattr(object.__getattribute__(self, '_brain'), k)
+        if k not in _OUT or not callable(f): return f
+        def out(first, *a, **kw): return f(_OUT[k](first), *a, **kw)
+        return out
     def __setattr__(self, k, v): setattr(object.__getattribute__(self, '_brain'), k, v)
 
 
 def _scrub(brain): return _Scrubbed(brain) if brain else brain
+def _scrubbed(system): return system.map(redact.scrub) if isinstance(system, Stable) else redact.scrub(system)
+
+
+def _said(m: dict) -> dict:
+    "One chat message with its words scrubbed: a string, or each text part of a list (a picture's part goes as it is)."
+    c = m.get('content')
+    if isinstance(c, str): return {**m, 'content': _scrubbed(c)}           # ...a Stable system keeps its cache blocks
+    if isinstance(c, list): return {**m, 'content': [{**p, 'text': redact.scrub(p['text'])} if isinstance(p, dict) and isinstance(p.get('text'), str) else p for p in c]}
+    return m
+
+
+_OUT = {'chat': lambda msgs: [_said(m) for m in msgs], 'search': redact.scrub, 'warm': _scrubbed}
 
 
 class _Cooling:

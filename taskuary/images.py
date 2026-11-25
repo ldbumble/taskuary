@@ -82,7 +82,8 @@ def ready(store) -> dict:
 def generate(store, prompt: str, size: str = '1024x1024', c: dict = None) -> dict:
     """Prompt in, {data, mime, provider, model} out. Raises RuntimeError with something the owner
     can act on - never an empty image, which reads downstream as a picture nobody can see."""
-    prompt = str(prompt or '').strip()[:MAX_PROMPT]
+    from .redact import scrub
+    prompt = scrub(str(prompt or '').strip())[:MAX_PROMPT]
     if not prompt: raise RuntimeError('nothing to draw - an image needs a prompt')
     c = c or pick(store)
     if not c: raise RuntimeError(NO_CONNECTOR)

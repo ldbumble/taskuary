@@ -100,7 +100,8 @@ class Live:
         except Exception: pass
 
     def _send(self, prompt: str):
-        self.p.stdin.write(json.dumps({'type': 'user', 'message': {'role': 'user', 'content': prompt}}) + '\n')
+        from .redact import scrub               # ...a turn's prompt and his words steered into it, as they leave for the CLI's provider
+        self.p.stdin.write(json.dumps({'type': 'user', 'message': {'role': 'user', 'content': scrub(prompt)}}) + '\n')
         self.p.stdin.flush()
 
     def turn(self, prompt: str, on_event, cancel=None, timeout: float = None) -> tuple:

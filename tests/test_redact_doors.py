@@ -163,5 +163,109 @@ class APlaceholderNeverGoesOutTests(unittest.TestCase):
         with self.assertRaises(RuntimeError) as e:
             outbound.reply_to_message(s, msg, 'Sure - I rotated it this morning.')
         self.assertNotIn('redacted', str(e.exception).lower())
+
+
+# ── SSNs AND DATES OF BIRTH, through every door Taskuary itself sends by (the owner, 2026-11-25: "never sent to endpoints, even HIPAA AI")
+# A front-desk mail of the shape a clinic gets: invented numbers from the never-issued ranges, an invented date, and a bare date that stays.
+SSN, DOB = '666-12-3456', '04/05/1961'
+INTAKE = (f'From Erin Blake: new resident intake. SSN {SSN}, DOB: {DOB}. Please book the first visit for 12/01/2026.')
+
+
+def _hipaa_card(s):
+    row = [c for c in s.list_connectors() if c['Type'] == 'anthropic'][0]
+    s.save_connector({'ConnectorId': row['ConnectorId'], 'Secret': 'k', 'Active': 1, 'ConfigJson': '{}'}, 'o')
+    s.set_setting('triage_ai', 'connector:anthropic', 't')
+
+
+class NoSsnOrBirthDateLeavesTests(unittest.TestCase):
+    def assertMasked(self, out):
+        out = json.dumps(out, default=str) if not isinstance(out, str) else out
+        self.assertNotIn(SSN, out); self.assertNotIn(DOB, out)
+        self.assertIn('[redacted:ssn]', out); self.assertIn('[redacted:date-of-birth]', out)
+        self.assertIn('12/01/2026', out, 'a bare date is not a birthday')
+
+    def test_a_hosted_call(self):
+        s, seen = MemoryStore(), {}
+        _hipaa_card(s)
+        def recorder(system, user, **kw): seen.update(system=system, user=user); return 'ok'
+        with mock.patch.object(llm, 'make_llm', return_value=recorder): llm.build_llm(s)('You sort mail.', INTAKE)
+        self.assertMasked(seen['user'])
+
+    def test_every_step_of_an_api_agent_and_its_search(self):
+        """apiagent.turn calls `brain.chat` - the HIPAA AI card's agent with hands - and that went past the wrapper's __call__ untouched:
+        its prompt, his mail and every tool answer (a page it read) reached the gateway as they were."""
+        from taskuary import apiagent
+        s, seen = MemoryStore(), {}
+        _hipaa_card(s)
+        def recorder(system, user, **kw): return 'ok'
+        def chat(messages, tools, max_tokens=100, **kw): seen['chat'] = messages; return {'role': 'assistant', 'content': 'done'}
+        def search(q, max_tokens=100): seen['search'] = q; return 'hits'
+        recorder.chat, recorder.search = chat, search
+        with mock.patch.object(llm, 'make_llm', return_value=recorder):
+            brain = llm.build_llm(s)
+            self.assertTrue(apiagent.can(brain))
+            got = apiagent.turn(brain, s, 1, 's1', 'You work tasks.', INTAKE, 100, tools=[])
+        self.assertEqual(got, 'done')
+        self.assertMasked(seen['chat'])
+        brain.search(f'who has SSN {SSN}'); self.assertNotIn(SSN, seen['search'])
+        bare = lambda system, user, **kw: 'ok'
+        with mock.patch.object(llm, 'make_llm', return_value=bare): self.assertFalse(apiagent.can(llm.build_llm(s)), 'no chat is still no chat')
+
+    def test_a_headless_cli_run(self):
+        fed = []
+        with mock.patch.object(agents, '_resolve_cmd', return_value=['claude']), \
+             mock.patch.object(agents.spawn, 'popen', side_effect=lambda *a, **k: _FakeProc(fed)):
+            agents.run_cli({'cmd': 'claude', 'args': ['-p']}, f'Work this task:\n{INTAKE}', lambda *a: None)
+        self.assertMasked(fed[0])
+
+    def test_a_kept_cli_conversation_and_an_acp_prompt(self):
+        from taskuary import acp, clipool
+        lv, wrote = object.__new__(clipool.Live), []
+        lv.p = mock.Mock(); lv.p.stdin.write.side_effect = wrote.append
+        lv._send(INTAKE)
+        self.assertMasked(json.loads(wrote[0])['message']['content'])
+        self.assertMasked(acp.blocks(INTAKE)[0]['text'])
+
+    def test_a_line_typed_into_a_live_session(self):
+        import threading
+        got, done = [], threading.Event()
+        class Chat:
+            def send_prompt(self, text, brief=False): got.append(text)
+        terminal.type_into(Chat(), INTAKE, done=lambda ok: done.set())
+        self.assertTrue(done.wait(5)); self.assertMasked(got[0])
+
+    def test_a_tool_answer(self):
+        from taskuary import agenttools
+        out = agenttools.rpc({'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call', 'params': {'name': 'read_message', 'arguments': {}}},
+                             lambda name, args: INTAKE)
+        self.assertMasked(out['result']['content'][0]['text'])
+
+    def test_the_context_file_an_agent_reads_off_disk(self):
+        from pathlib import Path
+        from taskuary import context
+        s = MemoryStore(); tid = s.create_task({'Title': 'intake', 'Kind': 'general', 'Status': 'open'}, 'owner')
+        with mock.patch.object(context, 'build', return_value=f'## Messages\n{INTAKE}'): p = context.write(s, tid)
+        self.assertMasked(Path(p).read_text(encoding='utf-8'))
+
+    def test_what_a_session_reads_over_the_api_and_the_owner_still_sees_it_whole(self):
+        from fastapi.testclient import TestClient
+        from taskuary import config, guard, server
+        srv = config.load()['server']
+        s = MemoryStore(); tid = s.create_task({'Title': 'intake', 'Kind': 'general', 'Status': 'open', 'OriginBase': 'owner'}, 'owner')
+        mid = s.add_message({'TaskId': tid, 'ExternalId': 'x1', 'ConversationId': 'c1', 'Channel': 'email', 'FromName': 'Erin Blake',
+                             'FromEmail': 'erin@northwind.example', 'Subject': 'Intake', 'BodyText': f'{INTAKE} Wifi password=bluefish17',
+                             'Status': 'routed'})
+        s._exec('UPDATE task SET TrustedThrough=? WHERE TaskId=?', (mid, tid))          # the owner vouched for her (agenttools.unvouched)
+        with mock.patch.object(server, 'store', s):
+            c = TestClient(server.app)
+            agent = c.get(f'/api/agent/messages/{mid}', params={'task_id': tid},
+                          headers={'X-Taskuary-Token': srv['agent_token'], guard.TASK_HDR: guard.task_proof(srv, tid)})
+            owner = c.get(f'/api/messages/{mid}', headers={'X-Taskuary-Token': srv.get('token') or ''})
+        # ...and still JSON: `password=` scrubbed over the answer's text took its closing quote with it
+        self.assertEqual(agent.status_code, 200); self.assertMasked(agent.json()['body']); self.assertTrue(agent.json()['body'].endswith('password=[redacted:secret]'))
+        self.assertEqual(owner.status_code, 200); self.assertIn(SSN, owner.text); self.assertIn(DOB, owner.text)
+        self.assertIn(SSN, s.get_message(mid)['BodyText'], 'the store keeps his mail as it came')
+
+
 if __name__ == '__main__':
     unittest.main()

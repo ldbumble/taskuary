@@ -31,7 +31,7 @@ def set_check(store, tid: int, when, what, actor: str = 'agent') -> dict:
     """Schedule it - `when` read as Remind me reads a day ('tomorrow 9am', 'in 2 days', '2026-11-12', 'in 3 hours'). A new one replaces the
     one waiting. Raises ValueError, said to the agent, for a time it cannot read, one gone, no `what`, or a closed task."""
     from . import remind
-    from .redact import scrub
+    from .redact import secrets as scrub
     t = store.get_task(int(tid))
     if not t: raise ValueError('no such task')
     if t.get('Status') in CLOSED: raise ValueError('this task is closed - a check-back would wake nobody')

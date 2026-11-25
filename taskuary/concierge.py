@@ -29,7 +29,7 @@ from loguru import logger
 from . import kinds as task_kinds
 from .timewords import plural
 from . import funnel, general, llm as llm_mod, store as store_mod, toolcatalog
-from .redact import scrub as _scrub
+from .redact import secrets as _scrub
 from .assistant import _ts
 from . import asks, attachtext, buttons, lanes, operations, timewords, workerstate as ws, words as places
 from . import bulk as bulk_mod

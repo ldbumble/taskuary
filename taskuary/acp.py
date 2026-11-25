@@ -205,7 +205,8 @@ class ACPClient:
     STEER = '_session/steering'
     def steer(self, text, timeout: float = 60) -> str:
         "'injected' when the words joined the running turn; else what the adapter said ('promptRequired': no turn runs; 'failed'), or ''."
-        r = self.request(self.STEER, {'sessionId': self.session_id, 'prompt': [{'type': 'text', 'text': str(text or '')}],
+        from .redact import scrub
+        r = self.request(self.STEER, {'sessionId': self.session_id, 'prompt': [{'type': 'text', 'text': scrub(text)}],
                                       '_meta': {'steering': {'idleBehavior': 'promptRequired'}}}, timeout=timeout) or {}
         return str(r.get('outcome') or '')
 
@@ -359,7 +360,8 @@ def blocks(text, caps: dict = None) -> list:
     "A prompt as ACP content: its words, then each file its own ATTACHED block names (general.prompt_files) as a block the agent takes."
     from pathlib import Path
     from .general import prompt_files
-    out = [{'type': 'text', 'text': str(text or '')}]
+    from .redact import scrub
+    out = [{'type': 'text', 'text': scrub(text)}]          # ...the prompt's words as they leave for the agent's provider (redact.py)
     # ...only a line that IS a file on this computer (the Codex walk, 2026-11-21: a seed whose next lines ran on under the block with no blank
     # line between sent "STATUS: in_progress" and each checklist line as links to files)
     for f in dict.fromkeys(x for x in prompt_files(text) if Path(x).is_absolute() and Path(x).is_file()):

@@ -28,7 +28,7 @@ def _cut(s, n=LINE) -> str:
 
 
 def step(n: int, kind: str, summary: str, detail: str = '', ok: bool = True) -> dict:
-    return {'id': f'trouble-{n}', 'kind': kind, 'summary': _cut(summary, 160), 'detail': redact.scrub(str(detail or ''))[:3000],
+    return {'id': f'trouble-{n}', 'kind': kind, 'summary': _cut(summary, 160), 'detail': redact.secrets(str(detail or ''))[:3000],
             'status': 'done' if ok else 'error'}
 
 

@@ -927,7 +927,7 @@ def permit(payload: dict, tid: int, wait: float = None, store=None) -> dict:
     inp = inp if isinstance(inp, dict) else {}
     from .sessionrecord import DRAFT_SHOWN, drafting
     # a draft by what it is, never its body (sessionrecord.hide_draft)
-    what = redact.scrub(str(inp.get('command') or inp.get('url') or inp.get('file_path') or inp))[:600]
+    what = redact.secrets(str(inp.get('command') or inp.get('url') or inp.get('file_path') or inp))[:600]
     if drafting(payload.get('tool_name'), inp): what = DRAFT_SHOWN
     g = ws.group_key(f'permit:{tid}:{sid}:{time.time_ns()}')        # a new group per call, so one Allow can never cover the next
     rid = ws.question_id(g, 1)

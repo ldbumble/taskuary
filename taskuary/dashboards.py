@@ -19,7 +19,18 @@ from .store import task_ref
 
 # kind -> (bindings it cannot draw without, the width it takes on a four-column grid)
 KINDS = {'stat': ((), 1), 'progress': (('target',), 1), 'line': (('x',), 2), 'area': (('x',), 2), 'bar': (('x',), 2),
-         'stacked': (('x', 'series'), 2), 'pie': (('x',), 2), 'table': ((), 4), 'list': (('label',), 2)}
+         'stacked': (('x', 'series'), 2), 'pie': (('x',), 2), 'table': ((), 4), 'list': (('label',), 2),
+         # ...and two that hold several: a strip of numbers (`items`, each a stat), and one chart over the days whose measure and split are
+         # switched on top (`metrics`, each a source's per-day count or sum and the columns that may split it) - one card, not five alike
+         'kpis': (('items',), 4), 'trend': (('metrics',), 4)}
+HOLDS = {'kpis': 'items', 'trend': 'metrics'}
+
+
+def parts(c: dict) -> list:
+    "The tiles a component draws from: itself, or each number in its strip and each measure of its chart (its `label` as a title)."
+    if not isinstance(c, dict) or c.get('kind') not in HOLDS: return [c]
+    return [{**{k: v for k, v in x.items() if k != 'label'}, 'title': x.get('title') or x.get('label'), 'kind': 'stat'}
+            for x in c.get(HOLDS[c['kind']]) or [] if isinstance(x, dict)]
 AGGS = ('count', 'sum', 'avg', 'median', 'min', 'max')
 RANGES = (7, 30, 90, 0)            # days back; 0 is everything the sources returned
 MAX_SOURCES, MAX_COMPONENTS, ROWS = 8, 20, 2000
@@ -152,72 +163,59 @@ DATASETS = {'tasks': (_tasks, 'task_id, ref, title, kind, status, state (open|cl
 
 # ── the built-in dashboard: what the End of day checkup is to reports. Every install gets it (store.SEEDED_REPORTS), and New
 # dashboard offers it again in one press. It reads ONLY this app's own tables, so it draws for anybody, with nothing connected.
-# ...and what the AI used (the owner, 2026-11-06: "dashboard of the taskuary thing included in current one the token usage and per
-# model"): the tokens per model per day, under what they cost
+# ONE STORY, NOT A WALL OF CHARTS (the owner, 2026-11-25: "bad design. the same chart a bunch of times ... It should be a coherent dashboard
+# trying to say something"): what the week was, in five numbers; every day of it in one chart whose measure and split are switched on top;
+# how what came in became done; what is waiting on him; and what the AI cost (2026-11-24: "spend is cost, not tokens" - aiusage.cost).
+# Nothing is said twice, and a tile that served no story went (who writes most, open work by kind, the four per-day charts the one replaced).
 _own = lambda key, label, dataset, date: {'key': key, 'label': label, 'type': 'taskuary_data', 'dataset': dataset, 'days': 90, 'date': date}
-_by_model = {'kind': 'stacked', 'title': 'AI tokens by model, per day', 'said': 'Tokens per model per day, stacked', 'source': 'ai', 'x': 'day',
-             'series': 'model', 'agg': 'sum', 'y': 'tokens', 'w': 2}
-# WHAT THE AI SPENT, AND FOR WHOM (the owner, 2026-11-24: "spend per day over last 7 days. then cost per task average. per
-# triage/advisor/tasks/assistant. Then how many tasks were completed" - "spend is cost, not tokens"): dollars per day split by who they were
-# for, each one's share, what one task's agent work costs, and the tasks done - its tokens under the dollars, what ran on a plan and what had
-# no price said apart (aiusage.cost)
 _WHO = ['Triage', 'Advisor', 'Tasks', 'Assistant', 'Other']
-SPEND_TILES = [
-    {'kind': 'stat', 'title': 'AI spend', 'said': 'What the AI cost, in dollars, with its tokens under it', 'source': 'ai', 'agg': 'sum', 'y': 'cost',
-     'unit': '$', 'good': 'down', 'also': [{'label': 'tokens', 'agg': 'sum', 'y': 'tokens'},
-                                           {'label': 'tokens on your plan', 'agg': 'sum', 'y': 'tokens', 'where': {'billing': 'plan'}},
-                                           {'label': 'tokens with no price', 'agg': 'sum', 'y': 'tokens', 'where': {'billing': 'unknown'}}]},
-    {'kind': 'stat', 'title': 'Cost per task', 'said': "What one task's agent work costs, on average", 'source': 'ai', 'agg': 'sum', 'y': 'cost',
-     'per': 'task_id', 'unit': '$', 'where': {'kind': 'agent run'}, 'good': 'down',
-     'also': [{'label': 'tokens a task', 'agg': 'sum', 'y': 'tokens', 'per': 'task_id', 'where': {'kind': 'agent run'}}]},
-    {'kind': 'stacked', 'title': 'AI spend per day', 'said': 'Dollars per day, split by triage, the Advisor, tasks and the Assistant',
-     'source': 'ai', 'x': 'day', 'series': 'who', 'agg': 'sum', 'y': 'cost', 'unit': '$', 'order': _WHO, 'w': 2},
-    {'kind': 'pie', 'title': 'AI spend by who', 'said': "Each one's share of the dollars: triage, the Advisor, tasks and the Assistant",
-     'source': 'ai', 'x': 'who', 'agg': 'sum', 'y': 'cost', 'unit': '$', 'order': _WHO, 'w': 2}]
-_spend, _per_task, _spend_by_day, _spend_by_who = SPEND_TILES
+_open = {'state': 'open'}
 GLANCE = {'type': 'dashboard', 'title': 'Taskuary at a glance', 'daily_at': '07:00',
           'sources': [_own('mail', 'What came in', 'mail', 'day'), _own('flow', 'How far it got', 'flow', 'day'),
                       _own('tasks', 'Tasks', 'tasks', 'arrived'), _own('closed', 'Tasks closed', 'tasks', 'closed'),
                       _own('agents', 'Agent sessions', 'agent_runs', 'day'), _own('replies', 'Replies', 'replies', 'day'),
                       _own('ai', 'AI used', 'ai_usage', 'day')],
           'filters': {'range': 7, 'segment': 'channel'},
-          # four columns with every row filled: a 1-wide tile is a number, a 2-wide one a chart
           'components': [
-              # the four that matter most: what the AI cost, what a task costs, what got done, and what is still open
-              _spend, _per_task,
-              {'kind': 'stat', 'title': 'Tasks completed', 'said': 'How many tasks were done', 'source': 'closed', 'agg': 'count',
-               'where': {'status': 'done'}, 'good': 'up'},
-              {'kind': 'stat', 'title': 'Open now', 'said': 'How many tasks are open right now, lower is better', 'source': 'tasks',
-               'agg': 'count', 'where': {'state': 'open'}, 'range': False, 'good': 'down'},
-              # ...what the AI spent, per day and for whom
-              _spend_by_day, _spend_by_who,
-              # ...what came in and how fast it was answered
-              {'kind': 'stat', 'title': 'Came in', 'said': 'How many messages came in', 'source': 'mail', 'agg': 'count'},
-              {'kind': 'stat', 'title': 'New tasks', 'said': 'How many new tasks arrived', 'source': 'tasks', 'agg': 'count'},
-              {'kind': 'stat', 'title': 'Median reply time', 'said': 'The median hours from an ask to my reply, lower is better',
-               'source': 'replies', 'agg': 'median', 'y': 'hours', 'unit': 'h', 'good': 'down'},
-              {'kind': 'stat', 'title': 'Agent time per session', 'said': 'The median minutes an agent session takes',
-               'source': 'agents', 'agg': 'median', 'y': 'minutes', 'unit': 'min', 'good': 'none'},
-              # ...then the days: what got done beside how far what came in got
-              {'kind': 'stacked', 'title': 'Tasks closed per day', 'said': 'Tasks closed per day, split by done or dropped',
-               'source': 'closed', 'x': 'closed', 'series': 'status', 'where': {'state': 'closed'}, 'order': ['done', 'dropped'], 'w': 2},
-              {'kind': 'bar', 'title': 'How far it got', 'said': 'How far what came in got, stage by stage, each as a share of what came in',
+              # the answer first: what came in, what became work, what got done, what waits on him, and what the AI cost
+              {'kind': 'kpis', 'title': 'This week', 'said': 'What came in, what became work, what got done, what waits on me and what the AI cost',
+               'w': 4, 'items': [
+                   {'title': 'Came in', 'source': 'mail', 'agg': 'count'},
+                   {'title': 'Became work', 'source': 'tasks', 'agg': 'count', 'good': 'up'},
+                   {'title': 'Done', 'source': 'closed', 'agg': 'count', 'where': {'status': 'done'}, 'good': 'up'},
+                   {'title': 'Waiting on you', 'source': 'tasks', 'agg': 'count', 'where': _open, 'range': False, 'good': 'down'},
+                   {'title': 'AI spend', 'source': 'ai', 'agg': 'sum', 'y': 'cost', 'unit': '$', 'good': 'down',
+                    'also': [{'label': 'tokens', 'agg': 'sum', 'y': 'tokens'},
+                             {'label': 'on your plan', 'agg': 'sum', 'y': 'tokens', 'where': {'billing': 'plan'}},
+                             {'label': 'with no price', 'agg': 'sum', 'y': 'tokens', 'where': {'billing': 'unknown'}}]}]},
+              # ...every day of it in ONE chart: the measure and what splits it switched on top, the rest the same shape
+              {'kind': 'trend', 'title': 'Day by day', 'said': 'Each day: what came in, the work done, agent sessions, AI spend or AI tokens, split',
+               'w': 4, 'metrics': [
+                   {'label': 'Came in', 'source': 'mail', 'agg': 'count', 'splits': [['channel', 'channel']]},
+                   {'label': 'Work done', 'source': 'closed', 'agg': 'count', 'where': {'state': 'closed'}, 'splits': [['outcome', 'status']],
+                    'order': ['done', 'dropped']},
+                   {'label': 'Agent sessions', 'source': 'agents', 'agg': 'count', 'splits': [['outcome', 'outcome']]},
+                   {'label': 'AI spend', 'source': 'ai', 'agg': 'sum', 'y': 'cost', 'unit': '$', 'splits': [['who', 'who'], ['model', 'model']],
+                    'order': _WHO},
+                   {'label': 'AI tokens', 'source': 'ai', 'agg': 'sum', 'y': 'tokens', 'splits': [['who', 'who'], ['model', 'model']], 'order': _WHO}]},
+              # ...how what came in became done - the bridge from the volume to the outcome - beside what is waiting on him
+              {'kind': 'bar', 'title': 'From mail to done', 'said': 'How far what came in got, stage by stage, each as a share of what came in',
                'source': 'flow', 'x': 'stage', 'order': list(STAGES), 'share': True, 'w': 2},
-              {'kind': 'stacked', 'title': 'What came in, by channel', 'said': 'Messages in per day, split by channel, stacked',
-               'source': 'mail', 'x': 'day', 'series': 'channel', 'w': 2},
-              {'kind': 'stacked', 'title': 'Agent sessions, and how they ended', 'said': 'Agent sessions per day, split by how they ended',
-               'source': 'agents', 'x': 'day', 'series': 'outcome', 'w': 2},
-              _by_model,
-              {'kind': 'bar', 'title': 'Open work by kind', 'said': 'Open tasks right now, by kind', 'source': 'tasks', 'x': 'kind',
-               'where': {'state': 'open'}, 'range': False, 'w': 2},
-              # ...and the detail: the asks that have waited longest on the owner, each opening its task, beside who writes most
-              {'kind': 'list', 'title': 'Waiting longest on you', 'said': 'The open tasks that have waited longest on me, with how long, at most 6',
-               'source': 'tasks', 'label': 'title', 'meta': 'waiting', 'where': {'status': 'open'}, 'range': False, 'sort': 'arrived', 'limit': 6, 'w': 2},
-              {'kind': 'bar', 'title': 'Who writes most', 'said': 'Who sends the most messages, top 6', 'source': 'mail', 'x': 'sender', 'limit': 6, 'w': 2}]}
+              {'kind': 'list', 'title': 'Waiting on you', 'said': 'The open tasks that have waited longest on me, with how long, at most 6',
+               'source': 'tasks', 'label': 'title', 'meta': 'waiting', 'where': _open, 'range': False, 'sort': 'arrived', 'limit': 6, 'w': 2},
+              # ...and what the AI cost: whom it worked for, and what one piece of work takes
+              {'kind': 'pie', 'title': 'AI spend by who', 'said': "Each one's share of the dollars: triage, the Advisor, tasks and the Assistant",
+               'source': 'ai', 'x': 'who', 'agg': 'sum', 'y': 'cost', 'unit': '$', 'order': _WHO, 'w': 2},
+              {'kind': 'kpis', 'title': 'Per piece of work', 'said': "What one task's agent work costs, an agent session's minutes and my reply time",
+               'w': 2, 'items': [
+                   {'title': 'Cost per task', 'source': 'ai', 'agg': 'sum', 'y': 'cost', 'per': 'task_id', 'unit': '$', 'where': {'kind': 'agent run'},
+                    'good': 'down', 'also': [{'label': 'tokens', 'agg': 'sum', 'y': 'tokens', 'per': 'task_id', 'where': {'kind': 'agent run'}}]},
+                   {'title': 'Agent session', 'source': 'agents', 'agg': 'median', 'y': 'minutes', 'unit': 'min', 'good': 'none'},
+                   {'title': 'Your reply', 'source': 'replies', 'agg': 'median', 'y': 'hours', 'unit': 'h', 'good': 'down'}]}]}
 # A SAVED BUILT-IN NOBODY EDITED FOLLOWS THE BUILT-IN: the print of every earlier GLANCE's tiles (glance_print), read off this file's history -
-# the copy from before the AI tiles, the one they were added to the end of (2026-11-06), moved up (2026-11-07), and the two token layouts of
+# the copy from before the AI tiles, the one they were added to the end of (2026-11-06), moved up (2026-11-07), the token and dollar layouts of
 # 2026-11-24. It replaces the once-only migrations that added and moved the AI tiles. An edited copy keeps its own.
-GLANCE_WAS = ('ee4598be5e96', '41927d8d3f03', '724ff7395bdd', '244ba8c05e99', '4b0277c8fdfb')
+GLANCE_WAS = ('ee4598be5e96', '41927d8d3f03', '724ff7395bdd', '244ba8c05e99', '4b0277c8fdfb', 'c7fb8ddf003e')
 
 
 def glance_print(comps) -> str:
@@ -436,33 +434,47 @@ def validate(spec: dict, store=None) -> tuple:
             if not ok: return False, why
     if not isinstance(comps, list) or not comps: return False, 'the dashboard shows nothing - it has no components'
     if len(comps) > MAX_COMPONENTS: return False, f'at most {MAX_COMPONENTS} components - one screen'
-    for n, c in enumerate(comps, 1):
-        if not isinstance(c, dict): return False, f'component {n} is not a component'
-        name = c.get('title') or f'component {n}'
-        if c.get('kind') not in KINDS: return False, f"{name}: {c.get('kind')!r} is not a preset ({', '.join(KINDS)})"
-        if c.get('source') not in keys: return False, f"{name}: it reads {c.get('source')!r}, which is not one of the sources"
-        miss = [k for k in KINDS[c['kind']][0] if c.get(k) in (None, '')]
-        if miss: return False, f"{name}: a {c['kind']} needs {' and '.join(miss)}"
-        agg = c.get('agg') or 'count'
-        if agg not in AGGS: return False, f"{name}: {agg!r} is not one of {', '.join(AGGS)}"
-        if agg != 'count' and not c.get('y'): return False, f'{name}: a {agg} needs the column it adds up (y)'
-        if c.get('where') is not None and not isinstance(c['where'], dict): return False, f'{name}: "where" is column: value pairs'
-        r = c.get('range')
-        if r is not None and r is not False and (isinstance(r, bool) or r not in RANGES[:-1]):
-            return False, f'{name}: its own "range" is false (what is true now) or one of {", ".join(map(str, RANGES[:-1]))} days'
-        if c.get('order') is not None and not isinstance(c['order'], list): return False, f'{name}: "order" is a list of its x values'
-        if c.get('per') is not None and not (isinstance(c['per'], str) and c['per']): return False, f'{name}: "per" is the column it averages over'
-        if c.get('also') is not None and not (isinstance(c['also'], list) and all(isinstance(a, dict) and a.get('label') and (a.get('agg') or 'count') in AGGS
-                                                                                for a in c['also'])):
-            return False, f'{name}: "also" is a list of figures, each a label and its own agg, y and where'
-        for k in ('target', 'limit'):
-            if c.get(k) is not None and (isinstance(c[k], bool) or _num(c[k]) is None): return False, f'{name}: "{k}" is a number'
-        if c.get('w') is not None and c['w'] not in (1, 2, 3, 4): return False, f'{name}: "w" is 1 to 4 columns'
-        if c.get('columns') is not None and not isinstance(c['columns'], list): return False, f'{name}: "columns" is a list'
+    for n, top in enumerate(comps, 1):
+        if not isinstance(top, dict): return False, f'component {n} is not a component'
+        if top.get('kind') in HOLDS:
+            held = top.get(HOLDS[top['kind']])
+            if not isinstance(held, list) or not held or not all(isinstance(x, dict) for x in held):
+                return False, f"{top.get('title') or f'component {n}'}: a {top['kind']} needs its {HOLDS[top['kind']]}, a list"
+            if top['kind'] == 'trend' and not all(isinstance(m.get('splits'), list) and m['splits'] and all(isinstance(s, list) and len(s) == 2 for s in m['splits'])
+                                                  for m in held):
+                return False, f"{top.get('title') or f'component {n}'}: each measure's \"splits\" is a list of [label, column]"
+        if top.get('w') is not None and top['w'] not in (1, 2, 3, 4): return False, f"{top.get('title') or f'component {n}'}: \"w\" is 1 to 4 columns"
+        for c in parts(top):
+            if why := _part_why(c, c.get('title') or top.get('title') or f'component {n}', keys): return False, why
     if not isinstance(spec.get('filters') or {}, dict): return False, 'the filters are name: value pairs, such as range: 30'
     rng = (spec.get('filters') or {}).get('range')
     if rng is not None and (isinstance(rng, bool) or _num(rng) not in RANGES): return False, f'the date range is one of {", ".join(map(str, RANGES))} days'
     return True, ''
+
+
+def _part_why(c: dict, name: str, keys: list) -> str:
+    "Why one tile (or one part of a strip or a chart) cannot draw - '' when it can."
+    if c.get('kind') not in KINDS: return f"{name}: {c.get('kind')!r} is not a preset ({', '.join(KINDS)})"
+    if c.get('source') not in keys: return f"{name}: it reads {c.get('source')!r}, which is not one of the sources"
+    miss = [k for k in KINDS[c['kind']][0] if c.get(k) in (None, '')]
+    if miss: return f"{name}: a {c['kind']} needs {' and '.join(miss)}"
+    agg = c.get('agg') or 'count'
+    if agg not in AGGS: return f"{name}: {agg!r} is not one of {', '.join(AGGS)}"
+    if agg != 'count' and not c.get('y'): return f'{name}: a {agg} needs the column it adds up (y)'
+    if c.get('where') is not None and not isinstance(c['where'], dict): return f'{name}: "where" is column: value pairs'
+    r = c.get('range')
+    if r is not None and r is not False and (isinstance(r, bool) or r not in RANGES[:-1]):
+        return f'{name}: its own "range" is false (what is true now) or one of {", ".join(map(str, RANGES[:-1]))} days'
+    if c.get('order') is not None and not isinstance(c['order'], list): return f'{name}: "order" is a list of its x values'
+    if c.get('per') is not None and not (isinstance(c['per'], str) and c['per']): return f'{name}: "per" is the column it averages over'
+    if c.get('also') is not None and not (isinstance(c['also'], list) and all(isinstance(a, dict) and a.get('label') and (a.get('agg') or 'count') in AGGS
+                                                                            for a in c['also'])):
+        return f'{name}: "also" is a list of figures, each a label and its own agg, y and where'
+    for k in ('target', 'limit'):
+        if c.get(k) is not None and (isinstance(c[k], bool) or _num(c[k]) is None): return f'{name}: "{k}" is a number'
+    if c.get('w') is not None and c['w'] not in (1, 2, 3, 4): return f'{name}: "w" is 1 to 4 columns'
+    if c.get('columns') is not None and not isinstance(c['columns'], list): return f'{name}: "columns" is a list'
+    return ''
 
 
 def problems(spec: dict, data: dict) -> list:
@@ -470,11 +482,12 @@ def problems(spec: dict, data: dict) -> list:
     out, srcs = [], (data or {}).get('sources') or {}
     for k, d in srcs.items():
         if d.get('failed'): out.append(f"{d.get('label') or k}: {d.get('error') or 'could not be read'}")
-    for c in spec.get('components') or []:
+    for c in (x for top in spec.get('components') or [] for x in parts(top)):
         d = srcs.get(c.get('source')) or {}
         if d.get('failed') or not d.get('rows'): continue
         cols = set(d.get('columns') or [])
         want = [c[k] for k in COLUMN_KEYS if isinstance(c.get(k), str) and c.get(k)] + list(c.get('columns') or []) + list((c.get('where') or {}).keys())
+        want += [s[1] for s in c.get('splits') or [] if isinstance(s, list) and len(s) == 2]
         if (date := source_of(spec, c.get('source')).get('date')): want.append(date)
         miss = sorted({w for w in want if w not in cols})
         if miss: out.append(f"{c.get('title') or c['kind']}: no column {', '.join(miss)} in {d.get('label') or c['source']}")
@@ -587,7 +600,7 @@ def _days(spec): return int(_num((spec.get('filters') or {}).get('range')) or 0)
 def numbers(spec: dict, data: dict) -> list:
     """[(tile, value)] for every stat tile, over the dashboard's default range - the value as counted, None where nothing was."""
     return [(c, aggregate(tile_rows(spec, data, c, _days(spec)), c.get('agg'), c.get('y'), c.get('per')))
-            for c in spec.get('components') or [] if c.get('kind') == 'stat']
+            for top in spec.get('components') or [] if top.get('kind') in ('stat', 'kpis') for c in parts(top)]
 
 
 def _says(c, v): return money(v) if c.get('unit') == '$' else fmt(v) + (f" {c['unit']}" if c.get('unit') and v is not None else '')
@@ -615,6 +628,14 @@ def _panel(spec, data, c, days) -> list:
     """The lines one component says: a number, a goal against its target, or the rows its chart, list or table draws."""
     rows, t, agg, y = tile_rows(spec, data, c, days), c.get('title') or c.get('kind'), c.get('agg'), c.get('y')
     k = c.get('kind')
+    if k == 'kpis': return [f'{t}:', *(f'- {line}' for x in parts(c) for line in _panel(spec, data, x, days))]
+    if k == 'trend':
+        out = [f'{t}:']
+        for m in parts(c):
+            by = {}
+            for r in tile_rows(spec, data, m, days): by.setdefault(_key_of(r.get(source_of(spec, m['source']).get('date'))), []).append(r)
+            out.append(f"- {m['title']}: " + (', '.join(f'{x} {fmt_of(m)(aggregate(rs, m.get("agg"), m.get("y")))}' for x, rs in sorted(by.items())) or 'nothing'))
+        return out
     if k == 'stat':
         more = ', '.join(f'{fmt(v)} {a.get("label") or ""}'.strip() for a, v in also(spec, data, c, days) if v)
         return [f'{t}: {_says(c, aggregate(rows, agg, y, c.get("per")))}' + (f' ({more})' if more else '')]

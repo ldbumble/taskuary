@@ -253,7 +253,9 @@ def test_the_template_validates_reads_only_taskuary_data_and_fits_one_screen():
     assert dashboards.validate(spec, MemoryStore()) == (True, '')
     assert {x['type'] for x in spec['sources']} == {'taskuary_data'}
     assert len(spec['components']) <= dashboards.MAX_COMPONENTS
-    assert [c['kind'] for c in spec['components'][:4]] == ['stat'] * 4      # the numbers first
+    # ONE STORY (the owner, 2026-11-25): the week's numbers first, then every day in one chart, the flow beside what waits, then the cost
+    assert [c['kind'] for c in spec['components']] == ['kpis', 'trend', 'bar', 'list', 'pie', 'kpis']
+    assert len({c['title'] for c in spec['components']}) == 6 and not any(c.get('title') == 'Who writes most' for c in spec['components'])
 
 
 def test_the_template_runs_deterministically_over_the_apps_own_rows():
@@ -267,8 +269,8 @@ def test_the_template_runs_deterministically_over_the_apps_own_rows():
     assert {k: r['outcome'] for k, r in runs.items()} == {'s1': 'finished', 's2': 'failed', 's3': 'working'}
     assert runs['s1']['minutes'] == 30 and runs['s3']['minutes'] is None
     tiles = dict(dashboards.headline(dashboards.GLANCE, one))
-    assert tiles == {'Came in': '4', 'New tasks': '2', 'Open now': '1', 'Median reply time': '3 h', 'Agent time per session': '45 min',
-                     'AI spend': '-', 'Cost per task': '-', 'Tasks completed': '1'}      # no AI ran in this store
+    assert tiles == {'Came in': '4', 'Became work': '2', 'Waiting on you': '1', 'Your reply': '3 h', 'Agent session': '45 min',
+                     'AI spend': '-', 'Cost per task': '-', 'Done': '1'}      # no AI ran in this store
 
 
 def test_a_components_own_range_and_the_median_are_checked():
@@ -300,8 +302,8 @@ def test_the_built_in_one_is_an_ordinary_dashboard_edited_and_kept_like_any_othe
     s = MemoryStore()
     row = next(r for r in s.list_sources(active_only=False) if r['Address'] == dashboards.GLANCE['title'])
     cfg = json.loads(row['ConfigJson'])
-    goal = next(c for c in cfg['components'] if c['title'] == 'Tasks completed'); goal['where'] = {'status': 'dropped'}
-    cfg['components'] = [c for c in cfg['components'] if c['title'] != 'Who writes most']
+    goal = next(c for c in cfg['components'] if c['kind'] == 'list'); goal['limit'] = 3
+    cfg['components'] = [c for c in cfg['components'] if c['title'] != 'AI spend by who']
     post = lambda c, spec: c.post('/api/sources', json={'SourceId': row['SourceId'], 'Channel': 'report', 'Address': spec['title'],
                                                         'ConfigJson': json.dumps(spec), 'Active': True})
     with mock.patch.object(server, 'store', s):
@@ -309,8 +311,8 @@ def test_the_built_in_one_is_an_ordinary_dashboard_edited_and_kept_like_any_othe
         assert post(c, cfg).status_code == 200
         assert post(c, {**cfg, 'components': [{**goal, 'source': 'gone'}]}).status_code == 422     # ...the check any dashboard's save runs
         got = c.get(f"/api/dashboards/{row['SourceId']}").json()['config']
-    assert next(x for x in got['components'] if x['title'] == 'Tasks completed')['where'] == {'status': 'dropped'}
-    assert 'Who writes most' not in [x['title'] for x in got['components']]
+    assert next(x for x in got['components'] if x['kind'] == 'list')['limit'] == 3
+    assert 'AI spend by who' not in [x['title'] for x in got['components']]
     s._heal_seeded_report_owner()                                       # the heal that runs on start leaves an edited one alone
     assert json.loads(s.get_source(row['SourceId'])['ConfigJson'])['components'] == got['components']
 
@@ -510,7 +512,7 @@ def test_the_describer_says_a_tile_plainly_from_its_config_alone():
 
 def test_every_saved_tile_has_a_sentence_and_the_built_in_ones_keep_their_hand_written_words():
     assert all(c['said'] for c in dashboards.GLANCE['components'])
-    old = {**dashboards.GLANCE, 'components': [{k: v for k, v in c.items() if k != 'said'} | ({'source': 'ai_used'} if c['source'] == 'ai' else {})
+    old = {**dashboards.GLANCE, 'components': [{k: v for k, v in c.items() if k != 'said'} | ({'source': 'ai_used'} if c.get('source') == 'ai' else {})
                                               for c in dashboards.GLANCE['components']] + [{'kind': 'stat', 'title': 'Mine', 'source': 'mail'}]}
     got = dashboards.with_said(old)['components']
     assert [c['said'] for c in got[:-1]] == [c['said'] for c in dashboards.GLANCE['components']]

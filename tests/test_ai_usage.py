@@ -160,11 +160,10 @@ def test_the_built_in_dashboard_draws_what_the_ai_used_with_its_tokens_in_the_to
     assert dashboards.validate(dashboards.GLANCE, s) == (True, '')
     data = dashboards.collect(s, dashboards.GLANCE)
     assert not dashboards.problems(dashboards.GLANCE, data)
-    top = dashboards.GLANCE['components'][:4]
-    assert top[0]['title'] == 'AI spend' and all(c['kind'] == 'stat' for c in top)
+    week = dashboards.GLANCE['components'][0]
+    assert week['kind'] == 'kpis' and [x['title'] for x in week['items']] == ['Came in', 'Became work', 'Done', 'Waiting on you', 'AI spend']
     # a Claude Code run is on her plan: no dollars, its tokens said as hers on the plan
-    said = dashboards._panel(dashboards.GLANCE, data, top[0], 7)
-    assert said == ['AI spend: - (97.1K tokens, 97.1K tokens on your plan)']
+    assert dashboards._panel(dashboards.GLANCE, data, week, 7)[-1] == '- AI spend: - (97.1K tokens, 97.1K on your plan)'
 
 
 def test_retention_keeps_what_was_used_for_ninety_days_and_the_reason_for_thirty():
@@ -518,19 +517,21 @@ def test_the_built_in_dashboard_says_the_weeks_spend_per_day_for_whom_per_task_a
     assert dashboards.validate(spec, s) == (True, '')
     data = dashboards.collect(s, spec)
     assert not dashboards.problems(spec, data)
-    panel = lambda title: dashboards._panel(spec, data, next(c for c in spec['components'] if c['title'] == title), 7)
+    # a tile, or one number of a strip or one measure of the day-by-day chart, by its title
+    panel = lambda title: dashboards._panel(spec, data, next(x for c in spec['components'] for x in [c, *dashboards.parts(c)] if x.get('title') == title), 7)
     # the week's dollars for each, in the owner's order - the call eight days ago is not in them; the draft at its list price (1,500 x $3/M)
     assert panel('AI spend by who')[1:] == ['Triage: $0.06', 'Advisor: $0.50', 'Tasks: $3.00', 'Assistant: $1', 'Other: $0.01']
-    # ...per day, split by who (a day with no call of the Advisor's has no Advisor part)
-    days = dict(x.split(': ', 1) for x in panel('AI spend per day')[1:])
-    assert len(days) == 7 and days[day(3)[:10]] == 'Advisor $0.20, Other $0.01' and days[day(1)[:10]] == 'Tasks $2, Advisor $0.30, Triage $0.01'
+    # ...per day, in the one chart: the dollars each day, the call eight days ago not among them
+    spend = next(x for x in panel('Day by day') if x.startswith('- AI spend: '))[len('- AI spend: '):]
+    days = dict(x.rsplit(' ', 1) for x in spend.split(', '))
+    assert len(days) == 7 and days[day(3)[:10]] == '$0.21' and days[day(1)[:10]] == '$2.31'
     # the total, and under it its tokens: the plan's said apart, and the one with no price
-    assert panel('AI spend') == ['AI spend: $4.57 (123.5K tokens, 20.0K tokens on your plan, 300 tokens with no price)']
+    assert panel('AI spend') == ['AI spend: $4.57 (123.5K tokens, 20.0K on your plan, 300 with no price)']
     # one task's agent work, on average: $2 + $1 on one task; the other ran on a plan, so it has no dollars to average
-    assert panel('Cost per task') == ['Cost per task: $3 (50.0K tokens a task)']
-    # ...and what got done: two tasks done, one dropped, per day apart
-    assert panel('Tasks completed') == ['Tasks completed: 2']
-    assert panel('Tasks closed per day')[1:] == [f'{day(3)[:10]}: dropped 1', f'{day(1)[:10]}: done 2']
+    assert panel('Cost per task') == ['Cost per task: $3 (50.0K tokens)']
+    # ...and what got done: two tasks done, and per day the done apart from the dropped
+    assert panel('Done') == ['Done: 2']
+    assert next(x for x in panel('Day by day') if x.startswith('- Work done: ')) == f'- Work done: {day(3)[:10]} 1, {day(1)[:10]} 2'
 
 
 def test_a_calls_cost_is_what_the_provider_said_else_its_list_price_else_none_and_a_plan_is_no_cost():
@@ -574,7 +575,7 @@ def test_per_averages_each_values_own_number_and_leaves_the_blank_out():
 
 def test_an_unedited_built_in_becomes_todays_and_an_edited_one_keeps_its_own():
     s, _, _ = _spend_store()
-    was = [c for c in dashboards.GLANCE['components'] if c not in dashboards.SPEND_TILES]
+    was = dashboards.GLANCE['components'][2:]
     row = next(r for r in s.list_sources(active_only=False) if r['Address'] == dashboards.GLANCE['title'])
     cfg = lambda: dashboards.cfg_of(s.get_source(row['SourceId']))
     s.save_source({'SourceId': row['SourceId'], 'ConfigJson': json.dumps({**dashboards.GLANCE, 'components': was, 'daily_at': '06:30'})}, 'owner')

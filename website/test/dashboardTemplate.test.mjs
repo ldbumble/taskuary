@@ -138,3 +138,46 @@ test("drawn, a pie's total is set to fit the ring's hole, a long one smaller", a
   assert.equal(holeFont("$1.2K"), "21px");
   assert.ok(px("$34.83") < 21 && px("$34.83") >= 18, holeFont("$34.83"));
 });
+
+// ONE STORY, NOT A WALL OF CHARTS (the owner, 2026-11-25: "the same chart a bunch of times ... It can be combined on top"): the week as a strip
+// of numbers, every day in ONE chart whose measure and split are switched on top, and one category said rather than charted
+test("drawn, the story's strip says the week, one chart holds every day with its switches, and a lone category is a sentence", async () => {
+  const { build } = await import("esbuild");
+  const out = await build({ stdin: { resolveDir: new URL("..", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1"), loader: "jsx", contents: `
+    import React from "react"; import { renderToStaticMarkup } from "react-dom/server.browser"; import Dashboard from "./src/dashboard/Dashboard.jsx";
+    import { Trend } from "./src/dashboard/charts.jsx"; import { trendView } from "./src/dashboard/slice.js";
+    export const html = (spec, data, now) => renderToStaticMarkup(<Dashboard spec={spec} data={data} now={now} onOpen={() => {}} />);
+    export const trend = (spec, data, c, start, now) => renderToStaticMarkup(<Trend c={c} metrics={c.metrics} start={start} onDrill={() => {}}
+      view={(mi, si) => trendView(spec, data, c.metrics[mi], si, { days: 7, now })} />);` }, loader: { ".css": "empty" },
+    bundle: true, write: false, format: "esm", jsx: "automatic", platform: "browser", conditions: ["worker"], logLevel: "silent",
+    define: { "process.env.NODE_ENV": '"production"' } });
+  const { html, trend } = await import(`data:text/javascript;base64,${Buffer.from(out.outputFiles[0].text).toString("base64")}`);
+  const day = (n) => daysAgo(n, NOW);
+  const data = { sources: {
+    mail: { rows: [{ day: day(0), channel: "email" }, { day: day(0), channel: "teams" }, { day: day(2), channel: "email" }] },
+    ai: { rows: [{ day: day(1), who: "Tasks", model: "claude-sonnet-4-5", cost: 2, tokens: 9000 }, { day: day(1), who: "Triage", model: "claude-haiku-4-5", cost: 0.25, tokens: 3000 }] },
+    tasks: { rows: [{ arrived: day(0), kind: "general", state: "open" }] } } };
+  const trendC = { kind: "trend", title: "Day by day", w: 4, metrics: [
+    { label: "Came in", source: "mail", agg: "count", splits: [["channel", "channel"]] },
+    { label: "AI spend", source: "ai", agg: "sum", y: "cost", unit: "$", splits: [["who", "who"], ["model", "model"]], order: ["Triage", "Advisor", "Tasks", "Assistant", "Other"] }] };
+  const spec = { title: "t", filters: { range: 7 }, sources: [{ key: "mail", date: "day" }, { key: "ai", date: "day" }, { key: "tasks", date: "arrived" }], components: [
+    { kind: "kpis", title: "This week", w: 4, items: [{ title: "Came in", source: "mail", agg: "count" }, { title: "AI spend", source: "ai", agg: "sum", y: "cost", unit: "$" }] },
+    trendC, { kind: "bar", title: "Open work by kind", source: "tasks", x: "kind", w: 2 }] };
+  const got = html(spec, data, NOW);
+  // the strip: two numbers in one card, each its own title and figure
+  assert.match(got, /data-tq-dash-kind="kpis"[\s\S]*?<div class="tq-dash-kpi-h">Came in<\/div><div class="tq-dash-value">3<\/div>[\s\S]*?<div class="tq-dash-kpi-h">AI spend<\/div><div class="tq-dash-value">\$2\.25<\/div>/);
+  // the one chart: what it counts and what splits it, switched on its top - Came in by channel to begin with
+  assert.match(got, /aria-label="What it counts"><button type="button" aria-pressed="true">Came in<\/button><button type="button" aria-pressed="false">AI spend<\/button>/);
+  assert.match(got, /<span class="lead">split by<\/span><button type="button" aria-pressed="true">channel<\/button>/);
+  assert.match(got, /<i style="background:var\(--d-s\d\)"><\/i>email<\/button>/);
+  // ...one category is a sentence, not a chart
+  assert.match(got, /<div class="tq-dash-onefig"><b>1<\/b><span>general<\/span><\/div>/);
+  // switched to AI spend, split by model: the columns are dollars per model; by who, the owner's order and its colours
+  const byModel = trend(spec, data, trendC, [1, 1], NOW);
+  assert.match(byModel, /<button type="button" aria-pressed="true">AI spend<\/button>/);
+  assert.match(byModel, /<button type="button" aria-pressed="true">model<\/button>/);
+  assert.match(byModel, /claude-sonnet-4-5<\/button>/);
+  assert.match(byModel, /aria-label="[A-Z][a-z]{2} \d+: \$2\.25"/, "a day's column says its dollars");
+  const byWho = trend(spec, data, trendC, [1, 0], NOW);
+  assert.match(byWho, /<i style="background:var\(--d-s1\)"><\/i>Triage<\/button><button[^>]*><i style="background:var\(--d-s3\)"><\/i>Tasks<\/button>/);
+});

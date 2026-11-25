@@ -7,8 +7,8 @@ import React, { useCallback, useMemo, useState } from "react";
 import "./dashboard.css";
 import { DASH } from "../words.js";
 import { openAppLink } from "../appLinks.js";
-import { Bars, Drill, Line, List, Pie, Progress, Stacked, StatTile, Table } from "./charts.jsx";
-import { MAX_DAYS, RANGES, aggregate, clampDays, componentRows, dateOf, fmtOf, groupBy, inSegment, rowsOf, segmentValues, seriesSlots, spanOf, spanOf4, stacked, timeSeries, where } from "./slice.js";
+import { Bars, Drill, Kpis, Line, List, Pie, Progress, Stacked, StatTile, Table, Trend } from "./charts.jsx";
+import { MAX_DAYS, RANGES, aggregate, trendView, clampDays, componentRows, dateOf, fmtOf, groupBy, inSegment, rowsOf, segmentValues, seriesSlots, spanOf, spanOf4, stacked, timeSeries, where } from "./slice.js";
 
 export default function Dashboard({ spec, data, stale = false, onOpen = openAppLink, now: nowAt, frame = null, after = null }) {
   const f = spec?.filters || {};
@@ -22,6 +22,12 @@ export default function Dashboard({ spec, data, stale = false, onOpen = openAppL
   const close = useCallback(() => setDrill(null), []);
   const open = (hash) => onOpen?.(hash);
 
+  // a number as a stat tile or a strip's cell draws it: its rows, the rows before the range (its delta), and what else it says (`also`)
+  const statOf = (c) => {
+    const base = componentRows(spec, data, { ...c, where: null }, cut);
+    return { rows: componentRows(spec, data, c, cut), all: where(inSegment(rowsOf(data, c.source), segment, value), c.where), date: dateOf(spec, c),
+      days: spanOf(c, days), now, also: (c.also || []).map((a) => ({ label: a.label, value: aggregate(where(base, a.where), a.agg, a.y, a.per) })) };
+  };
   const draw = (c, i) => {
     const key = `${i}-${c.kind}-${c.title}`, w = spanOf4(c);
     const rows = componentRows(spec, data, c, cut), failed = data?.sources?.[c.source]?.failed;
@@ -29,12 +35,11 @@ export default function Dashboard({ spec, data, stale = false, onOpen = openAppL
     // a series' colour follows its entity: by the tile's own `order` where it gives one (triage, Advisor, tasks, Assistant - the same colour
     // on the columns and the pie), else by its share of all the source's rows, dealt before any filter
     const slotsOf = (col) => (c.order?.length ? Object.fromEntries(c.order.map((k, n) => [String(k), n])) : seriesSlots(rowsOf(data, c.source), col));
-    if (c.kind === "stat") {
-      // the delta reads the period before the range, so it takes the rows before the range cut (segment and where still apply)
-      const all = where(inSegment(rowsOf(data, c.source), segment, value), c.where);
-      const base = componentRows(spec, data, { ...c, where: null }, cut);
-      const also = (c.also || []).map((a) => ({ label: a.label, value: aggregate(where(base, a.where), a.agg, a.y, a.per) }));
-      return <StatTile key={key} {...props} rows={rows} all={all} also={also} date={dateOf(spec, c)} days={spanOf(c, days)} now={now} />;
+    if (c.kind === "stat") return <StatTile key={key} {...props} {...statOf(c)} />;
+    if (c.kind === "kpis") return <Kpis key={key} {...props} cells={(c.items || []).map((x) => ({ c: x, ...statOf(x) }))} />;
+    if (c.kind === "trend") {
+      // ...one chart, its measure and split switched on its top: each is its source's rows per day, split by a column, coloured by its order
+      return <Trend key={key} {...props} metrics={c.metrics} view={(mi, si) => trendView(spec, data, c.metrics[mi], si, cut)} />;
     }
     if (c.kind === "progress") return <Progress key={key} {...props} rows={rows} />;
     if (c.kind === "pie") { const slots = slotsOf(c.x);      // ...a slice wears its entity's colour too

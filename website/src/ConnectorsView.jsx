@@ -69,6 +69,7 @@ import { DESKTOP_HOW } from "./newTask.js";
 import { viewResult } from "./pageView.js";
 import SetupWithAi from "./SetupWithAi.jsx";
 import { READ_META, READ_TYPES } from "./apiReads.js";
+import { cardKind, MAIL_CARDS } from "./connectSetup.js";
 import schema from "../../taskuary/settings_schema.json";   // the saved sign-ins' search words, the ones Settings finds the vault by
 
 // opens Connections > AI CLI agents from inside a card - the door the "no AI app here" line points at
@@ -2212,13 +2213,7 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
     : open?.kind === "alchemy-wallet" ? <AlchemyWalletGuide onBack={back}
       onData={() => { const c = byType.alchemy; if (c) setOpen({ kind: "connector", id: c.ConnectorId }); }} />
     : !conn ? null
-    : conn.Type === "mssql" ? <MssqlDetail key={conn.ConnectorId} {...shared} />
-    : conn.Type === "winrm" ? <WinrmDetail key={conn.ConnectorId} {...shared} />
-    : conn.Type === "reason_network" ? <ReasonDetail key={conn.ConnectorId} {...shared} />
-    : conn.Type === "agent_desktop" ? <DesktopDetail key={conn.ConnectorId} {...shared} />
-    : AGENT_TOOLS.has(conn.Type) ? <AgentToolDetail key={conn.ConnectorId} {...shared} />
-    : DATA_META[conn.Type] ? <DataDetail key={conn.ConnectorId} {...shared} meta={DATA_META[conn.Type]} sources={sources} byType={byType} />
-    : <ChannelDetail key={conn.ConnectorId} {...shared} sources={sources} onNavigate={onNavigate} chatsAsk={chatsAsk} />;
+    : <ConnectionCard key={conn.ConnectorId} {...shared} sources={sources} byType={byType} onNavigate={onNavigate} chatsAsk={chatsAsk} />;
   // ...and A SYSTEM WITH TWO WAYS IN offers both, at the top of its one card (connectorCatalog.oneCardPerSystem; the owner, 2026-11-10: "it's mcp
   // vs api for cards. there should be 2 options"): its own connector and its vendor's MCP server, each with its own setup and state, either or both
   const ways = waysOf(conn, byType);
@@ -2821,6 +2816,16 @@ function SyncNow({ conn, mine, sync, reload }) {
   );
 }
 
+// ONE CONNECTION'S OWN CARD, by its kind (connectSetup.cardKind) - the Connections page's, and the one a card's Connect brings up under it
+// (ConnectSetup, `inline`). `onConnected`: its Test passed or its sign-in came back - the card that asked goes on.
+export function ConnectionCard({ conn, sources, byType, inline = false, ...p }) {
+  const k = cardKind(conn.Type, { data: DATA_META, tools: AGENT_TOOLS }, inline), own = { conn, reload: p.reload, onBack: p.onBack, onCreated: p.onCreated };
+  return k === "mssql" ? <MssqlDetail {...own} /> : k === "winrm" ? <WinrmDetail {...own} /> : k === "reason" ? <ReasonDetail {...own} />
+    : k === "desktop" ? <DesktopDetail {...own} /> : k === "tool" ? <AgentToolDetail {...own} />
+    : k === "data" ? <DataDetail {...own} meta={DATA_META[conn.Type]} sources={sources} byType={byType} onConnected={p.onConnected} />
+    : <ChannelDetail {...p} conn={conn} sources={sources} simple={k === "mail"} />;
+}
+
 export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, onBack: leave, onCreated, onNavigate, simple = false, onConnected, chatsAsk = null }) {
   // EVERY FIELD SAVES ITSELF (ConnectorDraft.jsx): every control below draws from the draft and stages into it, and the draft saves it
   const draft = useCardDraft(savedConn, savedSources, reload);
@@ -2865,6 +2870,8 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
       // Apple Messages has a second card (Automation) on this step - a passing read test must
       // not whisk the step away before the person can try the send probe
       if (data.ok && conn.Type !== "imessage") setStep(m.srcLabel ? 2 : 3);
+      // ...the values it passed on are saved before the card that asked goes on: its press read a card not yet set up (connect-card shoot)
+      if (data.ok && onConnected) { await boxes.flush(); onConnected(); }
     } catch (e) { setTest({ ok: false, detail: e?.response?.data?.detail || "test call failed" }); }
     setBusy(""); reload();
   };
@@ -3132,7 +3139,7 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
           It sits above the agent box too: one sign-in is the whole setup, the agent is the long road (B10) */}
       {conn.Type === "teams" && <TeamsAccount conn={conn} cfg={cfg} setCfg={setCfg} reload={reload} />}
       {MS_SIGNIN.includes(conn.Type) && !(conn.Type === "teams" && cfg.account_type === "personal")
-        && <Box sx={{ mb: 2 }}><MsSignIn conn={conn} cfg={cfg} setCfg={setCfg} reload={reload} onSignedIn={() => setStep(m.srcLabel ? 2 : 3)} /></Box>}
+        && <Box sx={{ mb: 2 }}><MsSignIn conn={conn} cfg={cfg} setCfg={setCfg} reload={reload} onSignedIn={() => { setStep(m.srcLabel ? 2 : 3); onConnected?.(); }} /></Box>}
       {conn.Type === "chatgpt" && <Box sx={{ mb: 2 }}><ChatGptSignIn conn={conn} cfg={cfg} reload={reload} /></Box>}
       {conn.Type === "gmail" && <GoogleCalendar conn={conn} cfg={cfg} reload={reload} flush={boxes.flush} onSignedIn={() => setStep(1)}>
         {m.fields.filter(([, key]) => G_APP_KEYS.includes(key)).map((f) => <ConfigField key={f[1]} size="small" conn={conn} field={f} cfg={cfg} setCfg={setCfg} tick={boxes.tick(f[1])} onBlur={boxes.flush}
@@ -3614,7 +3621,7 @@ function PushAddress({ conn }) {
 /* A card whose credential is minted by signing in at the provider (QuickBooks): the box says
    what the provider's app must carry (the redirect URI), whether we are connected and to which
    company, and one button that opens the sign-in. The token comes back server-side. */
-function OAuthConnect({ conn, meta, reload }) {
+function OAuthConnect({ conn, meta, reload, onConnected }) {
   const [st, setSt] = useState(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
@@ -3637,7 +3644,9 @@ function OAuthConnect({ conn, meta, reload }) {
     return () => { clearInterval(id); clearTimeout(stop); };
   }, [busy, load]);
   const [url, setUrl] = useState("");   // the sign-in page that opened in another tab - a blocked popup needs it again
-  useEffect(() => { if (st?.connected) setBusy(false); }, [st?.connected]);
+  // ...and a sign-in that came back while it was waiting is the card's press (ConnectSetup): never a card that opened signed in already
+  const was = useRef(null);
+  useEffect(() => { const now = !!st?.connected; if (now) setBusy(false); if (now && was.current === false) onConnected?.(); if (st) was.current = now; }, [st?.connected]);   // eslint-disable-line react-hooks/exhaustive-deps
   // Teller Connect is a script on THIS page, not a redirect: it opens the bank's sign-in in a
   // modal and calls back with the token, which goes straight to the server and nowhere else
   const teller = async () => {
@@ -3757,7 +3766,7 @@ function ActionDefaults({ type, cfg, setCfg, tick }) {
   </Box>;
 }
 
-function DataDetail({ conn: savedConn, meta, sources: savedSources = [], reload, onBack: leave, onCreated, byType = {} }) {
+function DataDetail({ conn: savedConn, meta, sources: savedSources = [], reload, onBack: leave, onCreated, byType = {}, onConnected }) {
   // as on a channel card, every field saves itself: what each discovered object is used for through the draft, the boxes on their own
   const draft = useCardDraft(savedConn, savedSources, reload);
   const { conn, sources } = draft;
@@ -3798,6 +3807,7 @@ function DataDetail({ conn: savedConn, meta, sources: savedSources = [], reload,
     try {
       const t = (await api.post(`/api/connectors/${conn.ConnectorId}/test`, onScreen(conn, cfg, parse(conn.ConfigJson), secret))).data;
       setTest(t);
+      if (t?.ok && onConnected) { await boxes.flush(); onConnected(); }
       // the server saved the dots that answered; show them now - as saved, so they are not saved again
       if (Array.isArray(t?.apis)) { setCfg((c) => ({ ...c, apis: t.apis })); setBase((c) => ({ ...c, apis: t.apis })); }
     } catch (e) { setTest({ ok: false, detail: e?.response?.data?.detail || "test call failed" }); }
@@ -3829,7 +3839,7 @@ function DataDetail({ conn: savedConn, meta, sources: savedSources = [], reload,
               <Button size="small" variant="outlined" disabled={!!busy} onClick={useShared}>Use it and test</Button>
             </Box>
           )}
-          {meta.connect && <OAuthConnect conn={conn} meta={meta} reload={reload} />}
+          {meta.connect && <OAuthConnect conn={conn} meta={meta} reload={reload} onConnected={onConnected} />}
           {meta.push && <PushAddress conn={conn} />}
           {/* a field's 4th entry says where to get what it asks for, under the box */}
           {/* ...and a write-only one (an app's client secret, guard.WRITE_ONLY_CONFIG) is masked: once saved the server never sends it
@@ -4068,7 +4078,6 @@ const GithubCloseout = ({ conn, mine, reload }) => {
 
 // THE SIGNATURE MAIL FROM THIS MAILBOX CARRIES (outbound.card_signature): two mailboxes are two hats, and one global signature
 // put the first one's name and title under the second one's mail. Blank keeps the one in Settings. Held by the card's draft.
-const MAIL_CARDS = ["outlook", "gmail", "imap"];
 // the cards that sign in with Microsoft, each its own account: Outlook for mail and calendar, Teams for chats (msauth.TEAMS_SCOPES)
 const MS_SIGNIN = ["outlook", "teams"];
 const NO_AI_WALK = ["whatsapp", ...MS_SIGNIN, "gmail"];      // the cards with no Get AI to set it up

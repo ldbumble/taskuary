@@ -1,12 +1,15 @@
 // A CARD THAT NEEDS A CONNECTION NOT SET UP BRINGS THAT CONNECTION'S OWN SETUP UP UNDER IT (the owner, 2026-11-25): Connect opened the
-// Connections page and left the card behind. The setup is the Connections page's own card (ChannelDetail - its fields, its Test, its
-// sign-in), drawn under the card that asked for it; once it connects, that is the press: the card goes on (onConnected) and its agent is told.
+// Connections page and left the card behind. The setup is the Connections page's own card (ConnectionCard - its fields, its Test, its
+// sign-in, whichever kind of card it is), drawn under the card that asked for it; once it connects, that is the press: the card goes on (onConnected) and its agent is told.
 import React, { useCallback, useEffect, useState } from "react";
 import { Box, Typography } from "@mui/material";
 import api from "./api";
-import { ChannelDetail } from "./ConnectorsView.jsx";
+import { ConnectionCard } from "./ConnectorsView.jsx";
 import { DIM } from "./theme.jsx";
 import { setupType } from "./connectSetup.js";
+
+// each type's card, a switched-on one first, as the Connections page reads it (a card that borrows another's app asks it by type)
+const byType = (cs) => Object.fromEntries([...cs].reverse().sort((a, b) => !!a.Active - !!b.Active).map((c) => [c.Type, c]));
 
 export default function ConnectSetup({ href, onConnected, onClose }) {
   const type = setupType(href);
@@ -22,6 +25,6 @@ export default function ConnectSetup({ href, onConnected, onClose }) {
   if (err || (got && !conn)) return <Typography variant="body2" data-tq-inline-setup-failed="" sx={{ color: DIM, mt: 0.75 }}>{err || "Its card is not here."}</Typography>;
   if (!conn) return null;
   return (<Box data-tq-inline-setup={type} sx={{ mt: 1 }}>
-    <ChannelDetail key={conn.ConnectorId} conn={conn} sources={got.sources} reload={load} simple onBack={onClose} onConnected={onConnected} />
+    <ConnectionCard key={conn.ConnectorId} conn={conn} sources={got.sources} byType={byType(got.conns)} reload={load} inline onBack={onClose} onConnected={onConnected} />
   </Box>);
 }

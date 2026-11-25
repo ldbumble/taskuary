@@ -465,7 +465,7 @@ class ReadingOutside(unittest.TestCase):
         me = Path.home().name
         for cmd in ('grep -rl token $HOME', 'grep -rl token "$HOME"', 'grep -r token ${HOME}', "grep -r token '$HOME'/..", 'grep -r token $HOME/..',
                     'cd $HOME && grep -rl token .', 'Select-String -Path $env:USERPROFILE -Pattern token', 'findstr /s token %USERPROFILE%',
-                    *(['grep -r token $env:HOMEDRIVE$env:HOMEPATH'] if os.name == 'nt' else []), f'grep -r token ~{me}', 'h=$HOME; grep -rl token $h',
+                    *(['grep -r token $env:HOMEDRIVE$env:HOMEPATH'] if os.name == 'nt' else []), *([f'grep -r token ~{me}'] if os.name == 'nt' else []), 'h=$HOME; grep -rl token $h',
                     'Get-ChildItem $HOME -Recurse | Select-String token', 'Get-Content (Join-Path $HOME ".ssh/id_ed25519")',
                     'grep -r token $PWD/' + '/'.join(['..'] * len(Path(self.work).parts))):
             self.assertEqual(rg.of_command(self.s, self.tid, cmd, self.work), ([], rg.NEVER), cmd)

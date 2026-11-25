@@ -323,10 +323,24 @@ def end(p):
     try:
         pid = int(getattr(p, 'pid', p) or 0)
         if not pid: return
-        if WINDOWS: _end_tree(pid)
-        elif os.getpgid(pid) == pid: os.killpg(pid, signal.SIGKILL)
-        else: os.kill(pid, signal.SIGKILL)
-    except (OSError, ValueError, TypeError): pass
+        if WINDOWS: return _end_tree(pid)
+        kids = _posix_kids(pid)                          # ...read before the parent goes: its children are re-parented once it does
+        for q in (pid, *kids):
+            for f in (os.killpg, os.kill):               # the group a child leads, and the child itself where it left that group
+                try: f(q, signal.SIGKILL)
+                except OSError: pass
+    except (ValueError, TypeError): pass
+
+def _posix_kids(pid: int) -> list:
+    "Every process under `pid` as `ps` lists them, deepest last - a child that left its parent's group (macOS CI) is still under it."
+    try: rows = [r.split() for r in subprocess.run(['ps', '-A', '-o', 'pid=,ppid='], capture_output=True, text=True, timeout=5).stdout.splitlines()]
+    except (OSError, subprocess.SubprocessError): return []
+    under, out = {}, []
+    for r in rows:
+        if len(r) == 2 and r[0].isdigit() and r[1].isdigit(): under.setdefault(int(r[1]), []).append(int(r[0]))
+    todo = list(under.get(pid, []))
+    while todo: q = todo.pop(0); out.append(q); todo += under.get(q, [])
+    return out
 
 def _end_tree(pid: int):
     "Windows: end process `pid` and every process it started that still runs (a child is younger than its parent: an older one only reuses a pid)."

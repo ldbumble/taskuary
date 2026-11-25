@@ -133,3 +133,13 @@ test("a setting's change reads each switch as it is and as it will be, said once
   assert.match(html, />5 → 15</);
   assert.doesNotMatch(html, /until you approve|>Settings</);
 });
+
+test("a held browser step names its site once - in its title where the title says it, else on its On row (walk 19)", async () => {
+  const { card } = await P;
+  const held = (about) => card(act({ action: "browser_act", about, what: "click @e12", name: "127.0.0.1", command: "agent-browser click @e12" }));
+  const named = held('Click the "Sign in" button on 127.0.0.1');
+  assert.equal(one(named), 1); assert.match(named, /Sign in&quot; button on 127\.0\.0\.1|Sign in" button on 127\.0\.0\.1/);
+  assert.equal((named.match(/127\.0\.0\.1/g) || []).length, 1, "the site said once");
+  const bare = held('Click the "Sign in" button');
+  assert.match(bare, />On</); assert.equal((bare.match(/127\.0\.0\.1/g) || []).length, 1, "the On row names it");
+});

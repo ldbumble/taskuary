@@ -366,3 +366,12 @@ test("a chat opens with the top of its newest reply at the top of the view, unle
   nested.root.querySelectorAll = ((all) => () => [...all, inner])(nested.root.querySelectorAll());
   assert.equal(openAt(nested.view, nested.root), nested.tops[1], "a row inside a row is not the chat's newest");
 });
+
+test("a failed turn says its failure once: the error step the open chat patched in gives way to the turn's own line (walk 19)", async () => {
+  const { turnSteps, turnParts, eventsOf } = await import("../src/chatStream.js");
+  const err = { id: "e:1.1", k: "error", text: "No AI is connected - connect one on Connections → AI to run this task", status: "failed" };
+  const failed = { kind: "turn", state: "failed", fail: "No AI is connected - connect one on Connections → AI to run this task.", steps: [err] };
+  const rows = (t) => turnParts(eventsOf(turnSteps(t), false)).flatMap((p) => p.steps || []);
+  assert.deepEqual(rows(failed), []);
+  assert.equal(rows({ ...failed, fail: undefined, state: "done" }).length, 1, "a turn with no failed line keeps the step");
+});

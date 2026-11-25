@@ -10,6 +10,7 @@ import SendIcon from "@mui/icons-material/ArrowUpward";
 import OpenInFullIcon from "@mui/icons-material/OpenInFull";
 import CloseFullscreenIcon from "@mui/icons-material/CloseFullscreen";
 import api from "./api.js";
+import { SETUP_CHANGED } from "./wrote.js";
 import { liveUp, onLive, touches } from "./live.js";
 import { REST_LOOK_MS, changes, coalesced, restLook } from "./visible.js";
 import { aheadChat, heldChat, heldConversation } from "./taskDetail.js";
@@ -18,7 +19,7 @@ import { holdUnsent } from "./unsent.js";
 import { howToOpen } from "./bugReportOpen.js";
 import { baseName } from "./agentSteps.js";
 import { AgentSteps, PermitCtx } from "./AgentStepRows.jsx";
-import { chatSource, checkBackDue, waitingShown, eventsOf, hasParts, isPastCard, standing, heldAtEnd, AT_END, anchorOf, anchorShift, openAt, OPEN_HOLD, shrinkHeld, SHRINK_HOLD, turnParts, workCount, folds, ranUnder, foldLine, paintable, withMine, waitingChips, workingLine, waitingOn, askTurn, onYouTurn, askedFirst, runsOf, patchSteps, askOn, asksOff } from "./chatStream.js";
+import { chatSource, checkBackDue, waitingShown, eventsOf, turnSteps, hasParts, isPastCard, standing, heldAtEnd, AT_END, anchorOf, anchorShift, openAt, OPEN_HOLD, shrinkHeld, SHRINK_HOLD, turnParts, workCount, folds, ranUnder, foldLine, paintable, withMine, waitingChips, workingLine, waitingOn, askTurn, onYouTurn, askedFirst, runsOf, patchSteps, askOn, asksOff } from "./chatStream.js";
 import { stepLabel } from "./agentSteps.js";
 export { checkBackDue };
 import { detailFor, ownDetail, useOwnDetail } from "./chatDetail.js";
@@ -422,7 +423,7 @@ const NONE = new Set();
 // `later`: a turn after the chat's first - its agent starting again is the work going on, never "waiting for the agent" (workingLine)
 const ConvTurn = ({ t, more, ran = 0, cards, name, ask = null, later = false, owes = false, newest = false, skip = NONE }) => {
   const live = t.state === "working" || t.state === "starting";
-  const parts = useMemo(() => turnParts(eventsOf(t.steps || [], live), { live }), [t.steps, live]);
+  const parts = useMemo(() => turnParts(eventsOf(turnSteps(t), live), { live }), [t.steps, t.fail, live]);
   const key = t.answer || t.id, at = useTurnOutputs(key), shown = React.useContext(ShownCtx)[key];
   const sum = t.summary, words = t.text || (sum ? [sum.about, sum.did].map((x) => String(x || "").trim()).filter(Boolean).join("\n\n") : "");
   const made = at ? turnFiles({ listed: at.listed, id: key, words, did: sum?.did, tid: at.tid, skip }) : [];
@@ -974,6 +975,8 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
   // a turn this pane streams itself, whose own copy is the one on screen
   const quietRef = useRef(false); quietRef.current = loaded && !busy;
   useEffect(() => onLive("task-changed", (ev) => { if (quietRef.current && touches(ev, task.TaskId)) refresh(); }), [task.TaskId, refresh]);
+  // ...and when an AI card or setting moves (wrote.movesSetup): "No AI is connected yet" read the AIs once, and stood after the card came back on
+  useEffect(() => { const f = () => { if (quietRef.current) refresh(); }; window.addEventListener(SETUP_CHANGED, f); return () => window.removeEventListener(SETUP_CHANGED, f); }, [refresh]);
   const { onPaste: pasted, onDrop: dropped, onDragOver: dragging } = pics.drop;
 
   // ...AND ONCE IT IS UP FOR THE OWNER IT STAYS UP until the agent answers again (the owner, 2026-11-05, signing in to a site in two steps: "I put

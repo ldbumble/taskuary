@@ -649,7 +649,9 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
         ...(bccOpen || bccNow.length ? [{ key: "bcc", type: "people", label: "BCC", value: bccNow, editable: true, onChange: setBcc, autoOpen: bccOpen && !bccNow.length, onClose: () => setBccOpen(false) }] : [])]
         : [...(ccNow.length ? [{ key: "cc", type: "people", label: "CC", value: ccNow }] : []), ...(bccNow.length ? [{ key: "bcc", type: "people", label: "BCC", value: bccNow }] : [])]),
       { key: "subject", type: "line", label: "Subject", value: subjNow, editable: editing && !off, onChange: setSubj, placeholder: "(no subject)" }]
-    : proposal?.destination === "" ? [] : [{ key: "to", type: "read", label: proposal?.destinationLabel || "To", value: proposal?.destination || replyContext(filedDelivery) }]),
+    // ...and never a place its title already names (walk 19: "Click the "Sign in" button on 127.0.0.1" over "On 127.0.0.1")
+    : proposal?.destination === "" || saysPlace(proposal?.lead || proposal?.title, proposal?.destination) ? []
+    : [{ key: "to", type: "read", label: proposal?.destinationLabel || "To", value: proposal?.destination || replyContext(filedDelivery) }]),
     // ...A CHANGE TO SOMETHING STORED (reviewProposal.changeOf): what else it changes as facts, then its new words whole, each its own box, marked
     // where they change - and the switch for the marks, where there is a before to mark against
     ...(proposal?.rows || []).map((x, i) => ({ key: `row-${i}`, type: "read", label: x.label, value: x.was ? `${x.was} → ${x.now}` : x.now })),
@@ -758,6 +760,10 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
     </ReviewCard>
   );
 }
+
+// A PLACE THE CARD'S OWN TITLE ALREADY SAYS (its last words: "... on 127.0.0.1"), said once - by the title
+export const saysPlace = (title, place) => { const t = String(title || "").trim().toLowerCase(), p = String(place || "").trim().toLowerCase();
+  return !!p && (t.endsWith(` ${p}`) || t.endsWith(` ${p}.`)); };
 
 // WHAT A CARD IS, IN PLAIN WORDS, over its fields: a reply by its channel, an email, an invite's answer, a share
 const BY = { email: "by email", outlook: "by email", gmail: "by email", whatsapp: "on WhatsApp", teams: "on Teams", slack: "on Slack", telegram: "on Telegram",

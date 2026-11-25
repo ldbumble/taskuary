@@ -93,6 +93,20 @@ class WakeTests(unittest.TestCase):
         from taskuary import taskstate
         self.assertNotEqual(taskstate.standing(self.s, self.tid)['waits_on'], 'them', 'her line moves it on - no longer waiting on her')
 
+    def test_a_holding_reply_read_to_a_turns_end_leaves_the_wait_for_her_answer_on_a_new_thread(self):
+        """Walk 19 (S6a then S5a): her holding reply woke the task, its agent read it and ended its turn without asking again, and the wait was
+        gone - so her real answer, on a new thread, reached triage with nothing saying the task waited on her, and was filed as FYI."""
+        from taskuary import context, taskstate, workerstate as ws
+        self.s._exec("UPDATE task SET WaitingSince='2026-01-01 09:00:00' WHERE TaskId=?", (self.tid,))     # ...asked her earlier
+        out, _, _ = arrive(self.s, 'h1', PAULA, 'Paula Vance', 'Still working on it - I need the invoices first.')
+        ws.record(self.s, self.tid, 'sid1', 'working', text=ws.WAKE, source='api')
+        ws.record(self.s, self.tid, 'sid1', 'turn_end', text='Paula is still on it.', source='api')
+        st = taskstate.standing(self.s, self.tid)
+        self.assertEqual((self.s.get_task(self.tid)['WaitingOn'], [(w['key'], w['answered']) for w in st['them']]), (PAULA, [(PAULA, None)]))
+        later = {'from_email': PAULA, 'from_name': 'Paula Vance', 'conversation_id': 'c2', 'subject': 'PTO file'}
+        self.assertTrue(waiton.awaits(self.s, self.s.get_task(self.tid), later), 'her next line, on any thread, is still the awaited answer')
+        self.assertIn("waiting for Paula's input", context._stands(self.s, self.s.get_task(self.tid)))      # ...what triage's open_items say
+
     def test_a_reply_from_someone_else_leaves_the_wait(self):
         out, _, _ = arrive(self.s, 'w2', GAIL, 'Gail Moreno', 'Thanks all.')
         t = self.s.get_task(self.tid)

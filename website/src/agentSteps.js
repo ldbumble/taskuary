@@ -377,7 +377,8 @@ const OWN = {
   setupmeeting: () => ({ kind: "edit", summary: "Set up a meeting", tried: "Could not set up the meeting" }),
   share: () => ({ kind: "edit", summary: "Set up a share", tried: "Could not set up the share" }),
   // ...and the tools the prompt rebuild made of its protocols (2026-11-23): its one question, the playbooks it reads, a step it hands him
-  askowner: () => ({ kind: "plan", summary: "Asked you a question", tried: "Could not ask you" }),
+  // ...its `withdraw` takes the question BACK (walk 19, S7: "asked you a question" over a turn that had withdrawn it - no question drawn)
+  askowner: (a) => (a.withdraw === true ? { kind: "plan", summary: "Took back its question" } : { kind: "plan", summary: "Asked you a question", tried: "Could not ask you" }),
   playbooks: (a) => ({ kind: "read", summary: a.name ? `Read your playbook ${quoted(a.name)}` : "Read your playbooks" }),
   handover: () => ({ kind: "page", summary: "Handed you a step on the page", tried: "Could not hand you the step" }),
 };

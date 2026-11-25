@@ -4,7 +4,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { applied, cfgPatch, changes, patched, prune, saveBody, stage, stageable, tickWords } from "../src/connectorDraft.js";
+import { applied, cfgPatch, changes, patched, prune, saveBody, savedKey, stage, stageable, tickWords } from "../src/connectorDraft.js";
 
 const conn = { ConnectorId: 3, Active: 1, Roles: "trigger", Scope: "read", ConfigJson: JSON.stringify({ bulk: "clear", reply_comments: false }) };
 const src = readFileSync(new URL("../src/ConnectorsView.jsx", import.meta.url), "utf8");
@@ -73,4 +73,11 @@ test("a card's boxes save themselves: the typing on its pause, a secret when its
   assert.match(draft, /const keys = Object\.keys\(patch\), withSecret = all && !!s;/, "...and so does the secret");
   // the first run's simple card keeps its one Connect
   assert.match(src, /useBoxesSave\(\{ off: simple,/);
+});
+
+test("a write-only client secret saved moves what the card has saved, so its Connect reads the keys again (walk 19, QuickBooks)", () => {
+  const before = { ConnectorId: 9, ConfigJson: JSON.stringify({ client_id: "app-1" }), HasSecret: 0, ConfigSaved: [] };
+  const after = { ...before, ConfigSaved: ["client_secret"] };       // ...ConfigJson identical: the secret never comes back (guard.masked_config)
+  assert.notEqual(savedKey(after), savedKey(before));
+  assert.equal(savedKey({ ...before }), savedKey(before));
 });

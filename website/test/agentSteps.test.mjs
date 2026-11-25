@@ -640,3 +640,8 @@ test("a browser call reads by what it did, a command names its files by name, an
   assert.equal(describeCall("Bash", { command: `node -e ${blob}` }).summary, "Ran node -e …");
   assert.equal(describeCall("Bash", { command: "curl https://shop.example/home/plans" }).summary, "Read shop.example/home/plans", "an address is no local path");
 });
+
+test("a withdrawn question reads as taken back, never as asked (walk 19, S7)", () => {
+  assert.equal(describeCall("mcp__taskuary__ask_owner", { withdraw: true }).summary, "Took back its question");
+  assert.equal(describeCall("mcp__taskuary__ask_owner", { question: "Does 2 pm work?" }).summary, "Asked you a question");
+});

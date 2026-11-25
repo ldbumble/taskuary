@@ -311,11 +311,16 @@ class StandingTests(unittest.TestCase):
         ws.record(s, tid, 'sid1', 'working', text=ws.WAKE, source='api'); waiton.declare(s, tid, ERIN, 'agent')
         ws.record(s, tid, 'sid1', 'turn_end', text='Erin is still on the split.', source='api')
         self.assertEqual(taskstate.standing(s, tid)['waits_on'], 'them')
-        # ...her real answer, read through to the agent's turn's end, ends it
+        # ...her real answer moves it to the agent; a turn that reads it and ends leaves the wait standing (walk 19, M2) ...
         s._exec("UPDATE task SET WaitingSince='2026-01-01 11:00:00' WHERE TaskId=?", (tid,))
         erin_writes('2026-01-01 12:00:00', 'More users - we added the sales team.')
         self.assertEqual(taskstate.standing(s, tid)['waits_on'], 'agent')
         turn()
+        self.assertEqual((taskstate.standing(s, tid)['waits_on'], s.get_task(tid)['WaitingOn']), ('them', ERIN))
+        # ...and only a turn whose end says nothing is left ends it
+        erin_writes('2026-01-01 13:00:00', 'That is all of it.')
+        ws.record(s, tid, 'sid1', 'working', text=ws.WAKE, source='api'); waiton.settle(s, tid, over=True)
+        ws.record(s, tid, 'sid1', 'turn_end', text='Read it.', source='api')
         self.assertEqual((taskstate.standing(s, tid)['them'], s.get_task(tid)['WaitingOn']), ([], None))
         s._exec("UPDATE task SET CheckBackAt='2000-01-01 09:00:00' WHERE TaskId=?", (tid,))
         self.assertEqual(taskstate.standing(s, tid)['waits_on'], 'agent')

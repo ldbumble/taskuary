@@ -16,6 +16,10 @@ const roles = (r) => String(r || "").split(",").map((x) => x.trim()).filter(Bool
 // the keys `next` changes over `base`, as a patch: a key gone is null (the server removes it)
 export const cfgPatch = (base = {}, next = {}) => Object.fromEntries([...new Set([...Object.keys(base), ...Object.keys(next)])]
   .filter((k) => !same(base[k], next[k])).map((k) => [k, k in next && next[k] !== undefined ? next[k] : null]));
+// WHAT A CARD HAS SAVED, as one key a view reads again on (OAuthConnect's status): its config, its secret - and which write-only keys hold a
+// value (guard.masked_config's ConfigSaved). An app's client secret never comes back in ConfigJson, so saving it moved neither, and Connect
+// stayed greyed under "paste the application's keys below first" until the card was opened again (walk 19, QuickBooks)
+export const savedKey = (conn = {}) => [conn.ConnectorId, conn.ConfigJson || "", conn.HasSecret ? 1 : 0, (conn.ConfigSaved || []).join(",")].join("|");
 // a patch laid over a config: null removes its key
 export const patched = (cfg = {}, patch = {}) => {
   const out = { ...cfg };

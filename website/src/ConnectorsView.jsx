@@ -50,7 +50,7 @@ import { namesRestart, pairAgain, restartBridge, startBridge } from "./waBridge.
 import { waLine, waPair } from "./waStatus.js";
 import { ACCESS } from "./agentAccess.js";
 import { DraftProvider, Tick, useBoxesSave, useCardDraft, useSaveConnector, useSaveSource } from "./ConnectorDraft.jsx";
-import { cfgPatch, editedBoxes, syncState } from "./connectorDraft.js";
+import { cfgPatch, editedBoxes, savedKey, syncState } from "./connectorDraft.js";
 import { AI_SHELF, needsGateway } from "./aiShelf.js";
 import { cliCardOf, toolUpdateLine } from "./cliCard.js";
 import SavedSignins from "./SavedSignins.jsx";
@@ -3621,8 +3621,10 @@ function OAuthConnect({ conn, meta, reload }) {
   const [token, setToken] = useState("");
   // ...read again when the card's saved keys change: the status was read once, when the card opened, so keys pasted and saved
   // left Sign in greyed under "Save first" until the card was closed and opened again (the owner, 2026-10-21: LinkedIn)
+  // ...by everything it saved, a write-only client secret too (savedKey)
+  const saved = savedKey(conn);
   const load = useCallback(async () => { try { setSt((await api.get(meta.connect.status(conn.ConnectorId))).data); } catch { /* the card still works */ } },
-    [conn.ConnectorId, conn.ConfigJson, conn.HasSecret, meta]);   // eslint-disable-line react-hooks/exhaustive-deps
+    [saved, meta]);   // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { load(); }, [load]);
   // the sign-in happens in another tab; poll while it is likely underway so the box flips to
   // "connected" without a refresh

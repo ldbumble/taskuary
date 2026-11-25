@@ -148,9 +148,9 @@ class StateTests(unittest.TestCase):
             (self.tmp / 'tq-early.stream').write_text(str(stream.getsockname()[1])); (self.tmp / 'tq-early.pid').write_text('5150')
             self.assertFalse(bv.state('early', fresh=True)['open'], 'a helper with no Chrome under it is no open browser')
             done, chrome = [], {'up': False}
-            def run(argv, **kw): done.append(('run', argv[-1])); return mock.Mock(returncode=0)
+            def run(argv, wait, **kw): done.append(('run', argv[-1])); return 0, ''
             def launched(sid): chrome['up'] = True; done.append(('chrome', sid)); return 4242
-            with mock.patch.object(bv, 'program', return_value='ab'), mock.patch.object(bv.spawn, 'run', side_effect=run),                  mock.patch.object(bv, '_end_daemon', side_effect=lambda sid, pids=None: done.append(('end', pids))),                  mock.patch.object(bv, 'real_chrome', side_effect=launched), mock.patch.object(bv, 'chrome_up', side_effect=lambda sid: chrome['up']),                  mock.patch.object(bv.spawn, 'popen', side_effect=lambda cmd, **kw: done.append(('open', cmd[-1]))), mock.patch.object(bv, 'clock'):
+            with mock.patch.object(bv, 'program', return_value='ab'), mock.patch.object(bv.spawn, 'output', side_effect=run),                  mock.patch.object(bv, '_end_daemon', side_effect=lambda sid, pids=None: done.append(('end', pids))),                  mock.patch.object(bv, 'real_chrome', side_effect=launched), mock.patch.object(bv, 'chrome_up', side_effect=lambda sid: chrome['up']),                  mock.patch.object(bv.spawn, 'popen', side_effect=lambda cmd, **kw: done.append(('open', cmd[-1]))), mock.patch.object(bv, 'clock'):
                 self.assertTrue(bv.start('early', 'https://portal.example'))
             self.assertEqual([d[0] for d in done], ['run', 'end', 'chrome', 'open'])      # the helper closed, then the Chrome, then the page
             self.assertEqual(done[1][1], [5150])
@@ -204,11 +204,12 @@ class StateTests(unittest.TestCase):
     def test_close_is_a_no_op_without_the_tool_or_a_session(self):
         with mock.patch('shutil.which', return_value=None), mock.patch('subprocess.run') as run:
             bv.close('s9'); run.assert_not_called()
-        with mock.patch('shutil.which', return_value='/x/agent-browser'), mock.patch('subprocess.run') as run:
+        with mock.patch('shutil.which', return_value='/x/agent-browser'), mock.patch.object(bv.spawn, 'output', return_value=(0, '')) as run:
             bv.close('s9'); run.assert_not_called()                # no .stream file: nothing to close
             (self.tmp / 'tq-s9.stream').write_text('1234')
             bv.close('s9')
-            self.assertEqual(run.call_args.args[0], ['/x/agent-browser', '--session', 'tq-s9', 'close'])
+            # ...its output to a file within CLOSE_WAIT: piped, a helper it left held close() past its timeout (45 s measured, for ever at IDLE_MS 0)
+            self.assertEqual(run.call_args.args[:2], (['/x/agent-browser', '--session', 'tq-s9', 'close'], bv.CLOSE_WAIT))
 
 
 class RelayTests(unittest.TestCase):
@@ -612,3 +613,44 @@ def test_a_finished_download_is_told_by_its_path(tmp_path):
         assert told == []                                                                 # still coming
         (tmp_path / 'statement.pdf').write_text('x'); bv.arrived('dl1', had)
     assert len(told) == 1 and str(tmp_path / 'statement.pdf') in told[0] and 'outputs folder' in told[0]
+
+
+# A BROWSER THAT HANGS OR WILL NOT START (a HIPAA AI walk on another user's computer, 2026-11-25: "Opening whois.com in the browser" spun for
+# over a minute and the app froze) - measured on a throwaway home with a stand-in Chrome: five views onto a Chrome that took connections and
+# never answered held every request of the app for 15 s; a Chrome that never answered, or closed as it started, took 102 s to be said
+def test_a_view_opening_onto_a_hung_browser_never_holds_the_event_loop():
+    ticks = []
+    def hung(sid, fresh=False): time.sleep(.6); return {'open': False, 'url': '', 'port': 0}
+    class View:
+        async def close(self, code=None): pass
+    async def main():
+        async def tick():
+            for _ in range(12): ticks.append(time.monotonic()); await asyncio.sleep(.05)
+        t = asyncio.create_task(tick()); await asyncio.sleep(0)
+        await asyncio.gather(bv.relay(View(), 'hung'), t)
+    with mock.patch.object(bv, 'state', side_effect=hung): asyncio.run(main())
+    assert max(b - a for a, b in zip(ticks, ticks[1:])) < .4, 'every socket and request of the app waited on the browser'
+
+
+@pytest.mark.real_chrome
+def test_a_chrome_that_never_answers_is_given_its_wait_in_wall_time_whatever_a_probe_costs():
+    tried = []
+    def probe(port, timeout=.25): time.sleep(.2); return False             # Windows: a port nobody listens on costs the whole probe
+    with mock.patch.object(bv, 'chrome_exe', return_value='chrome.exe'), mock.patch.object(bv, '_spawn_chrome', side_effect=lambda a, hidden=True: tried.append(hidden) or 4242), \
+            mock.patch.object(bv, '_listening', side_effect=probe), mock.patch.object(bv, '_end_daemon'), \
+            mock.patch.object(bv, 'LAUNCH_WAIT', 1.0), mock.patch.object(bv, 'LAUNCH_POLL', .05):
+        t0 = time.monotonic(); assert bv.real_chrome('slow') is None; took = time.monotonic() - t0
+    assert took < 2.0, f'{took:.1f}s for a 1 s launch'
+    assert tried == ([True, False] if os.name == 'nt' else [False])       # ...its own desktop, then off the screen, both within the one wait
+    assert 'did not answer within' in bv.failed_why('slow')
+
+
+@pytest.mark.real_chrome
+def test_a_chrome_that_closes_as_it_starts_is_a_failure_at_once_said_by_its_exit_code():
+    def spawned(argv, hidden=True): bv._KIDS[99] = lambda: 3; return 99
+    with mock.patch.object(bv, 'chrome_exe', return_value='chrome.exe'), mock.patch.object(bv, '_spawn_chrome', side_effect=spawned), \
+            mock.patch.object(bv, '_listening', return_value=False), mock.patch.object(bv, '_end_daemon') as ended:
+        t0 = time.monotonic(); assert bv.real_chrome('gone') is None
+    assert time.monotonic() - t0 < 2.0
+    assert 'closed as soon as it started (exit code 3)' in bv.failed_why('gone') and not ended.called
+    assert 99 not in bv._KIDS

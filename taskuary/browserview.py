@@ -36,8 +36,16 @@ _TTL = 2.0                      # state() is on the terminal-listing poll path: 
 # is the worst outcome of the three: the agent is never handed the session name, so the browser it
 # opens for itself is one the owner's pane is not watching (2026-09-14). Waiting costs nothing when
 # the browser is quick - this returns the moment it answers.
+# ...IN WALL TIME, THE WHOLE LAUNCH (a HIPAA AI walk, live 2026-11-25: "Opening whois.com in the browser" spun for over a minute): each
+# wait counted its polls, not seconds, and on Windows a poll of a port nobody listens on takes its whole probe - 25 s was ~50 s a try,
+# twice over for the two desktops, then the helper's attach the same: measured 102 s for a Chrome that never answered, 102 s for one that
+# closed as it started. Now Chrome has LAUNCH_WAIT in all (its own desktop most of it), the helper ATTACH of it, and a Chrome that exits
+# is a failure at once - said by why (FAILED), where it happened
 LAUNCH_WAIT = 25.0
+ATTACH = 0.6                    # of LAUNCH_WAIT: the helper's attach to a Chrome that answers - and the most its own desktop is given
 LAUNCH_POLL = 0.25
+CLOSE_WAIT = 20.0               # agent-browser's own close of a session
+FAILED = {}                     # sid -> why its last start did not bring a browser up (failed_why)
 NAV_WAIT = 45.0                 # one page load on a browser that is already up, not a launch: a slow sign-in page, not a cold Chrome
 LAST = {}                       # sid -> the newest frame seen by any relay: what Snapshot files
 _CACHE = {}                     # sid -> (when, state)
@@ -248,7 +256,10 @@ async def relay(ws, sid: str):
     """Pipe the session's screencast to one page and that page's input back. `ws` is the FastAPI
     socket, not yet accepted - a session with no browser is refused with 4404 the way a missing
     terminal is."""
-    st = state(sid, fresh=True)
+    import asyncio
+    # ...OFF THE EVENT LOOP (the same walk): state asks the session's Chrome for its tabs, up to 3 s where it takes the connection and never
+    # answers - a hung or half-started one - and five views opening on it froze every request and socket of the app for 15 s (measured)
+    st = await asyncio.to_thread(state, sid, True)
     if not st['open']: return await ws.close(code=4404)
     await ws.accept()
     cur = LAST.setdefault(sid, {'frame': '', 'url': '', 'at': 0}); cur['port'] = st['port']      # whose url LAST holds (state)
@@ -762,6 +773,14 @@ def began(sid: str) -> bool:
     return stopped
 
 
+# ...ITS OUTPUT TO A FILE, AS EVERY COMMAND THAT CAN LEAVE A HELPER (navigate): piped, a helper the close left or started held the pipe, and
+# past its 20 s the wait went on draining it - measured 45 s for a helper that lived 45 s, for ever for one that idles never (IDLE_MS)
+def shut(sid: str, exe: str, failed: str = 'could not close the browser of') -> bool:
+    "agent-browser's own close of session `sid`, within CLOSE_WAIT whatever it leaves running. True when it ran."
+    try: spawn.output([exe, '--session', session_name(sid), 'close'], CLOSE_WAIT, **_cli(sid)); return True
+    except (OSError, subprocess.SubprocessError) as e: logger.debug(f'{failed} {sid}: {e}'); return False
+
+
 def close(sid: str, tid: int = None):
     """The pty ended: close its browser too. Best effort, and only when there is one - otherwise a
     Chrome per finished task sits idle for an hour each. `tid`: the task whose browser view keeps its last frame (keep_frame)."""
@@ -778,8 +797,7 @@ def close(sid: str, tid: int = None):
         if (stop := _WINDOWS.pop(sid, None)): stop.set()
         if exe and _read(session_name(sid), 'stream'):
             _safe_keep(sid)                                        # what it holds now, whether or not agent-browser's own save on close works
-            try: spawn.run([exe, '--session', session_name(sid), 'close'], **_cli(sid), timeout=20, capture_output=True)
-            except (OSError, subprocess.SubprocessError) as e: logger.debug(f'could not close the browser of {sid}: {e}')
+            shut(sid, exe, 'could not close the browser of')
         _end_daemon(sid)
         _CACHE.pop(sid, None); LAST.pop(sid, None); _BEGAN.pop(str(sid), None); listed(sid, False); _forget_profile(sid)
     with _START_LOCKS_GUARD:
@@ -1142,7 +1160,7 @@ def ask_open(sid: str, url: str) -> dict:
     if not re.match(r'^https?://', u, re.I) or not _page(u): raise ValueError('give the address of a web page (http:// or https://)')
     if not installed(): raise ValueError('agent-browser is not installed on this computer')
     if launch(sid, u): return {'url': u, 'launched': True}
-    if not state(sid, fresh=True).get('open'): raise ValueError(FAILED_WHY)
+    if not state(sid, fresh=True).get('open'): raise ValueError(failed_why(sid))
     try: return {'url': navigate(sid, u), 'launched': False}
     except ValueError:
         # ...WHAT THE AGENT'S OWN FAILED LAUNCH LEFT BEHIND IS NOT A BROWSER (recorded on Codex, 2026-11-14): its `agent-browser open` died in
@@ -1150,7 +1168,7 @@ def ask_open(sid: str, url: str) -> dict:
         # way. That one is closed and a whole one launched in its place
         close(sid)
         if start(sid, u): return {'url': u, 'launched': True}
-        raise ValueError(FAILED_WHY)
+        raise ValueError(failed_why(sid))
 
 
 # A REAL CHROME, ON A DESKTOP OF ITS OWN (the owner, 2026-11-16: a site's "Verify you are human" looped however often he clicked it in the
@@ -1210,8 +1228,9 @@ def _spawn_chrome(argv: list, hidden: bool = True) -> int:
     "Start Chrome where the owner never sees it; its pid. `hidden` (Windows): on Taskuary's own desktop; else its window off the screen."
     env, cwd = spawn.env_for(dict(os.environ)), spawn.cwd_for(None)
     if os.name != 'nt' or not hidden:
-        return spawn.bare([*argv, '--window-position=-32000,-32000'], env=env, cwd=cwd, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                          stderr=subprocess.DEVNULL, start_new_session=True).pid
+        p = spawn.bare([*argv, '--window-position=-32000,-32000'], env=env, cwd=cwd, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                       stderr=subprocess.DEVNULL, start_new_session=True)
+        _KIDS[p.pid] = p.poll; return p.pid
     import ctypes, ctypes.wintypes as W
     k, u = ctypes.WinDLL('kernel32', use_last_error=True), ctypes.WinDLL('user32', use_last_error=True)
     u.CreateDesktopW.restype = W.HANDLE
@@ -1227,8 +1246,27 @@ def _spawn_chrome(argv: list, hidden: bool = True) -> int:
                               0x00000400 | 0x00000200, block, cwd, ctypes.byref(si), ctypes.byref(pi))     # unicode env, its own process group
     if not ok: raise OSError(f'Chrome did not start ({ctypes.get_last_error()})')
     spawn.tie(handle=pi.hp); spawn.listed(pi.pid)     # it ends with the app, however the app ends
-    k.CloseHandle(pi.hp); k.CloseHandle(pi.ht)
+    k.CloseHandle(pi.ht)
+    k.WaitForSingleObject.argtypes, k.GetExitCodeProcess.argtypes = [W.HANDLE, W.DWORD], [W.HANDLE, ctypes.POINTER(W.DWORD)]
+    def poll(h=pi.hp, code=W.DWORD()):
+        if k.WaitForSingleObject(h, 0) != 0: return None                      # WAIT_OBJECT_0: it has exited
+        k.GetExitCodeProcess(h, ctypes.byref(code)); return int(code.value)
+    _KIDS[int(pi.pid)] = poll; _HANDLES[int(pi.pid)] = pi.hp
     return int(pi.pid)
+
+
+# ...AND A CHROME THAT CLOSES AS IT STARTS IS SEEN TO (a profile another Chrome holds hands off to it and exits, an antivirus stops it):
+# its exit, from the process Taskuary started - a pid it did not start is never judged gone
+_KIDS, _HANDLES = {}, {}                # pid -> poll() of a Chrome real_chrome started (None while it runs), its Windows handle
+def _exited(pid: int):
+    "The exit code of a Chrome _spawn_chrome started, once it has exited - None while it runs or where it was not one of ours."
+    try: return (_KIDS.get(int(pid or 0)) or (lambda: None))()
+    except Exception: return None
+def _let_go(pid: int) -> None:
+    _KIDS.pop(int(pid or 0), None)
+    if (h := _HANDLES.pop(int(pid or 0), None)) and os.name == 'nt':
+        import ctypes, ctypes.wintypes as W
+        ctypes.WinDLL('kernel32').CloseHandle(W.HANDLE(h))
 
 # WHAT THE AGENT'S BROWSER DOWNLOADS LANDS WHERE THE AGENT MAY READ IT: a click on a download link saved into the owner's own Downloads
 # folder, and reading it back was a read outside the task (readgate), held - a file the agent fetched it could not open without a card for
@@ -1258,25 +1296,45 @@ def _downloads_to(prof: Path, sid: str = '') -> None:
 def chrome_up(sid: str) -> bool: return _listening(cdp_port(sid))      # session `sid`'s own Chrome answers on its port
 
 
+def _until(secs: float, ok, gone=lambda: None):
+    "Poll ok() for `secs` of wall time: True once it is, False past them - and gone()'s word (an exit code) the moment it has one."
+    end = time.monotonic() + secs
+    while True:
+        if ok(): return True
+        if (rc := gone()) is not None: return rc
+        if time.monotonic() >= end: return False
+        time.sleep(LAUNCH_POLL)
+
+
+def failed_why(sid: str) -> str: return FAILED.get(str(sid)) or FAILED_WHY      # why session `sid`'s last start brought no browser up
+def _failed(sid: str, why: str) -> None:
+    FAILED[str(sid)] = why; logger.warning(f'the browser for {sid} did not start: {why}')
+
+
 def real_chrome(sid: str) -> int | None:
-    "Session `sid`'s own Chrome, started if it is not up; its pid (0 when one already answered). None when it could not start."
+    "Session `sid`'s own Chrome, started if it is not up; its pid (0 when one already answered). None when it could not start (failed_why)."
     port = cdp_port(sid)
     if _listening(port): return 0
     exe = chrome_exe()
-    if not exe: logger.warning(f'no Chrome for the browser of {sid}'); return None
+    if not exe: return _failed(sid, 'no Chrome was found on this computer')
     prof = _profile(sid); prof.mkdir(parents=True, exist_ok=True); _downloads_to(prof, sid)
     argv = [exe, f'--remote-debugging-port={port}', f'--user-data-dir={prof}', *CHROME_ARGS, 'about:blank']
     # ...and where its own desktop cannot be had or Chrome does not come up on it, the same Chrome with its window off the screen: a browser
-    # that works beats one that is out of sight, and the log says which it was
+    # that works beats one that is out of sight, and the log says which it was. Both within LAUNCH_WAIT, its own desktop never all of it
+    end, why = time.monotonic() + LAUNCH_WAIT, ''
     for hidden in ((True, False) if os.name == 'nt' else (False,)):
+        where = ' on its own desktop' if hidden else ''
         try: pid = _spawn_chrome(argv, hidden)
-        except OSError as e: logger.warning(f'could not start Chrome for {sid}{" on its own desktop" if hidden else ""}: {e}'); continue
-        for _ in range(int(LAUNCH_WAIT / LAUNCH_POLL)):
-            if _listening(port): return pid
-            time.sleep(LAUNCH_POLL)
-        logger.warning(f'Chrome for {sid} did not answer on its port within {LAUNCH_WAIT:.0f}s{" on its own desktop" if hidden else ""}')
-        _end_daemon(sid, [pid])
-    return None
+        except OSError as e: why = f'Chrome could not be started ({e})'; logger.warning(f'could not start Chrome for {sid}{where}: {e}'); continue
+        left = end - time.monotonic()
+        try: up = _until(min(left, LAUNCH_WAIT * ATTACH) if hidden else left, lambda: _listening(port), lambda: _exited(pid))
+        finally: _let_go(pid)
+        if up is True: return pid
+        why = (f'Chrome closed as soon as it started (exit code {up}) - another Chrome may hold its profile, or a security program stopped it'
+               if up is not False else f'Chrome did not answer within {LAUNCH_WAIT:.0f} s of starting')
+        logger.warning(f'Chrome for {sid}{where}: {why}')
+        if up is False: _end_daemon(sid, [pid])
+    return _failed(sid, why or 'Chrome could not be started')
 
 
 def start(sid: str, url: str = 'about:blank') -> bool:
@@ -1289,7 +1347,7 @@ def start(sid: str, url: str = 'about:blank') -> bool:
     closed with it (Term._pump -> close).
     """
     exe = program()
-    if not exe: return False
+    if not exe: FAILED[str(sid)] = 'the browser is not installed on this computer'; return False
     # General work starts the browser as soon as the workspace mounts, then its first prompt
     # verifies that it is ready before handing the CLI browser instructions. Those two roads can
     # arrive together. agent-browser's on-disk session files are not a launch mutex: without one,
@@ -1297,6 +1355,7 @@ def start(sid: str, url: str = 'about:blank') -> bool:
     with _START_LOCKS_GUARD:
         lock = _START_LOCKS.setdefault(sid, threading.Lock())
     with lock:
+        FAILED.pop(str(sid), None)
         if state(sid, fresh=True)['open']: watch_windows(sid); return True             # the agent or mount got there first
         # ...AND IT STAYS UP WHILE THE TASK IS OPEN. agent-browser shuts its daemon down after an hour
         # of inactivity by default, which is fine for a tool and wrong for a page someone is watching:
@@ -1311,22 +1370,21 @@ def start(sid: str, url: str = 'about:blank') -> bool:
         except Exception as e: logger.debug(f'the browser of {sid} starts without the sign-ins live elsewhere: {e}')
         # ...a helper an earlier command left pointed at a Chrome that was never there is closed first: it answers, and drives nothing
         if _listening(int(_read(session_name(sid), 'stream') or 0) if _read(session_name(sid), 'stream').isdigit() else 0):
-            try: spawn.run([exe, '--session', session_name(sid), 'close'], **_cli(sid), timeout=20, capture_output=True)
-            except (OSError, subprocess.SubprocessError) as e: logger.debug(f'the helper of {sid} without a Chrome was not closed: {e}')
+            shut(sid, exe, 'could not close the helper without a Chrome of')
             _end_daemon(sid, [_daemon_pid(sid)]); _CACHE.pop(sid, None)
         if (chrome := real_chrome(sid)) is None: return False
         listed(sid, True, [chrome] if chrome else None)
         cmd = [exe, '--session', session_name(sid), '--restore', RESTORE_KEY, 'open', url or 'about:blank']
         try:
-            spawn.popen(cmd, **_cli(sid), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                             stdin=subprocess.DEVNULL, close_fds=True)
-        except (OSError, subprocess.SubprocessError) as e:
-            logger.warning(f'could not start the browser for {sid}: {e}')
-            return False
-        for _ in range(int(LAUNCH_WAIT / LAUNCH_POLL)):            # it has a Chrome to launch
-            time.sleep(LAUNCH_POLL)
-            if state(sid, fresh=True)['open']: listed(sid, True, [_daemon_pid(sid)]); clock(sid); watch_windows(sid); return True
-        logger.warning(f'the browser for {sid} did not come up within {LAUNCH_WAIT:.0f}s')
+            p = spawn.popen(cmd, **_cli(sid), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                            stdin=subprocess.DEVNULL, close_fds=True)
+        except (OSError, subprocess.SubprocessError) as e: _failed(sid, f'the browser could not be started ({e})'); return False
+        # ...attached to the Chrome that answers, or said: a helper that quit with an error is a failure at once, never a wait
+        quit_ = lambda: rc if isinstance(rc := getattr(p, 'poll', lambda: None)(), int) and rc != 0 else None
+        if (up := _until(LAUNCH_WAIT * ATTACH, lambda: state(sid, fresh=True)['open'], quit_)) is True:
+            FAILED.pop(str(sid), None); listed(sid, True, [_daemon_pid(sid)]); clock(sid); watch_windows(sid); return True
+        _failed(sid, f'the browser stopped as it opened the page (exit code {up})' if up is not False else
+                     f'the browser did not attach to Chrome within {LAUNCH_WAIT * ATTACH:.0f} s')
         return False
 
 
@@ -1400,8 +1458,7 @@ def close_orphans() -> int:
     for sid, pid in _listed().items():
         done = False
         if exe and _read(session_name(sid), 'stream'):
-            try: spawn.run([exe, '--session', session_name(sid), 'close'], **_cli(sid), timeout=20, capture_output=True); done = True
-            except (OSError, subprocess.SubprocessError) as e: logger.debug(f'could not close the left-over browser {sid}: {e}')
+            done = shut(sid, exe, 'could not close the left-over browser')
         n += _end_daemon(sid, pid) or done
         listed(sid, False); _forget_profile(sid)
     if n: logger.info(f'closed {n} browser(s) the last run left open')

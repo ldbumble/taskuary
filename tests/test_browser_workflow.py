@@ -264,7 +264,7 @@ class ALeftOverBrowserIsClosedTests(unittest.TestCase):
     def test_the_next_start_closes_what_the_last_run_left_and_only_that(self):
         browserview.listed('run-a', True); browserview.listed('run-b', True)
         (self.dir / 'tq-run-a.stream').write_text('9222')                  # run-b's browser is already gone: nothing to close
-        with mock.patch.object(browserview, 'program', return_value='agent-browser'), mock.patch.object(browserview.spawn, 'run') as run:
+        with mock.patch.object(browserview, 'program', return_value='agent-browser'), mock.patch.object(browserview.spawn, 'output', return_value=(0, '')) as run:
             self.assertEqual(browserview.close_orphans(), 1)
         self.assertEqual([c.args[0] for c in run.call_args_list], [['agent-browser', '--session', 'tq-run-a', 'close']])
         self.assertEqual(browserview._listed(), {})
@@ -274,7 +274,7 @@ class ALeftOverBrowserIsClosedTests(unittest.TestCase):
         session never reached them. The quit closes every browser this folder lists."""
         browserview.listed('run-a', True); (self.dir / 'tq-run-a.stream').write_text('9222')
         with mock.patch.dict(terminal.SESSIONS, {}, clear=True), mock.patch.object(browserview, 'program', return_value='agent-browser'), \
-             mock.patch.object(browserview.spawn, 'run') as run:
+             mock.patch.object(browserview.spawn, 'output', return_value=(0, '')) as run:
             try: terminal.shutdown_sessions()
             finally: terminal.CLOSING.clear()
         self.assertEqual([c.args[0] for c in run.call_args_list], [['agent-browser', '--session', 'tq-run-a', 'close']])
@@ -397,7 +397,7 @@ class ALeftOverBrowserIsClosedTests(unittest.TestCase):
                 opened['on'] = False; time.sleep(.1); n = len(kept); time.sleep(.1)
                 self.assertEqual(len(kept), n)                             # a closed browser stops its clock
             kept.clear(); (self.dir / 'tq-run-d.stream').write_text('9')
-            with mock.patch.object(browserview, 'program', return_value='agent-browser'), mock.patch.object(browserview.spawn, 'run'):
+            with mock.patch.object(browserview, 'program', return_value='agent-browser'), mock.patch.object(browserview.spawn, 'output', return_value=(0, '')):
                 browserview.close('run-d')
             self.assertEqual(kept, ['run-d'])
 

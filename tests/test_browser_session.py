@@ -258,7 +258,7 @@ class StartingItTests(unittest.TestCase):
         what the close is for."""
         with mock.patch.object(bv.shutil, 'which', return_value='ab'), \
              mock.patch.object(bv, '_read', return_value='9222'), \
-             mock.patch.object(bv.spawn, 'run') as run:
+             mock.patch.object(bv.spawn, 'output', return_value=(0, '')) as run:
             bv.close('abc123')
         # ...among what ran: a pane another test left behind may close its own browser through the same patched run while this one does
         self.assertIn(['ab', '--session', 'tq-abc123', 'close'], [c[0][0] for c in run.call_args_list])

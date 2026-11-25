@@ -464,7 +464,7 @@ def run_tool(store, tid: int, sid: str, name: str, a: dict) -> str:
         if not bv.state(sid, fresh=True).get('open'):
             from . import gate                                                  # a magic link is judged like a click (browsergate.carries)
             if (held := gate.check(store, tid, sid, shlex.join([bg.EXE, 'open', u]), run=True)): return gate.reason(held) or bg.HELD
-            if not bv.start(sid, u): raise ValueError(bv.FAILED_WHY)
+            if not bv.start(sid, u): raise ValueError(f'the browser did not start: {bv.failed_why(sid)} - nothing was opened. Call browser_open again to try once more')
         else:
             # ...A PAGE THAT CAME BUT NEVER FINISHED (an image or a tracker on it still loading) is open all the same: agent-browser's
             # "Timed out ... waiting for load state" over a page whose text was there read as a failed open (the browser-read round,

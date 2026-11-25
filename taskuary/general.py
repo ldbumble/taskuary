@@ -3034,7 +3034,7 @@ class GeneralSession:
                                 + (f' It was last on {was} - open it again only if the work still needs it.' if was else ''))
                 elif self.browser_wanted:
                     # a browser that did not open is SAID - in the turn and to the agent - not left for it to guess at (2026-10-25)
-                    why = browserview.FAILED_WHY if browserview.installed() else setup_why or 'the browser is not installed on this computer'
+                    why = browserview.failed_why(self.sid) if browserview.installed() else setup_why or 'the browser is not installed on this computer'
                     self.browser_failed = why
                     self._emit(f'\x1b[33mThe browser did not open: {why}.\x1b[0m\r\n')
                     self._remember_trace('progress', 'browser', f'The browser did not open: {why}.')

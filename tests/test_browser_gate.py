@@ -1110,3 +1110,15 @@ class WhatCannotBeUndoneWaits(unittest.TestCase):
             self.assertFalse(one(self.s, self.act, {'url': 'https://social.example/signup', 'pw': True}, Brain(None), said='Sign me up')['hold'])
         with verdict({**post, 'irreversible': False}):
             self.assertFalse(one(self.s, self.act, {'url': 'https://social.example/search'}, Brain(None), said='')['hold'], 'what can be undone runs')
+
+
+def test_a_browser_that_could_not_start_is_said_at_the_agents_step_with_why():
+    """The agent's first `agent-browser open` launches the browser (on_demand); a launch that failed was only logged, and the open ran on
+    against a Chrome that was never there - the step spun on agent-browser's own attach and failed in its words, never why."""
+    why = 'Chrome closed as soon as it started (exit code 3)'
+    with mock.patch.object(browserview, 'began'), mock.patch.object(gate, 'check', return_value={}), \
+            mock.patch.object(browserview, 'on_demand', side_effect=lambda sid, cmd: browserview.FAILED.__setitem__(sid, why) or False):
+        said = gate.judge(MemoryStore(), 1, 'nostart', 'agent-browser open https://whois.example/')
+    assert said.startswith(gate.NOT_RUN_SAID) and why in said
+    with mock.patch.object(browserview, 'began'), mock.patch.object(gate, 'check', return_value={}), mock.patch.object(browserview, 'on_demand', return_value=True):
+        assert gate.judge(MemoryStore(), 1, 'nostart', 'agent-browser open https://whois.example/') == ''    # ...a start that came up says nothing

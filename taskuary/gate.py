@@ -105,8 +105,11 @@ def judge(store, tid: int, sid: str, cmd: str, cwd: str = '', brain=None) -> str
     waits. The browser comes up here, at the agent's first navigate, never before it has an address (browserview.on_demand)."""
     from . import agentdesktop, browsergate, browserview
     if not browsergate.names(cmd, agentdesktop.EXE):
-        try: browserview.began(sid); browserview.on_demand(sid, cmd)
+        # ...and A START THAT FAILED IS SAID AT THE STEP, with why: run on, the open waited out agent-browser's own attach to a Chrome
+        # that was never there, and failed in its words, not why
+        try: browserview.began(sid); browserview.FAILED.pop(str(sid), None); browserview.on_demand(sid, cmd)
         except Exception as e: logger.warning(f'the browser for {sid} did not start on its first page - {e}')
+        if (why := browserview.FAILED.get(str(sid))): return f'{NOT_RUN_SAID}: the browser did not start - {why}. Run it again to try once more.'
     out = check(store, tid, sid, cmd, cwd, run=True, brain=brain)
     return (reason(out) or HELD_SAID) if out else ''
 

@@ -94,6 +94,35 @@ class OnePress(unittest.TestCase):
         self.assertEqual(r.status_code, 200, r.text)
         self.assertEqual(json.loads(server.store.get_review(r.json()['review'])['DraftText'])['image'], 'gas-prices.png')
 
+    def test_a_picture_the_agent_saved_anywhere_it_may_read_rides_on_the_card_as_its_copy_in_the_folder(self):
+        """His live app, 2026-11-25: a Codex chat's picture was drawn by its own image tool into ~/.codex/generated_images/<thread> and copied
+        to its work folder - and a post card took only the task's folder. Where the agent saved a picture never decides whether it rides:
+        one in its work folder (by name or full path) or in its own CLI's pictures is copied into the task's folder and carried; one the read
+        gate keeps from this task is refused, and nothing is copied."""
+        import os
+        from pathlib import Path
+        from taskuary import agenttools
+        work = outputs.work_folder(self.tid); (work / 'gate.png').write_bytes(PNG + b'work')
+        server.store.save_session(self.tid, 'codex', '', 'thread-7f3a', 'k')                      # the chat's kept Codex conversation
+        drawn = Path(os.environ['CODEX_HOME']) / 'generated_images' / 'thread-7f3a'; drawn.mkdir(parents=True, exist_ok=True)
+        (drawn / 'exec-1.png').write_bytes(PNG + b'codex')
+        for named, kept in (('gate.png', b'work'), (str(work / 'gate.png'), b'work'), (str(drawn / 'exec-1.png'), b'codex')):
+            r = self.propose(text='Hi', image=named)
+            self.assertEqual(r.status_code, 200, r.text)
+            image = json.loads(server.store.get_review(r.json()['review'])['DraftText'])['image']
+            self.assertEqual((outputs.folder(self.tid) / image).read_bytes(), PNG + kept, named)
+        # ...an email's attachment takes the same road
+        (f,) = agenttools.attached(server.store, self.tid, [str(drawn / 'exec-1.png')])
+        self.assertEqual(f['name'], 'exec-1.png')
+        # ...and a picture in a folder this task may not read - another CLI thread's, his own Documents - is no card's, and copied nowhere
+        other = Path(os.environ['CODEX_HOME']) / 'generated_images' / 'thread-other'; other.mkdir(parents=True, exist_ok=True)
+        docs = Path(os.environ['USERPROFILE']) / 'Documents'; docs.mkdir(parents=True, exist_ok=True)
+        for p in (other / 'x.png', docs / 'y.png'):
+            p.write_bytes(PNG)
+            r = self.propose(text='Hi', image=str(p))
+            self.assertFalse((outputs.folder(self.tid) / p.name).exists(), p)
+            self.assertIn('no picture this task may read', r.text, p)
+
     def test_a_home_named_by_its_short_form_still_carries_the_picture(self):
         """A home given as C:/Users/ABCDEF~1 (an 8.3 short name, as %TEMP% often is) resolves to the long name, and one side of the
         comparison was never resolved: every picture post crashed. The short form is real where the disk makes one, else stood in for by
@@ -130,7 +159,7 @@ class OnePress(unittest.TestCase):
     def test_a_network_that_takes_no_picture_from_here_carries_it_on_its_card_all_the_same(self):
         # the owner, 2026-11-20: every post card carries its picture - one Taskuary uploads none to is shown to save and add by hand
         self.assertEqual(proposals.picture_why(self.tid, {'type': 'bluesky_post', 'image': 'gas-prices.png'}), '')
-        self.assertIn('not a file', proposals.picture_why(self.tid, {'type': 'bluesky_post', 'image': 'nowhere.png'}))
+        self.assertIn('no picture this task may read', proposals.picture_why(self.tid, {'type': 'bluesky_post', 'image': 'nowhere.png'}))
 
 
 

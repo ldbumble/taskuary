@@ -140,10 +140,14 @@ def fetched(p: str, cwd: str = '', sids=()) -> bool:
 
 
 def _sids(store, tid) -> list:
-    "The ids of the CLI sessions this task's agents ran (their transcripts): the threads whose own downloads are its work."
+    """The ids of the CLI sessions this task's agents ran (their transcripts) and its chat's kept conversation (session_resume - his live app,
+    2026-11-25: a chat on Codex keeps no transcript, so the picture its own image tool drew for the task was nobody's work): the threads
+    whose own downloads are its work."""
     if store is None or not str(tid or '').isdigit(): return []
-    try: return [r['Sid'] for r in store._rows('SELECT DISTINCT Sid FROM transcript WHERE TaskId=?', (int(tid),)) if r.get('Sid')]
-    except Exception: return []
+    try: kept = (store.saved_session(int(tid)) or {}).get('NativeId')
+    except Exception: kept = None
+    try: return [*(r['Sid'] for r in store._rows('SELECT DISTINCT Sid FROM transcript WHERE TaskId=?', (int(tid),)) if r.get('Sid')), *([kept] if kept else [])]
+    except Exception: return [kept] if kept else []
 
 
 def _open() -> list:

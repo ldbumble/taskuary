@@ -213,7 +213,7 @@ def picture_why(tid, p: dict) -> str:
     # ...EVERY POST CARD CARRIES ITS PICTURE (the owner, 2026-11-20): one Taskuary cannot upload to that network (MEDIA) is shown on the card to
     # save and add by hand, never refused - the card says so (ActionCard)
     f = outputs.named(int(tid), p['image']) if tid else None
-    if not f: return f"{p['image']} is not a file in your task folder - save the picture there first"
+    if not f: return f"{p['image']} is no picture this task may read - name the one you made by its full path"
     if f.suffix.lower() not in linkedin.IMAGE_TYPES: return f'{f.name} is not a PNG, JPG or GIF picture'
     return ''
 
@@ -585,14 +585,14 @@ def queue(store, task_id: int, p: dict, actor='agent', refused: list | None = No
         from .github import issue_check, issue_labels
         if why := issue_check(p): ok = False
         elif p.get('labels'): p = {**p, 'labels': ', '.join(issue_labels(p['labels']))}
-    # ...a picture on a post is one in the task's own folder, named - never a path the agent wrote (execute resolves it again)
+    # ...a picture on a post is one in the task's own folder, kept by its name there - taken in from wherever its agent may read it
+    # (outputs.take), never a path the agent wrote (execute resolves the name again)
     if ok and p.get('action') == 'run_tool':
+        from . import outputs
         p = {k: v for k, v in p.items() if k != 'image_path'}
         if p.get('type') in POSTS: p = {**p, 'network': POSTS[p['type']]}       # ...its card says where in his words ("LinkedIn"), never "linkedin post"
+        if p.get('image') and task_id and (f := outputs.take(store, int(task_id), p['image'])): p = {**p, 'image': outputs.rel(int(task_id), f)}
         if why := picture_why(task_id, p): ok = False
-        elif p.get('image'):                     # ...kept as its name in the folder: an agent names it by its full path as often as not
-            from . import outputs
-            p = {**p, 'image': outputs.rel(int(task_id), outputs.named(int(task_id), p['image']))}
     # ...and what the agent left unnamed on a card's choices comes from the connection's own defaults (Connections), so the card shows them
     if ok and p.get('action') == 'run_tool':
         from . import connectorcatalog as cat

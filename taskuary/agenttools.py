@@ -1032,16 +1032,16 @@ def replaced(store, doors, tid: int, was: list, out, old, why: str):
 # OF THIS TASK, checked here, at the server's door (server._agent_files) and again at the Send that carries it (verdicts._deliver_review)
 _AID = re.compile(r'^\s*(?:attachment\s*)?#?(\d+)\s*$', re.I)
 def attached(store, tid: int, names) -> list:
-    """The files a propose tool names to attach: one in the task's own folder by name (outputs.named), its bytes - or one that came on
+    """The files a propose tool names to attach: one in the task's own folder, or anywhere it may read, copied there (outputs.take), its bytes - or one that came on
     this task's own mail by its attachment id (mail_file), by that id. Anything else is a ValueError."""
     import base64
     from . import outputs
     out = []
     for raw in ([names] if isinstance(names, (str, int)) else names or []):
-        p = outputs.named(tid, str(raw))
+        p = outputs.take(store, tid, str(raw))
         if not p and (m := _AID.match(str(raw))): out.append({'name': mail_file(store, tid, m[1])[0], 'attachment': int(m[1])}); continue
-        if not p: raise ValueError(f'{raw} is not a file in your task folder ({outputs.folder(tid)}) - nothing was saved. Save the file '
-                                   'there first, or name one that is, or a file on this task\'s mail by its attachment id, and call it again')
+        if not p: raise ValueError(f'{raw} is no file this task may read - nothing was saved. Name a file you made by its full path, '
+                                   'or a file on this task\'s mail by its attachment id, and call it again')
         out.append({'name': p.name, 'data': base64.b64encode(p.read_bytes()).decode()})
     return out
 

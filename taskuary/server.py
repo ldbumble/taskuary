@@ -6681,8 +6681,8 @@ def agent_sign_form(body: AgentSignBody, request: Request):
         if agenttools.unvouched(store, tid, {'id': store.get_attachment(int(body.attachment))['MessageId']}): raise HTTPException(403, agenttools.UNVOUCHED)
         pdf = p.read_bytes()
     elif body.file:
-        p = outputs.named(tid, body.file)
-        if not p: raise HTTPException(404, f'{body.file} is not a file in this task\'s folder ({outputs.folder(tid)})')
+        p = outputs.take(store, tid, body.file)
+        if not p: raise HTTPException(404, f'{body.file} is no file this task may read')
         name, pdf = p.name, p.read_bytes()
     elif body.data:
         try: name, pdf = body.name or 'form.pdf', base64.b64decode(body.data, validate=True)

@@ -70,14 +70,36 @@ def take_in(tid: int, paths) -> list:
             if not p.is_file(): continue
             if p.parent == folder(tid).resolve(): out.append(str(p)); continue
             if not p.is_relative_to(root): continue
-            d = folder(tid); d.mkdir(parents=True, exist_ok=True)
-            stem, ext = Path(_STAMPED.sub('', p.name) or p.name).stem, p.suffix
-            q = next(d / f'{stem}{f"-{i}" if i else ""}{ext}' for i in range(1000) if not (d / f'{stem}{f"-{i}" if i else ""}{ext}').exists()
-                     or (d / f'{stem}{f"-{i}" if i else ""}{ext}').read_bytes() == p.read_bytes())
-            if not q.exists(): shutil.copyfile(p, q)
-            out.append(str(q))
+            out.append(str(_copy_in(tid, p)))
         except (OSError, ValueError, StopIteration): continue
     return list(dict.fromkeys(out))
+
+
+def _copy_in(tid: int, p: Path) -> Path:
+    "`p` copied into task `tid`'s folder under its own name (an upload's stamp off) - the same bytes there already are that copy, never a second"
+    d = folder(tid); d.mkdir(parents=True, exist_ok=True)
+    stem, ext = Path(_STAMPED.sub('', p.name) or p.name).stem, p.suffix
+    q = next(d / f'{stem}{f"-{i}" if i else ""}{ext}' for i in range(1000) if not (d / f'{stem}{f"-{i}" if i else ""}{ext}').exists()
+             or (d / f'{stem}{f"-{i}" if i else ""}{ext}').read_bytes() == p.read_bytes())
+    if not q.exists(): shutil.copyfile(p, q)
+    return q
+
+
+# A FILE ON A CARD IS TAKEN FROM WHEREVER ITS AGENT MAY READ (his live app, 2026-11-25: a Codex agent's picture sat in its work folder and in
+# Codex's own generated_images, and a post card takes only the task's folder - where an agent saved a file decided whether it rode on the card).
+# One road for every card that carries a file: the task's folder as before; else any file the read gate lets this task read (readgate.judge -
+# never Taskuary's own data or a sign-in place), a bare name read against its work folder - copied into the task's folder, and that copy carried
+def take(store, tid: int, raw):
+    "The file `raw` names for a card on task `tid`, in its folder - copied there from where the agent may read it - or None."
+    if f := named(tid, raw): return f
+    from . import readgate
+    raw = str(raw or '').strip().strip('"\'')
+    try:
+        q = Path(raw).expanduser()
+        p = (q if q.is_absolute() else work_folder(int(tid)) / q).resolve()
+        if not raw or not p.is_file() or any(readgate.judge(store, tid, [str(p)])): return None
+        return _copy_in(int(tid), p)
+    except (OSError, ValueError, StopIteration): return None
 
 
 def take_in_text(tid: int, text: str) -> str:

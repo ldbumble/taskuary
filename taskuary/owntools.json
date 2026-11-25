@@ -1,6 +1,7 @@
 {
  "_": "TASKUARY'S OWN TOOLS BY NAME (agenttools.TOOLS, pinned to it by tests/test_agent_toolbox.py): the page (website/src/agentSteps.js ownTool) reads a step under a bare name - the general agent's calls carry no server - as one of these, and only these answer with a Taskuary refusal and its agent's next-step line.",
  "tools": [
+  "add_to_task",
   "answer_invite",
   "ask_owner",
   "ask_stronger",

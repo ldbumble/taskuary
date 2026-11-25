@@ -128,3 +128,46 @@ class ToolTests(unittest.TestCase):
         doors = {'note_peers': lambda tid, to, text: seen.update(tid=tid, to=to, text=text) or {'sent': 1}}
         agenttools.call(None, 4, 'note_peers', {'to': 'TQ-0005', 'text': 'hi'}, doors)
         self.assertEqual(seen, {'tid': 4, 'to': 'TQ-0005', 'text': 'hi'})
+
+    def test_add_to_task_is_note_peers_to_one_task_with_its_files(self):
+        seen = {}
+        doors = {'note_peers': lambda tid, to, text, files=(), wake=False: seen.update(tid=tid, to=to, text=text, files=files, wake=wake) or {'sent': 1}}
+        agenttools.call(None, 4, 'add_to_task', {'task': 'TQ-0008', 'note': 'the signed quote', 'files': ['quote.pdf']}, doors)
+        self.assertEqual(seen, {'tid': 4, 'to': 'TQ-0008', 'text': 'the signed quote', 'files': ['quote.pdf'], 'wake': True})
+        m, path = agenttools.TOOLS['add_to_task'][3]
+        self.assertEqual(guard.classify(m, path)[0], 'agent')
+        self.assertNotIn('add_to_task', agenttools.STRANGER_TOOLS + agenttools.CODING_TOOLS)
+
+
+class AddToTask(unittest.TestCase):
+    """The owner, 2026-11-25: "put this on TQ-0008" - the agent of one task adds a note and a file to another task he named; it shows in that
+    task's chat as from this task's agent, and that task's agent, at rest, hears it."""
+    def setUp(self):
+        from taskuary import outputs
+        self.s = MemoryStore(); fx = Factory(self.s)
+        self.a, self.b = fx.task(title='Vendor quotes', kind='general'), fx.task(title='Renewal with Payworth', kind='general')
+        (d := outputs.folder(self.a)).mkdir(parents=True, exist_ok=True)
+        (d / 'quote.pdf').write_bytes(b'%PDF-1.4 quote')
+        self.p = mock.patch('taskuary.origin.of_task', return_value=('owner', '')); self.p.start()
+
+    def tearDown(self): self.p.stop()
+
+    def test_the_note_and_its_file_land_on_the_task_he_named_and_wake_its_agent(self):
+        from taskuary import outputs
+        with mock.patch('taskuary.general.to_agent', return_value='woke') as to:
+            out = peers.send(self.s, self.a, task_ref(self.b), 'Payworth sent the signed quote', ['quote.pdf'], wake=True)
+        self.assertEqual(out['to'], [task_ref(self.b)]); self.assertIn('woken', out['says'])
+        copy = outputs.folder(self.b) / 'quote.pdf'
+        self.assertEqual(copy.read_bytes(), b'%PDF-1.4 quote')
+        (_s, tid, said), = [c.args for c in to.call_args_list]
+        self.assertEqual(tid, self.b); self.assertIn('Payworth sent the signed quote', said); self.assertIn(str(copy), said)
+        self.assertEqual(self.s.peer_notes(self.b), [], 'heard once - never again at its next turn')
+        [row] = self.s._rows("SELECT * FROM chatlog WHERE TaskId=? AND Kind='arrival'", (self.b,))
+        self.assertIn(f'From the agent of {task_ref(self.a)}', row['Body']); self.assertIn('Payworth sent the signed quote', row['Body'])
+
+    def test_a_strangers_task_and_a_file_it_may_not_read_add_nothing(self):
+        with mock.patch('taskuary.origin.of_task', side_effect=lambda s, t: ('stranger' if t == self.b else 'owner', '')):
+            with self.assertRaises(PermissionError): peers.send(self.s, self.a, task_ref(self.b), 'x', wake=True)
+        with self.assertRaises(ValueError): peers.send(self.s, self.a, task_ref(self.b), 'x', ['nowhere.pdf'], wake=True)
+        with self.assertRaises(ValueError): peers.send(self.s, self.a, 'all', 'x', wake=True)
+        self.assertEqual(self.s.peer_notes(self.b), [])

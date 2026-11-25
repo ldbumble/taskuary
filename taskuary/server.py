@@ -6397,7 +6397,7 @@ def agent_ask_stronger(body: AgentAskStrongerBody, request: Request):
     try: return askstronger.ask(store, body.task_id, body.question, body.context)
     except ValueError as e: raise HTTPException(422, str(e))
 
-class AgentNoteBody(BaseModel): task_id: int; to: str; text: str
+class AgentNoteBody(BaseModel): task_id: int; to: str; text: str; files: list[str] = []; wake: bool = False
 
 @app.post('/api/agent/note-peers')
 def agent_note_peers(body: AgentNoteBody, request: Request):
@@ -6406,7 +6406,7 @@ def agent_note_peers(body: AgentNoteBody, request: Request):
     from . import peers
     _own_task_only(request, body.task_id)
     if not store.get_task(body.task_id): raise HTTPException(404, 'no such task')
-    try: return peers.send(store, body.task_id, body.to, body.text)
+    try: return peers.send(store, body.task_id, body.to, body.text, body.files, body.wake)
     except PermissionError as e: raise HTTPException(403, str(e))
     except ValueError as e: raise HTTPException(422, str(e))
 
@@ -6740,7 +6740,7 @@ async def mcp_rpc(request: Request, task: int = 0):
              'answer_invite': lambda tid, a: agent_answer_invite(AgentInviteBody(**{**a, 'task_id': tid}), request),
              'meeting': lambda tid, a: agent_meeting(AgentMeetingBody(**{**a, 'task_id': tid}), request),
              'share': lambda tid, a: agent_share(AgentShareBody(**{**a, 'task_id': tid}), request),
-             'note_peers': lambda tid, to, text: agent_note_peers(AgentNoteBody(task_id=tid, to=to, text=text), request),
+             'note_peers': lambda tid, to, text, files=(), wake=False: agent_note_peers(AgentNoteBody(task_id=tid, to=to, text=text, files=list(files), wake=wake), request),
              'note_lead': lambda tid, text, refs: agent_note_lead(AgentLeadBody(task_id=tid, text=text, refs=refs), request),
              'propose_land': lambda tid, how, why, deploy='': agent_propose_land(AgentLandBody(task_id=tid, how=how, why=why, deploy=deploy), request),
              'use_repo': lambda tid, target, why: agent_use_repo(AgentUseRepoBody(task_id=tid, path_or_name=target, why=why), request)}

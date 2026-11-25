@@ -51,3 +51,5 @@ export const nameAndRest = (title, name) => {
   const i = t.lastIndexOf(" — ");
   return i > 0 ? [t.slice(0, i), t.slice(i)] : [t, ""];
 };
+// WHEN A REPORT LAST RAN IS ITS LAST RUN (walk 20: "never ran" on its row beside its own "last run · 1m ago" - Run now leaves no poll stamp)
+export const lastRanAt = (source, lastRuns) => lastRuns?.[source?.SourceId]?.at || source?.LastPolledAt || null;

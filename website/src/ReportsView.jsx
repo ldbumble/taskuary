@@ -33,6 +33,7 @@ import WorkflowEditor, { SchedulePicker, scheduleOf, withSchedule } from "./Work
 import RunSteps from "./RunSteps.jsx";
 import AdvisorRuns from "./AdvisorRuns.jsx";
 import { TYPE_LABELS, useScheduleWords } from "./reportWords.js";
+import { lastRanAt } from "./reportRows.js";
 import { asSteps, runWords } from "./workflowFlow.js";
 import { onDraftHanded, takeDraft } from "./draftHandoff.js";
 import { label as btnLabel } from "./buttons.js";
@@ -534,7 +535,7 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
               <Typography sx={{ color: INK, fontWeight: 600, fontSize: 13.5 }} noWrap>{c.title || s.Address}</Typography>
               <Typography variant="caption" sx={{ color: FAINT }}>
                 {asSteps(c) && c.flow.length ? plural(c.flow.length, "step")
-                  : (c.sources || []).length > 1 ? `${c.sources.length} sources` : (TYPE_LABELS[c.type] || c.type || "rest")} · {sched || "no schedule"}{s.LastPolledAt ? ` · ran ${timeAgo(s.LastPolledAt)}` : " · never ran"}
+                  : (c.sources || []).length > 1 ? `${c.sources.length} sources` : (TYPE_LABELS[c.type] || c.type || "rest")} · {sched || "no schedule"}{lastRanAt(s, lastRuns) ? ` · ran ${timeAgo(lastRanAt(s, lastRuns))}` : " · never ran"}
               </Typography>
               {unscheduled && <Typography variant="caption" sx={{ color: ALERT_INK, display: "block" }}>
                 No schedule — it only runs when you press Run now. Give it one in step 3.</Typography>}

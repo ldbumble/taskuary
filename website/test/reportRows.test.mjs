@@ -53,3 +53,11 @@ test("a report's rows say their chart, their columns' decimals and one line of w
   assert.deepEqual([reportShape(tasks).val, reportShape(tasks).chart], [null, null]);
   assert.equal(reportShape([{ task_id: 2, ref: "TQ-0002", days_open: 9 }, { task_id: 1, ref: "TQ-0001", days_open: 3 }]).val, "days_open");
 });
+
+// walk 20: the End-of-day brief read "daily at 18:00 · never ran" beside its own "last run · 1m ago" - Run now leaves no poll stamp
+test("a report's row says it ran when its last run did, whatever road ran it", async () => {
+  const { lastRanAt } = await import("../src/reportRows.js");
+  assert.equal(lastRanAt({ SourceId: 7, LastPolledAt: null }, { 7: { at: "2026-11-25 03:12:00" } }), "2026-11-25 03:12:00");
+  assert.equal(lastRanAt({ SourceId: 7, LastPolledAt: "2026-11-24 18:00:00" }, {}), "2026-11-24 18:00:00");
+  assert.equal(lastRanAt({ SourceId: 7 }, {}), null);
+});

@@ -52,7 +52,8 @@ a = Analysis(['taskuary/desktop.py'],
                     # answer how Taskuary itself works (TQ-1251: "Taskuary doesnt know about itself")
                     ('docs/site/*.md', 'docs/site'), *datas],
              binaries=bins,
-             hiddenimports=['taskuary.server', 'webview.platforms.edgechromium', 'webview.platforms.winforms',
+             hiddenimports=['taskuary.server', 'taskuary.gate', 'taskuary.cli',   # ...the modules an agent's launchers run (desktop.as_module)
+                            'webview.platforms.edgechromium', 'webview.platforms.winforms',
                             'websockets', 'uvicorn.protocols.websockets.websockets_impl', 'pyte', *hidden],
              excludes=['tkinter', 'matplotlib', 'PIL'])
 pyz = PYZ(a.pure)

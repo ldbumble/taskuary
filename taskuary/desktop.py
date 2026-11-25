@@ -7,6 +7,43 @@ exe with `pyinstaller taskuary.spec` (see the spec at the repo root).
 """
 import http.client, io, os, socket, sys, threading, time, urllib.parse, webbrowser
 from pathlib import Path
+
+# A LAUNCHER'S RUN IS NEVER A START OF THE APP (another user's computer, 2026-11-25: three times in an hour the app went silent a second
+# after an agent's command). The launchers put on an agent's PATH - the browser's gate (gate.folder) and the `taskuary` command
+# (terminal.own_command) - run `<this interpreter> -m <module>`, and in the packaged app the interpreter is Taskuary.exe, whose script
+# is this one: each agent-browser command started the desktop app - its log, its sweep of old unpack folders, and the start that found
+# one running and asked it to bring its window forward - and never ran the command. It runs the module, as an interpreter would, and
+# nothing else of the app: only the launchers' own modules
+RUNS = ('taskuary.gate', 'taskuary.cli')
+def as_module(argv: list):
+    "`-m <module> args...` as the interpreter runs it: its exit code - None for any other start, which is the app's."
+    if len(argv) < 2 or argv[0] != '-m': return None
+    if argv[1] not in RUNS: print(f'Taskuary runs only {", ".join(RUNS)} with -m, not {argv[1]}', file=sys.stderr); return 2
+    try:
+        import pyi_splash                                  # the packaged app's splash, up before any of this ran: never for a command
+        pyi_splash.close()
+    except Exception: pass
+    _inherit_std()
+    import runpy
+    sys.argv = [argv[1], *argv[2:]]
+    try: runpy.run_module(argv[1], run_name='__main__', alter_sys=True)
+    except SystemExit as e: return e.code if isinstance(e.code, int) else 0 if e.code is None else 1
+    return 0
+
+
+def _inherit_std():
+    "A windowed exe has no sys.stdout: the streams its caller handed it are taken up, so what the command says reaches the agent's shell."
+    if os.name != 'nt' or all(getattr(sys, n) is not None for n in ('stdin', 'stdout', 'stderr')): return
+    import ctypes, msvcrt
+    k = ctypes.WinDLL('kernel32'); k.GetStdHandle.restype = ctypes.c_void_p
+    for n, h, mode in (('stdin', -10, 'r'), ('stdout', -11, 'w'), ('stderr', -12, 'w')):
+        if getattr(sys, n) is not None or not (oh := k.GetStdHandle(h)) or oh == ctypes.c_void_p(-1).value: continue
+        try: setattr(sys, n, open(msvcrt.open_osfhandle(oh, os.O_RDONLY if mode == 'r' else 0), mode, encoding='utf-8', errors='replace',
+                                  closefd=False, buffering=1 if mode == 'w' else -1))
+        except OSError: pass
+
+
+if __name__ == '__main__' and (_rc := as_module(sys.argv[1:])) is not None: sys.exit(_rc)
 # Every import serving() needs is HERE. It runs on a thread while uvicorn imports taskuary.server
 # on another, and an import on both sides at once deadlocks on the import lock - which is how the
 # app came to start and then never open its port at all (2026-09-09).

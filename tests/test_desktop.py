@@ -189,3 +189,22 @@ def test_the_window_file_has_no_relative_import_since_the_exe_runs_it_as_main():
     import ast, pathlib
     tree = ast.parse(pathlib.Path(__file__).parents[1].joinpath('taskuary', 'desktop.py').read_text(encoding='utf-8'))
     assert [n.lineno for n in ast.walk(tree) if isinstance(n, ast.ImportFrom) and n.level] == []
+
+
+def test_an_agents_launcher_run_by_the_app_runs_its_command_and_never_starts_the_app(capsys):
+    """Another user's packaged app went silent a second after each agent-browser command (2026-11-25): the launchers on an agent's PATH run
+    `<interpreter> -m taskuary.gate ...` and `-m taskuary.cli ...`, and in the packaged app the interpreter is Taskuary.exe, whose script is
+    desktop.py - each command started the app (its log, its start-up) and found the running one and asked it to bring its window forward.
+    Run as the exe runs it, the command runs and nothing of the app starts: no log set up, no probe of the running one, no /api/window."""
+    import http.client, pathlib, runpy, sys
+    from unittest import mock
+    script = str(pathlib.Path(desktop.__file__).resolve())
+    class Started(Exception): pass
+    def run(*argv):
+        with mock.patch.object(sys, 'argv', [script, *argv]), mock.patch('taskuary.logs.setup', side_effect=Started('the app started')),                 mock.patch.object(http.client, 'HTTPConnection', side_effect=Started('the running app was asked')) as asked:
+            try: runpy.run_path(script, run_name='__main__')
+            except SystemExit as e: return e.code, asked.call_count
+        return None, asked.call_count
+    assert run('-m', 'taskuary.cli', '--version') == (0, 0)
+    assert capsys.readouterr().out.startswith('taskuary ')
+    assert run('-m', 'http.server') == (2, 0)            # ...and nothing but the launchers' own modules

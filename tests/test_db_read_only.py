@@ -32,7 +32,7 @@ def test_mysqls_executable_comment_is_read_as_the_sql_it_runs():
 def test_a_read_is_the_databases_own_word_duckdb_reaches_no_file_and_mysql_reads_in_a_read_only_transaction():
     """Round 4: `SELECT * FROM read_csv('C:/...')` read any file on this computer through a DuckDB card - a text check cannot know every table
     function. DuckDB is opened with no reach outside its own file; MySQL, like Postgres, runs the read in a read-only transaction."""
-    import sqlalchemy
+    sqlalchemy = pytest.importorskip('sqlalchemy')
     made, ran = [], []
     class Cx:
         def __enter__(self): return self

@@ -245,13 +245,13 @@ class ResultAndReviewTests(NoHook):
 
 class UnsupportedSendTests(NoHook):
     """PW-237: the always-draft rule - a channel that cannot carry the reply hides Send, it does not hide the answer."""
-    def test_a_channel_that_cannot_send_still_gets_its_reply_and_says_why_send_is_hidden(self):
+    def test_a_github_reply_is_raised_for_his_send(self):
+        # ...GitHub replies go on his Send since 2026-11-25 (his press is the yes; no switch gates them)
         s = MemoryStore(); tid, mid = task_with(s, 'github')
         with mock.patch('taskuary.responder.write_draft', return_value='Fixed.') as wd, mock.patch.object(outbound, 'reply_to_message') as send:
             out = wrapup.finish(s, tid, REP, None, 'coding')
         wd.assert_not_called(); send.assert_not_called()                                 # the reply owed is raised, its agent's to write
-        self.assertEqual((out['drafting'], out['message_id'], out['can_send']), (True, mid, False))
-        self.assertIn('GitHub', out['send_block'])
+        self.assertEqual((out['drafting'], out['message_id'], out['can_send']), (True, mid, True))
         rv = s.list_reviews('pending')[0]
         self.assertEqual(rv['MessageId'], mid); self.assertEqual(s.get_task(tid)['Status'], 'waiting')
 

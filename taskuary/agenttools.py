@@ -136,10 +136,10 @@ TOOLS = {
     # WHAT WAS A PROTOCOL TAUGHT IN PROSE IS A TOOL (the owner, 2026-11-23: "everything else the agent can do is a tool"): how a turn ends, the
     # one question only the owner can answer, and the company's playbooks - each said by its own description, never in every prompt
     'end_turn': ('own', "Call once as your turn ends: where the task stands, shown on its page. name: the task in 3-6 words. about: 2-3 "
-                        "sentences - which conversation, who asked, for whom. did: the result first (path, link, figure), then what you did. "
+                        "sentences: who asked, for whom. did: the result first, then what you did. "
                         "on_you: steps only the owner can take that no card or question carries, each with why. nothing_left: goal met and "
-                        "checked. answer_is_result: your words are what was asked. after_press: send (his press wakes you for your next step) "
-                        "or handoff. retry: another try may work. corrections: [{kind: "
+                        "checked. answer_is_result: your words are what was asked. after_press: send only if a step of yours "
+                        "follows his press (his Send alone is none), or handoff. retry: another try may work. corrections: [{kind: "
                         "redraft|ask, review: draft id|null, said: his words}].",
                  _S({'name': _STR, 'about': _STR, 'did': _STR, 'on_you': {'type': 'array', 'items': _STR}, 'nothing_left': {'type': 'boolean'},
                      'answer_is_result': {'type': 'boolean'}, 'after_press': {'type': 'string', 'enum': ['send', 'handoff']},

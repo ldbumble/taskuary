@@ -339,25 +339,27 @@ def test_a_step_handed_to_him_on_a_page_shows_his_step_and_his_done_wakes_the_ag
     assert browserview.handing(w.s, w.tid) is None
 
 
-def test_the_agents_browser_is_answered_not_taken_to_a_connected_services_site(w):
-    """His live task: LinkedIn connected, and the agent drove its browser to linkedin.com - LinkedIn's sign-in page. For a service whose card
-    is connected the browser tool answers with that fact and opens nothing; a service not connected is still reached."""
-    for cmd in ('agent-browser open https://www.linkedin.com/feed/', 'agent-browser tab new linkedin.com/login'):
-        no = (browsergate.check(w.s, w.tid, 'run1', cmd).get('hookSpecificOutput') or {})
-        assert no.get('permissionDecision') == 'deny' and 'LinkedIn is connected' in no['permissionDecisionReason'], (cmd, no)
-    assert browsergate.check(w.s, w.tid, 'run1', 'agent-browser open https://vendor.example/pricing') == {}
-    li = w.s.get_connector_by_type('linkedin'); w.s.save_connector({'ConnectorId': li['ConnectorId'], 'Active': 0, 'Secret': ''}, 'owner')
-    if not __import__('taskuary').outbound.connect_fix(w.s, 'linkedin'): pytest.skip('this store keeps a secret an empty save does not clear')
-    assert browsergate.check(w.s, w.tid, 'run1', 'agent-browser open https://www.linkedin.com/feed/') == {}
+def test_the_agent_may_open_and_read_a_connected_services_site_and_posting_there_goes_through_its_card(w):
+    """The owner, 2026-11-25: "we are creating posts here not reading them. If the create fails or if I ask the agent to see if it's already
+    posted it, or if it can read my posts, then it should read it." With LinkedIn connected its site opens and reads like any other; a press
+    there the gate would hold - the post itself - is answered with its card, never held as a second card on the page."""
+    for cmd in ('agent-browser open https://www.linkedin.com/feed/', 'agent-browser tab new linkedin.com/in/me/recent-activity'):
+        assert browsergate.check(w.s, w.tid, 'run1', cmd) == {}, cmd
+    feed = {'url': 'https://www.linkedin.com/feed/', 'open': True, 'elements': '- textbox "Text editor" [ref=e2]\n- button "Post" [ref=e5]', 'name': 'LinkedIn'}
+    posts = lambda store, todo, *a, **k: [{'hold': True, 'what': 'click the "Post" button on LinkedIn', 'why': 'it speaks for you', 'kind': 'speaks'} for _ in todo]
+    with mock.patch.object(browsergate, 'page', return_value=feed), mock.patch.object(browsergate, 'judge', side_effect=posts):
+        no = (browsergate.check(w.s, w.tid, 'run1', 'agent-browser click @e5').get('hookSpecificOutput') or {})
+    assert no.get('permissionDecision') == 'deny' and 'LinkedIn is connected' in no['permissionDecisionReason'], no
+    assert not w.s._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action' AND Status='pending'", (w.tid,)), 'no second card on the page'
 
 
-def test_a_connected_services_page_is_never_handed_to_him(w):
-    "Sign-in pages of a connected service are never put to him: its sign-in is the connection's own."
+def test_a_connected_services_sign_in_is_his_step_where_reading_needs_it(w):
+    "To read his own posts the agent may need the site signed in: that page is his step like any other - only the act is its card's."
     page = {'open': True, 'url': 'https://www.linkedin.com/uas/login'}
     with mock.patch.object(browserview, 'state', return_value=page), mock.patch.object(browsergate, 'page_error', return_value=''):
-        said, _ = w.agent('hand_over', what='sign in to LinkedIn', site='linkedin.com')
-    assert json.loads(said)['ok'] is False and 'LinkedIn is connected' in json.loads(said)['why']
-    assert browserview.handing(w.s, w.tid) is None
+        said, _ = w.agent('hand_over', what='sign in to LinkedIn so I can read your recent posts')
+    assert json.loads(said)['ok'], said
+    assert browserview.handing(w.s, w.tid)
 
 
 def test_where_a_network_is_not_connected_its_card_comes_first_and_its_sign_in_at_his_press(w):

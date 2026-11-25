@@ -189,7 +189,12 @@ def stranger_env(env: dict, task_id, srv: dict = None) -> dict:
     out = {k: v for k, v in (env or {}).items() if k not in (guard.AGENT_ENV, guard.TASK_ENV)}
     tok = guard.stranger_token(srv or config.load()['server'], task_id) if str(task_id or '').isdigit() else ''
     if tok: out[guard.AGENT_ENV] = tok
+    # ...AND THE CLI'S OWN SIGN-IN NEVER REACHES ITS TOOLS (red team round 4: `printenv` in a stranger's session printed the provider key it
+    # inherits so the CLI can start - STRICT_ENV): Claude Code takes its credentials out of every shell, hook and MCP server it starts. Codex
+    # leaves a *KEY*/*TOKEN* name out of its shells by default (shell_environment_policy)
+    out[SCRUB] = '1'
     return out
+SCRUB = 'CLAUDE_CODE_SUBPROCESS_ENV_SCRUB'
 
 
 def terminal_host_env(argv, sid: str = '') -> dict:

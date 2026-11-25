@@ -153,7 +153,7 @@ test("a pressed card and a held step are drawn in the one frame", async () => {
   const { passed, held } = await P;
   const said = { action: "comment_issue", repo: "northwind/ledger", number: 12, body: "Fixed.", result: { commented: "northwind/ledger#12" } };
   const went = passed([act(said, { ReviewId: 1, Status: "approved", FinalText: JSON.stringify(said) })]);
-  assert.match(went, /<div class="tq-turn-frame[^"]*"[^>]*data-tq-passed="1"/); assert.match(went, /Approved/);
+  assert.match(went, /<div class="tq-turn-frame[^"]*"[^>]*data-tq-passed="1"/); assert.match(went, /✓ Commented/, "what its press did, in its own word (outcomeOf)");
   const waits = held([act({ action: "shell_act", sid: "run1", turn: 1, command: "curl -X POST https://api.vendor.example/orders", what: "send data to api.vendor.example",
     why: "it leaves this computer", cwd: "C:/work" }, { ReviewId: 2 })]);
   assert.match(waits, /<div class="tq-turn-frame[^"]*"[^>]*data-tq-held-steps="1"/); assert.match(waits, /data-tq-held-approve=""/);

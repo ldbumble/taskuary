@@ -9,7 +9,7 @@ import api from "./api";
 import ReplyFiles from "./ReplyFiles.jsx";
 import { holdInView } from "./inView.js";
 import { filesPromised, filesShort } from "./replyFiles.js";
-import { proposalFrom, proposalPresentation, receiptOf, resultOf, reviewStatusLabel, reviewText } from "./reviewProposal.js";
+import { outcomeOf, proposalFrom, proposalPresentation, receiptOf, resultOf, reviewStatusLabel, reviewText } from "./reviewProposal.js";
 import { actionFor, cardOf, changed, faceOf, fieldsOf, lengthOf, pressable as actPressable, stateOf, textKey, valuesOf, viaBrowserSaid, wordsOf } from "./actionCard.js";
 import { asLive, MovedPast } from "./PassedCard.jsx";
 import { FileDialog } from "./PublishedPages.jsx";
@@ -640,7 +640,7 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
   const over = !wentNow && !done && r.Status !== "pending";
   const shut = wentNow || !!done || over;                 // its words stand as they went: nothing to edit
   const after = sp ? { mark: "sent", label: sentMark(sp), line: `${sentSaid(sp)}${sp.at ? ` · ${fmtDateTime(sp.at)}` : ""}` }
-    : done ? { mark: "approved", label: `✓ ${upFirst(done.said)}`, line: done.what || "", ...(done.url ? { link: { href: done.url, text: done.url.replace(/^https?:\/\//, "").slice(0, 80) } } : {}) }
+    : done ? ((o) => ({ mark: o.mark, label: o.label, line: o.line, ...(o.url ? { link: { href: o.url, text: o.url.replace(/^https?:\/\//, "").slice(0, 80) } } : {}) }))(outcomeOf(r))
     : over ? { mark: r.Status === "rejected" ? "dismissed" : "discard", label: `✗ ${upFirst(reviewStatusLabel(r.Status))}` } : null;
   // ...TO, THEN CC AND BCC AS A MAIL CLIENT DRAWS THEM (the owner, 2026-11-13: "make it look normal"): "Cc" and "Bcc" at the To line's end,
   // each opening its own row under it, labelled as To is - never a CC label beside its own "Add CC"

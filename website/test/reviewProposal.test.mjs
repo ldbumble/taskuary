@@ -17,6 +17,21 @@ test("a pull request card says its title, its repository and its branch", async 
   assert.deepEqual([bare.destination, bare.rows.length, bare.bare], ["", 1, true]);
 });
 
+// The card gallery, 2026-11-25: a settings card he approved read "✓ Approved" and nothing else; a tracker move "✓ Approved · Where NW-12 · jira
+// move" - while a declared act's card said "✓ Commented". Every pressed card reads one function for what its press did
+test("a pressed card says what its press did in the act's own word, from one function", async () => {
+  const { outcomeOf } = await import("../src/reviewProposal.js");
+  const pressed = (p, result, Reason = "") => ({ Kind: "action", Status: "approved", Reason, DraftText: JSON.stringify(p), FinalText: JSON.stringify({ ...p, result }) });
+  const set = outcomeOf(pressed({ action: "settings", changes: [{ name: "poll_minutes", value: 10, was: "15" }, { name: "email_signature", value: "Alex Doyle\nNorthwind - Finance", was: null }] },
+    { changed: ["poll_minutes = 10"] }));
+  assert.deepEqual(set, { mark: "approved", label: "✓ Changed", url: "", line: "Poll minutes: 15 → 10 · Email signature: Alex Doyle Northwind - Finance" });
+  const move = outcomeOf(pressed({ action: "run_tool", type: "jira_move", item: "NW-12", status: "Done" }, { headline: "1 row", url: "https://jira.example/alex/1" },
+    "the agent proposes to move NW-12 in Jira to Done"));
+  assert.deepEqual(move, { mark: "approved", label: "✓ Done", url: "https://jira.example/alex/1", line: "" }, "its title says where - never the raw tool's name under it");
+  assert.equal(outcomeOf({ Kind: "action", Status: "rejected", DraftText: JSON.stringify({ action: "settings", changes: [] }) }).label, "✗ Dismissed");
+  assert.deepEqual(outcomeOf({ Kind: "action", Status: "superseded", ActError: "Jira refused the move.", DraftText: "{}" }), { mark: "failed", label: "✗ Failed", line: "Jira refused the move.", url: "" });
+});
+
 import { heldActsLine, proposalPresentation, reviewStatusLabel, resultOf, reviewText } from "../src/reviewProposal.js";
 
 const playbook = {

@@ -110,6 +110,24 @@ class RecallTests(unittest.TestCase):
         with fake_embed.reads(PORTAL, calls): context.build(s, tid); context.for_prompt(s, tid)
         self.assertEqual(len(calls), 1)                                               # ...made once per task, every turn reuses it
 
+    def test_a_task_closed_between_two_picks_adds_a_line_at_the_end_so_the_next_pick_reads_the_rest_from_the_cache(self):
+        """The pick's lists are the head of its prompt (textsim.pick). Newest first, the close between two tasks' picks put a line at the
+        top of the closed tasks and renumbered every one under it - each pick a new prompt (8% of a week's 'rank' tokens cached)."""
+        s, tid, old = _known_world()
+        for i in range(30): _closed(s, f'Vendor statement {i} reconciled', 'ray@northwind.example', 'Matched.', days=30 - i)
+        calls = []
+        with fake_embed.reads(PORTAL, calls): context.recall(s, tid)
+        new = _closed(s, 'Trainly seats added for the new starter', 'gail@northwind.example', 'Added.', days=0)
+        context._recalled.clear()
+        with fake_embed.reads(PORTAL, calls): context.recall(s, tid)
+        a, b = (c.rpartition('\n\nTHE TASK:\n')[0] for c in calls)
+        common = next((i for i, (x, y) in enumerate(zip(a, b)) if x != y), len(a))
+        self.assertGreaterEqual(common, 0.95 * len(a))
+        self.assertTrue(b.endswith('Trainly seats added for the new starter'), 'the new close is the last line')
+        with mock.patch.object(context, 'DONE_POOL', 10): pool = context.past_pool(s)
+        self.assertEqual([d['TaskId'] for d in pool][-2:], [pool[-2]['TaskId'], new])
+        self.assertEqual(len(pool), 10, 'the newest ten, from the day the tenth closed')
+
     def test_the_general_agent_reads_it_too_and_never_the_best_voted_notes_on_other_things(self):
         from taskuary import general
         s, tid, old = _known_world()

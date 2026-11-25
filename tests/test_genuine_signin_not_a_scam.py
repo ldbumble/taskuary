@@ -15,6 +15,8 @@ import pytest
 from taskuary import config, ingest, senders, triage
 from taskuary.store import MemoryStore
 
+pytestmark = pytest.mark.mail_auth        # these read the mail verdict each message carries, a missing one as missing (conftest)
+
 BANNERS = ("You don't often get email from no-reply-x1@mail.aiprovider.example. Learn why this is important\n"
            'This email was sent from outside of Northwind. Do not click links unless you know the content is safe.\n\n')
 BODY = BANNERS + 'Sign in to AI Provider\nYou requested a sign-in link. Click below to sign in. This link expires in 10 minutes.'

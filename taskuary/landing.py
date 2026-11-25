@@ -826,7 +826,8 @@ def _push(store, tid, s, how, actor) -> dict:
     ci._save_push(store, tid, {'repo': s['repo'], 'branch': base, 'from': base, 'sha': tip, 'commits': p['ahead'], 'state': 'pushed',
                                'url': f"https://github.com/{s['repo']}/commit/{tip}" if s['repo'] else '', 'checks': None, 'checked_at': None}, actor)
     said_ = f"Pushed {plural(p['ahead'], 'commit')} to origin/{base} ({tip[:7]})" + (f" and deployed it to {p['deploy']}." if went == 'deploy' else '.') + refused
-    out = _landed(store, tid, went, said_, actor, tip, **({'deploy': p['deploy']} if went == 'deploy' else {}))
+    # ...with how many went: once pushed none of its own is left to count, and the card it stays as says what it pushed (landing.js landingTitle)
+    out = _landed(store, tid, went, said_, actor, tip, commits=p['ahead'], **({'deploy': p['deploy']} if went == 'deploy' else {}))
     # ...a deploy refused is handed back; what went wakes it only where it named a step of its own after the press (_went)
     (_hand_back if refused else _went)(store, tid, f"{said_} The owner pressed {HOW[how]} on your proposal." + (
         f" Do what the refusal needs, then deploy {tip[:7]} to {p['deploy']} with your own `git push` - it is held for the owner's press - or say in a line why you cannot."

@@ -476,3 +476,25 @@ def test_files_handed_over_stand_in_the_order_they_were_handed():
         agenttools.show_files(s, tid, [str(out / names[0])])                       # ...shown again, it keeps its place
         assert outputs.handed(tid) == names
     finally: shutil.rmtree(out, ignore_errors=True); shutil.rmtree(outputs.turns_folder(tid), ignore_errors=True)
+
+
+def test_each_show_call_is_a_hand_over_of_its_own():
+    """The card gallery, 2026-11-25: a chart and its workbook, each shown by a call of its own in one turn, stood as one artifact "2 files".
+    One call is one hand-over: the files of a call share its number, the next call's have the next, and the page draws each as its own."""
+    import shutil
+    from taskuary import outputs
+    s = MemoryStore(); tid = s.create_task({'Title': 'A chart and its numbers', 'Kind': 'general'}, 'owner')
+    out = outputs.folder(tid)
+    for d in (out, outputs.turns_folder(tid)): shutil.rmtree(d, ignore_errors=True)
+    out.mkdir(parents=True, exist_ok=True)
+    for n in ('chart.md', 'numbers.md', 'notes.md'): (out / n).write_text(f'# {n}\n', encoding='utf-8')
+    try:
+        agenttools.show_files(s, tid, [str(out / 'chart.md')])
+        agenttools.show_files(s, tid, [str(out / 'numbers.md'), str(out / 'notes.md')])
+        assert outputs.calls(tid) == [['chart.md'], ['numbers.md', 'notes.md']]
+        by = outputs.call_of(tid)
+        assert by['chart.md'] != by['numbers.md'] and by['numbers.md'] == by['notes.md']
+        # ...and a list kept before calls were is one hand-over, as it was drawn
+        (outputs.turns_folder(tid) / 'handed.json').write_text('["chart.md", "numbers.md"]', encoding='utf-8')
+        assert outputs.calls(tid) == [['chart.md', 'numbers.md']] and outputs.handed(tid) == ['chart.md', 'numbers.md']
+    finally: shutil.rmtree(out, ignore_errors=True); shutil.rmtree(outputs.turns_folder(tid), ignore_errors=True)

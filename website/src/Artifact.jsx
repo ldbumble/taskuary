@@ -37,7 +37,7 @@ export default function Artifact({ as = "div", label = null, press = null, wide 
 // `press`: [{id, label, tone: p | s | q | x, run, disabled, title, spin, hidden, attrs}] - p the press named by what it does, s the others, q a
 // quiet one (Dismiss), x a no in red. `after`: {mark, label, line, link: {href, text}} - what the press did. `items`: a bulk card's rows.
 export function ReviewCard({ id = "", kind = "", state = "waiting", label: title = null, face = "", fields = [], files = null, before = null, press = [],
-  lit = "", quiet = false, nowrap = false, tail = null, after = null, failed = "", under = null, items = null, barRef = null, onView = null, children, ...rest }) {
+  lit = "", nowrap = false, tail = null, after = null, failed = "", under = null, items = null, barRef = null, onView = null, children, ...rest }) {
   const live = fields.some((f) => f.editable), choices = fields.filter((f) => f.type === "choice");
   const anyLit = press.some((v) => v.id === lit && !v.hidden);
   return (
@@ -58,7 +58,7 @@ export function ReviewCard({ id = "", kind = "", state = "waiting", label: title
       {children}
       {after ? <After a={after} /> : (press.length > 0 || tail) && <Box ref={barRef} data-tq-moves="" data-tq-press-row="" {...(live ? {} : { "data-tq-read-only": "" })}
         sx={{ display: "flex", alignItems: "center", gap: 0.75, mt: 1, flexWrap: nowrap ? "nowrap" : "wrap", ...(nowrap ? { "& > button": { whiteSpace: "nowrap", flexShrink: 0 } } : {}) }}>
-        {press.map((v) => <Press key={v.id} v={v} lit={lit} anyLit={anyLit} quiet={quiet} />)}
+        {press.map((v) => <Press key={v.id} v={v} lit={lit} anyLit={anyLit} />)}
         {tail}
       </Box>}
       {failed && <Typography role="alert" data-tq-review-failed="" sx={{ pt: 0.75, fontSize: 12.5, color: ALERT_INK, overflowWrap: "anywhere" }}><MdLine text={failed} /></Typography>}
@@ -69,7 +69,7 @@ export function ReviewCard({ id = "", kind = "", state = "waiting", label: title
 
 // A RUN OF CARDS IS ONE CARD WITH TABS (the owner, 2026-11-25: "a little carousel thing on top that scrolls from one to the other"): a tab a
 // card, named by where it goes, the one shown marked and a settled one ticked; under them each card as it is (`children`, one per tab, in its
-// order), side by side, the shown one slid into view. A press on a card is that card's alone; once it is settled the line slides on to the next
+// order), side by side, the shown one slid into view. One he said no to, or whose press failed, is crossed, never ticked (`no`). A press on a card is that card's alone; once it is settled the line slides on to the next
 // that waits, after a beat that lets its outcome be read. The height follows the card shown, so nothing under it jumps
 const SLIDE = 280, SETTLE = 650, GAP = 24;
 const useLayout = typeof window === "undefined" ? useEffect : useLayoutEffect;
@@ -99,11 +99,11 @@ export function CardLine({ tabs, children }) {
         <Box sx={{ display: "flex", alignItems: "center", minWidth: 0, overflow: "hidden" }}>
           {tabs.map((t, i) => <React.Fragment key={t.key}>{i > 0 && <Box component="span" aria-hidden sx={{ color: FAINT, fontSize: 12, px: 0.25 }}>·</Box>}
             <Box component="button" type="button" role="tab" aria-selected={i === at} tabIndex={i === at ? 0 : -1} data-tq-line-tab={t.key}
-              data-tq-tab-state={t.done ? "done" : "waiting"} onClick={() => go(i)} title={t.name}
+              data-tq-tab-state={t.no ? "not-done" : t.done ? "done" : "waiting"} onClick={() => go(i)} title={t.no ? `${t.name} - not done` : t.name}
               sx={{ ...FOCUS_RING, font: "inherit", fontSize: 12.5, lineHeight: 1.6, cursor: "pointer", bgcolor: "transparent", border: 0, px: 0.5, py: 0.125, minWidth: 0,
                 maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", borderBottom: "2px solid", borderRadius: 0,
                 borderColor: i === at ? ACCENT : "transparent", fontWeight: i === at ? 700 : 500, color: i === at ? INK : t.done ? FAINT : DIM,
-                transition: "color 160ms ease, border-color 160ms ease", "&:hover": { color: INK } }}>{t.done ? `✓ ${t.name}` : t.name}</Box></React.Fragment>)}
+                transition: "color 160ms ease, border-color 160ms ease", "&:hover": { color: INK } }}>{t.no ? `✗ ${t.name}` : t.done ? `✓ ${t.name}` : t.name}</Box></React.Fragment>)}
         </Box>
         <Typography data-tq-card-queue="" component="span" sx={{ ml: "auto", pl: 1, flexShrink: 0, fontSize: 11.5, color: FAINT }}>{`${at + 1} of ${tabs.length}`}</Typography>
       </Box>
@@ -118,10 +118,11 @@ export function CardLine({ tabs, children }) {
   );
 }
 
-// ...one button of the press row: the lit one filled (the Advisor's pick, where it stands), else the press named by what it does - unless the
-// task's bar carries the pick (`quiet`); a folded one stays mounted, unseen, its width the one the fold measured
-function Press({ v, lit, anyLit, quiet }) {
-  const filled = v.id === lit || (!anyLit && !quiet && v.tone === "p");
+// ...one button of the press row: the lit one filled (the Advisor's pick, where it stands), else the press named by what it does - ON EVERY
+// CARD, AT EVERY WIDTH (the card gallery, 2026-11-25: Comment and Approve stood outlined where the task's bar "carried the pick" - a bar that
+// draws no card's press, and on a phone is not there); a folded one stays mounted, unseen, its width the one the fold measured
+function Press({ v, lit, anyLit }) {
+  const filled = v.id === lit || (!anyLit && v.tone === "p");
   return <Button size="small" disableElevation variant={filled ? "contained" : v.tone === "q" || v.tone === "x" ? "text" : "outlined"} color={v.tone === "x" ? "error" : "primary"}
     data-tq-press={String(v.id).split(":").pop()} disabled={!!v.disabled} onClick={v.run} title={v.title || undefined} style={v.hidden ? { display: "none" } : undefined}
     startIcon={v.spin ? <CircularProgress size={11} data-tq-sending="" color="inherit" /> : null} {...(v.attrs || {})}>{v.label}</Button>;
@@ -141,6 +142,11 @@ const After = ({ a }) => (
 // editable (the owner, 2026-11-23: "all cards should be that way if there is text")
 const INLINE = { font: "inherit", fontSize: "inherit", fontWeight: "inherit", lineHeight: "inherit", color: "inherit", border: 0, background: "transparent", padding: 0,
   outline: 0, borderRadius: "4px", minWidth: "4ch", "&:focus-visible": { outline: `2px solid ${ACCENT}`, outlineOffset: 1 } };
+// ...AND A LINE OF HIS TO CHANGE WRAPS (the card gallery, 2026-11-25: at phone width a Reddit title and a subject showed only their start - an
+// <input> cannot wrap): one row that grows with its words, still one line - Enter and a pasted line break are kept out of it
+const OneLine = ({ f, sx, ...rest }) => (
+  <Box component="textarea" rows={1} aria-label={f.label} value={String(f.value ?? "")} onChange={(e) => f.onChange(e.target.value.replace(/\s*\n\s*/g, " "))}
+    onKeyDown={(e) => { if (e.key === "Enter") e.preventDefault(); }} sx={{ ...INLINE, display: "block", resize: "none", overflow: "hidden", fieldSizing: "content", ...sx }} {...rest} />);
 const Row = ({ f, children }) => (
   <Box data-tq-field-row={f.key} sx={{ display: "flex", alignItems: "baseline", gap: 0.8, mb: 0.75, minWidth: 0, flexWrap: "wrap" }}>
     {f.label && <Typography sx={{ ...LABEL, flexShrink: 0 }}>{f.label}</Typography>}{children}</Box>
@@ -189,12 +195,10 @@ function Field({ f, onView }) {
   if (f.type === "fold") return <Typography {...pressable(f.onToggle)} data-tq-show-command="" aria-expanded={!!f.open} sx={{ ...FOCUS_RING, display: "inline-block", fontSize: 11.5,
     color: "var(--tq-link, #55697a)", cursor: "pointer", fontWeight: 600, mb: f.open ? 0.5 : 0, "&:hover": { textDecoration: "underline" } }}>{f.label}</Typography>;
   if (f.type === "heading") return <Typography data-tq-act-heading={f.key} component="div" sx={{ fontSize: 14, fontWeight: 700, lineHeight: 1.5, color: INK, mb: 0.5, overflowWrap: "anywhere" }}>
-    {f.editable ? <Box component="input" data-tq-act-line={f.key} aria-label={f.label} placeholder={f.label} value={String(f.value ?? "")} onChange={(e) => f.onChange(e.target.value)}
-      sx={{ ...INLINE, display: "block", width: "100%" }} /> : f.value}</Typography>;
+    {f.editable ? <OneLine f={f} data-tq-act-line={f.key} placeholder={f.label} sx={{ width: "100%" }} /> : f.value}</Typography>;
   if (f.type === "line") return <Row f={f}>{f.editable
-    ? <Box component="input" data-tq-act-line={f.key} {...(f.key === "subject" ? { "data-tq-subject": "" } : {})} aria-label={f.label} placeholder={f.placeholder || (f.optional ? "none" : f.label)}
-        value={String(f.value ?? "")} onChange={(e) => f.onChange(e.target.value)}
-        sx={{ ...INLINE, ...FOCUS_RING, flex: 1, minWidth: 0, borderBottom: "1px dashed var(--tq-border, #d9e0d6)", fontSize: 13, fontWeight: 600, color: INK, py: 0.25,
+    ? <OneLine f={f} data-tq-act-line={f.key} {...(f.key === "subject" ? { "data-tq-subject": "" } : {})} placeholder={f.placeholder || (f.optional ? "none" : f.label)}
+        sx={{ ...FOCUS_RING, flex: 1, minWidth: 0, borderBottom: "1px dashed var(--tq-border, #d9e0d6)", fontSize: 13, fontWeight: 600, color: INK, py: 0.25,
           "&:focus": { borderBottomColor: "var(--tq-border-strong, #6f8a6e)" } }} />
     : <Typography variant="body2" sx={{ color: INK, fontWeight: 600, minWidth: 0, overflowWrap: "anywhere" }}>{f.value}</Typography>}</Row>;
   // ...the words: his to change in the one box every card writes in (DraftField: it grows, it marks a blank, a spinner while the AI writes) -

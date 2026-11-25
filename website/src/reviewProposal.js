@@ -62,6 +62,10 @@ export const toolBody = (p) => { const k = bodyKey(p); return k ? String(p[k]) :
 const changeOf = (title, p) => ({ title, lead: title, leadWhy: p?.why ? upFirst(String(p.why).replace(/[.\s]*$/, ".")) : "", destination: "",
   texts: Array.isArray(p?.texts) ? p.texts : [], rows: Array.isArray(p?.rows) ? p.rows : [], bare: Array.isArray(p?.texts) });
 const onOff = (v) => (v === true || v === "1" ? "on" : v === false || v === "0" ? "off" : String(v ?? ""));
+// ...each switch a settings card changes, as it was and as it will be: its rows while it waits, and what it says it changed once pressed
+const settingRows = (p) => (Array.isArray(p?.changes) ? p.changes : []).filter((c) => c && c.name)
+  .map((c) => ({ label: `${c.connector ? `${c.connector}: ` : ""}${upFirst(String(c.name).replaceAll("_", " "))}`, was: c.was == null ? "" : onOff(c.was), now: onOff(c.value) }));
+const rowSaid = (x) => (x.was ? `${x.was} → ${x.now}` : x.now);
 export const reviewText = (review) => {
   const proposal = proposalFrom(review);
   if (CLOSEOUT[proposal?.action]) return proposal.text || "";      // never the JSON envelope: an empty box sends nothing extra
@@ -271,6 +275,22 @@ export const proposalPresentation = (review) => {
     busyLabel: "Commenting…",
     rejectLabel: "Dismiss",
   };
+  // A PULL REQUEST SAYS WHAT IT OPENS (the card gallery, 2026-11-25: its body alone, under "On this task"): its title, the repository and the
+  // branch into its base, as the server read them for the press (ci.pr_plan) - its body the box, read-only as it goes
+  if (proposal?.action === "open_pr" && proposal.pr) return {
+    kind: "action",
+    title: "Open a draft pull request",
+    context: review.Reason || "Proposed · nothing is opened until you approve",
+    ...leadOf(review),
+    destinationLabel: "In",
+    destination: proposal.pr.repo || "",
+    rows: [{ label: "Title", now: proposal.pr.title }, ...(proposal.pr.branch ? [{ label: "Branch", now: `${proposal.pr.branch} → ${proposal.pr.base}` }] : [])],
+    approveLabel: APPROVE,
+    busyLabel: "opening…",
+    rejectLabel: "Dismiss",
+    readOnly: true,
+    bare: !String(proposal.body || "").trim(),
+  };
   // A PART OF THE TASK THAT IS ANOTHER MATTER (proposals.break_out, the owner 2026-11-10): the new task's title leads, what moves is read-only -
   // Approve runs the task page's own split with exactly those messages and to-dos
   if (proposal?.action === "break_out") return {
@@ -346,8 +366,7 @@ export const proposalPresentation = (review) => {
     leadWhy: proposal.why ? upFirst(String(proposal.why)) : "",
     destination: "",
     // ...each switch as it is and as it will be, read off - a fact, never words to type over (proposals.change_card: `was`)
-    rows: (Array.isArray(proposal.changes) ? proposal.changes : []).filter((c) => c && c.name)
-      .map((c) => ({ label: `${c.connector ? `${c.connector}: ` : ""}${upFirst(String(c.name).replaceAll("_", " "))}`, was: c.was == null ? "" : onOff(c.was), now: onOff(c.value) })),
+    rows: settingRows(proposal),
     approveLabel: APPROVE,
     busyLabel: "saving…",
     rejectLabel: "Dismiss",
@@ -398,8 +417,22 @@ export const resultOf = (review) => {
   const r = p.result || {}, url = r.url || (/https?:\/\/[^\s'"<>()\]]+/.exec(String(r.said || "")) || [""])[0].replace(/[.,)]+$/, "");
   // ...a yes the page refused (browsergate._perform's `refused`) is over, and did nothing: it never reads "ran on the page"
   if (r.refused) return { said: "Approved · not done", what: String(r.refused), url: "", command: String(p.command || "") };
-  const what = String(p.about || p.what || r.performed || r.commented || r.closed || r.merged || (r.task || r.source ? r.said : "") || "").trim();
+  // ...a settings card by the switches it changed, each to what ("Poll minutes: 15 → 10")
+  const set = p.action === "settings" ? settingRows(p).map((x) => `${x.label}: ${rowSaid(x)}`.replace(/\s+/g, " ")).join(" · ") : "";
+  const what = String(p.about || p.what || set || r.performed || r.commented || r.closed || r.merged || (r.task || r.source ? r.said : "") || "").trim();
   return { said: `Approved · ${VERB[p.action] || "done"}`, what, url, command: String(p.command || "") };
+};
+// WHAT A PRESS DID, ON EVERY CARD THAT TOOK ONE, FROM ONE FUNCTION (the card gallery, 2026-11-25: a settings card he approved read "✓ Approved"
+// and nothing of what changed; a tracker move "✓ Approved · Where NW-12 · jira move" - while a declared act's card read "✓ Commented"): its mark
+// says what it did in the act's own word ("✓ Changed", "✓ Opened the pull request"), its line what and where, its link. A card he dismissed, or
+// whose press failed, says that. {mark, label, line, url} - PassedCard and ReviewDecision both draw this
+export const outcomeOf = (review) => {
+  const done = resultOf(review), p = done && proposalPresentation(review), title = p?.lead || p?.title || "";
+  const same = (a, b) => String(a || "").trim().toLowerCase() === String(b || "").trim().toLowerCase();
+  // ...what it did where that is more than its title; else where, for a step held on a page or in a folder - a tool run's sentence names its place
+  if (done) return { mark: "approved", label: `✓ ${upFirst(done.said.replace(/^Approved · (?!not done)/, ""))}`, url: done.url,
+    line: (!same(done.what, title) && done.what) || (p?.destination && proposalFrom(review)?.action !== "run_tool" ? `${p.destinationLabel} ${p.destination}` : "") };
+  return failedAsk(review) ? { mark: "failed", label: "✗ Failed", line: String(review.ActError), url: "" } : { mark: "dismissed", label: "✗ Dismissed", line: "Nothing was done.", url: "" };
 };
 
 // ONE CARD FOR A TURN'S HELD STEPS (the owner, 2026-11-09: "this should be one action button and one card. make it smaller and more

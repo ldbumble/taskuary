@@ -65,7 +65,7 @@ test("an approved or dismissed proposal stays in its turn as its pressed card; a
   assert.deepEqual(past.map((g) => [g.key, g.at]), [["rv1", "2026-11-10 09:01:00"], ["rv2", "2026-11-10 09:02:00"]], "each in the turn that raised it");
   const page = read("TaskPage.jsx");
   assert.match(page, /node: g\.held \? <HeldSteps reviews=\{g\.reviews\} onChanged=\{decided\} \/> : <PassedCard reviews=\{g\.reviews\} \/>/);
-  assert.match(read("PassedCard.jsx"), /<PressedButton pressed=\{pressed\} \/>/); assert.match(read("HeldSteps.jsx"), /<PressedButton pressed=\{c\.pressed\} \/>/);
+  assert.match(read("PassedCard.jsx"), /<PressedButton pressed=\{o\.mark\} label=\{o\.label\} \/>/); assert.match(read("HeldSteps.jsx"), /<PressedButton pressed=\{c\.pressed\} \/>/);
 });
 
 

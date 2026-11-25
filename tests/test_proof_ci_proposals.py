@@ -554,6 +554,25 @@ class ProposalTests(unittest.TestCase):
         self.assertIn('DRAFT pull request', rv['Reason'])
         self.assertTrue(any('PROPOSAL REFUSED' in c['Body'] for c in s.list_comments(tid)))
 
+    def test_a_pull_request_card_says_what_it_opens_and_opens_what_it_said(self):
+        """The card gallery, 2026-11-25: a PR card showed the agent's body alone - no title, repository or branch - and the press then opened it
+        under the task's own title and summary, the agent's words dropped. Its card carries what the press reads (ci.pr_plan), and the press
+        opens it with the words the card showed."""
+        from taskuary import github, terminal
+        s = armed(MemoryStore()); tid = s.create_task({'Title': 'Fix the ledger rounding', 'Kind': 'coding', 'Status': 'open', 'Tags': 'repo:northwind/ledger'}, 't')
+        ses = mock.Mock(cwd='C:/work/ledger')
+        with mock.patch.object(terminal, 'session_for', return_value=ses), mock.patch.object(ci, 'branch_for', return_value='fix-rounding'):
+            rid = proposals.collect(s, tid, 'TASKUARY-PROPOSE {"action": "open_pr", "title": "Keep cents in totals", "body": "Rounds to two places."}')[0]['reviewId']
+            pr = json.loads(s.get_review(rid)['DraftText'])['pr']
+            self.assertEqual((pr['repo'], pr['branch'], pr['base']), ('northwind/ledger', 'fix-rounding', 'master'))
+            self.assertTrue(pr['title'].endswith('] Keep cents in totals'), pr['title'])
+            with mock.patch.object(ci, '_conn', return_value={'Secret': 'tok'}), \
+                 mock.patch.object(github, 'open_pr', return_value={'number': 9, 'url': 'u'}) as op:
+                verdicts.decide(s, s.get_review(rid), 'approve')
+        (_tok, repo, head, base, title, body), _ = op.call_args
+        self.assertEqual((repo, head, base, title), ('northwind/ledger', 'fix-rounding', 'master', pr['title']))
+        self.assertIn('Rounds to two places.', body)
+
     def test_approving_runs_it_and_rejecting_does_not(self):
         s = armed(MemoryStore()); tid = s.create_task({'Title': 't', 'Kind': 'coding', 'Status': 'open'}, 't')
         rid = proposals.collect(s, tid, 'TASKUARY-PROPOSE {"action": "open_pr"}')[0]['reviewId']

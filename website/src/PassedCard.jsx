@@ -5,7 +5,7 @@
 // no line saying why
 import React from "react";
 import { Box, Typography } from "@mui/material";
-import { failedAsk, proposalPresentation, heldLead, proposalFrom, resultOf } from "./reviewProposal.js";
+import { outcomeOf, proposalPresentation, heldLead, proposalFrom } from "./reviewProposal.js";
 import Artifact from "./Artifact.jsx";
 import { BORDER, DIM, FAINT, INK } from "./theme.jsx";
 
@@ -40,17 +40,16 @@ export default function PassedCard({ reviews }) {
   // "✓ Approved", and over "Set aside when you moved on"): its lead - what it does, in words - where it has one, and its result once, not the
   // lead a second time
   const p = proposalPresentation(r), title = p?.lead || p?.title || heldLead(proposalFrom(r) || {}).lead;
-  const done = resultOf(r), failed = failedAsk(r), pressed = done ? "approved" : failed ? "failed" : "dismissed";
-  const same = (a, b) => String(a || "").trim().toLowerCase() === String(b || "").trim().toLowerCase();
-  const line = done ? (!same(done.what, title) && done.what) || (p?.destination ? `${p.destinationLabel} ${p.destination}` : "") : failed ? String(r.ActError) : "Nothing was done.";
+  // ...and what its press did, in the act's own word and one line (reviewProposal.outcomeOf - the one every pressed card reads)
+  const o = outcomeOf(r);
   return (
-    <Artifact data-tq-passed={r.ReviewId || ""} data-tq-act-state={pressed} sx={{ px: 1.5, py: 1.25 }}>
+    <Artifact data-tq-passed={r.ReviewId || ""} data-tq-act-state={o.mark} sx={{ px: 1.5, py: 1.25 }}>
       <Typography sx={{ fontSize: 13.5, fontWeight: 700, color: INK, lineHeight: 1.3, overflowWrap: "anywhere" }}>
         {rs.length > 1 ? `${title} - ${rs.length} steps` : title}</Typography>
       <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mt: 0.6, flexWrap: "wrap" }}>
-        <PressedButton pressed={pressed} />
-        {!!(line || done?.url) && <Typography role="status" data-tq-passed-line="" sx={{ fontSize: 12, color: DIM, overflowWrap: "anywhere" }}>{line}
-          {done?.url && <>{line ? " · " : ""}<a href={done.url} target="_blank" rel="noreferrer">{done.url.replace(/^https?:\/\//, "").slice(0, 70)}</a></>}</Typography>}
+        <PressedButton pressed={o.mark} label={o.label} />
+        {!!(o.line || o.url) && <Typography role="status" data-tq-passed-line="" sx={{ fontSize: 12, color: DIM, overflowWrap: "anywhere" }}>{o.line}
+          {o.url && <>{o.line ? " · " : ""}<a href={o.url} target="_blank" rel="noreferrer">{o.url.replace(/^https?:\/\//, "").slice(0, 70)}</a></>}</Typography>}
       </Box>
     </Artifact>
   );

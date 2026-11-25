@@ -9,7 +9,7 @@ import api from "./api";
 import ReplyFiles from "./ReplyFiles.jsx";
 import { holdInView } from "./inView.js";
 import { filesPromised, filesShort } from "./replyFiles.js";
-import { proposalFrom, proposalPresentation, receiptOf, resultOf, reviewStatusLabel, reviewText } from "./reviewProposal.js";
+import { outcomeOf, proposalFrom, proposalPresentation, receiptOf, resultOf, reviewStatusLabel, reviewText } from "./reviewProposal.js";
 import { actionFor, cardOf, changed, faceOf, fieldsOf, lengthOf, pressable as actPressable, stateOf, textKey, valuesOf, viaBrowserSaid, wordsOf } from "./actionCard.js";
 import { asLive, MovedPast } from "./PassedCard.jsx";
 import { FileDialog } from "./PublishedPages.jsx";
@@ -640,7 +640,7 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
   const over = !wentNow && !done && r.Status !== "pending";
   const shut = wentNow || !!done || over;                 // its words stand as they went: nothing to edit
   const after = sp ? { mark: "sent", label: sentMark(sp), line: `${sentSaid(sp)}${sp.at ? ` · ${fmtDateTime(sp.at)}` : ""}` }
-    : done ? { mark: "approved", label: `✓ ${upFirst(done.said)}`, line: done.what || "", ...(done.url ? { link: { href: done.url, text: done.url.replace(/^https?:\/\//, "").slice(0, 80) } } : {}) }
+    : done ? ((o) => ({ mark: o.mark, label: o.label, line: o.line, ...(o.url ? { link: { href: o.url, text: o.url.replace(/^https?:\/\//, "").slice(0, 80) } } : {}) }))(outcomeOf(r))
     : over ? { mark: r.Status === "rejected" ? "dismissed" : "discard", label: `✗ ${upFirst(reviewStatusLabel(r.Status))}` } : null;
   // ...TO, THEN CC AND BCC AS A MAIL CLIENT DRAWS THEM (the owner, 2026-11-13: "make it look normal"): "Cc" and "Bcc" at the To line's end,
   // each opening its own row under it, labelled as To is - never a CC label beside its own "Add CC"
@@ -699,7 +699,7 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
   return (
     <ReviewCard id={r.ReviewId} kind={proposal ? proposal.kind : isCal ? "calendar" : email ? "email" : "reply"} state={sp ? "sent" : done ? "done" : over ? "not-done" : going ? "going" : "waiting"}
       data-tq-card-frame="" {...(done ? { "data-tq-act-result": "" } : {})} {...(sp ? { "data-tq-sent-here": sp.id || "" } : {})}
-      label={proposal ? proposal.lead || proposal.title : kindLabel(r, meta, email)} fields={fields} lit={lit} quiet={toRow} press={presses} after={after}
+      label={proposal ? proposal.lead || proposal.title : kindLabel(r, meta, email)} fields={fields} lit={lit} press={presses} after={after}
       barRef={setMoves} nowrap={paired} {...(paired ? { "data-tq-two-sends": folded ? "folded" : "both" } : {})}
       tail={!shut && <>{foldMore(pairSend)}
         {/* WHY IT IS LIT, BESIDE IT (the owner, 2026-10-28): the Advisor's reason, said where its button is lit */}
@@ -855,7 +855,8 @@ export function ActReview({ row: was, tid, live = true, onChanged, past = false 
       note: img.manual && !gone ? `${row?.network || "This network"} gets the words from here - open the picture to save it, and add it yourself` : "" }] : []),
   ];
   const ok = !busy && actPressable(act, p, text, vals) && !over;
-  const dismiss = { id: "dismiss", label: "Dismiss", tone: "q", disabled: !!busy, run: () => decide("reject"), attrs: { "data-tq-act-dismiss": "" } };
+  // ...his no, as every card draws it (tone x)
+  const dismiss = { id: "dismiss", label: "Dismiss", tone: "x", disabled: !!busy, run: () => decide("reject"), attrs: { "data-tq-act-dismiss": "" } };
   const pressRow = gone || !st.live ? [] : row?.connect ? [
     ...(post ? [{ id: "browser", label: busy === "browser" ? "Handing it over…" : "Post via the browser", tone: "p", spin: busy === "browser", disabled: !ok || !text.trim(), run: viaBrowser,
       attrs: { "data-tq-act-browser": "" } }] : []),

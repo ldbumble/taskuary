@@ -265,10 +265,12 @@ def _runs(store, tid: int, us: list) -> list:
 # A RUN OF CARDS IS ONE CARD WITH TABS (the owner, 2026-11-25: "a little carousel thing on top that scrolls from one to the other"): each tab is
 # the card it was, named by where it goes - the network a post goes to, whom a letter goes to - with whether it is settled and which is in front
 def tabs(store, s: dict) -> list:
-    "Each run of two or more on the line `s` (state): [[{'key', 'rids', 'name', 'done', 'front'}]], oldest first."
+    """Each run of two or more on the line `s` (state): [[{'key', 'rids', 'name', 'done', 'front'}]], oldest first. `no`: settled without
+    going - he said no to it, or its press failed (the card gallery, 2026-11-25: a dropped email's tab was ticked like a sent one)."""
     f = s['units'][0] if s['units'] else None
-    return [[{'key': str(u['rids'][0]), 'rids': u['rids'], 'name': tab(store, u), 'done': u['done'] is not None, 'front': u is f} for u in r]
-            for r in s['runs'] if len(r) > 1]
+    no = lambda u: u['done'] is not None and bool(u['rows']) and not any(r['Status'] in ('approved', 'edited', 'sent') for r in u['rows'])
+    return [[{'key': str(u['rids'][0]), 'rids': u['rids'], 'name': tab(store, u), 'done': u['done'] is not None, 'front': u is f, **({'no': True} if no(u) else {})}
+             for u in r] for r in s['runs'] if len(r) > 1]
 
 
 def tab(store, u: dict) -> str:

@@ -39,7 +39,7 @@ test("an email is the one card: To, Subject and its words editable, its press Se
   const { card } = await P, html = card(reply());
   assert.equal(one(html), 1);
   assert.match(html, /data-tq-review-kind="email"/); assert.match(html, /data-tq-act-state="waiting"/);
-  assert.match(html, /data-tq-to-line=""/); assert.match(html, /data-tq-subject="" [^>]*value="Re: Plans"/);
+  assert.match(html, /data-tq-to-line=""/); assert.match(html, /<textarea[^>]*rows="1"[^>]*data-tq-subject=""[^>]*>Re: Plans<\/textarea>/, "one line that wraps where it is long - never an input cut at its start");
   assert.match(html, /<textarea[^>]*data-tq-draft=""[^>]*>Thanks Erin/);
   assert.ok(press(html).some((w) => /^Send/.test(w)), press(html).join("|"));
 });
@@ -70,6 +70,19 @@ test("a GitHub comment is the same card: where it goes, its words his to change,
   assert.equal(one(html), 1); assert.match(html, /northwind\/ledger#12/);
   assert.match(html, /<textarea(?![^>]*readonly)[^>]*>Fixed in the next build\.<\/textarea>/, "editable");
   assert.equal(press(html)[0], "Comment");
+});
+
+// The card gallery, 2026-11-25: Comment stood outlined on the GitHub comment card, Approve on a proposal at phone width - the card deferred to
+// the task's bar (`toRow`), which draws no card's press. The press named by what it does is the filled one on every card; the rest are not
+test("the primary press is the filled button on every card, with the task's bar or without", async () => {
+  const { card, held } = await P, filled = (html) => [...html.matchAll(/<button[^>]*class="[^"]*MuiButton-contained[^"]*"[^>]*>(?:<span[^>]*>.*?<\/span>)?([^<]*)</g)].map((m) => m[1]);
+  for (const more of [{}, { toRow: true }]) {
+    assert.deepEqual(filled(card(act({ action: "comment_issue", repo: "northwind/ledger", number: 12, body: "Fixed." }), more)), ["Comment"]);
+    assert.deepEqual(filled(card(act({ action: "settings", changes: [{ name: "poll_minutes", value: 10 }] }), more)), ["Approve"]);
+    assert.deepEqual(filled(card(reply(), more)), ["Send"]);
+  }
+  assert.deepEqual(filled(card(act({ action: "run_tool", type: "jira_comment", item: "OPS-4", body: "Done." }))), ["Post comment"]);
+  assert.deepEqual(filled(held([act({ action: "shell_act", sid: "s", command: "git push", about: "Push the fix" })])), ["Approve"]);
 });
 
 test("a Jira comment is the same card, its press Post comment", async () => {
@@ -153,7 +166,7 @@ test("a pressed card and a held step are drawn in the one frame", async () => {
   const { passed, held } = await P;
   const said = { action: "comment_issue", repo: "northwind/ledger", number: 12, body: "Fixed.", result: { commented: "northwind/ledger#12" } };
   const went = passed([act(said, { ReviewId: 1, Status: "approved", FinalText: JSON.stringify(said) })]);
-  assert.match(went, /<div class="tq-turn-frame[^"]*"[^>]*data-tq-passed="1"/); assert.match(went, /Approved/);
+  assert.match(went, /<div class="tq-turn-frame[^"]*"[^>]*data-tq-passed="1"/); assert.match(went, /✓ Commented/, "what its press did, in its own word (outcomeOf)");
   const waits = held([act({ action: "shell_act", sid: "run1", turn: 1, command: "curl -X POST https://api.vendor.example/orders", what: "send data to api.vendor.example",
     why: "it leaves this computer", cwd: "C:/work" }, { ReviewId: 2 })]);
   assert.match(waits, /<div class="tq-turn-frame[^"]*"[^>]*data-tq-held-steps="1"/); assert.match(waits, /data-tq-held-approve=""/);

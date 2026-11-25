@@ -19,7 +19,7 @@ import { holdUnsent } from "./unsent.js";
 import { howToOpen } from "./bugReportOpen.js";
 import { baseName } from "./agentSteps.js";
 import { AgentSteps, PermitCtx } from "./AgentStepRows.jsx";
-import { chatSource, checkBackDue, waitingShown, eventsOf, turnSteps, hasParts, isPastCard, standing, heldAtEnd, AT_END, anchorOf, anchorShift, openAt, OPEN_HOLD, shrinkHeld, SHRINK_HOLD, turnParts, workCount, folds, ranUnder, foldLine, paintable, withMine, waitingChips, workingLine, waitingOn, askTurn, onYouTurn, askedFirst, runsOf, patchSteps, askOn, asksOff } from "./chatStream.js";
+import { chatSource, checkBackDue, waitingShown, eventsOf, turnSteps, hasParts, isPastCard, standing, heldAtEnd, AT_END, anchorOf, anchorShift, endAt, openAt, OPEN_HOLD, shrinkHeld, SHRINK_HOLD, turnParts, workCount, folds, ranUnder, foldLine, paintable, withMine, waitingChips, workingLine, waitingOn, askTurn, onYouTurn, askedFirst, runsOf, patchSteps, askOn, asksOff } from "./chatStream.js";
 import { stepLabel } from "./agentSteps.js";
 export { checkBackDue };
 import { detailFor, ownDetail, useOwnDetail } from "./chatDetail.js";
@@ -681,7 +681,7 @@ function AssistantThread({ task, onAsked, onStop, selectionRef, attachmentsRef, 
       if (keep) { el.style.minHeight = `${keep}px`; clearTimeout(free); free = setTimeout(() => { tall = own(); el.style.minHeight = ""; }, SHRINK_HOLD); }
       else { if (el.style.minHeight) { clearTimeout(free); el.style.minHeight = ""; } tall = h; }
       if (opening.current) { place(); hold(); return; }
-      if (stick.current) v.scrollTop = v.scrollHeight;
+      if (stick.current) v.scrollTop = endAt(v, el);
       else { const d = anchorShift(v, mark); if (Math.abs(d) > 1) v.scrollTop += d; }
       folding = false; hold();
     });
@@ -710,7 +710,8 @@ function AssistantThread({ task, onAsked, onStop, selectionRef, attachmentsRef, 
   }, [!!list]);   // eslint-disable-line react-hooks/exhaustive-deps
   // ...after EVERY draw, not only the list's: a card's own words (the page's node) grow the chat too - and once more when the draw is whole
   // (a microtask: after the rows that measured themselves in this same draw have grown), still before anything is painted
-  React.useLayoutEffect(() => { const pin = () => { const v = viewport.current; if (v && stick.current && !opening.current && v.scrollTop + v.clientHeight < v.scrollHeight) v.scrollTop = v.scrollHeight; };
+  // ...to its end, or where that would carry the top of a reply at rest out of the view, to that top (chatStream.endAt)
+  React.useLayoutEffect(() => { const pin = () => { const v = viewport.current; if (v && stick.current && !opening.current && v.scrollTop + v.clientHeight < v.scrollHeight) v.scrollTop = endAt(v, inner.current); };
     pin(); queueMicrotask(pin); });
   // WORDS ANOTHER DOOR HANDS THIS CHAT (`prompt`: an answer picked on the question's card): his next line, once
   const prompted = useRef(null);

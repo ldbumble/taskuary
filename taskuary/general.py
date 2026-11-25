@@ -969,9 +969,14 @@ def press_lines(store, tid: int) -> list:
     # ...but one asked ON ITS CALL'S ROW is that row's: the row says his answer (chatlog.asked_answered), and a line besides was a second record
     from .chatlog import asked_on_row
     rowed = asked_on_row(store, tid) if perm else set()
+    # ...AND A PRESS ON THE WORK'S CARD IS SAID BY THAT CARD (the owner's rules, part 4; the card gallery, 2026-11-25: "✓ Pushed - Pushed 1 commit
+    # to origin/master" on the card and "You pressed Push on the agent's work - it went through" under it): where the card is drawn it stays
+    # in its turn, pressed, so its press is no line besides. Its agent hears it as before (events.audited)
+    from . import landing
+    carded = {r['Id'] for r in store._rows("SELECT Id FROM audit WHERE EntityType='task' AND EntityId=? AND Action='landed'", (tid,))} if landing.shown(store, tid) else set()
     own = [{'id': f'press-{i}', 'role': 'user', 'press': True, 'content': [{'type': 'text', 'text': f'You {what}.'}], 'createdAt': at,
             **({'perm': {'asked': str(perm[i].get('asked') or ''), 'answer': str(perm[i].get('answer') or '')}} if i in perm else {})}
-           for i, at, what, *x in presses(store, tid) if not x and not (i in perm and str(perm[i].get('call') or '') in rowed)]
+           for i, at, what, *x in presses(store, tid) if not x and i not in carded and not (i in perm and str(perm[i].get('call') or '') in rowed)]
     return sorted(own + agent_set(store, tid), key=lambda m: int(m['id'].split('-')[1]))        # as they happened: one audit chain numbers both
 # ...and WHAT THE AGENT SET FOR THEM BY TOOL is a line at its time too (the agent walk, 2026-11-09: a reminder it set stood nowhere on the page
 # but in its own prose) - the page's alone: its own act is never told back to it

@@ -1,6 +1,37 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+// The card gallery, 2026-11-25: a pull request's card showed its body alone under "On this task" - which title, repository and branch it opens
+// are the server's reading for the press (ci.pr_plan), drawn as the card's own rows
+test("a pull request card says its title, its repository and its branch", async () => {
+  const { proposalPresentation: show, reviewText: words } = await import("../src/reviewProposal.js");
+  const review = { Kind: "action", Reason: "the agent proposes to open a DRAFT pull request for this task - the rounding fix",
+    DraftText: JSON.stringify({ action: "open_pr", title: "Keep cents in totals", body: "Rounds to two places.", why: "the rounding fix",
+      pr: { title: "[TQ-0021] Keep cents in totals", repo: "northwind/ledger", branch: "fix-rounding", base: "master" } }) };
+  const p = show(review);
+  assert.deepEqual([p.destinationLabel, p.destination], ["In", "northwind/ledger"]);
+  assert.deepEqual(p.rows, [{ label: "Title", now: "[TQ-0021] Keep cents in totals" }, { label: "Branch", now: "fix-rounding → master" }]);
+  assert.equal(words(review), "Rounds to two places."); assert.equal(p.bare, false);
+  // ...and with no branch or repository known yet it says its title alone - never a place it does not know
+  const bare = show({ ...review, DraftText: JSON.stringify({ action: "open_pr", pr: { title: "[TQ-0021] Fix the rounding", repo: "", branch: "", base: "master" } }) });
+  assert.deepEqual([bare.destination, bare.rows.length, bare.bare], ["", 1, true]);
+});
+
+// The card gallery, 2026-11-25: a settings card he approved read "✓ Approved" and nothing else; a tracker move "✓ Approved · Where NW-12 · jira
+// move" - while a declared act's card said "✓ Commented". Every pressed card reads one function for what its press did
+test("a pressed card says what its press did in the act's own word, from one function", async () => {
+  const { outcomeOf } = await import("../src/reviewProposal.js");
+  const pressed = (p, result, Reason = "") => ({ Kind: "action", Status: "approved", Reason, DraftText: JSON.stringify(p), FinalText: JSON.stringify({ ...p, result }) });
+  const set = outcomeOf(pressed({ action: "settings", changes: [{ name: "poll_minutes", value: 10, was: "15" }, { name: "email_signature", value: "Alex Doyle\nNorthwind - Finance", was: null }] },
+    { changed: ["poll_minutes = 10"] }));
+  assert.deepEqual(set, { mark: "approved", label: "✓ Changed", url: "", line: "Poll minutes: 15 → 10 · Email signature: Alex Doyle Northwind - Finance" });
+  const move = outcomeOf(pressed({ action: "run_tool", type: "jira_move", item: "NW-12", status: "Done" }, { headline: "1 row", url: "https://jira.example/alex/1" },
+    "the agent proposes to move NW-12 in Jira to Done"));
+  assert.deepEqual(move, { mark: "approved", label: "✓ Done", url: "https://jira.example/alex/1", line: "" }, "its title says where - never the raw tool's name under it");
+  assert.equal(outcomeOf({ Kind: "action", Status: "rejected", DraftText: JSON.stringify({ action: "settings", changes: [] }) }).label, "✗ Dismissed");
+  assert.deepEqual(outcomeOf({ Kind: "action", Status: "superseded", ActError: "Jira refused the move.", DraftText: "{}" }), { mark: "failed", label: "✗ Failed", line: "Jira refused the move.", url: "" });
+});
+
 import { heldActsLine, proposalPresentation, reviewStatusLabel, resultOf, reviewText } from "../src/reviewProposal.js";
 
 const playbook = {

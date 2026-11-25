@@ -83,20 +83,34 @@ def branch_for(store, task_id: int, cwd: str) -> str:
     return BRANCH_SAFE.sub('-', b) if b and b != 'HEAD' else ''
 
 
-def open_for_task(store, task_id: int, actor='owner') -> dict:
-    """Open (or find) the draft PR for this task's branch. Refuses the default branch: a PR
-    from main to main is not a thing, and it is the shape a mis-detected branch takes."""
-    from . import github, terminal as hub_term
+def pr_plan(store, task_id: int, p: dict = None) -> dict:
+    """What this task's pull request will be - {title, repo, branch, base, cwd}, each '' where it is not known yet. One reading for the card
+    that asks for it (proposals.queue: the card gallery, 2026-11-25 - a PR card showed its body alone, "On this task") and the press that opens
+    it (open_for_task). `p`: the agent's proposal - its own `title` for it, else the task's; the checkout it names (`cwd`), where that is one the
+    owner named on this task, else the session's; and its `repo` only where nothing else says which."""
+    import os
+    from . import landing, terminal as hub_term
     from .store import task_ref
-    ses = hub_term.session_for(task_id)
-    cwd = getattr(ses, 'cwd', None)
-    if not cwd: raise RuntimeError('no session on this task to read a branch from')
-    repo, _ = hub_term.guess_repo(store, task_id, {})
-    repo = repo or _cfg(store).get('default_repo')
+    p, t = p or {}, store.get_task(task_id) or {}
+    norm = lambda d: os.path.normcase(os.path.realpath(d))
+    at = landing.top(str(p.get('cwd') or ''))
+    cwd = at if at and norm(at) in map(norm, landing.named(store, task_id)) else getattr(hub_term.session_for(task_id), 'cwd', None) or ''
+    return {'title': f"[{task_ref(task_id)}] {' '.join(str(p.get('title') or '').split()) or t.get('Title') or 'work'}"[:120],
+            'repo': hub_term.guess_repo(store, task_id, {})[0] or _cfg(store).get('default_repo') or (landing._repo(cwd) if cwd else '') or str(p.get('repo') or ''),
+            'branch': branch_for(store, task_id, cwd) if cwd else '', 'base': _cfg(store).get('default_base') or 'master', 'cwd': cwd}
+
+
+def open_for_task(store, task_id: int, actor='owner', p: dict = None) -> dict:
+    """Open (or find) the draft PR for this task's branch. Refuses the default branch: a PR
+    from main to main is not a thing, and it is the shape a mis-detected branch takes.
+    `p`: the proposal its card showed - what was shown is what is opened (pr_plan), the agent's own `body` its words."""
+    from . import github
+    from .store import task_ref
+    plan = pr_plan(store, task_id, p)
+    if not plan['cwd']: raise RuntimeError('no session on this task to read a branch from')
+    repo, branch, base = plan['repo'], plan['branch'], plan['base']
     if not repo: raise RuntimeError('no repository known for this task')
     c = _conn(store, repo)
-    branch = branch_for(store, task_id, cwd)
-    base = _cfg(store).get('default_base') or 'master'
     if not branch or branch == base:
         raise RuntimeError(f"the checkout is on '{branch or 'a detached HEAD'}' - the agent needs its own "
                            'branch before a pull request can be opened')
@@ -104,9 +118,9 @@ def open_for_task(store, task_id: int, actor='owner') -> dict:
     # the issue this task came from closes with the merge - GitHub's own keyword, when both live in one repo
     iss = re.search(r'github\.com/([^/]+/[^/]+)/issues/(\d+)', str(t.get('SourceRef') or ''))
     closes = f"Closes #{iss.group(2)}\n\n" if iss and iss.group(1).lower() == repo.lower() else ''
-    body = (f"Opened by Taskuary for {task_ref(task_id)}.\n\n{closes}{(t.get('Summary') or '')[:1500]}\n\n"
+    body = (f"Opened by Taskuary for {task_ref(task_id)}.\n\n{closes}{(str((p or {}).get('body') or '').strip() or t.get('Summary') or '')[:1500]}\n\n"
             '_Draft: it merges when you approve its merge on the task in Taskuary, or merge it here yourself._')
-    pr = github.open_pr(c['Secret'], repo, branch, base, f"[{task_ref(task_id)}] {t.get('Title') or 'work'}"[:120], body)
+    pr = github.open_pr(c['Secret'], repo, branch, base, plan['title'], body)
     pr['repo'], pr['checks'], pr['checked_at'] = repo, None, None
     _save_pr(store, task_id, pr, actor)
     store.audit('task', task_id, 'pr_opened', actor, detail={'repo': repo, 'number': pr['number']})

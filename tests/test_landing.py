@@ -259,6 +259,9 @@ class LandingTests(unittest.TestCase):
             s = landing.state(self.s, self.tid)
         self.assertEqual((s['landed']['how'], s['commits']), ('push', 0))
         self.assertEqual(s['at'], s['landed']['at']); self.assertTrue(s['at'])
+        # ...and it says what it pushed once, on itself: how many went is kept for its title, and its press is no chat line under it
+        self.assertEqual(s['landed']['commits'], 1)
+        self.assertFalse([m for m in general.press_lines(self.s, self.tid) if 'went through' in m['content'][0]['text']])
 
     def test_a_card_read_again_asks_git_nothing_it_already_said_of_its_commits(self):
         """The owner's live app, 2026-11-19: /landing took 23 s - every poll asked git again for each own commit's files and whether each is on
@@ -555,6 +558,17 @@ class NamedCheckoutTests(unittest.TestCase):
         self.assertTrue(os.path.samefile(cwd, self.cwd)); self.assertTrue(p['command'].startswith('git push origin '))
         self.assertEqual(shellgate.replay(p)[1:], ['-c', p['command']], "the agent's Bash tool's own road")
         self.assertEqual(git(self.remote, 'rev-parse', 'master'), git(self.cwd, 'rev-parse', 'master'))
+
+    def test_a_pull_request_card_reads_its_branch_from_the_checkout_he_named(self):
+        """The card gallery, 2026-11-25: a general agent's pull request from the checkout he named showed its body alone - no branch, no
+        repository. Its card reads them off that checkout (ci.pr_plan); a folder he never named gives it nothing."""
+        from taskuary import ci
+        git(self.cwd, 'checkout', '-q', '-b', 'fix-rounding'); self.fix()
+        plan = ci.pr_plan(self.s, self.tid, {'cwd': self.cwd, 'repo': 'northwind/ledger', 'title': 'Keep cents in totals'})
+        self.assertEqual((plan['branch'], plan['base'], plan['repo']), ('fix-rounding', 'master', 'northwind/ledger'))
+        self.assertTrue(plan['title'].endswith('] Keep cents in totals'))
+        other = tempfile.mkdtemp(); git(other, 'init', '-q', '-b', 'side'); commit(other, 'x.py', 'x\n')
+        self.assertEqual(ci.pr_plan(self.s, self.tid, {'cwd': other})['branch'], '')
 
     def test_propose_push_with_no_folder_takes_the_one_he_named(self):
         self.fix()

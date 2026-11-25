@@ -51,6 +51,14 @@ test("nine files one turn made are one artifact: its label, nine rows, one previ
   assert.match(html, />workbook · 20 KB</);
 });
 
+test("two show calls in one turn are two artifacts; one call's files are one", async () => {
+  const f = (name, call) => ({ ...wb(1), id: `output:${name}`, path: name, name, handed: true, call });
+  const html = (await P).draw([f("chart.png", 0), f("numbers.xlsx", 1), f("notes.xlsx", 1)]);
+  assert.equal(count(html, /class="[^"]*tq-turn-frame/g), 2, "a frame per call");
+  assert.match(html, /data-tq-file-group="2"/); assert.doesNotMatch(html, /data-tq-file-group="3"/);
+  assert.match(html, /data-tq-turn-file="chart.png"/);
+});
+
 test("one file is drawn as before: its own frame, its name row, its preview, no list", async () => {
   const html = (await P).draw([wb(1)]);
   assert.equal(count(html, /class="[^"]*tq-turn-frame/g), 1);

@@ -351,6 +351,8 @@ def state(store, tid: int, full: bool = False) -> dict | None:
     # ...and a passed one keeps its answers: the page draws it as the card it was, its buttons greyed (the owner, 2026-11-18) - a press still
     # needs `ask` (land), so nothing it names can go
     hows = (OWN_HOW if mine else PUSH_HOW[:1 + bool((out['push'] or {}).get('deploy'))]) if out['ask'] or out['passed'] else ()
+    # ...and no Open a PR where its origin is no GitHub repository: a button whose press could only fail (the re-walk on Codex, 2026-11-25)
+    if not out['repo']: hows = tuple(k for k in hows if k != 'pr')
     out['answers'] = [{'how': k, 'label': HOW[k]} for k in hows]
     out['line'] = said(out)
     if full: out['diff'] = (_git(cwd, 'diff', _fork(cwd, base, br, start), br) if mine else _own_diff(cwd, o))[:DIFF_CAP]
@@ -426,6 +428,7 @@ def _repo(cwd) -> str:
     return shellgate.repo_of(cwd)
 
 
+NO_GITHUB = "this checkout's origin is not a GitHub repository"          # ...one sentence for the raise (propose) and the press (_pr)
 def propose(store, tid: int, how: str, why: str = '', actor: str = 'agent', deploy: str = '') -> dict:
     """The agent's own read of how its work should land: the close-out's question shows it marked. It lands nothing. On the shared base
     that is a push - `deploy` names the branch a push to deploys (the card's Push & deploy)."""
@@ -454,6 +457,12 @@ def propose(store, tid: int, how: str, why: str = '', actor: str = 'agent', depl
                                  'ask him in one question for the folder of his checkout this work belongs in'))
     if not s['ask']: raise ValueError(s['line'])
     if how == 'discard' and not s['own']: raise ValueError('discard is only for a branch of your own')
+    # ...AND A PULL REQUEST NO PRESS COULD OPEN IS NEVER RAISED (the re-walk on Codex, 2026-11-25: the checkout's origin pushed to a local folder;
+    # the Open a PR card stood, and his press failed with what was known when it was raised) - the press's own refusal (_pr), said now
+    if how == 'pr' and s['own'] and not s['repo']:
+        from .agenttools import refusal
+        raise ValueError(refusal(NO_GITHUB, "point the checkout's origin at its GitHub repository (git remote set-url origin <url>) and ask again; "
+                                            'where you do not know it, ask him for it in one question'))
     if how not in {a['how'] for a in s['answers']}: raise ValueError(f"how is one of: {', '.join(a['how'] for a in s['answers'])} here - {s['line']}")
     r = record(store, tid)
     # ...and asked again while it still stands (a press refused, a better why) it keeps its place in the line of cards (cardqueue): recorded
@@ -840,7 +849,7 @@ def _pr(store, tid, s, actor) -> dict:
     press is the push's press (an agent's propose_land only marks the question)."""
     from . import ci
     cwd, base, br, repo = s['cwd'], s['base'], s['branch'], s['repo']
-    if not repo: raise Refused("this checkout's origin is not a GitHub repository - push it and open the pull request by hand")
+    if not repo: raise Refused(f'{NO_GITHUB} - push it and open the pull request by hand')
     # ...GITHUB'S NO IS THE LANDING'S NO (stress round, 2026-11-18): its own error passed land()'s handler - no line kept, the agent never told
     try: ci._conn(store, repo)
     except RuntimeError as e: raise Refused(f'{e} - nothing was pushed') from e

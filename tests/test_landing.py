@@ -46,10 +46,12 @@ class LandingTests(unittest.TestCase):
 
     def test_an_own_branch_shows_its_diff_and_all_four_answers(self):
         self.branch()
-        s = landing.state(self.s, self.tid, full=True)
+        with mock.patch('taskuary.shellgate.repo_of', return_value='northwind/ledger'): s = landing.state(self.s, self.tid, full=True)
         self.assertTrue(s['ask'] and s['own'])
         self.assertEqual((s['branch'], s['base'], s['ahead'], s['changed'], s['plus'], s['minus']), ('fix-rounding', 'master', 1, 1, 1, 1))
         self.assertEqual([a['how'] for a in s['answers']], ['rebase', 'merge', 'pr', 'discard'])
+        # ...and no Open a PR where its origin is no GitHub repository: that press could only fail (the re-walk on Codex, 2026-11-25)
+        self.assertEqual([a['how'] for a in landing.state(self.s, self.tid)['answers']], ['rebase', 'merge', 'discard'])
         self.assertIn('+TWO', s['diff'])
         self.assertIn('How should it land?', s['line'])
 
@@ -459,9 +461,14 @@ class LandingTests(unittest.TestCase):
         self.remote = tempfile.mkdtemp(); git(self.remote, 'init', '-q', '--bare')
         git(self.cwd, 'remote', 'add', 'origin', self.remote); git(self.cwd, 'push', '-q', 'origin', 'master')
         self.branch(); self.dev()
-        held, said = landing.push_asked(self.s, self.tid, 'git push -u origin fix-rounding', self.cwd)
+        # ...AND NEVER AN "Open a PR" NO PRESS COULD OPEN (the re-walk on Codex, 2026-11-25: an origin that pushes to a local folder; the card
+        # stood and his press failed "not a GitHub repository"): raised, it is answered with that and the way on - the push is a held step
+        with self.assertRaisesRegex(ValueError, r'not a GitHub repository\s+Next: point the checkout.s origin'): landing.propose(self.s, self.tid, 'pr', 'the fix is ready')
+        self.assertIsNone(landing.push_asked(self.s, self.tid, 'git push -u origin fix-rounding', self.cwd))
+        with mock.patch('taskuary.shellgate.repo_of', return_value='northwind/ledger'):
+            held, said = landing.push_asked(self.s, self.tid, 'git push -u origin fix-rounding', self.cwd)
+            s = landing.state(self.s, self.tid)
         self.assertTrue(held, said)
-        s = landing.state(self.s, self.tid)
         self.assertEqual((s['proposal']['how'], len(s['answers'])), ('pr', 4), 'all four answers, its pick marked')
         self.assertFalse(git(self.remote, 'branch', '--list', 'fix-rounding'))
 

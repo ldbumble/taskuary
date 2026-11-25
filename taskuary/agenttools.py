@@ -137,7 +137,7 @@ TOOLS = {
     # WHAT WAS A PROTOCOL TAUGHT IN PROSE IS A TOOL (the owner, 2026-11-23: "everything else the agent can do is a tool"): how a turn ends, the
     # one question only the owner can answer, and the company's playbooks - each said by its own description, never in every prompt
     'end_turn': ('own', "Call once as your turn ends: where the task stands, shown on its page. name: the task in 3-6 words. about: 2-3 "
-                        "sentences: who asked, for whom. did: the result first, then what you did. "
+                        "sentences: who asked, for whom. did: result first, then what you did. "
                         "on_you: steps only the owner can take that no card or question carries, each with why. nothing_left: goal met and "
                         "checked. answer_is_result: your words are what was asked. retry: another try may work. corrections: [{kind: "
                         "redraft|ask, review: draft id|null, said: his words}].",
@@ -146,7 +146,7 @@ TOOLS = {
                      'check_back': {'type': 'object', 'properties': {'when': _STR, 'what': _STR}}}, ('did',)), ('GET', '/api/tasks/1')),
     'ask_owner': ('own', "Ask the owner the one fact or decision only they can give, with your recommended answer. It stands "
                          "until answered, closed or withdrawn; the answer comes to you. choices: short answers for a pick. "
-                         "withdraw: true takes your standing question back.",
+                         "withdraw: true takes it back.",
                   _S({'question': _STR, 'choices': {'type': 'array', 'items': _STR}, 'withdraw': {'type': 'boolean'},
                       'card': {'type': 'string', 'description': 'the card it is about (rv<id>), if any'}}), ('GET', '/api/tasks/1')),
     'playbooks': ('read', "How this company does each kind of job, written by the owner: with no `name`, the list of playbooks and when each "
@@ -341,12 +341,12 @@ ALWAYS_LOAD = ('show', 'propose','hand_over', 'browser_signup', 'remember', 'tic
 # All methods can be searched later"): the whole description of every tool rode on every call - ~15,000 characters, ~650 a tool. A tool is
 # listed by its name, this line and its parameters' names and types (lean); its full words, rules and examples are find_tools' answer
 SHORT = {
-    'search_messages': "Search the owner's saved mail and chats (dates YYYY-MM-DD).",
-    'read_message': 'One saved message in full (id: m1073).',
+    'search_messages': "Search saved mail and chats (dates YYYY-MM-DD).",
+    'read_message': 'A saved message in full (id: m1073).',
     'read_attachment': 'The text of one attachment on a saved message, by its id.',
     'my_task': "This task's brief and to-dos with their ids.",
     'search_tasks': "Search the owner's tasks, mail, chats and pull requests, and what earlier tasks settled.",
-    'person': "Who a name or address is: their record, their tasks and where each stands, latest messages.",
+    'person': "Who a name or address is: record, tasks, mail.",
     'past_figures': "What the mail and record already hold in figures for a vendor or person: charges, prices, seat counts.",
     'search_knowledge': "Search the owner's knowledge base (indexed folders, SharePoint).",
     'owner_memory': "Look up the owner's memory: what they said, their people, what they confirmed.",
@@ -356,10 +356,10 @@ SHORT = {
     'guide': "Read one of Taskuary's how-tos (browser, number, propose ...).",
     'run_system': "Run one tool on one of the owner's systems: {type, connector_id, ...its fields}.",
     'web_search': "Search the web through this task's AI card.",
-    'show': 'Draws bar, line and pie charts, tables, number tiles and checklists in this chat, with sliders, toggles, selects and '
-            'dates recomputing them live, and choices whose pick comes back to you - or hands the owner files you made, one artifact a call.',
-    'draw_image': "Draw a picture from a prompt into this task and this chat.",
-    'tick': "Tick or untick a to-do: `item` is its id.",
+    'show': 'Charts (bar, line, pie), tables, number tiles, checklists in this chat, live with sliders, toggles, selects, dates, '
+            'and choices whose pick comes back to you - or hands the owner files you made, one artifact a call.',
+    'draw_image': "Draw a picture into this chat.",
+    'tick': "Tick or untick a to-do (`item`: its id).",
     'todos': "Add, reword or merge this task's to-dos.",
     # end_turn and ask_owner are listed with their whole words: the fields ARE how they are used
     'playbooks': "How this company does each kind of job: the list, or one by `name`.",
@@ -369,22 +369,22 @@ SHORT = {
     'new_task': 'Start a separate job the owner asked for as its own task, its agent working at once (no card).',
     'note_peers': 'Leave a note for another coding agent (`to`: TQ-0123, repo or all).',
     'note_lead': "Hand the Advisor something you noticed beyond this task (text, refs).",
-    'add_to_task': "Add a note and files to another of the owner's tasks (`task`: TQ-0008); its agent hears it.",
+    'add_to_task': "Note and files to another task (`task`: TQ-0008); its agent hears it.",
     'use_repo': "Pick the git checkout this task's work belongs in.",
     'find_repos': 'The git checkouts you may work in, newest commit first.',
     'propose_land': "How your work lands (rebase, merge, pr ...), as the owner's buttons.",
     'reply_not_needed': 'The reply waiting here is no longer needed; say why.',
     'withdraw_draft': 'Take back a reply, email or proposal you set up that has not gone out.',
     'keep_card': 'Bring back a card greyed by the newest input, as it was, under that input.',
-    'hand_over': 'Hand the owner a step on the page only he can do (a sign-in, a robot check, paying) - one card; go on with the job.',
+    'hand_over': 'A page step only the owner can do (sign-in, paying): a card.',
     'sign_form': "Fill and sign a PDF form with the owner's saved signature.",
     'answer_invite': "Answer this task's meeting invite: accept, decline or propose.",
     'set_up_meeting': "Set up a meeting for the owner's press.",
     'share': "Share a report or dashboard of the owner's with a person.",
-    'propose': "Anything for the owner's review and press - a reply, an email, a post, GitHub/Jira/Monday comment or issue, PR or push, "
-               "an order on a system, a script kept by save_routine: one card in this chat - the draft itself, its words his to edit - nothing "
-               "done before his press. `kind` (an act names its `action`); several of one act in `items`; `then` your own step after his press.",
-    'find_tools': "A tool's instructions by name, or more tools by need.",
+    'propose': "Anything for the owner's review and press - a reply, an email, a post, GitHub/Jira/Monday comment or issue, PR, push, order on a system, "
+               "script for save_routine: one card in this chat, the draft itself, his to edit; nothing done before his press. "
+               "`kind` (an act names its `action`); several of one act in `items`; `then` your step after his press.",
+    'find_tools': "A tool's instructions by name, or tools by need.",
 }
 def lean(s):
     "A schema as a list shows it: names, types, enums and what is required - no words, no examples (find_tools has them)."

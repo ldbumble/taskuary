@@ -760,7 +760,8 @@ function AssistantThread({ task, onAsked, onStop, selectionRef, attachmentsRef, 
   // ...and only when it asks for a press or says what one did: "Worked on master - 8 files" alone is the header's diff, said again
   const landAt = landS && (landS.ask || landS.landed) ? landS.at || "" : null;
   // WHAT THE AGENT ASKS STANDS IN THE TURN THAT ASKED IT (conversation.items `asking.turn`): one node, drawn there
-  const askNode = asking ? <AgentAsks asking={asking} name={name} onAnswer={onAnswer} taskId={task.TaskId} /> : null;
+  // ...but a step handed to him on the page is its card (pagestep): its words and I'm done stand there once, never again as a line here
+  const askNode = asking && !isTurn(asking) ? <AgentAsks asking={asking} name={name} onAnswer={onAnswer} taskId={task.TaskId} /> : null;
   const askAt = askTurn(asking, merged.items);
   const askWords = askPlaceholder(asking);
   return (
@@ -1068,7 +1069,6 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
   // through the worker's answer road (workerstate.answer), and the card's state clears with the `answered` it records
   const answerAsk = async (text) => {
     const req = asking;
-    if (isTurn(req) && (req.choices || []).includes(text)) return handBack();      // the Done of a step on the page: a press wherever it is drawn
     // ...and a chat agent's question kept after its process idled out (`resting`): the answer is its next turn, which starts it again
     if (req.resting || (session?.sid && String(req.sid) === String(session.sid))) { setOwnPrompt({ id: `ask:${req.request_id}`, text }); setAnswered(req.request_id); return; }
     // ...and a coding agent's as any line typed to it (general.take_line): its next turn takes the line, and that closes the question
@@ -1085,22 +1085,12 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
   const onChat = pressable(conv.list);
   const viewActs = (data?.browserActs || []).map((r) => heldOn(r, session?.sid)).filter((h) => h && onChat.has(h.id));
   // ...EVERY WAIT ON THE PAGE IS ONE TURN (a sign-in too - the Claude walk, 2026-11-19: a sign-in drew the toolbar's "I'm done", which only let
-  // go of the page and told nobody): its bar's I'm done is the one hand-back - his line, the agent woken (handBack)
+  // go of the page and told nobody): its one hand-back is its card's I'm done (pagestep.perform) - the page only says what the step is
   const turn = asking && waitsOnPage(asking) ? asking : null;
   // ...a held SHELL step is the task page's card in Next steps, one card for the turn (HeldSteps) - it was drawn here a second time, per step
   const actsHere = (viewShown ? (data?.browserActs || []).filter((r) => !heldOn(r, session?.sid)) : data?.browserActs || []).filter((r) => proposalFrom(r)?.action !== "shell_act");
   // Approve runs the act and tells the agent on a thread of its own (browsergate._tell): its next turn starts a moment after the press
   const decidedOnView = () => { refresh(); setTimeout(refresh, 2000); };
-  // THE VIEW'S DONE IS THEIR PRESS (the spine audit, 2026-11-09): it went in as words typed in their name - a bubble they never wrote. The
-  // server closes the hand-over and tells the agent itself (workerstate.answer `press`, browsergate.done); the chat reads one quiet line
-  const handBack = async () => {
-    const req = asking;
-    // ...a sign-in is handed back by its own answer (signin.DONE - its road keeps what he typed); a step on the page by his press
-    const body = isSignin(req) ? { text: (req.choices || [])[0] || "Signed in" } : { text: "", press: true };
-    try { await api.post(`/api/tasks/${task.TaskId}/worker/answer`, { request_id: req.request_id, ...body }); }
-    catch (e) { if (e?.response?.status !== 409) throw e; }      // closed already: the page moved on first, and the agent was told that
-    setAnswered(req.request_id); onAnswered?.(); decidedOnView();
-  };
   const promptUsed = (id) => { if (ownPrompt?.id === id) setOwnPrompt(null); else onPromptUsed?.(id); };
   // ...each page in the turn that made it, as the list names it (conversation.items `published`)
   const turnKeys = turnsNow.map((x) => ({ id: x.answer || x.id }));
@@ -1223,7 +1213,7 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
         {/* ...a coding agent's browser is its session's too, shown only while he is needed on its page (the recorded coding walk, 2026-11-12:
             the agent asked to be signed in, and with no chat session to name, no page was ever shown him) */}
         <SessionPane sid={(!noTools && session?.sid) || (coding && needNow && cli?.sid) || null} height="100%" yourTurn={waitsOnPage(asking)} idle={!busy}
-          stack taskId={task.TaskId} held={pageBars(turn, viewActs).held} turn={turn} onHandBack={handBack} onDecided={decidedOnView}
+          stack taskId={task.TaskId} held={pageBars(turn, viewActs).held} turn={turn} onDecided={decidedOnView}
           onView={viewShownIs} quiet={chat} need={needNow}>{thread}</SessionPane>
       </Box>
     </Box>

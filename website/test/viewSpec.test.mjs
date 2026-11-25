@@ -153,7 +153,7 @@ test("a fenced block in an answer that is a view is the view the show road draws
     JSON.stringify({ root: "c", elements: { c: { type: "pie", props: {} } } })]) assert.equal(fencedView(code), null, code);
   // ...and the chat's markdown draws it through the view's own renderer, at the code block's place
   const md = readFileSync(new URL("../src/md.jsx", import.meta.url), "utf8");
-  assert.match(md, /const Pre = [^\n]*fencedView\(/);
+  assert.match(md, /const Pre = [^;]*;\n[^\n]*fencedView\(/);
   assert.match(md, /if \(view\) return <ViewSpec spec=\{view\} \/>;/);
 });
 

@@ -14,14 +14,14 @@ import { label as btn } from "./buttons.js";
 import { copyText } from "./CopyCorner.jsx";
 import { Md } from "./md.jsx";
 import { useOverlay } from "./overlays.js";
-import { csvRows, fitSvg, lockDown } from "./shownPages.js";
+import { csvRows, fitSvg, SANDBOX, shut } from "./shownPages.js";
 import { deliverables, MEDIA_H, mediaFit } from "./taskOutputs.js";
 import "./publishedPages.css";
 import Artifact from "./Artifact.jsx";
 
 // sandboxed WITHOUT allow-same-origin: the page's scripts run (charts, tabs) but in an opaque origin -
-// no Taskuary token, no cookies, no reach into this window
-export const SANDBOX = "allow-scripts allow-popups allow-popups-to-escape-sandbox";
+// no Taskuary token, no cookies, no reach into this window (shownPages.SANDBOX) - and inside a frame that lets it navigate nowhere (shut)
+export { SANDBOX };
 // a published page is not a run of the session: AgentReport numbers only its own session results
 export const isPublished = (a) => !!a?.external_url;
 const type = (p) => p?.content_type || "";
@@ -169,7 +169,7 @@ export function Preview({ page }) {
     );
   }
   return isHtml(page)
-    ? <iframe className="tq-published-frame" title={page.name} sandbox={SANDBOX} srcDoc={lockDown(isImage(page) ? fitSvg(body) : body)} />
+    ? <iframe className="tq-published-frame" title={page.name} sandbox={SANDBOX} srcDoc={shut(isImage(page) ? fitSvg(body) : body)} />
     : <div className="tq-published-md"><Md text={body} /></div>;
 }
 

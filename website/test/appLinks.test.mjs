@@ -7,6 +7,16 @@ import { appLink, firstAppLink, inApp, linkName, linkRoad, ownPath } from "../sr
 
 const read = (name) => fs.readFileSync(new URL(`../src/${name}`, import.meta.url), "utf8");
 
+test("a link in a stranger's words opens its page with nothing filled in (the red team, 2026-11-24, T8b)", async () => {
+  const { placeOnly } = await import("../src/appLinks.js");
+  const { canvasRequestFromHash } = await import("../src/canvasLinks.js");
+  const send = canvasRequestFromHash(placeOnly("#new-task&kind=send&channel=email&to=attacker@evil.example"));
+  assert.deepEqual(send, { kind: "new", n: 0 });
+  const route = canvasRequestFromHash(placeOnly("#report=1&line=send&to=attacker@evil.example&how=always"));
+  assert.equal(route.state.open, 1); assert.equal(route.state.route, undefined);
+  assert.ok(canvasRequestFromHash("#report=1&line=send&to=gail@northwind.example").state.route, "the Assistant's own link still fills it");
+});
+
 test("our pages are app links; the web and unknown hashes are not", () => {
   for (const h of ["#connector=intacct", "#cli-agents", "#settings=policies", "#report=new-agent", "#report=12", "#setup"])
     assert.equal(appLink(h), h, h);

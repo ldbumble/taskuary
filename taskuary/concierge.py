@@ -1856,8 +1856,9 @@ def _made_now(store, tid: int, op: str, params: dict, lead: str = '', actor: str
         record(store, tid, 'assistant', say_); return {'say': say_, 'options': [], 'chips': [], 'decision': None}
     ref = o.get('ref') or task_ref(o['taskId'])
     # ...and with nothing connected to send it, the draft waits on the card's Connect, not a Send it does not have (the visual audit, 2026-11-13)
-    from . import outbound
-    gone = op != 'outbox' or params.get('channel') in outbound.send_channels(store)
+    # - as the card itself reads it (capabilities.can_send_draft; walk 20: "nothing can send email yet" over a card whose Send worked)
+    from . import capabilities
+    gone = op != 'outbox' or capabilities.can_send_draft(store, o.get('reviewId'))
     what = ((f"Drafted it on {ref} - it waits for your Send." if gone else f"Drafted it on {ref} - nothing can send {params.get('channel')} "
              f"yet, so press Connect {params.get('channel')} there first.") if o.get('drafted') else f"Made {ref}, but the draft could not be written - write it there.") if op == 'outbox' \
         else f"Told the agent on {ref} - it is that same work." if o.get('joined')         else f"Started {ref} - an agent is on it." if o.get('started') or o.get('existing') else f"Made {ref} - it waits its turn for an agent."

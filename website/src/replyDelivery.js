@@ -73,3 +73,13 @@ export const sentTo = (review) => { const cc = deliveryCc(review); return `${rep
 // `text`: the words that went where the review has not been read again yet
 export const sentCardOf = (review, text = "") => ({ id: review.ReviewId, text: text || review.FinalText || review.DraftText, channel: review.Channel || "",
   done: pressWords(review).sentAs, to: sentTo(review), subject: deliverySubject(review), at: review.DecidedAt });
+// THE VERSIONS OF A LETTER ITS AGENT GAVE FOR HIM TO PICK FROM (agenttools._many: one call's `items` for one letter - walk 22, 2026-11-25): its
+// own list, [] for a letter of one. And the pick the card draws for them - one field, as its other picks are: which one the box holds now
+// ("Your words" once he changed it), and a pick puts that version in the box
+export const versionsOf = (review) => { try { const v = JSON.parse(review?.Versions || "[]"); return Array.isArray(v) && v.length > 1 ? v.map(String) : []; } catch { return []; } };
+export const versionPick = (versions, text, editable, onPick) => {
+  if (versions.length < 2) return [];
+  const at = versions.indexOf(String(text ?? ""));
+  return [{ key: "version", type: "choice", label: "Version", value: at < 0 ? "" : at, editable, onChange: (i) => { if (i !== "") onPick(versions[Number(i)]); },
+    choices: [...versions.map((_, i) => ({ value: i, label: `Version ${i + 1} of ${versions.length}` })), ...(at < 0 ? [{ value: "", label: "Your words" }] : [])] }];
+};

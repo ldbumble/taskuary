@@ -110,3 +110,15 @@ test("what went names the copied, as the agent says it; the To line keeps the To
   assert.match(src("ReviewDecision.jsx"), /said: verb === "approve" \? \{[^}]*to: sentTo\(r\)/);
 });
 
+
+test("versions of one letter are a pick on its one card: the box holds one, a pick puts another in, his own words say so", async () => {
+  // walk 22 (2026-11-25): "Yes - Thursday" and "No - keep Friday" stood as one card holding only the last
+  const { versionPick, versionsOf } = await import("../src/replyDelivery.js");
+  const vs = versionsOf({ Versions: JSON.stringify(["Yes - Thursday.", "No - Friday."]) });
+  assert.deepEqual(vs, ["Yes - Thursday.", "No - Friday."]); assert.deepEqual(versionsOf({ Versions: null }), []); assert.deepEqual(versionsOf({ Versions: "[\"one\"]" }), []);
+  let picked = null; const [f] = versionPick(vs, "Yes - Thursday.", true, (t) => { picked = t; });
+  assert.equal(f.type, "choice"); assert.equal(f.value, 0); assert.deepEqual(f.choices.map((c) => c.label), ["Version 1 of 2", "Version 2 of 2"]);
+  f.onChange("1"); assert.equal(picked, "No - Friday.");
+  assert.deepEqual(versionPick(vs, "Yes, but at 3.", true, () => {})[0].choices.at(-1), { value: "", label: "Your words" });
+  assert.deepEqual(versionPick([], "x", true, () => {}), []);
+});

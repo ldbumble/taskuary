@@ -17,7 +17,7 @@ import { withoutSignature } from "./signature.js";
 import { OFFER_HINT, OFFER_LABEL, useCloseoutState } from "./closeoutState.js";
 import { PANEL2, BORDER, DIM, FAINT, INK } from "./theme.jsx";
 import { timeAgo, cleanText, splitQuoted } from "./ui.jsx";
-import { deliveryBcc, deliveryCc, deliveryFiles, deliveryMeta, deliverySubject, needsAddress, pressWords, replyContext, sentCardOf, sentTo } from "./replyDelivery.js";
+import { deliveryBcc, deliveryCc, deliveryFiles, deliveryMeta, deliverySubject, needsAddress, pressWords, replyContext, sentCardOf, sentTo, versionPick, versionsOf } from "./replyDelivery.js";
 import { cardLook, endPress, hearMarks, markOf, pressMark, sentMark, sentSaid, sentTitle, WENT } from "./sentLine.js";
 import { fmtDateTime } from "./dates.js";
 import { acted, announce, repeatClick, useLit, useVerbs } from "./actionRow.js";
@@ -681,6 +681,9 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
       ...(pic ? [{ key: "post-picture", type: "picture", value: post.picture, file: pic }] : [])] : []),
     ...(proposal?.folded && !shut ? [{ key: "fold", type: "fold", label: `${cmdOpen ? "Hide" : "Show"} the ${proposal.foldWord || "command"}`, open: cmdOpen, onToggle: () => setCmdOpen((o) => !o) }] : []),
     // ...the words, the card's own box: while the AI writes it, its spinner IN the box (the owner, 2026-10-30: "spin in the box of drafting")
+    // ...AND THE VERSIONS ITS AGENT GAVE OF IT ARE A PICK ON THIS ONE CARD (versionsOf; walk 22, 2026-11-25: "Yes - Thursday" and "No - keep Friday"
+    // stood as one card holding only the last): the one picked fills the box, his to change, and Send sends the box
+    ...(!shut && !proposal ? versionPick(versionsOf(r), value, !(off || delivery.frozen), setText) : []),
     ...(shut ? (sp?.text || (over && (r.FinalText || r.DraftText)) ? [{ key: "draft", type: "text", value: sp?.text || String(r.FinalText || r.DraftText).slice(0, 500), clamp: true, dim: over }] : [])
       : [{ key: "draft", type: "text", box: true, label: "Reply draft", value, ...(proposal?.was ? { type: "change", label: "The playbook will say", was: proposal.was, marks: marksOn } : {}), editable: !(off || delivery.frozen || proposal?.readOnly), onChange: (v) => setText(v), marks: blanks,
         spin: drafting, boxRef: draftRef, hidden: (proposal?.folded && !cmdOpen) || proposal?.bare,

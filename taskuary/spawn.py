@@ -301,7 +301,6 @@ def adopt(pid: int) -> bool:
 def close_left() -> int:
     """At start: end the children a run of this home that is gone left running - its agents and what they run. One whose starter still runs
     (another process of this home) is kept. Returns how many were ended."""
-    import signal
     keep, gone = {}, []
     with _TIE_LOCK:
         rows = []
@@ -314,13 +313,20 @@ def close_left() -> int:
             if by == os.getpid() or now.get(by, '') == by_made: keep[k] = v
             else: gone.append(pid)
         _write_list(keep)
-    for pid in gone:
-        try:
-            if WINDOWS: _end_tree(pid)
-            elif os.getpgid(pid) == pid: os.killpg(pid, signal.SIGKILL)
-            else: os.kill(pid, signal.SIGKILL)
-        except OSError: pass
+    for pid in gone: end(pid)
     return len(gone)
+
+def end(p):
+    """End a child and every process it started - Stop, a closed session, a command past its time: ending the CLI alone left the command under
+    it running (walk 21: a `grep` of the home folder ran on after Stop). `p` a Popen, a pty, or a pid; POSIX ends the group it leads."""
+    import signal
+    try:
+        pid = int(getattr(p, 'pid', p) or 0)
+        if not pid: return
+        if WINDOWS: _end_tree(pid)
+        elif os.getpgid(pid) == pid: os.killpg(pid, signal.SIGKILL)
+        else: os.kill(pid, signal.SIGKILL)
+    except (OSError, ValueError, TypeError): pass
 
 def _end_tree(pid: int):
     "Windows: end process `pid` and every process it started that still runs (a child is younger than its parent: an older one only reuses a pid)."

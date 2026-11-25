@@ -544,16 +544,6 @@ def script_file(path) -> 'Path':
     return p
 
 
-def _kill_tree(p) -> None:
-    try:
-        if os.name == 'nt': spawn.run(['taskkill', '/PID', str(p.pid), '/T', '/F'], capture_output=True, timeout=15)
-        else:
-            import signal
-            os.killpg(os.getpgid(p.pid), signal.SIGKILL)
-    except Exception as e: logger.debug(f'python_script: the tree of {p.pid} was not killed - {e}')
-    try: p.kill()
-    except Exception: pass
-
 
 def script_rows(out: str):
     "The rows a script printed - a JSON array of objects, JSON lines, or a delimited table with a header - else None: it printed text."
@@ -604,11 +594,10 @@ def run_python_script(cfg):
             run_it.write_text(src, encoding='utf-8')
         # -I: no site of the user's, no PYTHON* variable, no script folder on the path - the script and the standard library
         p = spawn.popen([*script_python(), '-I', str(run_it)], cwd=tmp, env=script_env(), stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                        stderr=subprocess.PIPE, text=True, encoding='utf-8', errors='replace',
-                        **({} if os.name == 'nt' else {'start_new_session': True}))
+                        stderr=subprocess.PIPE, text=True, encoding='utf-8', errors='replace')     # ...in a group of its own (spawn.popen)
         try: out, err = p.communicate(str(cfg.get('input') or ''), timeout=limit)
         except subprocess.TimeoutExpired:
-            _kill_tree(p)
+            spawn.end(p); p.kill()
             try: p.communicate(timeout=5)
             except Exception: pass
             raise RuntimeError(f'{name} ran past its {plural(limit, "second")} and was stopped')

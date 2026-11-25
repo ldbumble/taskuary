@@ -410,14 +410,6 @@ def test_codex_s_config_flags_become_its_session_config():
                    'mcp_servers.mail.disabled_tools': ['send_email']}
 
 
-def test_a_closed_connection_takes_its_whole_process_tree_on_windows():
-    c = acp.ACPClient(FAKE[0], FAKE[1:], timeout=30)
-    with mock.patch.object(acp.os, 'name', 'nt'), mock.patch.object(acp.spawn, 'run') as r:
-        c.close()
-    assert r.call_args[0][0][:2] == ['taskkill', '/PID'] and '/T' in r.call_args[0][0]
-    c.p.kill()
-
-
 # ── a CLI whose reads no command line can keep works only on the held road (the owner, 2026-11-16) ────────────────────────────
 # Codex quick work - a look with no hands, on `codex exec` - listed the owner's Documents folder and nobody was asked: even its read-only
 # sandbox reads the whole disk, and its only way to act alone was --dangerously-bypass-approvals-and-sandbox

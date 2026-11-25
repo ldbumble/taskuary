@@ -80,9 +80,7 @@ def claude_ai_list(timeout: float = 90) -> dict:
     with tempfile.TemporaryDirectory(prefix='tq-claudeai-') as d:
         p = spawn.popen([exe, '-p', '--output-format', 'stream-json', '--verbose', '--setting-sources', 'project,local', '--max-turns', '1',
                          'Reply OK.'], cwd=d, env=env, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
-        def stop():
-            if os.name == 'nt': spawn.run(['taskkill', '/PID', str(p.pid), '/T', '/F'], capture_output=True)   # the npm shim's node too
-            else: p.kill()
+        def stop(): spawn.end(p)                         # the npm shim's node too
         timer = threading.Timer(timeout, stop); timer.start()
         init = None
         try:

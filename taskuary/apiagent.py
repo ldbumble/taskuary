@@ -399,12 +399,8 @@ def _hands(store, tid: int, sid: str, name: str, a: dict) -> str:
 
 def _kill(p):
     "The command and everything it started: ending its shell alone left the build under it running."
-    import os, signal
     from . import spawn
-    try:
-        if os.name == 'nt': spawn.run(['taskkill', '/PID', str(p.pid), '/T', '/F'], capture_output=True, timeout=15)
-        else: os.killpg(p.pid, signal.SIGKILL)
-    except Exception as e: logger.info(f'apiagent: command {p.pid} not ended as a whole - {e}')
+    spawn.end(p)
     try: p.kill(); p.communicate(timeout=5)
     except Exception: pass
 

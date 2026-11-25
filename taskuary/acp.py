@@ -309,12 +309,9 @@ class ACPClient:
         self._alive = False
         try:
             if self.p.poll() is not None: return
-            # an adapter is node under npx under cmd.exe: kill() ends the cmd and leaves node driving the CLI on its own
-            # ...and a tree-kill that could not run still ends the process we hold: skipped with it, the agent went on working a task
-            # its owner had closed and filed its answer there
-            if os.name == 'nt':
-                try: spawn.run(['taskkill', '/PID', str(self.p.pid), '/T', '/F'], capture_output=True, timeout=15)
-                except Exception as e: logger.debug(f'acp: the tree-kill did not run - {e}')
+            # an adapter is node under npx under cmd.exe, and the CLI's commands run under it: all of it ends (spawn.end) - and the process we
+            # hold all the same: left running, the agent went on working a task its owner had closed and filed its answer there
+            spawn.end(self.p)
             if self.p.poll() is None: self.p.kill()
         except Exception: pass
 

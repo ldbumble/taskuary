@@ -314,6 +314,25 @@ def test_what_the_app_started_ends_when_the_app_is_killed(tmp_path):
         for p in (kid, grand, out): p and _end(p)
 
 
+# Walk 21: Stop on a task ended the agent's CLI and left the `grep` it had started running, to be killed by hand. A stand-in agent starts a
+# command that runs on; each road's close - a kept CLI, an ACP adapter, a terminal's pty - ends the command with it.
+@pytest.mark.parametrize('road', ['cli', 'acp', 'pty'])
+def test_stop_ends_the_command_the_agent_started_too(road, tmp_path, monkeypatch):
+    from taskuary import acp, clipool, terminal
+    fn, argv = tmp_path / 'kid', [sys.executable, str(HARNESS)]
+    monkeypatch.setenv('TQ_SPAWN_MODE', 'agent'); monkeypatch.setenv('TQ_SPAWN_PID', str(fn))
+    s = (clipool.Live('k', argv, str(tmp_path), None, ()) if road == 'cli' else acp.ACPClient(argv[0], argv[1:], cwd=str(tmp_path)) if road == 'acp'
+         else (terminal._WinPty if os.name == 'nt' else terminal._UnixPty)(argv, str(tmp_path), 30, 100))
+    end, kid = time.monotonic() + 20, 0
+    try:
+        while not (kid := fn.exists() and fn.read_text().strip()) and time.monotonic() < end: time.sleep(.1)
+        assert kid and spawn._stamp(int(kid)), 'the stand-in agent never started its command'
+        s.kill() if road == 'pty' else s.close()
+        assert _gone(int(kid)), f'the command the agent started outlived its {road} session'
+    finally:
+        if kid: _end(int(kid))
+
+
 def test_the_next_start_ends_what_a_dead_run_left_and_keeps_a_live_ones(tmp_path, monkeypatch):
     env = {**os.environ, 'TQ_SPAWN_MODE': 'sleep'}
     left, kept = (subprocess.Popen([sys.executable, str(HARNESS)], env=env) for _ in range(2))

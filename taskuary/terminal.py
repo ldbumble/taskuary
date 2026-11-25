@@ -225,6 +225,7 @@ class _WinPty:
     def resize(self, rows, cols): self.p.setwinsize(rows, cols)
     def alive(self): return self.p.isalive()
     def kill(self):
+        from . import spawn; spawn.end(self.p)                 # ...the CLI and the commands it runs
         try: self.p.terminate(force=True)
         except Exception: pass
 
@@ -251,6 +252,7 @@ class _UnixPty:
         fcntl.ioctl(self.fd, termios.TIOCSWINSZ, struct.pack('HHHH', rows, cols, 0, 0))
     def alive(self): return self.p.poll() is None
     def kill(self):
+        from . import spawn; spawn.end(self.p)                 # ...its group: the CLI and the commands it runs
         try: self.p.kill()
         except Exception: pass
 

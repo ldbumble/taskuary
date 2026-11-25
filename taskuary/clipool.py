@@ -95,6 +95,7 @@ class Live:
     def close(self):
         try: self.p.stdin.close()
         except Exception: pass
+        spawn.end(self.p)                                # ...and what it runs: a command it started ended with it (walk 21)
         try: self.p.kill()
         except Exception: pass
 

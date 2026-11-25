@@ -1462,7 +1462,8 @@ def run_x_post(cfg):
     from .outbound import Fixable
     c, text = cfg.get('_card') or {}, str(cfg.get('text') or '').strip()
     if not text: raise RuntimeError('an X post needs `text`')
-    if len(text) > X_CHARS: raise RuntimeError(f'X posts are capped at {X_CHARS} characters; this one is {len(text)}')
+    from . import connectorcatalog as cat          # ...counted as X counts, by the one count its card is raised and drawn with
+    if long := cat.too_long(cat.action_for('x_post'), {'text': text}, 'X'): raise RuntimeError(long.split(' - ')[0])
     if miss := [n for n in X_KEYS if not str(_cfg(c).get(n) or '').strip()]:
         # ...SAID AS A SIGN-IN, IN PLAIN WORDS WITH THE WAY PAST IT (walk 8, 2026-11-20: "consumer_key, consumer_secret ... not saved" stood on his
         # card): the keys are the X card's own setup, which that card walks him through

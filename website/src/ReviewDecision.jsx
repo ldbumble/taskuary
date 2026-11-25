@@ -10,7 +10,7 @@ import ReplyFiles from "./ReplyFiles.jsx";
 import { holdInView } from "./inView.js";
 import { filesPromised, filesShort } from "./replyFiles.js";
 import { proposalFrom, proposalPresentation, receiptOf, resultOf, reviewStatusLabel, reviewText } from "./reviewProposal.js";
-import { actionFor, cardOf, changed, faceOf, fieldsOf, pressable as actPressable, stateOf, textKey, valuesOf, viaBrowserSaid, wordsOf } from "./actionCard.js";
+import { actionFor, cardOf, changed, faceOf, fieldsOf, lengthOf, pressable as actPressable, stateOf, textKey, valuesOf, viaBrowserSaid, wordsOf } from "./actionCard.js";
 import { asLive, MovedPast } from "./PassedCard.jsx";
 import { FileDialog } from "./PublishedPages.jsx";
 import { withoutSignature } from "./signature.js";
@@ -813,7 +813,7 @@ export function ActReview({ row: was, tid, live = true, onChanged, past = false 
   // ...EVERY POST CARRIES ITS PICTURE (the owner, 2026-11-20): one its network takes no upload for is shown all the same, to save and add by hand
   const img = fs.find((f) => f.type === "image" && f.value) || (p.image ? { key: "image", value: p.image, manual: true } : null);
   const pic = img ? outputRow(tid ?? row?.TaskId, img.value) : null;
-  const max = fs.find((f) => f.key === tk)?.max, over = max && text.length > max;
+  const tf = fs.find((f) => f.key === tk), max = tf?.max, len = lengthOf(tf, text), over = max && len > max;
   const go = done?.url || st.url, gone = !!done || st.done;
   // ...a press that failed before this card was drawn is still said on it: the review keeps it (store.review_act_failed)
   const failed = err || (!busy && !gone && ["pending", "superseded"].includes(row?.Status) && row?.ActError) || "";
@@ -843,7 +843,7 @@ export function ActReview({ row: was, tid, live = true, onChanged, past = false 
     ...fs.filter((f) => f.type === "line" && has(f)).sort((a, b) => !!b.heading - !!a.heading)
       .map((f) => ({ ...f, type: f.heading ? "heading" : "line", value: f.editable ? vals[f.key] : f.value, editable: edit && f.editable, onChange: set(f.key) })),
     { key: tk, type: "text", label: fs.find((f) => f.key === tk)?.label || "Words", box: !!st.live && !gone, value: st.live && !gone ? text : shown[tk], editable: edit && !gone,
-      onChange: setText, dim: !gone && !st.live, over: over ? `${text.length} of ${max} characters` : "" },
+      onChange: setText, dim: !gone && !st.live, over: over ? `${len} of ${max} characters` : "" },
     ...(pic ? [{ key: "image", type: "picture", value: img.value, file: pic, alt: p.alt || pic.name,
       note: img.manual && !gone ? `${row?.network || "This network"} gets the words from here - open the picture to save it, and add it yourself` : "" }] : []),
   ];

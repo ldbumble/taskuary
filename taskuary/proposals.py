@@ -610,7 +610,10 @@ def queue(store, task_id: int, p: dict, actor='agent', refused: list | None = No
             try: conf = json.loads((c or {}).get('ConfigJson') or '{}')
             except ValueError: conf = {}
             p = cat.with_defaults(p, conf)
-            if bad := next((f for f in act['fields'] if f['key'] in p and not cat.choice_ok(f, p[f['key']])), None):
+            # ...A CARD OVER ITS NETWORK'S LIMIT IS NEVER SHOWN (the owner, 2026-11-25): refused here with the limit and the count, so its
+            # agent raises it right - it stood at "314 of 280", every press on it greyed
+            if long := cat.too_long(act, p, POSTS.get(p.get('type'))): ok, why = False, long
+            elif bad := next((f for f in act['fields'] if f['key'] in p and not cat.choice_ok(f, p[f['key']])), None):
                 ok, why = False, f"{bad['key']} must be one of: {', '.join(str(c['value']) for c in bad['choices'])}"
     if ok and p.get('action') == 'break_out':
         p, miss = break_out(store, task_id, p)

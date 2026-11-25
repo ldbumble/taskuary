@@ -151,6 +151,21 @@ def field(act: dict, key: str) -> dict | None: return next((f for f in (act or {
 def text_key(act: dict) -> str | None:
     "The act's words the owner edits in its box (a post's `text`, a tracker comment's `body`)."
     return next((f['key'] for f in (act or {}).get('fields') or [] if f['type'] == 'text' and f.get('edit')), None)
+# HOW LONG A NETWORK SAYS ITS WORDS ARE (the owner's live X card, 2026-11-25: "314 of 280 characters" over a post X itself counts as 249 - a
+# link is 23 there whatever its length - so its press stood greyed over a post that fitted): a field's `max` is counted as its network counts,
+# a link by the field's own `link` where it declares one. One count for the card raised (proposals.queue), the card drawn (actionCard.js
+# lengthOf, the same rule) and the press (inboxes.run_x_post)
+_LINK = re.compile(r'https?://\S+')
+def length(f: dict, text) -> int:
+    t, n = str(text or ''), (f or {}).get('link')
+    return len(_LINK.sub('x' * int(n), t)) if n else len(t)
+def too_long(act: dict, p: dict, name: str = '') -> str:
+    "'' when every field of `p` fits its declared `max`, else the exact fix: the limit, and the count as the network counts it."
+    for f in (act or {}).get('fields') or []:
+        if f.get('max') and (n := length(f, p.get(f['key']))) > f['max']:
+            return (f"{name or act.get('title') or act.get('card')} allows {f['max']} characters; this is {n}"
+                    + (f" (a link counts as {f['link']})" if f.get('link') else '') + ' - shorten it and raise it again')
+    return ''
 def choice_ok(f: dict, v) -> bool: return f.get('type') != 'choice' or str(v) in {str(c['value']) for c in f.get('choices') or []}
 
 

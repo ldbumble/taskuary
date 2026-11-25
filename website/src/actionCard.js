@@ -60,6 +60,9 @@ export const stateOf = (row, live = true) => {
   if (s === "superseded" && row?.ActError) return { done: false, failed: true, said: "" };
   return { done: false, said: s === "pending" ? w.undone : `${w.undone} · dismissed` };
 };
+// HOW LONG ITS NETWORK SAYS THE WORDS ARE (connectorcatalog.length, the same rule): a link by the field's own `link` where it declares one - X
+// counts every link as 23 - so a post that fits is never drawn over its limit, its press greyed
+export const lengthOf = (f, text) => { const t = String(text || ""); return f?.link ? t.replace(/https?:\/\/\S+/g, "x".repeat(f.link)).length : t.length; };
 // the box's words: the act's one editable text field (a post's `text`, a tracker comment's `body`)
 export const textKey = (act) => (act?.fields || []).find((f) => f.type === "text" && f.edit)?.key || "text";
 // the press is lit while the box holds words - or where the act may go without them (`optional`) and the agent left none: Close issue with no

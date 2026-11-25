@@ -4613,7 +4613,8 @@
               "type": "text",
               "edit": true,
               "agent": true,
-              "max": 280
+              "max": 280,
+              "link": 23
             },
             {
               "key": "image",

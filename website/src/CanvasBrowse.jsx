@@ -138,7 +138,7 @@ export default function CanvasBrowse({ area, state, onState, live, onOpenCard, o
   return (
     <Box data-tq-browse={area}>
       {area === "connections" && <ConnectorsView onNavigate={onNavigate} {...common} />}
-      {area === "reports" && <ReportsView {...common} />}
+      {area === "reports" && <ReportsView onOpenTask={onOpenTask} {...common} />}
       {area === "settings" && <SettingsView onNavigate={onNavigate} {...common} />}
       {/* ...and About you - docs, playbooks, memory - the same view on its own page (the owner, 2026-11-06) */}
       {area === "about" && <SettingsView key="about" area="about" onNavigate={onNavigate} {...common} />}

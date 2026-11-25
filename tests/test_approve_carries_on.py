@@ -1029,6 +1029,26 @@ def test_then_is_kept_on_the_card_whatever_road_raised_it_and_a_rewrite_without_
     assert told.call_count == 1
 
 
+def test_the_to_do_a_card_does_is_ticked_by_its_press_and_nobody_is_woken_for_it():
+    """Walk 22, 2026-11-25 (Codex): every card carried `then: "mark the to-do complete"`, so every Send, Post and bulk run woke the agent to tick
+    a box and say under the card what the card already said. The card names the to-do it does (`todo`); the press that goes ticks it - plain
+    code, no `then`, nobody woken - and with several cards for one to-do, only once the last has gone."""
+    s = MemoryStore(); tid = Factory(s).task('Write the onboarding playbook')
+    todo = s.merge_task_checklist(tid, ['Save the onboarding playbook'], 'owner')[0]['id']
+    doors = {'propose': lambda t, p: {'ok': bool(q := proposals.queue(s, t, p)), 'review': q and q['reviewId']}}
+    done = lambda: next(i['done'] for i in s.task_checklist(tid) if i['id'] == todo)
+    for slug in ('onboarding', 'offboarding'):
+        agenttools.call(s, tid, 'propose', {'kind': 'act', 'action': 'write_playbook', 'slug': slug, 'todo': todo,
+                                            'text': f'# {slug}\nwhen: a new hire starts\nDay one: the laptop.'}, doors)
+    a, b = s._rows("SELECT * FROM review WHERE TaskId=? ORDER BY ReviewId", (tid,))
+    assert not card.carries_on(a) and 'todo' not in a['DraftText'], 'the to-do is the card\'s record, never part of what runs'
+    assert 'not bookkeeping' in agenttools.TOOLS['propose'][2]['properties']['then']['description']
+    with mock.patch.object(general, 'to_agent', return_value='woke') as told:
+        assert verdicts.decide(s, a, 'approve')['ok'] and not done(), 'a card for it still waits'
+        assert verdicts.decide(s, b, 'approve')['ok'] and done()
+    assert not told.called, 'no next step of its own: the press woke nobody'
+
+
 def test_a_landing_wakes_its_agent_only_where_its_proposal_named_a_step_after_it():
     s = MemoryStore(); tid = Factory(s).task('Fix the export', kind='coding'); s.add_transcript(tid, 'run1', 'Fixed the export.', 'claude', HELD)
     for then, woken in (('', False), ('check the deploy is live', True)):

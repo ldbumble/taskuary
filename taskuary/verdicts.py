@@ -674,8 +674,14 @@ def decide(store, rv: dict, verb_in: str, *a, closes: bool = False, always: bool
         from . import gate, proposals
         if proposals._action(rv) not in proposals.HELD_ACTS:
             gate.remember(store, rv['TaskId'], [gate.card_key(proposals._draft(rv))], 'dismissed' if verb_in == 'reject' else 'approved')
+    # ...and a yes that WENT is recorded by Taskuary itself - the to-do its card does is ticked (card.went) - one of a bulk card's rows too
+    went = verb_in in ('approve', 'edit', 'merge_anyway') and out.get('ok') and not out.get('send_error') and rv.get('TaskId')
+    if went:
+        from . import card
+        try: card.went(store, rv)
+        except Exception as e: logger.warning(f"rv{rv.get('ReviewId')}: it went, and its to-do was not ticked - {e}")
     if QUIET.get(): return out
-    if verb_in in ('approve', 'edit', 'merge_anyway') and out.get('ok') and not out.get('send_error') and rv.get('TaskId'):
+    if went:
         from . import cardqueue, general, proposals
         actor = a[2] if len(a) > 2 else kw.get('actor', 'owner')
         # SEND AND CLOSE CLOSES BEFORE ITS AGENT IS TOLD (the agent walk, 2026-11-10): the close came a beat after the send, by the page's

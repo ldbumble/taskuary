@@ -553,9 +553,9 @@ def _card_call(store, tid: int, name: str, args: dict, doors: dict, skip=()) -> 
     if raises and _asking(store, tid):
         raise ValueError(refusal('your question to the owner stands - nothing was raised', 'wait for his answer, then raise it; if this card does '
                                  'not hang on the question, take the question back with ask_owner withdraw: true and raise it'))
-    then, args = ((args or {}).get('then'), {k: v for k, v in (args or {}).items() if k != 'then'}) if raises else (None, args)
+    then, todo, args = ((args or {}).get('then'), (args or {}).get('todo'), {k: v for k, v in (args or {}).items() if k not in ('then', 'todo')}) if raises else (None, None, args)
     try:
-        with (card.raising(store, tid, then) if raises else contextlib.nullcontext()):
+        with (card.raising(store, tid, then, todo) if raises else contextlib.nullcontext()):
             if raises and isinstance((args or {}).get('items'), list): out = _many(store, tid, name, args, doors)
             else: out = _call(store, tid, name, args, doors, skip)
     except ValueError:
@@ -585,8 +585,12 @@ ITEMS = {'type': 'array', 'items': {'type': 'object'},
 # per checkout
 TOOLS['propose'][2]['properties']['items'] = ITEMS
 # ...and on every card a tool raises, the agent's own step after his press (card.raising): that press wakes it only where it names one
+# ...AND THE TO-DO THE CARD DOES (walk 22, 2026-11-25: Codex put `then: "mark to-do ... complete"` on every card, so every Send woke it to tick a
+# box and say it went): the press's record is Taskuary's - it ticks the to-do as the press goes (card.went), and nobody is woken for it
 for _t in TOOLS.values():
-    if _t[0] == 'propose': _t[2]['properties']['then'] = {'type': 'string', 'description': 'your own step after his press, if any'}
+    if _t[0] == 'propose':
+        _t[2]['properties']['then'] = {'type': 'string', 'description': 'your own next act after his press, if any (not bookkeeping - Taskuary records the press itself)'}
+        _t[2]['properties']['todo'] = {'type': 'string', 'description': "the id of this task's to-do this card does, if one - Taskuary ticks it when his press has gone"}
 def _take_back(store, tid: int, doors: dict, old, stand: list) -> None:
     "The one unsent card `old` names (its id, or who or what it was to), withdrawn - never one of `stand`, the cards the call itself stands as."
     from . import verdicts

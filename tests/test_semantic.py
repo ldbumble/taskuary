@@ -234,12 +234,11 @@ def test_the_metric_tools_are_reachable_on_a_read_only_intacct_card():
 
 
 # Fail-closed is the right default, but a type nobody classified is a refusal nobody predicted: it
-# needs 'write' on its card, so it is simply denied wherever that card ships at 'read'. These seven
-# were already unclassified. The test is here so an EIGHTH is a decision somebody made on purpose
+# needs 'write' on its card, so it is simply denied wherever that card ships at 'read'. These two
+# are unclassified on purpose. The test is here so a THIRD is a decision somebody made on purpose
 # rather than a tool that mysteriously will not run - adding a report type means giving it an
 # authority in scopes.ACTIONS, or adding it below and saying why 'write' is right for it.
-UNCLASSIFIED = ['agent', 'assistant', 'calendar', 'google_sheets', 'kb_reindex',
-                'sharepoint_file', 'sharepoint_list', 'taskuary']   # a Taskuary card reads the store, like the assistant
+UNCLASSIFIED = ['agent', 'kb_reindex']   # each writes Taskuary's own store (scopes.OWN_STORE); the readers once listed here are declared reads (2026-11-25)
 
 
 def test_no_new_report_type_is_left_unclassified():

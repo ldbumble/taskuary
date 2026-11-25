@@ -2,6 +2,26 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.4.3.8 - 2026-11-25
+
+- The file cookie is keyed by the owner token, never the token itself
+- Give starlette and fastapi floors above their published advisories
+- A connector secret its card never declared is one by its shape: sealed at rest, kept from agents
+- An approved held step says how it ended: its error line, else its exit code and output
+- The desktop window saves only its own server's files, under names that show what they are
+- A Send of his words never answers the question its agent is parked on
+- A reply that asks waits on them on every channel; a chat stranger's hold names them
+- The dashboard's "Waiting on you" is the rail's fact, not every open task
+- A rail row waits on whoever the header names, a reply's watch included
+- A page an agent shows has no peer connection and no window of its own; its links open through the app
+- A report's row says when it ran from its last run, as the line under it does
+- The Assistant says a draft can be sent as the draft's own card reads it
+- A file of the task linked in an answer's words opens as that file
+- A folder that holds Taskuary's home or a sign-in place is that place to the read gate
+- The model he picks on an AI card's chooser is one its harness offers, so the run takes it
+- The end-of-day brief's "what I did" is newest first, the acts that went live among the mail
+- A folder holding a secret place may still be LISTED on the owner's press; only reading through it is refused
+
 ## 0.4.3.7 - 2026-11-24
 
 - Taskuary at a glance tells one story: the week in five numbers, every day in one switched chart, the flow, what waits, the cost

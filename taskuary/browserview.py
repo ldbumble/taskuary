@@ -137,6 +137,16 @@ def env(sid: str) -> dict:
     return {'AGENT_BROWSER_SESSION': session_name(sid), 'AGENT_BROWSER_CDP': str(cdp_port(sid)),
             'AGENT_BROWSER_IDLE_TIMEOUT_MS': IDLE_MS, 'AGENT_BROWSER_AUTOSAVE_INTERVAL_MS': AUTOSAVE_MS}
 def _cli_env(sid: str) -> dict: return {**os.environ, **env(sid)}    # the server's own calls match the pty's
+# ...AND IT STANDS IN THE TASK'S FOLDER (walk 19: `agent-browser screenshot proton-signup.png` saved into the folder the SERVER was started
+# in - the daemon resolves a relative path against its own working folder, and it took the server's). The task's outputs folder, where what
+# the agent makes is shown; a session no task names, Taskuary's scratch - never wherever Taskuary was started
+def workdir(sid: str) -> Path:
+    from . import outputs, terminal as hub_term
+    tid = getattr(hub_term.get(sid), 'task_id', None)
+    d = outputs.folder(int(tid)) if tid else downloads(sid)
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+def _cli(sid: str) -> dict: return {'env': _cli_env(sid), 'cwd': str(workdir(sid))}
 def home() -> Path: return Path(os.environ.get('AGENT_BROWSER_HOME') or Path.home() / '.agent-browser')
 
 
@@ -531,7 +541,7 @@ def switch_tab(sid: str, tab: str) -> bool:
     "Make tab `tab` (t<N> or its target id) the active one of this session's browser. Output to a FILE, never a pipe (navigate)."
     exe = program()
     if not exe or not TAB_REF.fullmatch(str(tab or '')) or not state(sid, fresh=True)['open']: return False
-    try: ok = spawn.output([exe, '--session', session_name(sid), 'tab', tab], NAV_WAIT, env=_cli_env(sid))[0] == 0
+    try: ok = spawn.output([exe, '--session', session_name(sid), 'tab', tab], NAV_WAIT, **_cli(sid))[0] == 0
     except subprocess.TimeoutExpired: ok = False
     except OSError as e: logger.debug(f'the browser of {sid} did not switch to {tab}: {e}'); return False
     _CACHE.pop(sid, None)
@@ -758,7 +768,7 @@ def close(sid: str, tid: int = None):
         if (stop := _WINDOWS.pop(sid, None)): stop.set()
         if exe and _read(session_name(sid), 'stream'):
             _safe_keep(sid)                                        # what it holds now, whether or not agent-browser's own save on close works
-            try: spawn.run([exe, '--session', session_name(sid), 'close'], env=_cli_env(sid), timeout=20, capture_output=True)
+            try: spawn.run([exe, '--session', session_name(sid), 'close'], **_cli(sid), timeout=20, capture_output=True)
             except (OSError, subprocess.SubprocessError) as e: logger.debug(f'could not close the browser of {sid}: {e}')
         _end_daemon(sid)
         _CACHE.pop(sid, None); LAST.pop(sid, None); _BEGAN.pop(str(sid), None); listed(sid, False); _forget_profile(sid)
@@ -1270,14 +1280,14 @@ def start(sid: str, url: str = 'about:blank') -> bool:
         except Exception as e: logger.debug(f'the browser of {sid} starts without the sign-ins live elsewhere: {e}')
         # ...a helper an earlier command left pointed at a Chrome that was never there is closed first: it answers, and drives nothing
         if _listening(int(_read(session_name(sid), 'stream') or 0) if _read(session_name(sid), 'stream').isdigit() else 0):
-            try: spawn.run([exe, '--session', session_name(sid), 'close'], env=_cli_env(sid), timeout=20, capture_output=True)
+            try: spawn.run([exe, '--session', session_name(sid), 'close'], **_cli(sid), timeout=20, capture_output=True)
             except (OSError, subprocess.SubprocessError) as e: logger.debug(f'the helper of {sid} without a Chrome was not closed: {e}')
             _end_daemon(sid, [_daemon_pid(sid)]); _CACHE.pop(sid, None)
         if (chrome := real_chrome(sid)) is None: return False
         listed(sid, True, [chrome] if chrome else None)
         cmd = [exe, '--session', session_name(sid), '--restore', RESTORE_KEY, 'open', url or 'about:blank']
         try:
-            spawn.popen(cmd, env=_cli_env(sid), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            spawn.popen(cmd, **_cli(sid), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                              stdin=subprocess.DEVNULL, close_fds=True)
         except (OSError, subprocess.SubprocessError) as e:
             logger.warning(f'could not start the browser for {sid}: {e}')
@@ -1359,7 +1369,7 @@ def close_orphans() -> int:
     for sid, pid in _listed().items():
         done = False
         if exe and _read(session_name(sid), 'stream'):
-            try: spawn.run([exe, '--session', session_name(sid), 'close'], env=_cli_env(sid), timeout=20, capture_output=True); done = True
+            try: spawn.run([exe, '--session', session_name(sid), 'close'], **_cli(sid), timeout=20, capture_output=True); done = True
             except (OSError, subprocess.SubprocessError) as e: logger.debug(f'could not close the left-over browser {sid}: {e}')
         n += _end_daemon(sid, pid) or done
         listed(sid, False); _forget_profile(sid)
@@ -1388,7 +1398,7 @@ def set_viewport(sid: str, w: int, h: int) -> bool:
     lock = _START_LOCKS.get(sid)
     if (lock and lock.locked()) or not state(sid, fresh=True).get('open'): return False
     try:
-        spawn.popen([exe, '--session', session_name(sid), 'set', 'viewport', str(w), str(h)], env=_cli_env(sid),
+        spawn.popen([exe, '--session', session_name(sid), 'set', 'viewport', str(w), str(h)], **_cli(sid),
                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL, close_fds=True)
         return True
     except (OSError, subprocess.SubprocessError) as e:

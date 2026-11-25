@@ -328,8 +328,8 @@ def _run(sid: str, args: list, wait: float, tag: str, cwd: str = None) -> tuple:
     if not exe: raise RuntimeError('agent-browser is not installed')
     t0 = time.time()
     _ = browserview.began(sid) if args and (args[0] not in LOOKS or args[0] in NAVS) else browserview.unstick(sid)
-    try: rc, said = spawn.output([exe, '--session', browserview.session_name(sid), *args], wait, env=browserview._cli_env(sid),
-                                 **({'cwd': cwd} if cwd and os.path.isdir(cwd) else {}))
+    try: rc, said = spawn.output([exe, '--session', browserview.session_name(sid), *args], wait,
+                                 **{**browserview._cli(sid), **({'cwd': cwd} if cwd and os.path.isdir(cwd) else {})})
     except subprocess.TimeoutExpired: raise RuntimeError(LATE + (f' - {browserview.STOPPED}' if browserview.unstick(sid, t0) else ''))
     return rc, said + (f'\n{browserview.STOPPED}' if rc != 0 and browserview.unstick(sid, t0) else '')
 

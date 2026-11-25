@@ -88,6 +88,22 @@ class StateTests(unittest.TestCase):
                 self.assertTrue(bv.start('slow'))
         self.assertGreater(sum(slept), 10, 'it waited past the warm budget rather than giving up on it')
 
+    def test_the_browser_stands_in_its_task_s_folder_never_where_the_server_was_started(self):
+        """Walk 19: `agent-browser screenshot proton-signup.png` wrote into the folder Taskuary was started in (the repository root there) - the
+        daemon resolves a relative path against its own working folder, and the server launched it from its own. It stands in the task's
+        outputs folder; every command the server sends it does too."""
+        from taskuary import outputs
+        terminal.SESSIONS['w19'] = SimpleNamespace(task_id=7)
+        try:
+            got, opens = [], iter([False] + [True] * 60)
+            with mock.patch.object(bv.shutil, 'which', return_value='agent-browser'), mock.patch.object(bv.spawn, 'popen', side_effect=lambda cmd, **kw: got.append(kw)),                  mock.patch.object(bv.time, 'sleep'), mock.patch.object(bv, 'state', side_effect=lambda sid, fresh=False: {'open': next(opens), 'url': '', 'port': 0}):
+                self.assertTrue(bv.start('w19', 'https://mail.example'))
+            self.assertEqual(Path(got[0]['cwd']), outputs.folder(7))
+            self.assertNotEqual(Path(got[0]['cwd']).resolve(), Path.cwd().resolve())
+            self.assertEqual(Path(bv._cli('w19')['cwd']), outputs.folder(7))
+            self.assertEqual(Path(bv._cli('no-task')['cwd']), bv.downloads('no-task'), "a session no task names: scratch, never where the server stands")
+        finally: terminal.SESSIONS.pop('w19', None)
+
     @pytest.mark.real_chrome
     def test_the_session_s_chrome_is_a_real_one_taskuary_starts_and_agent_browser_attaches_to(self):
         """Cloudflare looped on agent-browser's own headless launch, whose navigator.webdriver is TRUE (the owner, 2026-11-16): the

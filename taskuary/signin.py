@@ -1272,7 +1272,7 @@ def _cdp_url(sid: str) -> str:
     if (own := browserview.devtools_url(sid)): return own
     exe = browserview.program()
     if not exe: raise SignInError('agent-browser is not installed')
-    try: rc, said = spawn.output([exe, '--session', browserview.session_name(sid), 'get', 'cdp-url'], 20, env=browserview._cli_env(sid))
+    try: rc, said = spawn.output([exe, '--session', browserview.session_name(sid), 'get', 'cdp-url'], 20, **browserview._cli(sid))
     except subprocess.TimeoutExpired: raise SignInError('the browser did not answer in time')
     m = re.search(r'ws://127\.0\.0\.1:\d+/devtools/browser/[\w-]+', said)
     if rc != 0 or not m: raise SignInError("the task's browser is not open")

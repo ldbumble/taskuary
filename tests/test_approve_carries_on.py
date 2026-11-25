@@ -18,6 +18,12 @@ def told_with(s, tid, *said) -> str:
     return '\n'.join([*map(str, said), events.take(s, tid)[0]])
 
 
+def acted_card(s, tid) -> int:
+    "An act he pressed Approve on (a held run, a tool's step) - its yes is the step the agent is parked on."
+    rid = s.add_review({'TaskId': tid, 'Kind': 'action', 'Status': 'pending', 'DraftText': json.dumps({'action': 'run_tool'})})
+    s.decide_review(rid, 'approved', None, 'owner'); return rid
+
+
 def sent_card(s, tid) -> int:
     "A card he pressed Send on, as the store writes it: its event is what the agent hears of the press (events.card)."
     rid = s.add_review({'TaskId': tid, 'Kind': 'draft_reply', 'Status': 'pending', 'DraftText': 'Confirmed.'})
@@ -272,7 +278,7 @@ class ParkedOnItsOwnQuestion(unittest.TestCase):
         with mock.patch.dict(term.SESSIONS, {'a': sess}, clear=True):
             self.asked(sess)
             t0 = time.time()
-            self.assertEqual(general.approved(self.s, self.tid, 'Send', 'the reply was sent', review=sent_card(self.s, self.tid)), 'told')
+            self.assertEqual(general.approved(self.s, self.tid, 'Approve', 'it ran', review=acted_card(self.s, self.tid)), 'told')
             self.assertLess(time.time() - t0, 2, 'the press answered before the turn it began had run')
             end = time.time() + 5
             while not told and time.time() < end: time.sleep(.01)
@@ -302,7 +308,7 @@ class ParkedOnItsOwnQuestion(unittest.TestCase):
                            say=lambda *a, **k: self.fail("Taskuary's note went in as the owner's prompt"))
         with mock.patch.dict(term.SESSIONS, {'a': sess}, clear=True), mock.patch.object(term, 'chooser_in', return_value=False):
             self.asked(sess)
-            self.assertEqual(general.approved(self.s, self.tid, 'Send', 'the reply was sent', review=sent_card(self.s, self.tid)), 'told')
+            self.assertEqual(general.approved(self.s, self.tid, 'Approve', 'it ran', review=acted_card(self.s, self.tid)), 'told')
             self.after()
         [(text, brief)] = got
         self.assertTrue(brief); self.assertIn('he approved it', told_with(self.s, self.tid, text))
@@ -940,11 +946,15 @@ class ASendIsSaidByItsCard(unittest.TestCase):
             self.s.add_comment(self.tid, 'assistant', general.SUMMARY_TYPE, json.dumps({'did': 'drafted it', 'after_press': 'send'}))
             self.assertEqual(general.approved(self.s, self.tid, 'Send', 'the reply was sent', review=rid), 'told')    # ...a step of its own follows
 
-    def test_a_send_its_agent_is_parked_on_wakes_it_though_it_declared_no_step(self):
-        "It asked \"Should the reply go out?\" and stands there: he pressed Send, so its step follows - woken with no summary filed."
+    def test_a_send_never_answers_the_question_its_agent_is_parked_on_and_an_approved_act_does(self):
+        """Walk 20: a reply card to a vendor and ONE question on what headcount to share, in the same turn - Send woke the agent with its
+        question still open, and it narrated the Send under the card. His words sent to someone else are not his answer to it; an approved
+        act it is parked on is its step following."""
         rid, sess = sent_card(self.s, self.tid), SimpleNamespace(sid='run1', task_id=self.tid, alive=True, waiting=lambda: True)
-        with mock.patch.object(general, 'to_agent', return_value='told') as told, mock.patch.dict(term.SESSIONS, {'run1': sess}, clear=True):
-            self.assertEqual(general.approved(self.s, self.tid, 'Send', 'the reply was sent', review=rid), '')       # ...live, asking nothing
+        act = acted_card(self.s, self.tid)
+        with mock.patch.object(general, 'to_agent', return_value='told') as told, mock.patch.dict(term.SESSIONS, {'run1': sess}, clear=True), \
+             mock.patch.object(general, 'at_work', return_value=False):
+            self.assertTrue(ws.record(self.s, self.tid, 'run1', 'input_needed', text='What headcount should I share with them?', source='api'))
+            self.assertEqual(general.approved(self.s, self.tid, 'Send', 'the reply was sent', review=rid), '')       # ...the Send is its card's
             told.assert_not_called()
-            self.assertTrue(ws.record(self.s, self.tid, 'run1', 'input_needed', text='Should the reply go out?', source='api'))
-            self.assertEqual(general.approved(self.s, self.tid, 'Send', 'the reply was sent', review=rid), 'told')   # ...parked on its question
+            self.assertEqual(general.approved(self.s, self.tid, 'Approve', 'it ran', review=act), 'told')            # ...an act it waits on

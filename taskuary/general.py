@@ -1144,11 +1144,12 @@ def approved(store, tid: int, press: str, what: str, actor: str = 'owner', revie
     # every Send, it said "I've sent the email to Gail" under the card that already read Sent. One at work hears it now; one at rest that said
     # nothing comes after the press hears it in its next turn, the card's event still past its cursor
     # ...and words he SENT are said by their card (a reply, a mail, a post): at work or at rest, the agent hears them in its next turn unless it
-    # said a step follows - one at work was handed the Send by the waiting room as it stopped, and answered it under the card (2026-11-25) -
-    # or it is parked on a question of its own (_asking): it asked, he pressed, its step follows
+    # said a step follows - one at work was handed the Send by the waiting room as it stopped, and answered it under the card (2026-11-25).
+    # An act it is parked on a question about (_asking) is its step following; words he sent to someone else never answer its question
+    # (walk 20: the Send to a vendor woke an agent whose question on what headcount to share was still open)
     from . import workerstate as ws
     said = bool(review) and (store.get_review(int(review)) or {}).get('Kind') != 'action'
-    if (said or not at_work(int(tid))) and not carries_on(store, tid, said=said) and not _asking(store, ws._live(int(tid))): return ''
+    if (said or not at_work(int(tid))) and not carries_on(store, tid, said=said) and (said or not _asking(store, ws._live(int(tid)))): return ''
     # ...WHAT WENT IS ITS CARD'S EVENT (events.card, written as the store wrote the card): this only wakes the agent to hear it
     mark = review and (lambda how: store.audit('review', int(review), TOLD, actor, 'system', {'task': int(tid), 'how': how}))
     return to_agent(store, tid, '', actor, heard=mark, pressed=True)

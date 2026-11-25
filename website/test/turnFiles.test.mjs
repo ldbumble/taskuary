@@ -14,6 +14,7 @@ test("a group's label is a plain count by kind, from one wording function", () =
   assert.equal(filesLabel([wb(1), { name: "summary.pdf" }, { name: "chart.png" }]), "3 files");
   assert.equal(filesLabel([{ name: "a.pdf" }, { name: "b.pdf" }]), "2 PDFs");
   assert.equal(fileKind({ name: "notes.zip" }), "file");
+  assert.equal(fileKind({ name: "board-deck.pptx" }), "document", "a deck previews as its slides' words (outputs.document), never a bare file");
   assert.deepEqual([sizeWords(512), sizeWords(20480), sizeWords(3 * 1048576), sizeWords(undefined)], ["512 B", "20 KB", "3.0 MB", ""]);
 });
 

@@ -459,3 +459,24 @@ class TheAnswer(unittest.TestCase):
         self.assertEqual(self.c.get(f'/api/tasks/{self.tid}/view-answers').json(), {'v1': {'c': 'Pro - $540/mo'}})
         # ...and no chat line besides: the view he pressed shows it (general.press_lines)
         self.assertFalse([m for m in general.press_lines(self.s, self.tid) if 'Pro' in m['content'][0]['text']])
+
+
+def test_files_handed_over_stand_in_the_order_they_were_handed():
+    """The card gallery, 2026-11-25: "three versions - pick one" stood newest first - the third version led the group, and a board pack led
+    with its clip. The files of one hand-over stand in the order the agent handed them, whatever was written last."""
+    import os, shutil
+    from taskuary import outputs
+    s = MemoryStore(); tid = s.create_task({'Title': 'Three versions of the banner', 'Kind': 'general'}, 'owner')
+    out = outputs.folder(tid)
+    for d in (out, outputs.turns_folder(tid)): shutil.rmtree(d, ignore_errors=True)      # ...another test's task of the same number
+    out.mkdir(parents=True, exist_ok=True)
+    names = ['banner-one.md', 'banner-two.md', 'banner-three.md']
+    for i, n in enumerate(names): (out / n).write_text(f'# version {i + 1}\n', encoding='utf-8'); os.utime(out / n, (1_700_000_000 + i, 1_700_000_000 + i))
+    try:
+        agenttools.show_files(s, tid, [str(out / n) for n in names])
+        listed = [{**r, 'handed': True} for r in outputs.listing(tid)]
+        assert [r['name'] for r in listed] == names[::-1], 'the folder lists newest first'
+        assert [r['name'] for r in outputs.as_handed(listed, outputs.handed(tid))] == names
+        agenttools.show_files(s, tid, [str(out / names[0])])                       # ...shown again, it keeps its place
+        assert outputs.handed(tid) == names
+    finally: shutil.rmtree(out, ignore_errors=True); shutil.rmtree(outputs.turns_folder(tid), ignore_errors=True)

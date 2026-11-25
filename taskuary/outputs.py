@@ -30,7 +30,7 @@ TYPES = {'.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.s
 # be able to play/interact/edit things taskuary generates right on screen" - an MP4 opened as its raw bytes)
 PREVIEW = {'.xlsx': 'sheet', '.xlsm': 'sheet', '.csv': 'table', '.pdf': 'pdf', '.png': 'picture', '.jpg': 'picture', '.jpeg': 'picture',
            '.gif': 'picture', '.webp': 'picture', '.md': 'text', '.txt': 'text', '.json': 'text', '.log': 'text', '.tsv': 'text',
-           '.svg': 'page', '.html': 'page', '.htm': 'page', '.docx': 'document',
+           '.svg': 'page', '.html': 'page', '.htm': 'page', '.docx': 'document', '.pptx': 'document',
            '.mp4': 'video', '.m4v': 'video', '.webm': 'video', '.mov': 'video', '.mp3': 'audio', '.wav': 'audio', '.m4a': 'audio', '.ogg': 'audio'}
 
 
@@ -301,17 +301,23 @@ def turn_folder(tid: int, turn: int) -> Path: return turns_folder(tid) / str(int
 # turn wrote was. A file of the folder is drawn in its turn only once `show` hands it over - several at once one artifact; the rest stay in
 # the task's files
 def hand(tid: int, paths) -> None:
-    "Mark these files of task `tid`'s folder (paths in it, or under it) as handed over to the owner."
+    "Mark these files of task `tid`'s folder (paths in it, or under it) as handed over to the owner, in the order they were handed."
     got = handed(tid)
     for p in paths:
-        try: got.add(rel(tid, Path(p)))
+        try: r = rel(tid, Path(p))
         except (OSError, ValueError): continue
+        if r not in got: got.append(r)
     turns_folder(tid).mkdir(parents=True, exist_ok=True)
-    (turns_folder(tid) / 'handed.json').write_text(json.dumps(sorted(got)), encoding='utf-8')
-def handed(tid: int) -> set:
-    "The files of task `tid`'s folder its agent handed over (hand), by their paths in it."
-    try: return set(json.loads((turns_folder(tid) / 'handed.json').read_text(encoding='utf-8')))
-    except (OSError, ValueError): return set()
+    (turns_folder(tid) / 'handed.json').write_text(json.dumps(got), encoding='utf-8')
+def handed(tid: int) -> list:
+    "The files of task `tid`'s folder its agent handed over (hand), by their paths in it - in the order it handed them."
+    try: return list(json.loads((turns_folder(tid) / 'handed.json').read_text(encoding='utf-8')))
+    except (OSError, ValueError): return []
+def as_handed(rows: list, gave: list) -> list:
+    """`rows` with the handed ones among them in the order they were handed (the card gallery, 2026-11-25: "three versions - pick one" stood
+    newest first, the third version leading; a board pack led with its clip): each keeps a handed row's place, the rest stay where they were."""
+    own = iter(sorted((r for r in rows if r.get('handed')), key=lambda r: gave.index(r['path']) if r['path'] in gave else len(gave)))
+    return [next(own) if r.get('handed') else r for r in rows]
 
 
 def _kept_copy(tid: int, path: str, made: list):
@@ -678,7 +684,9 @@ def document(p: Path) -> dict:
     DOC_BLOCKS of them - read from the file's own XML (a .docx is a zip), so no library is needed and nothing in it runs."""
     import zipfile
     from xml.etree import ElementTree as ET
-    with zipfile.ZipFile(p) as z: root = ET.fromstring(z.read('word/document.xml'))
+    with zipfile.ZipFile(p) as z:
+        if 'word/document.xml' not in z.namelist(): return _deck(z)
+        root = ET.fromstring(z.read('word/document.xml'))
     body = root.find(f'{_W}body')
     text = lambda el: ''.join(t.text or '' for t in el.iter(f'{_W}t'))
     blocks, more = [], False
@@ -692,6 +700,35 @@ def document(p: Path) -> dict:
             rows = [[_cell(text(c).strip()) for c in r.findall(f'{_W}tc')][:COLS] for r in el.findall(f'{_W}tr')][:ROWS]
             if rows: blocks.append({'rows': rows})
     while blocks and not blocks[-1].get('text', True): blocks.pop()
+    return {'blocks': blocks, 'more': more, 'max_blocks': DOC_BLOCKS}
+
+
+def _deck(z) -> dict:
+    """A DECK IS READ THE SAME WAY (the card gallery, 2026-11-25: a .pptx handed over stood as a bare name - nothing under it, not even a line
+    saying why): each slide in the deck's own order, its title the heading (its number where it has none), then its lines and its tables.
+    Its words, not its look - off the slides' own XML, by each tag's local name."""
+    from xml.etree import ElementTree as ET
+    loc = lambda el: el.tag.rpartition('}')[2]
+    words = lambda el: ''.join(t.text or '' for t in el.iter() if loc(t) == 't').strip()
+    names = sorted((n for n in z.namelist() if re.fullmatch(r'ppt/slides/slide\d+\.xml', n)), key=lambda n: int(re.search(r'(\d+)\.xml$', n).group(1)))
+    # ...the order he sees them in is the presentation's list, not the files' numbers: a slide moved keeps its file name
+    try:
+        rel = {r.get('Id'): f"ppt/{str(r.get('Target') or '').lstrip('/').removeprefix('ppt/')}" for r in ET.fromstring(z.read('ppt/_rels/presentation.xml.rels'))}
+        listed = [rel.get(next((v for k, v in s.attrib.items() if k.endswith('}id')), '')) for s in ET.fromstring(z.read('ppt/presentation.xml')).iter() if loc(s) == 'sldId']
+        names = [n for n in listed if n in names] or names
+    except (KeyError, ET.ParseError): pass
+    blocks, more = [], False
+    for i, n in enumerate(names, 1):
+        if len(blocks) >= DOC_BLOCKS: more = True; break
+        root = ET.fromstring(z.read(n))
+        titled = {id(x) for sp in root.iter() if loc(sp) == 'sp' and any(loc(e) == 'ph' and e.get('type') in ('title', 'ctrTitle') for e in sp.iter()) for x in sp.iter()}
+        tables = [t for t in root.iter() if loc(t) == 'tbl']
+        celled = {id(x) for t in tables for x in t.iter()}
+        title = ' '.join(w for x in root.iter() if loc(x) == 'p' and id(x) in titled and (w := words(x)))
+        blocks.append({'text': _cell(f'{i}. {title}' if title else f'Slide {i}'), 'heading': True})
+        blocks += [{'text': _cell(w)} for x in root.iter() if loc(x) == 'p' and id(x) not in titled and id(x) not in celled and (w := words(x))]
+        blocks += [{'rows': rows} for t in tables
+                   if (rows := [[_cell(words(c)) for c in r if loc(c) == 'tc'][:COLS] for r in t if loc(r) == 'tr'][:ROWS])]
     return {'blocks': blocks, 'more': more, 'max_blocks': DOC_BLOCKS}
 
 

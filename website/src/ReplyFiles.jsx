@@ -19,7 +19,7 @@ import { useVerbs } from "./actionRow.js";
 import { FileDialog } from "./PublishedPages.jsx";
 import { AttachChip, AttachRow } from "./promptImages.jsx";
 // a file on the reply as the viewer reads it: its preview by its kind, read back from the reply itself (server review_attachment_read)
-const EXT_PREVIEW = { csv: "text", txt: "text", md: "text", json: "text", xlsx: "sheet", xls: "sheet", docx: "document", pdf: "pdf", png: "picture",
+const EXT_PREVIEW = { csv: "text", txt: "text", md: "text", json: "text", xlsx: "sheet", xls: "sheet", docx: "document", pptx: "document", pdf: "pdf", png: "picture",
   jpg: "picture", jpeg: "picture", gif: "picture", webp: "picture" };
 const asViewed = (rid, f) => { const e = String(f.name).split(".").pop().toLowerCase(), u = `/api/reviews/${rid}/attachment?name=${encodeURIComponent(f.name)}`;
   return { id: `reply:${rid}:${f.name}`, name: f.name, path: f.name, kind: "output", preview: EXT_PREVIEW[e] || null, url: u,

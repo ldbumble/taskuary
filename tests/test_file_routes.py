@@ -110,6 +110,29 @@ class FileRoutesTests(unittest.TestCase):
         (self.dir / 'broken.docx').write_bytes(b'not a zip')
         self.assertEqual(self.client.get(f'/api/task-outputs/{self.tid}/broken.docx', params={'preview': 'true'}).status_code, 422)
 
+    def test_a_deck_previews_as_its_slides_in_the_decks_own_order(self):
+        """The card gallery, 2026-11-25: a .pptx an agent handed over stood as a bare name with nothing under it. A deck previews on the road a
+        document does - each slide its title as a heading, then its lines and its table - in the order the presentation lists them."""
+        A, P, R = 'http://schemas.openxmlformats.org/drawingml/2006/main', 'http://schemas.openxmlformats.org/presentationml/2006/main', 'http://schemas.openxmlformats.org/officeDocument/2006/relationships'
+        para = lambda t: f'<a:p><a:r><a:t>{t}</a:t></a:r></a:p>'
+        shape = lambda t, ph='': f'<p:sp><p:nvSpPr><p:nvPr>{ph}</p:nvPr></p:nvSpPr><p:txBody>{para(t)}</p:txBody></p:sp>'
+        slide = lambda *parts: f'<p:sld xmlns:p="{P}" xmlns:a="{A}"><p:cSld><p:spTree>{"".join(parts)}</p:spTree></p:cSld></p:sld>'
+        table = '<p:graphicFrame><a:tbl><a:tr><a:tc><a:txBody>' + para('Vendor') + '</a:txBody></a:tc><a:tc><a:txBody>' + para('Cost') + '</a:txBody></a:tc></a:tr></a:tbl></p:graphicFrame>'
+        with zipfile.ZipFile(self.dir / 'launch.pptx', 'w') as z:
+            # ...the file numbered 1 is shown second: he moved it, and the presentation's own list says so
+            z.writestr('ppt/slides/slide1.xml', slide(shape('Why now', '<p:ph type="title"/>'), shape('Invoices in one place'), table))
+            z.writestr('ppt/slides/slide2.xml', slide(shape('Ledger portal launch', '<p:ph type="ctrTitle"/>'), shape('Northwind')))
+            z.writestr('ppt/slides/slide3.xml', slide(shape('No title on this one')))
+            z.writestr('ppt/presentation.xml', f'<p:presentation xmlns:p="{P}" xmlns:r="{R}"><p:sldIdLst><p:sldId id="256" r:id="rId2"/><p:sldId id="257" r:id="rId1"/>'
+                                               '<p:sldId id="258" r:id="rId3"/></p:sldIdLst></p:presentation>')
+            z.writestr('ppt/_rels/presentation.xml.rels', '<Relationships>' + ''.join(f'<Relationship Id="rId{i}" Target="slides/slide{i}.xml"/>' for i in (1, 2, 3)) + '</Relationships>')
+        row = self.rows()['launch.pptx']
+        self.assertEqual(row['preview'], 'document')
+        got = self.client.get(row['url'], params={'preview': 'true'}).json()
+        self.assertEqual(got['blocks'], [{'text': '1. Ledger portal launch', 'heading': True}, {'text': 'Northwind'},
+                                         {'text': '2. Why now', 'heading': True}, {'text': 'Invoices in one place'}, {'rows': [['Vendor', 'Cost']]},
+                                         {'text': 'Slide 3', 'heading': True}, {'text': 'No title on this one'}])
+
     def test_a_long_document_previews_its_start(self):
         W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
         paras = ''.join(f'<w:p><w:r><w:t>line {i}</w:t></w:r></w:p>' for i in range(outputs.DOC_BLOCKS + 20))

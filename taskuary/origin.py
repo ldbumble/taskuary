@@ -40,9 +40,14 @@ def own_system(store, row: dict) -> str:
     return ''
 
 
+STEERED = 'triage read it as written to steer an AI, so no agent is handed it until you trust it'
+
 def of_message(store, row: dict, memo: dict = None, seen: dict = None) -> tuple:
     "(origin, why) for one stored message row. No network: senders.known is never asked to look deeper. `memo`: senders.known's."
     if _own(row): return 'owner', 'your own words'
+    # ...A LINE READ AS WRITTEN TO STEER AN AI is held whoever sent it (senders.steers - the model's reading, kept on the row): a trusted
+    # colleague's first mail held its start, then rode the next turn's events and brief (the red team, 2026-11-24, T1). His Trust hands it on
+    if senders.steers(row): return 'stranger', STEERED
     ch = row.get('Channel') or ''
     # an Advisor idea's line is as trusted as the least trusted thing it cites (idea_rests_on), a report's as the sources its run read
     # (report_rests_on). Every other line in Taskuary's voice - a digest, the Advisor's post - summarises what it read and names no

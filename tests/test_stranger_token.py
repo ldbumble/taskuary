@@ -48,7 +48,9 @@ def test_the_scope_of_a_stranger_token_is_stranger_and_the_others_are_as_before(
     assert guard.scope_of(srv, {'X-Taskuary-Token': 'k1'}) == guard.AGENT
     assert guard.scope_of(srv, {'X-Taskuary-Token': 'own'}) == guard.OWNER
     assert guard.scope_of(srv, {'X-Taskuary-Token': 'nope'}) == guard.ANON
-    assert guard.scope_of({'agent_token': 'k1'}, {'X-Taskuary-Token': guard.stranger_token(srv, 7)}) == guard.STRANGER   # even with no owner token
+    bare = {'agent_token': 'k1'}
+    assert guard.scope_of(bare, {'X-Taskuary-Token': guard.stranger_token(bare, 7)}) == guard.STRANGER   # even with no owner token
+    assert guard.stranger_token(srv, 7) != guard.stranger_token(bare, 7)            # ...keyed by the owner's token where there is one (T7)
 
 def test_the_stranger_table():
     d = lambda m, p, q=None, of=None: guard.stranger_denied(m, p, q or {}, 7, of or (lambda k, a: None))
@@ -107,8 +109,9 @@ def test_a_permit_takes_the_stranger_token_for_its_own_task(monkeypatch):
 
 def test_a_stranger_token_opens_no_socket(monkeypatch):
     class W: headers, query_params = {'host': '127.0.0.1:7787'}, {}
-    t, _ = _task(); W.query_params = {'token': guard.stranger_token(SRV(), t)}
+    t, _ = _task()
     monkeypatch.setitem(server.cfg['server'], 'token', '')            # the open, token-less install: still not a stranger's
+    W.query_params = {'token': guard.stranger_token(SRV(), t)}
     assert server._ws_ok(W) is False
     W.query_params = {}; assert server._ws_ok(W) is True
 
@@ -116,8 +119,12 @@ def test_owner_and_agent_access_is_unchanged():
     t, mid = _task()
     for p in ('/api/settings', '/api/connectors', f'/api/messages/{mid}', '/api/tasks'):
         assert c.get(p).status_code == 200, p                          # the owner (conftest's default header)
-        assert c.get(p, headers=AGENT()).status_code == 200, p         # the shared agent token, no proof: owner sessions rely on it
-    assert c.post('/api/board/notes', json={'body': 'a line for the others', 'agent': 'coding'}, headers=AGENT()).status_code != 403
+        # ...the shared agent token with no proof reads what is no task's; a task's own parts and every write need its proof (T7)
+        assert c.get(p, headers=AGENT()).status_code == (403 if 'messages' in p else 200), p
+    proof = {**AGENT(), guard.TASK_HDR: guard.task_proof(SRV(), t)}
+    assert c.get(f'/api/messages/{mid}', headers=proof).status_code == 200
+    assert c.post('/api/board/notes', json={'body': 'a line for the others', 'agent': 'coding'}, headers=AGENT()).status_code == 403
+    assert c.post('/api/board/notes', json={'body': 'a line for the others', 'agent': 'coding'}, headers=proof).status_code == 200
     assert c.post('/api/reviews/1/decide', json={'verb': 'approve'}, headers=AGENT()).status_code == 403
 
 

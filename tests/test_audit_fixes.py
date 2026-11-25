@@ -333,3 +333,21 @@ class DoorTests(unittest.TestCase):
                 ws.receive_json()
 
 if __name__ == '__main__': unittest.main()
+
+
+def test_an_audit_row_never_carries_a_connector_secret():
+    """The red team, 2026-11-24 (T5): a connector's create/edit row kept the ConfigJson it saved, and /api/audit/recent served a LINE channel
+    secret, a TOTP key and a password to an agent - which signed its own vendor push with the first. Written without them now, and a row
+    written before is read without them."""
+    import json
+    from taskuary.store import MemoryStore
+    s = MemoryStore()
+    cfg = {'channel_id': '1650001', 'channel_secret': 'S3CRET-line', 'totp_key': 'JBSWY3DP', 'password': 'hunter2', 'host': 'imap.vendor.example'}
+    s.audit('connector', 7, 'create', 'owner', detail={'Type': 'line', 'Name': 'LINE', 'ConfigJson': json.dumps(cfg)})
+    s._exec("INSERT INTO audit (EntityType, EntityId, Action, Actor, ActorType, Detail, CreatedAt) VALUES ('connector', 7, 'edit', 'owner', 'human', ?, '2026-11-01')",
+            (json.dumps({'Type': 'line', 'ConfigJson': json.dumps(cfg)}),))
+    rows = s.list_audit(limit=10)
+    said = ' '.join(r['Detail'] for r in rows)
+    for secret in ('S3CRET-line', 'JBSWY3DP', 'hunter2'): assert secret not in said
+    assert all('1650001' in r['Detail'] and 'imap.vendor.example' in r['Detail'] for r in rows)       # ...what was changed stays said
+    assert 'S3CRET-line' not in str(s._rows("SELECT Detail FROM audit WHERE Action='create'"))         # ...and the new row never held it

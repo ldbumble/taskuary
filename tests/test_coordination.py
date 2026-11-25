@@ -120,7 +120,7 @@ class LiveWallTests(Base):
         self.assertEqual(sorted(n['Body'] for n in bb.live_notes(self.s, CWD)), ['approval pending on the migration', 'legacy note without a session'])
 
     def test_the_owners_house_notes_are_guidance_and_stay_while_agent_house_notes_follow_their_run(self):
-        bb.post(self.s, 'the Intacct credentials are being rotated today', 'blocked', 'you', '')
+        bb.post(self.s, 'the Intacct credentials are being rotated today', 'blocked', 'you', '', owner=True)
         bb.post(self.s, 'found the flaky test, see TQ-0009', 'note', 'assistant', '', None, sid='chat1')
         self.assertEqual([n['Body'] for n in bb.live_notes(self.s, CWD)], ['the Intacct credentials are being rotated today'])
         term.SESSIONS['chat1'] = fake_session(None, 'chat1', cwd='', agent='assistant')
@@ -150,7 +150,7 @@ class LiveWallTests(Base):
     def test_the_general_prompt_carries_live_house_notes_only(self):
         tid = self.fx.task(title='research', summary='x', kind='general')
         bb.post(self.s, 'closed chat left this', 'note', 'assistant', '', None, sid='oldchat')
-        bb.post(self.s, 'the Intacct credentials are being rotated today', 'blocked', 'you', '')
+        bb.post(self.s, 'the Intacct credentials are being rotated today', 'blocked', 'you', '', owner=True)
         _system, user = general._prompt(self.s, tid)
         self.assertIn('rotated today', user); self.assertNotIn('closed chat left this', user)
 

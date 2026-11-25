@@ -20,6 +20,10 @@ export const appLink = (href) => {
   return req && req.kind === "browse" ? h : null;
 };
 
+// ...a link in someone else's words (md.jsx's Outside: a message's body) opens the page it names and nothing it asks to fill: its first part
+// alone - #new-task&kind=send&to=<them> opened a send ready-addressed, #report=1&line=send&to=<them> a report's recipient (the red team, T8b)
+export const placeOnly = (h) => String(h || "").split("&")[0];
+
 // EVERY "#..." LINK IS THE APP'S OWN (TQ-1251: the Assistant's "Open the request" - #new-task - opened the system browser on the desktop app):
 // only pages counted as ours, so New, a message or any hash the canvas reads another way got a new tab, which the desktop window hands
 // to the browser. A hash never leaves the window: it is followed in place, and the canvas opens what it knows

@@ -466,6 +466,7 @@ OAUTH_RETURNS = ('/api/quickbooks/callback', '/api/zoho/callback', '/api/linkedi
 # of ours, with no token: its signature (or the card's secret path) is its proof, and it answers nothing but "taken". The generic OAuth
 # return rides the same tunnel when a vendor refuses an http redirect (oauth.redirect_uri). Every other path keeps the Host check, so a
 # tunnel pointed at this port reaches these doors and not the page that carries the owner token.
+FILE_COOKIE, FILE_READS = 'taskuary_files', ('/api/attachments/', '/api/task-artifacts/', '/api/task-outputs/')
 def _outside_door(path: str) -> bool: return path == '/api/oauth/callback' or path.startswith('/api/inbound/')
 
 @app.middleware('http')
@@ -503,12 +504,12 @@ async def token_gate(request: Request, call_next):
     presented = request.headers.get('X-Taskuary-Token')
     if tok and request.url.path.startswith('/api') and not guard.token_matches(presented, tok, cfg['server'].get('agent_token')) \
             and guard.stranger_tid(cfg['server'], presented) is None:
-        # an <img src> cannot carry a header, so attachment READS take the token in the query
-        # string - the same concession websockets already needed
+        # an <img src> cannot carry a header, so a file READ is the owner's by the cookie his own page was handed (FILE_COOKIE) - never
+        # a token in its address, where history, a referer and a log kept it (the red team, 2026-11-24, T8c)
         # ...and an OAuth callback is a redirect from the provider's site: no header can ride on it.
         # It proves itself with the one-time state it was issued (quickbooks_authorize), not the token.
-        file_read = request.url.path.startswith(('/api/attachments/', '/api/task-artifacts/', '/api/task-outputs/'))
-        if not (file_read and guard.token_matches(request.query_params.get('token'), tok)) \
+        file_read = request.url.path.startswith(FILE_READS)
+        if not (file_read and guard.token_matches(request.cookies.get(FILE_COOKIE), tok)) \
                 and request.url.path not in OAUTH_RETURNS and not _outside_door(request.url.path):
             # In JSON, like every other refusal: an HTML body left `detail` undefined, so a tab that
             # was open across a token change answered every click with whichever screen's generic
@@ -525,7 +526,7 @@ async def token_gate(request: Request, call_next):
     # a deny list left /api/operations running review.approve for it under a path nobody had named.
     scope = guard.scope_of(cfg['server'], request.headers)
     if scope == guard.AGENT:
-        why = guard.denied(request.method, request.url.path) or await run_in_threadpool(
+        why = guard.denied(request.method, request.url.path) or guard.unproven(cfg['server'], request.headers, request.method, request.url.path) or await run_in_threadpool(
             guard.agent_read_denied, cfg['server'], request.headers, request.method, request.url.path, _stranger_file_task, store.get_setting('assistant_dock_task_id'))
         if why:
             logger.warning(f'agent refused {request.method} {request.url.path} - {why}')
@@ -540,7 +541,12 @@ async def token_gate(request: Request, call_next):
         if why:
             logger.warning(f'stranger session on task {tid} refused {request.method} {request.url.path} - {why}')
             return JSONResponse({'detail': f'agents cannot do this: {why}.'}, status_code=403)
-    return await call_next(request)
+    resp = await call_next(request)
+    # ...the owner's page, proven by its header, is handed the cookie its pictures and downloads are read by: same-site only, out of script's reach
+    if tok and scope == guard.OWNER and guard.token_matches(presented, tok) and not request.url.path.startswith(FILE_READS) \
+            and not guard.token_matches(request.cookies.get(FILE_COOKIE), tok):
+        resp.set_cookie(FILE_COOKIE, tok, httponly=True, samesite='strict', path='/api/')
+    return resp
 
 
 def _stranger_file_task(kind: str, aid):
@@ -5261,12 +5267,13 @@ def board_notes(request: Request, cwd: str = '', limit: int = 60, all: bool = Fa
 
 @app.post('/api/board/notes')
 def board_post(body: NoteBody, request: Request):
-    # a stranger's session speaks for its own task, whatever its body says: that task is what keeps the note off every
-    # other session's seed (blackboard.live_notes)
-    tid = guard.stranger_tid(cfg['server'], request.headers.get('X-Taskuary-Token'))
+    # a session speaks for the task its call proves, whatever its body says - a stranger's is what keeps the note off every other session's
+    # seed (blackboard.live_notes) - and only the owner signs a note as his
+    owner = guard.scope_of(cfg['server'], request.headers) == guard.OWNER
+    tid = body.task_id if owner else guard.session_tid(cfg['server'], request.headers)
     try:
-        return blackboard.post(store, body.body, body.kind, body.agent or ACTOR, body.cwd or '',
-                               body.task_id if tid is None else tid, body.files or '')
+        return blackboard.post(store, body.body, body.kind, body.agent or (ACTOR if owner else 'agent'), body.cwd or '',
+                               tid, body.files or '', owner=owner)
     except ValueError as e: raise HTTPException(422, str(e))
 
 @app.post('/api/board/notes/{note_id}/read')
@@ -7452,10 +7459,14 @@ async def concierge_stream(body: ConciergeStreamBody):
     return StreamingResponse(generate(), media_type='application/x-ndjson', headers={'Cache-Control': 'no-cache, no-transform'})
 
 @app.post('/api/reports/{sid}/rerun')
-def report_rerun(sid: int):
+def report_rerun(sid: int, request: Request):
     """Run one report now and hand back what it produced - the assistant's door (an agent token may
     not touch /api/sources, and should not: this changes no configuration). The report lands on the
-    Timeline exactly as a scheduled run would."""
+    Timeline exactly as a scheduled run would. The Assistant's alone among sessions (concierge.tools_block): any task's agent could
+    run the Advisor or any report by it (the red team, 2026-11-24, T7)."""
+    dock = store.get_setting('assistant_dock_task_id')
+    if guard.scope_of(cfg['server'], request.headers) != guard.OWNER and not (str(dock or '').isdigit() and guard.owns_task(cfg['server'], request.headers, int(dock))):
+        raise HTTPException(403, "agents cannot do this: running a report again is the owner's press, or the Assistant's")
     return _rerun_report(sid)
 
 

@@ -166,10 +166,7 @@ _VERIFIED = {'pass': 'pass - the receiving mail server verified the From domain 
              'fail': 'FAILED - the receiving mail server could not verify the From domain: it may be forged'}
 
 
-def org_domain(dom: str) -> str:
-    "The organisation's own domain under a mail host: mail.aiprovider.example -> aiprovider.example; a country's co.uk kept whole."
-    p = (dom or '').lower().strip('.').split('.')
-    return '.'.join(p[-3:] if len(p) > 2 and len(p[-1]) == 2 and len(p[-2]) <= 3 else p[-2:])
+from .mailauth import org_domain
 
 
 def sender_check(store, msg: dict, now=None) -> dict:
@@ -595,7 +592,8 @@ def wrote_to(store, mailbox: str, addr: str) -> bool:
     """Has THIS mailbox ever sent addr anything? Asked of the mail server that holds the history
     Taskuary does not. True/False is an answer; a failure RAISES, because 'could not check' is not
     'no' (PW-080) - the caller says so and leaves the task for a manual start."""
-    if not (mailbox and addr): return False
+    # ...a quoted local part ('" OR ALL TO "@evil.example') is no address he writes to - and no search either server gets to misread
+    if not (mailbox and addr) or not re.fullmatch(r'[^\s"\\<>()@]+@[^\s"\\<>()@]+', addr): return False
     src = next((s for s in store.list_sources(active_only=False)
                 if s.get('Channel') == 'email' and (s.get('Address') or '').lower() == mailbox.lower()), None)
     c = store.get_connector(src['ConnectorId'], with_secret=True) if src and src.get('ConnectorId') else None
@@ -618,13 +616,13 @@ def _graph_wrote_to(c, mailbox, addr) -> bool:
 
 
 def _imap_wrote_to(c, addr) -> bool:
-    from .imapmail import _login
+    from .imapmail import _login, _quoted
     M, _user = _login(c)
     try:
         for f in _SENT_FOLDERS:
-            typ, _ = M.select(f'"{f}"', readonly=True)
+            typ, _ = M.select(_quoted(f), readonly=True)
             if typ != 'OK': continue
-            typ, data = M.search(None, 'TO', f'"{addr}"')
+            typ, data = M.search(None, 'TO', _quoted(addr, False))
             return typ == 'OK' and bool(data and data[0])
     finally:
         try: M.logout()

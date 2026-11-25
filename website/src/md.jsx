@@ -10,7 +10,7 @@ import CloseIcon from "@mui/icons-material/Close";
 import { BORDER, DIM, INK, PANEL, mono } from "./theme.jsx";
 
 import { linkRefs, looksMd, refParts } from "./mdText.js";
-import { appLink, linkRoad, openAppLink, ownPath } from "./appLinks.js";
+import { appLink, linkRoad, openAppLink, ownPath, placeOnly } from "./appLinks.js";
 import { codeLocalPaths, localFile, plainCitations } from "./taskOutputs.js";
 import CopyCorner from "./CopyCorner.jsx";
 import { attUrl, saveFile } from "./fileSave.js";
@@ -22,6 +22,10 @@ import { useTableFit } from "./tableFit.js";
 export { looksMd };
 
 const TASK_LINK = /#task=(\d+)/;
+// SOMEONE ELSE'S WORDS DRAW NO APP (the red team, 2026-11-24, T8b): a mail body that reads as markdown drew its ```view fence as the app's own
+// card, its buttons live, and its link #new-task&kind=send&to=<them> opened a send ready-addressed. Inside an Outside - a message's body - a
+// link to a page of ours opens only the page (placeOnly), and a fence is the text it is
+const Outside = React.createContext(false);
 // A WEB LINK IN A CHAT'S ANSWER OPENS OVER IT, as a file the agent made does (the owner, 2026-11-05: "links should show in popup view as well
 // like preview of all other files"): inside a LinkPopups - an agent's turns, an item's answers - an http(s) link is a framed page with its
 // address for a title, Open in browser and Close. A site that refuses framing stays blank, which the page cannot always tell, so it says so
@@ -39,7 +43,8 @@ export function LinkDialog({ url, onClose }) {
         <IconButton size="small" aria-label="Close" onClick={onClose}><CloseIcon fontSize="small" /></IconButton>
       </DialogTitle>
       <DialogContent dividers sx={{ p: 0, display: "flex", flexDirection: "column" }}>
-        <iframe src={url} title={url} sandbox="allow-scripts allow-same-origin allow-forms allow-popups" referrerPolicy="no-referrer"
+        {/* ...in an opaque origin (no allow-same-origin): a page of ours framed here would have run as Taskuary, its token in reach (T8) */}
+        <iframe src={url} title={url} sandbox="allow-scripts allow-forms allow-popups" referrerPolicy="no-referrer"
           style={{ border: 0, width: "100%", height: "70vh", background: "var(--tq-panel, #fff)" }} />
         <Box data-tq-link-blank="" sx={{ px: 1.5, py: 0.75, fontSize: 12, color: DIM, borderTop: `1px solid ${BORDER}` }}>
           If it stays blank, this site won't show inside Taskuary - <Box component="button" type="button" onClick={out}
@@ -63,7 +68,8 @@ const A = ({ href, children, onTask }) => {
   // by its title, and the page put the number in its place): the words the answer gave it, the ref only where the ref is all it gave
   const m = road === "task" ? TASK_LINK.exec(hash || "") : null;
   // ...and a page of the app itself (appLinks.js): opened on the canvas here, never a new browser tab
-  const page = road === "page" ? appLink(hash) || String(hash).trim() : null;
+  const outside = React.useContext(Outside);
+  const page = road === "page" ? (outside ? placeOnly : (x) => x)(appLink(hash) || String(hash).trim()) : null;
   // ...and a file an agent made, as the Assistant links it (lookups.outputs_find): the Result's own Download - one tap saves it
   const file = road === "file";
   // ...SAVED where it is (fileSave.saveFile), never a new tab: the desktop window handed that tab to the system browser, and a file
@@ -73,6 +79,7 @@ const A = ({ href, children, onTask }) => {
   const [view, setView] = React.useState(false), pdf = file && isPdf({ name: fileName(raw) });
   const pop = React.useContext(LinkPop), web = !!pop && road === "outside" && isWebLink(href);
   if (file) href = attUrl({ url: own }, true);
+  else if (page && outside) href = page;
   return (<>
     <a href={href} target={road === "outside" ? "_blank" : undefined} data-tq-file-link={file ? "" : undefined} data-tq-web-link={web ? "" : undefined} aria-expanded={pdf ? view : undefined} data-tq-road={road} rel="noreferrer" style={{ color: "var(--tq-link, #55697a)", fontWeight: 600, textDecoration: "none" }}
       data-tq-task-link={m ? m[1] : undefined}
@@ -156,7 +163,8 @@ const Td = ({ children, node, ...rest }) => <td {...rest}>{keepRefs(children)}</
 // ...a code block - a command, a prompt to paste somewhere - copies at its corner (CopyCorner); one that is a view (viewSpec.fencedView) is
 // drawn by the view's own renderer, the road a `show` call takes, so a chart in an answer is a chart wherever answers are drawn
 const textOf = (n) => (n?.type === "text" ? n.value : (n?.children || []).map(textOf).join(""));
-const Pre = ({ children, node, ...rest }) => { const box = React.useRef(null), src = textOf(node), view = React.useMemo(() => fencedView(src), [src]);
+const Pre = ({ children, node, ...rest }) => { const box = React.useRef(null), src = textOf(node), outside = React.useContext(Outside);
+  const view = React.useMemo(() => (outside ? null : fencedView(src)), [src, outside]);
   if (view) return <ViewSpec spec={view} />;
   return <div className="tq-copy-host"><pre ref={box} {...rest}>{children}</pre><CopyCorner text={() => box.current?.innerText || ""} /></div>; };
 
@@ -171,16 +179,17 @@ export const MdLine = ({ text }) => (
 );
 // ...every table fits by the one rule (tableFit.js): its frame widens, then its font steps down, then it wraps at words, then it scrolls
 const FitTable = ({ children }) => { const ref = React.useRef(null); useTableFit(ref, [children]); return <div className="tbl" ref={ref}><table>{children}</table></div>; };
-export const Md = ({ text, onTask = null }) => {
+export const Md = ({ text, onTask = null, outside = false }) => {
   const at = React.useContext(LocalFiles), words = at ? codeLocalPaths(plainCitations(text || ""), at.tid) : plainCitations(text || "");
+  const within = React.useContext(Outside);
   return (
-  <Box sx={sx} className="tq-md">
+  <Outside.Provider value={outside || within}><Box sx={sx} className="tq-md">
     <ReactMarkdown remarkPlugins={PLUGINS}
       components={{ a: onTask ? (p) => <A {...p} onTask={onTask} /> : A, img: Img, td: Td, pre: Pre, code: Code, table: FitTable }}>
       {/* a Codex citation marker reads as the file's name wherever an answer is shown; the chat makes it a file (taskOutputs.js) */}
       {/* ...and in the chat a task it names is a link that opens it (linkRefs); a path into the task's own folder, the file (Code) */}
       {onTask ? linkRefs(words) : words}
     </ReactMarkdown>
-  </Box>
+  </Box></Outside.Provider>
   );
 };

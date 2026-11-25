@@ -2080,16 +2080,16 @@ def prompt_parts(store, tid: int, turn: bool = False, upto: int = None) -> tuple
         # ...SOMEONE ELSE'S WORDS BETWEEN THE MARKS, as the system prompt says they are (walk 10, 2026-11-23: the sender's mail was not)
         body = both_ends(str(m.get('BodyText') or ''), budget)
         return (body if from_owner(store, m, own) else fence(body)) + (f"\n[cut to fit - read_message m{m['MessageId']} reads it whole]" if long else '') + file_line
-    from .terminal import fence
+    from .terminal import fence, named
     from .wrapup import from_owner
     from .ingest import own_addresses
     own = own_addresses(store) if mails else None
     for run in runs[-window:]:
         m = run[0]
-        who = asked(m) or m.get('FromName') or m.get('FromEmail') or m.get('SourceName') or m.get('Channel') or 'source'
+        who = asked(m) or named(m.get('FromName'), m.get('FromEmail')) or m.get('SourceName') or m.get('Channel') or 'source'
         subj, was = str(m.get('Subject') or '').strip(), said_subject
         said_subject = norm_subject(subj) if subj else said_subject
-        where = ''.join(f' · {x}' for x in (m.get('Channel'), f'"{_flat(subj, 140)}"' if subj and norm_subject(subj) != was else '') if x)
+        where = ''.join(f' · {x}' for x in (m.get('Channel'), fence(_flat(subj, 140)) if subj and norm_subject(subj) != was else '') if x)
         if len(run) > 1:
             sources.append(f"FROM {who} ({m.get('SentAt') or ''} to {run[-1].get('SentAt') or ''}){where} - {len(run)} lines they wrote one after another, "
                            'oldest first; a later line can take back an earlier one\n' + '\n'.join(f"[m{x['MessageId']}] {wrote(x)}" for x in run))
@@ -2285,8 +2285,9 @@ def chat_runs(mails: list) -> list:
 
 def compacted_mail(mails) -> str:
     "The task's older mails the brief has no room for: one line each, by id, so the agent opens the one it needs whole (READ_WHOLE)."
-    lines = [f"- [m{m['MessageId']}] {m.get('FromName') or m.get('FromEmail') or m.get('Channel') or 'source'} ({_md(m.get('SentAt'), True)}): "
-             f"{_flat(m.get('BodyText'), 200)}" for m in mails]
+    from .terminal import fence, named
+    lines = [f"- [m{m['MessageId']}] {named(m.get('FromName'), m.get('FromEmail')) or m.get('Channel') or 'source'} ({_md(m.get('SentAt'), True)}): "
+             f"{fence(_flat(m.get('BodyText'), 200))}" for m in mails]
     return _lines_fit(f'EARLIER MAIL ON THIS TASK, COMPACTED - {len(mails)} older messages, one line each; {READ_WHOLE}:', lines)
 
 

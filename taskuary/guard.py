@@ -259,13 +259,28 @@ def denied(method: str, path: str) -> str:
     return '' if k in ('read', 'agent') else why
 
 
+def _key(server: dict, label: str) -> bytes:
+    """THE KEY A SESSION'S PROOF IS MADE WITH IS THE SERVER'S ALONE (the red team, 2026-11-24, T7): it was the agent token, which every
+    session holds - so any session could make any task's proof, and a stranger token for any task. It comes from the owner token now,
+    sealed on disk and never opened in a session (config._owner_token), under its own label per use. With no owner token every caller is
+    the owner already (scope_of), and the agent token keys it as before; b'' with no agent token - no agent scope to narrow."""
+    k = str(server.get('token') or server.get('agent_token') or '')
+    return hmac.new(k.encode(), f'taskuary {label}'.encode(), hashlib.sha256).digest() if server.get('agent_token') else b''
+
+_PROOF = re.compile(r'p1\.(\d{1,12})\.[0-9a-f]{32}')
+
 def task_proof(server: dict, tid) -> str:
-    """What a session on task `tid` carries (terminal.session_env) to show the task is its own. The
-    agent token is one secret every session shares, so alone it cannot tell a session drafting its
-    own reply from one rewriting a neighbour's; a keyed hash of the task id can, and needs no table.
-    '' with no agent token - there is then no agent scope to narrow."""
-    k = str(server.get('agent_token') or '')
-    return hmac.new(k.encode(), f'task:{int(tid)}'.encode(), hashlib.sha256).hexdigest()[:32] if k else ''
+    """What a session on task `tid` carries (terminal.session_env) to show the task is its own: the agent token is one secret every
+    session shares, so alone it cannot tell a session drafting its own reply from one rewriting a neighbour's. It names its task, so a
+    call proves WHICH task it speaks for (proof_tid). '' with no key - there is then no agent scope to narrow."""
+    k = _key(server, 'task proof')
+    return f'p1.{int(tid)}.' + hmac.new(k, f'task:{int(tid)}'.encode(), hashlib.sha256).hexdigest()[:32] if k else ''
+
+
+def proof_tid(server: dict, headers) -> int | None:
+    "The task a call's proof names, when the proof is the server's own; else None. Constant-time, through token_matches."
+    p = str((headers or {}).get(TASK_HDR) or '')
+    return int(m[1]) if (m := _PROOF.fullmatch(p)) and token_matches(p, task_proof(server, int(m[1]))) else None
 
 
 def owns_task(server: dict, headers, tid) -> bool:
@@ -274,7 +289,23 @@ def owns_task(server: dict, headers, tid) -> bool:
     sc = scope_of(server, headers)
     if sc == STRANGER: return stranger_tid(server, headers.get('X-Taskuary-Token')) == int(tid)
     if sc != AGENT: return True
-    return token_matches(headers.get(TASK_HDR), task_proof(server, tid))
+    return proof_tid(server, headers) == int(tid)
+
+
+def session_tid(server: dict, headers) -> int | None:
+    "The task a session's call speaks for - its stranger token's, else its proof's; None for the owner, or a session that proves none."
+    sc = scope_of(server, headers)
+    return stranger_tid(server, headers.get('X-Taskuary-Token')) if sc == STRANGER else proof_tid(server, headers) if sc == AGENT else None
+
+
+NO_PROOF = ("a session's call proves which task it is on, and this one carries no proof Taskuary made - make it from the session working "
+            "that task, whose `taskuary` command and tools send its TASKUARY_TASK_TOKEN")
+
+def unproven(server: dict, headers, method: str, path: str) -> str:
+    """'' when an agent-scope call may go on without a task proof, else why not: every write but a CLI hook reporting its own session
+    (hooks.command - installed user-wide, with no task to name) needs one; a session that dropped its proof was the owner of every door."""
+    if (method or '').upper() in READS or re.match(r'^/api/hooks/', path or ''): return ''
+    return '' if proof_tid(server, headers) is not None else NO_PROOF
 
 
 # ── A STRANGER'S SESSION (R28) ──────────────────────────────────────────────────────────────────────────────────────
@@ -286,9 +317,9 @@ def owns_task(server: dict, headers, tid) -> bool:
 _STRANGER_TOK = re.compile(r's1\.(\d{1,12})\.[0-9a-f]{32}')
 
 def stranger_token(server: dict, tid) -> str:
-    "What a stranger-origin session carries as TASKUARY_TOKEN. '' with no agent token - then there is no secret to key it."
-    k = str(server.get('agent_token') or '')
-    return f's1.{int(tid)}.' + hmac.new(k.encode(), f'stranger:{int(tid)}'.encode(), hashlib.sha256).hexdigest()[:32] if k else ''
+    "What a stranger-origin session carries as TASKUARY_TOKEN. '' with no key (_key) - then there is no secret to key it."
+    k = _key(server, 'stranger token')
+    return f's1.{int(tid)}.' + hmac.new(k, f'stranger:{int(tid)}'.encode(), hashlib.sha256).hexdigest()[:32] if k else ''
 
 def stranger_tid(server: dict, presented) -> int | None:
     "The task a presented stranger token is bound to, or None. Constant-time, through token_matches."
@@ -346,10 +377,9 @@ def agent_read_denied(server: dict, headers, method: str, path: str, owner_of, d
     "'' when an agent-scope session may make this read, else why not. `owner_of(kind, id)`: the task a message, file or pane is on."
     if (method or '').upper() not in READS or (str(dock or '').isdigit() and owns_task(server, headers, int(dock))): return ''
     if path in ('/api/terminals', '/api/terminals/'): return AGENT_SCOPE_WHY
-    # a session started on no task (a pane the owner opened) carries no proof and keeps its reads - but never a pane's screen
-    bound = bool(headers.get(TASK_HDR))
+    # ...a session that proves no task (a pane the owner opened, or one that dropped its proof) reads no task's parts (the red team, T7)
     for p, kind in _OWN_READS:
-        if (m := p.match(path or '')) and (bound or kind == 'terminal'):
+        if m := p.match(path or ''):
             tid = int(m[1]) if kind == 'task' else owner_of(kind, m[1])
             return '' if tid and owns_task(server, headers, tid) else AGENT_SCOPE_WHY
     return ''
@@ -494,6 +524,31 @@ _CONFIG_SECRETS = frozenset({
     'sender_password', 'user_password', 'connection_string', 'private_key', 'google_client_secret',
     'google_refresh_token', 'refresh_token', 'access_key', 'bot_token',
 })
+
+
+def _secretish(k) -> bool:
+    k = str(k).lower()
+    return k in _CONFIG_SECRETS or k.endswith(('_secret', '_password', '_token', '_key'))
+
+
+def masked_detail(detail):
+    """AN AUDIT ROW NEVER CARRIES A SECRET (the red team, 2026-11-24, T5): a connector's create/edit row kept the ConfigJson it saved - a
+    client secret, a TOTP key, a password, a LINE channel secret - and /api/audit/recent served it to an agent, which signed its own vendor
+    push with it. Its card's secret fields and any secret-shaped key come out, at any depth; what was changed stays said."""
+    if not isinstance(detail, str) or not detail.startswith('{'): return detail
+    try: d = json.loads(detail)
+    except ValueError: return detail
+    if not isinstance(d, dict): return detail
+    keys = set(WRITE_ONLY_CONFIG.get(str(d.get('Type') or d.get('type') or ''), ()))
+    def clean(x):
+        if isinstance(x, dict): return {k: clean(v) for k, v in x.items() if k not in keys and not _secretish(k)}
+        if isinstance(x, list): return [clean(v) for v in x]
+        if isinstance(x, str) and x.startswith('{'):
+            try: return json.dumps(clean(json.loads(x)))
+            except ValueError: return x
+        return x
+    out = json.dumps(clean(d), default=str)
+    return out if out != json.dumps(d, default=str) else detail
 
 
 def without_config_secrets(row: dict) -> dict:

@@ -176,13 +176,16 @@ class TaskOutputsTests(unittest.TestCase):
         got = self.client.get(f'/api/tasks/{self.tid}/assistant').json()
         self.assertIn('vendor comparison.xlsx', {r['name'] for r in got['outputs']})
 
-    def test_a_download_link_carries_the_token_in_its_query(self):
-        "An <a href> cannot send a header: the outputs route takes the token in the query, as attachments do."
+    def test_a_download_link_is_read_by_the_page_s_cookie_never_a_token_in_its_query(self):
+        "An <a href> cannot send a header: the outputs route reads the cookie the page was handed (server.FILE_COOKIE) - never ?token= (T8c)."
         cfg = {**server.cfg, 'server': {**server.cfg['server'], 'token': 'owner-secret'}}
         with mock.patch.object(server, 'cfg', cfg):
             url = f'/api/task-outputs/{self.tid}/notes.md'
             self.assertEqual(self.client.get(url).status_code, 401)
-            self.assertEqual(self.client.get(url, params={'token': 'owner-secret'}).status_code, 200)
+            self.assertEqual(self.client.get(url, params={'token': 'owner-secret'}).status_code, 401)
+            self.client.cookies.set(server.FILE_COOKIE, 'owner-secret')
+            try: self.assertEqual(self.client.get(url).status_code, 200)
+            finally: self.client.cookies.clear()
 
     def test_a_strangers_session_reaches_only_its_own_tasks_outputs(self):
         d = lambda p: guard.stranger_denied('GET', p, {}, self.tid, lambda k, a: None)

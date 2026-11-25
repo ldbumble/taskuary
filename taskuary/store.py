@@ -5432,7 +5432,8 @@ class SQLiteStore:
         a broken chain. A tamper-evident log that breaks itself is worse than none: it makes a real
         tamper indistinguishable from its own noise. (Seen at ids 151/152 of a live database, both
         stamped the same second, both carrying the same PrevHash.)"""
-        d = detail if isinstance(detail, str) or detail is None else json.dumps(detail, default=str)
+        from .guard import masked_detail
+        d = masked_detail(detail if isinstance(detail, str) or detail is None else json.dumps(detail, default=str))
         with self.lock:
             row = self.cx.execute('SELECT RowHash FROM audit ORDER BY Id DESC LIMIT 1').fetchone()
             prev = (row['RowHash'] if row and row['RowHash'] else None) or GENESIS
@@ -5501,8 +5502,11 @@ class SQLiteStore:
             if mine: e['note'], notes = mine[-1], notes[len(mine):]
         return ev
     def list_audit(self, et=None, eid=None, limit=200):
-        if et: return self._rows('SELECT * FROM audit WHERE EntityType=? AND EntityId=? ORDER BY Id DESC LIMIT ?', (et, eid, limit))
-        return self._rows('SELECT * FROM audit ORDER BY Id DESC LIMIT ?', (limit,))
+        "Audit rows, newest first - a row written before secrets were kept out of it (guard.masked_detail) read without them too."
+        from .guard import masked_detail
+        rows = self._rows('SELECT * FROM audit WHERE EntityType=? AND EntityId=? ORDER BY Id DESC LIMIT ?', (et, eid, limit)) if et else \
+            self._rows('SELECT * FROM audit ORDER BY Id DESC LIMIT ?', (limit,))
+        return [{**r, 'Detail': masked_detail(r.get('Detail'))} for r in rows]
     def verify_audit_chain(self):
         """Two different failures, and calling both "broken" was the problem.
 
@@ -6476,11 +6480,12 @@ class SQLiteStore:
         return self._one(q + ' ORDER BY Id DESC LIMIT 1', tuple(args))
     def worker_event_exists(self, event_id: str) -> bool: return self._one('SELECT 1 x FROM worker_event WHERE EventId=?', (event_id,)) is not None
     def wrote_to_locally(self, mailbox: str, email: str, exclude_mid=None, memo=None) -> bool:
-        """Verified SENT evidence this store already holds, scoped to the receiving mailbox: the mailbox's own
-        words on a thread with this address (a 'context' row or an outbound one from the mailbox), or a reply
-        to them the owner approved or sent - or the mailbox's own mail TO them (its To or Cc): what a card sent is written as it
-        goes (channels.record_sent), so the person he just wrote to is no stranger before the Sent folder syncs (walk 14).
-        Incoming rows alone never count (PW-079). `memo`: see _witnessed."""
+        """Verified SENT evidence this store already holds, scoped to the receiving mailbox: the mailbox's own mail TO them (its To
+        or Cc, a 'context' row or an outbound one) - what a card sent is written as it goes (channels.record_sent), so the person he
+        just wrote to is no stranger before the Sent folder syncs (walk 14) - or a reply to them the owner approved or sent.
+        Incoming rows alone never count (PW-079), and neither does the thread a mail names: a stranger's In-Reply-To citing a thread
+        he wrote on put them "on a thread with him" and their next mail started a full agent (the red team, 2026-11-24, T1a).
+        `memo`: see _witnessed."""
         if not (email and mailbox): return False
         rj = "CASE WHEN json_valid(o.RecipientsJson) THEN o.RecipientsJson ELSE '{}' END"
         to = lambda ex, n: [r['x'] for r in self._rows(f"""SELECT o.MessageId x FROM message o WHERE o.Channel='email' AND LOWER(o.SourceName)=LOWER(?)
@@ -6489,13 +6494,9 @@ class SQLiteStore:
                                                        (mailbox, ex, email, email, n))]
         return self._witnessed(memo, ('wrote', mailbox.lower(), email.lower()), exclude_mid, lambda ex, n: to(ex, n) or [r['x'] for r in self._rows("""SELECT m.MessageId x FROM message m
                              WHERE m.Channel='email' AND LOWER(m.SourceName)=LOWER(?)
-                               AND LOWER(m.FromEmail)=LOWER(?) AND m.MessageId<>? AND (
-                               EXISTS (SELECT 1 FROM message o WHERE o.ConversationId=m.ConversationId AND o.ConversationId IS NOT NULL
-                                       AND o.MessageId<>m.MessageId AND o.Channel='email'
-                                       AND LOWER(o.SourceName)=LOWER(?) AND LOWER(o.FromEmail)=LOWER(?)
-                                       AND (o.Status='context' OR o.Direction='out'))
-                             OR EXISTS (SELECT 1 FROM review r WHERE r.MessageId=m.MessageId AND r.Status IN ('approved','edited','sent')))
-                             LIMIT ?""", (mailbox, email, ex, mailbox, mailbox, n))])
+                               AND LOWER(m.FromEmail)=LOWER(?) AND m.MessageId<>?
+                               AND EXISTS (SELECT 1 FROM review r WHERE r.MessageId=m.MessageId AND r.Status IN ('approved','edited','sent'))
+                             LIMIT ?""", (mailbox, email, ex, n))])
     @staticmethod
     def _witnessed(memo, key, exclude_mid, find):
         """Is there a witness row other than exclude_mid? `find(exclude, n)` lists up to n witnesses. With a `memo` (one dict across a

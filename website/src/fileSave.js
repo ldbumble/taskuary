@@ -2,11 +2,11 @@
 import { useState } from "react";
 import api from "./api";
 
-// An <img src> carries no headers, so the token rides in the query string (see token_gate).
+// An <img src> carries no headers: the server reads a file by the cookie it handed this page (token_gate's FILE_COOKIE) - never a token in
+// the address, where history, a referer and a log keep it (the red team, 2026-11-24, T8c)
 export const attUrl = (a, download) => {
   if (String(a.url || "").startsWith("data:")) return a.url;   // the static demo carries its own bytes
-  const t = localStorage.getItem("taskuary_token");
-  const q = [download ? "download=true" : "", t ? `token=${encodeURIComponent(t)}` : ""].filter(Boolean).join("&");
+  const q = download ? "download=true" : "";
   return `${a.url}${q ? `${String(a.url).includes("?") ? "&" : "?"}${q}` : ""}`;   // a link that came with its own query keeps it
 };
 

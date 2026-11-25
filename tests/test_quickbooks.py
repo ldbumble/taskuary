@@ -11,11 +11,12 @@ from unittest import mock
 
 from fastapi.testclient import TestClient
 
-from taskuary import config, quickbooks as qb, scopes, server
+from taskuary import config, guard, quickbooks as qb, scopes, server
 from taskuary.store import MemoryStore
 
 c = TestClient(server.app)
-AGENT = {'X-Taskuary-Token': config.load()['server']['agent_token']}
+AGENT = {'X-Taskuary-Token': config.load()['server']['agent_token'],          # ...a session's call, proving the task it is on (guard.unproven)
+         guard.TASK_HDR: guard.task_proof(config.load()['server'], 999995)}
 
 
 def _resp(status, body):

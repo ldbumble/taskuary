@@ -630,11 +630,18 @@ def suggest(store, people, minutes: int = 30, within: str = '', first=None, last
 
 
 def name_of(store, addr: str) -> str:
-    """What to call someone in a title: the name the mail, the org chart or the directory knows them by, else the address."""
+    """What to call someone in a title: the name the mail, the org chart or the directory knows them by, else the address. A NAME IS SHOWN
+    ONLY FOR THE ADDRESS IT BELONGS TO (the red team, 2026-11-24, T9): a stranger's From typed "Erin Blake" made every card to them read
+    "Erin Blake", the address out of sight. Where another address carries the same name, it is that address's only when this one alone is
+    vouched for (peoplesearch.known: one he wrote to, the org chart's, the directory's); else the address is said."""
     from . import peoplesearch
-    try: hit = next((r for r in peoplesearch.known(store, 'email') if r['to'] == addr.lower() and r.get('name')), None)
-    except Exception: hit = None
-    return hit['name'] if hit else addr
+    try: ps = peoplesearch.known(store, 'email')
+    except Exception: ps = []
+    hit, a = next((r for r in ps if r['to'] == str(addr or '').lower() and r.get('name')), None), str(addr or '').lower()
+    if not hit: return addr
+    n = ' '.join(hit['name'].split()).lower()
+    rivals = [r for r in ps if r['to'] != a and ' '.join(str(r.get('name') or '').split()).lower() == n]
+    return hit['name'] if not rivals or (hit.get('vouched') and not any(r.get('vouched') for r in rivals)) else addr
 
 
 def _and(xs: list) -> str: return ' and '.join(xs) if len(xs) < 3 else f"{', '.join(xs[:-1])} and {xs[-1]}"

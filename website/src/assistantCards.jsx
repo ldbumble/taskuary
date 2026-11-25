@@ -607,7 +607,7 @@ function CombinedTaskText({ card, list = true }) {
             <div className="tq-card-note" style={{ marginBottom: 3 }}>
               {m.Direction === "out" ? "You" : (m.FromName || m.FromEmail || "Someone")}{m.SentAt ? ` · ${fmtDateTime(m.SentAt)}` : ""}
             </div>
-            {looksMd(body) ? <Md text={body} /> : body.trim() ? <LinkedText text={body} links={m.Links} /> : m.MessageId ? null : "(empty)"}
+            {looksMd(body) ? <Md text={body} outside={m.Direction !== "out"} /> : body.trim() ? <LinkedText text={body} links={m.Links} /> : m.MessageId ? null : "(empty)"}
             {m.MessageId && <Attachments messageId={m.MessageId} canFetch={String(m.Channel || "") === "email" && mentionsPicture(m.BodyText)} dense
               bare={body.trim() ? null : { remote: remotePicture(m.BodyText) }} />}
           </div>

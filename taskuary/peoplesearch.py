@@ -68,6 +68,8 @@ def known(store, channel: str = 'email') -> list:
         if '@' not in e: return
         r = out.setdefault(e, {'to': e, 'name': '', 'company': '', 'title': '', 'n': 0, 'last': '', 'source': src})
         r['name'], r['company'], r['title'] = r['name'] or str(name or ''), r['company'] or str(company or ''), r['title'] or str(title or '')
+        # ...an address he wrote to, the org chart's or the directory's is someone's own; a name read off an arriving From is only its claim
+        if src != 'mail': r['vouched'] = True
         r['n'] += int(n or 0); r['last'] = max(r['last'], str(last or ''))
     for p in store.people(None): add(p.get('Email'), p.get('Name'), p.get('N'), p.get('Last'), 'mail')
     # writing TO someone is the stronger tie: they count twice

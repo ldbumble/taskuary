@@ -76,8 +76,8 @@ def _imap(store, c, box, folder, who, subject, since, limit) -> list:
         if not name: return []
         typ, _ = M.select(_quoted(name), readonly=True)
         if typ != 'OK': return []
-        q = [f"SINCE {since.strftime('%d-%b-%Y')}", *([f"{'TO' if folder == 'sent' else 'FROM'} \"{who}\""] if who else []),
-             *([f'SUBJECT "{subject}"'] if subject else [])]
+        q = [f"SINCE {since.strftime('%d-%b-%Y')}", *([f"{'TO' if folder == 'sent' else 'FROM'} {_quoted(who, False)}"] if who else []),
+             *([f'SUBJECT {_quoted(subject, False)}'] if subject else [])]
         typ, data = M.uid('search', None, f"({' '.join(q)})")
         if typ != 'OK': return []
         out = []

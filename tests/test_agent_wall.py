@@ -59,7 +59,7 @@ class ReadingTests(unittest.TestCase):
         closed = s.create_task({'Title': 'session ended', 'Kind': 'coding'}, 'o')
         bb.post(s, 'live task note', 'working', 'codex', CWD, live)
         bb.post(s, 'closed task note', 'done', 'claude', CWD, closed)
-        bb.post(s, 'shared operational note', 'blocked', 'you', '')
+        bb.post(s, 'shared operational note', 'blocked', 'you', '', owner=True)
         sessions = [{'taskId': live}]
         with mock.patch('taskuary.terminal.live_sessions', return_value=sessions):
             bodies = [n['Body'] for n in bb.live_wall(s)]
@@ -153,7 +153,7 @@ class TheChatIsOnItTooTests(unittest.TestCase):
     standing in a checkout."""
     def test_a_note_with_no_checkout_is_everybodys(self):
         s = MemoryStore()
-        bb.post(s, 'the Intacct credentials are being rotated today', 'blocked', 'you', '')
+        bb.post(s, 'the Intacct credentials are being rotated today', 'blocked', 'you', '', owner=True)
         bb.post(s, 'mine alone', 'note', 'codex', CWD)
         self.assertEqual([n['Body'] for n in bb.house_wall(s)], ['the Intacct credentials are being rotated today'])
         self.assertEqual(len(bb.wall(s, CWD)), 2)                  # a checkout sees its own AND the house
@@ -161,7 +161,7 @@ class TheChatIsOnItTooTests(unittest.TestCase):
 
     def test_the_chat_reads_the_house_lane_and_not_a_checkouts(self):
         s = MemoryStore()
-        bb.post(s, 'everybody should know this', 'note', 'you', '')
+        bb.post(s, 'everybody should know this', 'note', 'you', '', owner=True)
         bb.post(s, 'only the people in this repo', 'note', 'codex', CWD)
         text = bb.chat_text(s)
         self.assertIn('everybody should know this', text)
@@ -171,7 +171,7 @@ class TheChatIsOnItTooTests(unittest.TestCase):
         from taskuary import general
         s = MemoryStore()
         tid = s.create_task({'Title': 'research', 'Kind': 'general', 'Summary': 'x'}, 'o')
-        bb.post(s, 'the Intacct credentials are being rotated today', 'blocked', 'you', '')
+        bb.post(s, 'the Intacct credentials are being rotated today', 'blocked', 'you', '', owner=True)
         _system, user = general._prompt(s, tid)
         self.assertIn('rotated today', user)
 

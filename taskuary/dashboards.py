@@ -49,6 +49,7 @@ def _since(days): return (datetime.now() - timedelta(days=max(1, int(days or 90)
 
 def _tasks(store, days):
     """One row per task opened in the window or still open: when its ask arrived (its first mail, else when it was made)."""
+    from .taskstate import standing
     rows = store._rows("""SELECT t.TaskId, t.Title, t.Kind, t.Status, t.Priority, t.CreatedAt, t.ClosedAt, t.UpdatedAt,
         (SELECT MIN(m.SentAt) FROM message m WHERE m.TaskId=t.TaskId) FirstAt
         FROM task t WHERE t.ParentId IS NULL AND (t.CreatedAt>=? OR t.Status NOT IN ('done','dropped'))
@@ -60,7 +61,9 @@ def _tasks(store, days):
              'status': r['Status'] or 'open', 'state': 'closed' if r['Status'] in ('done', 'dropped') else 'open',
              'priority': level(r['Priority']), 'arrived': (a := str(r['FirstAt'] or r['CreatedAt'] or '')[:10]),
              # a task closed before ClosedAt was stamped on every close says when it was last touched instead
-             'closed': str(r['ClosedAt'] or (r['UpdatedAt'] if r['Status'] in ('done', 'dropped') else '') or '')[:10], 'waiting': _waited(a)}
+             'closed': str(r['ClosedAt'] or (r['UpdatedAt'] if r['Status'] in ('done', 'dropped') else '') or '')[:10], 'waiting': _waited(a),
+             # ...whose move it is, as the rail says it (taskstate.standing): an open task is not his by being open (walk 20)
+             'waits_on': '' if r['Status'] in ('done', 'dropped') else standing(store, r['TaskId'])['waits_on'] or ''}
             for r in rows]
 
 
@@ -150,7 +153,7 @@ def _ai_usage(store, days):
 
 
 DATASETS = {'tasks': (_tasks, 'task_id, ref, title, kind, status, state (open|closed), priority (regular|important|urgent), arrived (date), closed (date), '
-                             'waiting (how long since it arrived, in words)'),
+                             'waiting (how long since it arrived, in words), waits_on (you|them|agent|blank - whose move it is now)'),
             'mail': (_mail, 'message_id, task_id, day (date), channel, sender, became_task (yes|no)'),
             'flow': (_flow, 'message_id, task_id, day (date), channel, stage (Came in|Triaged|On a task|Task closed - one row per stage reached)'),
             'agent_runs': (_agent_runs, 'run_id, task_id, ref, day (date), agent, status, outcome (finished|failed|stopped|waiting on you|working), minutes'),
@@ -169,7 +172,7 @@ DATASETS = {'tasks': (_tasks, 'task_id, ref, title, kind, status, state (open|cl
 # Nothing is said twice, and a tile that served no story went (who writes most, open work by kind, the four per-day charts the one replaced).
 _own = lambda key, label, dataset, date: {'key': key, 'label': label, 'type': 'taskuary_data', 'dataset': dataset, 'days': 90, 'date': date}
 _WHO = ['Triage', 'Advisor', 'Tasks', 'Assistant', 'Other']
-_open = {'state': 'open'}
+_yours = {'waits_on': 'you'}
 GLANCE = {'type': 'dashboard', 'title': 'Taskuary at a glance', 'daily_at': '07:00',
           'sources': [_own('mail', 'What came in', 'mail', 'day'), _own('flow', 'How far it got', 'flow', 'day'),
                       _own('tasks', 'Tasks', 'tasks', 'arrived'), _own('closed', 'Tasks closed', 'tasks', 'closed'),
@@ -183,7 +186,7 @@ GLANCE = {'type': 'dashboard', 'title': 'Taskuary at a glance', 'daily_at': '07:
                    {'title': 'Came in', 'source': 'mail', 'agg': 'count'},
                    {'title': 'Became work', 'source': 'tasks', 'agg': 'count', 'good': 'up'},
                    {'title': 'Done', 'source': 'closed', 'agg': 'count', 'where': {'status': 'done'}, 'good': 'up'},
-                   {'title': 'Waiting on you', 'source': 'tasks', 'agg': 'count', 'where': _open, 'range': False, 'good': 'down'},
+                   {'title': 'Waiting on you', 'source': 'tasks', 'agg': 'count', 'where': _yours, 'range': False, 'good': 'down'},
                    {'title': 'AI spend', 'source': 'ai', 'agg': 'sum', 'y': 'cost', 'unit': '$', 'good': 'down',
                     'also': [{'label': 'tokens', 'agg': 'sum', 'y': 'tokens'},
                              {'label': 'on your plan', 'agg': 'sum', 'y': 'tokens', 'where': {'billing': 'plan'}},
@@ -202,7 +205,7 @@ GLANCE = {'type': 'dashboard', 'title': 'Taskuary at a glance', 'daily_at': '07:
               {'kind': 'bar', 'title': 'From mail to done', 'said': 'How far what came in got, stage by stage, each as a share of what came in',
                'source': 'flow', 'x': 'stage', 'order': list(STAGES), 'share': True, 'w': 2},
               {'kind': 'list', 'title': 'Waiting on you', 'said': 'The open tasks that have waited longest on me, with how long, at most 6',
-               'source': 'tasks', 'label': 'title', 'meta': 'waiting', 'where': _open, 'range': False, 'sort': 'arrived', 'limit': 6, 'w': 2},
+               'source': 'tasks', 'label': 'title', 'meta': 'waiting', 'where': _yours, 'range': False, 'sort': 'arrived', 'limit': 6, 'w': 2},
               # ...and what the AI cost: whom it worked for, and what one piece of work takes
               {'kind': 'pie', 'title': 'AI spend by who', 'said': "Each one's share of the dollars: triage, the Advisor, tasks and the Assistant",
                'source': 'ai', 'x': 'who', 'agg': 'sum', 'y': 'cost', 'unit': '$', 'order': _WHO, 'w': 2},
@@ -215,7 +218,7 @@ GLANCE = {'type': 'dashboard', 'title': 'Taskuary at a glance', 'daily_at': '07:
 # A SAVED BUILT-IN NOBODY EDITED FOLLOWS THE BUILT-IN: the print of every earlier GLANCE's tiles (glance_print), read off this file's history -
 # the copy from before the AI tiles, the one they were added to the end of (2026-11-06), moved up (2026-11-07), the token and dollar layouts of
 # 2026-11-24. It replaces the once-only migrations that added and moved the AI tiles. An edited copy keeps its own.
-GLANCE_WAS = ('ee4598be5e96', '41927d8d3f03', '724ff7395bdd', '244ba8c05e99', '4b0277c8fdfb', 'c7fb8ddf003e')
+GLANCE_WAS = ('ee4598be5e96', '41927d8d3f03', '724ff7395bdd', '244ba8c05e99', '4b0277c8fdfb', 'c7fb8ddf003e', 'a0db3de55aba')
 
 
 def glance_print(comps) -> str:

@@ -273,6 +273,23 @@ def test_the_template_runs_deterministically_over_the_apps_own_rows():
                      'AI spend': '-', 'Cost per task': '-', 'Done': '1'}      # no AI ran in this store
 
 
+def test_waiting_on_you_is_the_rails_fact_never_every_open_task():
+    """Walk 20: "Waiting on you 10" counted tasks that waited on Erin, on a vendor and on an agent at work. The tile and the list read whose move
+    it is from taskstate.standing - the one fact the rail and the header say."""
+    from unittest import mock
+    from taskuary import taskstate
+    from taskuary.testing import Factory
+    s = MemoryStore(); f = Factory(s)
+    mine, erins, working = f.task('Approve the Trainly quote'), f.task('Spendly numbers from Erin'), f.task('Draft the budget memo')
+    said = {mine: 'you', erins: 'them', working: 'agent'}
+    with mock.patch.object(taskstate, 'standing', lambda st, tid, key=None: {'waits_on': said.get(tid)}):
+        data = dashboards.collect(s, dashboards.GLANCE)
+        tiles = dict(dashboards.headline(dashboards.GLANCE, data))
+    assert tiles['Waiting on you'] == '1', tiles
+    rows = dashboards.tile_rows(dashboards.GLANCE, data, next(c for c in dashboards.GLANCE['components'] if c['kind'] == 'list'), 7)
+    assert [r['title'] for r in rows] == ['Approve the Trainly quote'], rows
+
+
 def test_a_components_own_range_and_the_median_are_checked():
     bad = {**SPEC, 'components': [{'kind': 'progress', 'title': 'P', 'source': 'tasks', 'target': 5, 'range': 12}]}
     assert 'own "range"' in dashboards.validate(bad, MemoryStore())[1]

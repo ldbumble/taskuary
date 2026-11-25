@@ -368,6 +368,7 @@ const OWN = {
   newtask: (a) => ({ kind: "task", summary: a.title ? `Started a task: ${clip(a.title, 60)}` : "Started a task of its own" }),
   askstronger: () => ({ kind: "plan", summary: "Asked for a second opinion" }),
   notepeers: () => ({ kind: "plan", summary: "Left a note for another agent" }),
+  addtotask: (a) => ({ kind: "plan", summary: a.task ? `Added a note to ${clip(a.task, 20)}` : "Added a note to another task" }),
   notelead: () => ({ kind: "plan", summary: "Told the Advisor something it noticed" }),
   proposeland: () => ({ kind: "plan", summary: "Set up how the work lands" }),
   withdrawdraft: () => ({ kind: "plan", summary: "Took back something it had set up" }),

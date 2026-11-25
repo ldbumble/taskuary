@@ -140,7 +140,8 @@ CONNECTION_KEYS = frozenset({'base_url', 'site', 'account', 'gateway', 'server',
                              'cmd', 'env'})
 # ...save where one of those names is the executor's WHAT: a page reader's `url` is the page it reads (its key goes to its own provider,
 # never there) - stripped, run_system {"type": "reader", "url": ...} answered "no url to read" every time
-ASKED = {'reader': {'url'}, 'firecrawl': {'url'}, 'scrapingbee': {'url'}}
+# ...and a QuickBooks bill's `account` is the expense account it posts to: stripped, every agent's bill answered "no expense account given"
+ASKED = {'reader': {'url'}, 'firecrawl': {'url'}, 'scrapingbee': {'url'}, 'quickbooks_bill': {'account'}, 'quickbooks_expense': {'account'}}
 # ...and the other way: where a name that is a WHAT elsewhere (a Redis or Robinhood call's `args`) is the card's own place - an MCP stdio
 # server's `args` are its command line; the tool's own arguments are `tool_args`
 PLACED = {'mcp': {'args'}}
@@ -930,6 +931,23 @@ def _lazy(module, fn):
     try: run.__doc__ = getattr(importlib.import_module(f'.{module}', __package__), fn).__doc__
     except Exception: run.__doc__ = f'{module}.{fn}'
     return run
+
+
+# A WRITE IS CHECKED AGAINST ITS SYSTEM BEFORE ITS CARD IS DRAWN (proposals.queue - one stage for every executor that declares one): type ->
+# check(cfg) -> the fields as they will go, each thing it names by NAME with its id (the card says the name, the write runs on the id). It
+# raises ValueError where the write cannot happen as asked (a vendor the books do not have): the agent is answered with that, and no card
+# stands. A check that cannot reach its system says nothing either way - the card stands as asked. A new write executor adds its own here
+CHECKS = {t: _lazy('quickbooks', 'check') for t in ('quickbooks_bill', 'quickbooks_expense')}
+def checked(store, p: dict) -> dict:
+    "`p` (a run_tool proposal) as its system's own check reads it; `p` itself where its type declares none or the system cannot be read now."
+    if not (fn := CHECKS.get(str(p.get('type') or ''))): return p
+    try: cfg = resolve_cfg(store, p)
+    except Exception: return p                 # ...not connected: its card says so, with Connect
+    try: return {**p, **fn(cfg)}
+    except ValueError: raise
+    except Exception as e:
+        from loguru import logger
+        logger.debug(f"reports: {p.get('type')} was not checked against its system before its card - {e}"); return p
 
 
 def pair(res) -> tuple:

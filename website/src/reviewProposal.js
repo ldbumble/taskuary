@@ -51,9 +51,12 @@ export const toolWhere = (p) => {
 // Only the plumbing, and the place the "Where" line already names, are left out
 const BODY_KEYS = ["text", "body", "message", "query", "script"];
 const bodyKey = (p) => BODY_KEYS.find((x) => p?.[x] != null && p[x] !== "");
-const facts = (p) => { const k = bodyKey(p), w = whereKey(p);
-  return Object.entries(p || {}).filter(([x, v]) => x !== k && x !== w && !PLUMBING.has(x) && v !== "" && v != null)
-    .map(([x, v]) => ({ label: upFirst(x.replace(/_/g, " ")), now: typeof v === "string" ? v : JSON.stringify(v) })); };
+// ...AND A THING NAMED WITH ITS ID IS ONE ROW, BY NAME (reports.CHECKS; walk 22, 2026-11-25: "vendor id: 58 / account id: 7" was all a bill's card
+// said): "Vendor: Payworth (id 58)" - the id still on the card, beside what it is the id of
+const facts = (p) => { const k = bodyKey(p), w = whereKey(p), said = (v) => (typeof v === "string" ? v : JSON.stringify(v));
+  const named = (x) => x.endsWith("_id") && p[x.slice(0, -3)] != null && p[x.slice(0, -3)] !== "";
+  return Object.entries(p || {}).filter(([x, v]) => x !== k && x !== w && !PLUMBING.has(x) && v !== "" && v != null && !named(x))
+    .map(([x, v]) => ({ label: upFirst(x.replace(/_/g, " ")), now: said(v) + (p[`${x}_id`] != null && p[`${x}_id`] !== "" ? ` (id ${said(p[`${x}_id`])})` : "") })); };
 export const toolFacts = (p) => (bodyKey(p) ? facts(p) : []);
 export const toolBody = (p) => { const k = bodyKey(p); return k ? String(p[k]) : facts(p).map((f) => `${f.label.toLowerCase()}: ${f.now}`).join("\n"); };
 

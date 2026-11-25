@@ -311,3 +311,11 @@ test("a post card says where it goes by its network's name", async () => {
   assert.equal(toolWhere({ action: "run_tool", type: "x_post", network: "X", text: "The portal launches Monday." }), "X");
   assert.equal(toolWhere({ action: "run_tool", type: "linkedin_post", network: "LinkedIn" }), "LinkedIn");
 });
+
+test("a write that names a thing with its id says it once, by name, the id beside it", () => {
+  // walk 22 (2026-11-25): a bill's approval card read "vendor id: 58 / account id: 7 / amount: 120"
+  const r = { Kind: "action", DraftText: JSON.stringify({ action: "run_tool", type: "quickbooks_bill", vendor: "Payworth", vendor_id: "58", account: "Software subscriptions", account_id: "7", amount: 120 }) };
+  assert.equal(reviewText(r), "vendor: Payworth (id 58)\naccount: Software subscriptions (id 7)\namount: 120");
+  const bare = { Kind: "action", DraftText: JSON.stringify({ action: "run_tool", type: "quickbooks_bill", vendor_id: "58", amount: 120 }) };
+  assert.equal(reviewText(bare), "vendor id: 58\namount: 120", "an id with no name beside it is still on the card");
+});

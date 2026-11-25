@@ -177,15 +177,41 @@ def _ref(cfg, entity, name_field, name, kind='') -> dict:
     """An exact id, or a NAME resolved to one - and a name that matches nothing is refused, never
     guessed: a bill posted to the wrong vendor is the failure this whole file exists to prevent."""
     s = str(name or '').strip()
-    if not s: raise QuickBooksError(f'no {kind or entity.lower()} given')
+    if not s: raise NoSuch(f'no {kind or entity.lower()} given')
     if s.isdigit(): return {'value': s}
     rows = query(cfg, f"SELECT Id, {name_field} FROM {entity} WHERE {name_field} = '{s.replace(chr(39), '')}'", 5)
     if len(rows) == 1: return {'value': str(rows[0]['Id']), 'name': rows[0][name_field]}
     if not rows:
         near = query(cfg, f"SELECT Id, {name_field} FROM {entity} WHERE {name_field} LIKE '%{s.replace(chr(39), '')}%'", 5)
         hint = f" Close: {', '.join(str(r[name_field]) for r in near)}." if near else ''
-        raise QuickBooksError(f'no {kind or entity.lower()} named "{s}" in QuickBooks - it is not created for you.{hint}')
-    raise QuickBooksError(f'"{s}" matches {len(rows)} {entity}s - use the id')
+        raise NoSuch(f'no {kind or entity.lower()} named "{s}" in QuickBooks - it is not created for you.{hint}')
+    raise NoSuch(f'"{s}" matches {len(rows)} {entity}s - use the id')
+
+
+class NoSuch(QuickBooksError, ValueError):
+    "What the write names is not in the books (a vendor, an account) - the write cannot happen as asked; never a failure to reach them."
+
+
+# WHAT A WRITE WILL POST, READ OFF THE BOOKS BEFORE ITS CARD IS DRAWN (reports.CHECKS; walk 22, 2026-11-25: the approval card read "vendor id: 58
+# / account id: 7 / amount: 120" - nothing he could check - and a vendor the books do not have was found out at his press). Each thing it
+# names is looked up as the write itself will look it up: its name is what the card says, its id is what the write runs on
+def _named(cfg, entity, name_field, ref, kind) -> tuple:
+    "(id, name) of what `ref` names - an id or a name. NoSuch where the books have none, or several."
+    r = _ref(cfg, entity, name_field, ref, kind)
+    if r.get('name'): return r['value'], r['name']
+    rows = query(cfg, f"SELECT Id, {name_field} FROM {entity} WHERE Id = '{r['value']}'", 1)
+    if not rows: raise NoSuch(f"no {kind} with id {r['value']} in QuickBooks - read its vendors or accounts and name one of them")
+    return r['value'], rows[0][name_field]
+
+
+def check(cfg) -> dict:
+    "A bill's or an expense's fields as they will post: each vendor and account by name with its id, the amount as money, its date."
+    out = {'amount': _money(cfg.get('amount')), 'date': str(cfg.get('date') or date.today())}
+    for key, entity, field, kind in (('vendor', 'Vendor', 'DisplayName', 'vendor'), ('account', 'Account', 'Name', 'expense account'),
+                                     ('paid_from', 'Account', 'Name', 'credit card / bank account')):
+        if key == 'paid_from' and cfg.get('type') != 'quickbooks_expense': continue
+        out[f'{key}_id'], out[key] = _named(cfg, entity, field, cfg.get(f'{key}_id') or cfg.get(key), kind)
+    return out
 
 
 # ── writes: never called without an approved proposal, unless the owner raised the card ─
@@ -271,12 +297,12 @@ def run_quickbooks_bill(cfg):
     """{"vendor": "Acme Supply", "amount": 412.50, "account": "Office Supplies", "date": "2026-09-01",
     "memo": "card ****1234 txn 88213", "doc_number": "88213"} - create ONE AP bill. A WRITE: below
     scope write on the card it can only run as an approved proposal."""
-    b = create_bill(cfg, cfg.get('vendor'), cfg.get('amount'), cfg.get('account'), cfg.get('date'), cfg.get('memo'), cfg.get('doc_number'), cfg.get('description'))
+    b = create_bill(cfg, cfg.get('vendor_id') or cfg.get('vendor'), cfg.get('amount'), cfg.get('account_id') or cfg.get('account'), cfg.get('date'), cfg.get('memo'), cfg.get('doc_number'), cfg.get('description'))
     return f"bill {b.get('doc_number') or b.get('id')} for {b.get('total')} to {b.get('vendor')} created", json.dumps(b, indent=1)
 
 
 def run_quickbooks_expense(cfg):
     """{"vendor": "Delta", "amount": 318.20, "account": "Travel", "paid_from": "Amex 1234", "date":
     "2026-09-01", "memo": "txn 77a1"} - post a purchase already paid from a card or bank account."""
-    p = create_expense(cfg, cfg.get('vendor'), cfg.get('amount'), cfg.get('account'), cfg.get('paid_from'), cfg.get('date'), cfg.get('memo'), cfg.get('description'))
+    p = create_expense(cfg, cfg.get('vendor_id') or cfg.get('vendor'), cfg.get('amount'), cfg.get('account_id') or cfg.get('account'), cfg.get('paid_from_id') or cfg.get('paid_from'), cfg.get('date'), cfg.get('memo'), cfg.get('description'))
     return f"expense of {p.get('total')} to {p.get('vendor')} from {p.get('paid_from')} posted", json.dumps(p, indent=1)

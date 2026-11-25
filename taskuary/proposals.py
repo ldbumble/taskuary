@@ -601,6 +601,12 @@ def queue(store, task_id: int, p: dict, actor='agent', refused: list | None = No
         p = p or {'action': 'change_routine'}
     ok, why = validate(store, p) if not routine else (False, routine)
     if ok and several: ok, why = False, several
+    # ...and a write its system can check is read against it now (reports.checked): the card says each thing by name, and one that cannot
+    # happen as asked is answered with why - never found out at his press
+    if ok and p.get('action') == 'run_tool' and actor != 'workflow':
+        from .reports import checked
+        try: p = checked(store, p)
+        except ValueError as e: ok, why = False, str(e)[:300]
     # ...a new GitHub issue names its repository and a title, said to the agent now rather than at the press
     if ok and p.get('action') == 'run_tool' and p.get('type') == 'github_issue':
         from .github import issue_check, issue_labels

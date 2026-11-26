@@ -1845,6 +1845,7 @@ def land_on(store, msg: dict, tid: int, v: dict | None, actor: str, how: str = '
     # (agent_on_reply) - which then drafts the reply itself, so the tool-less writer below is not asked for one too
     # ...AND THE ANSWER IT WAITS ON IS ITS AGENT'S, WHATEVER TRIAGE MADE OF IT (walk 18: a holding reply with a picture, read fyi, "woke" the
     # task and reached no agent - only the agent's turn ends the wait): it goes by the same road as new work, on a task an agent works
+    if awaited or (v or {}).get('intent') in ('task', 'reply_only'): msg['_upgraded'] = upgrade_filed(store, tid, mid, actor)
     went = own and _carry_on(store, tid, msg, mid, answered(store, t, v) if awaited else v, actor)
     # ...and an ASIDE (a "thanks", a nudge) leaves the draft as it is, but its agent still hears it and re-plans (thread_moved)
     # ...and so does a fresh QUESTION (reply_only) on a task its assistant already worked: only the tool-less writer heard it, and the
@@ -2774,15 +2775,24 @@ def mark_browser(store, tid, actor: str = 'triage') -> bool:
     return True
 
 
+def _row_msg(m: dict) -> dict:
+    "A stored message as the dict a hand-over to an agent reads."
+    return {**senders.row_msg(m), 'body': m.get('BodyText') or '', 'subject': m.get('Subject') or '', 'message_id': m['MessageId']}
+
+
 def _pass_in(store, tid, msg: dict, mid, follow: dict | None, actor: str) -> bool:
     why = pass_in_why(store, tid, msg, mid, follow)
     if why:
         if code_of(why) not in QUIET_WHY: store.add_comment(tid, 'router', 'agent', f"{_who_said(msg)}'s new message was not passed to the agent: {why.rstrip('.')}. It waits for you.")
         return False
     store.audit('task', tid, 'passed_to_agent', actor, 'agent', {'message_id': mid})
+    road = _pass_general if live_agent(store, tid) == 'general' else _pass_coding
+    # ...behind the lines filed before it that are the task's now (upgrade_filed), in the order they came - less what waits for his Trust.
+    # A coding session is typed each line; a chat's turn reads every line on its task by itself, in order (events.take)
+    from . import origin
+    for m in origin.heard(store, tid, msg.get('_upgraded') or ()) if road is _pass_coding else (): _spawn(road, store, tid, _row_msg(m))
     # the wrapper triage named (a banner, a legal footer) rides with the line, so the agent is handed only what the sender wrote
-    _spawn(_pass_general if live_agent(store, tid) == 'general' else _pass_coding, store, tid,
-           {**msg, 'message_id': mid, 'wrapper': msg.get('wrapper') or wrapper_of(follow), '_awaited': bool((follow or {}).get('awaited'))})
+    _spawn(road, store, tid, {**msg, 'message_id': mid, 'wrapper': msg.get('wrapper') or wrapper_of(follow), '_awaited': bool((follow or {}).get('awaited'))})
     return True
 
 
@@ -3248,6 +3258,32 @@ def _reopen(store, tid, msg: dict, actor: str, intent: dict = None, mid: int = N
     return True
 
 
+def filed_is_news(store, m: dict, own=None) -> bool:
+    "A line filed onto a task that triage read, and news: not his own, an auto-reply, or a notice come again unchanged (its stored verdict)."
+    from .autoreply import is_auto
+    if is_ours(m) or is_auto(m) or str(m.get('FromEmail') or '').lower() in (own_addresses(store) if own is None else own): return False
+    try: v = json.loads(m['Verdict'] or 'null') if 'Verdict' in m else store.message_verdict(m['MessageId'])
+    except (TypeError, ValueError): v = None
+    return isinstance(v, dict) and v.get('repeat') != 'same'
+
+
+# A LATER LINE THAT IS WORK UPGRADES THE FYI BEFORE IT (the owner, 2026-11-26: "a second message on the same thing, if this is a task, it
+# upgrades the old fyi to task"). A colleague's picture with no words was read alone as nothing to do and filed onto its closed task; 46 s
+# later their words reopened it - the rail showed the task and, beside it, an FYI row for the picture, and a session that is typed its lines got
+# the words alone, never the picture that explained them. What was filed onto the task and never given to its agent is the task's own from
+# here (routed, never deleted): no row of its own, and it goes to the agent ahead of the line that brought the work (_pass_in)
+def upgrade_filed(store, tid, mid, actor: str) -> list:
+    "The lines filed onto task `tid` before message `mid` that its agent was never given, made the task's own - their rows, oldest first."
+    from . import conversation
+    new, own = set(conversation.not_given(store, tid)), own_addresses(store)
+    rows = sorted((m for m in store.list_messages(tid) if m.get('Status') == 'filed' and m['MessageId'] < mid and m['MessageId'] in new
+                   and str(m.get('Direction') or 'in') == 'in' and filed_is_news(store, m, own)), key=lambda m: m['MessageId'])
+    for m in rows:
+        store.set_message_status(m['MessageId'], 'routed')
+        store.audit('message', m['MessageId'], 'fyi_upgraded', actor, detail={'task': tid, 'by': mid})
+    return [{**m, 'Status': 'routed'} for m in rows]
+
+
 LIVE_JOIN = 'an agent is working this and asked on this chat'      # the one join made unread: a running agent's own conversation (day_count)
 
 def chat_route(store, msg: dict, cfg: dict, llm, mine=(), me=()) -> tuple:
@@ -3621,7 +3657,7 @@ def hand_unheard(store, tid, actor: str = 'router') -> str:
     from . import conversation, general, waitroom
     news = [m for i in conversation.not_given(store, tid) if (m := store.get_message(i))]
     if m := next((m for m in reversed(news) if not is_ours(m)), None) or (news[-1] if news else None):
-        msg = {**senders.row_msg(m), 'body': m.get('BodyText') or '', 'subject': m.get('Subject') or ''}
+        msg = _row_msg(m)
         if thread_moved(store, tid, msg, m['MessageId'], None, actor, own=is_ours(m), vouched=True): return 'handed'
     worked = live_agent(store, tid) or general.history(store, tid) or store.last_transcript(tid)
     if worked and general.waiting_lines(store, tid): waitroom.later(store, 0.2); return 'handed'

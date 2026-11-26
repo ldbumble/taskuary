@@ -30,6 +30,7 @@ import { openAppLink } from "./appLinks.js";
 import api from "./api.js";
 import Artifact from "./Artifact.jsx";
 import { asks, buttonOf, colName, columnsOf, evalExpr, fillIn, fmtAs, labels, placesOf } from "./viewSpec.js";
+import { overlap, rangeLabel, ticksOf, timeLabel } from "./availability.js";
 
 // ── A VIEW HE CAN WORK WITH (after json-render's state and actions): its values (the spec's `state`), moved by its controls on his screen
 // alone; every value written {$expr} is worked out from them as they move (viewSpec.evalExpr - no eval), and one that cannot be is said
@@ -131,6 +132,65 @@ function Checklist({ p }) {
       <span>{x.text}{x.done && <span className="sr"> (done)</span>}</span></li>))}</ul></Block>;
 }
 
+// WHO CAN MAKE WHICH TIMES: a row a person, their ranges as bars on one axis of the days side by side; under them how many are free in each
+// stretch; the best slot (the most people for the meeting's length) banded down every row, said over it with its count. All of it worked out
+// here from the ranges (availability.overlap) - the view carries no count. Shown again as replies come (the same `id`), the bars grow in, the
+// band slides to the new best slot and the count climbs; still for prefers-reduced-motion
+const still = () => typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+function useCount(to, ms = 650) {
+  const [v, setV] = useState(() => (still() ? to : 0)), at = useRef(v);
+  useEffect(() => {
+    const a = at.current; let raf = 0, t0 = 0;
+    if (a === to || still()) { at.current = to; setV(to); return undefined; }
+    const step = (t) => { t0 ||= t; const k = Math.min(1, (t - t0) / ms), x = Math.round(a + (to - a) * (1 - (1 - k) ** 3));
+      at.current = x; setV(x); if (k < 1) raf = requestAnimationFrame(step); };
+    raf = requestAnimationFrame(step); return () => cancelAnimationFrame(raf);
+  }, [to, ms]);
+  return v;
+}
+const PAD = 0.05;       // a day's hours stand inside its column, this share of it clear at each edge
+function Availability({ p }) {
+  const o = useMemo(() => overlap(p.people, p.minutes), [p.people, p.minutes]), b = o.best;
+  const nd = o.days.length || 1, span = o.hi - o.lo, di = Object.fromEntries(o.days.map((d, i) => [d.day, i]));
+  const x = (i, m) => ((i + PAD + ((m - o.lo) / span) * (1 - 2 * PAD)) / nd) * 100;
+  const at = (i, a, z) => ({ left: `${x(i, a)}%`, width: `${x(i, z) - x(i, a)}%` });
+  const n = useCount(b?.n || 0), ticks = ticksOf(o.lo, o.hi, nd), replied = o.total - o.waiting.length;
+  const was = useRef(null); if (b) was.current = b;          // ...with no best slot any more, its band fades where it stood
+  const band = b || was.current, said = (r) => Object.entries(r.days).map(([d, rs]) => `${o.days[di[d]].label} ${rs.map(([a, z]) => rangeLabel(a, z)).join(", ")}`).join("; ");
+  return <div className="tq-avl" data-tq-availability="" data-best={b ? `${b.day} ${b.from}-${b.to} ${b.n}/${o.total}` : ""}>
+    <div className="tq-avl-best" role="status">
+      <div><span className="lbl">{b ? "Best time" : "No shared time yet"}</span>
+        <span className="when">{b ? `${b.label} · ${rangeLabel(b.from, b.to)}` : `${replied} of ${o.total} replied`}</span></div>
+      {b && <div className="fit" aria-label={`${b.n} of ${o.total} can make it`}><b key={b.n} data-tq-avl-count="">{n}</b><span>of {o.total}<br />can make it</span></div>}
+    </div>
+    <div className="tq-avl-grid">
+      <div className="tq-avl-lay under" style={{ gridRow: `2 / span ${o.rows.length + 1}` }} aria-hidden>
+        {o.days.flatMap((d, i) => ticks.map((m) => <i key={`${d.day}:${m}`} style={{ left: `${x(i, m)}%` }} />))}
+        {o.days.slice(1).map((d, i) => <i key={d.day} className="sep" style={{ left: `${((i + 1) / nd) * 100}%` }} />)}
+      </div>
+      <span /><div className="tq-avl-track head">{o.days.map((d, i) => <span key={d.day} style={{ left: `${(i / nd) * 100}%`, width: `${100 / nd}%` }}>{d.label}</span>)}</div>
+      {o.rows.map((r) => { const st = !r.replied ? "wait" : b?.who.includes(r.name) ? "fit" : "out", none = r.replied && !Object.keys(r.days).length;
+        return <React.Fragment key={r.name}>
+          <span className={`tq-avl-name ${st}`} title={r.name}>{r.name}</span>
+          <div className={`tq-avl-track ${st}`} role="img" aria-label={`${r.name}: ${!r.replied ? "no reply yet" : none ? "none of these times" : said(r)}`}>
+            {(!r.replied || none) && <em>{none ? "none of these times" : "no reply yet"}</em>}
+            {Object.entries(r.days).flatMap(([d, rs]) => rs.map(([a, z], j) => <i key={`${d}:${j}`} className="tq-avl-bar" style={at(di[d], a, z)}
+              title={`${r.name}: ${o.days[di[d]].label} ${rangeLabel(a, z)}`} />))}
+          </div></React.Fragment>; })}
+      <span className="tq-avl-name sum">People free</span>
+      <div className="tq-avl-track sum">{o.days.flatMap((d, i) => d.segs.map((s) => <i key={`${d.day}:${s.from}`} style={{ ...at(i, s.from, s.to), "--k": s.n / o.total }}
+        className={`tq-avl-seg${b && d.day === b.day && s.n === b.n && s.from < b.to && s.to > b.from ? " best" : ""}`}
+        title={`${d.label} ${rangeLabel(s.from, s.to)}: ${s.who.join(", ")}`}>{s.n}</i>))}</div>
+      <span /><div className="tq-avl-track axis" aria-hidden>{o.days.flatMap((d, i) => ticks.map((m) => <span key={`${d.day}:${m}`} style={{ left: `${x(i, m)}%` }}>{timeLabel(m)}</span>))}</div>
+      <div className="tq-avl-lay over" style={{ gridRow: `2 / span ${o.rows.length + 1}` }} aria-hidden>
+        {band && <i className="tq-avl-band" data-on={b ? "" : undefined} style={at(di[band.day] ?? 0, band.from, band.to)} />}
+      </div>
+    </div>
+    {!!(b?.out.length || o.waiting.length) && <p className="tq-avl-who">
+      {!!b?.out.length && <span>Can't make it: {b.out.join(", ")}</span>}{!!o.waiting.length && <span>No reply yet: {o.waiting.join(", ")}</span>}</p>}
+  </div>;
+}
+
 const NOTE = { info: InfoIcon, success: OkIcon, warning: WarnIcon };
 const Note = ({ p }) => { const tone = p.tone || "info", Icon = NOTE[tone];
   return <aside className={`tq-view-note ${tone}`} role="note"><Icon aria-hidden sx={{ fontSize: 18 }} />
@@ -192,6 +252,7 @@ const DRAW = {
   list: (p) => <Block p={p}><ul className="tq-view-list">{p.items.map((x, i) => <li key={i}>{x}</li>)}</ul></Block>,
   steps: (p) => <Block p={p}><ol className="tq-view-list steps">{p.items.map((x, i) => <li key={i}><b>{i + 1}</b><span>{x}</span></li>)}</ol></Block>,
   checklist: (p) => <Checklist p={p} />,
+  availability: (p) => <Block p={p}><Availability p={p} /></Block>,
   // ...words alone are words in the chat; given a title they are a card like the rest
   text: (p) => (p.title || p.description ? <Block p={p}><Md text={p.text} /></Block> : <Md text={p.text} />),
   grid: (p) => <Head p={p} />,

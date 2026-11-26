@@ -26,7 +26,19 @@ SHOW_TYPES = ("THE `show` TYPES: every type takes title? and description?; each 
               "one value on his screen alone. A tile's value, a point's value or a table cell may be {$expr: \"...\"} (or {$state: /name}): "
               "numbers, 'words', true/false, the state's names - in a cell also its row's columns, lower case with _ for a space - + - * / %, "
               "== != < <= > >=, && || !, c ? a : b, min max round abs floor ceil; it is worked out again as a control moves. choice {label, "
-              "options} and a button's answer (its text may hold {expr}: \"Order {seats} seats\") come back to you once, as his press.")
+              "options} and a button's answer (its text may hold {expr}: \"Order {seats} seats\") come back to you once, as his press.\n"
+              "WHO CAN MAKE WHICH TIMES: availability {people: [{name, ranges?: [{day, from, to}]}], minutes?: the meeting's length, 30 unless "
+              "given} draws each person's ranges as bars on one time axis, the days side by side, how many people are free in each stretch, and "
+              "the best slot - the most people for `minutes` together - banded and said with its count (\"4 of 6\"), who cannot make it and who "
+              "has not replied. day is a date (2026-12-01) or a short label, from and to are 24-hour times (14:00); a person with no `ranges` has "
+              "not replied, with an empty list can make none. The counts and the best slot are worked out on the page from the ranges; the view "
+              "takes no count.\n"
+              "A VIEW'S `id` (beside title and root) names it: shown again under the same id, it replaces the one drawn before where it stands "
+              "in the chat - a view that fills in as answers arrive is one view, not a new one each time.")
+AVAILABILITY = ('{"id":"times","title":"Product ideas session","root":"a","elements":{"a":{"type":"availability","props":{"minutes":60,"people":['
+                '{"name":"Erin Blake","ranges":[{"day":"2026-12-01","from":"14:00","to":"16:00"}]},'
+                '{"name":"Ray Colton","ranges":[{"day":"2026-12-02","from":"10:00","to":"12:00"},{"day":"2026-12-01","from":"15:00","to":"16:00"}]},'
+                '{"name":"Paula Vance","ranges":[]},{"name":"Omar Keller"}]}}}}')
 WHAT_IF = ('{"title":"Payworth seats","state":{"seats":40,"annual":false},"root":"g","elements":{"g":{"type":"grid","props":{"cols":1},'
            '"children":["s","a","k","go"]},"s":{"type":"slider","props":{"label":"Seats","value":{"$bindState":"/seats"},"min":5,"max":200,"step":5}},'
            '"a":{"type":"toggle","props":{"label":"Pay yearly (2 months free)","value":{"$bindState":"/annual"}}},"k":{"type":"stats","props":{"items":['
@@ -39,7 +51,8 @@ CHOICE = ('{"root":"c","elements":{"c":{"type":"choice","props":{"label":"Which 
 def _show():
     from .agenttools import SHOW_EXAMPLE
     return (f'{SHOW_TYPES}\n\nA WORKED SPEC - a grid of stats, a chart beside a table, and a checklist:\n{SHOW_EXAMPLE}\n\n'
-            f'A WHAT-IF - a seats slider and a toggle working out the cost, and his go:\n{WHAT_IF}\n\nA CHOICE:\n{CHOICE}')
+            f'A WHAT-IF - a seats slider and a toggle working out the cost, and his go:\n{WHAT_IF}\n\nA CHOICE:\n{CHOICE}\n\n'
+            f'AN AVAILABILITY - two have named times, one can make none, one has not replied:\n{AVAILABILITY}')
 
 # ...and the shapes of the rarer proposals, out of every turn's tool list (2026-11-09)
 PROPOSE = ("THE SHAPES OF A `propose` run_tool: a new GitHub issue - {type: github_issue, repo: owner/name, title, "

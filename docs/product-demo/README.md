@@ -1,5 +1,35 @@
 # General assistant product demo
 
+## A team finds a time (availability view)
+
+`taskuary-availability.webm` (1440 × 900, about 40 seconds, no sound; `taskuary-availability.png` is a still of it)
+shows one thread where a team looks for an hour next week. The owner types one line; replies arrive one after
+another; the agent keeps one view of who can make which times - each person's ranges on a time axis, how many are
+free in each stretch, the best slot banded with its count - and that view fills in as each reply lands. It ends on
+the invite for the best slot, as a card waiting for a press. Nothing is sent.
+
+It is recorded from the demo world, never a live mailbox: `website/record-availability.mjs` starts
+`taskuary --demo` itself on a throwaway home and a free port with `TASKUARY_DEMO_SCENE=availability`, which adds
+the thread's task and plays the scene once when a line is typed on it (`taskuary/demo.py`, `SCENE`). The people are
+the repository's invented ones at `northwind.example`. The replies and the agent's turns go through the roads real
+ones take, and the view is the spec a real agent hands `show` (`availability`, the same `id` each time): the counts
+and the best slot are worked out by the page, not written in the script.
+
+The view stays where it was first drawn and the replies stand under it, so after the second reply the recording
+wheels the chat up to hold the view in sight, and goes down to the answer and the invite at the end.
+
+```powershell
+# from website/: build the app the demo serves
+npm exec --yes --package=node@22 -- node node_modules/vite/bin/vite.js build
+# from the repository root; Playwright is not a dependency here, so name its package folder
+$env:TASKUARY_PLAYWRIGHT = "<...>\node_modules\playwright"
+npm exec --yes --package=node@22 -- node website/record-availability.mjs            # --dark for the dark theme, --out <folder>
+```
+
+The recorder fails on a page error or on any request that leaves this computer. The page's loading is cut from the
+front with the ffmpeg in Playwright's own browsers folder; without one the video keeps it. A still is saved at each
+beat beside the video.
+
 ## Dashboard and Advisor showcase
 
 `website/record-showcase.mjs` records a separate, short tour of the current static

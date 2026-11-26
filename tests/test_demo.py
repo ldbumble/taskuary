@@ -891,3 +891,65 @@ class DemoSealedTests(unittest.TestCase):
             with mock.patch.object(requests.sessions.Session.request, 'real', side_effect=lambda *a, **k: 'local'):
                 self.assertEqual(requests.sessions.Session().request('GET', 'http://127.0.0.1:7803/api/health'), 'local')
         finally: requests.sessions.Session.request = before
+
+
+class TheSceneATeamFindsATimeTests(unittest.TestCase):
+    """TASKUARY_DEMO_SCENE=availability (the owner, 2026-11-26): one thread, a reply at a time, the agent's one view of who can make which times
+    kept up to date, then the invite - each through the road a real one takes, so the chat it leaves is one a real task could have."""
+    ENV = {demo.FLAG: '1', demo.SCENE_ENV: 'availability', demo.SCENE_PACE: '0.65'}     # ...a second between replies: a mail's stamp is no finer
+
+    def test_it_is_off_unless_asked_for(self):
+        from taskuary.testing import Factory
+        s = MemoryStore()
+        with on():
+            self.assertIsNone(demo.seed_scene(s, Factory(s)))
+            self.assertEqual(s.list_tasks(), [])
+        with mock.patch.dict(os.environ, self.ENV):                    # ...and on another task's line it starts nothing
+            other = s.create_task({'Title': 'Plan the team lunch', 'Kind': 'general', 'Status': 'open', 'Source': 'assistant'}, 'owner')
+            self.assertFalse(demo.scene_turn(s, other, 'book it'))
+
+    def test_his_line_starts_it_each_reply_updates_the_one_view_and_it_ends_on_the_invite(self):
+        import json
+        from taskuary import calwrite, conversation, server, viewspec
+        from taskuary.testing import Factory
+        with mock.patch.dict(os.environ, self.ENV):
+            s = MemoryStore(); s.set_setting('owner_email', demo.OWNER_EMAIL, 'demo')                  # ...her colleagues are no strangers (seed)
+            tid = demo.seed_scene(s, Factory(s))
+            self.assertEqual([x['who'] for x in conversation.items(s, tid)['items']], [demo.SCENE[0][0]])      # the page has the thread open: its first mail
+            with mock.patch.object(server, 'store', s):
+                self.assertEqual(server._demo_turn(tid, "Keep track of everyone's times and set up the invite."), '')
+            # ...read once it is at rest: its last words filed, its card put in the log by the log's own worker (chatlog.advance_soon)
+            def at_rest():
+                with s.lock: card = s.cx.execute("SELECT 1 FROM chatlog WHERE TaskId=? AND Kind='card'", (tid,)).fetchone()
+                return card and any('ready for your press' in (c.get('Body') or '') for c in s.list_comments(tid, internal=True))
+            for _ in range(600):
+                if at_rest(): break
+                time.sleep(.05)
+            got = conversation.items(s, tid)
+            self.assertFalse(demo.scene_turn(s, tid, 'and again?'))                             # played once: a later line is the demo's own answer
+        xs = got['items']
+        self.assertEqual([x['kind'] for x in xs][:3], ['arrival', 'line', 'turn'])              # the ask, his line, the turn it began under it
+        self.assertEqual([x['who'] for x in xs if x['kind'] == 'arrival'], [who for who, *_ in demo.SCENE])
+        shows = [st for x in xs if x['kind'] == 'turn' for st in x.get('steps') or [] if st.get('name') == 'mcp__taskuary__show']
+        specs = [json.loads(st['output'].split(viewspec.MARK)[1]) for st in shows]
+        self.assertEqual(len(specs), len(demo.SCENE))
+        for n, spec in enumerate(specs, 1):
+            self.assertEqual(spec, viewspec.check(demo.scene_view(n)))                          # ...the server's own checked spec, as a real call's
+            self.assertEqual(spec['id'], 'times')                                               # one view: the chat draws it once, where it first stood
+            people = spec['elements']['a']['props']['people']
+            self.assertEqual(sum('ranges' in p for p in people), n + 1)                         # him, and whoever has written so far
+            self.assertFalse(any(k not in ('name', 'ranges') for p in people for k in p))       # no count, no best slot: the page works them out
+        self.assertEqual(conversation.flow_breaks(got), [])
+        # ...it ends on the invite for the hour the view's last state makes its best, as a card - and nothing went
+        last = [x for x in xs if x['kind'] == 'turn'][-1]
+        self.assertIn('ready for your press', last['text'])
+        self.assertEqual([(c['what'], c['status']) for c in last['cards']], [('outbound', 'pending')])
+        rv = [r for r in s.list_reviews(status='pending') if r.get('TaskId') == tid]
+        self.assertEqual(len(rv), 1)
+        env, (day, a, b) = calwrite.env_of(rv[0]), demo.SCENE_SLOT
+        self.assertEqual((env['act'], len(env['to'])), ('schedule', len(demo.SCENE)))
+        self.assertEqual((env['start'], env['end']), (f'{demo._scene_days()[day]} {a}', f'{demo._scene_days()[day]} {b}'))
+        self.assertFalse(rv[0].get('DeliveryState'))
+        # ...and only invented people, at reserved addresses, on days still ahead
+        self.assertTrue(all(m['FromEmail'].endswith('@northwind.example') for m in s.list_messages(tid)))
+        self.assertTrue(all(d.weekday() in (1, 2, 3) and d > __import__('datetime').date.today() for d in demo._scene_days()))

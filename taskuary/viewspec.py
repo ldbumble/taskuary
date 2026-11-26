@@ -15,7 +15,7 @@ TYPES = {t: {**spec, **EVERY} for t, spec in CAT['types'].items()}     # every t
 MARK = 'TASKUARY-VIEW '                  # the tool's answer carries the spec after this, so the chat draws it from the trace (chatStream.viewOf)
 ROW_VERBS = sorted(v for v, b in buttons.VERBS.items() if b.get('row'))      # lit where it stands on the task page: a verb with no row has no button
 ROW_OF = {r: v for v in ROW_VERBS for r in buttons.VERBS[v]['row'] if r not in ROW_VERBS}    # its row id (done) names it too
-LINK = re.compile(r'#[\w=&%.:/-]+')
+LINK, ID = re.compile(r'#[\w=&%.:/-]+'), re.compile(r'[\w-]{1,64}')
 
 
 def _text(v, n, at):
@@ -200,6 +200,7 @@ def _prop(kind, v, at, props, names=()):
         val = lambda x, a: _expr(x, a, names) if isinstance(x, dict) else _num(x, a)
         return [{'label': _text(o['label'], CAPS['short'], f'{at}[{i}].label'), 'value': val(o['value'], f'{at}[{i}].value'),
                  **({'highlight': True} if o.get('highlight') is True else {})} for i, o in enumerate(os)]
+    if kind == 'avail': return _avail(v, at)
     if kind == 'verb':
         v = ROW_OF.get(v, v) if isinstance(v, str) else v
         if v not in ROW_VERBS: raise ValueError(f'{at}: {v!r} is no button on the task page - one of {", ".join(ROW_VERBS)}')
@@ -208,6 +209,31 @@ def _prop(kind, v, at, props, names=()):
         if not isinstance(v, str) or not LINK.fullmatch(v) or v == '#setup': raise ValueError(f'{at} must be an app page link like #settings or #report=new')
         return v
     raise ValueError(f'{at}: the catalog names an unknown kind {kind!r}')       # viewspec.json itself is wrong
+
+
+# ── WHO CAN MAKE WHICH TIMES (the owner, 2026-11-26: a thread finding a meeting time): the agent gives only who and their ranges - {name,
+# ranges: [{day, from, to}]}, a day an ISO date or a short label, times HH:MM on a 24-hour clock; no `ranges` is no reply yet, an empty list
+# none of the times. How many fit each slot and the best one are the page's arithmetic (availability.js `overlap`), never the model's
+_TIME, DAY_N = re.compile(r'([01]?\d|2[0-3]):([0-5]\d)'), 20
+def _mins(v, at):
+    if not isinstance(v, str) or not (m := _TIME.fullmatch(v.strip())): raise ValueError(f'{at} must be a time on a 24-hour clock, like 09:30 or 14:00')
+    return int(m[1]) * 60 + int(m[2])
+def _avail(v, at):
+    out, days = [], set()
+    for i, o in enumerate(_list(v, at, CAPS['people'])):
+        o = _obj(o, f'{at}[{i}]', ('name',), ('ranges',)); p = {'name': _text(o['name'], CAPS['short'], f'{at}[{i}].name')}
+        if p['name'] in [x['name'] for x in out]: raise ValueError(f'{at}[{i}].name {p["name"]!r} is listed twice - one entry a person, all their ranges in it')
+        if (rs := o.get('ranges')) is not None:
+            if not isinstance(rs, list): raise ValueError(f'{at}[{i}].ranges must be a list of {{day, from, to}} - leave it out for someone who has not replied')
+            if len(rs) > CAPS['ranges']: raise ValueError(f'{at}[{i}].ranges has {len(rs)} entries - at most {CAPS["ranges"]}')
+            p['ranges'] = []
+            for j, r in enumerate(rs):
+                a = f'{at}[{i}].ranges[{j}]'; r = _obj(r, a, ('day', 'from', 'to'))
+                if _mins(r['from'], f'{a}.from') >= _mins(r['to'], f'{a}.to'): raise ValueError(f'{a}.from must be before its to')
+                p['ranges'].append({'day': _text(r['day'], DAY_N, f'{a}.day'), 'from': r['from'].strip(), 'to': r['to'].strip()}); days.add(p['ranges'][-1]['day'])
+        out.append(p)
+    if len(days) > CAPS['days']: raise ValueError(f'{at} spans {len(days)} days - at most {CAPS["days"]}')
+    return out
 
 
 CONTROLS = ('slider', 'toggle', 'select', 'date')        # ...each moves one value of the view's state, on the page alone
@@ -251,6 +277,7 @@ def _element(eid, e, names=()):
     if t == 'button' and sum(x is not None for x in (out.get('verb'), out.get('open'), on)) != 1:
         raise ValueError(f'{at} needs one of props.verb (a button to light), props.open (a page link) or on.press (answer / setState)')
     if t == 'slider' and not out['min'] < out['max']: raise ValueError(f'{at}.props.min must be under max')
+    if t == 'availability' and not 15 <= out.get('minutes', 30) <= 480: raise ValueError(f'{at}.props.minutes (how long the meeting is) must be 15 to 480')
     kids = e.get('children') or []
     if not isinstance(kids, list) or not all(isinstance(k, str) for k in kids): raise ValueError(f'{at}.children must be a list of element ids')
     if len(kids) > CAPS['children']: raise ValueError(f'{at} has {len(kids)} children - at most {CAPS["children"]}')
@@ -281,7 +308,10 @@ def _state(spec, els) -> dict:
 # model fills it right the first time. One flat element (no anyOf: some providers refuse it); `check` still says what a type takes
 _KIND = {'str': {'type': 'string'}, 'md': {'type': 'string'}, 'verb': {'type': 'string'}, 'link': {'type': 'string'}, 'num': {'type': 'number'}, 'records': {'type': 'array', 'items': {'type': 'object'}},
          'cols': {'type': 'array', 'items': {}}, 'rows': {'type': 'array', 'items': {'type': 'array'}}, 'strs': {'type': 'array', 'items': {'type': 'string'}},
-         'tiles': {'type': 'array', 'items': {'type': 'object'}}, 'checks': {'type': 'array', 'items': {'type': 'object'}},
+         'tiles': {'type': 'array', 'items': {'type': 'object'}},
+         'avail': {'type': 'array', 'items': {'type': 'object', 'properties': {'name': {'type': 'string'}, 'ranges': {'type': 'array', 'items': {
+             'type': 'object', 'properties': {'day': {'type': 'string'}, 'from': {'type': 'string'}, 'to': {'type': 'string'}}, 'required': ['day', 'from', 'to']}}}, 'required': ['name']}},
+         'checks': {'type': 'array', 'items': {'type': 'object'}},
          'points': {'type': 'array', 'items': {'type': 'object', 'properties': {'label': {'type': 'string'}, 'value': {},
                                                                                   'highlight': {'type': 'boolean'}}, 'required': ['label', 'value']}}}
 def _kind(k):
@@ -324,6 +354,11 @@ def check(spec) -> dict:
         path.pop()
     walk(root)
     view = {**({'title': _text(spec['title'], CAPS['short'], 'title')} if spec.get('title') else {}), 'root': root, 'elements': out, **({'state': state} if state else {})}
+    # ...A VIEW NAMED IS ONE VIEW (the owner, 2026-11-26: availability that fills in as replies come): shown again under the same `id` it replaces
+    # the one drawn before, where it stands in the chat (chatStream.viewHomes) - never a second copy under it
+    if spec.get('id') not in (None, ''):
+        if not isinstance(spec['id'], str) or not ID.fullmatch(spec['id']): raise ValueError('id must be a short name of letters, digits, - or _ - it names the view, and showing it again updates it')
+        view['id'] = spec['id']
     if (n := len(json.dumps(view, ensure_ascii=False))) > CAPS['chars']: raise ValueError(f'the view is {n:,} characters - keep it to {CAPS["chars"]:,}: fewer rows, shorter text, or the whole of it in a file')
     return view
 

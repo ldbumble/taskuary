@@ -2,6 +2,24 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.4.5.0 - 2026-11-25
+
+- His line never leaves a live card greyed: an answer greys nothing, and what the turn does not replace stands again
+- A picture the agent drew rides on its card by the handle its tool gave
+- A card's picture is drawn on its card only, whichever tool showed it
+- One act on a page is one press: typed words are text, and his yes is to what the page holds
+- Versions of one letter stand on its one card however each was filed, and an API agent's calls are on the record
+- find_tools finds a connected system by its own name, on every road
+- His yes to the last press of a card he pressed wakes its agent only for its then, or a page that broke
+- Each picture the agent draws is its own file
+- Every road's tool call is on the record by its shape, at the tools' own door
+- A picture the agent draws is a file of its task, drawn by its card or by show - never by itself
+- The last press of a post he handed over waits for him by fact, whatever the judge said
+- A press Taskuary confirmed is its own check: a then that only does what the press did wakes nobody
+- A card his line greyed comes back as a new card under that line, never live again above it
+- propose names a reply, an email, a post again - the words the toolbox test reads
+- tick names its item again - the words the show-view test reads
+
 ## 0.4.4.9 - 2026-11-25
 
 - His line never leaves a live card greyed: an answer greys nothing, and what the turn does not replace stands again

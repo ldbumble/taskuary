@@ -302,5 +302,20 @@ class NothingToDrawWithTests(unittest.TestCase):
         self.assertEqual(buttons[0]['props'], {'label': 'Connect an image model', 'open': words.href('images')})
 
 
+def test_two_pictures_drawn_in_one_second_are_two_files():
+    """The re-walk, 2026-11-25: asked for an X post and a LinkedIn post "each with a picture", the agent drew two pictures in one second - both
+    were named by that second, and the second was written over the first. Each picture drawn is its own file of the task."""
+    import shutil
+    from taskuary import outputs
+    s = MemoryStore(); tid = s.create_task({'Title': 'Weekly AP posts'}, 'owner')
+    drew = iter([{'data': PNG + b'one', 'mime': 'image/png', 'provider': 'pictures', 'label': 'Pictures', 'model': 'm', 'prompt': 'p'},
+                 {'data': PNG + b'two', 'mime': 'image/png', 'provider': 'pictures', 'label': 'Pictures', 'model': 'm', 'prompt': 'p'}])
+    try:
+        with mock.patch.object(images, 'generate', side_effect=lambda *a, **k: next(drew)), mock.patch.object(images.time, 'time', return_value=1795658876.4):
+            a, b = (images.run_image_generate(s, {'prompt': 'p'}, task_id=tid) for _ in range(2))
+        assert a['name'] != b['name'] and (open(a['file'], 'rb').read(), open(b['file'], 'rb').read()) == (PNG + b'one', PNG + b'two'), (a['name'], b['name'])
+    finally: shutil.rmtree(outputs.folder(tid), ignore_errors=True)
+
+
 if __name__ == '__main__':
     unittest.main()

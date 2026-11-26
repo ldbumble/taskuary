@@ -2,6 +2,25 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.4.4.8 - 2026-11-25
+
+- A browser road's held step is drawn on the card he pressed, as its next press
+- A pull request goes into the repository's own branch, pushes its branch, and is never raised with nothing committed
+- A card names the to-do it does, and its press ticks it - nobody is woken for bookkeeping
+- A turn that raised a card of any kind and stopped is not woken to go on
+- An executor that answers rows and columns gives its reader the data, on every road
+- Versions of one letter are one card he picks from, never the last one alone
+- A meeting for next week is offered next week's days, and raised again it is never a dead end
+- A write is read against its system before its card is drawn: named by name, refused where it cannot happen
+- A step handed to him on a page is a card in the one line, its page opening when it is in front
+- Every step held on a card's browser road is that card's next press, a shell step too
+- No Open a PR is raised or offered where the checkout's origin is no GitHub repository
+- A step handed over on the page has one I'm done, on its card
+- A card line's tab writes a thing's own name as its card does
+- A card raised the second before its turn's answer waits lit in that turn
+- A sign-in on the agent's page is one card, its fill-page link on it
+- A QuickBooks write reads in plain words from its declared fields, and agent done after the press
+
 ## 0.4.4.7 - 2026-11-25
 
 - A view he can answer is drawn: its spec is the last thing of show's answer

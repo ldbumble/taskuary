@@ -176,7 +176,7 @@ The Python and desktop installs keep everything in `~/.taskuary/`:
 | `taskuary.db` | the SQLite database — messages, tasks, settings, the audit log |
 | `config.toml` | local configuration |
 | `taskuary.log` | the application log |
-| `playbooks/*.md` | one page per kind of job an agent has learned to do |
+| `skills/<name>/SKILL.md` | one folder per kind of job an agent has learned to do |
 | `context/` | the context file each coding session is handed at startup |
 
 `TASKUARY_HOME` moves all of it. Docker uses `/data` inside the container. `TASKUARY_HOST`,

@@ -36,7 +36,7 @@ def every_kind(s):
     ids['held'] = act(s, tid, {'action': 'shell_act', 'what': 'push to northwind/ledger', 'command': 'git push', 'turn': 1}, 'held before it ran')
     ids['act'] = act(s, tid, {'action': 'save_routine', 'title': 'Weekly ledger', 'runs': 'weekly'})
     ids['closeout'] = act(s, tid, {'action': 'merge_pr', 'repo': 'northwind/ledger', 'number': 7}, 'finishing it: merge pull request #7')
-    ids['playbook'] = act(s, tid, {'action': 'write_playbook', 'slug': 'quarter-close', 'text': 'x'})
+    ids['skill'] = act(s, tid, {'action': 'save_skill', 'slug': 'quarter-close', 'text': 'x'})
     return tid, ids
 
 
@@ -229,12 +229,12 @@ def test_what_the_agents_events_read_of_the_presses_since_its_cursor():
 
 
 # ── the Assistant reads the same ─────────────────────────────────────────────────────────────────────────────────────────────────────
-def test_a_task_whose_only_card_is_its_playbook_has_an_approve_for_the_assistant():
-    """The Assistant's check for an Approve on a task row read proposals.held_pending, which skipped playbooks and close-outs: the page drew
-    the playbook's Approve and the Assistant said there was nothing to approve. Its rulebook state read the same and lit nothing."""
+def test_a_task_whose_only_card_is_its_skill_has_an_approve_for_the_assistant():
+    """The Assistant's check for an Approve on a task row read proposals.held_pending, which skipped skills and close-outs: the page drew
+    the skill's Approve and the Assistant said there was nothing to approve. Its rulebook state read the same and lit nothing."""
     from taskuary import concierge, rulebook
     s = MemoryStore(); tid = task(s)
-    rid = act(s, tid, {'action': 'write_playbook', 'slug': 'quarter-close', 'text': 'x'})
+    rid = act(s, tid, {'action': 'save_skill', 'slug': 'quarter-close', 'text': 'x'})
     item = {'tid': tid, 'kind': 'task', 'ref': f'TQ-{tid:04d}', 'lane': 'approve'}
     assert concierge.cannot(item, 'approve', s) == ''
     assert rulebook.state(s, item, [])[0] == 'action_held' and rulebook.state(s, item, [])[1][rulebook.EV] == [f'rv{rid}']

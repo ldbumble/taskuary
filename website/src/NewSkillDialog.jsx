@@ -7,10 +7,10 @@ import api from "./api";
 import SetupWithAi from "./SetupWithAi.jsx";
 import { openAppLink } from "./appLinks.js";
 
-const failure = (e) => e?.response?.data?.detail || e.message || "Could not start playbook setup.";
+const failure = (e) => e?.response?.data?.detail || e.message || "Could not start skill setup.";
 
-// `initialText`: the words New's Playbook tab (or the Assistant) wrote - From scratch, filled in. `autoStart`: Set up with AI was pressed there
-export default function NewPlaybookDialog({ connectorType = "", initialText = "", autoStart = false, onClose, onManual }) {
+// `initialText`: the words New's Skill tab (or the Assistant) wrote - From scratch, filled in. `autoStart`: Set up with AI was pressed there
+export default function NewSkillDialog({ connectorType = "", initialText = "", autoStart = false, onClose, onManual }) {
   const [mode, setMode] = useState(initialText.trim() ? "scratch" : "");
   const [query, setQuery] = useState("");
   const [before, setBefore] = useState(0);
@@ -27,7 +27,7 @@ export default function NewPlaybookDialog({ connectorType = "", initialText = ""
     setLoading(true); setError("");
     const timer = setTimeout(async () => {
       try {
-        const { data } = await api.get(`/api/playbooks/examples?q=${encodeURIComponent(query)}&before=${before}`);
+        const { data } = await api.get(`/api/skills/examples?q=${encodeURIComponent(query)}&before=${before}`);
         if (live) { setRows((old) => before ? [...old, ...data.data] : data.data); setNext(data.next); }
       } catch (e) { if (live) setError(failure(e)); }
       finally { if (live) setLoading(false); }
@@ -35,20 +35,20 @@ export default function NewPlaybookDialog({ connectorType = "", initialText = ""
     return () => { live = false; clearTimeout(timer); };
   }, [mode, query, before]);
 
-  // SET UP WITH AI BUILDS IT HERE (the owner, 2026-11-13): no agent task - the Assistant drafts the playbook, checks it and saves it, and
-  // the strip below says each step and asks what only you can say; done, the playbook opens (taskuary/build.py)
+  // SET UP WITH AI BUILDS IT HERE (the owner, 2026-11-13): no agent task - the Assistant drafts the skill, checks it and saves it, and
+  // the strip below says each step and asks what only you can say; done, the skill opens (taskuary/build.py)
   const [building, setBuilding] = useState(autoStart && !!initialText.trim()), busy = building;
   const start = () => { setError(""); setBuilding(true); };
 
-  return <Dialog open onClose={onClose} fullWidth maxWidth="sm" aria-labelledby="new-playbook-title" PaperProps={{ sx: { maxHeight: "90vh" } }}>
-    <DialogTitle id="new-playbook-title">New playbook</DialogTitle>
+  return <Dialog open onClose={onClose} fullWidth maxWidth="sm" aria-labelledby="new-skill-title" PaperProps={{ sx: { maxHeight: "90vh" } }}>
+    <DialogTitle id="new-skill-title">New skill</DialogTitle>
     {building ? <DialogContent>
-      <SetupWithAi kind="playbook" words={(text.trim() || "Build a playbook from this email.") + (connectorType ? ` For the ${connectorType} connection.` : "")}
+      <SetupWithAi kind="skill" words={(text.trim() || "Build a skill from this email.") + (connectorType ? ` For the ${connectorType} connection.` : "")}
         messageId={mode === "email" ? selected?.MessageId : null} auto
         onDone={(v) => { onClose?.(); openAppLink(v.link); }} />
     </DialogContent> : <DialogContent>
       <Typography sx={{ color: "text.secondary", mb: 2 }}>
-        A playbook teaches Taskuary how to handle a recurring request. Start with an example, or describe what you need.
+        A skill teaches Taskuary how to handle a recurring request. Start with an example, or describe what you need.
       </Typography>
       {connectorType && <Alert severity="info" sx={{ mb: 2 }}>For your {connectorType} connection</Alert>}
       <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" }, gap: 1.5, mb: 2 }}>
@@ -84,7 +84,7 @@ export default function NewPlaybookDialog({ connectorType = "", initialText = ""
           <Button size="small" disabled={busy} onClick={() => setSelected(null)}>Remove example</Button>
         </Box>}
       </>}
-      {mode && <TextField fullWidth multiline minRows={3} label={mode === "email" ? "Anything to add? (optional)" : "What should this playbook do?"}
+      {mode && <TextField fullWidth multiline minRows={3} label={mode === "email" ? "Anything to add? (optional)" : "What should this skill do?"}
         placeholder="When someone asks for updated item numbers, gather the latest data and prepare a summary for my review."
         value={text} disabled={busy} onChange={(e) => setText(e.target.value)} />}
       {error && <Alert severity="error" sx={{ mt: 2 }}>{error}</Alert>}

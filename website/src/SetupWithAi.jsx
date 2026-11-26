@@ -1,6 +1,6 @@
 // SET UP WITH AI IS THE ASSISTANT BUILDING IT, ON THIS PAGE (the owner, 2026-11-13: "the agents are in tasks but assistant is ai about
 // taskuary itself"; "the assistant should be built into setup with ai without opening the bottom bar"). One strip for every builder - a
-// report, a dashboard, a routine, a playbook, a connection: the owner says what it should do, the server builds it (taskuary/build.py -
+// report, a dashboard, a routine, a skill, a connection: the owner says what it should do, the server builds it (taskuary/build.py -
 // drafts, checks, saves, tries again), and the strip shows its steps, its one question with a box to answer, and where it ended. The chat
 // is never opened; New and the chat bring the page up with the words and the strip starts there (goStraight).
 import React, { useEffect, useRef, useState } from "react";
@@ -14,7 +14,7 @@ import ConnectAi from "./ConnectAi.jsx";
 import { label as btnLabel } from "./buttons.js";
 
 export const NEW_HASH = { report: "report=new", dashboard: "report=new-dashboard", workflow: "report=new-agent" };
-const NOUN = { report: "report", dashboard: "dashboard", workflow: "routine", playbook: "playbook", connection: "connection" };
+const NOUN = { report: "report", dashboard: "dashboard", workflow: "routine", skill: "skill", connection: "connection" };
 const POLL_MS = 1200;
 
 // WORDS HANDED TO THE PAGE THAT OPENS NEXT: New's box or the chat said "a routine that ...", the builder comes up, and its strip takes them
@@ -41,7 +41,7 @@ const MARK = { done: "✓", failed: "✗", you: "You:", said: "" };
 const STEP_COLOR = { failed: "var(--tq-danger, #6b2733)", you: DIM, said: INK, done: INK };
 
 // `kind`; `words`: what the box starts with; `refId`: a connection's card; `ctx`: what a card's form knows (guide, fields, secret label);
-// `messageId`: a past email a playbook is made from; `onOpen`: a DOOR on a list - the press brings the builder up and the strip there starts;
+// `messageId`: a past email a skill is made from; `onOpen`: a DOOR on a list - the press brings the builder up and the strip there starts;
 // `auto`: start at once with `words`; `onDone(view)`: the thing is saved - the page goes to it
 export default function SetupWithAi({ kind = "report", words = "", refId = null, ctx = null, messageId = null, onOpen, auto = false, onDone, sx = {} }) {
   // ...words handed over are taken in the first draw, so the strip opens already working - never a beat of an empty box first

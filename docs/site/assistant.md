@@ -154,7 +154,7 @@ step under its answer in the chat:
   value, and it never types one: it tells you to paste it into its box. The server checks this again.
 - **Your hand wins.** A click or a key on the page while it is working stops the rest.
 
-**Set up with AI** - on a report, dashboard, routine or playbook, and on a connection's card - is the Assistant
+**Set up with AI** - on a report, dashboard, routine or skill, and on a connection's card - is the Assistant
 building it right there on that page, with no chat window and no task: it drafts it, checks it (a report's
 preview, a connection's **Test**), fixes what failed and tries again, and saves it. Its steps show on the page,
 and so does the one question only you can answer, with a box to answer it. It never types a secret - you paste

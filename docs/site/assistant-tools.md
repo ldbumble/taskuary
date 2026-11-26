@@ -154,7 +154,7 @@ Keep a fact about how the owner works in their memory.
 
 ### `setup`
 
-Build a report, a playbook (how one kind of recurring request is handled from now on), a connection to another system or an automation. Never a to-do, and never an agent's job.
+Build a report, a skill (how one kind of recurring request is handled from now on), a connection to another system or an automation. Never a to-do, and never an agent's job.
 
 - `text` - the request
 

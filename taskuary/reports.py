@@ -386,10 +386,8 @@ def run_agent(cfg):
     # custom CLI. A skill that is not there remains the provider's normal `/skill-name` command.
     owned = None
     if skill:
-        from . import config
-        candidate = config.home() / 'skills' / skill / 'SKILL.md'
-        try: owned = candidate.read_text(encoding='utf-8') if candidate.is_file() else None
-        except OSError: owned = None
+        from . import skills
+        owned = skills.read(skill)
     # ...and a run that only looks can look at the web as well, so the files it may open are the report's own (web_reads): the
     # folder it names and the paths its prompt and skill name - which is why the skill is read ahead of the brain
     reads = None if writes else web_reads(cfg, f'{prompt}\n{owned or ""}')

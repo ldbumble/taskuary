@@ -3,9 +3,9 @@
 A WORKFLOW is a scheduled or hand-run job the owner configured on the Reports tab's Workflows shelf: the
 `agent` source with its write grant, or the monthly invoice job. It carries its objective, its configured
 inputs, the connections it names, its steps (a saved skill), what it may do, what it must ask first, and
-when it is done. A PROCEDURE is a playbook (playbooks.py): how this company handles ONE kind of incoming
+when it is done. A PROCEDURE is a skill (skills.py): how this company handles ONE kind of incoming
 request, chosen by triage when a message is an instance of it. The two were one shelf; converting every
-playbook into a scheduled job would have been wrong, so the existing definitions stay exactly where they
+skill into a scheduled job would have been wrong, so the existing definitions stay exactly where they
 are and this module only reads them apart (PW-207).
 
 A triggered workflow used to run inside the report loop through a coding CLI, then file its answer as a
@@ -73,10 +73,8 @@ def definition(store, src) -> dict:
     # A CODING ROUTINE'S SKILL IS THE CLI'S OWN (the owner, 2026-10-29): typed as its slash command in the repository (slash_of), so Claude
     # Code finds it in that repo's .claude/skills or the user's ~/.claude/skills - Taskuary's own skills folder is a general routine's
     if skill and runs_on(cfg) != 'coding':
-        from . import config
-        p = config.home() / 'skills' / skill / 'SKILL.md'
-        try: steps = p.read_text(encoding='utf-8') if p.is_file() else ''
-        except OSError: steps = ''
+        from . import skills
+        steps = skills.read(skill) or ''
     return {'source_id': sid, 'type': cfg.get('type'), 'title': cfg.get('title') or (src.get('Address') if isinstance(src, dict) else '') or '',
             'objective': str(cfg.get('prompt') or cfg.get('objective') or '').strip(), 'skill': skill, 'steps': steps,
             'inputs': cfg.get('inputs') or {},
@@ -95,9 +93,9 @@ def definition(store, src) -> dict:
 
 def catalog(store) -> dict:
     """Configured workflows on one shelf, request procedures on the other - never the same thing (PW-203/207)."""
-    from . import playbooks
+    from . import skills
     flows = [definition(store, s) for s in store.list_sources(active_only=False) if s.get('Channel') == 'report' and is_workflow(s)]
-    procs = [{'slug': b['slug'], 'title': b['title'], 'when': b['when'], 'uses': b['uses'], 'about_code': b['about_code']} for b in playbooks.list_all()]
+    procs = [{'slug': b['slug'], 'title': b['title'], 'description': b['description'], 'uses': b['uses'], 'about_code': b['about_code']} for b in skills.list_all()]
     return {'workflows': flows, 'procedures': procs}
 
 
@@ -511,7 +509,7 @@ def running(store, sid) -> dict | None:
 
 # ── a mail starts it (the owner, 2026-10-21: "a workflow can be started by an incoming mail") ───────────────────────────────────
 # A workflow may say, in words, which arriving mail starts it (`on_mail`, the editor's "Start when a mail like this arrives") - the
-# playbook's `when`, for a job instead of a procedure. Triage is shown these the way it is shown the playbooks and names the one a
+# skill's `when`, for a job instead of a procedure. Triage is shown these the way it is shown the skills and names the one a
 # mail is an instance of (triage.classify_intent `workflow`); the run is then that mail's task, through the one road below.
 MAIL_NAME = 'workflow-'
 

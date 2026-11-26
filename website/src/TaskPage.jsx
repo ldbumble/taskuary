@@ -1383,7 +1383,7 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
   // Proposals are queued after the reply, so they must not be mistaken for it - but they SHARE
   // its stage. lanes.json has one lane for both ("a reply or an action is drafted and waits for
   // your yes"), and one lane on the rail is one section on the page (the owner, 2026-09-22: "put
-  // playbook proposal combined into the reply ready section as it's part of the approval/action").
+  // skill proposal combined into the reply ready section as it's part of the approval/action").
   // ...and only the task on the table's own: the last task's record, read until the new one lands, put its Send and Redraft on the row
   // for a beat, then the row emptied and refilled (the owner, 2026-10-26: "when you load task the buttons load then go gray then reload")
   // ...the rows of a BULK CARD are its own (BulkCard, taskuary/bulkcard.py): one card for many of one act, never a card each
@@ -1449,8 +1449,8 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
   const replyMessage = !detail?.batch && hasCorrespondent(sourceMessage) ? sourceMessage : null;
   // the reply cannot leave from here - its draft says so, or with none, the channel it would go back on
   const cantSend = pendingReview ? !draftCanSend(caps, pendingReview) : !!replyMessage && !canSend(caps, replyMessage.Channel);
-  const workContext = t?.Playbook
-    ? `Playbook · ${t.Playbook.title}${t.Playbook.uses?.length ? ` · uses ${t.Playbook.uses.join(", ")}` : ""}`
+  const workContext = t?.Skill
+    ? `Skill · ${t.Skill.title}${t.Skill.uses?.length ? ` · uses ${t.Skill.uses.join(", ")}` : ""}`
     : t?.Source === "report" && sourceMessage?.SourceName
       ? `Report · ${sourceMessage.SourceName}` : "";
   const openReply = async (generate = false) => {
@@ -1475,10 +1475,10 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
   // The task itself leads when no coding terminal is open. Triage already distilled an inbound
   // item into Title + Summary; falling back to its newest inbound body keeps older/promoted rows
   // equally useful. This is the human TODO, not an agent-launch advertisement.
-  // ...except where Summary is Taskuary's own brief to the agent (a playbook built with AI: the setup instructions and the example
+  // ...except where Summary is Taskuary's own brief to the agent (a skill built with AI: the setup instructions and the example
   // email's raw record - ownwork.BRIEFED): its title is the ask, and the owner's words are in the conversation
   // ...his words: the files his ask named are its Files field, pills on his line in the chat
-  const taskAsk = cleanText(t?.SourceRef === "assistant:playbook" ? t?.Title : t?.Summary || sourceMessage?.BodyText || "");
+  const taskAsk = cleanText(t?.SourceRef === "assistant:skill" ? t?.Title : t?.Summary || sourceMessage?.BodyText || "");
   // WHAT THEY ACTUALLY SAID. A task opens on one message and then keeps collecting the rest of
   // the conversation - three WhatsApp voice notes seconds apart are one thought, and ingest
   // attaches the later ones to the same task. The panel showed the FIRST and nothing else, so a
@@ -1531,8 +1531,8 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
   const opener = [...inbound].sort((a, b) => tsMs(a.SentAt) - tsMs(b.SentAt))[0];
   // THE ASK IS TRIAGE'S SUMMARY, whole (the owner, 2026-10-16: "the ask should be the triage summary") - its first sentence alone
   // read as the sender's voice ("Assistant for Backend Monitoring flags…") with the point cut off
-  // ...never Taskuary's own brief to the agent (ownwork.BRIEFED: a playbook built with AI) - its title is the ask (taskAsk)
-  const askText = (t?.SourceRef === "assistant:playbook" ? "" : cleanText(verdict?.summary || t?.Summary || opener?.ReadText || opener?.BodyText || "")) || taskAsk;
+  // ...never Taskuary's own brief to the agent (ownwork.BRIEFED: a skill built with AI) - its title is the ask (taskAsk)
+  const askText = (t?.SourceRef === "assistant:skill" ? "" : cleanText(verdict?.summary || t?.Summary || opener?.ReadText || opener?.BodyText || "")) || taskAsk;
   const askQuoted = !verdict?.summary && !t?.Summary && !!(opener?.ReadText || opener?.BodyText);   // the sender's words, not triage's
   // ...said once where it is the title's own words (taskLayout.askIsTitle): the band under the head is for a different sentence, or who it waits on
   // ...nor under What came in when it IS that one message's words (the product audit, 2026-11-08: the to-do's paragraph stood twice) - askInBody
@@ -2680,7 +2680,7 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
   // button"): the held steps it approved, and every reply that went - drawn by the chat in the turn that set it up (GeneralWorkspace turnCards)
   const liveAsks = askCards.filter((g) => g.reviews.some((r) => r.Status === "pending")).length;
   const asksBelow = !!(pendingReview || owesEmails || (handInPane && handoff) || calAsk?.invite);
-  // ...AND SO DOES EACH CARD THAT STILL WAITS (the spine audit, 2026-11-09): a held step, a browser act, a drafted playbook rode one block under
+  // ...AND SO DOES EACH CARD THAT STILL WAITS (the spine audit, 2026-11-09): a held step, a browser act, a drafted skill rode one block under
   // whichever turn was newest, and the last two stood again at the chat's foot with a second Approve. Each is drawn once, in the turn that
   // raised it (`rid`: the chat's payload names that turn). A to-do no agent has touched has no turns: its cards stay over its box (chatBody)
   const inTurns = !solo && !["done", "dropped"].includes(t?.Status), decided = () => { loadDetail(selected); loadTasks(); onChanged?.(); };

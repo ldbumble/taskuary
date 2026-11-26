@@ -3059,7 +3059,7 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true, r
     setRailOpen(false); if (old) setOld(null); setExpanded(false);
     const id = `b${Date.now()}`;
     // THE SAME AREA MOVES ITS CARD: a link or a button for the area already open re-places that card, never posts a second
-    // one - a second unmounted the first mid-dialog (a #playbook link opening New playbook), and old links posted two
+    // one - a second unmounted the first mid-dialog (a #skill link opening New skill), and old links posted two
     setMsgs((m) => {
       const live = [...m].reverse().find((x) => x.role === "browse" || (x.card && !x.card.background_event));
       if (live?.role === "browse" && live.area === area) return m.map((x) => (x.id === live.id ? { ...x, state, down: false } : x));

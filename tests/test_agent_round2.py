@@ -3,7 +3,7 @@ OpenClaw's cron).
 
 5. A turn leaves no lesson: what an agent concluded never becomes memory about the owner (the owner, 2026-11-13). Its check-back
    still rides the summary.
-6. Playbooks are a menu: every one's `when` and its file, read by the agent itself; code no longer hands it one.
+6. Skills are a menu: every one's `when` and its file, read by the agent itself; code no longer hands it one.
 7. Search before asking: the search an agent already has also reads what earlier tasks settled (their own endings).
 8. Check-backs: the agent wakes on its own task at a time it set, on the reminders' clock, with its note as the turn.
 """
@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 from unittest import mock
 
 from fastapi.testclient import TestClient
-from taskuary import agenttools, checkback, config, general, guard, playbooks, remind, search, selfclose, server
+from taskuary import agenttools, checkback, config, general, guard, skills, remind, search, selfclose, server
 from taskuary.store import MemoryStore
 from tests.test_general_turn_ends_short import a_claude, turn
 
@@ -28,9 +28,9 @@ W9 = BILL.replace('Post a card transaction as an AP bill', 'Collect a vendor W-9
 
 
 def fresh_books(*pages):
-    d = playbooks.folder()
+    d = skills.folder()
     if d.is_dir(): shutil.rmtree(d)
-    return [playbooks.write(slug, text) for slug, text in pages]
+    return [skills.write(slug, text) for slug, text in pages]
 
 
 def owner_task(s, title='Post the Payworth card charge', **kw):
@@ -46,7 +46,7 @@ class NoLessonTests(unittest.TestCase):
     def setUp(self): fresh_books(('bill', BILL))
 
     def test_the_summary_carries_the_check_back_and_no_lesson(self):
-        text, summ = selfclose.summary_marker('Done.\n' + summary(lesson={'playbook': 'bill', 'text': 'Payworth is vendor 4471'},
+        text, summ = selfclose.summary_marker('Done.\n' + summary(lesson={'skill': 'bill', 'text': 'Payworth is vendor 4471'},
                                                                  check_back={'when': 'tomorrow 9am', 'what': 'the bill posted'}))
         self.assertEqual(text, 'Done.')
         self.assertNotIn('lesson', summ); self.assertEqual(summ['check_back']['what'], 'the bill posted')
@@ -59,7 +59,7 @@ class NoLessonTests(unittest.TestCase):
 
     def test_a_real_turn_leaves_its_check_back_and_teaches_the_memory_nothing(self):
         s = MemoryStore(); a_claude(self); tid = owner_task(s)
-        reply = 'Posted the bill as Payworth (vendor 4471).\n' + summary(lesson={'playbook': 'bill', 'text': 'Payworth is vendor 4471'},
+        reply = 'Posted the bill as Payworth (vendor 4471).\n' + summary(lesson={'skill': 'bill', 'text': 'Payworth is vendor 4471'},
                                                                           check_back={'when': 'in 2 days', 'what': 'the bill shows paid'})
         with mock.patch('taskuary.learning.learn_from') as lf: seen = turn(s, tid, reply)
         self.assertNotIn('A LESSON FOR NEXT TIME', seen['prompt'])
@@ -69,16 +69,16 @@ class NoLessonTests(unittest.TestCase):
         self.assertTrue(kept and not any('lesson' in k or 'check_back' in k for k in kept))     # taken off the summary, never drawn
 
 
-# ── 6. playbooks are a tool, and a plain task is handed context and one sentence (the owner, 2026-11-23) ──────────────────────
-class PlaybookToolTests(unittest.TestCase):
+# ── 6. skills are a tool, and a plain task is handed context and one sentence (the owner, 2026-11-23) ──────────────────────
+class SkillToolTests(unittest.TestCase):
     def setUp(self): fresh_books(('bill', BILL), ('w9', W9))
 
-    def test_a_plain_task_carries_the_one_sentence_and_no_playbook_profile_or_routine_block(self):
+    def test_a_plain_task_carries_the_one_sentence_and_no_skill_profile_or_routine_block(self):
         s = MemoryStore(); s.upsert_agent('marketer', 'marketing', 'cli', '{}')
-        tid = owner_task(s, Tags='playbook:bill', Assignee='agent:marketer')
+        tid = owner_task(s, Tags='skill:bill', Assignee='agent:marketer')
         system, user = general._prompt(s, tid)
         self.assertIn(selfclose.ONE_SENTENCE, system)
-        for block in ('PLAYBOOKS', 'PROCEDURE FOR THIS JOB', 'bills under $500', 'PROFILE RULES', 'MARKETER.md', 'RULES (AGENT.md',
+        for block in ('SKILLS', 'PROCEDURE FOR THIS JOB', 'bills under $500', 'PROFILE RULES', 'MARKETER.md', 'RULES (AGENT.md',
                       'OBJECTIVE', 'ALLOWED ACTIONS', 'DONE WHEN', 'ENDING EVERY TURN', 'YOUR ONE GOAL'):
             self.assertNotIn(block, system + user)
 
@@ -113,14 +113,14 @@ class PlaybookToolTests(unittest.TestCase):
         self.assertNotIn('w' * (selfclose.AGENTS_CHARS + 1), general._prompt(s, tid)[0])
 
     def test_the_tool_lists_them_and_reads_one_whole(self):
-        s = MemoryStore(); tid = owner_task(s, Tags='playbook:bill')
-        call = lambda **a: agenttools.call(s, tid, 'playbooks', a, {})
+        s = MemoryStore(); tid = owner_task(s, Tags='skill:bill')
+        call = lambda **a: agenttools.call(s, tid, 'skills', a, {})
         listed = call()
-        self.assertIn('- bill: when a transaction line from the card feed (triage read this task as one)', listed)
-        self.assertIn('- w9: when a new vendor needs a W-9', listed); self.assertNotIn('bills under $500', listed)
+        self.assertIn('- bill: Post a card transaction as an AP bill. Use when a transaction line from the card feed (triage read this task as one)', listed)
+        self.assertIn('- w9: Collect a vendor W-9. Use when a new vendor needs a W-9', listed); self.assertNotIn('bills under $500', listed)
         self.assertIn('bills under $500', call(name='bill'))
-        playbooks.set_on('w9', False); self.assertNotIn('- w9:', call())
-        s.set_setting('playbooks_enabled', '0', 't'); self.assertEqual(call(), 'Playbooks are switched off.')
+        skills.set_on('w9', False); self.assertNotIn('- w9:', call())
+        s.set_setting('playbooks_enabled', '0', 't'); self.assertEqual(call(), 'Skills are switched off.')
 
     def test_end_turn_and_ask_owner_reach_the_turns_end_as_its_summary_and_question(self):
         s = MemoryStore(); tid = owner_task(s)

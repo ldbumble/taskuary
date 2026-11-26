@@ -1704,7 +1704,7 @@ def read_summary(store, tid: int, reply: str, drafted: str = '') -> tuple:
     if summ and summ.get('name'): _act(store, tid, 'naming the task', take_name, store, tid, summ['name'])
     return reply, summ
 def summary_ends(store, tid: int, summ, asks=()) -> None:
-    "What a turn that left nothing on him ends, before its end is drawn: the steps it went without, its wait, and the playbook question."
+    "What a turn that left nothing on him ends, before its end is drawn: the steps it went without, its wait, and the skill question."
     # ...a turn that left nothing on him finished the steps it went without. Its earlier question to him stands all the same until he
     # answers it, the task closes or the agent takes it back (workerstate.let_go) - never because this turn did not ask it again
     if asks or not (summ and summ.get('nothing_left')): return
@@ -1714,13 +1714,13 @@ def summary_ends(store, tid: int, summ, asks=()) -> None:
     # ...and an answer it waited on, read in this turn, is the end of that wait: nothing is left (waiton.settle - any other turn leaves it)
     try: waiton.settle(store, tid, over=True)
     except Exception as e: logger.debug(f'task {tid}: its wait was not ended - {e}')
-    # ...and the playbook question is asked NOW, with the cards this turn raised, before its end is drawn: in the line behind them
+    # ...and the skill question is asked NOW, with the cards this turn raised, before its end is drawn: in the line behind them
     # from the first frame, so the card in front never offers a close over it (his live app, 2026-11-23 - asked by the close, it
-    # closed the task and opened it again for the playbook). Once a task
+    # closed the task and opened it again for the skill). Once a task
     if not store._one("SELECT 1 AS x FROM audit WHERE EntityType='task' AND EntityId=? AND Action='playbook_asked'", (tid,)):
         store.audit('task', tid, 'playbook_asked', 'assistant')
-        try: wrapup.chat_playbook(store, tid)
-        except Exception as e: logger.debug(f'task {tid}: no playbook asked at its end - {e}')
+        try: wrapup.chat_skill(store, tid)
+        except Exception as e: logger.debug(f'task {tid}: no skill asked at its end - {e}')
 def file_summary(store, tid: int, summ, rid=None) -> None:
     "The turn's summary filed as the task's (SUMMARY_TYPE) - after its answer `rid` where the road files one - with what it says learned."
     if not summ: return
@@ -2071,7 +2071,7 @@ def prompt_parts(store, tid: int, turn: bool = False, upto: int = None) -> tuple
     # WHAT AN AGENT GETS IS CONTEXT, TOOLS AND ONE SENTENCE (the owner, 2026-11-23: "code should never tell an agent what to do ... just build
     # it like a normal assistant"): who the owner is, how he writes, what is certified about his systems, his repositories, the task's own
     # input - and his AGENTS.md (selfclose.guidance). What it can DO is its tools, each saying how it is used; AGENT.md's rules, the profile layer, the
-    # playbook menu and the how-to sections that rode here are gone. Only security is said as code: the fence (terminal.FENCE_LINE)
+    # skill menu and the how-to sections that rode here are gone. Only security is said as code: the fence (terminal.FENCE_LINE)
     from . import brief as _brief, selfclose
     from .terminal import FENCE_LINE
     counsel = style_block(store)                    # how he writes (STYLE.md) - his style, never the desk's rules (walk 9)
@@ -2095,7 +2095,7 @@ def prompt_parts(store, tid: int, turn: bool = False, upto: int = None) -> tuple
     if repos: system += f'\n\n{repos}'
     # A setup walkthrough's procedure is a shipped SKILL the worker reads and adapts, never dialogue
     # branching in here or a second assistant system prompt competing with this one (PW-190). It rides
-    # in the same slot a playbook does, so one task-brief structure serves both.
+    # in the same slot a skill does, so one task-brief structure serves both.
     if str(task.get('SourceRef') or '') == SETUP_REF:
         outside = store.task_has_tag(tid, SETUP_EXTERNAL)
         system += '\n\nPROCEDURE FOR THIS JOB\n' + (EXTERNAL_WALK if outside else _cut(setup_skill(), SETUP_SKILL_CHARS))

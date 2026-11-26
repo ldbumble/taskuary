@@ -29,7 +29,7 @@ from . import policy as policy_engine
 from . import reshape
 from . import terminal as hub_term
 from .wrapup import PAUSE_MARKER, REPORTS, pause_note, reply_target, wrap as end_task
-from . import aisetup, assistant, demo, deps, learning, memory, operations, outbound, playbooks, rank, responder, signatures, waitroom
+from . import aisetup, assistant, demo, deps, learning, memory, operations, outbound, skills, rank, responder, signatures, waitroom
 from . import live as live_bus
 from . import processing_all
 
@@ -184,8 +184,10 @@ async def _lifespan(_app):
         except Exception as e: logger.warning(f'first-run finish flag not settled: {e}')
         try: _firstrun.offer_about(store)             # ...but one that never answered About your work opens on it, once
         except Exception as e: logger.warning(f'About your work not offered: {e}')
-        try: playbooks.purge()                        # Recently deleted keeps a playbook KEEP_DAYS, then it goes for good
-        except Exception as e: logger.warning(f'deleted playbooks not purged: {e}')
+        try: skills.folder(); skills.move_cards(store)   # the pages kept as playbooks are skills now, and so are the cards raised for them
+        except Exception as e: logger.warning(f'the old playbooks were not moved: {e}')
+        try: skills.purge()                        # Recently deleted keeps a skill KEEP_DAYS, then it goes for good
+        except Exception as e: logger.warning(f'deleted skills not purged: {e}')
         try:                                          # Recently deleted keeps a report or a rule KEEP_DAYS, then it goes for good
             from . import recentlydeleted; recentlydeleted.purge(store)
         except Exception as e: logger.warning(f'Recently deleted not purged: {e}')
@@ -1279,17 +1281,17 @@ def _queued_info(q):
             'retryTurn': q.get('Turn') == RETRY_TURN}
 
 
-def _playbook_brief(task, books=None):
+def _skill_brief(task, books=None):
     """The existing job description attached to a task, shaped for the work surfaces.
 
     This deliberately is not an agent capability profile. A named worker can perform different
-    kinds of work; the task's playbook says which job it is doing this time.
+    kinds of work; the task's skill says which job it is doing this time.
     """
-    slug = playbooks.of_task(task)
+    slug = skills.of_task(task)
     if not slug: return None
-    found = (books or {}).get(slug) if books is not None else playbooks.for_task(task)
+    found = (books or {}).get(slug) if books is not None else skills.for_task(task)
     uses = (found or {}).get('uses') or []
-    if isinstance(uses, str): uses = playbooks.uses_of(found or {})
+    if isinstance(uses, str): uses = skills.uses_of(found or {})
     return {'slug': slug, 'title': (found or {}).get('title') or slug.replace('-', ' '),
             'uses': uses, 'missing': found is None}
 
@@ -1304,7 +1306,7 @@ def tasks(status: str = None, active: bool = False, q: str = None):
     qs = {q['TaskId']: q for q in store.queued_dispatches()}
     wc = store.waiting_counts()
     agented = store.agented_task_ids()      # the Board's Done lane shows agent work only
-    books = {b['slug']: b for b in playbooks.list_all()}
+    books = {b['slug']: b for b in skills.list_all()}
     # One lightweight pass over the live sessions. for_task() used to scan the roster and build
     # the FULL session payload (including git status and witness reconciliation) for every task;
     # with hundreds of tasks that made Tasks and Board wait behind repository I/O.
@@ -1314,7 +1316,7 @@ def tasks(status: str = None, active: bool = False, q: str = None):
     # stay on the done tab, same in board columns"): an agent's result from yesterday was cut from Done as old, and once
     # read it left the rail and every list with it
     rail = _rail_tids() | store.worked_today_task_ids()
-    return {'data': [{**t, 'ref': task_ref(t['TaskId']), 'Playbook': _playbook_brief(t, books), 'OnWorkToday': t['TaskId'] in rail,
+    return {'data': [{**t, 'ref': task_ref(t['TaskId']), 'Skill': _skill_brief(t, books), 'OnWorkToday': t['TaskId'] in rail,
                       'Session': sessions.get(t['TaskId']),
                       'Queued': _queued_info(qs.get(t['TaskId'])), 'Waiting': wc.get(t['TaskId'], 0),
                       'HadAgent': t['TaskId'] in agented,
@@ -2495,7 +2497,7 @@ def _task_detail(task_id: int, rev: str = '', opened: bool = False, whole: bool 
     # table carries (_pile_payload), so the task page and the canvas light one button and neither asks the Advisor
     from . import rulebook, watch
     known = {'task': d['task'], 'story': story, 'judged': judged, 'ended': ran, 'messages': msgs}       # ...and asks nothing this read knows
-    return _revisioned({**d,'task': {**d['task'], 'Playbook': _playbook_brief(d['task'])}, 'recommended': rulebook.recommended_task(store, task_id, known),
+    return _revisioned({**d,'task': {**d['task'], 'Skill': _skill_brief(d['task'])}, 'recommended': rulebook.recommended_task(store, task_id, known),
             'origin': {**o,                                                                  # who's words are on it (origin.py)
                        # ...and the presses that trust them, in the same words as the held box's (senders.trust_offer)
                        **({'trust': _trust_offer(task_id, msgs)} if o['origin'] == 'stranger' else {}),
@@ -2785,11 +2787,11 @@ def _assistant_payload(task_id: int, session=None):
             # conversation draws each in the turn that made it, by the cards' one rule (at_turn): a turn stopped or failed has no answer, and
             # its page went to the NEXT turn's (the overnight walk, 2026-11-11); lists any it cannot place at its foot
             'published': [{**r, 'after': at_turn(r.get('created_at'))} for r in outputs.pages(store, task_id)],
-            # A PLAYBOOK DRAFTED IN THIS CONVERSATION IS APPROVED IN IT (the owner, 2026-10-21): "Draft ready on the task" pointed at
+            # A SKILL DRAFTED IN THIS CONVERSATION IS APPROVED IN IT (the owner, 2026-10-21): "Draft ready on the task" pointed at
             # Close out, which a live session hides - Approve was reachable only after Stop and save, which nothing said to press
-            'playbookDrafts': [r for r in store._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action' AND Status='pending' "
+            'skillDrafts': [r for r in store._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action' AND Status='pending' "
                                                        "ORDER BY ReviewId", (task_id,))
-                               if _proposals._action(r) in ('write_playbook', 'amend_playbook')],
+                               if _proposals._action(r) in ('save_skill', 'save_skill')],
             # ...AND A HELD BROWSER ACT, the same way (2026-10-25): its card sat inside the hidden Close out, so the owner reached it only
             # by Stop and save - which closed the agent's browser, and then Approve said "the agent's browser is closed"
             # ...ONLY THE ONE THE LINE HAS AT ITS FRONT (cardqueue; a hard rule): one held behind it is its front's "next" and nothing more
@@ -8895,7 +8897,7 @@ class BuildAnswer(BaseModel): text: str
 def build_start(body: BuildBody):
     from . import build
     m = store.get_message(body.message_id) if body.message_id is not None else None
-    # ...a past email a playbook is made from: reference data, read by the model as such (build.PLAYBOOK_SYSTEM)
+    # ...a past email a skill is made from: reference data, read by the model as such (build.SKILL_SYSTEM)
     example = {k: m.get(k) for k in ('Subject', 'FromName', 'SentAt')} | {'BodyText': (m.get('BodyText') or '')[:12000]} if m else None
     try: return build.start(store, body.kind, body.words, body.ref, body.ctx, example)
     except ValueError as e: raise HTTPException(422, str(e))
@@ -9651,7 +9653,7 @@ def dashboard_get(sid: int):
 @app.get('/api/workflows')
 def workflows_catalog():
     """Configured workflows and request procedures, read apart (PW-203/207): a job the owner scheduled is not
-    a playbook, and a playbook is not a scheduled job."""
+    a skill, and a skill is not a scheduled job."""
     from . import workflows
     return workflows.catalog(store)
 
@@ -10692,57 +10694,58 @@ def put_doc(name: str, body: DocBody):
     store.save_doc(name, body.content, ACTOR)
     return {'ok': True}
 
-# ── playbooks: the fourth operator document, one file per kind of job (playbooks.py) ──────
-# Read by the Reports page's Playbooks shelf and by every connector card (filtered by `uses`). Agents
+# ── skills: how one kind of job is done here, a folder each with its SKILL.md (skills.py) ──────
+# Read by the Reports page's Skills shelf and by every connector card (filtered by `uses`). Agents
 # may GET these; writing is the owner's (guard.py denies agent tokens) - an agent PROPOSES one.
-@app.get('/api/playbooks')
-def list_playbooks():
-    return {'data': [{k: v for k, v in b.items() if k != 'text'} for b in playbooks.list_all()],
-            'deleted': playbooks.recently_deleted(), 'keep_days': playbooks.KEEP_DAYS,
-            'template': playbooks.template(), 'folder': str(playbooks.folder())}
+@app.get('/api/skills')
+def list_skills():
+    return {'data': [{k: v for k, v in b.items() if k != 'text'} for b in skills.list_all()],
+            'deleted': skills.recently_deleted(), 'keep_days': skills.KEEP_DAYS,
+            'template': skills.TEMPLATE, 'folder': str(skills.folder())}
 
-@app.get('/api/playbooks/examples')
-def playbook_examples(q: str = '', before: int = 0):
-    return store.playbook_examples(q[:300], max(0, before))
+@app.get('/api/skills/examples')
+def skill_examples(q: str = '', before: int = 0):
+    return store.skill_examples(q[:300], max(0, before))
 
 
-@app.get('/api/playbooks/{slug}')
-def get_playbook(slug: str):
-    text = playbooks.read(slug)
-    if text is None: raise HTTPException(404, f'no playbook {slug!r}')
-    pb = playbooks.parse(text)
-    return {'slug': playbooks.slugify(slug), 'content': text, 'title': pb['title'], 'uses': playbooks.uses_of(pb)}
+@app.get('/api/skills/{slug}')
+def get_skill(slug: str):
+    text = skills.read(slug)
+    if text is None: raise HTTPException(404, f'no skill {slug!r}')
+    s = skills.key(slug); pb = skills.parse(text, s)
+    return {'slug': s, 'content': text, 'title': pb['title'], 'description': pb['description'], 'uses': skills.uses_of(pb),
+            'origin': skills.origins().get(s) or '', 'files': skills.files_of(s)}
 
-@app.put('/api/playbooks/{slug}')
-def put_playbook(slug: str, body: DocBody):
-    """'new' as the slug files it under its title."""
-    try: out = playbooks.write(slug, body.content)
+@app.put('/api/skills/{slug}')
+def put_skill(slug: str, body: DocBody):
+    """'new' as the slug files it under its own name."""
+    try: out = skills.write(slug, body.content)
     except ValueError as e: raise HTTPException(400, str(e))
-    store.audit('playbook', 0, 'saved', ACTOR, detail={'slug': out})
+    store.audit('skill', 0, 'saved', ACTOR, detail={'slug': out})
     return {'ok': True, 'slug': out}
 
-class PlaybookOnBody(BaseModel): on: bool
+class SkillOnBody(BaseModel): on: bool
 
-@app.put('/api/playbooks/{slug}/enabled')
-def playbook_on(slug: str, body: PlaybookOnBody):
-    """Switch one playbook off, kept for later - triage stops offering it - or back on."""
-    if playbooks.read(slug) is None: raise HTTPException(404, f'no playbook {slug!r}')
-    playbooks.set_on(slug, body.on)
-    store.audit('playbook', 0, 'switched_on' if body.on else 'switched_off', ACTOR, detail={'slug': playbooks.slugify(slug)})
-    return {'ok': True, 'slug': playbooks.slugify(slug), 'enabled': body.on}
+@app.put('/api/skills/{slug}/enabled')
+def skill_on(slug: str, body: SkillOnBody):
+    """Switch one skill off, kept for later - triage stops offering it - or back on."""
+    if skills.read(slug) is None: raise HTTPException(404, f'no skill {slug!r}')
+    skills.set_on(slug, body.on)
+    store.audit('skill', 0, 'switched_on' if body.on else 'switched_off', ACTOR, detail={'slug': skills.slugify(slug)})
+    return {'ok': True, 'slug': skills.slugify(slug), 'enabled': body.on}
 
-@app.delete('/api/playbooks/{slug}')
-def delete_playbook(slug: str):
-    if not playbooks.delete(slug): raise HTTPException(404, f'no playbook {slug!r}')
-    store.audit('playbook', 0, 'deleted', ACTOR, detail={'slug': playbooks.slugify(slug)})
+@app.delete('/api/skills/{slug}')
+def delete_skill(slug: str):
+    if not skills.delete(slug): raise HTTPException(404, f'no skill {slug!r}')
+    store.audit('skill', 0, 'deleted', ACTOR, detail={'slug': skills.slugify(slug)})
     return {'ok': True}
 
-@app.post('/api/playbooks/{slug}/restore')
-def restore_playbook(slug: str):
+@app.post('/api/skills/{slug}/restore')
+def restore_skill(slug: str):
     """Recently deleted -> back on the shelf as it was: its words, its on/off switch, its place in the order."""
-    if not playbooks.restore(slug): raise HTTPException(404, f'no deleted playbook {slug!r}')
-    store.audit('playbook', 0, 'restored', ACTOR, detail={'slug': playbooks.slugify(slug)})
-    return {'ok': True, 'slug': playbooks.slugify(slug)}
+    if not skills.restore(slug): raise HTTPException(404, f'no deleted skill {slug!r}')
+    store.audit('skill', 0, 'restored', ACTOR, detail={'slug': skills.slugify(slug)})
+    return {'ok': True, 'slug': skills.slugify(slug)}
 
 @app.get('/api/learned/graph')
 def learned_graph():
@@ -11535,8 +11538,8 @@ def _poll_reports(backfill_hours: float = 0, what: str = 'syncing',
             orgchart.sync_if_due(target_store)
         except Exception as e:
             logger.warning(f'org chart read skipped: {e}')
-        try: playbooks.purge()                          # ...and a playbook deleted KEEP_DAYS ago leaves Recently deleted (playbooks.py)
-        except Exception as e: logger.warning(f'deleted playbooks not purged: {e}')
+        try: skills.purge()                          # ...and a skill deleted KEEP_DAYS ago leaves Recently deleted (skills.py)
+        except Exception as e: logger.warning(f'deleted skills not purged: {e}')
         try:                                            # ...and what Recently deleted has kept its time goes for good (recentlydeleted.py)
             from . import recentlydeleted; recentlydeleted.purge(target_store)
         except Exception as e: logger.warning(f'Recently deleted not purged: {e}')

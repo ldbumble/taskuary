@@ -1,7 +1,7 @@
 """Update in place, from Settings: check what the latest release is, fetch it, swap it in, come back.
 
 Everything the owner has - connections, tokens, the database, the operator documents, the
-playbooks - lives under ~/.taskuary (config.home()), never beside the program. So an update is
+skills - lives under ~/.taskuary (config.home()), never beside the program. So an update is
 only ever a program swap: nothing in the data folder is touched, and the new build opens the same
 database the old one closed. That is what makes "keep the connection and all the settings" free.
 

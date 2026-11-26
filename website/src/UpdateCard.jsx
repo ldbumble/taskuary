@@ -83,7 +83,7 @@ export default function UpdateCard({ asked = false, at = 0 }) {
   return (
     <Box>
       <Typography variant="body2" sx={{ color: DIM, mb: 1.5, lineHeight: 1.6 }}>
-        Everything you have set up — connections, tokens, the database, your documents and playbooks — lives in
+        Everything you have set up — connections, tokens, the database, your documents and skills — lives in
         the data folder, never beside the program. An update only swaps the program, so all of it is exactly
         where you left it when the new build opens.
       </Typography>

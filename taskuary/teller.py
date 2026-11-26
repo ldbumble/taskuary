@@ -178,7 +178,7 @@ def run_teller_transactions(cfg):
     """{"account": "1234" | "Amex" | "<id>" (blank = every account), "days": 30} - what posted,
     newest first, with `direction` (spend / inflow) so the sign needs no decoding. Schedule it with
     "can become work" on and each new transaction is a message triage judges - the front door of the
-    card-to-books playbook."""
+    card-to-books skill."""
     from .reports import rows_out, row_limit
     lim, mine = row_limit(cfg)
     return rows_out(transactions(cfg, cfg.get('account'), cfg.get('days') or 30, lim + 1), lim, unit='transactions', mine=mine)

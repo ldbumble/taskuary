@@ -39,17 +39,17 @@ test("each old link becomes a canvas request", () => {
   assert.deepEqual(about("#settings=docs&doc=learned"), { section: "memory", open: null }, "LEARNED.md reads as Memory's sentences");
   assert.deepEqual(about("#settings=docs&doc=learned&view=changes"), { section: "docs", open: "d:learned", view: "changes" }, "its What changed list stays");
   assert.deepEqual(about("#settings=docs&doc=soul"), { section: "docs", open: "d:soul" });
-  // ...and PLAYBOOKS ARE REPORTS' again (the owner, the same day: "it's more about how you work, not about you"): every link to them,
-  // About you's few hours' own among them, lands on Reports -> Playbooks
+  // ...and SKILLS ARE REPORTS' again (the owner, the same day: "it's more about how you work, not about you"): every link to them,
+  // About you's few hours' own among them, lands on Reports -> Skills
   const pb = (h) => { const r = canvasRequestFromHash(h); assert.equal(r.area, "reports", h); return r.state; };
-  assert.deepEqual(pb("#settings=playbooks"), { section: "playbooks", open: null });
-  assert.deepEqual(pb("#report=playbooks"), { section: "playbooks", open: null });
-  assert.deepEqual(pb("#about=playbooks"), { section: "playbooks", open: null });
-  assert.deepEqual(pb("#about=new-playbook"), { section: "playbooks", open: null, newPb: 1 });
+  assert.deepEqual(pb("#settings=skills"), { section: "skills", open: null });
+  assert.deepEqual(pb("#report=skills"), { section: "skills", open: null });
+  assert.deepEqual(pb("#about=skills"), { section: "skills", open: null });
+  assert.deepEqual(pb("#about=new-skill"), { section: "skills", open: null, newPb: 1 });
   assert.deepEqual(about("#about"), { section: null, open: null });
   assert.deepEqual(about("#about=bogus"), { section: null, open: null });
-  assert.deepEqual(pb("#playbook=weekly-close"), { section: "playbooks", open: "pb:weekly-close" });
-  assert.deepEqual(pb("#playbook=new:quickbooks"), { section: "playbooks", open: null, newFor: "quickbooks" }, "a card's New playbook");
+  assert.deepEqual(pb("#skill=weekly-close"), { section: "skills", open: "pb:weekly-close" });
+  assert.deepEqual(pb("#skill=new:quickbooks"), { section: "skills", open: null, newFor: "quickbooks" }, "a card's New skill");
 });
 
 // THE ONE CANVAS (the owner, 2026-10-20: "it should not take you there regardless"): a link to a message - an idea's "Based on", a
@@ -65,7 +65,7 @@ test("no link the app writes resolves to the old row view", () => {
   const src = (f) => fs.readFileSync(path.join(process.cwd(), "src", f), "utf8");
   // every kind a link can ask for has a handler on the canvas, and none of them is a stage panel
   const kinds = new Set(["#task=5", "#msg=5", "#message=5", "#new-task", "#report=3", "#connector=gmail", "#connections", "#settings",
-    "#settings=policies", "#hub", "#playbook=x", "#cli-agents"].map((h) => canvasRequestFromHash(h).kind));
+    "#settings=policies", "#hub", "#skill=x", "#cli-agents"].map((h) => canvasRequestFromHash(h).kind));
   const view = src("AssistantView.jsx");
   for (const k of kinds) assert.match(view, new RegExp(`request\\.kind === "${k}"`), `the canvas opens a ${k} link`);
   // ...and the view itself, and every door into it, is out of the code
@@ -123,4 +123,11 @@ test("a link to one task is told apart, and setup's first read opens it over set
   for (const h of ["", "#new-task", "#settings=audit", "#msg=4"]) assert.equal(opensTask(h), false, h);
   const src = fs.readFileSync(path.join(import.meta.dirname, "../src/AssistantView.jsx"), "utf8");
   assert.match(src, /setFirstRun\(true\); if \(opensTask\(window\.location\.hash\)\) setOverSetup\(true\);/);
+});
+
+test("a link kept from when skills were called playbooks opens the same place", () => {
+  assert.deepEqual(canvasRequestFromHash("#report=playbooks", 3), canvasRequestFromHash("#report=skills", 3));
+  assert.deepEqual(canvasRequestFromHash("#playbook=weekly-close", 3), canvasRequestFromHash("#skill=weekly-close", 3));
+  assert.deepEqual(canvasRequestFromHash("#report=new-playbook", 3), canvasRequestFromHash("#report=new-skill", 3));
+  assert.equal(canvasRequestFromHash("#playbook=weekly-close", 3).state.open, "pb:weekly-close");
 });

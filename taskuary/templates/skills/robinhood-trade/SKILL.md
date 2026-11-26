@@ -1,3 +1,10 @@
+---
+name: robinhood-trade
+description: "Act on a market report through Robinhood. Use when a scheduled market or portfolio report lands with something worth acting on; the owner asks what a report means for the portfolio; a holding moves enough to be worth a look"
+metadata:
+  uses: "robinhood (read: portfolio, positions, orders; orders are PROPOSED, never placed) · yahoo · finnhub · polygon · alpaca"
+---
+
 # Act on a market report through Robinhood
 when:      a scheduled market or portfolio report lands with something worth acting on; the owner asks what a report means for the portfolio; a holding moves enough to be worth a look
 uses:      robinhood (read: portfolio, positions, orders; orders are PROPOSED, never placed) · yahoo · finnhub · polygon · alpaca
@@ -10,10 +17,10 @@ alone:     reading. Positions, balances, order history, transactions, watchlists
 ask first: EVERY order, without exception - propose it and stop. Also ask before proposing at all when the analysis rests on one source, when the position would be more than the owner has sized before, when the market is closed, or when the report itself flagged its data as partial or capped.
 done when: the proposal is on the task carrying the tool, the symbol, the side, the size, the price you actually saw and the reasoning - or the owner approved it and Robinhood's confirmation is on the task
 
-<!-- WHY THIS PLAYBOOK IS SHAPED LIKE THIS
+<!-- WHY THIS SKILL IS SHAPED LIKE THIS
 
 The Robinhood card ships at authority READ, so `robinhood_order` cannot run for an agent at all:
-it becomes a proposal the owner approves on the task. This playbook does not soften that, and it
+it becomes a proposal the owner approves on the task. This skill does not soften that, and it
 should not be edited to. An agent here reads untrusted email upstream of a live brokerage
 account, and the approval click is the thing standing between those two facts.
 

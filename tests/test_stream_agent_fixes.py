@@ -137,8 +137,8 @@ def test_remind_sets_the_owners_reminder_not_the_agents_check_back():
     assert 'remind tool' in agenttools.TOOLS['check_back'][1]
 
 def test_where_the_agent_reads_what_is_learned_it_is_told_how_a_rule_is_kept():
-    "Asked to save a playbook, the agent on the real CLI read the learned facts, then wrote a file in the CLI's own memory folder - no card."
-    assert '`propose` write_playbook' in agenttools.TOOLS['owner_memory'][1] 
+    "Asked to save a skill, the agent on the real CLI read the learned facts, then wrote a file in the CLI's own memory folder - no card."
+    assert '`propose` save_skill' in agenttools.TOOLS['owner_memory'][1] 
 
 
 # ── F7: a finished turn is never woken ─────────────────────────────────────────────────────────────────────────────────────────────

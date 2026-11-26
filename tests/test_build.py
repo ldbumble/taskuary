@@ -5,14 +5,14 @@ from unittest import mock
 
 import pytest
 
-from taskuary import build, channels, compose, concierge, playbooks, server
+from taskuary import build, channels, compose, concierge, skills, server
 from taskuary.store import MemoryStore
 
 
 @pytest.fixture
 def st(tmp_path):
     s = MemoryStore()
-    with mock.patch.object(server, 'store', s), mock.patch.object(playbooks, 'folder', lambda: tmp_path / 'pb'):
+    with mock.patch.object(server, 'store', s), mock.patch.object(skills, 'folder', lambda: tmp_path / 'pb'):
         yield s
 
 
@@ -78,11 +78,14 @@ PB = ('# Chase a late bill\nwhen: a vendor bill is late\nuses: quickbooks (read)
       'ask first: write\ndone when: the vendor is written to')
 
 
-def test_a_playbook_is_written_after_its_check_and_a_bad_draft_is_drafted_again(st):
+def test_a_skill_is_written_after_its_check_and_a_bad_draft_is_drafted_again(st):
     said = iter([json.dumps({'text': '# Only a title'}), json.dumps({'text': PB})])
-    v = run(st, lambda sys, user, **k: next(said), 'playbook', 'how we chase late bills')
-    assert v['done'] and v['ref'] == 'chase-a-late-bill' and playbooks.read('chase-a-late-bill').startswith('# Chase a late bill')
-    assert v['steps'][1]['kind'] == 'failed' and 'when:' in v['steps'][1]['text']
+    v = run(st, lambda sys, user, **k: next(said), 'skill', 'how we chase late bills')
+    assert v['done'] and v['ref'] == 'chase-a-late-bill', v
+    saved = skills.read('chase-a-late-bill')
+    assert saved.startswith('---\nname: chase-a-late-bill\ndescription: ') and '# Chase a late bill' in saved
+    assert v['steps'][1]['kind'] == 'failed' and 'how the job is done' in v['steps'][1]['text']
+    assert 'SKILL.md' in build.SKILL_SYSTEM and 'six labels' not in build.SKILL_SYSTEM and 'alone' not in build.SKILL_SYSTEM
 
 
 def test_a_connection_saves_what_it_knows_never_a_secret_tests_and_finishes(st):
@@ -118,14 +121,14 @@ def test_the_endpoints(st):
     assert c.get(f"/api/build/{v['id']}").json()['error']
 
 
-def test_a_playbook_from_a_past_email_reads_it_as_reference_data(st):
+def test_a_skill_from_a_past_email_reads_it_as_reference_data(st):
     mid = st.add_message({'Channel': 'email', 'Direction': 'in', 'Subject': 'Updated item numbers', 'FromEmail': 'buyer@example.test',
                           'BodyText': 'Send the latest numbers for item X.', 'SentAt': '2020-01-01 12:00:00'})
     from fastapi.testclient import TestClient
     seen = []
     def llm(sys, user, **k): seen.append(json.loads(user)); return json.dumps({'text': PB})
     with mock.patch.object(concierge, '_compose_llm', lambda store: llm):
-        v = TestClient(server.app).post('/api/build', json={'kind': 'playbook', 'words': 'Build a playbook from this email.', 'message_id': mid}).json()
+        v = TestClient(server.app).post('/api/build', json={'kind': 'skill', 'words': 'Build a skill from this email.', 'message_id': mid}).json()
         build.BUILDS[v['id']]['thread'].join(10)
-    assert seen[0]['example_email']['Subject'] == 'Updated item numbers' and 'reference data' in build.PLAYBOOK_SYSTEM
+    assert seen[0]['example_email']['Subject'] == 'Updated item numbers' and 'reference data' in build.SKILL_SYSTEM
     assert build.view(v['id'])['done']

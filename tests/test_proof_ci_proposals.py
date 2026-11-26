@@ -521,9 +521,9 @@ class ProposalTests(unittest.TestCase):
         # a walk, 2026-11-18: "open_pr is not permitted - the owner has that switch off" named no switch, and the agent told the owner to "turn
         # on pull requests under Policies" - a page of mail rules with no such switch. The refusal names the switch, as his choice
         s = MemoryStore(); s.set_setting('playbooks_enabled', '0', 'owner')
-        p = {'action': 'write_playbook', 'slug': 'refunds', 'text': '# Refunds\nwhen: a customer asks for a refund\nsteps: check the order, then refund it'}
+        p = {'action': 'save_skill', 'slug': 'refunds', 'text': '# Refunds\nwhen: a customer asks for a refund\nsteps: check the order, then refund it'}
         ok, why = proposals.validate(s, p)
-        self.assertFalse(ok); self.assertIn('"Use playbooks" is off', why)
+        self.assertFalse(ok); self.assertIn('"Use skills" is off', why)
         self.assertIn("the owner's choice", why); self.assertIn('go on without it', why); self.assertNotIn('turns it on', why)
         s.set_setting('playbooks_enabled', '1', 'owner')
         self.assertTrue(proposals.validate(s, p)[0])

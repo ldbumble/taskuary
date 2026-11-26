@@ -71,7 +71,7 @@ TOOLS = {
                              "it is kept under), the facts about their people, and what was learned from what they did that they confirmed. "
                              "`about`: one person (a name or address) narrows it to them. What bears on this task is in your brief already; "
                              "read this when the work turns on more. Read-only: a fact they tell you is kept with `remember`; a way of working "
-                             "they ask you to keep (a playbook, a standing rule) is set up with `propose` write_playbook for their Approve.",
+                             "they ask you to keep (a skill, a standing rule) is set up with `propose` save_skill for their Approve.",
                      _S({'about': _STR}), ('GET', '/api/agent/memory')),
     # WHAT THE OWNER TELLS ONE AGENT, EVERY READER KNOWS (the owner, 2026-11-14: "if the user tells you something, they should not have to say
     # it again"): kept in his words in the memory's store of what he said (memory.remember), in use at once for triage, every agent and the
@@ -135,7 +135,7 @@ TOOLS = {
                   'merge': {'type': 'array', 'items': {'type': 'object', 'properties': {'ids': {'type': 'array', 'items': _STR}, 'text': _STR},
                                                        'required': ['ids']}}}), ('POST', '/api/agent/todos')),
     # WHAT WAS A PROTOCOL TAUGHT IN PROSE IS A TOOL (the owner, 2026-11-23: "everything else the agent can do is a tool"): how a turn ends, the
-    # one question only the owner can answer, and the company's playbooks - each said by its own description, never in every prompt
+    # one question only the owner can answer, and the company's skills - each said by its own description, never in every prompt
     'end_turn': ('own', "Call once as your turn ends: where the task stands, shown on its page. name: the task in 3-6 words. about: 2-3 "
                         "sentences: who asked, for whom. did: result first, then what you did. "
                         "on_you: owner-only steps no card or question carries, each with why. nothing_left: goal met and "
@@ -149,8 +149,8 @@ TOOLS = {
                          "withdraw takes it back.",
                   _S({'question': _STR, 'choices': {'type': 'array', 'items': _STR}, 'withdraw': {'type': 'boolean'},
                       'card': {'type': 'string', 'description': 'the card it is about (rv<id>), if any'}}), ('GET', '/api/tasks/1')),
-    'playbooks': ('read', "How this company does each kind of job, written by the owner: with no `name`, the list of playbooks and when each "
-                          "applies; with a `name`, that playbook whole. Read-only.",
+    'skills': ('read', "How this company does each kind of job, written by the owner: with no `name`, the list of skills, each with its "
+                          "description; with a `name`, that skill's SKILL.md whole. Read-only.",
                   _S({'name': _STR}), ('GET', '/api/tasks/1')),
     # ...and a wake of its own later on this task (checkback.py, the owner 2026-11-05) - for what only time settles
     'check_back': ('own', "Be woken on this task later: at `when` (\"tomorrow 9am\", \"in 2 days\", \"2026-11-12\") with `what` as your "
@@ -285,7 +285,7 @@ TOOLS = {
                            "close_issue, open_pr, land, push {cwd?: the checkout, deploy?: the branch that deploys it} (where the work is in a "
                            "checkout - one the owner named counts - these three are its Push / Push & deploy / PR buttons), run_tool {type, "
                            "connector_id, ...} (a send or order on one of their systems - a new GitHub issue and a Jira, Monday or Linear "
-                           "write are the guide tool's `propose` topic), write_playbook {slug, text}, settings {changes}, break_out {title, "
+                           "write are the guide tool's `propose` topic), save_skill {slug, text: the SKILL.md whole - frontmatter `name` and `description`, then how the job is done} (a new skill, or one of his changed), settings {changes}, break_out {title, "
                            "summary, messages: [m-ids], items: [to-do ids]} (a part of this task that is another matter, to a task of its "
                            "own), save_routine {title, script: whole standard-library Python, rows on stdin and JSON rows out, reads?: {a "
                            "source type and its keys}, prompt?: an AI step on its output, daily_at?: \"07:00\" | cron? | every_minutes? - "
@@ -362,7 +362,7 @@ SHORT = {
     'tick': "Tick or untick a to-do (`item`: its id).",
     'todos': "Add, reword or merge this task's to-dos.",
     # end_turn and ask_owner are listed with their whole words: the fields ARE how they are used
-    'playbooks': "How this company does each kind of job: the list, or one by `name`.",
+    'skills': "How this company does each kind of job: the list, or one by `name`.",
     'check_back': 'Be woken on this task later, at `when`, with `what` as your next turn.',
     'remind': "Take the task off the owner's list until `when`.",
     'ask_stronger': 'Ask a stronger model one hard question; `context` is all it sees.',
@@ -910,9 +910,9 @@ def _call(store, tid: int, name: str, args: dict, doors: dict, skip=()) -> str:
             from .card import ASKED
             store.audit('review', int(k), ASKED, 'agent', 'agent', {'question': ' '.join(str(a['question']).split())})
         return 'Asked - it stands on the task as their question, and their answer comes to you. Go on with what does not hang on it.'
-    if name == 'playbooks':
-        from . import playbooks
-        return _out(playbooks.lookup(store, store.get_task(tid), str(a.get('name') or '')))
+    if name == 'skills':
+        from . import skills
+        return _out(skills.lookup(store, store.get_task(tid), str(a.get('name') or '')))
     if name == 'remember': return doors['remember'](tid, str(a.get('note') or ''), str(a.get('subject') or ''), str(a.get('about') or ''), bool(a.get('signature')))['says']
     if name == 'ask_stronger':
         out = doors['ask_stronger'](tid, str(a.get('question') or ''), str(a.get('context') or ''))
@@ -1203,11 +1203,11 @@ def proposal_of(args: dict) -> dict:
     a = str((args or {}).get('action') or '').strip()
     if a in HELD_ACTS: raise ValueError(f'{a} is raised by Taskuary itself when it holds a step - it cannot be proposed. Run the step: Taskuary holds it and asks the owner')
     if a in NOT_ASKED: raise ValueError(f'{a} is the owner\'s own act - it cannot be proposed')
-    # ...and a playbook that could never be saved is said to the agent NOW, so it writes it again itself - it was queued, the owner pressed
-    # Approve, and only then read "a playbook needs a title" with the agent long gone (the recorded walk, 2026-11-10)
-    if a == 'write_playbook':
-        from . import playbooks
-        playbooks.check(str((args or {}).get('text') or ''))
+    # ...and a skill that could never be saved is said to the agent NOW, so it writes it again itself - it was queued, the owner pressed
+    # Approve, and only then read "a skill needs a title" with the agent long gone (the recorded walk, 2026-11-10)
+    if a == 'save_skill':
+        from . import skills
+        skills.check(str((args or {}).get('text') or ''))
     return {**{k: v for k, v in (args or {}).items() if k not in (*MARKS, 'task_id')}, 'action': a}
 
 

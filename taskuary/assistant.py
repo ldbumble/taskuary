@@ -94,7 +94,7 @@ PROMPT = (
     '4. THE APP AND THE SYSTEMS PEOPLE NAME:\n[taskuary.systems]\n'
     '5. WHAT REPEATS - once a week, a month of my traffic counted:\n[taskuary.automation]\n'
     'The automation worth having IN THIS APP, ranked by the minutes it saves me a week and resting on the numbers: a skip rule on '
-    'a sender nobody reads, a playbook for the question that always gets the same reply (drafted for my Send - nothing is ever '
+    'a sender nobody reads, a skill for the question that always gets the same reply (drafted for my Send - nothing is ever '
     'sent without my press), a standing prompt, a scheduled report. Never one the existing rules already cover; one a week is plenty, '
     'none when nothing repeats enough.\n'
     '6. WHAT I ALREADY KNOW - never repeat anything under ALREADY SAID, reworded or not; use my notes; draw on the knowledge base by name:\n[taskuary.memory]\n'

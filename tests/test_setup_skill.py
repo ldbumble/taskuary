@@ -1,7 +1,7 @@
 """The setup walkthrough gets its procedure from a shipped skill, not from branching in the code (PW-190).
 
 A task opened as `assistant:setup` carries the skill into the worker's prompt in the same slot a
-playbook rides in; every other general task is untouched by it. The skill is a document the worker
+skill rides in; every other general task is untouched by it. The skill is a document the worker
 READS and adapts - there is no wizard route behind this, and no keyword dispatch.
 """
 import unittest

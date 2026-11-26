@@ -779,7 +779,7 @@ def came_in(store, tid: int) -> str:
 def build(store, tid: int, msgs: list = None, repo: str = None, general: bool = False) -> str:
     """The file's text. Sections the hub has nothing for are left out; an empty file is not written.
     `general`: the same read for the general agent's prompt (for_prompt) - minus what its prompt already carries (who the owner
-    is, the playbook, the thread) and the linked documents, which are fetched, and it is rebuilt every turn."""
+    is, the skill, the thread) and the linked documents, which are fetched, and it is rebuilt every turn."""
     from .counsel import dossier, msg_of
     from .triage import sender_body
     t = store.get_task(tid) or {}

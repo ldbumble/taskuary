@@ -66,7 +66,7 @@ export const generalAnswered = (isGeneral, session) => !!(isGeneral && session?.
 // ...so a line that says "its agent is still working" is said of a live session that has NOT answered - never of one at rest waiting on him
 export const stillWorking = (live, answered) => !!live && !answered;
 
-// Action proposals (write a playbook, push a branch, close an issue) share the review table
+// Action proposals (write a skill, push a branch, close an issue) share the review table
 // with outbound replies, but they are not communication. A proposal is normally queued after
 // the reply, so blindly taking reviews[0] makes its JSON envelope appear as the current draft.
 // ...nor are a task's emails (slots.py): their own block (SlotList), never the reply card

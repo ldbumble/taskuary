@@ -538,7 +538,7 @@ export default function TaskHubPage() {
   useEffect(() => { if (tab === "Assistant") setEverAssistant(true); }, [tab]);
 
   // EVERY OLD LINK STILL LANDS - in the canvas (canvasLinks.js): #task=123 opens that task's view, #connector=,
-  // #settings=, #report=, #playbook= open their browse card, #new-task the New sheet, #msg= that message's card
+  // #settings=, #report=, #skill= open their browse card, #new-task the New sheet, #msg= that message's card
   // ...and the browser's Back and Forward come the same road (appLinks.onPlace): a step back to the address with no place is the walk's
   // own table, the page put down (the 2026-10-19 UI walk: Back left the app). `fromUrl`: the address already says it - the canvas
   // writes it more exactly, never as a new step

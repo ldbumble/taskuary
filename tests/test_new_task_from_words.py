@@ -247,7 +247,7 @@ class AdvisorMarkTests(unittest.TestCase):
     def test_only_an_advisor_idea_wears_the_advisor_mark(self):
         idea = {'Source': 'assistant', 'SourceRef': 'assistant:idea:42'}
         self.assertTrue(processing_all.advisor_task(idea))
-        for ref in ('assistant:handoff', 'assistant:agent', 'assistant:setup', 'assistant:playbook'):
+        for ref in ('assistant:handoff', 'assistant:agent', 'assistant:setup', 'assistant:skill'):
             self.assertFalse(processing_all.advisor_task({'Source': 'assistant', 'SourceRef': ref}), ref)
         self.assertEqual(processing_all.task_mark([idea]), 'assistant')
         self.assertIsNone(processing_all.task_mark([{'Source': 'assistant', 'SourceRef': 'assistant:handoff'}]))

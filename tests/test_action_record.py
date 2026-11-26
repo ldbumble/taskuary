@@ -41,13 +41,16 @@ class WhatAnAgentMayAsk(unittest.TestCase):
         self.assertEqual(agenttools.proposal_of({**ask, 'task_id': 4}), want)
         self.assertEqual(proposals.parse(f'{proposals.MARK} {json.dumps(ask)}'), [want])
 
-    def test_a_playbook_that_could_never_be_saved_is_refused_to_the_agent_at_once(self):
-        # the recorded walk, 2026-11-10: queued without its "# title" and "when:" lines, it failed only at the owner's Approve - the agent,
+    def test_a_skill_that_could_never_be_saved_is_refused_to_the_agent_at_once(self):
+        # the recorded walk, 2026-11-10: queued with nothing but one line, it failed only at the owner's Approve - the agent,
         # long gone, never heard; refused at the door, the agent writes it again itself
-        with self.assertRaisesRegex(ValueError, 'needs a "# title" line and a "when:" line'):
-            agenttools.proposal_of({'action': 'write_playbook', 'slug': 'vendor-review', 'text': 'Read the export first.', 'why': 'w'})
-        ok = agenttools.proposal_of({'action': 'write_playbook', 'slug': 'vendor-review', 'text': '# Vendor review\nwhen: a vendor tool is reviewed\n\nRead the export first.', 'why': 'w'})
-        self.assertEqual(ok['action'], 'write_playbook')
+        with self.assertRaisesRegex(ValueError, 'how the job is done'):
+            agenttools.proposal_of({'action': 'save_skill', 'slug': 'vendor-review', 'text': 'Read the export first.', 'why': 'w'})
+        with self.assertRaisesRegex(ValueError, 'needs a `description:` line'):
+            agenttools.proposal_of({'action': 'save_skill', 'slug': 'vendor-review', 'text': '', 'why': 'w'})
+        ok = agenttools.proposal_of({'action': 'save_skill', 'slug': 'vendor-review', 'why': 'w',
+                                     'text': '---\nname: vendor-review\ndescription: Review a vendor tool. Use when one is up for renewal.\n---\nRead the export first.'})
+        self.assertEqual(ok['action'], 'save_skill')
 
 
 class Acts(unittest.TestCase):
@@ -141,15 +144,15 @@ class EveryPressOfTheOwnersIsSaidInWords(Acts):
 class AMarkThatWasRefusedIsHeard(Acts):
     """A mark in an answer is read once its turn is over, so nothing answers the agent that wrote it. A refused one was a line on the task
     it never saw - under an answer reading "Proposed - it waits on the task for your yes" (the stress round, 2026-11-10)."""
-    MARK = proposals.MARK + ' ' + json.dumps({'action': 'write_playbook', 'slug': 'refunds', 'text': '# Refunds\nwhen: a customer asks for a refund\nsteps: check the order, then refund it'})
-    WHY = 'write_playbook is not permitted - ' + proposals.switch_off('playbooks_enabled')
+    MARK = proposals.MARK + ' ' + json.dumps({'action': 'save_skill', 'slug': 'refunds', 'text': '# Refunds\nwhen: a customer asks for a refund\nsteps: check the order, then refund it'})
+    WHY = 'save_skill is not permitted - ' + proposals.switch_off('playbooks_enabled')
     def answered(self): super().answered(); self.s.set_setting('playbooks_enabled', '0', 'owner')
 
     def test_its_reason_goes_back_to_the_caller_and_into_the_agents_next_turn(self):
         self.answered(); miss = []
         self.assertEqual(proposals.collect(self.s, self.tid, f'The fix is in. {self.MARK}', 'assistant', miss), [])
         self.assertEqual(miss, [self.WHY])
-        self.assertEqual(proposals.unheard(self.s, self.tid), [('write_playbook', self.WHY)])
+        self.assertEqual(proposals.unheard(self.s, self.tid), [('save_skill', self.WHY)])
         self.assertIn(proposals.refusal_line(self.WHY), next_turn(self.s, self.tid))
 
     def test_one_the_tool_already_answered_is_not_said_again(self):

@@ -24,11 +24,11 @@ class AgentIdentityTests(unittest.TestCase):
         self.assertEqual(store.get_task(tid)['Assignee'], 'agent:Atlas')
         self.assertEqual(store.queued_dispatches()[0]['Agent'], 'Atlas')
 
-    def test_task_detail_normalizes_a_playbooks_uses_line_for_the_ui(self):
-        task = {'Tags': 'playbook:bill'}
-        with mock.patch('taskuary.playbooks.for_task', return_value={
+    def test_task_detail_normalizes_a_skills_uses_line_for_the_ui(self):
+        task = {'Tags': 'skill:bill'}
+        with mock.patch('taskuary.skills.for_task', return_value={
                 'title': 'Post the bill', 'uses': 'quickbooks (write: bills) · teller (read)' }):
-            brief = server._playbook_brief(task)
+            brief = server._skill_brief(task)
         self.assertEqual(brief['uses'], ['quickbooks', 'teller'])
 
 

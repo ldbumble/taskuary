@@ -8,7 +8,7 @@ manifest and failing closed). Either alone would be enough to argue for; both is
 import json, unittest
 from unittest import mock
 
-from taskuary import mcp, playbooks, reports, robinhood, scopes
+from taskuary import mcp, skills, reports, robinhood, scopes
 
 TOOLS = [
     {'name': 'get_positions', 'description': 'current positions', 'annotations': {'readOnlyHint': True}},
@@ -149,17 +149,18 @@ class TransportTests(unittest.TestCase):
         with self.assertRaises(ValueError): mcp._session({})       # neither one named
 
 
-class PlaybookTests(unittest.TestCase):
-    def test_the_shipped_playbook_names_the_card_and_forbids_placing_a_trade(self):
+class SkillTests(unittest.TestCase):
+    def test_the_shipped_skill_names_the_card_and_forbids_placing_a_trade(self):
         from pathlib import Path
-        text = (Path(__file__).parent.parent / 'taskuary' / 'templates' / 'playbooks'
-                / 'robinhood-trade.md').read_text(encoding='utf-8')
-        pb = playbooks.parse(text)
-        self.assertIn('robinhood', playbooks.uses_of(pb))
-        self.assertIn('EVERY order', pb['ask first'])
-        self.assertIn('robinhood_tools first', pb['steps'])       # the names are not documented
+        text = (Path(__file__).parent.parent / 'taskuary' / 'templates' / 'skills' / 'robinhood-trade'
+                / 'SKILL.md').read_text(encoding='utf-8')
+        pb = skills.check(text)
+        self.assertEqual(pb['name'], 'robinhood-trade'); self.assertIn('Use when a scheduled market or portfolio report lands', pb['description'])
+        self.assertIn('robinhood', skills.uses_of(pb))
+        self.assertIn('EVERY order', pb['body'])
+        self.assertIn('robinhood_tools first', pb['body'])       # the names are not documented
         # it reaches systems, not a checkout - so the seed must not send an agent hunting a repo
-        self.assertFalse(playbooks.about_code(pb))
+        self.assertFalse(skills.about_code(pb))
 
 
 if __name__ == '__main__': unittest.main()

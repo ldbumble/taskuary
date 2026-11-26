@@ -381,11 +381,11 @@ class GeneralTests(unittest.TestCase):
         self.assertIn('(1) Also put Northwind Payroll on the list.', turn); self.assertEqual(kw, {'kept': True, 'brief': True})
 
     def test_taskuarys_word_to_a_parked_agent_leaves_no_head_on_the_owners_screen(self):
-        """The overnight audit, 2026-11-10: he pressed Approve on a playbook the agent set up; its card left the chat and a grey line "Taskuary
+        """The overnight audit, 2026-11-10: he pressed Approve on a skill the agent set up; its card left the chat and a grey line "Taskuary
         left 1 note for you. Take them in order:" stood in its place - the head the agent's own words were typed under."""
         from taskuary import general
         s = MemoryStore(); tid, ses = self.general(s)
-        said = 'The owner pressed Approve on what you set up, and it went through: saved the playbook vendor-review.'
+        said = 'The owner pressed Approve on what you set up, and it went through: saved the skill vendor-review.'
         with mock.patch.dict(terminal.SESSIONS, {'g': ses}, clear=True):
             waitroom.add(s, tid, said, 'router'); time.sleep(0.3)
         self.assertEqual(self.said(s, tid), [('taskuary', said)], "the word itself, kept as Taskuary's for the record - and nothing else")

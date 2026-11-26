@@ -879,7 +879,7 @@ CASES += AREA_SETTINGS
 # Assistant fills it and presses its tabs; a job asked for in words is written into New on its tab - an agent's pressed for the owner (2026-11-02)
 TABS = [{'id': i, 'label': l} for i, l in (('send_something', '✉️Send something'), ('give_an_agent_a_job', 'Give an agent a job'),
         ('note_to_self', '💡Note to self'), ('meeting', '📅Meeting'), ('set_a_goal', '🎯Set a goal'), ('report', '📊Report'),
-        ('dashboard', '📈Dashboard'), ('routine', '🔁Routine'), ('playbook', '📖Playbook'), ('close_new_task', 'Close new task'))]
+        ('dashboard', '📈Dashboard'), ('routine', '🔁Routine'), ('skill', '📖Skill'), ('close_new_task', 'Close new task'))]
 NEWAGENT = {'area': 'new', 'title': '', 'text': 'What are we starting? Give an agent a job WHO WORKS IT A live session A general agent',
             'fields': [{'key': 'about', 'label': 'What should it find out or write', 'kind': 'text', 'value': ''},
                        {'key': 'brain', 'label': 'Brain', 'kind': 'choice', 'value': 'the brain it runs on'},
@@ -983,8 +983,8 @@ AREA_NEW = [
       c('task.create_from_text', kind='general', text='summarise the open AP', recurs={'schedule': 'every friday at 4', 'objective': 'summarise the open AP'}),
       'did:task.create_from_text', freq=3),
     Q('new', 'set up a report of AP over 30 days', None, c('setup', text='a report of AP over 30 days'), 'did:task.create_from_text', sort={'kind': 'report'}, freq=3),
-    Q('new', 'make me a playbook for leave balance requests', None, c('setup', text='a playbook for leave balance requests'), 'new:playbook',
-      sort={'kind': 'playbook'}, freq=2),
+    Q('new', 'make me a skill for leave balance requests', None, c('setup', text='a skill for leave balance requests'), 'new:skill',
+      sort={'kind': 'skill'}, freq=2),
 ]
 CASES += AREA_NEW
 

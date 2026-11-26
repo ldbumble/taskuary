@@ -23,7 +23,7 @@ test("task, agent and reply phases remain independent", () => {
 });
 
 test("an action proposed after a reply never replaces the sender's draft", () => {
-  const action = { ReviewId: 12, Status: "pending", Kind: "action", DraftText: '{"action":"write_playbook"}' };
+  const action = { ReviewId: 12, Status: "pending", Kind: "action", DraftText: '{"action":"save_skill"}' };
   const reply = { ReviewId: 11, Status: "pending", Kind: "draft_reply", DraftText: "Answers to all eight items." };
   const reviews = [action, reply];
   assert.equal(pendingReplyReview(reviews), reply);
@@ -85,7 +85,7 @@ test("a general chat that has answered is agent state, not \"not started\"", () 
 });
 
 
-// A PROPOSAL IS A DECISION TOO. A playbook drafted after a coding job, or a setting proposed in
+// A PROPOSAL IS A DECISION TOO. A skill drafted after a coding job, or a setting proposed in
 // chat, has no sender and still needs a yes - so the stage cannot be gated on there being someone
 // to reply to, and the page cannot open folded over the only thing asking for you.
 test("a proposal waiting on you opens the stage, sender or no sender", () => {

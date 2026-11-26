@@ -301,7 +301,7 @@ export default function WorkflowEditor({ sourceId, sources, connectors, types, d
           <TextField size="small" fullWidth value={cfg.done_when || ""} placeholder='one finance task per duplicate pair; "all clear" when there are none'
             onChange={(e) => set("done_when", e.target.value)} sx={{ bgcolor: "var(--tq-panel, #fff)" }} />
         </Field>
-        {/* A MAIL STARTS IT (the owner, 2026-10-21): said in words, like a playbook's "when" - triage is shown it beside the playbooks
+        {/* A MAIL STARTS IT (the owner, 2026-10-21): said in words, like a skill's "when" - triage is shown it beside the skills
             and starts this workflow on a mail that is one; the run is that mail's task, and its steps read it as {{mail.subject}} */}
         <Field label="Start when a mail like this arrives" hint="optional - describe the mail in words; triage starts this routine when one like it comes in, and the steps read it as {{mail.from}}, {{mail.subject}}, {{mail.body}}">
           <TextField size="small" fullWidth value={cfg.on_mail || ""} placeholder="a vendor sends an invoice for something we ordered"

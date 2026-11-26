@@ -19,15 +19,15 @@ test("What the assistant changed lists only what it changed - a setting, a repor
   assert.match(sv, /filter\(\(r\) => CHANGED\.includes\(r\.entity\)\)/);
 });
 
-// SAID ONCE (the product audit, 2026-11-08): the to-do's paragraph under What came in and again as The ask; "+ New playbook" twice on its
+// SAID ONCE (the product audit, 2026-11-08): the to-do's paragraph under What came in and again as The ask; "+ New skill" twice on its
 // shelf; a back crumb under the Phone & chats chip that is already lit
-test("an ask that is its message's words, a second New playbook and a single page's back crumb are each drawn once", async () => {
+test("an ask that is its message's words, a second New skill and a single page's back crumb are each drawn once", async () => {
   const { askInBody } = await import("../src/taskLayout.js");
   const body = "Welcome to the demo. Northwind, its people and their mail are invented, and nothing you press here reaches anyone.";
   assert.equal(askInBody(body, `${body}\n\nAlex`), true); assert.equal(askInBody("Book the room", body), false);
   assert.match(src("TaskPage.jsx"), /!\(sourceCount === 1 && askInBody\(askText, opener\?\.ReadText \|\| opener\?\.BodyText\)\)/);
-  assert.match(src("ReportsView.jsx"), /<NewPlaybook [^>]*button=\{false\}/);
-  assert.match(src("PlaybookShelf.jsx"), /\{button && <Button size="small" variant="outlined"/);
+  assert.match(src("ReportsView.jsx"), /<NewSkill [^>]*button=\{false\}/);
+  assert.match(src("SkillShelf.jsx"), /\{button && <Button size="small" variant="outlined"/);
   assert.match(src("SettingsView.jsx"), /onePage: onePage\(section, SHELF\)/);
   // ...and every section that is one page opens from its chip: Mail rules and Updates drew one card named like the chip, to press again
   const { onePage } = await import("../src/settingsMap.js"), SHELF = { docs: 1 };

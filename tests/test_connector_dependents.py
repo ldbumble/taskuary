@@ -5,7 +5,7 @@ from unittest import mock
 
 from fastapi.testclient import TestClient
 
-from taskuary import dependents, playbooks, server
+from taskuary import dependents, skills, server
 from taskuary.store import SQLiteStore
 
 ALEX = 'alex@northwind.example'
@@ -68,13 +68,14 @@ def test_brains_borrowers_drafts_rules_and_sources_of_a_mailbox_card():
     assert len(got['draft']) == 1 and got['rule'] == ['Payworth is fyi'] and got['source'] == [ALEX]
 
 
-def test_playbooks_that_name_the_card_kind(tmp_path):
+def test_skills_that_name_the_card_kind(tmp_path):
     store = SQLiteStore(':memory:')
     qb = store.get_connector_by_type('quickbooks')['ConnectorId']
-    (tmp_path / 'vendor-bill.md').write_text('# Enter a vendor bill\n\nwhen: a vendor invoice arrives\nuses: quickbooks (write: bills)\n'
-                                             'steps: enter it\nalone: yes\nask first: over $500\ndone when: the bill is in\n', encoding='utf-8')
-    with mock.patch.object(playbooks, 'folder', return_value=tmp_path):
-        assert kinds(store, qb) == {'playbook': ['Enter a vendor bill']}
+    (tmp_path / 'vendor-bill').mkdir()
+    (tmp_path / 'vendor-bill' / 'SKILL.md').write_text('---\nname: vendor-bill\ndescription: Enter a vendor bill. Use when a vendor invoice arrives.\n'
+                                                       'metadata:\n  uses: "quickbooks (write: bills)"\n---\n# Enter a vendor bill\n\nEnter it.\n', encoding='utf-8')
+    with mock.patch.object(skills, 'folder', return_value=tmp_path):
+        assert kinds(store, qb) == {'skill': ['Enter a vendor bill']}
 
 
 def test_the_route_answers_for_the_card_and_404s_a_missing_one():

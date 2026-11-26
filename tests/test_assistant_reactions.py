@@ -68,12 +68,12 @@ def store():
     return s
 
 
-def brain(intent='task', kind='coding', why='because', playbook=None, sender=None):
+def brain(intent='task', kind='coding', why='because', skill=None, sender=None):
     """Triage's answer, scripted - `sender` is its sender_class (who wrote it: the model says, 2026-10-11)."""
     def llm(system, user, **kw):
         out = {'intent': intent, 'why': why}
         if intent == 'task' and kind: out['kind'] = kind
-        if playbook: out['playbook'] = playbook
+        if skill: out['skill'] = skill
         if sender: out['sender_class'] = sender
         return json.dumps(out)
     return llm
@@ -1281,16 +1281,16 @@ class NeverWorkTests(unittest.TestCase):
         reason = s.message_routes(again['message_id'])[-1]['Reason']
         self.assertIn('triage: nothing to do', reason); self.assertNotIn('already ruled', reason)
 
-    def test_a_playbook_instance_is_tagged_so_the_agent_works_it_that_way(self):
+    def test_a_skill_instance_is_tagged_so_the_agent_works_it_that_way(self):
         s = store()
-        from taskuary import playbooks
+        from taskuary import skills
         menu = '- pto-import: PTO import' + chr(10) + '  when: PTO files arrive'
-        with mock.patch.object(playbooks, 'menu', return_value=menu), mock.patch.object(ingest, '_spawn'):
+        with mock.patch.object(skills, 'menu', return_value=menu), mock.patch.object(ingest, '_spawn'):
             out = arrive(s, subject='August PTO files', body='Attached - please import.', who='Erin',
-                         email='erin@ours.com', llm=brain('task', 'coding', playbook='pto-import'))
+                         email='erin@ours.com', llm=brain('task', 'coding', skill='pto-import'))
         t = s.get_task(out['task_id'])
         self.assertEqual(t['Kind'], 'coding')
-        self.assertIn('pto-import', str(t['Tags'] or ''), 'the playbook rides on the task, so the session is seeded from it')
+        self.assertIn('pto-import', str(t['Tags'] or ''), 'the skill rides on the task, so the session is seeded from it')
 
 
 class WhichCheckoutTests(unittest.TestCase):
@@ -1540,9 +1540,9 @@ class ApiActionsTests(unittest.TestCase):
         s = store(); out = self._ask(s); c = self.client(s)
         rid = s.add_review({'TaskId': out['task_id'], 'MessageId': out['message_id'], 'Kind': 'action',
                             'Status': 'pending',
-                            'DraftText': json.dumps({'action': 'write_playbook', 'slug': 'pto-import',
+                            'DraftText': json.dumps({'action': 'save_skill', 'slug': 'pto-import',
                                                      'text': '# PTO import' + chr(10) + 'steps', 'why': 'it repeats'}),
-                            'Reason': 'the agent proposes a playbook'})
+                            'Reason': 'the agent proposes a skill'})
         funnel.invalidate()
         self.assertEqual([(i['kind'], i['lane']) for i in pile(s)], [('action', 'approve')])
         with mock.patch('taskuary.proposals.execute', return_value={'wrote': 'pto-import'}) as ran:
@@ -1552,7 +1552,7 @@ class ApiActionsTests(unittest.TestCase):
         self.assertEqual(s.get_review(rid)['Status'], 'approved')
         # …and a dismissal runs nothing at all
         rid2 = s.add_review({'TaskId': out['task_id'], 'MessageId': out['message_id'], 'Kind': 'action',
-                             'Status': 'pending', 'DraftText': json.dumps({'action': 'write_playbook', 'slug': 'x', 'text': '#x'}),
+                             'Status': 'pending', 'DraftText': json.dumps({'action': 'save_skill', 'slug': 'x', 'text': '#x'}),
                              'Reason': 'another proposal'})
         with mock.patch('taskuary.proposals.execute') as never:
             c.post(f'/api/reviews/{rid2}/decide', json={'verb': 'reject', 'final_text': None, 'note': 'no'})

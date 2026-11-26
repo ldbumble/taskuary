@@ -545,8 +545,8 @@ def withdraw(store, tid: int, why: str, by: str, which='', keep: int = 0) -> dic
 
 def unsent(store, tid: int) -> list:
     """What the agent may still take back on task `tid`, newest first: its reply draft, its emails (slots), its posts and other proposals -
-    each {rid, kind, to, what}. Never a close-out or what Taskuary's own ledger put on a playbook (theirs, not the agent's), and never
-    anything already sent. A playbook the agent proposed, or lessons it added to one, is its own to take back (the owner, 2026-11-10) - and so
+    each {rid, kind, to, what}. Never a close-out or what Taskuary's own ledger put on a skill (theirs, not the agent's), and never
+    anything already sent. A skill the agent proposed, or lessons it added to one, is its own to take back (the owner, 2026-11-10) - and so
     is an act his press handed it that has not been done (cardqueue.handed: walk 7, "nothing unsent" held the X post's line for good)."""
     from . import cardqueue, proposals
     def gave(r):
@@ -609,7 +609,7 @@ def _settle_task_after_sent_reply(store, rv: dict, actor: str, was_sent: bool):
         return
     # SENDING IS NOT CLOSING (the owner, 2026-10-18: "sending and closing are two steps, never automatic"): the reply went
     # out and the task stays open - on the table with its receipt - until the owner's own Mark done (concierge.close_task).
-    # It used to close here past a list of guards (an agent still on it, a newer message, a close-out or playbook waiting).
+    # It used to close here past a list of guards (an agent still on it, a newer message, a close-out or skill waiting).
 
 
 def _blanked(text):

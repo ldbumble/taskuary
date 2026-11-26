@@ -227,7 +227,7 @@ Not every job is code. A `coding` task goes to a coding agent, in a terminal in 
 spreadsheet or a dashboard, a form filled in a browser. Whatever it sets up waits for your press.
 
 Both run on a **brain** - a CLI such as Claude Code or Codex, or an API connection, with the model
-chosen on it (see [Brains and playbooks](#brains-and-playbooks)). You start one with **Send to agent** on a task, or from **+ New → Give an agent a job**, which asks
+chosen on it (see [Brains and skills](#brains-and-skills)). You start one with **Send to agent** on a task, or from **+ New → Give an agent a job**, which asks
 whether the job is general or coding - coding only with [Developer mode](#developer-mode) on.
 
 ### Developer mode
@@ -322,21 +322,21 @@ task to waiting, because an external answer is now required. An ordinary reply f
 owner-controlled task is just an update: it leaves both the task status and any useful session
 alone.
 
-## Brains and playbooks
+## Brains and skills
 
 Two levels, and the difference is worth holding onto:
 
 - A **brain** is what does the thinking — a CLI tool (Claude Code, Codex, …) or an API connector, with
   the model chosen on that connection.
-- A **playbook** is a job — when it starts, which connections it uses, the steps, what an agent
-  may do alone, what to ask first, and what counts as done.
+- A **skill** is a job — what it is, when to use it, and how it is done here, in your words.
+  It is a `SKILL.md` in a folder of its own, the format Claude Code and other agents use.
 
 A recurring kind of job gets its own page the first time an agent does it: on close, Taskuary
-asks whether that will recur and drafts the playbook onto the task. Approve it, and the next
-message like it is matched to that playbook by triage, and the agent finds it with its playbooks tool.
+asks whether that will recur and drafts the skill onto the task. Approve it, and the next
+message like it is matched to that skill by triage, and the agent finds it with its skills tool.
 
-Each connector card lists the playbooks that name it, and the words themselves are edited on
-**Reports → Playbooks**, where each has an on/off switch.
+Each connector card lists the skills that name it, and the words themselves are edited on
+**Reports → Skills**, where each has an on/off switch.
 
 ## The task view and the Board
 

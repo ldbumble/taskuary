@@ -430,15 +430,15 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                     </Typography>
                   </Box>
                 )}
-                {task.Playbook && <Typography variant="caption" noWrap sx={{ color: "var(--tq-warning, #6b5f45)", display: "block", mt: 0.2 }}>
-                  Playbook · {task.Playbook.title}
+                {task.Skill && <Typography variant="caption" noWrap sx={{ color: "var(--tq-warning, #6b5f45)", display: "block", mt: 0.2 }}>
+                  Skill · {task.Skill.title}
                 </Typography>}
-                {!task.Playbook && task.Source === "report" && task.SearchSources
+                {!task.Skill && task.Source === "report" && task.SearchSources
                   && <Typography variant="caption" noWrap sx={{ color: "var(--tq-warning, #6b5f45)", display: "block", mt: 0.2 }}>
                     Report · {String(task.SearchSources).split(",")[0]}
                   </Typography>}
                 {/* a workflow run says it is one, and who started it - its clock, your Run now, the assistant, your phone (workflows.run) */}
-                {!task.Playbook && isWorkflowRun(task)
+                {!task.Skill && isWorkflowRun(task)
                   && <Typography variant="caption" noWrap data-tq-workflow-run="" sx={{ color: "var(--tq-warning, #6b5f45)", display: "block", mt: 0.2 }}>
                     Workflow{startedBy(task) ? ` · started by ${startedBy(task)}` : ""}
                   </Typography>}

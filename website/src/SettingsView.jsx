@@ -988,13 +988,13 @@ const NAV = ["about", "docs", "config", "policies", PHONE_PAGE, "audit", "update
 // DOCS IS A TREE, not a list of scroll anchors: its rail entries SWITCH the document rather than
 // scrolling to a heading, because a document is not a heading you scroll past. Groups are headers
 // with their files under them, and the buttons that used to sit on a shelf inside the page - New
-// playbook - are entries here too. Nothing about this page lives in a header any
+// skill - are entries here too. Nothing about this page lives in a header any
 // more (the owner, 2026-09-22: "everything moves to sidebar").
 const docsTree = ({ people = [] }) => [
   { key: "g:documents", label: "Your documents", head: true, sel: { group: "documents" } },
   ...OPERATOR_DOCS.map((d) => ({ key: `d:${d.name}`, label: d.label, sel: { group: "documents", doc: d.name } })),
-  // NO PLAYBOOKS HERE: they live on the Reports page beside reports and workflows (the owner, 2026-10-21 - Settings is for regular
-  // configuration), PlaybookShelf.jsx
+  // NO SKILLS HERE: they live on the Reports page beside reports and workflows (the owner, 2026-10-21 - Settings is for regular
+  // configuration), SkillShelf.jsx
   // the pages the ledger keeps per person (people_pages.py), by address; none until reflection has compiled one
   ...(people.length ? [{ key: "g:people", label: "People", head: true, sel: { group: "people" } }] : []),
   ...people.map((p) => ({ key: `pp:${p.name}`, label: p.who, sel: { group: "documents", doc: p.name } })),
@@ -1007,8 +1007,8 @@ const RAIL = 236, GUTTER = 24;   // the rail's own width, and the grid gap besid
 // `browse` (the assistant canvas, CanvasBrowse.jsx): the pages are the sections, Configuration's groups its cards, and one
 // group (or one page) opens with its own controls - drawn through the canvas's frame instead of this tab's rail.
 // `area` "about": the same view as ABOUT YOU (the owner, 2026-11-06: "general things you care about, how you do your job, personality,
-// goals") - You, Docs and Memory on one page of their own; Settings keeps the knobs, Mail rules and Updates. Playbooks are
-// how you work, not who you are: they live on Reports (the owner, the same day; PlaybookShelf.jsx)
+// goals") - You, Docs and Memory on one page of their own; Settings keeps the knobs, Mail rules and Updates. Skills are
+// how you work, not who you are: they live on Reports (the owner, the same day; SkillShelf.jsx)
 export default function SettingsView({ onNavigate, browse = null, browseState = {}, onBrowseState = null, area = "settings" }) {
   const about = area === "about";
   const canCode = useCapabilities().coding;                   // no coding tool connected: no Coding agent section (capabilities.js)
@@ -1017,9 +1017,9 @@ export default function SettingsView({ onNavigate, browse = null, browseState = 
   // Docs' rail entries switch the document, so the selection belongs here beside `page` - and the
   // catalog they draw comes from DocsView, which already fetches and derives both lists.
   const [docSel, setDocSel] = useState({ group: "documents", doc: OPERATOR_DOCS[0].name });
-  const [docCat, setDocCat] = useState({ playbooks: [], people: [] });
+  const [docCat, setDocCat] = useState({ skills: [], people: [] });
   const onCatalog = useCallback((c) => setDocCat((cur) =>
-    (cur.playbooks === c.playbooks && cur.people === c.people ? cur : c)), []);
+    (cur.skills === c.skills && cur.people === c.people ? cur : c)), []);
   // WHICH RAIL ENTRIES SHOW THEIR SECTIONS. The page you are in shows its own - it has to, or the
   // rail would highlight a section folded away under a title - and the rest stay shut. Scrolling
   // the whole document would otherwise leave all seven open behind you, with eleven Configuration
@@ -1040,7 +1040,7 @@ export default function SettingsView({ onNavigate, browse = null, browseState = 
   // may not have settled yet - the page below it is still fetching its rows - so the scroll is
   // retried until it lands or two seconds pass.
   // Picking a document DOES swap what Docs shows, and it also scrolls you to Docs, so a rail
-  // click always lands on the thing you clicked. An ACTION entry (New playbook)
+  // click always lands on the thing you clicked. An ACTION entry (New skill)
   // carries a nonce: it is a one-shot, and without it a second click on the same entry would be
   // the same selection and nothing would reopen.
   const pickDoc = useCallback((sel) => {

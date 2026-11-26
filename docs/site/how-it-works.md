@@ -176,7 +176,7 @@ allowed to read and to do, not by where they run.
 
 | | What it does | What it reads | When | Acts? |
 |---|---|---|---|---|
-| **Triage** | Judges each arrival: task, goal, reply, watch, FYI or ignored. Attaches it to the thread's task, names the goal step a mail serves, opens a goal for the open-ended ask, names the playbook and repository | `TRIAGE.md`; the first 2,500 characters of `SOUL.md` and of `JOB.md`; `LEARNED.md`'s promoted lines; routing memory; the playbook menu; the recent open tasks; the open goals and their steps | every poll | makes rows; never sends |
+| **Triage** | Judges each arrival: task, goal, reply, watch, FYI or ignored. Attaches it to the thread's task, names the goal step a mail serves, opens a goal for the open-ended ask, names the skill and repository | `TRIAGE.md`; the first 2,500 characters of `SOUL.md` and of `JOB.md`; `LEARNED.md`'s promoted lines; routing memory; the skill menu; the recent open tasks; the open goals and their steps | every poll | makes rows; never sends |
 | **The assistant** | The voice and the hands: walks the rail, runs set-up, connects things, moves things (assign, route, close, later) through a button or by asking the model for the verb | `COUNSEL.md`, `SOUL.md` and `JOB.md` whole and `LEARNED.md`'s lines in use, on every page; the one item on the table and the page you asked about; `STYLE.md` and the rest when you ask about them | on a turn | moves things; never does the work, never proposes |
 | **The Advisor** | The brain on the clock: the Advisor report, the morning brief and reflection say what is late, what was not followed up, what worked, which system is worth connecting | the head of `SOUL.md` and `JOB.md`, `COUNSEL.md`; your work as the hub sees it; the calendar; the knowledge base; the sources it watches; its own notes; `LEARNED.md`'s promoted lines and the last month of the outcome ledger with the pages of the people it names. At reflection: `LEARNED.md` whole, hypotheses too, and the outcome ledger | on its schedule and when the app opens; reflection at launch and after three corrections; and on the event - an agent stop or ask (or an agent cut off by a close, heard at the next launch), a reply, an attached mail, a PR, a close, a missed day, a report - one small prompt that leaves a line and a pill on that item | never; it leaves a line, an idea row or a proposal |
 
@@ -217,11 +217,11 @@ around the edges — they are what the models are actually told.
 | `COUNSEL.md` | How the assistant speaks, and how readily it takes a position | the assistant, the morning brief, replies |
 | `LEARNED.md` | What was learned from what you do, one section per subject; always below `SOUL.md` | triage (`What you care about`), the Advisor, agents and the Assistant (the sections that help each) |
 | `DIGEST.md` | The current morning brief | you |
-| Playbooks | One page per kind of job: when it starts, which connections it uses, the steps, what an agent may do alone, what counts as done | triage's `when` line, and the agent working it |
+| Skills | One folder per kind of job with its `SKILL.md`: a name, a description of what the job is and when to use it, and how it is done | triage and every agent (the names and descriptions), and the agent that chooses one (the whole text) |
 
-Playbooks are the ones that grow. A kind of job — a card charge to post as a bill, a new hire to
+Skills are the ones that grow. A kind of job — a card charge to post as a bill, a new hire to
 set up — gets its own page the first time an agent does it. On close, Taskuary asks whether that was a kind of job that will recur, and drafts the
-playbook onto the task.
+skill onto the task.
 
 **Generate from history** on `TRIAGE.md`, `STYLE.md` and `JOB.md` bootstraps all of this from your
 last three months of mail: it compares what arrived with what you actually answered, reads how you
@@ -236,7 +236,7 @@ leaving anything you wrote outside that block alone.
 - **Game** — the same items as an office you walk around: people in the lobby, fyi's in the coffee room.
 - **Board** (Developer mode) — every agent and its session, full screen: **Columns** of queued,
   working, waiting and completed tasks, the **Wall** of live terminals side by side, and **Live handoffs**.
-- **Reports** — connected data on a schedule, routines and playbooks; see [Reports and the Advisor](reports).
+- **Reports** — connected data on a schedule, routines and skills; see [Reports and the Advisor](reports).
 - **Hub** — what agents have learned, by topic, so knowledge survives past one job.
 - **About you** — your initials in the top right corner: who you are, the documents above, and what Taskuary has learned about you (Memory).
 - **Settings** — everything else; see the [Settings reference](settings).

@@ -54,7 +54,7 @@
 //   SEARCH    Enter opened another query's hit, or nothing; focus left elsewhere than what opened; "N of N" over a cut list; a
 //             connection its name did not find or open; no search at a phone's width (the 2026-10-19 UI walk, G9)
 //   OVER      a New ... entry that asks in a dialog drew another document under it, or its Cancel left one open (2026-10-19 UI walk:
-//             + New playbook put SOUL.md under its dialog, and Cancel left the owner editing it)
+//             + New skill put SOUL.md under its dialog, and Cancel left the owner editing it)
 //   BASED     an idea's "Based on <name>'s message" (or a #msg= link) left anything but that message's own card on the table, named
 //             the Advisor for the person, or drew the old row panel ("CLEAR FROM TIMELINE", "Talk it through", "undefined in chat")
 //   HEAD      the task view's header takes more than one row - at 1366 on every road a task opens by, and at 390 (2026-10-21)
@@ -1027,24 +1027,24 @@ async function links() {
     await wait(4500);
   }
   walked.push("links: the address through four Nexts");
-  // OVER: + New playbook asks over the list it was pressed on, and Cancel leaves that list - never SOUL.md, open under the dialog
-  page.step = "links new playbook";
-  // ...Playbooks left Settings for the Reports page (Reports / Workflows / Playbooks, 0.3.9.16): the shelf's own New playbook
-  await page.goto(`${srv.base}/#report=playbooks`, { waitUntil: "load" }); await wait(5000);
-  const pb = await page.evaluate(() => { const e = [...document.querySelectorAll("[data-tq-browse='reports'] button")].find((x) => /^\+?\s*New playbook/.test(x.innerText.trim()));
+  // OVER: + New skill asks over the list it was pressed on, and Cancel leaves that list - never SOUL.md, open under the dialog
+  page.step = "links new skill";
+  // ...Skills left Settings for the Reports page (Reports / Workflows / Skills, 0.3.9.16): the shelf's own New skill
+  await page.goto(`${srv.base}/#report=skills`, { waitUntil: "load" }); await wait(5000);
+  const pb = await page.evaluate(() => { const e = [...document.querySelectorAll("[data-tq-browse='reports'] button")].find((x) => /^\+?\s*New skill/.test(x.innerText.trim()));
     e?.click(); return !!e; });
-  if (!pb) note("OVER", page.step, "Reports → Playbooks drew no New playbook to press");
+  if (!pb) note("OVER", page.step, "Reports → Skills drew no New skill to press");
   else {
     await wait(1500);
     // ...a document the owner could type into: not MUI's measuring twin of a multiline field (TextareaAutosize keeps an aria-hidden,
     // invisible copy holding "x" to size one row - it has a box, so it read as a document open under the dialog on CI, 2026-10-21)
     const under = () => page.evaluate(() => [...document.querySelectorAll("textarea")].some((t) => t.getBoundingClientRect().width > 0 && !t.closest("[role=dialog]")
       && t.getAttribute("aria-hidden") !== "true" && getComputedStyle(t).visibility !== "hidden" && t.value.trim()));
-    if (!(await page.$("[role=dialog]"))) note("NOTHING", page.step, "+ New playbook opened no dialog");
-    if (await under()) note("OVER", page.step, "+ New playbook drew a document under its dialog");
+    if (!(await page.$("[role=dialog]"))) note("NOTHING", page.step, "+ New skill opened no dialog");
+    if (await under()) note("OVER", page.step, "+ New skill drew a document under its dialog");
     await clickText(page, "Cancel"); await wait(1500);
-    if (await under()) note("OVER", page.step, "Cancel on + New playbook left a document open to edit");
-    walked.push("links: + New playbook asked over its list, and cancelled back to it");
+    if (await under()) note("OVER", page.step, "Cancel on + New skill left a document open to edit");
+    walked.push("links: + New skill asked over its list, and cancelled back to it");
   }
   await page.close(); srv.stop();
 }

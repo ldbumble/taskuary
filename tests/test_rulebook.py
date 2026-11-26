@@ -359,10 +359,10 @@ def test_a_held_action_is_read_before_an_agent_asking(s):
     assert rulebook.facts(s, it, _verbs('approve', 'stop_agent'))['state'] == 'agent_asking', 'answered: the agent asking is read as before'
 
 
-def test_a_close_out_or_a_playbook_is_no_held_action(s):
+def test_a_close_out_or_a_skill_is_no_held_action(s):
     from taskuary import proposals
     t = Factory(s).task(title='Ledger fix', kind='code', status='in_progress')
-    for p in ({'action': 'merge_pr', 'number': 7, 'closeout': True}, {'action': proposals.PLAYBOOK}):
+    for p in ({'action': 'merge_pr', 'number': 7, 'closeout': True}, {'action': proposals.SKILL}):
         s.add_review({'TaskId': t, 'Kind': 'action', 'Status': 'pending', 'DraftText': json.dumps(p), 'Reason': 'x'})
     assert card.pending(s, t, 'held') is None
 

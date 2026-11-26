@@ -86,9 +86,9 @@ def obsolete_read(store, tid, review) -> bool:
 
 
 def in_line(r: dict) -> bool:
-    """A card of the line: one the owner presses - the agent's, triage's, or Taskuary's own close-out and playbook alike (his live app,
-    2026-11-23: the playbook stood outside the line, so the email in front of it thought nothing waited behind and offered Send and close;
-    the task closed, then came back for the playbook). Never a workflow's own step, an email he wrote himself, nor one nobody has written
+    """A card of the line: one the owner presses - the agent's, triage's, or Taskuary's own close-out and skill alike (his live app,
+    2026-11-23: the skill stood outside the line, so the email in front of it thought nothing waited behind and offered Send and close;
+    the task closed, then came back for the skill). Never a workflow's own step, an email he wrote himself, nor one nobody has written
     (a reply owed, a to-do's email)."""
     from .conversation import unwritten
     from .proposals import passed
@@ -384,8 +384,8 @@ def what(store, u: dict, addr: bool = False) -> str:
     if r.get('Kind') == 'action':
         if (n := own_name(r)): return n                                     # ...an issue by its own name
         p = _p(r)
-        from .proposals import PLAYBOOKS
-        if p.get('action') in PLAYBOOKS: return 'the playbook'
+        from .proposals import SKILL
+        if p.get('action') == SKILL: return 'the skill'
         from .proposals import act_words
         why = act_words(r.get('Reason'))
         # ...cut at a word, never mid-word ("so its effect is u" stood on the line, design round 6)

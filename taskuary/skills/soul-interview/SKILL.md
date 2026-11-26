@@ -18,7 +18,7 @@ interview may ask what research, organization, analysis, or drafting would be us
 owner decides; it must not ask what Taskuary may send or ship on its own.
 
 Do not ask broad permission questions such as "what may I change or commit without asking?" The
-agent and playbook rules govern execution. SOUL.md should instead explain what matters, what the
+agent and skill rules govern execution. SOUL.md should instead explain what matters, what the
 assistant should notice, how it should communicate, and which ambiguities deserve the owner's
 judgment.
 

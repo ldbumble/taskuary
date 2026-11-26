@@ -7,7 +7,7 @@ brought it back. Now each acts on the press and the page shows "Removed <it> - U
 hidden again.
 
 Two lengths of keeping. A report, a workflow and a routing rule are listed under Recently deleted for KEEP_DAYS, the way a
-playbook is (playbooks.py). A connection removed or signed out is kept only for the Undo line's minutes (UNDO_SECONDS): its sign-in
+skill is (skills.py). A connection removed or signed out is kept only for the Undo line's minutes (UNDO_SECONDS): its sign-in
 stays sealed where the vault put it, and what makes the removal final - forgetting a keychain entry, ending a ChatGPT session at
 OpenAI - waits for purge(), which runs at startup, in the housekeeping, and whenever this list is read or written.
 """

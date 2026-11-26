@@ -104,10 +104,10 @@
     },
     "playbooks_enabled": {
       "group": "Agents",
-      "label": "Use playbooks",
+      "label": "Use skills",
       "type": "switch",
-      "desc": "New mail is matched to your playbooks, and agents may suggest new ones.",
-      "help": "On: a message that fits a playbook that is switched on becomes a task worked from it, and a finished job that will come back is suggested as a new playbook for your approval. Off: none is matched or suggested; the playbooks stay under Reports → Playbooks, where each can also be switched off by itself."
+      "desc": "New mail is matched to your skills, and agents may suggest new ones.",
+      "help": "On: a message that fits a skill that is switched on becomes a task worked from it, and a finished job that will come back is suggested as a new skill for your approval. Off: none is matched or suggested; the skills stay under Reports → Skills, where each can also be switched off by itself."
     },
     "email_signature": {
       "group": "Replies",

@@ -41,9 +41,9 @@ def row_for(store, tid: int):
 
 
 # A ROW SIGNED "YOU" CARRIES ONLY WHAT YOU SAID (the owner, 2026-10-21). A task Taskuary opened for you can carry its own brief in
-# Summary - a playbook built with AI holds the setup instructions and the example email's raw record there - and the row showed that
+# Summary - a skill built with AI holds the setup instructions and the example email's raw record there - and the row showed that
 # under "You" in The conversation. Such a task's row reads the owner's own first words instead.
-BRIEFED = ('assistant:playbook',)
+BRIEFED = ('assistant:skill',)
 
 
 def yours(store, t: dict) -> str:

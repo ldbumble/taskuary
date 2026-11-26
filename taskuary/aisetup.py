@@ -1,6 +1,6 @@
 """The setup task an AI app's install runs as (clisetup.py): its kind, the open one a press reuses, and its plain close.
 
-Setting up a CONNECTION, a report, a dashboard, a routine or a playbook is the Assistant's now, on that thing's own page (build.py, the owner
+Setting up a CONNECTION, a report, a dashboard, a routine or a skill is the Assistant's now, on that thing's own page (build.py, the owner
 2026-11-13) - no task and no walk. What is left here is the one setup that still runs as a task: installing an AI app, in a terminal pane.
 """
 KIND = 'setup'

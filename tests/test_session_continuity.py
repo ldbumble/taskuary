@@ -195,7 +195,7 @@ def test_previous_work_uses_saved_recaps_excludes_finished_and_busy_and_prioriti
     finished = task(store, Status='done'); dock = task(store, SourceRef='assistant:dock'); working = task(store)
     for tid in (resumed, ready, finished, dock, working):
         store.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'The figures are ready. Waiting for your review.')
-    rid = store.add_review({'TaskId': ready, 'Kind': 'action', 'Status': 'pending', 'DraftText': '{"action":"write_playbook"}'})
+    rid = store.add_review({'TaskId': ready, 'Kind': 'action', 'Status': 'pending', 'DraftText': '{"action":"save_skill"}'})
     live = mock.Mock(task_id=working, alive=True, mode='assistant', busy=True)
     with mock.patch.dict(terminal.SESSIONS, {'working': live}, clear=True):
         rows = continuity.previous_work(store)

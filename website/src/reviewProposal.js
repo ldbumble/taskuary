@@ -16,7 +16,7 @@ export const proposalFrom = (review) => {
 // ONE SET OF WORDS FOR EVERY SYSTEM (the owner, 2026-09-27: "if we have button to close out per system it will be
 // endless"): Approve / Decline / Remind me (the task's own - 2026-10-02: "not yet is really remind me later"). Only `then` - what it does THERE - differs; a new connector adds a line.
 // ...and Approve is the one word for every proposal (buttons.json: approve's `action` state) - "Merge & close", "Run action" and
-// "Save playbook" were three more names for the same press
+// "Save skill" were three more names for the same press
 const APPROVE = label("approve", "action");
 export const CLOSEOUT = {
   merge_pr: { label: APPROVE, busy: "merging…", then: "merges the pull request on GitHub", reject: null,
@@ -29,11 +29,11 @@ export const CLOSEOUT = {
 const TRACKER = { jira: "Jira", monday: "Monday", linear: "Linear" };
 export const closeoutOf = (review) => CLOSEOUT[proposalFrom(review)?.action] || null;
 
-// a playbook's file name from its title - playbooks.slugify's rule: lower case, every other run of characters one "-", cut, trimmed
+// a skill's file name from its title - skills.slugify's rule: lower case, every other run of characters one "-", cut, trimmed
 const slugify = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 60).replace(/^-+|-+$/g, "");
 
-// a proposal whose words ARE a playbook page: a new one (the agent's on-close draft) or the ledger's block on one (build step 5)
-export const PAGES = new Set(["write_playbook", "amend_playbook"]);
+// a proposal whose words ARE a skill's SKILL.md: a new one its agent drafted, or a change to one he has (the ledger's block, its lessons)
+export const PAGES = new Set(["save_skill"]);
 
 // a tool run's place (proposals.WHERE_KEYS, the same order) and what it carries: the text it writes, the query or script it runs,
 // else its other settings one per line - the plumbing (the action, the run it belongs to, the connection id) left out
@@ -105,9 +105,9 @@ const saysOf = (review) => String(review?.Reason || "").replace(/^the (agent pro
 // approve" under it - nothing on any card acts before its press, and the press says what it does
 const leadOf = (review) => { const says = saysOf(review); return says ? { lead: upFirst(says), leadWhy: "" } : {}; };
 
-// WHAT A WAITING CARD SAYS OVER ITSELF IN THE CHAT - what its Approve does, in one line: a drafted playbook's, a held act's. Said with the one
+// WHAT A WAITING CARD SAYS OVER ITSELF IN THE CHAT - what its Approve does, in one line: a drafted skill's, a held act's. Said with the one
 // card, wherever that card stands (a turn of the task's chat, the foot of a walk's)
-const PAGE_NOTE = "Approve saves this playbook to Reports → Playbooks, and triage starts matching new mail against its when line. Nothing is sent to anyone.";
+const PAGE_NOTE = "Approve saves this skill to Reports → Skills, where triage and the next agent find it by its description. Nothing is sent to anyone.";
 export const askNote = (r) => { const a = proposalFrom(r)?.action; return PAGES.has(a) ? PAGE_NOTE : ["browser_act", "desktop_act"].includes(a) ? heldActsLine([r]) : ""; };
 // THE LINE OVER A HELD STEP'S CARD IN THE CHAT, said for what was held: a held delete read "The agent's browser waits for your yes" (2026-11-03)
 export const heldActsLine = (reviews = []) => {
@@ -183,19 +183,19 @@ export const proposalPresentation = (review) => {
     };
   }
   if (PAGES.has(proposal?.action)) {
-    const title = String(proposal.text || "").match(/^#\s+(.+)$/m)?.[1]?.trim();
-    // "new" (or none) is filed under its TITLE (playbooks.write -> slugify), so that is the file it names: the card said new.md
-    // over a W-9 playbook the approve then saved as send-our-w-9-to-a-customer-who-asks.md (walk 2026-10-21)
+    const title = (String(proposal.text || "").match(/^#\s+(.+)$/m) || String(proposal.text || "").match(/^name:\s*(.+)$/m))?.[1]?.trim();
+    // "new" (or none) is filed under its own name (skills.write -> slugify), so that is the folder it names: the card said new.md
+    // over a W-9 skill the approve then saved as send-our-w-9-to-a-customer-who-asks (walk 2026-10-21)
     const given = String(proposal.slug || "").trim();
-    const slug = (given && given !== "new" ? given : slugify(title)) || "playbook";
-    const amend = proposal.action === "amend_playbook";
+    const slug = (given && given !== "new" ? given : slugify(title)) || "skill";
+    const amend = !!(proposal.block || proposal.lessons || proposal.was_text);          // a change to one he has, not a new one
     return {
-      kind: "playbook",
-      title: title ? `Playbook · ${title}` : "New playbook",
-      context: amend ? "What the outcome ledger counted about this kind of work, added to its playbook · nothing is sent"
-        : "Playbook proposal · nothing will be sent to the conversation",
+      kind: "skill",
+      title: title ? `Skill · ${title}` : "New skill",
+      context: amend ? "What was learned about this kind of work, added to its skill · nothing is sent"
+        : "Skill proposal · nothing will be sent to the conversation",
       destinationLabel: "Save to",
-      destination: `Reports → Playbooks → ${slug}.md`,         // where playbooks live (PlaybookShelf.jsx)
+      destination: `Reports → Skills → ${slug}`,         // where skills live (SkillShelf.jsx)
       // ...the page it replaces, where there is one (proposals.change_card): the box marks where this one changes it
       ...(proposal.was_text ? { was: String(proposal.was_text) } : {}),
       approveLabel: APPROVE,
@@ -426,7 +426,7 @@ export const reviewStatusLabel = (status) => REVIEW_STATUS[status] || String(sta
 const VERB = { shell_act: "ran", browser_act: "ran on the page", desktop_act: "ran", comment_issue: "commented", close_issue: "closed",
   merge_pr: "merged", land: "landed", open_pr: "opened the pull request", push_direct: "pushed", close_item: "closed", run_tool: "done",
   break_out: "moved to its own task", save_routine: "saved the routine", repair_workflow: "changed the routine", change_setup: "changed it", settings: "changed",
-  write_playbook: "saved the playbook", amend_playbook: "saved the playbook" };
+  save_skill: "saved the skill" };
 // ...and what it kept at the press: the proposal as he left it, with what it did (proposals.receipt) - null before
 export const receiptOf = (review) => { try { return JSON.parse(review?.FinalText || "") || null; } catch { return null; } };
 export const resultOf = (review) => {
@@ -522,7 +522,7 @@ export const keptHeld = (reviews, comments) => {
 // other ask, and a turn's held steps while any of them waits (the ones that ran ticked in it) - and `past` each turn's pressed card, with when
 // its turn held it (GeneralWorkspace's turn cards)
 // ...AND SO DOES EVERY OTHER PROPOSAL ONCE DECIDED (decidedAsk; the owner, 2026-11-10: "it should stay where it is with buttons grayed out"): an
-// approved playbook left its turn at the press, and Taskuary's note to its agent stood where it had been
+// approved skill left its turn at the press, and Taskuary's note to its agent stood where it had been
 export const splitHeld = (reviews, asks) => {
   const gs = heldGroups([...(reviews || []).filter(isHeldStep), ...(asks || []).filter((r) => !isHeldStep(r))].sort((a, b) => a.ReviewId - b.ReviewId));
   const waits = (g) => g.reviews.some((r) => r.Status === "pending");

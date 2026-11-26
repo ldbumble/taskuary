@@ -1,5 +1,5 @@
 """THE WRITE-UP RUNS BEHIND THE PRESS (the owner, 2026-10-20). Mark done on a task with a live agent, Close agent on the Wall and
-Stop and save all end a session the same way - its transcript becomes the report, the handbook and the playbook are asked, and
+Stop and save all end a session the same way - its transcript becomes the report, the handbook and the skill are asked, and
 for a close the task closes - and that took as long as the AI did, 18 s with the page held under "Writing up this session".
 
 Now the press starts ONE job the server owns and returns at once. The job harvests the session first - the transcript and the

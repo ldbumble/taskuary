@@ -1,6 +1,6 @@
 // ONE DECISION, WHEREVER IT IS SHOWN. What they wrote, what we would say back, and the verdict
 // buttons - extracted from the review queue so the task page can hold the decision instead of
-// sending you to another tab to make it (2026-09-22). A proposal (a playbook, a setting, an
+// sending you to another tab to make it (2026-09-22). A proposal (a skill, a setting, an
 // action) renders through the same card: proposalPresentation() gives it its own title, its
 // destination and its own labels, and nothing is sent to a sender.
 import React, { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
@@ -559,7 +559,7 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
     ] : proposal ? [
       { id: no("approve"), label: busy ? sentOr(proposal.busyLabel) : proposal.approveLabel, tone: "p", disabled: off || (proposal.kind === "closeout" && blocked), run: () => decide("approve"),
         why: proposal.kind === "closeout" && blocked ? gh.reason.split(" - ")[0] : "",
-        title: proposal.kind === "closeout" && blocked ? gh.reason : proposal.kind === "playbook" ? "Save this process in Reports → Playbooks; nothing is sent to the sender"
+        title: proposal.kind === "closeout" && blocked ? gh.reason : proposal.kind === "skill" ? "Save this process in Reports → Skills; nothing is sent to the sender"
           : proposal.kind === "closeout" ? `${proposal.approveLabel} - the text above goes with it` : "Run the proposed action; nothing is sent to the sender" },
       // ...A ROUTINE'S OWN WRITE STEP can be approved for good (the owner, 2026-11-25): this step, as saved, runs unpressed on its later runs
       ...(proposalFrom(r)?.flow_run?.key ? [{ id: no("always"), label: "Always approve this step", tone: "s", disabled: off, run: () => decide("approve", false, undefined, false, true),
@@ -686,7 +686,7 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
     // stood as one card holding only the last): the one picked fills the box, his to change, and Send sends the box
     ...(!shut && !proposal ? versionPick(versionsOf(r), value, !(off || delivery.frozen), setText) : []),
     ...(shut ? (sp?.text || (over && (r.FinalText || r.DraftText)) ? [{ key: "draft", type: "text", value: sp?.text || String(r.FinalText || r.DraftText).slice(0, 500), clamp: true, dim: over }] : [])
-      : [{ key: "draft", type: "text", box: true, label: "Reply draft", value, ...(proposal?.was ? { type: "change", label: "The playbook will say", was: proposal.was, marks: marksOn } : {}), editable: !(off || delivery.frozen || proposal?.readOnly), onChange: (v) => setText(v), marks: blanks,
+      : [{ key: "draft", type: "text", box: true, label: "Reply draft", value, ...(proposal?.was ? { type: "change", label: "The skill will say", was: proposal.was, marks: marksOn } : {}), editable: !(off || delivery.frozen || proposal?.readOnly), onChange: (v) => setText(v), marks: blanks,
         spin: drafting, boxRef: draftRef, hidden: (proposal?.folded && !cmdOpen) || proposal?.bare,
         placeholder: proposal?.kind === "closeout" ? proposal.placeholder : isCal ? "A note with your answer - or leave it empty" : drafting ? "Drafting…" : r.DraftText ? "" : proposal ? "Proposal details unavailable" : "No draft yet — write the reply here" }]),
   ];

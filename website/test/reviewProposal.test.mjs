@@ -34,30 +34,33 @@ test("a pressed card says what its press did in the act's own word, from one fun
 
 import { heldActsLine, proposalPresentation, reviewStatusLabel, resultOf, reviewText } from "../src/reviewProposal.js";
 
-const playbook = {
+const skill = {
   Kind: "action",
   Title: "Pto",
   DraftText: JSON.stringify({
-    action: "write_playbook",
+    action: "save_skill",
     slug: "run-manual-pto-import",
-    text: "# Run manual PTO import\nwhen: files are waiting\n",
+    text: "---\nname: run-manual-pto-import\ndescription: Run the manual PTO import. Use when files are waiting.\n---\n# Run manual PTO import\n\n1. Load the files.\n",
   }),
 };
 
-test("a playbook review is a save process, not a reply", () => {
-  const shown = proposalPresentation(playbook);
-  assert.equal(shown.kind, "playbook");
-  assert.equal(shown.title, "Playbook · Run manual PTO import");
-  assert.equal(shown.destination, "Reports → Playbooks → run-manual-pto-import.md");
+test("a skill review is a save process, not a reply", () => {
+  const shown = proposalPresentation(skill);
+  assert.equal(shown.kind, "skill");
+  assert.equal(shown.title, "Skill · Run manual PTO import");
+  assert.equal(shown.destination, "Reports → Skills → run-manual-pto-import");
   assert.equal(shown.approveLabel, "Approve");          // one word for every proposal (buttons.json approve.states.action)
   assert.match(shown.context, /nothing will be sent/);
 });
 
-test("a playbook proposed as new names the file its title files it under", () => {
-  // playbooks.write files slug "new" under slugify(title): the card said new.md over a playbook saved as send-our-w-9-....md
-  const review = { Kind: "action", DraftText: JSON.stringify({ action: "write_playbook", slug: "new",
-    text: "# Send our W-9 to a customer who asks\nwhen: a customer asks for our W-9\n" }) };
-  assert.equal(proposalPresentation(review).destination, "Reports → Playbooks → send-our-w-9-to-a-customer-who-asks.md");
+test("a skill proposed as new names the folder its title files it under", () => {
+  // skills.write files slug "new" under its own name: the card said new.md over a skill saved as send-our-w-9-...
+  const review = { Kind: "action", DraftText: JSON.stringify({ action: "save_skill", slug: "new",
+    text: "# Send our W-9 to a customer who asks\n\nFind the newest signed copy.\n" }) };
+  assert.equal(proposalPresentation(review).destination, "Reports → Skills → send-our-w-9-to-a-customer-who-asks");
+  // ...and one with no heading in its body is titled by its frontmatter's name
+  const named = { Kind: "action", DraftText: JSON.stringify({ action: "save_skill", slug: "w9", text: "---\nname: w9\ndescription: Send the W-9.\n---\nFind the newest signed copy.\n" }) };
+  assert.equal(proposalPresentation(named).title, "Skill · w9");
 });
 
 test("a workflow's write waiting for the yes reads as what it writes and where, never its JSON", () => {
@@ -84,8 +87,8 @@ test("a step's card shows every field its press runs - a script beside harmless 
   assert.equal(shown.destination, "C:\\logs · winrm");
 });
 
-test("the editable review body is the playbook markdown, not its action envelope", () => {
-  assert.equal(reviewText(playbook), "# Run manual PTO import\nwhen: files are waiting\n");
+test("the editable review body is the skill markdown, not its action envelope", () => {
+  assert.match(reviewText(skill), /^---\nname: run-manual-pto-import\n[\s\S]*# Run manual PTO import\n\n1\. Load the files\.\n$/);
   assert.equal(reviewText({ Kind: "draft", DraftText: "Thanks." }), "Thanks.");
 });
 
@@ -107,15 +110,17 @@ test("a verdict is shown in the words the owner used, never the column value", (
   assert.equal(reviewStatusLabel(null), "");
 });
 
-// the ledger's facts about a kind of work reach its playbook as a proposal: the card shows the page, and says where it goes (build step 5)
-test("an amend_playbook proposal shows the page and saves to its playbook", () => {
-  const review = { Kind: "action", DraftText: JSON.stringify({ action: "amend_playbook", slug: "vendor-onboarding", text: "# Vendor onboarding\nwhen: x\n\n- ask first" }) };
-  assert.equal(reviewText(review), "# Vendor onboarding\nwhen: x\n\n- ask first");
+// the ledger's facts about a kind of work reach its skill as a proposal: the card shows the page, and says where it goes (build step 5)
+test("a change to a skill he has shows the page and says it adds what was learned", () => {
+  const review = { Kind: "action", DraftText: JSON.stringify({ action: "save_skill", slug: "vendor-onboarding", block: "## From the ledger\n- 2 of 6 came open again",
+    text: "# Vendor onboarding\n\n- ask first" }) };
+  assert.equal(reviewText(review), "# Vendor onboarding\n\n- ask first");
   const p = proposalPresentation(review);
-  assert.equal(p.kind, "playbook");
-  assert.equal(p.title, "Playbook · Vendor onboarding");
-  assert.match(p.destination, /vendor-onboarding\.md/);
-  assert.match(p.context, /ledger/);
+  assert.equal(p.kind, "skill");
+  assert.equal(p.title, "Skill · Vendor onboarding");
+  assert.match(p.destination, /vendor-onboarding$/);
+  assert.match(p.context, /learned/);
+  assert.match(proposalPresentation(skill).context, /Skill proposal/, "a new one is a proposal, not a change");
 });
 
 // the owner, 2026-10-25: "browser acts that can't be undone (submit, pay, delete, send) wait as a proposal the owner presses" - the card

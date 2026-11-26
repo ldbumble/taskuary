@@ -1011,12 +1011,12 @@ class APostIsAKindOfTheOneReviewTool(unittest.TestCase):
         for k in ('a reply', 'an email', 'a post', 'GitHub'): self.assertIn(k, agenttools.SHORT['propose'])
 
     def test_every_kind_is_one_card_waiting_for_his_press_and_nothing_goes_before_it(self):
-        ran, PLAYBOOK = [], '# Renewals\nwhen: a renewal comes up\nCompare the uplift with last year.'
+        ran, SKILL = [], '# Renewals\nwhen: a renewal comes up\nCompare the uplift with last year.'
         with mock.patch.dict(REGISTRY, {'linkedin_post': lambda cfg: ran.append(cfg) or ('Posted', '')}), \
              mock.patch('taskuary.outbound.send_review', side_effect=lambda *a, **k: ran.append(a), create=True):
             for a in ({'kind': 'email', 'to': 'erin@northwind.example', 'subject': 'Plans', 'text': 'The plans. Alex'},
                       {'kind': 'post', 'network': 'linkedin', 'text': 'Three tools, compared.', 'picture': 'tools-compared.png'},
-                      {'kind': 'act', 'action': 'write_playbook', 'slug': 'renewals', 'text': PLAYBOOK, 'why': 'it comes again'}):
+                      {'kind': 'act', 'action': 'save_skill', 'slug': 'renewals', 'text': SKILL, 'why': 'it comes again'}):
                 said, err = tool(self.tid, 'propose', **a); self.assertFalse(err, said)
         got = self.s._rows("SELECT Kind, Status FROM review WHERE TaskId=? ORDER BY ReviewId", (self.tid,))
         self.assertEqual(len(got), 3); self.assertTrue(all(r['Status'] == 'pending' for r in got), got); self.assertEqual(ran, [])

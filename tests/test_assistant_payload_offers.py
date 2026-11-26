@@ -1,4 +1,4 @@
-"""What the conversation offers under an answer is decided by what PRODUCED it (the owner, 2026-10-21): a playbook drafted in the chat
+"""What the conversation offers under an answer is decided by what PRODUCED it (the owner, 2026-10-21): a skill drafted in the chat
 is approved in the chat."""
 import json
 from unittest import mock
@@ -23,14 +23,14 @@ def chat(s, **task):
     return tid
 
 
-def test_a_playbook_drafted_in_the_chat_is_handed_to_the_chat_with_its_approve():
-    s = MemoryStore(); tid = chat(s, SourceRef='assistant:playbook')
-    made = proposals.queue(s, tid, {'action': 'write_playbook', 'slug': 'new', 'text': PB}, 'assistant')
+def test_a_skill_drafted_in_the_chat_is_handed_to_the_chat_with_its_approve():
+    s = MemoryStore(); tid = chat(s, SourceRef='assistant:skill')
+    made = proposals.queue(s, tid, {'action': 'save_skill', 'slug': 'new', 'text': PB}, 'assistant')
     p = payload(s, tid)
-    assert [r['ReviewId'] for r in p['playbookDrafts']] == [made['reviewId']]
-    assert json.loads(p['playbookDrafts'][0]['DraftText'])['action'] == 'write_playbook'
+    assert [r['ReviewId'] for r in p['skillDrafts']] == [made['reviewId']]
+    assert json.loads(p['skillDrafts'][0]['DraftText'])['action'] == 'save_skill'
     s.decide_review(made['reviewId'], 'rejected', None, 'owner', '')
-    assert payload(s, tid)['playbookDrafts'] == []
+    assert payload(s, tid)['skillDrafts'] == []
 
 
 def test_an_agent_asking_from_a_terminal_on_a_general_task_has_its_question_in_the_canvas():

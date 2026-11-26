@@ -42,7 +42,7 @@ class ThePathRuleTests(unittest.TestCase):
             with self.assertRaises(files.Refused, msg=bad): files._rel(bad)
 
     def test_a_backslash_path_is_accepted_because_both_kinds_of_caller_are_real(self):
-        """The owner types what Explorer shows; the agent passes what the playbook said."""
+        """The owner types what Explorer shows; the agent passes what the skill said."""
         self.assertEqual(files._rel('Vendors\\2026\\acme.pdf'), 'Vendors/2026/acme.pdf')
         self.assertEqual(files._rel('/'), '')
         self.assertEqual(files._rel(None), '')

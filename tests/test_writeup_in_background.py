@@ -8,7 +8,7 @@ from unittest import mock
 import pytest
 from fastapi.testclient import TestClient
 
-from taskuary import handbook, playbooks, server, terminal, writeup, wrapup
+from taskuary import handbook, skills, server, terminal, writeup, wrapup
 from taskuary.store import MemoryStore
 
 SESSION = 'matched the hardware store to vendor 87, expense account 6120, created bill 1043 for 84.10. ' * 8
@@ -21,7 +21,7 @@ def brain(system, user, **kw):
     time.sleep(LAT)
     if 'determination' in str(system):
         return json.dumps({'determination': 'Matched the charge.', 'actions': 'Created bill 1043', 'summary': 'Posted the bill.', 'outcome': 'did_work'})
-    return json.dumps({'entries': [], 'playbook': None})
+    return json.dumps({'entries': [], 'skill': None})
 
 
 def rows(s):
@@ -39,7 +39,7 @@ def rows(s):
 @pytest.fixture
 def world(monkeypatch, tmp_path):
     monkeypatch.setattr(handbook, 'enabled', lambda store: False)
-    monkeypatch.setattr(playbooks, 'folder', lambda: tmp_path / 'playbooks')
+    monkeypatch.setattr(skills, 'folder', lambda: tmp_path / 'skills')
     monkeypatch.setattr(writeup, '_folder', lambda store: str(tmp_path))
     closed, order = [], []
     def transcript_for(store, tid): order.append('harvest'); return SESSION, 'coding', f'sid-{tid}'

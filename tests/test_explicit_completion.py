@@ -38,7 +38,7 @@ class Base(unittest.TestCase):
                         mock.patch.object(wrapup, 'resolution_text', return_value='Fixed the cron user.'),
                         mock.patch.object(wrapup, 'finish', return_value={'drafting': False}),
                         mock.patch('taskuary.proposals.collect', return_value=[]),
-                        mock.patch('taskuary.playbooks.draft', return_value=None),
+                        mock.patch('taskuary.skills.draft', return_value=None),
                         mock.patch('taskuary.handbook.enabled', return_value=False)]
         for p in self.patches: p.start(); self.addCleanup(p.stop)
     def tearDown(self): term.SESSIONS.clear(); term.SESSIONS.update(self._sessions)

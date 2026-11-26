@@ -140,7 +140,7 @@ class EverydayAsks(unittest.TestCase):
         from taskuary import capabilities
         drawn = {'send': 'Draft it', 'note': 'Note it',
                  'goal': 'Plan it' if capabilities.has_ai(Q._world()) else 'Track it',
-                 **{k: 'Set up with AI' for k in ('dashboard', 'playbook')}}
+                 **{k: 'Set up with AI' for k in ('dashboard', 'skill')}}
         for r in (r for r in self.rows if r['q'].cat == 'new' and r['q'].expect.startswith('new:')):
             with self.subTest(ask=r['q'].text):
                 self.assertEqual(r['ideal']['say'], f"Opened {concierge.OPENED.get(r['q'].expect[4:], 'New')} with your words - {drawn[r['q'].expect[4:]]} there {'keeps' if r['q'].expect == 'new:note' else 'starts'} it.")

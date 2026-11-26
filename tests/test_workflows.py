@@ -3,8 +3,8 @@
 A scheduled agent workflow used to run inside the report loop through a coding CLI and file its answer as a
 report that triage read back as an arrival. Now a triggered workflow is dispatched straight to its worker:
 a task carrying the definition and this run's context, through the same capacity gate as any unattended
-start, never through message triage, and never a coding agent unless the job is code. A playbook stays a
-playbook; a PTO-style request still selects its procedure in triage without being forced to coding and
+start, never through message triage, and never a coding agent unless the job is code. A skill stays a
+skill; a PTO-style request still selects its procedure in triage without being forced to coding and
 without a second agent start.
 """
 import json, os, tempfile, unittest
@@ -12,7 +12,7 @@ from unittest import mock
 
 from fastapi.testclient import TestClient
 
-from taskuary import blackboard, general, ingest, playbooks, reports, server, terminal, triage, workflows
+from taskuary import blackboard, general, ingest, skills, reports, server, terminal, triage, workflows
 from taskuary.store import MemoryStore
 
 BILL = ('# Post a vendor bill\nwhen: a card transaction or an invoice arrives\nuses: intacct\nsteps: match the vendor, post it\n'
@@ -34,7 +34,7 @@ def workflow(s, **cfg):
 
 
 class DefinitionTests(unittest.TestCase):
-    def test_a_workflow_is_read_as_a_definition_and_a_playbook_stays_a_procedure(self):
+    def test_a_workflow_is_read_as_a_definition_and_a_skill_stays_a_procedure(self):
         s = store(); sid = workflow(s)
         d = workflows.definition(s, s.get_source(sid))
         self.assertEqual((d['title'], d['runs_on'], d['allowed_actions'], d['connections'], d['inputs']),
@@ -46,12 +46,12 @@ class DefinitionTests(unittest.TestCase):
         self.assertEqual(workflows.runs_on({'type': 'agent', 'access': 'write', 'runs_on': 'coding'}), 'coding')
         home = tempfile.mkdtemp()
         with mock.patch('taskuary.config.home', return_value=__import__('pathlib').Path(home)):
-            playbooks.write('bill', BILL)
+            skills.write('bill', BILL)
             cat = workflows.catalog(s)
         self.assertEqual([w['title'] for w in cat['workflows']], ['Weekly access review'])
-        self.assertEqual([(p['slug'], p['when']) for p in cat['procedures']], [('bill', 'a card transaction or an invoice arrives')])
+        self.assertEqual([(p['slug'], p['description']) for p in cat['procedures']], [('bill', 'Post a vendor bill. Use when a card transaction or an invoice arrives')])
         with mock.patch('taskuary.config.home', return_value=__import__('pathlib').Path(home)):
-            self.assertEqual([b['slug'] for b in playbooks.list_all()], ['bill'])                              # untouched (PW-207)
+            self.assertEqual([b['slug'] for b in skills.list_all()], ['bill'])                              # untouched (PW-207)
         with mock.patch.object(server, 'store', s), mock.patch('taskuary.config.home', return_value=__import__('pathlib').Path(home)):
             got = TestClient(server.app).get('/api/workflows').json()
         self.assertEqual((len(got['workflows']), len(got['procedures'])), (1, 1))
@@ -155,10 +155,10 @@ class ProcedureTests(unittest.TestCase):
     def test_a_pto_style_request_selects_its_procedure_without_forced_coding_or_a_second_start(self):
         s = store(); home = tempfile.mkdtemp()
         s.set_setting('team_domains', 'ours.com', 't')
-        def llm(system, user, **kw): return json.dumps({'intent': 'task', 'kind': 'general', 'why': 'a PTO request', 'playbook': 'pto'})
+        def llm(system, user, **kw): return json.dumps({'intent': 'task', 'kind': 'general', 'why': 'a PTO request', 'skill': 'pto'})
         session = mock.Mock()
         with mock.patch('taskuary.config.home', return_value=__import__('pathlib').Path(home)):
-            playbooks.write('pto', '# PTO request\nwhen: someone asks for time off\nuses: bamboo\nsteps: log it\nalone: yes\nask first: overlaps\ndone when: it is in the calendar\n')
+            skills.write('pto', '# PTO request\nwhen: someone asks for time off\nuses: bamboo\nsteps: log it\nalone: yes\nask first: overlaps\ndone when: it is in the calendar\n')
             with mock.patch.object(general, 'start_session', return_value=session) as start, mock.patch.object(general, 'history', return_value=[]), \
                  mock.patch.object(general, 'provider_options', return_value=[{'pick': 'x', 'label': 'x', 'type': 'api'}]), \
                  mock.patch.object(blackboard, 'live_count', return_value=0), mock.patch.object(ingest, '_spawn', lambda fn, *a: fn(*a)), \
@@ -166,7 +166,7 @@ class ProcedureTests(unittest.TestCase):
                 out = ingest.ingest_message(s, {'external_id': 'pto1', 'channel': 'email', 'conversation_id': 'c:pto', 'subject': 'PTO next Friday',
                                                 'from_name': 'Erin', 'from_email': 'erin@ours.com', 'body': 'Can I take next Friday off?', 'to': ['owner@ours.com']}, llm=llm)
             t = s.get_task(out['task_id'])
-            self.assertEqual((t['Kind'], playbooks.of_task(t)), ('general', 'pto'))                          # the procedure, not a coding verdict (PW-205)
+            self.assertEqual((t['Kind'], skills.of_task(t)), ('general', 'pto'))                          # the procedure, not a coding verdict (PW-205)
             self.assertEqual(start.call_count, 1)                                                            # one start
 
 

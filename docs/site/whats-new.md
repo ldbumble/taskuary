@@ -2,6 +2,11 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.4.5.2 - 2026-11-26
+
+- A line his own presses made stays in memory: every press counted, no cap or reflection takes it down
+- An API card's agent sends every part of a step masked: the calls it made, a part that holds a tool's answer, a backup's prompt
+
 ## 0.4.5.1 - 2026-11-26
 
 - A task he made himself offers no Watch it; one being watched can still stop it

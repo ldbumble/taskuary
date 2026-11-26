@@ -1108,7 +1108,8 @@ def respond(store, channel: str, chat: str, question: str, connector_id: int, po
             if edit: store.set_setting(f'{EDIT_KEY}:{channel}:{chat}', '', 'assistant')
             if edit and not picked:
                 forget_offered(store, channel, chat)
-                send(store, channel, chat, press_card(store, int(edit), 'edit', question), connector_id)
+                rid, _, shown = edit.partition(':')
+                send(store, channel, chat, press_card(store, int(rid), 'edit', question, shown or None), connector_id)
                 return
             redo = str(store.get_setting(f'{REDRAFT_KEY}:{channel}:{chat}') or '')
             if redo and not picked:
@@ -1843,10 +1844,10 @@ def _run_act(store, act: dict, item: dict | None, actor: str = 'owner') -> str:
         if t == 'card' and act.get('verb') == 'edit':
             # EDIT ASKS FOR THE WORDS: the next typed line replaces the draft and goes with them, as the desk's box and its Send
             here = asking() or {}
-            if here.get('chat'): store.set_setting(f"{EDIT_KEY}:{here['channel']}:{here['chat']}", str(int(act['rid'])), 'assistant')
+            if here.get('chat'): store.set_setting(f"{EDIT_KEY}:{here['channel']}:{here['chat']}", f"{int(act['rid'])}:{act.get('shown') or ''}", 'assistant')
             return turn_text({'say': 'Type the new words - they replace the draft, and it goes with them.', 'item': None}, store=store,
                              extra=[('Cancel', {'t': 'stay', 'key': (item or {}).get('key') or ''})])
-        if t == 'card': return press_card(store, int(act['rid']), str(act.get('verb') or ''))
+        if t == 'card': return press_card(store, int(act['rid']), str(act.get('verb') or ''), shown=act.get('shown'))
         if t == 'files': return send_files(store, act, actor)
         if t == 'walk': return walk(store, actor, opener=not act.get('opened'))
         if t == 'script': return script_words(store, act.get('script') or '')
@@ -2254,15 +2255,18 @@ def card_picks(store, item: dict | None) -> list:
     an act - each pressed through server.decide like the desk's. [] where the row's own chips already press that card."""
     rv = front_card(store, item)
     if not rv or str(rv.get('ReviewId')) == str((item or {}).get('rid') or '-'): return []
-    rid = int(rv['ReviewId'])
+    # ...EACH YES CARRIES THE CARD AS THIS MESSAGE SHOWS IT (verdicts.draft_revision, round 5): a letter saved again before his tap went to
+    # whoever it then named - the desk's press sends what it drew (DecideBody.shown), and the phone's sent nothing to check by
+    from . import verdicts
+    rid, pin = int(rv['ReviewId']), {'shown': verdicts.draft_revision(store, rv)}
     if rv.get('Kind') == 'action':
-        return [(buttons.label('approve', 'action'), {'t': 'card', 'rid': rid, 'verb': 'approve'}), (DISMISS, {'t': 'card', 'rid': rid, 'verb': 'reject'})]
+        return [(buttons.label('approve', 'action'), {'t': 'card', 'rid': rid, 'verb': 'approve', **pin}), (DISMISS, {'t': 'card', 'rid': rid, 'verb': 'reject'})]
     if rv.get('Kind') not in LETTER_KINDS: return []
     # ...and only the presses its card draws (card.presses): a letter its channel cannot deliver has no Send here either (walk 21: the poll
     # offered Send under "draft to copy"), and its words are on the card above to copy
     from . import card
     if 'approve' not in card.presses(store, rv): return []
-    rows = [(buttons.label('approve'), {'t': 'card', 'rid': rid, 'verb': 'approve'}), (EDIT, {'t': 'card', 'rid': rid, 'verb': 'edit'})]
+    rows = [(buttons.label('approve'), {'t': 'card', 'rid': rid, 'verb': 'approve', **pin}), (EDIT, {'t': 'card', 'rid': rid, 'verb': 'edit', **pin})]
     from . import slots
     if rv.get('Kind') == slots.KIND and (sid := slots.of_review(rv)) and rv.get('TaskId'):
         rows.append((DONT_SEND, {'t': 'drop', 'tid': int(rv['TaskId']), 'slot': sid}))
@@ -2273,11 +2277,16 @@ DISMISS, EDIT, DONT_SEND = 'Dismiss', 'Edit', "Don't send"          # the desk c
 EDIT_KEY = 'remote_edit'                     # an Edit pick waiting for the new words: the next typed line is them
 
 
-def press_card(store, rid: int, verb: str, words: str = None) -> str:
+def press_card(store, rid: int, verb: str, words: str = None, shown: str = None) -> str:
     """His press on a waiting card, from the phone - the one press road (card.press: the desk's own door), so a press reads the same wherever
-    it was made: sent, handed to the agent, refused because the thread moved, or failed and why. Said with the walk's way on."""
-    from . import card
+    it was made: sent, handed to the agent, refused because the thread moved, or failed and why. Said with the walk's way on. `shown`: the
+    card as the message he tapped drew it (card_picks) - one that reads otherwise now is not pressed, and is his to open and read again."""
+    from . import card, verdicts
     rv = store.get_review(int(rid)) or {}
+    if shown and verb in ('approve', 'edit') and rv.get('Status') == 'pending' and verdicts.draft_revision(store, rv) != shown:
+        return turn_text({'say': 'This card changed after I showed it - nothing was sent. Open it to read it as it stands now.', 'item': None}, store=store,
+                         extra=([(f"Open TQ-{int(rv['TaskId']):04d}", {'t': 'open', 'key': f"task:{int(rv['TaskId'])}"})] if rv.get('TaskId') else [])
+                         + [(_next_word(), {'t': 'next'})])
     got = card.press(store, int(rid), verb, words)
     if not got['ok']: return stuck(store, got['did'])
     said = got['did'] or 'Done.'

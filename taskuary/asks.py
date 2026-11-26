@@ -6,7 +6,7 @@ check?" had no answer, and finished work was silent. An ask IS a task, marked wi
 state is its rail lane in the rail's own words; a move into a lane that needs the owner, or its end, is said once. No
 memory store, no model call.
 """
-import hashlib, json, threading, time
+import json, threading, time
 from email.utils import parseaddr
 from datetime import datetime, timedelta
 
@@ -101,7 +101,10 @@ def _title(t: dict) -> str:
     return s if len(s) <= TITLE_SAID else s[:TITLE_SAID - 1].rstrip() + '…'
 
 
-def _sig(text) -> str: return hashlib.sha1(str(text or '').strip().encode()).hexdigest()[:10]
+def _sig(store, rv) -> str:
+    "An email as a pick shows it - its words, who it goes to, what rides with it (verdicts.draft_revision: the words alone let its To be swapped)."
+    from . import verdicts
+    return verdicts.draft_revision(store, rv)
 
 
 def phone_text(store, t: dict, lane: str, says: str) -> tuple:
@@ -129,15 +132,15 @@ def phone_text(store, t: dict, lane: str, says: str) -> tuple:
                           + ('' if addr else ' - no address yet (reply with it, or drop it)') + (f' - "{subject}"' if subject else '')
                           + '\n' + str(rv.get('DraftText') or '').strip())
             if addr:
-                rows.append((f'Send to {who}', {'t': 'send', 'rid': rv['ReviewId'], 'sig': _sig(rv.get('DraftText'))})); ready.append(rv)
+                rows.append((f'Send to {who}', {'t': 'send', 'rid': rv['ReviewId'], 'sig': _sig(store, rv)})); ready.append(rv)
             else: rows.append((f'Drop the one to {who}', {'t': 'drop', 'tid': tid, 'slot': i['id']}))
         if len(ready) > 1:
             rows.append((f"Send {'both' if len(ready) == 2 else f'all {len(ready)}'} ready ones",
-                         {'t': 'sendall', 'sends': [[rv['ReviewId'], _sig(rv.get('DraftText'))] for rv in ready]}))
+                         {'t': 'sendall', 'sends': [[rv['ReviewId'], _sig(store, rv)] for rv in ready]}))
         reply = None if emails else store.waiting_on_owner(tid, ('draft', 'draft_reply'))
         if reply and str(reply.get('DraftText') or '').strip():
             blocks.append(str(reply['DraftText']).strip())
-            rows.append(('Send the reply', {'t': 'send', 'rid': reply['ReviewId'], 'sig': _sig(reply.get('DraftText'))}))
+            rows.append(('Send the reply', {'t': 'send', 'rid': reply['ReviewId'], 'sig': _sig(store, reply)}))
     rows.append((f'Open {task_ref(tid)}', {'t': 'open', 'key': f'task:{tid}'}))
     return '\n\n'.join(blocks) + '\n\n' + '\n'.join(f'{n} · {label}' for n, (label, _) in enumerate(rows, 1)), rows
 
@@ -151,7 +154,7 @@ def send_picked(store, sends: list) -> str:
         rv = store.get_review(int(rid)) or {}
         to = ', '.join((json.loads(rv.get('Deliver') or '{}') or {}).get('to') or []) or 'the sender'
         if rv.get('Status') != 'pending': said.append(f'the one to {to} was {verdicts.already(rv)}'); continue
-        if sig and _sig(rv.get('DraftText')) != sig: said.append(f'the email to {to} changed since I showed it - not sent; open it to see it again'); continue
+        if sig and _sig(store, rv) != sig: said.append(f'the email to {to} changed since I showed it - not sent; open it to see it again'); continue
         got = card.press(store, int(rid), 'approve')
         said.append(f'Sent to {to}' if got['ok'] else f"not sent to {to} - {got['did'].removeprefix('Not sent - ')}")
     return '. '.join(s[:1].upper() + s[1:] for s in said) + '.'

@@ -65,10 +65,10 @@ def run_report(cfg: dict):
     fetched so the headline can admit when the result was cut (see reports.rows_out)."""
     from .reports import row_limit, rows_out
     lim, mine = row_limit(cfg)
-    if cfg.get('dsn'):  # back-compat: sqlalchemy-style dsn from old configs
-        import sqlalchemy
-        with sqlalchemy.create_engine(cfg['dsn']).connect() as cx:
-            rows = [dict(r._mapping) for r in cx.execute(sqlalchemy.text(cfg['query'])).fetchmany(lim + 1)]
+    if cfg.get('dsn'):  # back-compat: sqlalchemy-style dsn from old configs - a server's, on the one road a connection string runs (db.py)
+        from . import db
+        if db.file_of(cfg['dsn']) is not None: raise RuntimeError('a SQL Server connection reads a server, never a database file on this computer')
+        rows = db.run_query({**cfg, 'conn_str': cfg['dsn']}, lim + 1)
     else:
         rows = run_query(cfg, lim + 1)
     return rows_out(rows, lim, mine=mine)

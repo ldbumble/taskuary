@@ -9510,8 +9510,9 @@ def tool_run(body: dict, request: Request):
         # ...and the card checked above is the card that runs: query_only drops connector_id, which fell back to the first of the type
         tool_cfg = {**query_only(body), 'type': t, 'connector_id': conn['ConnectorId']}
         if t == 'calendar': tool_cfg['_task'] = wtid           # ...whose call: an agent's reads its own profile's calendars (calendar.agenda)
-        # SQL commits only on a card the owner raised to write; at read, the batch is rolled back (mssql.run_query)
-        if t in ('mssql', 'database'): tool_cfg['_write'] = guard.scope_of(cfg['server'], request.headers) != guard.AGENT and scopes.rank(scopes.scope_of(conn)) >= scopes.rank('write')
+        # SQL commits only on a card the owner raised to write; at read, the batch is rolled back (mssql.run_query) - and an AWS operation
+        # that is not a read runs the same way (aws.run_aws)
+        if t in ('mssql', 'database', 'aws'): tool_cfg['_write'] = guard.scope_of(cfg['server'], request.headers) != guard.AGENT and scopes.rank(scopes.scope_of(conn)) >= scopes.rank('write')
         if t in hub_tools:
             # The token decides who spoke. A tool payload cannot claim to be the owner or
             # another agent, even though the executor accepts an author for internal calls.

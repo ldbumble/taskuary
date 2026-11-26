@@ -147,6 +147,40 @@ class SsnAndDateOfBirthTests(unittest.TestCase):
                   'DOB unknown, call 02/03/2026?', 'born in 1980', 'a social event on May 3', 'revert da8dae0012345', 'ref 666-12-3456-7'):
             self.assertEqual(redact.scrub(t), t)
 
+    # SECURITY ROUND 5 (H6/H7): three shapes the mask let through, each with the never-issued numbers 078-05-1120 and 666-12-3456
+    def test_a_lines_start_is_seen_in_text_that_is_json(self):
+        """A newline serialized is the two characters backslash-n, so the letter n stood before whatever began the line and no rule that
+        opens on a word's edge saw it: an SSN, a label, a key at a line's start in a tool's answer left whole."""
+        import json
+        note = 'Erin Blake\n078-05-1120\nSSN: 078051120\nDOB: 01/05/1990\npassword: chirp-pass9\nAKIA' + 'IOSFODNN7EXAMPLE\nSSN\n666123456\tend'
+        for text in (json.dumps({'note': note}), json.dumps(json.dumps({'note': note})), json.dumps({'row': json.dumps({'ssn': '078051120', 'dob': '01/05/1990'})})):
+            out = redact.scrub(text)
+            for raw in ('078-05-1120', '078051120', '01/05/1990', 'chirp-pass9', 'AKIA' + 'IOSFODNN7EXAMPLE', '666123456'): self.assertNotIn(raw, out, text)
+        self.assertEqual(redact.scrub('see C:\\reports\\new and call\\n555-123-4567'), 'see C:\\reports\\new and call\\n555-123-4567')
+
+    def test_a_value_whose_label_is_its_key_goes(self):
+        """{"ssn": "078051120"} read as data is a bare nine digits under a key: the walkers scrubbed each value alone, so its label was
+        never beside it. A value is read under its key - the field it is - by the same rules serialized text always had."""
+        import json
+        row = {'name': 'Erin Blake', 'ssn': '078051120', 'patient_ssn': 666123456, 'dob': '01/05/1990', 'memberDob': '1990-01-05', 'date_of_birth': '010590',
+               'client_secret': 'chirp secret nine', 'order': '078051120', 'date': '010590', 'visit': '12/01/2026', 'max_tokens': 4096, 'ok': True, 'n': None}
+        want = {**row, 'ssn': '[redacted:ssn]', 'patient_ssn': '[redacted:ssn]', 'dob': '[redacted:date-of-birth]', 'memberDob': '[redacted:date-of-birth]',
+                'date_of_birth': '[redacted:date-of-birth]', 'client_secret': '[redacted:secret]'}
+        self.assertEqual(redact.scrub_all({'rows': [row]}), {'rows': [want]})
+        hits = []
+        self.assertEqual(redact.scrub_body({'input': [{'output': row}]}, hits), {'input': [{'output': want}]}); self.assertEqual(len(hits), 6)
+        self.assertEqual(json.loads(redact.scrub_json(json.dumps(row))), want)
+        self.assertEqual(redact.scrub_parts([{'type': 'tool_result', 'content': row}]), [{'type': 'tool_result', 'content': want}])
+        # ...and JSON held in a string is read as the data it is, a line's start a line's start
+        held = redact.scrub_all({'output': json.dumps({'note': 'Erin Blake\nSSN 078051120', 'dob': '010590'})})
+        self.assertEqual(json.loads(held['output']), {'note': 'Erin Blake\nSSN [redacted:ssn]', 'dob': '[redacted:date-of-birth]'})
+
+    def test_a_date_of_birth_with_its_digits_run_together_goes_beside_its_label(self):
+        for raw, want in [('DOB: 010590', 'DOB: [redacted:date-of-birth]'), ('date of birth 01051990', 'date of birth [redacted:date-of-birth]'),
+                          ('"dob": "010590"', '"dob": "[redacted:date-of-birth]"'), ('member_dob=19900105', 'member_dob=[redacted:date-of-birth]')]:
+            self.assertEqual(redact.scrub(raw), want)
+        for t in ('order 010590', 'batch 01051990 closed', 'DOB 1234567', 'born in 1980'): self.assertEqual(redact.scrub(t), t)
+
     def test_his_screen_and_store_keep_the_number_only_what_leaves_loses_it(self):
         from taskuary import concierge
         line = 'Patient DOB 04/05/1961, SSN 666-12-3456 - book the follow-up'

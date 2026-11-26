@@ -320,14 +320,18 @@ def brain(store, trace=None, cancel=None, resume=None, fast=False, keep: str = N
             own = {'user_settings': False} if cli == 'claude' else {}
             if cli == 'claude' and 'stream-json' in (prof.get('args') or preset_args(str(prof.get('cmd') or name))): fx = fx + ['--include-partial-messages']
             cwd = None if fast else str(folder)                  # no cwd = make_cli_llm's read-only gear: no tools, no permission bypass
+            # ...what it is asked scrubbed, as every brain's is (llm._Scrubbed): built here and not by build_llm, its instructions - his
+            # memory, the row on the table - went into the CLI's system file as they were (round 5)
+            cli_brain = lambda: llm_mod._scrub(llm_mod.make_cli_llm(store, name, model, cwd=cwd, trace=trace, cancel=cancel, resume=resume, keep=keep,
+                                                                    **({'extra_args': fx} if fx else {}), **own))
             if dflt.startswith('effort:'):
                 # an effort-only gear (codex) rides on a copy of the profile, never written back to the row
                 prof['light_model'] = dflt
                 store_get = store.get_agent
                 store.get_agent = lambda n, _r=row, _p=prof: (_r | {'Config': json.dumps(_p)}) if n == name else store_get(n)
-                try: return llm_mod.make_cli_llm(store, name, model, cwd=cwd, trace=trace, cancel=cancel, resume=resume, keep=keep, **({'extra_args': fx} if fx else {}), **own)
+                try: return cli_brain()
                 finally: store.get_agent = store_get
-            return llm_mod.make_cli_llm(store, name, model, cwd=cwd, trace=trace, cancel=cancel, resume=resume, keep=keep, **({'extra_args': fx} if fx else {}), **own)
+            return cli_brain()
         return llm_mod.build_llm(store, pick=p, model=model_of(store) or None, trace=trace, cancel=cancel, job='assistant')
     except Exception as e:
         logger.debug(f'concierge: no brain - {e}'); return None

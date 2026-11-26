@@ -317,29 +317,34 @@ def test_his_answer_to_the_agents_own_question_greys_no_card_of_any_kind(w, kind
 
 
 @pytest.mark.parametrize('kind', WAITING)
-def test_a_card_his_line_greyed_stands_again_at_the_turns_end_unless_the_turn_replaced_it(w, kind):
-    """Walk 23: "Reply to Erin saying yes" greyed the agent's matching reply and a bug report greyed a waiting post; each agent answered "ready
-    on the card for you to press" over a card nothing could press. Greyed the second he types; what the turn does not replace stands again
-    where it stood when the turn ends, by plain code - no tool of the agent's needed - and its screen fact says so meanwhile."""
+def test_a_card_his_line_greyed_stays_greyed_and_stands_again_only_by_its_agents_keep(w, kind):
+    """The owner, 2026-11-26 ("Nothing comes back automatically ... if the reply is still the right choice after a clarifying question then of
+    course bring it back"): his line asked for a routine change and then a new post; at the turn's end Taskuary raised the OLD post again
+    beside the routine card - "then it showed the old post not even the new one?". Greyed the second he types, a card stays greyed where it
+    stood whatever the turn ends on; its agent is told that as a fact, and it stands again - under his line, as it was, once - only by the
+    agent's own keep (walk 23's plain-code re-raise is gone)."""
     rids = _waiting(w, kind)
     assert w.cards()[rids[0]]['status'] == 'pending'
     _line(w, 'The post box on the page is empty.')
     assert all(proposals.passed(w.s.get_review(r)) for r in rids), 'his line greys what waited, the second he types'
-    assert 'Greyed until this turn ends' in cardqueue.screen(w.s, w.tid), cardqueue.screen(w.s, w.tid)
-    ws.record(w.s, w.tid, 'run1', 'turn_end', text='It is filled in now - the card is ready for your press.', source='api')
-    w.s.add_comment(w.tid, 'assistant', general.ASSISTANT_TYPE, 'It is filled in now - the card is ready for your press.')
-    # ...as a new card under his line, never live again above it (the owner, 2026-11-25: "Never bring back things on top. It's a chat.")
-    assert all(proposals.passed(w.s.get_review(r)) for r in rids), 'the greyed card came back live above his newer line'
+    assert 'stands again under his newest line only where you keep it' in cardqueue.screen(w.s, w.tid), cardqueue.screen(w.s, w.tid)
+    ws.record(w.s, w.tid, 'run1', 'turn_end', text='That is fixed.', source='api')
+    w.s.add_comment(w.tid, 'assistant', general.ASSISTANT_TYPE, 'That is fixed.')
+    n = len(w.s._rows('SELECT 1 FROM review WHERE TaskId=?', (w.tid,)))
+    assert n == len(rids) and all(proposals.passed(w.s.get_review(r)) for r in rids) and not any(cardqueue.again_of(w.s, r) for r in rids), 'Taskuary raised it again by itself'
+    assert w.cards()[rids[0]]['status'] == 'passed', 'and it is still in the chat, greyed where it stood'
+    # ...the agent judges it still right: its keep stands it again as a new card under his line, never live again above it
+    out = cardqueue.keep(w.s, w.tid, ' + '.join(f'rv{r}' for r in rids), 'agent')
+    assert out['ok'], out
     again = [cardqueue.again_of(w.s, r) for r in rids]
-    assert all(again) and all(w.s.get_review(n)['Status'] == 'pending' for n in again), 'the turn replaced nothing, and nothing stands again'
+    assert all(again) and all(w.s.get_review(n)['Status'] == 'pending' for n in again) and all(proposals.passed(w.s.get_review(r)) for r in rids)
     assert [(w.s.get_review(n)['DraftText'], w.s.get_review(n)['Deliver']) for n in again] == [(w.s.get_review(r)['DraftText'], w.s.get_review(r)['Deliver']) for r in rids], 'as it was'
     chatlog.advance(w.s, w.tid); cardqueue._SEEN.clear(); items = chatlog.read(w.s, w.tid)['items']
     at = lambda rid: next(i for i, x in enumerate(items) for k in ([x] if x['kind'] == 'card' else x.get('cards') or []) if k['review'] == rid)
     line = next(i for i, x in enumerate(items) if 'The post box on the page is empty.' in json.dumps(x))
     assert at(rids[0]) < line < at(again[0]), [x['kind'] for x in items]
     assert w.cards()[again[0]]['status'] == 'pending' and 'Waiting for his press now' in cardqueue.screen(w.s, w.tid)
-    ws.record(w.s, w.tid, 'run1', 'turn_end', text='Still there.', source='api')
-    assert [cardqueue.again_of(w.s, r) for r in rids] == again and len(w.s._rows('SELECT 1 FROM review WHERE TaskId=?', (w.tid,))) == 2 * len(rids), 'raised again once'
+    assert not cardqueue.keep(w.s, w.tid, ' + '.join(f'rv{r}' for r in rids), 'agent')['ok'], 'kept once'
     _line(w, 'Make it shorter.')
     new = _waiting(w, kind)                                             # ...the turn writes it again: the rewrite is what greys the old one for good
     ws.record(w.s, w.tid, 'run1', 'turn_end', text='Shorter now.', source='api')

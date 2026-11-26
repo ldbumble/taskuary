@@ -349,7 +349,9 @@ def put_to_owner(ctx: dict, params: dict, why: str) -> tuple:
         # ...and the agent hears WHOSE no it was: into the turn it is in where the adapter steers, else as its next words
         if ws._live(tid):
             r = permissions.normal(req)
-            shellgate.declined(store, tid, {'what': permissions.asked(r | permissions.held_for(r, str(ctx.get('cwd') or ''))), 'command': r['command']})
+            # ...(the turn at work on this very call: no card's Dismiss, which wakes nobody - shellgate.declined)
+            from .browsergate import _tell, not_approved
+            _tell(store, tid, not_approved(f"{permissions.asked(r | permissions.held_for(r, str(ctx.get('cwd') or ''))) or 'the step'} (`{str(r['command'] or '')[:200]}`)"))
         return REFUSED, YOU_REJECTED
     out = check(store, tid, str(ctx.get('sid') or ''), t['command'], cwd, t['shell'], about=str(_raw(tc).get('description') or ''), argv=t['argv'],
                 paths=paths) if t['command'] or reads else {}

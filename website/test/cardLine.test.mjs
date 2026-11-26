@@ -3,7 +3,7 @@
 // the same component; a press on the shown one settles it and the line slides on to the next that waits. Invented posts.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { lineAt, lineRuns, standsAlone } from "../src/cardLine.js";
+import { lineAt, lineRuns, lineStep, shownTab, standsAlone } from "../src/cardLine.js";
 
 const AXIOS = { name: "axios", setup(b) { b.onResolve({ filter: /^axios$/ }, () => ({ path: "axios", namespace: "stub" }));
   b.onLoad({ filter: /.*/, namespace: "stub" }, () => ({ loader: "js", contents: "const a = { get: async () => ({ data: {} }), post: async () => ({ data: {} }), put: async () => ({ data: {} }), interceptors: { request: { use() {} }, response: { use() {} } }, defaults: { headers: { common: {} } } }; export default { ...a, create: () => a };" })); } };
@@ -31,7 +31,8 @@ const tabsOf = (done = [], front = 0) => NETS.map(([, name], i) => ({ key: Strin
 
 // The card gallery, 2026-11-25: after Don't send, the dropped email's tab read "✓ gail@..." - ticked like the one that went
 test("a tab he said no to is crossed, never ticked like one that went", async () => {
-  const { line } = await P, tabs = tabsOf([0, 1], 2).map((t, i) => (i === 1 ? { ...t, no: true } : t));
+  // ...(its own card, by its own key: the page keeps the tab shown per card - cardLine.shownTab)
+  const { line } = await P, tabs = tabsOf([0, 1], 2).map((t, i) => ({ ...t, key: `7${t.key}`, ...(i === 1 ? { no: true } : {}) }));
   const html = line(tabs, NETS.map(post));
   assert.deepEqual([...html.matchAll(/data-tq-line-tab="[^"]*"[^>]*>([^<]*)</g)].map((m) => m[1]), ["✓ X", "✗ LinkedIn", "Reddit"]);
   assert.deepEqual([...html.matchAll(/data-tq-tab-state="([^"]*)"/g)].map((m) => m[1]), ["done", "not-done", "waiting"]);
@@ -48,15 +49,38 @@ test("three cards waiting in line are one card: a tab each, the shown one marked
   assert.equal((html.match(/<div[^>]*role="tabpanel"[^>]*inert=""[^>]*>/g) || []).length, 2, "only the shown card can be pressed or reached");
 });
 
-test("pressing the shown card's action slides on to the next that waits; a tab he opens stays until it is settled", () => {
+// The owner, 2026-11-26: he approved one tab of two, the card slid on to the other, and what he had just approved "disappeared" - "cards or
+// anything generated on chat never go away". And three posts in one card, with no way he saw to reach the third but Dismiss on the first two
+test("a press never changes the card shown: the pressed tab stays, saying what it did, and only he moves on", () => {
   assert.equal(lineAt(tabsOf()), 0, "it opens on the card in front");
-  assert.equal(lineAt(tabsOf([0], 1)), 1, "the front pressed: the next comes forward");
-  assert.equal(lineAt(tabsOf([0, 1], 2)), 2);
-  assert.equal(lineAt(tabsOf([0, 1, 2], -1), null, 1), 1, "all settled: it stays on the one he pressed last, saying what it did");
-  assert.equal(lineAt(tabsOf(), { key: "43", done: false }), 2, "he opened Reddit to look");
-  assert.equal(lineAt(tabsOf([2], 0), { key: "43", done: false }), 0, "Reddit pressed: on to the next that waits");
-  assert.equal(lineAt(tabsOf([1], 0), { key: "42", done: false }), 2, "the next that waits after the one he pressed");
-  assert.equal(lineAt(tabsOf([0], 1), { key: "41", done: true }), 0, "a settled one he opened stays open");
+  const shown = tabsOf()[0].key;
+  assert.equal(lineAt(tabsOf([0], 1), shown), 0, "tab 1 approved: still tab 1, though the next is in front now");
+  assert.equal(lineAt(tabsOf([0, 1], 2), shown), 0);
+  assert.equal(lineAt(tabsOf([0, 1, 2], -1), shown), 0, "all settled: still the one he is on");
+  assert.equal(lineAt(tabsOf([2], 0), "43"), 2, "he opened Reddit and dismissed it: it stays, crossed");
+  assert.equal(lineAt(tabsOf([0, 1], 2)), 2, "a card first drawn after presses opens on the one that waits");
+  assert.equal(lineAt(tabsOf([0, 1, 2], -1)), 2, "none waits: the last");
+});
+
+test("the arrows beside the count step to the card before and after, round the ends", () => {
+  const tabs = tabsOf();
+  assert.deepEqual([lineStep(tabs, 0, 1), lineStep(tabs, 1, 1), lineStep(tabs, 2, 1)], [1, 2, 0]);
+  assert.deepEqual([lineStep(tabs, 0, -1), lineStep(tabs, 2, -1)], [2, 1]);
+  assert.equal(lineStep(tabsOf([0, 1], 2), 0, 1), 1, "a settled card is a step like any other: he can look back at what he pressed");
+});
+
+test("the tab he is on is kept for the card as long as the page is open, through a redraw of the card elsewhere in the chat", () => {
+  const tabs = tabsOf().map((t) => ({ ...t, key: `k${t.key}` }));
+  assert.equal(shownTab(tabs), "k41", "first drawn: the card in front");
+  assert.equal(shownTab(tabs, "k43"), "k43", "he steps to Reddit");
+  assert.equal(shownTab(tabs.map((t, i) => ({ ...t, done: i === 2, front: i === 0 }))), "k43", "drawn anew after his press: still Reddit");
+});
+
+test("the card draws an arrow each side of the count, each a button with its name", async () => {
+  const { line } = await P, html = line(tabsOf(), NETS.map(post));
+  assert.deepEqual([...html.matchAll(/<button[^>]*aria-label="([^"]*)"[^>]*data-tq-line-step="(-?1)"/g)].map((m) => [m[1], m[2]]), [["Previous card", "-1"], ["Next card", "1"]]);
+  assert.ok(html.indexOf('data-tq-line-step="-1"') < html.indexOf("data-tq-card-queue") && html.indexOf("data-tq-card-queue") < html.indexOf('data-tq-line-step="1"'));
+  assert.equal((html.match(/role="tablist"[^>]*>(.*?)data-tq-line-step/s)?.[1].match(/role="tab"/g) || []).length, 3, "the tab names stay, each a press");
 });
 
 test("the one card stands at the row of the card in front, else the newest of its cards that has one; one with none is not drawn", () => {

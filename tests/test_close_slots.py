@@ -758,7 +758,7 @@ def test_a_routine_runs_email_to_an_address_its_agent_chose_is_a_card_and_nothin
 
 
 # THE AGENT HEARS WHICH EMAIL WENT (the stress round, 2026-11-18): with two emails out, a Send told it "the message was sent" - no card, no
-# person - while a No names the card and whom it was to (cardqueue.said_no). One sentence says a card, for the yes as for the no
+# person - while a No names the card and whom it was to. One sentence says a card, for the yes as for the no
 def test_the_agent_is_told_which_of_its_emails_went(s):
     tid = typed(s, FOUR[:2]); a, b = draft(s, tid, 0), draft(s, tid, 1)
     told = []

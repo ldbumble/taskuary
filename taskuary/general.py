@@ -1149,7 +1149,7 @@ def _next_turn(store, tid: int, sess, said: str, wait=None, pressed: bool = Fals
         finally: hand(tid, -1)
     th = threading.Thread(target=go, daemon=True, name=f'told-{tid}'); th.start()
     if wait: th.join(30)
-TOLD = 'told_agent'          # audit on a review: its agent was woken on the yes (cardqueue.unheard reads it)
+TOLD = 'told_agent'          # audit on a review: its agent was woken on the press
 def approved(store, tid: int, press: str, what: str, actor: str = 'owner', review: int = None) -> str:
     """Wake task `tid`'s agent on the approval that went, as `to_agent` wakes it: 'told', 'woke' or ''. What went is its card's event
     (events.card), said once in the turn this wakes - or, where nothing wakes, in the agent's next turn."""
@@ -3325,8 +3325,7 @@ class GeneralSession:
             # stopped: the agent stopped in the middle of its turn ... type to carry on" of a task its owner had just closed
             # ...ONE WORD FOR HIS STOP ON EVERY ROAD: a turn ended by it (clipool.Cancelled) read "cancelled" - error, trace and worker event alike
             if stopped and _unfinished(e): said = 'stopped'
-            # ...AN AI THAT COULD NOT ANSWER NOW is queued to try again (queue_retry) and said in its one line - and a card this turn set aside
-            # stands again: no agent read past it (proposals.restore_set_aside)
+            # ...AN AI THAT COULD NOT ANSWER NOW is queued to try again (queue_retry) and said in its one line
             # ...and one whose AI went off under it (its budget, its address) is tried again at once where another AI stands in (_moved_off)
             quiet = stopped or timed is not None or is_dock(self.store.get_task(self.task_id))
             moved = '' if quiet else self._moved_off(e)
@@ -3336,8 +3335,6 @@ class GeneralSession:
                     # ...in its own words where Taskuary wrote them (llm.QuotaSpent: which model, and the way past it), else the plain kind
                     q = None if moved else next((x for x in _chain(e) if isinstance(x, llm_mod.QuotaSpent)), None)
                     said = queue_retry(self.store, self.task_id, e, str(q) if q else down, fresh=getattr(self, 'owned', False), soon=bool(moved))
-                    from . import proposals
-                    proposals.restore_set_aside(self.store, self.task_id)
                 else: let_go_retry(self.store, self.task_id)
             except Exception as skipped: logger.warning(f'task {self.task_id}: the try again was not queued - {skipped}')
             # ...his stop is said by its own line in the chat (the press): marked so the chat's log never also draws it as an error step (feed)

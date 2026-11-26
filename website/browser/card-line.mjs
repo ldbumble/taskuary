@@ -1,5 +1,5 @@
 // THREE POSTS IN LINE, DRAWN AND PRESSED (not a test: nothing here runs in CI). node browser/card-line.mjs <out folder>
-// The owner, 2026-11-25: the cards waiting in line are one card with a tab each, and a press on the shown one slides on to the next. Three
+// The owner, 2026-11-25: the cards waiting in line are one card with a tab each (11-26: a press never changes the tab shown). Three
 // posts - X, LinkedIn, Reddit, each network connected to a stand-in - on a chat task in a disposable home; each press recorded (recorder.mjs),
 // and the line's top, height and shown tab sampled every frame: a jump, a blank beat or a second card is a finding.
 import path from "node:path";

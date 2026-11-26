@@ -218,7 +218,7 @@ TOOLS = {
                               "one call, one Send left.",
                        _S({'why': _STR, 'which': _STR}, ('why',)), ('POST', '/api/agent/withdraw-draft')),
     'keep_card': ('own', "A card the owner's newest line or a new message greyed comes back under the newest line at once, the same words "
-                         "and envelope (one his line greyed does so by itself when the turn ends). `which`: the card as the screen fact "
+                         "and envelope. `which`: the card as the screen fact "
                          "names it (a card of many: its ids, 'rv1 + rv2'). "
                          "One his press handed you that you cannot do (no account, the site refused): keep it with `why` - his card says it.",
                   _S({'which': _STR, 'why': _STR}, ('which',)), ('GET', '/api/tasks/1')),

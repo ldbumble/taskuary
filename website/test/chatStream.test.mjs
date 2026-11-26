@@ -201,13 +201,17 @@ test("a missing fact is one question: the reply not written yet waits under no o
 });
 
 // A CARD HE SAID NO TO STAYS WHERE IT STOOD (the real-CLI walk, 2026-11-16: Don't send took the email off the chat, only "You dropped the email"
-// was left - the basic flow's "no card gone from the canvas"): drawn with its words, under what he pressed - "Not sent"
-test("a card he said no to is drawn where it stood, with its words", async () => {
-  const { isPastCard } = await import("../src/chatStream.js");
+// was left - the basic flow's "no card gone from the canvas") - AND IT IS STILL THE CARD (the owner, 2026-11-26: "cards never just disappear" -
+// a dismissed post folded to a line naming none of its words): its own card where the page holds one, the plain note only where it holds none
+test("a card he said no to is drawn where it stood: its own card, or a note with its words where the page holds none", async () => {
+  const { isPastCard, noCard } = await import("../src/chatStream.js");
   assert.ok(isPastCard({ id: "r:9", review: 9, status: "rejected", was: { text: "Hi Erin, the open house moved" } }));
+  assert.equal(noCard(9, [{ rid: 9, key: "rv:9" }], []), false, "the page drew its card: it stays that card, saying Dismissed");
+  assert.equal(noCard(9, [], [{ ReviewId: 9 }]), false, "a post's row is its card");
+  assert.equal(noCard(9, [{ rid: 4 }], [{ ReviewId: 5 }]), true, "no card of it: the note");
   const src = fs.readFileSync(new URL("../src/GeneralWorkspace.jsx", import.meta.url), "utf8");
-  assert.match(src, /if \(isPastCard\(c\) && c\.status === "rejected"\) \{ if \(!stands\.has\(c\.review\)\) claim\(\); return \[<NotSent key=\{c\.id\} c=\{c\} \/>\]; \}/);
-  assert.match(src, /<div className="tq-conv-past-head">\{c\.what === "action" \? "You said no to this" : "Not sent - you said don't send"\}<\/div>/);
+  assert.match(src, /bare = no && \(stands\.has\(c\.review\) \|\| noCard\(c\.review, nodes, posts\)\)/);
+  assert.match(src, /if \(bare\) \{ if \(!stands\.has\(c\.review\)\) claim\(\); return \[<NotSent key=\{c\.id\} c=\{c\} \/>\]; \}/);
 });
 
 
@@ -396,4 +400,25 @@ test("a failed turn says its failure once: the error step the open chat patched 
   const rows = (t) => turnParts(eventsOf(turnSteps(t), false)).flatMap((p) => p.steps || []);
   assert.deepEqual(rows(failed), []);
   assert.equal(rows({ ...failed, fail: undefined, state: "done" }).length, 1, "a turn with no failed line keeps the step");
+});
+
+// A CARD THAT WAITS IS THE LAST THING IN THE CHAT (the owner, 2026-11-26: "you put text under the card which is never allowed ... if text goes
+// after the card it makes the card look useless"): the server's rule (taskuary/chatlog.py waits_last), the same cases read by both
+test("a card that waits is set down under what the agent said after it, never across his line - the server's own cases", async () => {
+  const { waitsLast } = await import("../src/chatStream.js");
+  const cases = JSON.parse(fs.readFileSync(new URL("../../tests/fixtures/waits_last.json", import.meta.url), "utf8"));
+  const shape = (items) => items.map((x) => (x.kind === "turn" ? `${x.id}[${(x.cards || []).map((c) => c.id).join(",")}]` : x.id));
+  for (const c of cases) {
+    const got = waitsLast(c.items);
+    assert.deepEqual(shape(got), c.want, c.name);
+    assert.deepEqual(shape(waitsLast(got)), c.want, `${c.name} - set down once`);
+  }
+  const still = [{ id: "l1", kind: "line" }, { id: "tA", kind: "turn", cards: [{ id: "r1", kind: "card", status: "pending" }] }];
+  assert.equal(waitsLast(still), still, "nothing to move: the same list, so nothing redraws");
+});
+
+test("the chat draws its list through that rule, and a turn's cards are its last thing while it works too", () => {
+  const view = fs.readFileSync(new URL("../src/GeneralWorkspace.jsx", import.meta.url), "utf8");
+  assert.match(view, /const items = useMemo\(\(\) => waitsLast\(served\), \[served\]\)/);
+  assert.ok(view.indexOf("data-tq-working=") < view.indexOf("<div data-tq-turn-cards"), "the working line stands above a card that waits, never under it");
 });

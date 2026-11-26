@@ -139,13 +139,6 @@ def record(store, tid: int, sid: str, kind: str, request_id: str = None, text: s
     if kind in REQUESTS:
         request_id = request_id or request_id_for(text)
         if any(r['request_id'] == request_id for r in status(store, tid)['requests']): return False
-    # ...a card his input greyed that this turn did not replace stands again (proposals.restore_set_aside) - never under the question the turn
-    # ended on (locked rule 4): it waits for his answer, and stands under it when the turn his answer starts ends (rested)
-    if kind == 'turn_end' and not asks:
-        try:
-            from . import proposals
-            proposals.restore_set_aside(store, tid)
-        except Exception as e: logger.debug(f'task {tid}: the cards its turn left greyed were not brought back - {e}')
     store.add_worker_event({'TaskId': tid, 'Sid': str(sid), 'Kind': kind, 'RequestId': request_id, 'Text': str(text or '')[:4000],
                             'ChoicesJson': json.dumps(list(choices)) if choices else None, 'Source': source, 'EventId': event_id})
     try: store._poke('task-changed', task_id=tid)
@@ -369,17 +362,6 @@ def answering(store, tid: int, at: float) -> bool:
            for e in evs[q + 1:]): return False
     return not any(asked < ep(x['CreatedAt']) < sec for x in store.list_comments(int(tid), internal=True)
                    if x.get('ActorType') in (general.USER_TYPE, general.WAITING_TYPE) and x.get('Actor') == 'owner' and not general.is_brief(x))
-
-
-def rested(store, tid: int) -> str:
-    """When task `tid`'s agent last ended a turn that asked him nothing in words (a stamp; '' for never). A turn that ended on its question is
-    not over until he answers: what waits for a turn's end (proposals.restore_set_aside) waits through it, for the end of his answer's turn."""
-    out = end = None
-    for e in events(store, int(tid)):
-        if e['Kind'] == 'turn_end': out, end = end or out, e['CreatedAt']
-        elif end and in_words(e): end = None
-        elif end and e['Kind'] == 'working': out, end = end, None
-    return str(end or out or '')
 
 
 def left_asking(store, tid) -> list:

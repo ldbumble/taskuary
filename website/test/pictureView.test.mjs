@@ -84,7 +84,7 @@ test("a press on a picture the turn handed over opens the one viewer with that p
 
 test("a press on a post card's picture opens it in the card's viewer", async () => {
   const { ReviewCard } = await ESB(`export { ReviewCard } from "./src/Artifact.jsx";`, { ...BASE, ...ICONS,
-    "./cardLine.js": "export const lineAt = () => 0;", "./PassedCard.jsx": "export const PressedButton = 'PressedButton';",
+    "./cardLine.js": "export const lineAt = () => 0, lineStep = () => 0, shownTab = () => null;", "./PassedCard.jsx": "export const PressedButton = 'PressedButton';",
     "./ui.jsx": "export const CcRow = 'CcRow', DraftField = 'DraftField', ToRow = 'ToRow';", "./pressable.js": "export const FOCUS_RING = {}, pressable = () => ({});",
     "./md.jsx": "export const MdLine = 'MdLine';", "./bulkCard.js": "export const listCap = () => 0;",
     "./textDiff.js": "export const changeMarks = () => [], hasChange = () => false, wordDiff = () => [];" });

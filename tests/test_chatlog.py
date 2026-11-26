@@ -364,7 +364,9 @@ def test_a_card_raised_the_second_before_its_turns_answer_waits_lit_in_that_turn
         s._exec('UPDATE comment SET CreatedAt=? WHERE CommentId=?', (at(0), cid))
         return [(x['kind'], x.get('status'), [c.get('status') for c in x.get('cards') or []]) for x in chatlog.serve(s, tid)['items']]
     assert chat(1) == [('turn', None, ['pending'])]
-    assert chat(3) == [('card', 'pending', []), ('turn', None, [])]
+    # ...and one raised seconds before stands lit too, never greyed - under its turn's words, as every card that waits (waits_last, 2026-11-26:
+    # it stood alone ABOVE them, the turn's answer drawn under a card he had yet to press)
+    assert chat(3) == [('turn', None, ['pending'])]
 
 
 def test_a_card_raised_during_its_tasks_first_read_stands_in_its_turn():
@@ -1072,3 +1074,83 @@ def test_a_step_held_on_a_cards_road_that_the_agent_went_on_without_ends_with_th
     assert not s._rows("SELECT 1 AS x FROM review WHERE TaskId=? AND Status='pending'", (tid,)) and cardqueue.row_over(s, tid)
     assert taskstate.standing(s, tid)['waits_on'] != 'you', 'nothing waits on him'
     assert chatlog.live_card(s, tid) is None
+
+
+# ── A CARD THAT WAITS IS THE LAST THING IN THE CHAT (the owner, 2026-11-26) ──────────────────────────────────────────────────────────────
+from pathlib import Path
+WAITS = json.loads((Path(__file__).parent / 'fixtures' / 'waits_last.json').read_text(encoding='utf-8'))
+def shape(items): return [f"{x['id']}[{','.join(c['id'] for c in x.get('cards') or [])}]" if x['kind'] == 'turn' else x['id'] for x in items]
+
+
+@pytest.mark.parametrize('case', WAITS, ids=[c['name'] for c in WAITS])
+def test_a_card_that_waits_is_set_down_under_what_was_said_after_it(case):
+    "The one rule, read by the page too (website/test/chatStream.test.mjs, the same cases): chatlog.waits_last."
+    got = chatlog.waits_last(case['items'])
+    assert shape(got) == case['want']
+    assert shape(chatlog.waits_last(got)) == case['want'], 'set down once: the same list again'
+
+
+def posts_world():
+    "Alex asked for three posts; the agent raised them one after another - one card with a tab each (cardqueue.tabs) - and said so."
+    from taskuary import general
+    s = MemoryStore()
+    tid = s.create_task({'Title': 'Announce the ledger portal', 'Kind': 'general', 'Status': 'in_progress', 'OriginBase': 'owner'}, 'owner')
+    s.add_message({'TaskId': tid, 'ExternalId': 'own-1', 'Channel': 'own', 'Subject': 'Announce the ledger portal', 'FromName': 'You',
+                   'BodyText': 'post about the portal on X, Reddit and LinkedIn', 'Status': 'routed'})
+    ids = [s.add_review({'TaskId': tid, 'Kind': 'action', 'Status': 'pending', 'Origin': 'agent', 'Reason': 'the post you asked for',
+                         'DraftText': json.dumps({'action': 'run_tool', 'type': t, 'text': 'The ledger portal is live.'})}) for t in ('x_post', 'reddit_post', 'linkedin_post')]
+    s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'Three posts are set up.')
+    return s, tid, ids
+
+
+def chat(s, tid):
+    "The chat as the page is served it, top to bottom: each row's words, or the cards at a turn's foot as (review, status)."
+    from taskuary import cardqueue
+    cardqueue._SEEN.clear()
+    out = []
+    for x in chatlog.serve(s, tid)['items']:
+        if x['kind'] == 'card': out.append([(x['review'], x['status'])]); continue
+        out.append(x.get('text') or ' '.join(st.get('text') or '' for st in x.get('steps') or []))
+        if x.get('cards'): out.append([(c['review'], c['status']) for c in x['cards']])
+    return out
+
+
+def test_what_the_agent_says_after_a_waiting_card_is_drawn_above_it_and_it_stays_there_once_settled():
+    """The owner's live app, 2026-11-26 ("you put text under the card which is never allowed ... if text goes after the card it makes the card look
+    useless"): X, Reddit and LinkedIn stood as one card; he dismissed X, the agent was woken and wrote "X draft declined. Reddit and LinkedIn
+    are still available for review." UNDER the card still waiting for him. Whatever a later turn says while a card waits stands above it -
+    while that turn works too - and the card is the last thing; settled, it stays where he last saw it and later words go under it."""
+    from unittest import mock
+    from taskuary import general
+    s, tid, (x, reddit, li) = posts_world()
+    ask, card = 'post about the portal on X, Reddit and LinkedIn', lambda *st: [(r, v) for r, v in zip((x, reddit, li), st) if v]
+    assert chat(s, tid) == [ask, 'Three posts are set up.', card('pending')]
+    s.decide_review(x, 'rejected', None, 'owner')
+    s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'X draft declined. Reddit and LinkedIn are still available for review.')
+    said = 'X draft declined. Reddit and LinkedIn are still available for review.'
+    assert chat(s, tid) == [ask, 'Three posts are set up.', said, card('rejected', 'pending')], 'the words came after the card: drawn above it'
+    # ...a turn at work says more: the card that waits is under that too, from its first word
+    chatlog.put(s, tid, 'turn', 't:9', {'started': 2e9}, state='working')
+    chatlog.step(s, tid, 'sid1', 'm-1', {'k': 'said', 'text': 'Looking at Reddit again.'})
+    with mock.patch.object(general, 'working', return_value=True): got = chat(s, tid)
+    assert got[:4] == [ask, 'Three posts are set up.', said, 'Looking at Reddit again.'] and dict(got[4])[reddit] == 'pending' and len(got) == 5, got
+    chatlog.update(s, tid, 't:9', state='done')
+    # ...the rest settled: the card stays under the words it waited under, and what is said now goes under it
+    s.decide_review(reddit, 'rejected', None, 'owner'); s.decide_review(li, 'rejected', None, 'owner')
+    s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'All three were turned down.')
+    got = chat(s, tid)
+    assert got[:4] == [ask, 'Three posts are set up.', said, 'Looking at Reddit again.'] and got[5:] == ['All three were turned down.'], got
+    assert sorted(got[4]) == sorted(card('rejected', 'rejected', 'rejected')), 'every tab of the one card stands in the one place'
+    assert chat(s, tid) == got, 'and the same on the next read: a refresh, the phone'
+
+
+def test_a_card_that_waits_never_crosses_his_line_and_nothing_comes_back_over_it():
+    "The 11-25 ruling holds: his line ends what is above it - a card raised before it stays above it, and the turn it starts is under the line."
+    from taskuary import cardqueue, general
+    s, tid, (x, reddit, li) = posts_world()
+    chat(s, tid)
+    chatlog.put(s, tid, 'line', 'l-2', {'text': 'Leave the posts for now - what is on my calendar?', 'at': 2e9})
+    s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'Nothing today.')
+    got = chat(s, tid)
+    at = got.index('Leave the posts for now - what is on my calendar?')
+    assert [g for g in got[:at] if isinstance(g, list)] and got[at + 1:] == ['Nothing today.'], got

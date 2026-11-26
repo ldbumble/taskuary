@@ -636,8 +636,10 @@ def flow_breaks(got: dict, was: dict = None) -> list:
     c nothing on the canvas goes: every item and every card of the list before is in this one
     d nothing is drawn empty
     e "working" is one fact: one turn at work, the last one, exactly when the list says working
-    f nothing is drawn above what was there, and nothing that was there changes place; a past turn's words never change
-    g a turn at work draws no card (its card comes when it has ended, as its last thing); a step it is stopped at is its permission
+    f nothing is drawn above what was there, and nothing that was there changes place; a past turn's words never change - BUT A CARD THAT WAITS
+      IS THE LAST THING (chatlog.waits_last, the owner 2026-11-26): it stands under what its agent said after it, this side of his next line
+    g a turn at work draws no card of its own (its card comes when it has ended, as its last thing) - one that waited before it stands at its
+      foot; a step it is stopped at is its permission
     h an input is in exactly one place: waiting (`pending`) or on the canvas, never both, and one that leaves the waiting room is on the
       canvas in the same read - unless he took it back (`dropped`)"""
     xs, out = got.get('items') or [], []
@@ -674,7 +676,7 @@ def flow_breaks(got: dict, was: dict = None) -> list:
     seen = {c['id'] for x in (was or {}).get('items') or [] for c in ([x] if x.get('kind') == 'card' else x.get('cards') or [])}
     for x in at:
         for c in x.get('cards') or []:
-            if c['id'] not in seen: say(f"g: the turn at work {x['id']} draws its card {c['id']}")
+            if c['id'] not in seen and c.get('under') != x['id']: say(f"g: the turn at work {x['id']} draws its card {c['id']}")
     # h: ONE PLACE AT A TIME (the owner, 2026-11-12: "it does not show in 2 places"): waiting by the box or on the canvas, never both...
     for i in {p['id'] for p in got.get('pending') or []} & set(ids): say(f'h: {i} waits by the box AND stands on the canvas')
     if was is None: return out
@@ -685,17 +687,17 @@ def flow_breaks(got: dict, was: dict = None) -> list:
     old = [x for x in was.get('items') or []]
     now, by = {x['id']: i for i, x in enumerate(xs)}, {x['id']: x for x in xs}
     for x in old:
-        if x['id'] not in now and not (live(x) and not (x.get('text') or x.get('steps'))): say(f"c: {x['id']} was on the canvas and is gone")
+        if x['kind'] != 'card' and x['id'] not in now and not (live(x) and not (x.get('text') or x.get('steps'))): say(f"c: {x['id']} was on the canvas and is gone")
     # ...but a card still waiting for his press that the turn now at work holds back (it goes on from the turn that left it - `items`)
     had = {c['id']: c for x in old for c in ([x] if x['kind'] == 'card' else x.get('cards') or [] if x['kind'] == 'turn' else [])}
     # ...nor an offer outside the line (his own email), drawn only while no card of the line waits (chatlog._drawn: one box) - one stands again
     for c in had.keys() - {c['id'] for _, c in cards}:
         if not (at and had[c].get('status') == 'pending') and not (had[c].get('offer') and lit): say(f'c: the card {c} was on the canvas and is gone')
-    kept = [x['id'] for x in old if x['id'] in now]
+    kept = [x['id'] for x in old if x['id'] in now and x['kind'] != 'card']          # ...a card is set down under what was said after it (waits_last)
     if [i for i in ids if i in set(kept)] != kept: say('f: items already drawn changed their order')
     top = max((now[i] for i in kept), default=-1)
     for x in xs[:max(top, 0)]:
-        if x['id'] not in {y['id'] for y in old}: say(f"f: {x['id']} is drawn above {ids[top]}, which was already there")
+        if x['kind'] != 'card' and x['id'] not in {y['id'] for y in old}: say(f"f: {x['id']} is drawn above {ids[top]}, which was already there")
     for x in old:
         y = by.get(x['id'])
         if y and x['kind'] == 'turn' and not live(x) and str(x.get('text') or '') != str(y.get('text') or ''): say(f"f: the words of the past turn {x['id']} changed")

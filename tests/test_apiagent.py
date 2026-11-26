@@ -695,9 +695,10 @@ class TheSessionTests(unittest.TestCase):
         self.assertEqual(turn['text'], 'The posts are drafted.')
         self.assertGreaterEqual(turn['started'], last_try - 0.05)
 
-    def test_a_failed_turn_leaves_a_draft_that_is_still_good_live(self):
-        """The API walk, 2026-11-19: Paula's reply was drafted; he asked for a PDF too, the AI failed, and the draft's Send stood greyed for 43
-        minutes while turn after turn failed. A card is set aside as its agent hears the input; a turn the AI never answered read past nothing."""
+    def test_a_failed_turn_brings_no_card_back_by_itself_and_says_it_is_trying_again(self):
+        """The owner, 2026-11-26: "Nothing comes back automatically." Paula's reply was drafted; he asked for a PDF too and the AI failed: the
+        draft his line greyed stays greyed where it stood (the 11-19 walk's re-raise is gone with every other), the turn is queued again, and
+        the agent that answers then keeps the draft if it still stands."""
         from taskuary import general, proposals
         class Down:
             def chat(self, *a, **kw): raise llm.NoAnswer('hipaa_ai: the model ran out of room before answering, even with 8000 tokens (finish_reason length)')
@@ -710,11 +711,9 @@ class TheSessionTests(unittest.TestCase):
         with self._patched(Down()):
             try: self._down_session(s, tid).send_prompt('make it a one-page PDF too', echo=False)
             except Exception: pass
-        # ...raised again under his line, the greyed one left where it stood (the owner, 2026-11-25: "Never bring back things on top. It's a chat.")
         from taskuary import cardqueue
-        again = cardqueue.again_of(s, rid)
-        self.assertEqual((s.get_review(again)['Status'], s.get_review(again)['DraftText']), ('pending', 'Hi Paula - the total is 103,190.'))
-        self.assertNotIn(again, proposals.written_past(s, tid))
+        self.assertTrue(proposals.passed(s.get_review(rid))); self.assertIsNone(cardqueue.again_of(s, rid))
+        self.assertTrue(proposals.comes_back(s, s.get_review(rid)), 'and it is still its agent\'s to keep, once one answers')
         self.assertIn('The AI stopped before it answered - trying again at', [c['Body'] for c in s.list_comments(tid)][-1])
 
     def test_a_card_that_takes_no_tools_is_offered_only_the_ways_that_are_here(self):

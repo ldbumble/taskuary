@@ -553,6 +553,19 @@ def _install_fresh_routes(app, store):
         import json
         return json.loads((store.get_source(sid) or {}).get("ConfigJson") or "{}")
 
+    @app.post("/api/fixture/agent-says")
+    def fixture_agent_says(body: dict = Body(...)):
+        """The task's agent says `text` in a later turn - as one woken on the task does (browser/cards-stay.mjs: its words while a card still
+        waits stand above the card) - and, with `rows`, raises those review rows beside what the task holds (a post beside a routine change)."""
+        import json
+        from taskuary import general
+        tid = int(body["taskId"])
+        rids = [store.add_review({"TaskId": tid, "Status": "pending", "Origin": "agent",
+                                  **{k: (json.dumps(v) if k in ("DraftText", "Deliver") and not isinstance(v, str) else v) for k, v in r.items()}})
+                for r in body.get("rows") or []]
+        if body.get("text"): store.add_comment(tid, "assistant", general.ASSISTANT_TYPE, body["text"])
+        return {"ok": True, "reviewIds": rids}
+
     @app.post("/api/fixture/no-readonly")
     def fixture_no_readonly(body: dict = Body(...)):
         """The stand-in CLI as one with no read-only mode Taskuary can hold it to (clis.READONLY): with a version too old for its reviewer

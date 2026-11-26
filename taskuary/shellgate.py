@@ -37,7 +37,7 @@ somewhere else, a pipe into Remove-Item - is held, never let through for being h
 import contextvars, json, ntpath, os, re, shlex, shutil, subprocess, tempfile, threading
 from loguru import logger
 from .gate import TABLE, deny as _deny
-from .browsergate import _segments, _tell, joined, launched, not_approved, NEXT, OWNER_NO, words
+from .browsergate import _segments, _no, _tell, joined, launched, not_approved, NEXT, OWNER_NO, words
 
 from .gate import HELD_SAID as HELD          # ...one wording for every road's hold (gate.py)
 _FILING = threading.Lock()
@@ -751,7 +751,7 @@ def approve_steps(store, rids: list, decide, actor: str = 'owner', verb: str = '
     left = [r['ReviewId'] for r in rvs[len(done) + (1 if failed else 0):]]
     if refused and not done: return {'ok': False, **({'busy': busy} if busy else {'already': True}), 'send_error': refused, 'done': [], 'failed': None, 'left': left}
     ran = '; '.join(told) or 'nothing ran'
-    if verb != 'approve': _tell(store, tid, f"The owner dismissed {plural(len(done), 'held step')}: {ran} - NOT done. {OWNER_NO}")
+    if verb != 'approve': _no(store, tid, f"The owner dismissed {plural(len(done), 'held step')}: {ran} - NOT done. {OWNER_NO}")
     elif failed:
         # ...A STEP THAT FAILED IS OVER, AND THE AGENT'S (the owner, 2026-11-10: "no idea what this is. it's broken"): the card read "1 of 2 ran -
         # the rest wait" with Approve still lit under the failure, and the agent - told they still waited - worked the failure while the owner's
@@ -777,4 +777,4 @@ def declined(store, tid: int, p: dict) -> None:
     from . import gate
     gate.remember(store, tid, p.get('keys'), 'dismissed')
     if (told := _batch.get()) is not None: return told.append(f"{p.get('what') or 'the step'} (`{str(p.get('command') or '')[:200]}`)")
-    _tell(store, tid, not_approved(f"{p.get('what') or 'the step'} (`{str(p.get('command') or '')[:200]}`)"))
+    _no(store, tid, not_approved(f"{p.get('what') or 'the step'} (`{str(p.get('command') or '')[:200]}`)"))

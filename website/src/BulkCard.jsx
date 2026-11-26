@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Box, LinearProgress, Typography } from "@mui/material";
 import ReviewDecision, { ActReview } from "./ReviewDecision.jsx";
 import { cardOf, isCardReview } from "./actionCard.js";
-import { countOf, pressOf, progress, rowOf, rowState, running } from "./bulkCard.js";
+import { countOf, pressOf, progress, rowOf, rowOpens, rowState, running } from "./bulkCard.js";
 import { MovedPast } from "./PassedCard.jsx";
 import { ReviewCard } from "./Artifact.jsx";
 import { DIM, FAINT } from "./theme.jsx";
@@ -33,11 +33,11 @@ export default function BulkReview({ rows = [], tid, onChanged, past: given = fa
   };
   const stop = () => api.post(`/api/reviews/batch/${key}/cancel`).then(({ data }) => setRun(data)).catch(() => {});
   const flip = (setter, id) => setter((s) => { const x = new Set(s); if (x.has(id)) x.delete(id); else x.add(id); return x; });
-  const shownRow = (r, i) => open.has(r.ReviewId) || (i < SAMPLE && rowState(r, run).waiting && !live && !open.has(-r.ReviewId));
+  const shownRow = (r, i) => rowOpens(r.ReviewId, i, { open, live, sample: SAMPLE });
   const items = states.map(([r, s], i) => { const w = rowOf(r); return { id: r.ReviewId, target: w.target, line: w.line, flags: w.flags, failed: s.failed || "",
-    mark: s.done ? "✓" : s.failed ? "!" : "–", struck: skip.has(r.ReviewId), ...(s.waiting ? { checked: !skip.has(r.ReviewId), locked: live, onCheck: () => flip(setSkip, r.ReviewId),
+    mark: s.done ? "✓" : s.failed ? "!" : "–", struck: skip.has(r.ReviewId), ...(s.waiting ? { checked: !skip.has(r.ReviewId), locked: live, onCheck: () => flip(setSkip, r.ReviewId) } : {}),
       open: shownRow(r, i), onOpen: () => flip(setOpen, shownRow(r, i) ? -r.ReviewId : r.ReviewId),
-      body: isCardReview(r) ? <ActReview row={cardOf(r)} tid={tid} onChanged={onChanged} past={past} /> : <ReviewDecision review={r} onChanged={onChanged} past={past} /> } : {}) }; });
+      body: isCardReview(r) ? <ActReview row={cardOf(r)} tid={tid} onChanged={onChanged} past={past} /> : <ReviewDecision review={r} onChanged={onChanged} past={past} /> }; });
   const ran = live || ["finished", "stopped"].includes(run?.state);
   return (<MovedPast on={past}>
     <ReviewCard id={key} kind="bulk" state={live ? "going" : waiting.length ? "waiting" : "done"} data-tq-bulk-card={key} label={`${countOf(rows)} - review a few, then do them all`}

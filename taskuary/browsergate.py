@@ -1330,7 +1330,14 @@ def not_approved(what) -> str: return f'The owner did not approve it: {what} was
 def declined(store, tid: int, p: dict) -> None:
     from . import gate
     gate.remember(store, tid, p.get('keys'), 'dismissed')
-    _tell(store, tid, not_approved(p.get('what') or p.get('command')))
+    _no(store, tid, not_approved(p.get('what') or p.get('command')))
+def _no(store, tid: int, text: str) -> None:
+    """HIS NO WAKES NOBODY WHILE A CARD OF THE TASK STILL WAITS, on any card (the owner, 2026-11-26: each Dismiss woke the agent, and it wrote
+    under the card still waiting): it is on its card, and kept as the task's event - told to its agent as his own with its next turn
+    (events.take). The no that leaves nothing waiting is told at once, as any card's (verdicts._row_ended)."""
+    from . import cardqueue, events
+    if cardqueue.row_over(store, tid): return _tell(store, tid, text)
+    events.note(store, tid, text)
 
 
 # the turn an approval wakes says what happened. ...AND NOTHING ABOUT WHAT DID NOT (agent walk 2, 2026-11-10): told "(with its link, if it
@@ -1557,10 +1564,10 @@ def done(store, tid: int, rid: str) -> bool:
     return True
 
 
-def not_pressed(store, tid: int, rid: str, why: str) -> bool:
-    "The hand-over closed without the press: the agent is told it was NOT done."
+def not_pressed(store, tid: int, rid: str, why: str, his: bool = False) -> bool:
+    "The hand-over closed without the press: the agent is told it was NOT done - `his`: by his own Dismiss, heard with its next turn (_no)."
     h = _close(store, tid, rid, why)
     if not h: return False
-    _tell(store, tid, f"The owner did not do the step you handed them ({h.get('what') or 'on the page'}): {why}. It was NOT done - the page is as you left it. Do not do it yourself. {OWNER_NO}")
+    (_no if his else _tell)(store, tid, f"The owner did not do the step you handed them ({h.get('what') or 'on the page'}): {why}. It was NOT done - the page is as you left it. Do not do it yourself. {OWNER_NO}")
     store.audit('task', tid, 'browser_act_not_pressed', 'owner', 'human', {'site': h['site'], 'why': why})
     return True

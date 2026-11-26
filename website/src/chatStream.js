@@ -201,6 +201,29 @@ export const isPastCard = (c) => ["superseded", "passed", "withdrawn", "rejected
 // reviews that still have a card of their own in the list, whatever earlier versions of them stand above it
 export const standing = (items) => new Set((items || []).flatMap((x) => (x.kind === "card" ? [x] : x.kind === "turn" ? x.cards || [] : []))
   .filter((c) => !isPastCard(c)).map((c) => c.review));
+// A CARD THAT WAITS IS THE LAST THING IN THE CHAT (taskuary/chatlog.py waits_last - THE SAME FUNCTION, both read against
+// tests/fixtures/waits_last.json; the owner, 2026-11-26: "if text goes after the card it makes the card look useless"): what the agent says or
+// does after a card while it waits is drawn ABOVE it - the card stands at the foot of the newest row before his next line, never across that
+// line; once settled it stays under the row he last saw it wait under (`under`). The server's list comes so; this holds it for whatever the
+// page merges in. The same list back where nothing moves
+const cardsIn = (x) => (x.kind === "card" ? [x] : x.kind === "turn" ? x.cards || [] : []);
+export const waitsLast = (items) => {
+  const at = new Map(items.map((x, i) => [x.id, i])), to = new Map(), moved = new Map();
+  // ...at one foot in the order they were raised, whatever was set down first
+  const seq = (a, b) => (a.review || 0) - (b.review || 0) || String(a.id).localeCompare(String(b.id));
+  for (let i = items.length - 1, foot = -1; i >= 0; i -= 1) {
+    const x = items[i];
+    if (x.kind === "line") { foot = -1; continue; }
+    if (x.kind !== "card" && foot < 0) foot = i;
+    for (const c of cardsIn(x)) { const j = c.status === "pending" ? foot : at.get(c.under) ?? -1; if (i < j && j <= foot) to.set(c, j); }
+  }
+  if (!to.size) return items;
+  for (const x of items) for (const c of cardsIn(x)) if (to.has(c)) moved.set(to.get(c), [...(moved.get(to.get(c)) || []), c]);
+  return items.flatMap((x, i) => (x.kind === "card" && to.has(x) ? []
+    : x.kind === "turn" ? [{ ...x, cards: [...(x.cards || []).filter((c) => !to.has(c)), ...(moved.get(i) || [])].sort(seq) }] : [x, ...(moved.get(i) || []).sort(seq)]));
+};
+// ...and whether the page holds no card of a review he said no to (GeneralWorkspace `one`): then, and only then, the plain "you said no" note
+export const noCard = (review, nodes, posts) => !(nodes || []).some((n) => n.rid === review) && !(posts || []).some((p) => p.ReviewId === review);
 export const hasParts = (parts) => (parts || []).some((p) => p.type !== "said" || p.text);
 
 // WHICH AGENT a task's chat is typed to: a coding task, or any task with a coding CLI live on it, is its CLI's; every other the general agent's.

@@ -701,7 +701,7 @@ def decide(store, rv: dict, verb_in: str, *a, closes: bool = False, always: bool
         # ...ONCE FOR A ROW (the owner, 2026-11-23): a press with cards still waiting behind it is recorded on its card and wakes nobody; the
         # one that ends the row tells the agent, its screen fact naming every card of it (cardqueue.row_over)
         elif proposals._action(rv) not in proposals.HELD_ACTS and not (out.get('shut') or {}).get('closed') and cardqueue.row_over(store, rv['TaskId']):
-            try: general.approved(store, rv['TaskId'], *pressed(store, rv, out), actor, review=rv.get('ReviewId'))
+            try: general.approved(store, rv['TaskId'], *pressed(store, rv, out), actor, review=rv.get('ReviewId')) or _row_ended(store, rv, actor, no=False)
             except Exception as e: logger.warning(f"rv{rv.get('ReviewId')}: the agent was not told it went - {e}")
     # ...AND EVERY ONE THAT RAN AND FAILED (general.failed): an act's error, a send that did not go or may have - never a refusal before it
     # ran (stale, a blank, already answered), and never a held turn's steps, whose card tells its agent once for all (shellgate.approve_steps)
@@ -711,13 +711,31 @@ def decide(store, rv: dict, verb_in: str, *a, closes: bool = False, always: bool
             try:
                 if general.failed(store, rv['TaskId'], rv['ReviewId'], a[2] if len(a) > 2 else kw.get('actor', 'owner')): out['told'] = True
             except Exception as e: logger.warning(f"rv{rv.get('ReviewId')}: the agent was not told it failed - {e}")
-    # ...AND A NO TO A CARD WITH OTHERS BEHIND IT (cardqueue.said_no): the line does not go on past it until its agent has decided
-    elif verb_in in ('reject', 'no_reply', 'close_unsent', 'close_pr') and out.get('ok') and rv.get('TaskId'):
-        from . import cardqueue, demo
-        if not demo.enabled():
-            try: cardqueue.said_no(store, rv, verb_in, a[2] if len(a) > 2 else kw.get('actor', 'owner'))
-            except Exception as e: logger.warning(f"rv{rv.get('ReviewId')}: the agent was not told of the no - {e}")
+    # ...HIS NO WAKES NOBODY WHILE A CARD OF THE TASK STILL WAITS (the owner, 2026-11-26: Dismiss on two posts of three woke the agent twice, and
+    # it wrote under the one still waiting - "no text after an approval card until the approval card is denied or approved, then agent moves
+    # on"): it is on its card, and its card's event tells the agent whose no it was. The no that leaves nothing waiting is the row's end: its
+    # agent is woken once to move on (_row_ended) - Close without sending closes the task instead
+    elif verb_in in ('reject', 'no_reply', 'close_pr') and out.get('ok') and rv.get('TaskId'):
+        from . import demo, proposals
+        # ...(a held step turned down tells its agent by its own road, the gate's, by the same rule - browsergate._no)
+        if not demo.enabled() and proposals._action(rv) not in proposals.HELD_ACTS:
+            try: _row_ended(store, rv, a[2] if len(a) > 2 else kw.get('actor', 'owner'))
+            except Exception as e: logger.warning(f"rv{rv.get('ReviewId')}: the row ended, and its agent was not told - {e}")
     return out
+
+
+def _row_ended(store, rv: dict, actor: str, no: bool = True) -> str:
+    """THE ROW IS OVER (cardqueue.row_over - nothing on the task waits for his press): its agent is woken ONCE to move on. By his no (`no`): told
+    whose it was by its card's event. By a yes whose card named no step of its own: only where an earlier yes of the row did (card.carries_on)
+    - pressed while cards still stood behind it, that press woke nobody. '' while a card still waits, and where nothing is owed."""
+    from . import card, cardqueue, general
+    tid = rv['TaskId']
+    if not cardqueue.row_over(store, tid): return ''
+    owed = next((r for r in cardqueue.unheard(store, tid) if card.carries_on(r, store)), None)
+    if not (no or owed): return ''
+    rid = (owed or rv)['ReviewId']
+    return general.to_agent(store, tid, '', actor, pressed=True,
+                            heard=lambda how: store.audit('review', int(rid), general.TOLD, actor, 'system', {'task': int(tid), 'how': how, **({'no': True} if not owed else {})}))
 
 
 def _reply_waiting(store, tid):
@@ -769,7 +787,7 @@ def pressed(store, rv: dict, out: dict) -> tuple:
     if (env := _envelope(rv)).get('kind') == 'calendar':
         from .calwrite import head_of
         return 'Send', f'the calendar was told: {head_of(env)}'
-    # ...the card by its number and in the owner's words, as a No names it (cardqueue.said_no): with two emails out, "the message was sent"
+    # ...the card by its number and in the owner's words, as a No names it: with two emails out, "the message was sent"
     # left its agent guessing which one went (the stress round, 2026-11-18) - and to whom it went where that is not whom the card named (he
     # readdressed it, or copied someone): "the reply was sent" let its next turn tell him it had answered the person it drafted it for
     from .cardqueue import what

@@ -45,6 +45,10 @@ export const rowState = (r, run) => {
   if (r.Status === "superseded" && r.ActError) return { failed: r.ActError };
   return r.Status === "pending" ? { waiting: true } : { left: true };
 };
+// ...WHICH ROWS STAND OPEN in their own card: the first few, to review, and any he opened - never one he shut (`open`: ids he opened, a shut one
+// its negative), none while the run is at work. WAITING OR SETTLED ALIKE (the owner, 2026-11-26: "cards or anything generated on chat never go
+// away"): a row he pressed or dismissed in its own card stays open there, saying what came of it - it folded to a line the moment it settled
+export const rowOpens = (id, i, { open, live = false, sample = 2 }) => open.has(id) || (i < sample && !live && !open.has(-id));
 export const running = (run) => ["running", "cancelling"].includes(run?.state);
 // the bar: what of this run is over, of its total
 export const progress = (run) => (run?.total ? Math.round((100 * ((run.done || 0) + (run.failed || 0) + (run.left || 0))) / run.total) : 0);

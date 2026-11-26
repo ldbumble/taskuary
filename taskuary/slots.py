@@ -143,10 +143,7 @@ def drop(store, tid: int, slot_id: str, actor: str) -> bool:
     hit = next((i for i in all_(store, tid) if i['id'] == slot_id), None)
     if not hit: return False
     rv = store.get_review(hit['rid']) if hit.get('rid') else None
-    if rv and rv.get('Status') == 'pending' and store.decide_review(rv['ReviewId'], 'rejected', None, actor, DROPPED):
-        from . import cardqueue          # ...a no, like any card's: what waits behind it is its agent's to decide on first
-        try: cardqueue.said_no(store, rv, 'reject', actor)
-        except Exception as e: logger.warning(f"rv{rv['ReviewId']}: the agent was not told of the dropped email - {e}")
+    if rv and rv.get('Status') == 'pending': store.decide_review(rv['ReviewId'], 'rejected', None, actor, DROPPED)
     mark(store, tid, slot_id, done=True, actor=actor)
     store.audit('task', tid, 'slot_dropped', actor, detail={'to': hit['out'].get('name') or hit['out'].get('to'), 'kind': hit['out'].get('kind') or 'email'})
     return _left(store, tid, f"Dropped: {hit['text']}.", actor)

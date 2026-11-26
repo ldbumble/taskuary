@@ -18,7 +18,7 @@ import { AttachChip, fileChips, fileState, usePromptImages, useSendWhenUp } from
 import { holdUnsent } from "./unsent.js";
 import { baseName } from "./agentSteps.js";
 import { AgentSteps, PermitCtx } from "./AgentStepRows.jsx";
-import { chatSource, checkBackDue, waitingShown, eventsOf, turnSteps, hasParts, isPastCard, standing, heldAtEnd, AT_END, anchorOf, anchorShift, endAt, openAt, OPEN_HOLD, shrinkHeld, SHRINK_HOLD, turnParts, workCount, folds, ranUnder, foldLine, paintable, withMine, waitingChips, workingLine, waitingOn, askTurn, onYouTurn, askedFirst, runsOf, patchSteps, askOn, asksOff } from "./chatStream.js";
+import { chatSource, checkBackDue, waitingShown, eventsOf, turnSteps, hasParts, isPastCard, standing, heldAtEnd, AT_END, anchorOf, anchorShift, endAt, openAt, OPEN_HOLD, shrinkHeld, SHRINK_HOLD, turnParts, waitsLast, noCard, workCount, folds, ranUnder, foldLine, paintable, withMine, waitingChips, workingLine, waitingOn, askTurn, onYouTurn, askedFirst, runsOf, patchSteps, askOn, asksOff } from "./chatStream.js";
 import { stepLabel } from "./agentSteps.js";
 export { checkBackDue };
 import { detailFor, ownDetail, useOwnDetail } from "./chatDetail.js";
@@ -454,7 +454,6 @@ const ConvTurn = ({ t, more, ran = 0, cards, name, ask = null, later = false, ow
           {!!stopTries && <button type="button" className="tq-chip" data-tq-turn-stop-tries="" onClick={stopTries}>Cancel</button>}</div>}</div>}
       {/* ...what this turn asked him, where it asked it (the list's `asking.turn`): above its card, never at the chat's foot */}
       {ask}
-      {!!cards?.length && <div data-tq-turn-cards="">{cards}</div>}
       {/* ...what it left on him, at its FOOT, under its cards (design round 5, I3): said once they are pressed, it stood up over them - a line
           drawn in the middle of what was already there */}
       {/* ...and the dots say what is happening, or what we wait for, on every level: one quiet line that keeps its place (workingLine) -
@@ -462,6 +461,9 @@ const ConvTurn = ({ t, more, ran = 0, cards, name, ask = null, later = false, ow
       {live && <div className="tq-aui-thinking" role="status" aria-label="The agent is at work" data-tq-working="" {...(t.state === "starting" ? { "data-tq-starting-line": "" } : {})}><i /><i /><i />{compacting
         ? <span data-tq-compacting="" style={{ marginLeft: 8, fontSize: 12.5 }}>Compacting…</span>
         : doing ? <span className="tq-aui-working-line" data-tq-working-line="" title={doing}>{doing}</span> : null}</div>}
+      {/* ...AND ITS CARDS ARE ITS LAST THING, a turn at work's too (the owner, 2026-11-26): one still waiting from before this turn stands under
+          all the turn says while it works, its working line too - nothing is ever drawn under a card he has yet to press */}
+      {!!cards?.length && <div data-tq-turn-cards="">{cards}</div>}
     </div></div>;
 };
 const RetryCtx = React.createContext(null);
@@ -501,9 +503,11 @@ const wasCard = (c, rv) => <ReviewDecision key={c.id} past review={c.what !== "a
   : rv || { ReviewId: c.review, Kind: "action", DraftText: JSON.stringify({ what: c.was.text }) }} />;
 /* `items`: the server's list, with this page's own lines the server has not answered for yet (`mine`) already merged in by their names.
    `nodes`: the cards the page draws, by the review each is of ([{key, rid, node}]); `next`: the reply that waits, at the card it is. */
-function Conversation({ items, nodes = [], posts = [], reviews = [], next = null, landing: landed = null, landAt, name, tid, onChanged, ask = null, askAt = "", queue = null }) {
+function Conversation({ items: served, nodes = [], posts = [], reviews = [], next = null, landing: landed = null, landAt, name, tid, onChanged, ask = null, askAt = "", queue = null }) {
   // ONE CARD AT A TIME (cardqueue.py): what waits behind the card that stands is drawn nowhere on its own - the landing question too - and the
   // cards that came in a run are ONE card with a tab each (CardLine; the owner, 2026-11-25), standing at the row of the one in front (lineRuns)
+  // ...and a card that waits is the last thing: what the agent said after it stands above it (chatStream.waitsLast, the server's own rule)
+  const items = useMemo(() => waitsLast(served), [served]);
   const held = new Set(queue?.held || []), landing = held.has("land") ? null : landed;
   // THE WORK'S CARD IS PART OF THE AGENT TURN THAT DID IT, or not drawn at all (the owner, 2026-11-13: "stop putting worked on master at the
   // bottom ... it's part of the agent turn or doesn't belong at all"): the turn its newest change came in (landing.landingTurn); until the card
@@ -524,8 +528,12 @@ function Conversation({ items, nodes = [], posts = [], reviews = [], next = null
   const one = (c, inLine = false) => {
     // ...a draft no longer to press carries what it said (`was`); one he said no to says so. Either takes its review's node with it only where
     // the review has no card of its own left in the list (chatStream.standing) - an earlier version is drawn from its own words beside it
-    const past = isPastCard(c) || c.status === "passed", claim = () => nodes.forEach((n) => { if (n.rid === c.review) used.add(n.key); });
-    if (isPastCard(c) && c.status === "rejected") { if (!stands.has(c.review)) claim(); return [<NotSent key={c.id} c={c} />]; }
+    // ...AND THE CARD HE SAID NO TO IS STILL THE CARD (the owner, 2026-11-26: "cards never just disappear" - a dismissed post folded to a line
+    // naming none of its words): its own card with its words, Dismissed where its buttons stood; the plain note only where the page holds no
+    // card of it (noCard), and for an earlier version of a card that stands again
+    const no = isPastCard(c) && c.status === "rejected", bare = no && (stands.has(c.review) || noCard(c.review, nodes, posts));
+    const past = (isPastCard(c) && !no) || c.status === "passed", claim = () => nodes.forEach((n) => { if (n.rid === c.review) used.add(n.key); });
+    if (bare) { if (!stands.has(c.review)) claim(); return [<NotSent key={c.id} c={c} />]; }
     if (isPastCard(c) && stands.has(c.review)) return [wasCard(c, rv(c.review))];
     if (held.has(c.review) && !past && !inLine) return [];
     const got = nodes.filter((n) => n.rid === c.review && !used.has(n.key)), post = posts.find((p) => p.ReviewId === c.review);

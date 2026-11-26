@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
-import { countOf, listCap, pressOf, progress, rowOf, rowState, running } from "../src/bulkCard.js";
+import { countOf, listCap, pressOf, progress, rowOf, rowOpens, rowState, running } from "../src/bulkCard.js";
 
 // ONE CARD FOR A BULK JOB (taskuary/bulkcard.py; the owner, 2026-11-16). Invented people and a stand-in repository.
 const mail = (id, to, extra = {}) => ({ ReviewId: id, Kind: "slot", Status: "pending", Batch: "b1", DraftText: "Hello - about Market St.",
@@ -160,4 +160,17 @@ test("a bulk card the chat moved past is the same card with its press, greyed, a
 test("rows open to review are given most of the window, a list of lines stays short", () => {
   assert.equal(listCap([{ id: 1 }, { id: 2 }]), 420);
   assert.equal(listCap([{ id: 1, open: true }, { id: 2 }]), "min(80vh, 900px)");
+});
+
+// The owner, 2026-11-26: "cards or anything generated on chat never go away" - a row's own card, open to review, folded to a line the moment
+// he pressed or dismissed it
+test("a row open in its own card stays open once it is settled, and the page gives a settled row its card", async () => {
+  const open = new Set();
+  assert.equal(rowOpens(11, 0, { open }), true, "the first few stand open to review");
+  assert.equal(rowOpens(13, 2, { open }), false);
+  assert.equal(rowOpens(13, 2, { open: new Set([13]) }), true, "one he opened");
+  assert.equal(rowOpens(11, 0, { open: new Set([-11]) }), false, "one he shut stays shut");
+  assert.equal(rowOpens(11, 0, { open, live: true }), false);
+  const src = (await import("node:fs")).readFileSync(fileURLToPath(new URL("../src/BulkCard.jsx", import.meta.url)), "utf8");
+  assert.match(src, /onCheck: \(\) => flip\(setSkip, r\.ReviewId\) \} : \{\}\),\s*open: shownRow\(r, i\)/, "open, and its card, whether the row waits or is settled");
 });

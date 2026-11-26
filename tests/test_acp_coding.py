@@ -693,10 +693,10 @@ def test_a_waiting_card_never_moves_under_a_turn_that_only_stopped_at_his_allow(
     assert until(lambda: tail() == ['turn', 'press', 'turn']), json.dumps([conversation.items(s, tid)['items'], s._rows('SELECT * FROM heard WHERE TaskId=?', (tid,)),
                                                                          codingchat.acp_updates(tid, t.sid)], default=str)[:8000]
     got = conversation.items(s, tid)['items']; turns = [x for x in got if x['kind'] == 'turn']
-    # ...and it never moved: greyed where it stood, raised again under his line once that turn ended without writing it again (walk 23; the
-    # owner, 2026-11-25: "Never bring back things on top. It's a chat.")
+    # ...and it never moved: greyed where it stood - and nothing brings it back by itself when that turn ends (the owner, 2026-11-26: "Nothing
+    # comes back automatically"; 11-25: "Never bring back things on top. It's a chat.")
     assert live() == [('own', 'passed')], got
-    assert not turns[-2]['cards'] and [(c['review'], c['status']) for c in turns[-1]['cards']] == [(cardqueue.again_of(s, rid), 'pending')], got
+    assert not turns[-2]['cards'] and not turns[-1]['cards'] and cardqueue.again_of(s, rid) is None, got
 
 
 def test_the_work_after_his_allow_never_counts_from_before_his_press(world, monkeypatch):

@@ -86,4 +86,4 @@ def perform(store, tid: int, p: dict, run=None) -> dict:
 def declined(store, tid: int, p: dict) -> None:
     "His Dismiss: the step is closed undone and its agent told it was not done, as his own no."
     from . import browsergate
-    browsergate.not_pressed(store, int(tid), str(p.get('request') or ''), 'they dismissed its card')
+    browsergate.not_pressed(store, int(tid), str(p.get('request') or ''), 'they dismissed its card', his=True)

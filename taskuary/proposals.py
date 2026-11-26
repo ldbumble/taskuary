@@ -839,7 +839,7 @@ def set_aside_drafts(store, tid: int, before: float = 0., mails=()) -> list:
     which calls this. `before`: when his own line came (every card, and the landing question); `mails`: the messages heard, as (when it
     joined, its row) - each greys only the cards it bears on. -> the review ids (and LAND)."""
     from . import landing
-    # ...which of them his own line alone greyed is kept (`line`): those stand again where the turn does not replace them (restore_set_aside);
+    # ...which of them his own line alone greyed is kept (`line`): those its agent can bring back (cardqueue.keep, comes_back);
     # one a message on its own thread passed is answered by that message - the newest wins, and it stays greyed
     mail = set(_older(store, tid, [(at, m) for at, m in mails or () if at]))
     line = [r for r in (_older(store, tid, [(before, None)]) if before else []) if r not in mail]
@@ -850,43 +850,25 @@ def set_aside_drafts(store, tid: int, before: float = 0., mails=()) -> list:
     return out
 
 
-UNTIL = 'greyed until this turn ends - it is raised again under his newest line as it was unless a card raised in the turn takes its place'
+# NOTHING HIS LINE GREYED COMES BACK BY ITSELF (the owner, 2026-11-26: "Nothing comes back automatically ... if the reply is still the right
+# choice after a clarifying question then of course bring it back" - his line asked for a routine change and then a new post; at the turn's end
+# Taskuary raised the OLD post again beside the routine card: "then it showed the old post not even the new one?"). The greyed card stays greyed
+# where it stood; whether it is still right is its agent's to judge, and it stands again only by the agent's keep (cardqueue.keep)
+UNTIL = 'greyed by his line - it stays greyed where it stood, and stands again under his newest line only where you keep it (keep_card)'
 def comes_back(store, r: dict) -> bool:
-    """Is `r` a card HIS OWN LINE greyed (set_aside_drafts' record of it) that stands again by itself when the turn ends (restore_set_aside) -
-    what its agent is told of it (UNTIL)? Never a held step, nor one a message on its thread passed."""
+    """Is `r` a card HIS OWN LINE greyed (set_aside_drafts' record of it) that its agent can still keep (cardqueue.keep) - what it is told of
+    it (UNTIL)? Never a held step, nor one a message on its thread passed."""
     from .cardqueue import again_of
     if not (r.get('Status') == 'superseded' and r.get('DecideNote') == SET_ASIDE and r.get('TaskId') and _action(r) not in HELD_ACTS): return False
-    if again_of(store, r['ReviewId']): return False              # ...raised again once already: this one stays greyed where it stood
+    if again_of(store, r['ReviewId']): return False              # ...kept once already: this one stays greyed where it stood
     return any(r['ReviewId'] in (json.loads(a['Detail'] or '{}').get('line') or []) for a in store._rows(
         "SELECT Detail FROM audit WHERE EntityType='task' AND EntityId=? AND Action='cards_passed' AND CreatedAt>=?", (int(r['TaskId']), str(r.get('DecidedAt') or ''))))
-
-
-def restore_set_aside(store, tid: int) -> list:
-    """A CARD HIS LINE GREYED THAT THE TURN DID NOT REPLACE IS RAISED AGAIN UNDER HIS NEWEST LINE WHEN THE TURN ENDS (walk 23, 2026-11-25: a bug
-    report greyed a waiting LinkedIn post and a reply for good, and each agent told him it "is ready on the card for you to press" - bringing
-    one back was left to the agent's keep_card, which one road in three called). Plain code, every road (workerstate.record's turn_end) and
-    every kind: each card set aside since the agent last rested (workerstate.rested: a turn that ended on its question raises nothing under
-    it - the card waits for his answer's turn) comes back as it was, a new card under the line (cardqueue.keep;
-    the owner: "Never bring back things on top. It's a chat.") with the greyed one left where it stood - never one a card raised since takes
-    the place of (the same card by its name, cardqueue.what: the rewrite is what greys it for good), one the agent withdrew, nor a held step
-    (its gate holds it anew when it is run again). And a turn the AI never answered sets nothing aside the same way (design round 4, H3: a
-    draft stood greyed for 43 minutes while the provider failed turn after turn). -> the new cards' ids."""
-    from . import cardqueue
-    from .workerstate import rested
-    since = rested(store, int(tid))
-    us = cardqueue._units(store, int(tid), set())
-    name, out = (lambda u: cardqueue.what(store, u, True)), []
-    for u in us:
-        rs = [r for r in u['rows'] if str(r.get('DecidedAt') or '') >= since and comes_back(store, r)]
-        if not rs or any(v is not u and v['rids'] != [LAND] and v['rows'][0]['ReviewId'] > rs[-1]['ReviewId'] and name(v) == name(u) for v in us): continue
-        out += [r['ReviewId'] for r in rs]
-    return list((cardqueue.keep(store, int(tid), ' + '.join(f'rv{i}' for i in out), 'taskuary').get('kept') or {}).values()) if out else []
 
 
 def bears(store, r: dict, m: dict | None, at: float = 0.) -> bool:
     """DOES AN INPUT BEAR ON CARD `r` - what it greys (the owner, 2026-11-23, narrowing 11-16's "any input greys every waiting card": a chat
     line from one colleague greyed another's ready reply, and its agent redrafted it for nothing). His own line on the task (`m` None) bears on
-    every card - he is redirecting, and what the turn it starts does not replace stands again at its end (restore_set_aside) - EXCEPT HIS ANSWER
+    every card - he is redirecting, and what still stands is its agent's to bring back (cardqueue.keep) - EXCEPT HIS ANSWER
     TO THE AGENT'S OWN QUESTION (walk 23: "Keep both" under a question about X greyed the LinkedIn card for good, and its agent said it waited),
     which is no moving on (workerstate.answering). A message bears only on a card to someone it is from - his own, to someone it went to - or
     on a card written on its own thread. Structure, never meaning."""

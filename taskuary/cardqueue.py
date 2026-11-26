@@ -3,8 +3,10 @@ step or action card, so the agent should wait on it and then go to next steps ..
 In chat flow it makes more sense"). Every card on a task - a reply or an email to Send, an act to Approve (a push, a PR, a post, a SQL write,
 a held step), a calendar answer, the landing question - stands in ONE line, in the order it was raised. Only its front is live; the rest are
 held: drawn nowhere, named on the front as what comes next. One comes forward the moment the owner has pressed the one before it; the agent
-hears the row once it is over (row_over), at once where a press failed, and from a no where cards still stand behind it (said_no) - it then
-lets the rest stand, changes them, or takes them back. A press never sends or closes another card; nothing goes without its own press.
+hears the row once it is over (row_over) where a step of its own follows, and at once where a press failed. HIS NO WAKES NOBODY WHILE A CARD
+STILL WAITS (the owner, 2026-11-26: Dismiss on two tabs of three woke the agent twice, and it wrote under the card still waiting): it is
+recorded on its card and is that card's event (events.card), told as his own - at once where his no left nothing waiting (verdicts._row_ended),
+else with the agent's next turn. A press never sends or closes another card; nothing goes without its own press.
 
 Plain code, read wherever a card is drawn, listed or told: the chat's list (conversation.items), the page's detail (server.task_detail), what
 waits on the owner (store.waiting_reviews), and what its agent hears (agenttools, events.py, general.approved/failed)."""
@@ -154,18 +156,18 @@ def row_over(store, tid: int) -> bool:
     return not any(u['rids'] == [LAND] or _waits(u) for u in state(store, tid)['units'])
 
 
-def unheard(store, tid: int) -> bool:
-    "Has a yes of his on a card of the line gone since task `tid`'s agent last answered, told to nobody yet (general.TOLD)?"
+def unheard(store, tid: int) -> list:
+    "His yeses on cards of the line gone since task `tid`'s agent last answered that it was never woken on (general.TOLD), oldest first."
     from .general import TOLD, _last_answer
     told = lambda r: store._one("SELECT 1 AS x FROM audit WHERE EntityType='review' AND EntityId=? AND Action=? AND CreatedAt>=?", (r['ReviewId'], TOLD, r['DecidedAt']))
-    return any(in_line({**r, 'Status': 'pending', 'DecideNote': None}) and not told(r) for r in store._rows(
-        "SELECT * FROM review WHERE TaskId=? AND Status IN ('approved','edited') AND DecidedAt>?", (int(tid), _last_answer(store, int(tid)) or '')))
+    return [r for r in store._rows("SELECT * FROM review WHERE TaskId=? AND Status IN ('approved','edited') AND DecidedAt>=? ORDER BY ReviewId",
+                                   (int(tid), _last_answer(store, int(tid)) or '')) if in_line({**r, 'Status': 'pending', 'DecideNote': None}) and not told(r)]
 
 
-# A CARD HIS INPUT GREYED THAT STILL STANDS COMES BACK UNDER HIS NEWEST LINE AS IT WAS (the owner, 2026-11-23 - walk 6: the same three posts
-# proposed four times, each a model call and one more grey copy, and a reply to Paula greyed by Gail's unrelated message). An input greys what
-# it bears on (proposals.set_aside_drafts) and what the turn it starts does not replace is raised again when that turn ends, by plain code
-# (proposals.restore_set_aside; walk 23: left to this verb, two roads in three never called it) - the verb only brings one back sooner
+# A CARD HIS INPUT GREYED THAT STILL STANDS COMES BACK ONLY BY ITS AGENT'S KEEP (the owner, 2026-11-26: "Nothing comes back automatically" -
+# Taskuary's own re-raise at the turn's end stood the OLD post beside the card the turn had raised; 11-23, walk 6: the same three posts proposed
+# four times, each a model call and one more grey copy). An input greys what it bears on (proposals.set_aside_drafts); whether one is still
+# right is its agent's to judge, and `keep` raises it again as it was - no rewrite
 # ...AS A NEW CARD UNDER THE LINE, NEVER LIVE AGAIN ABOVE IT (the owner, 2026-11-25: "Never bring back things on top. It's a chat."): the
 # greyed one stays greyed where it stood, and is raised again once (again_of)
 # ...AND AN ACT HIS PRESS HANDED TO ITS AGENT THAT CANNOT BE DONE COMES BACK (walk 7, 2026-11-23: Post via the browser on the X card,
@@ -201,10 +203,8 @@ def asking(store, tid: int) -> bool:
     return selfclose.asks_now(tid) or bool(taskstate.open_question(store, tid))
 
 
-ASKED = ('Greyed while your question stands - he cannot press it; it stands again under his answer when the turn his answer starts ends, '
-         'unless that turn raises its replacement or withdraws it')
-WAITS = ('your question to the owner stands - nothing is raised under it; a greyed card that still stands is raised again under his answer '
-         'when the turn it starts ends')
+ASKED = 'Greyed while your question stands - he cannot press it; it stands again only where you keep it (keep_card) once he has answered'
+WAITS = 'your question to the owner stands - nothing is raised under it; a greyed card can be kept once he has answered'
 def keep(store, tid: int, which, by: str = 'agent', why: str = '') -> dict:
     """Raise again each greyed card `which` names ('rv12 + rv13') on task `tid` as a new card, the same words and envelope, drawn under the
     newest line - and an act his press handed to its agent that it could not do (handed), with `why`, which its failed press then says.
@@ -433,7 +433,7 @@ def line(s: dict) -> str:
 
 SCREEN_HEAD = ("WHAT THE OWNER'S SCREEN SHOWS ON THIS TASK NOW, AND WHAT CAME OF EACH CARD (Taskuary's record - a card it does not name is not "
                'on his screen; his own line greys what waited - never his answer to your question - a message only the cards to its sender or on '
-               'its thread, and a greyed card that no card raised in the turn replaces stands again as it was when the turn ends):')
+               'its thread, and a greyed card stays greyed where it stood unless you keep it):')
 NOTHING = 'Nothing waits for his press.'
 SETTLED = 6                     # the settled cards told, newest last: enough that a sent letter is never drafted again
 
@@ -485,7 +485,7 @@ def screen(store, tid: int, skip=()) -> str:
         ids = [w['ReviewId'] for w in _waits(u)] or u['rids']
         return (f"{' + '.join(f'rv{x}' for x in ids)}, {what(store, u, True)}" if len(u['rows']) > 1 else what(store, u, True)) + (f': {w}' if r and (w := _words(r)) else '')
     def greyed(r, n):
-        # ...one his line greyed comes back by itself (proposals.restore_set_aside); a held step, one a message passed or its turn finished without, never
+        # ...one his line greyed is its agent's to keep (keep); a held step, one a message passed or its turn finished without, never
         # ...and while its question stands, the truth of that wait: he cannot press it, and nothing brings it back before his answer's turn ends
         # (the owner, 2026-11-26: "it should not say it's waiting if you can't press it")
         head = ((ASKED if asking(store, tid) else UNTIL.capitalize()) if comes_back(store, r) else 'Greyed by an input your turn has not heard yet' if r.get('Status') == 'pending' else 'Greyed, will not go')
@@ -549,16 +549,3 @@ def on_page(store, tid: int) -> list:
 
 def _flat(x, n: int = 200) -> str: return ' '.join(str(x or '').split())[:n]
 
-
-def said_no(store, rv: dict, verb: str, actor: str = 'owner') -> str:
-    """A NO DOES NOT CARRY THE LINE ON BY ITSELF (the owner, 2026-11-16): his no to a card with others behind it wakes its agent, told whose no
-    it was, to decide what of the rest still stands - what it leaves is shown once its turn ends. 'told', 'woke' or '' (nothing waits)."""
-    from . import general
-    from .proposals import HELD_ACTS
-    tid = rv.get('TaskId')
-    # ...(a held step turned down tells its agent by its own road, the gate's; and Close without sending a reply closes the task)
-    if _p(rv).get('action') in HELD_ACTS or verb == 'close_unsent' and rv.get('Kind') != 'slot': return ''
-    # ...and a no that ends a row whose yeses woke nobody (row_over) is the row's one wake
-    if not tid or not (state(store, tid)['units'] or unheard(store, tid)): return ''
-    # ...his no is its card's event (events.card): this wakes the agent to hear it
-    return general.to_agent(store, tid, '', actor, heard=lambda how: store.audit('review', int(rv['ReviewId']), general.TOLD, actor, 'system', {'task': int(tid), 'how': how, 'no': verb}))

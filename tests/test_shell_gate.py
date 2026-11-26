@@ -498,6 +498,31 @@ class ReadingOutside(unittest.TestCase):
                     'cat "$TASKUARY_OUTPUTS/total.txt"', 'ls $PWD', '[Math]::Round(2.5)'):
             self.assertEqual(rg.of_command(self.s, self.tid, cmd, self.work), ([], ''), cmd)
 
+    def test_a_substitution_that_only_prints_its_own_words_is_those_words_and_a_pages_script_is_text(self):
+        """Walk 24 (2026-11-25): a look at what a page's post box held - its script handed to agent-browser's eval through `$(printf | base64)` -
+        was held as "read files at a path it builds from a variable", pending for good with no button; a commit message or a pull request's
+        body handed over as `"$(cat <<'EOF' ...)"` was held the same way. A `$(...)` that only prints its own words is those words, judged as
+        any word of the line; the script a page runs is text. What a `$(...)` runs is still read, and a value only a run can give still held."""
+        from pathlib import Path
+        from taskuary import readgate as rg
+        Path(self.secret).touch()
+        for cmd in ("git commit -m \"$(cat <<'EOF'\nFix the rounding in totals\n\nIt summed before tax, in /ledger/totals.py.\nEOF\n)\"",
+                    "gh pr create --title 'Fix rounding' --body \"$(cat <<'EOF'\nSums after tax now.\nEOF\n)\"",
+                    "git commit -m \"$(printf 'Fix the rounding')\"", 'git tag -a v2 -m "$(echo release two)"',
+                    'JS=\'JSON.stringify(Array.from(document.querySelectorAll("textarea")).map(function(e){return e.value}))\'\n'
+                    'agent-browser eval -b "$(printf \'%s\' "$JS" | base64 -w0)"'):
+            self.assertEqual(rg.of_command(self.s, self.tid, cmd, self.work), ([], ''), cmd)
+        # ...the words it prints are judged as the path they are, and what a script's `$(...)` runs as the command it is
+        for cmd in ('cat "$(echo "$TASKUARY_HOME/config.toml")"', 'cat $(echo $TASKUARY_HOME/config.toml)', 'cat "$(printf \'%s\' "$TASKUARY_HOME/config.toml")"',
+                    f'agent-browser eval "$(cat \'{self.secret}\')"', f'agent-browser eval -b "$(base64 -w0 \'{self.secret}\')"'):
+            self.assertEqual(rg.of_command(self.s, self.tid, cmd, self.work), ([], rg.NEVER), cmd)
+        # ...and a value only a run can give is held, as ever: a format that builds the path, a pipe that decodes one, a program's answer, and
+        # a heredoc under a bare mark, whose body the shell runs
+        for cmd in ('cat "$(printf \'%s/notes.txt\' "$HOME")"', 'cat "$(echo L2hvbWU= | base64 -d)"', 'grep -rl token "$(printenv HOME)"',
+                    'cat "$(cat <<\'EOF\' | tr a b\nx\nEOF\n)"', f'git commit -m "$(cat <<EOF\nnote $(cat \'{self.secret}\')\nEOF\n)"'):
+            held, never = rg.of_command(self.s, self.tid, cmd, self.work)
+            self.assertEqual((bool(held), never), (True, ''), cmd)
+
     def test_a_sign_in_place_stays_closed_inside_a_work_folder_or_behind_a_glob(self):
         """The never-list was judged after the work area and after a glob was cut to its folder: a task whose checkout is the home folder
         (a dotfiles repository) read the sign-ins in it freely, and once the owner let a task read his home folder, `cat ~/.s*/<key>`

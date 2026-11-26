@@ -309,6 +309,32 @@ def _segments(cmd: str) -> list:
     return out
 
 
+# A `$(...)` THAT ONLY PRINTS ITS OWN WORDS IS THOSE WORDS (walk 24, 2026-11-25: a commit message handed over as `-m "$(cat <<'EOF' ...)"` - how
+# Claude Code writes every commit - and a pull request's body the same way were held as "read files at a path it builds from a variable"): the
+# shell's own grammar, read before the line is cut - echo's words, printf's one literal (or what its bare %s prints), a quoted heredoc fed to cat. Put
+# in its place, each word is judged as any other word of the line: `cat "$(echo ~/.ssh/x)"` reads that path, and a message reads none. One
+# that runs anything else, pipes or reads a file is a value only a run can give, as before (_RUNS)
+_SUBST = re.compile(r'(")?\$\(([^()`|;&>]*)\)(?(1)")')
+def _printed(m) -> str:
+    from .browsergate import words
+    w = words(m[2])
+    tool, args = (w[0].lower() if w else ''), w[1:]
+    # ...a heredoc under a QUOTED mark: its body is text as written - under a bare one the shell runs the `$(...)` in it, which no one read here
+    if tool == 'cat' and len(args) >= 2 and args[0] in ('<<', '<<-') and len(set(args[1:])) == 1 and re.search(r'<<-?\s*[\'"]', m[2]): said = ''
+    elif '<' in m[2]: return m[0]
+    elif tool == 'echo': said = ' '.join(x for x in args if not re.fullmatch(r'-[neE]+', x))
+    elif tool == 'printf' and len(args) == 1 and '%' not in args[0].replace('%%', ''): said = args[0]
+    elif tool == 'printf' and len(args) > 1 and args[0] in ('%s', '%s\\n'): said = ' '.join(args[1:])
+    else: return m[0]
+    return '"' + said.replace('"', '\\"') + '"' if m[1] else said
+def _literal(cmd: str) -> str:
+    "The line with each `$(...)` that only prints its own words replaced by them (_printed) - innermost first."
+    for _ in range(8):
+        if (new := _SUBST.sub(_printed, cmd)) == cmd: break
+        cmd = new
+    return cmd
+
+
 # WHAT A LINE WRITES, BY ITS GRAMMAR (red team F2): a redirect's target, and the file a writing program is named on - its destination for a copy
 # or a move. Judged as writes (judge, write=True), never as reads: a program's own folder is free to read and never free to write
 _REDIRECT = re.compile(r'^\d?>>?&?$|^&>$')
@@ -319,14 +345,14 @@ def command_paths(cmd: str, cwd: str = '', env: dict = None, made: list = None, 
     it cannot read. The program itself, options, URLs and switches (`/s`) are not paths. `made` gets the files the line writes rather than
     reads: a browser screenshot's picture (walk 16: the agent's own screenshot in Temp stood as a card asking to read it). `writes`, where
     given, gets the paths it writes (_REDIRECT, _WRITERS, _COPIES) instead of the list it returns."""
-    from .browsergate import _head, types, words
+    from .browsergate import _head, _verb, types, words
     from .shellgate import _OWN, shell_text, unwrap
     # ...a line that is a shell started on a script (Codex's every call) is read as that script, whole: cut at the `;` inside its quotes first,
     # `$outDir = "<its outputs folder>"; New-Item $outDir` lost its assignment and the task's own folder was held as a variable it could not
     # read (the HIPAA walk, 2026-11-21)
     if (inner := unwrap(cmd))[0]: return command_paths(inner[1], cwd, env, made, writes)
     out, here, env, reads = [], cwd, dict(env or {}), False
-    for seg in _segments(shell_text(str(cmd or ''))):        # ...a heredoc's or a here-string's body is data, never a path read
+    for seg in _segments(_literal(shell_text(str(cmd or '')))):        # ...a heredoc's or a here-string's body is data, never a path read
         # ...a path kept in a variable is read where the variable is (`$p='C:/x.csv'; Get-Content $p` - the real-CLI walk, 2026-11-16)
         if (m := re.match(r'^\s*\$?([A-Za-z_]\w*)\s*=\s*([^=].*)$', seg)):
             v = m[2].strip().strip('"\'')
@@ -348,6 +374,10 @@ def command_paths(cmd: str, cwd: str = '', env: dict = None, made: list = None, 
         reads = reads or not (lists or tool in _NAMES)
         shot = (a := _head(w)) is not None and next((x.lower() for x in a if not x.startswith('-')), '') == 'screenshot'
         if a is not None and types(a): continue                 # ...words typed into a page's box are text, never a path (browsergate.types)
+        # ...and the script a page is handed to run (agent-browser's eval, by its grammar) is text the same way: a `$(...)` that builds it names
+        # no file of its own (walk 24: a look at what the post box held, its script piped through base64, was held as a read at a path built
+        # from a variable, and stayed pending for good). What that `$(...)` itself runs is read as the commands it is, as ever
+        script = a is not None and _verb(a)[0] == 'eval'
         if tool == 'join-path': w = [w[0], os.sep.join(x for x in w[1:] if not x.startswith('-'))]     # ...the one path it builds
         # ...a `$(...)` that is a word of its own, never one inside a string's text (`"rows: $((Import-Csv $p).Count)"`)
         sub = bool(re.search(r'(?:^|\s)' + '"' * (seg.count('"') % 2) + r'\$\s*$', seg))
@@ -363,7 +393,7 @@ def command_paths(cmd: str, cwd: str = '', env: dict = None, made: list = None, 
             x = re.sub(r'^\d?[<>]+&?', '', x)
             # ...an option's value is read as its own word, and so is a `name=value` operand's (`dd if=<home>/config.toml`, red team #3)
             if x.startswith('-') or re.match(r'^[A-Za-z_][\w.-]*=', x): x = x.split('=', 1)[1] if '=' in x else ''
-            if x == '$' and not sub: continue
+            if x == '$' and (script or not sub): continue
             if (v := _VAR.fullmatch(x)) and (v[1] or v[2]).lower() in env: x = env[(v[1] or v[2]).lower()]
             # ...after a `cd` away, a plain name that is there is read there (`cd ~ && cat .ssh/x`)
             near = here != cwd and here and x and not x.startswith('-') and os.path.exists(os.path.join(here, x))

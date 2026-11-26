@@ -330,6 +330,27 @@ def followups(store, hours: int, want=('followup', 'promise')) -> list:
     return out
 
 
+def follow_up_on(store, ask_mid: int, actor: str = 'owner') -> dict:
+    """HIS PRESS ON A FOLLOW-UP LINE (the owner, 2026-11-26: "information without action is not worth much"): the thread his sent message
+    `ask_mid` waits on goes to its task's agent as his own line, by the one road his words take (general.to_agent - a closed task opens
+    again there). A thread on no task gets one from the other side's last word, by the road Make it a task takes (ingest.task_from_message),
+    his ask with it. Everything is read from the stored message; the reply is the agent's to raise as a card, for his press.
+    -> {'taskId', 'ref', 'said'}; LookupError where the message is not a sent one of his with somebody on its thread."""
+    r = store.get_message(ask_mid) or {}
+    if not r.get('ConversationId') or not (r.get('Status') == 'context' or r.get('Direction') == 'out'): raise LookupError('that is not a message you sent')
+    inbound = _other_side(store, r['ConversationId'])
+    if not inbound: raise LookupError('nobody wrote on that thread, so there is nobody to follow up with')
+    from . import general, ingest
+    tid = r.get('TaskId') or inbound.get('TaskId')
+    if not tid:
+        tid = ingest.task_from_message(store, inbound['MessageId'], actor, 'general')
+        store.sent_onto_task(r['MessageId'], tid, f"your sent mail - what {task_ref(tid)} follows up on")
+    who, subj = inbound.get('FromName') or inbound.get('FromEmail') or 'them', _short(inbound.get('Subject'), 60)
+    said = f"Follow up with {who}" + (f' on "{subj}"' if subj else '')
+    general.to_agent(store, tid, said, actor, frm='owner', wait=False)
+    return {'taskId': tid, 'ref': task_ref(tid), 'said': said}
+
+
 def promises_due(store, now=None) -> list:
     """The owner's own open promises whose day - the one the model read out of their words (sentjudge) - is TODAY.
     [{'who', 'what', 'mid'}] - the arrival's one promise line (welcome.py)."""

@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { parseDigest } from "../src/digestText.js";
+import { doorOf, parseDigest } from "../src/digestText.js";
 
 test("a successful digest keeps emoji sections and turns their items into section lists", () => {
   const got = parseDigest("🚨 Errors\n1. Payroll import failed.\n\n📅 Meetings today\n1. 9:00 — Standup\n2. 2:00 — Budget\n");
@@ -48,4 +48,10 @@ test("a failed digest's wrapped block explanations are headings, never numbered 
     ["❔ Not judged yet", ["Ray Colton wrote Tue re \"PR\""]],
     ["📥 What arrived", ["x2 [ignored] vendor.example: \"Vendor create\""]],
   ]);
+});
+
+test("a link in the brief is its door: a follow-up by the sent message it waits on, a task by its id, anything else a way out", () => {
+  assert.deepEqual(doorOf("http://127.0.0.1:7787/#followup=4821"), { kind: "followup", mid: 4821 });
+  assert.deepEqual(doorOf("http://127.0.0.1:7787/#task=12"), { kind: "task", tid: 12 });
+  assert.equal(doorOf("https://vendor.example/renewal"), null);
 });

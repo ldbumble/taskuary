@@ -21,6 +21,13 @@ const RAW_HEADINGS = [
   ["THE WINDOW IN NUMBERS", "📊 At a glance"],
 ];
 
+// THE DOOR A LINK IN THE BRIEF IS (digest.app_link): a line about something somebody else owes carries #followup=<his sent message> - its
+// press prepares the follow-up on that thread's task - and any other line its task's #task=<id>. null: a link out of the app
+export const doorOf = (url) => {
+  const f = /#followup=(\d+)/.exec(String(url || "")), t = /#task=(\d+)/.exec(String(url || ""));
+  return f ? { kind: "followup", mid: Number(f[1]) } : t ? { kind: "task", tid: Number(t[1]) } : null;
+};
+
 const emojiHeading = (line) => /^\s*\p{Extended_Pictographic}/u.test(line);
 const rawHeading = (line) => RAW_HEADINGS.find(([raw]) => line.trimStart().startsWith(raw));
 const cleanItem = (line) => line.trim().replace(/^[-*]\s+/, "").replace(/^\d+[.)]\s+/, "");

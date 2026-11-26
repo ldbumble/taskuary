@@ -109,6 +109,7 @@ ALLOWED_WRITES = (
     # job (/api/ai/route_rules) stays refused, as adopt-brain does: a visitor changing what reads the mail is not a tour
     r'^/api/tasks/\d+/judged$',
     r'^/api/messages/\d+/reply$',                      # puts a draft on the table - only approving it sends
+    r'^/api/messages/\d+/follow-up$',                  # ...and a brief's Follow up: his line to the task's agent, as a typed one - nothing is sent
     r'^/api/messages/\d+/calendar$',                   # ...and a calendar answer the same way: drafted, never sent (calwrite.py)
     r'^/api/meetings$',                                # ...and New → Meeting's pick: a task and its invite drafted, never sent (calwrite.draft_new)
     r'^/api/reviews/\d+/draft$',

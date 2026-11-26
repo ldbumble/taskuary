@@ -331,6 +331,76 @@ class BriefConsolidatesTheAssistantTests(unittest.TestCase):
         self.assertIn('Chase the Q3 budget', block); self.assertIn('(open', block)
 
 
+# ── A FOLLOW-UP LINE IS A DOOR (the owner, 2026-11-26: "information without action is not worth much") ───────────────────────────────────
+ALEX, ERIN = 'alex@northwind.example', 'erin@northwind.example'
+
+
+def _asked(s, conv, tid=None, days=8):
+    "Erin wrote; Alex answered with a question (sentjudge's stored verdict) and nothing came back. -> (her message, his)"
+    theirs = s.add_message({'TaskId': tid, 'ExternalId': f'in:{conv}', 'ConversationId': conv, 'Channel': 'email', 'SourceName': ALEX,
+                            'Subject': 'Ledger export access', 'FromName': 'Erin Blake', 'FromEmail': ERIN, 'SentAt': _ago(days + 1),
+                            'BodyText': 'Which sites do you need?', 'Status': 'routed' if tid else 'filed', 'SenderClass': 'person'})
+    mine = s.add_message({'TaskId': tid, 'ExternalId': f'out:{conv}', 'ConversationId': conv, 'Channel': 'email', 'SourceName': ALEX,
+                          'Subject': 'RE: Ledger export access', 'FromName': 'Alex Doyle', 'FromEmail': ALEX, 'SentAt': _ago(days),
+                          'BodyText': 'All four - can you grant it this week?', 'Status': 'context', 'Direction': 'out'})
+    s.put_sent_verdict(mine, conv, True, False, '', None, 'model')
+    return theirs, mine
+
+
+@contextmanager
+def _pressed():
+    "The press's road with its last step - the kind's own starter - recorded instead of run: [(task, his line)], once the start's thread is through."
+    import threading
+    from taskuary import general
+    began, before = [], set(threading.enumerate())
+    with mock.patch.object(general, '_start_line', lambda store, tid, t, text, *a, **k: began.append((tid, text))), \
+            mock.patch('taskuary.origin.keeps_him', return_value=None):
+        yield began
+        for th in set(threading.enumerate()) - before: th.join(5)
+
+
+class FollowUpDoorTests(unittest.TestCase):
+    def setUp(self):
+        self.s = MemoryStore()
+        self.s.set_setting('calendar_enabled', '0', 't'); self.s.set_setting('owner_email', ALEX, 't')
+
+    def test_a_follow_up_line_carries_the_sent_message_it_waits_on(self):
+        tid = self.s.create_task({'Title': 'Get the ledger export access', 'Kind': 'general', 'Status': 'done'}, 'owner')
+        _, mine = _asked(self.s, 'f1', tid)
+        _, bare = _asked(self.s, 'f2')                                    # a thread on no task: the door is the same
+        loops = digest.gather(self.s, 1).split('MY OPEN LOOPS')[1].split('WAITING ON THE OWNER')[0]
+        lines = [l for l in loops.splitlines() if l.strip().startswith('[followup]')]
+        self.assertEqual(sorted(l.rsplit(' ', 1)[1] for l in lines), sorted(digest.followup_link(m) for m in (mine, bare)), loops)
+        self.assertTrue(all(l.count('http') == 1 for l in lines), 'one door a line')
+
+    def test_follow_up_on_a_closed_task_reopens_it_and_his_line_reaches_its_agent_once_with_nothing_sent(self):
+        tid = self.s.create_task({'Title': 'Get the ledger export access', 'Kind': 'general', 'Status': 'done'}, 'owner')
+        _, mine = _asked(self.s, 'f1', tid)
+        n = len(self.s.list_messages(tid))
+        with _pressed() as began:
+            out = assistant.follow_up_on(self.s, mine)
+        self.assertEqual(out['taskId'], tid)
+        self.assertEqual(self.s.get_task(tid)['Status'], 'open', 'a closed task opens again')
+        self.assertEqual(began, [(tid, 'Follow up with Erin Blake on "Ledger export access"')], 'his line, to its agent, once')
+        # ...and the reply is the agent's to raise as a card: the press wrote no draft and sent nothing
+        self.assertEqual(self.s._rows('SELECT ReviewId FROM review'), [])
+        self.assertEqual(len(self.s.list_messages(tid)), n)
+
+    def test_follow_up_on_a_sent_mail_with_no_task_makes_one_from_its_thread(self):
+        theirs, mine = _asked(self.s, 'f2')
+        with _pressed() as began:
+            tid = assistant.follow_up_on(self.s, mine)['taskId']
+        self.assertTrue(self.s.get_task(tid), 'the thread has a task now')
+        self.assertEqual({self.s.get_message(m)['TaskId'] for m in (theirs, mine)}, {tid}, 'her word and his ask are both on it')
+        self.assertEqual(began, [(tid, 'Follow up with Erin Blake on "Ledger export access"')])
+        self.assertEqual(self.s._rows('SELECT ReviewId FROM review'), [])
+
+    def test_a_message_that_is_not_his_sent_one_opens_no_door(self):
+        theirs, _ = _asked(self.s, 'f1')
+        with self.assertRaises(LookupError): assistant.follow_up_on(self.s, theirs)
+        with self.assertRaises(LookupError): assistant.follow_up_on(self.s, 99999)
+
+
 if __name__ == '__main__': unittest.main()
 
 

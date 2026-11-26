@@ -15,8 +15,8 @@ the repository's invented ones at `northwind.example`. The replies and the agent
 ones take, and the view is the spec a real agent hands `show` (`availability`, the same `id` each time): the counts
 and the best slot are worked out by the page, not written in the script.
 
-The view stays where it was first drawn and the replies stand under it, so after the second reply the recording
-wheels the chat up to hold the view in sight, and goes down to the answer and the invite at the end.
+Each time the agent shows the view again it is drawn once, under the newest reply, and no older copy stays above
+it - so the view is in sight through every reply, with no scrolling by hand.
 
 ```powershell
 # from website/: build the app the demo serves

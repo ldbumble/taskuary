@@ -58,6 +58,31 @@ class TheHostedBrainDoorTests(unittest.TestCase):
             self.assertEqual(getattr(brain, 'session_id', None), 'thread-7')
 
 
+class ACliBuiltOutsideTheOneDoorTests(unittest.TestCase):
+    """Round 5: the Assistant's CLI and a report's agent run are built by llm.make_cli_llm directly, past build_llm's wrapper - and a
+    CLI's instructions go by a road of their own (a system file), so what was in them left as it was. Both come back scrubbed now."""
+    SYSTEM = 'You are the Assistant. MEMORY: Erin Blake, SSN 078-05-1120, portal password: chirp-pass9'
+
+    def _seen(self, build):
+        seen = {}
+        def cli(system, user, **kw): seen.update(system=str(system), user=user); return 'ok'
+        with mock.patch.object(llm, 'make_cli_llm', return_value=cli): build(seen)
+        self.assertNotIn('078-05-1120', seen['system']); self.assertNotIn('chirp-pass9', seen['system'])
+        self.assertIn('[redacted:ssn]', seen['system'])
+
+    def test_the_assistants_cli(self):
+        from taskuary import concierge
+        s = MemoryStore()
+        with mock.patch.object(concierge, 'pick', return_value='cli:claude'):
+            self._seen(lambda seen: concierge.brain(s)(self.SYSTEM, 'next'))
+
+    def test_a_reports_agent_run(self):
+        from taskuary import agents, reports
+        s = MemoryStore()
+        with mock.patch.object(agents, 'connection_brains', return_value=[('claude', 'Claude')]), mock.patch.object(reports, 'AGENT_SYSTEM', self.SYSTEM):
+            self._seen(lambda seen: reports.run_agent({'store': s, 'agent': 'claude', 'prompt': 'Weekly ledger review'}))
+
+
 class _FakeProc:
     """Enough of a Popen for run_cli to finish one turn, recording what was fed to stdin."""
     def __init__(self, fed): self.fed, self.returncode = fed, 0
@@ -245,6 +270,16 @@ class NoSsnOrBirthDateLeavesTests(unittest.TestCase):
                              lambda name, args: INTAKE)
         self.assertMasked(out['result']['content'][0]['text'])
 
+    def test_a_tool_answer_that_is_rows(self):
+        """Round 5: an answer that is JSON - rows, each value under its key, a note whose lines are serialized - left with the SSN its key
+        named and the one at a line's start."""
+        from taskuary import agenttools
+        rows = json.dumps({'rows': [{'name': 'Erin Blake', 'ssn': '078051120', 'dob': '010590', 'note': 'Erin Blake\n666-12-3456\nvisit 12/01/2026'}]}, indent=1)
+        out = agenttools.rpc({'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call', 'params': {'name': 'run_system', 'arguments': {}}},
+                             lambda name, args: rows)['result']['content'][0]['text']
+        for raw in ('078051120', '010590', '666-12-3456'): self.assertNotIn(raw, out)
+        self.assertEqual(json.loads(out)['rows'][0]['note'], 'Erin Blake\n[redacted:ssn]\nvisit 12/01/2026')
+
     def test_the_context_file_an_agent_reads_off_disk(self):
         from pathlib import Path
         from taskuary import context
@@ -394,6 +429,18 @@ class TheCardHarnessRelayTests(unittest.TestCase):
         h = {k.lower(): v for k, v in seen['headers'].items()}
         self.assertEqual(h['authorization'], f'Bearer {CODE}'); self.assertNotIn('x-taskuary-token', h)
         self.assertIs(seen['allow_redirects'], False)
+
+    def test_rows_a_cli_read_itself_leave_masked_by_their_keys_and_at_a_lines_start(self):
+        """Round 5: a call's output that is JSON rode on as one string - "ssn": "078051120" by a rule for text, but a line-start SSN inside
+        it (the letter n of its serialized newline before it) and a run-together date of birth left whole."""
+        rows = json.dumps([{'name': 'Erin Blake', 'ssn': '078051120', 'dob': '010590', 'note': 'intake\n666-12-3456\nDOB\n01/05/1990'}])
+        body = {'model': 'hydrogen', 'input': [{'type': 'function_call_output', 'call_id': 'c1', 'output': rows},
+                                               {'type': 'function_call_output', 'call_id': 'c2', 'output': json.dumps(rows)}],
+                'metadata': {'ssn': '666123456'}}
+        _, seen, _ = self._ask(body)
+        sent = seen['data'].decode('utf-8')
+        for raw in ('078051120', '010590', '666-12-3456', '01/05/1990', '666123456'): self.assertNotIn(raw, sent)
+        self.assertEqual(json.loads(json.loads(sent)['input'][0]['output'])[0]['name'], 'Erin Blake')            # ...still the JSON it was
 
     def test_and_what_opencode_sends_the_same(self):
         body = {'model': 'hydrogen', 'messages': [

@@ -111,8 +111,8 @@ TOOLS = {
                      "whose pick comes back to you once, as his press. `elements` maps an id to {type, props, children?, on?}; `root` is drawn "
                      "first. Rows a Taskuary tool gave you as records ([{column: value}]) go into a table's or chart's `rows` as they are. "
                      "An availability draws who can make which times - each person's ranges on one time axis, how many are free in "
-                     "each slot and the best slot, counted on the page from the ranges alone. A view with an `id` shown again under that "
-                     "`id` replaces the one drawn before, where it stands in the chat. "
+                     "each slot and the best slot, counted on the page from the ranges alone. Any view with an `id` shown again under that "
+                     "`id` is drawn once, where you just showed it, as it now is - no older copy stays above it. "
                      "Types: grid, stats, chart, table, checklist, list, steps, text, note, badge, button, slider, toggle, select, date, "
                      "choice, availability - their props and worked examples are the guide tool's `show` topic. A view never sends, pays or closes. "
                      "A bad spec comes back saying what to fix. `files`: full paths of files you made - a picture,"
@@ -1261,8 +1261,9 @@ def rpc(msg: dict, run, skip=(), portable: bool = False) -> dict | None:
         # ...EVERY CALL ON THE RECORD BY ITS SHAPE (shape): the one door every road's call of a Taskuary tool comes in at
         logger.info(f'tools: {name} called with {json.dumps(shape(args), ensure_ascii=False)[:1200]}')
         # ...EVERY ANSWER SCRUBBED, whatever tool made it (redact.scrub): what comes back here goes on to the agent's provider
-        from .redact import scrub
-        try: return ok({'content': [{'type': 'text', 'text': scrub(run(name, args))}], 'isError': False})
+        # ...as the data it is where it is JSON (scrub_json): read decoded, a value's line starts where it starts and its key is its label
+        from .redact import scrub, scrub_json
+        try: return ok({'content': [{'type': 'text', 'text': scrub_json(run(name, args))}], 'isError': False})
         except Exception as e: return ok({'content': [{'type': 'text', 'text': scrub(failed(name, e))}], 'isError': True})
     return err(-32601, f'method {m!r} is not served here')
 

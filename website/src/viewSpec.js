@@ -217,7 +217,7 @@ export function normalise(spec) {
   if (!walk(spec.root)) return null;
   const title = spec.title == null ? "" : text(spec.title), state = stateOf(spec.state, out);
   if (title === null || state === null) return null;
-  // ...and A VIEW NAMED (its own `id`) is one view: shown again it replaces the one drawn before, where it stands (chatStream.viewHomes)
+  // ...and A VIEW NAMED (its own `id`) is one view: shown again it is drawn once, at its newest place, as it now is (chatStream.viewHomes)
   const id = typeof spec.id === "string" && /^[\w-]{1,64}$/.test(spec.id) ? spec.id : asks(out) ? hash(JSON.stringify({ title, root: spec.root, elements: out })) : "";
   return { title, root: spec.root, elements: out, ...(Object.keys(state).length ? { state } : {}), ...(id ? { id } : {}) };
 }

@@ -137,7 +137,9 @@ def _load() -> dict:
     # there is no way to tell a session's request from a person's, and guard.DENIED has nothing
     # to act on. It is written back to config.toml so it survives a restart.
     from . import guard
-    guard.ensure_tokens(_read, _write, cfg['server'])
+    k = f'agent_token:{home()}'
+    guard.ensure_tokens(_read, _write, cfg['server'], _LIVE.get(k, ''))
+    _LIVE[k] = cfg['server']['agent_token']
     _owner_token(cfg['server'])
     # A FRESH INSTALL NAMES NO AI (the owner, 2026-10-20: "the advisor says claude is installed, set it up?? ... it was not, and
     # stop assuming that"): this default carried `cmd = "claude"`, cli_connections.migrate split it into a `claude` connection on

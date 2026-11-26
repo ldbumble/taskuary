@@ -935,7 +935,7 @@ class TheSceneATeamFindsATimeTests(unittest.TestCase):
         self.assertEqual(len(specs), len(demo.SCENE))
         for n, spec in enumerate(specs, 1):
             self.assertEqual(spec, viewspec.check(demo.scene_view(n)))                          # ...the server's own checked spec, as a real call's
-            self.assertEqual(spec['id'], 'times')                                               # one view: the chat draws it once, where it first stood
+            self.assertEqual(spec['id'], 'times')                                               # one view: the chat draws the newest in full, under the newest reply
             people = spec['elements']['a']['props']['people']
             self.assertEqual(sum('ranges' in p for p in people), n + 1)                         # him, and whoever has written so far
             self.assertFalse(any(k not in ('name', 'ranges') for p in people for k in p))       # no count, no best slot: the page works them out

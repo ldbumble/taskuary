@@ -382,14 +382,14 @@ def hold(store, tid) -> dict | None:
 # from any process. The cold rail after a restart judged every open task's senders afresh, ~4 s of its first pile (2026-11-24)
 # ...and the rules it was judged BY: a stored hold outlives an update, so a change to who counts as trusted (the mail-proof rule, 2026-11-24)
 # moves this and every task is judged again on its next read
-RULES = 6
-_SIG = """SELECT t.Status, t.TrustedThrough, t.OriginBase, (SELECT COUNT(*) FROM message WHERE TaskId=t.TaskId) n,
+RULES = 7
+_SIG = """SELECT t.Status, t.TrustedThrough, t.OriginBase, t.Tags, (SELECT COUNT(*) FROM message WHERE TaskId=t.TaskId) n,
     (SELECT MAX(MessageId) FROM message WHERE TaskId=t.TaskId) m, (SELECT Gen FROM change_gen WHERE Tbl='trust') g,
     h.Sig, h.HoldJson FROM task t LEFT JOIN origin_hold h ON h.TaskId=t.TaskId WHERE t.TaskId=?"""
 def _judged(store, tid) -> dict | None:
     "{hold, own (his_own, read only where a hold stands)} for an open task, from origin_hold while it is current, else judged and kept."
     if not tid or not (r := store._one(_SIG, (int(tid),))) or r['Status'] in ('done', 'dropped'): return None
-    sig = json.dumps([RULES, r['n'], r['m'], r['TrustedThrough'], r['OriginBase'], r['g']])
+    sig = json.dumps([RULES, r['n'], r['m'], r['TrustedThrough'], r['OriginBase'], r['g'], senders.start_held(r)])
     if r['Sig'] == sig:
         try: return json.loads(r['HoldJson'])
         except (TypeError, ValueError): pass
@@ -443,12 +443,13 @@ def released(store, was: set) -> list:
 def _hold(store, tid: int, t: dict) -> dict | None:
     msgs = store.list_messages(tid)
     if of_task(store, tid, msgs)[0] != 'stranger': return None
-    through, memo, seen = int(t.get('TrustedThrough') or 0), _memo(store), {}
+    # ...a machine's mail too, where this task's own start was held for its sender (senders.can_hold): the reason and its Trust, never a blank task
+    through, memo, seen, held = int(t.get('TrustedThrough') or 0), _memo(store), {}, senders.start_held(t)
     said = {m['MessageId']: r[1] for m in msgs if m['MessageId'] > through and not _own(m) and (m.get('Channel') or '') not in OURS
-            and senders.can_hold(m) and (r := of_message(store, m, memo, seen)) and r[0] == 'stranger'}
+            and senders.can_hold(m, held) and (r := of_message(store, m, memo, seen)) and r[0] == 'stranger'}
     mids = list(said)
     if not mids or not (offer := senders.trust_offer(store, int(tid), msgs)): return None      # Taskuary's own words, a teammate chat: no sender to trust
-    m = senders.whom(store, msgs, through, memo) or {}
+    m = senders.whom(store, msgs, through, memo, held) or {}
     from .waiton import person
     who = ' '.join((person(m, store) or str(m.get('FromEmail') or 'this sender')).split())     # ...mid-sentence: "You have not trusted this sender yet"
     # ...WITH THE ADDRESS BESIDE THE NAME (the readiness review, 2026-11-14): a display name is the sender's to choose, and a stranger
@@ -456,7 +457,9 @@ def _hold(store, tid: int, t: dict) -> dict | None:
     # "Gail Moreno (15550100142@s.whatsapp.net)")
     addr = str(m.get('FromEmail') or '').strip() if (m.get('Channel') or 'email') == 'email' else ''
     named = f'{who} ({addr})' if '@' in addr and addr.lower() not in who.lower() else who
-    line = UNVERIFIED_LINE if getattr(said.get(m.get('MessageId')), 'unverified', False) else HELD_LINE
+    from .categories import automated
+    unverified = getattr(said.get(m.get('MessageId')), 'unverified', False) or (automated(m) and senders.auth(m) != 'pass')     # ...a machine's mail is known only by the server's word
+    line = UNVERIFIED_LINE if unverified else HELD_LINE
     return {'line': line.format(who=named), 'person': offer['person'], 'org': offer.get('org'), 'who': who, 'mids': mids,
             'after': TRUST_AFTER}
 

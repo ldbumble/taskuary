@@ -264,8 +264,8 @@ const TurnWorkView = ({ data, now, k }) => {
     : p.type === "edit" ? [{ id: p.id, kind: "edit", summary: p.summary, status: "done" }] : [])) }} />;
   const draw = (p, i, lvl) => p.type === "said" ? <Md key={p.id} text={p.text} /> : p.type === "edit" ? <EditRow key={p.id} p={p} />
     : p.type === "plan" ? <PlanRow key={p.id} p={p} />
-    // ...a view shown again under its name is drawn once, where it first stood, as it now is (chatStream.viewHomes)
-    : p.type === "view" ? ((spec) => spec && <ViewSpec key={p.id} spec={spec} taskId={outs?.tid} />)(viewAt(outs?.views, k, p))
+    // ...a view shown again under its name is drawn once, at its newest place; an older copy is never kept above it (chatStream.viewHomes)
+    : p.type === "view" ? (viewAt(outs?.views, k, p) ? <ViewSpec key={p.id} spec={p.spec} taskId={outs?.tid} /> : null)
     // ...a file the agent showed (show `files`) is drawn by its kept copy, placed in its turn by the server for both chats (ShownCtx), never twice
     : p.type === "files" ? null
     : lvl === "everything" ? <AgentSteps key={p.id} data={{ steps: p.steps }} />
@@ -414,7 +414,7 @@ const ConvTurn = ({ t, more, ran = 0, cards, name, ask = null, later = false, ow
   const made = at ? turnFiles({ listed: at.listed, id: key, words, did: sum?.did, tid: at.tid, skip }) : [];
   const names = new Set(made.map((f) => f.name));
   const rest = shownOnce(at ? outputRefs(words, at.tid, at.listed).files : [], shown).rest.filter((p) => !names.has(p.name) && !skip.has(p.name));
-  // ...a turn that only showed a named view again drew it where it first stood (chatStream.viewHomes): nothing of its own, so no head over nothing
+  // ...a turn whose only part is a view shown again since stands at that newer place: nothing of its own here, so no head over nothing
   const quiet = !live && !hasParts(parts.filter((p) => p.type !== "view" || viewAt(at?.views, t.id, p))) && !words && !t.fail && !cards?.length && !made.length && !rest.length && !ask;
   // ...and never under the turn's own open question (the audit, 2026-11-15: "What is your plate number?" in its words, then "For you to do:
   // Tell me your plate number"): what it asks him IS what is left to him, said once. THE TURN'S OWN, KEPT (design round 5, I3): the list says

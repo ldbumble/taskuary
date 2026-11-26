@@ -40,6 +40,16 @@ def read_only(query: str) -> str:
     return query
 
 
+FILE_ENGINES = ('sqlite', 'duckdb')                      # ...whose database is a file on this computer
+
+
+def file_of(cs: str):
+    "The local file a connection URL opens ('' for one held in memory), or None where it names a server."
+    import sqlalchemy
+    if not is_url(cs) or (u := sqlalchemy.engine.make_url(cs)).get_backend_name() not in FILE_ENGINES: return None
+    return '' if (u.database or '') in ('', ':memory:') else u.database
+
+
 READ_ONLY_TX = ('postgresql', 'mysql', 'mariadb')        # ...where SET TRANSACTION READ ONLY, before the first statement, holds the transaction
 
 
@@ -53,6 +63,9 @@ def _rows_sqlalchemy(cs, query, n, write=False):
     # ...A READ IS THE DATABASE'S OWN WORD WHERE IT HAS ONE (round 4: a text check let `SELECT * FROM read_csv('C:/...')` read any file on this
     # computer through DuckDB): DuckDB opened with no reach outside its own file, and a read-only transaction on Postgres and MySQL
     name = sqlalchemy.engine.make_url(cs).get_backend_name()
+    # ...and never the install's own files, whichever card names them (reports.ro_sqlite's rule): its database holds every card's secret
+    from .reports import is_taskuary_private
+    if (f := file_of(cs)) and is_taskuary_private(f.removeprefix('file:').split('?')[0]): raise RuntimeError('the Taskuary database is not a report source')
     eng = sqlalchemy.create_engine(cs, pool_pre_ping=True, **({'connect_args': {'config': {'enable_external_access': False}}}
                                                               if name == 'duckdb' and not write else {}))
     try:

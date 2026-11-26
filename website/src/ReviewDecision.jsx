@@ -789,9 +789,7 @@ export const saysPlace = (title, place) => { const t = String(title || "").trim(
 const BY = { email: "by email", outlook: "by email", gmail: "by email", whatsapp: "on WhatsApp", teams: "on Teams", slack: "on Slack", telegram: "on Telegram",
   sms: "by text", github: "on GitHub" };
 const upFirst = (x) => (x ? String(x)[0].toUpperCase() + String(x).slice(1) : "");
-// ...and a new meeting's invite is an invite, never a "Reply" (the availability scene's frames, 2026-11-26: "Reply" stood over an invite to six people)
 const kindLabel = (r, meta, email) => meta.share ? `Share ${meta.share.title || "a dashboard"}` : r.Kind === "slot" || (email && !r.MessageId) ? "Email"
-  : meta.kind === "calendar" && meta.act === "schedule" ? "Meeting invite"
   : `Reply${BY[String(r.Channel || meta.channel || "").toLowerCase()] ? ` ${BY[String(r.Channel || meta.channel || "").toLowerCase()]}` : ""}`;
 
 // A REPLY THAT WENT, AS A RECORD IN ITS TURN (TaskPage sentHere): the same card, its words as they went and the press it took

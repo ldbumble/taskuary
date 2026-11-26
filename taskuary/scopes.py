@@ -112,7 +112,7 @@ ACTIONS = {
     # a fact in front of every future agent" is exactly the question this ladder exists to ask.
     'handbook_search': 'read', 'handbook_write': 'write', 'handbook_vote': 'write',
     'hub_search': 'read', 'hub_write': 'write', 'hub_vote': 'write', 'hub_comment': 'write',
-    'aws': 'read', 's3_object': 'read', 'cloudwatch_logs': 'read',
+    'aws': 'read', 's3_object': 'read', 'cloudwatch_logs': 'read',     # aws: its Describe/List/Get operations; any other is his press (reaches)
     'azure': 'read', 'azure_blob': 'read', 'azure_logs': 'read',
     'entra_users': 'read', 'entra_groups': 'read', 'entra_signins': 'read', 'entra_licenses': 'read',
     'prometheus': 'read', 'datadog': 'read',
@@ -179,6 +179,8 @@ REACHES = {
     **{f'{t}_assign': f'assigns a {n} item to somebody - {n} tells them' for t, n in _TRACKERS.items()},
     **{f'{t}_close': f'moves a {n} item to done - {n} tells the people following it' for t, n in _TRACKERS.items()},
 }
+# ...and the AWS card's any-operation call is what its operation is (aws.is_read): SES sends, EC2 terminates, S3 takes an upload
+AWS_ACTS = 'runs an AWS operation that is not a read - it may send, change or delete'
 # ...AND EVERY OTHER WRITE WAITS FOR HIS PRESS TOO (the owner, 2026-11-25: "why would file uploads, QuickBooks bills or Intacct records have
 # their own rules? ... to write to the systems or any connector should require approval mechanically"). What an executor IS is its line in
 # ACTIONS above - a read runs, anything else (an unclassified one included) is a card - so there is no list of quiet writes to keep. The one
@@ -203,6 +205,9 @@ def reaches(action, cfg: dict = None, tool: dict = None) -> str:
     if a == 'mcp':
         from .mcp import read_only
         return '' if read_only(tool or {}) else REACHES['mcp']
+    if a == 'aws':
+        from .aws import is_read
+        return '' if is_read(cfg) else AWS_ACTS
     if a == 'graphql': return '' if _gql_op((cfg or {}).get('query')) in ('query', 'subscription') else REACHES['graphql']
     if needs(a) == 'read' or a in OWN_STORE or a in NEVER_AGENT: return ''      # ...and his own saved script, which no agent's call reaches
     if a in REACHES: return REACHES[a]

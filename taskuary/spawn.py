@@ -292,11 +292,99 @@ def listed(pid: int):
         if not _ME: _ME.extend([os.getpid(), now.get(os.getpid(), '')])
         d = {k: v for k, v in d.items() if now.get(int(k), '') == v[0]}
         d[str(int(pid))] = [now.get(int(pid), ''), *_ME]
+        _LED[int(pid)] = now.get(int(pid), '')
         _write_list(d)
 
 def adopt(pid: int) -> bool:
     "A child started outside popen (a ConPTY session): tied and listed like one started here."
     ok = tie(pid); listed(pid); return ok
+
+# WHOSE PROCESS IS ASKING (red team round 5): a door only the owner's own other process may knock on - Taskuary started again, `taskuary --link` -
+# was open to anything running as him, an agent's command among them, and a process this server started is never that. Told by what the
+# OS itself keeps, never by what the caller says: the parents it has now; on Windows the job every tied child and all it starts are in; on
+# macOS and Linux the session a tied child leads, which its descendants keep when their parent is gone; and on Linux the marks of a session
+# in the environment it was started with. What this cannot tell: a process that left all of these on purpose (a job it broke away from and
+# whose parent then ended, a scheduled task) - it runs as the owner's account does, and so does everything else on this machine.
+_LED = {}                        # pid -> when it started, of each child tied here (listed): the sessions and jobs that are ours
+def ours(pid: int, marks: tuple = ()) -> bool:
+    "Is process `pid` this process, one it started, or one under one of those? `marks`: environment names that say so where they can be read."
+    try: pid = int(pid)
+    except (TypeError, ValueError): return False
+    up, chain = _parents(), []
+    while pid > 0 and pid not in chain and len(chain) < 64: chain.append(pid); pid = up.get(pid, 0)
+    if not chain: return False
+    if WINDOWS:
+        import ctypes, ctypes.wintypes as W
+        k = ctypes.WinDLL('kernel32', use_last_error=True); k.OpenProcess.restype = W.HANDLE
+        if (job := _JOB['h']) and (h := k.OpenProcess(0x1000, False, chain[0])):
+            inside = W.BOOL(False)
+            try:
+                if k.IsProcessInJob(W.HANDLE(h), W.HANDLE(job), ctypes.byref(inside)) and inside.value: return True
+            finally: k.CloseHandle(W.HANDLE(h))
+        # ...a parent is older than its child: an older "child" only carries the pid of a parent long gone
+        made = {p: int(v or 0) for p, v in _stamps(chain).items()}
+        for i, p in enumerate(chain[1:], 1):
+            if not 0 < made.get(p, 0) <= made.get(chain[i - 1], 0): chain = chain[:i]; break
+        return os.getpid() in chain
+    if os.getpid() in chain: return True
+    for p in chain:
+        try: sid = os.getsid(p)
+        except OSError: sid = 0
+        # ...the session of a child tied here, while that child runs or after it ended - never a later process that only reuses its pid
+        if sid in _LED and _stamp(sid) in ('', _LED[sid]): return True
+        try: env = open(f'/proc/{p}/environ', 'rb').read().split(b'\0')
+        except OSError: env = []
+        if any(e.split(b'=', 1)[0].decode('utf-8', 'replace') in marks and e.split(b'=', 1)[1:] not in ([], [b'']) for e in env): return True
+    return False
+
+
+def holders(port: int, to: int):
+    """The pids holding the local end `port` of a TCP connection to local port `to` - who is on the other end of a request this machine made
+    to itself. None when that cannot be told (no such connection here: a caller on another machine; a table that cannot be read); [] when
+    the connection is here and its process hides itself."""
+    try: port, to = int(port), int(to)
+    except (TypeError, ValueError): return None
+    try:
+        if WINDOWS:
+            import ctypes, struct
+            ip, out = ctypes.WinDLL('iphlpapi'), None
+            # AF_INET, AF_INET6: a row's size, and where its two ports and its pid stand (MIB_TCPROW_OWNER_PID, MIB_TCP6ROW_OWNER_PID)
+            for fam, size, lp, rp, at in ((2, 24, 8, 16, 20), (23, 56, 20, 44, 52)):
+                n = ctypes.c_ulong(0)
+                ip.GetExtendedTcpTable(None, ctypes.byref(n), False, fam, 4, 0)
+                buf = ctypes.create_string_buffer(n.value + 8192); n = ctypes.c_ulong(len(buf))
+                if ip.GetExtendedTcpTable(buf, ctypes.byref(n), False, fam, 4, 0): continue
+                for i in range(struct.unpack_from('<I', buf, 0)[0]):
+                    o = 4 + i * size
+                    if struct.unpack_from('>H', buf, o + lp)[0] == port and struct.unpack_from('>H', buf, o + rp)[0] == to:
+                        out = (out or []) + [struct.unpack_from('<I', buf, o + at)[0]]
+            return out
+        if os.path.isdir('/proc/net'):
+            nodes = set()
+            for f in ('/proc/net/tcp', '/proc/net/tcp6'):
+                try: rows = open(f).read().splitlines()[1:]
+                except OSError: continue
+                nodes |= {c[9] for c in map(str.split, rows) if len(c) > 9 and int(c[1].rsplit(':', 1)[1], 16) == port and int(c[2].rsplit(':', 1)[1], 16) == to}
+            if not nodes: return None
+            out = []
+            for d in os.listdir('/proc'):
+                if not d.isdigit() or int(d) == os.getpid(): continue
+                try: fds = os.listdir(f'/proc/{d}/fd')
+                except OSError: continue
+                for fd in fds:
+                    try: link = os.readlink(f'/proc/{d}/fd/{fd}')
+                    except OSError: continue
+                    if link.startswith('socket:[') and link[8:-1] in nodes: out.append(int(d)); break
+            return out
+        lsof = next((c for c in ('/usr/sbin/lsof', '/usr/bin/lsof') if os.path.isfile(c)), 'lsof')
+        r = subprocess.run([lsof, '-nP', '-a', f'-iTCP:{port}', '-sTCP:ESTABLISHED', '-Fpn'], capture_output=True, text=True, timeout=5)
+        out, pid = [], 0
+        for ln in r.stdout.splitlines():
+            if ln[:1] == 'p' and ln[1:].isdigit(): pid = int(ln[1:])
+            elif ln[:1] == 'n' and pid != os.getpid() and f':{port}->' in ln and ln.endswith(f':{to}'): out.append(pid)
+        return out or None
+    except Exception: return None
+
 
 def close_left() -> int:
     """At start: end the children a run of this home that is gone left running - its agents and what they run. One whose starter still runs
@@ -331,13 +419,28 @@ def end(p):
                 except OSError: pass
     except (ValueError, TypeError): pass
 
+def _parents() -> dict:
+    "{pid: its parent's pid} of every process running now, as the OS lists them ({} when it cannot be asked)."
+    if not WINDOWS:
+        try: rows = [r.split() for r in subprocess.run(['ps', '-A', '-o', 'pid=,ppid='], capture_output=True, text=True, timeout=5).stdout.splitlines()]
+        except (OSError, subprocess.SubprocessError): return {}
+        return {int(r[0]): int(r[1]) for r in rows if len(r) == 2 and r[0].isdigit() and r[1].isdigit()}
+    import ctypes, ctypes.wintypes as W
+    class PE(ctypes.Structure):
+        _fields_ = [('size', W.DWORD), ('use', W.DWORD), ('pid', W.DWORD), ('heap', ctypes.c_size_t), ('mod', W.DWORD), ('n', W.DWORD),
+                    ('ppid', W.DWORD), ('prio', ctypes.c_long), ('flags', W.DWORD), ('exe', ctypes.c_wchar * 260)]
+    k = ctypes.WinDLL('kernel32', use_last_error=True); k.CreateToolhelp32Snapshot.restype = W.HANDLE
+    snap, e, up = k.CreateToolhelp32Snapshot(2, 0), PE(), {}
+    e.size = ctypes.sizeof(PE)
+    ok = k.Process32FirstW(W.HANDLE(snap), ctypes.byref(e))
+    while ok: up[int(e.pid)] = int(e.ppid); ok = k.Process32NextW(W.HANDLE(snap), ctypes.byref(e))
+    k.CloseHandle(W.HANDLE(snap))
+    return up
+
 def _posix_kids(pid: int) -> list:
     "Every process under `pid` as `ps` lists them, deepest last - a child that left its parent's group (macOS CI) is still under it."
-    try: rows = [r.split() for r in subprocess.run(['ps', '-A', '-o', 'pid=,ppid='], capture_output=True, text=True, timeout=5).stdout.splitlines()]
-    except (OSError, subprocess.SubprocessError): return []
     under, out = {}, []
-    for r in rows:
-        if len(r) == 2 and r[0].isdigit() and r[1].isdigit(): under.setdefault(int(r[1]), []).append(int(r[0]))
+    for c, p in _parents().items(): under.setdefault(p, []).append(c)
     todo = list(under.get(pid, []))
     while todo: q = todo.pop(0); out.append(q); todo += under.get(q, [])
     return out
@@ -345,15 +448,9 @@ def _posix_kids(pid: int) -> list:
 def _end_tree(pid: int):
     "Windows: end process `pid` and every process it started that still runs (a child is younger than its parent: an older one only reuses a pid)."
     import ctypes, ctypes.wintypes as W
-    class PE(ctypes.Structure):
-        _fields_ = [('size', W.DWORD), ('use', W.DWORD), ('pid', W.DWORD), ('heap', ctypes.c_size_t), ('mod', W.DWORD), ('n', W.DWORD),
-                    ('ppid', W.DWORD), ('prio', ctypes.c_long), ('flags', W.DWORD), ('exe', ctypes.c_wchar * 260)]
-    k = ctypes.WinDLL('kernel32', use_last_error=True); k.CreateToolhelp32Snapshot.restype = k.OpenProcess.restype = W.HANDLE
-    snap, e, kids = k.CreateToolhelp32Snapshot(2, 0), PE(), {}
-    e.size = ctypes.sizeof(PE)
-    ok = k.Process32FirstW(W.HANDLE(snap), ctypes.byref(e))
-    while ok: kids.setdefault(e.ppid, []).append(e.pid); ok = k.Process32NextW(W.HANDLE(snap), ctypes.byref(e))
-    k.CloseHandle(W.HANDLE(snap))
+    k = ctypes.WinDLL('kernel32', use_last_error=True); k.OpenProcess.restype = W.HANDLE
+    kids = {}
+    for c, p in _parents().items(): kids.setdefault(p, []).append(c)
     age = lambda p: int(_stamp(p) or 0)
     tree, todo = [], [int(pid)]
     while todo:

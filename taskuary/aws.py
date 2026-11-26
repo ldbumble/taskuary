@@ -166,7 +166,7 @@ def catalog(store, service: str = None) -> dict:
             names = [xform_name(o) for o in sess.get_service_model(service).operation_names]
         except Exception as e:
             return {**out, 'service': service, 'operations': [], 'error': str(e)[:200]}
-        read = [n for n in names if n.startswith(('list_', 'describe_', 'get_', 'head_', 'query', 'scan', 'select_'))]
+        read = [n for n in names if n.startswith(READS)]
         out.update({'service': service, 'operations': sorted(read) + sorted(set(names) - set(read)),
                     'read': sorted(read)})
     return out
@@ -234,12 +234,33 @@ def dot_path(data, path):
     return data
 
 
+# WHAT ONLY LOOKS, by the operation's own name - the one line `catalog` marks and the gate reads (scopes.reaches, rule 9). Anything else
+# changes something or sends: SES send_email, EC2 terminate_instances, an S3 put - and ran unpressed while the whole card was classed a read
+READS = ('list_', 'describe_', 'get_', 'head_', 'batch_get_', 'filter_', 'search_', 'lookup_', 'query', 'scan', 'select_')
+PRESIGN = 'generate_presigned_url'
+
+
+def is_read(cfg: dict) -> bool:
+    """Does this call only read? A presigned URL is what its ClientMethod is: a link to get an object reads, one to put it is an upload
+    by whoever holds the link (generate_presigned_post always is). An operation nobody can name is not a read."""
+    op, params = str((cfg or {}).get('operation') or ''), (cfg or {}).get('params')
+    if op == PRESIGN: op = str(params.get('ClientMethod') or '') if isinstance(params, dict) else ''
+    return op.startswith(READS)
+
+
 def run_aws(cfg: dict):
-    """{"service", "operation", "params": {...}, "path": "a.b"} - any boto3 call: service=s3
+    """{"service", "operation", "params": {...}, "path": "a.b"} - a boto3 call: service=s3
     operation=list_buckets, service=logs operation=describe_log_groups, service=athena...
-    A list at `path` (or the first list in the response) comes back row-capped and honest."""
+    A list at `path` (or the first list in the response) comes back row-capped and honest.
+
+    READ IS READ, as on a SQL card (mssql.run_query): an operation that is not one (is_read) runs only with `_write` - his press on its
+    card (proposals._run), or his own call on a card at write."""
     from .reports import row_limit, rows_out, BODY_CHARS
-    out = getattr(client(cfg, cfg['service']), cfg['operation'])(**(cfg.get('params') or {}))
+    op = str(cfg.get('operation') or '')
+    if not is_read(cfg) and not cfg.get('_write'):
+        raise PermissionError(f"{cfg.get('service')} {op} is not a read - it runs only on your press, as a card on a task")
+    cl = client(cfg, cfg['service'])
+    out = getattr(cl, op)(**(cfg.get('params') or {}))
     if isinstance(out, dict): out.pop('ResponseMetadata', None)
     data = dot_path(out, cfg.get('path')) if cfg.get('path') else out
     if isinstance(data, dict) and not cfg.get('path'):

@@ -1662,7 +1662,7 @@ def start_sessions(store) -> int:
 
 # ── THE SCENE: A TEAM FINDS A TIME (the owner, 2026-11-26: many mails on one thread, and a visual that keeps up with them) ───────────────────
 # One thread, a reply every few seconds, and the agent's ONE view of who can make which times filled in as each lands - the spec a real agent
-# hands `show` (viewspec `availability`, the same `id` each time, so the chat keeps one view) - then the invite for the best slot as its card
+# hands `show` (viewspec `availability`, the same `id` each time, so the chat keeps one full view, under the newest reply) - then the invite for the best slot as its card
 # (calwrite.meeting). Off unless TASKUARY_DEMO_SCENE=availability, so the demo everyone opens is as it was. It starts when the visitor types
 # on its task and plays once. No count is written here: the page works the overlap and the best slot out of the ranges (availability.js).
 SCENE_ENV, SCENE_PACE, SCENE_SID, SCENE_PLAYED = 'TASKUARY_DEMO_SCENE', 'TASKUARY_DEMO_SCENE_PACE', 'demo-scene', 'demo_scene_played'
@@ -1761,6 +1761,7 @@ def _play_scene(store, tid: int):
             rest(.9); chatlog.feed(store, tid, SCENE_SID, 'trace', {'type': 'prompt'}); chatlog.at_work(store, tid, SCENE_SID); told()
             rest(.9); show(i + 1)
             if i == len(SCENE) - 1:
+                rest(2.2)                   # ...the view as it now stands has its beat before the invite and the last words come under it
                 d, a, b = SCENE_SLOT
                 calwrite.meeting(store, tid, [_scene_addr(w) for w, *_ in SCENE], SCENE_ABOUT, 60, start=f'{days[d]} {a}', end=f'{days[d]} {b}',
                                  note='One hour on the new product ideas - bring one each.')

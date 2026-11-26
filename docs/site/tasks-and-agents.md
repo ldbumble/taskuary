@@ -207,9 +207,10 @@ The agent gives the availability view only who and the hours each named. How man
 best - the most people for the meeting's length; between equals the longer shared stretch, then the earlier - are
 counted on the page, the same every time.
 
-A view the agent names is one view: as a thread's replies come in it shows the same view again and the one in
-your chat fills in where it stands - bars grow, the band moves to the new best slot and the count climbs - rather
-than a new copy under each reply. With "reduce motion" on, it changes without moving.
+A view the agent names is one view, kept up to date - a chart, a table, any of them. When new input changes it the
+agent shows it again, and it is drawn once, under the newest line, as it now is: no older copy stays above it. On a
+thread finding a time, that is the availability view under the newest reply, its bars and count filled in. With
+"reduce motion" on, it is drawn without moving.
 
 ### When the agent opens a browser
 

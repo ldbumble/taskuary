@@ -498,7 +498,7 @@ def origin_ok(headers) -> bool:
 
 
 # ── the tokens ──────────────────────────────────────────────────────────────────────────
-def ensure_tokens(read, write, server: dict) -> dict:
+def ensure_tokens(read, write, server: dict, held: str = '') -> dict:
     """Give this install an agent token if it has none, and persist it - the owner token is minted in memory alone (config._owner_token).
 
     The agent token tells a session's request from a person's; without it the deny list has
@@ -511,12 +511,17 @@ def ensure_tokens(read, write, server: dict) -> dict:
     that loses is one holding a tab from before the upgrade: it reloads and is fine.
 
     `read`/`write` are config's own reader and writer, passed in rather than imported - config
-    calls this from inside load(), and importing it back would be a cycle."""
-    fresh = {k: _secrets.token_urlsafe(24) for k in ('agent_token',) if not server.get(k)}
+    calls this from inside load(), and importing it back would be a cycle.
+
+    `held`: the agent token this process already read for this home. A read that shows none while another writer has the file open
+    (an editor, a restore written in place) is a torn read, not an install without one: minting there wrote a new token over the one
+    every session and the running server held, and each was refused from then on (CI, Windows: a door's 401 to its own token)."""
+    fresh = {k: held or _secrets.token_urlsafe(24) for k in ('agent_token',) if not server.get(k)}
     if not fresh: return server
     server.update(fresh)
     try:
         cur = read()
+        if cur.get('server', {}).get('agent_token') == fresh['agent_token']: return server      # whole again, and it never left
         cur.setdefault('server', {}).update(fresh)
         write(cur)
         logger.info('wrote agent_token to config.toml - sessions run with less authority than you do')

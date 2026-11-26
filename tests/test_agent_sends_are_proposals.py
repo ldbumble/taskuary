@@ -117,6 +117,59 @@ class ARedditPostFromItsInboxCard(unittest.TestCase):
         self.assertIn('flair - one of: Question', str(e.exception))
 
 
+class AnAwsCallIsWhatItsOperationIs(unittest.TestCase):
+    """Security round 5 (C5): the AWS card's any-operation executor was classed a read whole, so an agent's SES send, EC2 terminate or
+    presigned upload link ran with no press. Its read is what only looks, by the operation; anything else is his card (locked rule 9)."""
+    def setUp(self):
+        from taskuary import aws
+        s = server.store
+        self.tid = s.create_task({'Title': 'Tidy the Northwind AWS account', 'Kind': 'general', 'Status': 'open'}, 'owner')
+        self.card = s.get_connector_by_type('aws')
+        s.save_connector({'ConnectorId': self.card['ConnectorId'], 'Active': 1, 'Roles': 'report,tool'}, 'test')
+        self.calls = calls = []
+
+        class Client:
+            def __getattr__(self, op): return lambda **kw: calls.append((op, kw)) or {'Things': [{'id': 1}]}
+        self.patch = mock.patch.object(aws, 'client', lambda cfg, service, region=None: Client())
+        self.patch.start()
+
+    def tearDown(self):
+        self.patch.stop()
+        server.store.save_connector({'ConnectorId': self.card['ConnectorId'], 'Active': 0}, 'test')
+
+    def _call(self, who, **body): return c.post('/api/tools/run', headers=who, json={'type': 'aws', 'task_id': self.tid, 'why': 'w', **body})
+
+    def test_an_agents_read_runs_and_anything_else_waits_for_his_press(self):
+        r = self._call(agent(self.tid), service='ec2', operation='describe_instances')
+        self.assertTrue(r.json().get('ok'), r.text); self.assertEqual([o for o, _ in self.calls], ['describe_instances'])
+        for service, op, params in (('ses', 'send_email', {'Source': 'alex@northwind.example'}), ('ec2', 'terminate_instances', {'InstanceIds': ['i-1']}),
+                                    ('s3', 'generate_presigned_url', {'ClientMethod': 'put_object', 'Params': {'Bucket': 'b', 'Key': 'k'}}),
+                                    ('s3', 'generate_presigned_post', {'Bucket': 'b', 'Key': 'k'})):
+            del self.calls[:]
+            r = self._call(agent(self.tid), service=service, operation=op, params=params)
+            self.assertEqual(r.status_code, 202, (op, r.text)); self.assertTrue(r.json()['queued'])
+            self.assertEqual(self.calls, [], op)                           # nothing ran before the press
+        proposals.execute(server.store, server.store.get_review(r.json()['review']), 'owner')
+        self.assertEqual([o for o, _ in self.calls], ['generate_presigned_post'])        # ...and his press runs exactly that
+        # ...and its card says what runs, never "read"
+        words = proposals.tool_words(server.store, {'type': 'aws', 'service': 'ec2', 'operation': 'terminate_instances', 'params': {'InstanceIds': ['i-1']}})
+        self.assertTrue(words.startswith('run ec2 terminate_instances'), words)
+
+    def test_a_link_to_get_an_object_is_a_read(self):
+        r = self._call(agent(self.tid), service='s3', operation='generate_presigned_url', params={'ClientMethod': 'get_object', 'Params': {'Bucket': 'b', 'Key': 'k'}})
+        self.assertTrue(r.json().get('ok'), r.text)
+
+    def test_the_executor_itself_only_reads_unpressed(self):
+        from taskuary import aws
+        with self.assertRaises(PermissionError): aws.run_aws({'service': 'ec2', 'operation': 'terminate_instances', 'params': {'InstanceIds': ['i-1']}})
+        self.assertEqual(self.calls, [])
+        self.assertFalse(aws.is_read({'service': 'ec2'})); self.assertFalse(aws.is_read({'operation': 'generate_presigned_url', 'params': 'x'}))
+
+    def test_the_owner_still_runs_a_write_directly(self):
+        r = self._call(owner(), service='ec2', operation='start_instances', params={'InstanceIds': ['i-1']})
+        self.assertTrue(r.json().get('ok'), r.text); self.assertEqual([o for o, _ in self.calls], ['start_instances'])
+
+
 class WhatReaches(unittest.TestCase):
     def test_every_write_to_a_connector_waits_for_his_press(self):
         """The owner, 2026-11-25: "to write to the systems or any connector should require approval mechanically". Every executor that is

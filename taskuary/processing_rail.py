@@ -49,7 +49,7 @@ DIRTY_ROWS = {
 # 0 of 1,050 production pile reads came back warm (2026-10-12). So the connector's UPDATE leaves a row only when a column
 # other than the stamp moved, or the connector is failing (once the rail's "stopped answering" row; that row is gone, 2026-10-26).
 # Every other column stays in: a column added to the table must be added here (test_rail_incremental pins the list).
-CONNECTOR_COLUMNS = ('ConnectorId', 'Type', 'Name', 'ConfigJson', 'Secret', 'Active', 'LastError', 'LastErrorAt', 'Roles', 'Scope')
+CONNECTOR_COLUMNS = ('ConnectorId', 'Type', 'Name', 'ConfigJson', 'Secret', 'Active', 'LastError', 'LastErrorAt', 'Roles', 'Scope', 'Workstream')
 UPDATE_WHEN = {'connector': 'NEW.LastError IS NOT NULL OR ' + ' OR '.join(f'OLD.{c} IS NOT NEW.{c}' for c in CONNECTOR_COLUMNS)}
 ENTITY_KINDS = ('message', 'task', 'review', 'idea')
 KEEP_ROWS = 10_000     # a rail older than this many dirty rows rebuilds in full

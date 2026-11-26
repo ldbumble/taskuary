@@ -19,7 +19,7 @@ Cards are chosen by CODE from the item's kind, never by the model. The model may
 multiple choice at the end of a line (OPTIONS: a | b | c) when a decision has clear choices and
 no button covers it; the choice comes back as the owner's next words.
 """
-import contextvars, json, re, threading
+import contextvars, json, re, threading, time
 from collections import Counter
 from contextlib import contextmanager, nullcontext
 from datetime import datetime, timedelta
@@ -320,14 +320,18 @@ def brain(store, trace=None, cancel=None, resume=None, fast=False, keep: str = N
             own = {'user_settings': False} if cli == 'claude' else {}
             if cli == 'claude' and 'stream-json' in (prof.get('args') or preset_args(str(prof.get('cmd') or name))): fx = fx + ['--include-partial-messages']
             cwd = None if fast else str(folder)                  # no cwd = make_cli_llm's read-only gear: no tools, no permission bypass
+            # ...what it is asked scrubbed, as every brain's is (llm._Scrubbed): built here and not by build_llm, its instructions - his
+            # memory, the row on the table - went into the CLI's system file as they were (round 5)
+            cli_brain = lambda: llm_mod._scrub(llm_mod.make_cli_llm(store, name, model, cwd=cwd, trace=trace, cancel=cancel, resume=resume, keep=keep,
+                                                                    **({'extra_args': fx} if fx else {}), **own))
             if dflt.startswith('effort:'):
                 # an effort-only gear (codex) rides on a copy of the profile, never written back to the row
                 prof['light_model'] = dflt
                 store_get = store.get_agent
                 store.get_agent = lambda n, _r=row, _p=prof: (_r | {'Config': json.dumps(_p)}) if n == name else store_get(n)
-                try: return llm_mod.make_cli_llm(store, name, model, cwd=cwd, trace=trace, cancel=cancel, resume=resume, keep=keep, **({'extra_args': fx} if fx else {}), **own)
+                try: return cli_brain()
                 finally: store.get_agent = store_get
-            return llm_mod.make_cli_llm(store, name, model, cwd=cwd, trace=trace, cancel=cancel, resume=resume, keep=keep, **({'extra_args': fx} if fx else {}), **own)
+            return cli_brain()
         return llm_mod.build_llm(store, pick=p, model=model_of(store) or None, trace=trace, cancel=cancel, job='assistant')
     except Exception as e:
         logger.debug(f'concierge: no brain - {e}'); return None
@@ -999,6 +1003,7 @@ def brain_trouble(error) -> str:
     wait until error clears")."""
     import re as _re
     text = ' '.join(str(error or '').split())
+    if isinstance(error, TurnOut): return f"I got {text}, so I stopped waiting. Nothing is lost - ask again in a moment."
     low = text.lower()
     detail = _re.sub(r'\s*\{.*$', '', text)[:160].rstrip(' :.')
     if _re.search(r'context (length|window)|maximum context|too many tokens|token limit|prompt is too long|max_tokens|too long', low):
@@ -6011,6 +6016,38 @@ class _Showing:
         return self.llm(system, user, **({'images': self.pics} if self.pics else {}), **kw)
 
 
+# A TYPED TURN ANSWERS INSIDE ITS TIME, OR SAYS WHY (a tester's install, 2026-11-26: "pull up my calendar for this upcoming monday" on an API
+# card read "Working… 30s" and never answered). Nothing in the turn hung - nothing ended it either: a look-up is two model calls and more,
+# each is given READ_TIMEOUT by its card and asks again by itself on an empty or refused answer, and a pass that failed was followed by the
+# look-up and the question once more. Minutes with nothing said, and the page's Stop reached no call under way. ONE CLOCK FOR THE TURN: its
+# model calls together get the time one answer is allowed; past it the turn stops waiting and says so in one line (brain_trouble), Try again
+# under it. A CLI brain keeps its own leash and its own Stop (clipool) - its words stream as it writes them
+TURN_WAIT = llm_mod.READ_TIMEOUT
+class TurnOut(TimeoutError): "The Assistant's AI did not answer inside the turn's time."
+
+
+class _Timed:
+    "A turn's brain on the turn's one clock: a call still out when the time is up, or at his Stop, is waited on no longer - its answer is dropped."
+    def __init__(self, llm, cancel=None, wait: float = None):
+        self.llm, self.cancel, self.wait = llm, cancel, wait or TURN_WAIT
+        self.until = time.monotonic() + self.wait
+    def __getattr__(self, k): return getattr(self.llm, k)
+    def _out(self): return TurnOut(f'no answer within {plural(round(self.wait / 60), "minute") if self.wait >= 60 else plural(round(self.wait), "second")}')
+    def __call__(self, *a, **kw):
+        if time.monotonic() >= self.until: raise self._out()
+        box, done, ctx = {}, threading.Event(), contextvars.copy_context()
+        def go():
+            try: box['out'] = ctx.run(self.llm, *a, **kw)
+            except BaseException as e: box['err'] = e
+            finally: done.set()
+        threading.Thread(target=go, daemon=True, name='assistant-answer').start()
+        while not done.wait(min(0.2, max(0., self.until - time.monotonic()))):
+            if self.cancel is not None and self.cancel.is_set(): raise Stopped('stopped by the owner')
+            if time.monotonic() >= self.until: raise self._out()
+        if 'err' in box: raise box['err']
+        return box['out']
+
+
 def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trace=None, cancel=None, item: dict | None = None,
          open_card: str | None = None, images: list | None = None) -> dict:
     """The owner's words, answered briefly - about the item on the table when there is one. The MODEL interprets
@@ -6046,7 +6083,9 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
     # of every typed turn on a fresh home before the model was asked, more on a real mailbox. Read here they take the build above; the
     # conversation so far is read here too, so it holds what came before this line and never the line itself, said again below it.
     from . import toolcatalog, pageview
+    own_cli = llm is None and is_cli(store)
     llm = _brain_for(store, tid, llm, trace, cancel)
+    if llm and not own_cli: llm = _Timed(llm, cancel)     # the turn's one clock (TURN_WAIT)
     if llm and images: llm = _Showing(llm, images)        # what he showed rides every call of the turn, a look-up's answer too (walk 9, 43)
     adv_d = _decision(store, item) if llm else {}
     picks = toolcatalog.select_values(store, p['items']) if llm else ''
@@ -6168,6 +6207,7 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
     except Exception as e:
         logger.warning(f'concierge: the model pass failed - {e}'); failed = e
     if cancel is not None and cancel.is_set(): raise Stopped('stopped by the owner')
+    if isinstance(failed, TurnOut): call = None          # ...the time is up: no look-up is run again for a question nobody will be asked
     if call:
         # A MISS IS THE MODEL'S TO FIX, not the owner's to read. "No setting by that name - settings.list <group> names
         # them" is written for the model, and it reached the owner word for word (the 2026-09-24 audit). The model gets

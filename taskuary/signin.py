@@ -1512,6 +1512,7 @@ FORM = "(() => { " + DEEP + r"""
   const at = deepActive();
   return { href: location.href, top: window === window.top, title: document.title, user: user ? String(user.value).slice(0, 200) : '',
            multi: !!at && (at.tagName === 'TEXTAREA' || !!at.isContentEditable),
+           typed: !!at && (at.tagName === 'TEXTAREA' || !!at.isContentEditable) ? String(at.tagName === 'TEXTAREA' ? at.value : at.innerText).slice(0, 4000) : '',
            pw: pv.length > 0, password: ins.some((e) => e.type === 'password'), pay: ins.some((e) => /^cc-/.test(e.autocomplete || '')),
            new: pv.some((e) => e.autocomplete === 'new-password') || (pv.length > 1 && pv.every((e) => e.value === pv[0].value)),
            fields: keep.slice(0, 30).map((e) => ({ k: e.name || e.id, t: e.type, f: fs.indexOf(e.form),

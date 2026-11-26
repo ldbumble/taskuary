@@ -354,8 +354,8 @@ def check(spec) -> dict:
         path.pop()
     walk(root)
     view = {**({'title': _text(spec['title'], CAPS['short'], 'title')} if spec.get('title') else {}), 'root': root, 'elements': out, **({'state': state} if state else {})}
-    # ...A VIEW NAMED IS ONE VIEW (the owner, 2026-11-26: availability that fills in as replies come): shown again under the same `id` it replaces
-    # the one drawn before, where it stands in the chat (chatStream.viewHomes) - never a second copy under it
+    # ...A VIEW NAMED IS ONE VIEW, KEPT UP TO DATE (the owner, 2026-11-26: the renderer draws a view again from new input and keeps no old
+    # one above): any view shown again under the same `id` is drawn once, where it was just shown; its earlier copy is gone (chatStream.viewHomes)
     if spec.get('id') not in (None, ''):
         if not isinstance(spec['id'], str) or not ID.fullmatch(spec['id']): raise ValueError('id must be a short name of letters, digits, - or _ - it names the view, and showing it again updates it')
         view['id'] = spec['id']

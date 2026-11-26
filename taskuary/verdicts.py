@@ -195,6 +195,11 @@ def _envelope(rv: dict) -> dict:
     except (TypeError, ValueError): return {}
 
 
+def content_envelope(row) -> dict:
+    "Where a review goes and what rides with it - how a send went is not what it says."
+    return {k: v for k, v in _envelope(row).items() if k not in ('delivery', 'attempted_at', 'attempts')}
+
+
 _RUNNING, _RUNNING_LOCK = set(), threading.Lock()   # action reviews whose act is running right now (one server process per home)
 
 
@@ -846,8 +851,6 @@ def _decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = N
     if unpressed(actor) and verb_in in ('approve', 'edit', 'merge_anyway', 'close_pr') and not saved_for(store, rv):
         return {'ok': False, 'status': rv.get('Status'), 'sent': None, 'held': True, 'send_error': HELD}
     if rv.get('Status') == 'pending' and verb_in in ('approve', 'edit'):
-        def content_envelope(row):
-            return {k: v for k, v in _envelope(row).items() if k not in ('delivery', 'attempted_at', 'attempts')}
         if (any(reviewed.get(k) != rv.get(k) for k in ('DraftText', 'ContextRevision', 'Stale', 'TaskId', 'MessageId', 'Kind'))
                 or content_envelope(reviewed) != content_envelope(rv)):
             return _delivery_busy(store, rv['ReviewId'])

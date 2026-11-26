@@ -1,5 +1,5 @@
 // WHO CAN MAKE WHICH TIMES (availability.js, viewSpec's `availability`): the counts and the best slot are worked out from the ranges alone,
-// the page draws only a spec the catalog allows, and a view shown again under its `id` is one view where it first stood. Invented people.
+// the page draws only a spec the catalog allows, and a view shown again under its `id` is one view under the newest line. Invented people.
 import assert from "node:assert/strict";
 import test from "node:test";
 import { dayLabel, minsOf, overlap, rangeLabel, ticksOf, timeLabel } from "../src/availability.js";
@@ -110,17 +110,26 @@ test("an availability outside the catalog is null, never half drawn", () => {
   assert.equal(normalise(view({ people: TEAM, best: "Tue 3pm" })), null);              // the best slot is worked out, never taken
 });
 
-// ── shown again under its id: one view, where it first stood ──
+// ── shown again under its id: one view, at its newest place ──
 const show = (id, spec) => ({ k: "tool", id, name: "mcp__taskuary__show", output: `Shown in the owner's chat. ${MARK}${JSON.stringify(spec)}` });
 const upTo = (n) => view({ people: TEAM.map((p, i) => (i < n ? p : { name: p.name })) }, { id: "times" });
 
-test("a view shown again under its id is drawn once, at its first place, as it now is", () => {
+test("a view shown again under its id is drawn once, at its newest place; no older copy is drawn", () => {
   const turns = [{ id: "t1", steps: [show("c1", upTo(1))] }, { id: "t2", steps: [{ k: "said", text: "Gail replied." }, show("c2", upTo(2))] }, { id: "t3", steps: [show("c3", upTo(4))] }];
   const homes = viewHomes(turns), part = (id, n) => ({ type: "view", id, spec: normalise(upTo(n)) });
-  assert.equal(homes.get("times").at, "t1:c1");
-  assert.deepEqual(viewAt(homes, "t1", part("c1", 1)), normalise(upTo(4)));           // ...the first draws the newest
-  assert.equal(viewAt(homes, "t2", part("c2", 2)), null);                             // ...the later ones draw nothing of their own
-  assert.equal(viewAt(homes, "t3", part("c3", 4)), null);
+  assert.equal(homes.get("times").at, "t3:c3");
+  assert.deepEqual(viewAt(homes, "t3", part("c3", 4)), normalise(upTo(4)));           // ...the newest is the view
+  assert.equal(viewAt(homes, "t1", part("c1", 1)), null);                             // ...the earlier ones draw nothing
+  assert.equal(viewAt(homes, "t2", part("c2", 2)), null);
+  // ...and while only the first has been shown it is the newest: nothing is a line before there is something below
+  assert.deepEqual(viewAt(viewHomes(turns.slice(0, 1)), "t1", part("c1", 1)), normalise(upTo(1)));
+});
+
+test("the rule is every view's: a chart shown again under its id is drawn once, as it now is", () => {
+  const chart = (v) => ({ id: "spend", root: "c", elements: { c: { type: "chart", props: { kind: "bar", points: [{ label: "Payworth", value: v }] } } } });
+  const turns = [{ id: "t1", steps: [show("c1", chart(200))] }, { id: "t2", steps: [show("c2", chart(540))] }], homes = viewHomes(turns);
+  assert.equal(viewAt(homes, "t1", { id: "c1", spec: normalise(chart(200)) }), null);
+  assert.equal(viewAt(homes, "t2", { id: "c2", spec: normalise(chart(540)) }).elements.c.props.points[0].value, 540);
 });
 
 test("a view with no id, and one he can answer, stand each time they are shown", () => {
@@ -132,7 +141,7 @@ test("a view with no id, and one he can answer, stand each time they are shown",
   assert.deepEqual(viewAt(homes, "t2", { id: "c4", spec: normalise(ask) }), normalise(ask));
 });
 
-test("a refused re-show changes nothing: the view stays as it last passed", () => {
+test("a refused re-show changes nothing: the view stays where it last passed", () => {
   const turns = [{ id: "t1", steps: [show("c1", upTo(2))] }, { id: "t2", steps: [{ k: "tool", id: "c2", name: "mcp__taskuary__show", output: "elements.a.props.people[0].ranges[0].from must be before its to" }] }];
   assert.deepEqual(viewHomes(turns).get("times"), { at: "t1:c1", spec: normalise(upTo(2)) });
 });

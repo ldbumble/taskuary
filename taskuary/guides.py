@@ -33,8 +33,8 @@ SHOW_TYPES = ("THE `show` TYPES: every type takes title? and description?; each 
               "has not replied. day is a date (2026-12-01) or a short label, from and to are 24-hour times (14:00); a person with no `ranges` has "
               "not replied, with an empty list can make none. The counts and the best slot are worked out on the page from the ranges; the view "
               "takes no count.\n"
-              "A VIEW'S `id` (beside title and root) names it: shown again under the same id, it replaces the one drawn before where it stands "
-              "in the chat - a view that fills in as answers arrive is one view, not a new one each time.")
+              "A VIEW'S `id` (beside title and root) names it: shown again under the same id - a chart, a table, any view - it is drawn "
+              "once, where you just showed it, as it now is, and no older copy stays above it: a view that changes as answers arrive is one view.")
 AVAILABILITY = ('{"id":"times","title":"Product ideas session","root":"a","elements":{"a":{"type":"availability","props":{"minutes":60,"people":['
                 '{"name":"Erin Blake","ranges":[{"day":"2026-12-01","from":"14:00","to":"16:00"}]},'
                 '{"name":"Ray Colton","ranges":[{"day":"2026-12-02","from":"10:00","to":"12:00"},{"day":"2026-12-01","from":"15:00","to":"16:00"}]},'

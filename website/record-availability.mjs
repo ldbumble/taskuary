@@ -61,22 +61,15 @@ try {
   await box.click(); await page.keyboard.type(LINE, { delay: 26 }); await delay(450); await still("his-line");
   await page.keyboard.press("Enter"); await page.mouse.move(4, 896);
   await until(async () => !!(await best())); await delay(1600); await still("first-times");
-  // ...a still each time the best slot or its count moves, once the view has come to rest. THE VIEW STAYS WHERE IT WAS FIRST DRAWN and the
-  // replies stand under it, so after the second of them the reader wheels the chat up to hold the view in sight (the chat follows its foot
-  // only while he is at it: chatStream.heldAtEnd) - then goes down to the answer and the invite at the end
-  const chat = page.locator(".tq-aui-viewport").first(), hold = Math.max(1, +arg("hold", "2"));
-  const gap = () => page.evaluate(() => { const c = document.querySelector(".tq-aui-viewport"), v = document.querySelector(".tq-view[data-tq-view]");
-    return Math.round(v.getBoundingClientRect().top - c.getBoundingClientRect().top); });
-  const toView = async (want = 6) => {
-    const b = await chat.boundingBox(); await page.mouse.move(b.x + 6, b.y + b.height - 8);
-    for (let pass = 0; pass < 2; pass++) { const dy = (await gap()) - want; if (Math.abs(dy) < 3) break;
-      for (let i = 0; i < 12; i++) { await page.mouse.wheel(0, dy / 12); await delay(26); } await delay(160); }
-    await page.mouse.move(4, 896);
-  };
+  // ...a still each time the best slot or its count moves, once the view has come to rest. Each time it is shown again the view stands
+  // under the newest reply (chatStream.viewHomes), so the chat following its own foot keeps it in sight: `held` is where its top and foot
+  // stood in the chat's window at each beat - then down to the invite at the end
+  const chat = page.locator(".tq-aui-viewport").first();
+  const gap = () => page.evaluate(() => { const c = document.querySelector(".tq-aui-viewport").getBoundingClientRect(), v = document.querySelector(".tq-view[data-tq-view]").getBoundingClientRect();
+    return [Math.round(v.top - c.top), Math.round(c.bottom - v.bottom)]; });
   for (let was = await best(), seen = 1; seen < 6;) {
     await until(async () => (await best()) !== was, 20000); was = await best(); seen++;
     await delay(1300); if (seen - 1 !== 3) await still(`reply-${seen - 1}`);
-    if (seen - 1 === hold) await toView();
     held.push(await gap());
   }
   await page.locator("[data-tq-review-card]").first().waitFor({ state: "attached", timeout: 20000 });

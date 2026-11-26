@@ -79,6 +79,7 @@ class VoiceTests(unittest.TestCase):
         lines = [v for k, v in concierge.RECEIPTS.items()] + [concierge.ALL_DONE, welcome.goodbye(store())]
         lines += [concierge.brain_trouble(Exception(e)) for e in ("maximum context length", '429 rate limit', '401 invalid key',
                                                                    'connection timed out', 'something odd')]
+        lines.append(concierge.brain_trouble(concierge.TurnOut('no answer within 3 minutes')))     # the turn's clock ran out (concierge._Timed)
         lines += [concierge.fallback(None, False, ITEMS), concierge.fallback(None, False, ITEMS, brain=True), concierge.waiting_line(ITEMS)]
         lines += [concierge.fallback({**i, 'mid': n, 'channel': 'email', 'why': 'a notice'}, True) for n, i in enumerate(ITEMS, 1)]
         lines += [concierge.fallback({'kind': 'report', 'title': 'Weekly AR', 'bad': True, 'when': ago(1)}, False)]

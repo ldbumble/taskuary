@@ -1247,7 +1247,11 @@ def test_an_enter_in_the_box_of_a_post_he_handed_over_is_a_line_of_it_never_a_se
     """Walk 24, 2026-11-25 (the Claude CLI): writing the X post he had handed over, the agent pressed Enter for a line break in the post box,
     and the judge called the key "Post ... to your X account" - a second card for one post, which the agent withdrew itself. A fact of the
     page: the focus is in a box of many lines, where Enter adds a line; the post's send is its own press. Where no post of his is being
-    written, or the focus is in a one-line box, what an Enter does is still the judge's to read."""
+    written, or the focus is in a one-line box, what an Enter does is still the judge's to read.
+    Red team round 5: with that post in flight an Enter passed unjudged on ANY page - a chat's box on another site, where Enter sends. It is
+    a line of the post only on the site its card goes to, in a box that holds words of that post and nothing else."""
+    from taskuary import connectorcatalog as cat
+    site = 'https://' + cat.by_type('x')['hosts'][0]            # ...the card's own site, as the catalogue names it
     s = MemoryStore(); tid = Factory(s).task('Post the four-day close')
     post = {'action': 'run_tool', 'type': 'x_post', 'network': 'X', 'text': 'Day four, done.\n\nNorthwind closes the month in four days.'}
     card = s.add_review({'TaskId': tid, 'Kind': 'action', 'Status': 'pending', 'DraftText': json.dumps(post), 'Reason': 'the agent proposes to post on X'})
@@ -1255,15 +1259,21 @@ def test_an_enter_in_the_box_of_a_post_he_handed_over_is_a_line_of_it_never_a_se
     speaks = {'big': True, 'kind': 'speaks', 'sure': True, 'irreversible': True, 'what': 'Post "Day four, done." to your X account'}
     held = lambda: [json.loads(r['DraftText']) for r in s._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action' AND Status='pending'", (tid,))
                     if json.loads(r['DraftText']).get('action') == 'browser_act']
-    def enter(multi):
-        pg = {'url': 'https://x.example/home', 'open': True, 'elements': snap, 'name': 'X', 'multi': multi, 'fields': [{'k': 'text', 't': 'textarea', 'f': 0, 'v': 'Day four, done.'}]}
+    def enter(multi, url=site + '/compose/post', typed='Day four, done.'):
+        pg = {'url': url, 'open': True, 'elements': snap, 'name': 'X', 'multi': multi, 'typed': typed, 'fields': [{'k': 'text', 't': 'textarea', 'f': 0, 'v': 'Day four, done.'}]}
         with mock.patch.object(bg, 'page', return_value=pg), verdict(speaks), mock.patch.object(bg, 'watch', None), \
              mock.patch.object(bg, '_run', lambda sid, a, w, t: (0, '')), mock.patch('taskuary.signin.acting', lambda *a, **k: None):
             return bg.check(s, tid, 'run1', 'agent-browser press Enter', Brain(None))
     s.decide_review(card, 'approved', json.dumps({**post, 'result': {'browser': True}}), 'owner')            # ...he pressed Post via the browser
     assert enter(True) == {} and held() == [], 'a line break in the post box is the agent\'s typing'
+    assert enter(True, typed='Day four, done.\n\nNorthwind closes') == {} and held() == [], 'and the next one, further into the post'
+    for n, (why, kw) in enumerate((('a chat on another site, where Enter sends', {'url': 'https://chat.vendor.example/room/7'}),
+                                   ('a box on its site that holds other words: a message, not the post', {'typed': 'Erin, the numbers are attached'}),
+                                   ('an empty box: nothing says it is the post\'s', {'typed': ''})), 1):
+        out = enter(True, **kw)
+        assert out and out['hookSpecificOutput']['permissionDecision'] == 'deny', why
     out = enter(False)
-    assert out['hookSpecificOutput']['permissionDecision'] == 'deny' and len(held()) == 1, 'in a one-line box an Enter sends its form: the judge\'s word stands'
+    assert out['hookSpecificOutput']['permissionDecision'] == 'deny' and held(), 'in a one-line box an Enter sends its form: the judge\'s word stands'
 
 
 def test_the_last_press_of_a_post_is_never_put_to_him_over_an_empty_box_the_agent_is_told_what_is_missing():

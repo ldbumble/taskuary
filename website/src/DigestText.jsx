@@ -1,7 +1,7 @@
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import { Alert, Box, Button, Typography } from "@mui/material";
 import api from "./api.js";
-import { parseDigest } from "./digestText.js";
+import { doorOf, parseDigest } from "./digestText.js";
 import { label as btnLabel } from "./buttons.js";
 import { openAppLink } from "./appLinks.js";
 import { placeHref } from "./words.js";
@@ -37,24 +37,43 @@ function DigestWayOn({ sourceId, noAi = false }) {
 }
 
 const URL = /(https?:\/\/[^\s<>"')\]]+)/g;
+const LINK = { color: "var(--tq-link, #526978)", fontWeight: 600, textDecoration: "none" };
 const REF = /\b(TQ-\d{3,})\b/g;
 const goTask = (e, id) => { e.preventDefault(); openAppLink(`task=${id}`); };
 // a ref the model wrote WITHOUT the link the data gave it is still a door into the task, unless the item links it already
 const Refs = ({ text, linked }) => text.split(REF).map((part, i) => {
   const id = /^TQ-(\d+)$/.exec(part)?.[1];
   return id && !linked.has(Number(id))
-    ? <a key={i} href={`#task=${Number(id)}`} onClick={(e) => goTask(e, Number(id))} style={{ color: "var(--tq-link, #526978)", fontWeight: 600, textDecoration: "none" }}>{part}</a>
+    ? <a key={i} href={`#task=${Number(id)}`} onClick={(e) => goTask(e, Number(id))} style={LINK}>{part}</a>
     : <React.Fragment key={i}>{part}</React.Fragment>;
 });
+// FOLLOW UP ON A LINE ABOUT SOMETHING OWED BY SOMEBODY ELSE (the owner, 2026-11-26: "information without action is not worth much"): his press
+// hands the thread to its task's agent as his own line and opens that task - closed or never made, the server's road brings it (follow-up).
+// A press that failed says why beside the link, which stays to press again
+function FollowUp({ mid, href }) {
+  const [busy, setBusy] = useState(false), [said, setSaid] = useState(""), going = useRef(false);
+  const go = async (e) => {
+    e.preventDefault();
+    if (going.current) return;             // a second press while the first is on its way starts nothing: his line reaches the agent once
+    going.current = true; setBusy(true); setSaid("");
+    try { openAppLink(`task=${(await api.post(`/api/messages/${mid}/follow-up`)).data.taskId}`); }
+    catch (x) { setSaid(` It could not be started - ${String(x?.response?.data?.detail || x?.message || "the app did not answer").replace(/\.+$/, "")}.`); }
+    going.current = false; setBusy(false);
+  };
+  return <><a href={href} onClick={go} aria-busy={busy} data-tq-follow-up={mid} style={LINK}>{busy ? "Opening…" : "Follow up →"}</a>
+    {said && <span role="alert">{said}</span>}</>;
+}
 const Linked = ({ children }) => {
   const text = String(children || ""), linked = new Set([...text.matchAll(/#task=(\d+)/g)].map((m) => Number(m[1])));
-  return text.split(URL).map((part, i) => /^https?:\/\//.test(part)
-    ? <a key={i} href={part} target={/#task=\d+/.test(part) ? undefined : "_blank"} rel="noreferrer"
-        style={{ color: "var(--tq-link, #526978)", fontWeight: 600, textDecoration: "none" }}
-        onClick={(e) => { const hit = /#task=(\d+)/.exec(part); if (hit) { e.preventDefault(); openAppLink(`task=${hit[1]}`); } }}>
-        {/#task=(\d+)/.test(part) ? `open TQ-${String(/#task=(\d+)/.exec(part)[1]).padStart(4, "0")} →` : part}
-      </a>
-    : <Refs key={i} text={part} linked={linked} />);
+  return text.split(URL).map((part, i) => {
+    if (!/^https?:\/\//.test(part)) return <Refs key={i} text={part} linked={linked} />;
+    const door = doorOf(part);
+    if (door?.kind === "followup") return <FollowUp key={i} mid={door.mid} href={part} />;
+    return <a key={i} href={part} target={door ? undefined : "_blank"} rel="noreferrer" style={LINK}
+      onClick={(e) => { if (door) goTask(e, door.tid); }}>
+      {door ? `open TQ-${String(door.tid).padStart(4, "0")} →` : part}
+    </a>;
+  });
 };
 
 const Sections = ({ sections }) => <Box sx={{ display: "grid", gap: 1.25 }}>

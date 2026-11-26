@@ -5292,6 +5292,12 @@ def mine_message(mid: int, body: MineBody = None, background: BackgroundTasks = 
     store.audit('task', tid, 'mine', ACTOR, detail={'message_id': mid, 'subject': m.get('Subject')})
     return {'taskId': tid, 'ref': task_ref(tid)}
 
+@app.post('/api/messages/{mid}/follow-up')
+def follow_up_message(mid: int):
+    "HIS PRESS ON A BRIEF'S FOLLOW-UP LINE, `mid` his sent message it waits on (assistant.follow_up_on): its task opens and its agent has his line."
+    try: return assistant.follow_up_on(store, mid, ACTOR)
+    except LookupError as e: raise HTTPException(404, str(e))
+
 def chat_message(mid: int, background: BackgroundTasks = None):
     """The message becomes a `general` task and the assistant's chat opens on it with the question
     already asked - the road a reclassify to `general` and a `task.create_from_message` of kind

@@ -126,9 +126,11 @@ def trust_offer(store, tid: int, msgs=None) -> dict | None:
     """The two presses that lift a stranger's hold, worded for the channel (the owner, 2026-10-26: "we should have button on untrusted
     user to either trust user or trust domain and then we won't have issue again"): {'person': 'Trust Erin', 'org': 'Trust everyone at
     vendor.example' | 'Trust <workspace>' | None} - no organisation button where there is none to name, rather than one that fails."""
-    m = whom(store, store.list_messages(tid) if msgs is None else msgs, int((store.get_task(tid) or {}).get('TrustedThrough') or 0))
+    t = store.get_task(tid) or {}; held = start_held(t)
+    m = whom(store, store.list_messages(tid) if msgs is None else msgs, int(t.get('TrustedThrough') or 0), held=held)
     # ...a machine's mail names nobody to vouch for (can_hold): a no-reply invoice's task starts on his press, never on a Trust of its address
-    if not m or (m.get('Channel') == 'email' and not can_hold(m)): return None
+    # - unless its own start was held for that sender: then the Trust is its way on
+    if not m or (m.get('Channel') == 'email' and not can_hold(m, held)): return None
     meta, ch = _chat_meta(m), (m.get('Channel') or '').lower()
     if ch in ALERTS: return {'person': 'Trust alerts from this source', 'org': None}
     from .triage import person_name
@@ -279,7 +281,7 @@ def _known(store, msg: dict, exclude_mid=None, deep: bool = False, memo: dict = 
     who = _person(msg, addr)
     # before any rule that reads the address: a forged From would otherwise borrow a colleague's trust, or the owner's own
     if auth(msg) == 'fail':
-        return False, _said(f'{addr} failed sender verification (DMARC/DKIM), so the From address may be forged and no agent starts on it by itself.')
+        return False, _said(f'{addr} failed sender verification (DMARC/DKIM), so the From address may be forged and no agent starts on it by itself.', True, True)
     # ...the owner's addresses and domains read once across a memo's lines, as its settings are
     once = (lambda k, f: f()) if memo is None else (lambda k, f: memo[k] if k in memo else memo.setdefault(k, f()))
     # ...HIS ADDRESS AND HIS DOMAIN ARE HIS ONLY ON THE RECEIVING SERVER'S WORD (the red team, 2026-11-24, F3): a From typed as his own domain,
@@ -560,24 +562,39 @@ def row_msg(row: dict) -> dict:
 # writes from. A filed line is kept for the chain and handed to no agent; a machine's notice (its stored class) has nobody to vouch for. A
 # line triage read as an attempt on an AI (Danger aimed at the agent) holds whatever sent it - a scam on HIM is a warning on the page, never
 # a Trust press (walk 18: a no-reply invoice whose fraud caution asked him to "Trust Payworth", the opposite of the caution)
-def can_hold(m: dict) -> bool:
+# ...BUT A START THAT WAS HELD FOR A MACHINE'S MAIL SAYS SO, WITH ITS TRUST (the owner's live task, 2026-11-26: a vendor portal's no-reply invite
+# became a task whose start was held for its sender, and the task showed the mail and nothing else - no reason, no press): where the task's
+# own start was refused for its sender (`held`: ingest.HOLD_TAG) the machine's line holds it like a person's - unless it carries a warning
+# aimed at HIM (walk 18's fraud caution stays a warning). AND A CALENDAR INVITE HOLDS NOTHING, whoever sent it (the owner, 2026-11-26: "for
+# calendar invites it should just show accept/decline button no trust no?"): what it is comes from the mail system (counsel.is_invite), its
+# answer is the calendar's own card for his press, and no agent starts on it by itself (ingest.invite_agent asks auto_start_ok)
+def can_hold(m: dict, held: bool = False) -> bool:
     "Can this stored line hold its task for a Trust press: a person's words routed to it, or any line read as an attempt on an AI."
     from .categories import automated
-    return steers(m) or (m.get('Status') != 'filed' and not automated(m))
+    from .counsel import is_invite
+    if steers(m): return True
+    if m.get('Status') == 'filed' or is_invite(m): return False
+    return not automated(m) or (held and not m.get('Danger'))
+
+
+def start_held(t: dict | None) -> bool:
+    "Was this task's own start refused for its sender (ingest.not_started's tag), and not let go since?"
+    from .ingest import HOLD_TAG
+    return HOLD_TAG in [x for x in re.split(r'[\s,]+', str((t or {}).get('Tags') or '')) if x]
 
 
 def steers(m: dict) -> bool:
     "Did triage or ranking read this stored line as written to steer an AI (message.Danger aimed at the agent) - never a scam aimed at him."
     return bool(m.get('Danger')) and m.get('DangerAim') == 'agent'
 
-def whom(store, rows, through: int = 0, memo: dict = None) -> dict | None:
+def whom(store, rows, through: int = 0, memo: dict = None, held: bool = False) -> dict | None:
     """THE HELD SENDER - who the hold's line, its Trust buttons and the press itself name (origin.hold, trust_offer, vouch, trust_org): the
     first line since `through`, on any channel, whose sender is not trusted, or - its sender trusted - the outsider it forwards or quotes
     (their address on the line, so vouch and trust_org act on THEM, never the colleague); else the opener."""
     from .ingest import is_ours
     memo, first = {} if memo is None else memo, next((m for m in rows if not is_ours(m)), None)
     for m in rows:
-        if is_ours(m) or int(m.get('MessageId') or 0) <= through or not can_hold(m): continue
+        if is_ours(m) or int(m.get('MessageId') or 0) <= through or not can_hold(m, held): continue
         # ...A LINE ON ANY OTHER CHANNEL IS ITS OWN SENDER'S, judged as the hold judges it (HIPAA walk 6, H8: a colleague's trusted chat line
         # past the mark returned the opener - "Trust Gail" under a printer's quote that joined her task, a press that vouched for her)
         if m.get('Channel') != 'email':

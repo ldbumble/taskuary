@@ -1543,14 +1543,13 @@ class SQLiteStore:
                 self.cx.execute('SAVEPOINT widen_connector_type')
                 try:
                     self.cx.execute('ALTER TABLE connector RENAME TO connector_one_per_type')
-                    self.cx.execute('''CREATE TABLE connector (
-                        ConnectorId INTEGER PRIMARY KEY, Type TEXT, Name TEXT, ConfigJson TEXT,
-                        Secret TEXT, Active INTEGER DEFAULT 0, LastSyncAt TEXT, LastError TEXT,
-                        Roles TEXT, Scope TEXT)''')
-                    self.cx.execute('''INSERT INTO connector
-                        (ConnectorId, Type, Name, ConfigJson, Secret, Active, LastSyncAt, LastError, Roles, Scope)
-                        SELECT ConnectorId, Type, Name, ConfigJson, Secret, Active, LastSyncAt, LastError, Roles, Scope
-                        FROM connector_one_per_type''')
+                    # every column the old table has rides across, in its own type: a rebuild that named its columns
+                    # dropped one added above (an account's Workstream), and the first read after it failed
+                    info = self.cx.execute('PRAGMA table_info(connector_one_per_type)').fetchall()
+                    names = ', '.join(f'"{r[1]}"' for r in info)
+                    defs = ', '.join(f'"{r[1]}" {r[2]}' + (' PRIMARY KEY' if r[5] else '') + (f' DEFAULT {r[4]}' if r[4] is not None else '') for r in info)
+                    self.cx.execute(f'CREATE TABLE connector ({defs})')
+                    self.cx.execute(f'INSERT INTO connector ({names}) SELECT {names} FROM connector_one_per_type')
                     self.cx.execute('DROP TABLE connector_one_per_type')
                     self.cx.execute('RELEASE widen_connector_type')
                 except Exception:

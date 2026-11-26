@@ -2,6 +2,13 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.4.6.2 - 2026-11-26
+
+- A later line that is work upgrades the fyi filed before it
+- A start held for a machine's mail says why with its Trust, and a calendar invite holds nothing
+- A turn that wrote only its opening reads what it did as its answer
+- The Assistant's typed turn answers inside its time, or says why
+
 ## 0.4.6.1 - 2026-11-26
 
 - The old agent types leave what was left of them: no per-type AI, no type list, one coding row

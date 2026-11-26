@@ -67,11 +67,12 @@ export function ReviewCard({ id = "", kind = "", state = "waiting", label: title
   );
 }
 
-// A RUN OF CARDS IS ONE CARD WITH TABS (the owner, 2026-11-25: "a little carousel thing on top that scrolls from one to the other"): a tab a
-// card, named by where it goes, the one shown marked and a settled one ticked; under them each card as it is (`children`, one per tab, in its
-// order), side by side, the shown one slid into view. One he said no to, or whose press failed, is crossed, never ticked (`no`). A press on a
-// card is that card's alone AND NEVER CHANGES THE CARD SHOWN (cardLine.lineAt): it stays, saying what the press did; he moves with the arrows
-// beside the count or a tab's name. The height follows the card shown, so nothing under it jumps
+// A SET RAISED IN ONE CALL IS ONE CARD WITH A TAB EACH (BulkCard.jsx, taskuary/cardqueue.py sets; the owner, 2026-11-26: the same post for X, for
+// Reddit and for LinkedIn): ONE frame - in its head the tab names, the one shown marked and a settled one ticked, and an arrow each side of the
+// count; under them each item as the card it is (`children`, one per tab, in its order), lying flat in that frame, side by side, the shown one
+// slid into view. One he said no to, or whose press failed, is crossed, never ticked (`no`). A press on an item is that item's alone AND NEVER
+// CHANGES THE ONE SHOWN (cardLine.lineAt): it stays, saying what the press did; he moves with the arrows or a tab's name. The height follows
+// the item shown, so nothing under it jumps
 const SLIDE = 280, GAP = 24;
 const useLayout = typeof window === "undefined" ? useEffect : useLayoutEffect;
 export function CardLine({ tabs, children }) {
@@ -93,8 +94,8 @@ export function CardLine({ tabs, children }) {
       bgcolor: "transparent", color: INK, border: `1px solid ${BORDER}`, borderRadius: "50%", "&:hover": { bgcolor: "var(--tq-inset, #eef2f5)" } }}>{d < 0 ? "‹" : "›"}</Box>;
   const ease = { transition: `transform ${SLIDE}ms cubic-bezier(.2,.7,.2,1), height ${SLIDE}ms ease`, "@media (prefers-reduced-motion: reduce)": { transition: "none" } };
   return (
-    <Box data-tq-card-line={tabs.length} data-tq-line-at={tabs[at]?.key || ""} sx={{ maxWidth: "min(100%, var(--tq-turn-item))", my: 1 }}>
-      <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, mb: 0.75, minWidth: 0 }}>
+    <Artifact data-tq-card-line={tabs.length} data-tq-line-at={tabs[at]?.key || ""} sx={{ px: 1.5, py: 1.25 }}>
+      <Box data-tq-line-head="" sx={{ display: "flex", alignItems: "center", gap: 0.5, pb: 0.75, mb: 1, minWidth: 0, borderBottom: `1px solid ${BORDER}` }}>
         <Box role="tablist" aria-label="Cards in line" onKeyDown={keys} sx={{ display: "flex", alignItems: "center", minWidth: 0, overflow: "hidden" }}>
           {tabs.map((t, i) => <React.Fragment key={t.key}>{i > 0 && <Box component="span" aria-hidden sx={{ color: FAINT, fontSize: 12, px: 0.25 }}>·</Box>}
             <Box component="button" type="button" role="tab" aria-selected={i === at} tabIndex={i === at ? 0 : -1} data-tq-line-tab={t.key}
@@ -108,14 +109,14 @@ export function CardLine({ tabs, children }) {
           <Typography aria-live="polite" data-tq-card-queue="" component="span" sx={{ fontSize: 11.5, color: DIM, fontVariantNumeric: "tabular-nums" }}>{`${at + 1} of ${tabs.length}`}</Typography>
           {arrow(1)}</Box>
       </Box>
-      {/* ...room around the cards for their raised edge, which the slide's window would cut */}
-      <Box sx={{ overflow: "hidden", m: "-6px", p: "6px", ...(h != null ? { height: h + 12, boxSizing: "border-box" } : {}), ...ease }}>
+      {/* ...each item lies flat in the one frame: no edge, no padding of its own (appTheme.css: a card inside a card) */}
+      <Box sx={{ overflow: "hidden", ...(h != null ? { height: h } : {}), ...ease, "& .tq-turn-frame.tq-turn-frame": { border: 0, borderRadius: 0, m: 0, p: 0, maxWidth: "100%" } }}>
         <Box sx={{ display: "flex", alignItems: "flex-start", gap: `${GAP}px`, transform: `translateX(calc(${-at} * (100% + ${GAP}px)))`, ...ease }}>
           {panes.map((p, i) => <Box key={tabs[i]?.key ?? i} ref={(el) => { refs.current[i] = el; }} role="tabpanel" data-tq-line-pane={tabs[i]?.key ?? i}
             {...(i === at ? {} : { inert: "", "aria-hidden": "true" })} sx={{ flex: "0 0 100%", minWidth: 0 }}>{p}</Box>)}
         </Box>
       </Box>
-    </Box>
+    </Artifact>
   );
 }
 

@@ -120,6 +120,10 @@ def due(store, now: datetime = None, spawn=None) -> int:
             store.update_task(tid, {'CheckBackAt': '', 'CheckBackWhat': ''}, 'assistant'); continue
         if not general.session_for(tid) and not general.idled(tid, store) and not ingest.has_room(store): continue
         if brainroute.auto_held(store): continue           # past the day's ceiling for what nobody asked for: due again tomorrow
+        # ...AND NEVER WHILE A CARD OF THE TASK WAITS FOR HIS PRESS (the owner, 2026-11-26: nothing of the agent's comes after a card until he has
+        # approved or denied it): due again at the next tick, and spoken once nothing waits
+        from . import cardqueue
+        if not cardqueue.row_over(store, tid): continue
         store.update_task(tid, {'CheckBackAt': '', 'CheckBackWhat': ''}, 'assistant')        # cleared first: it speaks once
         # ...A TASK MARKED DONE SINCE COMES BACK FOR IT (the owner, 2026-11-20): through the one reopen, on the rail with the turn that checks
         if t.get('Status') == 'done': general.reopen(store, tid, 'router', 'check_back', {'what': t.get('CheckBackWhat') or ''})

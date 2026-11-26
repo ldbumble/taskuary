@@ -68,8 +68,7 @@ import AssessmentOutlinedIcon from "@mui/icons-material/AssessmentOutlined";
 import PersonOutlineIcon from "@mui/icons-material/PersonOutline";
 import BoltIcon from "@mui/icons-material/Bolt";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
-import Artifact, { CardLine } from "./Artifact.jsx";
-import { lineRuns, standsAlone } from "./cardLine.js";
+import Artifact from "./Artifact.jsx";
 
 const errText = (e) => e?.response?.data?.detail || e?.message || "The assistant could not respond.";
 const textOf = (message) => (message?.content || []).filter((p) => p.type === "text").map((p) => p.text).join("\n").trim();
@@ -504,8 +503,9 @@ const wasCard = (c, rv) => <ReviewDecision key={c.id} past review={c.what !== "a
 /* `items`: the server's list, with this page's own lines the server has not answered for yet (`mine`) already merged in by their names.
    `nodes`: the cards the page draws, by the review each is of ([{key, rid, node}]); `next`: the reply that waits, at the card it is. */
 function Conversation({ items: served, nodes = [], posts = [], reviews = [], next = null, landing: landed = null, landAt, name, tid, onChanged, ask = null, askAt = "", queue = null }) {
-  // ONE CARD AT A TIME (cardqueue.py): what waits behind the card that stands is drawn nowhere on its own - the landing question too - and the
-  // cards that came in a run are ONE card with a tab each (CardLine; the owner, 2026-11-25), standing at the row of the one in front (lineRuns)
+  // ONE CARD AT A TIME (cardqueue.py): what waits behind the card that stands is drawn nowhere until it comes forward - the landing question
+  // too. Separate calls are separate cards, one after another, never tabs of one another (the owner, 2026-11-26); a set raised in one call is
+  // its own one card (BulkCard.jsx: tabs, or the list)
   // ...and a card that waits is the last thing: what the agent said after it stands above it (chatStream.waitsLast, the server's own rule)
   const items = useMemo(() => waitsLast(served), [served]);
   const held = new Set(queue?.held || []), landing = held.has("land") ? null : landed;
@@ -522,9 +522,8 @@ function Conversation({ items: served, nodes = [], posts = [], reviews = [], nex
   // ...a card's own row, never an earlier version of it (drawn from its own words where it stood)
   const version = (c) => isPastCard(c) && stands.has(c.review);
   const rowOf = new Map(items.flatMap((x) => (x.kind === "card" ? [x] : x.kind === "turn" ? x.cards || [] : [])).filter((c) => !version(c)).map((c) => [String(c.review), c]));
-  const alone = standsAlone(queue?.runs), runs = lineRuns(queue?.runs, new Set(rowOf.keys())), runOf = new Map(runs.flatMap((r) => r.tabs.flatMap((t) => t.rids.map((id) => [String(id), r]))));
-  // ...each tab is the card it was, drawn by the same road as one alone - one held behind the front from its review, the card it is when it comes
-  const pane = (t) => <React.Fragment key={t.key}>{t.key === "land" ? landed : one(rowOf.get(t.key) || { id: `held:${t.key}`, review: Number(t.key), status: "pending" }, true)}</React.Fragment>;
+  // ...and the first that waits of a later run stands lit where it was raised, under the line of his that began it (cardqueue.alone)
+  const alone = new Set(queue?.alone || []);
   const one = (c, inLine = false) => {
     // ...a draft no longer to press carries what it said (`was`); one he said no to says so. Either takes its review's node with it only where
     // the review has no card of its own left in the list (chatStream.standing) - an earlier version is drawn from its own words beside it
@@ -546,13 +545,9 @@ function Conversation({ items: served, nodes = [], posts = [], reviews = [], nex
       ...(post && !got.length && !used.has(`post:${c.review}`) && used.add(`post:${c.review}`) ? [<ActReview key={`post:${c.review}`} row={post} tid={tid} onChanged={onChanged} past={past} step={c.step || null} />] : [])];
     return out;
   };
-  const draw = (cs) => (cs || []).flatMap((c) => {
-    const r = !version(c) && runOf.get(String(c.review));
-    if (!r) return one(c, alone.has(String(c.review)));
-    return String(c.review) === r.at ? [<CardLine key={`line:${r.tabs[0].key}`} tabs={r.tabs}>{r.tabs.map(pane)}</CardLine>] : [];
-  });
-  // A TURN'S CARDS, ITS LAST THING: what the log placed in it - a reply, a letter, an act - then the work's card (a tab of a run's card, there)
-  const cardsOf = (x) => [...draw(x.cards), ...(x.id === landIn && !runOf.has("land") ? [<React.Fragment key="landing">{landing}</React.Fragment>] : [])];
+  const draw = (cs) => (cs || []).flatMap((c) => one(c, alone.has(String(c.review))));
+  // A TURN'S CARDS, ITS LAST THING: what the log placed in it - a reply, a letter, an act - then the work's card
+  const cardsOf = (x) => [...draw(x.cards), ...(x.id === landIn ? [<React.Fragment key="landing">{landing}</React.Fragment>] : [])];
   const rows = items.map((x, i) => {
     const prev = items[i - 1];
     // ...A TURN AT WORK ALWAYS DRAWS ITS HEAD (2026-11-17: one that carried on after the agent's first message folded into the turn above - no
@@ -574,7 +569,7 @@ function Conversation({ items: served, nodes = [], posts = [], reviews = [], nex
     {/* ...EVERY CARD IS A ROW THE LOG PLACED (chatlog.advance - one road): under everything only the page's own block, a hand-off or a
         write-up he opened, never a card of the line */}
     {!!next && <Box data-tq-next-steps="" className="tq-aui-summary" sx={{ mt: 1, mx: { xs: 1, sm: 2 } }}>{next}</Box>}
-    {!landIn && landing && !runOf.has("land") && <div hidden>{landing}</div>}</MoreCardsCtx.Provider>;
+    {!landIn && landing && <div hidden>{landing}</div>}</MoreCardsCtx.Provider>;
 }
 /* WHAT WAITS FOR THE AGENT, BY THE BOX: accepted, not yet handed over - never in the conversation until it is (the heard rule).
    ...A ROW IS NOT MARKED [data-tq-held] (seen 2026-11-11: with lines waiting, the task's card stood 8 px under the canvas's head): that name

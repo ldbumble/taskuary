@@ -662,10 +662,12 @@ def _many(store, tid: int, name: str, args: dict, doors: dict) -> str:
         picks = {stand[0]: alls}
     for r, v in picks.items(): store.set_review_versions(r, v)
     if old and stand: _take_back(store, tid, doors, old, stand)
-    # ...and only MANY OF THE SAME THING is one card (the owner, 2026-11-20): posts for different networks are different things - each its own
-    # card in the row, with its own picture - however many there are
-    bulk = len(mine) > 1 and len({str({**base, **it}.get('type') or {**base, **it}.get('network') or '') for it in items}) <= 1
-    if bulk: store._exec(f"UPDATE review SET Batch=? WHERE ReviewId IN ({','.join('?' * len(mine))})", (key, *mine))
+    # ...ONE CALL IS ONE CARD (the owner, 2026-11-26: what the agent raised together stands together - and two calls are never tabs of one card):
+    # its rows share a Batch. Many of the SAME act is the list card, one press doing them all; DIFFERENT acts - posts for different networks,
+    # each with its own picture - are that one card with a tab each, each pressed by itself (cardqueue.is_set, the one answer)
+    if len(mine) > 1: store._exec(f"UPDATE review SET Batch=? WHERE ReviewId IN ({','.join('?' * len(mine))})", (key, *mine))
+    from . import cardqueue
+    bulk = len(mine) > 1 and not cardqueue.is_set(bulkcard.rows(store, key))
     n = len(stand)
     card = (f"They stand as ONE card holding {len(next(iter(picks.values())))} versions: the owner picks one, changes it if he likes, and sends that one." if picks and n == 1
             else 'They stand as ONE card: the owner does them all with one press; you hear the whole run once.' if bulk
@@ -674,7 +676,7 @@ def _many(store, tid: int, name: str, args: dict, doors: dict) -> str:
     shown = ((f"{len(went)} of {len(items)} sent at once - a routine's email to what its owner saved into it goes without a press; say they went."
               + (f" Not sent: {'; '.join(held)}." if held else '') + (f" The {n} unsent stand for the owner's Send{' as ONE card' if bulk else ', one at a time'}." if n else '')) if went
              else card if n else 'Nothing was filed, so no card stands - fix what each item was refused for and call it again.')
-    return _j({'ok': n > 0 or bool(went), **({'on_the_card': n} if n else {}), **({'batch': key} if bulk else {}), **({'sent': len(went)} if went else {}),
+    return _j({'ok': n > 0 or bool(went), **({'on_the_card': n} if n else {}), **({'batch': key} if len(mine) > 1 else {}), **({'sent': len(went)} if went else {}),
                **({'refused': refused} if refused else {}), 'shown': shown, **({'files_say': '\n\n'.join(dict.fromkeys(says))} if says else {})})
 
 

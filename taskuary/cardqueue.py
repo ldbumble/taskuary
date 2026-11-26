@@ -3,10 +3,10 @@ step or action card, so the agent should wait on it and then go to next steps ..
 In chat flow it makes more sense"). Every card on a task - a reply or an email to Send, an act to Approve (a push, a PR, a post, a SQL write,
 a held step), a calendar answer, the landing question - stands in ONE line, in the order it was raised. Only its front is live; the rest are
 held: drawn nowhere, named on the front as what comes next. One comes forward the moment the owner has pressed the one before it; the agent
-hears the row once it is over (row_over) where a step of its own follows, and at once where a press failed. HIS NO WAKES NOBODY WHILE A CARD
-STILL WAITS (the owner, 2026-11-26: Dismiss on two tabs of three woke the agent twice, and it wrote under the card still waiting): it is
-recorded on its card and is that card's event (events.card), told as his own - at once where his no left nothing waiting (verdicts._row_ended),
-else with the agent's next turn. A press never sends or closes another card; nothing goes without its own press.
+hears the row once it is over (row_over) where a step of its own follows, and at once where a press failed. HIS NO NEVER WAKES IT (the owner,
+2026-11-26: a click on a card wakes its agent only where it failed or the agent has something to do next - Dismiss on two posts of three
+woke it twice, and it wrote under the one still waiting): it is recorded on its card and is that card's event (events.card), told as his
+own with the agent's next turn. A press never sends or closes another card; nothing goes without its own press.
 
 Plain code, read wherever a card is drawn, listed or told: the chat's list (conversation.items), the page's detail (server.task_detail), what
 waits on the owner (store.waiting_reviews), and what its agent hears (agenttools, events.py, general.approved/failed)."""
@@ -278,7 +278,7 @@ def _state(store, tid: int) -> dict:
     """The line on task `tid`: {'live': the front's ids or [], 'held': ids that wait behind it, 'n': the front's place in the run it is one
     of, 'of': that run's length, 'next': what comes next in words, 'units', 'runs': every run of the cards that stood (_runs), 'past': the
     cards the chat moved past (proposals.written_past), 'fronts': the ids of the first card that waits in each LATER run - each stands where
-    it was raised, under the line of his that began its run, with the cards behind it as its tabs}."""
+    it was raised, under the line of his that began its run}."""
     from .proposals import written_past
     us = _units(store, tid, past := written_past(store, int(tid)))
     waiting = [u for u in us if u['done'] is None]
@@ -321,29 +321,41 @@ def _runs(store, tid: int, us: list) -> list:
     return out
 
 
-# A RUN OF CARDS IS ONE CARD WITH TABS (the owner, 2026-11-25: "a little carousel thing on top that scrolls from one to the other"): each tab is
-# the card it was, named by where it goes - the network a post goes to, whom a letter goes to - with whether it is settled and which is in front
-def tabs(store, s: dict) -> list:
-    """Each run of two or more on the line `s` (state): [[{'key', 'rids', 'name', 'done', 'front'}]], oldest first - and a later run of one
-    card that waits (state's `fronts`), which stands by itself where it was raised. `front`: the one of its run in front. `no`: settled
-    without going - he said no to it, or its press failed (the card gallery, 2026-11-25: a dropped email's tab was ticked like a sent one)."""
-    no = lambda u: u['done'] is not None and bool(u['rows']) and not any(r['Status'] in ('approved', 'edited', 'sent') for r in u['rows'])
-    return [[{'key': str(u['rids'][0]), 'rids': u['rids'], 'name': tab(store, u), 'done': u['done'] is not None, 'front': u is _front(r), **({'no': True} if no(u) else {})}
-             for u in r] for r in s['runs'] if len(r) > 1 or r[0]['rids'] in s['fronts'] and r[0]['rids'] != [LAND]]
+# WHAT IS ONE CARD, AND WHAT IS A TAB (the owner, 2026-11-26, taking back 11-25's "a run of cards is one card with tabs" - a routine change and
+# a post stood as two tabs of one card): THE AGENT'S CALL DECIDES, never a count and never what the cards are about.
+# - separate calls are separate cards, one after another (the line: its front drawn, the rest behind it) - never tabs of one another;
+# - ONE call carrying a set (`items`, bulkcard.py - its rows share a Batch) is ONE card: where its items are the same act (one letter to many,
+#   forty issues closed) the list card, one press doing them all with its progress on it; where they are DIFFERENT acts - the same post for
+#   X, for Reddit and for LinkedIn - one card with a tab each (`sets`), each tab the card of its own act with its own press.
+def is_set(rows: list) -> bool:
+    "Are the rows of one call's card different acts (a tab each), not one act to many (the list)? By each row's own act, as it was filed."
+    return all(r.get('Kind') == 'action' for r in rows) and len({_p(r).get('type') or _p(r).get('action') for r in rows}) > 1
 
 
-def tab(store, u: dict) -> str:
-    "A card's name on its tab: 'LinkedIn', 'Erin Blake', else what it is ('Push')."
+def sets(store, tid: int) -> dict:
+    """{its Batch: [{'key', 'rid', 'name', 'done', 'no'}]} for each card on task `tid` that is a set under tabs (is_set), its tabs in the order
+    they were raised: `name` where it goes ('LinkedIn'), `done` once settled, `no` settled without going - his no, or a press that failed."""
+    by = {}
+    for r in store._rows('SELECT * FROM review WHERE TaskId=? AND Batch IS NOT NULL ORDER BY ReviewId', (int(tid),)): by.setdefault(r['Batch'], []).append(r)
+    went = ('approved', 'edited', 'sent')
+    return {k: [{'key': str(r['ReviewId']), 'rid': r['ReviewId'], 'name': tab(store, r), 'done': r['Status'] != 'pending' and not handed(r),
+                 **({'no': True} if r['Status'] not in ('pending', *went) else {})} for r in rs] for k, rs in by.items() if is_set(rs)}
+
+
+def tab(store, r: dict) -> str:
+    "A tab's name: the network its post goes to ('LinkedIn'), else what its act is by its own name or words ('Push')."
     from .proposals import POSTS
-    r = (([] if step(u) else _waits(u)) or u['rows'] or [{}])[0]
-    if r.get('Kind') == 'action' and not r.get('Batch') and (net := POSTS.get(_p(r).get('type'))): return net
-    if r.get('Kind') not in (None, 'action') and not r.get('Batch') and (to := to_whom(store, r)): return to
-    # ...a thing's own name is written as its card writes it (the card gallery, 2026-11-25: "Northwind/ledger#31" over northwind/ledger#31);
-    # only a phrase in his words starts with a capital ('Push')
-    if not r.get('Batch') and (n := own_name(r)): return n
-    w = what(store, u)
+    if (net := POSTS.get(_p(r).get('type'))): return net
+    if (n := own_name(r)): return n
+    w = what(store, {'rids': [r['ReviewId']], 'rows': [{**r, 'Batch': None}]})
     w = w[4:] if w.startswith('the ') else w
     return w[:1].upper() + w[1:]
+
+
+def alone(s: dict) -> list:
+    """The keys of the cards on the line `s` (state) that stand lit beside its front: the first that waits of each LATER run (state's
+    `fronts`), which stands where it was raised, under the line of his that began its run."""
+    return [str(f[0]) for f in s['fronts'] if f != [LAND]]
 
 
 def own_name(r: dict) -> str:
@@ -511,9 +523,8 @@ def screen(store, tid: int, skip=()) -> str:
                 shown = '' if 'approve' in ps else f" (its card: {card.press_words({'kind': card.SEND, 'presses': ps})})"
                 waiting.append(f'Waiting for his press now{outcome(r)}: {n}{shown}')
             elif u['rids'] == front: waiting.append(f'Comes forward once your turn ends (you are going on from his last press): {n}')
-            # ...A CARD BEHIND THE FRONT IN ITS RUN IS A TAB OF THE SAME CARD, HIS TO PRESS (tabs; walk 22: told "not on his screen yet", an agent drew
-            # the second post again as a table and a file "for review" beside the cards)
-            elif ids & held: waiting.append(f'On his screen now, a tab of the same card as the one in front - his to press in any order: {n}')
+            # ...A CARD BEHIND THE FRONT COMES ONCE THE ONE IN FRONT IS PRESSED (separate calls are separate cards, one after another)
+            elif ids & held: waiting.append(f'Raised, and behind the card in front - it comes forward at his press on that one: {n}')
             continue
         s, at = (_card(r)['status'] if r else 'approved'), clock(r.get('DecidedAt')) if r else ''
         if s == 'passed': str(r.get('DecidedAt') or '') >= since and greyed(r, n)

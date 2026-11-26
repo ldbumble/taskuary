@@ -46,9 +46,17 @@ export const rowState = (r, run) => {
   return r.Status === "pending" ? { waiting: true } : { left: true };
 };
 // ...WHICH ROWS STAND OPEN in their own card: the first few, to review, and any he opened - never one he shut (`open`: ids he opened, a shut one
-// its negative), none while the run is at work. WAITING OR SETTLED ALIKE (the owner, 2026-11-26: "cards or anything generated on chat never go
-// away"): a row he pressed or dismissed in its own card stays open there, saying what came of it - it folded to a line the moment it settled
-export const rowOpens = (id, i, { open, live = false, sample = 2 }) => open.has(id) || (i < sample && !live && !open.has(-id));
+// its negative). WAITING, AT WORK OR SETTLED ALIKE (the owner, 2026-11-26: "cards or anything generated on chat never go away"): a row he
+// pressed or dismissed in its own card stays open there, saying what came of it, and the ones open stay open through the run - they folded to
+// a line the moment one settled, and all of them the moment he pressed (the card shrank under his pointer and grew back at the run's end)
+export const rowOpens = (id, i, { open, sample = 2 }) => open.has(id) || (i < sample && !open.has(-id));
+// ...AND A SET UNDER TABS (taskuary/cardqueue.py sets - each of its rows carries its tab's name, `Tab`): [{key, name, done, no, front}] in the
+// order they were raised, the first that waits in front - null for the list card
+export const tabsOf = (rows, run) => {
+  if (!(rows || []).length || !rows.every((r) => r.Tab)) return null;
+  const st = rows.map((r) => rowState(r, run)), front = st.findIndex((s) => s.waiting);
+  return rows.map((r, i) => ({ key: String(r.ReviewId), name: r.Tab, done: !st[i].waiting, front: i === front, ...(st[i].waiting || st[i].done ? {} : { no: true }) }));
+};
 export const running = (run) => ["running", "cancelling"].includes(run?.state);
 // the bar: what of this run is over, of its total
 export const progress = (run) => (run?.total ? Math.round((100 * ((run.done || 0) + (run.failed || 0) + (run.left || 0))) / run.total) : 0);

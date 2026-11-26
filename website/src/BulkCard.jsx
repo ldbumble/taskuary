@@ -2,12 +2,15 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Box, LinearProgress, Typography } from "@mui/material";
 import ReviewDecision, { ActReview } from "./ReviewDecision.jsx";
 import { cardOf, isCardReview } from "./actionCard.js";
-import { countOf, pressOf, progress, rowOf, rowOpens, rowState, running } from "./bulkCard.js";
+import { countOf, pressOf, progress, rowOf, rowOpens, rowState, running, tabsOf } from "./bulkCard.js";
 import { MovedPast } from "./PassedCard.jsx";
-import { ReviewCard } from "./Artifact.jsx";
+import { CardLine, ReviewCard } from "./Artifact.jsx";
 import { DIM, FAINT } from "./theme.jsx";
 import api from "./api";
 
+// WHAT ONE CALL RAISED TOGETHER IS ONE CARD (the owner, 2026-11-26; taskuary/cardqueue.py sets): DIFFERENT acts - the same post for X, for Reddit,
+// for LinkedIn - are a tab each in the one frame (CardLine), each tab the card of its own act with its own press; the server says which
+// (a row's `Tab`), never a count.
 // MANY OF ONE ACT IS THE SAME CARD WITH ITS ROWS (bulkCard.js, taskuary/bulkcard.py): the count, a row each - whom or what it goes to, its one line,
 // what to check - with a tick box; the first few opened in their own card to review; one press does every ticked one, each by its own road, and a
 // bar IN the card says how far it is, failures counted as they come, Stop for the rest. Its agent hears the run once.
@@ -33,11 +36,16 @@ export default function BulkReview({ rows = [], tid, onChanged, past: given = fa
   };
   const stop = () => api.post(`/api/reviews/batch/${key}/cancel`).then(({ data }) => setRun(data)).catch(() => {});
   const flip = (setter, id) => setter((s) => { const x = new Set(s); if (x.has(id)) x.delete(id); else x.add(id); return x; });
-  const shownRow = (r, i) => rowOpens(r.ReviewId, i, { open, live, sample: SAMPLE });
+  // ...an item as the card of its own act: a list row opened to review, and a set's tab
+  const own = (r) => (isCardReview(r) ? <ActReview row={cardOf(r)} tid={tid} onChanged={onChanged} past={past} /> : <ReviewDecision review={r} onChanged={onChanged} past={past} />);
+  const shownRow = (r, i) => rowOpens(r.ReviewId, i, { open, sample: SAMPLE });
   const items = states.map(([r, s], i) => { const w = rowOf(r); return { id: r.ReviewId, target: w.target, line: w.line, flags: w.flags, failed: s.failed || "",
     mark: s.done ? "✓" : s.failed ? "!" : "–", struck: skip.has(r.ReviewId), ...(s.waiting ? { checked: !skip.has(r.ReviewId), locked: live, onCheck: () => flip(setSkip, r.ReviewId) } : {}),
       open: shownRow(r, i), onOpen: () => flip(setOpen, shownRow(r, i) ? -r.ReviewId : r.ReviewId),
-      body: isCardReview(r) ? <ActReview row={cardOf(r)} tid={tid} onChanged={onChanged} past={past} /> : <ReviewDecision review={r} onChanged={onChanged} past={past} /> }; });
+      // ...while the run is at work an open row is looked at, never pressed: the run does it
+      body: <div {...(live ? { inert: "" } : {})}>{own(r)}</div> }; });
+  const tabs = tabsOf(rows, run);
+  if (tabs) return <MovedPast on={past}><CardLine tabs={tabs}>{rows.map((r) => <div key={r.ReviewId}>{own(r)}</div>)}</CardLine></MovedPast>;
   const ran = live || ["finished", "stopped"].includes(run?.state);
   return (<MovedPast on={past}>
     <ReviewCard id={key} kind="bulk" state={live ? "going" : waiting.length ? "waiting" : "done"} data-tq-bulk-card={key} label={`${countOf(rows)} - review a few, then do them all`}

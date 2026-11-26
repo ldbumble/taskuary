@@ -1332,11 +1332,9 @@ def declined(store, tid: int, p: dict) -> None:
     gate.remember(store, tid, p.get('keys'), 'dismissed')
     _no(store, tid, not_approved(p.get('what') or p.get('command')))
 def _no(store, tid: int, text: str) -> None:
-    """HIS NO WAKES NOBODY WHILE A CARD OF THE TASK STILL WAITS, on any card (the owner, 2026-11-26: each Dismiss woke the agent, and it wrote
-    under the card still waiting): it is on its card, and kept as the task's event - told to its agent as his own with its next turn
-    (events.take). The no that leaves nothing waiting is told at once, as any card's (verdicts._row_ended)."""
-    from . import cardqueue, events
-    if cardqueue.row_over(store, tid): return _tell(store, tid, text)
+    """HIS NO NEVER WAKES THE AGENT, on any card (the owner, 2026-11-26: each Dismiss woke it, and it wrote under the card still waiting): it is
+    on its card, and kept as the task's event - told to its agent as his own with its next turn (events.take)."""
+    from . import events
     events.note(store, tid, text)
 
 

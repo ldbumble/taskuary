@@ -1,8 +1,9 @@
 // THE OWNER'S THREE RULES, WATCHED ON THE REAL PAGE (not a test: nothing here runs in CI). node browser/cards-stay.mjs <out folder>
 // 2026-11-26: "Things on chat don't go away." "No text after an approval card until the approval card is denied or approved, then agent moves
-// on." "Cards never just disappear." Three posts in one card on a chat task in a disposable home, each network a stand-in: he steps with the
-// arrows, dismisses one, the agent says something while two still wait, he refreshes, dismisses another, approves the last; then a routine
-// change beside a post, the routine approved. Each step a frame, the whole thing recorded (recorder.mjs), and every painted frame sampled:
+// on." "Cards never just disappear." A: the same post for three networks, raised in one call - ONE card with a tab each, on a chat task in a
+// disposable home, each network a stand-in: he steps with the arrows, dismisses one, the agent says something while two still wait, he
+// refreshes, dismisses another, approves the last. B: a routine change and a post, a call each - two cards, one after another, never tabs.
+// C: one act to many - the list card, before and after its one press. Each step a frame, the whole recorded (recorder.mjs), every frame sampled:
 // the tab shown, the count, where the card stands, and how many of the chat's rows stand UNDER a card that still waits - which must be none.
 import path from "node:path";
 import { mkdir, writeFile } from "node:fs/promises";
@@ -56,7 +57,7 @@ try {
 
   // ── A. three posts in one card ──
   const { taskId, reviewIds } = await api("/api/fixture/review-rows", { title: "Announce the export fix", connect: ["x", "reddit", "linkedin"], ask: "Post the export fix on X, Reddit and LinkedIn.",
-    answer: "Three posts are set up below, one for each network.", rows: POSTS.map(row) });
+    answer: "Three posts are set up below, one for each network.", rows: POSTS.map((x) => ({ ...row(x), Batch: "set1" })) });
   await api(`/api/tasks/${taskId}/trust`, {});
   await open(taskId);
   await shot("a0-three-posts-arrows");
@@ -79,20 +80,33 @@ try {
   await sum("A after the refresh"); await rec.stop({ sheet: 16 });
   said.push(`A reviews: ${JSON.stringify(reviewIds)}`);
 
-  // ── B. a routine change beside a post ──
+  // ── B. a routine change and a post: a call each, so a card each - one after another ──
   const b = await api("/api/fixture/change-card", { was: "Draft a LinkedIn post about the week's numbers. Three paragraphs.", now: "Draft a LinkedIn post about the week's numbers. Two sentences, no hashtags." });
   await api("/api/fixture/agent-says", { taskId: b.taskId, rows: [row(POSTS[2])] });
   await open(b.taskId);
-  await shot("b0-routine-change-and-post");
+  await shot("b0-two-unrelated-cards-the-first");
   const rec2 = await record(page, path.join(OUT, "video-b"), { secs: 60, mb: 80 });
   await watch(); await sleep(600);
-  said.push(`B opens on: ${await at()}`);
-  said.push(`approve the routine change: ${await press(/^(Approve|Change|Save)/)}`); await sleep(3500); said.push(`  still on: ${await at()}`); await shot("b1-routine-approved-stays");
-  said.push(`next arrow: ${await step(1)}`); await sleep(900); said.push(`  now on: ${await at()}`); await shot("b2-post-tab");
-  said.push(`previous arrow: ${await step(-1)}`); await sleep(900); said.push(`  back on: ${await at()}`); await shot("b3-back-on-approved");
-  await sum("B routine and post"); await rec2.stop({ sheet: 12 });
+  said.push(`B: tabs on the page: ${await page.evaluate(() => document.querySelectorAll("[data-tq-line-tab]").length)}; cards drawn: ${await page.evaluate(() => document.querySelectorAll("[data-tq-task-page] [data-tq-review-card]").length)}`);
+  said.push(`approve the routine change: ${await press(/^(Approve|Change|Save)/)}`); await sleep(4000); await shot("b1-first-approved-second-stands-after-it");
+  said.push(`B after the press: tabs ${await page.evaluate(() => document.querySelectorAll("[data-tq-line-tab]").length)}; cards waiting ${await page.evaluate(() => document.querySelectorAll('[data-tq-task-page] [data-tq-act-state="waiting"]').length)}`);
+  await sum("B two unrelated cards"); await rec2.stop({ sheet: 12 });
+
+  // ── C. one act to many: the list card, and its one press ──
+  const TIPS = [1, 2, 3, 4].map((i) => ({ ...row(["linkedin_post", `Ledger portal tip ${i}: invoices in one place.`]), Batch: "bulk1" }));
+  const cTask = await api("/api/fixture/review-rows", { title: "Four portal tips", connect: ["linkedin"], ask: "Post the four portal tips on LinkedIn.", answer: "The four tips are on one card.", rows: TIPS });
+  await api(`/api/tasks/${cTask.taskId}/trust`, {});
+  await open(cTask.taskId);
+  await shot("c0-bulk-card-before");
+  const rec3 = await record(page, path.join(OUT, "video-c"), { secs: 60, mb: 80 });
+  await watch(); await sleep(600);
+  said.push(`C: tabs on the page: ${await page.evaluate(() => document.querySelectorAll("[data-tq-line-tab]").length)}; rows on the card: ${await page.evaluate(() => document.querySelectorAll("[data-tq-bulk-row]").length)}`);
+  said.push(`C press: ${await page.evaluate(() => { const x = document.querySelector("[data-tq-bulk-press]"); x?.click(); return x?.innerText || "no press"; })}`);
+  await sleep(700); await shot("c1-bulk-card-going"); await sleep(5000); await shot("c2-bulk-card-after-with-progress");
+  said.push(`C after: ${await page.evaluate(() => document.querySelector("[data-tq-bulk-progress]")?.innerText || "no progress line")}`);
+  await sum("C the list card"); await rec3.stop({ sheet: 12 });
   // ...and the three posts again at a phone's width: the arrows and the count on one line with the tab names
-  await page.setViewport({ width: 390, height: 800 }); await open(taskId); await shot("c0-phone-width");
+  await page.setViewport({ width: 390, height: 800 }); await open(taskId); await shot("d0-phone-width");
   said.push(`page errors: ${errors.length ? errors.join(" || ") : "none"}`);
 } catch (e) { said.push(`STOPPED: ${e.message}`); } finally {
   await writeFile(path.join(OUT, "README.txt"), said.join("\n") + "\n").catch(() => {});

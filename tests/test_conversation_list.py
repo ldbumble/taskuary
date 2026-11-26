@@ -700,9 +700,8 @@ class TheList(unittest.TestCase):
         ray, erin = mail('ray@northwind.example', 'Ray - a quote for a bus for 40? Alex'), mail('erin@northwind.example', 'Erin - can you approve the budget? Alex')
         self.brain.delay = 0; self.rest()
         was = self.list(); wrote = [x for x in was['items'] if x['kind'] == 'turn'][-1]
-        tab = lambda rid, to, front: {'key': str(rid), 'rids': [rid], 'name': to, 'done': False, 'front': front}   # ...one card, a tab each (cardqueue.tabs)
         self.assertEqual((was['letters'], was['queue']), (wrote['id'], {'live': [ray], 'held': [erin], 'line': '1 of 2 · next: the email to erin@northwind.example',
-                                                                         'runs': [[tab(ray, 'ray@northwind.example', True), tab(erin, 'erin@northwind.example', False)]]}))
+                                                                         'alone': [], 'sets': {}}))
         self.assertEqual([r['ReviewId'] for r in s.waiting_reviews() if r['TaskId'] == tid], [ray], 'what waits on him: the one that stands')
         next_second()
         woke, sent = [], mock.patch('taskuary.outbound.send_out', lambda *a, **k: {'channel': 'email', 'to': k.get('to') or []})

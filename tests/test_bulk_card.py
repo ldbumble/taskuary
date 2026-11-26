@@ -84,7 +84,7 @@ def test_twenty_five_emails_are_one_card_and_one_press_sends_them_all():
 
 def test_a_bulk_card_and_a_run_of_cards_stand_alike_on_a_coding_task_and_a_chat_task():
     """ONE CHAT (the owner, 2026-11-25: "it should be exactly the same, only difference is what level of feedback it shows by default"): a
-    coding task's bulk card, and its run of cards with a tab each, stand in its chat where a chat task's do - read by the one list."""
+    coding task's bulk card, and its cards raised one call each, stand in its chat where a chat task's do - read by the one list."""
     from taskuary import chatlog
     def drawn(kind, bulk):
         s, tid = world(kind)
@@ -94,11 +94,13 @@ def test_a_bulk_card_and_a_run_of_cards_stand_alike_on_a_coding_task_and_a_chat_
                 for e in emails(3): call(tid, 'propose_email', **e)
             d = chatlog.serve(s, tid, 'steps')
         cards = [(x['kind'], [(k['what'], k['status'], k.get('n')) for k in ([x] if x['kind'] == 'card' else x.get('cards') or [])]) for x in d['items']]
-        return cards, d['queue']['line'], [[t['name'] for t in r] for r in d['queue']['runs']]
+        return cards, d['queue']['line'], d['queue']['held'], d['queue']['sets']
     for bulk in (True, False):
         assert drawn('coding', bulk) == drawn('general', bulk), bulk
     assert [w for _, c in drawn('coding', True)[0] for w in c] == [('batch', 'pending', 3)]
-    assert len(drawn('coding', False)[2]) == 1 and len(drawn('coding', False)[2][0]) == 3, 'three cards, one card with a tab each'
+    cards, line, held, sets = drawn('coding', False)
+    assert len([w for _, c in cards for w in c]) == 1 and line.startswith('1 of 3') and len(held) == 2 and sets == {}, 'three calls: three cards, one after another, never tabs'
+    assert drawn('coding', True)[3] == {}, 'one act to many is the list card, never tabs'
 
 
 def test_one_call_is_one_card_whatever_its_count_and_separate_calls_are_cards_one_after_another():

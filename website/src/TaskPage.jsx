@@ -2718,14 +2718,6 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
     ...allReviews.filter((r) => r.Kind !== "action" && r.Kind !== "slot" && WENT.includes(r.Status) && r.ReviewId !== sentBox?.id)
       .map((r) => ({ key: `sent:${r.ReviewId}`, at: r.CreatedAt || "", rid: r.ReviewId, node: <SentReview {...sentCardOf(r)}
         {...(sentHere?.id === r.ReviewId ? { closing: sentHere.closing, kept: sentHere.kept } : {})} /> }))];
-  // ...AND EACH CARD THE LINE HOLDS BEHIND ITS FRONT is a tab of its run's one card (cardqueue.tabs): the card it is, by its own component,
-  // drawn only in that card's tabs (GeneralWorkspace CardLine) - its rows apart from the page's, so no other door takes it for the one in front
-  const heldRvs = t ? detail?.heldReviews || [] : [];
-  turnCards.push(...heldGroups(heldRvs.filter((r) => !r.Batch && !isCardReview(r))).map((g) => { const r = g.reviews[0];
-    return { key: `held:${r.ReviewId}`, at: r.CreatedAt || "", rid: r.ReviewId, waits: true, node: g.held ? <HeldSteps reviews={g.reviews} onChanged={decided} />
-      : r.Kind === "slot" ? <Letter taskId={t?.TaskId} item={letterOf[r.ReviewId] || null} rv={r} onChanged={decided} /> : <ReviewDecision review={r} onChanged={decided} /> }; }),
-    ...Object.values(heldRvs.filter((r) => r.Batch).reduce((m, r) => ({ ...m, [r.Batch]: [...(m[r.Batch] || []), r] }), {})).map((rs) => [...rs].sort((a, b) => a.ReviewId - b.ReviewId))
-      .map((rs) => ({ key: `batch:${rs[0].Batch}`, at: rs[0].CreatedAt || "", rid: rs[0].ReviewId, waits: true, node: <BulkReview rows={rs} tid={t?.TaskId} onChanged={decided} /> })));
   // ...the reply that went is that card in its turn, so the chat's cards say it no second time - no "What was sent", no To over it
   const sentCarded = !!sentReview && turnCards.some((c) => c.key === `sent:${sentReview.ReviewId}`);
   // ...the reply in it only once it is written or something was said about it (replyCardShown): a reply owed that nobody wrote is the agent's

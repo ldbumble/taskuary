@@ -2427,9 +2427,10 @@ def _task_detail(task_id: int, rev: str = '', opened: bool = False, whole: bool 
     from . import card
     closes = card.may_close(store, task_id)
     held = set(q['held'])
-    # ...but each is a tab of the one card its run is (cardqueue.tabs), drawn there by its own card - its rows apart, so nothing else takes it
-    d['heldReviews'] = [r for r in d['reviews'] if r['ReviewId'] in held]
     d['reviews'] = [r for r in d['reviews'] if r['ReviewId'] not in held and not cardqueue.obsolete_read(store, task_id, r)]
+    # ...and each row of a card that is a set under tabs carries its tab's name (cardqueue.sets: the one answer to "tabs or a list")
+    tabs = {t['rid']: t['name'] for ts in cardqueue.sets(store, task_id).values() for t in ts}
+    d['reviews'] = [{**r, 'Tab': tabs[r['ReviewId']]} if r['ReviewId'] in tabs else r for r in d['reviews']]
     # ...and on a task a stranger's words hold, no card waits for a press until he trusts them: the hold and its Trust are the one move
     # (the judge's browser round, 2026-11-19: the reply drafted on a stranger's mail stood as the email card where the hold belonged)
     from . import origin as _origin
@@ -2437,7 +2438,7 @@ def _task_detail(task_id: int, rev: str = '', opened: bool = False, whole: bool 
     # words, never Send on the reply to the known person (the ruling, 2026-11-19)
     if _origin.keeps_him(store, task_id):
         past_ = set(q['past'])
-        d['reviews'] = [r for r in d['reviews'] if r.get('Status') != 'pending' or r['ReviewId'] in past_]; d['heldReviews'] = []
+        d['reviews'] = [r for r in d['reviews'] if r.get('Status') != 'pending' or r['ReviewId'] in past_]
     d['queue'] = {'live': q['live'], 'held': q['held'], 'closes': closes}       # ...the page's reply door reads it: none beside a front that is another card
     # ...and what the chat moved past reads as it will once its agent hears that (proposals.written_past): greyed in place, from this read on
     from .proposals import SET_ASIDE

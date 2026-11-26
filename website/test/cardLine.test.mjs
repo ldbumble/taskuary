@@ -1,9 +1,9 @@
-// A RUN OF CARDS IS ONE CARD WITH TABS (the owner, 2026-11-25: "we write 1 of 3 anyway so a little carousel thing on top that scrolls from one to
-// the other is fine"): three posts waiting in line are one CardLine - a tab each, "1 of 3" - and each tab is the one review card it was, drawn by
-// the same component; a press on the shown one settles it and the line slides on to the next that waits. Invented posts.
+// A SET RAISED IN ONE CALL IS ONE CARD WITH A TAB EACH (the owner, 2026-11-26: the same post for three networks - never two unrelated cards):
+// one frame, its tabs and "1 of 3" in its head, each tab the one review card it is, drawn by the same component; a press on the shown one
+// settles it and NEVER changes the tab shown. Invented posts.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { lineAt, lineRuns, lineStep, shownTab, standsAlone } from "../src/cardLine.js";
+import { lineAt, lineStep, shownTab } from "../src/cardLine.js";
 
 const AXIOS = { name: "axios", setup(b) { b.onResolve({ filter: /^axios$/ }, () => ({ path: "axios", namespace: "stub" }));
   b.onLoad({ filter: /.*/, namespace: "stub" }, () => ({ loader: "js", contents: "const a = { get: async () => ({ data: {} }), post: async () => ({ data: {} }), put: async () => ({ data: {} }), interceptors: { request: { use() {} }, response: { use() {} } }, defaults: { headers: { common: {} } } }; export default { ...a, create: () => a };" })); } };
@@ -83,17 +83,12 @@ test("the card draws an arrow each side of the count, each a button with its nam
   assert.equal((html.match(/role="tablist"[^>]*>(.*?)data-tq-line-step/s)?.[1].match(/role="tab"/g) || []).length, 3, "the tab names stay, each a press");
 });
 
-test("the one card stands at the row of the card in front, else the newest of its cards that has one; one with none is not drawn", () => {
-  assert.equal(lineRuns([tabsOf([2], 0)], new Set(["41", "43"]))[0].at, "41", "a tab pressed behind the front never moves the card");
-  const runs = [tabsOf([0], 1)];
-  assert.equal(lineRuns(runs, new Set(["41", "42"]))[0].at, "42");
-  assert.equal(lineRuns(runs, new Set(["41"]))[0].at, "41", "the next has no row yet: it stays where it stood");
-  assert.deepEqual(lineRuns(runs, new Set()), []);
-  assert.deepEqual(lineRuns([tabsOf().slice(0, 1)], new Set(["41"])), [], "a card alone is no carousel");
-});
-
-test("a card raised after his line while an older one still waits above it stands alone at its own row, never a tab of the card above", () => {
-  const above = tabsOf().slice(0, 2), under = [{ key: "51", rids: [51], name: "Gail Moreno", done: false, front: true }];
-  assert.deepEqual([...standsAlone([above, under])], ["51"]);
-  assert.deepEqual(lineRuns([above, under], new Set(["41", "51"])).map((r) => r.tabs.map((t) => t.key)), [["41", "42"]], "the card above keeps its own tabs, and only those");
+// The owner, 2026-11-26: "did you move the tabs switcher on to the actual card as it looks really weird now" - the tab names and the count are
+// the card's own head, inside its one frame, never a row floating over it in the chat
+test("the tabs and the count are in the card's own frame, and each item lies in that one frame", async () => {
+  const { line } = await P, html = line(tabsOf().map((t) => ({ ...t, key: `9${t.key}` })), NETS.map(post));
+  assert.match(html, /^(<style[^>]*>.*?<\/style>)*<div class="[^"]*tq-turn-frame[^"]*"[^>]*data-tq-card-line="3"/s, "the card is the one frame");
+  const head = html.indexOf("data-tq-line-head"), frame = html.indexOf("tq-turn-frame");
+  assert.ok(frame >= 0 && frame < head && head < html.indexOf('role="tabpanel"'), "its head, with the tabs, comes inside the frame and over the items");
+  assert.ok(html.indexOf('role="tablist"') > head && html.indexOf("data-tq-card-queue") > head);
 });

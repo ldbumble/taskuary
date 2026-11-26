@@ -316,7 +316,7 @@ def run_of(turn: dict, kids: list) -> float:
 # after the card it makes the card look useless"): what the agent says or does after a card while it waits - a later turn, a note, a failure -
 # is drawn ABOVE it. The card stands at the foot of the newest row before his next line, and never crosses that line (the 11-25 ruling:
 # nothing comes back above or below his line - a card raised before it stays above it). Once settled it stays where he last saw it wait
-# (`under`, the row it stood under - kept by serve) and what comes later goes under it. A carousel's and a bulk card's row are a card's: one rule.
+# (`under`, the row it stood under - kept by serve) and what comes later goes under it. A set's and a bulk card's row are a card's: one rule.
 # THE SAME FUNCTION ON THE PAGE (website/src/chatStream.js waitsLast), both read against tests/fixtures/waits_last.json
 def waits_last(items: list) -> list:
     "`items` (read's, in the log's order) with each card set down where it is drawn. A list of new rows; none of `items` is changed."
@@ -345,39 +345,25 @@ def waits_last(items: list) -> list:
     return out
 
 
-def _stood(store, tid: int, was: list, now: list) -> bool:
+def _stood(store, tid: int, was: list, now: list) -> None:
     """Each waiting card `waits_last` set down under a later row keeps that row (`under`), so it stays there once it is settled. Written
-    beside the read, never a change he sees: the row is drawn there already. True where a row was kept (it is set down again)."""
+    beside the read, never a change he sees: the row is drawn there already."""
     cards = lambda x: [x] if x.get('kind') == 'card' else x.get('cards') or [] if x.get('kind') == 'turn' else []
     def spots(xs, prev=None) -> dict:
-        "{a card: (its place, the row it stands under - its turn, else the row over it)}"
+        "{a card: the row it stands under - its turn, else the row over it}"
         out = {}
-        for n, x in enumerate(xs):
-            for c in cards(x): out[id(c)] = (n, x.get('id') if x.get('kind') == 'turn' else (prev or {}).get('id'))
+        for x in xs:
+            for c in cards(x): out[id(c)] = x.get('id') if x.get('kind') == 'turn' else (prev or {}).get('id')
             if x.get('kind') != 'card': prev = x
         return out
     home, spot = spots(was), spots(now)
-    kept = []
-    def keep(c, under):
-        if not under or c.get('under') == under: return
-        c['under'] = under; kept.append(c)
+    for c in [c for x in now for c in cards(x) if str(c.get('id') or '').count(':') == 1]:
+        if c.get('status') != 'pending' or not (under := spot[id(c)]) or home[id(c)] == under or c.get('under') == under: continue
+        c['under'] = under
         with store.lock:
             if (r := _row(store, tid, c['id'])):
                 store.cx.execute('UPDATE chatlog SET Body=? WHERE Id=?', (json.dumps({**json.loads(r['Body'] or '{}'), 'under': under}, default=str), r['Id']))
                 store.cx.commit()
-    mine = [c for x in now for c in cards(x) if str(c.get('id') or '').count(':') == 1]
-    for c in mine:
-        if c.get('status') == 'pending' and home[id(c)][1] != spot[id(c)][1]: keep(c, spot[id(c)][1])
-    # ...AND THE TABS OF ONE CARD STAND IN ONE PLACE, its front's (the page draws the run there - cardLine.lineRuns): a tab settled where the
-    # front stood before, or pressed while it waited behind, never leaves the card to come back up to it once the last is pressed
-    from . import cardqueue
-    for run in cardqueue.state(store, tid).get('runs') or []:
-        rids = {r for u in run for r in u['rids']}
-        tabs = [c for c in mine if c.get('review') in rids] if len(run) > 1 else []
-        lead = max(tabs, key=lambda c: (c.get('status') == 'pending', spot[id(c)][0]), default=None)
-        for c in tabs:
-            if spot[id(c)][1] != spot[id(lead)][1]: keep(c, spot[id(lead)][1])
-    return bool(kept)
 
 
 DRAFTS = ('draft_reply', 'draft')
@@ -1066,6 +1052,9 @@ def advance(store, tid: int) -> None:
         rv = by.get(json.loads(r['Body']).get('review'))
         if not rv or k.count(':') > 1: continue          # ...an earlier version (r:<rid>:v<n>) is what it said then, for good
         st = _card(rv)['status']
+        # ...A CARD OF MANY WAITS WHILE ANY OF ITS ROWS DOES (a set's tab or a list's row pressed by itself, 2026-11-26: its row read as its first
+        # item did - dismissed - with the rest still his to press)
+        if rv.get('Batch') and st != 'pending' and any(y.get('Batch') == rv['Batch'] and y['Status'] == 'pending' for y in by.values()): st = 'pending'
         # ...A REPLY RAISED EMPTY AND WRITTEN AFTER HIS LINE IS THE CARD OF THE TURN THAT WROTE IT (the real walk 2, 2026-11-19: the agent asked,
         # he answered, and the letter its next turn wrote stood ABOVE his line, in the turn that had only asked): its words-less row was never
         # a card he could press, so it is put again where the words were written
@@ -1136,21 +1125,8 @@ def advance(store, tid: int) -> None:
         if rv.get('DecidedBy') not in OWNER_ACTORS and c['status'] != 'failed':
             if c['status'] not in ('passed', 'superseded') or not _was_front(by, rv): continue
             c = {**c, 'status': 'passed'}
-        # ...AND ONE PRESSED ON ITS TAB WHILE IT WAITED BEHIND THE FRONT (CardLine, 2026-11-25) beside the run's cards, where the run is one
-        # card - never in the turn open at the press, which moved the run's one card down the chat to it
-        t = _run_home(q, rid, rows) or _raised(store, rid) or (_turn_at(store, tid, rv.get('CreatedAt')) or {}).get('Id')
+        t = _raised(store, rid) or (_turn_at(store, tid, rv.get('CreatedAt')) or {}).get('Id')
         put(store, tid, 'card', f'r:{rid}', c, parent=t, state=c['status'], src=f'review:{rid}')
-
-
-def _run_home(q: dict, rid: int, rows: dict):
-    """The turn the run that review `rid` is a tab of stands in (cardqueue.state's `runs`): its front's row's, else its newest row's - where the
-    page draws it (cardLine.lineRuns). None for a card of no run, or of one with no row yet."""
-    for r in q.get('runs') or []:
-        if len(r) < 2 or not any(rid in u['rids'] for u in r): continue
-        had = [u for u in r if f"r:{u['rids'][0]}" in rows and rid not in u['rids']]
-        u = next((u for u in had if u['done'] is None), None) or (had[-1] if had else None)
-        return rows[f"r:{u['rids'][0]}"]['Parent'] if u else None
-    return None
 
 
 def _words(card: dict) -> str:
@@ -1417,7 +1393,7 @@ def _serve(store, tid: int, level: str = None) -> dict:
         out = [x if x['kind'] != 'turn' else {**x, 'cards': [c for c in x.get('cards') or [] if not waits(c)]} for x in out if not waits(x)]
     closed(store, tid, out)
     was, out = out, waits_last(out)
-    if _stood(store, tid, was, out): out = waits_last(was)
+    _stood(store, tid, was, out)
     if at_work and (lv := next((x for x in reversed(out) if x['kind'] == 'turn' and x.get('state') in LIVE), None)): lv.update(_now(tid, lv))
     body = {'items': out, 'level': got['level'], **beside(store, tid, out, at_work, hold_, ending)}
     return {'rev': hashlib.sha1(json.dumps(body, default=str).encode()).hexdigest()[:16], **body}
@@ -1608,9 +1584,11 @@ def beside(store, tid: int, out: list, at_work: bool, hold_, ending: bool = Fals
     sid = getattr(lv, 'sid', '') or getattr(live, 'sid', '') or ''
     return {'pending': pend, 'needsOwner': taskstate.needs_owner(ask, taskstate.browser_acts(store, tid), sid), 'now': now, 'later': later, 'dropped': [d for d in dropped if d], 'working': at_work,
             'started': general.turn_started(tid) if at_work else None, 'asking': ask, 'permissions': perms, 'live': codingchat.live_of(lv),
-            # ...and its runs, each one card with a tab per card (cardqueue.tabs) - none on a task a stranger's words hold: no card waits there
+            # ...what stands lit beside its front (cardqueue.alone), and each card that is a set under tabs (cardqueue.sets) - none on a task a
+            # stranger's words hold: no card waits there
             'letters': letters, 'idle': idle, 'queue': {'live': q['live'], 'held': q['held'], 'line': cardqueue.line(q),
-                                                         'runs': [] if hold_ and origin.keeps_him(store, tid) else cardqueue.tabs(store, q)},
+                                                         **({'alone': [], 'sets': {}} if hold_ and origin.keeps_him(store, tid) else
+                                                            {'alone': cardqueue.alone(q), 'sets': cardqueue.sets(store, tid)})},
             'hold': hold_ and {**{k: hold_[k] for k in ('line', 'person', 'org')},
                                **({'line': origin.JOINED_LINE.format(who=hold_['who'])} if turns else {})},
             'published': published, 'ran': bool(turns)}

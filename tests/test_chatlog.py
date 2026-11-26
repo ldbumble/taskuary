@@ -265,29 +265,6 @@ def test_a_card_pressed_after_later_turns_turns_sent_where_it_stood():
     assert s._rows("SELECT Id, Parent FROM chatlog WHERE TaskId=? AND Key=?", (tid, f'r:{rid}'))[0] == where, 'nothing moved'
 
 
-def test_a_card_pressed_on_its_tab_behind_the_front_stands_beside_its_run_never_in_the_turn_open_at_the_press():
-    """THE CARD LINE (the owner, 2026-11-25): three posts raised in one turn are one card with a tab each. He opens the third's tab two turns
-    later and posts it while the first still waits: its row goes beside the run's - the page draws the run there - never into the turn open
-    at the press, which carried the one card down the chat (recorded: it jumped 250 px and lost the tab he was on). Invented posts."""
-    from taskuary import cardqueue, conversation, general
-    s, tid = world()
-    conversation.hear(s, tid, turn=True)
-    ids = [s.add_review({'TaskId': tid, 'Kind': 'action', 'Status': 'pending', 'Origin': 'agent', 'Reason': 'the post you asked for',
-                         'DraftText': json.dumps({'action': 'run_tool', 'type': t, 'text': 'We shipped the ledger export.'})}) for t in ('x_post', 'linkedin_post', 'reddit_post')]
-    s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'Three posts are set up.')
-    chatlog.read(s, tid)
-    home = s._rows("SELECT Parent FROM chatlog WHERE TaskId=? AND Key=?", (tid, f'r:{ids[0]}'))[0]['Parent']
-    assert not s._rows("SELECT 1 AS x FROM chatlog WHERE TaskId=? AND Key=?", (tid, f'r:{ids[2]}')), 'held behind the front: no row of its own'
-    for n in (2, 3):
-        conversation.hear(s, tid, turn=True); s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, f'Noted {n}.')
-    chatlog.read(s, tid)
-    s.decide_review(ids[2], 'approved', None, 'owner'); cardqueue._SEEN.clear()
-    chatlog.read(s, tid)
-    assert s._rows("SELECT Parent FROM chatlog WHERE TaskId=? AND Key=?", (tid, f'r:{ids[2]}'))[0]['Parent'] == home
-    [run] = cardqueue.tabs(s, cardqueue.state(s, tid))
-    assert [(t['name'], t['done'], t['front']) for t in run] == [('X', False, True), ('LinkedIn', False, False), ('Reddit', True, False)]
-
-
 def test_the_held_step_of_a_cards_browser_road_is_drawn_on_that_card_as_its_next_press():
     """Walk 22, 2026-11-25, both homes: X and LinkedIn posts; Post via the browser on the X card; he signs in, says "post without the picture",
     and the agent's final Post is held - joined to the X card he had already pressed, whose row read `approved`, so NOTHING could be pressed
@@ -326,19 +303,28 @@ def test_the_held_step_of_a_cards_browser_road_is_drawn_on_that_card_as_its_next
     assert cardqueue.state(s, tid)['live'] == [got[li]['review']] if li in got else True
 
 
+def one_call(s, tid, acts) -> list:
+    "The acts one call raised together (its `items`): their rows share a Batch, as agenttools files them - one card."
+    from taskuary import bulkcard
+    key, ids = bulkcard.new_key(), []
+    for p in acts:
+        ids.append(s.add_review({'TaskId': tid, 'Kind': 'action', 'Status': 'pending', 'Origin': 'agent', 'Reason': 'the post you asked for', 'DraftText': json.dumps(p)}))
+        s._exec('UPDATE review SET Batch=? WHERE ReviewId=?', (key, ids[-1]))
+    return ids
+
+
 def test_a_tab_he_said_no_to_is_marked_so_never_as_one_that_went():
-    """The card gallery, 2026-11-25: three emails in a line - one sent, the next dropped - and the dropped one's tab was ticked like the sent
-    one. A card settled without going (his no, a press that failed) says so on its tab (`no`); one that went, or still waits, does not."""
+    """The card gallery, 2026-11-25: one of three sent, the next dropped - and the dropped one's tab was ticked like the sent one. A tab
+    settled without going (his no, a press that failed) says so (`no`); one that went, or still waits, does not."""
     from taskuary import cardqueue, conversation, general
     s, tid = world()
     conversation.hear(s, tid, turn=True)
-    ids = [s.add_review({'TaskId': tid, 'Kind': 'action', 'Status': 'pending', 'Origin': 'agent', 'Reason': 'the post you asked for',
-                         'DraftText': json.dumps({'action': 'run_tool', 'type': t, 'text': 'We shipped the ledger export.'})}) for t in ('x_post', 'linkedin_post', 'reddit_post')]
+    ids = one_call(s, tid, [{'action': 'run_tool', 'type': t, 'text': 'We shipped the ledger export.'} for t in ('x_post', 'linkedin_post', 'reddit_post')])
     s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'Three posts are set up.')
     chatlog.read(s, tid)
     s.decide_review(ids[0], 'approved', None, 'owner'); s.decide_review(ids[1], 'rejected', None, 'owner'); cardqueue._SEEN.clear()
-    [run] = cardqueue.tabs(s, cardqueue.state(s, tid))
-    assert [(t['name'], t['done'], bool(t.get('no'))) for t in run] == [('X', True, False), ('LinkedIn', True, True), ('Reddit', False, False)]
+    [tabs] = cardqueue.sets(s, tid).values()
+    assert [(t['name'], t['done'], bool(t.get('no'))) for t in tabs] == [('X', True, False), ('LinkedIn', True, True), ('Reddit', False, False)]
 
 
 def test_a_card_raised_the_second_before_its_turns_answer_waits_lit_in_that_turn():
@@ -392,8 +378,8 @@ def test_a_tab_names_a_thing_as_its_card_writes_it():
                                                               {'action': 'push', 'cwd': '.', 'why': 'the fix'})]
     s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'Merge it, then push.')
     chatlog.read(s, tid)
-    [run] = cardqueue.tabs(s, cardqueue.state(s, tid))
-    assert run[0]['name'] == 'northwind/ledger#31' and run[1]['name'][:1].isupper(), run
+    names = [cardqueue.tab(s, s.get_review(i)) for i in ids]
+    assert names[0] == 'northwind/ledger#31' and names[1][:1].isupper(), names
 
 
 def test_every_tool_call_is_one_row_in_plain_words_and_summary_folds_them_to_one_line():
@@ -1032,7 +1018,7 @@ def test_a_card_raised_after_his_newest_line_stands_under_that_line_never_as_a_t
     q = cardqueue.state(s, tid)
     assert [[u['rids'] for u in r] for r in q['runs']] == [[[post]], [[mail]]], 'his answer parts the two: each is its own card'
     assert (q['live'], q['fronts']) == ([post], [[mail]])
-    assert [[(t['key'], t['front']) for t in r] for r in cardqueue.tabs(s, q)] == [[(str(mail), True)]], 'the later card alone - no tabs with the one above'
+    assert cardqueue.alone(q) == [str(mail)] and cardqueue.sets(s, tid) == {}, 'the later card alone - no tabs with the one above'
     items = chatlog.read(s, tid, 'everything')['items']
     order = [(x['kind'], [c['review'] for c in x.get('cards') or []] if x['kind'] == 'turn' else x.get('text')) for x in items if x['kind'] in ('line', 'turn')]
     assert order[-3:] == [('turn', [post]), ('line', 'Yes'), ('turn', [mail])], order
@@ -1091,14 +1077,13 @@ def test_a_card_that_waits_is_set_down_under_what_was_said_after_it(case):
 
 
 def posts_world():
-    "Alex asked for three posts; the agent raised them one after another - one card with a tab each (cardqueue.tabs) - and said so."
+    "Alex asked for three posts; the agent raised them in one call - one card with a tab each (cardqueue.sets) - and said so."
     from taskuary import general
     s = MemoryStore()
     tid = s.create_task({'Title': 'Announce the ledger portal', 'Kind': 'general', 'Status': 'in_progress', 'OriginBase': 'owner'}, 'owner')
     s.add_message({'TaskId': tid, 'ExternalId': 'own-1', 'Channel': 'own', 'Subject': 'Announce the ledger portal', 'FromName': 'You',
                    'BodyText': 'post about the portal on X, Reddit and LinkedIn', 'Status': 'routed'})
-    ids = [s.add_review({'TaskId': tid, 'Kind': 'action', 'Status': 'pending', 'Origin': 'agent', 'Reason': 'the post you asked for',
-                         'DraftText': json.dumps({'action': 'run_tool', 'type': t, 'text': 'The ledger portal is live.'})}) for t in ('x_post', 'reddit_post', 'linkedin_post')]
+    ids = one_call(s, tid, [{'action': 'run_tool', 'type': t, 'text': 'The ledger portal is live.'} for t in ('x_post', 'reddit_post', 'linkedin_post')])
     s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'Three posts are set up.')
     return s, tid, ids
 
@@ -1123,24 +1108,23 @@ def test_what_the_agent_says_after_a_waiting_card_is_drawn_above_it_and_it_stays
     from unittest import mock
     from taskuary import general
     s, tid, (x, reddit, li) = posts_world()
-    ask, card = 'post about the portal on X, Reddit and LinkedIn', lambda *st: [(r, v) for r, v in zip((x, reddit, li), st) if v]
+    ask, card = 'post about the portal on X, Reddit and LinkedIn', lambda st: [(x, st)]       # ...the one card of the three, by its first item
     assert chat(s, tid) == [ask, 'Three posts are set up.', card('pending')]
     s.decide_review(x, 'rejected', None, 'owner')
     s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'X draft declined. Reddit and LinkedIn are still available for review.')
     said = 'X draft declined. Reddit and LinkedIn are still available for review.'
-    assert chat(s, tid) == [ask, 'Three posts are set up.', said, card('rejected', 'pending')], 'the words came after the card: drawn above it'
+    assert chat(s, tid) == [ask, 'Three posts are set up.', said, card('pending')], 'the words came after the card: drawn above it - it waits while any tab does'
     # ...a turn at work says more: the card that waits is under that too, from its first word
     chatlog.put(s, tid, 'turn', 't:9', {'started': 2e9}, state='working')
     chatlog.step(s, tid, 'sid1', 'm-1', {'k': 'said', 'text': 'Looking at Reddit again.'})
     with mock.patch.object(general, 'working', return_value=True): got = chat(s, tid)
-    assert got[:4] == [ask, 'Three posts are set up.', said, 'Looking at Reddit again.'] and dict(got[4])[reddit] == 'pending' and len(got) == 5, got
+    assert got == [ask, 'Three posts are set up.', said, 'Looking at Reddit again.', card('pending')], got
     chatlog.update(s, tid, 't:9', state='done')
     # ...the rest settled: the card stays under the words it waited under, and what is said now goes under it
     s.decide_review(reddit, 'rejected', None, 'owner'); s.decide_review(li, 'rejected', None, 'owner')
     s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'All three were turned down.')
     got = chat(s, tid)
-    assert got[:4] == [ask, 'Three posts are set up.', said, 'Looking at Reddit again.'] and got[5:] == ['All three were turned down.'], got
-    assert sorted(got[4]) == sorted(card('rejected', 'rejected', 'rejected')), 'every tab of the one card stands in the one place'
+    assert got == [ask, 'Three posts are set up.', said, 'Looking at Reddit again.', card('rejected'), 'All three were turned down.'], got
     assert chat(s, tid) == got, 'and the same on the next read: a refresh, the phone'
 
 

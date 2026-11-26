@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
-import { countOf, listCap, pressOf, progress, rowOf, rowOpens, rowState, running } from "../src/bulkCard.js";
+import { countOf, listCap, pressOf, progress, rowOf, rowOpens, rowState, running, tabsOf } from "../src/bulkCard.js";
 
 // ONE CARD FOR A BULK JOB (taskuary/bulkcard.py; the owner, 2026-11-16). Invented people and a stand-in repository.
 const mail = (id, to, extra = {}) => ({ ReviewId: id, Kind: "slot", Status: "pending", Batch: "b1", DraftText: "Hello - about Market St.",
@@ -79,7 +79,7 @@ const build = async () => {
     "react/jsx-runtime": "export const { jsx, jsxs, Fragment } = globalThis.__R;",
     "@mui/material": "const C = (n) => n; export const Box = C('Box'), LinearProgress = C('LinearProgress'), Typography = C('Typography');",
     "./api": "export default globalThis.__api;", "./theme.jsx": "export const DIM = '', FAINT = '';",
-    "./ReviewDecision.jsx": "export default 'ReviewDecision'; export const ActReview = 'ActReview';", "./Artifact.jsx": "export const ReviewCard = 'ReviewCard';",
+    "./ReviewDecision.jsx": "export default 'ReviewDecision'; export const ActReview = 'ActReview';", "./Artifact.jsx": "export const ReviewCard = 'ReviewCard', CardLine = 'CardLine';",
     "./PassedCard.jsx": "export const MovedPast = ({ children }) => children;" };
   const out = await esb({ entryPoints: [fileURLToPath(new URL("../src/BulkCard.jsx", import.meta.url))], bundle: true, write: false, format: "esm",
     jsx: "automatic", logLevel: "silent", plugins: [{ name: "stubs", setup(b) {
@@ -165,12 +165,23 @@ test("rows open to review are given most of the window, a list of lines stays sh
 // The owner, 2026-11-26: "cards or anything generated on chat never go away" - a row's own card, open to review, folded to a line the moment
 // he pressed or dismissed it
 test("a row open in its own card stays open once it is settled, and the page gives a settled row its card", async () => {
-  const open = new Set();
+  const open = new Set(), src0 = (await import("node:fs")).readFileSync(fileURLToPath(new URL("../src/BulkCard.jsx", import.meta.url)), "utf8");
   assert.equal(rowOpens(11, 0, { open }), true, "the first few stand open to review");
   assert.equal(rowOpens(13, 2, { open }), false);
   assert.equal(rowOpens(13, 2, { open: new Set([13]) }), true, "one he opened");
   assert.equal(rowOpens(11, 0, { open: new Set([-11]) }), false, "one he shut stays shut");
-  assert.equal(rowOpens(11, 0, { open, live: true }), false);
+  assert.equal(rowOpens(11, 0, { open, live: true }), true, "and through the run: nothing folds at his press");
+  assert.match(src0, /body: <div \{\.\.\.\(live \? \{ inert: "" \} : \{\}\)\}>\{own\(r\)\}<\/div>/, "looked at while the run does it, never pressed");
   const src = (await import("node:fs")).readFileSync(fileURLToPath(new URL("../src/BulkCard.jsx", import.meta.url)), "utf8");
   assert.match(src, /onCheck: \(\) => flip\(setSkip, r\.ReviewId\) \} : \{\}\),\s*open: shownRow\(r, i\)/, "open, and its card, whether the row waits or is settled");
+});
+
+// The owner, 2026-11-26: the same post for three networks is ONE card with a tab each; one act to many is the list card, never tabs - which
+// it is, the server says (each row's `Tab`, taskuary/cardqueue.py sets), never a count
+test("a set under tabs is read off its rows' own tab names; a list card has none", () => {
+  const row = (id, Tab, Status = "pending") => ({ ReviewId: id, Kind: "action", Status, Batch: "k1", ...(Tab ? { Tab } : {}), DraftText: "{}" });
+  assert.equal(tabsOf([row(1), row(2), row(3)], null), null, "one act to many: the list");
+  assert.deepEqual(tabsOf([row(1, "LinkedIn", "approved"), row(2, "X", "rejected"), row(3, "Bluesky")], null),
+    [{ key: "1", name: "LinkedIn", done: true, front: false }, { key: "2", name: "X", done: true, front: false, no: true }, { key: "3", name: "Bluesky", done: false, front: true }]);
+  assert.equal(tabsOf([row(1, "LinkedIn"), row(2, "X")], null)[0].front, true, "the first that waits is in front");
 });

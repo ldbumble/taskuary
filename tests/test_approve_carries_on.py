@@ -776,25 +776,11 @@ class OneCardAtATime(unittest.TestCase):
         said = told_with(self.s, tid, *told)
         for rid in ids: self.assertIn(f'Card rv{rid} (the email to', said)
 
-    def test_a_no_that_ends_a_row_of_yeses_is_its_one_wake(self):
-        from taskuary import outbound
-        tid = Factory(self.s).task('Answer Gail and tell Ray'); self.answered(tid, 'Both letters are set up.', '2000-01-01 00:00:00')
-        first, second = self.email(tid, 'gail@northwind.example', 'Gail - the rate is 4%.'), self.email(tid, 'ray@northwind.example', 'Ray - Gail has the rate.')
-        told = []
-        with mock.patch.object(general, 'to_agent', lambda st, t, said, actor='owner', heard=None, **k: told.append(said) or (heard and heard('woke')) or 'woke'), \
-             mock.patch('taskuary.learning.learn_from'), mock.patch.object(outbound, 'send_block', return_value=''), \
-             mock.patch.object(outbound, 'send_out', side_effect=lambda st, ch, to, *a, **k: {'channel': ch, 'to': to, 'cc': []}):
-            self.assertTrue(verdicts.decide(self.s, self.s.get_review(first), 'approve')['ok'])
-            self.assertEqual(told, [])
-            self.assertTrue(verdicts.decide(self.s, self.s.get_review(second), 'reject')['ok'])
-        [said] = told
-        said = told_with(self.s, tid, said)
-        self.assertIn(f'Card rv{second} (the email to ray@northwind.example): he turned it down', said); self.assertIn(f'Card rv{first} ', said)
-
-    def test_a_no_while_a_card_still_waits_wakes_nobody_and_is_told_as_his_with_the_next_turn(self):
+    def test_a_no_never_wakes_the_agent_and_is_told_as_his_with_the_next_turn(self):
         """The owner's live app, 2026-11-26: X, Reddit and LinkedIn stood as one card; he wanted LinkedIn only and pressed Dismiss on X, then on
         Reddit. Each Dismiss woke the agent, which wrote "X draft declined. Reddit and LinkedIn are still available for review." under the card
-        still waiting. His no wakes nobody while a card of the task waits; both are told as his own with the agent's next turn."""
+        still waiting. A click on a card wakes its agent only where it failed or the agent has something to do next: his no never does - with
+        cards still waiting or with none - and each is told as his own with the agent's next turn."""
         tid = Factory(self.s).task('Announce the ledger portal'); self.answered(tid, 'Three posts are set up.', '2000-01-01 00:00:00')
         x, reddit, li = [self.s.add_review({'TaskId': tid, 'Kind': 'action', 'Status': 'pending', 'Reason': 'the post you asked for',
                                             'DraftText': json.dumps({'action': 'run_tool', 'type': t, 'text': 'The ledger portal is live.'})})
@@ -807,9 +793,10 @@ class OneCardAtATime(unittest.TestCase):
             self.assertEqual(cardqueue.state(self.s, tid)['live'], [li], 'the one he wants is his to press')
             said = events.take(self.s, tid)[0]
             for rid in (x, reddit): self.assertIn(f'Card rv{rid} (the post you asked for): he turned it down', said)
-            # ...and the no that leaves nothing waiting is the row's end: its agent moves on, woken once
+            # ...and the no that leaves nothing waiting wakes nobody either: told with the turn his next line starts
             self.assertTrue(verdicts.decide(self.s, self.s.get_review(li), 'reject')['ok'])
-        self.assertEqual(len(woken), 1, woken)
+        self.assertEqual(woken, [], woken)
+        self.assertIn(f'Card rv{li} (the post you asked for): he turned it down', events.take(self.s, tid)[0])
 
     def test_a_yes_with_its_own_next_step_pressed_before_the_rest_is_owed_its_wake_when_a_no_ends_the_row(self):
         "One card approved first - it names the agent's step after it - then the other dismissed: nothing waits, and the step is owed once."
@@ -825,33 +812,37 @@ class OneCardAtATime(unittest.TestCase):
             self.assertTrue(verdicts.decide(self.s, self.s.get_review(x), 'reject')['ok'])
         self.assertEqual(len(woken), 1, woken)
 
-    def test_a_run_of_posts_is_one_card_with_a_tab_each_and_a_press_settles_its_own(self):
-        """The owner, 2026-11-25: three posts waiting in line are one card with a tab each ("X · LinkedIn · Reddit", "1 of 3"); a press on any
-        tab settles that card alone, the next that waits comes to the front, and the run keeps counting all three - settled ones ticked."""
-        tid = Factory(self.s).task('Announce the release'); self.answered(tid, 'Three posts are set up.', '2000-01-01 00:00:00')
-        ids = [self.s.add_review({'TaskId': tid, 'Kind': 'action', 'Status': 'pending', 'Reason': 'the post you asked for',
-                                  'DraftText': json.dumps({'action': 'run_tool', 'type': t, 'text': 'We shipped the ledger export.'})})
-               for t in ('x_post', 'linkedin_post', 'reddit_post')]
-        def tabs():
-            q = cardqueue.state(self.s, tid); [run] = cardqueue.tabs(self.s, q)
-            return [(t['name'], t['done'], t['front']) for t in run], (q['n'], q['of'])
-        self.assertEqual(tabs(), ([('X', False, True), ('LinkedIn', False, False), ('Reddit', False, False)], (1, 3)))
-        self.s.decide_review(ids[2], 'rejected', None, 'owner')         # ...a press on a tab behind the front: that card alone
-        self.assertEqual(tabs(), ([('X', False, True), ('LinkedIn', False, False), ('Reddit', True, False)], (1, 3)))
-        self.s.decide_review(ids[0], 'rejected', None, 'owner')
-        self.assertEqual(tabs(), ([('X', True, False), ('LinkedIn', False, True), ('Reddit', True, False)], (2, 3)), 'the next that waits is in front')
-        self.assertEqual(cardqueue.state(self.s, tid)['live'], [ids[1]])
-        self.s.decide_review(ids[1], 'rejected', None, 'owner')
-        self.assertEqual(tabs()[0], [('X', True, False), ('LinkedIn', True, False), ('Reddit', True, False)], 'the run stays one card once all are settled')
+    def test_separate_calls_are_separate_cards_and_a_set_raised_in_one_call_is_one_card_with_a_tab_each(self):
+        """The owner, 2026-11-26 (taking back 11-25's "a run of cards is one card with tabs"): a routine change and a post stood as two tabs of
+        one card. Separate calls are separate cards, one after another - never tabs; one call carrying the same post for three networks is
+        ONE card with a tab each, a press on a tab settling that one alone; one act to many is the list card, never tabs."""
+        from taskuary import bulkcard
+        tid = Factory(self.s).task('Announce the release'); self.answered(tid, 'It is set up.', '2000-01-01 00:00:00')
+        post = lambda t, key=None: self.s.add_review({'TaskId': tid, 'Kind': 'action', 'Status': 'pending', 'Reason': 'the post you asked for',
+                                                      'DraftText': json.dumps({'action': 'run_tool', 'type': t, 'text': 'We shipped the ledger export.'})})
+        def call(*types):
+            key, ids = bulkcard.new_key(), [post(t) for t in types]
+            for i in ids: self.s._exec('UPDATE review SET Batch=? WHERE ReviewId=?', (key, i))
+            return ids
+        a, b = post('x_post'), post('linkedin_post')                      # ...two calls: two cards, the second behind the first
+        q = cardqueue.state(self.s, tid)
+        self.assertEqual((q['live'], q['held'], cardqueue.sets(self.s, tid)), ([a], [b], {}))
+        for i in (a, b): self.s.decide_review(i, 'rejected', None, 'owner')
+        ids = call('x_post', 'linkedin_post', 'reddit_post')              # ...one call, three different acts: one card, a tab each
+        tabs = lambda: [(t['name'], t['done'], bool(t.get('no'))) for t in next(iter(cardqueue.sets(self.s, tid).values()))]
+        self.assertEqual((cardqueue.state(self.s, tid)['live'], tabs()), (ids, [('X', False, False), ('LinkedIn', False, False), ('Reddit', False, False)]))
+        self.s.decide_review(ids[2], 'rejected', None, 'owner')
+        self.assertEqual(tabs(), [('X', False, False), ('LinkedIn', False, False), ('Reddit', True, True)], 'a press on a tab settles that one alone')
+        for i in ids[:2]: self.s.decide_review(i, 'rejected', None, 'owner')
+        self.assertEqual(len(tabs()), 3, 'settled, it is still the one card with its three tabs')
+        many = call('linkedin_post', 'linkedin_post', 'linkedin_post')   # ...one act to many: the list card, never tabs
+        self.assertEqual((cardqueue.state(self.s, tid)['live'], len(cardqueue.sets(self.s, tid))), (many, 1))
 
-    def test_a_no_to_the_only_card_that_waits_wakes_its_agent_once_to_move_on(self):
-        """The owner, 2026-11-26: "No text after an approval card until the approval card is denied or approved, then agent moves on" - his no
-        to the one card that waits leaves nothing waiting, and its agent is told at once, as his own."""
+    def test_a_no_to_the_only_card_that_waits_wakes_nobody(self):
         tid = Factory(self.s).task('Answer Gail'); self.answered(tid, 'The letter is set up.', '2000-01-01 00:00:00')
-        only, told = self.email(tid, 'gail@northwind.example', 'Gail - the rate is 4%.'), []
-        with mock.patch.object(general, 'to_agent', lambda st, t, said='', actor='owner', heard=None, **k: told.append(said) or (heard and heard('woke')) or 'woke'):
+        only = self.email(tid, 'gail@northwind.example', 'Gail - the rate is 4%.')
+        with mock.patch.object(general, 'to_agent', side_effect=AssertionError('his no is heard with his next line, never by a wake')):
             self.assertTrue(verdicts.decide(self.s, self.s.get_review(only), 'reject')['ok'])
-        self.assertEqual(len(told), 1)
         self.assertIn(f'Card rv{only} (the email to gail@northwind.example): he turned it down', told_with(self.s, tid))
 
 
@@ -1025,8 +1016,8 @@ def test_the_screen_fact_says_what_waits_what_is_held_what_is_greyed_and_what_ha
     said = cardqueue.screen(s, tid)
     # ...each card of one by what it is, never its number (walk 11: the agent told him it drafted the reply "(rv2)")
     assert 'post on X' in said.split('Waiting for his press now:')[1].split('\n')[0] and 'The portal launches Monday.' in said, said
-    # ...and the one behind it is a tab of the same card, his to press (walk 22: told "not on his screen yet", an agent drew it again beside the cards)
-    assert 'post on Reddit' in said.split('On his screen now, a tab of the same card')[1].split('\n')[0] and 'Not on his screen yet' not in said, said
+    # ...and the one behind it is said as it is: raised, and behind the card in front (separate calls are separate cards, one after another)
+    assert 'post on Reddit' in said.split('Raised, and behind the card in front')[1].split('\n')[0], said
     assert 'the email to gail@northwind.example' in said.split('Sent')[1].split('\n')[0] and not re.search(r'\brv\d', said), said
     s._exec("UPDATE review SET CreatedAt='2000-01-01 00:00:01' WHERE ReviewId IN (?,?)", (x, reddit))
     general.wait_line(s, tid, 'Give me a button for each', line_id='l-each')                 # ...his line greys both, the moment it is sent

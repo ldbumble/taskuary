@@ -35,7 +35,7 @@ class HeldStepsOneCard(unittest.TestCase):
         real = verdicts.decide
         def door(store, rv, v, **kw): seen.append(rv['ReviewId']); return real(store, rv, v, **kw)
         with mock.patch.object(sg.subprocess, 'run', run), mock.patch('taskuary.spawn.run', run), mock.patch.object(sg.os.path, 'isdir', lambda p: p == HELD), \
-             mock.patch.object(sg, 'git_bash', return_value='bash'), mock.patch.object(sg, '_tell', lambda st, tid, t, **k: told.append(t)),              mock.patch('taskuary.browsergate._tell', lambda st, tid, t, **k: told.append(t)):      # ...his no that leaves nothing waiting (browsergate._no)
+             mock.patch.object(sg, 'git_bash', return_value='bash'), mock.patch.object(sg, '_tell', lambda st, tid, t, **k: told.append(t)):
             out = sg.approve_steps(self.s, ids, door, 'owner', verb)
         return ids, out, ran, told, seen
 
@@ -99,10 +99,12 @@ class HeldStepsOneCard(unittest.TestCase):
             out = verdicts.decide(self.s, rv, 'approve')
         self.assertTrue(out['ok'], out); self.assertEqual(self.s.get_review(rv['ReviewId'])['Status'], 'approved')
 
-    def test_one_dismiss_dismisses_them_all_and_the_agent_hears_once(self):
+    def test_one_dismiss_dismisses_them_all_and_the_agent_hears_it_once_with_its_next_turn(self):
+        # his no never wakes the agent (the owner, 2026-11-26): it is the task's event, said once, in the turn his next line starts
+        from taskuary import events
         ids, out, ran, told, _ = self.run_all([0, 0, 0], 'reject')
         self.assertEqual(ran, []); self.assertEqual([self.s.get_review(i)['Status'] for i in ids], ['rejected'] * 3)
-        [t] = told; self.assertIn('NOT done', t)
+        self.assertEqual(told, []); self.assertEqual(events.take(self.s, self.tid)[0].count('The owner dismissed 3 held steps'), 1)
 
     def test_a_second_press_on_an_answered_card_runs_nothing_and_tells_nobody(self):
         # a double click, or the card pressed again from a page or phone that had not read the first press: the steps were already approved

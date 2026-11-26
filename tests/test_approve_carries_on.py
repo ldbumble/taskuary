@@ -443,6 +443,39 @@ def test_a_card_his_line_greyed_that_still_stands_comes_back_under_it_as_it_was(
     assert not twice['ok'] and f'as rv{new[0]}' in twice['why'], 'a greyed card is raised again once'
 
 
+def _turn(s, tid, said, answer):
+    "His line on a chat task and the turn it starts, to its end: the agent answers `answer` (general's own road, its brain stood in)."
+    with mock.patch.object(general, '_selected', return_value=('api:test', 'Test', 'm')): sess = general.GeneralSession(s, tid)
+    with mock.patch.object(general.llm_mod, 'build_llm', return_value=lambda system, user, **kw: answer): sess.send_prompt(said)
+
+
+def _waiting_post(s, tid) -> int:
+    s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'The post waits for your press.')
+    s._exec("UPDATE comment SET CreatedAt='2026-01-01 09:00:00' WHERE TaskId=?", (tid,))
+    return _raised(s, tid, {'action': 'run_tool', 'type': 'bluesky_post', 'text': 'Our AP team closed October in four days.', 'what': 'Post it on Bluesky'})
+
+
+def test_a_greyed_card_is_never_raised_again_under_the_agents_open_question_it_stands_under_his_answer():
+    """Walk 24 (2026-11-25, all three roads): a post waited; his line asked for something new "but ask me first"; the line greyed the post, the
+    agent asked its one question and raised nothing (its own propose is refused there) - and at the turn's end Taskuary raised the greyed post
+    again, live with every button, directly under the question. Locked rule 4: nothing is raised under his question, on any road. The card
+    waits for his answer, and stands again when the turn his answer starts ends. Invented people."""
+    from taskuary import agenttools, taskstate
+    s = MemoryStore(); tid = Factory(s).task('Post about the October close')
+    post = _waiting_post(s, tid)
+    live = lambda: [r['ReviewId'] for r in s._rows("SELECT ReviewId FROM review WHERE TaskId=? AND Status='pending'", (tid,))]
+    _turn(s, tid, 'Also email Gail that we closed in four days - but ask me first whether to copy Paula.', f'{selfclose.ASK_MARKER} Copy Paula on it? | Copy Paula | Gail only')
+    assert taskstate.open_question(s, tid)['text'] == 'Copy Paula on it?' and proposals.passed(s.get_review(post))
+    assert live() == [], 'a card stands live under his open question'
+    # ...and the agent's own verb is answered the same while it stands
+    out = json.loads(agenttools.call(s, tid, 'keep_card', {'which': f'rv{post}'}, {}))
+    assert not out['ok'] and 'question' in out['why'] and live() == [], out
+    _turn(s, tid, 'Gail only', 'Understood - Gail only.')
+    assert not taskstate.open_question(s, tid)
+    [again] = live()
+    assert cardqueue.again_of(s, post) == again and s.get_review(again)['DraftText'] == s.get_review(post)['DraftText'], 'answered, the same card stands again'
+
+
 def test_a_card_raised_again_is_the_whole_card_its_versions_and_its_then():
     """Walk 24: a reply card held two versions (yes / no); his line greyed it; the agent, rightly, wrote nothing new ("both versions are on the
     card"); Taskuary's copy stood with the yes alone and no picker. A card raised again is every column of the card."""

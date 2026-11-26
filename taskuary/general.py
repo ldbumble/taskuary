@@ -3528,7 +3528,7 @@ class GeneralSession:
         try:
             from . import workerstate as ws
             summary_ends(self.store, self.task_id, summ, asks)
-            ws.record(self.store, self.task_id, self.sid, 'turn_end', text=reply[:4000], source=src)
+            ws.record(self.store, self.task_id, self.sid, 'turn_end', text=reply[:4000], source=src, asks=bool(asks))
             # ...each question of the reply as one group, so the owner answers them together (workerstate.answer_group) - WITH THE CHOICES THE
             # AGENT OFFERED (walk 13: passed to ask_owner, written into the answer as prose and never pressable): a button each, his press his
             # answer as his next line (workerstate.answer: a chat takes words); the box still answers in his own words

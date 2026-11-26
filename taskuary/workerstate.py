@@ -125,9 +125,9 @@ def idled(store, tid: int, sid: str):
 
 
 def record(store, tid: int, sid: str, kind: str, request_id: str = None, text: str = '', choices: list = None,
-           source: str = 'api', event_id: str = None) -> bool:
+           source: str = 'api', event_id: str = None, asks: bool = False) -> bool:
     """One event. False when it is a replay (same event id), a duplicate open request, or from a run that
-    is no longer the task's current one (PW-227)."""
+    is no longer the task's current one (PW-227). `asks`: this turn_end is of a turn that asked him a question, recorded right after it."""
     if kind not in KINDS: raise ValueError(f'unknown worker event: {kind}')
     if event_id and store.worker_event_exists(event_id): return False
     # a LIVE run owns the task: another run's word is stale and ignored. With no live run the newest run to
@@ -139,7 +139,9 @@ def record(store, tid: int, sid: str, kind: str, request_id: str = None, text: s
     if kind in REQUESTS:
         request_id = request_id or request_id_for(text)
         if any(r['request_id'] == request_id for r in status(store, tid)['requests']): return False
-    if kind == 'turn_end':                       # ...a card his input greyed that this turn did not replace stands again (proposals.restore_set_aside)
+    # ...a card his input greyed that this turn did not replace stands again (proposals.restore_set_aside) - never under the question the turn
+    # ended on (locked rule 4): it waits for his answer, and stands under it when the turn his answer starts ends (rested)
+    if kind == 'turn_end' and not asks:
         try:
             from . import proposals
             proposals.restore_set_aside(store, tid)
@@ -367,6 +369,17 @@ def answering(store, tid: int, at: float) -> bool:
            for e in evs[q + 1:]): return False
     return not any(asked < ep(x['CreatedAt']) < sec for x in store.list_comments(int(tid), internal=True)
                    if x.get('ActorType') in (general.USER_TYPE, general.WAITING_TYPE) and x.get('Actor') == 'owner' and not general.is_brief(x))
+
+
+def rested(store, tid: int) -> str:
+    """When task `tid`'s agent last ended a turn that asked him nothing in words (a stamp; '' for never). A turn that ended on its question is
+    not over until he answers: what waits for a turn's end (proposals.restore_set_aside) waits through it, for the end of his answer's turn."""
+    out = end = None
+    for e in events(store, int(tid)):
+        if e['Kind'] == 'turn_end': out, end = end or out, e['CreatedAt']
+        elif end and in_words(e): end = None
+        elif end and e['Kind'] == 'working': out, end = end, None
+    return str(end or out or '')
 
 
 def left_asking(store, tid) -> list:

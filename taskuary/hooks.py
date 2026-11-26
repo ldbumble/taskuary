@@ -513,7 +513,7 @@ def _events(t, p: dict) -> None:
             said, signing = selfclose.signin_marker(str(p.get('last_assistant_message') or ''))
             said, turn = selfclose.turn_marker(said)
             said, asks = selfclose.ask_markers(said)
-            ws.record(st, tid, sid, 'turn_end', text=said[:4000], source='hook')
+            ws.record(st, tid, sid, 'turn_end', text=said[:4000], source='hook', asks=bool(asks))
             # ...AND THE START IN FLIGHT IS OVER, as an ACP turn's end says (acpcoding._idle): a coding task's first turn in its terminal began
             # before its session existed, nothing took the mark off, and the chat read "working 15m" over his sign-in (the recorded walk, 2026-11-12)
             try:

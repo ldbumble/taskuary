@@ -859,13 +859,15 @@ def restore_set_aside(store, tid: int) -> list:
     """A CARD HIS LINE GREYED THAT THE TURN DID NOT REPLACE IS RAISED AGAIN UNDER HIS NEWEST LINE WHEN THE TURN ENDS (walk 23, 2026-11-25: a bug
     report greyed a waiting LinkedIn post and a reply for good, and each agent told him it "is ready on the card for you to press" - bringing
     one back was left to the agent's keep_card, which one road in three called). Plain code, every road (workerstate.record's turn_end) and
-    every kind: each card set aside since the agent's turn before this one ended comes back as it was, a new card under the line (cardqueue.keep;
+    every kind: each card set aside since the agent last rested (workerstate.rested: a turn that ended on its question raises nothing under
+    it - the card waits for his answer's turn) comes back as it was, a new card under the line (cardqueue.keep;
     the owner: "Never bring back things on top. It's a chat.") with the greyed one left where it stood - never one a card raised since takes
     the place of (the same card by its name, cardqueue.what: the rewrite is what greys it for good), one the agent withdrew, nor a held step
     (its gate holds it anew when it is run again). And a turn the AI never answered sets nothing aside the same way (design round 4, H3: a
     draft stood greyed for 43 minutes while the provider failed turn after turn). -> the new cards' ids."""
     from . import cardqueue
-    since = str((store.last_worker_event(int(tid), kinds=('turn_end',)) or {}).get('CreatedAt') or '')
+    from .workerstate import rested
+    since = rested(store, int(tid))
     us = cardqueue._units(store, int(tid), set())
     name, out = (lambda u: cardqueue.what(store, u, True)), []
     for u in us:

@@ -191,13 +191,25 @@ def named(store, tid: int, which: str) -> list:
     return hit[:1] if len(hit) == 1 else []
 
 
+def asking(store, tid: int) -> bool:
+    """Whether the task's agent's own question to the owner stands: asked in this turn (ask_owner's mark), or asked before and not yet answered.
+    WHILE IT STANDS NOTHING IS RAISED UNDER IT, ON ANY ROAD (locked rule 4; walk 24, 2026-11-25: the agent's propose was refused under its
+    question and Taskuary's own re-raise then stood a live card there) - the agent's call (agenttools) and `keep` both ask this."""
+    from . import selfclose, taskstate
+    return selfclose.asks_now(tid) or bool(taskstate.open_question(store, tid))
+
+
+WAITS = ('your question to the owner stands - nothing is raised under it; a greyed card that still stands is raised again under his answer '
+         'when the turn it starts ends')
 def keep(store, tid: int, which, by: str = 'agent', why: str = '') -> dict:
     """Raise again each greyed card `which` names ('rv12 + rv13') on task `tid` as a new card, the same words and envelope, drawn under the
     newest line - and an act his press handed to its agent that it could not do (handed), with `why`, which its failed press then says.
-    Never one that went, was turned down, is live or was raised again already; a held step is run again instead (its gate holds it anew)."""
+    Never one that went, was turned down, is live or was raised again already; a held step is run again instead (its gate holds it anew).
+    And none while the agent's question stands (asking)."""
     import re
     from . import bulkcard
     from .proposals import HELD_ACTS, SET_ASIDE, _action
+    if asking(store, tid): return {'ok': False, 'why': WAITS}
     w = str(which or '')
     ids = list(dict.fromkeys(int(x) for x in re.findall(r'\d+', w))) if re.fullmatch(IDS, w, re.I) else named(store, tid, w)
     if not ids: return {'ok': False, 'why': 'name the greyed card as the screen fact names it (the reply to gail@northwind.example; a card of many: rv12 + rv13)'}

@@ -547,12 +547,6 @@ def _failed_now(store, tid: int) -> str:
     return got[1] if got and got[0] >= _turn_began(store, tid) else ''
 
 
-def _asking(store, tid: int) -> bool:
-    "Whether the task's agent's own question to the owner stands: asked in this turn (ask_owner's mark), or asked before and not yet answered."
-    from . import selfclose, taskstate
-    return selfclose.asks_now(tid) or bool(taskstate.open_question(store, tid))
-
-
 def _card_call(store, tid: int, name: str, args: dict, doors: dict, skip=()) -> str:
     args = _arguments(args)
     # ...WHAT STANDS BESIDE `items` IS SHARED BY EVERY ITEM - never one more of them (walk 23, 2026-11-25: one version beside `items`, the other
@@ -566,12 +560,12 @@ def _card_call(store, tid: int, name: str, args: dict, doors: dict, skip=()) -> 
         args = {**{k: v for k, v in args.items() if k != 'items'}, **args['items'][0]}
     if name == 'tick' and (args or {}).get('done', True) is not False and (bad := _failed_now(store, tid)):
         raise ValueError(refusal(f'not ticked: {bad} failed in this turn', 'tick it once that is done; say in your answer what is still left'))
-    from . import card
+    from . import card, cardqueue
     raises = TOOLS[name][0] == 'propose'
     # A QUESTION TO HIM HOLDS THE TURN THERE (the owner's live task, 2026-11-25: "it asked a question, then underneath it created the post that was
     # greyed out ... if it asks a question it has to wait there"): a card raised under the agent's own standing question was greyed by his answer
     # to it. Nothing is raised while it stands; a card raised before it stays as it is
-    if raises and _asking(store, tid):
+    if raises and cardqueue.asking(store, tid):
         raise ValueError(refusal('your question to the owner stands - nothing was raised', 'wait for his answer, then raise it; if this card does '
                                  'not hang on the question, take the question back with ask_owner withdraw: true and raise it'))
     then, todo, args = ((args or {}).get('then'), (args or {}).get('todo'), {k: v for k, v in (args or {}).items() if k not in ('then', 'todo')}) if raises else (None, None, args)

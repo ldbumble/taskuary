@@ -1075,7 +1075,8 @@ class APostIsAKindOfTheOneReviewTool(unittest.TestCase):
             got = {o['name']: o for o in payload()['outputs']}
         self.assertTrue(got['drafts.md'].get('handed') and got['notes.txt'].get('handed'), got)
 
-    def test_three_networks_are_three_cards_standing_one_at_a_time_and_none_posts(self):
+    def test_three_networks_raised_in_one_call_are_one_card_with_a_tab_each_and_none_posts(self):
+        # the owner, 2026-11-26: what one call raises together is ONE card - different acts a tab each, each pressed by itself, never the list
         from taskuary import cardqueue
         ran = []
         with mock.patch.dict(REGISTRY, {t: (lambda cfg: ran.append(cfg) or ('Posted', '')) for t in ('x_post', 'linkedin_post', 'reddit_post')}):
@@ -1085,9 +1086,11 @@ class APostIsAKindOfTheOneReviewTool(unittest.TestCase):
         self.assertFalse(err, said); self.assertEqual(ran, [])
         rvs = self.cards()
         self.assertEqual([json.loads(r['DraftText'])['type'] for r in rvs], ['x_post', 'linkedin_post', 'reddit_post'])
-        self.assertFalse(any(r.get('Batch') for r in rvs), 'different networks are different cards, never one bulk card')
-        self.assertEqual(cardqueue.state(self.s, self.tid)['live'], [rvs[0]['ReviewId']])
-        self.assertEqual(cardqueue.held(self.s, self.tid), {rvs[1]['ReviewId'], rvs[2]['ReviewId']})
+        self.assertEqual(len({r.get('Batch') for r in rvs if r.get('Batch')}), 1, 'one call, one card')
+        [tabs] = cardqueue.sets(self.s, self.tid).values()
+        self.assertEqual([(t['rid'], t['name']) for t in tabs], [(r['ReviewId'], n) for r, n in zip(rvs, ('X', 'LinkedIn', 'Reddit'))], 'a tab each, never the list card')
+        self.assertEqual(cardqueue.state(self.s, self.tid)['live'], [r['ReviewId'] for r in rvs]); self.assertEqual(cardqueue.held(self.s, self.tid), set())
+        self.assertIn('one card with a tab each', said)
 
     def test_a_post_that_replaces_its_network_never_takes_back_the_card_it_just_raised(self):
         """The owner's live task, 2026-11-25: his answer greyed the Reddit card; the agent raised it again with `replaces: "Reddit"`, and the

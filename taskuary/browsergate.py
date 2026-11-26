@@ -1248,17 +1248,24 @@ def _perform(store, tid: int, p: dict, run=None) -> dict:
         store.audit('task', tid, 'browser_act_refused', 'owner', 'human', {'site': p.get('site'), 'what': p.get('what')})
         return {'performed': None, 'refused': f"{p.get('name') or p.get('site') or 'The page'} did not take it - {why}. The agent was told and goes on another way."}
     now = str(browserview.state(sid, fresh=True).get('url') or '')
-    from . import signin
+    from . import card, cardqueue, events, signin
     signin.acting(store, tid, sid, signin.site_of(here))
-    _tell(store, tid, f"The owner approved it and Taskuary ran `{p.get('command')}` in your browser. It said: {said[-300:] or 'done'}. "
-                      f"The page is now {now or 'unknown'} - look at it, then " + NEXT[0].lower() + NEXT[1:], wake=True)
+    # ...HIS YES TO THE LAST PRESS OF A CARD HE PRESSED WAKES NOBODY (walk 23, 2026-11-25: the held Post of "Post via the browser" was approved,
+    # the X card read posted, and its agent was woken to say "Verified that the announcement was published"): the press is that card's own
+    # end, so it wakes its agent only where the card carries its `then` (card.carries_on - one rule with every press), or where the page it
+    # left is not a working one (outcome: an error status, a load that never finished). Its agent hears it with its next turn. A step held in
+    # the middle of the agent's own work on a page is no card's end: the work goes on from it, woken as ever
+    own = store.get_review(int(p['card'])) if str(p.get('card') or '').isdigit() else None
+    bad = outcome(sid, store) if own and cardqueue.handed(own) and not card.carries_on(own) else ''
+    told = (f"The owner approved it and Taskuary ran `{p.get('command')}` in your browser. It said: {said[-300:] or 'done'}. "
+            f"The page is now {now or 'unknown'}")
+    if own and cardqueue.handed(own) and not card.carries_on(own) and not bad: events.note(store, tid, f'{told}.')
+    else: _tell(store, tid, f'{told} - look at it, then ' + NEXT[0].lower() + NEXT[1:] + (f'\n{bad}' if bad else ''), wake=True)
     store.audit('task', tid, 'browser_act_done', 'owner', 'human', {'site': p.get('site'), 'what': p.get('what'), 'command': str(p.get('command') or '')[:300],
                                                           'said': now or said[-300:]})
     overcome(store, tid, p.get('site'), f"Done on a later try: {p.get('what') or p.get('command')}", command=str(p.get('command') or ''))
     # ...and the act his earlier press handed the agent (a post's Post via the browser) is done now its own final press has run (cardqueue.done)
-    if not p.get('signup'):
-        from . import cardqueue
-        cardqueue.done(store, tid, f"{p.get('what') or p.get('command')} on {p.get('name') or p.get('site') or 'the page'}")
+    if not p.get('signup'): cardqueue.done(store, tid, f"{p.get('what') or p.get('command')} on {p.get('name') or p.get('site') or 'the page'}")
     return {'performed': p.get('what') or p.get('command'), 'site': p.get('site'), 'page': now}
 
 

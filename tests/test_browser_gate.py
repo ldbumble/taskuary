@@ -1175,3 +1175,39 @@ def test_a_held_press_says_what_the_page_holds_and_his_yes_runs_only_while_it_st
     held = proposals.queue(s, tid, p)['reviewId']
     cardqueue._SEEN.clear()
     assert f'the page holds {bg.holds(p)}' in cardqueue.screen(s, tid) and cardqueue.step_says(s.get_review(held)) == bg.held_says(p)
+
+
+def test_his_yes_to_the_last_press_of_a_card_he_pressed_wakes_its_agent_only_for_its_then_or_a_page_that_broke():
+    """Walk 23 (Codex): "Post via the browser" on the X card, the site's final Post held and approved - the card read posted, and its agent was
+    woken to say "Verified that the announcement and image were published". That press is the card's own end: it wakes the agent only where
+    the card carries its `then`, or where the page it left is not a working one. A step held in the middle of the agent's own work on a page
+    is no card's end - the work goes on from it, woken as ever."""
+    from taskuary import cardqueue, events, general, signin
+    def world(then=''):
+        s = MemoryStore(); tid = Factory(s).task('Post the four-day close')
+        post = {'action': 'run_tool', 'type': 'x_post', 'text': 'We close in four days.'}
+        card = s.add_review({'TaskId': tid, 'Kind': 'action', 'Status': 'pending', 'DraftText': json.dumps(post), 'Reason': 'the agent proposes to post on X', 'NextStep': then or None})
+        s.decide_review(card, 'approved', json.dumps({**post, 'result': {'browser': True}}), 'owner')
+        return s, tid, card
+    def press(s, tid, p, bad=''):
+        woken = []
+        with mock.patch.object(browserview, 'state', return_value={'open': True, 'url': 'https://x.example/home'}), mock.patch.object(bg, 'held_tab', return_value=''), \
+             mock.patch.object(signin, 'form_state', return_value={}), mock.patch.object(signin, 'acting'), mock.patch.object(bg, 'outcome', return_value=bad), \
+             mock.patch.object(bg, 'page', return_value={'url': 'https://x.example/home', 'elements': ''}), \
+             mock.patch.object(general, 'to_agent', lambda st, t, said='', *a, **k: woken.append(said) or 'woke'):
+            out = bg._perform(s, tid, p, run=lambda sid, a: (0, 'Done'))
+        return out, woken
+    step = lambda s, tid: json.loads(s.get_review(proposals.queue(s, tid, {'action': 'browser_act', 'sid': 'run1', 'args': ['click', '@e6'], 'command': 'agent-browser click @e6',
+                                                                       'what': 'Publish your post on X', 'site': 'x.example', 'url': 'https://x.example/home'})['reviewId'])['DraftText'])
+    s, tid, card = world()
+    out, woken = press(s, tid, step(s, tid))
+    assert out['performed'] and woken == [], f'the last press of the card he pressed woke its agent: {woken}'
+    assert not cardqueue.handed(s.get_review(card)) and 'Publish your post on X' in json.loads(s.get_review(card)['FinalText'])['result']['done'], 'its card reads done'
+    assert 'Taskuary ran `agent-browser click @e6`' in events.take(s, tid)[0], 'its agent hears it with its next turn'
+    s, tid, card = world(then='reply to Gail that it is posted')
+    assert len(press(s, tid, step(s, tid))[1]) == 1, 'the card carries its own next step: woken once'
+    s, tid, card = world()
+    out, woken = press(s, tid, step(s, tid), bad='TASKUARY: https://x.example/home answered with a server error (HTTP 500).')
+    assert len(woken) == 1 and 'HTTP 500' in woken[0], 'the page it left broke: its agent is woken with what the page said'
+    s = MemoryStore(); tid = Factory(s).task('Renew the listing')                     # ...no card of his behind it: a step of the agent's own work
+    assert len(press(s, tid, step(s, tid))[1]) == 1

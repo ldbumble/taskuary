@@ -166,6 +166,12 @@ def _open() -> list:
     return [_n(r) for r in rs if r]
 
 
+# ...AND WHERE PROGRAMS INSTALLED FOR THE WHOLE MACHINE KEEP THEIR OWN FILES (%ProgramData%: a package manager's bin, a tool's shims), ITS NAMES
+# ARE LISTED (the real-CLI check, 2026-11-26: an agent looking for a converter ran `ls C:/ProgramData/chocolatey/bin` - held as a card asking
+# him to let it read "bin", and it stopped there). Names only (Listed): what a file there holds - a service's keys, a program's data - waits as before
+def _listable() -> list: return [_n(os.environ['ProgramData'])] if os.name == 'nt' and os.environ.get('ProgramData') else []
+
+
 def opened(store, tid, p: dict) -> bool:
     """A held step that was only reads the gate lets through now (`p` a shell_act payload): never his to answer, so never drawn (the owner,
     2026-11-17: "Read craft-floor.md in reference · Dismissed" stood after the CLI's own skills were opened - "it told you to get rid of it").
@@ -211,7 +217,7 @@ def judge(store, tid, paths, cwd: str = '', write: bool = False) -> tuple:
         sec = [r for r in nev if _in(p, r) or (_reaches(pat, r) if pat != p else _in(r, p) and not isinstance(raw, Listed))]
         if any(_in(p, r) and (not sec or any(_in(r, n) for n in sec)) for r in mine) or (not sec and fetched(p, cwd, sids)): continue
         if sec: return [], NEVER_WRITE if write else NEVER
-        if any(_in(p, r) for r in ok): continue
+        if any(_in(p, r) for r in ok) or (not write and isinstance(raw, Listed) and any(_in(p, r) for r in _listable())): continue
         p = os.path.realpath(os.path.expanduser(_cut(str(raw))))     # ...said as the owner's own spelling of it, never case-folded
         folder = p if os.path.isdir(p) else os.path.dirname(p)
         held.setdefault(folder, []).append('' if folder == p else os.path.basename(p))

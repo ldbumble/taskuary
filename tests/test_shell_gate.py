@@ -425,6 +425,20 @@ class ReadingOutside(unittest.TestCase):
         live = f"$p='{here}'; $l=Get-Content $p; \"rows: $((Import-Csv $p).Count)\""
         self.assertTrue(rg.command_paths(live, self.work) and set(rg.command_paths(live, self.work)) == {here}, rg.command_paths(live, self.work))
         self.assertTrue(rg.of_command(self.s, self.tid, live, self.work)[0])
+
+    @unittest.skipUnless(os.name == 'nt', '%ProgramData% is a Windows folder')
+    def test_the_names_in_a_machine_wide_programs_folder_are_listed_and_what_its_files_hold_still_waits(self):
+        """The real-CLI check, 2026-11-26: an agent looking for a converter ran `ls C:/ProgramData/chocolatey/bin | grep ffmpeg`, it was held
+        as a card to read "bin", and the agent stopped. Where machine-wide programs keep their files, names are listed like Program Files';
+        a file's contents there - a service's keys, a program's data - wait for his press as before."""
+        from taskuary import readgate as rg
+        t = self.docs.replace(os.sep, '/')                                  # ...this test folder stands in for it: outside every open place
+        lists = (f'ls {t} | grep -i ffmpeg', f'dir "{t}"', f'find {t} -name "*.exe"', f'Get-ChildItem {t} | Select-Object Name')
+        for names in lists: self.assertTrue(rg.of_command(self.s, self.tid, names, self.work)[0], f'held before: {names}')
+        with mock.patch.dict(os.environ, {'ProgramData': self.docs}):
+            for names in lists: self.assertEqual(rg.of_command(self.s, self.tid, names, self.work), ([], ''), names)
+            for reads in (f'cat {t}/conftest.py', f'grep -r token {t}', f'find {t} -exec cat {{}} ;'):
+                self.assertTrue(rg.of_command(self.s, self.tid, reads, self.work)[0], reads)
         for cmd in ('git status', 'for f in *.csv; do wc -l "$f"; done', 'grep -rn /api/tasks src', 'curl -s https://docs.northwind.example/a',
                     'dir /s', 'python script.py 2>/dev/null', 'cat "$TASKUARY_OUTPUTS/total.txt"'):
             self.assertEqual(rg.of_command(self.s, self.tid, cmd, self.work), ([], ''), cmd)

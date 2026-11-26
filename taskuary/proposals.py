@@ -558,8 +558,7 @@ def linked(store, tid) -> tuple | None:
 
 
 def refusal_line(why) -> str:
-    return (f"the proposal was refused: {why or 'it did not validate'}. Fix that and propose it again - or, if it cannot be fixed from "
-            "here, say in your answer what is missing and who could supply it.")
+    return f"the proposal was refused: {why or 'it did not validate'}. Fix that and propose it again."
 
 
 def tool_words(store, p: dict) -> str:

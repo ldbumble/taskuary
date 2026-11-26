@@ -2,8 +2,11 @@
 its install, Taskuary's tools, the chat, Stop, sessions - pointed at the card's own endpoint. Or OpenCode, where the owner picks it on the card.
 
 A card's agent is the pick `cli:card-<id>`, whose row (agents.agent_row) is built here: the CLI, its gears in the card's own models, and an
-environment holding a home of its own per card (CODEX_HOME / OpenCode's config) and the card's key. The key rides that environment only -
-the config names the variable it is read from, and nothing written to disk holds it.
+environment holding a home of its own per card (CODEX_HOME / OpenCode's config).
+
+THE CLI IS POINTED AT TASKUARY'S OWN RELAY (relay.py), never at the card's endpoint: what it sends - a file it opened with its own shell
+included - leaves through the one mask, and the card's key stays in the store. What rides its environment is the relay's token for
+that card; the config names the variable it is read from, and nothing written to disk holds it.
 
 Triage and the other one-shot jobs stay on llm.make_llm. Where neither CLI can run here (not installed and no way to install it), the
 agent keeps Taskuary's own loop (apiagent.py) and the card says so in one line (line)."""
@@ -14,7 +17,7 @@ from loguru import logger
 
 HARNESSES = ('codex', 'opencode')
 LABEL = {'codex': 'Codex', 'opencode': 'OpenCode'}
-KEY_ENV = 'TASKUARY_CARD_KEY'            # the variable the card's key is handed in at launch - named in the config, never its value
+KEY_ENV = 'TASKUARY_CARD_KEY'            # the variable the card's relay token is handed in at launch - named in the config, never its value
 PREFIX = 'card-'                       # cli:card-<id>
 _MARK = '\x00key\x00'                  # stands in for the key while llm.endpoint says which header carries it
 _TRIED: set = set()                    # harnesses whose install already failed in this process: not started again on every turn
@@ -178,14 +181,12 @@ CLOSED_FEATURES = {'apps': False, 'plugins': False, 'remote_plugin': False, 'ima
 OFF_KEYS = {'skills.bundled.enabled': False}
 
 
-def codex_config(cid: int, name: str, base: str, header: str, extra: dict, model: str, window: int = 0, catalog: str = '') -> str:
+def codex_config(cid: int, name: str, base: str, model: str, window: int = 0, catalog: str = '') -> str:
     """config.toml for a card's own CODEX_HOME: the card as Codex's model provider, and every road out of this computer but the card's own
     endpoint closed - nothing reaches OpenAI. Each switch is named where it is set."""
     prov = f'card{int(cid)}'
-    p = {'name': name, 'base_url': base, 'wire_api': 'responses', 'request_max_retries': 2}     # Codex speaks only the Responses API
-    if header: p['env_http_headers'] = {header: KEY_ENV}                   # Azure's api-key, Vertex's x-goog-api-key: read from the env
-    else: p['env_key'] = KEY_ENV                                           # a Bearer token, read from the env at launch
-    if extra: p['http_headers'] = extra
+    # Codex speaks only the Responses API; its Bearer token is read from the env at launch (the card's own header and key are the relay's to add)
+    p = {'name': name, 'base_url': base, 'wire_api': 'responses', 'request_max_retries': 2, 'env_key': KEY_ENV}
     top = {'model': model, 'model_provider': prov,
            'model_context_window': int(window or 1_000_000),     # a model Codex has no metadata for warns on every run without it
            'check_for_update_on_startup': False,      # the update check (it asks GitHub / OpenAI for the latest release)
@@ -209,11 +210,10 @@ def codex_config(cid: int, name: str, base: str, header: str, extra: dict, model
     return '\n'.join(out) + '\n'
 
 
-def opencode_config(name: str, base: str, header: str, extra: dict, model: str, strong: str, chosen: str = '') -> dict:
+def opencode_config(name: str, base: str, model: str, strong: str, chosen: str = '') -> dict:
     """opencode.json for a card: the card as its one provider, its models with the efforts the gears ask for, and its own roads out closed
     (sharing, auto-update) - the rest is closed by its environment (row)."""
-    opts = {'baseURL': base, 'apiKey': f'{{env:{KEY_ENV}}}'} if not header else {'baseURL': base, 'headers': {header: f'{{env:{KEY_ENV}}}'}}
-    if extra: opts['headers'] = {**opts.get('headers', {}), **extra}
+    opts = {'baseURL': base, 'apiKey': f'{{env:{KEY_ENV}}}'}
     # ...each model once as itself and once per effort (oc_name), so a gear is a model name - the one thing its command line takes
     models = {}
     for m in dict.fromkeys(x for x in (model, strong, chosen) if x):
@@ -273,13 +273,15 @@ def row(store, name: str, chosen: str = '') -> dict | None:
     harness's own models beside the gears' (walk 20: the chooser's claude-sonnet-5-5 was no model Codex offered, and the run took the card's)."""
     cid = card_id(name)
     if cid is None: return None
-    t, cfg, key = _cfg(store, cid)
+    t, cfg, _ = _cfg(store, cid)
     if not t: return None
     h = harness_of(cfg, t)
     if not (cmd := where(h, install=False)): return None
+    from . import config, relay
     from .clis import preset_args
     from .climodels import split_pick
-    base, header, extra, model = _provider(t, cfg)
+    model, srv = _provider(t, cfg)[3], config.load()['server']
+    base = relay.base(srv, cid)            # ...the relay, which sends on to the card's own address (_provider) masked
     e = split_pick(cfg.get('model'))[1]
     quick, normal, hard = gears(cfg, f'{model}@{e}' if e else model)
     chosen = split_pick(chosen)[0] if chosen else ''
@@ -290,12 +292,12 @@ def row(store, name: str, chosen: str = '') -> dict | None:
         cat = home / 'models.json'
         try: _write(cat, json.dumps(catalog(cmd, [x for x in dict.fromkeys((model, split_pick(hard)[0], chosen)) if x], window)))
         except Exception as e: cat = None; logger.warning(f'harness: no model catalogue for card {cid} - Codex says its fallback warning ({e})')
-        _write(home / 'config.toml', codex_config(cid, label, base, header, extra, model, window, str(cat) if cat else ''))
+        _write(home / 'config.toml', codex_config(cid, label, base, model, window, str(cat) if cat else ''))
         env = {'CODEX_HOME': str(home)}
     else:
         strong = split_pick(hard)[0] if cfg.get('strong_model') else ''
         f = d / 'opencode.json'
-        _write(f, json.dumps(opencode_config(label, base, header, extra, model, strong, chosen), indent=2))
+        _write(f, json.dumps(opencode_config(label, base, model, strong, chosen), indent=2))
         quick, normal, hard = (oc_name(x) for x in (quick, normal, hard))
         # its own config and data folders, so the owner's other providers and sign-ins are not loaded, and nothing is fetched for them
         env = {'OPENCODE_CONFIG': str(f), 'XDG_CONFIG_HOME': str(d / 'config'), 'XDG_DATA_HOME': str(d / 'data'),
@@ -305,7 +307,7 @@ def row(store, name: str, chosen: str = '') -> dict | None:
                'OPENCODE_DISABLE_LSP_DOWNLOAD': '1',        # language servers fetched from the network
                'OPENCODE_DISABLE_DEFAULT_PLUGINS': '1',     # plugins installed from npm
                'OPENCODE_DISABLE_CLAUDE_CODE': '1'}         # the owner's ~/.claude prompts and skills are not read into a card's agent
-    env[KEY_ENV] = key
+    env[KEY_ENV] = relay.token(srv, cid)
     prof = {'cmd': cmd, 'args': preset_args(h), 'model': normal, 'light_model': quick, 'strong_model': hard, 'env': env, 'card': cid}
     return {'Name': name, 'Kind': 'general', 'Runner': 'cli', 'Config': json.dumps(prof)}
 

@@ -1858,7 +1858,7 @@ def spawn_env(profile: dict, extra_env: dict = None) -> dict:
     "A headless CLI's environment: the process's own, or - for a stranger's task (profile strict_env) - only what terminal.STRICT_ENV lets through."
     from .terminal import strict_ok          # lazy: terminal imports this module
     base = {k: v for k, v in ambient(os.environ).items() if not profile.get('strict_env') or strict_ok(k)}
-    # ...and the profile's own (an API card's harness: its CODEX_HOME and its key - in the environment, never on disk; harness.row)
+    # ...and the profile's own (an API card's harness: its CODEX_HOME and its relay token - in the environment, never on disk; harness.row)
     return child_env({**base, **(profile.get('env') or {}), **(extra_env or {})})
 
 

@@ -968,8 +968,9 @@ def test_a_check_back_made_as_the_turn_filed_is_said_under_that_turn():
     from taskuary import agenttools, checkback, remind
     s, tid = world()
     chatlog.put(s, tid, 'turn', 't:1', {'started': 101.0}, state='working')
-    call = [{'type': 'tool_call', 'name': 'mcp__taskuary__check_back',
-             'detail': {'args': {'when': '2026-11-26 07:00:00', 'what': 'Dana sent the corrected quote'}}}]
+    import datetime as dt
+    when = (dt.datetime.now() + dt.timedelta(days=2)).replace(hour=7, minute=0, second=0, microsecond=0).strftime('%Y-%m-%d %H:%M:%S')   # ...always ahead: a fixed date went past
+    call = [{'type': 'tool_call', 'name': 'mcp__taskuary__check_back', 'detail': {'args': {'when': when, 'what': 'Dana sent the corrected quote'}}}]
     late = agenttools.made_late(s, tid, call, set())
     chatlog.update(s, tid, 't:1', state='done', text='The Thursday check-back is therefore not scheduled.')      # ...its answer ends the turn (general._file)
     chatlog.made_late(s, tid, late); chatlog.made_late(s, tid, late)

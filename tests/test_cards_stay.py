@@ -253,17 +253,36 @@ def test_a_tab_he_pressed_is_still_a_tab_of_the_same_card_with_what_came_of_it(w
 
 # ── "NO TEXT AFTER AN APPROVAL CARD UNTIL IT IS DENIED OR APPROVED" ──────────────────────────────────────────────────────────────────────
 
-def test_what_the_agent_says_after_a_card_in_the_same_turn_is_drawn_above_it(w):
-    "The card closes its turn: words the turn says after raising it stand above the card."
+def test_a_card_is_drawn_once_when_its_turn_has_ended_under_all_the_turn_said_and_never_moves_after(w):
+    """The owner, 2026-11-26: "there should be no text writing above card. If you want to say something say it before you render the card."
+    A card raised during a turn is not drawn while the turn works - the read says the agent is at work, so the page shows it working - and
+    stands once the turn has ended, under everything the turn said before AND after raising it. From then on its place in the read never
+    changes: not at his press, not at what is said once it is settled."""
+    from taskuary import chatlog
+    w.read()
+    chatlog.put(w.s, w.tid, 'turn', 't:9', {'started': 2e9}, state='working')
+    chatlog.step(w.s, w.tid, 'run1', 'm-1', {'k': 'said', 'text': 'Setting the post up.'})
     a = w.post()
-    w.says('The post is set up - tell me if you want it shorter.')
-    got = rows(w.read())
-    assert got[-1] == ('card', a, 'pending') and [r[0] for r in got] == ['line', 'turn', 'card'], got
+    chatlog.step(w.s, w.tid, 'run1', 'm-2', {'k': 'said', 'text': 'Tell me if you want it shorter.'})
+    with mock.patch.object(general, 'working', return_value=True): got = w.read()
+    assert drawn(got) == [] and got['working'], 'while its turn works: no card yet, and the chat says the agent is at work'
+    chatlog.update(w.s, w.tid, 't:9', state='done')
+    got = w.read(); turn = next(x for x in got['items'] if x['id'] == 't:9')
+    assert rows(got)[-1] == ('card', a, 'pending') and [k['review'] for k in turn['cards']] == [a], rows(got)
+    assert [st['text'] for st in turn['steps']] == ['Setting the post up.', 'Tell me if you want it shorter.'], 'all it said, before and after raising it, is above its card'
+    place = [r[:2] for r in rows(got)]
+    assert [r[:2] for r in rows(w.read())] == place, 'a refresh: the same place'
+    w.press(a)
+    assert [r[:2] for r in rows(w.read())] == place, 'his press: the same place'
+    w.says('It is posted.')
+    assert [r[:2] for r in rows(w.read())][:len(place)] == place, 'and what is said once it is settled goes under it'
 
 
-def test_whatever_is_written_while_a_card_waits_stands_above_it_and_the_card_is_the_last_thing(w, cards):
-    """His live app: "X draft declined. Reddit and LinkedIn are still available for review." stood UNDER the card still waiting. A later turn's
-    words, a turn at work, a note of Taskuary's - all above it; settled, it stays where he last saw it wait and what comes later goes under."""
+def test_what_can_still_arrive_while_a_card_waits_is_never_drawn_under_it(w, cards):
+    """THE NET. Nothing wakes the agent while a card waits (the tests under "a click on a card ..."), so nothing of its own comes after the card.
+    What can still arrive - a turn a message or a failed press started, a note of Taskuary's - is never drawn UNDER the card (his live app:
+    "X draft declined. Reddit and LinkedIn are still available for review." stood under the one still waiting): the card is the last thing.
+    Settled, it stays where he last saw it wait and what comes later goes under it."""
     from taskuary import chatlog
     front = cards[0]
     assert rows(w.read())[-1] == ('card', front, 'pending')

@@ -313,8 +313,11 @@ def run_of(turn: dict, kids: list) -> float:
 
 
 # A CARD THAT WAITS IS THE LAST THING IN THE CHAT (the owner, 2026-11-26: "you put text under the card which is never allowed ... if text goes
-# after the card it makes the card look useless"): what the agent says or does after a card while it waits - a later turn, a note, a failure -
-# is drawn ABOVE it. The card stands at the foot of the newest row before his next line, and never crosses that line (the 11-25 ruling:
+# after the card it makes the card look useless"; and: "if you want to say something say it before you render the card"). BY CONSTRUCTION A
+# CARD IS DRAWN ONCE, IN ITS PLACE: when the turn that raised it has ended, under all that turn said (read: a turn at work draws no card), and
+# while it waits nothing wakes its agent (verdicts.decide, checkback.due) - so nothing comes after it but his own line. THIS IS THE NET UNDER
+# THAT, for what can still arrive while it waits - a message that starts a turn, a press that failed (its agent is woken, locked rule 2), a
+# note of Taskuary's: never drawn under the card - the card stands under it. The card stands at the foot of the newest row before his next line, and never crosses that line (the 11-25 ruling:
 # nothing comes back above or below his line - a card raised before it stays above it). Once settled it stays where he last saw it wait
 # (`under`, the row it stood under - kept by serve) and what comes later goes under it. A set's and a bulk card's row are a card's: one rule.
 # THE SAME FUNCTION ON THE PAGE (website/src/chatStream.js waitsLast), both read against tests/fixtures/waits_last.json

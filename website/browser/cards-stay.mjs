@@ -38,7 +38,9 @@ try {
     const items = [...document.querySelectorAll("[data-tq-task-page] [data-tq-item]")];
     const under = foot < 0 ? 0 : items.filter((x) => !x.hasAttribute("data-tq-chat-line") && x.getBoundingClientRect().top >= foot - 1 && x.innerText.trim()).length;
     window.__look.push([Math.round(performance.now() - t0), l?.getAttribute("data-tq-line-at") || "", document.querySelector("[data-tq-card-queue]")?.innerText || "",
-      Math.round((l || cs[0])?.getBoundingClientRect().top || 0), under, cs.length, items.length]);
+      // ...where the card stands IN THE CHAT (from the chat's first row, so the chat scrolling to its foot is no move), and what is above it
+      Math.round(((l || cs[0])?.getBoundingClientRect().top || 0) - (items[0]?.getBoundingClientRect().top || 0)), under, cs.length, items.length,
+      document.querySelectorAll("[data-tq-task-page] [data-tq-turn-retry]").length]);
     if (window.__look.length < 6000) requestAnimationFrame(tick); }; requestAnimationFrame(tick); });
   const shot = async (name) => { await page.screenshot({ path: path.join(OUT, `${name}.png`) }); };
   const press = (re) => page.evaluate((src) => {
@@ -50,8 +52,10 @@ try {
   const sum = async (what) => {
     const look = await page.evaluate(() => window.__look || []);
     const under = look.filter((x) => x[4] > 0).length, tops = [...new Set(look.map((x) => x[3]))], cards = [...new Set(look.map((x) => x[5]))], rows = look.map((x) => x[6]);
-    said.push(`${what}: ${look.length} frames; frames with a chat row under a waiting card: ${under}; cards drawn ${cards.join("/")}; chat rows ${Math.min(...rows)}..${Math.max(...rows)}` +
-      `${rows.some((x, i) => i && x < rows[i - 1]) ? " - A ROW WENT AWAY" : ""}; card tops ${tops.join("/")}; shown ${[...new Set(look.map((x) => `${x[1]}:${x[2]}`))].join(" -> ")}`);
+    const moved = look.filter((x, i) => i && x[3] && look[i - 1][3] && x[3] !== look[i - 1][3]).length;
+    const retry = [...new Set(look.map((x) => x[7]))].join("/");
+    said.push(`${what}: ${look.length} frames; frames with a chat row under a waiting card: ${under}; frames where the card moved: ${moved}; cards drawn ${cards.join("/")}; chat rows ${Math.min(...rows)}..${Math.max(...rows)}` +
+      `${rows.some((x, i) => i && x < rows[i - 1]) ? " - A ROW WENT AWAY" : ""}; card at ${tops.join("/")} px down the chat; Try again buttons above ${retry}; shown ${[...new Set(look.map((x) => `${x[1]}:${x[2]}`))].join(" -> ")}`);
     await writeFile(path.join(OUT, `${what.replace(/\W+/g, "-")}.json`), JSON.stringify(look));
   };
 
@@ -67,7 +71,6 @@ try {
   said.push(`next arrow: ${await step(1)}`); await sleep(900); said.push(`  now on: ${await at()}`); await shot("a1-next-arrow");
   said.push(`previous arrow: ${await step(-1)}`); await sleep(900); said.push(`  now on: ${await at()}`);
   said.push(`dismiss X: ${await press(/^Dismiss/)}`); await sleep(3000); said.push(`  still on: ${await at()}`); await shot("a2-x-dismissed-stays");
-  await api("/api/fixture/agent-says", { taskId, text: "Noted on X. Reddit and LinkedIn are still there for you." }); await sleep(3000); await shot("a3-agent-words-above-waiting-card");
   said.push(`next arrow: ${await step(1)}`); await sleep(900);
   said.push(`dismiss Reddit: ${await press(/^Dismiss/)}`); await sleep(3000); said.push(`  still on: ${await at()}`); await shot("a4-two-dismissed");
   await sum("A before the refresh");
@@ -77,7 +80,12 @@ try {
   said.push(`to LinkedIn: ${await page.evaluate(() => { const t = [...document.querySelectorAll("[data-tq-line-tab]")].find((x) => /LinkedIn/.test(x.innerText)); t?.click(); return !!t; })}`); await sleep(900);
   said.push(`approve LinkedIn: ${await press(/^Post to /)}`); await sleep(3500); said.push(`  still on: ${await at()}`); await shot("a6-linkedin-posted-stays");
   await api("/api/fixture/agent-says", { taskId, text: "LinkedIn is posted." }); await sleep(3000); await shot("a7-words-after-settled-card");
-  await sum("A after the refresh"); await rec.stop({ sheet: 16 });
+  await sum("A after the refresh");
+  // ...THE NET, on its own beat: something that still arrives while a card waits (a failed press's turn, a message's) is never under the card
+  const net = await api("/api/fixture/review-rows", { title: "One post", connect: ["linkedin"], ask: "Post the fix on LinkedIn.", answer: "The post is set up.", rows: [row(POSTS[2])] });
+  await api(`/api/tasks/${net.taskId}/trust`, {}); await open(net.taskId); await watch();
+  await api("/api/fixture/agent-says", { taskId: net.taskId, text: "A message came in on this while the post waits." }); await sleep(3000); await shot("a8-the-net-what-arrives-is-never-under-a-waiting-card");
+  await sum("A8 the net (the card is set down under what arrived: it moves here, by design)"); await rec.stop({ sheet: 16 });
   said.push(`A reviews: ${JSON.stringify(reviewIds)}`);
 
   // ── B. a routine change and a post: a call each, so a card each - one after another ──

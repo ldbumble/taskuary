@@ -4,7 +4,7 @@
 // action) renders through the same card: proposalPresentation() gives it its own title, its
 // destination and its own labels, and nothing is sent to a sender.
 import React, { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { heldEdit as held, holdEdit, onHeld } from "./heldEdits.js";
+import { heldEdit as editOf, holdEdit, onHeld } from "./heldEdits.js";
 import { Alert, Box, Button, Typography, Menu, MenuItem } from "@mui/material";
 import api from "./api";
 import ReplyFiles from "./ReplyFiles.jsx";
@@ -95,7 +95,7 @@ export const InvoiceLine = ({ meta }) => (
 // ...and ONE DRAFT IN TWO PLACES reads the same in both (the agent's draft, 2026-11-02: Close out and the pop-up over the terminal): an edit in
 // either is told to the other card on the same draft, so a Send from either sends what the owner last typed
 // ...kept by the card's review, wherever it is drawn (heldEdits.js: one store for every card that takes his words)
-const heldEdit = (r) => held(r?.ReviewId, reviewText(r));
+const heldEdit = (r) => editOf(r?.ReviewId, reviewText(r));
 const hold = (r, part) => holdEdit(r.ReviewId, reviewText(r), part);
 // SEND AND CLOSE OUTLIVES THE PRESS (the owner, 2026-11-03): a send nobody could confirm comes back as Check delivery or Send anyway, and the
 // card may be drawn again meanwhile - which of Close out's two sends was pressed is held per draft, so the confirmed send still closes, or not
@@ -833,7 +833,7 @@ export function ActReview({ row: was, tid, live = true, onChanged, past = false,
   const p = row?.post || {}, act = actionFor(p.type), st = stateOf(row, live), tk = textKey(act);
   // ...HIS WORDS AND PICKS ARE KEPT BY THE CARD'S REVIEW (heldEdits.js): drawn again elsewhere in the chat - set down under a later turn, a
   // tab come back to - the card reads them back, never the proposal's again. One moved past shows what it was filed with
-  const filed = row?.DraftText || JSON.stringify(p), kept = past ? null : held(row?.ReviewId, filed);
+  const filed = row?.DraftText || JSON.stringify(p), kept = past ? null : editOf(row?.ReviewId, filed);
   const [text, setTextNow] = useState(kept?.text ?? String(p[tk] || "")), [vals, setValsNow] = useState(() => kept?.vals ?? valuesOf(act, p)), [copied, setCopied] = useState(false);
   const setText = (v) => { if (!past) holdEdit(row.ReviewId, filed, { text: v }); setTextNow(v); };
   const setVals = (f) => { const n = f(vals); if (!past) holdEdit(row.ReviewId, filed, { vals: n }); setValsNow(n); };

@@ -49,11 +49,13 @@ export default function BulkReview({ rows = [], tid, onChanged, past: given = fa
   const ran = live || ["finished", "stopped"].includes(run?.state);
   return (<MovedPast on={past}>
     <ReviewCard id={key} kind="bulk" state={live ? "going" : waiting.length ? "waiting" : "done"} data-tq-bulk-card={key} label={`${countOf(rows)} - review a few, then do them all`}
-      before={ran && <Box data-tq-bulk-progress="" sx={{ mb: 1 }}>
-        <LinearProgress variant="determinate" value={progress(run)} sx={{ height: 6, borderRadius: 3 }} />
-        <Typography variant="caption" sx={{ color: DIM }}>
-          {`${(run.done || 0) + (run.failed || 0) + (run.left || 0)} of ${run.total} · ${run.done || 0} done`}{run.failed ? ` · ${run.failed} failed` : ""}{run.left ? ` · ${run.left} left out` : ""}
-          {run.state === "stopped" ? ` · stopped${waiting.length && !past ? " - the rest still waits" : ""}` : run.state === "cancelling" ? " · stopping after this one" : run.state === "finished" ? " · finished" : ""}</Typography>
+      // ...ITS BAR HAS ITS ROOM FROM THE FIRST FRAME (the owner, 2026-11-26: nothing on a card moves at his press - the rows dropped 37 px as the
+      // bar came in over them): kept empty and unseen until the run begins
+      before={<Box {...(ran ? { "data-tq-bulk-progress": "" } : { "aria-hidden": true, "data-tq-bulk-room": "" })} sx={{ mb: 1, visibility: ran ? "visible" : "hidden" }}>
+        <LinearProgress variant="determinate" value={ran ? progress(run) : 0} sx={{ height: 6, borderRadius: 3 }} />
+        <Typography variant="caption" sx={{ color: DIM }}>{!ran ? `0 of ${rows.length}`
+          : <>{`${(run.done || 0) + (run.failed || 0) + (run.left || 0)} of ${run.total} · ${run.done || 0} done`}{run.failed ? ` · ${run.failed} failed` : ""}{run.left ? ` · ${run.left} left out` : ""}
+          {run.state === "stopped" ? ` · stopped${waiting.length && !past ? " - the rest still waits" : ""}` : run.state === "cancelling" ? " · stopping after this one" : run.state === "finished" ? " · finished" : ""}</>}</Typography>
       </Box>} items={items}
       press={live ? [{ id: "stop", label: "Stop the rest", tone: "s", disabled: run.state === "cancelling", run: stop, attrs: { "data-tq-bulk-stop": "" } }]
         : waiting.length ? [{ id: "run", label: pressOf(rows, n), tone: "p", disabled: busy || !n, run: go, attrs: { "data-tq-bulk-press": "" } }] : []}

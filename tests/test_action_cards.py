@@ -11,7 +11,7 @@ from taskuary.reports import REGISTRY, card_of
 
 c = TestClient(server.app)
 SRV = config.load()['server']
-TYPES = {'text', 'line', 'image', 'choice', 'people', 'files'}
+TYPES = {'text', 'line', 'money', 'image', 'choice', 'people', 'files'}
 
 
 def agent(tid): return {'X-Taskuary-Token': SRV['agent_token'], guard.TASK_HDR: guard.task_proof(SRV, tid)}

@@ -138,7 +138,7 @@ const SHAPES = {
     const w = await fx("world", { connect: ["quickbooks"], lands: ["quickbooks_bill"], books: { Vendor: { Payworth: 58 }, Account: { "Software subscriptions": 7 } } });
     await agent(t, "propose", { kind: "act", action: "run_tool", type: "quickbooks_bill", connector_id: w.connectors.quickbooks, vendor: "Payworth", amount: "200",
       account: "Software subscriptions", date: "2026-11-24", memo: "November - Basic plan, 40 seats", doc_number: "PW-1124", why: "the November invoice" });
-    await end(t, "The Payworth bill is set up for your press."); return { ...t, press: [[/^Approve$/, "approved"]] }; },
+    await end(t, "The Payworth bill is set up for your press."); return { ...t, press: [[/^Enter the bill$/, "approved"]] }; },
   // ...a write on one of his systems asked for through run_system: held as a card, whatever its type
   syswrite: async () => { const t = await task("Move the ticket to Done", "Move NW-12 to Done."); const w = await fx("world", { connect: ["jira"], lands: ["jira_move"] });
     await agent(t, "run_system", { type: "jira_move", connector_id: w.connectors.jira, item: "NW-12", status: "Done" });

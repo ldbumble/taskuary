@@ -1595,6 +1595,10 @@ def one_state(store, payload: dict, observed=_OBSERVE) -> dict:
                 # ...kept only while no write landed since the mark it was read at: one that did may have been missed by it
                 if _kept_at(store) == top: kept[int(tid)] = (sig, at, dict(seen[tid]) if seen[tid] else None)
         st = seen[tid]
+        # ...AND A CHAT AGENT DONE FOR NOW READS SO ON ITS ROW (the card gallery, 2026-11-25: Enter the bill pressed, nothing owed, and the header
+        # read "on you" off the row's own lane - "agent done" is no lane): the row is the chat's done row, as an idled agent's is (paused_conversation)
+        if st and st['key'] == 'chat_done' and i.get('lane') in ('yours', 'queued') and (t := store.get_task(int(tid))):
+            i.update({k: v for k, v in chat_done(store, t).items() if k in ('kind', 'lane', 'who', 'why', 'chat_done')}, status=st); continue
         if not st or st['key'] not in LANES or i.get('lane') in OWN_WORDS or (st['key'] == 'yours' and i.get('lane') in ARRIVAL_WORDS): continue
         i['lane'], i['status'] = st['key'], st
     return payload

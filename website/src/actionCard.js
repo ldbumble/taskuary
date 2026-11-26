@@ -31,6 +31,20 @@ export const POST_PICTURE = { display: "block", width: "calc(100% - 24px)", heig
 // name): the account it goes out as, else the network's own initials - words, never marks ("X (Twitter)" drew "X(", design round 6, D3)
 export const faceOf = (row) => { const s = String(row?.as || row?.network || "").trim(); return s ? initialsOf(s) : ""; };
 export const choiceOf = (f, v) => (f?.choices || []).find((c) => String(c.value) === String(v)) || null;
+// A FIELD AS ITS CARD SAYS IT (connectorcatalog.shown - the card gallery, 2026-11-25: a QuickBooks bill read "amount: 200" and "vendor: Payworth
+// (id 58)" in one box under "Write quickbooks bill on QuickBooks Online"): money in its unit, a thing the system runs on an id by its name with
+// the id beside it (`ids`), else as given - and the act's title in plain words from its declared `head`
+export const shownOf = (f, p, ids = true) => {
+  const v = p?.[f?.key];
+  if (v == null || v === "") return "";
+  if (f.type === "money") { const u = f.unit || "", n = Number(String(v).replaceAll(",", "").replace(u, ""));
+    return Number.isFinite(n) ? `${u}${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : String(v); }
+  const i = p?.[f.id || ""];
+  return ids && i != null && i !== "" ? `${v} (id ${i})` : String(v);
+};
+export const headOf = (act, p) => String(act?.head || "").replace(/\{(\w+)\}/g, (_, k) => shownOf((act.fields || []).find((f) => f.key === k) || { key: k }, p, false));
+// ...an act with no words of its own (a bill: its lines say it all) draws no box, and its lines alone light its press
+export const hasBox = (act) => (act?.fields || []).some((f) => f.type === "text");
 // each declared field with its value - the proposal's, else the catalogue's default - and whether the owner may change it now (only while it waits)
 export const fieldsOf = (act, p, live = false) => (act?.fields || []).map((f) => ({ ...f, value: p?.[f.key] ?? f.default ?? "", editable: !!(live && f.edit) }));
 // ...its words' length as its network counts them, against the field's `max` (connectorcatalog.length): a link is `link_counts` where it says
@@ -71,7 +85,7 @@ export const textKey = (act) => (act?.fields || []).find((f) => f.type === "text
 export const pressable = (act, p, text, values = {}) => {
   const f = (act?.fields || []).find((x) => x.key === textKey(act));
   const lines = (act?.fields || []).filter((x) => isWords(x) && !x.optional && x.key in values).every((x) => String(values[x.key] ?? "").trim());
-  return lines && (!!String(text || "").trim() || !!(f?.optional && !String(p?.[f.key] ?? "").trim()));
+  return lines && (!hasBox(act) || !!String(text || "").trim() || !!(f?.optional && !String(p?.[f.key] ?? "").trim()));
 };
 // the choices a connection keeps its own default for (`setting`), shown on its card under Connections
 export const settingsOf = (type) => (CATALOGUE.find((c) => c.type === type)?.actions || []).flatMap((a) => (a.fields || []).filter((f) => f.setting && f.type === "choice"));

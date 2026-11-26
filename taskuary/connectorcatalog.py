@@ -181,6 +181,22 @@ def too_long(act: dict, p: dict) -> str:
             link = f", a link counting {f['link_counts']}" if f.get('link_counts') else ''
             return f"{who} allows {f['max']} characters in a {str(f.get('label') or f['key']).lower()}{link}; this one is {n} - shorten it"
     return ''
+# A FIELD AS ITS CARD SAYS IT (the card gallery, 2026-11-25: a QuickBooks bill read "Write quickbooks bill on QuickBooks Online", "amount: 200" and
+# "vendor: Payworth (id 58)" in one box): money in its unit ("$200.00"), a thing the system runs on an id by its name with the id beside it,
+# else as given - and the act's title in plain words from its declared `head`. The page reads the same two (actionCard.shownOf / headOf)
+def shown(f: dict, p: dict, ids: bool = True) -> str:
+    v = (p or {}).get(f['key'])
+    if v is None or v == '': return ''
+    if f.get('type') == 'money':
+        u = str(f.get('unit') or '')
+        try: return f"{u}{float(str(v).replace(',', '').replace(u, '') if u else str(v).replace(',', '')):,.2f}"
+        except ValueError: return str(v)
+    i = (p or {}).get(f.get('id') or '')
+    return f'{v} (id {i})' if ids and i not in (None, '') else str(v)
+def head(act: dict, p: dict) -> str:
+    "An act's card title in plain words ('Bill for Payworth - $200.00 on QuickBooks'), from its `head`; '' where it declares none."
+    fs = {f['key']: f for f in (act or {}).get('fields') or []}
+    return re.sub(r'\{(\w+)\}', lambda m: shown(fs.get(m[1]) or {'key': m[1]}, p, False), str((act or {}).get('head') or ''))
 def choice_ok(f: dict, v) -> bool: return f.get('type') != 'choice' or str(v) in {str(c['value']) for c in f.get('choices') or []}
 
 

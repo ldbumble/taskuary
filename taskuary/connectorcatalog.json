@@ -17,7 +17,7 @@
     ]
   },
   "actions": {
-    "_": "WHAT THE OWNER PRESSES, PER CONNECTOR (the owner, 2026-11-05: \"each connector should have settings what the action view looks like no?\"). A card's `actions` lists the acts it can be set up for under a chat turn's Next steps, and one card (ActionCard.jsx) draws whatever is declared. Each: `kind` (post, email, chat, tracker), `road` (run_tool: a proposal on `tool`; reply: propose, kind reply or email), the press words (`press`, `busy`, `done`, `undone`, `note`) and `fields`. A field has a `key` (the proposal's own), a `label` and a `type` (text, line, image, choice, people, files); `edit`: the owner may change it on the card before pressing; `agent`: the agent may propose it (general.roads tells it which); `optional`: a text the act may go without - its press is lit over the empty box the agent left (ActionCard); `setting`: a per-connection default on the Connections card, saved as default_<key> on the card and filled into the agent's proposal when it names none (connectorcatalog.with_defaults); a choice's own `press` / `busy` / `done` replace the act's while it is picked."
+    "_": "WHAT THE OWNER PRESSES, PER CONNECTOR (the owner, 2026-11-05: \"each connector should have settings what the action view looks like no?\"). A card's `actions` lists the acts it can be set up for under a chat turn's Next steps, and one card (ActionCard.jsx) draws whatever is declared. Each: `kind` (post, email, chat, tracker, record), `road` (run_tool: a proposal on `tool`; reply: propose, kind reply or email), the press words (`press`, `busy`, `done`, `undone`, `note`) and `fields`. A field has a `key` (the proposal's own), a `label` and a `type` (text, line, money - said as currency in its `unit`, image, choice, people, files); `id`: the key of the id the system runs it on, said beside the name; an act's `head`: its card's title in plain words, each {key} its field as the card says it; `edit`: the owner may change it on the card before pressing; `agent`: the agent may propose it (general.roads tells it which); `optional`: a text the act may go without - its press is lit over the empty box the agent left (ActionCard); `setting`: a per-connection default on the Connections card, saved as default_<key> on the card and filled into the agent's proposal when it names none (connectorcatalog.with_defaults); a choice's own `press` / `busy` / `done` replace the act's while it is picked."
   },
   "cards": [
     {
@@ -966,6 +966,125 @@
       ],
       "secret_config": [
         "client_secret"
+      ],
+      "actions": [
+        {
+          "kind": "record",
+          "road": "run_tool",
+          "tool": "quickbooks_bill",
+          "head": "Bill for {vendor} - {amount} on QuickBooks",
+          "press": "Enter the bill",
+          "busy": "Entering…",
+          "done": "Entered",
+          "undone": "Not entered",
+          "note": "Nothing is entered in QuickBooks until you press it.",
+          "fields": [
+            {
+              "key": "vendor",
+              "label": "Vendor",
+              "type": "line",
+              "id": "vendor_id",
+              "agent": true
+            },
+            {
+              "key": "amount",
+              "label": "Amount",
+              "type": "money",
+              "unit": "$",
+              "agent": true
+            },
+            {
+              "key": "account",
+              "label": "Account",
+              "type": "line",
+              "id": "account_id",
+              "agent": true
+            },
+            {
+              "key": "date",
+              "label": "Date",
+              "type": "line",
+              "agent": true
+            },
+            {
+              "key": "doc_number",
+              "label": "Bill no.",
+              "type": "line",
+              "agent": true
+            },
+            {
+              "key": "memo",
+              "label": "Memo",
+              "type": "line",
+              "agent": true
+            },
+            {
+              "key": "description",
+              "label": "Line",
+              "type": "line",
+              "agent": true
+            }
+          ]
+        },
+        {
+          "kind": "record",
+          "road": "run_tool",
+          "tool": "quickbooks_expense",
+          "head": "Expense to {vendor} - {amount} on QuickBooks",
+          "press": "Enter the expense",
+          "busy": "Entering…",
+          "done": "Entered",
+          "undone": "Not entered",
+          "note": "Nothing is entered in QuickBooks until you press it.",
+          "fields": [
+            {
+              "key": "vendor",
+              "label": "Vendor",
+              "type": "line",
+              "id": "vendor_id",
+              "agent": true
+            },
+            {
+              "key": "amount",
+              "label": "Amount",
+              "type": "money",
+              "unit": "$",
+              "agent": true
+            },
+            {
+              "key": "account",
+              "label": "Account",
+              "type": "line",
+              "id": "account_id",
+              "agent": true
+            },
+            {
+              "key": "paid_from",
+              "label": "Paid from",
+              "type": "line",
+              "id": "paid_from_id",
+              "agent": true
+            },
+            {
+              "key": "date",
+              "label": "Date",
+              "type": "line",
+              "agent": true
+            },
+            {
+              "key": "memo",
+              "label": "Memo",
+              "type": "line",
+              "agent": true
+            },
+            {
+              "key": "description",
+              "label": "Line",
+              "type": "line",
+              "agent": true
+            }
+          ]
+        }
       ]
     },
     {

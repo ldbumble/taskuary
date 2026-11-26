@@ -60,3 +60,28 @@ def test_a_chat_agent_whose_turn_was_stopped_is_not_done():
     assert taskstate.done_for_now(s, s.get_task(tid), live)
     ws.record(s, tid, 'g-1', 'stopped', text='stopped', source='api')
     assert not taskstate.done_for_now(s, s.get_task(tid), live) and taskstate.state(s, s.get_task(tid), session=live) != 'agentdone'
+
+
+def test_after_his_press_settles_the_one_card_the_rail_row_reads_agent_done_never_on_you():
+    """The card gallery, 2026-11-25: a QuickBooks bill's card, pressed and entered - nothing owed, the agent's turn over - and the header went
+    "waiting for your input" -> "on you": the row kept its own lane, as the task's state ("agent done") is no lane. It reads what is owed."""
+    import json
+    from unittest import mock
+    from fastapi.testclient import TestClient
+    from taskuary import general, reports, server
+    s = MemoryStore()
+    tid = s.create_task({'Title': 'Enter the Payworth bill', 'Kind': 'general', 'Status': 'open', 'OriginBase': 'owner'}, 'owner')
+    s.add_comment(tid, general.BRIEF_ACTOR, general.USER_TYPE, "Enter Payworth's November invoice in QuickBooks.")
+    qb = s.get_connector_by_type('quickbooks'); s.save_connector({'ConnectorId': qb['ConnectorId'], 'Active': 1, 'Secret': 'stand-in'}, 'owner')
+    rid = s.add_review({'TaskId': tid, 'Kind': 'action', 'Status': 'pending', 'Origin': 'agent', 'Reason': 'the agent proposes to enter the bill',
+                        'DraftText': json.dumps({'action': 'run_tool', 'type': 'quickbooks_bill', 'connector_id': qb['ConnectorId'], 'vendor': 'Payworth',
+                                                 'amount': 200, 'account': 'Software subscriptions'})})
+    s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'The Payworth bill is set up for your press.')
+    c, owner = TestClient(server.app), {'X-Taskuary-Token': 'pytest-owner-token'}
+    row = lambda: next((i['lane'], (i.get('status') or {}).get('word')) for i in c.get('/api/funnel/pile', params={'force': 1}, headers=owner).json()['items']
+                       if i.get('tid') == tid)
+    with mock.patch.object(server, 'store', s), mock.patch.object(general, 'to_agent', lambda *a, **k: 'woke'), \
+         mock.patch.dict(reports.REGISTRY, {'quickbooks_bill': lambda cfg: {'rows': [{'url': 'https://quickbooks.example/bill/1'}], 'columns': ['url']}}):
+        assert row() == ('blocked', 'waiting for your input')
+        assert c.post(f'/api/reviews/{rid}/decide', headers=owner, json={'verb': 'approve'}).json()['ok']
+        assert row() == ('yours', 'agent done'), 'nothing is on him'

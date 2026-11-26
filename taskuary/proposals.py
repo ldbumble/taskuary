@@ -404,7 +404,7 @@ def _hidden(p: dict) -> tuple:
     "(the fields a declared act's card draws, the keys of `p` beside them) - ((), []) for a tool no card declares."
     from .connectorcatalog import action_for
     if not (act := action_for((p or {}).get('type'))): return (), []
-    fs = [f['key'] for f in act.get('fields') or []]
+    fs = [k for f in act.get('fields') or [] for k in (f['key'], f.get('id')) if k]      # ...and the id a named thing runs on, said beside it
     return fs, sorted(k for k in p if k not in SHOWN_BESIDE and k not in fs)
 def unshown(p: dict) -> str:
     "'' when every field of a run_tool on a declared act is one its card draws, else what to drop: nothing runs that the card does not show."
@@ -563,6 +563,9 @@ def tool_words(store, p: dict) -> str:
     # (Twitter)" on the next card's line (design round 6, D3)
     from .connectorcatalog import action_for
     if (act := action_for(t)) and act.get('kind') == 'post' and (press := str(act.get('press') or '')): return press[:1].lower() + press[1:]
+    # ...and one whose card declares its title says that ("bill for Payworth - $200.00 on QuickBooks"), never its tool's name
+    from .connectorcatalog import head
+    if (h := head(act, p)): return h[:1].lower() + h[1:]
     verb = {'read': 'read', 'write': 'write', 'admin': 'run'}.get(scopes.needs(t), 'run')
     if t.endswith('_move'): verb = 'move'
     where = next((str(p[k]) for k in WHERE_KEYS if p.get(k)), '')

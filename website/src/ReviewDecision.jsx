@@ -10,7 +10,7 @@ import ReplyFiles from "./ReplyFiles.jsx";
 import { holdInView } from "./inView.js";
 import { filesPromised, filesShort } from "./replyFiles.js";
 import { outcomeOf, proposalFrom, proposalPresentation, receiptOf, resultOf, reviewStatusLabel, reviewText } from "./reviewProposal.js";
-import { actionFor, cardOf, changed, faceOf, fieldsOf, lengthOf, pressable as actPressable, stateOf, textKey, valuesOf, viaBrowserSaid, wordsOf } from "./actionCard.js";
+import { actionFor, cardOf, changed, faceOf, fieldsOf, hasBox, headOf, lengthOf, pressable as actPressable, shownOf, stateOf, textKey, valuesOf, viaBrowserSaid, wordsOf } from "./actionCard.js";
 import { asLive, MovedPast } from "./PassedCard.jsx";
 import { FileDialog } from "./PublishedPages.jsx";
 import { withoutSignature } from "./signature.js";
@@ -879,10 +879,11 @@ export function ActReview({ row: was, tid, live = true, onChanged, past = false,
   // ITS FIELDS FROM ITS DECLARATION: its picks under the label, a heading line bold, its other lines, its words, its picture once
   const fields = [
     ...fs.filter((f) => f.type === "choice").map((f) => ({ ...f, value: edit || done ? vals[f.key] : f.value, editable: edit, onChange: set(f.key) })),
-    ...fs.filter((f) => f.type === "line" && has(f)).sort((a, b) => !!b.heading - !!a.heading)
-      .map((f) => ({ ...f, type: f.heading ? "heading" : "line", value: f.editable ? vals[f.key] : f.value, editable: edit && f.editable, onChange: set(f.key) })),
-    { key: tk, type: "text", label: fs.find((f) => f.key === tk)?.label || "Words", box: !!st.live && !gone, value: st.live && !gone ? text : shown[tk], editable: edit && !gone,
-      onChange: setText, dim: !gone && !st.live, over: over ? `${n} of ${max} characters` : "" },
+    // ...each line labelled, as its card declares it says it: money in its unit, a thing by its name with its id (shownOf)
+    ...fs.filter((f) => ["line", "money"].includes(f.type) && has(f)).sort((a, b) => !!b.heading - !!a.heading)
+      .map((f) => ({ ...f, type: f.heading ? "heading" : "line", value: f.editable ? vals[f.key] : shownOf(f, shown), editable: edit && f.editable, onChange: set(f.key) })),
+    ...(hasBox(act) ? [{ key: tk, type: "text", label: fs.find((f) => f.key === tk)?.label || "Words", box: !!st.live && !gone, value: st.live && !gone ? text : shown[tk],
+      editable: edit && !gone, onChange: setText, dim: !gone && !st.live, over: over ? `${n} of ${max} characters` : "" }] : []),
     ...(pic ? [{ key: "image", type: "picture", value: img.value, file: pic, alt: p.alt || pic.name,
       note: img.manual && !gone ? `${row?.network || "This network"} gets the words from here - open the picture to save it, and add it yourself` : "" }] : []),
   ];
@@ -906,7 +907,7 @@ export function ActReview({ row: was, tid, live = true, onChanged, past = false,
     : !st.live && !st.failed ? { mark: "dismissed", label: `✗ ${st.said}` } : null;
   return (<MovedPast on={past}>
     <ReviewCard id={row?.ReviewId} kind={act.kind} state={stepRow ? "waiting" : gone ? "done" : st.live ? "waiting" : "not-done"} data-tq-act={row?.ReviewId} data-tq-act-kind={act.kind}
-      face={post ? faceOf(row) : ""} label={post ? `${row?.as || `Your ${row?.network || ""} account`} · ${row?.network || "post"}` : act.title}
+      face={post ? faceOf(row) : ""} label={post ? `${row?.as || `Your ${row?.network || ""} account`} · ${row?.network || "post"}` : headOf(act, shown) || act.title}
       fields={fields} press={stepRow || pressRow} after={after} failed={failed || (stepRow && err) || ""} onView={setViewing}
       before={stepRow && <Typography data-tq-act-step-says="" sx={{ fontSize: 12.5, color: INK, mb: 0.75 }}>{step.press === "done" ? "Your step on the page, open beside this card" : "Waiting for your press - the next step of putting this up"}: {step.what}
         {step.fill && <> - <FillLink tid={tid ?? row?.TaskId} /></>}</Typography>}

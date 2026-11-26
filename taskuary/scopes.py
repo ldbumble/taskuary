@@ -166,6 +166,9 @@ REACHES = {
     'github_issue': 'opens an issue on GitHub - everyone watching the repository is told',
     'github_close': 'closes an issue on GitHub - everyone watching it is told',
     'robinhood_order': 'places an order with your money', 'treg_call': 'calls a paid endpoint that can publish or order',
+    # ...and an entry in his books, which his accountant and his payables run on (the card gallery, 2026-11-25: its card is declared now)
+    'quickbooks_bill': 'enters a bill in your QuickBooks books - it is owed from then on',
+    'quickbooks_expense': 'enters an expense in your QuickBooks books',
     # these two reach whatever the far side does with them, so the call itself decides (reaches below)
     'mcp': "runs a tool its server does not mark read-only - it may send, post or comment",
     'graphql': 'runs a GraphQL mutation - it may post a comment or change a record somebody reads',

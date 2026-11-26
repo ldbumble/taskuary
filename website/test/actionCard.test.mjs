@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { POST_PICTURE, actionFor, cardOf, changed, faceOf, fieldsOf, isCardReview, stateOf, textKey, valuesOf, wordsOf } from "../src/actionCard.js";
+import { POST_PICTURE, actionFor, cardOf, changed, faceOf, fieldsOf, hasBox, headOf, isCardReview, pressable, shownOf, stateOf, textKey, valuesOf, wordsOf } from "../src/actionCard.js";
 import { turnFiles } from "../src/taskOutputs.js";
 
 const read = (name) => readFileSync(fileURLToPath(new URL(`../src/${name}`, import.meta.url)), "utf8");
@@ -142,4 +142,16 @@ test("a post's picture is as wide as its words, at its own shape, with its room 
   assert.match(POST_PICTURE.aspectRatio, /^auto /, "its own ratio once loaded, the feed's before");
   assert.ok(POST_PICTURE.borderRadius);
   for (const t of ["linkedin_post", "bluesky_post", "mastodon_post"]) assert.equal(actionFor(t)?.kind, "post", `${t} is a post card - it draws the same picture`);
+});
+
+// A WRITE ON HIS BOOKS IS SAID IN PLAIN WORDS (the card gallery, 2026-11-25: "Write quickbooks bill on QuickBooks Online", "amount: 200" and
+// "vendor: Payworth (id 58)" in one box): its title from its declared head, money as money, each thing by name with its id, no box of words
+test("a declared write reads as labelled lines under a plain title", () => {
+  const act = actionFor("quickbooks_bill"), p = { vendor: "Payworth", vendor_id: "58", amount: 200, account: "Software subscriptions", account_id: "7" };
+  assert.equal(headOf(act, p), "Bill for Payworth - $200.00 on QuickBooks");
+  assert.deepEqual(act.fields.filter((f) => shownOf(f, p)).map((f) => [f.label, shownOf(f, p)]),
+    [["Vendor", "Payworth (id 58)"], ["Amount", "$200.00"], ["Account", "Software subscriptions (id 7)"]]);
+  assert.equal(shownOf(act.fields[1], { amount: "1,200.5" }), "$1,200.50");
+  assert.ok(!hasBox(act) && pressable(act, p, "", {}), "no words of its own: its press is lit by its lines");
+  assert.ok(hasBox(actionFor("jira_comment")) && !pressable(actionFor("jira_comment"), {}, "", {}));
 });

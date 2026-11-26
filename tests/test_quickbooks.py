@@ -128,6 +128,14 @@ class ReadsAndWrites(unittest.TestCase):
             why = []; made = proposals.queue(s, tid, bill, refused=why); self.assertTrue(made, why)
             p = json.loads(s.get_review(made['reviewId'])['DraftText'])
             self.assertEqual((p['vendor'], p['vendor_id'], p['account'], p['account_id'], p['amount']), ('Payworth', '58', 'Software subscriptions', '7', 120.0))
+            # ...and its card says it in plain words, from the fields its catalogue declares (the card gallery, 2026-11-25: "Write quickbooks bill
+            # on QuickBooks Online", "Where: quickbooks bill" and "amount: 200" in one box): its title, money as money, each thing by name and id
+            from taskuary import connectorcatalog as cat
+            act = cat.action_for('quickbooks_bill')
+            self.assertEqual(cat.head(act, p), 'Bill for Payworth - $120.00 on QuickBooks')
+            self.assertEqual([(f['label'], cat.shown(f, p)) for f in act['fields'] if cat.shown(f, p)],
+                             [('Vendor', 'Payworth (id 58)'), ('Amount', '$120.00'), ('Account', 'Software subscriptions (id 7)'), ('Date', p['date'])])
+            self.assertTrue(s.get_review(made['reviewId'])['Reason'].startswith('the agent proposes to bill for Payworth - $120.00 on QuickBooks'))
             no = []
             self.assertIsNone(proposals.queue(s, tid, {**bill, 'vendor_id': 99, 'memo': 'another'}, refused=no))
             self.assertIn('no vendor with id 99', no[0])
@@ -163,7 +171,7 @@ class TheLadder(unittest.TestCase):
         # ...and a bill past the card's Authority waits for the owner's press on a task: with none named, the refusal says how to name it
         r = c.post('/api/tools/run', json={'type': 'quickbooks_bill', 'vendor': 'Acme', 'amount': 5, 'account': 'x'}, headers=AGENT)
         self.assertEqual(r.status_code, 422, r.text)
-        self.assertIn('write', r.text); self.assertIn('task_id', r.text)
+        self.assertIn('task_id', r.text)
 
     def test_the_status_route_hands_the_card_its_redirect_uri(self):
         s = server.store; card = _card(s)

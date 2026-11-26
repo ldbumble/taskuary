@@ -272,5 +272,80 @@ class NoSsnOrBirthDateLeavesTests(unittest.TestCase):
         self.assertIn(SSN, s.get_message(mid)['BodyText'], 'the store keeps his mail as it came')
 
 
+# ── EVERY PART OF WHAT AN API CARD'S AGENT SENDS (the owner, 2026-11-26): a file the agent opens by itself, and the calls it made ─────────
+def _card(s, t):
+    row = [c for c in s.list_connectors() if c['Type'] == t][0]
+    s.save_connector({'ConnectorId': row['ConnectorId'], 'Secret': 'k', 'Active': 1, 'ConfigJson': '{}'}, 'o')
+    return f"connector:{row['ConnectorId']}"
+
+
+def _call(i, name, **a): return {'id': f'c{i}', 'type': 'function', 'function': {'name': name, 'arguments': json.dumps(a)}}
+
+
+class EveryPartOfAnAgentsStepTests(unittest.TestCase):
+    def _turn(self, card):
+        """Its own loop on `card`: it opens the intake sheet in its task's folder, writes a note with the number in it, and answers.
+        Returns (every list of messages a step sent, the sheet, the note)."""
+        from pathlib import Path
+        from taskuary import apiagent
+        s, sent = MemoryStore(), []
+        pick = _card(s, card)
+        tid = s.create_task({'Title': 'intake', 'Kind': 'general', 'Status': 'open'}, 'owner')
+        sheet = Path(apiagent.workdir(s, tid)) / 'intake.txt'; sheet.write_text(INTAKE, encoding='utf-8')
+        steps = iter([[_call(1, 'file_read', path='intake.txt')], [_call(2, 'file_write', path='note.txt', text=f'Erin Blake, SSN {SSN}, born {DOB}')], None])
+        def recorder(system, user, **kw): return 'ok'
+        def chat(messages, tools, max_tokens=100, **kw):
+            sent.append(json.loads(json.dumps(messages)))
+            return {'role': 'assistant', 'content': None, 'tool_calls': c} if (c := next(steps)) else {'role': 'assistant', 'content': 'done'}
+        recorder.chat = chat
+        with mock.patch.object(llm, 'make_llm', return_value=recorder):
+            brain = llm.build_llm(s, pick=pick, job='general', task_id=tid)
+            self.assertEqual(apiagent.turn(brain, s, tid, 's1', 'You work tasks.', 'Read the intake sheet.', 100, tools=list(apiagent.FILES)), 'done')
+        return sent, sheet, sheet.with_name('note.txt')
+
+    def _masked_whole(self, card):
+        sent, sheet, note = self._turn(card)
+        self.assertEqual(len(sent), 3)
+        read = [m for m in sent[1] if m.get('role') == 'tool'][0]['content']
+        self.assertIn('[redacted:ssn]', read); self.assertIn('[redacted:date-of-birth]', read); self.assertIn('12/01/2026', read)
+        wrote = json.loads([m for m in sent[2] if m.get('tool_calls')][-1]['tool_calls'][0]['function']['arguments'])     # ...still JSON, its path kept
+        self.assertEqual(wrote['path'], 'note.txt'); self.assertIn('[redacted:ssn]', wrote['text'])
+        for msgs in sent: self.assertNotIn(SSN, json.dumps(msgs)); self.assertNotIn(DOB, json.dumps(msgs))
+        # ...and his files are as they were: the sheet it read, and the note written with what the agent gave, not with what was sent
+        self.assertEqual(sheet.read_text(encoding='utf-8'), INTAKE)
+        self.assertIn(SSN, note.read_text(encoding='utf-8')); self.assertIn(DOB, note.read_text(encoding='utf-8'))
+
+    def test_on_the_hipaa_ai_card(self): self._masked_whole('hipaa_ai')
+    def test_and_on_any_other_card_the_same(self): self._masked_whole('anthropic')          # one rule for every endpoint (2026-11-25)
+
+    def test_a_tools_answer_held_inside_a_part_and_a_picture_beside_it(self):
+        pic = {'type': 'image', 'source': {'type': 'base64', 'media_type': 'image/png', 'data': 'iVBORw0KGgo'}}
+        held = {'type': 'tool_result', 'tool_use_id': 'c1', 'content': [{'type': 'text', 'text': INTAKE}]}
+        out = redact.scrub_parts([pic, held, {'type': 'text', 'text': 'Booked.'}])
+        self.assertEqual(out[0], pic); self.assertEqual(out[2], {'type': 'text', 'text': 'Booked.'})
+        self.assertEqual(out[1]['tool_use_id'], 'c1'); self.assertNotIn(SSN, json.dumps(out)); self.assertNotIn(DOB, json.dumps(out))
+
+    def test_what_a_backup_card_is_handed_when_the_first_brain_is_out(self):
+        s, seen = MemoryStore(), {}
+        first, backup = _card(s, 'anthropic'), _card(s, 'hipaa_ai')
+        class Out(RuntimeError): unavailable = True
+        def down(system, user, **kw): raise Out('resting')
+        def up(system, user, **kw): seen['user'] = user; return 'ok'
+        with mock.patch.object(llm, 'make_llm', side_effect=lambda t, *a, **k: up if t == 'hipaa_ai' else down):
+            brain = llm._build_llm(s, first, backups=[backup], fallback_user=INTAKE)
+            self.assertEqual(brain('You work tasks.', 'go on'), 'ok')
+        self.assertNotIn(SSN, seen['user']); self.assertNotIn(DOB, seen['user']); self.assertIn('[redacted:ssn]', seen['user'])
+
+    def test_the_search_a_card_runs_for_its_agent_on_a_cli(self):
+        from taskuary import harness
+        s, seen = MemoryStore(), {}
+        def card(system, user, **kw): return 'ok'
+        card.search = lambda q, max_tokens=100: seen.update(q=q) or 'hits'
+        with mock.patch.object(harness, '_task_card', return_value={'ConnectorId': 1}), mock.patch.object(harness, '_cfg', return_value=('hipaa_ai', {}, 'k')), \
+             mock.patch.object(llm, 'make_llm', return_value=card):
+            self.assertEqual(harness.searcher(s, 1).search(f'who has SSN {SSN}'), 'hits')
+        self.assertNotIn(SSN, seen['q'])
+
+
 if __name__ == '__main__':
     unittest.main()

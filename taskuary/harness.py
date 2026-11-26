@@ -90,7 +90,7 @@ def searcher(store, tid):
     if not (c := _task_card(store, tid)): return None
     from . import llm
     t, cfg, key = _cfg(store, c['ConnectorId'])
-    try: return llm.make_llm(t, cfg, key)
+    try: return llm._scrub(llm.make_llm(t, cfg, key))         # ...what it is asked scrubbed, as every brain's is (llm._Scrubbed)
     except Exception as e: logger.info(f'harness: card {c["ConnectorId"]} has no search here - {e}'); return None
 
 

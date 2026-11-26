@@ -713,10 +713,14 @@ def _scrubbed(system): return system.map(redact.scrub) if isinstance(system, Sta
 
 
 def _said(m: dict) -> dict:
-    "One chat message with its words scrubbed: a string, or each text part of a list (a picture's part goes as it is)."
+    """One chat message as it may leave, EVERY PART OF IT (the owner, 2026-11-26): its words, a tool's answer - a file the agent opened by
+    itself, a page, a command's output - each part of a list (redact.scrub_parts), and the arguments of the calls it made, which ride back
+    on every later step. The conversation Taskuary keeps is not changed: only the copy that is sent."""
     c = m.get('content')
-    if isinstance(c, str): return {**m, 'content': _scrubbed(c)}           # ...a Stable system keeps its cache blocks
-    if isinstance(c, list): return {**m, 'content': redact.scrub_parts(c)}
+    if isinstance(c, (str, list)): m = {**m, 'content': _scrubbed(c) if isinstance(c, str) else redact.scrub_parts(c)}   # ...a Stable system keeps its cache blocks
+    if m.get('tool_calls'):
+        m = {**m, 'tool_calls': [{**k, 'function': {**f, 'arguments': redact.scrub_json(f['arguments'])}}
+                                 if isinstance(f := k.get('function'), dict) and isinstance(f.get('arguments'), str) else k for k in m['tool_calls']]}
     return m
 
 
@@ -861,7 +865,8 @@ def _build_llm(store, pick=None, model=None, trace=None, cancel=None, resume=Non
         for i, (candidate, brain) in enumerate(brains):
             try:
                 # A backup has no access to the primary CLI's native conversation.
-                context = fallback_user if candidate != primary and fallback_user is not None else user
+                # ...scrubbed here, as `user` was at the door (_Scrubbed): it was handed to an API backup as it came
+                context = redact.scrub_parts(fallback_user) if candidate != primary and fallback_user is not None else user
                 # ...and a schema is dropped for the brain that cannot carry one - per brain, so a
                 # CLI backup does not take the schema away from the API brain behind it
                 kw = {k: v for k, v in kwargs.items()

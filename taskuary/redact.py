@@ -104,9 +104,13 @@ def scrub(text) -> str:
 
 
 def scrub_parts(c):
-    "A message's content as it may leave: a string scrubbed, or each text part of a list - a picture's part goes as it is."
-    if isinstance(c, list): return [{**p, 'text': scrub(p['text'])} if isinstance(p, dict) and isinstance(p.get('text'), str) else p for p in c]
+    """A message's content as it may leave: a string scrubbed, or every string of each part of a list - its words, a tool's answer held
+    inside it, a file's text. A part that carries bytes (a picture, a document as base64) goes as it is: no rule here reads a picture."""
+    if isinstance(c, list): return [p if isinstance(p, dict) and _BYTES & p.keys() else scrub_all(p) for p in c]
     return scrub(c)
+
+
+_BYTES = {'image_url', 'source', 'file', 'input_audio'}     # the keys a part's bytes ride under, on the wires Taskuary speaks
 
 
 def scrub_all(o):
@@ -115,6 +119,14 @@ def scrub_all(o):
     if isinstance(o, dict): return {k: scrub_all(v) for k, v in o.items()}
     if isinstance(o, list): return [scrub_all(v) for v in o]
     return o
+
+
+def scrub_json(s):
+    "A string that holds JSON (a tool call's arguments), scrubbed as the data it is and still JSON; any other string as scrub does it."
+    import json
+    try: o = json.loads(s)
+    except (TypeError, ValueError): return scrub(s)
+    return s if (out := scrub_all(o)) == o else json.dumps(out, ensure_ascii=False)
 
 
 # SAID, NOT SHAPED: "my password is Hunter2!x9", "username northwind, password chirp-pass". A prompt keeps these - the agent he gave a

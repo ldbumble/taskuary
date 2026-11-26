@@ -1122,3 +1122,56 @@ def test_a_browser_that_could_not_start_is_said_at_the_agents_step_with_why():
     assert said.startswith(gate.NOT_RUN_SAID) and why in said
     with mock.patch.object(browserview, 'began'), mock.patch.object(gate, 'check', return_value={}), mock.patch.object(browserview, 'on_demand', return_value=True):
         assert gate.judge(MemoryStore(), 1, 'nostart', 'agent-browser open https://whois.example/') == ''    # ...a start that came up says nothing
+
+
+# ── ONE ACT, ONE PRESS (walk 23, 2026-11-25) ──────────────────────────────────────────────────────────────────────────────────────────
+POSTBOX = [{'k': 'text', 't': 'textarea', 'f': 0, 'v': 'Northwind has a new month-end close: four days, start to finish.'},
+           {'k': 'media', 't': 'file', 'f': 0, 'v': 'C:\\fakepath\\four-day-close.png'}]
+
+
+def test_words_typed_into_a_pages_box_are_text_never_a_path_the_shell_reads(tmp_path):
+    """The Claude CLI's X post took four presses: its `fill` of the post's words was held by the read gate as "read files at a path it builds
+    from a variable" - the words, written $'...' with their line breaks, read as a path. Filling a page is the agent's work: its words are
+    text. The file it uploads is still a file it reads, judged where it is."""
+    from taskuary import readgate
+    pic = str(tmp_path / 'four-day-close.png'); open(pic, 'wb').close()
+    cmd = (f'PIC="{pic}"\nagent-browser read; agent-browser fill \'@e9\' $\'Northwind has a new month-end close: four days.\\n\\nHow long does yours take?\'; '
+           'echo "fill $?"; agent-browser upload \'@e10\' "$PIC"; agent-browser keyboard type "$5 off ~/today"; agent-browser find label "What is happening?!" fill "$now"')
+    got = readgate.command_paths(cmd, str(tmp_path))
+    assert None not in got and {os.path.normcase(os.path.normpath(p)) for p in got} == {os.path.normcase(os.path.normpath(pic))}, got
+    assert readgate.command_paths('agent-browser upload @e10 $NOT_SET_ANYWHERE_X/a.png', '') == [None], 'a file it uploads is read as ever'
+    assert bg.types(['fill', '@e9', 'hello']) and bg.types(['keyboard', 'inserttext', 'x']) and not bg.types(['upload', '@e1', 'a.png']) and not bg.types(['click', '@e1'])
+
+
+def test_a_held_press_says_what_the_page_holds_and_his_yes_runs_only_while_it_still_holds_it():
+    """C's held Post was approved over an empty box ("You approved it - the page did not take it"), on a card that said "Trigger a control on
+    X". The one press that waits carries what the page's form held; it is said on its card and to its agent; and his yes presses nothing
+    on a page that holds something else by then."""
+    import pytest
+    from taskuary import cardqueue, signin
+    p = {'action': 'browser_act', 'sid': 'run1', 'args': ['click', '@e6'], 'command': 'agent-browser click @e6', 'what': 'Publish your post on X',
+         'site': 'x.example', 'name': 'X', 'url': 'https://x.example/home', 'fields': POSTBOX}
+    assert bg.holds(p) == '"Northwind has a new month-end close: four days, start to finish." · the file four-day-close.png'
+    assert bg.held_says(p) == f'Publish your post on X - the page holds {bg.holds(p)}'
+    assert bg.held_says({**p, 'fields': []}) == 'Publish your post on X - nothing is filled in on the page'
+    assert bg.held_says({k: v for k, v in p.items() if k != 'fields'}) == 'Publish your post on X', 'a step held before pages were read says what it says'
+    assert signin.form_fields('run1', {'fields': POSTBOX[:1], 'written': ['words in a box the page makes editable']})[-1] == {
+        'k': '', 't': 'textarea', 'f': -1, 'v': 'words in a box the page makes editable'}
+    s = MemoryStore(); tid = Factory(s).task('Post the four-day close')
+    ran = []
+    def press(now):
+        with mock.patch.object(browserview, 'state', return_value={'open': True, 'url': p['url']}), mock.patch.object(bg, 'held_tab', return_value=''), \
+             mock.patch.object(signin, 'form_state', return_value={'href': p['url'], 'fields': now}), mock.patch.object(signin, 'acting'), \
+             mock.patch.object(bg, '_tell'), mock.patch.object(bg, 'page', return_value={'url': p['url'], 'elements': ''}):
+            return bg._perform(s, tid, p, run=lambda sid, a: ran.append(a) or (0, 'Done'))
+    with pytest.raises(RuntimeError, match='no longer holds what this card showed'): press([])
+    with pytest.raises(RuntimeError, match='no longer holds'): press([{**POSTBOX[0], 'v': 'Something else entirely.'}, POSTBOX[1]])
+    assert ran == [], 'pressed on a page that holds something else'
+    assert press(POSTBOX)['performed'] == 'Publish your post on X' and ran == [['click', '@e6']]
+    # ...and on the card he pressed, whose last step it is: one sentence for his screen and for its agent
+    card = s.add_review({'TaskId': tid, 'Kind': 'action', 'Status': 'pending', 'DraftText': json.dumps({'action': 'run_tool', 'type': 'x_post', 'text': 'We close in four days.'}),
+                         'Reason': 'the agent proposes to post on X'})
+    s.decide_review(card, 'approved', json.dumps({'action': 'run_tool', 'type': 'x_post', 'text': 'We close in four days.', 'result': {'browser': True}}), 'owner')
+    held = proposals.queue(s, tid, p)['reviewId']
+    cardqueue._SEEN.clear()
+    assert f'the page holds {bg.holds(p)}' in cardqueue.screen(s, tid) and cardqueue.step_says(s.get_review(held)) == bg.held_says(p)

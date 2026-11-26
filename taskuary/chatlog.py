@@ -990,7 +990,7 @@ def advance(store, tid: int) -> None:
     # the agent's final Post held, and nothing to press anywhere - the card he had pressed stood "approved" over a step the line kept behind
     # it): the card waits again, carrying the step (`step`), until the step is pressed, taken back or moved past
     sp = cardqueue.step(q['units'][0]) if front else None
-    step = {'review': sp['ReviewId'], 'what': cardqueue._flat(cardqueue._p(sp).get('what') or cardqueue._p(sp).get('command'), 300),
+    step = {'review': sp['ReviewId'], 'what': cardqueue.step_says(sp),
             **({'press': 'done'} if cardqueue._p(sp).get('action') == pagestep.ACT else {}), **({'fill': True} if cardqueue._p(sp).get('fill') else {})} if sp else None
     # ...every card that stood reads as its review does now: pressed, withdrawn, moved past - in its place
     for k, r in list(rows.items()):

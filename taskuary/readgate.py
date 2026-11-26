@@ -319,7 +319,7 @@ def command_paths(cmd: str, cwd: str = '', env: dict = None, made: list = None, 
     it cannot read. The program itself, options, URLs and switches (`/s`) are not paths. `made` gets the files the line writes rather than
     reads: a browser screenshot's picture (walk 16: the agent's own screenshot in Temp stood as a card asking to read it). `writes`, where
     given, gets the paths it writes (_REDIRECT, _WRITERS, _COPIES) instead of the list it returns."""
-    from .browsergate import _head, words
+    from .browsergate import _head, types, words
     from .shellgate import _OWN, shell_text, unwrap
     # ...a line that is a shell started on a script (Codex's every call) is read as that script, whole: cut at the `;` inside its quotes first,
     # `$outDir = "<its outputs folder>"; New-Item $outDir` lost its assignment and the task's own folder was held as a variable it could not
@@ -347,6 +347,7 @@ def command_paths(cmd: str, cwd: str = '', env: dict = None, made: list = None, 
         lists = tool in _LISTS and not any(x in _RUNS_ON for x in w)
         reads = reads or not (lists or tool in _NAMES)
         shot = (a := _head(w)) is not None and next((x.lower() for x in a if not x.startswith('-')), '') == 'screenshot'
+        if a is not None and types(a): continue                 # ...words typed into a page's box are text, never a path (browsergate.types)
         if tool == 'join-path': w = [w[0], os.sep.join(x for x in w[1:] if not x.startswith('-'))]     # ...the one path it builds
         # ...a `$(...)` that is a word of its own, never one inside a string's text (`"rows: $((Import-Csv $p).Count)"`)
         sub = bool(re.search(r'(?:^|\s)' + '"' * (seg.count('"') % 2) + r'\$\s*$', seg))

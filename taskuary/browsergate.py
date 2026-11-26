@@ -394,19 +394,27 @@ def opens(cmd: str) -> str:
     return ''
 
 
+def _verb(a: list) -> tuple:
+    "(the verb of these agent-browser arguments as acts() finds it, the reader of the words after it)"
+    i = 0
+    while i < len(a) and a[i].startswith('-'): i += 2 if a[i] in VALUED and '=' not in a[i] else 1
+    # `keyboard <sub>` and `find <locator> <value> <action>` are read only where their words stand bare: an option among them could
+    # take the next word as its value or not, and a guess that turns a click into typing would wave the click through
+    return (a[i].lower() if i < len(a) else ''), lambda n: a[i + n].lower() if i + n < len(a) and not any(t.startswith('-') for t in a[i + 1:i + n + 1]) else ''
+def types(a: list) -> bool:
+    """Do these agent-browser arguments only put WORDS in a box (fill, type, keyboard type/inserttext, find ... fill/type)? Its grammar. What
+    follows the verb is then text for the page - never a command, nor a path the shell reads (readgate.command_paths; walk 23: a post's
+    words, typed with `fill`, were held as "read files at a path it builds from a variable" - one more press for one post)."""
+    v, sub = _verb(a)
+    return v in TYPES or (v == 'keyboard' and sub(1) in KEY_TYPES) or (v == 'find' and sub(3) in TYPES)
 def typing(act: dict) -> bool:
     """Is this act only typing into a box? By agent-browser's verb, never by its text. A line break typed as KEYS (type, keyboard type, find ...
     type) presses Enter, which sends a form: not plain typing. fill and inserttext set the box's text and press no key - its lines are text."""
-    a, i = act.get('args') or [], 0
-    while i < len(a) and a[i].startswith('-'): i += 2 if a[i] in VALUED and '=' not in a[i] else 1     # as acts() found the verb
-    if i >= len(a) or a[i].lower() != act.get('verb'): return False
-    # `keyboard <sub>` and `find <locator> <value> <action>` are read only where their words stand bare: an option among them could
-    # take the next word as its value or not, and a guess that turns a click into typing would wave the click through
-    sub = lambda n: a[i + n].lower() if i + n < len(a) and not any(t.startswith('-') for t in a[i + 1:i + n + 1]) else ''
-    v = act['verb']
-    ok = v in TYPES or (v == 'keyboard' and sub(1) in KEY_TYPES) or (v == 'find' and sub(3) in TYPES)
+    a = act.get('args') or []
+    v, sub = _verb(a)
+    if not v or v != act.get('verb'): return False
     keys = v == 'type' or (v == 'keyboard' and sub(1) == 'type') or (v == 'find' and sub(3) == 'type')
-    return ok and not (keys and (act.get('nl') or broke(a)))
+    return types(a) and not (keys and (act.get('nl') or broke(a)))
 
 
 # ...AND A CLICK ON A FIELD OF THE FORM IS FILLING IT TOO, by the role the page's snapshot gives the control (the ZoningNow walk, 2026-11-22: the
@@ -531,7 +539,7 @@ def page(sid: str) -> dict:
     # ...and what the site is called for him (signin.site_name): a page reached by a bare address by its own title, never "127.0.0.5"
     form = signin.form_state(sid) if rc == 0 else {}         # ...and whether a password box of it holds one (pw): an account's form
     pg = _PAGES[str(sid)] = {'url': url, 'open': bool(st.get('open')), 'elements': snap[:SNAP_MAX] if rc == 0 else '',
-                             'fields': form.get('fields') or [], 'pw': bool(form.get('pw')), 'name': signin.site_name(url, sid) if url else ''}
+                             'fields': signin.form_fields(sid, form), 'pw': bool(form.get('pw')), 'name': signin.site_name(url, sid) if url else ''}
     return pg
 
 
@@ -898,7 +906,7 @@ def _check(store, tid: int, sid: str, cmd: str, brain=None, cwd: str = '') -> di
                                          'url': (tab_ := _held_at(sid))[1] or pg['url'], **({'tab': tab_[0]} if tab_[0] else {}),
                                          'site': site, 'name': pg.get('name') or site, 'what': v['what'], 'why': v['why'], **({'cwd': cwd} if cwd else {}),
                                          'keys': [step['key']],
-                                         'fields': signin.form_fields(sid),
+                                         'fields': pg.get('fields') or [],
                                          **({'control': {'name': c['name'], 'role': c['role']}} if c.get('role') else {})}, 'agent')
             store.audit('task', tid, 'browser_act_held', 'taskuary', 'system', {'verb': a['verb'], 'site': site, 'why': v['why']})
         from .selfclose import CARD_TAIL
@@ -1073,6 +1081,21 @@ def closes(cmd: str):
 
 
 # ── approved: run it, on the same page; dismissed: say so ─────────────────────────────────────────────────────────────────
+# ONE ACT, ONE PRESS, AND HIS YES IS TO WHAT IT SENDS (walk 23, 2026-11-25: a held Post approved over an empty box - "You approved it - the
+# page did not take it" - and a card that said only "Trigger a control on X"). The press that cannot be undone is the one step that waits; what
+# the page's form held as it was held rides on that step (its `fields`), is said on the card and to the agent in these words, and his yes runs
+# only while the page still holds it (_perform) - a card changed after it was shown does not run, a page changed under its card neither
+def holds(p: dict) -> str:
+    "What the form of a held step's page held, in words: each written box and the file a file box holds - '' when nothing is filled in."
+    fs = [f for f in p.get('fields') or [] if isinstance(f, dict) and f.get('t') not in ('checkbox', 'radio', 'hidden', 'password') and str(f.get('v') or '').strip()]
+    return ' · '.join([f'"{_cut(f["v"], 280)}"' if f.get('t') != 'file' else f"the file {re.sub(r'^.*[/]', '', str(f['v']).replace(chr(92), '/'))}" for f in fs])
+def held_says(p: dict) -> str:
+    "A held step as its card and its agent are told it: what it does, and what the page holds for it to send."
+    w = ' '.join(str(p.get('what') or p.get('command') or '').split())[:300]
+    if p.get('action') != 'browser_act' or 'fields' not in p or p.get('signup'): return w
+    return f'{w} - the page holds {h}' if (h := holds(p)) else f'{w} - nothing is filled in on the page'
+
+
 def _held_at(sid: str) -> tuple:
     "(the tab session `sid`'s commands work, its address) as its own Chrome lists it - ('', '') when that cannot be read."
     from . import browserview
@@ -1186,6 +1209,7 @@ def overcome(store, tid, site: str, said: str, signup: bool = False, command: st
 
 def _perform(store, tid: int, p: dict, run=None) -> dict:
     from . import browserview
+    from .signin import form_fields, form_state
     sid, args = str(p.get('sid') or ''), list(p.get('args') or [])
     if not sid or not args: raise RuntimeError('this held act names no browser command')
     if p.get('signup'):                     # a sign-up: filled again where the agent has moved on, its password made and kept (signin.send_held)
@@ -1204,6 +1228,10 @@ def _perform(store, tid: int, p: dict, run=None) -> dict:
     if (was := p.get('control')) and (now := control({'args': args}, page(sid))) and (now.get('role'), now.get('name')) != (was.get('role'), was.get('name')):
         raise RuntimeError(f"the {was.get('role') or 'control'} \"{was.get('name')}\" this was held on is no longer where it was on "
                            f"{p.get('name') or p.get('site') or 'the page'} - the page has changed since, so nothing was done. {AGAIN}")
+    # ...AND THE PAGE STILL HOLDS WHAT HIS CARD SHOWED (holds): a box emptied or rewritten since is another act than the one he said yes to
+    if 'fields' in p and (form := form_state(sid)) and (now := holds({'fields': form_fields(sid, form)})) != (was := holds(p)):
+        raise RuntimeError(f"{p.get('name') or p.get('site') or 'the page'} no longer holds what this card showed ({was or 'nothing filled in'}) - it holds "
+                           f"{now or 'nothing filled in'} now, so nothing was pressed. {AGAIN}")
     # ...WHERE THE AGENT RAN IT: `upload @e5 ./resume.pdf` approved ran from the server's own folder, and its relative path named another file
     rc, said = (run or (lambda s, a: _run(s, a, 60, 'act', **({'cwd': p['cwd']} if p.get('cwd') else {}))))(sid, args)
     said = ' '.join(str(said or '').split())[-600:]

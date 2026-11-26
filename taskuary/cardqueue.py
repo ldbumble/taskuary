@@ -64,6 +64,12 @@ def step(u: dict) -> dict | None:
     return next(reversed(_waits(u)), None) if u.get('rows') and handed(u['rows'][0]) else None
 
 
+def step_says(sp: dict) -> str:
+    "A held step in words, with what its page holds for it to send (browsergate.held_says) - one sentence for his card and for its agent."
+    from .browsergate import held_says
+    return held_says(_p(sp))
+
+
 def in_flight(store, tid: int) -> dict | None:
     "The act on task `tid` a press handed to its agent and that is not done yet - the oldest one, as `done` settles them - or None."
     return next((r for r in store._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action' AND Status IN ('approved','edited') ORDER BY ReviewId",
@@ -446,7 +452,7 @@ def screen(store, tid: int, skip=()) -> str:
             if (sp := step(u)):
                 # ...its held step is HIS now, on the card he pressed - never "do it", never a card of its own (walk 22: both agents said one waited)
                 waiting.append(f"Waiting for his press now, drawn on the card he pressed as its last step ({what(store, {'rids': u['rids'][:1], 'rows': u['rows'][:1]}, True)}): "
-                               f"{_flat(_p(sp).get('what') or _p(sp).get('command'))}")
+                               f"{step_says(sp)}")
             elif (h := next((x for x in u['rows'] if handed(x)), None)):
                 waiting.append(f"Handed to you by his press {clock(h.get('DecidedAt'))}, NOT done yet - do it; it is done once its own final press "
                                f"has gone, and the next card waits until then. One you cannot do now: keep_card it with `why` (it stands again "

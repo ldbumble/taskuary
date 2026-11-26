@@ -991,7 +991,7 @@ def advance(store, tid: int) -> None:
     # it): the card waits again, carrying the step (`step`), until the step is pressed, taken back or moved past
     sp = cardqueue.step(q['units'][0]) if front else None
     step = {'review': sp['ReviewId'], 'what': cardqueue._flat(cardqueue._p(sp).get('what') or cardqueue._p(sp).get('command'), 300),
-            **({'press': 'done'} if cardqueue._p(sp).get('action') == pagestep.ACT else {})} if sp else None
+            **({'press': 'done'} if cardqueue._p(sp).get('action') == pagestep.ACT else {}), **({'fill': True} if cardqueue._p(sp).get('fill') else {})} if sp else None
     # ...every card that stood reads as its review does now: pressed, withdrawn, moved past - in its place
     for k, r in list(rows.items()):
         rv = by.get(json.loads(r['Body']).get('review'))
@@ -1231,7 +1231,11 @@ def migrate(store, tid: int, legacy=None) -> bool:
     with store.lock:
         if migrated(store, tid): return False
         # ...what dual-write wrote before is the warm-up: the list is the record
-        if not keep: store.cx.execute('DELETE FROM chatlog WHERE TaskId=?', (int(tid),))
+        if not keep:
+            store.cx.execute('DELETE FROM chatlog WHERE TaskId=?', (int(tid),))
+            # ...and the turns noted as raising its cards (_RAISED) were rows of what was just cleared - their Ids free for any row now (the card
+            # gallery, 2026-11-25: a sign-in's card raised during its task's first read was put under its own Id, and drawn nowhere)
+            for x in store.cx.execute('SELECT ReviewId FROM review WHERE TaskId=?', (int(tid),)).fetchall(): (_RAISED.get(store) or {}).pop(x['ReviewId'], None)
         prev, seen_live = 0., False
         def row(kind, key, body, parent=None, state=None):
             nonlocal prev

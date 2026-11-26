@@ -158,6 +158,10 @@ const SHAPES = {
     await end(t, "The order is ready to send; it waits on your press."); return { ...t, press: [[/^Dismiss$/, "dismissed"]] }; },
   handover: async () => { const t = await task("Pay the venue deposit", "Pay the venue deposit on the vendor's site."); await fx("session", { taskId: t.taskId, url: "https://pay.vendor.example/checkout" });
     await agent(t, "hand_over", { what: 'tick the "I am not a robot" box', site: "pay.vendor.example" }); await end(t, "The checkout is filled in; one step is yours."); return { ...t, press: [[/^I.m done/, "done"]] }; },
+  // ...a sign-in its page asks for: ONE card says it, with I'm done and the way to the fill page - never a line over the card too
+  signin: async () => { const t = await task("Download the October statement", "Get the October statement from the vendor portal.");
+    await fx("session", { taskId: t.taskId, url: "https://portal.vendor.example/login" }); await fx("signin", { taskId: t.taskId, site: "portal.vendor.example", name: "Vendor portal" });
+    await end(t, "The portal wants you signed in before I can download it."); return t; },
   question: async () => { const t = await task("Which plan to renew", "Renew the expense tool.");
     await agent(t, "ask_owner", { question: "Which plan should I renew? I would take Basic - the approval flow is the same.", choices: ["Basic - $200/mo", "Pro - $540/mo", "Let it lapse"] });
     await end(t, "One thing I need from you before I renew."); return { ...t, press: [[/^Basic/, "answered"]] }; },

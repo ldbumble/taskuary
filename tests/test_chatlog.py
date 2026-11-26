@@ -367,6 +367,18 @@ def test_a_card_raised_the_second_before_its_turns_answer_waits_lit_in_that_turn
     assert chat(3) == [('card', 'pending', []), ('turn', None, [])]
 
 
+def test_a_card_raised_during_its_tasks_first_read_stands_in_its_turn():
+    """The card gallery, 2026-11-25: a sign-in asked on the agent's page, its turn answered, and the task first read after - its card was raised
+    in that read, under the turn noted for it in the log the read then froze afresh, whose Id was the card's own by then: drawn nowhere."""
+    from taskuary import general, workerstate as ws
+    s = MemoryStore()
+    tid = s.create_task({'Title': 'Download the October statement', 'Kind': 'general', 'Status': 'open', 'OriginBase': 'owner'}, 'owner')
+    s.add_comment(tid, general.BRIEF_ACTOR, general.USER_TYPE, 'Get the October statement from the vendor portal.')
+    ws.record(s, tid, 'run1', 'input_needed', request_id='signin:portal.vendor.example', text='Sign in to Vendor portal to continue', source='api')
+    s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'The portal wants you signed in before I can download it.')
+    assert [(x['kind'], [c.get('status') for c in x.get('cards') or []]) for x in chatlog.serve(s, tid)['items']] == [('turn', ['pending'])]
+
+
 def test_a_tab_names_a_thing_as_its_card_writes_it():
     """The card gallery, 2026-11-25: the pull request's tab read "Northwind/ledger#31" over a card saying northwind/ledger#31 - a name is
     written as it is; only a phrase in his words ('Push') starts with a capital."""

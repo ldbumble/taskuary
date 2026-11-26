@@ -27,9 +27,6 @@
 .tq-aui-agent-body th, .tq-aui-agent-body td, .tq-aui-agent-body a { overflow-wrap: anywhere; word-break: break-word; }
 /* the choices of what the agent asked wrap under its line at any width (AgentAsks) - a line of the chat, never a box (2026-11-11) */
 .tq-aui-asking-choices { display: flex; gap: 6px; flex-wrap: wrap; }
-/* a sign-in ask is a line of the conversation, not a card (2026-11-03): its words, and the fill page's link */
-.tq-aui-signin { margin: 2px 0 10px; color: var(--tq-text, #3f423d); font-size: 13px; line-height: 1.5; }
-.tq-aui-signin a { color: var(--tq-link, #41525f); text-decoration: underline; text-underline-offset: 2px; }
 .tq-aui-asking-err { color: var(--tq-danger, #8a2f2f); font-size: 11.5px; }
 /* ...and so is the agent's own question (2026-11-04): its sentence in the answer's type, the choices under it only when it gave real ones */
 .tq-aui-asked { margin: 2px 0 10px; display: flex; flex-direction: column; gap: 8px; }

@@ -18,7 +18,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from taskuary import (bulkcard, card, cardqueue, chatlog, conversation, general, landing, outbound, pagestep, proposals, reports, scopes, server,
-                      workerstate as ws)
+                      signin, workerstate as ws)
 from taskuary.store import MemoryStore
 
 c = TestClient(server.app)
@@ -231,6 +231,23 @@ def test_a_post_put_up_through_the_browser_keeps_every_further_press_on_its_one_
         assert w.press(held).get('ok')
     got = w.cards()
     assert got[x]['status'] == 'approved' and not got[x].get('step') and held not in got and not cardqueue.state(w.s, w.tid)['units']
+
+
+def test_a_sign_in_is_one_card_that_carries_its_way_to_the_fill_page(w):
+    """The card gallery, 2026-11-25: a sign-in step said its words twice - a chat line with "fill it in securely" over its card. One step, one
+    card: the card says it and carries the fill page's way (`fill`), on its own or as the next press of the post it is on; a code the site asks
+    is typed on the page, so its card carries none."""
+    ws.record(w.s, w.tid, 'run1', 'input_needed', request_id='signin:x.example', text='Sign in to X to continue', source='api')
+    got = w.cards(); c = pagestep.card_of(w.s, w.tid, 'signin:x.example')
+    assert json.loads(c['DraftText'])['fill'] is True and got[c['ReviewId']]['status'] == 'pending'
+    ws.record(w.s, w.tid, 'run1', 'answered', request_id='signin:x.example', text='Signed in', source='owner'); w.cards()
+    x = w.act({'action': 'run_tool', 'type': 'x_post', 'text': 'We close the month in four days.'})
+    assert proposals.via_browser(w.s, x, '')['ok']
+    ws.record(w.s, w.tid, 'run1', 'input_needed', request_id='signin:x.example~2', text='Sign in to X to continue', source='api')
+    assert w.cards()[x]['step']['fill'] is True, 'on the post it is the next press of: the same way there'
+    ws.record(w.s, w.tid, 'run1', 'answered', request_id='signin:x.example~2', text='Signed in', source='owner'); w.cards()
+    ws.record(w.s, w.tid, 'run1', 'input_needed', request_id='signin:x.example~3', text=signin.CODE_ASK.format(site='x.example'), source='api')
+    assert 'fill' not in w.cards()[x]['step'], 'a code is typed on the page'
 
 
 def test_a_step_handed_to_him_on_a_page_is_a_card_in_the_line_one_at_a_time_and_his_done_settles_it(w):

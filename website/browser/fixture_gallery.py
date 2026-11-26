@@ -170,6 +170,15 @@ def install(app, store):
         return proposals.queue(store, tid, {"action": "browser_act", "sid": sid, "args": args, "command": " ".join(["agent-browser", *args]), "what": body["what"],
                                             "site": body.get("site") or "", "url": PAGES.get(sid, "")}, "taskuary")
 
+    @app.post("/api/fixture/gallery/signin")
+    def gallery_signin(body: dict = Body(...)):
+        "A sign-in the agent's page asks for, raised as signin.needs raises one where none is saved (no watch: there is no page behind it)."
+        from taskuary import signin, workerstate as ws
+        tid, site = int(body["taskId"]), body["site"]
+        ws.record(store, tid, f"gal{tid}", "input_needed", request_id=ws.fresh_id(store, tid, f"{signin.PREFIX}{site}"),
+                  text=f"Sign in to {body.get('name') or site}{signin.CONTINUE}", source="api")
+        return {"ok": True}
+
     @app.get("/api/fixture/gallery/woken")
     def gallery_woken(): return {"woken": WOKEN}
 

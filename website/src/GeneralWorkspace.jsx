@@ -16,7 +16,6 @@ import { REST_LOOK_MS, changes, coalesced, restLook } from "./visible.js";
 import { aheadChat, heldChat, heldConversation } from "./taskDetail.js";
 import { AttachChip, fileChips, fileState, usePromptImages, useSendWhenUp } from "./promptImages.jsx";
 import { holdUnsent } from "./unsent.js";
-import { howToOpen } from "./bugReportOpen.js";
 import { baseName } from "./agentSteps.js";
 import { AgentSteps, PermitCtx } from "./AgentStepRows.jsx";
 import { chatSource, checkBackDue, waitingShown, eventsOf, turnSteps, hasParts, isPastCard, standing, heldAtEnd, AT_END, anchorOf, anchorShift, endAt, openAt, OPEN_HOLD, shrinkHeld, SHRINK_HOLD, turnParts, workCount, folds, ranUnder, foldLine, paintable, withMine, waitingChips, workingLine, waitingOn, askTurn, onYouTurn, askedFirst, runsOf, patchSteps, askOn, asksOff } from "./chatStream.js";
@@ -46,7 +45,7 @@ import TurnFiles from "./TurnFiles.jsx";
 import CopyCorner from "./CopyCorner.jsx";
 import { SessionPane, TerminalPane } from "./TerminalView.jsx";
 import ThreadReading from "./ThreadReading.jsx";
-import { askPlaceholder, heldOn, isSignin, isTurn, pageBars, pressable, waitsOnPage } from "./browserSplit.js";
+import { askPlaceholder, heldOn, pageBars, pressable, waitsOnPage } from "./browserSplit.js";
 import { BORDER, DIM, FAINT, INK, PANEL, PANEL2, mono } from "./theme.jsx";
 import "./generalWorkspace.css";
 import "./agentStepRows.css";
@@ -290,39 +289,17 @@ const levelOf = (own, given) => (own && own !== "live" ? own : given);
 // double ui. we don't need question box if we have way to answer on the bottom"): the card's own field and Answer button went - what is
 // typed in the composer while a question is open is its answer (AssistantThread's answerTyped). `onAnswer(text)` delivers either - a
 // reply in this conversation, or the worker's own answer road - and throws with the reason when it could not.
-// A SIGN-IN it waits on (request id `signin:<site>`, signin.py) is NO CARD (the owner, 2026-11-03: "remove that stupid box again as we did
-// with the questions ... just have the question and link to fill it out securely"): the question as a line of the conversation, and a
-// link to the one-time fill page (Taskuary types it, the agent never sees it). Signing in on the page beside it needs no press: Taskuary
-// sees the page go past the sign-in (signin.watch), and "done" typed in the box below says so too.
-export function AgentAsks({ asking, name, onAnswer, taskId }) {
+// A STEP ON THE PAGE - a sign-in, his turn - IS NO LINE HERE (pagestep: the card gallery, 2026-11-25: the sign-in said its words twice, a line with
+// "fill it in securely" over its card): its card says it once, with I'm done and the way to the fill page (ReviewDecision FillLink)
+export function AgentAsks({ asking, name, onAnswer }) {
   const [going, setGoing] = useState(false), [err, setErr] = useState("");
-  const site = isSignin(asking) ? asking.site || "the site" : "";
-  const choices = site ? [] : asking.choices || [];
-  const fillPage = async (e) => {
-    e?.preventDefault?.();
-    setErr("");
-    try {
-      const app = howToOpen(window) === "app";
-      const { data } = await api.post(`/api/tasks/${taskId}/signin/link${app ? "?open=1" : ""}`);
-      if (!app) window.open(data.url, "_blank", "noopener");
-    } catch (e) { setErr(errText(e)); }
-  };
+  const choices = asking.choices || [];
   useEffect(() => { setErr(""); setGoing(false); }, [asking?.request_id]);
   const send = async (w) => {
     if (going) return;
     setGoing(true); setErr("");
     try { await onAnswer?.(w); } catch (e) { setErr(errText(e)); } finally { setGoing(false); }
   };
-  if (site) return (
-    <p className="tq-aui-signin" data-tq-asking={asking.request_id} data-tq-signin-ask={site}>
-      {String(asking.text || `Sign in to ${site} to continue`).replace(/\.?\s*$/, "")}
-      {/* ...a step that is his alone on the page - the code a site asks after the saved sign-in (signin.CODE_ASK) - is its own line, whole */}
-      {asking.text && asking.text !== `Sign in to ${site} to continue` ? "." : taskId ? <> - <a href="#" onClick={fillPage} data-tq-signin-link=""
-        title={`A one-time page to type the ${site} sign-in - Taskuary types it into the browser and the agent never sees it`}>fill it in securely</a>
-        , or sign in on the page.</> : ", on the page."}
-      {err && <span className="tq-aui-asking-err" role="alert"> {err}</span>}
-    </p>
-  );
   // A QUESTION IS SAID IN PLAIN WORDS (the closeout-in-chat spec, 2026-11-04): the agent's own sentence, a line of the conversation - not
   // a card headed "Taskuary asked you something". NOTHING THE AGENT ASKS IS A BOX (the owner, 2026-11-11: "Stop making popups for approvals.
   // just ask" - "only actions should have boxes"): a request for leave or a stuck turn used to keep a boxed lead ("Agent needs your
@@ -761,7 +738,7 @@ function AssistantThread({ task, onAsked, onStop, selectionRef, attachmentsRef, 
   const landAt = landS && (landS.ask || landS.landed) ? landS.at || "" : null;
   // WHAT THE AGENT ASKS STANDS IN THE TURN THAT ASKED IT (conversation.items `asking.turn`): one node, drawn there
   // ...but a step handed to him on the page is its card (pagestep): its words and I'm done stand there once, never again as a line here
-  const askNode = asking && !isTurn(asking) ? <AgentAsks asking={asking} name={name} onAnswer={onAnswer} taskId={task.TaskId} /> : null;
+  const askNode = asking && !waitsOnPage(asking) ? <AgentAsks asking={asking} name={name} onAnswer={onAnswer} /> : null;
   const askAt = askTurn(asking, merged.items);
   const askWords = askPlaceholder(asking);
   return (

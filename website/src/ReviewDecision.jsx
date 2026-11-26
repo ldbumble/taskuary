@@ -30,6 +30,7 @@ import { draftState, failureHead, failureWhy, replySendFailure, reviewDeliverySt
 import { failLine, landed, landedSend, press } from "./press.js";
 import { openAppLink } from "./appLinks.js";
 import { setupType } from "./connectSetup.js";
+import { howToOpen } from "./bugReportOpen.js";
 // ...the connection's own setup under the card that needs it: the Connections page's code, loaded only when a Connect is pressed
 const ConnectSetup = React.lazy(() => import("./ConnectSetup.jsx"));
 const setupUnder = (href, onClose, onConnected) => href && <React.Suspense fallback={null}>
@@ -717,7 +718,8 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
           setText(res.edits[r.ReviewId] ?? value); setCompare(res.compare); setInterrupt(null);
         }} />
         {proposal?.kind === "closeout" ? <Typography variant="caption" sx={{ color: "var(--tq-success, #6f8a6e)", display: "block", mb: 0.5 }}>{proposal.context}</Typography>
-          : proposal?.lead ? <Typography data-tq-held-lead="" variant="caption" sx={{ color: "var(--tq-success, #6f8a6e)", display: "block", mb: 0.75 }}>{proposal.leadWhy}</Typography>
+          : proposal?.lead ? <Typography data-tq-held-lead="" variant="caption" sx={{ color: "var(--tq-success, #6f8a6e)", display: "block", mb: 0.75 }}>{proposal.leadWhy}
+            {proposal.fill && <> <FillLink tid={r.TaskId} />, then press I'm done.</>}</Typography>
           : r.Reason && !failure && (r.DraftText || !/draft/i.test(r.Reason)) && <Typography data-tq-review-reason="" variant="caption" sx={{ color: "var(--tq-success, #6f8a6e)", display: "block", mb: 0.5 }}>{r.Reason}</Typography>}
         {meta.kind === "zoho_invoice" && <InvoiceLine meta={meta} />}
         {/* !!: the task detail carries the raw row, where Stale is the NUMBER 0 - and React draws a 0 */}
@@ -797,6 +799,23 @@ export function SentReview(p) {
   return <ReviewCard id={p.id || ""} kind="reply" state="sent" data-tq-sent-here={p.id || ""} label={sentTitle(p)}
     fields={[{ key: "draft", type: "text", value: p.text, clamp: true, dim: true }]}
     after={{ mark: "sent", label: sentMark(p), line: `${sentSaid(p)}${p.at ? ` · ${fmtDateTime(p.at)}` : ""}` }} />;
+}
+
+// THE WAY TO THE FILL PAGE, ON THE SIGN-IN'S OWN CARD (pagestep `fill`; the card gallery, 2026-11-25: it was a chat line over the card, the step
+// said twice): a one-time page where he types the sign-in, and Taskuary types it into the browser - the agent never sees it
+export function FillLink({ tid }) {
+  const [err, setErr] = useState("");
+  const go = async (e) => {
+    e?.preventDefault?.(); setErr("");
+    try {
+      const app = howToOpen(window) === "app";
+      const { data } = await api.post(`/api/tasks/${tid}/signin/link${app ? "?open=1" : ""}`);
+      if (!app) window.open(data.url, "_blank", "noopener");
+    } catch (x) { setErr(x?.response?.data?.detail || x?.message || "The page did not open - try again"); }
+  };
+  return <>or <a href="#" onClick={go} data-tq-signin-link="" style={{ color: "var(--tq-link, #41525f)", textDecoration: "underline", textUnderlineOffset: 2 }}
+    title="A one-time page to type the sign-in - Taskuary types it into the browser and the agent never sees it">fill it in securely</a>
+    {err && <span role="alert" style={{ color: "var(--tq-danger, #8a2f2f)" }}> - {err}</span>}</>;
 }
 
 // AN ACT A CONNECTOR DECLARES (the owner, 2026-11-05: "each connector should have settings what the action view looks like no?"): a post with its
@@ -889,7 +908,8 @@ export function ActReview({ row: was, tid, live = true, onChanged, past = false,
     <ReviewCard id={row?.ReviewId} kind={act.kind} state={stepRow ? "waiting" : gone ? "done" : st.live ? "waiting" : "not-done"} data-tq-act={row?.ReviewId} data-tq-act-kind={act.kind}
       face={post ? faceOf(row) : ""} label={post ? `${row?.as || `Your ${row?.network || ""} account`} · ${row?.network || "post"}` : act.title}
       fields={fields} press={stepRow || pressRow} after={after} failed={failed || (stepRow && err) || ""} onView={setViewing}
-      before={stepRow && <Typography data-tq-act-step-says="" sx={{ fontSize: 12.5, color: INK, mb: 0.75 }}>{step.press === "done" ? "Your step on the page, open beside this card" : "Waiting for your press - the next step of putting this up"}: {step.what}</Typography>}
+      before={stepRow && <Typography data-tq-act-step-says="" sx={{ fontSize: 12.5, color: INK, mb: 0.75 }}>{step.press === "done" ? "Your step on the page, open beside this card" : "Waiting for your press - the next step of putting this up"}: {step.what}
+        {step.fill && <> - <FillLink tid={tid ?? row?.TaskId} /></>}</Typography>}
       tail={st.live && !gone && row?.connect && <Typography data-tq-not-connected="" sx={{ fontSize: 11.5, color: FAINT }}>{row.connect.says}{post
         ? " - Post via the browser has the agent put it up there, and its last Post waits for you" : row.connect.waits ? ` - ${row.connect.waits}` : ""}</Typography>}
       under={<>{row?.connect && st.live && !gone && setupUnder(setupAt, () => setSetupAt(""), () => decide("approve"))}

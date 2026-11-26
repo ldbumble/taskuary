@@ -39,9 +39,11 @@ def sync(store, tid: int) -> None:
     have = {json.loads(c['DraftText']).get('request') for c in cards}
     for rid, r in open_.items():
         if rid in have: continue
-        site = ws.ask_of(rid)['site']
+        site, signin = ws.ask_of(rid)['site'], ws.ask_of(rid)['ask'] == 'signin'
+        # ...and a sign-in the fill page can type carries its way there (`fill`): the card is the one place the step is said, link and all
+        from .signin import fills
         proposals.queue(store, int(tid), {'action': ACT, 'request': rid, 'sid': str(r.get('Sid') or ''), 'what': ' '.join(str(r.get('Text') or '').split())[:300],
-                                          **({'site': site} if site else {})}, 'taskuary')
+                                          **({'site': site} if site else {}), **({'fill': True} if signin and fills(r.get('Text')) else {})}, 'taskuary')
     if not (gone := [c for c in cards if json.loads(c['DraftText']).get('request') not in open_]): return
     from . import browsergate, browserview, signin
     how = {e['RequestId']: str(e.get('Text') or '') for e in ws.events(store, int(tid)) if e['Kind'] == 'answered'}

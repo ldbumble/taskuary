@@ -538,6 +538,11 @@ def step_words(sid: str, name: str, saved_row=None, conn=None) -> str:
     return f'Sign in to {name}{CONTINUE}'
 
 
+def fills(text) -> bool:
+    "Does the sign-in ask `text` ask what the fill page types - a user and a password (step_words' sign-in) - never a code or a step in the agent's words?"
+    t = str(text or ''); return t.startswith('Sign in to ') and t.endswith(CONTINUE)
+
+
 HANDED_ON = 6
 def needs(store, tid: int, sid: str, claimed: str = '', fill=None, watch=..., what: str = '', ended: bool = True) -> dict:
     """The agent ended its turn asking to be signed in. Record the ask on the existing road and, when the owner keeps a sign-in for

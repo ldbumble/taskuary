@@ -227,7 +227,9 @@ export const proposalPresentation = (review) => {
     kind: "action",
     title: "Your step on the agent's page",
     context: "",
-    lead: upFirst(String(proposal.what || "A step on the page only you can do")), leadWhy: "The page is open beside this card - do the step there, then press I'm done.",
+    // ...a sign-in the fill page can type says that way too, on this card alone (`fill`: ReviewDecision's FillLink)
+    lead: upFirst(String(proposal.what || "A step on the page only you can do")), fill: !!proposal.fill,
+    leadWhy: proposal.fill ? "The page is open beside this card - sign in there" : "The page is open beside this card - do the step there, then press I'm done.",
     destinationLabel: "On",
     destination: proposal.site || "",
     approveLabel: "I'm done",

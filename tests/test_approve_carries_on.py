@@ -443,6 +443,25 @@ def test_a_card_his_line_greyed_that_still_stands_comes_back_under_it_as_it_was(
     assert not twice['ok'] and f'as rv{new[0]}' in twice['why'], 'a greyed card is raised again once'
 
 
+def test_a_card_raised_again_is_the_whole_card_its_versions_and_its_then():
+    """Walk 24: a reply card held two versions (yes / no); his line greyed it; the agent, rightly, wrote nothing new ("both versions are on the
+    card"); Taskuary's copy stood with the yes alone and no picker. A card raised again is every column of the card."""
+    s = MemoryStore(); tid = Factory(s).task('Answer Marcus about the vendor panel')
+    s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'Two versions wait on the reply card.')
+    s._exec("UPDATE comment SET CreatedAt='2026-01-01 09:00:00' WHERE TaskId=?", (tid,))
+    two = ['Marcus - yes, I will join the panel.', 'Marcus - thank you, but I have to decline.']
+    rid = s.add_review({'TaskId': tid, 'Kind': 'draft_reply', 'Status': 'pending', 'DraftText': two[0], 'NextStep': 'put the panel in the calendar',
+                        'Deliver': json.dumps({'kind': 'reply', 'to': ['marcus@northwind.example'], 'cc': []})})
+    s.set_review_versions(rid, two); s._exec("UPDATE review SET CreatedAt='2026-01-01 09:00:01' WHERE ReviewId=?", (rid,))
+    general.wait_line(s, tid, 'Give me two versions - one yes, one declining - and I will pick.', line_id='l-two'); general.take_kept(s, tid)
+    proposals.restore_set_aside(s, tid)
+    o, n = s.get_review(rid), s.get_review(cardqueue.again_of(s, rid))
+    assert proposals.passed(o) and n['Status'] == 'pending'
+    assert json.loads(n['Versions']) == two and n['NextStep'] == 'put the panel in the calendar', (n['Versions'], n['NextStep'])
+    same = {k for k in o if k not in cardqueue.CAME_OF}
+    assert {k: n[k] for k in same} == {k: o[k] for k in same}, 'every column the card carries'
+
+
 def test_a_held_step_is_run_again_never_kept():
     from taskuary import agenttools, conversation
     s = MemoryStore(); tid = Factory(s).task('Fix the August export')

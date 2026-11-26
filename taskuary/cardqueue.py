@@ -172,7 +172,10 @@ def unheard(store, tid: int) -> bool:
 # Post via the browser to try again, Dismiss to skip it - so the line moves on. His word to drop it is withdraw_draft's (verdicts.withdraw)
 KEEP = ('Kept: {ids} stand{s} again under the newest line, as {it} was - nothing was rewritten.')
 UNDONE = 'handed to its agent, which could not do it'
-LIKE, MORE = ('MessageId', 'RunId', 'Kind', 'DraftText', 'Reason', 'Deliver', 'Origin'), ('AnswersMid', 'Instructions', 'FilesPromised', 'DraftBy', 'DraftWhy')
+# ...A KEPT CARD IS EVERY COLUMN OF THE CARD (walk 24, 2026-11-25: copied by a list of names, a reply kept with two versions stood with one and
+# no picker, and an act would have lost its `then`): all its row holds but what came of it - a column added later is a kept card's too
+CAME_OF = frozenset(('ReviewId', 'TaskId', 'Status', 'FinalText', 'DecidedBy', 'DecidedAt', 'DecideNote', 'CreatedAt', 'DraftAt', 'DraftError', 'DraftNeeds', 'Stale',
+                     'ActError', 'NotNeeded', 'Batch', 'DeliveryState', 'DeliveryClaim', 'DeliveryAttemptedAt', 'DeliveryEnvelope', 'DeliveryReceipt'))
 IDS = r'\s*(?:rv)?\d+(?:\s*[,+]\s*(?:rv)?\d+)*\s*'      # 'rv12 + rv13': the ids of a card of many, its one handle
 
 
@@ -212,8 +215,8 @@ def keep(store, tid: int, which, by: str = 'agent', why: str = '') -> dict:
             bad.append(f"rv{i}: not greyed by an input ({_card_status(r)}) - only a greyed card is kept; raise a new one where it is still needed"); continue
         elif (n := again_of(store, i)): bad.append(f'rv{i}: it stands again already, as rv{n}'); continue
         if r['Kind'] == 'action' and _action(r) in HELD_ACTS: bad.append(f'rv{i}: a step held for his press - run it again and Taskuary holds it anew'); continue
-        new = store.add_review({**{k: r.get(k) for k in LIKE}, 'TaskId': int(tid), 'Status': 'pending'})
-        rest = {k: r.get(k) for k in MORE}
+        rest = {k: v for k, v in r.items() if k not in CAME_OF}
+        new = store.add_review({**rest, 'TaskId': int(tid), 'Status': 'pending'})
         if r.get('Batch'): rest['Batch'] = batch.setdefault(r['Batch'], bulkcard.new_key())
         # ...written now: a card is older than an input by when its words were written (proposals._older), so the kept one stands after it
         store._exec(f"UPDATE review SET DraftAt=CreatedAt, {', '.join(f'{k}=?' for k in rest)} WHERE ReviewId=?", (*rest.values(), new))

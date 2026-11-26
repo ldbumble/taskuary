@@ -118,6 +118,7 @@ test("a view shown again under its id is drawn once, at its newest place; no old
   const turns = [{ id: "t1", steps: [show("c1", upTo(1))] }, { id: "t2", steps: [{ k: "said", text: "Gail replied." }, show("c2", upTo(2))] }, { id: "t3", steps: [show("c3", upTo(4))] }];
   const homes = viewHomes(turns), part = (id, n) => ({ type: "view", id, spec: normalise(upTo(n)) });
   assert.equal(homes.get("times").at, "t3:c3");
+  assert.deepEqual(homes.get("times").was, normalise(upTo(2)));                       // ...and it knows what it replaces: the draw moves from it
   assert.deepEqual(viewAt(homes, "t3", part("c3", 4)), normalise(upTo(4)));           // ...the newest is the view
   assert.equal(viewAt(homes, "t1", part("c1", 1)), null);                             // ...the earlier ones draw nothing
   assert.equal(viewAt(homes, "t2", part("c2", 2)), null);
@@ -143,5 +144,5 @@ test("a view with no id, and one he can answer, stand each time they are shown",
 
 test("a refused re-show changes nothing: the view stays where it last passed", () => {
   const turns = [{ id: "t1", steps: [show("c1", upTo(2))] }, { id: "t2", steps: [{ k: "tool", id: "c2", name: "mcp__taskuary__show", output: "elements.a.props.people[0].ranges[0].from must be before its to" }] }];
-  assert.deepEqual(viewHomes(turns).get("times"), { at: "t1:c1", spec: normalise(upTo(2)) });
+  assert.deepEqual(viewHomes(turns).get("times"), { at: "t1:c1", spec: normalise(upTo(2)), was: undefined });
 });

@@ -906,9 +906,9 @@ class TheSceneATeamFindsATimeTests(unittest.TestCase):
             self.assertEqual(s.list_tasks(), [])
         with mock.patch.dict(os.environ, self.ENV):                    # ...and on another task's line it starts nothing
             other = s.create_task({'Title': 'Plan the team lunch', 'Kind': 'general', 'Status': 'open', 'Source': 'assistant'}, 'owner')
-            self.assertFalse(demo.scene_turn(s, other, 'book it'))
+            self.assertFalse(demo.scene_opened(s, other))
 
-    def test_his_line_starts_it_each_reply_updates_the_one_view_and_it_ends_on_the_invite(self):
+    def test_it_starts_by_itself_each_reply_updates_the_one_view_and_it_ends_on_the_invite(self):
         import json
         from taskuary import calwrite, conversation, server, viewspec
         from taskuary.testing import Factory
@@ -916,8 +916,7 @@ class TheSceneATeamFindsATimeTests(unittest.TestCase):
             s = MemoryStore(); s.set_setting('owner_email', demo.OWNER_EMAIL, 'demo')                  # ...her colleagues are no strangers (seed)
             tid = demo.seed_scene(s, Factory(s))
             self.assertEqual([x['who'] for x in conversation.items(s, tid)['items']], [demo.SCENE[0][0]])      # the page has the thread open: its first mail
-            with mock.patch.object(server, 'store', s):
-                self.assertEqual(server._demo_turn(tid, "Keep track of everyone's times and set up the invite."), '')
+            self.assertTrue(demo.scene_opened(s, tid))                                           # nobody prompts it: opened, the agent starts on the mail
             # ...read once it is at rest: its last words filed, its card put in the log by the log's own worker (chatlog.advance_soon)
             def at_rest():
                 with s.lock: card = s.cx.execute("SELECT 1 FROM chatlog WHERE TaskId=? AND Kind='card'", (tid,)).fetchone()
@@ -926,9 +925,9 @@ class TheSceneATeamFindsATimeTests(unittest.TestCase):
                 if at_rest(): break
                 time.sleep(.05)
             got = conversation.items(s, tid)
-            self.assertFalse(demo.scene_turn(s, tid, 'and again?'))                             # played once: a later line is the demo's own answer
+            self.assertFalse(demo.scene_opened(s, tid))                                         # played once
         xs = got['items']
-        self.assertEqual([x['kind'] for x in xs][:3], ['arrival', 'line', 'turn'])              # the ask, his line, the turn it began under it
+        self.assertEqual([x['kind'] for x in xs][:2], ['arrival', 'turn'])                      # the mail, and the turn it began - no line of his
         self.assertEqual([x['who'] for x in xs if x['kind'] == 'arrival'], [who for who, *_ in demo.SCENE])
         shows = [st for x in xs if x['kind'] == 'turn' for st in x.get('steps') or [] if st.get('name') == 'mcp__taskuary__show']
         specs = [json.loads(st['output'].split(viewspec.MARK)[1]) for st in shows]

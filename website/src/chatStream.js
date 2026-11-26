@@ -120,15 +120,15 @@ export function turnParts(events, { keepStart = false, live = false } = {}) {
 // A VIEW NAMED IS ONE VIEW, AND IT STAYS UP TO DATE IN THE CHAT (the owner, 2026-11-26: the renderer draws a view again from new input, and
 // never keeps an old one above): ANY view - a chart, a table, an availability - the agent shows again under the same `id` (viewspec.check) is
 // drawn once, at its newest call, as it now is; its earlier places draw nothing, and a turn that held only one of them draws nothing at all.
-// Read off the turns' own steps, so a reload and the phone draw the same. {id: {at: "<turn>:<call>" of the newest, spec}}; one he can answer
-// is its own each time
+// Read off the turns' own steps, so a reload and the phone draw the same. {id: {at: "<turn>:<call>" of the newest, spec, was}}; `was` is the
+// spec it replaces, so the new draw can move from it (ViewSpec `was`); one he can answer is its own each time
 export function viewHomes(turns) {
   const homes = new Map();
   for (const t of turns || []) {
     const shows = []; turnSteps(t).forEach((s, i) => { if (s.k === "tool" && SHOW.test(String(s.name || ""))) shows.push(s.id ? s : { ...s, id: `t${i}` }); });
     const evs = eventsOf(shows, false), res = new Map(evs.filter((e) => e.type === "tool_result").map((e) => [e.detail.tool_call_id, e]));
     for (const e of evs) { const v = e.type === "tool_call" ? viewOf(e, res.get(e.detail.tool_call_id)) : null, id = v && !asks(v.spec.elements) && v.spec.id;
-      if (id) homes.set(id, { at: `${t.id}:${e.detail.tool_call_id}`, spec: v.spec }); }
+      if (id) homes.set(id, { at: `${t.id}:${e.detail.tool_call_id}`, spec: v.spec, was: homes.get(id)?.spec }); }
   }
   return homes;
 }

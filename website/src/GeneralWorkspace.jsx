@@ -265,7 +265,7 @@ const TurnWorkView = ({ data, now, k }) => {
   const draw = (p, i, lvl) => p.type === "said" ? <Md key={p.id} text={p.text} /> : p.type === "edit" ? <EditRow key={p.id} p={p} />
     : p.type === "plan" ? <PlanRow key={p.id} p={p} />
     // ...a view shown again under its name is drawn once, at its newest place; an older copy is never kept above it (chatStream.viewHomes)
-    : p.type === "view" ? (viewAt(outs?.views, k, p) ? <ViewSpec key={p.id} spec={p.spec} taskId={outs?.tid} /> : null)
+    : p.type === "view" ? (viewAt(outs?.views, k, p) ? <ViewSpec key={p.id} spec={p.spec} was={outs?.views?.get(p.spec.id)?.was} taskId={outs?.tid} /> : null)
     // ...a file the agent showed (show `files`) is drawn by its kept copy, placed in its turn by the server for both chats (ShownCtx), never twice
     : p.type === "files" ? null
     : lvl === "everything" ? <AgentSteps key={p.id} data={{ steps: p.steps }} />

@@ -1663,8 +1663,8 @@ def start_sessions(store) -> int:
 # ── THE SCENE: A TEAM FINDS A TIME (the owner, 2026-11-26: many mails on one thread, and a visual that keeps up with them) ───────────────────
 # One thread, a reply every few seconds, and the agent's ONE view of who can make which times filled in as each lands - the spec a real agent
 # hands `show` (viewspec `availability`, the same `id` each time, so the chat keeps one full view, under the newest reply) - then the invite for the best slot as its card
-# (calwrite.meeting). Off unless TASKUARY_DEMO_SCENE=availability, so the demo everyone opens is as it was. It starts when the visitor types
-# on its task and plays once. No count is written here: the page works the overlap and the best slot out of the ranges (availability.js).
+# (calwrite.meeting). Off unless TASKUARY_DEMO_SCENE=availability, so the demo everyone opens is as it was. It starts by itself when its
+# task is first opened - nobody prompts it - and plays once. No count is written here: the page works the overlap and the best slot out of the ranges (availability.js).
 SCENE_ENV, SCENE_PACE, SCENE_SID, SCENE_PLAYED = 'TASKUARY_DEMO_SCENE', 'TASKUARY_DEMO_SCENE_PACE', 'demo-scene', 'demo_scene_played'
 SCENE_TITLE, SCENE_ABOUT = 'Product ideas session - a time next week?', 'Product ideas session'
 SCENE_BEAT = 2.6                     # seconds between replies unless SCENE_PACE says: the film's pace (website/record-availability.mjs)
@@ -1718,16 +1718,12 @@ def seed_scene(store, f):
     return tid
 
 
-def scene_turn(store, tid: int, text: str, line_id=None) -> bool:
-    """HIS LINE ON THE SCENE'S TASK STARTS IT, once: kept as he typed it, the agent's turn begun under it at once (chatlog.heard), the rest
-    played behind this answer. False for any other task, and for a line after it has played - those are the demo's own answer (chat_turn)."""
-    if not scene_on() or (store.get_task(tid) or {}).get('Title') != SCENE_TITLE or store.get_setting(SCENE_PLAYED): return False
-    from . import conversation, general
+def scene_opened(store, tid: int) -> bool:
+    """THE SCENE STARTS BY ITSELF, once, when its task's chat is first read (the owner, 2026-11-26: nobody prompts it - the mail is there and
+    the task's agent starts on it, as an arrival starts one): played behind that read. False for any other task and once it has played."""
+    if not scene_on() or store.get_setting(SCENE_PLAYED) or (store.get_task(tid) or {}).get('Title') != SCENE_TITLE: return False
     store.set_setting(SCENE_PLAYED, '1', 'demo')
-    store.update_task(tid, {'Status': 'in_progress', 'Assignee': 'agent:general'}, 'owner')
-    line_id = line_id or f'scene-{time.time_ns()}'
-    store.add_comment(tid, 'owner', general.USER_TYPE, str(text).strip(), line_id=line_id)
-    conversation.hear(store, tid, [line_id], turn=True, sid=SCENE_SID)
+    store.update_task(tid, {'Status': 'in_progress', 'Assignee': 'agent:general'}, 'triage')
     threading.Thread(target=_play_scene, args=(store, tid), daemon=True).start()
     return True
 
@@ -1752,7 +1748,9 @@ def _play_scene(store, tid: int):
         elif (t := chatlog.open_turn(store, tid)): chatlog.flush(store, tid); chatlog.update(store, tid, t['Key'], state='done', ended=time.time())      # ...a turn that only drew
         store._poke('task-changed', task_id=int(tid))
     try:
-        chatlog.feed(store, tid, SCENE_SID, 'trace', {'type': 'prompt'}); chatlog.at_work(store, tid, SCENE_SID); told()
+        rest(3.2)                           # ...the thread's first mail read, then the agent's turn begins on it by itself (conversation.hear)
+        conversation.hear(store, tid, turn=True, sid=SCENE_SID); store._poke('task-changed', task_id=int(tid))
+        rest(.9); chatlog.feed(store, tid, SCENE_SID, 'trace', {'type': 'prompt'}); chatlog.at_work(store, tid, SCENE_SID); told()
         rest(1.4); show(1); answer(0)
         for i in range(1, len(SCENE)):
             rest(SCENE_BEAT)

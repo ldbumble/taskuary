@@ -36,7 +36,7 @@ import { overlap, rangeLabel, ticksOf, timeLabel } from "./availability.js";
 // alone; every value written {$expr} is worked out from them as they move (viewSpec.evalExpr - no eval), and one that cannot be is said
 // in plain words where it stands. His pick on a choice, or a button's answer, goes to the agent once as his press (viewspec.answer) and
 // stays on what he pressed; nothing in a view sends or pays.
-const ViewCtx = createContext({ state: {}, set: () => {}, picks: {}, answer: null });
+const ViewCtx = createContext({ state: {}, set: () => {}, picks: {}, answer: null, was: null });
 const useView = () => useContext(ViewCtx);
 // a value as it stands now: {value}, or {error} where its expression cannot be worked out
 const now = (v, scope) => (v && typeof v === "object" && "$expr" in v ? evalExpr(v.$expr, scope) : { value: v });
@@ -137,8 +137,8 @@ function Checklist({ p }) {
 // here from the ranges (availability.overlap) - the view carries no count. Shown again as replies come (the same `id`), the bars grow in, the
 // band slides to the new best slot and the count climbs; still for prefers-reduced-motion
 const still = () => typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
-function useCount(to, ms = 650) {
-  const [v, setV] = useState(() => (still() ? to : 0)), at = useRef(v);
+function useCount(to, ms = 650, from = 0) {
+  const [v, setV] = useState(() => (still() ? to : from)), at = useRef(v);
   useEffect(() => {
     const a = at.current; let raf = 0, t0 = 0;
     if (a === to || still()) { at.current = to; setV(to); return undefined; }
@@ -149,12 +149,21 @@ function useCount(to, ms = 650) {
   return v;
 }
 const PAD = 0.05;       // a day's hours stand inside its column, this share of it clear at each edge
-function Availability({ p }) {
+// ...AND SHOWN AGAIN IT MOVES FROM WHAT IT WAS (the owner, 2026-11-26): the view it replaces (`was`, the same element of the spec before) is
+// drawn for one frame, then this one - so a bar that changed slides, a new one grows in beside those that stay, the band travels to the new
+// best slot and the count goes on from where it stood, never back to nothing
+function Availability({ p: now, id }) {
+  const old = useView().was?.elements?.[id], from = old?.type === "availability" && !still() ? old.props : null;
+  const [p, setP] = useState(from || now), kept = useRef(null);
+  useEffect(() => { if (p === now) return undefined; let b = 0; const a = requestAnimationFrame(() => { b = requestAnimationFrame(() => setP(now)); });
+    return () => { cancelAnimationFrame(a); cancelAnimationFrame(b); }; }, [now]);
   const o = useMemo(() => overlap(p.people, p.minutes), [p.people, p.minutes]), b = o.best;
+  if (from && !kept.current) kept.current = new Set(o.rows.flatMap((r) => Object.entries(r.days).flatMap(([d, rs]) => rs.map((_, j) => `${r.name}:${d}:${j}`))));
+  const stays = (k) => (kept.current?.has(k) ? " kept" : "");
   const nd = o.days.length || 1, span = o.hi - o.lo, di = Object.fromEntries(o.days.map((d, i) => [d.day, i]));
   const x = (i, m) => ((i + PAD + ((m - o.lo) / span) * (1 - 2 * PAD)) / nd) * 100;
   const at = (i, a, z) => ({ left: `${x(i, a)}%`, width: `${x(i, z) - x(i, a)}%` });
-  const n = useCount(b?.n || 0), ticks = ticksOf(o.lo, o.hi, nd), replied = o.total - o.waiting.length;
+  const n = useCount(b?.n || 0, 650, from ? b?.n || 0 : 0), ticks = ticksOf(o.lo, o.hi, nd), replied = o.total - o.waiting.length;
   const was = useRef(null); if (b) was.current = b;          // ...with no best slot any more, its band fades where it stood
   const band = b || was.current, said = (r) => Object.entries(r.days).map(([d, rs]) => `${o.days[di[d]].label} ${rs.map(([a, z]) => rangeLabel(a, z)).join(", ")}`).join("; ");
   return <div className="tq-avl" data-tq-availability="" data-best={b ? `${b.day} ${b.from}-${b.to} ${b.n}/${o.total}` : ""}>
@@ -174,7 +183,7 @@ function Availability({ p }) {
           <span className={`tq-avl-name ${st}`} title={r.name}>{r.name}</span>
           <div className={`tq-avl-track ${st}`} role="img" aria-label={`${r.name}: ${!r.replied ? "no reply yet" : none ? "none of these times" : said(r)}`}>
             {(!r.replied || none) && <em>{none ? "none of these times" : "no reply yet"}</em>}
-            {Object.entries(r.days).flatMap(([d, rs]) => rs.map(([a, z], j) => <i key={`${d}:${j}`} className="tq-avl-bar" style={at(di[d], a, z)}
+            {Object.entries(r.days).flatMap(([d, rs]) => rs.map(([a, z], j) => <i key={`${d}:${j}`} className={`tq-avl-bar${stays(`${r.name}:${d}:${j}`)}`} style={at(di[d], a, z)}
               title={`${r.name}: ${o.days[di[d]].label} ${rangeLabel(a, z)}`} />))}
           </div></React.Fragment>; })}
       <span className="tq-avl-name sum">People free</span>
@@ -252,7 +261,7 @@ const DRAW = {
   list: (p) => <Block p={p}><ul className="tq-view-list">{p.items.map((x, i) => <li key={i}>{x}</li>)}</ul></Block>,
   steps: (p) => <Block p={p}><ol className="tq-view-list steps">{p.items.map((x, i) => <li key={i}><b>{i + 1}</b><span>{x}</span></li>)}</ol></Block>,
   checklist: (p) => <Checklist p={p} />,
-  availability: (p) => <Block p={p}><Availability p={p} /></Block>,
+  availability: (p, e, id) => <Block p={p}><Availability p={p} id={id} /></Block>,
   // ...words alone are words in the chat; given a title they are a card like the rest
   text: (p) => (p.title || p.description ? <Block p={p}><Md text={p.text} /></Block> : <Md text={p.text} />),
   grid: (p) => <Head p={p} />,
@@ -280,19 +289,19 @@ class Guard extends React.Component {
 }
 
 // `taskId`: the task whose agent showed it - where his answers go. A view off a task draws its answer buttons greyed
-export default function ViewSpec({ spec, taskId }) {
+export default function ViewSpec({ spec, taskId, was = null }) {
   const [state, setState] = useState(() => ({ ...(spec?.state || {}) })), [picks, setPicks] = useState({});
   const answering = !!(spec && taskId && spec.id && asks(spec.elements));
   // ...what he answered already, so the view drawn again (a reload, the phone) shows his pick, never the buttons lit again
   useEffect(() => { if (!answering) return undefined;
     let on = true; api.get(`/api/tasks/${taskId}/view-answers`).then(({ data }) => on && setPicks((p) => ({ ...(data?.[spec.id] || {}), ...p }))).catch(() => {});
     return () => { on = false; }; }, [answering, taskId, spec?.id]);
-  const ctx = useMemo(() => ({ state, picks, set: (k, v) => setState((s) => ({ ...s, [k]: v })),
+  const ctx = useMemo(() => ({ state, picks, was, set: (k, v) => setState((s) => ({ ...s, [k]: v })),
     answer: answering ? async (el, pick, asked) => {
       try { await api.post(`/api/tasks/${taskId}/view-answer`, { view: spec.id, el, pick, asked }); setPicks((p) => ({ ...p, [el]: pick })); }
       catch (e) { const d = String(e?.response?.data?.detail || "");      // ...answered already (a second tab): the first pick is what stands
         if (e?.response?.status === 409) setPicks((p) => ({ ...p, [el]: d.replace(/^answered already:\s*/, "") })); else throw e; }
-    } : null }), [state, picks, answering, taskId, spec?.id]);
+    } : null }), [state, picks, was, answering, taskId, spec?.id]);
   if (!spec) return null;
   return <Guard><ViewCtx.Provider value={ctx}><Artifact as="section" className="tq-dash tq-view" data-tq-view="" data-tq-view-skip="" aria-label={spec.title || "A view from the agent"}>
     {spec.title && <h3 className="tq-view-title">{spec.title}</h3>}

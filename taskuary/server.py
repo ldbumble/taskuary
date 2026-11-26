@@ -2835,7 +2835,9 @@ def _revisioned(got, rev: str = ''):
 
 @app.get('/api/tasks/{task_id}/assistant')
 def assistant_state(task_id: int, rev: str = ''):
-    return _revisioned(_assistant_payload(task_id), rev)
+    out = _assistant_payload(task_id)
+    if demo.enabled(): demo.scene_opened(store, task_id)          # ...the one scripted scene, where it was asked for: it starts once its chat is open
+    return _revisioned(out, rev)
 
 def _left_now(task_id: int) -> None:
     """A HELD STEP WHOSE BROWSER HAS LEFT ITS PAGE IS GREYED BEFORE IT IS SERVED (browsergate.left_now; the walk, 2026-11-19: an Approve looked
@@ -2892,7 +2894,6 @@ def _demo_turn(task_id: int, text: str, line_id=None):
     advance. None off the demo, and for the Assistant's own chat, which the demo answers from its recordings."""
     from . import general
     if not demo.enabled() or general.is_dock(store.get_task(task_id)) or not str(text or '').strip(): return None
-    if demo.scene_turn(store, task_id, text, line_id): return ''          # ...the one scripted scene, where it was asked for: his line starts it
     said = demo.chat_turn(any(c.get('ActorType') == general.ASSISTANT_TYPE and c.get('Body') not in (demo.CHAT_TURN, demo.NEW_CHAT_TURN)
                               for c in store.list_comments(task_id)))
     store.add_comment(task_id, 'owner', general.USER_TYPE, str(text).strip(), line_id=line_id)

@@ -267,6 +267,7 @@
   .tq-avl-name, .tq-avl-name::before { transition: color .45s, background-color .45s, border-color .45s; }
   .tq-avl-best .fit b { animation: tq-avl-land .5s cubic-bezier(.16, 1, .3, 1); }
 }
+.tq-avl-bar.kept { animation: none; }     /* ...a bar that was there before this draw moves from where it stood: only a new one grows in */
 @keyframes tq-avl-in { from { transform: scaleX(0); opacity: 0; } }
 @keyframes tq-avl-fade { from { opacity: 0; } }
 @keyframes tq-avl-land { from { transform: translateY(5px); opacity: .35; } }

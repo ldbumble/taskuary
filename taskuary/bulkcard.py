@@ -134,6 +134,6 @@ def told(store, key: str, st: dict, actor: str = 'owner') -> str:
     # triggering the agent unless it fails of course or there are next steps") - general.approved's rule; else it is said in its next turn
     from . import card, events
     rs = rows(store, key)
-    if not any(v not in ('ok', 'left') for v in st.get('rows', {}).values()) and not any(card.carries_on(r) for r in rs):
+    if not any(v not in ('ok', 'left') for v in st.get('rows', {}).values()) and not any(card.carries_on(r, store) for r in rs):
         events.note(store, int(st['tid']), summary(store, key, st)); return ''
     return general.to_agent(store, st['tid'], summary(store, key, st), actor, heard=heard)

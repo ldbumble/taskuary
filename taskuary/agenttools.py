@@ -610,7 +610,7 @@ TOOLS['propose'][2]['properties']['items'] = ITEMS
 # box and say it went): the press's record is Taskuary's - it ticks the to-do as the press goes (card.went), and nobody is woken for it
 for _t in TOOLS.values():
     if _t[0] == 'propose':
-        _t[2]['properties']['then'] = {'type': 'string', 'description': 'your own next act after his press, if any (not bookkeeping - Taskuary records the press itself)'}
+        _t[2]['properties']['then'] = {'type': 'string', 'description': 'your own NEXT ACT after his press, if any (not a check, not bookkeeping - Taskuary confirms the act itself and records the press)'}
         _t[2]['properties']['todo'] = {'type': 'string', 'description': "the id of this task's to-do this card does, if one - Taskuary ticks it when his press has gone"}
 def _take_back(store, tid: int, doors: dict, old, stand: list) -> None:
     "The one unsent card `old` names (its id, or who or what it was to), withdrawn - never one of `stand`, the cards the call itself stands as."

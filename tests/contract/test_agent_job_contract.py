@@ -273,6 +273,19 @@ def test_a_press_wakes_the_agent_only_if_the_card_has_a_then(w):
     assert w.net.posted == ['The portal is live.', 'A second post about the portal.']
 
 
+def test_a_press_taskuary_confirmed_wakes_nobody_for_a_then_that_only_does_what_the_press_did(w):
+    """The owner, 2026-11-25 ("Yes, change the rule"): a press whose act Taskuary confirmed went needs no check of the agent's. A `then` that
+    names the to-do the card does - which its press ticks - is satisfied by the press; a `then` that is a real next act still wakes it."""
+    todo = w.s.merge_task_checklist(w.tid, ['Post the portal announcement'], 'agent')[0]['id']
+    rid, _ = w.post('linkedin', 'The portal is live.', todo=todo, then=f'mark to-do {todo} (Post the portal announcement) done')
+    w.press(rid)
+    assert w.woken == [] and w.net.posted == ['The portal is live.'], 'the confirmed post is the whole of its `then`'
+    assert next(i['done'] for i in w.s.task_checklist(w.tid) if i['id'] == todo), 'the press ticked the to-do itself'
+    nxt, _ = w.post('linkedin', 'A second post about the portal.', todo=todo, then='reply to Gail that it is posted')
+    w.press(nxt)
+    assert len(w.woken) == 1, 'a next act of its own wakes it once'
+
+
 def test_a_send_with_no_then_wakes_nobody_and_closes_the_agents_question_about_that_card(w):
     """A question the agent asked ABOUT a card is answered by his press on it - left standing, "should it go out as drafted?" stayed on the
     task after it went. A question on something else stays his to answer."""

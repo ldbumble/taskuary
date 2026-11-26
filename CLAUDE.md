@@ -175,8 +175,10 @@ product: fix the code, never the test.
    A failed execution stays on its card, with the way past it, and its agent is woken once with what
    failed and why. His no is told to the agent as his own.
 3. **Wake.** His press executes without waking the agent, at work or at rest, unless the card
-   carries its `then` or the execution fails. A press with no `then` that went wakes nobody, and
-   answers the question the agent asked about that card; a bulk card's run is the same, once.
+   carries its `then` - the agent's own next act after the press - or the execution fails. A press
+   Taskuary confirmed went is its own check: a `then` that only does what the press did (the to-do
+   the card does, which the press ticks) wakes nobody. A press with no `then` that went wakes nobody,
+   and answers the question the agent asked about that card; a bulk card's run is the same, once.
 4. **Question.** The agent's question stands until he answers; no card is raised under it, in
    that turn or after, until he answers; his answer reaches the agent once.
 5. **Hand-off on a page.** A step handed to him shows that step; his "I'm done" wakes the agent

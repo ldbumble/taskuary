@@ -1166,7 +1166,7 @@ def approved(store, tid: int, press: str, what: str, actor: str = 'owner', revie
     if rv and (qs := card.asked_about(store, rv['ReviewId'])): ws.let_go(store, tid, 'answered by his press on its card', only=qs)
     # ...AT WORK OR AT REST (the owner, 2026-11-25: "the approval by the user sends it without further triggering the agent unless it fails of
     # course or there are next steps"): an act's press told an agent at work as its next turn; it hears the card's event with its next line
-    if not card.carries_on(rv): return ''
+    if not card.carries_on(rv, store): return ''
     # ...WHAT WENT IS ITS CARD'S EVENT (events.card, written as the store wrote the card): this only wakes the agent to hear it
     mark = review and (lambda how: store.audit('review', int(review), TOLD, actor, 'system', {'task': int(tid), 'how': how}))
     return to_agent(store, tid, '', actor, heard=mark, pressed=True)

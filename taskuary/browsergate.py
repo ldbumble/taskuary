@@ -1274,10 +1274,10 @@ def _perform(store, tid: int, p: dict, run=None) -> dict:
     # left is not a working one (outcome: an error status, a load that never finished). Its agent hears it with its next turn. A step held in
     # the middle of the agent's own work on a page is no card's end: the work goes on from it, woken as ever
     own = store.get_review(int(p['card'])) if str(p.get('card') or '').isdigit() else None
-    bad = outcome(sid, store) if own and cardqueue.handed(own) and not card.carries_on(own) else ''
+    bad = outcome(sid, store) if own and cardqueue.handed(own) and not card.carries_on(own, store) else ''
     told = (f"The owner approved it and Taskuary ran `{p.get('command')}` in your browser. It said: {said[-300:] or 'done'}. "
             f"The page is now {now or 'unknown'}")
-    if own and cardqueue.handed(own) and not card.carries_on(own) and not bad: events.note(store, tid, f'{told}.')
+    if own and cardqueue.handed(own) and not card.carries_on(own, store) and not bad: events.note(store, tid, f'{told}.')
     else: _tell(store, tid, f'{told} - look at it, then ' + NEXT[0].lower() + NEXT[1:] + (f'\n{bad}' if bad else ''), wake=True)
     store.audit('task', tid, 'browser_act_done', 'owner', 'human', {'site': p.get('site'), 'what': p.get('what'), 'command': str(p.get('command') or '')[:300],
                                                           'said': now or said[-300:]})

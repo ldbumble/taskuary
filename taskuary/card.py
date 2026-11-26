@@ -13,7 +13,7 @@ The rows stay where they live (review, worker_event, landing's record): this mod
 them by ONE road (`press`): a review through the desk's own door (server.press_review, the stale-thread check and verdicts.decide behind it), a
 question or a page step through workerstate.answer. The desk, the phone and the Assistant read and press here; `settled` is what the agent's
 events read of the presses since its cursor."""
-import json
+import json, re
 from contextlib import contextmanager
 
 from . import cardqueue as cq
@@ -330,7 +330,15 @@ def then_of(c) -> str:
     return ' '.join(str((c or {}).get('NextStep') or (c or {}).get('then') or '').split())
 
 
-def carries_on(c) -> bool: return bool(then_of(c))
+# ...AND AN ACT TASKUARY CONFIRMED NEEDS NO CHECK OF THE AGENT'S (the owner's written OK, 2026-11-25: "Yes, change the rule"): every caller is a
+# press that went - posted, sent, pushed - so a `then` that only does what that press already did is satisfied by it. Told by the card's own
+# record, never by reading the words for meaning: a `then` naming the to-do this card does (`todo`, which its press ticks - went) wakes nobody
+def carries_on(c, store=None) -> bool:
+    "Whether his confirmed press on card `c` (a review row, or the landing question's proposal) wakes its agent for a next act of its own."
+    if not (then := then_of(c).casefold()): return False
+    if store is None or not (c or {}).get('ReviewId'): return True
+    own = [i for i in store.task_checklist(int(c['TaskId'])) if i['id'] in _todos(store, c['ReviewId'])]
+    return not any(re.search(rf'(?<!\w){re.escape(i["id"].casefold())}(?!\w)', then) or ' '.join(i['text'].split()).casefold() in then for i in own)
 
 
 # ...and a question its agent asked ABOUT a card (ask_owner's `card`) is answered by his press on it: left standing, "Should it go out as

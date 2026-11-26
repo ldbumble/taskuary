@@ -121,3 +121,11 @@ test("watched, though held for a sender: nothing filled, Stop watching on the ro
   assert.ok(phone.more.some((x) => x.id === "trust"), "Trust waits in More");
   assert.notEqual(pillsOf(phone).lead?.id, "trust", "nor leads the phone's row");
 });
+
+test("a task he made himself offers no Watch it; one he is watching can still stop it", async () => {
+  const { taskMoves } = await import("../src/taskMoves.js");
+  const w = { label: (k) => k, hint: () => "", natTitle: "" }, ids = (s) => taskMoves(s, {}, w).map((v) => v.id);
+  assert.ok(!ids({ own: true }).includes("watch"));
+  assert.ok(ids({ own: false }).includes("watch"));
+  assert.ok(ids({ own: true, watching: true }).includes("watch"));
+});

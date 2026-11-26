@@ -176,6 +176,9 @@ const STARTED_BY = { schedule: "its schedule", manual: "you (Run now)", assistan
 // WHERE A TASK CAME FROM, in plain words: "from email · created 1m ago by triage" named the machinery (the walk's WORDS, 2026-10-17).
 // The sorter that made it is "sorted", the owner is "you", anything else just made it.
 const SORTERS = new Set(["triage", "router", "routing", "classifier"]), OWNER = new Set(["owner", "manual", "you", "user"]);
+// ...a task he made himself (New, a line he typed): never someone else's to watch (the owner, 2026-11-25: "If you create a task not sure we need Watch it")
+export const madeByHim = (task = {}) => { const by = String(task?.CreatedBy || "").trim().toLowerCase(), src = String(task?.Source || "").trim();
+  return !SORTERS.has(by) && (OWNER.has(by) || !src || src === "manual"); };
 export function madeLine(task = {}, ago = "") {
   const by = String(task?.CreatedBy || "").trim().toLowerCase(), src = String(task?.Source || "").trim();
   const how = SORTERS.has(by) ? `sorted ${ago}` : OWNER.has(by) || !src || src === "manual" ? `made by you ${ago}` : `made ${ago}`;

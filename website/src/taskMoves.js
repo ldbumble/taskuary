@@ -41,7 +41,8 @@ export function taskMoves(s, run, w) {
     // ONE VERB FOR IT, button and dialog (U13)
     { id: "nat", group: "more", label: w.label("nat"), run: run.nat, title: w.natTitle, ...shut },
     { id: "remind", group: "more", label: s.away || w.label("remind"), run: run.remind, title: w.hint("remind"), ...shut },
-    { id: "watch", group: s.watching && !s.closed ? "decide" : "more", label: w.label("watch", s.watching ? "on" : null), run: run.watch, title: w.hint("watch", s.watching ? "on" : null), ...shut },
+    // ...Watch it is for someone else's thread: a task he made himself has none, unless it is being watched now (so it can be stopped)
+    ...(s.own && !s.watching ? [] : [{ id: "watch", group: s.watching && !s.closed ? "decide" : "more", label: w.label("watch", s.watching ? "on" : null), run: run.watch, title: w.hint("watch", s.watching ? "on" : null), ...shut }]),
     ...(s.manual ? [{ id: "hand", group: "more", label: w.label("hand"), run: run.hand, title: w.hint("hand"), tucked: true, ...shut }] : []),
     { id: "reshape", group: "more", label: w.label("reshape"), run: run.reshape, title: w.hint("reshape"), ...shut },
     // WHAT THE PILLS USED TO CHANGE (section 1's redesign, 2026-10-16): the same PATCHes and the same repository picker, each a menu at the row's button

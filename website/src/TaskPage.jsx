@@ -65,7 +65,7 @@ import { onLive, touches } from "./live.js";
 import { pollCalming } from "./visible.js";
 import { PANEL, PANEL2, BORDER, DIM, FAINT, INK, card, frame, frameInner, label, step, PALETTE, hoverable, mono, ACCENT, ACCENT2, PILL_COLORS, ALERT, ALERT_BD, ALERT_INK, ALERT_TINT, BRAND } from "./theme.jsx";
 import RunSteps from "./RunSteps.jsx";
-import { askLine, byLine, cameFromLabel, cameFromWhere, channelName, filesByMessage, fromExpands, fromRows, groupConversations, groupMeta, headerFacts, isIdeaLine, isChat, madeLine, madeOf, rowText, sortedLine, todoSources, toLine, triageLine, triageSays, workflowOrigin } from "./taskSources.js";
+import { askLine, byLine, cameFromLabel, cameFromWhere, channelName, filesByMessage, fromExpands, fromRows, groupConversations, groupMeta, headerFacts, isIdeaLine, isChat, madeByHim, madeLine, madeOf, rowText, sortedLine, todoSources, toLine, triageLine, triageSays, workflowOrigin } from "./taskSources.js";
 import { latestTriageVerdict, legacyTriageVerdict, parseTriageVerdict, routeIntent } from "./triageVerdict.js";
 import { Handoff } from "./Handoff.jsx";
 import { Reshape } from "./Reshape.jsx";
@@ -2463,7 +2463,7 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
   // with why where they do not apply now; only the stage moves below come and go with what they act on
   const closedNow = !notDone || reopening === selected;
   const ownMoves = !t ? [] : taskMoves({ made: made?.moves, closed: closedNow, closedWith: reopening !== selected ? closedResult(selected, closedNow) : "", live: liveSession, reopening: reopening === selected, finishing, waitingDraft: !!pendingReview,
-    watching, away: remindWaiting(t) ? `Back ${remindDay(t.RemindAt)}` : "", manual, repo: { held: heldRepo, can: !isGeneral && canCode },
+    watching, own: madeByHim(t), away: remindWaiting(t) ? `Back ${remindDay(t.RemindAt)}` : "", manual, repo: { held: heldRepo, can: !isGeneral && canCode },
     // ...held for a sender he has not trusted: its Trust is the row's lit move, wherever the chat that says why is folded (detail.origin.held)
     trust: detail?.origin?.held ? { label: detail.origin.trust?.person || "Trust them", busy: trusting === "person", hint: HELD_TRUST_HINT } : null },
   { trust: () => trustPress(""), reopen, done: askFinish, note: (e, a) => setNoteAt(steady(a || e?.currentTarget)), nat: notATask, remind: (e, a) => remindHere(steady(a || e?.currentTarget)), watch: watchIt,

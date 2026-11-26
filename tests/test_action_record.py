@@ -161,7 +161,9 @@ class AMarkThatWasRefusedIsHeard(Acts):
     def test_one_that_was_taken_says_nothing(self):
         self.answered(); miss = []
         mark = proposals.MARK + ' ' + json.dumps({'action': 'open_pr', 'why': 'the fix is ready'})     # ...a PR card, the agents' push switch off
-        self.assertEqual(len(proposals.collect(self.s, self.tid, f'The fix is in. {mark}', 'assistant', miss)), 1)
+        from taskuary import ci     # ...on a checkout with the fix committed on a branch of its own, so it can be opened (ci.pr_why)
+        with mock.patch.object(ci, 'pr_why', return_value=''):
+            self.assertEqual(len(proposals.collect(self.s, self.tid, f'The fix is in. {mark}', 'assistant', miss)), 1)
         self.assertEqual((miss, proposals.unheard(self.s, self.tid)), ([], []))
 
 

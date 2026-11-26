@@ -124,15 +124,15 @@ export function AttachImage({ pics, size = 18, sx }) {
 export function AttachChip({ name, icon = null, thumb = "", warn = "", note = "", onRemove = null, title = "", sx, ...rest }) {
   const opens = !!(rest.onClick || rest.href);
   return <Box className="tq-attach-chip" {...rest} title={warn ? `${name} - ${warn}` : title || name}
-    sx={{ display: "inline-flex", alignItems: "center", gap: 0.5, flexShrink: 0, maxWidth: 240, height: 24, pl: thumb ? 0.25 : 0.75, pr: onRemove ? 0.25 : 0.75,
+    sx={{ display: "inline-flex", alignItems: "center", gap: 0.5, flexShrink: 0, maxWidth: 240, overflow: "hidden", height: 24, pl: thumb ? 0.25 : 0.75, pr: onRemove ? 0.25 : 0.75,
       borderRadius: "12px", bgcolor: warn ? "var(--tq-panel, #fbf3e8)" : "var(--tq-inset, #e4e9ee)", border: `1px solid ${warn ? "var(--tq-edge-brass, #e2c9a8)" : "transparent"}`, fontSize: 12.5, color: "var(--tq-link, #2f3a42)",
       boxSizing: "border-box", textDecoration: "none", ...(opens ? { cursor: "pointer", "&:hover": { borderColor: "var(--tq-border, #b9c6d1)" } } : {}), ...sx }}>
     {thumb ? <Box component="img" src={thumb} alt="" sx={{ width: 18, height: 18, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
       : icon === false ? null : icon || <AttachFileIcon sx={{ fontSize: 13, color: "var(--tq-link, #55697a)", flexShrink: 0 }} />}
-    {/* ...THE NAME BEFORE ITS SIZE (the design walk, 2026-11-20: a cramped chip read "Q... 44 KB"): the name keeps a few letters and the size
-        gives way first */}
-    <Box component="span" sx={{ minWidth: "min(7ch, 100%)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</Box>
-    {note && <Box component="span" sx={{ color: "var(--tq-link, #7d8a94)", fontSize: 11, whiteSpace: "nowrap", flexShrink: 1, minWidth: 0, overflow: "hidden" }}>{note}</Box>}
+    {/* ...THE NAME BEFORE ITS SIZE (the design walk, 2026-11-20: a cramped chip read "Q... 44 KB"): the size gives way first. No floor on the
+        name: one wider than a short word ("Report") left the pill past it, and one wider than a cramped pill ran the words out of it */}
+    <Box component="span" sx={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</Box>
+    {note && <Box component="span" sx={{ color: "var(--tq-link, #7d8a94)", fontSize: 11, whiteSpace: "nowrap", flexShrink: 9, minWidth: 0, overflow: "hidden" }}>{note}</Box>}
     {warn && <Box component="span" sx={{ color: "var(--tq-warning, #8a5a1c)", whiteSpace: "nowrap", flexShrink: 0 }}>· {warn.length > 24 ? "can't go" : warn}</Box>}
     {onRemove && <IconButton size="small" aria-label={`Remove ${name}`} onClick={(e) => { e.stopPropagation(); onRemove(e); }} sx={{ width: 18, height: 18, p: 0, color: "var(--tq-link, #55697a)", flexShrink: 0 }}>
       <CloseIcon sx={{ fontSize: 12 }} /></IconButton>}
@@ -140,6 +140,9 @@ export function AttachChip({ name, icon = null, thumb = "", warn = "", note = ""
 }
 // ...in ONE line, however many: the row never grows the box (2026-10-31) - and never scrolls sideways (the owner, 2026-11-06): the first `few`
 // chips, then "+N more", which opens the whole list. A chip cuts its name before the row would run past its width
+// ...and EVERY PILL IS AS WIDE AS ITS WORDS (the owner, 2026-11-25 and 11-26: "the blue pill does not match the words"): a flex row with a 96px
+// floor per chip drew "Report" in a pill twice its width, and in a narrow box ran the last pill off the row's edge. A column per chip, its own
+// words wide and no wider; short of room the long names give way first and the short ones stay whole
 export const ATTACH_FEW = 3;
 export const attachSplit = (n, few = ATTACH_FEW) => (n > few + 1 ? few : n);   // how many chips stand in the row: "+1 more" is never worth its chip
 const isChip = (c) => React.isValidElement(c) && c.type === AttachChip;
@@ -152,8 +155,10 @@ export const INLINE_CHIPS = { flex: "0 1 auto", maxWidth: "34%", pb: 0 };
 export function AttachRow({ children, sx, few = ATTACH_FEW, ...rest }) {
   const [at, setAt] = useState(null);
   const all = flat(children), chips = all.filter(isChip), other = all.filter((c) => !isChip(c)), k = attachSplit(chips.length, few), more = chips.slice(k);
-  return <Box data-tq-attach-row="" {...rest} sx={{ display: "flex", flexWrap: "nowrap", alignItems: "center", gap: 0.5, minWidth: 0, maxWidth: "100%", overflow: "hidden",
-    pb: 0.25, "& > .tq-attach-chip": { flexShrink: 1, minWidth: 96 }, "& > [data-tq-attach-more]": { flexShrink: 0 }, ...sx }}>
+  return <Box data-tq-attach-row="" {...rest} sx={{ display: "grid", gridAutoFlow: "column", gridAutoColumns: "minmax(0, max-content)", alignItems: "center", gap: 0.5,
+    // ..."+N more" is the way to the rest: it keeps its words whole, the names beside it give way
+    gridTemplateColumns: `repeat(${k}, minmax(0, max-content))${more.length ? " max-content" : ""}`,
+    minWidth: 0, maxWidth: "100%", overflow: "hidden", pb: 0.25, "& > .tq-attach-chip": { minWidth: 0 }, ...sx }}>
     {chips.slice(0, k)}
     {more.length > 0 && <AttachChip name={`+${more.length} more`} icon={false} component="button" type="button" data-tq-attach-more={more.length}
       aria-haspopup="dialog" aria-expanded={!!at} title={`Show all ${chips.length}`} onClick={(e) => setAt(e.currentTarget)}

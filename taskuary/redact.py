@@ -30,9 +30,10 @@ label names (SSN, social security number); a date of birth only where a label sa
 date of birth, born, birthday) - a bare date is a meeting, an invoice, a deadline, and stays.
 `secrets` is the credential half alone, for what is SHOWN or KEPT here (a chat line, a title, an
 error on his screen): his store and his screen keep the number, only what leaves for a model loses
-it. The cost is real: an agent cannot type an SSN into a form it never saw. What no door here can
-reach - a CLI reading a file off disk with its own Read tool, a picture of a card - needs the
-gateway's own guardrail.
+it. The cost is real: an agent cannot type an SSN into a form it never saw. A file an AI card's
+agent opens with its harness CLI's own shell leaves through relay.py, scrubbed there (scrub_body). What no door
+here can reach - his own CLI plan reading a file off disk with its own Read tool, a picture of a card - needs
+the provider's own guardrail.
 """
 import re
 
@@ -110,7 +111,9 @@ def scrub_parts(c):
     return scrub(c)
 
 
-_BYTES = {'image_url', 'source', 'file', 'input_audio'}     # the keys a part's bytes ride under, on the wires Taskuary speaks
+# the keys a part's bytes ride under, on the wires Taskuary and a card's harness speak (chat completions, Responses): a picture, a document
+# as base64, and a provider's own sealed reasoning - a rule that matched inside one would hand back bytes it cannot read
+_BYTES = {'image_url', 'source', 'file', 'input_audio', 'file_data', 'encrypted_content'}
 
 
 def scrub_all(o):
@@ -127,6 +130,17 @@ def scrub_json(s):
     try: o = json.loads(s)
     except (TypeError, ValueError): return scrub(s)
     return s if (out := scrub_all(o)) == o else json.dumps(out, ensure_ascii=False)
+
+
+def scrub_body(o, hits: list = None, k: str = ''):
+    """A whole request on its way to a model (relay.py), whatever its wire: every string scrubbed, a call's arguments as the JSON they are
+    (scrub_json), what rides under a bytes key as it is. `hits` is handed the key of each string that changed - a count, never the text."""
+    if isinstance(o, dict): return {a: v if a in _BYTES else scrub_body(v, hits, a) for a, v in o.items()}
+    if isinstance(o, list): return [scrub_body(v, hits, k) for v in o]
+    if not isinstance(o, str): return o
+    out = scrub_json(o) if k == 'arguments' else scrub(o)
+    if hits is not None and out != o: hits.append(k)
+    return out
 
 
 # SAID, NOT SHAPED: "my password is Hunter2!x9", "username northwind, password chirp-pass". A prompt keeps these - the agent he gave a

@@ -7,7 +7,7 @@ from unittest import mock
 
 import pytest
 
-from taskuary import agents, cliinstall, harness, llm
+from taskuary import agents, cliinstall, config, harness, llm, relay
 from taskuary.store import MemoryStore
 
 KEY = 'sk-card-secret-0001'
@@ -37,17 +37,32 @@ def test_an_api_cards_agent_launches_codex_on_the_cards_provider_with_the_key_in
     prof = json.loads(agents.agent_row(s, f'card-{cid}')['Config'])
     assert agents.cli_of(prof) == 'codex' and prof['args'][0] == 'exec'
     home = prof['env']['CODEX_HOME']
-    assert prof['env'][harness.KEY_ENV] == KEY and agents.spawn_env(prof)[harness.KEY_ENV] == KEY      # handed in at launch
+    # WHAT IT SENDS LEAVES THROUGH TASKUARY'S RELAY (relay.py, the owner 2026-11-26): the CLI is pointed at this computer and handed the
+    # relay's token for its card - the card's own address and key are nowhere in its config or its environment
+    srv = config.load()['server']
+    tok = relay.token(srv, cid)
+    assert prof['env'][harness.KEY_ENV] == tok and agents.spawn_env(prof)[harness.KEY_ENV] == tok      # handed in at launch
     text = (harness.folder(cid) / 'codex' / 'config.toml').read_text(encoding='utf-8')
-    assert home == str(harness.folder(cid) / 'codex') and KEY not in text                                 # ...and never written
+    assert home == str(harness.folder(cid) / 'codex') and tok not in text                                 # ...and never written
+    assert not any(KEY in str(v) for v in prof['env'].values()) and KEY not in text and 'gateway.example' not in text
     c = tomllib.loads(text)
     p = c['model_providers'][c['model_provider']]
-    assert (p['base_url'], p['env_key'], p['wire_api'], c['model']) == ('https://gateway.example/v1', harness.KEY_ENV, 'responses', 'hydrogen')
+    assert (p['base_url'], p['env_key'], p['wire_api'], c['model']) == (relay.base(srv, cid), harness.KEY_ENV, 'responses', 'hydrogen')
+    assert p['base_url'].startswith('http://127.0.0.1:') and p['base_url'].endswith(f'/relay/card-{cid}')
     # HIPAA: nothing reaches OpenAI - telemetry, the update check, feedback, hosted search, a ChatGPT login and its apps all off
     assert c['analytics']['enabled'] is False and c['feedback']['enabled'] is False and c['otel']['exporter'] == 'none'
     assert c['check_for_update_on_startup'] is False and c['web_search'] == 'disabled' and c['forced_login_method'] == 'api'
     assert not any(c['features'][k] for k in ('apps', 'plugins', 'remote_plugin', 'image_generation', 'in_app_updates'))
     assert harness.KEY_ENV in c['shell_environment_policy']['exclude']
+
+
+def test_the_relays_address_is_loopback_wherever_the_server_listens_there_else_its_one_address():
+    at = lambda h: relay.base({'host': h, 'port': 7799}, 3)
+    for h in ('0.0.0.0', '::', '', None, 'localhost'): assert at(h) == 'http://127.0.0.1:7799/relay/card-3', h
+    assert at('127.0.0.1') == 'http://127.0.0.1:7799/relay/card-3' and at('::1') == 'http://[::1]:7799/relay/card-3'
+    assert at('192.0.2.10') == 'http://192.0.2.10:7799/relay/card-3'            # bound to one address and no loopback: that one (relay.here)
+    assert relay.here('127.0.0.1', '192.0.2.10') and relay.here('192.0.2.10', '192.0.2.10') and relay.here('::1', '')
+    assert not relay.here('192.0.2.11', '192.0.2.10') and not relay.here('192.0.2.11', '') and not relay.here('', '') and not relay.here('testclient', 'testclient')
 
 
 def test_the_agent_turn_builds_the_codex_brain_and_triage_keeps_the_card(here):
@@ -59,10 +74,19 @@ def test_the_agent_turn_builds_the_codex_brain_and_triage_keeps_the_card(here):
         assert api.called and cli.call_count == 1
 
 
-def test_a_header_keyed_card_reads_its_key_from_env_by_header():
-    t = harness.codex_config(3, 'Azure', 'https://res.example/openai/v1', 'api-key', {}, 'dep')
-    p = tomllib.loads(t)['model_providers']['card3']
-    assert p['env_http_headers'] == {'api-key': harness.KEY_ENV} and 'env_key' not in p
+def test_a_header_keyed_cards_harness_signs_in_to_the_relay_which_adds_the_cards_own_header(here):
+    s = MemoryStore()
+    cid = s.save_connector({'Type': 'vertex_ai', 'Name': 'Vertex', 'ConfigJson': json.dumps({'project': 'northwind-ai', 'model': 'm', 'harness': 'codex'}),
+                            'Secret': KEY, 'Active': 1}, 't')
+    agents.agent_row(s, f'card-{cid}')
+    p = tomllib.loads((harness.folder(cid) / 'codex' / 'config.toml').read_text(encoding='utf-8'))['model_providers'][f'card{cid}']
+    assert p['env_key'] == harness.KEY_ENV and 'env_http_headers' not in p and 'http_headers' not in p
+    sent = {}
+    class Answer: status_code, headers, iter_content, close = 200, {}, lambda self, chunk_size=None: iter([b'{}']), lambda self: None
+    with mock.patch('requests.request', lambda method, url, **kw: sent.update(url=url, **kw) or Answer()):
+        relay.send(s, cid, 'POST', 'responses', '', {'authorization': 'Bearer x', 'content-type': 'application/json'}, b'{}')
+    assert sent['headers']['x-goog-api-key'] == KEY and not any(k.lower() == 'authorization' for k in sent['headers'])
+    assert sent['url'].startswith('https://aiplatform.googleapis.com/') and sent['url'].endswith('/endpoints/openapi/responses')
 
 
 def test_gears_quick_is_the_cards_model_thinking_less_hard_is_its_strong_model_never_flash(here):
@@ -82,6 +106,8 @@ def test_opencode_is_the_second_launcher_on_the_same_road(here):
     assert agents.cli_of(prof) == 'opencode' and prof['model'] == 'card/hydrogen' and prof['light_model'] == 'card/hydrogen-low'
     f = json.loads((harness.folder(cid) / 'opencode.json').read_text(encoding='utf-8'))
     assert KEY not in json.dumps(f) and f['provider']['card']['options']['apiKey'] == '{env:TASKUARY_CARD_KEY}'
+    assert f['provider']['card']['options']['baseURL'] == relay.base(config.load()['server'], cid)          # the relay, as Codex is (relay.py)
+    assert prof['env'][harness.KEY_ENV] == relay.token(config.load()['server'], cid)
     assert f['share'] == 'disabled' and f['autoupdate'] is False and f['provider']['card']['models']['hydrogen-low']['id'] == 'hydrogen'
     assert prof['env']['OPENCODE_DISABLE_AUTOUPDATE'] == '1' and prof['env']['OPENCODE_CONFIG'].endswith('opencode.json')
 
@@ -140,7 +166,7 @@ def test_no_harness_can_run_here_so_the_agent_keeps_its_own_loop_and_the_card_sa
 
 def test_every_switch_the_gateway_proof_needed_is_pinned():
     "Without these Codex reached OpenAI's telemetry host and GitHub; with them the gateway was the only host in 32 runs (2026-11-20)."
-    c = tomllib.loads(harness.codex_config(1, 'AI', 'https://gateway.example/v1', '', {}, 'hydrogen'))
+    c = tomllib.loads(harness.codex_config(1, 'AI', 'https://gateway.example/v1', 'hydrogen'))
     p = c['model_providers'][c['model_provider']]
     assert (p['env_key'], p['wire_api'], harness.KEY_ENV) == ('TASKUARY_CARD_KEY', 'responses', 'TASKUARY_CARD_KEY')
     assert c['model_context_window'] == 1_000_000 and c['check_for_update_on_startup'] is False and c['web_search'] == 'disabled'
@@ -153,7 +179,7 @@ def test_every_switch_the_gateway_proof_needed_is_pinned():
 def test_a_chat_completions_only_card_defaults_to_opencode_and_its_websearch_is_off(here):
     assert harness.harness_of({}, 'hipaa_ai') == 'codex' and harness.harness_of({}, 'vertex_ai') == 'opencode'
     assert harness.harness_of({'harness': 'codex'}, 'groq') == 'codex'                       # ...his pick stands
-    f = harness.opencode_config('AI', 'https://x.example/v1', '', {}, 'm', '')
+    f = harness.opencode_config('AI', 'https://x.example/v1', 'm', '')
     assert f['tools']['websearch'] is False and f['provider']['card']['models']['m']['tool_call'] is True
 
 

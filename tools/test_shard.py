@@ -5,7 +5,10 @@ from pathlib import Path
 
 # ...but a small file can be a long run: the audit corpus drives every scenario on every agent backend (about 9 minutes) - weighed as that
 # share of the suite's ~45 minutes, so it gets a part to itself rather than doubling one (2026-11-10)
-SHARE = {'test_audit_scenarios.py': 0.2}
+# ...and so can five more (Windows part 3, 2026-11-26: the split is by size, a file grew, and all five fell into one part - 34 minutes at 84%
+# when the job's 35 ran out, no test hanging). Each by its measured share of the Windows run, so no part can draw them all
+SHARE = {'test_audit_scenarios.py': 0.2, 'test_assistant_queries.py': 0.08, 'test_landing.py': 0.04, 'test_line_road.py': 0.035,
+         'test_every_card_kind.py': 0.03, 'test_app_own_screens.py': 0.025}
 
 def shard(part: int, of: int, root='tests') -> list[str]:
     all_ = list(Path(root).rglob('test_*.py')); total = sum(p.stat().st_size for p in all_)

@@ -48,6 +48,7 @@ import { openRun } from "./funnelPile.js";
 import { routeOfHash } from "./canvasLinks.js";
 import { NewSkill, PB_EMPTY, PB_OPEN, SkillDetail, SkillRow, RecentlyDeleted as SkillsDeleted, pbOpen, useSkills } from "./SkillShelf.jsx";
 import { NEW_PB, takeSkillAsk } from "./skillOpen.js";
+import ImportSkill from "./ImportSkill.jsx";
 import SetupWithAi, { onBuilt } from "./SetupWithAi.jsx";
 import { useViewExtras } from "./pageView.js";
 import { isDigest } from "./MorningDigest.jsx";
@@ -644,6 +645,7 @@ export default function ReportsView({ onOpenTask = null, browse = null, browseSt
       tools: section === "skills" ? (browseState.open == null ? <Box sx={{ display: "flex", flexDirection: "column" }}>
         <NewSkill key={browseState.newFor || browseState.newPb || ""} connectorType={browseState.newFor || ""} asked={!!browseState.newPb} onDone={pbs.load} button={false}
           onManual={() => onBrowseState?.({ section: "skills", open: `${PB_OPEN}new` })} />
+        <Box sx={{ mt: 1.5 }}><ImportSkill onDone={pbs.load} /></Box>
         {!!pbs.err && <Typography variant="body2" sx={{ mt: 1, fontWeight: 600, color: "var(--tq-danger, #6b2733)" }}>✗ {pbs.err}</Typography>}</Box> : null)
       : section && browseState.open == null ? (
         <Box sx={{ mt: 1.5, display: "flex", flexDirection: "column", gap: 1 }}>

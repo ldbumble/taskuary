@@ -10708,6 +10708,31 @@ def skill_examples(q: str = '', before: int = 0):
     return store.skill_examples(q[:300], max(0, before))
 
 
+# A SKILL OUT TO SOMEONE ELSE, AND ONE IN FROM THEM (skillshare.py): out is its folder as a zip; in is shown whole first (`save` false) and
+# saved by his press on exactly that (`save` true, `shown` its hash). Nothing in it runs, and nothing it says is read as a permission.
+class SkillFile(BaseModel): name: str = ''; data: str = ''          # data: base64, or the data: URL the page's file reader hands over
+class SkillImportBody(BaseModel): files: list[SkillFile] = []; save: bool = False; shown: str = ''
+
+@app.post('/api/skills/import')
+def import_skill(body: SkillImportBody):
+    import base64, binascii
+    from . import skillshare
+    try: files = [(f.name, base64.b64decode(re.sub(r'^data:[^,]*,', '', f.data.strip()), validate=True)) for f in body.files[:skillshare.MAX_FILES + 1]]
+    except (binascii.Error, ValueError): raise HTTPException(422, 'a picked file was not valid base64')
+    try:
+        if not body.save: return {k: v for k, v in skillshare.read_in(files).items() if not k.startswith('_')}
+        out = skillshare.save(files, body.shown)
+    except (skillshare.Refused, OSError) as e: raise HTTPException(400, str(e))
+    store.audit('skill', 0, 'imported', ACTOR, detail=out)
+    return {'ok': True, **out}
+
+@app.get('/api/skills/{slug}/export')
+def export_skill(slug: str):
+    from . import skillshare
+    try: name, data = skillshare.export(slug)
+    except LookupError as e: raise HTTPException(404, str(e))
+    return Response(data, media_type='application/zip', headers={'Content-Disposition': f'attachment; filename="{name}"'})
+
 @app.get('/api/skills/{slug}')
 def get_skill(slug: str):
     text = skills.read(slug)

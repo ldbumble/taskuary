@@ -317,6 +317,13 @@ wording untouched; the old folder (`~/.taskuary/playbooks`) is still there as a 
   the conversation with its **Approve** - or opens the editor to write it by hand.
 - When an agent finishes a kind of job that will recur and no skill covers it, Taskuary
   proposes one on the task; approve it and the next mail like it is matched.
+- **Export** on a skill's row saves its folder as one zip - the file to send someone. It drops into
+  Claude Code's or another agent's skills folder as it is.
+- **Import** takes a zip, a folder or a single `SKILL.md`. You see the whole text first, and one
+  press saves it; it never replaces a skill you have (a name already taken comes in under a new
+  one). Nothing in an imported skill runs, and nothing it says - "send without asking", a list of
+  allowed tools - lets an agent act without your press. It is marked *imported* on the shelf and
+  to the agents.
 - Each skill has an **on/off switch**: off keeps it, and triage stops matching it. Settings →
   How mail is sorted → **Use skills** turns them all off at once.
 

@@ -6,6 +6,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { Box, Button, Switch, Typography } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
+import FileDownloadOutlinedIcon from "@mui/icons-material/FileDownloadOutlined";
 import MenuBookIcon from "@mui/icons-material/MenuBook";
 import api from "./api.js";
 import DocsView from "./DocsView.jsx";
@@ -40,6 +41,14 @@ export function useSkills() {
   return { books: books || [], deleted: deleted || [], loaded: books !== null, err, load, setOn, restore };
 }
 
+// EXPORT: the skill's folder as one zip, saved by the browser - the file to send someone (taskuary/skillshare.py)
+export async function exportSkill(slug) {
+  const { data } = await api.get(`/api/skills/${slug}/export`, { responseType: "blob" });
+  const url = URL.createObjectURL(data), a = document.createElement("a");
+  a.href = url; a.download = `${slug}.zip`; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 export function SkillRow({ b, onOpen, onToggle }) {
   const on = b.enabled !== false;
   return (
@@ -48,10 +57,14 @@ export function SkillRow({ b, onOpen, onToggle }) {
         opacity: on ? 1 : 0.7, "&:hover": { bgcolor: "var(--tq-panel, #faf8f4)" } }}>
       <MenuBookIcon sx={{ fontSize: 18, color: "var(--tq-link, #55697a)", flexShrink: 0 }} />
       <Box sx={{ flex: 1, minWidth: 0 }}>
-        <Typography sx={{ color: INK, fontWeight: 600, fontSize: 13.5 }} noWrap>{b.title}</Typography>
+        <Typography sx={{ color: INK, fontWeight: 600, fontSize: 13.5 }} noWrap>{b.title}
+          {b.origin === "imported" && <Box component="span" data-tq-skill-imported="" sx={{ ml: 1, fontWeight: 500, fontSize: 11.5, color: FAINT }}>imported</Box>}
+        </Typography>
         <Typography variant="caption" sx={{ color: DIM, display: "block" }} noWrap>{b.description || "—"}</Typography>
         {!!b.uses?.length && <Typography variant="caption" sx={{ ...mono, color: FAINT, display: "block" }} noWrap>uses {b.uses.join(" · ")}</Typography>}
       </Box>
+      <Button size="small" variant="text" data-tq-skill-export={b.slug} startIcon={<FileDownloadOutlinedIcon sx={{ fontSize: 15 }} />}
+        onClick={(e) => { e.stopPropagation(); exportSkill(b.slug).catch(() => {}); }} sx={{ flexShrink: 0, color: DIM, minWidth: 0 }}>Export</Button>
       <Typography variant="caption" sx={{ color: on ? DIM : FAINT, flexShrink: 0 }}>{on ? "triage matches it" : "off - kept, not matched"}</Typography>
       <Switch size="small" checked={on} inputProps={{ "aria-label": `${b.title}: ${on ? "on" : "off"}` }}
         onClick={(e) => e.stopPropagation()} onChange={() => onToggle(!on)} />
@@ -104,4 +117,4 @@ export function SkillDetail({ slug, onGone }) {
   return <Box sx={{ bgcolor: PANEL }}><DocsView sel={{ group: "skills", doc: slug }} onSel={() => {}} onGone={onGone} /></Box>;
 }
 
-export const PB_EMPTY = "No skills yet - New skill builds one from a past email or your own words, and an agent proposes one when it finishes a job that will recur.";
+export const PB_EMPTY = "No skills yet - New skill builds one from a past email or your own words, Import brings in one somebody sent you, and an agent proposes one when it finishes a job that will recur.";

@@ -139,6 +139,11 @@ def record(store, tid: int, sid: str, kind: str, request_id: str = None, text: s
     if kind in REQUESTS:
         request_id = request_id or request_id_for(text)
         if any(r['request_id'] == request_id for r in status(store, tid)['requests']): return False
+    if kind == 'turn_end':                       # ...a card his input greyed that this turn did not replace stands again (proposals.restore_set_aside)
+        try:
+            from . import proposals
+            proposals.restore_set_aside(store, tid)
+        except Exception as e: logger.debug(f'task {tid}: the cards its turn left greyed were not brought back - {e}')
     store.add_worker_event({'TaskId': tid, 'Sid': str(sid), 'Kind': kind, 'RequestId': request_id, 'Text': str(text or '')[:4000],
                             'ChoicesJson': json.dumps(list(choices)) if choices else None, 'Source': source, 'EventId': event_id})
     try: store._poke('task-changed', task_id=tid)
@@ -345,6 +350,23 @@ def line_answers(store, tid: int, text: str, actor: str = 'owner') -> list:
     words = ' '.join(str(text or '').split())[:500]
     for r in rs: record(store, tid, sid, 'answered', request_id=r['request_id'], text=words, source=said_by(actor))
     return [r['request_id'] for r in rs]
+
+
+def answering(store, tid: int, at: float) -> bool:
+    """IS HIS LINE THAT CAME AT `at` THE ANSWER TO A QUESTION THE AGENT ASKED IN WORDS - a chip he pressed or words he typed under it? Read off the
+    record alone, at any time after: the newest such question before the line, with nothing of his said since it (a line, a prompt in the
+    pane) and no answer to it from an earlier second (a press, the agent taking it back). His answer is no moving on: it greys no card
+    (proposals.bears)."""
+    from .conversation import ep
+    from . import general
+    evs, sec = events(store, int(tid)), int(at)
+    q = next((i for i in range(len(evs) - 1, -1, -1) if in_words(evs[i]) and ep(evs[i]['CreatedAt']) <= at), None)
+    if q is None: return False
+    asked = ep(evs[q]['CreatedAt'])
+    if any(ep(e['CreatedAt']) < sec and (e['Kind'] == 'answered' and e['RequestId'] == evs[q]['RequestId'] or e['Kind'] == 'working' and e.get('Text') != WAKE)
+           for e in evs[q + 1:]): return False
+    return not any(asked < ep(x['CreatedAt']) < sec for x in store.list_comments(int(tid), internal=True)
+                   if x.get('ActorType') in (general.USER_TYPE, general.WAITING_TYPE) and x.get('Actor') == 'owner' and not general.is_brief(x))
 
 
 def left_asking(store, tid) -> list:

@@ -1023,7 +1023,9 @@ def advance(store, tid: int) -> None:
         # ...ONE WORD FOR A CARD ITS AGENT TOOK THE PLACE OF (decided 2026-11-20, the moved-past ruling): greyed - 'passed' - whether his line set it
         # aside first or the agent's rewrite did; which came first is a race, and no race decides what he sees
         if st == 'superseded' and rv.get('DecidedBy') not in OWNER_ACTORS: st = 'passed'
-        if st == 'pending' and rv['ReviewId'] != (front[0] if front else None): st = 'passed' if rv['ReviewId'] in q['past'] else 'offer' if r['State'] == 'offer' else 'held'
+        # ...(one outside the line - his own email - is offered beside it by what it IS, not by the state its row last had: drawn `pending` while
+        # no card stood in front, it read `held` and left the chat when a greyed card stood again - proposals.restore_set_aside)
+        if st == 'pending' and rv['ReviewId'] != (front[0] if front else None): st = 'passed' if rv['ReviewId'] in q['past'] else 'held' if cardqueue.in_line(rv) else 'offer'
         if step and front and rv['ReviewId'] == front[0]: st = 'pending'
         if st != r['State']: update(store, tid, k, state=st, status=st)
     if front and (rv := by.get(front[0])) and f"r:{front[0]}" not in rows:

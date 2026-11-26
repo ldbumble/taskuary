@@ -155,7 +155,7 @@ def _card(e) -> str:
         if e.get('result'): said += f" ({_flat(e['result'], 300)})"
         if e.get('final'): said += f"; what went: \"{_flat(e['final'], 600)}\""
     elif s in CARD: said = CARD[s]
-    elif s == 'superseded': said = 'greyed, it will not go' + (f' ({note})' if note else '')
+    elif s == 'superseded': said = (e.get('until') or 'greyed, it will not go') + (f' ({note})' if note else '')
     else: said = s or 'changed'
     if s == 'pending' and d in ('failed', 'unknown') and e.get('final'): said += f"; what he pressed Send on: \"{_flat(e['final'], 600)}\""
     return f'{head}: {said}' + (f' - by {by}' if by and by not in ('owner', 'you', 'taskuary', 'system') and s != 'pending' else '')
@@ -234,7 +234,7 @@ def card(store, r: dict) -> None:
     if r.get('DeliveryState') == 'sending' or r.get('Status') == 'held': return
     if r.get('Status') == 'pending' and r.get('Kind') != 'action' and not str(r.get('DraftText') or '').strip(): return     # ...a reply nobody wrote yet is no card
     tid, rid = int(r['TaskId']), int(r['ReviewId'])
-    from . import general
+    from . import general, proposals
     from .general import ACT_CUT, AGENT_TOLD
     olds = [json.loads(x['Body']) for x in store._rows("SELECT Body FROM event WHERE TaskId=? AND Kind='card' AND Key LIKE ? ORDER BY Id", (tid, f'card:{rid}:%'))]
     try:
@@ -251,7 +251,8 @@ def card(store, r: dict) -> None:
     body = dict(rid=rid, act=r.get('Kind') == 'action', what=label, status=r.get('Status'), delivery=r.get('DeliveryState'), error=err.rstrip('. '),
                 cut=err.startswith(ACT_CUT), note=r.get('DecideNote'), reason=r.get('Reason') if r.get('DeliveryState') in general.NOT_GONE else '',
                 by=r.get('DecidedBy'), final=final, result=str(result)[:300] if result else '', words=_words(r) if r.get('Status') == 'pending' else '',
-                back=bool(olds) and r.get('Status') == 'pending' and not r.get('DeliveryState') and not err, **_went(r))
+                back=bool(olds) and r.get('Status') == 'pending' and not r.get('DeliveryState') and not err, **_went(r),
+                **({'until': proposals.UNTIL} if proposals.comes_back(store, r) else {}))
     if olds and _card(olds[-1]) == _card(body): return
     add(store, tid, 'card', f'card:{rid}:{len(olds)}:{_card(body)[:200]}', **body, own=general.at_work(tid))
 

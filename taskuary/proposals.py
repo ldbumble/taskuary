@@ -833,33 +833,57 @@ def set_aside_drafts(store, tid: int, before: float = 0., mails=()) -> list:
     which calls this. `before`: when his own line came (every card, and the landing question); `mails`: the messages heard, as (when it
     joined, its row) - each greys only the cards it bears on. -> the review ids (and LAND)."""
     from . import landing
-    ins = ([(before, None)] if before else []) + [(at, m) for at, m in mails or () if at]
-    out = [r for r in _older(store, tid, ins) if store.decide_review(r, 'superseded', None, 'taskuary', note=SET_ASIDE)]
+    # ...which of them his own line alone greyed is kept (`line`): those stand again where the turn does not replace them (restore_set_aside);
+    # one a message on its own thread passed is answered by that message - the newest wins, and it stays greyed
+    mail = set(_older(store, tid, [(at, m) for at, m in mails or () if at]))
+    line = [r for r in (_older(store, tid, [(before, None)]) if before else []) if r not in mail]
+    # ...written down first: each card's own event reads it as the card is settled (events.card, comes_back)
+    if mail or line: store.audit('task', tid, 'cards_passed', 'taskuary', 'system', {'rids': [*mail, *line], 'line': line})
+    out = [r for r in [*mail, *line] if store.decide_review(r, 'superseded', None, 'taskuary', note=SET_ASIDE)]
     if before and landing.pass_over(store, int(tid), before): out.append(LAND)
-    if out: store.audit('task', tid, 'cards_passed', 'taskuary', 'system', {'rids': out})
     return out
 
 
+UNTIL = 'greyed until this turn ends - it stands again as it was unless a card raised in the turn takes its place'
+def comes_back(store, r: dict) -> bool:
+    """Is `r` a card HIS OWN LINE greyed (set_aside_drafts' record of it) that stands again by itself when the turn ends (restore_set_aside) -
+    what its agent is told of it (UNTIL)? Never a held step, nor one a message on its thread passed."""
+    if not (r.get('Status') == 'superseded' and r.get('DecideNote') == SET_ASIDE and r.get('TaskId') and _action(r) not in HELD_ACTS): return False
+    return any(r['ReviewId'] in (json.loads(a['Detail'] or '{}').get('line') or []) for a in store._rows(
+        "SELECT Detail FROM audit WHERE EntityType='task' AND EntityId=? AND Action='cards_passed' AND CreatedAt>=?", (int(r['TaskId']), str(r.get('DecidedAt') or ''))))
+
+
 def restore_set_aside(store, tid: int) -> list:
-    """A TURN THE AI NEVER ANSWERED SETS NOTHING ASIDE (design round 4, H3: a draft he needed stood greyed for 43 minutes while the provider
-    failed turn after turn on the line after it). Set aside as its agent heard the input (set_aside_drafts), a card no answer has come under
-    since stands again, live where it stood: no agent read past it. The input stays heard - the try after the failure answers it. -> ids."""
-    from . import general
-    rows = store.list_comments(int(tid), internal=True)
-    answer = next((c['CreatedAt'] for c in reversed(rows) if c.get('ActorType') == general.ASSISTANT_TYPE and c.get('Actor') == 'assistant'
-                   and not (lambda w, f: f and not w)(*general.failed_line(c.get('Body')))), '')
-    out = [r['ReviewId'] for r in store._rows("SELECT ReviewId FROM review WHERE TaskId=? AND Status='superseded' AND DecideNote=? AND DecidedBy='taskuary' "
-                                              "AND DecidedAt>=?", (int(tid), SET_ASIDE, str(answer or ''))) if store.restore_review(r['ReviewId'])]
+    """A CARD HIS LINE GREYED THAT THE TURN DID NOT REPLACE STANDS AGAIN WHEN THE TURN ENDS, LIVE WHERE IT STOOD (walk 23, 2026-11-25: a bug
+    report greyed a waiting LinkedIn post and a reply for good, and each agent told him it "is ready on the card for you to press" - bringing
+    one back was left to the agent's keep_card, which one road in three called). Plain code, every road (workerstate.record's turn_end) and
+    every kind: each card set aside since the agent's turn before this one ended comes back as it was - never one a card raised since takes
+    the place of (the same card by its name, cardqueue.what: the rewrite is what greys it for good), one the agent withdrew, nor a held step
+    (its gate holds it anew when it is run again). And a turn the AI never answered sets nothing aside the same way (design round 4, H3: a
+    draft stood greyed for 43 minutes while the provider failed turn after turn). -> ids."""
+    from . import cardqueue
+    from .conversation import ep
+    since = str((store.last_worker_event(int(tid), kinds=('turn_end',)) or {}).get('CreatedAt') or '')
+    us = cardqueue._units(store, int(tid), set())
+    name, out = (lambda u: cardqueue.what(store, u, True)), []
+    for u in us:
+        rs = [r for r in u['rows'] if str(r.get('DecidedAt') or '') >= since and comes_back(store, r)]
+        if not rs or any(v is not u and v['rids'] != [LAND] and v['rows'][0]['ReviewId'] > rs[-1]['ReviewId'] and name(v) == name(u) for v in us): continue
+        out += [r['ReviewId'] for r in rs if store.restore_review(r['ReviewId'])]
     if out: store.audit('task', tid, 'cards_restored', 'taskuary', 'system', {'rids': out})
     return out
 
 
-def bears(store, r: dict, m: dict | None) -> bool:
+def bears(store, r: dict, m: dict | None, at: float = 0.) -> bool:
     """DOES AN INPUT BEAR ON CARD `r` - what it greys (the owner, 2026-11-23, narrowing 11-16's "any input greys every waiting card": a chat
     line from one colleague greyed another's ready reply, and its agent redrafted it for nothing). His own line on the task (`m` None) bears on
-    every card - he is redirecting, and the agent brings back what still stands (keep_card). A message bears only on a card to someone it is
-    from - his own, to someone it went to - or on a card written on its own thread. Structure, never meaning."""
-    if m is None: return True
+    every card - he is redirecting, and what the turn it starts does not replace stands again at its end (restore_set_aside) - EXCEPT HIS ANSWER
+    TO THE AGENT'S OWN QUESTION (walk 23: "Keep both" under a question about X greyed the LinkedIn card for good, and its agent said it waited),
+    which is no moving on (workerstate.answering). A message bears only on a card to someone it is from - his own, to someone it went to - or
+    on a card written on its own thread. Structure, never meaning."""
+    if m is None:
+        from .workerstate import answering
+        return not (r.get('TaskId') and answering(store, int(r['TaskId']), at))
     from .context import _recipients
     from .continuity import addressees, answers
     who = {a.lower() for a in _recipients(m)} if m.get('Own') else {str(m.get('FromEmail') or '').lower()} - {''}
@@ -889,7 +913,7 @@ def _older(store, tid: int, inputs) -> list:
         if _action(r) == 'page_step': return False              # ...a step on a page is closed by his press or the page alone (workerstate.page_step)
         return r['Kind'] == 'action' or words(r) or r['Kind'] not in ('draft_reply', 'draft')
     return [r['ReviewId'] for r in rows if card(r) and (t := ep(r.get('DraftAt') or r['CreatedAt'])) is not None
-            and any(t < at and bears(store, r, m) for at, m in inputs)]
+            and any(t < at and bears(store, r, m, at) for at, m in inputs)]
 
 
 def inputs_since(store, tid: int, after: float = 0.) -> list:

@@ -756,13 +756,18 @@ class TheList(unittest.TestCase):
         turn = next(x for x in got['items'] if x['kind'] == 'turn' and its in [c['review'] for c in x.get('cards') or []])
         self.assertEqual((got['letters'], [c['review'] for c in turn['cards']]), (turn['id'], [its]))   # waiting: its card, at the end of its turn (letters are card rows)
         next_second()
-        self.say('Actually, the Quay.', 'l-two'); self.rest()
+        self.brain.delay = HOLD; self.say('Actually, the Quay.', 'l-two', wait=False); self.at_work()
         self.assertTrue(proposals.passed(s.get_review(its))); self.assertEqual(s.get_review(his)['Status'], 'pending')
         now = self.list(); old = next(x for x in now['items'] if x['id'] == turn['id'])
         self.assertEqual([(c['what'], c['status'], c['was']['text']) for c in old['cards']], [('slot', 'passed', 'Paula - we are going with the Mill. Alex'),
                                                                                          ('slot', 'pending', 'Ray - call me about the Mill.')])      # ...his own stands where it stood
-        self.assertIn('(the email to paula@northwind.example): greyed, it will not go', self.brain.calls[-1])       # ...and its agent is told
+        self.assertIn(f'(the email to paula@northwind.example): {proposals.UNTIL}', self.brain.calls[-1])       # ...and its agent is told
         self.assertEqual(conversation.flow_breaks(now, got), [])
+        # ...AND THE TURN THAT WROTE NO NEW ONE LEAVES IT STANDING AGAIN WHERE IT STOOD (walk 23, 2026-11-25: greyed for good, with "it is ready
+        # on the card for you to press" said over it)
+        self.brain.delay = 0; self.rest()
+        self.assertEqual(s.get_review(its)['Status'], 'pending')
+        self.assertIn((its, 'pending'), [(c['review'], c['status']) for x in self.list()['items'] if x['id'] == turn['id'] for c in x['cards']])
 
 
     def test_redraft_on_a_task_its_agent_works_wakes_that_agent(self):
@@ -811,10 +816,13 @@ class TheList(unittest.TestCase):
         rid = self.s.add_review({'TaskId': self.tid, 'MessageId': self.s.list_messages(self.tid)[0]['MessageId'], 'Kind': 'draft_reply', 'Status': 'pending',
                                  'Channel': 'email', 'DraftText': 'Hi Gail, which date? Alex'})
         self.assertEqual([(c['review'], c['status']) for c in self.list()['items'][-1]['cards']], [(rid - 1, 'approved'), (rid, 'pending')])
-        next_second(); self.say('Thanks.', 'l-two'); self.rest()
+        next_second(); self.brain.delay = HOLD; self.say('Thanks.', 'l-two', wait=False); self.at_work()
         turns = [x for x in self.list()['items'] if x['kind'] == 'turn']
         self.assertEqual([(c['review'], c['status'], c.get('was', {}).get('text')) for c in turns[-2]['cards']], [(rid - 1, 'approved', None), (rid, 'passed', 'Hi Gail, which date? Alex')])
         self.assertEqual(turns[-1]['cards'], [])
+        self.brain.delay = 0; self.rest()                   # ...and the turn that did not write it again leaves it live where it stood (walk 23)
+        turns = [x for x in self.list()['items'] if x['kind'] == 'turn']
+        self.assertEqual([[(c['review'], c['status']) for c in t['cards']] for t in turns[-2:]], [[(rid - 1, 'approved'), (rid, 'pending')], []])
 
     def test_an_empty_reply_is_drawn_only_where_its_record_says_why_and_then_in_the_turn(self):
         """The owner, 2026-11-13: "why would you have empty write a reply box, unless the agent said i'm not sure what to respond, feel free to
@@ -888,9 +896,11 @@ class TheList(unittest.TestCase):
         got = self.list()
         self.assertEqual([(x['kind'], [(c['review'], c['status']) for c in x.get('cards') or []]) for x in got['items']][-2:],
                          [('turn', [(rid, 'passed')]), ('arrival', [])])
-        self.say('Answer her.', 'l-two'); self.rest()
+        self.brain.delay = HOLD; self.say('Answer her.', 'l-two', wait=False); self.at_work()
         self.assertTrue(proposals.passed(self.s.get_review(rid)))
         rid2 = wrapup.agent_reply(self.s, self.tid, 'Hi Gail, Leeds is fine. Alex', 'assistant', sid=general.session_for(self.tid).sid)['review_id']
+        self.brain.delay = 0; self.rest()
+        self.assertTrue(proposals.passed(self.s.get_review(rid)), 'written again in the turn, the old one stays greyed for good')
         got = self.list()['items']
         self.assertEqual([(c['review'], c['status']) for c in got[-1]['cards']], [(rid2, 'pending')])
         self.assertEqual([x['kind'] for x in got][-4:], ['turn', 'arrival', 'line', 'turn'])
@@ -1293,7 +1303,7 @@ class TheList(unittest.TestCase):
         general.wait_line(self.s, self.tid, 'And ask her the dates.', line_id='l-two')                 # typed as the app went down
         old.alive = False; terminal.SESSIONS.pop(old.sid, None); general.drop_session(self.tid); general.answered(self.tid, every=True)
         terminal.recover_after_restart(self.s); general.keep_cut_turns(self.s)
-        waitroom.tick(self.s); self.rest()                                                             # ...and his line goes in by itself
+        self.brain.delay = HOLD; waitroom.tick(self.s); self.at_work()                                 # ...and his line goes in by itself
         new = general.session_for(self.tid)
         self.assertTrue(new is not None and new.sid != old.sid)
         from taskuary import proposals
@@ -1303,6 +1313,7 @@ class TheList(unittest.TestCase):
         self.assertTrue(any(f'rv{rid}' in c for c in self.brain.calls[1:]), 'the turn that heard his line is told the draft is old news')
         # ...and the new session's own draft is the live card, in its own turn, the old one greyed where it was
         rid2 = wrapup.agent_reply(self.s, self.tid, 'Hi Gail, which city and which dates? Alex', 'assistant', sid=new.sid)['review_id']
+        self.brain.delay = 0; self.rest()
         self.assertEqual((rid2 != rid, self.s.pending_review(self.tid)['ReviewId']), (True, rid2))
         turns = [x for x in self.list()['items'] if x['kind'] == 'turn']
         self.assertEqual([(c['review'], c['status']) for c in turns[0]['cards']], [(rid, 'passed')])

@@ -3520,7 +3520,7 @@ def _auto_code(store, tid):
     from . import terminal as term, blackboard as bb, rank, agents as hub_agents
     # the worker this task was ROUTED to (Assignee), else the coding agent
     _who = str((store.get_task(tid) or {}).get('Assignee') or '')
-    agent = _who.split(':', 1)[1].strip() if _who.startswith('agent:') and _who.split(':', 1)[1].strip() else hub_agents.default_agent(store)
+    agent = _who.split(':', 1)[1].strip() if _who.startswith('agent:') and _who.split(':', 1)[1].strip() else hub_agents.coding_role(store)
     # Rank mode (the connector's bulk setting): the task does not race for a slot, it joins
     # ONE value-ordered queue and the drain picks the most valuable waiting task whenever a
     # slot is free - see rank.py. Clear mode is everything below, unchanged.

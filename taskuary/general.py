@@ -519,7 +519,7 @@ def place_coding(store, tid: int) -> str:
     apiagent.workdir and the LAND card read. Refuses a named repo with no checkout, as the CLI's start does."""
     from . import agents, landing, repochoice, terminal
     if (landing.record(store, tid) or {}).get('cwd'): return landing.record(store, tid)['cwd']
-    role = agents.default_agent(store)
+    role = agents.coding_role(store)
     profile = json.loads((store.get_agent(role) or {}).get('Config') or '{}') if role else {}
     repo, _why = terminal.guess_repo(store, tid, profile)
     cwd = ((profile.get('cwd_map') or {}).get(repo) or terminal.find_checkout(repo, profile)) if repo else ''

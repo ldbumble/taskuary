@@ -1143,7 +1143,7 @@ def open_session(store, agent: str = None, task_id: int = None, repo: str = None
         # half-migrated install must still be able to start an agent at all.
         from . import agents as _hub
         # an explicit brain is the OWNER's choice at the picker and outranks the setting
-        profile = with_brain(profile, _hub.brain_command(store, agent, want=brain))
+        profile = with_brain(profile, _hub.brain_command(store, want=brain))
         # ...and a role whose row names no CLI runs on the one resolver's CLI (agents.resolve_brain), never on claude by default.
         # A pane cannot exist without a terminal, so here an API connector is no answer: it says it needs a coding tool.
         if not profile.get('cmd'): profile = with_brain(profile, _hub.resolved_command(store, 'coding'))

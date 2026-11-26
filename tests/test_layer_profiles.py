@@ -31,8 +31,7 @@ class LayerProfilesTests(unittest.TestCase):
         self.assertEqual(s.get_setting('default_brain'), 'claude')
         self.assertFalse(s.get_setting('default_agent'))
         self.assertFalse(any('provider' in p for p in cfg['agents'].values()))
-        # only the role that ran somewhere else keeps that somewhere, as its brain override
-        self.assertEqual(json.loads(s.get_setting('profile_brains')), {'researcher': 'codex'})
+        self.assertFalse(s.get_setting('profile_brains'))                         # no agent type keeps an AI of its own
 
     def test_the_coding_profile_is_renamed_everywhere_and_keeps_its_edits(self):
         cfg, s, tid = legacy()

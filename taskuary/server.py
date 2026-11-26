@@ -3233,7 +3233,7 @@ def code(task_id: int, background: BackgroundTasks, body: CodeBody = None):
     used to be the headless path (pipes, no window, a report you read afterwards); nothing starts
     where you cannot watch it, interrupt it or answer it, so it is now the same as /dispatch."""
     if not store.get_task(task_id): raise HTTPException(404, 'task not found')
-    agent = (body.agent if body else None) or hub_agents.default_agent(store)
+    agent = (body.agent if body else None) or hub_agents.coding_role(store)
     if not store.get_agent(agent): raise HTTPException(422, f'unknown agent: {agent}' if agent else 'no coding agent is set up to take it')
     ses = start_session(store, task_id, agent, (body.model if body else None), (body.instruction if body else None),
                         brain=getattr(body, 'brain', None))
@@ -3258,7 +3258,7 @@ def continue_task(task_id: int, body: CodeBody):
     from . import agents as hub_agents
     # An explicit picker choice means "restart with this harness". Falling back to the previous
     # transcript preserves the convenient same-agent continue path.
-    agent = str(body.agent or previous.get('Agent') or hub_agents.default_agent(store)).strip()
+    agent = str(body.agent or previous.get('Agent') or hub_agents.coding_role(store)).strip()
     if not store.get_agent(agent):
         raise HTTPException(422, f'the previous agent "{agent}" is no longer configured; choose an agent from Start session'
                             if agent else 'no coding agent is set up - restart Taskuary and it is made again')
@@ -3628,7 +3628,7 @@ def dispatch_task(task_id: int, body: DispatchBody, background: BackgroundTasks)
         from . import funnel
         if e.status_code == 422 and funnel.needs_repo(e):
             funnel.hold_for_repo(store, task_id, str(e.detail or ''))    # ...and the task keeps saying so after the answer is gone
-            return {'dispatch': 'needs_repo', 'started': False, 'existing': False, 'agent': body.agent or hub_agents.default_agent(store), 'taskId': task_id,
+            return {'dispatch': 'needs_repo', 'started': False, 'existing': False, 'agent': body.agent or hub_agents.coding_role(store), 'taskId': task_id,
                     'ref': task_ref(task_id), 'reason': str(e.detail or '')}
         if e.status_code < 422 or isinstance(e, StartRefused): raise
         _start_refused(task_id, body, e.__context__ if isinstance(e.__context__, Exception) else str(e.detail or 'the agent did not start'))
@@ -4897,7 +4897,7 @@ def start_session(store_, tid: int, agent: str = None, model: str = None, instru
     try:
         _refresh_chat_context(task_id=tid)
         # `agent` is the ROLE, `brain` is which CLI runs it - two questions, two arguments
-        return hub_term.start_on_task(store_, tid, agent or hub_agents.default_agent(store_), model, instruction,
+        return hub_term.start_on_task(store_, tid, agent or hub_agents.coding_role(store_), model, instruction,
                                       ACTOR, brain=brain)
     except (ValueError, RuntimeError, FileNotFoundError) as e:
         raise HTTPException(422, str(e))
@@ -5051,7 +5051,7 @@ def _dispatch_one(tid: int, body: DispatchBody, background: BackgroundTasks) -> 
         return {'dispatch': 'assistant', 'agent': session.provider, 'model': session.model, 'started': not had_session, 'existing': had_session,
                 'taskId': tid, 'ref': task_ref(tid), 'session': session.info(tail=3)}
 
-    agent = body.agent or hub_agents.default_agent(store)
+    agent = body.agent or hub_agents.coding_role(store)
     if not store.get_agent(agent): raise HTTPException(422, f'unknown agent: {agent}' if agent else 'no coding agent is set up to take it')
     # THE BRAIN TRAVELS WITH THE ROLE. This called start_session without it, so a picked CLI got as
     # far as the door and no further: "chose devin from start coding agent screen but it started
@@ -5092,7 +5092,7 @@ def dispatch_message(mid: int, body: DispatchBody, background: BackgroundTasks):
         from . import funnel
         if e.status_code == 422 and funnel.needs_repo(e):
             funnel.hold_for_repo(store, tid, reason)
-            return {'dispatch': 'needs_repo', 'started': False, 'existing': False, 'agent': body.agent or hub_agents.default_agent(store), 'taskId': tid,
+            return {'dispatch': 'needs_repo', 'started': False, 'existing': False, 'agent': body.agent or hub_agents.coding_role(store), 'taskId': tid,
                     'ref': task_ref(tid), 'reason': reason}
         raise
 
@@ -10558,16 +10558,15 @@ def agents():
     conns = cfg.get('cli_connections') or {}
     brains_here = sorted(k for k in conns if hub_agents.runs_here(cli_connections.with_defaults(conns[k])))
     from . import general as _general
-    head = hub_agents.default_agent(store)
+    head = hub_agents.coding_role(store)
     rows = sorted(store.list_agents(), key=lambda a: a['Name'] != head)
-    profs = hub_agents.profiles(store)
-    return {'data': [{**a, 'installed': hub_agents.runs_here(profs.get(a['Name']) or {})} for a in rows], 'default': head,
+    return {'data': [{**a, 'installed': hub_agents.runs_here(json.loads(a.get('Config') or '{}'))} for a in rows], 'default': head,
             'models': {a['Name']: _models(a) for a in store.list_agents()},
             # WHICH BRAIN each role runs on. The card used to name the role, and after the roles
             # and brains were split every coding row would read `coding` - the owner asked for the
             # coding AGENT (2026-09-16). A brain is not a property of the task, so it is served
             # once per role here rather than stamped on every row.
-            'brains': {a['Name']: hub_agents.brain_for(store, a['Name']) for a in rows},
+            'brains': {a['Name']: hub_agents.brain_for(store) for a in rows},
             # every brain that can be picked, and the models each offers. A coding picker chooses
             # the BRAIN: the role is the coding agent for every coding task, so offering roles there would
             # be one choice with one entry (the 2026-09-16 spec).

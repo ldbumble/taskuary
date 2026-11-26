@@ -249,7 +249,6 @@ const assistantBox = (taskId) => {
     trace: [], trace_revision: 0 };
   if (numbersWorkflow && Number(taskId) === NUMBERS_TASK) {
     box.session.provider = box.providers.find(p => p.id === box.session.pick)?.label || box.providers[0].label;
-    if (box.session.pick === "cli:claude") box.session.pick = "cli:analyst";
   }
   return box;
 };
@@ -490,7 +489,7 @@ const write = (method, url, body) => {
       scriptedAssistant.pile.rev = `demo-assistant-${++nextId}`;
       journeyChanged();
     }
-    return { dispatch: "assistant", started: !existing, existing, taskId: NUMBERS_TASK, ref: "TQ-0018", agent: "analyst", demo: true };
+    return { dispatch: "assistant", started: !existing, existing, taskId: NUMBERS_TASK, ref: "TQ-0018", demo: true };
   }
 
   // TRUST <SENDER> (the chat's one action on an untrusted sender's task, server.task_trust): the hold is gone from the task's recorded list

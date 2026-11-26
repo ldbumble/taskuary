@@ -107,14 +107,14 @@ class WhichAgentWorkTests(unittest.TestCase):
         _agent(s, 'coding', 'claude')
         s.upsert_agent('researcher', 'research', 'cli', json.dumps({'cmd': 'claude'}))
         with mock.patch.object(agents, 'runs_here', return_value=True):
-            self.assertEqual(agents.default_agent(s), 'coding')
+            self.assertEqual(agents.coding_role(s), 'coding')
 
     def test_a_path_probe_never_silently_replaces_the_default_profile(self):
         """A profile is instructions, not a CLI: which tool is installed has nothing to say about it."""
         s = MemoryStore()
         _agent(s, 'coding', 'claude')
         with mock.patch.object(agents, 'runs_here', side_effect=lambda p: p.get('cmd') == 'codex'):
-            self.assertEqual(agents.default_agent(s), 'coding')
+            self.assertEqual(agents.coding_role(s), 'coding')
 
     def test_a_chain_of_brains_needs_no_dedupe(self):
         """agent_chain had to skip candidates whose cli_of it had already seen, because a list of
@@ -143,14 +143,14 @@ class WhichAgentWorkTests(unittest.TestCase):
         s = MemoryStore()
         _agent(s, 'coding', 'claude')
         with mock.patch.object(agents, 'runs_here', return_value=False):
-            self.assertEqual(agents.default_agent(s), 'coding')
+            self.assertEqual(agents.coding_role(s), 'coding')
 
     def test_a_legacy_default_agent_setting_invents_no_profile(self):
         """`default_agent` once held a profile name; it is read by nothing now, and with no coding profile the answer is
         blank - never a name nobody has."""
         s = MemoryStore()
         s.set_setting('default_agent', 'somebody-elses-agent', 'o')
-        self.assertEqual(agents.default_agent(s), '')
+        self.assertEqual(agents.coding_role(s), '')
 
     def test_runs_here_answers_no_rather_than_raising_for_a_missing_cli(self):
         self.assertFalse(agents.runs_here({'cmd': 'no-such-cli-anywhere-9z'}))

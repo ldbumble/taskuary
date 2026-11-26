@@ -27,7 +27,7 @@ export default function DemoJourney({ onChanged }) {
   const step = phase === "request" ? 0 : phase === "working" ? 1 : 2;
   const start = async () => {
     setStarting(true); setError("");
-    try { await api.post(`/api/tasks/${NUMBERS_TASK}/dispatch`, { agent: "analyst" }); }
+    try { await api.post(`/api/tasks/${NUMBERS_TASK}/dispatch`, {}); }
     catch (e) { setError(e?.response?.data?.detail || "The demo could not start. Try again."); }
     finally { setStarting(false); }
   };
@@ -49,7 +49,7 @@ export default function DemoJourney({ onChanged }) {
       {phase === "request" && <>
         <Typography sx={{ fontWeight: 600, fontSize: 14 }}>Ruth asks for the latest vendor spend numbers</Typography>
         <Typography sx={{ fontSize: 13, color: DIM, my: 1, maxWidth: 760 }}>{NUMBERS_REQUEST}</Typography>
-        <Typography sx={{ fontSize: 12, color: DIM, mb: 1.5 }}>The task already has her request. Let the demo analyst prepare a sourced answer and a draft for you to review.</Typography>
+        <Typography sx={{ fontSize: 12, color: DIM, mb: 1.5 }}>The task already has her request. Let the demo agent prepare a sourced answer and a draft for you to review.</Typography>
         <Button variant="contained" disableElevation disabled={starting} onClick={start}>
           {starting ? "Starting…" : "Start demo agent"}
         </Button>

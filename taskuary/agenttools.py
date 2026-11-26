@@ -359,7 +359,7 @@ SHORT = {
     'show': 'Charts (bar, line, pie), tables, number tiles, checklists in this chat, live with sliders, toggles, selects, dates, '
             'and choices whose pick comes back to you - or hands the owner files you made, one artifact a call.',
     'draw_image': "Draw a picture, a file of this task.",
-    'tick': "Tick or untick a to-do by its id.",
+    'tick': "Tick or untick a to-do (`item`: its id).",
     'todos': "Add, reword or merge this task's to-dos.",
     # end_turn and ask_owner are listed with their whole words: the fields ARE how they are used
     'playbooks': "How this company does each kind of job: the list, or one by `name`.",

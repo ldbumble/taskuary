@@ -402,6 +402,16 @@ def change_of(store, tid: int, p: dict) -> tuple:
     was, new = flow.steps_of(cfg), p.get('flow')
     # ...and its clock and its name, beside or without its steps: one card, one save (save - the editor's own)
     patch = {k: p[k] for k in (*CLOCK, 'title', 'goal', 'done_when') if p.get(k) not in (None, '')}
+    # ...AND WHAT ELSE IT IS SAVED WITH (the owner, 2026-11-26: a routine rewritten for his press still said "browser on" and a goal "for manual
+    # posting" - nothing an agent could change): whether it is driven in the browser, and the skill of his it uses - a link, never a copy
+    if isinstance(p.get('browser'), bool) and p['browser'] != bool(cfg.get('browser')):
+        if not is_workflow({**cfg, 'browser': p['browser']}): return {}, 'this routine only reads, in the browser - with the browser off nothing would run it'
+        patch['browser'] = p['browser']
+    uses, had = str(p.get('skill') or '').strip().lstrip('/'), definition(store, src)['skill']
+    if uses:
+        from . import skills
+        if skills.read(uses) is None: return {}, f'no skill is named {uses!r} - name one the skills tool lists, or leave `skill` out'
+        uses = skills.key(uses)
     if patch:
         from .reports import schedule_error
         if (why := schedule_error({**{k: None for k in CLOCK}, **patch} if set(patch) & set(CLOCK) else {**cfg, **patch})): return {}, f'that schedule does not hold: {why}'
@@ -409,18 +419,70 @@ def change_of(store, tid: int, p: dict) -> tuple:
         agent = [i for i, x in enumerate(was) if x.get('kind') == 'agent']
         if len(agent) != 1: return {}, "this routine has no one agent step to give new instructions to - send `flow`, its steps whole"
         new = [{**x, 'prompt': str(p['prompt']).strip()} if i == agent[0] else x for i, x in enumerate(was)]
-    if new is None and patch: new = was                                     # ...its clock or name alone
+    if new is None and (patch or uses): new = was                           # ...its clock, its name or its skill alone
+    if uses and uses != had and isinstance(new, list):
+        agent = [i for i, x in enumerate(new) if isinstance(x, dict) and x.get('kind') == 'agent']
+        if len(agent) != 1: return {}, 'this routine has no one agent step to use a skill - send `flow`, its steps whole, the skill on the step that uses it'
+        new = [{**x, 'skill': uses} if i == agent[0] else x for i, x in enumerate(new)]
     if not isinstance(new, list) or not new: return {}, "change_routine needs `prompt` (its agent step's new instructions), `flow` (its steps whole), or a schedule (daily_at, cron, every_minutes) or title"
     ok, why = flow.validate(store, new)
     if not ok: return {}, f'the changed steps do not hold: {why}'
     clock = {k: patch.get(k) for k in CLOCK} if set(patch) & set(CLOCK) else {}
     rows = ([{'label': 'Runs', 'was': runs_words(cfg), 'now': runs_words({**cfg, **clock})}] if clock and runs_words({**cfg, **clock}) != runs_words(cfg) else []) + (
-        [{'label': 'Name', 'was': cfg.get('title') or src.get('Address') or '', 'now': patch['title']}] if patch.get('title') and patch['title'] != cfg.get('title') else [])
+        [{'label': 'Name', 'was': cfg.get('title') or src.get('Address') or '', 'now': patch['title']}] if patch.get('title') and patch['title'] != cfg.get('title') else []) + (
+        [{'label': 'Browser', 'was': ON[not patch['browser']], 'now': ON[patch['browser']]}] if 'browser' in patch else [])
     words = {k: patch[k] for k in ('goal', 'done_when') if patch.get(k) and patch[k] != cfg.get(k)}
     if not flow.diff(was, new) and not rows and not words: return {}, 'that is the routine as it already is'
     return change_card({'action': 'repair_workflow', 'source_id': src['SourceId'], 'title': cfg.get('title') or src.get('Address') or '', 'flow': new,
-            'was': was, 'rows': rows, 'why': ' '.join(str(p.get('why') or '').split())[:300],
-            **({'patch': {**clock, **{k: patch[k] for k in ('title', *words) if patch.get(k)}}, 'before': {k: cfg.get(k) or '' for k in words}} if rows or words else {})}), ''
+            'was': was, 'rows': rows, 'why': ' '.join(str(p.get('why') or '').split())[:300], 'facts': facts(store, src),
+            **({'patch': {**clock, **{k: patch[k] for k in ('title', 'browser', *words) if patch.get(k) not in (None, '')}}, 'before': {k: cfg.get(k) or '' for k in words}} if rows or words else {})}), ''
+
+
+# THE ROUTINE AS IT STANDS, IN ITS KEY FIELDS (the owner, 2026-11-26: he approved new instructions over a goal that still said "for manual
+# posting" and a browser still on - the card showed neither): what it is for, when it runs, whether it is driven in the browser, the
+# connections it names and the skill it uses. One reading for the change card (after: these with the change laid over) and the agent's
+# own look at a routine (lookup).
+ON = {True: 'on', False: 'off'}
+def facts(store, src, cfg: dict = None) -> dict:
+    cfg = cfg_of(src) if cfg is None else cfg
+    d = definition(store, {**src, 'ConfigJson': json.dumps(cfg)})
+    return {'Goal': str(cfg.get('goal') or '').strip(), 'Runs': runs_words(cfg), 'Browser': ON[d['browser']], 'Connections': ', '.join(d['connection_names']),
+            'Skill': d['skill'], 'Done when': d['done_when']}
+
+
+def after(p: dict) -> list:
+    """[{label, now, was?}] - a routine's key fields as its change card's press leaves them, `was` on each one the press changes. Its goal
+    and its done-when are here while they stay as they are: changed, each is a box of its own on the card (texts)."""
+    from . import flow
+    had, patch = p.get('facts') or {}, p.get('patch') or {}
+    now = {**{k: v for k, v in had.items() if not patch.get({v: k for k, v in WORDS.items()}.get(k))},
+           **({'Browser': ON[bool(patch['browser'])]} if 'browser' in patch else {}), **{r['label']: r['now'] for r in p.get('rows') or [] if r.get('label') == 'Runs'}}
+    lone = [x for x in flow.steps_of({'flow': p.get('flow')}) if isinstance(x, dict) and x.get('kind') == 'agent']
+    if len(lone) == 1 and lone[0].get('skill'): now['Skill'] = str(lone[0]['skill']).strip().lstrip('/')
+    return [{'label': k, 'now': v or 'none', **({'was': had.get(k) or 'none'} if v != had.get(k) else {})} for k, v in now.items() if v or k != 'Done when']
+
+
+# THE `routines` TOOL'S ANSWER (the owner, 2026-11-26: an agent asked to change a routine could not read it, and wrote its instructions anew):
+# with no name every routine, report and dashboard by title; with one, that one whole - its facts, then its instructions as they are saved.
+def lookup(store, name: str = '') -> str:
+    from . import flow
+    kind = lambda s: 'routine' if is_workflow(s) else 'dashboard' if cfg_of(s).get('type') == 'dashboard' else 'report'
+    if not str(name or '').strip():
+        rows = [s for s in store.list_sources(active_only=False) if s.get('Channel') == 'report' and (is_workflow(s) or cfg_of(s).get('title'))]
+        return '\n'.join(f"{cfg_of(s).get('title') or s.get('Address')} (#{s['SourceId']}, {kind(s)}) - runs {runs_words(cfg_of(s))}"
+                         + (f" - uses the skill {d['skill']}" if (d := definition(store, s))['skill'] else '') for s in rows) or 'There are no routines or reports yet.'
+    src = named_setup(store, name)
+    if not src: return f'No routine or report is called {name!r} - ask with no name for the list.'
+    cfg = cfg_of(src)
+    head = [f"{kind(src).upper()}: {cfg.get('title') or src.get('Address')} (#{src['SourceId']}){'' if src.get('Active', 1) else ' - switched off'}",
+            *(f'{k.upper()}: {v or "none"}' for k, v in facts(store, src).items() if v or k != 'Done when')]
+    if not is_workflow(src):
+        q = str(cfg.get('prompt') or cfg.get('ai_prompt') or '').strip()
+        return '\n'.join([*head, *([f'QUESTION ({len(q):,} characters):\n{q}'] if q else []), *([f"QUERY:\n{cfg['query']}"] if cfg.get('query') else [])])
+    steps = flow.steps_of(cfg)
+    if not flow.is_flow(cfg): return '\n'.join([*head, f"INSTRUCTIONS ({len(str(steps[0].get('prompt') or '')):,} characters):\n{steps[0].get('prompt') or ''}"])
+    return '\n'.join([*head, 'STEPS:', *(f"{x.get('id')} · {x.get('label') or x.get('kind')} ({x.get('kind')}{', skill ' + str(x['skill']) if x.get('skill') else ''})"
+                                         + (f":\n{x['prompt']}" if x.get('prompt') else '') for x in steps)])
 
 
 # A CHANGE TO SOMETHING STORED SHOWS WHAT IT WILL SAY (the owner, 2026-11-24, over a card whose box held "prompt: <whole old> -> <whole new>":
@@ -432,7 +494,7 @@ WILL = {'routine': 'The routine will say', 'report': 'The report will ask', 'das
 WORDS = {'goal': 'Goal', 'done_when': 'Done when', 'query': 'Query'}
 def change_card(p: dict) -> dict:
     from . import flow
-    rows, texts = [r for r in p.get('rows') or [] if r.get('label') not in ('Adds', 'Removes', 'Step')], []
+    rows, texts = [r for r in p.get('rows') or [] if r.get('label') not in ('Adds', 'Removes', 'Step', 'Skill')], []
     if p.get('action') == 'change_setup':
         texts = [{'key': k, 'label': WILL.get(p.get('kind') or 'report') if k in ('prompt', 'ai_prompt') else WORDS.get(k, k), 'was': str((p.get('was') or {}).get(k) or ''),
                   'now': str(v)} for k, v in (p.get('patch') or {}).items() if k in TEXTS]
@@ -442,14 +504,15 @@ def change_card(p: dict) -> dict:
         for x in d:
             if x['change'] != 'changed': rows.append({'label': 'Adds' if x['change'] == 'added' else 'Removes', 'was': '', 'now': f"the step {x['label'] or x['id']}"}); continue
             for k in x['keys']:
-                if k['key'] in TEXTS and isinstance(k['now'], str):
+                if k['key'] == 'skill': rows.append({'label': 'Skill', 'was': str(k['was'] or 'none'), 'now': str(k['now'] or 'none')})
+                elif k['key'] in TEXTS and isinstance(k['now'], str):
                     texts.append({'key': f"flow.{x['id']}.{k['key']}", 'was': str(k['was'] or ''), 'now': k['now'],
                                   'label': WILL['routine'] if one and k['key'] == 'prompt' else f"{x['label'] or x['id']} · {WORDS.get(k['key'], k['key'])}"})
                 else: rows.append({'label': 'Step', 'was': '', 'now': f"{x['label'] or x['id']}: its {k['key'].replace('_', ' ')} changes"})
         texts += [{'key': k, 'label': WORDS[k], 'was': str((p.get('before') or {}).get(k) or ''), 'now': str((p.get('patch') or {})[k])}
                   for k in ('goal', 'done_when') if (p.get('patch') or {}).get(k)]
     said = [f"{r['label']}: {r['was']} -> {r['now']}" if r.get('was') else f"{r['label']} {r['now']}" for r in rows] + [f"{t['label']}: {t['now']}" for t in texts]
-    return {**p, 'rows': rows, 'texts': texts, 'changes': chr(10).join(said)}
+    return {**p, 'rows': rows, 'texts': texts, 'changes': chr(10).join(said), **({'after': after({**p, 'rows': rows})} if p.get('facts') else {})}
 
 
 def edit_change(p: dict, fields: dict) -> dict:

@@ -1048,6 +1048,33 @@ class APostIsAKindOfTheOneReviewTool(unittest.TestCase):
         self.assertIn('Compare the uplift with last year', skills.read('renewal-uplift'))
         skills.delete('renewal-uplift')
 
+    def test_a_skill_he_has_is_changed_by_its_name_and_its_card_is_the_page_before_and_after(self):
+        """The owner, 2026-11-26: "the card that shows the changes should bring up the skill card ... and show what the agent is editing".
+        A skill named as he has it is a change to that page: the card holds the page it replaces and the new one whole, and the routines
+        that use it; his press saves exactly the page shown, and never over one changed since the card was written."""
+        from taskuary import skills, verdicts
+        skills.write('renewal-uplift', self.SKILL_MD); self.addCleanup(lambda: (skills.delete('renewal-uplift'), skills.purge(now=10 ** 12)))
+        self.s.save_source({'Channel': 'report', 'Address': 'Renewals', 'Owner': 'o', 'Active': 1, 'ConfigJson': json.dumps(
+            {'type': 'agent', 'access': 'write', 'title': 'Renewals', 'prompt': 'Answer each renewal notice.', 'skill': 'renewal-uplift'})}, 'o')
+        was, new = skills.read('renewal-uplift'), self.SKILL_MD.replace('the number we accept', 'the number we accept, in two lines')
+        said, err = tool(self.tid, 'propose', kind='skill', name='renewal-uplift', text=new, why='he wants them shorter'); self.assertFalse(err, said)
+        rv, = self.cards(); p = json.loads(rv['DraftText'])
+        self.assertEqual((p['was_text'], p['text'], p['used_by']), (was, new, ['Renewals']))
+        self.assertEqual(skills.read('renewal-uplift'), was, 'nothing before his press')
+        self.assertEqual(verdicts.decide(self.s, rv, 'approve', None, None, 'owner')['result']['skill'], 'renewal-uplift')
+        self.assertIn('the number we accept, in two lines', skills.read('renewal-uplift'))
+        # ...and a page that names the skill only in its own frontmatter is the same change, never a "new" one written over it (the real walk)
+        for a in ({}, {'title': 'renewal-uplift'}):
+            said, err = tool(self.tid, 'propose', kind='skill', text=new.replace('two lines', 'three lines'), **a); self.assertFalse(err, said)
+            p = json.loads(self.cards()[-1]['DraftText']); self.assertEqual((p['slug'], p['was_text']), ('renewal-uplift', skills.read('renewal-uplift')))
+        # ...a second card, and the page changed under it by another hand: not saved over
+        said, err = tool(self.tid, 'propose', kind='skill', name='renewal-uplift', text=new.replace('two lines', 'one line')); self.assertFalse(err, said)
+        rv = self.cards()[-1]; skills.write('renewal-uplift', new.replace('Compare', 'First compare'))
+        try: out = verdicts.decide(self.s, rv, 'approve', None, None, 'owner')
+        except Exception as e: out = {'error': str(e)}
+        self.assertIn('First compare', skills.read('renewal-uplift')); self.assertNotIn('one line', skills.read('renewal-uplift'))
+        self.assertIn('changed since', json.dumps(out) + json.dumps(self.s.get_review(rv['ReviewId']), default=str))
+
     def test_a_second_skill_card_takes_the_first_ones_place_and_a_job_with_no_mail_is_asked_as_a_job(self):
         said, err = tool(self.tid, 'propose', kind='skill', name='renewal-uplift', text=self.SKILL_MD); self.assertFalse(err, said)
         said, err = tool(self.tid, 'propose', kind='skill', name='renewal-uplift', text=self.SKILL_MD.replace('last year', 'the last two years'))

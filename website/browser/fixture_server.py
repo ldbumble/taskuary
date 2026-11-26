@@ -512,16 +512,41 @@ def _install_fresh_routes(app, store):
     @app.post("/api/fixture/change-card")
     def fixture_change_card(body: dict = Body(...)):
         """A routine of his and the agent's ask to change its instructions, queued as the agent's change_routine is (proposals.queue) - the change
-        card (browser/change-card.mjs). `was`/`now`: its instructions before and as proposed. GET /api/fixture/routine/<id> reads what was saved."""
+        card (browser/change-card.mjs). `was`/`now`: its instructions before and as proposed. GET /api/fixture/routine/<id> reads what was saved.
+        `cfg`: more of the routine as saved (its goal, browser, skill); `skill`: {name, text} a skill of his, written first; `change`: more of the
+        agent's ask (goal, browser); `skill_edit`: {name, text, why} the agent's change to a skill - or a new one - as a second task's card."""
         import json
-        from taskuary import general, proposals
-        cfg = {"type": "agent", "access": "write", "title": body.get("title") or "Social post drafts", "prompt": body["was"], "cron": "0 9 * * 1"}
+        from taskuary import general, proposals, skills
+        if body.get("skill"): skills.write(body["skill"]["name"], body["skill"]["text"])
+        cfg = {"type": "agent", "access": "write", "title": body.get("title") or "Social post drafts", "prompt": body["was"], "cron": "0 9 * * 1", **(body.get("cfg") or {})}
         sid = store.save_source({"Channel": "report", "Address": cfg["title"], "Owner": "owner", "Active": 1, "ConfigJson": json.dumps(cfg)}, "owner")
         tid = store.create_task({"Title": "Make the posts shorter", "Kind": "general", "Status": "open"}, "owner")
         store.add_comment(tid, general.BRIEF_ACTOR, general.USER_TYPE, "Make future LinkedIn posts short.")
         store.add_comment(tid, "assistant", general.ASSISTANT_TYPE, "I rewrote the routine's instructions - the card below changes it on your press.")
-        rv = proposals.queue(store, tid, {"action": "change_routine", "routine": cfg["title"], "prompt": body["now"], "why": body.get("why") or "Make future posts short"})
-        return {"taskId": tid, "sourceId": sid, "review": rv}
+        rv = proposals.queue(store, tid, {"action": "change_routine", "routine": cfg["title"], "prompt": body["now"], "why": body.get("why") or "Make future posts short",
+                                          **(body.get("change") or {})})
+        out = {"taskId": tid, "sourceId": sid, "review": rv}
+        for i, e in enumerate(body.get("skill_edits") or []):
+            t2 = store.create_task({"Title": e.get("title") or "Make the posts punchier", "Kind": "general", "Status": "open"}, "owner")
+            store.add_comment(t2, general.BRIEF_ACTOR, general.USER_TYPE, e.get("ask") or "Make my social posts punchier.")
+            store.add_comment(t2, "assistant", general.ASSISTANT_TYPE, e.get("said") or "How your posts are written lives in the skill - the card below changes it on your press.")
+            out[f"skill{i}"] = {"taskId": t2, "review": proposals.queue(store, t2, {"action": "save_skill", "slug": e["name"], "text": e["text"], "why": e.get("why") or ""})}
+        return out
+
+    @app.post("/api/fixture/routine")
+    def fixture_routine_seed(body: dict = Body(...)):
+        "A routine of his as saved (`cfg`), and the skill it uses written first (`skill`: {name, text}) - no card: what a walk's agent finds and changes."
+        import json
+        from taskuary import skills, workflows
+        if body.get("skill"): skills.write(body["skill"]["name"], body["skill"]["text"])
+        cfg = {"type": "agent", "access": "write", **body["cfg"]}
+        # ...by the editor's own save: a new routine starts on its next slot, never on the next tick (workflows.save)
+        return {"sourceId": workflows.save(store, {"Channel": "report", "Address": cfg["title"], "Owner": "owner", "Active": 1, "ConfigJson": json.dumps(cfg)}, "owner")}
+
+    @app.get("/api/fixture/skill/{name}")
+    def fixture_skill_page(name: str):
+        from taskuary import skills
+        return {"text": skills.read(name)}
 
     @app.post("/api/fixture/filed-news")
     def fixture_filed_news(body: dict = Body(None)):

@@ -381,6 +381,7 @@ const OWN = {
   // ...its `withdraw` takes the question BACK (walk 19, S7: "asked you a question" over a turn that had withdrawn it - no question drawn)
   askowner: (a) => (a.withdraw === true ? { kind: "plan", summary: "Took back its question" } : { kind: "plan", summary: "Asked you a question", tried: "Could not ask you" }),
   skills: (a) => ({ kind: "read", summary: a.name ? `Read your skill ${quoted(a.name)}` : "Read your skills" }),
+  routines: (a) => ({ kind: "read", summary: a.name ? `Read your routine ${quoted(a.name)}` : "Read your routines" }),
   handover: () => ({ kind: "page", summary: "Handed you a step on the page", tried: "Could not hand you the step" }),
 };
 // ...AND AN AI CARD'S OWN HANDS (apiagent.py) in the words the CLI's take (design round 5, 2026-11-19: the API walk read "Used browser open on ..."):

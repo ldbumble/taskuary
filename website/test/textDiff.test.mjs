@@ -1,7 +1,41 @@
 // WHERE A TEXT CHANGED, IN THE TEXT (the owner, 2026-11-24: "show also where it changed in the full text")
 import test from "node:test";
 import assert from "node:assert/strict";
-import { changeMarks, hasChange, wordDiff } from "../src/textDiff.js";
+import { changeMarks, hasChange, lengthSaid, wordDiff } from "../src/textDiff.js";
+
+// The owner, 2026-11-26: a routine's instructions grew to ~3,000 characters behind a card that never said how long they were or had been
+test("how long the words are, and were where that changed", () => {
+  assert.equal(lengthSaid("x".repeat(1204), "y".repeat(2950)), "2,950 characters · was 1,204");
+  assert.equal(lengthSaid("Keep it short.", "Keep it brief."), "14 characters", "the same length is said once");
+  assert.equal(lengthSaid("", "A new page."), "11 characters · new");
+  assert.equal(lengthSaid(undefined, "a"), "1 character · new");
+});
+
+test("a line rewritten in a page is struck on its own line: the line break after it is drawn once, the new text's", () => {
+  const p = wordDiff("# Posts\n\nOne idea a post.\n\n1. Open with the lesson.\n", "# Posts\n\nOne idea a post, said plainly and first.\n\n1. Open with the lesson.\n");
+  assert.deepEqual(p.filter((x) => x.t === "del").map((x) => x.s), ["post. "]);
+  assert.equal(p.filter((x) => x.t !== "del").map((x) => x.s).join(""), "# Posts\n\nOne idea a post, said plainly and first.\n\n1. Open with the lesson.\n");
+});
+
+// The real walk, 2026-11-26: an agent restructured a skill's page, and read word by word across its lines the struck halves of three old steps
+// stood stitched into the new ones. A line that went is struck whole, one that came is lit whole, one rewritten is marked in itself
+test("a page is read line by line: a line gone or new is whole, a line rewritten is marked word by word", () => {
+  const was = "# Posts\n\nVoice: plain and direct. One idea a post.\n\n1. Open with the lesson.\n2. X: under 260 characters.\n3. No hashtags, no emoji.\n";
+  const now = "# Posts\n\nVoice: plain, direct and punchy. One idea a post.\n\nPunch rules:\n- Open with a blunt claim in under 12 words, never a warm-up line.\n\n1. X: under 220 characters, one sentence of proof after the lesson.\n2. No hashtags, no emoji.\n";
+  const p = wordDiff(was, now);
+  assert.equal(p.filter((x) => x.t !== "del").map((x) => x.s).join(""), now, "same + added is the new page exactly");
+  assert.ok(p.some((x) => x.t === "del" && x.s.includes("1. Open with the lesson.\n")), "a line that went is struck whole, with its line break");
+  assert.ok(p.some((x) => x.t === "add" && x.s.includes("Punch rules:\n- Open with a blunt claim in under 12 words, never a warm-up line.\n")), "lines that came are lit whole");
+  assert.ok(p.some((x) => x.t === "same" && x.s.includes("Voice: ")) && p.some((x) => x.t === "same" && x.s.includes("One idea a post.\n")), "a line rewritten keeps what it kept");
+  assert.ok(p.some((x) => x.t === "same" && x.s.includes("No hashtags, no emoji.")), "a line renumbered keeps its words");
+  assert.ok(!p.some((x) => x.t === "del" && /lesson\.\n2\. X/.test(x.s) && /Voice/.test(x.s)), "no run stitched across the page");
+  assert.deepEqual(wordDiff(was, was), [{ t: "same", s: was }]);
+});
+
+test("a new page against nothing is all added, and is the page exactly", () => {
+  const page = "---\nname: social-posts\n---\n# Social posts\n\nOne idea a post.\n";
+  assert.deepEqual(wordDiff("", page), [{ t: "add", s: page }]);
+});
 
 test("the new text whole, what went struck where it stood, what came lit", () => {
   const p = wordDiff("Write three posts a week, long and detailed.", "Write three short posts a week.");

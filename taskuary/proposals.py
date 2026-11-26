@@ -253,9 +253,17 @@ def change_card(store, p: dict) -> dict:
             try: return json.loads((store.get_connector_by_type(c['connector']) or {}).get('ConfigJson') or '{}').get(c['name'])
             except ValueError: return None
         return {**p, 'changes': [{**c, 'was': was(c)} for c in setting_changes(p)[0]]}
-    if a == SKILL and str(p.get('slug') or '').strip() not in ('', 'new'):
-        from . import skills
-        return {**p, 'was_text': skills.read(p['slug']) or ''}
+    # ...A SKILL'S CARD IS ITS PAGE (the owner, 2026-11-26: "the card that shows the changes should bring up the skill card ... and show what
+    # the agent is editing"): the page he has under that name beside the new one - none for a new skill, so all of it reads as added - and
+    # the routines that use it, by title
+    # ...BY THE NAME THE PRESS WILL FILE IT UNDER (skills.filed_as - the real walk, 2026-11-26: an agent's new page for a skill he had came with
+    # no name of its own, its card read "new" with nothing marked, and the press wrote it over the old one)
+    if a == SKILL:
+        from . import skills, workflows
+        slug = skills.filed_as(str(p.get('slug') or '').strip(), str(p.get('text') or ''))
+        if slug and (was := skills.read(slug)) is not None:
+            used = workflows.uses_skill(store).get(skills.key(slug)) or []
+            return {**p, 'slug': slug, 'was_text': was, **({'used_by': used} if used else {})}
     return p
 
 
@@ -1231,6 +1239,10 @@ def _run(store, rv: dict, p: dict, tid, a: str, actor: str, edited, skip_checks:
             p['text'] = splice(skills.read(p['slug']) or p['text'], p['block'])
         elif p.get('lessons') and not edited:   # ...and its lessons, onto the page as it is NOW (with_lessons)
             p['text'] = skills.with_lessons(skills.read(p['slug']) or p['text'], p['lessons'])
+        # ...a page written whole over the one its card showed: changed since by another hand, the marks he read were against a page that is
+        # gone - not saved over it (a routine's steps the same, below)
+        elif not (p.get('block') or p.get('lessons')) and p.get('was_text') is not None and (skills.read(p['slug']) or '') != p['was_text']:
+            raise RuntimeError('this skill has changed since the card was written - nothing was saved over it')
         slug = skills.write(p['slug'], p['text'])
         out = {'skill': slug, 'path': str(skills.path_of(slug))}
     elif a == 'repair_workflow':

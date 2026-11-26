@@ -157,6 +157,12 @@ TOOLS = {
     'skills': ('read', "How this company does each kind of job, written by the owner: with no `name`, the list of skills, each with its "
                           "description; with a `name`, that skill's SKILL.md whole. Read-only.",
                   _S({'name': _STR}), ('GET', '/api/tasks/1')),
+    # ...and his routines, read as they are saved (the owner, 2026-11-26): what one does, when, with what - and the skill it uses, by name
+    'routines': ('read', "The owner's routines, reports and dashboards as they are saved: with no `name`, the list - each with when it runs "
+                         "and the skill it uses; with a `name` (its title or number), that one whole: its goal, when it runs, whether it is "
+                         "driven in the browser, its connections, the skill it uses, and its instructions. A routine holds what to do, when "
+                         "and with which connections; a skill it uses holds how the job is done well, and is read by the skills tool. Read-only.",
+                 _S({'name': _STR}), ('GET', '/api/tasks/1')),
     # ...and a wake of its own later on this task (checkback.py, the owner 2026-11-05) - for what only time settles
     'check_back': ('own', "Be woken on this task later: at `when` (\"tomorrow 9am\", \"in 2 days\", \"2026-11-12\") with `what` as your "
                           "next turn - a payment that should clear, a reply due by a date. One per task; a new one replaces it. "
@@ -287,8 +293,10 @@ TOOLS = {
                            "Reddit `subreddit` and `title`. One card per network; on the press it goes up through the network's connection, "
                            "else in the browser with the final Post waiting for his press.\n"
                            "- skill: `name`, `text` the SKILL.md whole - frontmatter `name` and `description` (what the job is and when to use "
-                           "it), then how the job is done. One card asking him to make a skill of this kind of job for the next agent; it "
-                           "stands behind the cards already raised, his press saves it to his skills, and a new one takes a waiting one's place.\n"
+                           "it), then how the job is done well: its style, its steps, what good looks like. A skill holds how; a routine "
+                           "that uses it holds what and when. With the `name` of a skill he has (the skills tool lists them) the card is "
+                           "that skill's page with the changes marked, and his press saves it over the old one; with a new name it is a new "
+                           "skill for the next agent. It stands behind the cards already raised, and a new one takes a waiting one's place.\n"
                            "- act: any other act Taskuary runs on his press, by `action`: comment_issue {body} (a public GitHub comment), "
                            "close_issue, open_pr, land, push {cwd?: the checkout, deploy?: the branch that deploys it} (where the work is in a "
                            "checkout - one the owner named counts - these three are its Push / Push & deploy / PR buttons), run_tool {type, "
@@ -299,15 +307,17 @@ TOOLS = {
                            "source type and its keys}, prompt?: an AI step on its output, skill?: one of his skills it uses, daily_at?: \"07:00\" | cron? | "
                            "every_minutes? - none: on demand} (a script you wrote for a job that will come again, kept as a routine), change_routine "
                            "{routine?: the title of the routine, report or dashboard to change (none: the routine this task is a run of), "
-                           "prompt: its new instructions or question, or flow: a routine's steps whole, daily_at | cron | every_minutes?, "
-                           "title?} (one of Taskuary's own setups changed).\n"
+                           "prompt?: its instructions or question whole, or flow?: a routine's steps whole, goal?, done_when?, skill?: the "
+                           "skill of his it uses, browser?: true | false, daily_at | cron | every_minutes?, title?} (one of Taskuary's own "
+                           "setups changed: a routine holds what to do, when, with which connections, and the skill it uses - the routines "
+                           "tool reads one as it is saved; the card shows each field that changes and the routine as the press leaves it).\n"
                            "`attach`: files that go with it. `why`: one line on why. `replaces`: the review id (or recipient) of an unsent "
                            "card this takes the place of, withdrawn in the same call.",
                 {'type': 'object', 'properties': {'kind': {'type': 'string', 'enum': list(KINDS)}, 'text': _STR, 'to': _STR, 'subject': _STR,
                                                   'cc': {'type': 'array', 'items': _STR}, 'answers': _INT, 'only': {'type': 'boolean'}, 'why_to': _STR,
                                                   'from': _STR, 'slot': _STR, 'guessed': {'type': 'array', 'items': _STR},
                                                   'network': {'type': 'string', 'enum': list(NETWORKS)}, 'picture': _STR, 'link': _STR, 'subreddit': _STR,
-                                                  'title': _STR, 'action': _STR, 'attach': _ATTACH, 'why': _STR, 'replaces': _STR},
+                                                  'title': _STR, 'name': _STR, 'action': _STR, 'attach': _ATTACH, 'why': _STR, 'replaces': _STR},
                  'additionalProperties': True}, ('POST', '/api/agent/propose')),
     # ...and EVERY TOOL'S FULL INSTRUCTIONS, ON ASK (the owner, 2026-11-15: "MCP-style tools with simple JSON ... All methods can be searched
     # later"): listed, a tool is its name, one line and its parameters (SHORT, lean); what it takes and its rules are read here
@@ -371,6 +381,7 @@ SHORT = {
     'todos': "Add, reword or merge this task's to-dos.",
     # end_turn and ask_owner are listed with their whole words: the fields ARE how they are used
     'skills': "How this company does each kind of job: the list, or one by `name`.",
+    'routines': "The owner's routines and reports as saved: the list, or one by `name`.",
     'check_back': 'Be woken on this task later, at `when`, with `what` as your next turn.',
     'remind': "Take the task off the owner's list until `when`.",
     'ask_stronger': 'Ask a stronger model one hard question; `context` is all it sees.',
@@ -923,6 +934,9 @@ def _call(store, tid: int, name: str, args: dict, doors: dict, skip=()) -> str:
     if name == 'skills':
         from . import skills
         return _out(skills.lookup(store, store.get_task(tid), str(a.get('name') or '')))
+    if name == 'routines':
+        from . import workflows
+        return _out(workflows.lookup(store, str(a.get('name') or '')))
     if name == 'remember': return doors['remember'](tid, str(a.get('note') or ''), str(a.get('subject') or ''), str(a.get('about') or ''), bool(a.get('signature')))['says']
     if name == 'ask_stronger':
         out = doors['ask_stronger'](tid, str(a.get('question') or ''), str(a.get('context') or ''))

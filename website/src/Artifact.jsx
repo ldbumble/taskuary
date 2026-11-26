@@ -13,7 +13,7 @@ import { attUrl } from "./fileSave.js";
 import { FOCUS_RING, pressable } from "./pressable.js";
 import { MdLine } from "./md.jsx";
 import { listCap } from "./bulkCard.js";
-import { changeMarks, hasChange, wordDiff } from "./textDiff.js";
+import { changeMarks, hasChange, lengthSaid, wordDiff } from "./textDiff.js";
 import { ACCENT, ALERT_INK, BORDER, DIM, FAINT, INK, label as LABEL } from "./theme.jsx";
 
 export default function Artifact({ as = "div", label = null, press = null, wide = false, className = "", sx, children, ...rest }) {
@@ -33,7 +33,7 @@ export default function Artifact({ as = "div", label = null, press = null, wide 
 // `fields`: [{key, type, label, value, editable, onChange, ...}] in the order they read; type `line` (a line of words: a subject, a title),
 // `heading` (a bold title line), `text` (the words: a body, a post, a comment), `choice` (a pick, on the line under the label), `to` and `people`
 // (an email's recipients), `read` (a fact it goes by: where it goes), `picture` (one picture, once - the one-item rule), `change` (new words for
-// old: the new text whole, marked where it changes against `was`).
+// old: the new text whole, marked where it changes against `was`), `facts` (what it will be once pressed, a row each: `rows` [{label, now, was?}]).
 // `press`: [{id, label, tone: p | s | q | x, run, disabled, title, spin, hidden, attrs}] - p the press named by what it does, s the others, q a
 // quiet one (Dismiss), x a no in red. `after`: {mark, label, line, link: {href, text}} - what the press did. `items`: a bulk card's rows.
 export function ReviewCard({ id = "", kind = "", state = "waiting", label: title = null, face = "", fields = [], files = null, before = null, press = [],
@@ -170,7 +170,9 @@ function Change({ f }) {
   const parts = useMemo(() => wordDiff(f.was, f.value), [f.was, f.value]), on = f.marks !== false && hasChange(parts);
   const read = !f.editable || (on && !typing);
   return <Box data-tq-change={f.key} data-tq-marks={on ? "on" : "off"} sx={{ mb: 0.75 }}>
-    {f.label && <Typography data-tq-change-label="" sx={{ ...LABEL, mb: 0.375 }}>{f.label}</Typography>}
+    {f.label && <Box sx={{ display: "flex", alignItems: "baseline", gap: 1, mb: 0.375, flexWrap: "wrap" }}>
+      <Typography data-tq-change-label="" sx={LABEL}>{f.label}</Typography>
+      {f.was != null && <Typography data-tq-change-length="" sx={{ fontSize: 11.5, color: FAINT, fontVariantNumeric: "tabular-nums" }}>{lengthSaid(f.was, f.value)}</Typography>}</Box>}
     {read ? <Box data-tq-change-text="" {...(f.editable ? { role: "textbox", tabIndex: 0, "aria-label": f.label, onClick: () => setTyping(true), onFocus: () => setTyping(true) } : {})}
         sx={{ ...FOCUS_RING, ...MARKED, fontSize: 13, lineHeight: 1.5, color: INK, whiteSpace: "pre-wrap", overflowWrap: "anywhere", cursor: f.editable ? "text" : "default",
           ...(f.editable ? { border: `1px solid ${BORDER}`, borderRadius: "4px", px: 1.75, py: 1.0625 } : {}) }}>
@@ -180,9 +182,26 @@ function Change({ f }) {
   </Box>;
 }
 
+// ...WHAT IT WILL BE ONCE PRESSED, FIELD BY FIELD (the owner, 2026-11-26: he approved a routine's new instructions over a goal that still said
+// "for manual posting" and a browser still on - the card showed neither): each key field as the press leaves it, one that changes lit with
+// what it was struck beside it, one that stays said plainly - so a stale one is there to see
+const Facts = ({ f }) => (
+  <Box data-tq-facts={f.key} sx={{ mb: 1 }}>
+    {f.label && <Typography sx={{ ...LABEL, mb: 0.375 }}>{f.label}</Typography>}
+    <Box component="dl" sx={{ ...MARKED, m: 0, display: "grid", gridTemplateColumns: "max-content minmax(0, 1fr)", columnGap: 1.5, rowGap: 0.25, fontSize: 13, lineHeight: 1.5 }}>
+      {f.rows.map((x) => <React.Fragment key={x.label}>
+        <Box component="dt" sx={{ color: DIM }}>{x.label}</Box>
+        <Box component="dd" data-tq-fact={x.label} {...(x.was != null ? { "data-tq-fact-changed": "" } : {})} sx={{ m: 0, color: INK, overflowWrap: "anywhere" }}>
+          {x.was != null ? <><ins data-tq-added="">{x.now}</ins>{" "}<del data-tq-removed="">{x.was}</del></> : x.now}</Box>
+      </React.Fragment>)}
+    </Box>
+  </Box>
+);
+
 function Field({ f, onView }) {
   const [open, setOpen] = useState(false);
   if (f.type === "change") return <Change f={f} />;
+  if (f.type === "facts") return <Facts f={f} />;
   if (f.type === "to") return <Box data-tq-to-line="" sx={{ display: "flex", alignItems: "baseline", columnGap: 2, flexWrap: "wrap" }}>
     <ToRow to={f.value} disabled={!f.editable} needs={!!f.needs} who={f.who || ""} onSave={f.onSave} />{f.trail}</Box>;
   if (f.type === "people") return f.editable ? <CcRow cc={f.value} setCc={f.onChange} channel="email" label={f.label} autoOpen={!!f.autoOpen} onClose={f.onClose} />

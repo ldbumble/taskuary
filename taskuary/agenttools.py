@@ -138,7 +138,7 @@ TOOLS = {
     # one question only the owner can answer, and the company's playbooks - each said by its own description, never in every prompt
     'end_turn': ('own', "Call once as your turn ends: where the task stands, shown on its page. name: the task in 3-6 words. about: 2-3 "
                         "sentences: who asked, for whom. did: result first, then what you did. "
-                        "on_you: steps only the owner can take that no card or question carries, each with why. nothing_left: goal met and "
+                        "on_you: owner-only steps no card or question carries, each with why. nothing_left: goal met and "
                         "checked. answer_is_result: your words are what was asked. retry: another try may work. corrections: [{kind: "
                         "redraft|ask, review: draft id|null, said: his words}].",
                  _S({'name': _STR, 'about': _STR, 'did': _STR, 'on_you': {'type': 'array', 'items': _STR}, 'nothing_left': {'type': 'boolean'},
@@ -146,7 +146,7 @@ TOOLS = {
                      'check_back': {'type': 'object', 'properties': {'when': _STR, 'what': _STR}}}, ('did',)), ('GET', '/api/tasks/1')),
     'ask_owner': ('own', "Ask the owner the one fact or decision only they can give, with your recommended answer. It stands "
                          "until answered, closed or withdrawn; the answer comes to you. choices: short answers for a pick. "
-                         "withdraw: true takes it back.",
+                         "withdraw takes it back.",
                   _S({'question': _STR, 'choices': {'type': 'array', 'items': _STR}, 'withdraw': {'type': 'boolean'},
                       'card': {'type': 'string', 'description': 'the card it is about (rv<id>), if any'}}), ('GET', '/api/tasks/1')),
     'playbooks': ('read', "How this company does each kind of job, written by the owner: with no `name`, the list of playbooks and when each "
@@ -358,8 +358,8 @@ SHORT = {
     'web_search': "Search the web through this task's AI card.",
     'show': 'Charts (bar, line, pie), tables, number tiles, checklists in this chat, live with sliders, toggles, selects, dates, '
             'and choices whose pick comes back to you - or hands the owner files you made, one artifact a call.',
-    'draw_image': "Draw a picture into this chat.",
-    'tick': "Tick or untick a to-do (`item`: its id).",
+    'draw_image': "Draw a picture in this chat.",
+    'tick': "Tick or untick a to-do by its id.",
     'todos': "Add, reword or merge this task's to-dos.",
     # end_turn and ask_owner are listed with their whole words: the fields ARE how they are used
     'playbooks': "How this company does each kind of job: the list, or one by `name`.",
@@ -369,7 +369,7 @@ SHORT = {
     'new_task': 'Start a separate job the owner asked for as its own task, its agent working at once (no card).',
     'note_peers': 'Leave a note for another coding agent (`to`: TQ-0123, repo or all).',
     'note_lead': "Hand the Advisor something you noticed beyond this task (text, refs).",
-    'add_to_task': "Note and files to another task (`task`: TQ-0008); its agent hears it.",
+    'add_to_task': "Note and files to another task (TQ-0008); its agent hears it.",
     'use_repo': "Pick the git checkout this task's work belongs in.",
     'find_repos': 'The git checkouts you may work in, newest commit first.',
     'propose_land': "How your work lands (rebase, merge, pr ...), as the owner's buttons.",
@@ -381,7 +381,7 @@ SHORT = {
     'answer_invite': "Answer this task's meeting invite: accept, decline or propose.",
     'set_up_meeting': "Set up a meeting for the owner's press.",
     'share': "Share a report or dashboard of the owner's with a person.",
-    'propose': "Anything for the owner's review and press - a reply, an email, a post, GitHub/Jira/Monday comment or issue, PR, push, order on a system, "
+    'propose': "Anything for the owner's press - a reply, email, post, GitHub/Jira/Monday comment or issue, PR, push, order on a system, "
                "script for save_routine: one card in this chat, the draft itself, his to edit; nothing done before his press. "
                "`kind` (an act names its `action`); several of one act in `items`; `then` your step after his press.",
     'find_tools': "A tool's instructions by name, or tools by need.",

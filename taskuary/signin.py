@@ -1512,7 +1512,10 @@ FORM = "(() => { " + DEEP + r"""
            pw: pv.length > 0, password: ins.some((e) => e.type === 'password'), pay: ins.some((e) => /^cc-/.test(e.autocomplete || '')),
            new: pv.some((e) => e.autocomplete === 'new-password') || (pv.length > 1 && pv.every((e) => e.value === pv[0].value)),
            fields: keep.slice(0, 30).map((e) => ({ k: e.name || e.id, t: e.type, f: fs.indexOf(e.form),
-             v: e.type === 'checkbox' || e.type === 'radio' ? (e.value || 'on') : String(e.value).slice(0, e.type === 'textarea' ? 4000 : 300) })) }; })()"""
+             v: e.type === 'checkbox' || e.type === 'radio' ? (e.value || 'on') : String(e.value).slice(0, e.type === 'textarea' ? 4000 : 300) })),
+           written: [...ins.filter((e) => e.tagName === 'TEXTAREA' && !(e.name || e.id)).map((e) => e.value),
+                     ...deepAll('[contenteditable]').filter((e) => e.isContentEditable && vis(e) && !(e.parentElement && e.parentElement.isContentEditable)).map((e) => e.innerText)]
+             .map((v) => String(v || '').trim()).filter(Boolean).slice(0, 10).map((v) => v.slice(0, 4000)) }; })()"""
 # ...a long box (a post's words) is kept whole enough to read back on the card its press waits on (walk 15: cut at 300, the post was its first lines)
 FORM_PW = "(() => { " + DEEP + " const e = deepAll('input[type=password]').find((x) => !!x.value); return e ? e.value : ''; })()"
 # ...A PAGE THAT STILL ASKS: a box the page itself requires and nobody filled - the browser's own check (validity.valueMissing), or one marked
@@ -2034,9 +2037,12 @@ def pressing(store, tid, sid, site, conn=None) -> str | None:
     _PRESSED[str(sid)] = (int(tid), site, prev, user)
 
 
-def form_fields(sid) -> list:
-    "The boxes the agent filled on the page its browser is on (FORM) - kept with a card held there, so his press can fill it again. [] unread."
-    return form_state(sid).get('fields') or []
+def form_fields(sid, form: dict = None) -> list:
+    """The boxes the agent filled on the page its browser is on (FORM) - kept with a card held there, so his press can fill it again - and the
+    words written in a box with no name, or one the page makes editable (a post's box on most networks): what a press there sends, as its
+    card shows it (browsergate.holds). [] unread."""
+    f = form_state(sid) if form is None else form
+    return (f.get('fields') or []) + [{'k': '', 't': 'textarea', 'f': -1, 'v': v} for v in f.get('written') or []]
 def form_state(sid) -> dict:
     "The form on the page its browser is on, as FORM reads it ({fields, pw, ...}) - {} unread."
     try:

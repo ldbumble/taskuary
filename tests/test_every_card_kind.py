@@ -282,3 +282,54 @@ def test_the_landing_question_wakes_its_agent_only_where_its_proposal_named_a_st
              mock.patch.object(landing, '_hand_back', side_effect=lambda st, t, text: w.woken.append(text)):
             landing._landed(w.s, w.tid, 'merge', 'Merged fix-export into main.', 'owner')
         assert len(w.woken) == woken, (then, w.woken)
+
+
+# ── HIS NEXT LINE AND THE CARDS THAT WAIT (walk 23) ───────────────────────────────────────────────────────────────────────────────────
+
+def _line(w, words: str):
+    "His line on the task, heard and taken by its agent as it is sent (general.take_line's own steps)."
+    general.wait_line(w.s, w.tid, words); general.take_kept(w.s, w.tid)
+    ws.line_answers(w.s, w.tid, words)
+
+
+WAITING = [a for a in ACTS if a not in proposals.HELD_ACTS] + ['letter', 'bulk']
+def _waiting(w, kind: str) -> list:
+    if kind == 'letter': return [_letter(w)]
+    if kind == 'bulk':
+        rids = [_letter(w, to=f'owner{i}@cedar.example') for i in range(3)]
+        w.s._exec(f"UPDATE review SET Batch=? WHERE ReviewId IN ({','.join('?' * len(rids))})", (bulkcard.new_key(), *rids)); return rids
+    return [w.act(_filled(kind))]
+
+
+@pytest.mark.parametrize('kind', WAITING)
+def test_his_answer_to_the_agents_own_question_greys_no_card_of_any_kind(w, kind):
+    """Walk 23: a LinkedIn post waited, the agent asked him about something else, he pressed its chip - and the post went grey for good while
+    the agent said it "is still waiting for your press". His answer to the question the agent asked is no moving on: every card stands."""
+    rids = _waiting(w, kind)
+    ws.record(w.s, w.tid, 'run1', 'input_needed', text='Two posts are up on X - keep both?', choices=['Keep both', 'Remove the first'], source='api')
+    _line(w, 'Keep both')
+    assert all(w.s.get_review(r)['Status'] == 'pending' for r in rids), 'his answer to the question greyed a card that waits'
+    assert proposals.written_past(w.s, w.tid) == set() and w.cards()[rids[0]]['status'] == 'pending'
+    assert 'Waiting for his press now' in cardqueue.screen(w.s, w.tid) and 'Greyed' not in cardqueue.screen(w.s, w.tid)
+    for t in ('worker_event', 'comment'): w.s._exec(f"UPDATE {t} SET CreatedAt='2026-01-01 09:00:00' WHERE TaskId=?", (w.tid,))     # ...a while later
+    _line(w, 'Now write it shorter')                                    # ...his next line, under no question, moves the chat on as ever
+    assert all(proposals.passed(w.s.get_review(r)) for r in rids)
+
+
+@pytest.mark.parametrize('kind', WAITING)
+def test_a_card_his_line_greyed_stands_again_at_the_turns_end_unless_the_turn_replaced_it(w, kind):
+    """Walk 23: "Reply to Erin saying yes" greyed the agent's matching reply and a bug report greyed a waiting post; each agent answered "ready
+    on the card for you to press" over a card nothing could press. Greyed the second he types; what the turn does not replace stands again
+    where it stood when the turn ends, by plain code - no tool of the agent's needed - and its screen fact says so meanwhile."""
+    rids = _waiting(w, kind)
+    assert w.cards()[rids[0]]['status'] == 'pending'
+    _line(w, 'The post box on the page is empty.')
+    assert all(proposals.passed(w.s.get_review(r)) for r in rids), 'his line greys what waited, the second he types'
+    assert 'Greyed until this turn ends' in cardqueue.screen(w.s, w.tid), cardqueue.screen(w.s, w.tid)
+    ws.record(w.s, w.tid, 'run1', 'turn_end', text='It is filled in now - the card is ready for your press.', source='api')
+    assert all(w.s.get_review(r)['Status'] == 'pending' for r in rids), 'the turn replaced nothing, and its card stayed greyed'
+    assert w.cards()[rids[0]]['status'] == 'pending' and 'Waiting for his press now' in cardqueue.screen(w.s, w.tid)
+    _line(w, 'Make it shorter.')
+    new = _waiting(w, kind)                                             # ...the turn writes it again: the rewrite is what greys the old one for good
+    ws.record(w.s, w.tid, 'run1', 'turn_end', text='Shorter now.', source='api')
+    assert all(proposals.passed(w.s.get_review(r)) for r in rids) and all(w.s.get_review(r)['Status'] == 'pending' for r in new)

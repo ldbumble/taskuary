@@ -152,6 +152,43 @@ class OnePress(unittest.TestCase):
         said = agenttools.rpc({'id': 1, 'method': 'tools/call', 'params': {'name': 'tick', 'arguments': {}}}, need)['result']['content'][0]['text']
         self.assertEqual(said, agenttools.refusal('`item` was not given', 'call tick again with it'))
 
+    def test_a_picture_the_agent_drew_rides_on_its_card_by_the_handle_its_tool_gave_and_is_drawn_there_only(self):
+        """Walk 23, 2026-11-25: draw_image drew the picture into the chat and answered only `shown:1`; propose refused that handle ("no picture
+        this task may read"), both post cards were queued with no picture, and the picture stood in the chat as a file of its own. A picture
+        the agent drew is a file of its task by the handle its tool gave, by its name and by the path its answer says - and once a card
+        carries it, the chat draws it on that card only, whichever tool showed it (the test below)."""
+        from taskuary import agenttools, images, outbound
+        s = server.store
+        drew = {'data': PNG + b'drawn', 'mime': 'image/png', 'provider': 'pictures', 'label': 'Pictures', 'model': 'm', 'prompt': 'a four-day close'}
+        with mock.patch.object(images, 'generate', return_value=drew), mock.patch.object(outbound, 'connect_fix', return_value=None):
+            said = agenttools._call(s, self.tid, 'draw_image', {'prompt': 'a four-day close'}, {})
+        [made] = list(outputs.folder(self.tid).glob('image-*.png'))
+        self.assertIn(str(made), said)                                                                # ...its answer says where the file is
+        self.assertEqual((outputs.pages(s, self.tid), outputs.calls(self.tid)), ([], []), 'drawn into the chat by itself: only a card or `show` draws it')
+        row = json.loads(agenttools.show_files(s, self.tid, [str(made)]).partition(agenttools.FILES_MARK)[2])[0]      # ...shown, it has a handle too
+        self.assertTrue(row['path'].startswith('shown:'))
+        for handle in (row['path'], row['name'], str(outputs.folder(self.tid) / row['name'])):
+            r = self.propose(text='We close the month in four days.', image=handle)
+            self.assertEqual(r.status_code, 200, f'{handle}: {r.text}')
+            f = outputs.named(self.tid, json.loads(s.get_review(r.json()['review'])['DraftText'])['image'])
+            self.assertTrue(f and f.read_bytes() == PNG + b'drawn', handle)
+        # ...and a handle of another task's picture is no file of this one
+        other = s.create_task({'Title': 'Another post', 'Kind': 'general', 'Status': 'open'}, 'owner')
+        self.assertIsNone(outputs.take(s, other, row['path']))
+
+    def test_a_picture_a_card_carries_is_drawn_on_its_card_only_whichever_tool_showed_it_and_queued_or_drawn(self):
+        """Walks 22 and 23: an agent `show`ed the picture it then put on a post - and the picture stood in the chat with Download beside the
+        cards, the second post's too while its card waited behind the first. A file a card of the task carries is drawn on that card only."""
+        from taskuary import agenttools
+        s = server.store
+        work = outputs.work_folder(self.tid)
+        for n in ('x.png', 'linkedin.png', 'chart.png'): (work / n).write_bytes(PNG + n.encode())
+        agenttools.show_files(s, self.tid, [str(work / 'x.png'), str(work / 'linkedin.png'), str(work / 'chart.png')])
+        self.assertEqual(sorted(p['name'] for p in outputs.pages(s, self.tid)), ['chart.png', 'linkedin.png', 'x.png'])
+        for n in ('x.png', 'linkedin.png'):                        # ...two cards in a row: the second waits behind the first, drawn nowhere yet
+            self.assertEqual(self.propose(text=f'We close the month in four days ({n}).', image=str(work / n)).status_code, 200)
+        self.assertEqual([p['name'] for p in outputs.pages(s, self.tid)], ['chart.png'], 'only the file handed to him on purpose stays in the chat')
+
     def test_a_picture_outside_the_task_folder_is_refused(self):
         r = self.propose(text='Hi', image='../../secret.png')
         self.assertEqual(r.status_code, 422, r.text)

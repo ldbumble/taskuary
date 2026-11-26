@@ -688,8 +688,9 @@ def flow_breaks(got: dict, was: dict = None) -> list:
         if x['id'] not in now and not (live(x) and not (x.get('text') or x.get('steps'))): say(f"c: {x['id']} was on the canvas and is gone")
     # ...but a card still waiting for his press that the turn now at work holds back (it goes on from the turn that left it - `items`)
     had = {c['id']: c for x in old for c in ([x] if x['kind'] == 'card' else x.get('cards') or [] if x['kind'] == 'turn' else [])}
+    # ...nor an offer outside the line (his own email), drawn only while no card of the line waits (chatlog._drawn: one box) - one stands again
     for c in had.keys() - {c['id'] for _, c in cards}:
-        if not (at and had[c].get('status') == 'pending'): say(f'c: the card {c} was on the canvas and is gone')
+        if not (at and had[c].get('status') == 'pending') and not (had[c].get('offer') and lit): say(f'c: the card {c} was on the canvas and is gone')
     kept = [x['id'] for x in old if x['id'] in now]
     if [i for i in ids if i in set(kept)] != kept: say('f: items already drawn changed their order')
     top = max((now[i] for i in kept), default=-1)

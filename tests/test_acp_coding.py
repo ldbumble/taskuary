@@ -693,7 +693,8 @@ def test_a_waiting_card_never_moves_under_a_turn_that_only_stopped_at_his_allow(
     assert until(lambda: tail() == ['turn', 'press', 'turn']), json.dumps([conversation.items(s, tid)['items'], s._rows('SELECT * FROM heard WHERE TaskId=?', (tid,)),
                                                                          codingchat.acp_updates(tid, t.sid)], default=str)[:8000]
     got = conversation.items(s, tid)['items']; turns = [x for x in got if x['kind'] == 'turn']
-    assert live() == [('own', 'passed')], got                                                        # ...and it never moved
+    # ...and it never moved: greyed while the turn worked, live again where it stood once that turn ended without writing it again (walk 23)
+    assert live() == [('own', 'pending')], got
     assert not turns[-2]['cards'] and not turns[-1]['cards']
 
 

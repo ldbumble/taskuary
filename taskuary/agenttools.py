@@ -120,9 +120,9 @@ TOOLS = {
              ('GET', '/api/tasks/1')),
     # ...and A PICTURE, drawn by the owner's image model (images.pick: an image card, or an AI card whose models include one) - the one road to
     # images.run_image_generate an agent has; with nothing to draw with, its answer is his Connect card (the owner, 2026-11-25)
-    'draw_image': ('own', "Draw a picture from `prompt` with the owner's image model; it lands in this task's outputs and shows in this "
-                          "chat. `size`: 1024x1024, 1024x1536 (tall) or 1536x1024 (wide). With no image model connected, nothing is drawn and"
-                          " his chat shows the card that connects one.",
+    'draw_image': ('own', "Draw a picture from `prompt` with the owner's image model; it lands in this task's files - a card's `image` "
+                          "by its name, or shown in his chat by `show`. `size`: 1024x1024, 1024x1536 (tall) or 1536x1024 (wide). With no "
+                          "image model connected, nothing is drawn and his chat shows the card that connects one.",
                    _S({'prompt': _STR, 'size': {'type': 'string', 'enum': ['1024x1024', '1024x1536', '1536x1024']}}, ('prompt',)),
                    ('GET', '/api/tasks/1')),
     'tick': ('own', "Tick (done=true) or untick one of this task's to-dos: `item` is its id, the one in brackets after it.",
@@ -217,9 +217,9 @@ TOOLS = {
                               "correct a reply, just propose the new one; an email IN PLACE of another is the new one's `replaces` - "
                               "one call, one Send left.",
                        _S({'why': _STR, 'which': _STR}, ('why',)), ('POST', '/api/agent/withdraw-draft')),
-    'keep_card': ('own', "A card the owner's newest line or a new message greyed, that still stands as it is: it comes back under the "
-                         "newest line, the same words and envelope, for his press - no new proposal. `which`: the card as the screen "
-                         "fact names it (a card of many: its ids, 'rv1 + rv2'). One the input changed: propose its new version instead. "
+    'keep_card': ('own', "A card the owner's newest line or a new message greyed stands again for his press at once, the same card where "
+                         "it stood (it does so by itself when the turn ends). `which`: the card as the screen fact names it (a card of "
+                         "many: its ids, 'rv1 + rv2'). "
                          "One his press handed you that you cannot do (no account, the site refused): keep it with `why` - his card says it.",
                   _S({'which': _STR, 'why': _STR}, ('which',)), ('GET', '/api/tasks/1')),
     'hand_over': ('own', "A step on your browser's page only the owner can do - a sign-in or code you cannot type, an \"I'm not a robot\" "
@@ -358,7 +358,7 @@ SHORT = {
     'web_search': "Search the web through this task's AI card.",
     'show': 'Charts (bar, line, pie), tables, number tiles, checklists in this chat, live with sliders, toggles, selects, dates, '
             'and choices whose pick comes back to you - or hands the owner files you made, one artifact a call.',
-    'draw_image': "Draw a picture in this chat.",
+    'draw_image': "Draw a picture, a file of this task.",
     'tick': "Tick or untick a to-do by its id.",
     'todos': "Add, reword or merge this task's to-dos.",
     # end_turn and ask_owner are listed with their whole words: the fields ARE how they are used
@@ -375,7 +375,7 @@ SHORT = {
     'propose_land': "How your work lands (rebase, merge, pr ...), as the owner's buttons.",
     'reply_not_needed': 'The reply waiting here is no longer needed; say why.',
     'withdraw_draft': 'Take back a reply, email or proposal you set up that has not gone out.',
-    'keep_card': 'Bring back a card greyed by the newest input, as it was, under that input.',
+    'keep_card': 'Bring back a card greyed by the newest input, as it was.',
     'hand_over': 'A page step only the owner can do (sign-in, paying): a card.',
     'sign_form': "Fill and sign a PDF form with the owner's saved signature.",
     'answer_invite': "Answer this task's meeting invite: accept, decline or propose.",
@@ -395,11 +395,26 @@ def instructions(name: str) -> str:
     "One tool's whole description and parameters, as find_tools answers it."
     c, d, s, _ = TOOLS[name]
     return f'{name}: {d}\nParameters: {json.dumps(s, ensure_ascii=False)}'
-def found(query, names: dict) -> list:
-    "The tools of `names` ({name: description}) that `query` asks for: by name, else by most of its words in a name and description (at most 4)."
+def shape(a, deep: int = 3):
+    """A CALL'S ARGUMENTS BY THEIR SHAPE, for the server's log (walk 23, 2026-11-25: "two versions" became one card and what the agent had
+    passed was in no log - the re-walk found that road's calls come in at this door, as every road's do): every key it gave, a number or a
+    switch as it is, a text by its length alone - never his words, an address or a secret - and a list by each item's own shape."""
+    if isinstance(a, dict): return {str(k)[:40]: shape(v, deep - 1) for k, v in list(a.items())[:30]} if deep else f'object({len(a)})'
+    if isinstance(a, list): return [shape(v, deep - 1) for v in a[:12]] + ([f'+{len(a) - 12} more'] if len(a) > 12 else []) if deep else f'list({len(a)})'
+    return a if isinstance(a, (bool, int, float)) or a is None else f'text({len(str(a))})'
+SYSTEM_TOOLS = ('list_systems', 'run_system')
+def found(query, names: dict, store=None) -> list:
+    """The tools of `names` ({name: description}) that `query` asks for: by name, else by most of its words in a name and description (at most 4).
+    A CONNECTED SYSTEM IS FOUND BY ITS OWN NAME (walk 23, 2026-11-25: "quickbooks" found nothing - the words searched were the tools', and
+    QuickBooks is reached through run_system - so the agent told him twice "no QuickBooks or accounting tool is connected here"): the two tools
+    that reach his systems are searched by what list_systems answers too - each system's name, its tools and what they do."""
     q = str(query or '').strip().lower()
     if q in names: return [q]
     ws = [w for w in re.findall(r'[a-z0-9_]+', q) if len(w) > 2]
+    if store is not None and any(n in names for n in SYSTEM_TOOLS):
+        from .docsync import agent_systems
+        try: names = {**names, **{n: f'{names[n]} {agent_systems(store)}' for n in SYSTEM_TOOLS if n in names}}
+        except Exception as e: logger.debug(f'find_tools: the connected systems were not read - {e}')
     score = lambda n: sum((w in n) * 3 + (w in str(names[n]).lower()) for w in ws)
     return [n for n in sorted(names, key=lambda n: -score(n)) if score(n)][:4]
 # THE CORE UP FRONT, THE REST ON DEMAND, ON A CARD'S HARNESS TOO (the review, 2026-11-23): Claude Code and his own Codex defer an MCP server's
@@ -540,6 +555,12 @@ def _asking(store, tid: int) -> bool:
 
 def _card_call(store, tid: int, name: str, args: dict, doors: dict, skip=()) -> str:
     args = _arguments(args)
+    # ...WHAT STANDS BESIDE `items` IS SHARED BY EVERY ITEM - never one more of them (walk 23, 2026-11-25: one version beside `items`, the other
+    # inside it; the one beside them went nowhere, one card stood with one version and the agent said "both")
+    if TOOLS[name][0] == 'propose' and isinstance((args or {}).get('items'), list) and (its := [x for x in args['items'] if isinstance(x, dict)]) \
+            and (dead := sorted(k for k, v in args.items() if k not in ('items', 'replaces') and all(k in it and it[k] != v for it in its))):
+        raise ValueError(refusal(f"`{'`, `'.join(dead)}` is given beside `items` and again, differently, in every item - what stands beside them is shared by "
+                                 "all, so it would be used by none; nothing was raised", "give each version (or each person's) as its own item, and beside them only what they share"))
     # ...ONE item is one card, as if given whole (2026-11-17: a lone break_out stood as "1 step - review a few, then do them all", "Approve all 1")
     if TOOLS[name][0] == 'propose' and isinstance((args or {}).get('items'), list) and len(args['items']) == 1 and isinstance(args['items'][0], dict):
         args = {**{k: v for k, v in args.items() if k != 'items'}, **args['items'][0]}
@@ -634,11 +655,17 @@ def _many(store, tid: int, name: str, args: dict, doors: dict) -> str:
     # filed is new, and only new ones are batched
     stand = [r['ReviewId'] for r in store._rows(f"SELECT ReviewId FROM review WHERE TaskId=? AND Status='pending' AND ReviewId IN ({','.join('?' * len(mine))})",
                                                 (int(tid), *mine))] if mine else []
-    mine = [r for r in stand if r > top]
+    mine_all, mine = mine, [r for r in stand if r > top]
     # ...AND ITEMS THAT ARE ONE LETTER WRITTEN SEVERAL WAYS ARE ITS VERSIONS, ON THAT ONE CARD (walk 22, 2026-11-25: "Yes - Thursday 2pm" and
     # "No - keep Friday" for one reply; each item rewrote the same card and only the last stood): kept on it for him to pick from, the first in
     # its box - what he picks, and changes, is what his Send sends
+    # ...WHETHER EACH ITEM REWROTE THE CARD OR TOOK ITS PLACE (walk 23, 2026-11-25: on a task with an earlier draft the second version closed the
+    # first as replaced and stood alone - one card, one version, answered as "a tab each, 1 of them", and the agent said "both"): where ONE
+    # letter stands of all the call filed, every item's words are that letter's versions, in the order given
     picks = {r: list(dict.fromkeys(v)) for r, v in words.items() if r in stand and len(set(v)) > 1}
+    if len(stand) == 1 and not picks and not went and len(alls := list(dict.fromkeys(w for r in dict.fromkeys(mine_all) for w in words[r] if w.strip()))) > 1 \
+            and (store.get_review(stand[0]) or {}).get('Kind') != 'action':
+        picks = {stand[0]: alls}
     for r, v in picks.items(): store.set_review_versions(r, v)
     if old and stand: _take_back(store, tid, doors, old, stand)
     # ...and only MANY OF THE SAME THING is one card (the owner, 2026-11-20): posts for different networks are different things - each its own
@@ -648,6 +675,7 @@ def _many(store, tid: int, name: str, args: dict, doors: dict) -> str:
     n = len(stand)
     card = (f"They stand as ONE card holding {len(next(iter(picks.values())))} versions: the owner picks one, changes it if he likes, and sends that one." if picks and n == 1
             else 'They stand as ONE card: the owner does them all with one press; you hear the whole run once.' if bulk
+            else f'ONE card stands of the {len(items)} items given: each wrote that same card, and its words are those of the last item.' if n == 1 and len(items) > 1
             else f'They stand as one card with a tab each, {n} of them: the owner sees and presses each, in any order; you hear how they went once the last is answered, or at once if a press fails.')
     shown = ((f"{len(went)} of {len(items)} sent at once - a routine's email to what its owner saved into it goes without a press; say they went."
               + (f" Not sent: {'; '.join(held)}." if held else '') + (f" The {n} unsent stand for the owner's Send{' as ONE card' if bulk else ', one at a time'}." if n else '')) if went
@@ -809,7 +837,7 @@ def _call(store, tid: int, name: str, args: dict, doors: dict, skip=()) -> str:
         return _out(guides.read(a.get('topic')))
     if name == 'find_tools':
         # ...only this session's own: on the owner's own ask "reply to the sender" found propose_reply, and calling it answered "unknown tool"
-        hits = found(a.get('query'), {n: d for n, (_, d, _s, _) in TOOLS.items() if n not in skip})
+        hits = found(a.get('query'), {n: d for n, (_, d, _s, _) in TOOLS.items() if n not in skip}, store)
         if not hits and str(a.get('query') or '').strip().lower() in skip:
             return f"{a['query'].strip()} is not offered on this task - tools/list names the ones it has; say what you need in words to find one of them."
         return '\n\n'.join(map(instructions, hits)) if hits else (f"No tool fits {a.get('query')!r} - name one, or say what it should do in other words. Work no tool of Taskuary's does (a file to make, a page to "
@@ -858,7 +886,10 @@ def _call(store, tid: int, name: str, args: dict, doors: dict, skip=()) -> str:
             return f"Nothing was drawn: {fix['says'].lower()}. His chat shows the card that connects one ({fix['label']}); the picture can be drawn once he has. {card}"
         try: out = images.run_image_generate(store, a, task_id=tid)
         except RuntimeError as e: raise ValueError(refusal(f'nothing was drawn - {e}', 'say what the image model answered, or try again with another prompt'))
-        return f"Drew {out['name']} with {out['label']}. " + show_files(store, tid, [out['file']])
+        # ...A FILE OF THE TASK, DRAWN NOWHERE BY ITSELF (the re-walk, 2026-11-25: a picture the agent then did not use - it made a better one for
+        # its cards - stood in the chat as a file of its own): a card that carries it draws it; `show` hands it to him where it is the answer
+        return (f"Drew {out['name']} with {out['label']} - a file of this task, {out['file']}. Not in his chat: a card you name it on as its "
+                "`image` draws it there, and `show` puts it in the chat where the picture itself is what he asked for.")
     if name == 'tick': return _j(doors['tick'](tid, str(a['item']), a.get('done', True) is not False))
     if name == 'check_back': return _j(doors['check_back'](tid, str(a.get('when') or ''), str(a.get('what') or '')))
     if name == 'todos': return _j(doors['todos'](tid, a))
@@ -1217,6 +1248,8 @@ def rpc(msg: dict, run, skip=(), portable: bool = False) -> dict | None:
             try: name, args = aliased(name, args)
             except ValueError: pass
         if name not in TOOLS or name in skip: return err(-32602, f"unknown tool {name!r} - this task's tools are the ones tools/list names")
+        # ...EVERY CALL ON THE RECORD BY ITS SHAPE (shape): the one door every road's call of a Taskuary tool comes in at
+        logger.info(f'tools: {name} called with {json.dumps(shape(args), ensure_ascii=False)[:1200]}')
         # ...EVERY ANSWER SCRUBBED, whatever tool made it (redact.scrub): what comes back here goes on to the agent's provider
         from .redact import scrub
         try: return ok({'content': [{'type': 'text', 'text': scrub(run(name, args))}], 'isError': False})

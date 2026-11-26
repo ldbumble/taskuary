@@ -265,6 +265,9 @@ def run_image_generate(store, args: dict, message_id: int = None, task_id: int =
         # ...an agent's picture lands in its task's outputs, the folder the task page offers to open and download (outputs.folder)
         from . import outputs
         d = outputs.folder(int(tid)); d.mkdir(parents=True, exist_ok=True)
+        # ...EACH PICTURE ITS OWN FILE (the re-walk, 2026-11-25: two pictures drawn in one second - one for each post - took one name, and the
+        # second was written over the first): a stamp is a whole second, so one taken already is counted on from
+        name = next(n for n in (f"{name[:-len(ext) - 1]}{f'-{i + 1}' if i else ''}.{ext}" for i in range(1000)) if not (d / n).exists())
         (d / name).write_bytes(out['data'])
         logger.info(f"images: {out['provider']} drew {len(out['data']):,} bytes into task {tid}'s outputs")
         return {'file': str(d / name), 'name': name, 'provider': out['provider'], 'label': out['label'], 'model': out['model'],

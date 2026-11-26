@@ -548,12 +548,12 @@ def load(tid: int, sid: str, tools: list, names) -> str:
     return f"Loaded {', '.join(t['function']['name'] for t in new)} - call them now." if new else ''
 
 
-def find(tid: int, sid: str, tools: list, query) -> str:
+def find(tid: int, sid: str, tools: list, query, store=None) -> str:
     "find_tools: the whole words of the tools this session has that `query` names or asks for - and those not yet offered, added (load)."
     from . import agenttools as at
     mine = (OFFERED.get((tid, sid)) or {t['function']['name'] for t in tools}) - {LOAD}
     words = {n: FULL.get(n) or (at.instructions(n) if n in at.TOOLS else n) for n in mine}
-    hits = at.found(query, words)
+    hits = at.found(query, words, store)
     if not hits: return f"No tool fits {str(query or '')!r} - name one, or say what it should do in other words."
     return '\n\n'.join([*(words[n] for n in hits), load(tid, sid, tools, hits)]).strip()
 
@@ -743,12 +743,16 @@ def turn(brain, store, tid: int, sid: str, system: str, user: str, max_tokens: i
                 try: a = json.loads(f.get('arguments') or '{}') or {}
                 except ValueError: a = {}
                 if trace: trace('tool_call', name, {'tool_call_id': cid, 'args': a})
+                # ...its own hands' calls by their shape (agenttools.shape); a Taskuary tool's is written at that tool's door, on every road
+                if name in LOCAL:
+                    from .agenttools import shape
+                    logger.info(f'apiagent: task {tid} calls {name} {json.dumps(shape(a), ensure_ascii=False)[:1200]}')
                 if name in (DEFERRED.get((tid, sid)) or {}): load(tid, sid, tools, [name])       # called by the name it was given: loaded as it runs
                 if name == 'browser_open': load(tid, sid, tools, BROWSER_MORE)
                 key, again = (name, json.dumps(a, sort_keys=True, default=str)), False
                 if name in reads and key in seen: out, err, again = _again(msgs, *seen[key], name, tools, budget), False, True
                 else:
-                    try: out, err = (find(tid, sid, tools, a.get('query') or ' '.join(map(str, a.get('names') or []))) if name == LOAD else _await(lambda: run_tool(store, tid, sid, name, a), cancel)), False
+                    try: out, err = (find(tid, sid, tools, a.get('query') or ' '.join(map(str, a.get('names') or [])), store) if name == LOAD else _await(lambda: run_tool(store, tid, sid, name, a), cancel)), False
                     except Exception as e:
                         if stopped(): raise
                         from .agenttools import failed          # ...in the words every tool's failure takes: never "{name} failed: " over them

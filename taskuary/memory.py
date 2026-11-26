@@ -13,10 +13,13 @@ and his sign-off lived in two homes. Now there are three stores, told apart by W
             press whose words say "from now on" (FOR_GOOD) - and never by asking him (the owner, 2026-11-23: "we don't want to have to
             confirm manually"). A one-off press is one episode: it acts once (the owner, 2026-11-24: "one press is one press").
             Wrong or Forget takes it down at once; an act that goes against it weakens it (`weaken`)
+            A line his own PRESSES made (`pressed`: a verdict's) is what he did (the owner, 2026-11-25: "memory is something that I do or
+            say"): each press is counted, no cap and no reflection takes it down - only a press of his that goes against it lowers it
 
 Memory is SHORT - conclusions (how he works, who handles what, his rules, his preferences), never records: those are the ledger's and
 the Hub's. A learned line is one sentence (MAX_WORDS); at most PER_ABOUT are kept about one person or topic and CAP in use in all, LEARNING
-still being seen - past them the line least recently borne out falls out first (`_trim`).
+still being seen - past them the line least recently borne out falls out first (`_trim`). The caps are for what a model inferred: a line
+his presses made is never trimmed.
 
 How he writes is read from his sent mail (STYLE.md, learning.style_ws) and from what he said; his signature has ONE home, the
 `email_signature` setting (signatures.keep writes it, the Memory page shows it among what he said).
@@ -37,6 +40,7 @@ TASK_CAP = 6_000              # the confirmed learned lines a task's context car
 MIGRATED = 'memory_r10'       # the setting that says LEARNED.md was read into the stores
 IN_USE_FIX = 'memory_r10_in_use'   # ...and that the lines in use before r10 were put back in use (its first cut left them waiting on a press)
 ONE_PRESS_FIX = 'memory_one_press'  # ...and that the lines a one-off press had put in use wait for AUTO_AT episodes (one_press)
+PRESS_FIX = 'memory_his_presses'    # ...and that the lines his presses made, which a cap or a reflection took down, stand again (his_presses)
 AUTO_AT = 3                   # distinct episodes of his own acts that put a learned line in use - LEARNED.md's bar from the beginning
 CAP, LEARNING, PER_ABOUT = 60, 30, 6    # learned lines in use (about what LEARNED.md held), still being seen, and about one person or topic
 MAX_WORDS = 30                # a conclusion is one sentence; a longer line is a record, and records are the ledger's
@@ -82,6 +86,11 @@ def rows(store, kind: str = None, live: bool = True) -> list:
     if live: q += " AND Status='live'"
     if (until := getattr(store, 'memory_until', None)): q += ' AND At<?'; a.append(until)
     return [_row(r) for r in store._rows(q + ' ORDER BY Id', tuple(a))]
+
+
+def pressed(r) -> bool:
+    "Whether a learned line was made by the owner's own presses (a verdict's): what he DID - no cap and no reflection takes it down."
+    return r.get('Kind') == INFERRED and str(r.get('Source') or '').startswith('verdict:')
 
 
 def in_use(store) -> list:
@@ -268,10 +277,12 @@ def _about_of(r) -> str:
 def _trim(store) -> int:
     """THE MEMORY STAYS SHORT (the owner, 2026-11-23: "don't write too much detail in memory, otherwise it's basically the hub"): of the
     learned lines in use at most CAP, of those still being seen LEARNING, and in each at most PER_ABOUT about one person or topic - past it
-    the line least recently borne out goes first, the weaker of two seen at once. What he said is never trimmed. Returns the lines gone."""
+    the line least recently borne out goes first, the weaker of two seen at once. What he said is never trimmed, and neither is a line his
+    own presses made (`pressed`): one was dropped at N=1 after a dozen presses on one topic, and that mail came back as work to watch
+    (2026-11-26). Returns the lines gone."""
     n = 0
     for used, cap in ((True, CAP), (False, LEARNING)):
-        rs = sorted((r for r in rows(store, INFERRED) if bool(r['Confirmed']) == used), key=lambda r: (str(r['UpdatedAt']), r['N'], r['Id']))[::-1]
+        rs = sorted((r for r in rows(store, INFERRED) if bool(r['Confirmed']) == used and not pressed(r)), key=lambda r: (str(r['UpdatedAt']), r['N'], r['Id']))[::-1]
         per, kept = {}, 0
         for r in rs:
             a = _about_of(r)
@@ -281,11 +292,12 @@ def _trim(store) -> int:
     return n
 
 
-def weaken(store, subject: str, ev: str = '') -> dict:
+def weaken(store, subject: str, ev: str = '', press: bool = False) -> dict:
     """An act of his that goes against a learned line (the model reads that it does, and names the line's subject): one episode less behind
-    it - below AUTO_AT it is out of use until his acts bear it out again, at none it is gone. Never his own line. {} when none matched."""
+    it - below AUTO_AT it is out of use until his acts bear it out again, at none it is gone. Never his own line; and a line his presses
+    made is lowered only by a `press` of his, never by what a reflection read. {} when none matched."""
     r = next((r for r in rows(store, INFERRED) if subject_of(r['Subject']) == subject_of(subject)), None)
-    if not r: return {}
+    if not r or (pressed(r) and not press): return {}
     if r['N'] <= 1: _down(store, r['Id'], 'dropped')
     else: store._exec('UPDATE memory_line SET N=N-1, Confirmed=? WHERE Id=?', (int(bool(r['Confirmed']) and r['N'] - 1 >= AUTO_AT), r['Id']))
     logger.info(f"memory: {ev or 'an act'} went against the learned line on {r['Subject']!r}")
@@ -474,14 +486,14 @@ def for_task(store, people=(), workstream: str = '', target: str = '', topic: st
 def whole(store, reader: str = 'triage', target: str = '', cap: int = WHOLE_CAP, people: bool = True, subject: bool = False) -> str:
     """Everything in use, in the order it was kept - for a reader that decides on all of it (triage, the routing judge, the Assistant).
     Lines about one sender or topic come too: triage weighs them for mail about that. Past `cap` the learned lines about one sender or topic
-    go first, oldest first, said in the log; what he said is never left out. The same bytes for every mail while nothing changes.
+    go first, oldest first, said in the log; what he said is never left out, and a line his presses made is the last to go. The same bytes for every mail while nothing changes.
     `people` False leaves out every line about someone (an evaluation's arm); `subject` names the subject of each line he said."""
     rs = [r for r in in_use(store) if people or not (r['people'] or r.get('Scope') == 'sender')]
     fs = [f"- {f['text']}" for f in facts(store)] if people else []
     used = sum(len(said_line(r)) + 1 for r in rs if r['Kind'] == SAID) + sum(len(l) + 1 for l in fs)
     scoped = lambda r: r['Kind'] == INFERRED and r.get('Scope') != 'global'
     keep, over = set(), 0
-    for r in sorted((r for r in rs if r['Kind'] == INFERRED), key=lambda r: (scoped(r), -r['Id'] if scoped(r) else r['Id'])):
+    for r in sorted((r for r in rs if r['Kind'] == INFERRED), key=lambda r: (not pressed(r), scoped(r), -r['Id'] if scoped(r) else r['Id'])):
         n = len(said_line(r)) + 1
         if used + n > cap: over += 1; continue
         keep.add(r['Id']); used += n
@@ -630,6 +642,16 @@ def _scope(text: str) -> tuple:
     return (bare, 'sender', a.lower()) if '@' in a else (text, 'global', '')
 
 
+def _history_ev(hist) -> dict:
+    "{key: the ids of every episode LEARNED.md's history holds behind that line} - each press, each time it was seen, less what an Undo took back."
+    out = {}
+    for h in hist:
+        ev, have = [e.strip() for e in str(h['Ev'] or '').split(',') if e.strip()], out.setdefault(h['Key'], [])
+        if h['Action'] in ('unsaid', 'withdrawn'): have[:] = [e for e in have if e not in ev]
+        elif h['Action'] != 'replaced': have += [e for e in ev if e not in have]
+    return out
+
+
 def _waiting(head: str) -> bool: return any(w in head for w in ('watching', 'proposed'))     # the two sections no reader read before r10
 
 
@@ -642,6 +664,7 @@ def _old_lines(store, doc: str):
     has = lambda t: bool(store._one('SELECT name FROM sqlite_master WHERE type=? AND name=?', ('table', t)))
     hist = store._rows("SELECT Key, Text, Action, Actor, Ev FROM learned_history ORDER BY Id") if has('learned_history') else []
     taught = {str(h['Text'] or '').strip(): h for h in hist if h['Action'] == 'said' and str(h['Actor'] or '').startswith('verdict:')}
+    evs = _history_ev(hist)                     # ...every press behind a verdict's line, not only its last: it was read in at N=1
     yes = {h['Key'] for h in hist if h['Actor'] == 'owner' and h['Action'] in ('promoted', 'kept')}
     down = {r['Key']: r for r in store._rows("SELECT Key, Status, OwnerText FROM learned_line")} if has('learned_line') else {}
     head = ''
@@ -662,7 +685,7 @@ def _old_lines(store, doc: str):
         if not text: continue
         v = taught.get(t)
         ppl, subj = names(text) | ({sk} if sc == 'sender' else set()), _key(text) + (f' · {sk}' if sk else '')
-        if v: yield dict(kind=INFERRED, text=text, subject=subj, people=ppl, scope=sc, key=sk, ev=[v['Ev']] if v.get('Ev') else [],
+        if v: yield dict(kind=INFERRED, text=text, subject=subj, people=ppl, scope=sc, key=sk, ev=evs.get(v['Key']) or [],
                          confirmed=not _waiting(head) or v['Actor'].split(':', 1)[1] in FOR_GOOD, source=v['Actor'])
         else: yield dict(kind=SAID, text=text, subject=subj, people=ppl, scope=sc, key=sk, ev=[], confirmed=False, source='owner')
 
@@ -672,7 +695,7 @@ def migrate(store) -> int:
     the lines a verdict wrote in his document - are what was INFERRED, with their evidence, in use where they were in use before. The
     document as it stood is kept whole (BACKUP); LEARNED.md is then the stores' face. An older install's notes table is read in the same
     way. Idempotent. Returns the lines read in (or, on an install r10's first cut read in, put back in use). Never raises."""
-    if store.get_setting(MIGRATED): n = in_use_again(store); one_press(store); return n
+    if store.get_setting(MIGRATED): n = in_use_again(store); one_press(store); his_presses(store); return n
     try:
         doc, n = store.get_doc(DOC) or '', 0
         for l in _old_lines(store, doc):
@@ -686,7 +709,7 @@ def migrate(store) -> int:
         if doc.strip(): store.save_doc(BACKUP, doc, 'migrate')
         store.set_setting(MIGRATED, _now(), 'migrate')
         in_use_again(store)                     # ...and what his acts already bear out goes into use, within the caps
-        one_press(store)
+        one_press(store); his_presses(store)
         if n: logger.info(f'memory: {n} line(s) of LEARNED.md read into the three stores - the document as it was is kept as {BACKUP}')
         return n
     except Exception as e:
@@ -724,3 +747,80 @@ def one_press(store) -> int:
         return len(back)
     except Exception as e:
         logger.warning(f'the lines one press put in use were not set back yet: {e}'); return 0
+
+
+# ── what his presses made, put back ──────────────────────────────────────────────────────────────────────────────────────────────────
+NOT_MINE = ('verdict:not_ours', 'verdict:not_a_task')        # the presses the audit trail keeps with what each was keyed on
+
+
+def _gone_by_itself(store) -> list:
+    """The verdict lines LEARNED.md's history shows the app took down by itself before r10 - a reflection's delete, close or expiry the
+    last thing that happened to them, never his Wrong, Forget or Undo: [{text, scope, key, source, ev}]."""
+    if not store._one('SELECT name FROM sqlite_master WHERE type=? AND name=?', ('table', 'learned_history')): return []
+    hist = store._rows('SELECT Key, Text, Action, Actor, Ev FROM learned_history ORDER BY Id')
+    evs, said, last = _history_ev(hist), {}, {}
+    for h in hist:
+        last[h['Key']] = h
+        if h['Action'] == 'said' and str(h['Actor'] or '').startswith('verdict:'): said[h['Key']] = h
+    out = []
+    for k, h in said.items():
+        if not (last[k]['Action'] in ('deleted', 'faded', 'expired') or (last[k]['Action'] == 'closed' and last[k]['Actor'] != 'owner')): continue
+        text, sc, sk = _scope(str(h['Text'] or '').strip().lstrip('-* ').strip())
+        if text: out.append(dict(text=text, scope=sc, key=sk, source=h['Actor'], ev=evs.get(k) or []))
+    return out
+
+
+def _audit_presses(store) -> dict:
+    "{(scope, key): [evidence id]} - his Not ours / Not a task presses as the audit trail holds them, by what each was keyed on."
+    out = {}
+    for a in store._rows("SELECT EntityType, EntityId, Detail FROM audit WHERE (EntityType='memory' AND Action='create') "
+                         "OR (EntityType='message' AND Action='not_mine') ORDER BY Id"):
+        try: d = json.loads(a['Detail'] or '{}')
+        except ValueError: continue
+        if isinstance(d, dict) and d.get('scope') and d.get('key'):
+            out.setdefault((d['scope'], subject_of(d['key'])), []).append(('mem' if a['EntityType'] == 'memory' else 'msg') + str(a['EntityId']))
+    return out
+
+
+def his_presses(store) -> int:
+    """WHAT HIS PRESSES MADE STANDS AGAIN (the owner, 2026-11-25: "memory is something that I do or say"; 2026-11-26: a topic he had marked
+    not his a dozen times came back as work to watch). Once, from the store's own records and no model: a line a verdict of his made that
+    a cap or a reflection dropped is live again; one the old LEARNED.md lost to a reflection is written back; the lines his presses on one
+    topic were split into are one; and each counts every press on record - its own evidence, the history's, the audit trail's - in use at
+    AUTO_AT. Never over his Wrong, Forget, No longer true or Undo, never over what he said on that subject. Returns the lines put right."""
+    if store.get_setting(PRESS_FIX): return 0
+    try:
+        every = lambda: [_row(r) for r in store._rows('SELECT * FROM memory_line ORDER BY Id')]
+        said = {subject_of(r['Subject']) for r in rows(store, SAID)}
+        gone, aud, n = _gone_by_itself(store), _audit_presses(store), 0
+        for h in gone:
+            subj = _key(h['text']) + (f" · {h['key']}" if h['key'] else '')
+            if len(h['text'].split()) > MAX_WORDS or any(_same(r['Text'], h['text']) or subject_of(r['Subject']) == subject_of(subj) for r in every()): continue
+            rid = _add(store, INFERRED, h['text'], subj, names(h['text']) | ({h['key']} if h['scope'] == 'sender' else set()), h['scope'], h['key'],
+                       h['ev'], False, h['source'])
+            _down(store, rid, 'dropped')            # ...as the app left it: the pass below is the one road back
+        groups = {}
+        for r in every():
+            if not pressed(r): continue
+            topic = r['Scope'] == 'subject' and r['ScopeKey']
+            groups.setdefault((r['Source'], subject_of(r['ScopeKey'])) if topic else ('', subject_of(r['Subject'])), []).append(r)
+        for rs in groups.values():
+            if any(r['Status'] == 'wrong' for r in rs) or any(subject_of(r['Subject']) in said for r in rs): continue
+            up = [r for r in rs if r['Status'] in (LIVE, 'dropped')]
+            if not up: continue
+            keep = next((r for r in reversed(up) if r['Status'] == LIVE), up[-1])
+            ev = [e for r in up for e in r['ev']] + [e for h in gone if any(_same(r['Text'], h['text']) for r in up) for e in h['ev']]
+            if keep['Source'] in NOT_MINE and keep['Scope'] != 'global': ev += aud.get((keep['Scope'], subject_of(keep['ScopeKey'])), [])
+            ev = list(dict.fromkeys(ev))
+            cnt = max(keep['N'], len(ev))
+            if keep['Status'] == LIVE and cnt == keep['N'] and len(up) == 1: continue
+            store._exec('UPDATE memory_line SET Ev=?, N=?, Confirmed=?, Status=?, UpdatedAt=? WHERE Id=?',
+                        (','.join(ev), cnt, int(bool(keep['Confirmed']) or cnt >= AUTO_AT), LIVE, _now(), keep['Id']))
+            for r in up:
+                if r['Id'] != keep['Id'] and r['Status'] == LIVE: _down(store, r['Id'], 'replaced', keep['Id'])
+            n += 1
+        store.set_setting(PRESS_FIX, _now(), 'migrate')
+        if n: render(store); logger.info(f'memory: {n} line(s) his own presses made stand again, each press counted')
+        return n
+    except Exception as e:
+        logger.warning(f'the lines his presses made were not put back yet: {e}'); return 0

@@ -92,3 +92,22 @@ test("the tabs and the count are in the card's own frame, and each item lies in 
   assert.ok(frame >= 0 && frame < head && head < html.indexOf('role="tabpanel"'), "its head, with the tabs, comes inside the frame and over the items");
   assert.ok(html.indexOf('role="tablist"') > head && html.indexOf("data-tq-card-queue") > head);
 });
+
+// The owner, 2026-11-26: a card set down under a later turn is drawn anew there - and the words he had typed into its post were gone with the
+// old one ("things on chat don't go away"). What he typed is kept by the card's review, not by where the card is drawn
+test("what he typed into a card is read back by the card drawn again, and is no edit of a card filed with other words", async () => {
+  const { heldEdit, holdEdit, onHeld } = await import("../src/heldEdits.js"), filed = JSON.stringify({ type: "linkedin_post", text: "We shipped the ledger export." });
+  assert.equal(heldEdit(901, filed), null, "nothing typed: the card as filed");
+  const told = [], off = onHeld((id) => told.push(id));
+  holdEdit(901, filed, { text: "We shipped the ledger export - totals round to cents." });
+  holdEdit(901, filed, { vals: { visibility: "CONNECTIONS" } });
+  assert.deepEqual({ ...heldEdit(901, filed) }, { text: "We shipped the ledger export - totals round to cents.", vals: { visibility: "CONNECTIONS" }, filed }, "drawn again: his words and his pick");
+  assert.deepEqual(told, [901, 901], "and a second card on the same review hears each");
+  assert.equal(heldEdit(901, JSON.stringify({ type: "linkedin_post", text: "A new draft." })), null, "the agent filed other words: his edit was of the old ones");
+  assert.equal(heldEdit(902, filed), null, "another card's is its own");
+  holdEdit(901, filed, { text: null, vals: null }); off();
+  assert.equal(heldEdit(901, filed), null, "taken back, nothing is held");
+  const src = (await import("node:fs")).readFileSync(new URL("../src/ReviewDecision.jsx", import.meta.url), "utf8");
+  assert.match(src, /useState\(kept\?\.text \?\? String\(p\[tk\] \|\| ""\)\)/, "a post's card opens on what he typed");
+  assert.match(src, /useState\(\(\) => heldOf\(r\)\?\.words \?\? \{\}\)/, "and a change's boxes");
+});

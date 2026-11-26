@@ -4,6 +4,7 @@
 // action) renders through the same card: proposalPresentation() gives it its own title, its
 // destination and its own labels, and nothing is sent to a sender.
 import React, { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { heldEdit as held, holdEdit, onHeld } from "./heldEdits.js";
 import { Alert, Box, Button, Typography, Menu, MenuItem } from "@mui/material";
 import api from "./api";
 import ReplyFiles from "./ReplyFiles.jsx";
@@ -93,13 +94,9 @@ export const InvoiceLine = ({ meta }) => (
 // "+ loop someone in" while the edited words stood - Send would have gone without her)
 // ...and ONE DRAFT IN TWO PLACES reads the same in both (the agent's draft, 2026-11-02: Close out and the pop-up over the terminal): an edit in
 // either is told to the other card on the same draft, so a Send from either sends what the owner last typed
-const edits = new Map(), heard = new Set();
-const heldEdit = (r) => { const e = edits.get(r?.ReviewId); return e && e.filed === reviewText(r) ? e : null; };
-const hold = (r, part) => {
-  const e = { text: null, cc: null, bcc: null, subject: null, ...heldEdit(r), ...part, filed: reviewText(r) };
-  if (e.text == null && e.cc == null && e.bcc == null && e.subject == null) edits.delete(r.ReviewId); else edits.set(r.ReviewId, e);
-  heard.forEach((f) => f(r.ReviewId));
-};
+// ...kept by the card's review, wherever it is drawn (heldEdits.js: one store for every card that takes his words)
+const heldEdit = (r) => held(r?.ReviewId, reviewText(r));
+const hold = (r, part) => holdEdit(r.ReviewId, reviewText(r), part);
 // SEND AND CLOSE OUTLIVES THE PRESS (the owner, 2026-11-03): a send nobody could confirm comes back as Check delivery or Send anyway, and the
 // card may be drawn again meanwhile - which of Close out's two sends was pressed is held per draft, so the confirmed send still closes, or not
 const closing = new Set();
@@ -177,11 +174,12 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
   const setSubj = (v) => { hold(r, { subject: v ?? null }); setSubjNow(v); };
   const [ccOpen, setCcOpen] = useState(false), [bccOpen, setBccOpen] = useState(false), [cmdOpen, setCmdOpen] = useState(false);
   // ...a change's new words as he leaves them, box by box (proposals.as_left saves exactly these), and its marks of where they change on or off
-  const [words2, setWords2] = useState({}), [marksOn, setMarksOn] = useState(true);
+  const [words2, setWords2Now] = useState(() => heldOf(r)?.words ?? {}), [marksOn, setMarksOn] = useState(true);
+  const setWords2 = (f) => { const n = f(words2); hold(r, { words: Object.keys(n).length ? n : null }); setWords2Now(n); };
   const rNow = useRef(r); rNow.current = r;
   useEffect(() => { const f = (id) => { if (id !== rNow.current.ReviewId) return; const e = heldOf(rNow.current); setTextNow(e?.text ?? null); setCcNow(e?.cc ?? null);
     setBccNow(e?.bcc ?? null); setSubjNow(e?.subject ?? null); };
-    heard.add(f); return () => { heard.delete(f); }; }, []);
+    return onHeld(f); }, []);
   // SENT STAYS SENT until the page's re-read takes the card away (the owner, 2026-10-26: "when you hit send on close out email it grey's
   // out and then turns blue again then closes"): busy still ends when the decide answers, as 2026-10-18 ruled, but the button after it
   // reads "Sent" and stays off - a blue Send again over a reply already gone invited a second press
@@ -833,7 +831,12 @@ export function ActReview({ row: was, tid, live = true, onChanged, past = false,
   const answered = !!settled && given?.Status === "pending", row = answered && settled.mine ? { ...given, Status: settled.Status, ActError: settled.ActError || given.ActError } : given;
   const held = answered && !settled.mine ? "held" : "";
   const p = row?.post || {}, act = actionFor(p.type), st = stateOf(row, live), tk = textKey(act);
-  const [text, setText] = useState(String(p[tk] || "")), [vals, setVals] = useState(() => valuesOf(act, p)), [copied, setCopied] = useState(false);
+  // ...HIS WORDS AND PICKS ARE KEPT BY THE CARD'S REVIEW (heldEdits.js): drawn again elsewhere in the chat - set down under a later turn, a
+  // tab come back to - the card reads them back, never the proposal's again. One moved past shows what it was filed with
+  const filed = row?.DraftText || JSON.stringify(p), kept = past ? null : held(row?.ReviewId, filed);
+  const [text, setTextNow] = useState(kept?.text ?? String(p[tk] || "")), [vals, setValsNow] = useState(() => kept?.vals ?? valuesOf(act, p)), [copied, setCopied] = useState(false);
+  const setText = (v) => { if (!past) holdEdit(row.ReviewId, filed, { text: v }); setTextNow(v); };
+  const setVals = (f) => { const n = f(vals); if (!past) holdEdit(row.ReviewId, filed, { vals: n }); setValsNow(n); };
   const [pressing, setBusy] = useState(""), [err, setErr] = useState(""), [viewing, setViewing] = useState(null), [setupAt, setSetupAt] = useState("");
   const done = answered && settled.mine && ["approved", "edited"].includes(settled.Status) ? settled : null;
   const busy = pressing || held;

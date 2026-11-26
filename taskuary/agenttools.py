@@ -381,7 +381,7 @@ SHORT = {
     'answer_invite': "Answer this task's meeting invite: accept, decline or propose.",
     'set_up_meeting': "Set up a meeting for the owner's press.",
     'share': "Share a report or dashboard of the owner's with a person.",
-    'propose': "Anything for the owner's press - a reply, email, post, GitHub/Jira/Monday comment or issue, PR, push, order on a system, "
+    'propose': "Anything for the owner's press - a reply, an email, a post, GitHub/Jira/Monday comment or issue, PR, push, order on a system, "
                "script for save_routine: one card in this chat, the draft itself, his to edit; nothing done before his press. "
                "`kind` (an act names its `action`); several of one act in `items`; `then` your step after his press.",
     'find_tools': "A tool's instructions by name, or tools by need.",

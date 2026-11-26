@@ -179,6 +179,8 @@ product: fix the code, never the test.
    Taskuary confirmed went is its own check: a `then` that only does what the press did (the to-do
    the card does, which the press ticks) wakes nobody. A press with no `then` that went wakes nobody,
    and answers the question the agent asked about that card; a bulk card's run is the same, once.
+   His Dismiss never wakes the agent: his no is told to it, as his, at its next turn. A `then` starts
+   only when every card of that task that still waits is settled.
 4. **Question.** The agent's question stands until he answers; no card is raised under it, in
    that turn or after, until he answers; his answer reaches the agent once.
 5. **Hand-off on a page.** A step handed to him shows that step; his "I'm done" wakes the agent
@@ -203,3 +205,11 @@ product: fix the code, never the test.
    A routine's write step waits too, unless he pressed "Always approve this step" on it: that
    routine's step, exactly as saved, then runs unpressed; any other target, executor or an agent's
    own call during the run is a card as usual. Taken back under Settings → Agent permissions.
+10. **Cards stay** (the owner, 2026-11-26: "Things on chat don't go away. No text after an approval
+   card until the approval card is denied or approved, then the agent moves on. Cards never just
+   disappear."). Nothing drawn in the chat ever disappears, hides or moves by itself. A card raised
+   in a turn is drawn once, when that turn ends, under all its words, and nothing of the agent's is
+   drawn after a card that waits; only his own line may come after it. A press never changes which
+   tab of a card is shown, and a pressed card shows its result where it stands. Nothing he greyed is
+   raised again by Taskuary: only the agent brings it back. Unrelated acts are separate cards; tabs
+   are only for one call's set; a bulk act is one list card with its progress.

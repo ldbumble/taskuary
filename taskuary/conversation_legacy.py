@@ -566,6 +566,9 @@ def _items(store, tid: int) -> dict:
         if t is None:
             i = max((j for j, x in enumerate(out) if ep(x.get('started') or x.get('at')) <= at), default=-1)
             if i >= 0 and out[i]['kind'] == 'turn': t = out[i]
+            # ...OR THE TURN WHOSE ANSWER CAME IN THE SECOND AFTER IT, nothing between (a stamp is a whole second - the card gallery, 2026-11-25:
+            # a card raised at :49.99 by a turn answered at :50.01 stood above that turn, greyed while it waited) - chatlog.answered's one rule
+            elif (n := out[i + 1] if i + 1 < len(out) else None) and n['kind'] == 'turn' and n['state'] not in LIVE and ep(n.get('started') or n.get('at')) - 1 <= at: t = n
             else: out.insert(i + 1, card); return
         t['cards'].append(card)
     # ...a task's emails are the page's own block while they wait (`letters`, below); one he wrote past stays where it stood, greyed with

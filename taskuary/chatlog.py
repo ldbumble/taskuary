@@ -1006,7 +1006,8 @@ def advance(store, tid: int) -> None:
         # ...AND WHAT IT SAID BEFORE STAYS WHERE IT STOOD, greyed (the owner's plan, 2026-11-25): an earlier version is a row of its own, its words
         # as he saw them (`was`) - the key moves to the version now standing, never the place (conversation_legacy's r:<rid>:c<n>, the same shape)
         b = json.loads(r['Body'] or '{}')
-        if (st == 'pending' and _card(rv).get('was') and _words(b) != _words(_card(rv)) and rv.get('DraftSid') != OWNER_SID
+        # ...(a bulk card's row has no words of its own - its rows' are each theirs: never "rewritten", and never greyed for it)
+        if (st == 'pending' and b.get('what') != 'batch' and _card(rv).get('was') and _words(b) != _words(_card(rv)) and rv.get('DraftSid') != OWNER_SID
                 and (o := open_turn(store, tid)) and o['Id'] != r.get('Parent')):
             with store.lock:
                 store.cx.execute("UPDATE chatlog SET Key=?, State='passed', Body=?, Rev=Rev+1 WHERE Id=?",

@@ -341,6 +341,32 @@ def test_a_tab_he_said_no_to_is_marked_so_never_as_one_that_went():
     assert [(t['name'], t['done'], bool(t.get('no'))) for t in run] == [('X', True, False), ('LinkedIn', True, True), ('Reddit', False, False)]
 
 
+def test_a_card_raised_the_second_before_its_turns_answer_waits_lit_in_that_turn():
+    """The card gallery, 2026-11-25: three emails raised as one card at :49.99 by a turn whose answer was filed at :50.01, the task first read
+    after (its chat frozen then - migrate). A stamp is a whole second, so the card read as older than its turn: it stood ABOVE the turn,
+    and greyed as a version the turn had rewritten - while it still waited. It stands lit, in the turn that raised it; and a bulk card left
+    standing alone (raised seconds before) waits lit where it is - it has no words of its own a later turn could rewrite. Invented people."""
+    from datetime import datetime, timedelta
+    from unittest import mock
+    from taskuary import general, server
+    from test_bulk_card import call
+    def chat(gap):
+        s = MemoryStore()
+        tid = s.create_task({'Title': 'Tell the three approvers', 'Kind': 'general', 'Status': 'open', 'OriginBase': 'owner'}, 'owner')
+        s.add_comment(tid, general.BRIEF_ACTOR, general.USER_TYPE, 'Tell Erin, Gail and Paula the portal goes live Monday.')
+        with mock.patch.object(server, 'store', s):
+            call(tid, 'propose', kind='email', why='one note to each approver',
+                 items=[{'to': f'{w}@northwind.example', 'subject': 'The ledger portal is live Monday', 'text': f'Hello {w},\n\nIt is live Monday.\n\nAlex'}
+                        for w in ('erin', 'gail', 'paula')])
+        now = datetime.utcnow(); at = lambda d: f'{now - timedelta(seconds=d):%Y-%m-%d %H:%M:%S}'
+        s._exec('UPDATE comment SET CreatedAt=? WHERE TaskId=?', (at(5), tid)); s._exec('UPDATE review SET CreatedAt=? WHERE TaskId=?', (at(gap), tid))
+        cid = s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'Three emails, one card.')
+        s._exec('UPDATE comment SET CreatedAt=? WHERE CommentId=?', (at(0), cid))
+        return [(x['kind'], x.get('status'), [c.get('status') for c in x.get('cards') or []]) for x in chatlog.serve(s, tid)['items']]
+    assert chat(1) == [('turn', None, ['pending'])]
+    assert chat(3) == [('card', 'pending', []), ('turn', None, [])]
+
+
 def test_a_tab_names_a_thing_as_its_card_writes_it():
     """The card gallery, 2026-11-25: the pull request's tab read "Northwind/ledger#31" over a card saying northwind/ledger#31 - a name is
     written as it is; only a phrase in his words ('Push') starts with a capital."""

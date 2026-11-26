@@ -989,6 +989,26 @@ def test_an_answer_filed_is_never_read_without_its_turn():
     assert not r.is_alive() and gaps == [], gaps
 
 
+def test_an_answer_filed_while_a_chat_is_first_read_keeps_its_turn():
+    """Windows CI, 2026-11-26: a task's first read built the list to freeze (chatlog.migrate), the turn's answer was filed on its own thread,
+    and the freeze then cleared the log and wrote the list built before it - the turn without its answer, for good ("answer comment-2 ...
+    is in no turn"). The freeze writes a list only of the log as it stands: one written to since the list was built is read again."""
+    from unittest import mock
+    from taskuary import conversation, general
+    s, tid = world()
+    general.wait_line(s, tid, 'Send Erin the review', line_id='l-1'); conversation.hear(s, tid, ['l-1'], turn=True)
+    real, filed = chatlog._legacy, []
+    def late(st, t):
+        got = real(st, t)
+        if not filed: filed.append(s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'Sent Erin the review.'))    # ...between the list and its freeze
+        return got
+    with mock.patch.object(chatlog, '_legacy', late): conversation.items(s, tid)
+    got = conversation.items(s, tid)
+    assert filed and chatlog.migrated(s, tid) and not got['working']
+    assert chatlog.missing(s, tid, got) == []
+    assert [x['text'] for x in got['items'] if x['kind'] == 'turn' and x.get('answer') == f'comment-{filed[0]}'] == ['Sent Erin the review.']
+
+
 def test_a_card_raised_after_his_newest_line_stands_under_that_line_never_as_a_tab_of_the_card_above_it():
     """Walk 24 (2026-11-25, all three roads): a post waited; the agent asked a question; he answered (an answer greys no card); the turn his
     answer began raised a second card - told "it stands as its card under your answer" - and it became tab 2 of the card that stood ABOVE his

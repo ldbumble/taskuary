@@ -1292,9 +1292,20 @@ def migrate(store, tid: int, legacy=None) -> bool:
     written item by item in its order - each turn's steps and cards under it - and from then on the producers append. What waits by the box
     stays pending; a turn at work stays at work, so its road goes on appending under it; of two cards that waited at once the front stays
     and the other is held (one box). Done once per task, under the store's lock; True when it was done now."""
+    # ...THE LIST IT WRITES IS OF THE LOG AS IT STANDS (Windows CI, 2026-11-26: built before the lock, with the turn's answer filed in between -
+    # the freeze cleared the row that answer had just ended and wrote the turn without it, an answer in no turn for good): a log written to
+    # since the list was built is no longer that list's - it is built again, and a log that never holds still is frozen by a later read
+    for _ in range(FREEZE_TRIES):
+        if (done := _migrate(store, tid, legacy)) is not None: return done
+    return False
+
+
+FREEZE_TRIES = 3
+def _migrate(store, tid: int, legacy=None):
+    "One try at the freeze: True done now, False not to be done (done already, no copy yet), None when the log was written to under the list."
     from . import cardqueue
     if migrated(store, tid) or not backed_up(store): return False
-    got = legacy if legacy is not None else _legacy(store, tid)
+    n, got = rev(store, tid), legacy if legacy is not None else _legacy(store, tid)
     live = set((cardqueue.state(store, int(tid)) or {}).get('live') or [])
     # ...A LIST THAT HELD NOTHING HE SAW HAS NOTHING TO FREEZE (a new coding task read as its first start began: the old list drew no line yet,
     # the freeze wiped the line the press had heard, and his line stood by the box for good under the task's title, answered): the log is the record
@@ -1302,6 +1313,7 @@ def migrate(store, tid: int, legacy=None) -> bool:
     items, keep = got.get('items') or [], all(bare(x) for x in got.get('items') or [])   # ...still drawn: the turn at work is written beside it
     with store.lock:
         if migrated(store, tid): return False
+        if legacy is None and rev(store, tid) != n: return None
         # ...what dual-write wrote before is the warm-up: the list is the record
         if not keep:
             store.cx.execute('DELETE FROM chatlog WHERE TaskId=?', (int(tid),))

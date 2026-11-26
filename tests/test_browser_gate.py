@@ -1262,3 +1262,35 @@ def test_an_enter_in_the_box_of_a_post_he_handed_over_is_a_line_of_it_never_a_se
     assert enter(True) == {} and held() == [], 'a line break in the post box is the agent\'s typing'
     out = enter(False)
     assert out['hookSpecificOutput']['permissionDecision'] == 'deny' and len(held()) == 1, 'in a one-line box an Enter sends its form: the judge\'s word stands'
+
+
+def test_the_last_press_of_a_post_is_never_put_to_him_over_an_empty_box_the_agent_is_told_what_is_missing():
+    """Walk 24, 2026-11-25 (HIPAA AI): Post via the browser pressed; the agent uploaded the picture, clicked Post and said "I have entered your
+    X post text" - the post box was empty, and an Approve stood over it (he caught it). A fact of the page: the card he handed over has
+    words, and no box of the page holds any. The agent is answered with what is missing and no card is raised; the post typed in, the same
+    press is held as ever, saying what the page holds. Pressed again over a box that still reads empty, it is held too - never a dead end."""
+    s = MemoryStore(); tid = Factory(s).task('Post the four-day close')
+    post = {'action': 'run_tool', 'type': 'x_post', 'network': 'X', 'text': 'Northwind now closes its books in four days.', 'image': 'close.png'}
+    card = s.add_review({'TaskId': tid, 'Kind': 'action', 'Status': 'pending', 'DraftText': json.dumps(post), 'Reason': 'the agent proposes to post on X'})
+    s.decide_review(card, 'approved', json.dumps({**post, 'result': {'browser': True}}), 'owner')            # ...he pressed Post via the browser
+    snap = '- textbox "What is happening?!" [ref=e9]\n- button "Add photo" [ref=e10]\n- button "Post" [ref=e11]'
+    speaks = {'big': True, 'kind': 'speaks', 'sure': True, 'irreversible': True, 'what': 'Publish your post on X'}
+    pic, words = {'k': 'media', 't': 'file', 'f': 0, 'v': 'C:\\fakepath\\close.png'}, {'k': 'text', 't': 'textarea', 'f': 0, 'v': 'Northwind now closes its books in four days.'}
+    held = lambda: [json.loads(r['DraftText']) for r in s._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action' AND Status='pending'", (tid,))
+                    if json.loads(r['DraftText']).get('action') == 'browser_act']
+    def click(fields, sid='run1'):
+        pg = {'url': 'https://x.example/home', 'open': True, 'elements': snap, 'fields': fields, 'name': 'X'}
+        with mock.patch.object(bg, 'page', return_value=pg), verdict(speaks), mock.patch.object(bg, 'watch', None), mock.patch.object(bg, '_run', lambda sid, a, w, t: (0, '')), \
+             mock.patch('taskuary.signin.acting', lambda *a, **k: None):
+            return bg.check(s, tid, sid, "agent-browser click '@e11'", Brain(None))['hookSpecificOutput']['permissionDecisionReason']
+    bg._EMPTY.clear()
+    said = click([pic])
+    assert held() == [], 'no Approve stands over an empty box'
+    assert "the page's box is empty" in said and 'the file close.png' in said and 'Type the post' in said, said
+    click([words, pic])
+    [p] = held()
+    assert p['card'] == card and bg.held_says(p) == 'Publish your post on X - the page holds "Northwind now closes its books in four days." · the file close.png'
+    # ...and a box that still reads empty when it presses again (a page whose box cannot be read) is held, saying so: he decides, nothing dead-ends
+    click([pic], 'run2'); assert len(held()) == 1
+    click([pic], 'run2')
+    assert [bg.held_says(x) for x in held() if x['sid'] == 'run2'] == ['Publish your post on X - the page holds the file close.png']

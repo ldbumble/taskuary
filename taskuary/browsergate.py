@@ -824,15 +824,32 @@ def _verdict(act: dict, v: dict | None, pg: dict, said: str, mine: bool = False)
 # still in flight (cardqueue.in_flight), the page's form holds that card's words, and the act is a click on a control that is no box of the
 # form and no link - the press that sends them. It waits for him, whatever the verdict said.
 def last_press(store, tid, act: dict, pg: dict) -> dict | None:
+    flat = lambda s: ' '.join(str(s or '').split()).casefold()
+    if not (p := _handed(store, tid, act, pg)): return None
+    words = flat(p.get('text') or p.get('body'))
+    if not any((v := flat(f.get('v'))) and (v in words or words[:60] in v) for f in _written(pg)): return None
+    return {'hold': True, 'what': f"Publish your post on {pg.get('name') or p.get('network') or 'the site'}", 'why': WHY['speaks'], 'kind': 'speaks'}
+def _handed(store, tid, act: dict, pg: dict) -> dict | None:
+    "The card he handed over that this act would send - in flight, with words of its own, and the act a click on no box of the form and no link - else None."
     if act.get('verb') != 'click' or fills(act, pg) or follows(act, pg): return None
     from . import cardqueue
     if not (store and tid and (r := cardqueue.in_flight(store, int(tid)))): return None
     try: p = json.loads(r.get('FinalText') or r.get('DraftText') or '{}') or {}
     except (TypeError, ValueError): return None
-    flat = lambda s: ' '.join(str(s or '').split()).casefold()
-    words = flat(p.get('text') or p.get('body'))
-    if not words or not any((v := flat(f.get('v'))) and (v in words or words[:60] in v) for f in pg.get('fields') or [] if isinstance(f, dict) and f.get('t') != 'file'): return None
-    return {'hold': True, 'what': f"Publish your post on {pg.get('name') or p.get('network') or 'the site'}", 'why': WHY['speaks'], 'kind': 'speaks'}
+    return p if isinstance(p, dict) and str(p.get('text') or p.get('body') or '').strip() else None
+def _written(pg: dict) -> list:
+    "The boxes of the page's form that hold words (never a file's box, a tick or a password)."
+    return [f for f in pg.get('fields') or [] if isinstance(f, dict) and f.get('t') not in ('file', 'checkbox', 'radio', 'hidden', 'password') and str(f.get('v') or '').strip()]
+
+
+# ...AND IT IS NEVER PUT TO HIM OVER AN EMPTY BOX (walk 24, 2026-11-25: the agent uploaded the picture, clicked Post and said "I have entered your
+# X post text" - the box was empty, and an Approve stood over it; walk 23: one approved so answered "the page did not take it"). A fact again:
+# the card he handed over has words and no box of the page holds any. The agent is answered with what is missing, and nothing is raised -
+# once: pressed again on the same page still reading empty, the step is held as ever, its card saying what the page holds (held_says)
+_EMPTY: dict = {}               # sid -> the address its last press was answered "the box is empty" on
+def empty_box(store, tid, sid, act: dict, pg: dict) -> bool:
+    if not _handed(store, tid, act, pg) or _written(pg) or _EMPTY.get(str(sid)) == pg.get('url'): _EMPTY.pop(str(sid), None); return False
+    _EMPTY[str(sid)] = pg.get('url'); return True
 
 
 # ...AND AN ENTER IN THAT POST'S BOX IS A LINE OF IT, NEVER ITS SEND, BY FACT TOO (walk 24, 2026-11-25: writing the post he had handed over, the
@@ -912,6 +929,10 @@ def _check(store, tid: int, sid: str, cmd: str, brain=None, cwd: str = '') -> di
         v = next(vs)
         if not v['hold'] and (his := last_press(store, tid, a, pg)): v = his
         if not v['hold']: continue
+        if empty_box(store, tid, sid, a, pg):
+            return _deny(f"{NOT_RUN}: the page's box is empty - the post's words are not on {pg.get('name') or 'the page'}"
+                         f"{' (it holds ' + h + ')' if (h := holds(pg)) else ''}. Type the post into its box first, then press again; nothing was "
+                         'pressed and nothing was put to the owner.')
         if (fact := card_site(store, pg['url'])): return _deny(f'{NOT_RUN}: {fact}.')
         args = _own_args(a['args'])
         if not args: return _deny(f"{NOT_RUN}: a browser command it could not read. Run each agent-browser command on its own line.")

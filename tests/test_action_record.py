@@ -312,7 +312,10 @@ class AnApprovedHeldStepWakesItsAgent(Acts):
         self.answered(); told = []
         self.press('reject', told)
         self.assertEqual(told, [], 'a no is heard with the owner\'s next line - it starts no turn')
-        self.assertTrue(any('No agent is running' in n for n in self.notes()))
+        # his no is on its card and kept for the agent's next turn as his own (browsergate._no): the task no longer says nobody was told
+        self.assertFalse(any('No agent is running' in n for n in self.notes()))
+        said = next_turn(self.s, self.tid)
+        self.assertIn('The owner dismissed', said); self.assertIn('NOT done', said)
 
     def test_with_no_agent_ever_on_it_the_task_says_nobody_was_told(self):
         told = []

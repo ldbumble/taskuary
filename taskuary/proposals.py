@@ -1152,12 +1152,18 @@ def execute(store, rv: dict, actor='owner', final_text: str = None, skip_checks:
                     (rv['ReviewId'], before, tid, actor))
     if tid: store.add_comment(tid, actor, 'human', f'APPROVED PROPOSAL ({a}): {json.dumps(out)[:600]}')   # a task-less one has no card to say it on
     store.audit('review', rv['ReviewId'], 'proposal_executed', actor, detail={'action': a, 'result': out})
-    # a workflow run that stopped for this yes goes on from that step (flow.resume) - on its own thread, as a run starts: a last
-    # agent step's first turn would otherwise hold the owner's click for as long as the agent works
+    return out
+
+
+def go_on(store, rv: dict, out: dict) -> None:
+    """A workflow run that stopped for this yes goes on from that step (flow.resume) - on its own thread, as a run starts: a last agent
+    step's first turn would otherwise hold the owner's click for as long as the agent works. Called once HIS YES IS WRITTEN DOWN, never
+    before (execute started it, 2026-11-26): a run with nothing left finished and closed its task while the card still waited, the close
+    put the card down as unanswered, and the press whose write had gone answered that it was already turned down."""
+    p = _draft(rv); a = p.get('action')
     if isinstance(p.get('flow_run'), dict) and a in ('run_tool', 'repair_workflow'):
         from . import flow, workflows
         workflows._spawn(lambda: flow.resume(store, p['flow_run'], out if a == 'run_tool' else None))
-    return out
 
 
 def _run(store, rv: dict, p: dict, tid, a: str, actor: str, edited, skip_checks: bool) -> dict:

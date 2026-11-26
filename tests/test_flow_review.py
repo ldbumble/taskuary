@@ -134,7 +134,8 @@ def test_an_approved_write_is_that_step_done_and_the_run_goes_on_below_it():
     ran = []
     with mock.patch.dict(reports.REGISTRY, {'smb_write': lambda cfg: (ran.append(cfg) or 'wrote 1 file', '')}), \
             mock.patch.object(workflows, '_spawn', lambda f: f()):
-        proposals.execute(s, {**rv, 'ReviewId': rv['ReviewId']})
+        from taskuary import verdicts
+        assert verdicts.decide(s, s.get_review(rv['ReviewId']), 'approve', None, None, 'owner')['ok']      # his press: the run goes on once it is recorded
     assert 'flow_run' not in ran[0]
     run = s.report_run_of_task(tid)
     assert [r['status'] for r in run['steps']] == ['ok', 'ok'] and not run['failed']
@@ -194,13 +195,12 @@ def test_a_saved_report_that_writes_runs_on_schedule_only_where_he_always_approv
     assert ran == [] and out.get('task_id'), out                                     # ...not authorized: nothing written
     rv = s._one("SELECT * FROM review WHERE TaskId=? AND Kind='action' AND Status='pending'", (out['task_id'],))
     assert rv and json.loads(rv['DraftText'])['flow_run']['key'], 'the write is a card he can always approve'
-    with mock.patch.dict(reports.REGISTRY, {'smb_write': write}):
+    # ...the run goes on at once and has nothing left, so it ends and closes its task UNDER the press (macOS CI, 2026-11-26: the close put
+    # the card he had just approved down as unanswered, and his press answered "already")
+    with mock.patch.dict(reports.REGISTRY, {'smb_write': write}), mock.patch.object(workflows, '_spawn', lambda f: f()):
         got = verdicts.decide(s, s.get_review(rv['ReviewId']), 'approve', None, None, 'owner', always=True)
     assert got['ok'] and got['always'] and len(ran) == 1, got                          # ...his press runs it now
-    import time
-    for _ in range(200):                                                               # ...and its run goes on, on its own thread
-        if [r['status'] for r in s.report_run_of_task(out['task_id'])['steps']] == ['ok']: break
-        time.sleep(0.02)
+    assert s.get_review(rv['ReviewId'])['Status'] == 'approved' and [r['status'] for r in s.report_run_of_task(out['task_id'])['steps']] == ['ok']
     out = scheduled()
     assert len(ran) == 2 and not out.get('task_id'), out                              # ...and the next scheduled run writes unpressed
     assert not s._one("SELECT 1 AS x FROM review WHERE Kind='action' AND Status='pending'")

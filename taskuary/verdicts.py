@@ -1001,6 +1001,7 @@ def _decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = N
                 try: ledger.went(store, rid, out)                       # ...on the record: what went live, and where (ledger.py)
                 except Exception as e: logger.warning(f'review {rid}: the act ran, and was not written to the ledger - {e}')
                 proposals.settle(store, rv, 'approve' if verb == 'merge_anyway' else verb, actor)   # runs only the act: the task stays open
+                proposals.go_on(store, rv, out)                         # ...and a routine's run that stopped for this yes goes on, now that it is recorded
                 return {'ok': True, 'status': 'approved', 'sent': None, 'send_error': None, 'result': out}
             if not store.decide_review(rid, VERB2STATUS[verb], None, actor, note): return _delivery_busy(store, rid)
             store.add_comment(rv['TaskId'], actor, 'human', f'Proposal {VERB2STATUS[verb]} - nothing was done.')

@@ -11,6 +11,12 @@
 // pressed Send on the first, the second card drew where his press had landed, and his next press sent a letter he never read). Measured from
 // when it came there, not from the last click: the next card draws when the agent has answered, seconds after the press. One rule for every
 // button, card and row, wherever a press just landed - the pointer moving off the spot ends the watch.
+// ...AND A PRESS LANDS ON THE BUTTON THE POINTER WENT DOWN ON (the owner, 2026-11-26: "most buttons on our app you have to click twice for it to
+// go?"). The browser gives a click only to what is under the pointer at BOTH ends of the press, and a page that moves in between - the Ask box
+// opening at the pointer going down, its up-arrow rising a line; a box that shrinks as it loses the focus; the day filling in over a row of
+// buttons - leaves the release on something else: no click reached the button, nothing happened, and he pressed again. A hand that went down
+// on a button and came up where it went down pressed that button, wherever the page has since put it: the stray click is taken and the
+// button is given it. A hand that moved off before letting go still cancels, and a button gone, greyed or hidden by then is not pressed.
 export const GRACE_MS = 450, MOMENT_MS = 1000;
 const SPOT_PX = 6;
 // ...a dialog is shut by a click on its container (MUI Dialog), a menu or pop-over by one on its invisible backdrop
@@ -32,7 +38,8 @@ const pageWatch = (doc) => (check) => {
 export const installSecondClick = (doc = globalThis.document, { grace = GRACE_MS, moment = MOMENT_MS, now = () => globalThis.performance?.now() ?? Date.now(), watch = pageWatch(doc) } = {}) => {
   if (!doc || doc.__tqSecondClick) return () => {};
   doc.__tqSecondClick = true;
-  let last = -Infinity, at = null, stop = () => {};
+  let last = -Infinity, at = null, stop = () => {}, down = null;
+  const ours = new WeakSet();
   const swallow = (e) => { e.preventDefault(); e.stopImmediatePropagation(); };
   // what is under the pressed spot, pressable, and since when: a control that comes there - or comes alive there - is new
   const live = (c) => !!c && !c.disabled && c.getAttribute?.("aria-disabled") !== "true";
@@ -41,28 +48,47 @@ export const installSecondClick = (doc = globalThis.document, { grace = GRACE_MS
     const c = controlOf(doc.elementFromPoint?.(at.x, at.y));
     if (c !== at.under || live(c) !== at.alive || cardOf(c) !== at.card) Object.assign(at, { under: c, alive: live(c), card: cardOf(c), since: now() });
   };
-  const leave = (e) => { if (at && (Math.abs(e.clientX - at.x) > SPOT_PX || Math.abs(e.clientY - at.y) > SPOT_PX)) { stop(); stop = () => {}; at = null; } };
+  const near = (e, p) => Math.abs(e.clientX - p.x) <= SPOT_PX && Math.abs(e.clientY - p.y) <= SPOT_PX;
+  const leave = (e) => { if (at && !near(e, at)) { stop(); stop = () => {}; at = null; } };
+  const drawn = (c) => !c.getClientRects || c.getClientRects().length > 0;
+  // ...`fresh`: it came under the pressed spot a moment ago - read as the pointer goes down, while it still stands there
+  const press = (e) => {
+    const c = e.isTrusted === false || e.button ? null : controlOf(e.target);
+    down = c ? { control: c, x: e.clientX, y: e.clientY, fresh: !!at && near(e, at) && (look(), same(c, at.under) && now() - at.since < moment) } : null;
+  };
   const click = (e) => {
-    const el = e.target, soon = e.timeStamp - last < grace;
+    if (ours.has(e)) return;
+    const d = down; down = null;
+    // ...the button moved from under a still pointer: this click is the browser's, on whatever holds both ends of the press
+    const moved = !!d && e.isTrusted !== false && !same(controlOf(e.target), d.control) && near(e, d) && d.control.isConnected !== false && live(d.control) && drawn(d.control);
+    const el = moved ? d.control : e.target, soon = e.timeStamp - last < grace;
     if (el?.matches?.(BACKDROP)) {
       if (soon) swallow(e);
       return;
     }
     // ...the same spot, another control: what the first click drew under the pointer a moment ago, or what came there since and is still new
-    if (at && e.isTrusted !== false && Math.abs(e.clientX - at.x) <= SPOT_PX && Math.abs(e.clientY - at.y) <= SPOT_PX) {
+    if (at && e.isTrusted !== false && near(e, at)) {
       const c = controlOf(el);
       const other = c && (!same(c, at.control) || cardOf(c) !== at.pressed);
-      if (other && (soon || (look(), same(c, at.under) && now() - at.since < moment))) { swallow(e); return; }
+      if (other && (soon || (moved ? d.fresh : (look(), same(c, at.under) && now() - at.since < moment)))) { swallow(e); return; }
     }
     last = e.timeStamp;
     stop();
     const c = controlOf(el);
     at = { x: e.clientX, y: e.clientY, control: c, under: c, alive: live(c), card: cardOf(c), pressed: cardOf(c), since: -Infinity };
     stop = watch(look);
+    if (!moved) return;
+    // ...judged above as a press of that button; now given to it, where the hand made it
+    swallow(e);
+    const view = doc.defaultView || globalThis;
+    const again = new view.MouseEvent("click", { bubbles: true, cancelable: true, composed: true, view: doc.defaultView || null, detail: 1, clientX: e.clientX, clientY: e.clientY,
+      screenX: e.screenX, screenY: e.screenY, ctrlKey: e.ctrlKey, shiftKey: e.shiftKey, altKey: e.altKey, metaKey: e.metaKey });
+    ours.add(again); d.control.dispatchEvent(again);
   };
+  doc.addEventListener("pointerdown", press, true);
   doc.addEventListener("click", click, true);
   doc.addEventListener("pointermove", leave, true);
   // ...and the page scrolled under the still pointer brings another control there as surely as a new one drawn
   doc.addEventListener("scroll", look, true);
-  return () => { stop(); doc.removeEventListener("click", click, true); doc.removeEventListener("pointermove", leave, true); doc.removeEventListener("scroll", look, true); doc.__tqSecondClick = false; };
+  return () => { stop(); doc.removeEventListener("pointerdown", press, true); doc.removeEventListener("click", click, true); doc.removeEventListener("pointermove", leave, true); doc.removeEventListener("scroll", look, true); doc.__tqSecondClick = false; };
 };

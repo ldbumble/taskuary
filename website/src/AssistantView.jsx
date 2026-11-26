@@ -3195,10 +3195,8 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true, r
       </DayHold>
       <div className="tq-modes">
         {/* pressable while the day counts or the walk is busy: the press is held (walkQueued) and runs once it can */}
+        {/* ...the day fills in above this row as it lands and moves it under the pointer: the press still lands (secondClick.js) */}
         <button type="button" className="tq-chip primary" disabled={walkQueued || starting || resetting || (!counting && !canAdvance && !onYou)}
-          // ...kept on the press itself while loading: the day fills in above this row as it lands and moves it, and a click
-          // whose release lands after the move never reaches the button
-          onPointerDown={counting ? () => setWalkQueued(true) : undefined}
           onClick={() => (counting || walkOff ? setWalkQueued(true) : start(null))}
           title={btnHint("walk")}>{starting || walkQueued ? "Getting your first one..." : btn("walk")}</button>
         {/* NO "Set up Taskuary" HERE: setup is the Setup button on the top bar, never a choice in the chat (the owner, 2026-10-19) */}

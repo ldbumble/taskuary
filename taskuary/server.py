@@ -188,6 +188,8 @@ async def _lifespan(_app):
         except Exception as e: logger.warning(f'the old playbooks were not moved: {e}')
         try: skills.purge()                        # Recently deleted keeps a skill KEEP_DAYS, then it goes for good
         except Exception as e: logger.warning(f'deleted skills not purged: {e}')
+        try: skills.seed()                         # ...and the few a home starts with, each offered once (skills.seed)
+        except Exception as e: logger.warning(f'starter skills not filed: {e}')
         try:                                          # Recently deleted keeps a report or a rule KEEP_DAYS, then it goes for good
             from . import recentlydeleted; recentlydeleted.purge(store)
         except Exception as e: logger.warning(f'Recently deleted not purged: {e}')

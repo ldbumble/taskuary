@@ -583,3 +583,37 @@ def test_a_skill_that_says_nothing_of_how_the_job_is_done_is_refused_at_every_do
     try: agenttools.proposal_of({'action': 'save_skill', 'slug': 'month-end', 'text': blank}); raise AssertionError('the tool took it')
     except ValueError as e: assert 'how the job is done' in str(e)
     assert proposals.queue(s, tid, {'action': 'save_skill', 'slug': 'month-end', 'text': full, 'why': 'it recurs'})
+
+
+# ── the skills a home starts with (skills.seed) ──────────────────────────────────────────────────────────────────────────────────────────
+STARTERS = ['charts', 'document', 'research', 'slides', 'spreadsheet', 'website']
+
+
+def test_a_fresh_home_starts_with_the_starter_skills_each_one_a_skill_like_his_own():
+    """The owner, 2026-11-26: "did you seed with a few skills and one that includes interview". Each is filed in the library's own shape -
+    listed with its description whole, read whole by the agent that picks it - and the website one says to ask him first, all at once."""
+    _clean()
+    assert skills.seed() == STARTERS
+    books = {b['slug']: b for b in skills.list_all()}
+    assert sorted(books) == STARTERS and all(b['enabled'] and not b['origin'] for b in books.values())
+    for slug, b in books.items():
+        pb = skills.check(b['text'])
+        assert pb['name'] == slug and 'Use when' in pb['description'] and len(pb['description']) <= skills.LIST_DESC, (slug, pb['description'])
+        assert len(b['text'].split()) < 450, f'{slug}: a starter skill is short'
+        assert skills.line(b) in skills.brief() and not skills.line(b).endswith('…')
+    web = skills.lookup(name='website')
+    assert 'interview the owner' in web and 'one set of questions' in web and web.index('Ask first') < web.index('## Build')
+
+
+def test_seeding_is_once_a_skill_of_his_under_that_name_is_untouched_and_one_he_deleted_stays_gone():
+    import time
+    _clean()
+    mine = skills.front('website', 'How we build client sites. Use when a client asks for one.') + '\n# Client sites\n\nAlways on our own template.\n'
+    skills.write('website', mine)
+    assert skills.seed() == [s for s in STARTERS if s != 'website'], 'an install that has one of that name keeps its own'
+    assert 'our own template' in skills.read('website') and skills.seed() == [], 'and a second start files nothing'
+    # ...he rewrites one and deletes another: neither comes back, at the next start or after the purge
+    skills.write('slides', skills.front('slides', 'Our decks. Use when asked for a deck.') + '\n# Decks\n\nTen slides, never more.\n')
+    assert skills.delete('charts') and skills.purge(now=time.time() + (skills.KEEP_DAYS + 1) * 86400) == ['charts']
+    assert skills.seed() == [] and 'Ten slides' in skills.read('slides') and skills.read('charts') is None
+    assert 'our own template' in skills.read('website')

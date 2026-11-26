@@ -805,10 +805,13 @@ def finished_without(store, tid: int, card: int = None) -> list:
     the way to a post, the agent went on without it, the post went up on its own Approve - and the look stayed pending on a card that read
     "Posted", with no button anywhere and the task "waiting for your input" for good). -> the review ids."""
     from .shellgate import turn_of
+    from .verdicts import _RUNNING
     turn, out = turn_of(store, int(tid)), []
     for r in store._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action' AND Status='pending' AND DeliveryClaim IS NULL", (int(tid),)):
         try: p = json.loads(r.get('DraftText') or '{}') or {}
         except (TypeError, ValueError): p = {}
+        # ...never the step whose own press is running now (verdicts._claim_act): that is the road's last press itself, marked once it has run
+        if r['ReviewId'] in _RUNNING: continue
         if isinstance(p, dict) and p.get('action') in HELD_ACTS and (p.get('turn') == turn if card is None else p.get('card') == card) \
                 and store.decide_review(r['ReviewId'], 'superseded', None, 'taskuary', note=NOT_NEEDED):
             out.append(r['ReviewId'])

@@ -1049,7 +1049,7 @@ def test_a_step_held_on_a_cards_road_that_the_agent_went_on_without_ends_with_th
     read "Posted": no button anywhere, and the task's header and rail said the agent waited on him. A step held on a card's road ends with
     that road, with its one true line. Invented posts."""
     from unittest import mock
-    from taskuary import cardqueue, conversation, general, proposals, taskstate
+    from taskuary import cardqueue, conversation, general, proposals, taskstate, verdicts
     s, tid = world()
     conversation.hear(s, tid, turn=True)
     x = s.add_review({'TaskId': tid, 'Kind': 'action', 'Status': 'pending', 'Origin': 'agent', 'Reason': 'the post you asked for',
@@ -1060,9 +1060,14 @@ def test_a_step_held_on_a_cards_road_that_the_agent_went_on_without_ends_with_th
     hold = lambda what, **p: proposals.queue(s, tid, {'action': 'browser_act', 'sid': 's1', 'site': 'x.example', 'what': what, 'why': 'it is his to allow', **p}, 'agent')['reviewId']
     look = hold('Run a script on the page', args=['eval', 'document.title'], command='agent-browser eval document.title')
     post = hold('Publish your post on X', args=['click', '@e20'], command='agent-browser click @e20')
-    s.decide_review(post, 'approved', None, 'owner'); assert cardqueue.done(s, tid, 'Posted on x.example') == [x]; cardqueue._SEEN.clear()
+    # ...his Approve on the Post, in the order a press runs: claimed, run on the page - the card is done - and only then marked (verdicts.decide)
+    assert verdicts._claim_act(s, post)
+    try: assert cardqueue.done(s, tid, 'Posted on x.example') == [x]
+    finally: verdicts._RUNNING.discard(post)
+    assert s.get_review(post)['Status'] == 'pending', 'the press that is running is never one the card went without'
+    s.decide_review(post, 'approved', None, 'owner'); cardqueue._SEEN.clear()
     rv = s.get_review(look)
-    assert proposals.passed(rv) and rv['DecideNote'] == proposals.NOT_NEEDED, 'the look it went on without is over with the card'
+    assert s.get_review(post)['Status'] == 'approved' and proposals.passed(rv) and rv['DecideNote'] == proposals.NOT_NEEDED, 'the look it went on without is over with the card'
     assert not s._rows("SELECT 1 AS x FROM review WHERE TaskId=? AND Status='pending'", (tid,)) and cardqueue.row_over(s, tid)
     assert taskstate.standing(s, tid)['waits_on'] != 'you', 'nothing waits on him'
     assert chatlog.live_card(s, tid) is None

@@ -341,6 +341,21 @@ def test_a_tab_he_said_no_to_is_marked_so_never_as_one_that_went():
     assert [(t['name'], t['done'], bool(t.get('no'))) for t in run] == [('X', True, False), ('LinkedIn', True, True), ('Reddit', False, False)]
 
 
+def test_a_tab_names_a_thing_as_its_card_writes_it():
+    """The card gallery, 2026-11-25: the pull request's tab read "Northwind/ledger#31" over a card saying northwind/ledger#31 - a name is
+    written as it is; only a phrase in his words ('Push') starts with a capital."""
+    from taskuary import cardqueue, conversation, general
+    s, tid = world()
+    conversation.hear(s, tid, turn=True)
+    ids = [s.add_review({'TaskId': tid, 'Kind': 'action', 'Status': 'pending', 'Origin': 'agent', 'Reason': 'the agent proposes to merge it',
+                         'DraftText': json.dumps(p)}) for p in ({'action': 'merge_pr', 'repo': 'northwind/ledger', 'number': 31, 'text': ''},
+                                                              {'action': 'push', 'cwd': '.', 'why': 'the fix'})]
+    s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'Merge it, then push.')
+    chatlog.read(s, tid)
+    [run] = cardqueue.tabs(s, cardqueue.state(s, tid))
+    assert run[0]['name'] == 'northwind/ledger#31' and run[1]['name'][:1].isupper(), run
+
+
 def test_every_tool_call_is_one_row_in_plain_words_and_summary_folds_them_to_one_line():
     """"BETTER SHOWING WHAT TOOLS ARE RUN, BUT NOT A BILLION DETAILS" (the owner, 2026-11-19): each call one row of what it did and on what,
     its outcome in a few words, its output capped behind it; summary - one line that opens. ONE ROW PER CALL, ALWAYS (2026-11-23): the same

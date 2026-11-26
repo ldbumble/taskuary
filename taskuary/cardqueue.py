@@ -285,9 +285,18 @@ def tab(store, u: dict) -> str:
     r = (([] if step(u) else _waits(u)) or u['rows'] or [{}])[0]
     if r.get('Kind') == 'action' and not r.get('Batch') and (net := POSTS.get(_p(r).get('type'))): return net
     if r.get('Kind') not in (None, 'action') and not r.get('Batch') and (to := to_whom(store, r)): return to
+    # ...a thing's own name is written as its card writes it (the card gallery, 2026-11-25: "Northwind/ledger#31" over northwind/ledger#31);
+    # only a phrase in his words starts with a capital ('Push')
+    if not r.get('Batch') and (n := own_name(r)): return n
     w = what(store, u)
     w = w[4:] if w.startswith('the ') else w
     return w[:1].upper() + w[1:]
+
+
+def own_name(r: dict) -> str:
+    "An act's thing by its own name, as written ('northwind/ledger#31' - an issue or a pull request), else ''."
+    p = _p(r) if r.get('Kind') == 'action' else {}
+    return f"{p['repo']}#{p['number']}" if p.get('repo') and p.get('number') is not None else ''
 
 
 
@@ -320,7 +329,8 @@ def what(store, u: dict, addr: bool = False) -> str:
         press = str((action_for(_p(r).get('type')) or {}).get('press') or '').split()
         return plural(len(rows), press[1] if len(press) == 2 else 'step')
     if r.get('Kind') == 'action':
-        if (p := _p(r)).get('repo') and p.get('number') is not None: return f"{p['repo']}#{p['number']}"       # ...an issue by its own name
+        if (n := own_name(r)): return n                                     # ...an issue by its own name
+        p = _p(r)
         from .proposals import PLAYBOOKS
         if p.get('action') in PLAYBOOKS: return 'the playbook'
         from .proposals import act_words

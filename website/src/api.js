@@ -23,7 +23,9 @@ api.interceptors.request.use((c) => {
 const wrote = c => { if (isWrite(c)) noteWrite(); };
 api.interceptors.response.use((r) => { wrote(r.config); noteSetup(r.config); return r; }, (e) => {
   wrote(e?.config);
-  if (staleToken(e, localStorage)) window.dispatchEvent(new Event(UNLINKED_EVENT));
+  const stale = staleToken(e, localStorage);
+  if (stale === "renewed") { if (!window.__tqRenewing) { window.__tqRenewing = true; window.location.reload(); } }
+  else if (stale) window.dispatchEvent(new Event(UNLINKED_EVENT));
   record(e);
   return Promise.reject(keepDetail(e));
 });

@@ -13,7 +13,7 @@ API road's file tools), and in a shell line every argument that is a path - driv
 A path built from a variable this cannot read is held, as an unreadable delete is. Programs' own folders (Program Files, the system's,
 Python's) are no one's files and pass.
 """
-import os, re, sys, tempfile
+import os, posixpath, re, sys, tempfile
 from pathlib import Path
 from urllib.parse import unquote
 
@@ -322,17 +322,63 @@ def _printed(m) -> str:
     # ...a heredoc under a QUOTED mark: its body is text as written - under a bare one the shell runs the `$(...)` in it, which no one read here
     if tool == 'cat' and len(args) >= 2 and args[0] in ('<<', '<<-') and len(set(args[1:])) == 1 and re.search(r'<<-?\s*[\'"]', m[2]): said = ''
     elif '<' in m[2]: return m[0]
+    # ...and words the program DECODES are not the words written (red team round 5: `cat "$(printf '\056\056/\056\056/config\056toml')"` named no
+    # path here and the owner's token to the shell): a backslash escape is a value only a run can give - but for printf's own closing `\n`
+    elif '\\' in m[2].replace('%s\\n', '%s', 1): return m[0]
     elif tool == 'echo': said = ' '.join(x for x in args if not re.fullmatch(r'-[neE]+', x))
     elif tool == 'printf' and len(args) == 1 and '%' not in args[0].replace('%%', ''): said = args[0]
-    elif tool == 'printf' and len(args) > 1 and args[0] in ('%s', '%s\\n'): said = ' '.join(args[1:])
+    elif tool == 'printf' and len(args) > 1 and args[0].replace('\\\\', '\\') in ('%s', '%s\\n'): said = ' '.join(args[1:])      # ...words doubles a `\` on Windows
     else: return m[0]
     return '"' + said.replace('"', '\\"') + '"' if m[1] else said
+# ...AND `$'...'` IS THE SHELL'S OWN DECODING, done before any program runs: read as the words it will be (`cat $'\x2e\x2e/x'` is `cat ../x`),
+# so a tab handed to sort or a message's line breaks stay plain words. One whose words cannot be written back as one quoted word is UNREAD
+_ESC = re.compile(r'\\(?:(0?[0-7]{1,3})|x([0-9A-Fa-f]{1,2})|u([0-9A-Fa-f]{1,4})|U([0-9A-Fa-f]{1,6})|c(.)|(.))', re.S)
+_ESC1 = dict(zip('abeEfnrtv\\\'"?', '\a\b\x1b\x1b\f\n\r\t\v\\\'"?'))
+UNREAD = '${env:TASKUARY_UNREAD}'                # a word only a run can give, spelled as a variable no environment has: held wherever it is a path
+def _ansi(cmd: str) -> str:
+    def said(m): return (chr(int(m[1], 8) & 255) if m[1] else chr(min(int(m[2] or m[3] or m[4], 16), 0x10ffff)) if m[2] or m[3] or m[4]
+                         else chr(ord(m[5].upper()) ^ 64) if m[5] else _ESC1.get(m[6], m[0]))
+    out, q, i = [], '', 0
+    while i < len(cmd):
+        c = cmd[i]
+        if not q and cmd.startswith("$'", i):
+            j = i + 2
+            while j < len(cmd) and cmd[j] != "'": j += 2 if cmd[j] == '\\' else 1
+            t = _ESC.sub(said, cmd[i + 2:j])
+            out.append(f"'{t}'" if not re.search(r"['\\]", t) else f'"{t}"' if not re.search(r'["\\$`]', t) else UNREAD); i = j + 1; continue
+        if c == '\\' and q != "'" and i + 1 < len(cmd): out.append(cmd[i:i + 2]); i += 2; continue
+        if q: q = '' if c == q else q
+        elif c in '"\'': q = c
+        out.append(c); i += 1
+    return ''.join(out)
+
+
 def _literal(cmd: str) -> str:
-    "The line with each `$(...)` that only prints its own words replaced by them (_printed) - innermost first."
+    "The line with each `$'...'` as its words (_ansi) and each `$(...)` that only prints its own words replaced by them (_printed) - innermost first."
+    cmd = _ansi(cmd)
     for _ in range(8):
         if (new := _SUBST.sub(_printed, cmd)) == cmd: break
         cmd = new
     return cmd
+
+
+# A VARIABLE THE LINE ITSELF SET, HOWEVER THE SHELL SPELLS READING IT: `${!b}` is the variable `b` names, `${a[0]}` and `${a[@]}` items of a
+# list, `${a:-x}` the value it has - and a word that reads a list is each word it may be. A cut or a swap (`${f%.txt}`) is left as written
+_ARRAY = re.compile(r'(?<![\w$.\-/])([A-Za-z_]\w*)=\(([^()]*)\)')
+_FORM = re.compile(r'\$\{(!?)([A-Za-z_]\w*)((?:\[[^\]}]*\])?)([^}]*)\}')
+_MULTI = re.compile(r'\$(?:\{([A-Za-z_]\w*)(?:\[\])?\}|([A-Za-z_]\w*))')
+def _forms(x: str, env: dict, deep: int = 0) -> list:
+    def one(m):
+        n = m[2].lower()
+        if n not in env and n + '[]' not in env: return m[0]
+        if m[1]: return env.get(str(env.get(n)).lower(), UNREAD) if not (m[3] or m[4]) else UNREAD
+        if m[4] and not re.match(r':?[-=]', m[4]): return m[0]
+        return '${' + n + ('[]' if m[3] and n + '[]' in env else '') + '}'
+    x = _FORM.sub(one, x)
+    m = next((m for m in _MULTI.finditer(x) if (m[1] or m[2]).lower() + '[]' in env), None)
+    if not m or deep > 2: return [x]
+    its = env[(m[1] or m[2]).lower() + '[]'].split('\0')
+    return [y for it in its[:12] + [UNREAD] * (len(its) > 12) for y in _forms(x[:m.start()] + it + x[m.end():], env, deep + 1)]
 
 
 # WHAT A LINE WRITES, BY ITS GRAMMAR (red team F2): a redirect's target, and the file a writing program is named on - its destination for a copy
@@ -352,12 +398,20 @@ def command_paths(cmd: str, cwd: str = '', env: dict = None, made: list = None, 
     # read (the HIPAA walk, 2026-11-21)
     if (inner := unwrap(cmd))[0]: return command_paths(inner[1], cwd, env, made, writes)
     out, here, env, reads = [], cwd, dict(env or {}), False
-    for seg in _segments(_literal(shell_text(str(cmd or '')))):        # ...a heredoc's or a here-string's body is data, never a path read
+    line = _literal(shell_text(str(cmd or '')))                        # ...a heredoc's or a here-string's body is data, never a path read
+    qs = _quoted(line)
+    line = _ARRAY.sub(lambda m: m[0] if any(a < m.start() < b for a, b in qs) else f'{m[1]}[]={m[2]} ;', line)
+    for seg in _segments(line):
         # ...a path kept in a variable is read where the variable is (`$p='C:/x.csv'; Get-Content $p` - the real-CLI walk, 2026-11-16)
-        if (m := re.match(r'^\s*\$?([A-Za-z_]\w*)\s*=\s*([^=].*)$', seg)):
-            v = m[2].strip().strip('"\'')
-            env[m[1].lower()] = v
+        # ...AND KEPT AS WHAT IT IS BY THEN (red team round 5: `a=.ssh/id_ed25519; b=$a; cd ~; cat "$b"` - each hop was filled in once, so a
+        # second hop was a word that named nothing): a value is filled in where it is set, a list's items (`a=(x y)`, `for f in x y`) are
+        # each the word it may be, and `export`, `declare` and their kin set one as a bare `a=` does
+        if (m := re.match(r'^\s*(?:(?:export|declare|local|readonly|typeset)\s+(?:-\w+\s+)*)?\$?([A-Za-z_]\w*)(\[\])?\s*=\s*([^=].*)$', seg)):
+            v, n = m[3].strip() if m[2] else m[3].strip().strip('"\''), m[1].lower()
+            if m[2]: env[n + '[]'] = '\0'.join(words(v))
+            else: env[n] = v if (e := _expand(v, here, env)) is None else e; env.pop(n + '[]', None)
             seg = f'= {v}'
+        elif (m := re.match(r'^\s*for\s+([A-Za-z_]\w*)\s+in\s+(.*)$', seg)): env[m[1].lower() + '[]'] = '\0'.join(words(m[2]))
         # ...a PowerShell array's items are its words, never one name with a comma on it (`@("$env:USERPROFILE\Desktop", ...)` held "Read \", in
         # Desktop"), and a segment that opens on a value is an expression - its first word a path like the rest, not a program
         w = [x for x in (y.rstrip(',') for y in words(seg)) if x]
@@ -365,10 +419,12 @@ def command_paths(cmd: str, cwd: str = '', env: dict = None, made: list = None, 
         while w and (re.match(r'^[A-Za-z_]\w*=', w[0]) or w[0].lower() in ('&', 'sudo', 'time', 'nohup', 'command', 'exec', 'call', 'then', 'do', 'if', 'else')): w = w[1:]
         if not w: continue
         tool = re.sub(r'\.(exe|cmd|ps1|bat)$', '', os.path.basename(w[0].replace('\\', '/')).lower())
-        if tool in ('bash', 'sh', 'powershell', 'pwsh', 'cmd'):
+        if tool in ('bash', 'sh', 'zsh', 'dash', 'ksh', 'powershell', 'pwsh', 'cmd'):
             i = next((i for i, x in enumerate(w) if x.lower() in ('-c', '-command', '/c', '/k')), None)
             if i is not None: out += command_paths(' '.join(w[i + 1:]), here, env, made, writes)
             continue
+        # ...and a line handed to the shell to run again is that line (`eval "cat <path>"`, PowerShell's iex): one quoted word named no path
+        if tool in ('eval', 'iex', 'invoke-expression'): out += command_paths(' '.join(w[1:]), here, env, made, writes); continue
         cd, named = tool in ('cd', 'chdir', 'set-location', 'sl', 'pushd'), len(out)
         lists = tool in _LISTS and not any(x in _RUNS_ON for x in w)
         reads = reads or not (lists or tool in _NAMES)
@@ -387,6 +443,7 @@ def command_paths(cmd: str, cwd: str = '', env: dict = None, made: list = None, 
         # ...and a variable it reads by name (`os.environ['TASKUARY_HOME'] + '/config.toml'`, process.env.HOME) is that variable's path, joined to
         # the text after it (red team #2, T3): the script names the file as surely as `cat $TASKUARY_HOME/config.toml` does
         if code: w = [w[0], *(t for x in w[1:] for t in re.split(r"[\s'\"(),;=+]+", _joined(x)) if t and t not in ('-c', '-e'))]
+        else: w = [w[0], *(y for x in w[1:] for y in _forms(x, env))]
         dest = max((i for i, x in enumerate(w) if i and not x.startswith('-')), default=0) if tool in _COPIES else 0
         for i, x in enumerate(w[1:], 1):
             to = bool(_REDIRECT.match(w[i - 1])) or i == dest or tool in _WRITERS
@@ -401,6 +458,8 @@ def command_paths(cmd: str, cwd: str = '', env: dict = None, made: list = None, 
             near = near or bool(x) and not x.startswith('-') and _linked(os.path.join(here or cwd or os.getcwd(), x))
             # ...a file:// address is the file it names (`curl file://$TASKUARY_HOME/config.toml`)
             if re.match(r'^file:', x, re.I): x = re.sub(r'^/(?=[A-Za-z]:)', '', unquote(re.sub(r'^file:(//(localhost)?)?', '', x, flags=re.I)))
+            # ...a rooted path is the place it comes to: `/dev/../<home>/config.toml` is no device (red team round 5)
+            if x.startswith('/') and '..' in x.split('/'): x = posixpath.normpath(x)
             # ...and Taskuary's own address as a session is handed it ($TASKUARY_URL/api/...) is a web address, never a file: a read-only curl
             # of its own API was held as "a path it builds from a variable", a card each time the agent looked (the roads audit, 2026-11-19)
             if not x or '://' in x or _OWN.match(x) or re.match(r'^/\w$', x) or re.match(r'^(/dev/|\d$)', x) or not (near or _pathish(x) or tool not in _PRINTS and _filled(x, here, env)): continue

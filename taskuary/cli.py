@@ -750,6 +750,9 @@ def main():
     host, port = args.host or cfg['server']['host'], args.port or cfg['server']['port']
     url = public_url(host, port)
     if args.link:
+        # ...the owner's, from his own terminal: an agent's session - his own task's too - is handed no address that signs in as him
+        if agent: raise SystemExit("taskuary: --link refused - this is an agent's session, and the address it prints signs in as the owner. "
+                                   "It is his to run in his own terminal.")
         if _busy(host, port) and _is_taskuary(url): print(launchkey.remote_link(url, config.home()))
         else: print(f'Taskuary is not running at {url} - start it with `taskuary`, then ask again.')
         return

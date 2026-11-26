@@ -161,3 +161,139 @@ def test_a_start_given_its_own_port_never_asks_the_app_on_the_configured_one(mon
     monkeypatch.setattr(desktop, 'BOOT_WAIT', 0)
     desktop.main()
     assert asked == [7899]
+
+
+# ── RED TEAM ROUND 5: a launch key is never handed to a process Taskuary started ──────────────────────────────────────────────────────────
+# An agent's own command asked the door with no token, read the one-time word back out of the home (the same account's file), and opened the
+# page that carries the owner token. Who is asking is read from the OS - the process on the other end of the socket - never from the caller.
+def test_the_door_refuses_a_process_this_server_started_and_one_that_hides(monkeypatch):
+    from taskuary import config, spawn
+    agent = TestClient(server.app, client=('127.0.0.1', 51111), headers={'X-Taskuary-Token': ''})
+    asked, words = [], lambda: set((config.home() / 'launch').glob('*.word'))
+    monkeypatch.setattr(spawn, 'holders', lambda port, to: asked.append(port) or [4242])
+    monkeypatch.setattr(spawn, 'ours', lambda pid, marks=(): pid == 4242)
+    before = words()
+    r = agent.post('/api/launch-key')
+    assert r.status_code == 403 and 'never to a process Taskuary started' in r.json()['detail'] and asked == [51111]
+    assert words() == before, 'no word is even written for it'
+    monkeypatch.setattr(spawn, 'holders', lambda port, to: [])                 # ...the connection is here and nobody admits to holding it
+    assert agent.post('/api/launch-key').status_code == 403
+    # ...the owner's own other process - not one of ours - is handed the challenge, and the key for the word, as before
+    monkeypatch.setattr(spawn, 'ours', lambda pid, marks=(): False); monkeypatch.setattr(spawn, 'holders', lambda port, to: [777])
+    got = agent.post('/api/launch-key').json()
+    word = (config.home() / 'launch' / got['challenge']).read_text(encoding='utf-8')
+    k = agent.post('/api/launch-key', json={'challenge': got['challenge'], 'word': word}).json()['key']
+    assert TOK() in c.get(f'/?k={k}').text
+    # ...and a caller on another machine (no connection of this machine's own) is asked for the word in the home, as before
+    monkeypatch.setattr(spawn, 'holders', lambda port, to: None)
+    assert set(agent.post('/api/launch-key').json()) == {'challenge'}
+
+def test_a_process_is_ours_by_its_parents_and_the_one_that_started_us_is_not():
+    import os
+    from taskuary import spawn
+    assert spawn.ours(os.getpid()), 'this process itself'
+    assert not spawn.ours(os.getppid()), 'the process that started this one is nobody we started'
+    assert not spawn.ours(0) and not spawn.ours('x')
+
+def test_an_agents_session_asks_for_no_key_and_link_is_refused_there(monkeypatch, capsys):
+    """`taskuary --link` run from inside an agent's session printed an address that signs in as the owner; Taskuary started again from one
+    opened his browser on a keyed page. A session - his own task's too - asks the running server for nothing."""
+    called = []
+    class Conn:
+        def __init__(self, *a, **k): called.append(a)
+    monkeypatch.setattr(launchkey.http.client, 'HTTPConnection', Conn)
+    monkeypatch.setenv('TASKUARY_TASK', '7'); monkeypatch.setenv('TASKUARY_TOKEN', server.cfg['server']['agent_token'])
+    assert launchkey.remote_link('http://127.0.0.1:7795', 'unused') == 'http://127.0.0.1:7795' and not called
+    monkeypatch.setattr(cli, '_busy', lambda h, p: True); monkeypatch.setattr(cli, '_is_taskuary', lambda u: True)
+    monkeypatch.setattr(cli, 'session', lambda: (True, None))                # ...the owner's own task's agent
+    monkeypatch.setattr(sys, 'argv', ['taskuary', '--link'])
+    with pytest.raises(SystemExit) as e: cli.main()
+    assert '--link refused' in str(e.value) and '?k=' not in capsys.readouterr().out and not called
+
+SERVER = r'''
+import os, sys, threading, time
+sys.path.insert(0, {root!r})
+import uvicorn
+from taskuary import launchkey, server, spawn
+srv = uvicorn.Server(uvicorn.Config(server.app, host='127.0.0.1', port={port}, lifespan='off', log_level='error'))
+threading.Thread(target=srv.run, daemon=True).start()
+while not srv.started: time.sleep(.05)
+print('UP', flush=True)
+# an agent's own command, as this server starts one (spawn) - with every mark of a session taken out of its environment, as one hiding would
+env = {{k: v for k, v in os.environ.items() if k not in launchkey.MARKERS and k != 'TASKUARY_TOKEN'}}
+rc, out = spawn.output([sys.executable, '-I', {client!r}], timeout=60, env=env)
+print('CHILD ' + ' '.join(out.split()), flush=True)
+# ...and one that outlives the command that started it: its parent is gone by the time it asks
+spawn.output([sys.executable, '-I', {starter!r}], timeout=60, env=env)
+end = time.time() + 60
+while not os.path.exists({late!r}) and time.time() < end: time.sleep(.1)
+print('LATE ' + (open({late!r}).read().strip() if os.path.exists({late!r}) else 'nothing'), flush=True)
+sys.stdin.readline()
+srv.should_exit = True
+'''
+CLIENT = r'''
+import sys
+sys.path.insert(0, {root!r})
+from taskuary import launchkey
+print(launchkey.remote_link({url!r}, {home!r}))
+'''
+STARTER = r'''
+import subprocess, sys
+subprocess.Popen([sys.executable, '-I', {orphan!r}], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+'''
+ORPHAN = r'''
+import os, sys, time
+sys.path.insert(0, {root!r})
+from taskuary import launchkey
+time.sleep(1.5)
+got = launchkey.remote_link({url!r}, {home!r})
+with open({late!r} + '.tmp', 'w') as f: f.write(got)
+os.replace({late!r} + '.tmp', {late!r})
+'''
+
+def test_on_real_sockets_an_agents_command_is_refused_and_the_owners_own_start_still_signs_in(monkeypatch, tmp_path, isolated_process_env):
+    """The live shape, end to end: a real server in a process of its own, a command it starts as it starts an agent's (and one that outlives
+    its parent) asking for a key by the CLI's own road - refused - and this process, which that server did not start, standing in for the
+    owner's own second start or `taskuary --link`: handed a key, and the page it opens carries his token."""
+    import http.client, socket, subprocess
+    from pathlib import Path
+    for k in (*launchkey.MARKERS, 'TASKUARY_TOKEN'): monkeypatch.delenv(k, raising=False)
+    with socket.socket() as so: so.bind(('127.0.0.1', 0)); port = so.getsockname()[1]
+    env = isolated_process_env(port=port)
+    for k in (*launchkey.MARKERS, 'TASKUARY_TOKEN', 'TASKUARY_API'): env.pop(k, None)
+    env.update(TASKUARY_HOST='127.0.0.1', TASKUARY_PORT=str(port))
+    home, root, url = env['TASKUARY_HOME'], str(Path(__file__).resolve().parents[1]), f'http://127.0.0.1:{port}'
+    f = {n: str(tmp_path / f'{n}.py') for n in ('server', 'client', 'starter', 'orphan')}
+    late = str(tmp_path / 'late.txt')
+    for n, text in (('server', SERVER), ('client', CLIENT), ('starter', STARTER), ('orphan', ORPHAN)):
+        Path(f[n]).write_text(text.format(root=root, port=port, url=url, home=home, late=late, client=f['client'], starter=f['starter'], orphan=f['orphan']), encoding='utf-8')
+    p = subprocess.Popen([sys.executable, '-I', f['server']], env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    try:
+        said, seen = {}, []
+        for line in p.stdout:
+            seen.append(line); k, _, v = line.strip().partition(' ')
+            said[k] = v
+            if k == 'LATE': break
+        assert 'UP' in said and 'CHILD' in said and 'LATE' in said, ''.join(seen)[-3000:]
+        assert said['CHILD'] == url, f"the server's own child was handed a key: {said['CHILD']}"
+        assert said['LATE'] == url, f"a command that outlived its parent was handed a key: {said['LATE']}"
+        assert not list((Path(home) / 'launch').glob('*.word')), 'and no word was left in the home for it to read'
+        mine = launchkey.remote_link(url, home)                    # ...the owner's own process: not one that server started
+        assert mine.startswith(url + '/?k='), mine
+        conn = http.client.HTTPConnection('127.0.0.1', port, timeout=10)
+        try: conn.request('GET', mine[len(url):]); page = conn.getresponse().read().decode('utf-8', 'replace')
+        finally: conn.close()
+        assert SEED in page or 'Taskuary is updating' in page, page[:300]
+    finally:
+        try: p.stdin.write('\n'); p.stdin.flush()
+        except OSError: pass
+        try: p.wait(timeout=20)
+        except subprocess.TimeoutExpired: p.kill()
+
+def test_the_word_in_the_home_is_never_an_agents_to_read():
+    from taskuary import config, readgate
+    from taskuary.store import MemoryStore
+    d = config.home() / 'launch'; d.mkdir(parents=True, exist_ok=True); (d / '0123456789abcdef.word').write_text('w', encoding='utf-8')
+    for cmd in (f'cat "{d / "0123456789abcdef.word"}"', f'cat "{d}"/*.word', f'cd "{d}" && cat 0123456789abcdef.word'):
+        assert readgate.of_command(MemoryStore(), 1, cmd, str(config.home().parent)) == ([], readgate.NEVER), cmd
+    assert readgate.judge(MemoryStore(), 1, [str(d / '0123456789abcdef.word')], str(config.home().parent)) == ([], readgate.NEVER)

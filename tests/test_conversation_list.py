@@ -1210,6 +1210,9 @@ class TheList(unittest.TestCase):
         self.brain.delay = HOLD
         self.say('Remove the old export.', 'l-one', wait=False)
         self.assertTrue(until(lambda: self.list()['working'] and any(x['kind'] == 'turn' for x in self.list()['items'])))
+        # ...and handed over, at work in its brain: a turn is drawn from his line, before its hand-over - and a press made in that beat is one
+        # the hand-over itself hears, in the chat at once and never by the box (macOS CI, 2026-11-26: pending read [])
+        self.at_work()
         self.s.audit('task', self.tid, 'permission_answered', 'owner', detail={'answer': 'allow_once', 'asked': 'delete old-export.csv'})
         self.assertEqual([x['kind'] for x in self.list()['pending']], ['press'])
         conversation.hear_press(self.s, self.tid, 'permission_answered')

@@ -727,6 +727,16 @@ def launch_key(request: Request, body: LaunchKeyBody | None = None):
     scope = guard.scope_of(cfg['server'], request.headers)
     if scope == guard.OWNER: return {'key': launchkey.mint()}
     if scope != guard.ANON: raise HTTPException(403, "a launch key is the owner's")
+    # ...AND NEVER A PROCESS THIS SERVER STARTED (red team round 5: an agent's own command asked with no token, read the word back out of the
+    # home - the same account's file - and opened the page that carries the owner token). Who is on the other end is asked of the OS
+    # (spawn.holders, spawn.ours), not of the caller: an agent's session, a command under it, a held step run on a press
+    from . import spawn
+    c, me = request.client, request.scope.get('server') or ('', 0)
+    if c and re.fullmatch(r'[0-9a-fA-F:.]+', str(c.host or '')) and (who := spawn.holders(c.port, me[1])) is not None \
+            and (not who or any(spawn.ours(p, launchkey.MARKERS) for p in who)):
+        raise HTTPException(403, "a launch key is handed to the owner's own start of Taskuary, never to a process Taskuary started or one this "
+                                 "computer will not name - an agent's session works through its own task's tools. The owner opens the app himself, "
+                                 "or runs `taskuary --link` in his own terminal.")
     if body and body.challenge:
         if not launchkey.proved(body.challenge, body.word): raise HTTPException(403, 'that word is not the one written - ask again')
         return {'key': launchkey.mint()}

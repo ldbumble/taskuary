@@ -44,6 +44,7 @@ PRESS_FIX = 'memory_his_presses'    # ...and that the lines his presses made, wh
 AUTO_AT = 3                   # distinct episodes of his own acts that put a learned line in use - LEARNED.md's bar from the beginning
 CAP, LEARNING, PER_ABOUT = 60, 30, 6    # learned lines in use (about what LEARNED.md held), still being seen, and about one person or topic
 MAX_WORDS = 30                # a conclusion is one sentence; a longer line is a record, and records are the ledger's
+SAID_MAX, SUBJECT_MAX = 400, 120   # what an agent may keep as his words (remember): one fact and what it is about - as much as its audit row keeps
 _ADDR = re.compile(r'[\w.+-]+@[\w-]+(?:\.[\w-]+)+')
 SCOPE_SAYS = {'sender': '{}', 'sender_domain': 'anyone at {}', 'subject': 'the topic "{}"', 'source': 'mail arriving on "{}"'}
 YOURS = "That line is yours - you said it, so it is not something Taskuary learned wrong. Forget takes it out."
@@ -185,6 +186,12 @@ def remember(store, text: str, subject: str = '', about: str = '', actor: str = 
     from .concierge import redact               # a token typed into a fact never lands in the memory every prompt reads
     t = redact(' '.join(str(text or '').split()).lstrip('-* ').strip())
     if not t: raise ValueError('say the fact to remember')
+    # ...AN AGENT KEEPS ONE FACT HE SAID, NEVER A DOCUMENT (red team round 5: a 40,096-character line went in as his word, in place of a rule of
+    # his own, and rode into every prompt from then on). His own lines, typed on the Memory page or said to the Assistant, are his to size
+    if str(actor).startswith('agent') and (len(t) > SAID_MAX or len(' '.join(str(subject or '').split())) > SUBJECT_MAX):
+        raise ValueError(f"not kept: a memory line is one fact in a sentence or two - {SAID_MAX} characters at most, its subject a few words - "
+                         f"and this is {len(t):,}. Nothing in the memory changed. Keep the one fact that changes future work, in the owner's "
+                         "words; anything longer belongs in the task's files.")
     if doc: return told(store, doc, t, actor)
     subject = subject if subject_of(subject) else (_key(t) or t.lower())        # ...none named: a line of its own, which only its own words correct
     w = ' '.join(str(about or '').split()).lower()

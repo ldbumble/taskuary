@@ -76,7 +76,9 @@ def proved(name, word) -> bool:
 
 def remote_link(url: str, folder) -> str:
     """A keyed address from ANOTHER process's server (the instance already running) - asked for a challenge, the word read back from the
-    running server's `folder` (its home) - or the plain one if it gives none."""
+    running server's `folder` (its home) - or the plain one if it gives none. Never asked for from inside an agent's session (in_session):
+    the key opens the page that carries the owner token, and the server refuses a process it started all the same (server.launch_key)."""
+    if in_session(): return url
     u = urllib.parse.urlsplit(url)
     def ask(body: dict) -> dict:
         conn = http.client.HTTPConnection(u.hostname, u.port or 80, timeout=5)

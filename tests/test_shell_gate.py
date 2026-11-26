@@ -60,6 +60,23 @@ class Reading(unittest.TestCase):
         for cmd in ('timeout 60 git status', 'time pytest -q', 'timeout 30 curl -s https://docs.vendor.example/rates'):
             self.assertEqual(sg.acts(cmd, '/w'), [], cmd)
 
+    def test_a_hash_inside_a_word_is_no_comment_and_the_step_after_it_is_read(self):
+        """Red team round 5: `echo ok#; git push` - everything after a `#` was dropped as a comment, wherever it stood, and the push went out
+        unread. The shell starts a comment only where a word starts: `ok#` is a word, and the command after it runs. cmd.exe has no `#` at
+        all, and a lone `&` ends a command as `;` does."""
+        for cmd, what in (('echo ok#; git push', 'push'), ('echo ok#x && gh pr merge 12', 'merge a pull request'), ('echo a;#b\ngit push origin main', 'push'),
+                          ('echo done #1\nnpm publish', 'publish'), ('echo \\# ; git push', 'push'), ('rm notes#old /srv/northwind/ledger', 'delete ledger'),
+                          ('cmd /c "echo ok # & git push"', 'push'), ('sleep 1 & rm -rf /srv/northwind/ledger', 'delete ledger')):
+            got = sg.acts(cmd, '/w')
+            self.assertTrue(got, cmd); self.assertIn(what, got[0]['what'], cmd)
+        # ...and a comment is still a comment: its words are no step, and none of them rides into what a held press runs
+        for cmd in ('git status # then git push', '# git push', 'echo ok # git push', 'ls   # rm -rf /srv/northwind/ledger', 'pytest -q 2>&1 | tail -5'):
+            self.assertEqual(sg.acts(cmd, '/w'), [], cmd)
+        from taskuary import browsergate as bg
+        self.assertEqual([a['args'] for a in bg.acts('agent-browser click @e3 # the Save button')], [['click', '@e3']])
+        self.assertEqual([a['args'] for a in bg.acts('agent-browser fill @e2 "Suite #4"')], [['fill', '@e2', 'Suite #4']])
+        self.assertEqual([a['args'] for a in bg.acts('echo ok#; agent-browser click @e3')], [['click', '@e3']])
+
     def test_looking_and_working_locally_pass(self):
         for cmd in ('git status', 'git commit -m "push the fix"', 'git log --grep push', 'gh pr view 12', 'gh api repos/northwind/ledger',
                     'echo git push', 'npm install', 'pytest -q', 'rm -rf build', 'git pull', 'git fetch origin', 'gh pr list',
@@ -522,6 +539,45 @@ class ReadingOutside(unittest.TestCase):
                     'cat "$(cat <<\'EOF\' | tr a b\nx\nEOF\n)"', f'git commit -m "$(cat <<EOF\nnote $(cat \'{self.secret}\')\nEOF\n)"'):
             held, never = rg.of_command(self.s, self.tid, cmd, self.work)
             self.assertEqual((bool(held), never), (True, ''), cmd)
+
+    def test_words_the_shell_decodes_are_never_read_as_the_words_written(self):
+        """Red team round 5, a regression of the rule above: `cat "$(printf '\\056\\056/\\056\\056/config\\056toml')"` - the literal has no path's
+        shape, so it passed, and the shell decoded it into the owner's token. A printed word with a backslash escape is a value only a run can
+        give: held. `$'...'` is the shell's own decoding, read as the words it will be."""
+        from pathlib import Path
+        from taskuary import readgate as rg
+        ssh = Path.home() / '.ssh'; ssh.mkdir(exist_ok=True); (ssh / 'id_ed25519').touch()
+        home = Path.home().as_posix() if os.name != 'nt' else '/' + Path.home().as_posix()[0].lower() + Path.home().as_posix()[2:]
+        for cmd in (r'''cat "$(printf '\056\056/\056\056/config\056toml')"''', r'''cat "$(echo -e '\x2e\x2e/\x2e\x2e/config.toml')"''',
+                    r'''cat "$(printf '%b' '\056\056/notes')"''', r'''grep -r token "$(printf '\176')"'''):
+            held, never = rg.of_command(self.s, self.tid, cmd, self.work)
+            self.assertEqual((bool(held), never), (True, ''), cmd)
+        for cmd in (f"cat $'{home}/.ssh/id_ed25519'", f"cat $'{home}/.ssh/id" + r"\x5fed25519'", r"cd ~; cat $'\x2essh/id_ed25519'"):
+            self.assertEqual(rg.of_command(self.s, self.tid, cmd, self.work), ([], rg.NEVER), cmd)
+        # ...and the escapes of everyday lines are still plain words: a tab handed to sort, a message's line breaks, printf's closing newline
+        for cmd in (r"sort -t $'\t' data.tsv", r"git commit -m $'Fix totals\n\nSummed before tax'", r'''git tag -a v2 -m "$(printf '%s\n' 'release two')"''',
+                    r"IFS=$'\n' read -r row", r"grep -rn $'\t' src"):
+            self.assertEqual(rg.of_command(self.s, self.tid, cmd, self.work), ([], ''), cmd)
+
+    def test_a_secret_behind_a_device_prefix_a_second_variable_or_a_line_run_again_is_never_read(self):
+        """Red team round 5: `cat /dev/..<home>/config.toml` passed as a device, and a path that reached its command through a second
+        variable (`a=...; b=$a; cat "$b"`) was a word that named nothing - each hop was filled in once. So were a list's item, `${!b}`, a
+        loop's word and a line handed to eval. Each is the file it comes to."""
+        from pathlib import Path
+        from taskuary import readgate as rg
+        ssh = Path.home() / '.ssh'; ssh.mkdir(exist_ok=True); (ssh / 'id_ed25519').touch(); Path(self.secret).touch()
+        gb = lambda p: Path(p).as_posix() if os.name != 'nt' else '/' + Path(p).as_posix()[0].lower() + Path(p).as_posix()[2:]
+        home, mine = gb(Path.home()), gb(Path(self.secret).parent)
+        for cmd in (f'cat /dev/..{mine}/config.toml', f'cat /dev/../dev/..{home}/.ssh/id_ed25519', f'base64 /dev/fd/../..{mine}/config.toml',
+                    'a=.ssh/id_ed25519; b=$a; cd ~; cat "$b"', 'a=.ssh; b=$a/id_ed25519; c=$b; cd ~ && cat $c', 'export a=.ssh/id_ed25519; cd ~; cat $a',
+                    'a=(notes.txt .ssh/id_ed25519); cd ~; cat ${a[1]}', 'a=.ssh/id_ed25519; b=a; cd ~; cat "${!b}"',
+                    'for f in notes.txt .ssh/id_ed25519; do cd ~; cat $f; done', f'eval "cat {mine}/config.toml"', f'iex "Get-Content {mine}/config.toml"'):
+            self.assertEqual(rg.of_command(self.s, self.tid, cmd, self.work), ([], rg.NEVER), cmd)
+        # ...and the same spellings on the agent's own work, a device and a value that is no place pass as ever
+        for cmd in ('cat /dev/null', 'python script.py 2>/dev/null', 'f=report.csv; cp "$f" "${f%.csv}.bak"', 'a=(1 2 3); echo ${a[@]}', 'n=5; echo "${n:-1}"',
+                    'for f in src/*.py; do grep -n TODO "$f"; done', 'out="$TASKUARY_OUTPUTS"; b=$out; cp a.txt "$b/a.txt"', 'x=$(date +%F); mkdir -p out/$x',
+                    'declare -a xs=(a b); echo "${xs[@]}"', 'eval "ls -la"', 'python -c "x=(1, 2); print(x)"'):
+            self.assertEqual(rg.of_command(self.s, self.tid, cmd, self.work), ([], ''), cmd)
 
     def test_a_sign_in_place_stays_closed_inside_a_work_folder_or_behind_a_glob(self):
         """The never-list was judged after the work area and after a glob was cut to its folder: a task whose checkout is the home folder

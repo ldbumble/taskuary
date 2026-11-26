@@ -106,10 +106,13 @@ def test_an_owner_session_runs_the_owner_s_subcommands(monkeypatch, capsys):
     ran = mock.Mock(); monkeypatch.setattr('taskuary.evalset.run', ran)
     _run(monkeypatch, '--evalset', 'build'); assert ran.called
     monkeypatch.setattr(cli, '_busy', lambda h, p: True); monkeypatch.setattr(cli, '_is_taskuary', lambda u: True)
-    monkeypatch.setattr(launchkey, 'remote_link', lambda url, tok: f'{url}/?k=once')
-    _run(monkeypatch, '--link'); assert '/?k=once' in capsys.readouterr().out
+    # ...but for the address that signs in AS him (red team round 5: an agent on his own task printed it and held his token): --link is
+    # refused in any session, and Taskuary started from one opens the running app's plain address, asking the server for no key
+    asked = []; monkeypatch.setattr(launchkey.http.client, 'HTTPConnection', lambda *a, **k: asked.append(a))
+    with pytest.raises(SystemExit) as e: _run(monkeypatch, '--link')
+    assert '--link refused' in str(e.value) and '?k=' not in capsys.readouterr().out
     opened = []; monkeypatch.setattr(cli, '_open_private', opened.append)
-    _run(monkeypatch); assert opened == [f"{cli.public_url(server.cfg['server']['host'], server.cfg['server']['port'])}/?k=once"]
+    _run(monkeypatch); assert opened == [cli.public_url(server.cfg['server']['host'], server.cfg['server']['port'])] and not asked
 
 def test_an_owner_session_that_dropped_its_token_is_treated_as_a_stranger_s(monkeypatch):
     "Fail closed: without the agent token nothing proves whose it is."

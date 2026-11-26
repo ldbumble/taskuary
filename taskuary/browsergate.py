@@ -85,12 +85,31 @@ def _unquoted_breaks(cmd: str) -> str:
     return ''.join(out)
 
 
+# A `#` STARTS A COMMENT ONLY WHERE A WORD STARTS (red team round 5: `echo ok#; git push` - the reader dropped everything after a `#` in the
+# middle of a word, which the shell does not, and the push after it went out unread). The shell's own rule, bash's and PowerShell's alike: an
+# unquoted `#` at the start of a word, up to the end of its line. One reading for every gate that cuts a line into words (_segments, words)
+def uncomment(cmd: str) -> str:
+    "The line without its comments, as the shell reads them: a `#` inside a word (`ok#`, `a#b`), in quotes or after a backslash is text."
+    out, q, i, s = [], '', 0, str(cmd or '')
+    while i < len(s):
+        c = s[i]
+        if c == '\\' and q != "'" and i + 1 < len(s): out.append(s[i:i + 2]); i += 2; continue
+        if q: q = '' if c == q else q
+        elif c in '"\'': q = c
+        elif c == '#' and (i == 0 or s[i - 1] in ' \t\r\n;&|()<>'):
+            while i < len(s) and s[i] != '\n': i += 1
+            continue
+        out.append(c); i += 1
+    return ''.join(out)
+
+
 # ── which part of a shell command is a browser act ────────────────────────────────────────────────────────────────────────
-def _segments(cmd: str):
-    "The simple commands in a shell line, as argv lists - split on ; && || | and on newlines outside quotes. None when it cannot be read."
+def _segments(cmd: str, comments: bool = True):
+    """The simple commands in a shell line, as argv lists - split on ; && || | and on newlines outside quotes. None when it cannot be read.
+    `comments` False: a line for cmd.exe, which has no `#` comment - every word of it is read."""
     try:
-        lx = shlex.shlex(_unquoted_breaks(cmd), posix=True, punctuation_chars=';&|()<>')
-        lx.whitespace_split = True
+        lx = shlex.shlex(_unquoted_breaks(uncomment(cmd) if comments else cmd), posix=True, punctuation_chars=';&|()<>')
+        lx.whitespace_split, lx.commenters = True, ''
         toks = list(lx)
     except ValueError: return None
     out, cur, redir = [], [], False
@@ -113,8 +132,9 @@ def words(seg: str) -> list:
     """One simple command's words as the shell will see them: quotes joined to what they touch (`"$HOME"/.ssh/x` is one path) and a redirect cut
     from the word it is stuck to (`cat<x`). On Windows a backslash is a path's separator, never an escape."""
     try:
+        seg = uncomment(seg)
         lx = shlex.shlex(seg.replace('\\', '\\\\') if os.name == 'nt' else seg, posix=True, punctuation_chars=True)
-        lx.whitespace_split = True
+        lx.whitespace_split, lx.commenters = True, ''
         return list(lx)
     except ValueError: return [x.strip('"\'') for x in seg.split()]      # a quote the split cut in two (`cmd /c "cd X && rd Y"`)
 
@@ -540,7 +560,7 @@ def page(sid: str) -> dict:
     form = signin.form_state(sid) if rc == 0 else {}         # ...and whether a password box of it holds one (pw): an account's form
     pg = _PAGES[str(sid)] = {'url': url, 'open': bool(st.get('open')), 'elements': snap[:SNAP_MAX] if rc == 0 else '',
                              'fields': signin.form_fields(sid, form), 'pw': bool(form.get('pw')), 'name': signin.site_name(url, sid) if url else '',
-                             'multi': bool(form.get('multi'))}
+                             'multi': bool(form.get('multi')), 'typed': str(form.get('typed') or '')}
     return pg
 
 
@@ -854,13 +874,20 @@ def empty_box(store, tid, act: dict, pg: dict) -> bool: return bool(_handed(stor
 # the agent took back itself). Read off the page, not the key's name: the focus is in a box of many lines (a text area, an editable region -
 # `multi`), where the browser's own Enter adds a line and sends no form. Only while a post he handed over is being written: its send is its
 # own press, held above. Anywhere else what an Enter does is the judge's to read, as before
+# ...AND ONLY IN THAT POST'S OWN BOX (red team round 5: with a post in flight an Enter passed unjudged on ANY page - a chat site's box, where
+# Enter sends). Two more facts of the page: it is on the site of the card that post goes to (connectorcatalog `hosts`), and the box the
+# focus is in holds words of that post and nothing else (`typed`)
 def line_break(store, tid, act: dict, pg: dict) -> bool:
     v, sub = _verb(act.get('args') or [])
     if not (v == 'press' and sub(1) in ('enter', 'return') and pg.get('multi')): return False
-    from . import cardqueue, proposals
+    from . import cardqueue, connectorcatalog as cat, proposals
     if not (store and tid and (r := cardqueue.in_flight(store, int(tid)))): return False
-    try: return proposals.is_post(json.loads(r.get('FinalText') or r.get('DraftText') or '{}'))
+    try: p = json.loads(r.get('FinalText') or r.get('DraftText') or '{}')
     except (TypeError, ValueError): return False
+    if not (isinstance(p, dict) and proposals.is_post(p)): return False
+    flat = lambda s: ' '.join(str(s or '').split()).casefold()
+    site, typed = cat.site_card(_site(pg.get('url'))), flat(pg.get('typed'))
+    return bool(site and site['type'] == (cat.action_for(p.get('type')) or {}).get('card') and typed and flat(p.get('text') or p.get('body')).startswith(typed))
 
 
 # ── held: the proposal, and the agent told why ────────────────────────────────────────────────────────────────────────────

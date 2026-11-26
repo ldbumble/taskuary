@@ -159,7 +159,9 @@ _API_DEL = re.compile(r'\[(?:system\.)?io\.(?:file|directory)\]::delete\b|shutil
                       r'|\bfs\.(?:rm|rmdir|unlink)(?:sync)?\b|\.delete\(\s*(?:\$true)?\s*\)|\.unlink\(\s*(?:missing_ok\s*=\s*true)?\s*\)', re.I)
 _DEL_WORDS = ('rm', 'del', 'erase', 'remove', 'unlink', 'shred', 'rd', 'rmtree')
 _VAR = re.compile(r'\$(?:env:)?(\w+)|%(\w+)%', re.I)
-_SPLIT = re.compile(r'\r?\n|;|&&|\|\||\||\{|\}')
+# ...a lone `&` ends a command too (bash's background, cmd's separator: `sleep 1 & rm -rf <his folder>` read as one call of sleep) - never
+# the `&` of a redirect (`2>&1`, `&>`)
+_SPLIT = re.compile(r'\r?\n|;|&&|\|\||\||\{|\}|(?<![<>&])&(?![&>])')
 _VALUED_DEL = frozenset('-erroraction -ea -filter -include -exclude -depth -credential -stream -warningaction -wa'.split())
 
 
@@ -306,15 +308,15 @@ def acts(cmd: str, cwd: str = '') -> list:
     return _outward(cmd) + deletes(cmd, cwd)
 
 
-def _outward(cmd: str, own: bool = True) -> list:
+def _outward(cmd: str, own: bool = True, comments: bool = True) -> list:
     """Every step in a shell command that goes out: [{'tool', 'what', 'why', 'command'}]. A command that cannot be read and names one of
-    these tools is one step - held, never let through for being hard to read."""
+    these tools is one step - held, never let through for being hard to read. `comments` False: a line handed to cmd.exe, which has no `#`."""
     raw = shell_text(str(cmd or ''))
     low = joined(raw)
     own = own and not _SETS_OWN.search(raw)
     if not any(w in low for w in ('git', 'gh', 'glab', 'publish', 'push', 'upload', 'mail', 'mutt', 'msmtp', 'http', 'curl', 'wget', 'xh', 'iwr', 'irm',
                                   'invoke-')): return []      # the cheap test first
-    segs = _segments(raw)
+    segs = _segments(raw, comments)
     if segs is None:
         import re
         return [{'tool': '?', 'kind': 'out', 'what': 'run a command that may push, publish or send', 'why': OUT, 'command': raw[:400]}] if re.search(
@@ -326,7 +328,7 @@ def _outward(cmd: str, own: bool = True) -> list:
         if tool in MOVES: moved = True
         if tool in ('bash', 'sh', 'powershell', 'pwsh', 'cmd'):                 # `bash -c "git push"`: the string is a command of its own
             for t in argv[1:]:
-                if ' ' in t.strip(): out += _outward(t, own)
+                if ' ' in t.strip(): out += _outward(t, own, tool != 'cmd')
             continue
         what = (GIT.get(w[0]) if tool == 'git' and w else
                 GH.get(tuple(w[:2])) if tool == 'gh' else GLAB.get(tuple(w[:2])) if tool == 'glab' else

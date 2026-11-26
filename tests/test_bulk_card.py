@@ -240,6 +240,29 @@ def test_sends_that_did_not_go_still_wait_on_the_card_and_its_agent_never_sets_t
     assert 'not run' not in bulkcard.summary(s, out['batch'], stopped), 'a row that ran and failed is no row that was not run'
 
 
+def test_a_row_rewritten_after_his_press_is_not_sent():
+    """Security round 5 (H2): the run read each row again at its turn, so an agent could change who a letter not yet sent goes to - or
+    what it says - after his press, and it went under that press. His press covers the rows as they read at the press (locked rule 2)."""
+    s, tid = world()
+    with mock.patch.object(server, 'store', s):
+        out = call(tid, 'propose_email', items=emails(4))
+    rids = [r['ReviewId'] for r in bulkcard.rows(s, out['batch'])]
+    went = []
+    def send(*a, **k):
+        went.append((k.get('to'), a, k))
+        if len(went) == 1:                         # ...while the first letter goes, the third's recipient and the fourth's words are rewritten
+            s._exec("UPDATE review SET Deliver=replace(Deliver, 'owner2@cedar.example', 'mallory@elsewhere.example') WHERE ReviewId=?", (rids[2],))
+            s._exec("UPDATE review SET DraftText='Wire the deposit to account 1234.' WHERE ReviewId=?", (rids[3],))
+        return {'channel': 'email', 'to': k.get('to') or []}
+    with mock.patch.object(outbound, 'send_out', send), mock.patch.object(outbound, 'send_block', lambda *a, **k: ''):
+        st, told = press(s, out['batch'])
+    assert (st['done'], st['failed']) == (2, 2), st
+    assert 'mallory@elsewhere.example' not in str(went) and 'Wire the deposit' not in str(went), 'nothing he did not press left'
+    assert st['rows'][str(rids[2])] == st['rows'][str(rids[3])] == bulkcard.CHANGED
+    assert [r['Status'] for r in bulkcard.rows(s, out['batch'])][2:] == ['pending', 'pending'], 'a changed row waits for a press of its own'
+    assert 'changed after your press' in told[0]
+
+
 def test_a_press_on_a_bulk_card_the_chat_moved_past_sends_nothing():
     """He typed "hold off" under 5 emails, the card greyed on every surface - and a press on it from a page not yet redrawn sent all 5: the
     run marked itself at work before its first row, and a bulk card at work is never written past, so no row's own refusal stood."""

@@ -76,6 +76,36 @@ class QueryTests(unittest.TestCase):
         self.assertEqual(head, '2 rows'); self.assertIn('"Name": "a"', body)
 
 
+class WhereItConnectsIsTheCards(unittest.TestCase):
+    """Security round 5 (C6): an agent's tool call carried its own `dsn`, and the SQL Server executor opened it as it came - a sqlite URL
+    of Taskuary's own database, every connector's secret in it. Where a card connects is the saved card's alone, and never a local file."""
+    def test_a_tool_call_cannot_name_the_connection(self):
+        from taskuary.reports import query_only
+        q = query_only({'type': 'mssql', 'query': 'SELECT 1', 'dsn': 'sqlite:///x.db', 'driver': 'D};Database=x;{', 'auth': 'windows', 'conn_str': 'DSN=x'})
+        self.assertEqual(q, {'type': 'mssql', 'query': 'SELECT 1'})
+
+    def test_a_local_file_is_never_a_sql_server(self):
+        import sqlite3, tempfile
+        from pathlib import Path
+        p = Path(tempfile.mkdtemp()) / 'ledger.db'
+        cx = sqlite3.connect(p); cx.execute('CREATE TABLE secrets (v)'); cx.execute("INSERT INTO secrets VALUES ('northwind-key')"); cx.commit(); cx.close()
+        for dsn in (f'sqlite:///{p.as_posix()}', 'sqlite://', f'duckdb:///{p.as_posix()}'):
+            with self.assertRaisesRegex(RuntimeError, 'never a database file'): mssql.run_report({'dsn': dsn, 'query': 'SELECT v FROM secrets'})
+
+    def test_a_saved_dsn_runs_on_the_one_road_and_only_reads(self):
+        from taskuary import db
+        seen = []
+        with mock.patch.object(db, '_rows_sqlalchemy', lambda cs, q, n, write=False: seen.append((cs, write)) or [{'A': 1}]):
+            head, _ = mssql.run_report({'dsn': 'mssql+pyodbc://erin@sql.northwind.example/ledger', 'query': 'SELECT 1'})
+            with self.assertRaises(ValueError): mssql.run_report({'dsn': 'mssql+pyodbc://erin@sql.northwind.example/ledger', 'query': 'DROP TABLE bills'})
+        self.assertEqual((head, seen), ('1 row', [('mssql+pyodbc://erin@sql.northwind.example/ledger', False)]))
+
+    def test_no_connection_string_opens_taskuarys_own_database(self):
+        from taskuary import config, db
+        with self.assertRaisesRegex(RuntimeError, 'not a report source'):
+            db.run_query({'conn_str': f"sqlite:///{(config.home() / 'taskuary.db').as_posix()}", 'query': 'SELECT 1'}, 5)
+
+
 if __name__ == '__main__':
     unittest.main()
 

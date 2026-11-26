@@ -191,6 +191,30 @@ def test_the_desk_the_phone_and_the_phones_pick_press_through_the_one_road():
     assert a['ok'] and a['did'].startswith('Sent the reply to') and 'Sent the reply to' in b and c.startswith('Sent to')
 
 
+def test_a_letter_saved_again_after_the_phone_showed_it_is_not_sent_by_that_tap():
+    """Security round 5 (H3): the phone's Send carried nothing of the card it showed, and a report-back's pick only its words - so a
+    letter its agent saved again before his tap, to another recipient, went under it. Each pick carries the card as shown (words, who
+    it goes to, what rides with it), as the desk's press does, and a card that reads otherwise is not pressed."""
+    from taskuary import asks, remote_assistant as ra, server, slots
+    s = MemoryStore(); tid = task(s)
+    rid = slots.draft(s, tid, 'Hi Gail - the plan is attached.', to='gail@northwind.example', subject='Plan')['review_id']
+    def swap(): s._exec("UPDATE review SET Deliver=replace(Deliver, 'gail@northwind.example', 'mallory@elsewhere.example') WHERE ReviewId=?", (rid,))
+    with mock.patch('taskuary.capabilities.can_send_draft', return_value=True), \
+         mock.patch.object(server, 'press_review', return_value={'ok': True, 'status': 'approved'}) as door:
+        picks = dict(ra.card_picks(s, {'tid': tid, 'rid': None}))
+        _, rows = asks.phone_text(s, s.get_task(tid), 'approve', 'an email is drafted')
+        send = next(a for _, a in rows if a['t'] == 'send')
+        assert ra._run_act(s, picks['Send'], None) and door.call_count == 1, 'the card as shown goes'
+        assert 'Sent' in asks.send_picked(s, [[send['rid'], send['sig']]]) and door.call_count == 2
+        swap()
+        said = ra._run_act(s, picks['Send'], None)
+        assert 'changed after I showed it' in said and f'Open TQ-{tid:04d}' in said, said
+        assert 'changed since I showed it' in asks.send_picked(s, [[send['rid'], send['sig']]])
+        assert door.call_count == 2, 'nothing was pressed for the one who was swapped in'
+        # ...and the card read again is pressed as it stands
+        assert ra._run_act(s, dict(ra.card_picks(s, {'tid': tid, 'rid': None}))['Send'], None) and door.call_count == 3
+
+
 def test_a_press_on_a_card_no_longer_his_presses_nothing_and_says_what_became_of_it():
     from taskuary import server
     s = MemoryStore(); tid = task(s)

@@ -14,6 +14,7 @@ from loguru import logger
 KEY = 'batch:'                 # setting: batch:<key> -> the run's state
 YES = 'approve'
 LEFT = 'left out by you'      # a row he unticked: closed, never done
+CHANGED = 'it was changed after your press - nothing was done; it waits on the card as it reads now'
 _CLAIM = threading.Lock()      # a press claims the card's run (run)
 BOOT = uuid.uuid4().hex        # this process: a run marked by another was cut short by a restart (state)
 
@@ -48,6 +49,12 @@ def _save(store, st: dict) -> None:
     if st.get('tid'): store._poke('task-changed', task_id=st['tid'])
 
 
+def pressed(r: dict) -> list:
+    "What a press on this row does - the act, its words, where they go and what rides with them: what his press covers (run)."
+    from . import verdicts
+    return [r.get('Kind'), r.get('TaskId'), r.get('MessageId'), r.get('DraftText'), verdicts.content_envelope(r)]
+
+
 def _went(out: dict) -> str:
     "'' when the row's press went through, else why not - in the words its own card would have said."
     if not out.get('ok'): return str(out.get('send_error') or out.get('why') or out.get('error') or 'it did not go')[:300]
@@ -69,6 +76,9 @@ def run(store, key: str, skip=(), actor: str = 'owner', wait: bool = False) -> d
         # ...A CARD THE CHAT MOVED PAST PRESSES NOTHING (verdicts._decide's rule): asked here, before the run is marked at work - a bulk card at
         # work is never written past (proposals._older), so each row's own refusal would read it as still standing
         if tid and (past := [r for r in todo if r['ReviewId'] in proposals.written_past(store, tid)]): raise ValueError(proposals.passed_why(store, past[0]))
+        # ...HIS PRESS IS FOR THE ROWS AS THEY READ AT THE PRESS (locked rule 2, round 5): each was read again at its own turn, so its agent
+        # could rewrite who a row not yet sent goes to, or what it says, after the press. A row that differs then is not done
+        shown = {r['ReviewId']: pressed(r) for r in todo}
         st = {**state(store, key), 'key': key, 'tid': tid, 'total': len(todo), 'done': 0, 'failed': 0, 'left': 0, 'state': 'running', 'rows': {}, 'at': time.time(), 'boot': BOOT}
         _save(store, st)
     def go():
@@ -82,7 +92,8 @@ def run(store, key: str, skip=(), actor: str = 'owner', wait: bool = False) -> d
                         store.decide_review(rid, 'closed_unsent' if r['Kind'] != 'action' else 'rejected', r.get('DraftText'), actor, LEFT)
                         st['rows'][str(rid)], st['left'] = 'left', st['left'] + 1
                     else:
-                        why = _went(verdicts.decide(store, store.get_review(rid) or r, YES, actor=actor))
+                        now = store.get_review(rid) or r         # ...as it stands (its delivery state too), and only if it is what he pressed
+                        why = CHANGED if pressed(now) != shown[rid] else _went(verdicts.decide(store, now, YES, actor=actor))
                         st['rows'][str(rid)] = why or 'ok'
                         st['done' if not why else 'failed'] += 1
                 except Exception as e:

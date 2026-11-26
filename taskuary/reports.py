@@ -137,7 +137,10 @@ CONNECTION_KEYS = frozenset({'base_url', 'site', 'account', 'gateway', 'server',
                              'consumer_secret', 'token_id', 'tenant', 'org_uuid', 'cert_file', 'key_file',
                              # ...and WHAT PROGRAM a card starts (mcp.py's stdio server): an agent's `cmd`/`env` replaced the owner's
                              # server with a command of its choosing, spawned to list its tools before any gate (2026-11-18)
-                             'cmd', 'env'})
+                             'cmd', 'env',
+                             # ...and a SQL Server card's other ways to say where (mssql.py, round 5): a tool call's `dsn` opened any database
+                             # file on this computer - Taskuary's own, every card's secret in it - and `driver` or `auth` rewrote the string
+                             'dsn', 'driver', 'auth'})
 # ...save where one of those names is the executor's WHAT: a page reader's `url` is the page it reads (its key goes to its own provider,
 # never there) - stripped, run_system {"type": "reader", "url": ...} answered "no url to read" every time
 # ...and a QuickBooks bill's `account` is the expense account it posts to: stripped, every agent's bill answered "no expense account given"
@@ -364,7 +367,7 @@ def run_agent(cfg):
 
     This is the "run my Claude skill every Monday" report: the agent researches, reads the systems
     it has tools for, and files what it found onto the Timeline like any other report."""
-    from .llm import make_cli_llm
+    from .llm import make_cli_llm, _scrub
     store = cfg.get('store')
     if store is None: raise RuntimeError('the agent source needs the store (run it through the reports pipeline)')
     skill, prompt = str(cfg.get('skill') or '').strip().lstrip('/'), str(cfg.get('prompt') or '').strip()
@@ -393,8 +396,9 @@ def run_agent(cfg):
     reads = None if writes else web_reads(cfg, f'{prompt}\n{owned or ""}')
     llm = None
     if name:
-        try: llm = make_cli_llm(store, name, cfg.get('model') or None, cwd=cfg.get('cwd') or None,
-                                cli_tools=writes, read_only=not writes, research=not writes, reads=reads)
+        # ...what it is asked scrubbed, as every brain's is (llm._Scrubbed): a CLI's instructions go by a road of their own, past run_cli's
+        try: llm = _scrub(make_cli_llm(store, name, cfg.get('model') or None, cwd=cfg.get('cwd') or None,
+                                       cli_tools=writes, read_only=not writes, research=not writes, reads=reads))
         except hub_agents.NoAI: llm = None
     if llm is None:
         api = pick if pick.startswith('connector:') else hub_agents.resolve_brain(store, 'general')

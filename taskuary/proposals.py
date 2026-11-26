@@ -567,9 +567,12 @@ def tool_words(store, p: dict) -> str:
     if (h := head(act, p)): return h[:1].lower() + h[1:]
     verb = {'read': 'read', 'write': 'write', 'admin': 'run'}.get(scopes.needs(t), 'run')
     if t.endswith('_move'): verb = 'move'
+    # ...a call that is not the read its executor is classed as (an AWS operation that changes something) is said as what it runs
+    if verb == 'read' and scopes.reaches(t, p): verb = 'run'
     where = next((str(p[k]) for k in WHERE_KEYS if p.get(k)), '')
     code = ' '.join(str(p.get('query') or p.get('script') or '').split())
-    what = where or (f"this {'query' if p.get('query') else 'script'}: {code[:120]}" if code else t.replace('_', ' '))
+    op = ' '.join(str(p[k]) for k in ('service', 'operation') if p.get(k))
+    what = where or (f"this {'query' if p.get('query') else 'script'}: {code[:120]}" if code else op or t.replace('_', ' '))
     try: c = reports._connector(store, reports.card_of(t), p.get('connector_id'))
     except (TypeError, ValueError): c = None
     on = (c or {}).get('Name') or ''

@@ -1258,8 +1258,9 @@ def rpc(msg: dict, run, skip=(), portable: bool = False) -> dict | None:
         # ...EVERY CALL ON THE RECORD BY ITS SHAPE (shape): the one door every road's call of a Taskuary tool comes in at
         logger.info(f'tools: {name} called with {json.dumps(shape(args), ensure_ascii=False)[:1200]}')
         # ...EVERY ANSWER SCRUBBED, whatever tool made it (redact.scrub): what comes back here goes on to the agent's provider
-        from .redact import scrub
-        try: return ok({'content': [{'type': 'text', 'text': scrub(run(name, args))}], 'isError': False})
+        # ...as the data it is where it is JSON (scrub_json): read decoded, a value's line starts where it starts and its key is its label
+        from .redact import scrub, scrub_json
+        try: return ok({'content': [{'type': 'text', 'text': scrub_json(run(name, args))}], 'isError': False})
         except Exception as e: return ok({'content': [{'type': 'text', 'text': scrub(failed(name, e))}], 'isError': True})
     return err(-32601, f'method {m!r} is not served here')
 

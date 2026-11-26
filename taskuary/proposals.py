@@ -157,6 +157,7 @@ MARKS = ('closeout', 'flow_run')
 # where the network takes one - and what the owner left in the box is what goes. MEDIA: the ones that carry a picture from here.
 POSTS = {'linkedin_post': 'LinkedIn', 'bluesky_post': 'Bluesky', 'mastodon_post': 'Mastodon', 'reddit_post': 'Reddit', 'x_post': 'X'}
 MEDIA = {'linkedin_post', 'x_post'}
+VIDEO = {'linkedin_post'}                    # ...and the ones that carry a video from here (linkedin.upload_video)
 
 
 def is_post(p: dict) -> bool: return (p or {}).get('action') == 'run_tool' and (p or {}).get('type') in POSTS
@@ -223,7 +224,14 @@ def picture_why(tid, p: dict) -> str:
     # save and add by hand, never refused - the card says so (ActionCard)
     f = outputs.named(int(tid), p['image']) if tid else None
     if not f: return f"{p['image']} is no picture this task may read - name the one you made by its full path"
-    if f.suffix.lower() not in linkedin.IMAGE_TYPES: return f'{f.name} is not a PNG, JPG or GIF picture'
+    # ...AND ITS VIDEO, WHERE ITS NETWORK TAKES ONE FROM HERE (VIDEO; the owner, 2026-11-26: a screen recording was refused as "not a PNG, JPG or
+    # GIF picture" and its agent went to the site with it): read now against what the network states it takes, answered with the way past
+    net = POSTS.get(p.get('type')) or 'post'
+    if linkedin.is_video(f):
+        return linkedin.video_why(f) if p.get('type') in VIDEO else (f'{f.name} is a video, and the {net} card carries a PNG, JPG or GIF picture, '
+                                                                     'not a video: raise the post with a picture, or with its words alone')
+    if f.suffix.lower() not in linkedin.IMAGE_TYPES:
+        return f"{f.name} is not a PNG, JPG or GIF picture{' or an MP4 video' if p.get('type') in VIDEO else ''}: raise the post with one that is"
     return ''
 
 

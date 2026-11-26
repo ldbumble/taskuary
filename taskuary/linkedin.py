@@ -209,7 +209,8 @@ def run_linkedin_post(cfg):
             'lifecycleState': 'DRAFT' if publish == 'draft' else 'PUBLISHED', 'isReshareDisabledByAuthor': False}
     # the picture goes up FIRST, and only after every check above: an upload LinkedIn keeps is a stray if the post is then refused here
     if cfg.get('image_path'):
-        body['content'] = {'media': {'id': upload_image(cfg, author, cfg['image_path']),
+        up = upload_video if is_video(cfg['image_path']) else upload_image
+        body['content'] = {'media': {'id': up(cfg, author, cfg['image_path']),
                                      **({'altText': str(cfg['alt'])[:4000]} if cfg.get('alt') else {})}}
     r = requests.post(f'{API}/rest/posts', headers=_headers(cfg), json=body, timeout=TIMEOUT)
     if not r.ok: _fail(r)
@@ -245,3 +246,108 @@ def upload_image(cfg, author: str, path) -> str:
                       headers={'Authorization': _headers(cfg)['Authorization'], 'Content-Type': IMAGE_TYPES[p.suffix.lower()]})
     if not up.ok: _fail(up)
     return v['image']
+
+
+# A VIDEO ON A POST (the owner, 2026-11-26: asked for a post with a screen recording, the card took a picture only, and its agent went round
+# it through the site). LinkedIn's Videos API takes an MP4 in parts: initializeUpload answers the video's urn and an address per part, each
+# part's bytes go up with a PUT that answers an ETag, finalizeUpload names them in order, and the post carries the urn as its media - the
+# road a picture takes. Their stated limits for a video sent this way: MP4, 75 KB to 500 MB, 3 seconds to 30 minutes
+# (https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/videos-api)
+VIDEO_TYPES = {'.mp4': 'video/mp4'}
+VIDEO_MIN, VIDEO_MAX, VIDEO_SECS = 75 * 1024, 500 * 1024 * 1024, (3, 30 * 60)
+VIDEO_READY = 60                                     # seconds a press waits on LinkedIn reading the video before the post names it
+
+
+def is_video(name) -> bool:
+    "Is this file a video by its type, whatever its format (an MP4, a WebM, a MOV)?"
+    import mimetypes
+    from pathlib import Path
+    return Path(str(name)).suffix.lower() in VIDEO_TYPES or str(mimetypes.guess_type(str(name))[0] or '').startswith('video/')
+
+
+def mp4_seconds(path):
+    "How long an MP4 runs, read off its own header (moov/mvhd: duration over timescale) - None for a file that is not one or does not say."
+    import struct
+    def boxes(f, end):
+        while f.tell() + 8 <= end:
+            at = f.tell(); n, kind = struct.unpack('>I4s', f.read(8))
+            if n == 1: n = struct.unpack('>Q', f.read(8))[0]
+            elif n == 0: n = end - at
+            if n < 8: return
+            yield kind, f.tell(), at + n
+            f.seek(at + n)
+    try:
+        with open(path, 'rb') as f:
+            size = f.seek(0, 2); f.seek(0)
+            for kind, start, end in list(boxes(f, size)):
+                if kind != b'moov': continue
+                f.seek(start)
+                for k, s, _e in list(boxes(f, end)):
+                    if k != b'mvhd': continue
+                    f.seek(s); v1 = f.read(4)[0] == 1
+                    scale, dur = struct.unpack('>IQ', f.read(28)[16:]) if v1 else struct.unpack('>II', f.read(16)[8:])
+                    return dur / scale if scale else None
+    except (OSError, struct.error, IndexError): pass
+    return None
+
+
+def converter() -> str:
+    "An ffmpeg on this computer that writes an MP4 - on the PATH, or the one imageio-ffmpeg carries - or ''. Nothing is installed for it."
+    import shutil
+    if (f := shutil.which('ffmpeg')): return f
+    try:
+        import imageio_ffmpeg
+        return imageio_ffmpeg.get_ffmpeg_exe()
+    except Exception: return ''
+
+
+def video_why(path) -> str:
+    "'' when LinkedIn takes this video as it is; else what is wrong with it and the way past, said to the agent that raised the post."
+    from pathlib import Path
+    p = Path(path)
+    with open(p, 'rb') as f: mp4 = p.suffix.lower() in VIDEO_TYPES and f.read(8)[4:] == b'ftyp'        # ...by its bytes too: a WebM renamed is no MP4
+    if not mp4:
+        to = p.with_name(p.stem + '-linkedin.mp4') if p.suffix.lower() in VIDEO_TYPES else p.with_suffix('.mp4')
+        how = (f'the ffmpeg on this computer converts it - "{ff}" -i "{p}" -c:v libx264 -pix_fmt yuv420p -c:a aac -movflags +faststart "{to}" - '
+               f'and the post is raised with {to.name}') if (ff := converter()) else 'no ffmpeg is on this computer to convert it with: raise the post with an MP4 (H.264) of it'
+        return f'{p.name} is not an MP4, the one video format LinkedIn takes: {how}'
+    n, secs = p.stat().st_size, mp4_seconds(p)
+    if not VIDEO_MIN <= n <= VIDEO_MAX:
+        return f'{p.name} is {max(1, n // 1024):,} KB - LinkedIn takes a video from 75 KB to 500 MB: raise the post with one inside that'
+    if secs is not None and not VIDEO_SECS[0] <= secs <= VIDEO_SECS[1]:
+        return f'{p.name} runs {secs:.0f} seconds - LinkedIn takes a video from 3 seconds to 30 minutes: raise the post with one inside that'
+    return ''
+
+
+def upload_video(cfg, author: str, path) -> str:
+    import time
+    from pathlib import Path
+    from urllib.parse import quote
+    p = Path(path)
+    if (why := video_why(p)): raise RuntimeError(f'{why} - nothing was posted')
+    r = requests.post(f'{API}/rest/videos?action=initializeUpload', headers=_headers(cfg), timeout=TIMEOUT,
+                      json={'initializeUploadRequest': {'owner': author, 'fileSizeBytes': p.stat().st_size, 'uploadCaptions': False, 'uploadThumbnail': False}})
+    if not r.ok: _fail(r)
+    v = (r.json() or {}).get('value') or {}
+    parts = v.get('uploadInstructions') or []
+    if not (v.get('video') and parts): raise RuntimeError('LinkedIn did not hand back an address for the video - nothing was posted')
+    etags = []
+    with open(p, 'rb') as f:
+        for part in parts:
+            first = int(part.get('firstByte') or 0); f.seek(first)
+            up = requests.put(part['uploadUrl'], data=f.read(int(part['lastByte']) - first + 1), timeout=TIMEOUT * 10,
+                              headers={'Authorization': _headers(cfg)['Authorization'], 'Content-Type': 'application/octet-stream'})
+            if not up.ok: _fail(up)
+            etags.append(str(up.headers.get('etag') or '').strip('"'))
+    r = requests.post(f'{API}/rest/videos?action=finalizeUpload', headers=_headers(cfg), timeout=TIMEOUT,
+                      json={'finalizeUploadRequest': {'video': v['video'], 'uploadToken': v.get('uploadToken') or '', 'uploadedPartIds': etags}})
+    if not r.ok: _fail(r)
+    # ...and LinkedIn reads it before a post can show it: the press waits on that for a while, and stops only where LinkedIn says it failed
+    until = time.time() + VIDEO_READY
+    while time.time() < until:
+        st = requests.get(f"{API}/rest/videos/{quote(v['video'], safe='')}", headers=_headers(cfg), timeout=TIMEOUT)
+        status = str((st.json() or {}).get('status') or '') if st.ok else ''
+        if status == 'PROCESSING_FAILED': raise RuntimeError(f'LinkedIn could not read {p.name} as a video - nothing was posted')
+        if status not in ('PROCESSING', 'WAITING_UPLOAD'): break
+        time.sleep(2)
+    return v['video']

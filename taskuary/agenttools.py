@@ -283,7 +283,7 @@ TOOLS = {
                            "`from` a connected mailbox (list_systems names them) - else the one this task's mail came in on; `slot` the id "
                            "of the checklist line it is (\"-> email to ..., slot <id>\"), \"new\" for a second, separate email to someone "
                            "you already wrote to this turn; `guessed` any address on it you guessed - the card says so.\n"
-                           "- post: `network` (" + ', '.join(NETWORKS) + "), `text`, `picture` a file in your task folder, `link`, and on "
+                           "- post: `network` (" + ', '.join(NETWORKS) + "), `text`, `picture` a picture or video file in your task folder, `link`, and on "
                            "Reddit `subreddit` and `title`. One card per network; on the press it goes up through the network's connection, "
                            "else in the browser with the final Post waiting for his press.\n"
                            "- skill: `name`, `text` the SKILL.md whole - frontmatter `name` and `description` (what the job is and when to use "

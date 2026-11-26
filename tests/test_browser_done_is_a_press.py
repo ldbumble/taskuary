@@ -262,6 +262,29 @@ class DoneIsAPress(unittest.TestCase):
             got = browserview.hand_over(self.s, self.tid, 'complete the security check', 'linkedin.example', 'run1', watch=None)
         self.assertFalse(got['ok']); self.assertIn('HTTP 404', got['why']); self.assertEqual(self.open(), [], 'nothing was handed to him')
 
+    def test_a_step_on_a_connected_services_site_for_what_its_card_does_is_never_handed_to_him_and_reading_still_is(self):
+        """The owner, 2026-11-26: "we have linkedin connected, no need for browser what is wrong here?" - his post's agent opened linkedin.com
+        and handed him "Sign in to LinkedIn so I can attach the video to the draft". What the step is for is the guard model's to read: one
+        for what the connected card does goes back to the agent as that fact, nothing raised; a sign-in to read his own posts is still his
+        step; and with no AI to read it the step stands - the site is never shut, only its act is the card's."""
+        from taskuary import outbound, signin
+        asked = []
+        def brain(system, user, **kw): asked.append((system, user)); return json.dumps({'writes': 'attach the video' in user})
+        on = [mock.patch.object(browserview, 'state', return_value={'open': True, 'url': 'https://www.linkedin.com/uas/login'}), mock.patch.object(bg, 'page_error', return_value=''),
+              mock.patch.object(outbound, 'connect_fix', return_value=None), mock.patch.object(signin, 'shows_signin', return_value=True),
+              mock.patch.object(signin, 'saved', return_value=None)]
+        for m in on: m.start(); self.addCleanup(m.stop)
+        self.assertEqual(bg.check(self.s, self.tid, 'run1', 'agent-browser open https://www.linkedin.com/feed/'), {}, 'its site opens and reads like any other')
+        with mock.patch('taskuary.llm.build_llm', return_value=brain):
+            got = browserview.hand_over(self.s, self.tid, 'Sign in to LinkedIn so I can attach the video to the draft', 'linkedin.com', 'run1', watch=None)
+            self.assertFalse(got['ok'], got); self.assertEqual(self.open(), [], 'nothing was handed to him')
+            for want in ('LinkedIn is connected', 'its card', 'with its picture or video', 'still open and read'): self.assertIn(want, got['why'])
+            self.assertIn('LinkedIn', asked[0][0]); self.assertIn('attach the video', asked[0][1])
+            got = browserview.hand_over(self.s, self.tid, 'Sign in to LinkedIn so I can read your recent posts', 'linkedin.com', 'run1', watch=None)
+            self.assertTrue(got['ok'], got); self.assertEqual(len(self.open()), 1)
+        with mock.patch('taskuary.llm.build_llm', return_value=None):
+            self.assertEqual(bg.card_act(self.s, 'https://www.linkedin.com/uas/login', 'Sign in to LinkedIn so I can attach the video to the draft'), '')
+
 
 if __name__ == '__main__': unittest.main()
 

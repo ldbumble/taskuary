@@ -2070,8 +2070,8 @@ def prompt_parts(store, tid: int, turn: bool = False, upto: int = None) -> tuple
     dock = is_dock(task)
     # WHAT AN AGENT GETS IS CONTEXT, TOOLS AND ONE SENTENCE (the owner, 2026-11-23: "code should never tell an agent what to do ... just build
     # it like a normal assistant"): who the owner is, how he writes, what is certified about his systems, his repositories, the task's own
-    # input - and his AGENTS.md (selfclose.guidance). What it can DO is its tools, each saying how it is used; AGENT.md's rules, the profile layer, the
-    # skill menu and the how-to sections that rode here are gone. Only security is said as code: the fence (terminal.FENCE_LINE)
+    # input - and his AGENTS.md (selfclose.guidance). What it can DO is its tools, each saying how it is used; AGENT.md's rules, the profile layer
+    # and the how-to sections that rode here are gone. Only security is said as code: the fence (terminal.FENCE_LINE)
     from . import brief as _brief, selfclose
     from .terminal import FENCE_LINE
     counsel = style_block(store)                    # how he writes (STYLE.md) - his style, never the desk's rules (walk 9)
@@ -2093,6 +2093,9 @@ def prompt_parts(store, tid: int, turn: bool = False, upto: int = None) -> tuple
               + (f'\n\nHOW THE OWNER WRITES (STYLE.md)\n{counsel}' if counsel else ''))
     repos = '' if outsider else repos_block(store)
     if repos: system += f'\n\n{repos}'
+    # ...and HIS SKILLS by name and description (the owner, 2026-11-26): what there is to read, as triage is shown it - a body only by its tool
+    from . import skills as _skills
+    if not outsider and (known_skills := _skills.brief(store, task)): system += f'\n\n{known_skills}'
     # A setup walkthrough's procedure is a shipped SKILL the worker reads and adapts, never dialogue
     # branching in here or a second assistant system prompt competing with this one (PW-190). It rides
     # in the same slot a skill does, so one task-brief structure serves both.

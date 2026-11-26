@@ -1987,6 +1987,9 @@ def seed_text(store, tid: int, instruction: str = None, repo: str = None, cwd: s
     from . import semantic
     layer = ' '.join(semantic.block(store).split())
     if layer: parts.append(layer)
+    # ...and HIS SKILLS by name and description (skills.brief), the list every agent's context carries - never on a stranger's task
+    from . import skills as _skills
+    if not stranger and (known := _skills.brief(store, t, sep=' ')): parts.append(known)
     # NO RULE BLOCKS (the owner, 2026-11-23: "code should never tell an agent what to do ... profiles do nothing"): AGENT.md, the profile's
     # document and the matched skill no longer ride the seed - the fence (security) does, and how a to-do is ticked, the shell's one tool
     parts.append(f'{FENCE_LINE} {TICK_LINE}')

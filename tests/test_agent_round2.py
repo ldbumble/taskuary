@@ -73,14 +73,40 @@ class NoLessonTests(unittest.TestCase):
 class SkillToolTests(unittest.TestCase):
     def setUp(self): fresh_books(('bill', BILL), ('w9', W9))
 
-    def test_a_plain_task_carries_the_one_sentence_and_no_skill_profile_or_routine_block(self):
+    def test_a_plain_task_carries_the_one_sentence_and_no_skill_body_profile_or_routine_block(self):
         s = MemoryStore(); s.upsert_agent('marketer', 'marketing', 'cli', '{}')
         tid = owner_task(s, Tags='skill:bill', Assignee='agent:marketer')
         system, user = general._prompt(s, tid)
         self.assertIn(selfclose.ONE_SENTENCE, system)
-        for block in ('SKILLS', 'PROCEDURE FOR THIS JOB', 'bills under $500', 'PROFILE RULES', 'MARKETER.md', 'RULES (AGENT.md',
+        for block in ('PROCEDURE FOR THIS JOB', 'bills under $500', 'PROFILE RULES', 'MARKETER.md', 'RULES (AGENT.md',
                       'OBJECTIVE', 'ALLOWED ACTIONS', 'DONE WHEN', 'ENDING EVERY TURN', 'YOUR ONE GOAL'):
             self.assertNotIn(block, system + user)
+
+    def test_every_agents_context_carries_the_skills_names_and_descriptions_and_no_body(self):
+        """The owner, 2026-11-26: every agent sees what skills there are - name and one line each, triage's pick said on its line - and
+        opens one itself when it fits. The same list its tool answers with and triage is shown; a stranger's task carries none."""
+        from taskuary import origin, terminal
+        s = MemoryStore(); tid = owner_task(s, Tags='skill:bill')
+        system = general._prompt(s, tid)[0]
+        listed = agenttools.call(s, tid, 'skills', {}, {})
+        self.assertIn(skills.BRIEF_HEAD + '\n' + listed, system)
+        self.assertIn('- bill: Post a card transaction as an AP bill. Use when a transaction line from the card feed (triage read this task as one)', system)
+        self.assertNotIn('bills under $500', system)                              # the body is read by the tool, when it chooses
+        self.assertEqual(system, general._prompt(s, tid)[0])                      # the same bytes turn after turn: the kept prefix holds
+        for line in listed.splitlines(): self.assertIn(line.split(' (triage')[0][2:], skills.menu(store=s))      # ...and triage's own menu
+        seed = terminal.seed_text(s, tid)
+        self.assertIn('- w9: Collect a vendor W-9. Use when a new vendor needs a W-9', seed); self.assertNotIn('bills under $500', seed)
+        with mock.patch.object(origin, 'of_task', return_value=('stranger', '')):
+            self.assertNotIn('- bill:', general._prompt(s, tid)[0]); self.assertNotIn('- bill:', terminal.seed_text(s, tid))
+        skills.set_on('w9', False); self.assertNotIn('- w9:', general._prompt(s, tid)[0])
+        s.set_setting('playbooks_enabled', '0', 't'); self.assertNotIn(skills.BRIEF_HEAD, general._prompt(s, tid)[0])
+
+    def test_past_the_cap_the_rest_are_counted_and_triages_pick_is_never_cut(self):
+        for i in range(skills.MENU_MAX + 2): skills.write(f'job-{i:02d}', f'---\nname: job-{i:02d}\ndescription: Job {i}.\n---\nDo it.\n')
+        s = MemoryStore(); tid = owner_task(s, Tags='skill:w9')
+        lines = skills.brief(s, s.get_task(tid)).splitlines()
+        self.assertEqual(len(lines), 1 + skills.MENU_MAX + 1)
+        self.assertIn('- w9: ', lines[1]); self.assertEqual(lines[-1], '- and 4 more')
 
     # AGENTS.md IS THE ONE SENTENCE, AS HIS FILE (the owner, 2026-11-23): read at every turn, short, and never the security lines
     def test_a_plain_task_reads_his_agents_md_and_an_edit_reaches_the_next_turn(self):

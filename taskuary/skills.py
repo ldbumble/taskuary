@@ -17,6 +17,7 @@ Three readers, none of which re-reads the mail to second-guess triage:
 - triage is handed menu() - each skill's name and description - and names the one a message is an instance of. The task is tagged
   skill:<name>; the tag routes it, like repo: does.
 - every agent's context carries brief() - the same names and descriptions - and it reads one whole through its `skills` tool (lookup).
+  A stranger's task carries none, as it carries nothing else of the owner's.
 - an agent that did a kind of job proposes its skill as a card (proposals.py save_skill); his press files it. Nothing is ever filed
   without it, for the same reason a bill is not posted without one.
 """
@@ -358,11 +359,23 @@ def menu(books: list = None, store=None) -> str:
     return '\n'.join(f"- {b['slug']}: {' '.join(b['description'].split())}" for b in offered(store, books))
 
 
-def _lines(books: list, mine: str = None) -> str:
+def _lines(books: list, mine: str = None) -> list:
+    "One line a skill, triage's own pick first so the cut never drops it; what is past MENU_MAX is counted, never silently left out."
     cut = lambda s: s if len(s) <= MENU_DESC else s[:MENU_DESC - 1] + '…'
     said = lambda b: ((' (imported, not written by the owner)' if b.get('origin') == 'imported' else '')
                       + (' (triage read this task as one)' if b['slug'] == mine else ''))
-    return '\n'.join(f"- {b['slug']}: {cut(' '.join(b['description'].split()))}{said(b)}" for b in books[:MENU_MAX])
+    books = sorted(books, key=lambda b: b['slug'] != mine)
+    return ([f"- {b['slug']}: {cut(' '.join(b['description'].split()))}{said(b)}" for b in books[:MENU_MAX]]
+            + ([f'- and {len(books) - MENU_MAX} more'] if len(books) > MENU_MAX else []))
+
+
+BRIEF_HEAD = "THE OWNER'S SKILLS - how each kind of job is done here, by name; one read whole is the `skills` tool's answer:"
+def brief(store=None, task: dict = None, sep: str = '\n') -> str:
+    """What every agent's context carries of his skills: their names and one-line descriptions - a list of what there is, the same one
+    triage is shown and the `skills` tool answers with. '' with none, or with them switched off. A body is never here: the agent reads
+    one when it chooses to (lookup)."""
+    books = offered(store)
+    return sep.join([BRIEF_HEAD, *_lines(books, of_task(task))]) if books else ''
 
 
 def lookup(store=None, task: dict = None, name: str = '') -> str:
@@ -374,7 +387,7 @@ def lookup(store=None, task: dict = None, name: str = '') -> str:
         b = next((b for b in books if b['slug'] == key(name)), None)
         if not b: return f"No skill is called {name!r} - ask with no name for the list."
         return b['text'] + (f"\n\nFiles kept with it: {', '.join(b['files'])}" if b['files'] else '')
-    return _lines(books, of_task(task)) if books else 'There are no skills yet.'
+    return '\n'.join(_lines(books, of_task(task))) if books else 'There are no skills yet.'
 
 
 def tag(slug: str) -> str: return f'skill:{slugify(slug)}'

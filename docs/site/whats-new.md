@@ -2,6 +2,22 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.4.5.1 - 2026-11-26
+
+- A task he made himself offers no Watch it; one being watched can still stop it
+- A card raised again is the whole card: its versions and its then come back with it
+- Nothing is raised under the agent's open question, on any road: a greyed card waits for his answer and stands under it
+- A card raised after his newest line stands under that line, never as a tab of the card above it
+- A substitution that only prints its own words reads no file, and a page's script is text
+- A step held on a card's browser road ends with that road: nothing stays pending with no button
+- An Enter in the box of a post he handed over is a line of it, never a second post card
+- The last press of a post is never put to him over an empty box: the agent is told what is missing
+- The press that is running is never a step its card went without
+- An empty box is answered the same every time: no Approve stands over it on a second press
+- A bare @ref on a PowerShell line Taskuary runs is passed as the word it is
+- A greyed card under the agent's open question is told as what it is: he cannot press it, and it stands again after his answer only if that turn keeps it
+- A tab left open across a restart never drops the new token: it reloads onto it instead of saying 'Open Taskuary from its app'
+
 ## 0.4.5.0 - 2026-11-25
 
 - His line never leaves a live card greyed: an answer greys nothing, and what the turn does not replace stands again

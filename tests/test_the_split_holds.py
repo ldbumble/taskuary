@@ -57,7 +57,7 @@ class TheSessionRunsTheBrain(unittest.TestCase):
     def test_the_profiles_own_command_does_not_decide_what_runs(self):
         """coding agent's profile says claude; settings say codex. Settings win, and the ROLE is unchanged."""
         s = store('codex')
-        self.assertEqual(hub_agents.brain_command(s, 'coding', CFG).get('cmd'), 'codex')
+        self.assertEqual(hub_agents.brain_command(s, CFG).get('cmd'), 'codex')
 
     def test_open_session_launches_the_brain_not_the_profile(self):
         s = store('codex')

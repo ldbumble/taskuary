@@ -32,11 +32,32 @@ function AboutWorkstreams() {
     catch (e) { setMsg(e?.response?.data?.detail || "save failed"); }
   };
   const change = (v) => { setText(v); setMsg(""); clearTimeout(timer.current); timer.current = setTimeout(() => save(v), 700); };
+  // ADD A PROFILE (the owner, 2026-11-26): named here, with one profile too - it is how he gets a second; its accounts are tagged on their cards
+  const [adding, setAdding] = useState(null);
+  const add = async () => {
+    const name = String(adding || "").trim();
+    if (!name) return setAdding(null);
+    try {
+      const { data } = await api.post("/api/about/workstreams", { name });
+      setD(data); setText(data.text || ""); was.current = parseWorkstreams(data.text); loadWorkstreams(true); setAdding(null); setMsg("Saved");
+    } catch (e) { setMsg(e?.response?.data?.detail || "could not add it"); }
+  };
   return (
     <Box data-tq-about-workstreams="" sx={{ mb: 3 }}>
-      <Typography sx={{ fontSize: 11.5, color: FAINT, mb: 1 }}>What you work on</Typography>
+      {/* ...with two kept they are his PROFILES, each with its own accounts, job section and what was learned under it (2026-11-26) */}
+      <Typography sx={{ fontSize: 11.5, color: FAINT, mb: 1 }}>{parseWorkstreams(text).filter((r) => r.kept && r.keep !== false).length > 1 ? "Your profiles" : "What you work on"}</Typography>
       {!d ? <CircularProgress size={16} /> : <WorkstreamsSection d={d} text={text} onChange={change} heading={false}
         later="What you work on is still being read from your mail - it fills in on its own." />}
+      {d && d.state !== "running" && (adding === null
+        ? <Box component="button" type="button" data-tq-add-profile="" onClick={() => { setMsg(""); setAdding(""); }}
+          sx={{ mt: 0.75, p: 0, border: 0, bgcolor: "transparent", cursor: "pointer", font: "inherit", fontSize: 12.5, color: FAINT, "&:hover": { color: INK, textDecoration: "underline" } }}>Add a profile</Box>
+        : <Box sx={{ mt: 0.75, display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
+          <TextField size="small" autoFocus value={adding} placeholder="Profile name" onChange={(e) => setAdding(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") add(); if (e.key === "Escape") setAdding(null); }} onBlur={add}
+            inputProps={{ "aria-label": "Profile name", maxLength: 60 }} sx={{ width: 260, "& .MuiInputBase-root": { fontSize: 13.5 } }} />
+          {/* ...saved as it is named, like the list above - no button (Enter, or leaving the box) */}
+          <Typography variant="caption" sx={{ color: FAINT }}>Enter adds it. Then pick it on each connection that is this profile's.</Typography>
+        </Box>)}
       {msg && <Typography variant="caption" sx={{ color: msg === "Saved" ? FAINT : "var(--tq-danger, #6b2733)", display: "block", mt: 0.5 }}>{msg}</Typography>}
     </Box>
   );

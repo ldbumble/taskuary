@@ -814,6 +814,13 @@
    the whole of it is the row's hover */
 .tq-pile-row .t b.goal-t { flex-shrink: 3; }
 .tq-pile-steps, .tq-pile-due { flex: 0 1000 auto; min-width: 0; overflow: hidden; }
+/* A ROW'S PROFILE (the owner, 2026-11-26: "very subtle", the rail's look unchanged): one line high and wrapping, so the word is drawn whole
+   on the first line or falls to a second that is never shown - and it gives way before the title loses a pixel (the shrink), taking no
+   gap of its own when it is gone (the margin undoes .t's, the word carries it) */
+.tq-pile-profile { flex: 0 1000000 auto; min-width: 0; margin-left: -9px; display: flex; flex-wrap: wrap; align-content: flex-start; height: 16px; overflow: hidden;
+  font: 400 11px/16px 'IBM Plex Sans', system-ui, sans-serif; color: var(--tq-muted, #6e685f); }
+.tq-pile-profile::before { content: ""; flex: 0 0 0; height: 16px; }
+.tq-pile-profile > span { flex: 0 0 auto; padding-left: 9px; white-space: nowrap; }
 .tq-pile-word.keep { flex: 0 1 auto; min-width: 46px; overflow: hidden; text-overflow: ellipsis; }
 
 /* ── the canvas (the canvas redesign, 2026-09-29) ─────────────────────────────────────────────── */

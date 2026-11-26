@@ -819,7 +819,7 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
                       onPointerEnter={() => { if (!isCur && i.tid) prefetchTask(api, i.tid); }}
                       onPointerDown={() => { if (!isCur && i.tid) prefetchTask(api, i.tid); }}   /* a touch has no hover: read at the press */
                       aria-label={urgentDot ? `${i.title} - urgent` : imp ? `${i.title} - important` : undefined}
-                      title={[i.who, st?.word || meta.word, i.ref, i.moved ? `moved to Tasks as ${i.moved.ref}` : "", imp ? "important" : "", i.promoted ? 'moved up - it looked urgent' : '', dangerLine(i.danger, i.danger_aim), why].filter(Boolean).join(" · ")}>
+                      title={[i.who, st?.word || meta.word, i.ref, i.profile, i.moved ? `moved to Tasks as ${i.moved.ref}` : "", imp ? "important" : "", i.promoted ? 'moved up - it looked urgent' : '', dangerLine(i.danger, i.danger_aim), why].filter(Boolean).join(" · ")}>
                       <div className="t">
                         {/* AN AGENT AT WORK is a ring spinning round the row's icon (the owner, 2026-10-21) - it stops when the agent
                             finishes, asks, fails or is stopped; the highlighted border stays the table's alone. A goal wears its mark. */}
@@ -831,7 +831,10 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
                             and on the card (B3, 2026-10-29) - a warning in the row's own height, never a gate */}
                         {!!i.danger && <span className="tq-pile-danger" data-tq-danger="" style={{ color: "var(--tq-danger, #8a3646)" }} aria-label={dangerLine(i.danger, i.danger_aim)}>⚠</span>}
                         <b className={goal ? "goal-t" : undefined}>{i.title}</b>
-                        {/* NO WORKSTREAM CHIP ON THE RAIL (the owner, 2026-11-08: "little card taskuary AI .... on rail. hate that") - the task's own page still says it */}
+                        {/* NO CHIP ON THE RAIL (the owner, 2026-11-08: "little card taskuary AI .... on rail. hate that"): with two profiles a row says
+                            which in a quiet word where it has the room, whole - and where it has none, nothing: never a title's room, never a
+                            cut word (.tq-pile-profile, 2026-11-26). With one profile it is not drawn at all */}
+                        {!!i.profile && <span className="tq-pile-profile" data-tq-row-profile="" title={`Profile: ${i.profile}`}><span>{i.profile}</span></span>}
                         {/* NO "+N" FOR NEW REPLIES (the owner, 2026-10-26), on the phone neither. ONE FYI ROW PER EMAIL THREAD (trust audit P2, 2026-10-28): the newest mail speaks; the rest are counted in their own words */}
                         {i.thread_n > 0 && <span className="tq-pile-steps" data-tq-thread-n={i.thread_n} title="it opens on all of them">· {i.thread_n} more on the thread</span>}
                         {/* a goal's row is "🎯 title · 2 of 5 steps" - its count, never its TQ number (the owner, 2026-10-21) */}
@@ -3192,10 +3195,8 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true, r
       </DayHold>
       <div className="tq-modes">
         {/* pressable while the day counts or the walk is busy: the press is held (walkQueued) and runs once it can */}
+        {/* ...the day fills in above this row as it lands and moves it under the pointer: the press still lands (secondClick.js) */}
         <button type="button" className="tq-chip primary" disabled={walkQueued || starting || resetting || (!counting && !canAdvance && !onYou)}
-          // ...kept on the press itself while loading: the day fills in above this row as it lands and moves it, and a click
-          // whose release lands after the move never reaches the button
-          onPointerDown={counting ? () => setWalkQueued(true) : undefined}
           onClick={() => (counting || walkOff ? setWalkQueued(true) : start(null))}
           title={btnHint("walk")}>{starting || walkQueued ? "Getting your first one..." : btn("walk")}</button>
         {/* NO "Set up Taskuary" HERE: setup is the Setup button on the top bar, never a choice in the chat (the owner, 2026-10-19) */}

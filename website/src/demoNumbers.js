@@ -35,7 +35,7 @@ I prepared the reply to Ruth on its task. Nothing has been sent.
 export function installNumbersWorkflow(state, assistant, at = Date.now()) {
   const created = fmtStamp(at - 60000);
   const task = { TaskId: NUMBERS_TASK, ref: 'TQ-0018', Title: 'Prepare the latest vendor spend numbers', Summary: NUMBERS_REQUEST,
-    Kind: 'general', Status: 'open', Priority: 'normal', Assignee: 'agent:analyst', Source: 'email', SourceRef: 'demo:vendor-numbers', CreatedBy: 'triage', CreatedAt: created };
+    Kind: 'general', Status: 'open', Priority: 'normal', Source: 'email', SourceRef: 'demo:vendor-numbers', CreatedBy: 'triage', CreatedAt: created };
   const message = { MessageId: NUMBERS_MESSAGE, TaskId: NUMBERS_TASK, ExternalId: 'demo-vendor-numbers', ConversationId: 'demo:vendor-numbers',
     Channel: 'email', SourceName: 'Outlook mail', Subject: 'Latest vendor spend numbers?', FromName: 'Ruth Bennett', FromEmail: 'rbennett@northwind.example',
     SentAt: created, CreatedAt: created, BodyText: NUMBERS_REQUEST, Brief: NUMBERS_REQUEST, Direction: 'in', Status: 'routed' };
@@ -48,7 +48,7 @@ export function installNumbersWorkflow(state, assistant, at = Date.now()) {
     comments: [], runs: [], audit: [], reviews: [], session: null, transcript: null };
   state['/api/messages/one'][NUMBERS_MESSAGE] = message;
   state['/api/feed'].data = [{ ...message, Preview: NUMBERS_REQUEST, Title: task.Title, TaskKind: 'general', TaskStatus: 'open', MsgStatus: 'routed',
-    Decision: 'create', RouteDecision: 'create', RouteReason: 'Current internal figures → general assistant with the analyst profile', Category: 'task', NeedsYou: 1,
+    Decision: 'create', RouteDecision: 'create', RouteReason: 'Current internal figures → an agent', Category: 'task', NeedsYou: 1,
     ChainSize: 1, CanSend: true, ReviewId: null, ReviewStatus: null, HasDraft: 0 }];
   state['/api/tasks/detail'][`${NUMBERS_TASK}:assistant`] = { messages: [], session: null, defaultPick: 'cli:claude', providers: [
     { id: 'cli:claude', pick: 'cli:claude', type: 'cli', label: 'Claude Code', model: '' },

@@ -817,7 +817,7 @@ def no_agent(store) -> str:
     agent" is never said in front of a 422 (2026-09-03)."""
     try:
         from . import agents as hub_agents
-        want = hub_agents.default_agent(store)
+        want = hub_agents.coding_role(store)
         return '' if store.get_agent(want) else (want or 'the coding agent')
     except Exception: return ''
 

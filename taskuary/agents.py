@@ -727,21 +727,10 @@ BRAIN_SETTING = {'coding': 'default_brain', 'general': 'assistant_ai', 'triage':
 class NoAI(ValueError): "Nothing connected can run this - the reason a start shows, naming no AI the person does not have."
 
 
-def role_brain(store, role: str) -> str:
-    """The CLI key set for one profile's work (profile_brains) - his own taken at its word, as resolve_brain takes a card's; one an update
-    moved there only while it is connected. '' when none."""
-    try: over = json.loads(store.get_setting('profile_brains') or '{}')
-    except (TypeError, ValueError): over = {}
-    k = str(over.get(str(role or '')) or '').strip() if role and isinstance(over, dict) else ''
-    return k if k and (picked(store, 'profile_brains') or k in dict(connection_brains(store))) else ''
-
-
-def resolve_brain(store, kind: str = 'general', cli_only: bool = False, role: str = None) -> str:
-    """'cli:<key>', 'connector:<id>' or '' - see above. `cli_only` for a run that cannot exist without a terminal; `role` a profile
-    whose own brain (profile_brains) the owner set. THE PICK EVERY ROAD READS: triage's (llm.effective_pick), the Assistant's
+def resolve_brain(store, kind: str = 'general', cli_only: bool = False) -> str:
+    """'cli:<key>', 'connector:<id>' or '' - see above. `cli_only` for a run that cannot exist without a terminal. THE PICK EVERY ROAD READS: triage's (llm.effective_pick), the Assistant's
     (concierge.default_pick), the general agent's (general._selected), a coding pane's (brain_for, brain_chain, cli_connections.brain_of)
     and the router's fixed answer (brainroute._fixed) - two of them read a blank slot two ways, and a job ran on a CLI Settings did not name."""
-    if role and (r := role_brain(store, role)): return f'cli:{r}'
     name = BRAIN_SETTING.get(kind, 'assistant_ai')
     v = '' if stale(store, name) else str(store.get_setting(name) or '').strip()
     # ...a CLI's key, or an AI card the owner chose for coding (the owner, 2026-11-09: "coding tasks should run on hipaa, why not")
@@ -766,7 +755,7 @@ def resolve_brain(store, kind: str = 'general', cli_only: bool = False, role: st
 def resolved_command(store, kind: str = 'coding') -> dict:
     "The command fields of the CLI resolve_brain names for a run that needs one - {} when none is connected."
     p = resolve_brain(store, kind, cli_only=True)
-    return brain_command(store, '', want=p[4:]) if p else {}
+    return brain_command(store, want=p[4:]) if p else {}
 
 
 def with_cmd(profile: dict, store=None, kind: str = 'coding') -> dict:
@@ -835,14 +824,6 @@ def availability_failure(error) -> bool:
     if getattr(error, 'unavailable', False) is True: return True
     return isinstance(error, (FileNotFoundError, PermissionError)) or bool(
         cli_quota(text) or _UNAVAILABLE.search(text) or _SIGNED_OUT.search(text) or _DENIED.search(text) or _NO_HOME.search(text))
-
-
-def profiles(store) -> dict:
-    out = {}
-    for a in store.list_agents():
-        try: out[a['Name']] = json.loads(a.get('Config') or '{}')
-        except ValueError: out[a['Name']] = {}
-    return out
 
 
 def cli_of(profile: dict, fallback: str = '') -> str:
@@ -947,12 +928,6 @@ def coding_role(store) -> str:
     return rows[0]['Name'] if rows else ''
 
 
-def default_agent(store) -> str:
-    """The profile a task runs under when nobody picked one - the coding profile (coding_role). Kept as a name for its callers;
-    it no longer reads a setting, and never answers with a brain."""
-    return coding_role(store)
-
-
 def default_brain(store) -> str:
     """The CLI every worker session runs on - coding and general alike (the owner, 2026-09-16:
     "general agents use the same brain on high level like coding by default").
@@ -1013,10 +988,9 @@ def default_pick(store) -> str:
     return f"connector:{c['ConnectorId']}" if c else ''
 
 
-def brain_for(store, role: str) -> str:
-    """The CLI that runs one role's coding pane - the one resolver's (resolve_brain), the role's own brain (profile_brains) first. A
-    profile never PINS a brain: this is a setting keyed BY a profile, and what it names is a brain - never a model, never an effort."""
-    return resolve_brain(store, 'coding', cli_only=True, role=role)[4:]
+def brain_for(store) -> str:
+    "The CLI that runs a coding pane - the one resolver's (resolve_brain)."
+    return resolve_brain(store, 'coding', cli_only=True)[4:]
 
 
 def brain_chain(store, first: str = None, cfg: dict = None) -> list:
@@ -1125,8 +1099,8 @@ def layer_profiles(cfg: dict, store) -> bool:
     layered on top of any brain tool"; the coding profile is just a profile). Once, at start:
 
     - the coding brain is named outright (default_brain) from the legacy `default_agent` profile, and that setting goes;
-    - a profile's own `provider` leaves it: one on another CLI than the default becomes that role's brain override
-      (profile_brains), so nothing runs anywhere new, and the rest simply run on the default brain;
+    - a profile's own `provider` leaves it, and so does the per-role brain override an older version kept: every agent runs on
+      the brain Settings names;
     - the shipped coding profile's old name becomes `coding` - its config, its row, its document (now CODING.md), the tasks and
       transcripts that name it, the settings that do. Only when no `coding` exists yet, so an owner's own is never overwritten.
     Returns whether config.toml changed (the caller saves it)."""
@@ -1137,22 +1111,14 @@ def layer_profiles(cfg: dict, store) -> bool:
         key = default_brain(store)
         if key and key in (cfg.get('cli_connections') or {}): store.set_setting('default_brain', key, 'migration')
     if str(store.get_setting('default_agent') or '').strip(): store.set_setting('default_agent', '', 'migration')
-    dflt = str(store.get_setting('default_brain') or '').strip()
-    try: over = json.loads(store.get_setting('profile_brains') or '{}')
-    except ValueError: over = {}
-    over = over if isinstance(over, dict) else {}
-    moved = dict(over)
-    for name, prof in agents.items():
-        provider = str(prof.pop('provider', '') or '')
-        if provider.startswith('cli:') and provider[4:] != dflt and name not in moved: moved[name] = provider[4:]
+    for prof in agents.values(): prof.pop('provider', None)
+    if store.get_setting('profile_brains'): store.set_setting('profile_brains', '', 'migration')
     if 'coder' in agents and 'coding' not in agents:
         agents['coding'] = agents.pop('coder')
-        if 'coder' in moved: moved['coding'] = moved.pop('coder')
         _rename_coding_profile(store)
     for prof in agents.values():
         if str(prof.get('rules_doc') or '') == 'coder': prof['rules_doc'] = 'coding'
     if 'coding' in agents: _retire_old_name(store)
-    if moved != over: store.set_setting('profile_brains', json.dumps(moved) if moved else '', 'migration')
     return json.dumps(agents, sort_keys=True, default=str) != before
 
 
@@ -1201,7 +1167,6 @@ def _retire_old_name(store) -> None:
     # fails the same way until it is fixed" over a task Start would now run (2026-10-16). It goes; the task reads not started.
     try: store._exec("DELETE FROM dispatchq WHERE State='failed' AND LastError LIKE 'unknown agent: coder%'")
     except Exception: pass
-    if str(store.get_setting('default_profile') or '') == 'coder': store.set_setting('default_profile', 'coding', 'migration')
     # ...and the reports that name it: one with agent `coder` failed "no CLI agent named 'coder'" after the rename, and one whose
     # brain was `cli:coder` would have too (2026-10-16). The agent becomes `coding`; the brain, the tool coding runs on.
     tool = str(store.get_setting('default_brain') or '').strip()
@@ -1216,12 +1181,12 @@ def _retire_old_name(store) -> None:
         if now != was: store.save_source({'SourceId': src['SourceId'], 'ConfigJson': json.dumps(now)}, 'migration')
 
 
-def brain_command(store, role: str, cfg: dict = None, want: str = None) -> dict:
-    """The COMMAND a role's brain runs - cmd, args, resume flags, timeout, gears.
+def brain_command(store, cfg: dict = None, want: str = None) -> dict:
+    """The COMMAND the brain runs - cmd, args, resume flags, timeout, gears.
 
-    `want` is the owner's own pick at the dialog and outranks everything below it.
+    `want` is the owner's own pick at the dialog and outranks the default.
 
-    Empty unless a brain was CHOSEN - `want`, `default_brain`, or this role's override. Blank means the
+    Empty unless a brain was CHOSEN - `want` or `default_brain`. Blank means the
     owner has not moved to the brain layer yet, and `brain_for` would then be guessing from the
     legacy `default_agent` profile; overriding an explicit profile command with a guess is how
     "start a session with codex" would have quietly run claude.
@@ -1231,12 +1196,7 @@ def brain_command(store, role: str, cfg: dict = None, want: str = None) -> dict:
     from . import config
     from .cli_connections import COMMAND_FIELDS, with_defaults
     settings = store.get_settings()
-    try: over = json.loads(settings.get('profile_brains') or '{}')
-    except ValueError: over = {}
-    # the owner picking a brain at the dialog outranks both the role's override and the default
-    key = str(want or '').strip() \
-        or (str(over.get(str(role or '')) or '').strip() if isinstance(over, dict) else '') \
-        or str(settings.get('default_brain') or '').strip()
+    key = str(want or '').strip() or str(settings.get('default_brain') or '').strip()
     if not key: return {}
     cfg = config.load() if cfg is None else cfg
     conn = (cfg.get('cli_connections') or {}).get(key)

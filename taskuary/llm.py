@@ -406,7 +406,7 @@ def make_cli_llm(store, agent_name: str, model: str = None, cwd: str = None, tra
     prof = {k: v for k, v in json.loads(row.get('Config') or '{}').items() if k not in ('cwd', 'cwd_map')}
     # A ROLE'S ROW THAT NAMES NO CLI (synced before any brain was chosen) runs on the brain chosen for it, else on a ready one - it
     # used to run `claude` by default, on a machine where the person had only set up Codex (2026-10-21). No brain: no CLI brain.
-    if not prof.get('cmd'): prof = {**prof, **hub_agents.brain_command(store, agent_name)}      # the role's own brain first
+    if not prof.get('cmd'): prof = {**prof, **hub_agents.brain_command(store)}
     prof = hub_agents.with_cmd(prof, store)            # ...else the one resolver's; NoAI when nothing is connected
     # a CONVERSATION that stays open between turns (clipool) - the Assistant's chat, a general agent's task
     if keep: prof['keep_alive'] = keep

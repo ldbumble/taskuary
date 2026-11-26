@@ -108,3 +108,63 @@ test("the next card drawn in the same button takes no press for its first moment
   t = 1900; assert.ok(click(477, 703).stopped, "the double-click's second press never sends the letter that just came");
   t = 2800; assert.ok(!click(477, 703).stopped, "a moment later it is his to press");
 });
+
+// THE BUTTON MOVED WHILE THE POINTER WAS DOWN (the owner, 2026-11-26: "most buttons on our app you have to click twice for it to go?"): the Ask
+// box shut with words in it opens as the pointer goes down, its up-arrow rises a line, and the release lands 29px under it - the browser's
+// click went to the box, the words stayed, and he pressed again
+function moving() {
+  const on = {}, w = { t: 0, under: null, check: null };
+  class MouseEvent { constructor(type, o) { Object.assign(this, o, { type, isTrusted: false, stopped: false }); } preventDefault() {} stopImmediatePropagation() { this.stopped = true; } }
+  const doc = { addEventListener: (k, f) => { on[k] = f; }, removeEventListener: (k) => { delete on[k]; }, elementFromPoint: () => w.under, defaultView: { MouseEvent } };
+  installSecondClick(doc, { now: () => w.t, watch: (f) => { w.check = f; return () => { w.check = null; }; } });
+  // `presses`: the clicks that reached it, as the page under this listener would hear them
+  w.control = () => { const c = { matches: () => false, contains: (x) => x === c, disabled: false, isConnected: true, shown: true, presses: [], getClientRects: () => (c.shown ? [1] : []),
+    dispatchEvent(e) { e.target = c; e.timeStamp = w.t; on.click(e); if (!e.stopped) c.presses.push([e.clientX, e.clientY]); } }; c.closest = () => c; return c; };
+  w.bare = { matches: () => false, closest: () => null };          // the box's own middle, the page: nothing that takes a press
+  const ev = (target, x, y) => ({ target, timeStamp: w.t, clientX: x, clientY: y, isTrusted: true, button: 0, stopped: false, preventDefault() {}, stopImmediatePropagation() { this.stopped = true; } });
+  w.down = (target, x, y) => on.pointerdown(ev(target, x, y));
+  // ...the browser's own click: on the button when the release was on it too (and then it presses it), else on what holds both ends
+  w.click = (target, x, y) => { const e = ev(target, x, y); on.click(e); if (!e.stopped) target.presses?.push([x, y]); return e; };
+  w.move = (x, y) => on.pointermove({ clientX: x, clientY: y });
+  return w;
+}
+
+test("a press whose button moved from under the still pointer presses that button, once, where the hand made it", () => {
+  const w = moving(), send = w.control();
+  w.t = 1000; w.down(send, 1383, 850);
+  w.t = 1090; const stray = w.click(w.bare, 1383, 850);
+  assert.ok(stray.stopped, "the click the browser gave the box is not the page's");
+  assert.deepEqual(send.presses, [[1383, 850]], "the up-arrow he pressed is pressed");
+  // ...and a press that stayed on its button is the browser's own: nothing is added to it
+  w.move(900, 300); w.t = 5000; w.down(send, 1383, 821); w.t = 5090;
+  assert.ok(!w.click(send, 1384, 821).stopped);
+  assert.equal(send.presses.length, 2, "one press, one click");
+});
+
+test("a hand that moved off before letting go cancels as before, and a button greyed, gone or hidden by the release is not pressed", () => {
+  const w = moving(), b = w.control();
+  w.t = 1000; w.down(b, 500, 400); w.t = 1300;
+  assert.ok(!w.click(w.bare, 500, 420).stopped, "dragged off it: the browser's click stands");
+  for (const gone of [{ disabled: true }, { isConnected: false }, { shown: false }]) {
+    const c = w.control(); w.move(0, 0); w.t += 5000; w.down(c, 700, 400); Object.assign(c, gone); w.t += 90;
+    assert.ok(!w.click(w.bare, 700, 400).stopped, JSON.stringify(gone));
+    assert.equal(c.presses.length, 0, JSON.stringify(gone));
+  }
+  assert.equal(b.presses.length, 0);
+  // ...a key's click, and the page's own click(), come with no pointer down: never moved to another button
+  w.move(0, 0); w.t += 5000; w.down(b, 500, 400); w.t += 90; w.click(b, 500, 400);
+  w.t += 5000; assert.ok(!w.click(w.bare, 500, 400).stopped);
+  assert.equal(b.presses.length, 1);
+});
+
+test("a button that came under the still pointer a moment ago takes no press, moved or not: the next letter is never sent unread", () => {
+  const w = moving(), first = w.control(), second = w.control();
+  w.under = first; w.t = 1000; w.down(first, 477, 702); w.click(first, 477, 702);
+  w.t = 9000; w.under = second; w.check();                 // ...the next card, drawn where his press landed
+  w.t = 9200; w.down(second, 477, 702);
+  w.under = w.bare; w.t = 9290;                            // ...and it moved while he held it
+  assert.ok(w.click(w.bare, 477, 702).stopped);
+  assert.equal(second.presses.length, 0, "not his choice of it");
+  w.under = second; w.t = 10300; w.down(second, 477, 702); w.under = w.bare; w.t = 10390; w.click(w.bare, 477, 702);
+  assert.equal(second.presses.length, 1, "a moment later it is his to press, and the press lands though it moved");
+});

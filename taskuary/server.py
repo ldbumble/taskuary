@@ -3234,7 +3234,7 @@ def code(task_id: int, background: BackgroundTasks, body: CodeBody = None):
     used to be the headless path (pipes, no window, a report you read afterwards); nothing starts
     where you cannot watch it, interrupt it or answer it, so it is now the same as /dispatch."""
     if not store.get_task(task_id): raise HTTPException(404, 'task not found')
-    agent = (body.agent if body else None) or hub_agents.default_agent(store)
+    agent = (body.agent if body else None) or hub_agents.coding_role(store)
     if not store.get_agent(agent): raise HTTPException(422, f'unknown agent: {agent}' if agent else 'no coding agent is set up to take it')
     ses = start_session(store, task_id, agent, (body.model if body else None), (body.instruction if body else None),
                         brain=getattr(body, 'brain', None))
@@ -3259,7 +3259,7 @@ def continue_task(task_id: int, body: CodeBody):
     from . import agents as hub_agents
     # An explicit picker choice means "restart with this harness". Falling back to the previous
     # transcript preserves the convenient same-agent continue path.
-    agent = str(body.agent or previous.get('Agent') or hub_agents.default_agent(store)).strip()
+    agent = str(body.agent or previous.get('Agent') or hub_agents.coding_role(store)).strip()
     if not store.get_agent(agent):
         raise HTTPException(422, f'the previous agent "{agent}" is no longer configured; choose an agent from Start session'
                             if agent else 'no coding agent is set up - restart Taskuary and it is made again')
@@ -3629,7 +3629,7 @@ def dispatch_task(task_id: int, body: DispatchBody, background: BackgroundTasks)
         from . import funnel
         if e.status_code == 422 and funnel.needs_repo(e):
             funnel.hold_for_repo(store, task_id, str(e.detail or ''))    # ...and the task keeps saying so after the answer is gone
-            return {'dispatch': 'needs_repo', 'started': False, 'existing': False, 'agent': body.agent or hub_agents.default_agent(store), 'taskId': task_id,
+            return {'dispatch': 'needs_repo', 'started': False, 'existing': False, 'agent': body.agent or hub_agents.coding_role(store), 'taskId': task_id,
                     'ref': task_ref(task_id), 'reason': str(e.detail or '')}
         if e.status_code < 422 or isinstance(e, StartRefused): raise
         _start_refused(task_id, body, e.__context__ if isinstance(e.__context__, Exception) else str(e.detail or 'the agent did not start'))
@@ -3662,8 +3662,19 @@ class WorkstreamBody(BaseModel):
 
 @app.get('/api/workstreams')
 def list_workstreams():
-    """The owner's workstreams, for the task's picker and the labels (workstreams.py). Proposed ones are the Advisor's cards, not here."""
-    return {'data': [{k: w[k] for k in ('slug', 'name', 'about', 'personal', 'status')} for w in hub_ws.streams(store)]}
+    """The owner's profiles, for the task's picker, the labels and a connection card's picker (workstreams.py). Proposed ones are the
+    Advisor's cards, not here."""
+    return {'data': [{k: w[k] for k in ('slug', 'name', 'about', 'personal', 'status')} for w in hub_ws.shown(store)]}
+
+
+class AccountProfileBody(BaseModel):
+    workstream: str = ''; source_id: int | None = None
+
+@app.put('/api/connectors/{cid}/workstream')
+def set_account_workstream(cid: int, body: AccountProfileBody):
+    """The Profile picker on a connection card (the owner, 2026-11-26): this account is one profile's, or every profile's ('')."""
+    try: return hub_ws.tag_account(store, body.workstream, connector_id=cid, source_id=body.source_id, actor=ACTOR)
+    except ValueError as e: raise HTTPException(422, str(e))
 
 
 class WorkstreamsAnswerBody(BaseModel):
@@ -3682,6 +3693,19 @@ def put_about_workstreams(body: WorkstreamsAnswerBody):
     """The rows the owner changed, each {slug, name, personal, keep} - as the setup screen's answer, one left out kept to tick again."""
     from . import firstrun
     return firstrun.answer_workstreams(store, body.items, ACTOR)
+
+
+class NewProfileBody(BaseModel): name: str = ''
+
+@app.post('/api/about/workstreams')
+def add_about_workstream(body: NewProfileBody):
+    """About you's "Add a profile" (the owner, 2026-11-26): he names it there; its accounts are then tagged on their connection cards."""
+    from . import firstrun
+    name = ' '.join(body.name.split())[:60]
+    if not name: raise HTTPException(422, 'give the profile a name')
+    if hub_ws.get(store, hub_ws.slugify(name)): raise HTTPException(422, f'there is already a profile called {name}')
+    hub_ws.upsert(store, {'name': name}, ACTOR)
+    return firstrun.workstreams_page(store)
 
 
 @app.put('/api/tasks/{task_id}/workstream')
@@ -4898,7 +4922,7 @@ def start_session(store_, tid: int, agent: str = None, model: str = None, instru
     try:
         _refresh_chat_context(task_id=tid)
         # `agent` is the ROLE, `brain` is which CLI runs it - two questions, two arguments
-        return hub_term.start_on_task(store_, tid, agent or hub_agents.default_agent(store_), model, instruction,
+        return hub_term.start_on_task(store_, tid, agent or hub_agents.coding_role(store_), model, instruction,
                                       ACTOR, brain=brain)
     except (ValueError, RuntimeError, FileNotFoundError) as e:
         raise HTTPException(422, str(e))
@@ -5052,7 +5076,7 @@ def _dispatch_one(tid: int, body: DispatchBody, background: BackgroundTasks) -> 
         return {'dispatch': 'assistant', 'agent': session.provider, 'model': session.model, 'started': not had_session, 'existing': had_session,
                 'taskId': tid, 'ref': task_ref(tid), 'session': session.info(tail=3)}
 
-    agent = body.agent or hub_agents.default_agent(store)
+    agent = body.agent or hub_agents.coding_role(store)
     if not store.get_agent(agent): raise HTTPException(422, f'unknown agent: {agent}' if agent else 'no coding agent is set up to take it')
     # THE BRAIN TRAVELS WITH THE ROLE. This called start_session without it, so a picked CLI got as
     # far as the door and no further: "chose devin from start coding agent screen but it started
@@ -5093,7 +5117,7 @@ def dispatch_message(mid: int, body: DispatchBody, background: BackgroundTasks):
         from . import funnel
         if e.status_code == 422 and funnel.needs_repo(e):
             funnel.hold_for_repo(store, tid, reason)
-            return {'dispatch': 'needs_repo', 'started': False, 'existing': False, 'agent': body.agent or hub_agents.default_agent(store), 'taskId': tid,
+            return {'dispatch': 'needs_repo', 'started': False, 'existing': False, 'agent': body.agent or hub_agents.coding_role(store), 'taskId': tid,
                     'ref': task_ref(tid), 'reason': reason}
         raise
 
@@ -6067,7 +6091,7 @@ def agent_messages(request: Request, task_id: int, sender: str = '', subject: st
     """`taskuary --search` from an agent's own shell: the owner's mail and messages by sender, subject, words and date (mailsearch)."""
     from . import mailsearch, search
     _owner_history(request, task_id)
-    try: hits = mailsearch.search(store, sender, subject, words, since, until, limit)
+    try: hits = mailsearch.search(store, sender, subject, words, since, until, limit, tid=task_id)
     except ValueError as e: raise HTTPException(422, str(e))
     # ...and what earlier tasks settled on those words (search.outcomes): the CLI's one search reads both, so it asks the owner neither
     done = search.outcomes(store, f'{subject} {words}', skip=task_id) if (words or subject).strip() else []
@@ -6084,7 +6108,11 @@ def agent_message(mid: str, request: Request, task_id: int):
         # ...but never a stranger's words: a stranger's session is refused this door outright (guard.stranger_denied), so whoever asks here
         # runs full (agenttools.UNVOUCHED)
         if agenttools.unvouched(store, task_id, {'id': n}): raise HTTPException(403, agenttools.UNVOUCHED)
-    else: _owner_history(request, task_id)
+    else:
+        _owner_history(request, task_id)
+        raw = store.get_message(n) or {}                                           # ...and never mail in an account of another profile
+        if (mv := hub_ws.move_card(store, task_id, raw.get('SourceName'), f'read message m{n}', raw.get('Channel') or 'email')):
+            raise HTTPException(403, mv['says'])
     m = mailsearch.message(store, n)
     if not m: raise HTTPException(404, agenttools.no_message(n))
     return m
@@ -6675,8 +6703,8 @@ def agent_propose(body: AgentProposeBody, request: Request):
     except ValueError as e: raise HTTPException(422, str(e))
     q = proposals.queue(store, body.task_id, p, 'agent', refused=(miss := []))
     if not q: raise HTTPException(422, proposals.refusal_line(miss[0] if miss else ''))
-    return {'ok': True, 'queued': True, 'review': q['reviewId'], 'says': "A card already asks this and waits on the owner's press - no second card."
-            if q.get('already') else "Waiting on the owner's press - nothing happens until they approve it."}
+    return {'ok': True, 'queued': True, 'review': q['reviewId'], 'says': q.get('says') or ("A card already asks this and waits on the owner's press - no second card."
+            if q.get('already') else "Waiting on the owner's press - nothing happens until they approve it.")}
 
 # ...and the calendar and a share, SET UP like an email (calwrite.answer / meeting, sharing.agent_share): a card with the owner's press
 class AgentInviteBody(BaseModel): task_id: int; answer: str; start: str | None = None; end: str | None = None; note: str | None = None
@@ -9405,6 +9433,11 @@ def tool_run(body: dict, request: Request):
         from .agenttools import refusal
         raise HTTPException(403, refusal(f'{t} has no connection card an owner turned on - it is not an agent tool',
                                          "work it with your session's own tools, or on one of his systems", see=('list_systems', 'lists them')))
+    # ...AND ON AN ACCOUNT OF ANOTHER PROFILE, the one card that moves the task there (workstreams.may_use, the one wall): nothing runs
+    if (wtid := guard.session_tid(cfg['server'], request.headers)) and (
+            m := hub_ws.move_card(store, wtid, conn['ConnectorId'], proposals_words(t, conn, body))):
+        if not m['review']: raise HTTPException(403, m['says'])
+        return JSONResponse({'ok': True, 'queued': True, 'review': m['review'], 'says': m['says']}, status_code=202)
     # ...AN AGENT'S POST ON A NETWORK NOT CONNECTED is its card all the same, Connect where Post would be (outbound.review_connect): "the
     # connection is off - turn it on" sent the agent to say in words what the card's own Connect does (design round 2, 2026-11-18)
     # ...AND ANY CALL ON A CONNECTION SWITCHED OFF is a card whose press switches it on and runs it - its Connect where it is not set up
@@ -9458,6 +9491,7 @@ def tool_run(body: dict, request: Request):
         # card's, sending the card's token to a host of the caller's choosing (reports.query_only)
         # ...and the card checked above is the card that runs: query_only drops connector_id, which fell back to the first of the type
         tool_cfg = {**query_only(body), 'type': t, 'connector_id': conn['ConnectorId']}
+        if t == 'calendar': tool_cfg['_task'] = wtid           # ...whose call: an agent's reads its own profile's calendars (calendar.agenda)
         # SQL commits only on a card the owner raised to write; at read, the batch is rolled back (mssql.run_query)
         if t in ('mssql', 'database'): tool_cfg['_write'] = guard.scope_of(cfg['server'], request.headers) != guard.AGENT and scopes.rank(scopes.scope_of(conn)) >= scopes.rank('write')
         if t in hub_tools:
@@ -9472,6 +9506,12 @@ def tool_run(body: dict, request: Request):
         return {'ok': False, 'error': failed(t, e)}               # ...bounded there, its next step kept
     store.audit('tool', (conn or {}).get('ConnectorId', 0), 'run', actor, detail={'type': t, 'headline': str(head)[:200]})
     return {'ok': True, 'headline': head, 'output': (out or '')[:20000]}
+
+def proposals_words(t: str, conn: dict, body: dict) -> str:
+    "An agent's connector call in the words its card would say it (proposals.tool_words) - the `then` of the card that stands in its way."
+    from . import proposals
+    from .reports import query_only
+    return proposals.tool_words(store, {**query_only(body), 'type': t, 'connector_id': conn['ConnectorId']})
 
 def _sql_writes(body) -> bool:
     "Does this statement do more than read, by its grammar (db.read_only)? An empty one is the executor's to refuse."
@@ -9521,7 +9561,7 @@ def _agent_proposes(request: Request, t: str, conn: dict, body: dict, why: str):
     if not q: raise HTTPException(403, proposals.refusal_line(miss[0] if miss else ''))
     store.audit('tool', conn['ConnectorId'], 'run_proposed', 'agent', detail={'type': t, 'task': tid, 'review': q['reviewId']})
     return JSONResponse({'ok': True, 'queued': True, 'review': q['reviewId'],
-                         'says': f"Waiting on the owner's press: this {why}. Nothing was sent; it runs only when they press Approve."},
+                         'says': q.get('says') or f"Waiting on the owner's press: this {why}. Nothing was sent; it runs only when they press Approve."},
                         status_code=202)
 
 @app.post('/api/reports/compose')
@@ -10570,16 +10610,15 @@ def agents():
     conns = cfg.get('cli_connections') or {}
     brains_here = sorted(k for k in conns if hub_agents.runs_here(cli_connections.with_defaults(conns[k])))
     from . import general as _general
-    head = hub_agents.default_agent(store)
+    head = hub_agents.coding_role(store)
     rows = sorted(store.list_agents(), key=lambda a: a['Name'] != head)
-    profs = hub_agents.profiles(store)
-    return {'data': [{**a, 'installed': hub_agents.runs_here(profs.get(a['Name']) or {})} for a in rows], 'default': head,
+    return {'data': [{**a, 'installed': hub_agents.runs_here(json.loads(a.get('Config') or '{}'))} for a in rows], 'default': head,
             'models': {a['Name']: _models(a) for a in store.list_agents()},
             # WHICH BRAIN each role runs on. The card used to name the role, and after the roles
             # and brains were split every coding row would read `coding` - the owner asked for the
             # coding AGENT (2026-09-16). A brain is not a property of the task, so it is served
             # once per role here rather than stamped on every row.
-            'brains': {a['Name']: hub_agents.brain_for(store, a['Name']) for a in rows},
+            'brains': {a['Name']: hub_agents.brain_for(store) for a in rows},
             # every brain that can be picked, and the models each offers. A coding picker chooses
             # the BRAIN: the role is the coding agent for every coding task, so offering roles there would
             # be one choice with one entry (the 2026-09-16 spec).

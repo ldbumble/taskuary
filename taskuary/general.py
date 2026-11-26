@@ -519,7 +519,7 @@ def place_coding(store, tid: int) -> str:
     apiagent.workdir and the LAND card read. Refuses a named repo with no checkout, as the CLI's start does."""
     from . import agents, landing, repochoice, terminal
     if (landing.record(store, tid) or {}).get('cwd'): return landing.record(store, tid)['cwd']
-    role = agents.default_agent(store)
+    role = agents.coding_role(store)
     profile = json.loads((store.get_agent(role) or {}).get('Config') or '{}') if role else {}
     repo, _why = terminal.guess_repo(store, tid, profile)
     cwd = ((profile.get('cwd_map') or {}).get(repo) or terminal.find_checkout(repo, profile)) if repo else ''
@@ -845,7 +845,7 @@ PRESSES = {'remind': lambda d: f"set a reminder for {clock_of(d.get('to'))} - pu
            'priority': lambda d: f"changed its priority from {d.get('from')} to {d.get('to')}",
            'handoff': lambda d: f"handed this to {d.get('to')} by {d.get('channel')}", 'reopened': lambda d: 'reopened it', 'reopen': lambda d: 'reopened it',
            'split_into_task': lambda d: f"split part of it off as its own task: {d.get('title') or ''}".rstrip(': '),
-           'set_repo': lambda d: 'changed where its code lives', 'set_workstream': lambda d: 'changed its workstream',
+           'set_repo': lambda d: 'changed where its code lives', 'set_workstream': lambda d: 'changed its profile',
            'not_coding': lambda d: 'said it is not coding work', 'funnel_later': lambda d: 'put it for later',
            'close_from_assistant': lambda d: 'marked it done',      # every surface's close (concierge.close_task) writes this one row
            # ...Redraft / Draft with AI on a task an agent works: the press goes to that agent (responder.to_agent)

@@ -196,6 +196,8 @@ OWNER_ONLY = (
     (r'POST', r'^/api/window$', "bringing the app's window to the front is Taskuary started again by the owner (desktop.show_running)"),
     (r'PUT', r'^/api/tasks/\d+/workstream$', "which of the owner's workstreams a task belongs to is the owner's word - it teaches where its people belong"),
     (r'PUT', r'^/api/about/workstreams$', "what the owner works on - kept, renamed, personal - is the owner's word, as at setup"),
+    (r'POST', r'^/api/about/workstreams$', "a new profile is the owner's to name (About you)"),
+    (r'PUT', r'^/api/connectors/\d+/workstream$', "whose account a connection is decides what a task's agent may use - never an agent's own press (workstreams.may_use)"),
     (r'DELETE', r'^/api/tasks/\d+/check-back$', "cancelling the agent's check-back is the owner's press - the agent sets its own"),
     (r'POST', r'^/api/tasks/\d+/desktop$', "marking a task 'needs desktop' hands its agent the owner's desktop - never its own agent's press"),
     (r'POST', r'^/api/tasks/\d+/trust$', "raising a task's origin is the owner's decision (origin.raise_to) - never a session's"),

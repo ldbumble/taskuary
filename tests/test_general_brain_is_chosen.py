@@ -368,11 +368,8 @@ def test_a_coding_pane_its_role_row_and_its_failover_head_name_one_cli(world):
     "brain_for, the pane's chain and the row sync (cli_connections.brain_of) read the settings each their own way; now the resolver's."
     world['installed'] |= {'claude', 'codex'}
     s, cfg = _two_ready()
-    s.set_setting('profile_brains', json.dumps({'researcher': 'claude'}), 'owner')
     with mock.patch.object(config, 'load', lambda: cfg):
-        for role, want in (('coding', 'codex'), ('researcher', 'claude')):
-            assert agents.brain_for(s, role) == agents.resolve_brain(s, 'coding', cli_only=True, role=role)[4:] == want
-            assert clic.brain_of(s, cfg, role, {}) == want
+        assert agents.brain_for(s) == clic.brain_of(s, cfg, 'coding', {}) == 'codex'
         assert agents.brain_chain(s)[0] == agents.resolve_brain(s, 'coding', cli_only=True)[4:] == 'codex'
 
 
@@ -383,7 +380,7 @@ def test_a_brain_an_update_saved_that_no_longer_starts_is_set_aside_by_every_roa
     for k, v in (('default_brain', 'gemini'), ('triage_ai', 'cli:gemini')): s.set_setting(k, v, 'migration')
     with mock.patch.object(config, 'load', lambda: cfg):
         assert llm.effective_pick(s) == agents.resolve_brain(s, 'triage') == 'cli:codex'
-        assert agents.brain_for(s, 'coding') == agents.brain_chain(s)[0] == 'codex'
+        assert agents.brain_for(s) == agents.brain_chain(s)[0] == 'codex'
 
 
 def test_the_task_header_names_the_ai_its_session_opens_on(world):

@@ -356,8 +356,8 @@ def reads_said(reads: dict) -> str:
 
 
 def run_agent(cfg):
-    """{"agent": "researcher", "skill": "weekly-user-review", "prompt": "...", "cwd": "C:/repo", "model": "..."} -
-    the AI itself as the source: a coding CLI agent (Connections -> AI CLI agents) runs your saved
+    """{"skill": "weekly-user-review", "prompt": "...", "cwd": "C:/repo", "model": "..."} -
+    the AI itself as the source: the AI Settings names runs your saved
     SKILL (a slash command - "/weekly-user-review") and/or a prompt, on the schedule, and what it
     answers is the report. "cwd" is optional: a project-level skill lives in its repo, a user-level
     one runs from anywhere. The AI summary pass is usually unnecessary - the agent already wrote prose.

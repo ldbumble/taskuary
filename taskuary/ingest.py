@@ -916,7 +916,9 @@ def _classify(store, msg, llm, thread, carried, lrn, notes, notes_left, me, cand
                              # ...and what it can reach: "I can pull the Q3 totals" was offered with no connection to pull them from (B25)
                              connected=connected_systems(store),
                              # ...and the owner's workstreams, so the sort knows which hat this is under (workstreams.py, 2026-11-01)
-                             workstreams=workstreams.menu(store) or None)
+                             # ...unless the account it came in on is one profile's: that is decided, and no model reads the hat
+                             workstreams=None if workstreams.of_account(store, msg.get('source_name'), msg.get('channel') or 'email')
+                             else workstreams.menu(store) or None)
 
 
 INVITE_FYI = {'intent': 'fyi', 'why': 'a calendar invite - a meeting to be ready for, not work'}    # the one verdict made without a model
@@ -3520,7 +3522,7 @@ def _auto_code(store, tid):
     from . import terminal as term, blackboard as bb, rank, agents as hub_agents
     # the worker this task was ROUTED to (Assignee), else the coding agent
     _who = str((store.get_task(tid) or {}).get('Assignee') or '')
-    agent = _who.split(':', 1)[1].strip() if _who.startswith('agent:') and _who.split(':', 1)[1].strip() else hub_agents.default_agent(store)
+    agent = _who.split(':', 1)[1].strip() if _who.startswith('agent:') and _who.split(':', 1)[1].strip() else hub_agents.coding_role(store)
     # Rank mode (the connector's bulk setting): the task does not race for a slot, it joins
     # ONE value-ordered queue and the drain picks the most valuable waiting task whenever a
     # slot is free - see rank.py. Clear mode is everything below, unchanged.

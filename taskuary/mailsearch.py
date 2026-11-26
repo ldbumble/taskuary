@@ -36,9 +36,16 @@ def _day(x, name: str) -> str:
     except ValueError: raise ValueError(f'{name} {_echo(x, 40)!r} is not a date - give it as YYYY-MM-DD') from None
 
 
-def search(store, sender: str = '', subject: str = '', words: str = '', since: str = '', until: str = '', limit: int = 20) -> list:
+def search(store, sender: str = '', subject: str = '', words: str = '', since: str = '', until: str = '', limit: int = 20, tid: int = None) -> list:
     """Messages matching every filter given, best match first when there are words, else newest first. `since`/`until` are dates
-    (YYYY-MM-DD) on when it was SENT, `until` inclusive. The Assistant's own chat is not mail and is never a hit."""
+    (YYYY-MM-DD) on when it was SENT, `until` inclusive. The Assistant's own chat is not mail and is never a hit - nor, for the agent
+    on task `tid`, is mail in an account of another profile (workstreams.may_use)."""
+    from .workstreams import may_use
+    seen = {}
+    def mine(r):
+        k = (r.get('Channel'), r.get('SourceName'))
+        if k not in seen: seen[k] = may_use(store, tid, k[1], k[0] or 'email')
+        return seen[k]
     who, subj = str(sender or '').strip().lower(), str(subject or '').strip().lower()
     want = tokens(f'{subject or ""} {words or ""}')
     lo, hi = _day(since, 'since'), _day(until, 'until')
@@ -53,7 +60,7 @@ def search(store, sender: str = '', subject: str = '', words: str = '', since: s
         rows = sorted(store.feed(limit=len(ids) or 1, days=3650, ids=ids, live_state=()), key=lambda r: rank[r['MessageId']])
     out = []
     for r in rows:
-        if r.get('Channel') == 'assistant': continue
+        if r.get('Channel') == 'assistant' or not mine(r): continue
         if who and who not in f"{r.get('FromName') or ''} {r.get('FromEmail') or ''}".lower(): continue
         if subj and subj not in str(r.get('Subject') or '').lower(): continue
         if ids is None and want and not set(want) <= set(tokens(f"{r.get('Subject') or ''} {r.get('Preview') or ''} {_who(r)}")): continue

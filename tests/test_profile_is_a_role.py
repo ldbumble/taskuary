@@ -45,10 +45,6 @@ class WhichRoleTests(unittest.TestCase):
         """No 'default general role' exists, by design - the owner picks at start."""
         self.assertEqual(hub_agents.routed_role(store(), 'general'), '')
 
-    def test_a_default_profile_routes_nothing(self):
-        s = store(); s.set_setting('default_profile', 'analyst', 'o')
-        self.assertEqual(hub_agents.routed_role(s, 'general'), '')
-
     def test_general_never_falls_through_to_coder(self):
         self.assertNotEqual(hub_agents.routed_role(store(), 'general'), 'coding')
 

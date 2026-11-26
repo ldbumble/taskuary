@@ -41,30 +41,26 @@ class DefaultBrainTests(unittest.TestCase):
     def store(self):
         s = MemoryStore()
         s.upsert_agent('coding', 'coding', 'cli', json.dumps({'cmd': 'claude'}))
-        s.upsert_agent('analyst', 'analysis', 'cli', json.dumps({'cmd': 'claude'}))
         return s
 
     def test_one_brain_serves_coding_and_general_alike(self):
         """The owner's rule: general agents use the same brain as coding by default."""
         s = self.store()
         s.set_setting('default_brain', 'claude', 'owner')
-        self.assertEqual(hub_agents.brain_for(s, 'coding'), 'claude')
-        self.assertEqual(hub_agents.brain_for(s, 'analyst'), 'claude')
+        self.assertEqual(hub_agents.brain_for(s), 'claude')
 
-    def test_a_role_may_be_overridden_in_settings(self):
-        """Configurable - but it is a SETTING keyed by a profile, never a field on the profile,
-        and what it names is a brain, never a model."""
+    def test_no_agent_type_has_an_ai_of_its_own(self):
+        """The old agent types are gone (the owner, 2026-11-26: "remove everywhere"): a per-type AI an older version saved names
+        nothing, and nothing in the module still answers for a type."""
         s = self.store()
         s.set_setting('default_brain', 'claude', 'owner')
-        s.set_setting('profile_brains', json.dumps({'analyst': 'codex'}), 'owner')
-        self.assertEqual(hub_agents.brain_for(s, 'analyst'), 'codex')
-        self.assertEqual(hub_agents.brain_for(s, 'coding'), 'claude')
-
-    def test_a_broken_override_falls_back_rather_than_failing(self):
-        s = self.store()
-        s.set_setting('default_brain', 'claude', 'owner')
-        s.set_setting('profile_brains', 'not json', 'owner')
-        self.assertEqual(hub_agents.brain_for(s, 'analyst'), 'claude')
+        s.set_setting('profile_brains', json.dumps({'coding': 'codex', 'analyst': 'codex'}), 'owner')
+        cfg = {'cli_connections': {'claude': {'cmd': 'claude'}, 'codex': {'cmd': 'codex'}}}
+        self.assertEqual(hub_agents.brain_for(s), 'claude')
+        self.assertEqual(hub_agents.brain_command(s, cfg).get('cmd'), 'claude')
+        for gone in ('profiles', 'role_brain', 'default_agent'): self.assertFalse(hasattr(hub_agents, gone), gone)
+        from taskuary.store import DEFAULT_SETTINGS
+        for gone in ('profile_brains', 'default_profile'): self.assertNotIn(gone, DEFAULT_SETTINGS)
 
     def test_an_unset_default_falls_back_to_the_legacy_profile_setting(self):
         """Nothing regresses on upgrade: blank means "whatever default_agent was already running"."""
@@ -87,36 +83,29 @@ class SessionBrainTests(unittest.TestCase):
         """The profile still says claude; settings say codex, and settings win. A profile has
         nothing to do with which brain runs it."""
         s, cfg = self.setup('codex')
-        self.assertEqual(hub_agents.brain_command(s, 'coding', cfg).get('cmd'), 'codex')
+        self.assertEqual(hub_agents.brain_command(s, cfg).get('cmd'), 'codex')
 
     def test_an_unconfigured_brain_leaves_the_profile_alone(self):
         """A half-migrated install must still be able to start an agent at all."""
         s, cfg = self.setup('nobody-has-this')
-        self.assertEqual(hub_agents.brain_command(s, 'coding', cfg), {})
+        self.assertEqual(hub_agents.brain_command(s, cfg), {})
 
     def test_no_brain_chosen_leaves_the_profile_alone(self):
         """Blank means the owner has not moved to the brain layer, and brain_for would be GUESSING
         from the legacy default_agent. Overriding an explicit profile command with a guess is how
         "start a session with codex" would quietly have run claude."""
         s, cfg = self.setup('')
-        s.upsert_agent('codex', 'coding', 'cli', json.dumps({'cmd': 'codex'}))
-        self.assertEqual(hub_agents.brain_command(s, 'codex', cfg), {})
+        self.assertEqual(hub_agents.brain_command(s, cfg), {})
 
     def test_the_owners_own_pick_outranks_the_setting(self):
-        """What the picker chooses is a BRAIN now, and it beats both the role override and the
-        default - otherwise "start a session with codex" would resolve the default and run claude."""
+        """What the picker chooses is a BRAIN now, and it beats the default - otherwise "start a session with codex" would
+        resolve the default and run claude."""
         s, cfg = self.setup('claude')
-        s.set_setting('profile_brains', json.dumps({'coding': 'claude'}), 'owner')
-        self.assertEqual(hub_agents.brain_command(s, 'coding', cfg, want='codex').get('cmd'), 'codex')
-
-    def test_a_role_override_alone_is_enough_to_choose(self):
-        s, cfg = self.setup('')
-        s.set_setting('profile_brains', json.dumps({'coding': 'codex'}), 'owner')
-        self.assertEqual(hub_agents.brain_command(s, 'coding', cfg).get('cmd'), 'codex')
+        self.assertEqual(hub_agents.brain_command(s, cfg, want='codex').get('cmd'), 'codex')
 
     def test_the_brain_brings_its_own_headless_flags(self):
         s, cfg = self.setup('codex')
-        self.assertIn('exec', hub_agents.brain_command(s, 'coding', cfg).get('args') or [])
+        self.assertIn('exec', hub_agents.brain_command(s, cfg).get('args') or [])
 
     def test_the_transcript_records_which_brain_ran(self):
         """Which brain ran is a fact of the SESSION - the task is never stamped with one."""

@@ -184,6 +184,9 @@ def draft(store, tid: int, text: str, to: str = '', subject: str = '', slot: str
         if not box:
             have = ', '.join(m['address'] for m in outbound.mailboxes(store)) or 'none is connected'
             return {'ok': False, 'why': f'{mailbox} is not a connected mailbox - send from one of: {have}'}
+        if agent != 'owner':                # ...and one of another profile is the card that moves the task there (workstreams.may_use)
+            from . import workstreams
+            if (mv := workstreams.move_card(store, tid, box['address'], f"email {to} from {box['address']}"[:200])): return {'ok': False, 'why': mv['says']}
         mailbox = box['address']
     cc = [a for a in (split(x)[1] for x in ([cc] if isinstance(cc, str) else cc or [])) if a]
     if cc and channel != 'email': return {'ok': False, 'why': f'{channel} has no cc - only an email can copy somebody in'}

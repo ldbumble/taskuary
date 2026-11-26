@@ -2,6 +2,23 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.4.6.4 - 2026-11-26
+
+- An availability view: who can make which times, the best slot worked out on the page
+- Accept and Decline on a calendar invite tell the calendar at the press
+- A view shown again moves from what it was; the availability scene starts by itself
+- A greyed card its agent can still keep is told whenever its turn ended
+- A post card carries a video, and a connected service's act is never handed to him on its site
+- An agent's several questions are one card, answered with one press
+- A home starts with six starter skills
+- A post ends with the owner's saved post signature, put on by Taskuary
+- A video its network cannot take is answered with the fact alone - what it takes, what the file is
+- The show tool's one line fits the offered tools' budget again
+- A routine's run goes on after his yes is written down, never before
+- A refusal is the fact alone, and a machine-wide programs folder's names are listed; bundles rebuilt
+- Every calendar is read at the same time, and the look-up pass asks the card's quick model
+- The post card's video player takes its backdrop from a theme token
+
 ## 0.4.6.3 - 2026-11-26
 
 - An availability view: who can make which times, the best slot worked out on the page

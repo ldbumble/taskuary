@@ -253,3 +253,15 @@ def test_the_card_picker_tags_an_account_through_the_api(two):
         assert next(x for x in c.get('/api/connectors').json()['data'] if x['ConnectorId'] == two.shared)['Workstream'] == 'harbor-bakery'
         assert c.put(f'/api/connectors/{two.shared}/workstream', json={'workstream': ''}).status_code == 200 and W.of_account(two, SHARED) == ''
         assert c.put(f'/api/connectors/{two.shared}/workstream', json={'workstream': 'nope'}).status_code == 422
+
+
+def test_about_you_adds_a_profile_by_name_with_one_kept_too(two):
+    "The owner's yes, 2026-11-26: the second profile is made by naming it on About you - there was no way to one but the mail's own grouping."
+    W.remove(two, 'harbor-bakery')
+    with mock.patch.object(server, 'store', two):
+        c = TestClient(server.app)
+        r = c.post('/api/about/workstreams', json={'name': '  Harbor   Bakery '})
+        assert r.status_code == 200 and [x['name'] for x in json.loads(r.json()['text'])] == ['Northwind', 'Harbor Bakery']
+        assert [w['slug'] for w in W.shown(two)] == ['northwind', 'harbor-bakery'] and W.start('harbor-bakery') in two.get_doc('job')
+        assert c.post('/api/about/workstreams', json={'name': 'harbor bakery'}).status_code == 422       # one name, one profile
+        assert c.post('/api/about/workstreams', json={'name': '  '}).status_code == 422

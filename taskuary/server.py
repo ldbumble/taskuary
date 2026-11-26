@@ -3694,6 +3694,19 @@ def put_about_workstreams(body: WorkstreamsAnswerBody):
     return firstrun.answer_workstreams(store, body.items, ACTOR)
 
 
+class NewProfileBody(BaseModel): name: str = ''
+
+@app.post('/api/about/workstreams')
+def add_about_workstream(body: NewProfileBody):
+    """About you's "Add a profile" (the owner, 2026-11-26): he names it there; its accounts are then tagged on their connection cards."""
+    from . import firstrun
+    name = ' '.join(body.name.split())[:60]
+    if not name: raise HTTPException(422, 'give the profile a name')
+    if hub_ws.get(store, hub_ws.slugify(name)): raise HTTPException(422, f'there is already a profile called {name}')
+    hub_ws.upsert(store, {'name': name}, ACTOR)
+    return firstrun.workstreams_page(store)
+
+
 @app.put('/api/tasks/{task_id}/workstream')
 def set_task_workstream(task_id: int, body: WorkstreamBody):
     """Move a task to a workstream - the picker on the task, as the repo picker moves it to a checkout (the owner, 2026-11-01). Its

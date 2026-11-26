@@ -845,11 +845,8 @@ def _written(pg: dict) -> list:
 # ...AND IT IS NEVER PUT TO HIM OVER AN EMPTY BOX (walk 24, 2026-11-25: the agent uploaded the picture, clicked Post and said "I have entered your
 # X post text" - the box was empty, and an Approve stood over it; walk 23: one approved so answered "the page did not take it"). A fact again:
 # the card he handed over has words and no box of the page holds any. The agent is answered with what is missing, and nothing is raised -
-# once: pressed again on the same page still reading empty, the step is held as ever, its card saying what the page holds (held_says)
-_EMPTY: dict = {}               # sid -> the address its last press was answered "the box is empty" on
-def empty_box(store, tid, sid, act: dict, pg: dict) -> bool:
-    if not _handed(store, tid, act, pg) or _written(pg) or _EMPTY.get(str(sid)) == pg.get('url'): _EMPTY.pop(str(sid), None); return False
-    _EMPTY[str(sid)] = pg.get('url'); return True
+# each time, until the words are in: an act it cannot do is its to hand back (keep_card with why - the card stands again for his press)
+def empty_box(store, tid, act: dict, pg: dict) -> bool: return bool(_handed(store, tid, act, pg)) and not _written(pg)
 
 
 # ...AND AN ENTER IN THAT POST'S BOX IS A LINE OF IT, NEVER ITS SEND, BY FACT TOO (walk 24, 2026-11-25: writing the post he had handed over, the
@@ -929,7 +926,7 @@ def _check(store, tid: int, sid: str, cmd: str, brain=None, cwd: str = '') -> di
         v = next(vs)
         if not v['hold'] and (his := last_press(store, tid, a, pg)): v = his
         if not v['hold']: continue
-        if empty_box(store, tid, sid, a, pg):
+        if empty_box(store, tid, a, pg):
             return _deny(f"{NOT_RUN}: the page's box is empty - the post's words are not on {pg.get('name') or 'the page'}"
                          f"{' (it holds ' + h + ')' if (h := holds(pg)) else ''}. Type the post into its box first, then press again; nothing was "
                          'pressed and nothing was put to the owner.')

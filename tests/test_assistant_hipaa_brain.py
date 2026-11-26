@@ -155,3 +155,37 @@ def test_his_stop_ends_a_turn_whose_card_is_still_out():
         with pytest.raises(concierge.Stopped): concierge.say(s, ASK, llm=f, cancel=cancel)
     finally: never.set()
     assert time.monotonic() - t0 < 5
+
+
+# ── the pass that only chooses a look-up asks the card's quick model; the answer keeps the model chosen for the Assistant ──────────────────
+def tiered(light='quick-model'):
+    "His HIPAA AI card with a quick model on it, and a model of its own chosen for the Assistant."
+    from taskuary import aidefaults
+    s = calendars(); c = s.get_connector_by_type('hipaa_ai')
+    s.save_connector({'ConnectorId': c['ConnectorId'], 'Active': 1, 'Secret': 'code',
+                      'ConfigJson': json.dumps({'base_url': 'https://gateway.example/v1', 'model': 'card-model', **({'light_model': light} if light else {})})}, 't')
+    p = f"connector:{c['ConnectorId']}"
+    s.set_setting(concierge.AI_KEY, p, 't'); aidefaults.keep_model(s, concierge.MODEL_KEY, 'usual-model', 't', pick=p)
+    return s
+
+def models(s, line, replies):
+    "The model each pass of the turn asked, in order, and what the turn said."
+    asked = []
+    def post(url, headers, body, *a, **k):
+        asked.append(str(body.get('model')).split('@')[0]); return answer(replies[min(len(asked), len(replies)) - 1])
+    with mock.patch.object(L, 'post_retrying', post), mock.patch('taskuary.calendar.agenda', return_value=MONDAY), \
+         mock.patch('taskuary.capabilities.has_ai', return_value=True):
+        out = concierge.say(s, line)
+    return asked, out['say']
+
+def test_the_look_up_pass_asks_the_quick_model_and_the_answer_the_usual_one():
+    asked, said = models(tiered(), ASK, [READ, 'Monday: Budget review at 10:00, then the dentist at 2:00.'])
+    assert asked == ['quick-model', 'usual-model'] and said.startswith('Monday: Budget review')
+
+def test_what_the_quick_model_says_that_is_no_look_up_is_never_his_answer():
+    asked, said = models(tiered(), 'thanks, that is all', ['A quick word.', 'You are welcome.'])
+    assert asked == ['quick-model', 'usual-model'] and said == 'You are welcome.'
+
+def test_a_card_with_no_quick_model_asks_its_one_model_once_per_pass():
+    asked, said = models(tiered(light=''), ASK, [READ, 'Monday is two meetings.'])
+    assert asked == ['usual-model', 'usual-model'] and said == 'Monday is two meetings.'

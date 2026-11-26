@@ -337,6 +337,19 @@ def brain(store, trace=None, cancel=None, resume=None, fast=False, keep: str = N
         logger.debug(f'concierge: no brain - {e}'); return None
 
 
+def look_brain(store, trace=None, cancel=None):
+    """The card's QUICK model, for the pass of a turn that only chooses a look-up (the owner, 2026-11-26: a tester waited 30 s and more for
+    Monday's calendar) - None where the Assistant speaks on it already: a CLI, a card with no quick model, no model chosen for the Assistant
+    (the card's quick gear is then its every pass, brainroute._fixed)."""
+    from . import demo, brainroute
+    p, m = pick(store), model_of(store)
+    quick = '' if demo.enabled() or not m else brainroute.quick_of(store, p)
+    if not quick or llm_mod.split_effort(quick)[0] == llm_mod.split_effort(m)[0]: return None
+    try: return llm_mod.build_llm(store, pick=p, trace=trace, cancel=cancel, gear='light', job='assistant')
+    except Exception as e:
+        logger.debug(f'concierge: no quick model for the look-up pass - {e}'); return None
+
+
 def _sid(store, tid: int) -> str: return str(store.get_setting(f'{SID_KEY}:{tid}') or '')
 
 
@@ -6084,8 +6097,11 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
     # conversation so far is read here too, so it holds what came before this line and never the line itself, said again below it.
     from . import toolcatalog, pageview
     own_cli = llm is None and is_cli(store)
+    # ...the card's quick model for the look-up pass, on a turn of words alone: a picture is the usual model's to see
+    look = look_brain(store, trace, cancel) if llm is None and not own_cli and not images else None
     llm = _brain_for(store, tid, llm, trace, cancel)
     if llm and not own_cli: llm = _Timed(llm, cancel)     # the turn's one clock (TURN_WAIT)
+    if llm and look: look = _Timed(look, cancel); look.until = llm.until      # ...which the look-up pass is on too
     if llm and images: llm = _Showing(llm, images)        # what he showed rides every call of the turn, a look-up's answer too (walk 9, 43)
     adv_d = _decision(store, item) if llm else {}
     picks = toolcatalog.select_values(store, p['items']) if llm else ''
@@ -6153,9 +6169,16 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
                       # ...and WHAT A FILE SAYS, read here (attachtext): the API brain cannot open a path, and the CLI one runs with its tools off
                       + (f"{said}\n" if images and (said := attachtext.block(attachtext.of_paths(images), 'WHAT THE ATTACHED FILES SAY')) else '')
                       + 'Answer them, briefly.')                        # the rest of how is the instructions' (TURN_GUIDE)
-        raw = _view_lines(str(llm(system, asked, max_tokens=MAX_TOKENS) or '').strip())
+        # THE LOOK-UP PASS ASKS THE QUICK MODEL (look_brain): what it says is kept only when it is a look-up to run - choosing one needs no
+        # thinking model. Anything else - words, an operation, nothing, a failure - is the usual model's to say, asked as it always was
+        first = None
+        if llm and look:
+            try: first = parse_call(_view_lines(str(look(system, asked, max_tokens=MAX_TOKENS) or '').strip()))
+            except (Stopped, TurnOut): raise
+            except Exception as e: logger.debug(f'concierge: the quick look-up pass failed, the usual model is asked - {e}')
+            if not (first and first[1] and toolcatalog.runs_now(first[1]['kind'])): first = None
+        raw, call = first or parse_call(_view_lines(str(llm(system, asked, max_tokens=MAX_TOKENS) or '').strip()))
         rail_read(llm, tid, rail, rail_sent)
-        raw, call = parse_call(raw)
         # A LOOK-UP runs at once and comes straight back, because it changes nothing and waits for
         # nobody. The model then answers with what it read - one round only, so a question can never
         # become an unbounded search (the owner, 2026-09-07: "read should be immediate").

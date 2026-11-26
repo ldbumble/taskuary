@@ -817,6 +817,23 @@ def _verdict(act: dict, v: dict | None, pg: dict, said: str, mine: bool = False)
     return {'hold': hold, 'what': what, 'why': why, **({'kind': kind} if hold and kind else {})}
 
 
+# THE LAST PRESS OF A POST HE HANDED OVER IS HIS, BY FACT (the re-walk, 2026-11-25: "Post via the browser" pressed, the agent wrote the post on
+# the site and clicked its Post - and the judge, shown his press on the card as his own go-ahead, called the click "not big": the post went
+# up with no yes of his, under a card that says "its last Post waits for you"). Nothing here is the model's to read: a card he handed over is
+# still in flight (cardqueue.in_flight), the page's form holds that card's words, and the act is a click on a control that is no box of the
+# form and no link - the press that sends them. It waits for him, whatever the verdict said.
+def last_press(store, tid, act: dict, pg: dict) -> dict | None:
+    if act.get('verb') != 'click' or fills(act, pg) or follows(act, pg): return None
+    from . import cardqueue
+    if not (store and tid and (r := cardqueue.in_flight(store, int(tid)))): return None
+    try: p = json.loads(r.get('FinalText') or r.get('DraftText') or '{}') or {}
+    except (TypeError, ValueError): return None
+    flat = lambda s: ' '.join(str(s or '').split()).casefold()
+    words = flat(p.get('text') or p.get('body'))
+    if not words or not any((v := flat(f.get('v'))) and (v in words or words[:60] in v) for f in pg.get('fields') or [] if isinstance(f, dict) and f.get('t') != 'file'): return None
+    return {'hold': True, 'what': f"Publish your post on {pg.get('name') or p.get('network') or 'the site'}", 'why': WHY['speaks'], 'kind': 'speaks'}
+
+
 # ── held: the proposal, and the agent told why ────────────────────────────────────────────────────────────────────────────
 def _pending(store, tid: int, sid: str, args: list, url: str = ''):
     """The same act already waiting on this task - an agent that tries it again gets the same card, not a second one. The same ref on
@@ -878,6 +895,7 @@ def _check(store, tid: int, sid: str, cmd: str, brain=None, cwd: str = '') -> di
         if typing(a): continue
         if vs is None: vs = iter(judge(store, [x for x in todo[i:] if not x.get('read') and not typing(x)], pg, brain, said=said))
         v = next(vs)
+        if not v['hold'] and (his := last_press(store, tid, a, pg)): v = his
         if not v['hold']: continue
         if (fact := card_site(store, pg['url'])): return _deny(f'{NOT_RUN}: {fact}.')
         args = _own_args(a['args'])

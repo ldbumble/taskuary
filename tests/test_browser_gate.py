@@ -1211,3 +1211,31 @@ def test_his_yes_to_the_last_press_of_a_card_he_pressed_wakes_its_agent_only_for
     assert len(woken) == 1 and 'HTTP 500' in woken[0], 'the page it left broke: its agent is woken with what the page said'
     s = MemoryStore(); tid = Factory(s).task('Renew the listing')                     # ...no card of his behind it: a step of the agent's own work
     assert len(press(s, tid, step(s, tid))[1]) == 1
+
+
+def test_the_last_press_of_a_post_he_handed_over_waits_for_him_whatever_the_judge_said():
+    """The re-walk, 2026-11-25 (the Claude CLI): he pressed Post via the browser, the agent wrote the post on the site and clicked its Post -
+    and the judge, told of his press on the card as his own go-ahead, answered "not big". The post went up with no yes of his, under a card
+    that says its last Post waits for him. A fact, not a reading: a card he handed over is in flight, the page's form holds its words, and
+    the click is on no box of the form and no link - it waits."""
+    s = MemoryStore(); tid = Factory(s).task('Post the four-day close')
+    post = {'action': 'run_tool', 'type': 'x_post', 'network': 'X', 'text': 'Day four, done.\n\nNorthwind closes the month in four days.'}
+    card = s.add_review({'TaskId': tid, 'Kind': 'action', 'Status': 'pending', 'DraftText': json.dumps(post), 'Reason': 'the agent proposes to post on X'})
+    snap = '- textbox "What is happening?!" [ref=e9]\n- button "Add photo" [ref=e10]\n- button "Post" [ref=e11]\n- link "Help" [ref=e12]'
+    page = lambda fields: mock.patch.object(bg, 'page', return_value={'url': 'https://x.example/home', 'open': True, 'elements': snap, 'fields': fields, 'name': 'X'})
+    box = [{'k': 'text', 't': 'textarea', 'f': 0, 'v': 'Day four, done.\n\nNorthwind closes the month in four days.'}]
+    held = lambda: [json.loads(r['DraftText']) for r in s._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action' AND Status='pending'", (tid,))
+                    if json.loads(r['DraftText']).get('action') == 'browser_act']
+    def click(ref, fields):
+        with page(fields), verdict({'big': False}), mock.patch.object(bg, 'watch', None), mock.patch.object(bg, '_run', lambda sid, a, w, t: (0, '')), \
+             mock.patch('taskuary.signin.acting', lambda *a, **k: None):
+            return bg.check(s, tid, 'run1', f"agent-browser click '{ref}'", Brain(None))
+    assert click('@e11', box) == {} and held() == [], 'no card of his is in flight yet: the judge\'s word stands'
+    s.decide_review(card, 'approved', json.dumps({**post, 'result': {'browser': True}}), 'owner')            # ...he pressed Post via the browser
+    assert click('@e9', box) == {} and click('@e12', box) == {} and held() == [], 'a box of the form and a link are no sending of it'
+    assert click('@e11', []) == {} and held() == [], 'nothing of the post is on the page yet: the judge\'s word stands'
+    out = click('@e11', box)
+    assert out['hookSpecificOutput']['permissionDecision'] == 'deny', out
+    [p] = held()
+    assert (p['what'], p['args'], p['card']) == ('Publish your post on X', ['click', '@e11'], card), p
+    assert bg.held_says(p).startswith('Publish your post on X - the page holds "Day four, done. Northwind closes the month in four days."')

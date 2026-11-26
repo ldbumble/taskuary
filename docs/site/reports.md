@@ -305,7 +305,11 @@ company does one kind of job, written in your words. It is a folder with a `SKIL
 same format Claude Code and other agents use: a `name`, a one-line `description` of what the job
 is and when to use it, then how it is done. Triage matches arriving mail to a skill by its
 description, every agent sees the names and descriptions of your skills, and reads one whole when
-it fits the job.
+it fits the job. However many you keep, triage and the agents are shown only each skill's name
+and a short description - 120 characters at most - the way tools are listed; the rest of a skill
+is read only by the agent that picks it. With more than one profile, a skill's row has a
+**Profile** picker: one profile's, or all profiles'. A task or a mail is shown its own profile's
+skills and the ones left to all.
 
 A skill is something an agent reads, never a permission. Whatever one says, every send, post or
 change still waits for your press.

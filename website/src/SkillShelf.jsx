@@ -14,6 +14,7 @@ import NewSkillDialog from "./NewSkillDialog.jsx";
 import { BORDER, DIM, FAINT, INK, PANEL, mono } from "./theme.jsx";
 import { plural } from "./timeWords.js";
 import { takeSkillAsk } from "./skillOpen.js";
+import { SkillProfile } from "./Workstream.jsx";
 
 export { PB_OPEN, pbOpen } from "./skillOpen.js";
 
@@ -49,7 +50,7 @@ export async function exportSkill(slug) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-export function SkillRow({ b, onOpen, onToggle }) {
+export function SkillRow({ b, onOpen, onToggle, reload }) {
   const on = b.enabled !== false;
   return (
     <Box data-tq-skill={b.slug} onClick={onOpen}
@@ -64,6 +65,7 @@ export function SkillRow({ b, onOpen, onToggle }) {
         {!!b.uses?.length && <Typography variant="caption" sx={{ ...mono, color: FAINT, display: "block" }} noWrap>uses {b.uses.join(" · ")}</Typography>}
         {!!b.used_by?.length && <Typography variant="caption" data-tq-skill-used-by="" sx={{ color: FAINT, display: "block" }} noWrap>used by {b.used_by.join(", ")}</Typography>}
       </Box>
+      <SkillProfile skill={b} reload={reload} />
       <Button size="small" variant="text" data-tq-skill-export={b.slug} startIcon={<FileDownloadOutlinedIcon sx={{ fontSize: 15 }} />}
         onClick={(e) => { e.stopPropagation(); exportSkill(b.slug).catch(() => {}); }} sx={{ flexShrink: 0, color: DIM, minWidth: 0 }}>Export</Button>
       <Typography variant="caption" sx={{ color: on ? DIM : FAINT, flexShrink: 0 }}>{on ? "triage matches it" : "off - kept, not matched"}</Typography>

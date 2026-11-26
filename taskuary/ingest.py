@@ -235,11 +235,12 @@ def _workflow_menu(store) -> str:
         logger.debug(f'ingest: workflow menu skipped - {e}'); return ''
 
 
-def _skill_menu(store=None) -> str:
-    """What triage is shown of the owner's skills - '' when there are none, so no words are spent."""
+def _skill_menu(store=None, msg: dict = None) -> str:
+    """What triage is shown of the owner's skills - each by name and short description, those of this mail's profile where he keeps
+    more than one - '' when there are none, so no words are spent."""
     try:
         from . import skills
-        return skills.menu(store=store)
+        return skills.menu(store=store, msg=msg)
     except Exception as e:
         logger.debug(f'ingest: skill menu skipped - {e}'); return ''
 
@@ -907,7 +908,7 @@ def _classify(store, msg, llm, thread, carried, lrn, notes, notes_left, me, cand
                              watch=report_brief(msg),
                              # ...and the skills: a message that is an instance of one is
                              # tagged with it, and the agent is seeded from it (skills.py)
-                             skills=_skill_menu(store), workflows=_workflow_menu(store), candidates=candidates,
+                             skills=_skill_menu(store, msg), workflows=_workflow_menu(store), candidates=candidates,
                              # ...and what the owner corrected LAST time a message like this was
                              # judged. The loop closes here: a verdict, a correction, a better verdict.
                              routing_history=_routing_history(store, msg),

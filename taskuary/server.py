@@ -10761,6 +10761,17 @@ def skill_on(slug: str, body: SkillOnBody):
     store.audit('skill', 0, 'switched_on' if body.on else 'switched_off', ACTOR, detail={'slug': skills.slugify(slug)})
     return {'ok': True, 'slug': skills.slugify(slug), 'enabled': body.on}
 
+class SkillProfileBody(BaseModel): workstream: str = ''
+
+@app.put('/api/skills/{slug}/workstream')
+def skill_profile(slug: str, body: SkillProfileBody):
+    """The Profile picker on a skill: one profile's, or every profile's ('') - a task or a mail is offered its own profile's and those."""
+    if skills.read(slug) is None: raise HTTPException(404, f'no skill {slug!r}')
+    if body.workstream and body.workstream not in hub_ws.names(store): raise HTTPException(422, f'no profile {body.workstream!r}')
+    skills.set_profile(slug, body.workstream)
+    store.audit('skill', 0, 'profile', ACTOR, detail={'slug': skills.key(slug), 'profile': body.workstream})
+    return {'ok': True, 'slug': skills.key(slug), 'profile': body.workstream}
+
 @app.delete('/api/skills/{slug}')
 def delete_skill(slug: str):
     if not skills.delete(slug): raise HTTPException(404, f'no skill {slug!r}')

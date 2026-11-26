@@ -854,7 +854,7 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
             # From here down the code only LABELS what it hands over. Every sentence about how to judge it - the
             # report brief, kind, repositories, chat lines, same_as - lives in the guide (2026-10-09:
             # the owner, "why are there items in code in triage? I thought we removed them").
-            if skills: system += "\n\nSKILLS - how the owner does each kind of job, by name, with what it is and when it is used:\n" + str(skills)[:3000]
+            if skills: system += "\n\nSKILLS - how the owner does each kind of job, by name, with what it is and when it is used:\n" + str(skills)
             # THE OWNER'S WORKSTREAMS (the owner, 2026-11-01): which body of work this belongs to sorts it - a side product's tester is not
             # a day-job colleague, and a personal chat is never the job's. Context for the sort; how each is weighed is the guide's to say
             if workstreams: system += ("\n\nTHE OWNER'S WORKSTREAMS - the separate bodies of work they run (a personal one is their own life, "

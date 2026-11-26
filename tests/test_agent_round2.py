@@ -90,10 +90,11 @@ class SkillToolTests(unittest.TestCase):
         system = general._prompt(s, tid)[0]
         listed = agenttools.call(s, tid, 'skills', {}, {})
         self.assertIn(skills.BRIEF_HEAD + '\n' + listed, system)
-        self.assertIn('- bill: Post a card transaction as an AP bill. Use when a transaction line from the card feed (triage read this task as one)', system)
+        self.assertIn('- bill: Post a card transaction as an AP bill. Use when a transaction line from the card feed\n', system)
+        self.assertIn('\nTriage read this task as: bill', system)                 # said after the list, never inside it: the list is every task's
         self.assertNotIn('bills under $500', system)                              # the body is read by the tool, when it chooses
         self.assertEqual(system, general._prompt(s, tid)[0])                      # the same bytes turn after turn: the kept prefix holds
-        for line in listed.splitlines(): self.assertIn(line.split(' (triage')[0][2:], skills.menu(store=s))      # ...and triage's own menu
+        self.assertEqual(listed.split('\nTriage read')[0], skills.menu(store=s))  # ...and triage's own menu, line for line
         seed = terminal.seed_text(s, tid)
         self.assertIn('- w9: Collect a vendor W-9. Use when a new vendor needs a W-9', seed); self.assertNotIn('bills under $500', seed)
         with mock.patch.object(origin, 'of_task', return_value=('stranger', '')):
@@ -101,12 +102,58 @@ class SkillToolTests(unittest.TestCase):
         skills.set_on('w9', False); self.assertNotIn('- w9:', general._prompt(s, tid)[0])
         s.set_setting('playbooks_enabled', '0', 't'); self.assertNotIn(skills.BRIEF_HEAD, general._prompt(s, tid)[0])
 
-    def test_past_the_cap_the_rest_are_counted_and_triages_pick_is_never_cut(self):
-        for i in range(skills.MENU_MAX + 2): skills.write(f'job-{i:02d}', f'---\nname: job-{i:02d}\ndescription: Job {i}.\n---\nDo it.\n')
+    def test_a_hundred_and_twenty_skills_are_listed_like_tools_all_of_them_short_and_the_same_bytes_every_time(self):
+        """The owner, 2026-11-26: "it might become too many if there are 100 skills ... it should not be more than name and short
+        description like the way tools are called". Every skill is listed - none dropped past a count - as its name and at most 120
+        characters of its description, by name, so the block is the same on every call (cached once) and its size is bounded."""
+        import random
+        long = 'Answer a payer asking for the remittance advice of a denied claim, with the denial code and the appeal window. ' * 3
+        names = [f'billing-job-{i:03d}' for i in range(120)]
+        for n in random.Random(7).sample(names, len(names)):               # written in any order: listed by name
+            skills.write(n, f'---\nname: {n}\ndescription: "{long}Use when one arrives ({n})."\n---\n# {n}\n\nBODY-OF-{n}: look it up, then answer.\n')
         s = MemoryStore(); tid = owner_task(s, Tags='skill:w9')
-        lines = skills.brief(s, s.get_task(tid)).splitlines()
-        self.assertEqual(len(lines), 1 + skills.MENU_MAX + 1)
-        self.assertIn('- w9: ', lines[1]); self.assertEqual(lines[-1], '- and 4 more')
+        block = skills.brief(s, s.get_task(tid)); lines = block.splitlines()
+        listed = [l for l in lines if l.startswith('- ')]
+        self.assertEqual(len(listed), 122)                                  # the 120 and the two this class keeps: none left out
+        self.assertEqual([l.split(':')[0][2:] for l in listed], sorted(l.split(':')[0][2:] for l in listed))
+        for l in listed: self.assertLessEqual(len(l.split(': ', 1)[1]), skills.LIST_DESC, l)
+        self.assertNotIn('BODY-OF-', block)
+        self.assertLess(len(block), 22_000)                                 # ~5,500 tokens at the very most for 122 skills, paid once
+        self.assertLess(len(block) / len(listed), 185)                      # ...under 185 characters a skill, about 45 tokens, at the longest
+        self.assertEqual(lines[-1], 'Triage read this task as: w9')
+        other = owner_task(s)
+        self.assertEqual(skills.brief(s, s.get_task(other)), '\n'.join(lines[:-1]))    # another task: the same bytes, minus its own last line
+        self.assertEqual(skills.brief(s, s.get_task(tid)), block)
+        menu = skills.menu(store=s)
+        self.assertEqual(menu.splitlines(), listed); self.assertLess(len(menu), 22_000)   # triage: the same lines, whole - no cut at 3,000
+        from taskuary import triage
+        seen = {}
+        def llm(system, user, **k): seen['system'] = system; return json.dumps({'intent': 'task', 'kind': 'general', 'why': 'x', 'skill': 'billing-job-119'})
+        out = triage.classify_intent({'from_email': 'erin@vendor.example', 'subject': 'Remittance for claim 88', 'body': 'Please send it.'}, llm=llm, skills=menu)
+        self.assertIn('- billing-job-119: ', seen['system']); self.assertEqual(out.get('skill'), 'billing-job-119')     # the last one is offered too
+
+    def test_a_skill_of_one_profile_is_offered_to_that_profiles_tasks_and_one_left_to_all_to_every_task(self):
+        from taskuary import workstreams
+        s = MemoryStore(); mine = owner_task(s); theirs = owner_task(s)
+        self.assertIsNone(skills.profile_of(s, s.get_task(mine)))            # one profile, or none: nothing is told apart
+        skills.set_profile('bill', 'finance')
+        self.assertIn('- bill:', skills.brief(s, s.get_task(mine)))
+        workstreams.save(s, [{'slug': 'finance', 'name': 'Finance', 'status': 'active'}, {'slug': 'clinic', 'name': 'Clinic', 'status': 'active'}])
+        workstreams.set_task(s, mine, 'finance'); workstreams.set_task(s, theirs, 'clinic')
+        a, b = skills.brief(s, s.get_task(mine)), skills.brief(s, s.get_task(theirs))
+        self.assertIn('- bill:', a); self.assertIn('- w9:', a)                # its own profile's, and the one left to all
+        self.assertNotIn('- bill:', b); self.assertIn('- w9:', b)
+        self.assertIn('No skill is called', agenttools.call(s, theirs, 'skills', {'name': 'bill'}, {}))
+        self.assertIn('bills under $500', agenttools.call(s, mine, 'skills', {'name': 'bill'}, {}))
+        self.assertNotIn('- bill:', skills.menu(store=s, msg={'Workstream': 'clinic'})); self.assertIn('- bill:', skills.menu(store=s, msg={'Workstream': 'finance'}))
+        from fastapi.testclient import TestClient
+        with mock.patch.object(server, 'store', s):
+            c = TestClient(server.app)
+            self.assertEqual(c.put('/api/skills/w9/workstream', json={'workstream': 'clinic'}).json()['profile'], 'clinic')
+            self.assertEqual(c.put('/api/skills/w9/workstream', json={'workstream': 'nope'}).status_code, 422)
+            self.assertEqual({r['slug']: r['profile'] for r in c.get('/api/skills').json()['data']}, {'bill': 'finance', 'w9': 'clinic'})
+        self.assertTrue(guard.denied('PUT', '/api/skills/w9/workstream'))    # never an agent's own press
+        self.assertNotIn('- w9:', skills.brief(s, s.get_task(mine)))
 
     # AGENTS.md IS THE ONE SENTENCE, AS HIS FILE (the owner, 2026-11-23): read at every turn, short, and never the security lines
     def test_a_plain_task_reads_his_agents_md_and_an_edit_reaches_the_next_turn(self):
@@ -142,7 +189,8 @@ class SkillToolTests(unittest.TestCase):
         s = MemoryStore(); tid = owner_task(s, Tags='skill:bill')
         call = lambda **a: agenttools.call(s, tid, 'skills', a, {})
         listed = call()
-        self.assertIn('- bill: Post a card transaction as an AP bill. Use when a transaction line from the card feed (triage read this task as one)', listed)
+        self.assertIn('- bill: Post a card transaction as an AP bill. Use when a transaction line from the card feed\n', listed)
+        self.assertTrue(listed.endswith('\nTriage read this task as: bill'))
         self.assertIn('- w9: Collect a vendor W-9. Use when a new vendor needs a W-9', listed); self.assertNotIn('bills under $500', listed)
         self.assertIn('bills under $500', call(name='bill'))
         skills.set_on('w9', False); self.assertNotIn('- w9:', call())

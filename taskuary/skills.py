@@ -275,7 +275,7 @@ def purge(now: float = None) -> list:
         m.pop(s); gone.append(s)
     if gone:
         _save(DELETED_FILE, m)
-        for s in gone: set_on(s, True); set_origin(s, '')               # a purged one leaves no stale switch behind
+        for s in gone: set_on(s, True); set_origin(s, ''); set_profile(s, '')      # a purged one leaves no stale switch behind
     return gone
 
 
@@ -323,7 +323,7 @@ def list_all() -> list:
     """Every skill on disk and not deleted, oldest first, each parsed - the shelf, the cards, triage and the agents all read this."""
     d = folder()
     if not d.is_dir(): return []
-    out, shut, gone, came = [], off(), deleted_at(), origins()
+    out, shut, gone, came, whose = [], off(), deleted_at(), origins(), profiles()
     found = [p for p in d.glob(f'*/{FILE}') if p.is_file() and p.parent.name not in gone]
     for p in sorted(found, key=lambda p: p.stat().st_mtime):
         try: text = p.read_text(encoding='utf-8')
@@ -331,7 +331,7 @@ def list_all() -> list:
         slug = p.parent.name; pb = parse(text, slug)
         out.append({'slug': slug, 'title': pb['title'], 'description': pb['description'], 'uses': uses_of(pb),
                     'about_code': about_code(pb), 'updated': p.stat().st_mtime, 'text': text, 'enabled': slug not in shut,
-                    'origin': came.get(slug) or '', 'files': files_of(slug)})
+                    'origin': came.get(slug) or '', 'profile': whose.get(slug) or '', 'files': files_of(slug)})
     return out
 
 
@@ -340,55 +340,89 @@ def for_connector(ctype: str) -> list:
 
 
 # ── who is offered them: ONE LIST, read by triage (menu), by every agent's context (brief) and by its tool (lookup) ──────────────
-# A MENU, NOT A PICK (the owner, 2026-11-05, from Hermes' skills index: "list every playbook's when + its path ... let the agent read
-# the full one itself when it decides it applies, including mid-task"): code handing one skill to the agent decided for it what kind of
-# job this is, and a job that turned into another kind halfway never saw the second. One short line each keeps the brief lean; the file
-# is read whole only when the agent says it applies. Triage's match is said on its line - a reading, not a rule.
-MENU_MAX, MENU_DESC = 30, 160
+# A LISTING LIKE A TOOL LISTING (the owner, 2026-11-26: "it should not be more than name and short description like the way tools are
+# called" - a hundred skills, general ones and one per kind of email, must not inflate triage or a brief): each skill is its name and
+# its description cut to LIST_DESC characters, and nothing else. EVERY one is listed - none dropped past a count - in the order of
+# their names, so the block is the same bytes on every call and a provider's cache pays for it once. The body is read whole only by
+# the agent that chooses one (lookup). Triage's own pick is said on a line after the list, never inside it.
+LIST_DESC = 120
 
 
-def offered(store=None, books: list = None) -> list:
-    """The skills switched on, each with a description - none when the store's `playbooks_enabled` is off: that switch said "use"
-    while triage went on matching them all."""
+# WHOSE A SKILL IS, where he keeps more than one profile (workstreams.py): one profile's, or every profile's - kept beside the folders
+# like the switch. A task or a mail is offered its own profile's skills and the ones left to all, as it may use its own profile's
+# accounts (workstreams.may_use).
+PROFILE_FILE = '_profile.json'
+
+
+def profiles() -> dict:
+    m = _json(PROFILE_FILE, {})
+    return {str(k): str(v) for k, v in m.items() if v} if isinstance(m, dict) else {}
+
+
+def set_profile(slug: str, profile: str):
+    s, m = key(slug), profiles()
+    if (m.get(s) or '') == (profile or ''): return
+    _save(PROFILE_FILE, {**m, s: profile} if profile else {k: v for k, v in m.items() if k != s})
+
+
+def profile_of(store, task: dict = None, msg: dict = None):
+    "The profile a task or an arriving mail is under ('' for none) - None where he keeps fewer than two, and nothing is told apart."
+    from . import workstreams
+    if store is None or len(workstreams.streams(store)) < 2: return None
+    if task and task.get('TaskId'): return workstreams.of_task(store, int(task['TaskId'])) or ''
+    if msg:
+        up = {'SourceName': msg.get('SourceName') or msg.get('source_name'), 'Channel': msg.get('Channel') or msg.get('channel'),
+              'ConversationId': msg.get('ConversationId') or msg.get('conversation_id'), 'Workstream': msg.get('Workstream'),
+              'FromEmail': msg.get('FromEmail') or msg.get('from_email')}
+        return workstreams.of_message(store, {**msg, **up}) or ''
+    return None
+
+
+def offered(store=None, books: list = None, profile: str = None) -> list:
+    """The skills switched on, each with a description, by name - none when the store's `playbooks_enabled` is off: that switch said
+    "use" while triage went on matching them all. `profile`: only that profile's and the ones left to every profile (None: all)."""
     if store is not None and store.get_setting('playbooks_enabled', '1') != '1': return []
-    return [b for b in (list_all() if books is None else books) if b.get('description') and b.get('enabled', True)]
+    got = [b for b in (list_all() if books is None else books) if b.get('description') and b.get('enabled', True)]
+    if profile is not None: got = [b for b in got if not b.get('profile') or b['profile'] == profile]
+    return sorted(got, key=lambda b: b['slug'])
 
 
-def menu(books: list = None, store=None) -> str:
-    """What triage is shown: one line per skill, its name and description. '' when there are none - the paragraph is never added
+def line(b: dict) -> str:
+    "One skill as it is listed anywhere: its name, its description cut short, and whose words they are when not his."
+    d = ' '.join(b['description'].split())
+    return f"- {b['slug']}: {d if len(d) <= LIST_DESC else d[:LIST_DESC - 1] + '…'}" + (' (imported, not written by the owner)' if b.get('origin') == 'imported' else '')
+
+
+def menu(books: list = None, store=None, msg: dict = None) -> str:
+    """What triage is shown: one line per skill offered for this mail's profile. '' when there are none - the paragraph is never added
     for nothing."""
-    return '\n'.join(f"- {b['slug']}: {' '.join(b['description'].split())}" for b in offered(store, books))
-
-
-def _lines(books: list, mine: str = None) -> list:
-    "One line a skill, triage's own pick first so the cut never drops it; what is past MENU_MAX is counted, never silently left out."
-    cut = lambda s: s if len(s) <= MENU_DESC else s[:MENU_DESC - 1] + '…'
-    said = lambda b: ((' (imported, not written by the owner)' if b.get('origin') == 'imported' else '')
-                      + (' (triage read this task as one)' if b['slug'] == mine else ''))
-    books = sorted(books, key=lambda b: b['slug'] != mine)
-    return ([f"- {b['slug']}: {cut(' '.join(b['description'].split()))}{said(b)}" for b in books[:MENU_MAX]]
-            + ([f'- and {len(books) - MENU_MAX} more'] if len(books) > MENU_MAX else []))
+    return '\n'.join(line(b) for b in offered(store, books, profile_of(store, msg=msg)))
 
 
 BRIEF_HEAD = "THE OWNER'S SKILLS - how each kind of job is done here, by name; one read whole is the `skills` tool's answer:"
+def _listing(store, task: dict) -> str:
+    books = offered(store, profile=profile_of(store, task))
+    mine = of_task(task)
+    return '\n'.join([*(line(b) for b in books), *([f'Triage read this task as: {mine}'] if mine and any(b['slug'] == mine for b in books) else [])])
+
+
 def brief(store=None, task: dict = None, sep: str = '\n') -> str:
-    """What every agent's context carries of his skills: their names and one-line descriptions - a list of what there is, the same one
+    """What every agent's context carries of his skills: their names and short descriptions - a list of what there is, the same one
     triage is shown and the `skills` tool answers with. '' with none, or with them switched off. A body is never here: the agent reads
     one when it chooses to (lookup)."""
-    books = offered(store)
-    return sep.join([BRIEF_HEAD, *_lines(books, of_task(task))]) if books else ''
+    got = _listing(store, task)
+    return sep.join([BRIEF_HEAD, *got.split('\n')]) if got else ''
 
 
 def lookup(store=None, task: dict = None, name: str = '') -> str:
     """The `skills` tool's answer (agenttools): with no `name`, every skill switched on - its name and description, triage's match said on
     its line; with one, that skill whole."""
     if store is not None and store.get_setting('playbooks_enabled', '1') != '1': return 'Skills are switched off.'
-    books = offered(store)
     if name:
-        b = next((b for b in books if b['slug'] == key(name)), None)
+        b = next((b for b in offered(store, profile=profile_of(store, task)) if b['slug'] == key(name)), None)
         if not b: return f"No skill is called {name!r} - ask with no name for the list."
         return b['text'] + (f"\n\nFiles kept with it: {', '.join(b['files'])}" if b['files'] else '')
-    return '\n'.join(_lines(books, of_task(task))) if books else 'There are no skills yet.'
+    return _listing(store, task) or 'There are no skills yet.'
 
 
 def tag(slug: str) -> str: return f'skill:{slugify(slug)}'

@@ -667,7 +667,7 @@ export default function ReportsView({ onOpenTask = null, browse = null, browseSt
         </Box>
       ) : null,
       cards: section === "skills" ? [...pbs.books.map((b) => ({ key: `pb-${b.slug}`, node: <SkillRow b={b}
-          onOpen={() => onBrowseState?.({ section: "skills", open: `${PB_OPEN}${b.slug}` })} onToggle={(on) => pbs.setOn(b.slug, on)} /> })),
+          onOpen={() => onBrowseState?.({ section: "skills", open: `${PB_OPEN}${b.slug}` })} onToggle={(on) => pbs.setOn(b.slug, on)} reload={pbs.load} /> })),
           // ...and under them, Recently deleted - with nothing on the shelf the shelf's own empty line still leads
           ...(pbs.deleted.length ? [
             ...(pbs.books.length ? [] : [{ key: "pb-none", node: <Typography sx={{ fontSize: 12.5, color: FAINT, p: 1 }}>{pbs.err || PB_EMPTY}</Typography> }]),

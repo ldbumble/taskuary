@@ -201,6 +201,8 @@ def asking(store, tid: int) -> bool:
     return selfclose.asks_now(tid) or bool(taskstate.open_question(store, tid))
 
 
+ASKED = ('Greyed while your question stands - he cannot press it; it stands again under his answer when the turn his answer starts ends, '
+         'unless that turn raises its replacement or withdraws it')
 WAITS = ('your question to the owner stands - nothing is raised under it; a greyed card that still stands is raised again under his answer '
          'when the turn it starts ends')
 def keep(store, tid: int, which, by: str = 'agent', why: str = '') -> dict:
@@ -484,7 +486,9 @@ def screen(store, tid: int, skip=()) -> str:
         return (f"{' + '.join(f'rv{x}' for x in ids)}, {what(store, u, True)}" if len(u['rows']) > 1 else what(store, u, True)) + (f': {w}' if r and (w := _words(r)) else '')
     def greyed(r, n):
         # ...one his line greyed comes back by itself (proposals.restore_set_aside); a held step, one a message passed or its turn finished without, never
-        head = (UNTIL.capitalize() if comes_back(store, r) else 'Greyed by an input your turn has not heard yet' if r.get('Status') == 'pending' else 'Greyed, will not go')
+        # ...and while its question stands, the truth of that wait: he cannot press it, and nothing brings it back before his answer's turn ends
+        # (the owner, 2026-11-26: "it should not say it's waiting if you can't press it")
+        head = ((ASKED if asking(store, tid) else UNTIL.capitalize()) if comes_back(store, r) else 'Greyed by an input your turn has not heard yet' if r.get('Status') == 'pending' else 'Greyed, will not go')
         settled.append((r.get('DecidedAt') or r.get('CreatedAt') or '', head + (f' ({w})' if (w := passed_why(store, r)) else '') + f': {n}'))
     for u in _units(store, tid, set()):
         seen.update(u['rids'])

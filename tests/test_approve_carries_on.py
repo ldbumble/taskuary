@@ -470,6 +470,9 @@ def test_a_greyed_card_is_never_raised_again_under_the_agents_open_question_it_s
     # ...and the agent's own verb is answered the same while it stands
     out = json.loads(agenttools.call(s, tid, 'keep_card', {'which': f'rv{post}'}, {}))
     assert not out['ok'] and 'question' in out['why'] and live() == [], out
+    # ...and the agent is told the truth of it: he cannot press it now (the owner, 2026-11-26: "it should not say it's waiting if you can't press it")
+    told = cardqueue.screen(s, tid)
+    assert cardqueue.ASKED in told and proposals.UNTIL.capitalize() not in told, told
     _turn(s, tid, 'Gail only', 'Understood - Gail only.')
     assert not taskstate.open_question(s, tid)
     [again] = live()

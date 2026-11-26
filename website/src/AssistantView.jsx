@@ -2677,14 +2677,19 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true, r
   };
   // ...and the start every item's own box takes his line by (ItemSections.startsItems): the box is this road, never a second one
   startsItems(startOnItem);
-  // THE CALENDAR'S ANSWERS (calwrite.py): Accept and Decline draft at once; Propose a new time and Find a time open the free times
-  // first (SlotPicker). Each lands on the table as a draft with Send lit, as a reply does - nothing reaches the calendar before the
-  // owner's Send. A card that may not write says so in one line, with its sign-in as the way out (failures.py's fix).
+  // THE CALENDAR'S ANSWERS (calwrite.py): Accept and Decline tell the calendar at the press (the owner, 2026-11-26) and say what went;
+  // Propose a new time and Find a time open the free times first (SlotPicker) and land on the table as a draft with Send lit, as a
+  // reply does. A send that failed is that card, its way past it on it. A card that may not write says so in one line, with its
+  // sign-in as the way out (failures.py's fix).
   const calendarDrafted = (data, item) => {
     if (!data?.ok) {
       setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", status: "error", text: data?.say || "That could not be drafted.", tid: item?.tid, ref: item?.ref,
         chips: [...(data?.fix?.href ? [{ verb: "go", href: data.fix.href, label: data.fix.label }] : []), { verb: "next", label: btn("next") }] }]);
       return;
+    }
+    if (data.sent) {
+      setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", status: "done", text: data.say, tid: item?.tid, ref: item?.ref, chips: [{ verb: "next", label: btn("next") }] }]);
+      putOnTable(null, "sync"); return;
     }
     setLit({ verb: "approve", label: btn("approve"), line: "", key: `review:${data.reviewId}`,
              tid: item?.tid ? Number(item.tid) : null, landed: false });

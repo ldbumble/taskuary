@@ -105,8 +105,8 @@ const CAL_ACT = { accept: btn("accept_invite"), decline: btn("decline_invite"), 
 // ...and ITS PRESS SAYS THE ACT (the owner, 2026-11-08: "fix it like email or all other actions"): the card the agent set up is pressed as
 // what it does - Accept, Decline, Propose this time, Send invite - where an email's says Send
 export const CAL_PRESS = { accept: btn("accept_invite"), decline: btn("decline_invite"), propose: "Propose this time", schedule: "Send invite" };
-// ...and an invite's other answers beside it, each setting that one up instead (POST /api/messages/{mid}/calendar - the row's own draft; a new
-// time with none named is the first free one): nothing reaches the calendar before the lit press
+// ...and an invite's other answers beside it (POST /api/messages/{mid}/calendar - the row's own road): Accept and Decline tell the calendar at
+// their press, in place of this answer; a new time is set up instead (with none named, the first free one) and waits for the lit press
 const CAL_OTHER = { accept: btn("accept_invite"), decline: btn("decline_invite"), propose: btn("propose_time") };
 // WHAT A SHARE SHARES, OVER ITS PRESS (the owner, 2026-11-08: "the agent shows the dashboard inline in the chat"): the dashboard as Reports
 // draws it, from its last run - lazy, so a card with none never loads the charts
@@ -607,9 +607,9 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
   useVerbs(`fix:${r.ReviewId}`, fix && !past ? [{ id: no("fix"), group: "decide", tone: "s", label: fix.label, title: "Opens where this is fixed",
     run: () => openAppLink(fix.href) }] : [], !!fix && toRow);
   // THE LINE'S ONE ▾: the open Send its pair gave up (`send`), then whichever other answers the width could not hold - each the press its button is
-  const calTitle = (w) => `Sets up "${w}" in place of this answer - nothing reaches the calendar until you press it`;
+  const calTitle = (w, a) => (a === "propose" ? `Sets up "${w}" in place of this answer - nothing reaches the calendar until you press it` : btnHint(`${a}_invite`));
   const foldMore = (send) => {
-    const rest = [...(folded ? send : []), ...calOthers.filter(([a]) => !bar.shown(`cal:${a}`)).map(([a, w]) => ({ id: `cal:${a}`, label: switching === a ? "Setting up…" : w, title: calTitle(w),
+    const rest = [...(folded ? send : []), ...calOthers.filter(([a]) => !bar.shown(`cal:${a}`)).map(([a, w]) => ({ id: `cal:${a}`, label: switching === a ? "Setting up…" : w, title: calTitle(w, a),
       disabled: off || !!switching, run: () => { setSendAt(null); answerInstead(a); } }))];
     return rest.length > 0 && <>
       <Button size="small" variant="outlined" disabled={rest.every((x) => x.disabled)} onClick={(e) => setSendAt(e.currentTarget)} title={rest.map((x) => x.label).join(", ")}
@@ -692,7 +692,7 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
   const presses = shut ? [] : [...moves.filter((v) => !v.closes && !(v.id === no("redraft") && (warnTop || delivery.frozen)))
     .map((v) => ({ ...v, spin: busy && /…$/.test(String(v.label)), tone: v.id === no("reject") ? "x" : v.tone,
       ...(v.id === no("approve") && paired ? { hidden: folded, attrs: { "data-tq-bar-item": "send", "data-tq-send": "open" } } : v.id === no("send_close") ? { attrs: { "data-tq-send": "close" } } : {}) })),
-    ...calOthers.map(([a, w]) => ({ id: `cal:${a}`, label: switching === a ? "Setting up…" : w, tone: "s", disabled: off || !!switching, run: () => answerInstead(a), title: calTitle(w),
+    ...calOthers.map(([a, w]) => ({ id: `cal:${a}`, label: switching === a ? "Setting up…" : w, tone: "s", disabled: off || !!switching, run: () => answerInstead(a), title: calTitle(w, a),
       hidden: !bar.shown(`cal:${a}`), attrs: { "data-tq-cal-instead": a, "data-tq-bar-item": `cal:${a}` } })),
     // ...and one email of several can be let go: it drops that slot and closes nothing (slots.settled)
     ...(isSlot && onDrop && !delivery.frozen ? [{ id: no("drop"), label: "Don't send", tone: "s", disabled: off, run: onDrop, title: "Drop this email - it is never sent, and the task stays open" }] : [])];

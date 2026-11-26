@@ -220,8 +220,7 @@ around the edges — they are what the models are actually told.
 | Skills | One folder per kind of job with its `SKILL.md`: a name, a description of what the job is and when to use it, and how it is done | triage and every agent (the names and descriptions), and the agent that chooses one (the whole text) |
 
 Skills are the ones that grow. A kind of job — a card charge to post as a bill, a new hire to
-set up — gets its own page the first time an agent does it. On close, Taskuary asks whether that was a kind of job that will recur, and drafts the
-skill onto the task.
+set up — gets its own skill when the agent that did it offers one as a card and you approve it.
 
 **Generate from history** on `TRIAGE.md`, `STYLE.md` and `JOB.md` bootstraps all of this from your
 last three months of mail: it compares what arrived with what you actually answered, reads how you

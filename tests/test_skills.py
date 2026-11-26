@@ -257,131 +257,77 @@ class TheSessionRunsOnIt(unittest.TestCase):
 
 
 
-# a real session's worth of screen: shorter than skills.MIN_SESSION is judged to have done no job
+# a real session's worth of screen
 SESSION = 'matched the hardware store to vendor 87, expense account 6120, created bill 1043 for 84.10. ' * 8
 
 
-class DraftedOnClose(unittest.TestCase):
+class NoEndingDraftsOne(unittest.TestCase):
+    """The owner, 2026-11-26: a side model read every finished task and drafted a skill in its agent's place - a second voice, a
+    12,000-character call per task, and the thing that reopened a task he had closed. It is gone: the agent offers one itself."""
     def setUp(self): _clean()
 
     def _task(self, s, tags=''):
         return s.create_task({'Title': 'Post the hardware store charge', 'Kind': 'coding', 'Tags': tags}, 't')
 
-    def test_a_recurring_job_becomes_a_proposal_not_a_file(self):
-        s = MemoryStore(); tid = self._task(s)
-        llm, seen = _llm_saying({'skill': {'slug': 'card-bill', 'text': BILL, 'why': 'every card line needs this'}})
-        made = skills.draft(s, tid, SESSION, llm=llm)
-        self.assertEqual(made['action'], 'save_skill')
-        self.assertIn('Skills already on file', seen['user'])
-        self.assertEqual(skills.list_all(), [])                        # nothing on disk yet
-        rv = s.list_reviews('pending')[0]
-        self.assertEqual(rv['Kind'], 'action'); self.assertIn('save a SKILL', rv['Reason'])
-        # approving files it - and an edit made in the Review box is what gets filed
-        edited = BILL.replace('anything over $500', 'anything over $200')
-        out = verdicts.decide(s, rv, 'approve', edited, None, 'owner')
-        self.assertEqual(out['result']['skill'], 'card-bill')
-        self.assertIn('anything over $200', skills.read('card-bill'))
+    def test_the_drafter_is_not_there(self):
+        from taskuary import general, wrapup
+        for mod, gone in ((skills, ('draft', 'DRAFT_SYSTEM', 'MIN_SESSION')), (wrapup, ('chat_skill', 'asks_skill', 'CLOSING'))):
+            for name in gone: self.assertFalse(hasattr(mod, name), f'{mod.__name__}.{name}')
 
-    def test_usually_nothing(self):
+    def test_a_coding_ending_and_a_chat_ending_ask_no_model_for_a_skill(self):
+        from taskuary import general, wrapup
+        asked = []
+        def llm(system, user, **k): asked.append(system); return json.dumps({'skill': {'slug': 'card-bill', 'text': BILL, 'why': 'it recurs'}})
         s = MemoryStore(); tid = self._task(s)
-        llm, _ = _llm_saying({'skill': None})
-        self.assertIsNone(skills.draft(s, tid, SESSION, llm=llm))
-        self.assertEqual(s.list_reviews('pending'), [])
-        self.assertIsNone(skills.draft(s, tid, 'fixed the importer', llm=lambda *a, **k: 1 / 0))   # too short: no AI call at all
+        with mock.patch('taskuary.terminal.transcript_for', return_value=(SESSION, 'coding', None)), mock.patch('taskuary.llm.build_llm', return_value=llm), \
+             mock.patch('taskuary.handbook.enabled', return_value=False), \
+             mock.patch.object(wrapup, 'report_from_transcript', return_value={'summary': 'posted the bill', 'resolution': 'done'}):
+            out = wrapup.wrap(s, tid, close=False, actor='assistant')
+        self.assertEqual(out['proposed'], [])
+        chat = s.create_task({'Title': 'Reconcile the October cash shortfall', 'Kind': 'general'}, 't')
+        s.add_comment(chat, 'owner', general.USER_TYPE, 'Reconcile the October cash shortfall. ' * 20)
+        s.add_comment(chat, 'assistant', general.ASSISTANT_TYPE, 'Matched every statement line to the register: two card fees sat in the wrong period. ' * 10)
+        with mock.patch('taskuary.llm.build_llm', return_value=llm), mock.patch('taskuary.handbook.enabled', return_value=False):
+            self.assertEqual(wrapup.wrap(s, chat, close=True, actor='assistant')['proposed'], [])
+            general.summary_ends(s, chat, {'nothing_left': True})
+        self.assertEqual([r for r in s.list_reviews('pending') if card.sort_of(r) == 'skill'], [])
+        self.assertFalse([a for a in asked if 'KIND OF JOB' in a or 'SKILL.md' in a], 'a model was asked whether this was a skill')
+        self.assertEqual(s.get_task(chat)['Status'], 'done')                # ...and nothing held the task open for one
 
-    def test_the_second_run_and_a_duplicate_slug_draft_nothing(self):
-        s = MemoryStore()
-        llm, _ = _llm_saying({'skill': {'slug': 'bill', 'text': BILL}})
-        self.assertIsNone(skills.draft(s, self._task(s, tags='skill:bill'), SESSION, llm=llm))
-        skills.write('bill', BILL)
-        self.assertIsNone(skills.draft(s, self._task(s), SESSION, llm=llm))
-
-    def test_one_proposal_per_task_while_it_waits(self):
-        """The stress run, 2026-11-05: a chat task's agent ends its session after every turn, and each ending asked again - one task piled up
-        three proposals for the same kind of job under three slugs ("Also waiting on you · 3"), and they kept its Send and close open."""
+    def test_the_agent_road_and_the_switch(self):
         s = MemoryStore(); tid = self._task(s)
-        self.assertIsNotNone(skills.draft(s, tid, SESSION, llm=_llm_saying({'skill': {'slug': 'card-bill', 'text': BILL}})[0]))
-        again = BILL.replace('# ', '# Post a card charge as a bill - ', 1)
-        self.assertIsNone(skills.draft(s, tid, SESSION, llm=_llm_saying({'skill': {'slug': 'post-card-charge', 'text': again}})[0]))
-        self.assertEqual(len(s.list_reviews('pending')), 1)
-
-    def test_the_switch_and_the_agent_road(self):
-        s = MemoryStore(); tid = self._task(s)
-        # an agent may propose one itself, in the transcript; the same gate applies
+        # an agent proposes one itself - by its tool (tests/test_agent_toolbox.py) or in its transcript; the same gate applies
         made = proposals.collect(s, tid, 'TASKUARY-PROPOSE ' + json.dumps({'action': 'save_skill', 'slug': 'bill', 'text': BILL}))
         self.assertEqual([m['action'] for m in made], ['save_skill'])
+        rv = s.list_reviews('pending')[0]
+        self.assertEqual(rv['Kind'], 'action'); self.assertIn('save a SKILL', rv['Reason'])
+        self.assertEqual(skills.list_all(), [])                        # nothing on disk yet
+        # approving files it - and an edit made in the Review box is what gets filed
+        out = verdicts.decide(s, rv, 'approve', BILL.replace('anything over $500', 'anything over $200'), None, 'owner')
+        self.assertEqual(out['result']['skill'], 'bill'); self.assertIn('anything over $200', skills.read('bill'))
         s.set_setting('playbooks_enabled', '0', 'owner')
         self.assertEqual(proposals.validate(s, {'action': 'save_skill', 'slug': 'x', 'text': BILL})[0], False)
-        llm, _ = _llm_saying({'skill': {'slug': 'other', 'text': ONBOARD}})
-        self.assertIsNone(skills.draft(s, tid, SESSION, llm=llm))
 
-    def test_wrap_asks_the_question(self):
-        """wrapup.wrap is the one on-close road; the draft rides in its `proposed` list."""
+    def test_one_its_agent_offered_is_not_cancelled_by_the_agents_own_finish(self):
+        """A skill card was the one proposal a finish did not wait for (it was drafted after the close, and held the task by a mark of its
+        own). Raised by the agent with its work, it waits like a bill it proposed: the finish leaves the task waiting on him, the card
+        still to press, and his answer puts the task back on him - no mark, nothing reopened."""
         from taskuary import wrapup
         s = MemoryStore(); tid = self._task(s)
-        with mock.patch('taskuary.terminal.transcript_for', return_value=(SESSION, 'coding', None)),              mock.patch.object(wrapup, 'report_from_transcript', return_value={'summary': 'posted the bill', 'resolution': 'done'}),              mock.patch.object(wrapup, 'resolution_text', return_value='posted the bill'),              mock.patch('taskuary.handbook.enabled', return_value=False),              mock.patch('taskuary.llm.build_llm', return_value=_llm_saying({'skill': {'slug': 'card-bill', 'text': BILL}})[0]):
-            out = wrapup.wrap(s, tid, close=False, actor='owner')
-        self.assertIn('save_skill', [p['action'] for p in out['proposed']])
-
-    def _chat(self, s, **task):
-        """A general-work job as it really arrives: a mail, triage's one-line title as the opening turn, and a crisp answer - the
-        chat alone is under skills.MIN_SESSION, so the mail has to be read with it."""
-        from taskuary import general
-        from taskuary.testing import Factory
-        tid = s.create_task({'Title': 'Reconcile the October cash shortfall', 'Kind': 'general', **task}, 't')
-        Factory(s).message(task_id=tid, subject='October cash shortfall - bank does not tie', from_name='Erin Blake',
-                           body='The October bank balance does not tie to the ledger - we are $412.50 short. Can you reconcile it and '
-                                'tell me what the adjusting entries are? We close the month on Friday and the auditors ask for this. '
-                                'Last quarter the same gap turned out to be card fees, so start there. Thanks, Erin')
-        s.add_comment(tid, 'owner', general.USER_TYPE, 'Reconcile the October cash shortfall.')
-        s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'Matched every statement line to the register: two card fees sat in '
-                      'the wrong period and one deposit is in transit. Three adjusting entries are listed for your yes: '
-                      'move the two September card fees ($37.50) into October, and hold the $375.00 deposit until it clears.')
-        return tid
-
-    def test_a_general_conversation_is_asked_too(self):
-        """The jobs skills are FOR are general work - a bill, a W-9, a reconciliation - and only the coding ending asked
-        (walk 2026-10-21: a month-end reconciliation closed itself with no proposal; no brain call was even made)."""
-        from taskuary import wrapup
-        s = MemoryStore(); tid = self._chat(s)
-        llm, seen = _llm_saying({'skill': {'slug': 'reconcile-cash', 'text': ONBOARD.replace('# Onboard a new hire in the directory',
-                                                                                              '# Reconcile a month-end cash shortfall')}})
-        with mock.patch('taskuary.llm.build_llm', return_value=llm), mock.patch('taskuary.handbook.enabled', return_value=False):
-            out = wrapup.wrap(s, tid, close=True, actor='assistant')
-        self.assertEqual([p['action'] for p in out['proposed']], ['save_skill'])
-        self.assertIn('two card fees', seen['user'])                       # drafted from the conversation itself...
-        self.assertIn('does not tie to the ledger', seen['user'])          # ...and the mail that started it - the skill's `when`
-        self.assertIsNotNone(card.pending(s, tid, 'skill'))
-
-    def test_a_proposal_on_a_task_that_closed_itself_is_kept_in_sight(self):
-        """With nobody to answer, the task closed as done and its pending proposal was shown nowhere (store._VISIBLE_PENDING).
-        It waits for the proposal instead, and closes again once the owner answers it (the owner, 2026-10-21)."""
-        from taskuary import general, wrapup
-        s = MemoryStore()
-        tid = s.create_task({'Title': 'Weekly vendor check', 'Kind': 'general'}, 't')
-        s.add_comment(tid, 'owner', general.USER_TYPE, 'Check every vendor billed this week for a W-9 and a matching remit-to. ' * 6)
-        s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'Checked Payworth, Spendly and Trainly: all on file, all matching. ' * 6)
-        llm, _ = _llm_saying({'skill': {'slug': 'vendor-check', 'text': ONBOARD}})
-        with mock.patch('taskuary.llm.build_llm', return_value=llm), mock.patch('taskuary.handbook.enabled', return_value=False):
+        said = SESSION + '\nTASKUARY-PROPOSE ' + json.dumps({'action': 'save_skill', 'slug': 'vendor-check', 'text': ONBOARD, 'why': 'weekly'})
+        with mock.patch('taskuary.terminal.transcript_for', return_value=(said, 'coding', None)), mock.patch('taskuary.llm.build_llm', return_value=None), \
+             mock.patch('taskuary.handbook.enabled', return_value=False), \
+             mock.patch.object(wrapup, 'report_from_transcript', return_value={'summary': 'checked them', 'resolution': 'done'}):
             wrapup.wrap(s, tid, close=True, actor='assistant')
         t = s.get_task(tid)
-        self.assertEqual(t['Status'], 'waiting'); self.assertIn(proposals.HELD, t['Tags'])
+        self.assertEqual(t['Status'], 'waiting'); self.assertNotIn(proposals.HELD, t['Tags'] or '')
+        self.assertTrue(proposals.owed(s, tid)); self.assertFalse(hasattr(proposals, 'hold_for_skill'))
         rv = next(r for r in s.list_reviews('pending') if r['TaskId'] == tid)      # the rail and the task page both read this
-        verdicts.decide(s, rv, 'reject', None, None, 'owner')
-        t = s.get_task(tid)
-        self.assertEqual(t['Status'], 'done'); self.assertNotIn(proposals.HELD, t['Tags'] or '')
-
-    def test_a_workflow_run_is_not_asked(self):
-        """A workflow is a job already written down; its run proposing a skill for itself would be the same job twice."""
-        s = MemoryStore(); tid = self._chat(s, Source='workflow')
-        self.assertIsNone(skills.draft(s, tid, SESSION, llm=lambda *a, **k: 1 / 0))
-
-    def test_a_skill_setup_conversation_is_not_asked_again(self):
-        from taskuary import wrapup
-        s = MemoryStore(); tid = self._chat(s, SourceRef='assistant:skill')
-        with mock.patch('taskuary.llm.build_llm', return_value=lambda *a, **k: 1 / 0), mock.patch('taskuary.handbook.enabled', return_value=False):
-            out = wrapup.wrap(s, tid, close=True, actor='owner')
-        self.assertEqual(out['proposed'], [])
+        self.assertEqual(card.sort_of(rv), 'skill')
+        verdicts.decide(s, rv, 'approve', None, None, 'owner')
+        self.assertIsNotNone(skills.read('vendor-check'))
+        self.assertEqual(s.get_task(tid)['Status'], 'open')                       # answered: back on him, for his Mark done
+        self.assertFalse(proposals.owed(s, tid))
 
 
 class OverTheApi(unittest.TestCase):
@@ -620,7 +566,7 @@ if __name__ == '__main__':
 
 def test_a_skill_that_says_nothing_of_how_the_job_is_done_is_refused_at_every_door():
     """The owner, 2026-11-11: an agent's skill card stood for his approval, blank. A name and when it applies passed the check, so the tool,
-    the proposal gate and the on-close question all queued one with no steps. One rule, at the one gate, said to whoever wrote it."""
+    and the proposal gate both queued one with no steps. One rule, at the one gate, said to whoever wrote it."""
     import json
     from taskuary import agenttools, skills, proposals
     from taskuary.store import MemoryStore
@@ -636,7 +582,4 @@ def test_a_skill_that_says_nothing_of_how_the_job_is_done_is_refused_at_every_do
     assert refused and 'how the job is done' in str(refused[0]) and not s._rows('SELECT 1 FROM review WHERE TaskId=?', (tid,))
     try: agenttools.proposal_of({'action': 'save_skill', 'slug': 'month-end', 'text': blank}); raise AssertionError('the tool took it')
     except ValueError as e: assert 'how the job is done' in str(e)
-    s.set_setting('playbooks_enabled', '1', 'owner')
-    said = lambda t: (lambda system, user, **k: json.dumps({'skill': {'slug': 'month-end', 'text': t, 'why': 'it recurs'}}))
-    assert skills.draft(s, tid, 'x' * 5000, llm=said(blank)) is None and not s._rows('SELECT 1 FROM review WHERE TaskId=?', (tid,))
     assert proposals.queue(s, tid, {'action': 'save_skill', 'slug': 'month-end', 'text': full, 'why': 'it recurs'})

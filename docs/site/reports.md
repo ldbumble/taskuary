@@ -315,8 +315,10 @@ wording untouched; the old folder (`~/.taskuary/playbooks`) is still there as a 
 
 - **New skill** builds one with AI from a past email or your own words - the draft appears in
   the conversation with its **Approve** - or opens the editor to write it by hand.
-- When an agent finishes a kind of job that will recur and no skill covers it, Taskuary
-  proposes one on the task; approve it and the next mail like it is matched.
+- The agent that did a kind of job can offer its skill itself: one card behind the send it
+  follows - "Make a skill for this kind of email, so the next agent can use it?" - with the
+  skill it drafted for you to read and edit. Approve saves it; nothing reads a finished task to
+  draft one behind your back, and no task is reopened for one.
 - **Export** on a skill's row saves its folder as one zip - the file to send someone. It drops into
   Claude Code's or another agent's skills folder as it is.
 - **Import** takes a zip, a folder or a single `SKILL.md`. You see the whole text first, and one

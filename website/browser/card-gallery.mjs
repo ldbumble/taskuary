@@ -179,7 +179,7 @@ const SHAPES = {
     await agent(t, "propose", { kind: "act", action: "settings", changes: { poll_minutes: 10, email_signature: "Alex Doyle\nNorthwind - Finance" }, why: "he asked" }); await end(t, "The two settings wait for your press.");
     return { ...t, press: [[/^Approve$/, "approved"]] }; },
   skill: async () => { const t = await task("How we renew vendors", "Write down how we renew a vendor.");
-    await agent(t, "propose", { kind: "act", action: "save_skill", slug: "vendor-renewals", text: "# Vendor renewals\nwhen: a vendor's renewal notice arrives\n\n1. Check the price against last year.\n2. Ask Erin to approve anything over $500.\n3. Renew, and file the receipt.", why: "he asked" });
+    await agent(t, "propose", { kind: "skill", name: "vendor-renewals", text: "---\nname: vendor-renewals\ndescription: Renew a vendor. Use when a vendor's renewal notice arrives.\n---\n# Vendor renewals\n\n1. Check the price against last year.\n2. Ask Erin to approve anything over $500.\n3. Renew, and file the receipt.", why: "he asked" });
     await end(t, "The skill page waits for your press."); return t; },
 };
 

@@ -147,7 +147,7 @@ def test_mark_done_on_a_chat_agents_task_answers_before_its_ending_asks_any_ai(w
     from taskuary import general
     make, _ = world
     s, _coding = make(); c = TestClient(server.app); tid = chat_task(s)
-    # ...the ending held once its harvest is saved, not behind an AI: his own close drafts nothing new (wrapup.CLOSING, 2026-11-23), so an
+    # ...the ending held once its harvest is saved, not behind an AI: an ending drafts nothing new (no skill question, 2026-11-26), so an
     # AI-held ending was not held at all, and a fast runner (macOS CI) had it done before the press's answer was read
     gate, real = threading.Event(), wrapup.wrap
     def held(store, tid_, **k):

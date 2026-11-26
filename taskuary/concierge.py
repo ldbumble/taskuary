@@ -4291,13 +4291,11 @@ def save_live(store, tid: int, actor: str = 'owner') -> bool:
     try: s = terminal.session_for(tid)
     except Exception: s = None
     if not (s and getattr(s, 'alive', False)): return False
-    shut = wrapup.CLOSING.set(actor == 'owner')         # ...his close's own ending asks him nothing new (wrapup.CLOSING)
     try: wrapup.wrap(store, tid, close=False, actor=actor, sid=getattr(s, 'sid', None), no_reply=True)
     except ValueError as e:
         if not str(e).startswith('nothing to wrap up'): return _kept(store, tid, actor, e)
         return False                   # ...a session that wrote nothing has nothing to lose: the close stops it as before
     except Exception as e: return _kept(store, tid, actor, e)
-    finally: wrapup.CLOSING.reset(shut)
     return True
 
 

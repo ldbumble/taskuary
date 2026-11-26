@@ -95,22 +95,17 @@ class OneLine(unittest.TestCase):
         q = cardqueue.state(s, tid)
         self.assertEqual((q['live'], q['held']), ([reply, co], []))
 
-    def test_his_close_asks_no_skill_and_a_leftover_one_never_reopens_it(self):
+    def test_no_ending_drafts_a_skill_and_nothing_reopens_his_close_for_one(self):
         from taskuary import concierge, general, wrapup
         s = MemoryStore(); s.set_setting('playbooks_enabled', '1', 't')
         tid = s.create_task({'Title': 'Weekly vendor check', 'Kind': 'general', 'Status': 'open'}, 't')
         s.add_comment(tid, 'owner', general.USER_TYPE, 'Check every vendor billed this week for a W-9 and a matching remit-to. ' * 6)
         s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'Checked Payworth, Spendly and Trainly: all on file, all matching. ' * 6)
         llm = lambda *a, **k: json.dumps({'skill': {'slug': 'vendor-check', 'text': BOOK}})
-        # ...the ending his close runs (writeup's, concierge.save_live's) - the same write-up that drafted it on his live app
-        shut = wrapup.CLOSING.set(True)
-        try:
-            with mock.patch('taskuary.llm.build_llm', return_value=llm), mock.patch('taskuary.handbook.enabled', return_value=False):
-                self.assertEqual(wrapup.wrap(s, tid, close=False, actor='owner')['proposed'], [])
-        finally: wrapup.CLOSING.reset(shut)
+        # ...no ending drafts one - his close's, a road's or the agent's own: the write-up that drafted it on his live app asks no such thing
+        with mock.patch('taskuary.llm.build_llm', return_value=llm), mock.patch('taskuary.handbook.enabled', return_value=False):
+            self.assertEqual(wrapup.wrap(s, tid, close=False, actor='assistant')['proposed'], [])
         self.assertIsNone(card.pending(s, tid, 'skill'))
         concierge.close_task(s, tid, 'owner')
-        proposals.queue(s, tid, {'action': 'save_skill', 'slug': 'vendor-check', 'text': BOOK, 'why': 'it recurs'}, 'assistant')
-        proposals.hold_for_skill(s, tid, 'assistant')
         self.assertEqual(s.get_task(tid)['Status'], 'done', 'his close stands')
-        self.assertIsNone(card.pending(s, tid, 'skill'))
+        self.assertIsNone(card.pending(s, tid, 'skill')); self.assertFalse(hasattr(proposals, 'hold_for_skill'))

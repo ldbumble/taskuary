@@ -63,6 +63,17 @@ test("a skill proposed as new names the folder its title files it under", () => 
   assert.equal(proposalPresentation(named).title, "Skill · w9");
 });
 
+test("the agent's own skill card asks him its one question, and names the skill under it", () => {
+  const offer = "Make a skill for this kind of email, so the next agent can use it?";
+  const review = { Kind: "action", DraftText: JSON.stringify({ action: "save_skill", slug: "renewal-uplift", offer,
+    text: "---\nname: renewal-uplift\ndescription: Answer a renewal uplift.\n---\n# Renewal uplift\n\nCompare it with last year.\n" }) };
+  const p = proposalPresentation(review);
+  assert.equal(p.title, offer);
+  assert.match(p.context, /^Skill · Renewal uplift · nothing will be sent/);
+  assert.equal(p.destination, "Reports → Skills → renewal-uplift");
+  assert.equal(p.approveLabel, "Approve");
+});
+
 test("a workflow's write waiting for the yes reads as what it writes and where, never its JSON", () => {
   const review = { Kind: "action", Reason: "the workflow asks to write Onboarding/new-starter-checklist.txt on Network file share",
     DraftText: JSON.stringify({ action: "run_tool", type: "smb_write", connector_id: 44, path: "Onboarding/new-starter-checklist.txt",

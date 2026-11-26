@@ -1704,23 +1704,16 @@ def read_summary(store, tid: int, reply: str, drafted: str = '') -> tuple:
     if summ and summ.get('name'): _act(store, tid, 'naming the task', take_name, store, tid, summ['name'])
     return reply, summ
 def summary_ends(store, tid: int, summ, asks=()) -> None:
-    "What a turn that left nothing on him ends, before its end is drawn: the steps it went without, its wait, and the skill question."
+    "What a turn that left nothing on him ends, before its end is drawn: the steps it went without, and its wait."
     # ...a turn that left nothing on him finished the steps it went without. Its earlier question to him stands all the same until he
     # answers it, the task closes or the agent takes it back (workerstate.let_go) - never because this turn did not ask it again
     if asks or not (summ and summ.get('nothing_left')): return
-    from . import proposals, waiton, wrapup
+    from . import proposals, waiton
     try: proposals.finished_without(store, tid)
     except Exception as e: logger.debug(f'task {tid}: the steps it finished without stayed lit - {e}')
     # ...and an answer it waited on, read in this turn, is the end of that wait: nothing is left (waiton.settle - any other turn leaves it)
     try: waiton.settle(store, tid, over=True)
     except Exception as e: logger.debug(f'task {tid}: its wait was not ended - {e}')
-    # ...and the skill question is asked NOW, with the cards this turn raised, before its end is drawn: in the line behind them
-    # from the first frame, so the card in front never offers a close over it (his live app, 2026-11-23 - asked by the close, it
-    # closed the task and opened it again for the skill). Once a task
-    if not store._one("SELECT 1 AS x FROM audit WHERE EntityType='task' AND EntityId=? AND Action='playbook_asked'", (tid,)):
-        store.audit('task', tid, 'playbook_asked', 'assistant')
-        try: wrapup.chat_skill(store, tid)
-        except Exception as e: logger.debug(f'task {tid}: no skill asked at its end - {e}')
 def file_summary(store, tid: int, summ, rid=None) -> None:
     "The turn's summary filed as the task's (SUMMARY_TYPE) - after its answer `rid` where the road files one - with what it says learned."
     if not summ: return

@@ -2,7 +2,7 @@
 this closes the loop: the transcript becomes the report, the reply the sender gets is the agent's
 (written in the run, or asked of it at the end), and the task waits on you to send it.
 """
-import contextvars, json, re, threading
+import json, re, threading
 from loguru import logger
 from . import aiusage, card as cards
 
@@ -938,27 +938,6 @@ def _ended(store, tid: int, close: bool, actor: str):
     if (store.get_task(tid) or {}).get('Status') == 'in_progress': store.update_task(tid, {'Status': 'open'}, actor)
 
 
-# THE OWNER'S CLOSE ASKS NOTHING NEW OF HIM (his live app, 2026-11-23: Send and close, the task closed, and its write-up drafted a skill and
-# opened it again to ask for it): what will need his press is raised while the work is on his screen (general's turn end, the agent's own
-# ending), in the line with its other cards - never by the ending his close runs. Set by his close's roads (writeup, concierge.save_live);
-# a road's own close (a merged PR) is no press of his, and still asks
-CLOSING = contextvars.ContextVar('wrapup_closing', default=False)
-def asks_skill(close: bool, actor: str) -> bool: return not ((close and actor == 'owner') or CLOSING.get())
-
-
-def chat_skill(store, tid: int) -> dict | None:
-    """The skill question of a chat task, asked by its turn that ended its job (general: nothing_left) and by its own ending: was this a
-    KIND of job, done here for the first time? Only the coding ending asked it once, so the jobs skills are for - a bill, a W-9, a month-end
-    reconciliation, all general work - never drafted one (walk 2026-10-21). It reads what ARRIVED beside what was said: a skill's `when` is
-    the arriving message, which the conversation opens on only as triage's one-line title. A skill-authoring conversation proposed its own
-    (skills.setup_task): never a second draft of it."""
-    from . import general, skills
-    if (store.get_task(tid) or {}).get('SourceRef') == 'assistant:skill': return None
-    arrived = '\n\n'.join(f"ARRIVED from {m.get('FromName') or m.get('FromEmail') or 'someone'}: {m.get('Subject') or ''}\n"
-                          f"{str(m.get('BodyText') or '')[:3000]}" for m in ((store.task_detail(tid) or {}).get('messages') or [])[:3])
-    return skills.draft(store, tid, '\n\n'.join(x for x in (arrived, general.conversation_text(store, tid)) if x), 'assistant')
-
-
 def wrap(store, tid: int, close: bool = True, actor: str = 'owner', sid: str = None,
          final_message: str = '', no_reply: bool = False, harvested: dict = None, on_harvest=None) -> dict:
     """"We're done" - the whole ending, in one callable. The transcript becomes the report, the
@@ -1034,13 +1013,9 @@ def wrap(store, tid: int, close: bool = True, actor: str = 'owner', sid: str = N
                              # say what the task IS: a proposal left for the owner keeps it waiting (finish), not done
                              else ' The task waits for your answer to what the agent proposed.' if close and (store.get_task(tid) or {}).get('Status') == 'waiting'
                              else ' Marked the task done.' if close else ''))
-        # ...and the skill question, asked of THIS worker too. Only the coding ending asked it, so the jobs skills are for -
-        # a bill, a W-9, a month-end reconciliation, all general work - never drafted one: "the first real one is drafted for you
-        # when an agent finishes a kind of job for the first time" held for code alone (walk 2026-10-21). Last, as there.
-        pbd = chat_skill(store, tid) if asks_skill(close, actor) else None
-        if cards.pending(store, tid, 'skill'): proposals.hold_for_skill(store, tid, 'assistant')     # always in sight
+        # ...no ending drafts a skill: the agent that did the job offers one itself, as a card of the line (the owner, 2026-11-26)
         _ended(store, tid, close, actor)
-        return {'wrap': 'done', 'taskId': tid, 'report': last, 'proposed': [pbd] if pbd else [],
+        return {'wrap': 'done', 'taskId': tid, 'report': last, 'proposed': [],
                 'drafting': bool(fin.get('drafting')), 'can_send': bool(fin.get('can_send')),
                 'send_block': fin.get('send_block') or '', 'freshness': fin.get('freshness') or 'unchecked'}
     if harvested and 'text' in harvested:          # harvested already - by a write-up that was interrupted (writeup.resume): the session is gone
@@ -1105,9 +1080,9 @@ def _wrap_once(store, tid, task, close, actor, sid, final_message, no_reply, tex
     return out
 
 
-# THE THREE QUESTIONS AT ONCE, THE ANSWERS IN ORDER (2026-10-20): a wrap asked the report, then the handbook, then the skill
-# question one after another - 18 s of a Mark done with a 6-second brain. The handbook and skill questions do not depend on
-# the report: each is asked AHEAD, beside it, exactly as it will be asked (the real function is run up to its question, which
+# THE QUESTIONS AT ONCE, THE ANSWERS IN ORDER (2026-10-20): a wrap asked the report, then the handbook
+# one after another - 18 s of a Mark done with a 6-second brain. The handbook's question does not depend on
+# the report: it is asked AHEAD, beside it, exactly as it will be asked (the real function is run up to its question, which
 # is caught and not answered - _question). At its own place in the ending each function runs as it always did, and when it
 # asks the very question that was asked ahead it gets that answer; anything it asks differently - the state moved - is asked
 # then, as before. So what is written, and in what order, is today's. At most two are asked ahead at a time (with the report
@@ -1193,11 +1168,10 @@ def _close_again(store, tid, close, actor, agent, text, no_reply) -> dict:
 
 def _wrap_session(store, tid, task, close, actor, sid, final_message, no_reply, text, agent, found, cut) -> dict:
     """wrap's coding ending, once per session: the report, the result, the pty closed, proposals, the reply."""
-    from . import proposals, terminal as term, handbook, skills
-    # the handbook's and the skill's questions, asked now beside the report's - answered at their own places below (_AHEAD)
+    from . import proposals, terminal as term, handbook
+    # the handbook's question, asked now beside the report's - answered at its own place below (_AHEAD)
     ahead = _ask_ahead(store, [
-        _question(handbook.learn_from_session, store, tid, text, agent, repo=term.repo_tag(task) or '') if handbook.enabled(store) else None,
-        _question(skills.draft, store, tid, text, agent) if asks_skill(close, actor) else None])
+        _question(handbook.learn_from_session, store, tid, text, agent, repo=term.repo_tag(task) or '') if handbook.enabled(store) else None])
     _stage(tid, 'report')
     asked = unanswered(store, tid)                 # read while the session is still up: its questions lead the result
     # ...and whether the agent ended it itself: the run's Finished event is its `--done` (selfclose._finished), the only one there is
@@ -1250,14 +1224,6 @@ def _wrap_session(store, tid, task, close, actor, sid, final_message, no_reply, 
     if handbook.enabled(store):
         try: handbook.learn_from_session(store, tid, text, agent, repo=term.repo_tag(task) or '', llm=_answered(store, ahead))
         except Exception as e: logger.debug(f'handbook: nothing filed for task {tid} - {e}')
-    # ...and the last question, once the report and the reply are in hand: was this a KIND of job that
-    # will recur, done here for the first time? The answer is a proposal on the task, never a file
-    # (skills.py) - the second such job matches it. Last on purpose: the receipt and the sender's
-    # answer are what a close is for, and this call must never be the one the drafter's AI budget goes to.
-    pbd = skills.draft(store, tid, text, agent, llm=_answered(store, ahead)) if asks_skill(close, actor) else None
-    # ...and one the agent proposed itself (TASKUARY-PROPOSE, collected above) is held in sight the same way (proposals.HELD)
-    if cards.pending(store, tid, 'skill'): proposals.hold_for_skill(store, tid, agent)
-    if pbd: proposed.append(pbd)
     store.audit('terminal', tid, 'wrap', actor, detail={'sid': found or sid, 'close': close})
     _ended(store, tid, close, actor)
     # ...and the reply it owes and did not write is asked of it, once its run is put away (ask_for_reply) - only where the agent ended

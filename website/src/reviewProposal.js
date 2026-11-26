@@ -191,8 +191,10 @@ export const proposalPresentation = (review) => {
     const amend = !!(proposal.block || proposal.lessons || proposal.was_text);          // a change to one he has, not a new one
     return {
       kind: "skill",
-      title: title ? `Skill · ${title}` : "New skill",
+      // ...the agent's own offer asks him in one line (agenttools.SKILL_OFFER), and names the skill under it
+      title: proposal.offer && !amend ? String(proposal.offer) : title ? `Skill · ${title}` : "New skill",
       context: amend ? "What was learned about this kind of work, added to its skill · nothing is sent"
+        : proposal.offer ? `Skill · ${title || slug} · nothing will be sent to the conversation`
         : "Skill proposal · nothing will be sent to the conversation",
       destinationLabel: "Save to",
       destination: `Reports → Skills → ${slug}`,         // where skills live (SkillShelf.jsx)

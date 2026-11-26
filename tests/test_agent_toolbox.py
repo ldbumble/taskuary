@@ -1007,7 +1007,7 @@ class APostIsAKindOfTheOneReviewTool(unittest.TestCase):
         listed = {t['name']: t for t in rpc(self.tid, 'tools/list').json()['result']['tools']}
         self.assertTrue(listed['propose']['_meta']['anthropic/alwaysLoad']); self.assertNotIn('propose', agenttools.deferred())
         self.assertFalse({'propose_post', 'propose_email', 'propose_reply'} & set(listed))
-        self.assertEqual(set(listed['propose']['inputSchema']['properties']['kind']['enum']), {'reply', 'email', 'post', 'act'})
+        self.assertEqual(set(listed['propose']['inputSchema']['properties']['kind']['enum']), {'reply', 'email', 'post', 'skill', 'act'})
         for k in ('a reply', 'an email', 'a post', 'GitHub'): self.assertIn(k, agenttools.SHORT['propose'])
 
     def test_every_kind_is_one_card_waiting_for_his_press_and_nothing_goes_before_it(self):
@@ -1022,6 +1022,43 @@ class APostIsAKindOfTheOneReviewTool(unittest.TestCase):
         self.assertEqual(len(got), 3); self.assertTrue(all(r['Status'] == 'pending' for r in got), got); self.assertEqual(ran, [])
         said, err = tool(self.tid, 'propose', text='Hi')
         self.assertTrue(err); self.assertIn('`kind` was not given', said)
+
+    SKILL_MD = ('---\nname: renewal-uplift\ndescription: Answer a vendor asking for a renewal uplift. Use when a renewal notice names a price rise.\n---\n'
+                '# Renewal uplift\n\nCompare the uplift with last year, then answer with the number we accept.\n')
+
+    def test_the_agent_offers_one_skill_card_behind_its_send_and_his_press_saves_it(self):
+        """The owner, 2026-11-26: after the agent's send goes, ONE card - "Make a skill for this kind of email, so the next agent can use
+        it?" - which the agent that did the job drafted itself; his press saves it. No second model reads the finished task to draft one."""
+        from taskuary import card, cardqueue, skills, verdicts
+        self.s.add_message({'TaskId': self.tid, 'ExternalId': 'u1', 'ConversationId': 'conv-u', 'Channel': 'email', 'FromName': 'Erin Blake',
+                            'FromEmail': 'erin@vendor.example', 'Subject': 'Renewal: 6% uplift', 'BodyText': 'We propose a 6% uplift.', 'Status': 'routed'})
+        with mock.patch('taskuary.llm.build_llm', side_effect=AssertionError('a model was asked')):
+            said, err = tool(self.tid, 'propose', kind='email', to='erin@vendor.example', subject='Re: Renewal: 6% uplift', text='We accept 3%. Alex')
+            self.assertFalse(err, said)
+            said, err = tool(self.tid, 'propose', kind='skill', name='renewal-uplift', text=self.SKILL_MD, why='renewals come every year')
+            self.assertFalse(err, said)
+        rv, = self.cards(); p = json.loads(rv['DraftText'])
+        self.assertEqual((card.sort_of(rv), p['action'], p['slug']), ('skill', 'save_skill', 'renewal-uplift'))
+        self.assertEqual(p['offer'], 'Make a skill for this kind of email, so the next agent can use it?')
+        q = cardqueue.state(self.s, self.tid)
+        self.assertEqual(q['held'], [rv['ReviewId']]); self.assertEqual(len(q['live']), 1)       # behind the send, in the line like any card
+        self.assertIsNone(skills.read('renewal-uplift'))                                           # nothing is saved before his press
+        out = verdicts.decide(self.s, rv, 'approve', None, None, 'owner')
+        self.assertEqual(out['result']['skill'], 'renewal-uplift')
+        self.assertIn('Compare the uplift with last year', skills.read('renewal-uplift'))
+        skills.delete('renewal-uplift')
+
+    def test_a_second_skill_card_takes_the_first_ones_place_and_a_job_with_no_mail_is_asked_as_a_job(self):
+        said, err = tool(self.tid, 'propose', kind='skill', name='renewal-uplift', text=self.SKILL_MD); self.assertFalse(err, said)
+        said, err = tool(self.tid, 'propose', kind='skill', name='renewal-uplift', text=self.SKILL_MD.replace('last year', 'the last two years'))
+        self.assertFalse(err, said)
+        rv, = self.cards(); p = json.loads(rv['DraftText'])
+        self.assertIn('the last two years', p['text'])
+        self.assertEqual(p['offer'], 'Make a skill for this kind of job, so the next agent can use it?')      # his own ask: no mail on the task
+
+    def test_a_skill_that_says_nothing_is_refused_at_the_tool_with_what_it_lacks(self):
+        said, err = tool(self.tid, 'propose', kind='skill', name='renewal-uplift', text='---\nname: renewal-uplift\ndescription: Renewals.\n---\n')
+        self.assertTrue(err); self.assertIn('how the job is done', said); self.assertEqual(self.cards(), [])
 
     def test_a_call_by_an_old_name_runs_as_its_kind(self):
         said, err = tool(self.tid, 'propose_post', network='linkedin', text='Three tools, compared.', picture='tools-compared.png')

@@ -331,9 +331,10 @@ Two levels, and the difference is worth holding onto:
 - A **skill** is a job — what it is, when to use it, and how it is done here, in your words.
   It is a `SKILL.md` in a folder of its own, the format Claude Code and other agents use.
 
-A recurring kind of job gets its own page the first time an agent does it: on close, Taskuary
-asks whether that will recur and drafts the skill onto the task. Approve it, and the next
-message like it is matched to that skill by triage, and the agent finds it with its skills tool.
+A recurring kind of job gets its own skill when the agent that did it offers one: a card after
+its send goes, asking whether to make a skill of this kind of job, with the skill it drafted.
+Approve it, and the next message like it is matched to that skill by triage, and every agent
+sees it by name and reads it when it fits.
 
 Each connector card lists the skills that name it, and the words themselves are edited on
 **Reports → Skills**, where each has an on/off switch.

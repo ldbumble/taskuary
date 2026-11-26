@@ -727,44 +727,19 @@ _ISSUE = re.compile(r'github\.com/([^/]+/[^/]+)/issues/(\d+)')
 _PULL = re.compile(r'github\.com/([^/]+/[^/]+)/pull/(\d+)')
 
 
-# ── close-out and skill are TWO things (the owner, 2026-10-01) ────────────────────────────────────────────────────
-# Neither closes the task: its close-out (the reply sent, the pull request merged or closed, the issue closed) and the
-# skill proposal its agent left (approved or dismissed) are each said on the task, and only the owner's Mark done closes it
-# (2026-10-18: "sending and closing are two steps, never automatic"). A sent reply used to dismiss the undecided skill.
+# ── A SKILL ITS AGENT OFFERED IS A CARD OF THE LINE LIKE ANY OTHER (the owner, 2026-11-26) ───────────────────────────────────────────
+# It is raised by the agent that did the job, while the work is on his screen, and it waits as every proposal waits: an agent's own
+# finish does not cancel it (owed), and the last one answered puts the task back on him (settle). Nothing drafts one after a task's
+# ending any more, so nothing has to bring a closed task back for it.
 SKILL = 'save_skill'
-
-
-# A SKILL PROPOSAL IS ALWAYS SEEN (the owner, 2026-10-21). It is drafted after the task's ending, and a task that closed itself
-# with nobody to answer - a workflow run, the owner's own chat, a coding session - was done by then: a pending review on a done task
-# is shown nowhere (store._VISIBLE_PENDING), so the proposal waited where nobody could find it. Such a task waits for it instead,
-# marked HELD, and goes back to done once the owner answers it, yes or no - the close was already theirs or the agent's.
+# ...a task held open for one BEFORE that (the side model drafted it after the close, and the task was marked to wait): its answer
+# still lets it go (skill_answered). Nothing sets the mark now.
 HELD = 'held:playbook'
 
 
 def _pending(store, tid, sort):
     from .card import pending
     return pending(store, tid, sort)
-
-
-def owner_closed(store, tid: int) -> bool:
-    "Is task `tid` closed, and by him - the close the last write to it was - not by a road or its agent?"
-    from .processing_unread import OWNER_ACTORS
-    t = store.get_task(tid) or {}
-    return t.get('Status') in ('done', 'dropped') and str(t.get('UpdatedBy') or '') in OWNER_ACTORS
-
-
-def hold_for_skill(store, tid: int, actor: str) -> None:
-    t = store.get_task(tid) or {}
-    if t.get('Status') != 'done': return
-    # ...BUT A TASK THE OWNER CLOSED STAYS CLOSED (his live app, 2026-11-23: Send and close, then the task came back asking for a skill):
-    # only new work from outside reopens his close - a proposal raised after it is put down with the close, as the close puts down what waits
-    if owner_closed(store, tid):
-        from .concierge import CLOSED_TASK
-        while (r := _pending(store, tid, 'skill')): store.decide_review(r['ReviewId'], 'no_reply', None, actor, note=CLOSED_TASK)
-        return
-    tags = [x for x in str(t.get('Tags') or '').split(',') if x.strip()]
-    store.update_task(tid, {'Status': 'waiting', 'Tags': ','.join([*tags, HELD])}, actor)
-    store.add_comment(tid, actor, 'agent', 'Kept open for its skill proposal - approve or dismiss it, and the task closes again.')
 
 
 def skill_answered(store, tid: int, actor: str) -> None:
@@ -1012,21 +987,20 @@ def _cut(w: str, n: int = 60) -> str: return (w := ' '.join(str(w or '').split()
 
 
 def owed(store, tid: int) -> bool:
-    """Something of the close-out still waits on the owner: a reply, a close-out act, any other proposal - not the skill (card.holds_close)."""
+    """Something still waits on the owner's press: a reply, a close-out act, any other proposal, a skill its agent offered (card.holds_close)."""
     from .card import holds_close
-    return any(c['sort'] != 'skill' for c in holds_close(store, tid))
+    return bool(holds_close(store, tid))
 
 
 def closed_out(store, tid: int, actor: str, said: str) -> None:
-    """The close-out is done: said on the task, with what still waits (its emails, its skill). The task STAYS OPEN - only
+    """The close-out is done: said on the task, with what still waits (its emails). The task STAYS OPEN - only
     the owner's Mark done closes it (the owner, 2026-10-18: "sending and closing are two steps, never automatic"); this used
     to close it whenever nothing else waited."""
     from . import slots
     if (store.get_task(tid) or {}).get('Status') in ('done', 'dropped'): return
     n = len(slots.open_(store, tid))
     store.audit('task', tid, 'closed_out', actor)
-    rest = (f" {plural(n, 'email')} still to go." if n else ' Its skill still waits on your approve or dismiss.' if _pending(store, tid, 'skill')
-            else f" {buttons.label('close')} when the task is finished.")
+    rest = f" {plural(n, 'email')} still to go." if n else f" {buttons.label('close')} when the task is finished."
     store.add_comment(tid, actor, 'human', f'{said}{rest}')
 
 
@@ -1108,7 +1082,7 @@ def settle(store, rv: dict, verb: str, actor='owner') -> None:
     """After the owner answered a proposal: Approve ran only that act (the owner, 2026-10-18) - the task stays open for Mark
     done, and is said to be on them once nothing else of it waits; "not yet" on a close-out leaves it open and on them."""
     tid = rv.get('TaskId')
-    if tid and _action(rv) == SKILL: return skill_answered(store, tid, actor)
+    if tid and _action(rv) == SKILL and HELD in str((store.get_task(tid) or {}).get('Tags') or ''): return skill_answered(store, tid, actor)
     if not tid: return
     # a held step dismissed: the waiting agent hears it was not done
     if _action(rv) in HELD_ACTS and verb not in ('approve', 'edit'): _gate(_action(rv)).declined(store, tid, json.loads(rv.get('DraftText') or '{}'))

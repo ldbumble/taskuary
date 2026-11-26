@@ -248,7 +248,6 @@ class WrapOnceTests(unittest.TestCase):
         self.p = [mock.patch.object(term, 'transcript_for', return_value=('$ gh pr view 7\nmerged', 'coding', 'sid-w')),
                   mock.patch.object(term, 'close'), mock.patch.object(term, 'session_for', return_value=None),
                   mock.patch('taskuary.handbook.enabled', return_value=False),
-                  mock.patch('taskuary.skills.draft', return_value=None),
                   mock.patch.object(wrapup, 'report_from_transcript', return_value={'determination': 'merged', 'actions': '', 'summary': 'Merged it.'})]
         for p in self.p: p.start()
 
@@ -330,7 +329,7 @@ class LastMessageTests(unittest.TestCase):
         live = SimpleNamespace(sid='sid-m', alive=True, witness=w)
         with mock.patch.object(term, 'transcript_for', return_value=('$ gh pr merge 7', 'coding', 'sid-m')), \
              mock.patch.object(term, 'close'), mock.patch.object(term, 'session_for', return_value=live), \
-             mock.patch('taskuary.handbook.enabled', return_value=False), mock.patch('taskuary.skills.draft', return_value=None), \
+             mock.patch('taskuary.handbook.enabled', return_value=False), \
              mock.patch.object(wrapup, 'report_from_transcript', return_value={'summary': 'Merged it.'}):
             wrapup.wrap(s, tid, close=True, actor='owner', no_reply=True)
         rep = next(c['Body'] for c in s.list_comments(tid) if wrapup.is_report(c['Body']))
@@ -347,7 +346,7 @@ class LastMessageTests(unittest.TestCase):
         dead = SimpleNamespace(sid='sid-d', alive=False, witness=w)            # it exited on its own; its object is still here
         with mock.patch.object(term, 'transcript_for', return_value=('$ gh pr merge 7', 'coding', 'sid-d')), \
              mock.patch.object(term, 'close'), mock.patch.object(term, 'session_for', return_value=dead), \
-             mock.patch('taskuary.handbook.enabled', return_value=False), mock.patch('taskuary.skills.draft', return_value=None), \
+             mock.patch('taskuary.handbook.enabled', return_value=False), \
              mock.patch.object(wrapup, 'report_from_transcript', return_value={'summary': 'Merged it.'}):
             wrapup.wrap(s, tid, close=True, actor='router', no_reply=True)
         rep = next(c['Body'] for c in s.list_comments(tid) if wrapup.is_report(c['Body']))

@@ -18,8 +18,9 @@ Three readers, none of which re-reads the mail to second-guess triage:
   skill:<name>; the tag routes it, like repo: does.
 - every agent's context carries brief() - the same names and descriptions - and it reads one whole through its `skills` tool (lookup).
   A stranger's task carries none, as it carries nothing else of the owner's.
-- an agent that did a kind of job proposes its skill as a card (proposals.py save_skill); his press files it. Nothing is ever filed
-  without it, for the same reason a bill is not posted without one.
+- the agent that did a kind of job offers its skill itself, as one card behind the send it follows (agenttools `propose` kind skill ->
+  proposals.py save_skill); his press files it. No second model reads a finished task to draft one in the agent's place, and nothing is
+  ever filed without his press, for the same reason a bill is not posted without one.
 """
 import json, re, shutil, time
 from pathlib import Path
@@ -399,60 +400,6 @@ def for_task(task: dict) -> dict | None:
     if not slug: return None
     text = read(slug)
     return {**parse(text, slug), 'slug': slug, 'text': text} if text else None
-
-
-# ── the ending: was this a kind of job that will recur? ─────────────────────────────────
-MIN_SESSION = 600            # a session shorter than this did no job worth a skill - no AI call for it
-DRAFT_SYSTEM = (
-    'You are reading the terminal transcript of an agent that has just finished a piece of work for a '
-    'company. Decide whether it did a KIND OF JOB that will recur - posting a bill, onboarding a user, '
-    'reconciling a statement, chasing a vendor - which no existing skill covers, and which the session '
-    'shows was done well enough to write down. Usually it did not: a one-off, a code change in a repository '
-    '(CODING.md already covers those), or a job a listed skill already describes is {"skill": null}.\n'
-    'When it did, draft the SKILL.md the NEXT agent would read: frontmatter, then how the job is done, as the session did it:\n'
-    '---\nname: <kebab-case>\ndescription: <what the job is. Use when <what arriving message or event is an instance of it>>\n---\n'
-    '# <Verb phrase naming the job>\n<the steps, in order, and what is finished when it is done>\n'
-    'Write only what the transcript shows; never invent a rule the owner did not state. '
-    'Output ONLY JSON: {"skill": null} or {"skill": {"slug": "<kebab-case>", '
-    '"text": "<the markdown above>", "why": "<one sentence: what in the session says this will recur>"}}.')
-
-
-def draft(store, task_id: int, transcript: str, agent: str = 'agent', llm=None) -> dict | None:
-    """The on-close question. Queues a save_skill PROPOSAL for the owner and returns it, or None -
-    and None is the usual, right answer. Never raises: a skill is a bonus, the task must still close."""
-    from .llm import build_llm
-    from . import proposals
-    try:
-        if store.get_setting('playbooks_enabled', '1') != '1' or len(str(transcript or '').strip()) < MIN_SESSION: return None
-        task = store.get_task(task_id) or {}
-        if of_task(task): return None                     # the second run of a skill is not a new kind of job
-        # ...nor is a workflow's run (its job is written down already, as the workflow) or a skill being written by hand
-        if task.get('Source') == 'workflow' or task.get('SourceRef') == 'assistant:skill': return None
-        # ...nor asked again while this task's own proposal still waits: a chat task's agent ends its session after every turn, and each
-        # ending proposed the same kind of job under another slug - three waiting on one task (the stress run, 2026-11-05)
-        from . import card as cards
-        if cards.pending(store, task_id, 'skill') or proposals.owner_closed(store, task_id): return None      # ...never after his close
-        llm = llm or build_llm(store, job='memory')
-        if not llm: return None
-        books = list_all()
-        user = (f"Skills already on file (a job one of these covers is not new):\n{menu(books) or '(none yet)'}\n\n"
-                f"Task: {task.get('Title') or ''}\n\nTranscript:\n{transcript[-12000:]}")
-        j = json.loads(re.sub(r'^```(json)?|```$', '', str(llm(DRAFT_SYSTEM, user, max_tokens=1200) or '').strip(), flags=re.M))
-        pb = j.get('skill')
-        if not isinstance(pb, dict) or not str(pb.get('text') or '').strip(): return None
-        try: parsed = check(pb['text'])                 # one rule for every road: never queue one that says nothing
-        except ValueError: return None
-        slug = slugify(pb.get('slug') or parsed['name'] or parsed['title'])
-        if any(b['slug'] == slug for b in books): return None
-        made = proposals.queue(store, task_id, {'action': 'save_skill', 'slug': slug, 'text': pb['text'],
-                                                'why': str(pb.get('why') or '')[:300]}, agent)
-        if made:
-            logger.info(f'skills: {agent} drafted "{parsed["title"]}" closing task {task_id} (rv{made["reviewId"]})')
-            proposals.hold_for_skill(store, task_id, agent)      # a task already done would hide it (proposals.HELD)
-        return made
-    except Exception as e:
-        logger.debug(f'skills: nothing drafted for task {task_id} - {e}')
-        return None
 
 
 # ── lessons on a skill: a `save_skill` card's lessons, onto the page in a marked block, so the owner's own lines are never

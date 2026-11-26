@@ -615,6 +615,17 @@ def _launcher(cmd: str) -> list | None:
 # as ASCII and writes a file in UTF-16 - a Python's "a – b" sent to a file came back "a ΓÇô b", and "c — d" piped on as "c ? d"
 PS_UTF8 = ("$OutputEncoding=[Console]::InputEncoding=[Console]::OutputEncoding=New-Object Text.UTF8Encoding $false;"
            "'Out-File','Set-Content','Add-Content'|%{$PSDefaultParameterValues[\"$($_):Encoding\"]='utf8'};")
+# A BARE @ref ON A POWERSHELL LINE IS A SPLAT OF A VARIABLE NOBODY SET, AND EXPANDS TO NOTHING (walk 24's re-run, 2026-11-26, HIPAA AI: `agent-browser
+# fill @e4 "..."` ran as `fill "..."` and `click @e6` as a bare `click` - the tool said Done, the post box stayed empty, and the agent told him
+# the words were in). The guide asks every agent to quote one; on the lines Taskuary itself runs it is code: a word `@name` outside quotes,
+# whose `$name` the line never sets, is passed as the word it is
+_SPLAT = re.compile(r"(?<![\w'\"`$@.-])@([A-Za-z_]\w*)(?![\w({'\"])")
+def no_splat(cmd: str) -> str:
+    from .readgate import _quoted
+    qs = _quoted(cmd)
+    return _SPLAT.sub(lambda m: m[0] if any(a <= m.start() < b for a, b in qs) or re.search(r'\$' + m[1] + r'\s*=', cmd, re.I) else f"'{m[0]}'", cmd)
+
+
 def replay(p: dict) -> list:
     """THE HELD CALL AS THE AGENT'S OWN TOOL WOULD HAVE RUN IT - the one road an Approve runs by: the argv its brain gave (Codex's list), a line
     that is itself a shell started on a line (`powershell.exe -Command '...'`, `bash -lc '...'`) as that shell, else the line in the shell its tool
@@ -624,7 +635,7 @@ def replay(p: dict) -> list:
         return [a[0] if os.path.isabs(a[0]) and os.path.isfile(a[0]) else _shell_exe(a[0]) if _name(a[0]) in _FLAG else (shutil.which(a[0]) or a[0]), *a[1:]]
     cmd, shell = str(p.get('command') or ''), str(p.get('shell') or 'Bash')
     if (l := _launcher(cmd)): return l
-    if _name(shell) in ('powershell', 'pwsh'): return [_shell_exe(shell), '-NoProfile', '-NonInteractive', '-Command', PS_UTF8 + cmd]
+    if _name(shell) in ('powershell', 'pwsh'): return [_shell_exe(shell), '-NoProfile', '-NonInteractive', '-Command', PS_UTF8 + no_splat(cmd)]
     return [_shell_exe('bash'), '-c', cmd]
 
 

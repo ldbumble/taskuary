@@ -925,3 +925,17 @@ def _check(s, tid, sid, cmd, tool='Bash', cwd='', **k):
     "The one check point (gate.check), in the old hook's order of arguments."
     from taskuary import gate
     return gate.check(s, tid, sid, cmd, cwd, tool, **k)
+
+
+def test_a_bare_ref_on_a_powershell_line_taskuary_runs_is_passed_as_the_word_it_is():
+    """Walk 24's re-run, 2026-11-26 (HIPAA AI on Windows): `agent-browser fill @e4 "..."` and `click @e6` went through PowerShell, where a bare
+    @name is a splat of a variable nobody set - nothing. The fill named no box, the tool said Done, the post box stayed empty and the agent
+    said the words were in. On a line Taskuary runs, a bare @ref is the word it is; a quoted one, a splat the line itself sets, an array, a
+    here-string and an address are as written."""
+    lit = lambda cmd: sg.replay({'command': cmd, 'shell': 'PowerShell'})[-1][len(sg.PS_UTF8):]
+    assert lit('agent-browser fill @e4 "Northwind closes in four days"') == 'agent-browser fill \'@e4\' "Northwind closes in four days"'
+    assert lit('agent-browser click @e6; agent-browser upload @e5 close.png') == "agent-browser click '@e6'; agent-browser upload '@e5' close.png"
+    for cmd in ("agent-browser click '@e6'", 'agent-browser fill "@e4" "to @erin at northwind"', '$a = @{Name="x"}; New-Item @a', '$xs = @(1, 2)',
+                'git log main@{1}', 'Send-Note erin@northwind.example', "$t = @'\nhello @e1\n'@"):
+        assert lit(cmd) == cmd, cmd
+    assert sg.replay({'command': 'agent-browser click @e6', 'shell': 'Bash'})[-1] == 'agent-browser click @e6', 'another shell reads it as a word already'

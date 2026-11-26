@@ -238,3 +238,116 @@ def test_an_address_he_typed_is_on_the_record_as_his_words_and_memory_says_only_
     said = [f['text'] for f in memory.facts(s, [PAULA, GAIL]) if f['source'] == 'ledger']
     assert said and not any('{' in t or 'Q3 board pack' in t for t in said), said
     assert f'address {PAULA} (he gave it)' in said and f'address {GAIL} (mailed)' in said
+
+
+# ── what his presses made stays (the owner, 2026-11-25: "memory is something that I do or say") ──────────────────────────────────────
+TOPIC, NOT_HIS = 'visitor parking refund request', "Visitor parking refunds are the site managers' work, not yours"
+
+
+def _pressed(s, n, kind='not_a_task', start=100):
+    "`n` of the same press on mail with one topic - by a model that names the lesson's subject differently every time."
+    said = iter(range(10 ** 6))
+    llm = lambda system, user, **k: json.dumps({'line': NOT_HIS, 'subject': f'parking refunds, take {next(said)}', 'only_this': True, 'against': ''})
+    with mock.patch.object(learning, '_llm', lambda st, llm_=None: llm):
+        for i in range(n): learning.teach(s, kind, f'msg{start + i}', 'From: Ray\nSubject: Visitor parking refund request', 'subject', TOPIC)
+    return [r for r in memory.rows(s, memory.INFERRED) if r['ScopeKey'] == TOPIC]
+
+
+def _flood(s):
+    "More learned lines than the memory holds, all newer than what is there."
+    s._exec("UPDATE memory_line SET UpdatedAt='2026-01-01 00:00:00'")
+    for i in range(memory.CAP + 5): memory.infer(s, f'You sign off on spend category {i} yourself', f'spend {i}', [f'rv{i}a', f'rv{i}b', f'rv{i}c'])
+    for i in range(memory.LEARNING + 5): memory.infer(s, f'You might batch topic {i} on Fridays', f'batch {i}', [f'msg{i}'])
+
+
+def test_twelve_presses_on_one_topic_are_one_line_counted_twelve_that_no_cap_trims():
+    """The owner, 2026-11-26: a topic he had marked not his a dozen times came back as work to watch. Each press had made a line of its own
+    under whatever subject the model named, none reached AUTO_AT, and the cap dropped them. One topic, one press kind: one line, every press
+    counted - and the caps, which keep what a model inferred short, never take down what he did. One press is still one press."""
+    s = _store()
+    got = _pressed(s, 12)
+    assert len(got) == 1 and got[0]['N'] == 12 and got[0]['Confirmed'], [(r['Subject'], r['N']) for r in got]
+    once = memory.infer(s, 'Room booking mail is real work for you', 'room bookings', ['msg7'], source='verdict:made_task')
+    _flood(s)
+    live = memory.rows(s, memory.INFERRED)
+    assert sum(not memory.pressed(r) and bool(r['Confirmed']) for r in live) == memory.CAP, 'what a model inferred is still kept short'
+    assert sum(not memory.pressed(r) and not r['Confirmed'] for r in live) == memory.LEARNING
+    assert memory.get(s, got[0]['key'])['Status'] == 'live' and memory.get(s, got[0]['key'])['N'] == 12, 'his twelve presses outlive the cap'
+    assert NOT_HIS in memory.whole(s, 'triage') and NOT_HIS in s.get_doc('learned')
+    kept = memory.get(s, once['key'])
+    assert kept['Status'] == 'live' and kept['N'] == 1 and not kept['Confirmed'] and 'Room booking' not in memory.whole(s, 'triage'), \
+        'one press stays on record as one press: kept, counted, not yet a rule'
+
+
+def test_a_reflection_never_lowers_a_line_his_presses_made_and_a_press_of_his_does():
+    """LEARNED.md's reflection deleted and closed the line his verdicts had made, twice, and a correction read by the model could take an
+    episode off it. Only his own press that goes against it lowers it."""
+    s = _store()
+    line = _pressed(s, 3)[0]
+    tid = _task(s, 'general')
+    against = json.dumps({'lines': [], 'against': [{'subject': line['Subject'], 'ev': [f'task{tid}']}]})
+    assert learning.reflect(s, lambda system, user, **k: against)
+    learning.learn_from(s, 'The owner reopened a parking refund task', f'task{tid}',
+                        llm=lambda system, user, **k: json.dumps({'line': '', 'against': line['Subject'], 'lines': []}))
+    assert memory.get(s, line['key'])['N'] == 3 and NOT_HIS in memory.whole(s, 'triage'), 'what a reflection read takes nothing off what he did'
+    with mock.patch.object(learning, '_llm', lambda st, llm=None: teacher('', against=line['Subject'])):
+        learning.teach(s, 'made_task', 'msg300', 'From: Ray\nSubject: Visitor parking refund request', 'subject', TOPIC)
+    assert memory.get(s, line['key'])['N'] == 2 and NOT_HIS not in memory.whole(s, 'triage'), 'his own press against it does'
+
+
+def test_a_line_his_presses_made_that_the_app_dropped_comes_back_on_start_with_every_press_counted():
+    """The live shape, 2026-11-26: a dozen presses on one topic since the summer, and the line they made stood dropped at N=1 - read in from
+    LEARNED.md with one press of its evidence, set back to waiting, then trimmed. Once, on start, from the audit trail and the old history,
+    no model: it is live again with each press counted; a line a reflection deleted before the stores is written back; what he took down
+    himself, and what a model inferred, stay down."""
+    s = _store()
+    for k in (memory.MIGRATED, memory.IN_USE_FIX, memory.ONE_PRESS_FIX): s.set_setting(k, 'x', 't')
+    lost = memory.infer(s, NOT_HIS, 'parking refunds', ['msg3'], scope='subject', key=TOPIC, source='verdict:not_a_task')
+    guess = memory.infer(s, 'You might batch approvals on Fridays', 'friday approvals', ['msg4'], source='reflect')
+    wrong = memory.infer(s, 'Room booking mail is never yours', 'room bookings', ['msg5'], scope='subject', key='room booking change',
+                         source='verdict:not_ours', confirmed=True)
+    for r in (lost, guess): memory._down(s, r['Id'], 'dropped')
+    memory.mark(s, wrong['key'], 'wrong')
+    for i in range(8): s.audit('memory', 10 + i, 'create', 'owner', detail={'scope': 'subject', 'key': 'Visitor parking  refund request', 'from': RAY})
+    for i in range(3): s.audit('message', 50 + i, 'not_mine', 'owner', detail={'scope': 'subject', 'key': TOPIC, 'from': RAY, 'was': 'routed'})
+    s.audit('message', 60, 'not_mine', 'owner', detail={'scope': 'subject', 'key': 'room booking change', 'from': RAY})
+    hist = lambda key, text, action, actor, ev='': s._exec('INSERT INTO learned_history (Key,Text,Action,Actor,Ev,At) VALUES (?,?,?,?,?,?)',
+                                                           (key, text, action, actor, ev, '2026-10-01'))
+    gate = '- Gate pass renewals are the front desk\'s, not yours (about: the topic "gate pass renewal")'
+    hist('gate', gate, 'said', 'verdict:not_ours', 'msg70'); hist('gate', gate, 'strengthened', 'owner-verdicts', 'msg71, msg72')
+    hist('gate', gate, 'deleted', 'reflect')
+    hist('badge', '- Badge reprints are not yours', 'said', 'verdict:not_ours', 'msg80'); hist('badge', '- Badge reprints are not yours', 'forgotten', 'owner')
+    assert NOT_HIS not in memory.whole(s, 'triage')
+    memory.migrate(s)
+    back = memory.get(s, lost['key'])
+    assert back['Status'] == 'live' and back['N'] == 12 and back['Confirmed'], (back['Status'], back['N'], back['ev'])
+    assert f'{NOT_HIS} (about: the topic "{TOPIC}")' in memory.whole(s, 'triage'), 'triage reads it again on the next mail'
+    gone = next((r for r in memory.rows(s, memory.INFERRED) if r['ScopeKey'] == 'gate pass renewal'), None)
+    assert gone and gone['N'] == 3 and gone['Confirmed'] and gone['Scope'] == 'subject' and 'Gate pass renewals' in memory.whole(s, 'triage')
+    read = memory.whole(s, 'triage')
+    assert 'Badge reprints' not in read and 'Room booking' not in read and 'batch approvals' not in read, 'his Forget, his Wrong and a guess stay down'
+    was = [(r['Id'], r['Status'], r['N'], r['Ev']) for r in s._rows('SELECT * FROM memory_line ORDER BY Id')]
+    memory.migrate(s)
+    assert was == [(r['Id'], r['Status'], r['N'], r['Ev']) for r in s._rows('SELECT * FROM memory_line ORDER BY Id')], 'once'
+
+
+def test_the_old_document_is_read_in_with_every_press_behind_a_verdicts_line():
+    "LEARNED.md's verdict lines were read into the stores with the one press that first said them: five presses arrived as N=1."
+    s = _store()
+    raw = f'- {NOT_HIS} (about: the topic "{TOPIC}")'
+    for i, act in enumerate(('said', 'strengthened', 'strengthened', 'strengthened', 'strengthened')):
+        s._exec('INSERT INTO learned_history (Key,Text,Action,Actor,Ev,At) VALUES (?,?,?,?,?,?)',
+                ('parking', raw, act, 'verdict:not_a_task' if act == 'said' else 'owner-verdicts', f'msg{90 + i}', '2026-10-01'))
+    s.save_doc('learned', f'# LEARNED.md\n\n## What you care about\n{raw}\n', 'reflect')
+    memory.migrate(s)
+    r = next(r for r in memory.rows(s, memory.INFERRED) if r['ScopeKey'] == TOPIC)
+    assert r['N'] == 5 and r['Confirmed'] and NOT_HIS in memory.whole(s, 'triage'), (r['N'], r['Confirmed'])
+
+
+def test_triage_reads_what_his_presses_made_before_anything_a_model_inferred_about_a_topic():
+    "Past its cap the whole memory left out the oldest lines about one sender or topic first - his presses' line among them."
+    s = _store()
+    _pressed(s, 3)
+    for i in range(20): memory.infer(s, f'Vendor notice kind {i} is only for your information', f'notice {i}', [f'rv{i}a', f'rv{i}b', f'rv{i}c'],
+                                     scope='sender', key=f'notices{i}@vendor.example')
+    assert NOT_HIS in memory.whole(s, 'triage', cap=600), 'a tight read keeps what he did'

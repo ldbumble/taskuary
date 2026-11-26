@@ -8,7 +8,7 @@
   reflect    a batch over his episodes (episodes.py: what he did and wrote) -> lines that two or more of his own acts support; and the
              weekday he puts a sender's mail off to, counted (usual.put_off_habits)
   against    each of these may also say an act went AGAINST a line already learned (the model reads that, by the line's subject):
-             memory.weaken takes one episode off it
+             memory.weaken takes one episode off it - off a line his own presses made, only when the act is a press of his (teach)
   style_ws   how he writes in one workstream, from his own sent mail there (STYLE.md's marked section per workstream)
 
 Nothing here writes what he SAID - that is memory.remember's alone - and nothing written here is read as his word. A line goes into use by
@@ -115,7 +115,7 @@ def teach(store, kind: str, src: str, facts: str, scope: str = 'global', key: st
                         max_tokens=300))
         line = memory._ABOUT.sub('', str(a.get('line') or '')).strip().lstrip('-* ').strip()
         if stands and not stands(): return ''
-        if str(a.get('against') or '').strip(): memory.weaken(store, str(a['against']), src)
+        if str(a.get('against') or '').strip(): memory.weaken(store, str(a['against']), src, press=True)
         if not line: return ''
         only = a.get('only_this') is True and scope != 'global'
         subj = str(a.get('subject') or '').strip() or memory._key(line) + (f' · {key}' if only and key else '')
@@ -124,6 +124,10 @@ def teach(store, kind: str, src: str, facts: str, scope: str = 'global', key: st
         # model's subject groups them) - two Make it a task on Ray's mail and a Not a task on Gail's are three presses, and no habit
         if kind not in FOR_GOOD and not memory.subject_of(subj).endswith(memory.subject_of(tag := ' · '.join(['', kind, *([key] if key and scope == 'sender' else [])]))):
             subj += tag
+        # ...AND EVERY PRESS ON ONE TOPIC IS ONE LINE, COUNTED (the owner, 2026-11-26): the same press on the topic a line of that press is
+        # already kept about is that line seen again, whatever subject the model named this time
+        if only and scope == 'subject' and (was := next((r for r in memory.rows(store, memory.INFERRED) if r['Source'] == f'verdict:{kind}'
+                and r['Scope'] == 'subject' and memory.subject_of(r['ScopeKey']) == memory.subject_of(key)), None)): subj = was['Subject']
         got = memory.infer(store, line, subj, [src] if src else [], scope=scope if only else 'global', key=(key or '') if only else '',
                            source=f'verdict:{kind}', confirmed=kind in FOR_GOOD)
         return got.get('Text') or ''

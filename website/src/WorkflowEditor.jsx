@@ -4,7 +4,7 @@
 // asks first, when it is done, and when it runs. Every one of those is a field here, the actions sit in one place at the top,
 // and Run now is there for a workflow that is not saved yet (it saves, then runs).
 import React, { useEffect, useMemo, useState } from "react";
-import { Alert, Box, Button, Chip, CircularProgress, MenuItem, Select, Switch, TextField, Typography } from "@mui/material";
+import { Alert, Autocomplete, Box, Button, Chip, CircularProgress, MenuItem, Select, Switch, TextField, Typography } from "@mui/material";
 import PlayArrowIcon from "@mui/icons-material/PlayArrow";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import api from "./api";
@@ -100,6 +100,9 @@ export default function WorkflowEditor({ sourceId, sources, connectors, types, d
   useEffect(() => { if (!cur && draft) { setCfg({ type: "agent", access: "write", ...draft }); setSched(scheduleOf(draft)); } }, [draft, cur]);
   const [busy, setBusy] = useState("");
   const [msg, setMsg] = useState(null);
+  // his skills, for "Uses skill" - the one library (GET /api/skills); none read yet is no list, and the box still takes a name
+  const [skillList, setSkillList] = useState([]);
+  useEffect(() => { let on = true; api.get("/api/skills").then(({ data }) => { if (on) setSkillList(data?.data || []); }).catch(() => {}); return () => { on = false; }; }, []);
   // REMOVE IS AT ONCE (the owner, 2026-10-21): the Workflows list says "Removed <it> - Undo", and Recently deleted keeps it 30 days
   const remove = async () => {
     try { await removeNow(() => api.delete(`/api/sources/${cur.SourceId}`), "workflow", cfg.title || cur.Address); await reload(); onBack(); }
@@ -266,6 +269,19 @@ export default function WorkflowEditor({ sourceId, sources, connectors, types, d
             <Typography variant="caption" sx={{ color: FAINT }}>so the same reads and writes run as code, and the AI only judges</Typography>
           </Box>
         </Field>}
+        {/* A ROUTINE'S TWO PARTS (the owner, 2026-11-26): its own instructions above, and - optionally - one of his skills it uses to do
+            the job. A link to Reports -> Skills, never a copy: the skill is edited there. A coding routine names its CLI's own slash command */}
+        <Field label="Uses skill" hint="optional - one of your skills, read by the agent on every run. What it does, above, stays this routine's own.">
+          <Autocomplete size="small" freeSolo autoHighlight options={skillList.map((b) => b.slug)} value={cfg.skill || ""} data-tq-routine-skill=""
+            onChange={(e, v) => set("skill", String(v || "").replace(/^\//, ""))}
+            onInputChange={(e, v, why) => { if (why === "input") set("skill", v.replace(/^\//, "")); }}
+            renderOption={(props, o) => { const b = skillList.find((x) => x.slug === o); return (
+              <Box component="li" {...props} key={o} sx={{ display: "block !important" }}>
+                <Typography sx={{ fontSize: 13, fontWeight: 600, color: INK }}>{b?.title || o}</Typography>
+                <Typography variant="caption" sx={{ color: FAINT, display: "block" }} noWrap>{b?.description}</Typography>
+              </Box>); }}
+            renderInput={(p) => <TextField {...p} placeholder="none" />} sx={{ width: 380, maxWidth: "100%", bgcolor: "var(--tq-panel, #fff)" }} />
+        </Field>
         {brain && <Field label="Model" hint="the general agents' own unless this job is hard enough to need a stronger model or more thought">
           <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
             <Select size="small" displayEmpty value={cfg.model || ""} sx={{ minWidth: 280, bgcolor: "var(--tq-panel, #fff)", fontSize: 13 }}
@@ -313,10 +329,6 @@ export default function WorkflowEditor({ sourceId, sources, connectors, types, d
         <Box component="details" sx={{ mt: 1, borderTop: `1px solid ${BORDER}`, pt: 1.5 }}>
           <Box component="summary" sx={{ cursor: "pointer", color: DIM, fontSize: 12.5, fontWeight: 600 }}>More</Box>
           <Box sx={{ mt: 1.5 }}>
-            <Field label="Saved skill" hint="a slash command with the steps written down, run before the words above (optional)">
-              <TextField size="small" value={cfg.skill || ""} placeholder="weekly-user-review"
-                onChange={(e) => set("skill", e.target.value.replace(/^\//, ""))} sx={{ bgcolor: "var(--tq-panel, #fff)", width: 280 }} />
-            </Field>
             {steps && <Field label="When a step fails" hint="the AI repairs the step toward the goal; a fix that would change the goal, or send or write somewhere new, always waits for you">
               <Select size="small" value={cfg.repair || "auto"} onChange={(e) => set("repair", e.target.value)} sx={{ minWidth: 300, bgcolor: "var(--tq-panel, #fff)", fontSize: 13 }}>
                 {REPAIR.map(([v, w]) => <MenuItem key={v} value={v} sx={{ fontSize: 13 }}>{w}</MenuItem>)}

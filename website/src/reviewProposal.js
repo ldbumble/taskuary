@@ -335,7 +335,7 @@ export const proposalPresentation = (review) => {
     title: `Create the ${proposal.kind || "routine"}${proposal.title ? ` "${proposal.title}"` : ""}`,
     context: review.Reason || "Proposed · nothing is saved until you approve",
     lead: upFirst(String(proposal.why || proposal.title || "A routine")),
-    leadWhy: `Runs ${proposal.runs || "when you run it"}${proposal.based_on ? ` · built from ${proposal.based_on}` : ""}.`,
+    leadWhy: `Runs ${proposal.runs || "when you run it"}${proposal.skill ? ` · uses your skill ${proposal.skill}` : ""}${proposal.based_on ? ` · built from ${proposal.based_on}` : ""}.`,
     destinationLabel: "It does",
     destination: String(proposal.prompt || ""),
     approveLabel: APPROVE,

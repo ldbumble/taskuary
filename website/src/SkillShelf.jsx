@@ -62,6 +62,7 @@ export function SkillRow({ b, onOpen, onToggle }) {
         </Typography>
         <Typography variant="caption" sx={{ color: DIM, display: "block" }} noWrap>{b.description || "—"}</Typography>
         {!!b.uses?.length && <Typography variant="caption" sx={{ ...mono, color: FAINT, display: "block" }} noWrap>uses {b.uses.join(" · ")}</Typography>}
+        {!!b.used_by?.length && <Typography variant="caption" data-tq-skill-used-by="" sx={{ color: FAINT, display: "block" }} noWrap>used by {b.used_by.join(", ")}</Typography>}
       </Box>
       <Button size="small" variant="text" data-tq-skill-export={b.slug} startIcon={<FileDownloadOutlinedIcon sx={{ fontSize: 15 }} />}
         onClick={(e) => { e.stopPropagation(); exportSkill(b.slug).catch(() => {}); }} sx={{ flexShrink: 0, color: DIM, minWidth: 0 }}>Export</Button>

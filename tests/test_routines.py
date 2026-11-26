@@ -209,6 +209,22 @@ class ChangeTests(unittest.TestCase):
             self.assertEqual((cfg['prompt'][:20], cfg['daily_at'], cfg['based_on'], bool(workflows.is_workflow(cfg))),
                              ('Write one useful, no', '09:00', 'https://github.com/example/social-content-skill', kind == 'routine'))
 
+    def test_a_routine_an_agent_proposes_may_name_a_skill_of_his_it_uses_and_never_one_that_is_not_there(self):
+        from taskuary import proposals, skills
+        own = self.s.create_task({'Title': 'Set up the vendor chase', 'Kind': 'general', 'Status': 'open'}, 'o')
+        ask = {'action': 'save_routine', 'title': 'Chase late vendors', 'daily_at': '09:00', 'prompt': 'Chase every invoice 30 days late.', 'why': 'you asked'}
+        refused = []
+        self.assertIsNone(proposals.queue(self.s, own, {**ask, 'skill': 'vendor-chase'}, refused=refused))
+        self.assertIn("no skill is named 'vendor-chase'", refused[0])
+        skills.write('vendor-chase', '---\nname: vendor-chase\ndescription: Chase a late vendor invoice.\n---\nWrite once, politely, with the invoice number.\n')
+        try:
+            rv = proposals.queue(self.s, own, {**ask, 'skill': 'vendor-chase'})
+            with mock.patch('taskuary.docsync.sync_connections'): out = proposals.execute(self.s, self.s.get_review(rv['reviewId']), 'owner')
+            cfg = json.loads(self.s.get_source(out['source'])['ConfigJson'])
+            self.assertEqual((cfg['skill'], cfg['prompt']), ('vendor-chase', 'Chase every invoice 30 days late.'))     # the link, and its own words
+            self.assertIn('Write once, politely', workflows.definition(self.s, self.s.get_source(out['source']))['steps'])
+        finally: skills.delete('vendor-chase'); skills.purge(now=10 ** 12)
+
     def test_a_routine_whose_words_ask_for_drafts_by_hand_has_its_goal_and_done_when_changed_by_its_card(self):
         # the owner's live routine, 2026-11-20: its goal said "drafts ... for manual posting" and its done-when "three labeled drafts", so each
         # run left a text file - its own words are changed by the same card

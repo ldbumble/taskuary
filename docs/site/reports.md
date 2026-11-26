@@ -326,6 +326,9 @@ wording untouched; the old folder (`~/.taskuary/playbooks`) is still there as a 
   one). Nothing in an imported skill runs, and nothing it says - "send without asking", a list of
   allowed tools - lets an agent act without your press. It is marked *imported* on the shelf and
   to the agents.
+- A routine can **use a skill**: its editor's *Uses skill* names one of yours, and the agent reads
+  it on every run. The routine's own instructions - its script, or the words its AI steps work
+  by - stay the routine's; the skill is a link, edited here, and its row says which routines use it.
 - Each skill has an **on/off switch**: off keeps it, and triage stops matching it. Settings →
   How mail is sorted → **Use skills** turns them all off at once.
 

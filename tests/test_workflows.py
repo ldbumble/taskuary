@@ -34,6 +34,33 @@ def workflow(s, **cfg):
 
 
 class DefinitionTests(unittest.TestCase):
+    def test_a_routine_uses_a_skill_by_link_and_keeps_its_own_instructions(self):
+        """The owner, 2026-11-26: a routine is its own instructions and, optionally, a skill it uses. The skill is read from the one
+        library on every run - edited there, the next run reads the new words - and the routine's words are never turned into one."""
+        from taskuary import flow
+        home = __import__('pathlib').Path(tempfile.mkdtemp())
+        with mock.patch('taskuary.config.home', return_value=home):
+            skills._moved.clear(); skills.write('bill', BILL)
+            s = store(); sid = workflow(s, skill='bill')
+            d = workflows.definition(s, s.get_source(sid))
+            self.assertEqual(d['skill'], 'bill'); self.assertIn('match the vendor, post it', d['steps'])
+            said = workflows.brief(d, 'schedule', 'Monday 08:00')
+            self.assertIn('OBJECTIVE: ' + d['objective'], said); self.assertIn('match the vendor, post it', said)       # both parts, each its own
+            self.assertEqual(workflows.uses_skill(s), {'bill': ['Weekly access review']})
+            self.assertEqual([b['slug'] for b in skills.list_all()], ['bill'])                 # the routine's instructions made no skill
+            skills.write('bill', skills.read('bill').replace('match the vendor, post it', 'match the vendor, then ask Erin'))
+            self.assertIn('then ask Erin', workflows.definition(s, s.get_source(sid))['steps'])       # a link, never a copy
+            # ...and a skill named on ONE agent step is read for that step: it rode as a name alone
+            step = {'id': 's2', 'kind': 'agent', 'prompt': 'Post what the read found.', 'skill': 'bill'}
+            plain = workflow(s, title='Post the feed')
+            told = flow.agent_brief(s, s.get_source(plain), step, {'steps': {}, 'labels': {}}, [], 'schedule', 'Monday 08:00')
+            self.assertIn('OBJECTIVE: Post what the read found.', told); self.assertIn('then ask Erin', told)
+            self.assertEqual(workflows.definition(s, s.get_source(plain))['steps'], '')              # a routine with no skill uses none
+            from fastapi.testclient import TestClient
+            with mock.patch.object(server, 'store', s):
+                row, = TestClient(server.app).get('/api/skills').json()['data']
+            self.assertEqual((row['slug'], row['used_by']), ('bill', ['Weekly access review']))
+
     def test_a_workflow_is_read_as_a_definition_and_a_skill_stays_a_procedure(self):
         s = store(); sid = workflow(s)
         d = workflows.definition(s, s.get_source(sid))

@@ -10699,7 +10699,9 @@ def put_doc(name: str, body: DocBody):
 # may GET these; writing is the owner's (guard.py denies agent tokens) - an agent PROPOSES one.
 @app.get('/api/skills')
 def list_skills():
-    return {'data': [{k: v for k, v in b.items() if k != 'text'} for b in skills.list_all()],
+    from . import workflows
+    used = workflows.uses_skill(store)                  # ...and which routines use each (a routine's optional link to one)
+    return {'data': [{**{k: v for k, v in b.items() if k != 'text'}, 'used_by': used.get(b['slug'], [])} for b in skills.list_all()],
             'deleted': skills.recently_deleted(), 'keep_days': skills.KEEP_DAYS,
             'template': skills.TEMPLATE, 'folder': str(skills.folder())}
 

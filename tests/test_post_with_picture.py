@@ -174,6 +174,19 @@ class OnePress(unittest.TestCase):
         other = s.create_task({'Title': 'Another post', 'Kind': 'general', 'Status': 'open'}, 'owner')
         self.assertIsNone(outputs.take(s, other, row['path']))
 
+    def test_a_picture_a_card_carries_is_drawn_on_its_card_only_whichever_tool_showed_it_and_queued_or_drawn(self):
+        """Walks 22 and 23: an agent `show`ed the picture it then put on a post - and the picture stood in the chat with Download beside the
+        cards, the second post's too while its card waited behind the first. A file a card of the task carries is drawn on that card only."""
+        from taskuary import agenttools
+        s = server.store
+        work = outputs.work_folder(self.tid)
+        for n in ('x.png', 'linkedin.png', 'chart.png'): (work / n).write_bytes(PNG + n.encode())
+        agenttools.show_files(s, self.tid, [str(work / 'x.png'), str(work / 'linkedin.png'), str(work / 'chart.png')])
+        self.assertEqual(sorted(p['name'] for p in outputs.pages(s, self.tid)), ['chart.png', 'linkedin.png', 'x.png'])
+        for n in ('x.png', 'linkedin.png'):                        # ...two cards in a row: the second waits behind the first, drawn nowhere yet
+            self.assertEqual(self.propose(text=f'We close the month in four days ({n}).', image=str(work / n)).status_code, 200)
+        self.assertEqual([p['name'] for p in outputs.pages(s, self.tid)], ['chart.png'], 'only the file handed to him on purpose stays in the chat')
+
     def test_a_picture_outside_the_task_folder_is_refused(self):
         r = self.propose(text='Hi', image='../../secret.png')
         self.assertEqual(r.status_code, 422, r.text)

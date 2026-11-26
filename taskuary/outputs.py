@@ -564,8 +564,11 @@ def page_row(a: dict) -> dict:
 
 PAGES = ('shown', 'claude_artifact')
 def pages(store, tid: int) -> list:
-    "The pages task `tid`'s agents showed (agenttools.show_files) or published (claude_artifacts), as rows - each chat places them by its turns."
-    return [page_row(a) for a in store.list_task_artifacts(int(tid)) if a.get('Kind') in PAGES]
+    """The pages task `tid`'s agents showed (agenttools.show_files) or published (claude_artifacts), as rows - each chat places them by its turns.
+    NEVER A FILE A CARD CARRIES, whichever tool made or showed it and whether its card is drawn yet or queued (on_cards; walks 22 and 23: an
+    agent's `show` of a queued card's picture stood beside the cards with Download): that is drawn on its card only."""
+    cards = on_cards(store, tid)
+    return [page_row(a) for a in store.list_task_artifacts(int(tid)) if a.get('Kind') in PAGES and not (a['Kind'] == 'shown' and a.get('Name') in cards)]
 
 
 def find(store, query: str = '', kind: str = '', tid: int = None, limit: int = 8) -> list:

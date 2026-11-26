@@ -143,9 +143,15 @@ def _instrument(st, clock: Clock):
 
 
 def _guards(st, live_box):
+    from types import SimpleNamespace
     from taskuary import concierge, ingest, terminal
-    st.enter_context(mock.patch.object(terminal, 'live_sessions', return_value=[]))
-    st.enter_context(mock.patch.object(terminal, 'for_task', lambda tid, **k: {'sid': f's{tid}'} if live_box and int(tid) in live_box else None))
+    # a step's live agent is live to every reader: the dock's, the pile's (funnel.observe) and the task's own state (taskstate.live) - its row a
+    # running agent's, never the chat's done row (funnel.one_state)
+    info = lambda tid, **k: {'sid': f's{tid}', 'taskId': int(tid), 'alive': True, 'waiting': False}
+    st.enter_context(mock.patch.object(terminal, 'live_sessions', lambda *a, **k: [info(t) for t in live_box]))
+    st.enter_context(mock.patch.object(terminal, 'for_task', lambda tid, **k: info(tid) if live_box and int(tid) in live_box else None))
+    st.enter_context(mock.patch.object(terminal, 'session_for', lambda tid: SimpleNamespace(alive=True, started='', info=lambda details=False: info(tid))
+                                       if live_box and int(tid) in live_box else None))
     st.enter_context(mock.patch.object(concierge, 'stop_turn', lambda tid: bool(live_box) and int(tid) in live_box))      # the x's road, never a real session
     st.enter_context(mock.patch.object(ingest, '_spawn'))
     st.enter_context(mock.patch.object(concierge, '_compose_llm', return_value=lambda *a, **k: '{"kind": "report", "why": "scripted"}'))

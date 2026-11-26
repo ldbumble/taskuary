@@ -33,6 +33,30 @@ class LinkedIn:
 def stubbed(net): return mock.patch.multiple(linkedin.requests, get=net.get, post=net.post, put=net.put)
 
 
+def mp4(secs=12, size=80 * 1024):
+    "The bytes of an MP4 as its header says it: an ftyp, a moov whose mvhd runs `secs`, and a body that fills it to `size`."
+    import struct
+    ftyp = struct.pack('>I4s', 16, b'ftyp') + b'isom' + b'\0' * 4
+    mvhd = struct.pack('>I4sIIIII', 28, b'mvhd', 0, 0, 0, 1000, secs * 1000)
+    pad = size - len(ftyp) - 8 - len(mvhd) - 8
+    return ftyp + struct.pack('>I4s', 8 + len(mvhd), b'moov') + mvhd + struct.pack('>I4s', 8 + pad, b'mdat') + b'\0' * pad
+
+
+class LinkedInVideo(LinkedIn):
+    "...and its Videos API: an address per part, an ETag per part sent, the finalize that names them, the video read."
+    def post(self, url, **kw):
+        if 'videos?action=initializeUpload' in url:
+            self.calls.append(('POST', url, kw.get('json'))); n = kw['json']['initializeUploadRequest']['fileSizeBytes']
+            parts = [{'uploadUrl': f'https://upload.linkedin.test/v/{i}', 'firstByte': a, 'lastByte': min(a + 49999, n - 1)} for i, a in enumerate(range(0, n, 50000))]
+            return mock.Mock(ok=True, json=lambda: {'value': {'video': 'urn:li:video:V1', 'uploadToken': 'tok', 'uploadInstructions': parts}})
+        return super().post(url, **kw)
+    def put(self, url, **kw):
+        self.calls.append(('PUT', url, len(kw.get('data') or b''))); return mock.Mock(ok=True, headers={'etag': f'"e{url.rsplit("/", 1)[-1]}"'})
+    def get(self, url, **kw):
+        if '/rest/videos/' in url: self.calls.append(('GET', url)); return mock.Mock(ok=True, json=lambda: {'status': 'AVAILABLE'})
+        return super().get(url, **kw)
+
+
 class TheExecutor(unittest.TestCase):
     def test_a_picture_is_uploaded_then_named_on_the_post(self):
         f = outputs.folder(9001); f.mkdir(parents=True, exist_ok=True); (f / 'gas.png').write_bytes(PNG)
@@ -188,6 +212,41 @@ class OnePress(unittest.TestCase):
         for n in ('x.png', 'linkedin.png'):                        # ...two cards in a row: the second waits behind the first, drawn nowhere yet
             self.assertEqual(self.propose(text=f'We close the month in four days ({n}).', image=str(work / n)).status_code, 200)
         self.assertEqual([p['name'] for p in outputs.pages(s, self.tid)], ['chart.png'], 'only the file handed to him on purpose stays in the chat')
+
+    def test_a_video_rides_on_the_post_card_and_the_press_uploads_it_then_posts_with_it(self):
+        """The owner, 2026-11-26: "we have linkedin connected, no need for browser" - asked for a post with a screen recording, the card took a
+        picture only, the agent wrote the words to a file and went to the site with the video. A video LinkedIn takes rides on the card as a
+        picture does; the press sends it in the parts LinkedIn names, finalizes them in order, and posts with the video's urn."""
+        (outputs.folder(self.tid) / 'tour.mp4').write_bytes(mp4())
+        net = LinkedInVideo()
+        with stubbed(net):
+            r = self.propose(text='A tour of the availability view.', image='tour.mp4')
+            self.assertEqual(r.status_code, 200, r.text); self.assertEqual(net.calls, [])
+            rv = server.store.get_review(r.json()['review'])
+            self.assertEqual(json.loads(rv['DraftText'])['image'], 'tour.mp4')
+            out = verdicts.decide(server.store, rv, 'approve', 'A tour of the availability view.')
+        self.assertTrue(out['ok'], out)
+        said = [x[0] + ' ' + x[1].split('linkedin.com')[-1].split('linkedin.test')[-1] for x in net.calls]
+        self.assertEqual(said[-6:], ['POST /rest/videos?action=initializeUpload', 'PUT /v/0', 'PUT /v/1', 'POST /rest/videos?action=finalizeUpload',
+                                     'GET /rest/videos/urn%3Ali%3Avideo%3AV1', 'POST /rest/posts'])
+        self.assertEqual(sum(x[2] for x in net.calls if x[0] == 'PUT'), 80 * 1024, 'every byte of it, once')
+        done = next(x[2] for x in net.calls if x[0] == 'POST' and 'finalizeUpload' in x[1])['finalizeUploadRequest']
+        self.assertEqual(done, {'video': 'urn:li:video:V1', 'uploadToken': 'tok', 'uploadedPartIds': ['e0', 'e1']})
+        self.assertEqual(net.calls[-1][2]['content']['media']['id'], 'urn:li:video:V1')
+
+    def test_a_video_its_network_cannot_take_is_answered_with_that_fact_and_no_card_is_shown(self):
+        "A WebM screen recording, one too long, and a video on a network whose card carries none: each answered with what the network takes and what the file is, nothing raised."
+        f = outputs.folder(self.tid)
+        (f / 'tour.webm').write_bytes(b'\x1aE\xdf\xa3' + b'\0' * 90000); (f / 'long.mp4').write_bytes(mp4(secs=45 * 60)); (f / 'tour.mp4').write_bytes(mp4())
+        was = len(verdicts.unsent(server.store, self.tid))
+        r = self.propose(text='A tour.', image='tour.webm')
+        self.assertEqual(r.status_code, 422, r.text)
+        self.assertIn('LinkedIn takes MP4 (H.264) video; tour.webm is WEBM', r.json()['detail'])
+        self.assertNotIn('ffmpeg', r.text)                 # ...the fact, never a how-to: converting it is the agent's own work
+        r = self.propose(text='A tour.', image='long.mp4')
+        self.assertEqual(r.status_code, 422, r.text); self.assertIn('3 seconds to 30 minutes', r.text)
+        self.assertIn('not a video', proposals.picture_why(self.tid, {'type': 'x_post', 'image': 'tour.mp4'}))
+        self.assertEqual(len(verdicts.unsent(server.store, self.tid)), was, 'no card was shown')
 
     def test_a_picture_outside_the_task_folder_is_refused(self):
         r = self.propose(text='Hi', image='../../secret.png')

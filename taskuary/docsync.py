@@ -140,7 +140,7 @@ def agent_systems(store, tooled: bool = True) -> str:
 def act_cards(store) -> str:
     from . import scopes
     from .connectorcatalog import action_for, as_now, connected
-    from .proposals import MEDIA
+    from .proposals import MEDIA, VIDEO
     from .reports import REGISTRY, card_of
     try: cards = connected(store, failing=True)
     except Exception: return ''
@@ -149,7 +149,7 @@ def act_cards(store) -> str:
         mine = [f"`{f['key']}`" for f in act['fields'] if f.get('agent')]
         theirs = [f"`{f['key']}` ({' or '.join(str(c['value']) for c in f['choices'])})" for f in act['fields'] if f.get('setting')]
         return (f"; it takes {', '.join(mine)}" if mine else '') + (f"; {' and '.join(theirs)} come from the owner's defaults on the card" if theirs else '')
-    rows = [f"- {c.get('Name') or c['Type']} (connector_id {c['ConnectorId']}): {t} - {scopes.REACHES[t]}" + (', with a picture' if t in MEDIA else '')
+    rows = [f"- {c.get('Name') or c['Type']} (connector_id {c['ConnectorId']}): {t} - {scopes.REACHES[t]}" + (', with a picture or a video' if t in VIDEO else ', with a picture' if t in MEDIA else '')
             + takes(t) + as_now(c) for c in cards for t in sorted(REGISTRY) if t in scopes.REACHES and t not in ('mcp', 'graphql') and card_of(t) == c['Type']]
     return ('WHAT GOES OUT ON HIS CONNECTED CARDS - each a run_tool proposal by its type and connector_id, waiting for his press:\n' + '\n'.join(rows)) if rows else ''
 

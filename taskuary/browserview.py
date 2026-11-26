@@ -968,8 +968,9 @@ def hand_over(store, tid: int, what: str = '', site: str = '', sid: str = None, 
     # ...NOR, WHERE A SERVICE WITH A CARD IS NOT CONNECTED, BEFORE HIS PRESS ON ITS CARD HANDED THE ACT OVER (browsergate.card_first). A connected
     # one's sign-in, where reading his own page needs it, is his step like any other (the owner, 2026-11-25: "if it can read my posts, then it
     # should read it") - only its act is its card's (browsergate.card_site)
-    from .browsergate import card_first
-    if (fact := card_first(store, tid, state(sid, fresh=True).get('url'))): return {'ok': False, 'why': f'nothing was handed to him - {fact}'}
+    from .browsergate import card_act, card_first
+    url = state(sid, fresh=True).get('url')
+    if (fact := card_first(store, tid, url) or card_act(store, url, what)): return {'ok': False, 'why': f'nothing was handed to him - {fact}'}
     # ...A SITE NAMED IS A SIGN-IN ONLY ON A PAGE THAT ASKS ONE (walk 10: "Enter your date of birth" on signup.live.com, named with its site,
     # took the saved sign-in's road and answered "Taskuary is signing in" while the step went to him): a page read with no box a sign-in
     # fills is his turn

@@ -204,6 +204,10 @@ function Field({ f, onView }) {
     : <Row f={f}><Typography variant="body2" sx={{ color: INK }}>{(f.value || []).join(", ") || "none"}</Typography></Row>;
   if (f.type === "read") return <Row f={f}><Typography variant="body2" data-tq-field={f.key} sx={{ color: INK, fontWeight: 600, minWidth: 0, overflowWrap: "anywhere" }}>{f.value}</Typography>
     {f.note && <Typography variant="caption" sx={{ color: FAINT }}>{f.note}</Typography>}</Row>;
+  // ...A POST'S VIDEO PLAYS WHERE ITS PICTURE WOULD STAND (the owner, 2026-11-26): the same field, a player at the same width
+  if (f.type === "picture" && (f.file?.preview === "video" || /\.(mp4|m4v|webm|mov)$/i.test(String(f.value || "")))) return <Box component="video" controls preload="metadata"
+    data-tq-act-video={f.value} src={attUrl(f.file)} aria-label={f.alt || f.file?.name || "The post's video"}
+    sx={{ display: "block", width: "100%", height: "auto", maxHeight: "min(60vh, 560px)", mt: 0.75, borderRadius: "8px", background: "#000" }} />;
   if (f.type === "picture") return <>
     <Box component="img" data-tq-act-image={f.value} src={attUrl(f.file)} alt={f.alt || f.file?.name || ""} onClick={onView ? () => onView(f.file) : undefined}
       sx={{ display: "block", width: "100%", height: "auto", aspectRatio: "auto 1.91 / 1", maxHeight: "min(60vh, 560px)", objectFit: "cover", mt: 0.75, borderRadius: "8px",

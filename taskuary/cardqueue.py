@@ -233,6 +233,12 @@ def again_of(store, rid) -> int | None:
     return None
 
 
+def is_again(store, rid) -> bool:
+    "Card `rid` is a greyed card Taskuary raised again (keep) - its words are the earlier turn's, never a draft a later turn wrote."
+    return any(str(int(rid)) in [str(v) for v in (json.loads(a['Detail'] or '{}').get('kept') or {}).values()]
+               for a in store._rows("SELECT Detail FROM audit WHERE EntityType='task' AND Action='cards_kept' AND Detail LIKE ?", (f'%{int(rid)}%',)))
+
+
 def _card_status(r) -> str:
     from .conversation import _card
     return {'pending': 'it still waits for his press', 'superseded': 'taken back or replaced'}.get(s := _card(r)['status'], s.replace('_', ' '))

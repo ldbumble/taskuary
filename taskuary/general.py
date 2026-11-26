@@ -1734,7 +1734,9 @@ def file_summary(store, tid: int, summ, rid=None) -> None:
     if rid is not None:
         try:
             rv = store.pending_review(tid)
-            if rv and str(rv.get('DraftText') or '').strip(): summ['drafted'] = [{'review': int(rv['ReviewId'])}] if store.snap_draft(int(rv['ReviewId']), rid) else []
+            from . import cardqueue          # ...a card Taskuary raised again carries an earlier turn's words: this turn wrote none (keep)
+            if rv and str(rv.get('DraftText') or '').strip() and not cardqueue.is_again(store, int(rv['ReviewId'])):
+                summ['drafted'] = [{'review': int(rv['ReviewId'])}] if store.snap_draft(int(rv['ReviewId']), rid) else []
         except Exception as e: logger.debug(f'task {tid}: the turn draft was not kept with it - {e}')
     store.add_comment(tid, 'assistant', SUMMARY_TYPE, json.dumps(summ))
     if 'on_you' in summ: store.set_on_you(tid, summ['on_you'], 'assistant')     # no list said: the steps stay as they are

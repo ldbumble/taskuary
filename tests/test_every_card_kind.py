@@ -316,6 +316,22 @@ def test_his_answer_to_the_agents_own_question_greys_no_card_of_any_kind(w, kind
     assert all(proposals.passed(w.s.get_review(r)) for r in rids)
 
 
+def test_a_card_its_agent_can_still_keep_is_told_whenever_its_turn_ended(w):
+    """A contract run failed one time in a few (2026-11-26): the turn's answer fell in the second after his line, and the screen fact dropped
+    the greyed card its agent could still keep - told only while both stamps shared a second, which a live turn never does."""
+    rids = _waiting(w, WAITING[0])
+    _line(w, 'First something else.')
+    ws.record(w.s, w.tid, 'run1', 'turn_end', text='That is done.', source='api')
+    w.s.add_comment(w.tid, 'assistant', general.ASSISTANT_TYPE, 'That is done.')
+    def said(): return 'only where you keep it' in cardqueue.screen(w.s, w.tid)
+    assert said(), "the answer in his line's own second"
+    w.s._exec("UPDATE worker_event SET CreatedAt='2099-01-01 09:00:00' WHERE TaskId=? AND Kind='turn_end'", (w.tid,))
+    w.s._exec("UPDATE comment SET CreatedAt='2099-01-01 09:00:00' WHERE TaskId=? AND ActorType=?", (w.tid, general.ASSISTANT_TYPE))
+    cardqueue._SEEN.clear()
+    assert said(), "the answer a second later: still the agent's to keep, and still told"
+    assert cardqueue.keep(w.s, w.tid, ' + '.join(f'rv{r}' for r in rids), 'agent')['ok'] and not said(), 'kept: told as the card that waits now'
+
+
 @pytest.mark.parametrize('kind', WAITING)
 def test_a_card_his_line_greyed_stays_greyed_and_stands_again_only_by_its_agents_keep(w, kind):
     """The owner, 2026-11-26 ("Nothing comes back automatically ... if the reply is still the right choice after a clarifying question then of

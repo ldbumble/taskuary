@@ -527,7 +527,9 @@ def screen(store, tid: int, skip=()) -> str:
             elif ids & held: waiting.append(f'Raised, and behind the card in front - it comes forward at his press on that one: {n}')
             continue
         s, at = (_card(r)['status'] if r else 'approved'), clock(r.get('DecidedAt')) if r else ''
-        if s == 'passed': str(r.get('DecidedAt') or '') >= since and greyed(r, n)
+        # ...one its agent can still keep is told until it is kept, whenever its turn ended: by the stamps alone it was told only where the
+        # answer fell in his line's own second (a contract run in a few, 2026-11-26) - a live turn's never does, and the card was the agent's to keep unseen
+        if s == 'passed': (str(r.get('DecidedAt') or '') >= since or comes_back(store, r)) and greyed(r, n)
         elif s == 'failed': settled.append((r['DecidedAt'], f"Failed {at}, nothing went ({_flat(r.get('ActError') or r.get('DecideNote'))}): {n}"))
         elif s in ('approved', 'edited', 'sent'):
             got = _result(r) if r else ''

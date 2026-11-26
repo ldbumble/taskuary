@@ -265,7 +265,8 @@ def test_a_turns_draft_keeps_its_own_words_after_a_later_redraft():
     _, sess = turn(s, tid, f'Drafted it.\n{block()}', draft='Hi Gail, the run is Friday.')
     turn(s, tid, f'Redrafted it.\n{block()}', sess, draft='Hi Gail, the run moved to Thursday.')
     turn(s, tid, f'Nothing new on the draft.\n{block()}', sess)
-    rid, rid2 = [r['ReviewId'] for r in s._rows('SELECT ReviewId FROM review WHERE TaskId=? ORDER BY ReviewId', (tid,))]
+    # ...the third turn left the second draft as it was: it stands again as a fresh card under his line (cardqueue.keep), never a turn's draft
+    rid, rid2 = [r['ReviewId'] for r in s._rows('SELECT ReviewId FROM review WHERE TaskId=? ORDER BY ReviewId', (tid,))][:2]
     answers = [m for m in general.shown_history(s, tid) if m.get('summary')]
     assert [[d['text'] for d in m.get('drafts_then', [])] for m in answers] == [['Hi Gail, the run is Friday.'], ['Hi Gail, the run moved to Thursday.'], []]
     assert [m['summary'].get('drafted', []) for m in answers] == [[{'review': rid}], [{'review': rid2}], []]

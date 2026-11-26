@@ -347,5 +347,95 @@ class EveryPartOfAnAgentsStepTests(unittest.TestCase):
         self.assertNotIn(SSN, seen['q'])
 
 
+# ── WHAT A CARD'S HARNESS CLI SENDS (the owner, 2026-11-26): Codex or OpenCode reads a file with its own shell, and its next request carries it ──
+CODE = 'gw-access-code-0001'
+PICTURE = {'type': 'input_image', 'image_url': 'data:image/png;base64,iVBORw0KGgo'}
+
+
+class _Answer:
+    "The card's endpoint answering, in the pieces it sends."
+    def __init__(self, chunks, status=200): self.chunks, self.status_code, self.closed = chunks, status, False
+    headers = {'Content-Type': 'text/event-stream', 'Content-Length': '999', 'Set-Cookie': 'gw=1'}
+    def iter_content(self, chunk_size=None): return iter(self.chunks)
+    def close(self): self.closed = True
+
+
+class TheCardHarnessRelayTests(unittest.TestCase):
+    def _ask(self, body, path='responses', client=('127.0.0.1', 50000), auth=None, chunks=(b'ok',), headers=None):
+        "(the relay's answer, what the card's endpoint was sent - {} when nothing was, the card's id)"
+        from fastapi.testclient import TestClient
+        from taskuary import relay, server
+        s, seen = MemoryStore(), {}
+        cid = s.save_connector({'Type': 'hipaa_ai', 'Name': 'HIPAA AI', 'Secret': CODE, 'Active': 1,
+                                'ConfigJson': json.dumps({'base_url': 'https://gateway.example/v1', 'model': 'hydrogen'})}, 't')
+        def endpoint(method, url, **kw): seen.update(method=method, url=url, **kw); return _Answer(chunks)
+        with mock.patch.object(server, 'store', s), mock.patch('requests.request', endpoint):
+            r = TestClient(server.app, client=client).post(
+                f'/relay/card-{cid}/{path}', content=body if isinstance(body, bytes) else json.dumps(body),
+                headers={'Authorization': auth or f'Bearer {relay.token(server.cfg["server"], cid)}', 'Content-Type': 'application/json', **(headers or {})})
+        return r, seen, cid
+
+    def test_a_file_codex_opened_itself_goes_on_masked_and_its_calls_are_still_json(self):
+        args = json.dumps({'command': ['cat', 'intake.txt'], 'why': f'Erin Blake, SSN {SSN}, password=chirp-pass'})
+        body = {'model': 'hydrogen', 'stream': True, 'instructions': 'You are hydrogen.', 'input': [
+            {'type': 'message', 'role': 'user', 'content': [{'type': 'input_text', 'text': 'Book her first visit.'}, PICTURE]},
+            {'type': 'function_call', 'call_id': 'c1', 'name': 'shell', 'arguments': args},
+            {'type': 'function_call_output', 'call_id': 'c1', 'output': INTAKE}]}
+        r, seen, _ = self._ask(body)
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual((seen['method'], seen['url']), ('POST', 'https://gateway.example/v1/responses'))       # the card's own address, nowhere else
+        sent = seen['data'].decode('utf-8')
+        self.assertNotIn(SSN, sent); self.assertNotIn(DOB, sent)
+        went = json.loads(sent)['input']
+        self.assertIn('[redacted:ssn]', went[2]['output']); self.assertIn('12/01/2026', went[2]['output'])       # ...a bare date is a visit, and stays
+        self.assertEqual(json.loads(went[1]['arguments'])['command'], ['cat', 'intake.txt'])                    # still the JSON its call was
+        self.assertEqual(went[0]['content'], body['input'][0]['content'])                                       # his words and the picture as they were
+        # ...signed in to the endpoint with the card's own code, which the CLI never held - and none of the caller's own sign-ins ride on
+        h = {k.lower(): v for k, v in seen['headers'].items()}
+        self.assertEqual(h['authorization'], f'Bearer {CODE}'); self.assertNotIn('x-taskuary-token', h)
+        self.assertIs(seen['allow_redirects'], False)
+
+    def test_and_what_opencode_sends_the_same(self):
+        body = {'model': 'hydrogen', 'messages': [
+            {'role': 'user', 'content': 'Book her first visit.'},
+            {'role': 'assistant', 'content': None, 'tool_calls': [_call(1, 'read', filePath='intake.txt', note=f'born {DOB}')]},
+            {'role': 'tool', 'tool_call_id': 'c1', 'content': INTAKE}]}
+        _, seen, _ = self._ask(body, path='chat/completions')
+        sent = seen['data'].decode('utf-8')
+        self.assertEqual(seen['url'], 'https://gateway.example/v1/chat/completions')
+        self.assertNotIn(SSN, sent); self.assertNotIn(DOB, sent)
+        self.assertEqual(json.loads(json.loads(sent)['messages'][1]['tool_calls'][0]['function']['arguments'])['filePath'], 'intake.txt')
+
+    def test_a_request_with_nothing_to_take_out_goes_as_the_bytes_it_came(self):
+        raw = b'{"model": "hydrogen",  "input": "Book the visit for 12/01/2026."}'
+        _, seen, _ = self._ask(raw)
+        self.assertEqual(seen['data'], raw)
+
+    def test_the_answer_streams_back_byte_for_byte(self):
+        # ...split mid-character and mid-event, and saying a number of its own: the answer is the model's, handed on as it came
+        chunks = (b'event: response.output_text.delta\ndata: {"delta":"Erin \xc3', b'\xa9 - ' + SSN.encode() + b'"}\n\n', b'event: response.completed\ndata: {}\n\n')
+        r, _, _ = self._ask({'model': 'hydrogen', 'input': 'hello', 'stream': True}, chunks=chunks)
+        self.assertEqual(r.content, b''.join(chunks))
+        self.assertTrue(r.headers['content-type'].startswith('text/event-stream')); self.assertNotIn('gw=1', str(r.headers))
+
+    def test_only_this_computer_and_only_the_cards_own_agent(self):
+        from taskuary import relay, server
+        body = {'model': 'hydrogen', 'input': INTAKE}
+        for why, kw in (('another computer, with the right token', {'client': ('203.0.113.9', 50000)}),
+                        ('no token of ours', {'auth': 'Bearer sk-guessed-0001'}),
+                        ("the card's own code is not the relay's token", {'auth': f'Bearer {CODE}'}),
+                        ("another card's token", {'auth': f'Bearer {relay.token(server.cfg["server"], 999)}'})):
+            r, seen, _ = self._ask(body, **kw)
+            self.assertEqual(r.status_code, 403, why); self.assertEqual(seen, {}, why)
+        r, seen, cid = self._ask(body)
+        self.assertEqual(r.status_code, 200); self.assertNotIn(relay.token(server.cfg['server'], cid), json.dumps(seen['headers']))
+
+    def test_a_body_it_cannot_read_is_not_sent(self):
+        r, seen, _ = self._ask(b'\x28\xb5\x2f\xfd packed', headers={'Content-Encoding': 'zstd'})
+        self.assertEqual(r.status_code, 415); self.assertEqual(seen, {})
+        r, seen, _ = self._ask({'input': INTAKE}, path='../admin/keys')
+        self.assertNotEqual(r.status_code, 200); self.assertEqual(seen, {})
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -225,6 +225,8 @@ OWNER_ONLY = (
     (r'POST|DELETE', r'^/api/funnel/(\d+/(later|pin)|mutes/\d+|rerank|settle)$', "the owner's pile"),
     (r'POST', r'^/api/board/notes/\d+/read$', "the owner's read mark"),
     (r'POST', r'^/api/notes$', "a note to self is the owner's"),
+    # a card's harness CLI asking its model (relay.py): proven by that card's own relay token, which no session's token stands in for
+    (r'POST', r'^/relay/card-\d+/.+$', "an AI card's relay answers that card's own harness, by its relay token"),
     (r'POST', r'^/api/ingest/(poll|push)$', 'putting a message in the inbox would let an agent write its own next prompt'),
     (r'POST', r'^/api/(ai/defaults|setup/(adopt-brain|dismiss|seen|walk|walk/reset)|knowledge/reindex|calendar/prep(are)?|prompt-(image|file))$',
      "set-up, the brains, the index and the owner's own starts"),

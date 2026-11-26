@@ -9126,6 +9126,17 @@ def _is_loopback(host) -> bool:
     try: return ipaddress.ip_address(str(host or '').split('%')[0]).is_loopback
     except ValueError: return str(host or '').lower() == 'localhost'
 
+@app.api_route('/relay/card-{cid}/{path:path}', methods=['GET', 'POST'], include_in_schema=False)
+async def card_relay(cid: int, path: str, request: Request):
+    """An AI card's harness CLI asks its model HERE (relay.py): the request goes on to the card's own endpoint with its body masked, and the
+    answer comes back as it arrives. This computer only, and only the caller holding that card's relay token - no page, no other process."""
+    from . import relay
+    if not _is_loopback(request.client.host if request.client else '') or not relay.signed(cfg['server'], cid, request.headers):
+        logger.warning(f'relay: refused {request.method} card {cid} from {request.client.host if request.client else "nowhere"}')
+        return JSONResponse({'error': {'message': "This address answers only an AI card's own agent, on this computer.", 'type': 'taskuary_relay'}}, status_code=403)
+    status, headers, body = await run_in_threadpool(relay.send, store, cid, request.method, path, request.url.query, request.headers, await request.body())
+    return StreamingResponse(body, status_code=status, headers=headers)
+
 @app.get('/api/ms/callback', response_class=HTMLResponse)
 def ms_callback(request: Request, code: str = None, state: str = '', error: str = None, error_description: str = None,
                 admin_consent: str = None):

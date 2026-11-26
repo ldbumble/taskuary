@@ -858,7 +858,7 @@ def _call(store, tid: int, name: str, args: dict, doors: dict, skip=()) -> str:
             return f"Nothing was drawn: {fix['says'].lower()}. His chat shows the card that connects one ({fix['label']}); the picture can be drawn once he has. {card}"
         try: out = images.run_image_generate(store, a, task_id=tid)
         except RuntimeError as e: raise ValueError(refusal(f'nothing was drawn - {e}', 'say what the image model answered, or try again with another prompt'))
-        return f"Drew {out['name']} with {out['label']}. " + show_files(store, tid, [out['file']])
+        return f"Drew {out['name']} with {out['label']} - a file of this task, {out['file']}. " + show_files(store, tid, [out['file']])
     if name == 'tick': return _j(doors['tick'](tid, str(a['item']), a.get('done', True) is not False))
     if name == 'check_back': return _j(doors['check_back'](tid, str(a.get('when') or ''), str(a.get('what') or '')))
     if name == 'todos': return _j(doors['todos'](tid, a))

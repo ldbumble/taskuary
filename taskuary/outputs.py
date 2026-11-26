@@ -75,10 +75,10 @@ def take_in(tid: int, paths) -> list:
     return list(dict.fromkeys(out))
 
 
-def _copy_in(tid: int, p: Path) -> Path:
-    "`p` copied into task `tid`'s folder under its own name (an upload's stamp off) - the same bytes there already are that copy, never a second"
+def _copy_in(tid: int, p: Path, name: str = '') -> Path:
+    "`p` copied into task `tid`'s folder under its own name (an upload's stamp off; or `name`) - the same bytes there already are that copy, never a second"
     d = folder(tid); d.mkdir(parents=True, exist_ok=True)
-    stem, ext = Path(_STAMPED.sub('', p.name) or p.name).stem, p.suffix
+    stem, ext = Path(Path(name).name or _STAMPED.sub('', p.name) or p.name).stem, p.suffix
     q = next(d / f'{stem}{f"-{i}" if i else ""}{ext}' for i in range(1000) if not (d / f'{stem}{f"-{i}" if i else ""}{ext}').exists()
              or (d / f'{stem}{f"-{i}" if i else ""}{ext}').read_bytes() == p.read_bytes())
     if not q.exists(): shutil.copyfile(p, q)
@@ -95,6 +95,10 @@ def take(store, tid: int, raw):
     from . import readgate
     raw = str(raw or '').strip().strip('"\'')
     try:
+        # ...AND BY THE HANDLE ITS OWN TOOL GAVE IT (walk 23, 2026-11-25: draw_image answered only `shown:1`, propose refused that as "no picture
+        # this task may read", and every post card went up without its picture): a file the agent showed or drew is its task's by that too
+        if (m := re.fullmatch(r'shown:(\d+)', raw)) and (a := store.get_task_artifact(int(m[1]))) and a.get('TaskId') == int(tid) and a.get('Kind') == 'shown':
+            return _copy_in(int(tid), Path(a['Path']), str(a.get('Name') or ''))
         q = Path(raw).expanduser()
         p = (q if q.is_absolute() else work_folder(int(tid)) / q).resolve()
         if not raw or not p.is_file() or any(readgate.judge(store, tid, [str(p)])): return None

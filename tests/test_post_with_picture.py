@@ -152,6 +152,28 @@ class OnePress(unittest.TestCase):
         said = agenttools.rpc({'id': 1, 'method': 'tools/call', 'params': {'name': 'tick', 'arguments': {}}}, need)['result']['content'][0]['text']
         self.assertEqual(said, agenttools.refusal('`item` was not given', 'call tick again with it'))
 
+    def test_a_picture_the_agent_drew_rides_on_its_card_by_the_handle_its_tool_gave_and_is_drawn_there_only(self):
+        """Walk 23, 2026-11-25: draw_image drew the picture into the chat and answered only `shown:1`; propose refused that handle ("no picture
+        this task may read"), both post cards were queued with no picture, and the picture stood in the chat as a file of its own. A picture
+        the agent drew is a file of its task by the handle its tool gave, by its name and by the path its answer says - and once a card
+        carries it, the chat draws it on that card only, whichever tool showed it (the test below)."""
+        from taskuary import agenttools, images, outbound
+        s = server.store
+        drew = {'data': PNG + b'drawn', 'mime': 'image/png', 'provider': 'pictures', 'label': 'Pictures', 'model': 'm', 'prompt': 'a four-day close'}
+        with mock.patch.object(images, 'generate', return_value=drew), mock.patch.object(outbound, 'connect_fix', return_value=None):
+            said = agenttools._call(s, self.tid, 'draw_image', {'prompt': 'a four-day close'}, {})
+        row = json.loads(said.partition(agenttools.FILES_MARK)[2])[0]
+        self.assertTrue(row['path'].startswith('shown:'))
+        self.assertIn(str(outputs.folder(self.tid) / row['name']), said)                              # ...and its answer says where the file is
+        for handle in (row['path'], row['name'], str(outputs.folder(self.tid) / row['name'])):
+            r = self.propose(text='We close the month in four days.', image=handle)
+            self.assertEqual(r.status_code, 200, f'{handle}: {r.text}')
+            f = outputs.named(self.tid, json.loads(s.get_review(r.json()['review'])['DraftText'])['image'])
+            self.assertTrue(f and f.read_bytes() == PNG + b'drawn', handle)
+        # ...and a handle of another task's picture is no file of this one
+        other = s.create_task({'Title': 'Another post', 'Kind': 'general', 'Status': 'open'}, 'owner')
+        self.assertIsNone(outputs.take(s, other, row['path']))
+
     def test_a_picture_outside_the_task_folder_is_refused(self):
         r = self.propose(text='Hi', image='../../secret.png')
         self.assertEqual(r.status_code, 422, r.text)

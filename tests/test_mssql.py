@@ -4,6 +4,8 @@ actual SQL Server needed, so these run anywhere (CI included).
 import unittest
 from unittest import mock
 from taskuary import mssql
+import importlib.util
+HAS_SA = importlib.util.find_spec('sqlalchemy') is not None     # ...a connection string runs only through sqlalchemy: without it nothing opens at all
 
 
 class FakeCursor:
@@ -84,6 +86,7 @@ class WhereItConnectsIsTheCards(unittest.TestCase):
         q = query_only({'type': 'mssql', 'query': 'SELECT 1', 'dsn': 'sqlite:///x.db', 'driver': 'D};Database=x;{', 'auth': 'windows', 'conn_str': 'DSN=x'})
         self.assertEqual(q, {'type': 'mssql', 'query': 'SELECT 1'})
 
+    @unittest.skipUnless(HAS_SA, 'sqlalchemy is not installed')
     def test_a_local_file_is_never_a_sql_server(self):
         import sqlite3, tempfile
         from pathlib import Path
@@ -92,6 +95,7 @@ class WhereItConnectsIsTheCards(unittest.TestCase):
         for dsn in (f'sqlite:///{p.as_posix()}', 'sqlite://', f'duckdb:///{p.as_posix()}'):
             with self.assertRaisesRegex(RuntimeError, 'never a database file'): mssql.run_report({'dsn': dsn, 'query': 'SELECT v FROM secrets'})
 
+    @unittest.skipUnless(HAS_SA, 'sqlalchemy is not installed')
     def test_a_saved_dsn_runs_on_the_one_road_and_only_reads(self):
         from taskuary import db
         seen = []
@@ -100,6 +104,7 @@ class WhereItConnectsIsTheCards(unittest.TestCase):
             with self.assertRaises(ValueError): mssql.run_report({'dsn': 'mssql+pyodbc://erin@sql.northwind.example/ledger', 'query': 'DROP TABLE bills'})
         self.assertEqual((head, seen), ('1 row', [('mssql+pyodbc://erin@sql.northwind.example/ledger', False)]))
 
+    @unittest.skipUnless(HAS_SA, 'sqlalchemy is not installed')
     def test_no_connection_string_opens_taskuarys_own_database(self):
         from taskuary import config, db
         with self.assertRaisesRegex(RuntimeError, 'not a report source'):

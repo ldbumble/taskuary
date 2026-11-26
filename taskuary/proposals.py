@@ -128,6 +128,10 @@ ACTIONS = {
     # A CALL ON AN ACCOUNT OF ANOTHER PROFILE (workstreams.move_card, the owner 2026-11-26): raised by the wall, never an agent's marker - his
     # press moves the task there, as the task's own picker does (workstreams.set_task)
     'move_profile': ('move this task to another profile', ('profile',), None),
+    # THE AGENT'S QUESTIONS, ASKED TOGETHER (the owner, 2026-11-26: "one that includes interview ... and asks you questions"): raised by the
+    # ask_owner door, never an agent's marker - one card holding each question with its box or its choices, his one press his answer to all of
+    # them; nothing is raised under it while it waits (cardqueue.asking), and its agent hears every answer once (card.carries_on)
+    'questions': ('answer its questions', ('questions',), None),
 }
 FAILED_NOTE = 'failed'      # a pressed act that failed: settled, its error kept (ActError) - its agent sets up what goes next
 HELD_ACTS = ('browser_act', 'shell_act', 'desktop_act', 'page_step')     # raised by a hook before the act ran - never an agent's marker
@@ -149,7 +153,7 @@ def _gate(a: str):
 # WHAT NO AGENT MAY ASK FOR, AND THE MARKS NONE MAY PUT ON ITS OWN ASK - one list for both doors: the marker (parse) and the tool
 # (agenttools.proposal_of). They were two, and had drifted (the spine audit, 2026-11-09): the tool's did not name the held steps, so an agent
 # could file a "held step" of its own - a command of its choosing, on the card the owner reads as one Taskuary stopped
-NOT_ASKED = ('merge_pr', 'close_item', 'repair_workflow', 'change_setup', 'use_desktop', 'start_task', 'switch_ai', 'rerun_report', 'use_repo', 'move_profile', *HELD_ACTS)
+NOT_ASKED = ('merge_pr', 'close_item', 'repair_workflow', 'change_setup', 'use_desktop', 'start_task', 'switch_ai', 'rerun_report', 'use_repo', 'move_profile', 'questions', *HELD_ACTS)
 MARKS = ('closeout', 'flow_run')
 
 # A POST IS DRAWN AS THE POST (the owner, 2026-11-05: "it's not showing the post and the image as a linkedin post and asking me if i want to
@@ -270,8 +274,39 @@ def cards_waiting(store) -> int:
     return n
 
 
+# ── the agent's questions, one card (ACTIONS 'questions') ────────────────────────────────────────────────────────────────────────────────
+ASKS, ASKS_MIN, ASKS_MAX = 'questions', 2, 6
+def asks_of(p: dict) -> list:
+    "A questions card's questions as given: [{question, choices}] - whatever was filed that is not one is left out."
+    qs = (p or {}).get(ASKS)
+    flat = lambda x: ' '.join(str(x or '').split())
+    return [{'question': flat(q.get('question'))[:300], 'choices': [c for c in (flat(c)[:80] for c in q.get('choices') or [] if not isinstance(c, (dict, list))) if c][:6]}
+            for q in (qs if isinstance(qs, list) else []) if isinstance(q, dict) and flat(q.get('question'))]
+def asks_card(question, qs) -> tuple:
+    "(the card ask_owner's `questions` make, '') - or (None, what to give instead)."
+    p = {'action': ASKS, ASKS: asks_of({ASKS: qs}), **({'title': t} if (t := ' '.join(str(question or '').split())[:200]) else {})}
+    n = len(p[ASKS])
+    if n < ASKS_MIN or n > ASKS_MAX or n != len(qs):
+        return None, (f'`questions` holds {ASKS_MIN}-{ASKS_MAX}, each {{question, choices}} with its `question` in words - {len(qs)} came, {n} of them readable; '
+                      'one question alone is `question`, and more than six are the six the work hangs on')
+    return p, ''
+def asks_waiting(store, tid) -> list:
+    "The questions cards of task `tid` that wait for his answers."
+    return [r for r in store._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action' AND Status='pending' ORDER BY ReviewId", (int(tid),)) if _action(r) == ASKS]
+def answers_of(p: dict, fields: dict = None) -> list:
+    "His answer to each question of the card, in its order - '' where he left one empty."
+    got = (fields or {}).get('answers') if isinstance(fields, dict) else None
+    got = [' '.join(str(a or '').split())[:2000] if not isinstance(a, (dict, list)) else '' for a in (got if isinstance(got, list) else [])]
+    return [(got[i] if i < len(got) else '') for i in range(len(asks_of(p)))]
+def answered(result) -> str:
+    "What he answered, a line a question - as its agent is told it and its card keeps it (the receipt's result)."
+    rows = (result or {}).get('answers') if isinstance(result, dict) else None
+    return '\n'.join(f"{i}. {a.get('question')} - {a.get('answer') or '(left empty)'}" for i, a in enumerate(rows or [], 1) if isinstance(a, dict))
+
+
 def as_left(p: dict, final_text, fields: dict = None) -> dict:
     "The proposal as he left its card at the press: a change's boxes (workflows.edit_change), else an act's words and choices (_edited)."
+    if p.get('action') == ASKS: return {**p, 'answers': answers_of(p, fields)}
     if p.get('action') in CHANGES:
         from . import workflows
         return workflows.edit_change(p, fields)
@@ -708,7 +743,8 @@ def queue(store, task_id: int, p: dict, actor='agent', refused: list | None = No
               f"held before it ran, {HELD_IN[p['action']]}: {p.get('what') or ('a step' if p['action'] == 'shell_act' else p.get('command'))}"
               + (f" - {p['why']}" if p.get('why') else '') if p['action'] in HELD_ACTS else
               f"finishing it: {'merge pull request #' + str(p.get('number')) if p['action'] == 'merge_pr' else trackers.words(p) if p['action'] == 'close_item' else 'close the issue it came from'}"
-              if p.get('closeout') else f"the {'workflow asks' if actor == 'workflow' else 'agent proposes'} to {said}" + (f" - {p['why'][:200]}" if p.get('why') else ''))
+              if p.get('closeout') else p.get('title') or f"{len(asks_of(p))} questions from the agent" if p['action'] == ASKS       # ...its own heading: no act is proposed
+              else f"the {'workflow asks' if actor == 'workflow' else 'agent proposes'} to {said}" + (f" - {p['why'][:200]}" if p.get('why') else ''))
     rid = store.add_review({'TaskId': task_id, 'Kind': 'action', 'Status': 'pending', 'DraftText': json.dumps(p), 'Reason': reason, 'NextStep': then[:300] or None})
     store.audit('review', rid, 'proposed', actor, detail={'action': p['action']})
     logger.info(f'task {task_id}: proposal queued - {p["action"]} (rv{rid})')
@@ -1162,6 +1198,7 @@ def execute(store, rv: dict, actor='owner', final_text: str = None, skip_checks:
 
 def _run(store, rv: dict, p: dict, tid, a: str, actor: str, edited, skip_checks: bool) -> dict:
     "The act itself, for execute."
+    if a == ASKS: return {'answers': [{'question': q['question'], 'answer': w} for q, w in zip(asks_of(p), p.get('answers') or answers_of(p))]}
     if a in ('land', 'open_pr', 'push_direct'):
         from . import ci
         fn = {'land': ci.land, 'open_pr': ci.open_for_task, 'push_direct': ci.push_direct}[a]

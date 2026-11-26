@@ -46,6 +46,7 @@ import { draftCanSend, useCapabilities } from "./capabilities.js";
 import { blankAsk, blankRefusal, blankSpans } from "./blanks.js";
 import { outputRow } from "./taskOutputs.js";
 import { ReviewCard } from "./Artifact.jsx";
+import { answeredAny, answersFor, answersOf, askFields } from "./questionsCard.js";
 const hint = btnHint;
 
 // What they wrote, above what we would say back. The queue used to show only the draft: you
@@ -176,6 +177,9 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
   // ...a change's new words as he leaves them, box by box (proposals.as_left saves exactly these), and its marks of where they change on or off
   const [words2, setWords2Now] = useState(() => heldOf(r)?.words ?? {}), [marksOn, setMarksOn] = useState(true);
   const setWords2 = (f) => { const n = f(words2); hold(r, { words: Object.keys(n).length ? n : null }); setWords2Now(n); };
+  // ...and his answers to the agent's questions, by place (questionsCard.js), held as his other edits are
+  const [answers, setAnswersNow] = useState(() => heldOf(r)?.answers ?? []);
+  const answer = (i, v) => { const n = [...answers]; n[i] = v; hold(r, { answers: answeredAny(n) ? n : null }); setAnswersNow(n); };
   const rNow = useRef(r); rNow.current = r;
   useEffect(() => { const f = (id) => { if (id !== rNow.current.ReviewId) return; const e = heldOf(rNow.current); setTextNow(e?.text ?? null); setCcNow(e?.cc ?? null);
     setBccNow(e?.bcc ?? null); setSubjNow(e?.subject ?? null); };
@@ -408,7 +412,9 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
           ...(closesIt && shut && verb === "approve" ? { closes: true } : {}),
           ...(always && verb === "approve" ? { always: true } : {}),
           // ...a change card's boxes he changed, by their keys (workflows.edit_change): what he edited is what is saved
-          ...(verb === "approve" && Object.keys(changedWords).length ? { fields: changedWords } : {}) }), data = out.data;
+          ...(verb === "approve" && Object.keys(changedWords).length ? { fields: changedWords } : {}),
+          // ...and his answers to the agent's questions, one a question (proposals.answers_of)
+          ...(verb === "approve" && proposal?.asks ? { fields: { answers: answersFor(proposalFrom(r), answers) } } : {}) }), data = out.data;
       // NO ANSWER IN A MINUTE is not "nothing was sent": the server may be sending still. The card reads the review again and its
       // DeliveryState draws Sending… or Check delivery (reviewDeliveryState) - the check it already has, not a line of ours
       if (!data) { if (out.kind === "unknown") onChanged?.(); else setErr(out.why || "That didn't go through - nothing was sent. Try the button again."); setBusy(false); return; }
@@ -555,9 +561,9 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
         why: blocked ? gh.reason.split(" - ")[0] : sendable && !words.trim() ? "write the reply first" : "" },
       ...(co.alt ? [{ id: no("alt"), label: altSends ? `${co.alt.label} & send your text` : co.alt.label, tone: "s", title: altTitle, disabled: off, run: () => decideBoth(co.alt.verb) }] : []),
     ] : proposal ? [
-      { id: no("approve"), label: busy ? sentOr(proposal.busyLabel) : proposal.approveLabel, tone: "p", disabled: off || (proposal.kind === "closeout" && blocked), run: () => decide("approve"),
-        why: proposal.kind === "closeout" && blocked ? gh.reason.split(" - ")[0] : "",
-        title: proposal.kind === "closeout" && blocked ? gh.reason : proposal.kind === "skill" ? "Save this process in Reports → Skills; nothing is sent to the sender"
+      { id: no("approve"), label: busy ? sentOr(proposal.busyLabel) : proposal.approveLabel, tone: "p", disabled: off || (proposal.kind === "closeout" && blocked) || (!!proposal.asks && !answeredAny(answers)), run: () => decide("approve"),
+        why: proposal.kind === "closeout" && blocked ? gh.reason.split(" - ")[0] : proposal.asks && !answeredAny(answers) ? "answer a question first" : "",
+        title: proposal.asks ? "Sends your answers to the agent, which goes on from them" : proposal.kind === "closeout" && blocked ? gh.reason : proposal.kind === "skill" ? "Save this process in Reports → Skills; nothing is sent to the sender"
           : proposal.kind === "closeout" ? `${proposal.approveLabel} - the text above goes with it` : "Run the proposed action; nothing is sent to the sender" },
       // ...A ROUTINE'S OWN WRITE STEP can be approved for good (the owner, 2026-11-25): this step, as saved, runs unpressed on its later runs
       ...(proposalFrom(r)?.flow_run?.key ? [{ id: no("always"), label: "Always approve this step", tone: "s", disabled: off, run: () => decide("approve", false, undefined, false, true),
@@ -670,6 +676,8 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
     // ...A CHANGE TO SOMETHING STORED (reviewProposal.changeOf): what else it changes as facts, then its new words whole, each its own box, marked
     // where they change - and the switch for the marks, where there is a before to mark against
     ...(proposal?.rows || []).map((x, i) => ({ key: `row-${i}`, type: "read", label: x.label, value: x.was ? `${x.was} → ${x.now}` : x.now })),
+    // ...THE AGENT'S QUESTIONS, each a pick and a line of his (questionsCard.js) - and, pressed, what he answered where it stood
+    ...(proposal?.asks ? askFields(proposalFrom(r), done ? answersOf(receiptOf(r)) : answers, shut || off ? null : answer) : []),
     ...changeTexts.map((t) => ({ key: t.key, type: "change", label: t.label, was: t.was, value: words2[t.key] ?? t.now, marks: marksOn, editable: !(off || shut),
       onChange: (v) => setWords2((w) => ({ ...w, [t.key]: v })) })),
     ...(changeTexts.some((t) => t.was) || proposal?.was ? [{ key: "marks", type: "fold", label: marksOn ? "Hide what changed" : "Show what changed", open: marksOn, onToggle: () => setMarksOn((o) => !o) }] : []),
@@ -683,7 +691,7 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
     // ...AND THE VERSIONS ITS AGENT GAVE OF IT ARE A PICK ON THIS ONE CARD (versionsOf; walk 22, 2026-11-25: "Yes - Thursday" and "No - keep Friday"
     // stood as one card holding only the last): the one picked fills the box, his to change, and Send sends the box
     ...(!shut && !proposal ? versionPick(versionsOf(r), value, !(off || delivery.frozen), setText) : []),
-    ...(shut ? (sp?.text || (over && (r.FinalText || r.DraftText)) ? [{ key: "draft", type: "text", value: sp?.text || String(r.FinalText || r.DraftText).slice(0, 500), clamp: true, dim: over }] : [])
+    ...(proposal?.asks ? [] : shut ? (sp?.text || (over && (r.FinalText || r.DraftText)) ? [{ key: "draft", type: "text", value: sp?.text || String(r.FinalText || r.DraftText).slice(0, 500), clamp: true, dim: over }] : [])
       : [{ key: "draft", type: "text", box: true, label: "Reply draft", value, ...(proposal?.was ? { type: "change", label: "The skill will say", was: proposal.was, marks: marksOn } : {}), editable: !(off || delivery.frozen || proposal?.readOnly), onChange: (v) => setText(v), marks: blanks,
         spin: drafting, boxRef: draftRef, hidden: (proposal?.folded && !cmdOpen) || proposal?.bare,
         placeholder: proposal?.kind === "closeout" ? proposal.placeholder : isCal ? "A note with your answer - or leave it empty" : drafting ? "Drafting…" : r.DraftText ? "" : proposal ? "Proposal details unavailable" : "No draft yet — write the reply here" }]),

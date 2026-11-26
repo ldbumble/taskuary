@@ -152,6 +152,7 @@ def _card(e) -> str:
         said = ('he changed your words and sent it' if s == 'edited' else 'he pressed Send - it was sent') if d == 'sent' else \
                f'{CARD[s]} - it was done' if e.get('act') else CARD[s]
         if d == 'sent' and e.get('to'): said += f" to {', '.join(e['to'])}" + (f", copying {', '.join(e['cc'])}" if e.get('cc') else '')
+        if e.get('answers'): said = f"he answered:\n{e['answers']}"
         if e.get('result'): said += f" ({_flat(e['result'], 300)})"
         if e.get('final'): said += f"; what went: \"{_flat(e['final'], 600)}\""
     elif s in CARD: said = CARD[s]
@@ -248,9 +249,10 @@ def card(store, r: dict) -> None:
     final = went if r.get('Kind') != 'action' and pressed and went.split() and (snap.split() != went.split() if snap else r.get('Status') == 'edited') else ''
     try: result = (json.loads(r.get('FinalText') or '{}') or {}).get('result') if r.get('Kind') == 'action' else None
     except (TypeError, ValueError, AttributeError): result = None
+    answers = proposals.answered(result)             # ...a questions card's: each answer whole, never a cut of its record
     body = dict(rid=rid, act=r.get('Kind') == 'action', what=label, status=r.get('Status'), delivery=r.get('DeliveryState'), error=err.rstrip('. '),
                 cut=err.startswith(ACT_CUT), note=r.get('DecideNote'), reason=r.get('Reason') if r.get('DeliveryState') in general.NOT_GONE else '',
-                by=r.get('DecidedBy'), final=final, result=str(result)[:300] if result else '', words=_words(r) if r.get('Status') == 'pending' else '',
+                by=r.get('DecidedBy'), final=final, result=str(result)[:300] if result and not answers else '', **({'answers': answers} if answers else {}), words=_words(r) if r.get('Status') == 'pending' else '',
                 back=bool(olds) and r.get('Status') == 'pending' and not r.get('DeliveryState') and not err, **_went(r),
                 **({'until': proposals.UNTIL} if proposals.comes_back(store, r) else {}))
     if olds and _card(olds[-1]) == _card(body): return

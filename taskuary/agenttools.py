@@ -151,8 +151,10 @@ TOOLS = {
                      'check_back': {'type': 'object', 'properties': {'when': _STR, 'what': _STR}}}, ('did',)), ('GET', '/api/tasks/1')),
     'ask_owner': ('own', "Ask the owner the one fact or decision only they can give, with your recommended answer. It stands "
                          "until answered, closed or withdrawn; the answer comes to you. choices: short answers for a pick. "
+                         "questions: 2-6 on one card, answered together with one press (`question` heads it). "
                          "withdraw takes it back.",
                   _S({'question': _STR, 'choices': {'type': 'array', 'items': _STR}, 'withdraw': {'type': 'boolean'},
+                      'questions': {'type': 'array', 'items': {'type': 'object', 'properties': {'question': _STR, 'choices': {'type': 'array', 'items': _STR}}}},
                       'card': {'type': 'string', 'description': 'the card it is about (rv<id>), if any'}}), ('GET', '/api/tasks/1')),
     'skills': ('read', "How this company does each kind of job, written by the owner: with no `name`, the list of skills, each with its "
                           "description; with a `name`, that skill's SKILL.md whole. Read-only.",
@@ -908,11 +910,27 @@ def _call(store, tid: int, name: str, args: dict, doors: dict, skip=()) -> str:
         return 'Kept - it shows on the task when your answer is filed.' + (_end_check(store, tid, a['check_back'], doors, skip) if a.get('check_back') else '')
     if name == 'ask_owner':
         from . import selfclose, workerstate
+        from . import cardqueue, proposals
         if a.get('withdraw') is True:
             had, gone = selfclose.asks_now(tid), workerstate.let_go(store, tid, 'the agent took the question back')
             selfclose.drop_asks(tid)
+            # ...and its questions card, greyed where it stood as any card its agent takes back
+            gone += [cardqueue.what(store, {'rids': [r['ReviewId']], 'rows': [r]}) for r in proposals.asks_waiting(store, tid)
+                     if store.decide_review(r['ReviewId'], 'superseded', None, 'agent', note='the agent took its questions back')]
             if had and not gone: gone = ['the question you asked in this turn']
             return f"Withdrawn: {'; '.join(gone)}" if gone else 'No question of yours stands on the task - nothing to withdraw.'
+        # SEVERAL, ASKED TOGETHER, ARE ONE CARD (proposals 'questions'): his one press answers them all, and it is the question that stands -
+        # one alone is the plain question it always was
+        if isinstance(qs := a.get('questions'), list) and len(qs) == 1 and isinstance(qs[0], dict): a, qs = {**a, **qs[0]}, None
+        if isinstance(qs, list) and qs:
+            if cardqueue.asking(store, tid):
+                raise ValueError(refusal('a question of yours to the owner already stands - nothing was raised', 'wait for his answer, or take it back with withdraw: true and ask these'))
+            p, why = proposals.asks_card(a.get('question'), qs)
+            if not p: raise ValueError(refusal(why, 'call ask_owner again with them so'))
+            if not (q := proposals.queue(store, int(tid), p, 'agent', refused=(miss := []))):
+                raise ValueError(refusal(miss[0] if miss else 'the card could not be raised', 'go on with what does not hang on his answers'))
+            return (f"Asked - your {len(p[proposals.ASKS])} questions stand as one card (rv{q['reviewId']}) for his answers; they come to you together at his press, "
+                    "and nothing is raised under it until then.")
         if not str(a.get('question') or '').strip(): raise ValueError('`question` is empty - write the one thing you need from the owner')
         selfclose.keep_mark(tid, 'ask', selfclose.ask_mark(a['question'], a.get('choices') if isinstance(a.get('choices'), list) else ()))
         # ...asked about a card of this task, his press on that card answers it (card.asked_about)

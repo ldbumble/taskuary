@@ -1,5 +1,6 @@
 import { label } from "./buttons.js";
 import { whyFailed } from "./stepWhy.js";
+import { asksLine, asksOf, isAsks } from "./questionsCard.js";
 
 export const proposalFrom = (review) => {
   if (review?.Kind !== "action") return null;
@@ -88,6 +89,7 @@ export const reviewText = (review) => {
   // said "agent-browser click @e12" three times over (2026-10-25)
   if (["browser_act", "shell_act", "desktop_act"].includes(proposal?.action)) return proposal.command ? `Approve runs: ${proposal.command}` : proposal.what || "";
   if (proposal?.action === "page_step") return "";             // ...his step is the card's own line: no box of words under it
+  if (isAsks(proposal)) return "";                              // ...and its questions are its fields (questionsCard.js)
   if (PAGES.has(proposal?.action) && proposal.text) return proposal.text;
   // ...AND NO CARD SHOWS ITS OWN JSON (the card round, 2026-11-12: a setting's change stood as `{"action": "settings", "changes": [...]}` in a
   // box he could type into): any other proposal's box holds what it carries, in words - or nothing, and the card draws no box (`bare`)
@@ -378,6 +380,20 @@ export const proposalPresentation = (review) => {
     busyLabel: "saving…",
     rejectLabel: "Dismiss",
   };
+  // THE AGENT'S QUESTIONS, ASKED TOGETHER (proposals 'questions'): each its own field, one press that sends every answer
+  if (isAsks(proposal)) return {
+    kind: "questions",
+    title: proposal.title || "The agent has a few questions",
+    lead: proposal.title || "The agent has a few questions",
+    leadWhy: asksLine(proposal),
+    destination: "",
+    asks: asksOf(proposal),
+    approveLabel: "Send answers",
+    busyLabel: "sending your answers…",
+    rejectLabel: "Dismiss",
+    readOnly: true,
+    bare: true,
+  };
   // A SETTING THE AGENT ASKS TO CHANGE (proposals 'settings'): which one and to what, in words, and why - Approve changes exactly that
   if (proposal?.action === "settings") return {
     kind: "action",
@@ -428,7 +444,7 @@ export const reviewStatusLabel = (status) => REVIEW_STATUS[status] || String(sta
 const VERB = { shell_act: "ran", browser_act: "ran on the page", desktop_act: "ran", comment_issue: "commented", close_issue: "closed",
   merge_pr: "merged", land: "landed", open_pr: "opened the pull request", push_direct: "pushed", close_item: "closed", run_tool: "done",
   break_out: "moved to its own task", save_routine: "saved the routine", repair_workflow: "changed the routine", change_setup: "changed it", settings: "changed",
-  save_skill: "saved the skill" };
+  save_skill: "saved the skill", questions: "answered" };
 // ...and what it kept at the press: the proposal as he left it, with what it did (proposals.receipt) - null before
 export const receiptOf = (review) => { try { return JSON.parse(review?.FinalText || "") || null; } catch { return null; } };
 export const resultOf = (review) => {

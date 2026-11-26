@@ -5,8 +5,9 @@
 // no line saying why
 import React from "react";
 import { Box, Typography } from "@mui/material";
-import { outcomeOf, proposalPresentation, heldLead, proposalFrom } from "./reviewProposal.js";
-import Artifact from "./Artifact.jsx";
+import { outcomeOf, proposalPresentation, heldLead, proposalFrom, receiptOf } from "./reviewProposal.js";
+import Artifact, { Ask } from "./Artifact.jsx";
+import { answersOf, askFields } from "./questionsCard.js";
 import { BORDER, DIM, FAINT, INK } from "./theme.jsx";
 
 export const PASSED_NOTE = "set aside when you moved on";
@@ -46,6 +47,8 @@ export default function PassedCard({ reviews }) {
     <Artifact data-tq-passed={r.ReviewId || ""} data-tq-act-state={o.mark} sx={{ px: 1.5, py: 1.25 }}>
       <Typography sx={{ fontSize: 13.5, fontWeight: 700, color: INK, lineHeight: 1.3, overflowWrap: "anywhere" }}>
         {rs.length > 1 ? `${title} - ${rs.length} steps` : title}</Typography>
+      {/* ...the agent's questions stay with what he answered (the owner, 2026-11-26: cards stay, a pressed one showing its result where it stands) */}
+      {o.mark === "approved" && <Box sx={{ mt: 0.75 }}>{askFields(proposalFrom(r), answersOf(receiptOf(r))).map((f) => <Ask key={f.key} f={f} />)}</Box>}
       <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mt: 0.6, flexWrap: "wrap" }}>
         <PressedButton pressed={o.mark} label={o.label} />
         {!!(o.line || o.url) && <Typography role="status" data-tq-passed-line="" sx={{ fontSize: 12, color: DIM, overflowWrap: "anywhere" }}>{o.line}

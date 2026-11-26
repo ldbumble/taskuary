@@ -199,8 +199,8 @@ def asking(store, tid: int) -> bool:
     """Whether the task's agent's own question to the owner stands: asked in this turn (ask_owner's mark), or asked before and not yet answered.
     WHILE IT STANDS NOTHING IS RAISED UNDER IT, ON ANY ROAD (locked rule 4; walk 24, 2026-11-25: the agent's propose was refused under its
     question and Taskuary's own re-raise then stood a live card there) - the agent's call (agenttools) and `keep` both ask this."""
-    from . import selfclose, taskstate
-    return selfclose.asks_now(tid) or bool(taskstate.open_question(store, tid))
+    from . import proposals, selfclose, taskstate
+    return selfclose.asks_now(tid) or bool(taskstate.open_question(store, tid)) or bool(proposals.asks_waiting(store, tid))
 
 
 ASKED = 'Greyed while your question stands - he cannot press it; it stands again only where you keep it (keep_card) once he has answered'

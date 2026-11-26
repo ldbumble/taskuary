@@ -104,7 +104,8 @@ def test_every_act_is_drawn_pressed_once_says_what_it_did_and_wakes_only_for_its
          mock.patch.object(proposals, '_run', side_effect=lambda *x, **k: ran.append(1) or {'done': True}):
         rid = w.act(_filled(a), then)
         # ...a held step's own gate tells its agent what it ran (perform), so its press goes through no wake of its own here
-        w.lifecycle(rid, ran, wakes=1 if then and a not in proposals.HELD_ACTS else 0)
+        # ...and his answers to its questions are always its agent's to go on with (card.carries_on)
+        w.lifecycle(rid, ran, wakes=1 if (then or a == proposals.ASKS) and a not in proposals.HELD_ACTS else 0)
 
 
 @pytest.mark.parametrize('a', ACTS)
@@ -272,6 +273,61 @@ def test_a_step_handed_to_him_on_a_page_is_a_card_in_the_line_one_at_a_time_and_
         w.press(step['ReviewId'])
     assert done.call_count == 1 and w.cards()[step['ReviewId']]['status'] == 'approved'
     assert not [k for k in card.waiting(w.s, w.tid) if k['state'] == 'pending'], 'nothing is owed once he is done'
+
+
+# ── THE AGENT'S QUESTIONS, ONE CARD (the owner, 2026-11-26: an interview is one card answered with one press) ────────────────────────────
+ASKED = [{'question': 'Who is the site for?'}, {'question': 'Which pages?', 'choices': ['Home, Menu, Contact', 'One page']},
+         {'question': 'What tone?', 'choices': ['Warm', 'Plain']}]
+def _tool(w, name, **args):
+    "One call of the agent's own tool on its task, through the real door (/api/mcp): (what it was told, whether that was a refusal)."
+    from taskuary import config, guard
+    srv = config.load()['server']
+    r = c.post(f'/api/mcp?task={w.tid}', headers={'X-Taskuary-Token': srv['agent_token'], guard.TASK_HDR: guard.task_proof(srv, w.tid)},
+               json={'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call', 'params': {'name': name, 'arguments': args}}).json()['result']
+    return r['content'][0]['text'], r['isError']
+
+
+def test_several_questions_are_one_card_nothing_is_raised_under_it_and_one_press_tells_its_agent_every_answer_once(w):
+    from taskuary import events
+    said, err = _tool(w, 'ask_owner', question='Before I build the site', questions=ASKED)
+    assert not err and 'one card' in said, said
+    [rv] = proposals.asks_waiting(w.s, w.tid); rid = rv['ReviewId']
+    assert [q['question'] for q in proposals.asks_of(json.loads(rv['DraftText']))] == [q['question'] for q in ASKED]
+    drawn = w.cards()
+    assert list(drawn) == [rid] and drawn[rid]['status'] == 'pending', 'one card, drawn to press'
+    # ...it is the agent's question (locked rule 4): no card under it, and no second set of questions
+    said, err = _tool(w, 'propose', kind='post', network='x', text='Harbor Bakery opens Saturday.')
+    assert err and 'your question to the owner stands' in said, said
+    assert _tool(w, 'ask_owner', questions=ASKED[:2])[1] and len(w.s._rows('SELECT 1 FROM review WHERE TaskId=?', (w.tid,))) == 1
+    # ...his one press answers them all - the card as the page drew it, his answers beside it
+    answers = ['Locals and visitors to the harbour', 'Home, Menu, Contact', '']
+    out = c.post(f'/api/reviews/{rid}/decide', headers=OWNER, json={'verb': 'approve', 'shown': json.loads(rv['DraftText']), 'fields': {'answers': answers}}).json()
+    end = time.time() + .4
+    while time.time() < end and not w.woken: time.sleep(.02)
+    assert out.get('ok') and len(w.woken) == 1, (out, w.woken)
+    # ...the card stays where it stood, showing his answers (rule 10), and its agent is told each one in the card's event
+    after = w.cards()[rid]; kept = json.loads(w.s.get_review(rid)['FinalText'])['result']['answers']
+    assert after['status'] == 'approved' and [a['answer'] for a in kept] == answers
+    told = events.render(events.pending(w.s, w.tid), fresh=True)
+    assert '1. Who is the site for? - Locals and visitors to the harbour' in told and '3. What tone? - (left empty)' in told, told
+    c.post(f'/api/reviews/{rid}/decide', headers=OWNER, json={'verb': 'approve', 'fields': {'answers': ['other', 'other', 'other']}})
+    assert len(w.woken) == 1 and [a['answer'] for a in json.loads(w.s.get_review(rid)['FinalText'])['result']['answers']] == answers, 'a second press changed nothing'
+    # ...answered, the question no longer stands: the next card is raised
+    assert not cardqueue.asking(w.s, w.tid) and not _tool(w, 'propose', kind='post', network='x', text='Harbor Bakery opens Saturday.')[1]
+
+
+def test_questions_the_agent_takes_back_or_gives_wrongly_leave_nothing_standing(w):
+    for bad in ([{'question': 'Only one?'}, {'choices': ['a']}], [{'question': f'Question {i}?'} for i in range(7)]):
+        said, err = _tool(w, 'ask_owner', questions=bad)
+        assert err and '2-6' in said and not proposals.asks_waiting(w.s, w.tid), said
+    # ...one question in the list is the plain question it always was, never a card
+    assert not _tool(w, 'ask_owner', questions=[{'question': 'Which domain?', 'choices': ['harborbakery.example']}])[1] and not proposals.asks_waiting(w.s, w.tid)
+    _tool(w, 'ask_owner', withdraw=True)
+    assert not _tool(w, 'ask_owner', questions=ASKED)[1]
+    [rv] = proposals.asks_waiting(w.s, w.tid)
+    said, err = _tool(w, 'ask_owner', withdraw=True)
+    assert not err and 'Withdrawn' in said and not cardqueue.asking(w.s, w.tid), said
+    assert w.s.get_review(rv['ReviewId'])['Status'] == 'superseded' and w.cards()[rv['ReviewId']]['status'] != 'pending', 'greyed where it stood, never gone'
 
 
 def test_the_landing_question_wakes_its_agent_only_where_its_proposal_named_a_step_after_it(w):

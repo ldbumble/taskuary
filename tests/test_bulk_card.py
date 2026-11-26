@@ -595,7 +595,7 @@ def test_words_given_beside_items_that_every_item_gives_again_are_answered_with_
         out = call(tid, 'propose', kind='email', subject='October close', text='The October close is done. Alex',
                    items=[{'to': 'gail@northwind.example'}, {'to': 'paula@northwind.example'}])
     assert out['ok'] and out['on_the_card'] == 2, out
-    # ...and what its agent passed is on the server's record by its shape - each key, a text by its length, never a word of his (apiagent.shape)
-    from taskuary import apiagent
-    assert apiagent.shape({'kind': 'reply', 'text': 'Hi Erin - yes.', 'answers': 12, 'items': [{'text': 'x' * 400, 'to': ['erin@northwind.example']}]}) == {
+    # ...and what its agent passed is on the server's record by its shape - each key, a text by its length, never a word of his (agenttools.shape)
+    from taskuary import agenttools
+    assert agenttools.shape({'kind': 'reply', 'text': 'Hi Erin - yes.', 'answers': 12, 'items': [{'text': 'x' * 400, 'to': ['erin@northwind.example']}]}) == {
         'kind': 'text(5)', 'text': 'text(14)', 'answers': 12, 'items': [{'text': 'text(400)', 'to': 'list(1)'}]}, "a call's shape names no word of his"

@@ -395,6 +395,13 @@ def instructions(name: str) -> str:
     "One tool's whole description and parameters, as find_tools answers it."
     c, d, s, _ = TOOLS[name]
     return f'{name}: {d}\nParameters: {json.dumps(s, ensure_ascii=False)}'
+def shape(a, deep: int = 3):
+    """A CALL'S ARGUMENTS BY THEIR SHAPE, for the server's log (walk 23, 2026-11-25: "two versions" became one card and what the agent had
+    passed was in no log - the re-walk found that road's calls come in at this door, as every road's do): every key it gave, a number or a
+    switch as it is, a text by its length alone - never his words, an address or a secret - and a list by each item's own shape."""
+    if isinstance(a, dict): return {str(k)[:40]: shape(v, deep - 1) for k, v in list(a.items())[:30]} if deep else f'object({len(a)})'
+    if isinstance(a, list): return [shape(v, deep - 1) for v in a[:12]] + ([f'+{len(a) - 12} more'] if len(a) > 12 else []) if deep else f'list({len(a)})'
+    return a if isinstance(a, (bool, int, float)) or a is None else f'text({len(str(a))})'
 SYSTEM_TOOLS = ('list_systems', 'run_system')
 def found(query, names: dict, store=None) -> list:
     """The tools of `names` ({name: description}) that `query` asks for: by name, else by most of its words in a name and description (at most 4).
@@ -1238,6 +1245,8 @@ def rpc(msg: dict, run, skip=(), portable: bool = False) -> dict | None:
             try: name, args = aliased(name, args)
             except ValueError: pass
         if name not in TOOLS or name in skip: return err(-32602, f"unknown tool {name!r} - this task's tools are the ones tools/list names")
+        # ...EVERY CALL ON THE RECORD BY ITS SHAPE (shape): the one door every road's call of a Taskuary tool comes in at
+        logger.info(f'tools: {name} called with {json.dumps(shape(args), ensure_ascii=False)[:1200]}')
         # ...EVERY ANSWER SCRUBBED, whatever tool made it (redact.scrub): what comes back here goes on to the agent's provider
         from .redact import scrub
         try: return ok({'content': [{'type': 'text', 'text': scrub(run(name, args))}], 'isError': False})

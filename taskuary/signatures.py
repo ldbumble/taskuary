@@ -108,6 +108,17 @@ def _say_ending(store, rid: int, gone: str):
     if now != str((store.get_review(rid) or {}).get('Reason') or ''): store.update_review_reason(rid, now)
 
 
+# THE SIGNATURE UNDER EVERY POST (the owner, 2026-11-26: a post went up ending with a lone word its agent wrote where his own footer belongs -
+# "It should be static"): Settings → Replies → Social post signature, put under a post's words as its card is built (proposals.queue), exactly as
+# saved and once - a post already ending with it is left as written. The card holds the result, so what he reads is what goes, and a later
+# change to the setting touches no card already raised. Blank: nothing is added.
+POST = 'post_signature'
+def post(store) -> str: return str(store.get_setting(POST) or '').strip()
+def post_signed(store, text) -> str:
+    t, sig = str(text or '').rstrip(), post(store)
+    return f'{t}\n\n{sig}' if t and sig and unsigned(t, sig) == t else str(text or '')
+
+
 def told(store) -> str:
     """THE AGENT IS TOLD HOW ITS EMAILS ARE SIGNED, up front (the recorded walk, 2026-11-11: asked to "sign it Alex" it wrote that, the card
     showed the saved block, and it warned the owner to check the card): one sentence for every agent that can draft an email - '' with

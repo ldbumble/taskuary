@@ -142,6 +142,23 @@ function SignatureSetting({ value, save }) {
     </Box>
   );
 }
+// THE POST SIGNATURE (the owner, 2026-11-26: "It should be static"): the lines Taskuary puts under every post's words as its card is made
+// (signatures.post_signed) - saved as typed, like the email one above, with a post drawn under it so he sees how one will end
+function PostSignatureSetting({ value, save }) {
+  const [text, setText] = useState(value);
+  useEffect(() => { setText(value); }, [value]);
+  useEffect(() => { if (text === value) return undefined; const t = setTimeout(() => save(text.trim()), 800); return () => clearTimeout(t); }, [text]);  // eslint-disable-line react-hooks/exhaustive-deps
+  return (
+    <Box data-tq-post-signature="" sx={{ display: "flex", flexDirection: "column", gap: 1, width: "100%", maxWidth: 460 }}>
+      <TextField multiline minRows={2} value={text} onChange={(e) => setText(e.target.value)} sx={{ bgcolor: "var(--tq-panel, #fff)" }}
+        inputProps={{ style: { fontSize: 12.5 }, "aria-label": "Post signature" }} onBlur={() => text !== value && save(text.trim())} />
+      <Box sx={{ border: `1px solid ${BORDER}`, borderRadius: 1.5, bgcolor: "var(--tq-panel, #fff)", px: 1.5, py: 1, fontSize: 12.5, whiteSpace: "pre-line", color: INK }}>
+        {"We opened the new portal to every team today.\n\n"}{text.trim() || <span style={{ color: DIM }}>(nothing is added under a post)</span>}
+      </Box>
+    </Box>
+  );
+}
+
 // one mailbox's own signature, saved on the card that sends as it (outbound.card_signature) - blank: the default above
 function MailboxSignature({ box, save }) {
   const [text, setText] = useState(box.signature || "");
@@ -638,6 +655,7 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
     }
     // THE EMAIL SIGNATURE (responder.signed): the exact block under every email, read off the sent mail and checked here
     if (m.type === "signature") return <SignatureSetting value={s.Value || ""} save={(v) => saveSetting(s.Name, v)} />;
+    if (m.type === "block") return <PostSignatureSetting value={s.Value || ""} save={(v) => saveSetting(s.Name, v)} />;
     // ...the chat's detail level, the one slider every chat corner draws too (DetailSlider)
     if (m.type === "detail") return <DetailSlider value={asLevel(s.Value) || asLevel(s.Default) || "summary"} label={m.label} says={false} onChange={(v) => saveSetting(s.Name, v)} />;
     if (m.type === "lines") return <LinesSetting value={s.Value || ""} fallback={s.Default || ""} save={(v) => saveSetting(s.Name, v)} />;

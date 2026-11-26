@@ -1159,6 +1159,44 @@ class APostIsAKindOfTheOneReviewTool(unittest.TestCase):
         with self.assertRaises(RuntimeError) as e: inboxes.run_x_post({'text': 'z' * 281, '_card': {}})
         self.assertIn('this one is 281', str(e.exception))
 
+    SIG = "----\nI'm building northwind.example to help people with their ledgers"
+    def words(self, rv): return json.loads(rv['DraftText'])['text']
+
+    def test_a_post_card_carries_his_saved_post_signature_once_on_every_network(self):
+        """The owner, 2026-11-26: his post went up ending with a lone word its agent wrote where his footer belongs ("It should be static").
+        The saved post signature goes under the words as the card is built, exactly as saved - and one the agent wrote itself is not doubled."""
+        said, err = tool(self.tid, 'propose', kind='post', network='linkedin', text='The portal is open.')
+        self.assertFalse(err, said); self.assertEqual(self.words(self.cards()[-1]), 'The portal is open.')       # ...none saved: as written
+        self.s.set_setting('post_signature', self.SIG, 'owner')
+        for n, extra in (('linkedin', {}), ('x', {}), ('bluesky', {}), ('mastodon', {}), ('reddit', {'subreddit': 'ledgers', 'title': 'Open today'})):
+            said, err = tool(self.tid, 'propose', kind='post', network=n, text=f'The ledger closes Friday on {n}.', **extra)
+            self.assertFalse(err, said)
+            self.assertEqual(self.words(self.cards()[-1]), f'The ledger closes Friday on {n}.\n\n{self.SIG}', n)
+        said, err = tool(self.tid, 'propose', kind='post', network='linkedin', text=f'Books are shut.\n\n{self.SIG}\n')
+        self.assertFalse(err, said); self.assertEqual(self.words(self.cards()[-1]).count(self.SIG), 1)
+        self.assertTrue(self.words(self.cards()[-1]).startswith('Books are shut.'))
+
+    def test_his_post_signature_counts_inside_the_networks_limit_and_the_refusal_says_what_is_left(self):
+        "Rule 1: no card stands over its network's limit - the signature is part of the count, and the agent is told how many words fit above it."
+        self.s.set_setting('post_signature', self.SIG, 'owner')
+        left = 280 - len(self.SIG) - 2
+        said, err = tool(self.tid, 'propose', kind='post', network='x', text='z' * (left + 1))
+        self.assertTrue(err); self.assertFalse(self.cards())
+        for w in ('280', 'this one is 281', f'{len(self.SIG)} of them', f'to {left} or fewer'): self.assertIn(w, said)
+        said, err = tool(self.tid, 'propose', kind='post', network='x', text='z' * left)
+        self.assertFalse(err, said); self.assertEqual(len(self.words(self.cards()[-1])), 280)
+
+    def test_a_changed_post_signature_is_on_the_next_card_and_the_card_already_shown_keeps_its_own(self):
+        "Rule 2: what was shown is what goes - the setting is read when a card is built, never written back into one that waits."
+        self.s.set_setting('post_signature', self.SIG, 'owner')
+        tool(self.tid, 'propose', kind='post', network='linkedin', text='Quarter one is in.')
+        first, = self.cards(); was = first['DraftText']
+        self.s.set_setting('post_signature', '-- Alex at Northwind', 'owner')
+        tool(self.tid, 'propose', kind='post', network='linkedin', text='Quarter two is in.')
+        old, new = self.cards()
+        self.assertEqual(old['DraftText'], was); self.assertTrue(self.words(old).endswith(self.SIG))
+        self.assertEqual(self.words(new), 'Quarter two is in.\n\n-- Alex at Northwind')
+
     def test_a_pictures_description_rides_on_its_card_and_a_field_its_network_has_not_is_left_off(self):
         """The owner's live task, 2026-11-25: the LinkedIn card was refused for its picture's `alt` ("would run unseen under it"), so the agent
         put the alt text in each card's why and wrote a drafts file beside the cards to hold it. A picture's description is the picture's, and

@@ -194,7 +194,10 @@ dossier is read: the reply drafter, triage's context, meeting prep, and the Advi
 Facts about kinds of work go to the skill they belong to, as a proposal: once a skill has
 five closes on the ledger, reflection writes a bullet block - how often a close came open again,
 and how often the ones closed with a question still open did - and it waits for your yes on the
-Review queue. Nothing edits a skill on its own; your own lines on it are never touched.
+Review queue. Your edits teach it too: when you change an agent's draft before sending it, on a
+task worked from a skill, the next reflection reads what was drafted beside what you sent and
+suggests the update to that skill as the same kind of card. Nothing edits a skill on its own;
+your own lines on it are never touched.
 
 ## The outcome ledger
 

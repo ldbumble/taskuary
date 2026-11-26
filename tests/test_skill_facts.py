@@ -110,3 +110,65 @@ class WorkFactsTests(unittest.TestCase):
 
 
 if __name__ == '__main__': unittest.main()
+
+
+SKILL_MD = '---\nname: vendor-onboarding\ndescription: Onboard a new vendor. Use when a new vendor writes.\n---\n# Vendor onboarding\n\nAsk for the W-9, then set them up.\n'
+DRAFT = 'Hi Erin,\n\nThank you so much for reaching out! We would be delighted to onboard Payworth. Could you kindly send a W-9?\n\nBest regards,\nAlex Doyle'
+SENT = 'Erin - send the W-9 and a voided check and we will set Payworth up this week.\n\nAlex'
+
+
+class HisEditsTeachTheSkill(unittest.TestCase):
+    """The owner, 2026-11-26: when he edits an agent's draft before sending it, that says how he wants this kind of job written. It
+    goes into the reflection the skill already has, and comes back as ONE card to update the skill - never a silent change."""
+    def setUp(self):
+        import shutil
+        if skills.folder().is_dir(): shutil.rmtree(skills.folder())
+        self.s = MemoryStore(); self.s.set_setting('playbooks_enabled', '1', 'test')
+        skills.write('vendor-onboarding', SKILL_MD)
+
+    def letter(self, draft, final, slug='vendor-onboarding', went=True):
+        t = self.s.create_task({'Title': 'Onboard Payworth', 'Tags': skills.tag(slug) if slug else '', 'Status': 'open'}, 'owner')
+        rid = self.s.add_review({'TaskId': t, 'Kind': 'draft_reply', 'Status': 'sent' if went else 'pending', 'DraftText': draft, 'FinalText': final if went else None})
+        if went: self.s._exec("UPDATE review SET DeliveryState='sent' WHERE ReviewId=?", (rid,))
+        return rid
+
+    def test_an_edit_is_a_letter_that_went_with_other_words_on_a_task_worked_from_the_skill(self):
+        mine = self.letter(DRAFT, SENT)
+        self.letter(DRAFT, DRAFT)                                   # sent as drafted: nothing of his to learn from
+        self.letter(DRAFT, DRAFT.replace('\n\n', '\n \n'))            # ...nor a change of spacing alone
+        self.letter(DRAFT, SENT, went=False)                        # ...nor one that never went
+        self.letter(DRAFT, SENT, slug='')                           # ...nor a letter on a task no skill was used for
+        self.letter(DRAFT, SENT, slug='vendor-onboarding-old')      # ...nor another skill's, whatever its name starts with
+        self.assertEqual(skill_facts.edits(self.s, 'vendor-onboarding'), [{'rid': mine, 'draft': DRAFT, 'sent': SENT}])
+
+    def test_one_edit_reaches_reflection_and_comes_back_as_a_card_never_a_silent_change(self):
+        rid = self.letter(DRAFT, SENT); seen = []
+        def brain(system, user, **k): seen.append((system, user)); return f'- Write to a vendor in two plain lines, no pleasantries [ev: rv{rid}]'
+        before = skills.read('vendor-onboarding')
+        self.assertEqual(skill_facts.refresh(self.s, llm=brain), ['vendor-onboarding'])           # no five closes needed: his edit is the evidence
+        (system, user), = seen
+        self.assertIn('HIS EDITS', user); self.assertIn('THE AGENT DRAFTED:\n' + DRAFT, user); self.assertIn('HE SENT:\n' + SENT, user)
+        self.assertIn('what he changed in an agent\'s draft', system)
+        self.assertEqual(skills.read('vendor-onboarding'), before)                                 # nothing changed without his press
+        rv, = self.s.list_reviews('pending'); p = json.loads(rv['DraftText'])
+        self.assertEqual((card.sort_of(rv), p['action'], p['slug']), ('skill', 'save_skill', 'vendor-onboarding'))
+        self.assertIn('two plain lines', p['block']); self.assertIn('what you changed in drafts before sending them', p['block'])
+        self.assertIn('Ask for the W-9, then set them up.', p['text'])                             # his own lines stand in what the card shows
+        proposals.execute(self.s, rv)
+        now = skills.read('vendor-onboarding')
+        self.assertIn('two plain lines', now); self.assertIn('Ask for the W-9, then set them up.', now)
+
+    def test_an_edit_is_put_to_him_once(self):
+        self.letter(DRAFT, SENT); calls = []
+        brain = lambda *a, **k: calls.append(1) or '- Two plain lines [ev: rv1]'
+        skill_facts.refresh(self.s, llm=brain)
+        rv, = self.s.list_reviews('pending')
+        self.s.decide_review(rv['ReviewId'], 'rejected', None, 'owner')
+        self.assertEqual(skill_facts.refresh(self.s, llm=brain), [])                               # his no stands: the same edit is not put again
+        self.assertEqual(len(calls), 1)
+        self.letter(DRAFT, SENT.replace('this week', 'by Friday'))                                 # ...a new edit is new evidence
+        self.assertEqual(skill_facts.refresh(self.s, llm=brain), ['vendor-onboarding']); self.assertEqual(len(calls), 2)
+
+    def test_no_edit_and_too_few_closes_asks_no_model(self):
+        self.letter(DRAFT, DRAFT)
+        self.assertEqual(skill_facts.refresh(self.s, llm=lambda *a, **k: 1 / 0), [])

@@ -9131,10 +9131,10 @@ async def card_relay(cid: int, path: str, request: Request):
     """An AI card's harness CLI asks its model HERE (relay.py): the request goes on to the card's own endpoint with its body masked, and the
     answer comes back as it arrives. This computer only, and only the caller holding that card's relay token - no page, no other process."""
     from . import relay
-    if not _is_loopback(request.client.host if request.client else '') or not relay.signed(cfg['server'], cid, request.headers):
+    if not relay.here(request.client.host if request.client else '', (request.scope.get('server') or ('',))[0]) or not relay.signed(cfg['server'], cid, request.headers):
         logger.warning(f'relay: refused {request.method} card {cid} from {request.client.host if request.client else "nowhere"}')
         return JSONResponse({'error': {'message': "This address answers only an AI card's own agent, on this computer.", 'type': 'taskuary_relay'}}, status_code=403)
-    status, headers, body = await run_in_threadpool(relay.send, store, cid, request.method, path, request.url.query, request.headers, await request.body())
+    status, headers, body = await relay.ask(store, cid, request.method, path, request.url.query, request.headers, await request.body())
     return StreamingResponse(body, status_code=status, headers=headers)
 
 @app.get('/api/ms/callback', response_class=HTMLResponse)

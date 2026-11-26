@@ -361,7 +361,7 @@ class _Answer:
 
 
 class TheCardHarnessRelayTests(unittest.TestCase):
-    def _ask(self, body, path='responses', client=('127.0.0.1', 50000), auth=None, chunks=(b'ok',), headers=None):
+    def _ask(self, body, path='responses', client=('127.0.0.1', 50000), auth=None, chunks=(b'ok',), headers=None, at='http://testserver'):
         "(the relay's answer, what the card's endpoint was sent - {} when nothing was, the card's id)"
         from fastapi.testclient import TestClient
         from taskuary import relay, server
@@ -370,7 +370,7 @@ class TheCardHarnessRelayTests(unittest.TestCase):
                                 'ConfigJson': json.dumps({'base_url': 'https://gateway.example/v1', 'model': 'hydrogen'})}, 't')
         def endpoint(method, url, **kw): seen.update(method=method, url=url, **kw); return _Answer(chunks)
         with mock.patch.object(server, 'store', s), mock.patch('requests.request', endpoint):
-            r = TestClient(server.app, client=client).post(
+            r = TestClient(server.app, client=client, base_url=at).post(
                 f'/relay/card-{cid}/{path}', content=body if isinstance(body, bytes) else json.dumps(body),
                 headers={'Authorization': auth or f'Bearer {relay.token(server.cfg["server"], cid)}', 'Content-Type': 'application/json', **(headers or {})})
         return r, seen, cid
@@ -429,6 +429,45 @@ class TheCardHarnessRelayTests(unittest.TestCase):
             self.assertEqual(r.status_code, 403, why); self.assertEqual(seen, {}, why)
         r, seen, cid = self._ask(body)
         self.assertEqual(r.status_code, 200); self.assertNotIn(relay.token(server.cfg['server'], cid), json.dumps(seen['headers']))
+
+    def test_a_server_bound_to_one_address_and_no_loopback_still_answers_its_own_computer(self):
+        # ...the harness is then pointed at that address (relay.base), and its call arrives FROM it - another computer on that network does not
+        body = {'model': 'hydrogen', 'input': INTAKE}
+        r, seen, _ = self._ask(body, client=('192.0.2.10', 50000), at='http://192.0.2.10:7787')
+        self.assertEqual(r.status_code, 200); self.assertNotIn(SSN, seen['data'].decode('utf-8'))
+        r, seen, _ = self._ask(body, client=('192.0.2.11', 50000), at='http://192.0.2.10:7787')
+        self.assertEqual(r.status_code, 403); self.assertEqual(seen, {})
+
+    def test_agents_streaming_at_once_never_hold_the_apps_own_threads(self):
+        """A stream is held while its model thinks. More of them than the server's shared pool has threads (40), each on an endpoint that
+        says nothing yet - and a plain read of the app still answers at once."""
+        import threading, time
+        from fastapi.testclient import TestClient
+        from taskuary import relay, server
+        N, s, go, lock, open_ = 45, MemoryStore(), threading.Event(), threading.Lock(), []
+        cid = s.save_connector({'Type': 'hipaa_ai', 'Name': 'HIPAA AI', 'Secret': CODE, 'Active': 1,
+                                'ConfigJson': json.dumps({'base_url': 'https://gateway.example/v1', 'model': 'hydrogen'})}, 't')
+        class Thinking(_Answer):
+            def iter_content(self, chunk_size=None):
+                with lock: open_.append(1)
+                go.wait(60); yield b'data: done\n\n'
+        got, health = [], []
+        with mock.patch.object(server, 'store', s), mock.patch('requests.request', lambda *a, **k: Thinking(())), \
+             TestClient(server.app, client=('127.0.0.1', 50000)) as c:
+            h = {'Authorization': f'Bearer {relay.token(server.cfg["server"], cid)}', 'Content-Type': 'application/json'}
+            asks = [threading.Thread(target=lambda: got.append(c.post(f'/relay/card-{cid}/responses', content=b'{"input":"hello"}', headers=h).content), daemon=True)
+                    for _ in range(N)]
+            try:
+                for t in asks: t.start()
+                end = time.monotonic() + 20
+                while len(open_) < N and time.monotonic() < end: time.sleep(0.05)
+                t = threading.Thread(target=lambda: health.append(c.get('/api/health').status_code), daemon=True); t.start(); t.join(5)
+                self.assertEqual(health, [200], f'the app waited on {len(open_)} streams')
+                self.assertEqual(len(open_), N)
+            finally:
+                go.set()
+                for t in asks: t.join(30)
+        self.assertEqual(got, [b'data: done\n\n'] * N)
 
     def test_a_body_it_cannot_read_is_not_sent(self):
         r, seen, _ = self._ask(b'\x28\xb5\x2f\xfd packed', headers={'Content-Encoding': 'zstd'})

@@ -56,6 +56,15 @@ def test_an_api_cards_agent_launches_codex_on_the_cards_provider_with_the_key_in
     assert harness.KEY_ENV in c['shell_environment_policy']['exclude']
 
 
+def test_the_relays_address_is_loopback_wherever_the_server_listens_there_else_its_one_address():
+    at = lambda h: relay.base({'host': h, 'port': 7799}, 3)
+    for h in ('0.0.0.0', '::', '', None, 'localhost'): assert at(h) == 'http://127.0.0.1:7799/relay/card-3', h
+    assert at('127.0.0.1') == 'http://127.0.0.1:7799/relay/card-3' and at('::1') == 'http://[::1]:7799/relay/card-3'
+    assert at('192.0.2.10') == 'http://192.0.2.10:7799/relay/card-3'            # bound to one address and no loopback: that one (relay.here)
+    assert relay.here('127.0.0.1', '192.0.2.10') and relay.here('192.0.2.10', '192.0.2.10') and relay.here('::1', '')
+    assert not relay.here('192.0.2.11', '192.0.2.10') and not relay.here('192.0.2.11', '') and not relay.here('', '') and not relay.here('testclient', 'testclient')
+
+
 def test_the_agent_turn_builds_the_codex_brain_and_triage_keeps_the_card(here):
     s = MemoryStore(); cid = _card(s)
     with mock.patch.object(llm, 'make_cli_llm', return_value=lambda *a, **k: 'ok') as cli, mock.patch.object(llm, 'make_llm') as api:

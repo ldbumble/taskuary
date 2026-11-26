@@ -273,13 +273,14 @@ def _stood(u: dict) -> bool:
 def _state(store, tid: int) -> dict:
     """The line on task `tid`: {'live': the front's ids or [], 'held': ids that wait behind it, 'n': the front's place in the run it is one
     of, 'of': that run's length, 'next': what comes next in words, 'units', 'runs': every run of the cards that stood (_runs), 'past': the
-    cards the chat moved past (proposals.written_past)}."""
+    cards the chat moved past (proposals.written_past), 'fronts': the ids of the first card that waits in each LATER run - each stands where
+    it was raised, under the line of his that began its run, with the cards behind it as its tabs}."""
     from .proposals import written_past
     us = _units(store, tid, past := written_past(store, int(tid)))
     waiting = [u for u in us if u['done'] is None]
     # ...the run it is one of: each card that stood for his press, raised while the one before it still waited or with nothing of his between
     runs = _runs(store, tid, [u for u in us if _stood(u)])
-    if not waiting: return {'live': [], 'held': [], 'n': 0, 'of': 0, 'next': '', 'units': [], 'runs': runs, 'past': past}
+    if not waiting: return {'live': [], 'held': [], 'n': 0, 'of': 0, 'next': '', 'units': [], 'runs': runs, 'past': past, 'fronts': []}
     front = waiting[0]
     run = next(r for r in runs if any(x is front for x in r))
     n = next(i for i, x in enumerate(run) if x is front) + 1
@@ -289,15 +290,26 @@ def _state(store, tid: int) -> dict:
     # queued, the front is drawn, and its agent hears the row once it is over (row_over)
     live = front['rids']
     return {'live': live, 'held': held, 'n': n, 'of': len(run), 'next': what(store, waiting[1]) if len(waiting) > 1 else '', 'units': waiting,
-            'runs': runs, 'past': past}
+            'runs': runs, 'past': past, 'fronts': [u['rids'] for r in runs if (u := _front(r)) and u is not front]}
+
+
+def _front(run: list) -> dict | None:
+    "The card of a run that is in front: the first of it that waits, or None."
+    return next((u for u in run if u['done'] is None), None)
 
 
 def _runs(store, tid: int, us: list) -> list:
     """The cards that stood, oldest first, cut into runs: a card is one of the run before it when it was raised before that one was settled,
     AND ON THROUGH THE CARDS ITS AGENT RAISES AFTER A PRESS while nothing of his came between (decided 2026-11-20: "2 of 7" went on as "1 of 6"
-    when the agent wrote the next letters after his Send) - only his line or a message that came in begins a new run."""
-    ins = sorted(r['At'] for r in store._rows("SELECT At FROM heard WHERE TaskId=? AND Kind IN ('line','mail')", (int(tid),)))
-    def linked(a, b): return b['at'] <= (a['done'] or float('inf')) + 1 or not any((a['done'] or 0.) < x < b['at'] for x in ins)
+    when the agent wrote the next letters after his Send) - only his line or a message that came in begins a new run.
+    AND A RUN NEVER CROSSES HIS LINE (walk 24, 2026-11-25: an email raised after his answer became tab 2 of the card that stood above the
+    answer, with nothing to press under it, and the one card moved down the chat when its front was pressed): a card raised after a line of
+    his begins its own run under that line, whether or not the one above still waits (a stamp is a whole second: only a line surely between)."""
+    heard = store._rows("SELECT At, Kind FROM heard WHERE TaskId=? AND Kind IN ('line','mail')", (int(tid),))
+    ins, his = sorted(r['At'] for r in heard), [r['At'] for r in heard if r['Kind'] == 'line']
+    def linked(a, b):
+        if any(a['at'] + 1 <= x < b['at'] for x in his): return False
+        return b['at'] <= (a['done'] or float('inf')) + 1 or not any((a['done'] or 0.) < x < b['at'] for x in ins)
     out = []
     for u in us:
         if out and linked(out[-1][-1], u): out[-1].append(u)
@@ -308,12 +320,12 @@ def _runs(store, tid: int, us: list) -> list:
 # A RUN OF CARDS IS ONE CARD WITH TABS (the owner, 2026-11-25: "a little carousel thing on top that scrolls from one to the other"): each tab is
 # the card it was, named by where it goes - the network a post goes to, whom a letter goes to - with whether it is settled and which is in front
 def tabs(store, s: dict) -> list:
-    """Each run of two or more on the line `s` (state): [[{'key', 'rids', 'name', 'done', 'front'}]], oldest first. `no`: settled without
-    going - he said no to it, or its press failed (the card gallery, 2026-11-25: a dropped email's tab was ticked like a sent one)."""
-    f = s['units'][0] if s['units'] else None
+    """Each run of two or more on the line `s` (state): [[{'key', 'rids', 'name', 'done', 'front'}]], oldest first - and a later run of one
+    card that waits (state's `fronts`), which stands by itself where it was raised. `front`: the one of its run in front. `no`: settled
+    without going - he said no to it, or its press failed (the card gallery, 2026-11-25: a dropped email's tab was ticked like a sent one)."""
     no = lambda u: u['done'] is not None and bool(u['rows']) and not any(r['Status'] in ('approved', 'edited', 'sent') for r in u['rows'])
-    return [[{'key': str(u['rids'][0]), 'rids': u['rids'], 'name': tab(store, u), 'done': u['done'] is not None, 'front': u is f, **({'no': True} if no(u) else {})}
-             for u in r] for r in s['runs'] if len(r) > 1]
+    return [[{'key': str(u['rids'][0]), 'rids': u['rids'], 'name': tab(store, u), 'done': u['done'] is not None, 'front': u is _front(r), **({'no': True} if no(u) else {})}
+             for u in r] for r in s['runs'] if len(r) > 1 or r[0]['rids'] in s['fronts'] and r[0]['rids'] != [LAND]]
 
 
 def tab(store, u: dict) -> str:
@@ -486,7 +498,7 @@ def screen(store, tid: int, skip=()) -> str:
                                f"has gone, and the next card waits until then. One you cannot do now: keep_card it with `why` (it stands again "
                                f"for his press); one he drops: withdraw_draft it: {name(u, h)}")
             elif r and ids <= past: greyed(r, n)
-            elif ids & live:
+            elif ids & live or u['rids'] in st['fronts']:
                 # ...on the buttons its card draws where it has no Send (card.presses; walk 21: "ready to send" over Copy + Redraft)
                 from . import card
                 ps = card.presses(store, r) if r and r.get('Kind') != 'action' else ('approve',)
@@ -495,9 +507,7 @@ def screen(store, tid: int, skip=()) -> str:
             elif u['rids'] == front: waiting.append(f'Comes forward once your turn ends (you are going on from his last press): {n}')
             # ...A CARD BEHIND THE FRONT IN ITS RUN IS A TAB OF THE SAME CARD, HIS TO PRESS (tabs; walk 22: told "not on his screen yet", an agent drew
             # the second post again as a table and a file "for review" beside the cards)
-            elif ids & held and any(ids <= {x for w in run for x in w['rids']} and any(w['rids'] == front for w in run) for run in st['runs'] if len(run) > 1):
-                waiting.append(f'On his screen now, a tab of the same card as the one in front - his to press in any order: {n}')
-            elif ids & held: waiting.append(f'Not on his screen yet - it comes forward once the one before it is pressed (after an act, once you have heard how it went): {n}')
+            elif ids & held: waiting.append(f'On his screen now, a tab of the same card as the one in front - his to press in any order: {n}')
             continue
         s, at = (_card(r)['status'] if r else 'approved'), clock(r.get('DecidedAt')) if r else ''
         if s == 'passed': str(r.get('DecidedAt') or '') >= since and greyed(r, n)

@@ -436,7 +436,7 @@ def answered(store, tid: int, cid: int, actor: str, body: str, created: str) -> 
         # with no turn row yet, stood loose at the chat's foot while the CLI road's stood in its turn): what was put at the foot since the last
         # input is this turn's - still its last thing, under the words it just filed
         with store.lock:
-            store.cx.execute("UPDATE chatlog SET Parent=?, Rev=Rev+1 WHERE TaskId=? AND Parent IS NULL AND Kind='card' AND State IN ('pending','offer') AND Id>? AND Id<?",
+            store.cx.execute("UPDATE chatlog SET Parent=?, Rev=Rev+1 WHERE TaskId=? AND Parent IS NULL AND Kind='card' AND State IN ('pending','offer','also') AND Id>? AND Id<?",
                              (n, tid, ins, n)); store.cx.commit()
     # ...and a press he made while it worked, which no turn will hear (a second Trust, a tap on what was already done), goes in under it: kept
     # for a turn that never comes, it stood by the box while this one ran and was gone the moment it answered. One a next turn hears is in place
@@ -965,6 +965,7 @@ def came_in(store, tid: int) -> None:
 
 
 # ── THE ONE ACTION BOX (stage 5, D): cardqueue.advance is the only writer of card rows ─────────────────────────────────────────────────────
+ALSO = 'also'                   # a card row's state: the front of a later run - it waits for his press under his newer line, beside the one pending row
 @_safe
 def advance(store, tid: int) -> None:
     """The line of cards on task `tid` (cardqueue.state) into the log: the front is put as the ONE pending card - under the turn that raised
@@ -985,7 +986,7 @@ def advance(store, tid: int) -> None:
         rows = {r['Key']: dict(r) for r in store.cx.execute("SELECT * FROM chatlog WHERE TaskId=? AND Kind='card'", (tid,))}
     by = {r['ReviewId']: r for r in store._rows('SELECT * FROM review WHERE TaskId=? ORDER BY ReviewId', (tid,))}
     front = [x for x in q['live'] if x != cardqueue.LAND]
-    held = set(q['held'])
+    held, also = set(q['held']), {f[0]: f for f in q['fronts'] if f != [cardqueue.LAND]}
     # ...AND THE HELD STEP OF A CARD'S BROWSER ROAD IS THAT CARD'S NEXT PRESS, DRAWN ON IT (walk 22, 2026-11-25: Post via the browser on the X card,
     # the agent's final Post held, and nothing to press anywhere - the card he had pressed stood "approved" over a step the line kept behind
     # it): the card waits again, carrying the step (`step`), until the step is pressed, taken back or moved past
@@ -1025,9 +1026,10 @@ def advance(store, tid: int) -> None:
         if st == 'superseded' and rv.get('DecidedBy') not in OWNER_ACTORS: st = 'passed'
         # ...(one outside the line - his own email - is offered beside it by what it IS, not by the state its row last had: drawn `pending` while
         # no card stood in front, it read `held` and left the chat when a greyed card stood again - proposals.restore_set_aside)
-        if st == 'pending' and rv['ReviewId'] != (front[0] if front else None): st = 'passed' if rv['ReviewId'] in q['past'] else 'held' if cardqueue.in_line(rv) else 'offer'
+        if st == 'pending' and rv['ReviewId'] != (front[0] if front else None):
+            st = 'passed' if rv['ReviewId'] in q['past'] else ALSO if rv['ReviewId'] in also else 'held' if cardqueue.in_line(rv) else 'offer'
         if step and front and rv['ReviewId'] == front[0]: st = 'pending'
-        if st != r['State']: update(store, tid, k, state=st, status=st)
+        if st != r['State']: update(store, tid, k, state=st, status='pending' if st == ALSO else st)
     if front and (rv := by.get(front[0])) and f"r:{front[0]}" not in rows:
         # ...the turn that raised it (advance_soon kept it), else the one open now; a turn's card is drawn when that turn has ended
         # ...else the turn at work when it was raised, by its own time: a card is a turn's last thing, never loose where a turn was
@@ -1035,6 +1037,13 @@ def advance(store, tid: int) -> None:
         put(store, tid, 'card', f"r:{front[0]}", {**_card(rv), 'rids': front, 'line': cardqueue.line(q), 'step': step, **({'status': 'pending'} if step else {})},
             parent=t, state='pending', src=f"review:{front[0]}")
     elif front and f"r:{front[0]}" in rows: update(store, tid, f"r:{front[0]}", line=cardqueue.line(q))
+    # ...AND THE FRONT OF EACH LATER RUN STANDS WHERE IT WAS RAISED, UNDER THE LINE OF HIS THAT BEGAN ITS RUN (walk 24, 2026-11-25: raised after
+    # his answer it was a tab of the card above the answer, and came down the chat when that card's front was pressed): its own row from the
+    # start (ALSO), which becomes the one pending row in place once the cards before it are settled
+    for rid, f in also.items():
+        if f"r:{rid}" not in rows and (rv := by.get(rid)):
+            t = _raised(store, rid) or (open_turn(store, tid) or _turn_at(store, tid, rv.get('CreatedAt')) or {}).get('Id')
+            put(store, tid, 'card', f"r:{rid}", {**_card(rv), 'rids': f}, parent=t, state=ALSO, src=f"review:{rid}")
     # ...its step on the card in front only: pressed, that card is done; taken back or moved past, the card is as it was
     for k, r in rows.items():
         if (want := step if front and k == f"r:{front[0]}" else None) != json.loads(r['Body'] or '{}').get('step'): update(store, tid, k, step=want)

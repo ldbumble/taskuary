@@ -69,7 +69,7 @@ import PersonOutlineIcon from "@mui/icons-material/PersonOutline";
 import BoltIcon from "@mui/icons-material/Bolt";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import Artifact, { CardLine } from "./Artifact.jsx";
-import { lineRuns } from "./cardLine.js";
+import { lineRuns, standsAlone } from "./cardLine.js";
 
 const errText = (e) => e?.response?.data?.detail || e?.message || "The assistant could not respond.";
 const textOf = (message) => (message?.content || []).filter((p) => p.type === "text").map((p) => p.text).join("\n").trim();
@@ -518,7 +518,7 @@ function Conversation({ items, nodes = [], posts = [], reviews = [], next = null
   // ...a card's own row, never an earlier version of it (drawn from its own words where it stood)
   const version = (c) => isPastCard(c) && stands.has(c.review);
   const rowOf = new Map(items.flatMap((x) => (x.kind === "card" ? [x] : x.kind === "turn" ? x.cards || [] : [])).filter((c) => !version(c)).map((c) => [String(c.review), c]));
-  const runs = lineRuns(queue?.runs, new Set(rowOf.keys())), runOf = new Map(runs.flatMap((r) => r.tabs.flatMap((t) => t.rids.map((id) => [String(id), r]))));
+  const alone = standsAlone(queue?.runs), runs = lineRuns(queue?.runs, new Set(rowOf.keys())), runOf = new Map(runs.flatMap((r) => r.tabs.flatMap((t) => t.rids.map((id) => [String(id), r]))));
   // ...each tab is the card it was, drawn by the same road as one alone - one held behind the front from its review, the card it is when it comes
   const pane = (t) => <React.Fragment key={t.key}>{t.key === "land" ? landed : one(rowOf.get(t.key) || { id: `held:${t.key}`, review: Number(t.key), status: "pending" }, true)}</React.Fragment>;
   const one = (c, inLine = false) => {
@@ -540,7 +540,7 @@ function Conversation({ items, nodes = [], posts = [], reviews = [], next = null
   };
   const draw = (cs) => (cs || []).flatMap((c) => {
     const r = !version(c) && runOf.get(String(c.review));
-    if (!r) return one(c);
+    if (!r) return one(c, alone.has(String(c.review)));
     return String(c.review) === r.at ? [<CardLine key={`line:${r.tabs[0].key}`} tabs={r.tabs}>{r.tabs.map(pane)}</CardLine>] : [];
   });
   // A TURN'S CARDS, ITS LAST THING: what the log placed in it - a reply, a letter, an act - then the work's card (a tab of a run's card, there)

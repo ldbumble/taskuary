@@ -998,3 +998,46 @@ def test_an_answer_filed_is_never_read_without_its_turn():
         r = threading.Thread(target=read, daemon=True); r.start(); r.join(0.5)
         go.set(); w.join(5); r.join(5)
     assert not r.is_alive() and gaps == [], gaps
+
+
+def test_a_card_raised_after_his_newest_line_stands_under_that_line_never_as_a_tab_of_the_card_above_it():
+    """Walk 24 (2026-11-25, all three roads): a post waited; the agent asked a question; he answered (an answer greys no card); the turn his
+    answer began raised a second card - told "it stands as its card under your answer" - and it became tab 2 of the card that stood ABOVE his
+    answer, with nothing to press under his newest line; when the first was pressed the one card came down the chat. A run never crosses his
+    line: the second is its own card in the turn that raised it, both wait for his press, and a press moves nothing. Invented posts."""
+    import time
+    from unittest import mock
+    from taskuary import cardqueue, general, selfclose, taskstate
+    s, tid = world()
+    raised = {}
+    def turn(said, raise_, answer):
+        "His line and the turn it starts, on the chat's own road: mid-turn the agent's card is raised, then it answers."
+        def brain(system, user, **kw):
+            time.sleep(1.1)                       # ...a model's answer takes longer than a stamp's one second: the card is raised after his line
+            raised[said] = s.add_review({'TaskId': tid, 'Kind': 'action', 'Status': 'pending', 'Origin': 'agent', 'Reason': 'the post you asked for',
+                                         'DraftText': json.dumps({'action': 'run_tool', 'type': raise_, 'text': 'Our AP team closed October in four days.'})})
+            return answer
+        with mock.patch.object(general, '_selected', return_value=('api:test', 'Test', 'm')): sess = general.GeneralSession(s, tid)
+        with mock.patch.object(general.llm_mod, 'build_llm', return_value=brain): sess.send_prompt(said)
+    turn('Post on LinkedIn that we closed October in four days.', 'linkedin_post', f'The post is set up. {selfclose.ASK_MARKER} Shall I put it on Bluesky too? | Yes | No')
+    post = raised['Post on LinkedIn that we closed October in four days.']
+    assert taskstate.open_question(s, tid) and s.get_review(post)['Status'] == 'pending'
+    time.sleep(1.1)
+    turn('Yes', 'bluesky_post', 'The Bluesky post is set up.')
+    mail = raised['Yes']
+    assert s.get_review(post)['Status'] == 'pending', 'his answer to the question greys no card'
+    q = cardqueue.state(s, tid)
+    assert [[u['rids'] for u in r] for r in q['runs']] == [[[post]], [[mail]]], 'his answer parts the two: each is its own card'
+    assert (q['live'], q['fronts']) == ([post], [[mail]])
+    assert [[(t['key'], t['front']) for t in r] for r in cardqueue.tabs(s, q)] == [[(str(mail), True)]], 'the later card alone - no tabs with the one above'
+    items = chatlog.read(s, tid, 'everything')['items']
+    order = [(x['kind'], [c['review'] for c in x.get('cards') or []] if x['kind'] == 'turn' else x.get('text')) for x in items if x['kind'] in ('line', 'turn')]
+    assert order[-3:] == [('turn', [post]), ('line', 'Yes'), ('turn', [mail])], order
+    assert [c['status'] for x in items if x['kind'] == 'turn' for c in x.get('cards') or []] == ['pending', 'pending'], 'both wait for his press'
+    told = cardqueue.screen(s, tid)
+    assert told.count('Waiting for his press now') == 2 and 'tab of the same card' not in told, told
+    # ...and his press on the one above moves nothing: the email is the one card left, where it stood
+    where = lambda: s._rows("SELECT Id, Parent FROM chatlog WHERE TaskId=? AND Key=?", (tid, f'r:{mail}'))[0]
+    was = where()
+    s.decide_review(post, 'rejected', None, 'owner'); cardqueue._SEEN.clear(); chatlog.read(s, tid)
+    assert where() == was and chatlog.live_card(s, tid)['review'] == mail

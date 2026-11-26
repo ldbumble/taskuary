@@ -19,3 +19,7 @@ export const lineAt = (tabs, pick = null, at = -1) => {
 // review ids, as strings) - one held behind the front has none yet. A run with no row drawn is not drawn either, as its cards were not
 const rowOf = (tabs, rowed) => tabs.find((t) => t.front && rowed.has(String(t.rids[0]))) || [...tabs].reverse().find((t) => rowed.has(String(t.rids[0])));
 export const lineRuns = (runs, rowed) => (runs || []).map((tabs) => ({ tabs, at: rowOf(tabs, rowed)?.key })).filter((r) => r.at && r.tabs.length > 1);
+
+// ...AND A RUN OF ONE CARD IS A LATER RUN'S FRONT (cardqueue.tabs serves no other run of one): raised after a line of his while an older card
+// still waits above that line, it is the card it is at its own row under the line - no tabs, and never a tab of the card above (walk 24)
+export const standsAlone = (runs) => new Set((runs || []).filter((tabs) => tabs.length === 1).map((tabs) => tabs[0].key));

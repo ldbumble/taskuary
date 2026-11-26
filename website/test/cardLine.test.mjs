@@ -3,7 +3,7 @@
 // the same component; a press on the shown one settles it and the line slides on to the next that waits. Invented posts.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { lineAt, lineRuns } from "../src/cardLine.js";
+import { lineAt, lineRuns, standsAlone } from "../src/cardLine.js";
 
 const AXIOS = { name: "axios", setup(b) { b.onResolve({ filter: /^axios$/ }, () => ({ path: "axios", namespace: "stub" }));
   b.onLoad({ filter: /.*/, namespace: "stub" }, () => ({ loader: "js", contents: "const a = { get: async () => ({ data: {} }), post: async () => ({ data: {} }), put: async () => ({ data: {} }), interceptors: { request: { use() {} }, response: { use() {} } }, defaults: { headers: { common: {} } } }; export default { ...a, create: () => a };" })); } };
@@ -66,4 +66,10 @@ test("the one card stands at the row of the card in front, else the newest of it
   assert.equal(lineRuns(runs, new Set(["41"]))[0].at, "41", "the next has no row yet: it stays where it stood");
   assert.deepEqual(lineRuns(runs, new Set()), []);
   assert.deepEqual(lineRuns([tabsOf().slice(0, 1)], new Set(["41"])), [], "a card alone is no carousel");
+});
+
+test("a card raised after his line while an older one still waits above it stands alone at its own row, never a tab of the card above", () => {
+  const above = tabsOf().slice(0, 2), under = [{ key: "51", rids: [51], name: "Gail Moreno", done: false, front: true }];
+  assert.deepEqual([...standsAlone([above, under])], ["51"]);
+  assert.deepEqual(lineRuns([above, under], new Set(["41", "51"])).map((r) => r.tabs.map((t) => t.key)), [["41", "42"]], "the card above keeps its own tabs, and only those");
 });

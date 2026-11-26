@@ -283,7 +283,7 @@ CHAT_LINE = (
 # ...ONE DUTY LINE (the owner's rule 8, 2026-11-11: the agent talks like a person helping - "no repeating what the card says"): it was told
 # to say what it set up and for whom, and said that over a card that says it - then "it waits for your Send", "nothing has been sent". What
 # the card shows is never said; the agent adds only what the card cannot
-CARD_SAID = ('It stands as its card under your answer, with its own button: the card shows what it is, to whom, its words, the file it '
+CARD_SAID = ('It stands as its card, with its own button: the card shows what it is, to whom, its words, the file it '
              'carries, what it replaced, that it waits and that nothing went. What stands on his screen is told you at the head of every turn; '
              'many of one act (25 emails, 40 issues to close) are one card, in one call with `items`.')
 # ...AND A ROUTINE'S OWN EMAIL IS NO CARD (slots.routine_sends, the owner 2026-11-17: "routines should send on their own too"): it went at

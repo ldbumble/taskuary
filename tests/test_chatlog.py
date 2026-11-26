@@ -1138,3 +1138,60 @@ def test_a_card_that_waits_never_crosses_his_line_and_nothing_comes_back_over_it
     got = chat(s, tid)
     at = got.index('Leave the posts for now - what is on my calendar?')
     assert [g for g in got[:at] if isinstance(g, list)] and got[at + 1:] == ['Nothing today.'], got
+
+
+# ── A TURN'S OPENING IS NOT ITS ANSWER (the owner, 2026-11-26: "it's broken in the response") ─────────────────────────────────────────────
+OPENING = "I'll check which calendars can be combined and whether the screenshot shows where Erin's request got stuck."
+DID = 'The reply to Erin is ready for Send. Two calendars combine today; the screenshot leaves the last result unconfirmed, so the draft asks.'
+def _acp_turn(closing=''):
+    "The recorded shape: one opening message, the work, the reply card raised, end_turn - and its closing words, where it wrote any."
+    said = lambda i, w: {'sessionUpdate': 'agent_message_chunk', 'messageId': i, 'content': {'type': 'text', 'text': w}}
+    call = lambda i, name, **a: [{'sessionUpdate': 'tool_call', 'toolCallId': i, 'title': name, 'status': 'in_progress', 'rawInput': a, '_meta': {'taskuary': {'tool': name}}},
+                                 {'sessionUpdate': 'tool_call_update', 'toolCallId': i, 'status': 'completed'}]
+    return [said('m1', OPENING), *call('c1', 'Bash', command='pytest -q tests/test_calendar.py'), *call('c2', 'Read', file_path='shot.png'),
+            *([said('m2', closing)] if closing else []), *call('c3', 'mcp__taskuary__propose_reply', text='Hi Erin - which calendar did it stop on?'),
+            *call('c4', 'mcp__taskuary__end_turn', did=DID)]
+def _trace_turn(closing=''):
+    said = lambda w: {'type': 'progress', 'name': 'text', 'detail': w}
+    call = lambda i, name, **a: [{'type': 'tool_call', 'name': name, 'detail': {'tool_call_id': i, 'args': a}}, {'type': 'tool_result', 'name': i, 'detail': {'tool_call_id': i, 'result': 'ok'}}]
+    return [{'type': 'prompt', 'name': 'prompt_sent_to_agent', 'detail': 'go'}, said(OPENING), *call('c1', 'run', command='pytest -q tests/test_calendar.py'),
+            *call('c2', 'read_file', path='shot.png'), *([said(closing)] if closing else []), *call('c3', 'propose_reply', text='Hi Erin - which calendar did it stop on?'),
+            *call('c4', 'end_turn', did=DID)]
+
+
+def _filed(road, events, handed, summary=True):
+    "The turn `events` record, filed as its road files it (general._file) with what that road hands over as the answer: the turn as the chat reads it."
+    import time
+    from unittest import mock
+    from taskuary import conversation, general, selfclose
+    s, tid = world()
+    conversation.hear(s, tid, turn=True)
+    with mock.patch.object(general, '_selected', return_value=('api:test', 'Test', 'm')): sess = general.GeneralSession(s, tid)
+    try:
+        for e in events: chatlog.feed(s, tid, sess.sid or '', road, e)
+        selfclose.take_marks(tid)
+        if summary: selfclose.keep_mark(tid, 'summary', selfclose.summary_mark({'about': 'Erin asked for one agenda across her calendars.', 'did': DID}))
+        with mock.patch('taskuary.hooks.judge_ended'): sess._file(handed, [], time.time())
+    finally: sess.close()
+    return chatlog.read(s, tid, 'summary')['items'][-1]
+
+
+@pytest.mark.parametrize('road,turn', [('acp', _acp_turn), ('trace', _trace_turn)])
+def test_a_turn_that_wrote_only_its_opening_reads_what_it_did_as_its_answer(road, turn):
+    """Live, 2026-11-26 (invented people): a turn wrote one opening line, ran its steps, raised Erin's reply card and ended with end_turn - no
+    word after its first step. Its road hands over all it said (acp.prompt), so the chat kept "I'll check..." as the answer over the card: a
+    promise of work already done, what it found nowhere. The answer is what the turn says after its work - here, its summary's `did`."""
+    t = _filed(road, turn(), OPENING)
+    assert t['text'] == DID and t['tail'] == DID, (t['text'], t.get('tail'))
+    assert [x['text'] for x in t['steps'] if x['k'] == 'said'] == [OPENING], 'what it said as it began stays where it was said'
+
+
+@pytest.mark.parametrize('road,turn', [('acp', _acp_turn), ('trace', _trace_turn)])
+def test_a_turns_own_closing_words_stay_its_answer(road, turn):
+    "Words after its work began are its answer, the card and end_turn after them, summary or none - and an opening with nothing after it and no summary is all it said."
+    closing = 'Two calendars combine today, and the draft asks Erin which one it stopped on.'
+    assert _filed(road, turn(closing), closing)['text'] == closing
+    assert _filed(road, turn(closing), f'{OPENING}\n\n{closing}')['text'] == f'{OPENING}\n\n{closing}', 'a road that hands over both keeps both'
+    assert _filed(road, turn(), OPENING, summary=False)['text'] == OPENING, 'nothing else was said: its words are never thrown away'
+    said_only = [e for e in turn() if e.get('sessionUpdate') == 'agent_message_chunk' or e.get('name') == 'text']
+    assert _filed(road, said_only, OPENING)['text'] == OPENING, 'a turn that did no work said its answer'

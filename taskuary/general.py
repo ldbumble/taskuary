@@ -1700,6 +1700,13 @@ def read_summary(store, tid: int, reply: str, drafted: str = '') -> tuple:
     letters = [drafted, *(r['DraftText'] for r in store._rows("SELECT DraftText FROM review WHERE TaskId=? AND (Status='pending' OR Kind IN ('draft_reply','draft','slot'))",
                                                               (tid,)))]
     reply, summ = selfclose.summary_marker(reply, [x for x in letters if x])
+    # ...AND WORDS IT WROTE ONLY BEFORE ITS WORK ARE ITS OPENING, NEVER ITS ANSWER (the owner, 2026-11-26: "I'll check which calendars..." stood
+    # as the answer over the card of a turn that had checked, and what it found was nowhere): a road hands over all a turn said where it said
+    # nothing after its last call (acp.prompt), so the summary's `did` - an empty answer's words already - is that turn's too. By the turn's
+    # own steps (chatlog.opened_only), on every road; what the opening wrote for the app (a question, a tick) is kept (selfclose.carried)
+    if summ and summ['did'] and reply:
+        from . import chatlog
+        if chatlog.opened_only(store, tid): reply = selfclose.carried(reply, '')
     if summ: reply = reply or summ['did']
     if summ and summ.get('name'): _act(store, tid, 'naming the task', take_name, store, tid, summ['name'])
     return reply, summ

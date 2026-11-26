@@ -850,6 +850,20 @@ def flush(store, tid: int) -> None:
             for r in list(f.get('dirty') or ()): _put(store, tid, sid, f, r)
 
 
+def opened_only(store, tid: int) -> bool:
+    """Did the newest turn say its words only BEFORE its work - nothing after its first step (its own plumbing, conversation.machinery, is no
+    step)? Then those words are its opening - "I'll check..." - and no answer. Words after work began are what it found, wherever its card
+    and its end_turn come after them (words first, the card at the turn's end). False for a turn that did no work: its words are all of it."""
+    if not store or not tid: return False
+    from .conversation import machinery
+    flush(store, tid)
+    with store.lock:
+        t = store.cx.execute("SELECT Id FROM chatlog WHERE TaskId=? AND Kind='turn' AND Parent IS NULL ORDER BY Id DESC LIMIT 1", (int(tid),)).fetchone()
+        steps = [json.loads(r['Body'] or '{}') for r in store.cx.execute("SELECT Body FROM chatlog WHERE Parent=? AND Kind='step' ORDER BY Id", (t['Id'],))] if t else []
+    began = next((i for i, s in enumerate(steps) if s.get('k') == 'tool' and not machinery(s)), None)
+    return began is not None and not any(s.get('k') == 'said' and str(s.get('text') or '').strip() for s in steps[began + 1:])
+
+
 # ── HOW MUCH OF THE WORK IS SHOWN: the one place the detail setting is applied ──────────────────────────────────────────────────────────
 LEVELS = ('summary', 'steps', 'everything')
 SETTING = {'coding': 'chat_detail_coding', 'other': 'chat_detail_other'}

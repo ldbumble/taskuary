@@ -2402,8 +2402,9 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
   const rec = notDone && detail?.task?.TaskId === selected ? detail?.recommended || null : null;
   const filled = (verb) => liveVerb(rec?.verb) === verb;
   // THE CALENDAR'S ANSWERS (calwrite.py, server task_detail's `calendar`): an invite waiting on the owner is answered from the row -
-  // Accept, Decline, Propose a new time - and a thread asking for a time offers Find a time. Each DRAFTS into the chat for the
-  // owner's Send; a card that may not write says so on the error line with its sign-in as the way out (failures.py's fix).
+  // Accept, Decline, Propose a new time - and a thread asking for a time offers Find a time. Accept and Decline tell the calendar at
+  // the press, and the answer's card says what went (or what failed, with the way past it); the others DRAFT into the chat for the
+  // owner's Send. A card that may not write says so on the error line with its sign-in as the way out (failures.py's fix).
   const calAsk = notDone && !liveSession ? detail?.calendar || null : null;
   const [slotAt, setSlotAt] = useState(null);           // { act, at } - Propose a new time / Find a time's free times
   const calAnswer = async (act, slot = null) => {
@@ -2412,7 +2413,8 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
     try {
       const { data } = await api.post(`/api/messages/${calAsk.mid}/calendar`, { act, ...(slot || {}) });
       if (!data?.ok) { setErr(data?.say || "That could not be drafted."); setStartFail({ text: data?.say || "", fix: data?.fix || null, retry: false }); return; }
-      setOpenStage("reply"); loadDetail(selected); onChanged?.();
+      if (!data.sent) setOpenStage("reply");
+      loadDetail(selected); onChanged?.();
     } catch (e) { setErr(e?.response?.data?.detail || e?.message || "That could not be drafted."); }
   };
   // A LATE ANSWER NO AGENT WAS WOKEN FOR IS CHASED FROM THE ROW (the owner, 2026-11-10: "job of agent is to be helpful and do as much as

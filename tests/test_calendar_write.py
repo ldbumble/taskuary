@@ -1,5 +1,5 @@
 """Answering the calendar (calwrite.py): an invite accepted, declined or met with another time, a meeting booked from a thread -
-each DRAFTED for the owner's Send, and only that Send reaching Graph or Google. Both providers are faked; no network."""
+Accept and Decline told to the calendar at his press, the rest DRAFTED for the owner's Send. Both providers are faked; no network."""
 import json, unittest
 from datetime import datetime, timedelta
 from unittest import mock
@@ -155,26 +155,31 @@ class AStrangersInvite(unittest.TestCase):
 
     def test_it_shows_accept_and_decline_with_no_trust_and_one_press_sends_one_answer(self):
         from fastapi.testclient import TestClient
-        from taskuary import chatlog, origin, senders, server
+        from taskuary import chatlog, general, origin, senders, server
         s = outlook_store(); out = self.arrive(s); tid, mid = out['task_id'], out['message_id']
         self.assertIsNone(origin.hold(s, tid)); self.assertIsNone(senders.trust_offer(s, tid))
         self.assertFalse(s.task_has_tag(tid, ingest.HOLD_TAG))
         item = {'kind': 'asked', 'key': f'msg:{mid}', 'mid': mid, 'tid': tid, 'title': 'Invite: Budget sync'}
         self.assertEqual([c['verb'] for c in concierge.chips_for(s, item)][:3], ['accept_invite', 'decline_invite', 'propose_time'])
         g = Fake()
-        with mock.patch.object(server, 'store', s), mock.patch.object(calwrite, 'busy', return_value=BUSY), mock.patch.object(calwrite, 'requests', g):
+        with mock.patch.object(server, 'store', s), mock.patch.object(calwrite, 'busy', return_value=BUSY), mock.patch.object(calwrite, 'requests', g), \
+                mock.patch('taskuary.channels.graph_token', return_value='tok'), mock.patch.object(general, 'to_agent') as woke:
             d = TestClient(server.app).get(f'/api/tasks/{tid}').json()
             self.assertTrue(d['calendar']['invite']); self.assertNotIn('held', d['origin']); self.assertIsNone(d['origin'].get('trust'))
-            r = TestClient(server.app).post(f'/api/messages/{mid}/calendar', json={'act': 'accept'}).json()
-            self.assertTrue(r['ok'], r); self.assertEqual(g.calls, [], 'nothing reaches the calendar before his Send')
-            # ...and its card is drawn for his press - a held task's never was
+            # ...ONE PRESS (the owner, 2026-11-26: "it should just show accept/decline button"): Accept drafted a card he then had to Send
+            r = TestClient(server.app).post(f'/api/messages/{mid}/calendar', json={'act': 'decline'}).json()
+            self.assertTrue(r['ok'] and r['sent'], r); self.assertEqual(r['say'], f'Declined Budget sync - sent to {self.VENDOR}')
+            self.assertEqual([(m, url.rsplit('/', 1)[-1]) for m, url, _ in g.calls], [('POST', 'decline')])
+            # ...its result on its one card - a held task's never was drawn - and nothing else waits
             page = chatlog._serve(s, tid)
             self.assertIsNone(page['hold'])
-            self.assertEqual([x['kind'] for x in page['items'] if x['kind'] == 'card' and x.get('status') == 'pending'], ['card'])
-            self.assertTrue(send(s, r['reviewId'])['ok'])
-            try: send(s, r['reviewId'])                             # ...pressed twice: once
-            except Exception: pass
-        self.assertEqual([(m, url.rsplit('/', 1)[-1]) for m, url, _ in g.calls], [('POST', 'accept')])
+            self.assertEqual([x.get('status') for x in page['items'] if x['kind'] == 'card'], ['approved'])
+            self.assertIsNone(TestClient(server.app).get(f'/api/tasks/{tid}').json()['calendar'], 'the buttons are gone with the answer')
+            for act in ('decline', 'accept'):                       # ...pressed twice, or the other one after: once
+                again = TestClient(server.app).post(f'/api/messages/{mid}/calendar', json={'act': act}).json()
+                self.assertEqual((again['sent'], again['reviewId'], again['say']), (True, r['reviewId'], r['say']))
+        self.assertEqual([(m, url.rsplit('/', 1)[-1]) for m, url, _ in g.calls], [('POST', 'decline')])
+        self.assertEqual(len(s.reviews_for_message(mid)), 1); self.assertEqual(woke.call_args_list, [], 'a press with no next step wakes nobody')
 
     def test_on_his_own_task_it_holds_nothing_and_its_words_reach_no_agent(self):
         from taskuary import origin
@@ -191,6 +196,57 @@ class AStrangersInvite(unittest.TestCase):
         s.set_message_danger(out['message_id'], "asks the agent to forward the owner's mail")
         s._exec("UPDATE change_gen SET Gen=Gen+1 WHERE Tbl='trust'")
         self.assertTrue(origin.hold(s, out['task_id']))
+
+
+class OnePress(unittest.TestCase):
+    """The owner, 2026-11-26: "for calendar invites it should just show accept/decline button". Accept on a colleague's invite drafted a card
+    whose Send he then had to press - two steps for a yes. The press is the answer: the calendar is told once, by the door every Send
+    takes, and the card says what went. A new time still needs his words, and waits."""
+    def press(self, s, mid, act, g, wakes=0):
+        from fastapi.testclient import TestClient
+        from taskuary import general, server
+        with mock.patch.object(server, 'store', s), mock.patch.object(calwrite, 'busy', return_value=BUSY), mock.patch.object(calwrite, 'requests', g), \
+                mock.patch('taskuary.channels.graph_token', return_value='tok'), mock.patch.object(general, 'to_agent') as woke:
+            r = TestClient(server.app).post(f'/api/messages/{mid}/calendar', json={'act': act}).json()
+        self.assertEqual(len(woke.call_args_list), wakes, 'his press wakes nobody - a failure hands it back once')
+        return r
+
+    def cards(self, s, tid):
+        from taskuary import chatlog
+        return [x.get('status') for x in chatlog._serve(s, tid)['items'] if x['kind'] == 'card']
+
+    def test_a_colleagues_invite_is_accepted_at_the_press_once(self):
+        s = outlook_store(); out = arrive(s); tid, mid = out['task_id'], out['message_id']
+        g = Fake(); r = self.press(s, mid, 'accept', g)
+        self.assertTrue(r['ok'] and r['sent'], r); self.assertEqual(r['say'], f'Accepted Budget sync - sent to {ERIN}')
+        (m, url, kw), = g.calls
+        self.assertEqual((m, url.rsplit('/', 1)[-1]), ('POST', 'accept'))
+        self.assertEqual(json.loads(kw['data']), {'comment': '', 'sendResponse': True}, 'no note he never saw rides along')
+        rv = s.get_review(r['reviewId'])
+        self.assertEqual((rv['Status'], rv['DeliveryState']), ('approved', 'sent'))
+        self.assertEqual(self.cards(s, tid), ['approved'], 'one card, its result on it, nothing waiting')
+        self.assertIsNone(calwrite.of_task(s, tid))
+        again = self.press(s, mid, 'accept', g)                       # ...pressed twice
+        self.assertEqual((again['sent'], again['reviewId']), (True, r['reviewId']))
+        self.assertEqual(len(g.calls), 1); self.assertEqual(len(s.reviews_for_message(mid)), 1)
+
+    def test_a_refused_answer_stays_on_its_card_and_the_next_press_sends_one(self):
+        s = outlook_store(); out = arrive(s); tid, mid = out['task_id'], out['message_id']
+        bad = Fake({'/accept': R(403, {'error': 'denied'})}); r = self.press(s, mid, 'accept', bad, wakes=1)
+        self.assertTrue(r['ok']); self.assertFalse(r['sent']); self.assertTrue(r['say'])
+        rv = s.get_review(r['reviewId'])
+        self.assertEqual((rv['Status'], rv['DeliveryState']), ('pending', 'failed'))
+        self.assertEqual(self.cards(s, tid), ['pending'], 'the failure is its card, Send still on it')
+        self.assertTrue(calwrite.of_task(s, tid)['invite'], 'and the invite still waits')
+        g = Fake(); ok = self.press(s, mid, 'accept', g)
+        self.assertTrue(ok['sent'], ok); self.assertEqual(len(g.calls), 1)
+        self.assertEqual(sorted(x['Status'] for x in s.reviews_for_message(mid)), ['approved', 'superseded'])
+
+    def test_a_new_time_still_waits_for_his_send(self):
+        s = outlook_store(); out = arrive(s); g = Fake()
+        r = self.press(s, out['message_id'], 'propose', g)
+        self.assertTrue(r['ok']); self.assertNotIn('sent', r); self.assertEqual(g.calls, [])
+        self.assertEqual(s.get_review(r['reviewId'])['Status'], 'pending')
 
 
 class DraftedThenSent(unittest.TestCase):

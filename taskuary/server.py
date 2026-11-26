@@ -4444,7 +4444,8 @@ def fetch_attachments(mid: int):
         raise HTTPException(422, str(e)[:300])
     return {'fetched': n, 'data': [_att_row(a) for a in store.list_attachments(mid)]}
 
-# ── answering the calendar (calwrite.py): each press DRAFTS into the approval queue; only the owner's Send writes the calendar ──
+# ── answering the calendar (calwrite.py): his Accept or Decline tells the calendar at the press, once; a new time and a meeting
+# DRAFT into the approval queue for his Send ──
 def _cal_refusal(e) -> dict:
     """The one line a press that cannot be drafted answers with, and its way out (failures.py's fix shape) - 200, so the row
     says it where it was pressed instead of an error toast."""
@@ -4475,11 +4476,13 @@ class CalendarBody(BaseModel):
 
 @app.post('/api/messages/{mid}/calendar')
 def calendar_answer(mid: int, body: CalendarBody):
-    """Accept, Decline, Propose a new time or Find a time, pressed: the answer drafted as a review on the message (and its
-    task) for the owner's Send - nothing reaches the calendar here. {ok, reviewId, taskId, say} or {ok: false, say, fix}."""
+    """Accept or Decline, pressed: the calendar is told, once, and the answer's card says so - {ok, reviewId, taskId, sent, say, fix};
+    a send that failed stays on that card (`sent` false). Propose a new time or Find a time: the answer drafted as a review on the
+    message (and its task) for the owner's Send - {ok, reviewId, taskId, say}. What cannot be set up at all: {ok: false, say, fix}."""
     from . import calwrite
     if not store.get_message(mid): raise HTTPException(404, 'message not found')
-    try: out = calwrite.draft(store, mid, body.act, body.start, body.end, ACTOR)
+    try: out = (calwrite.rsvp(store, mid, body.act, ACTOR) if body.act in calwrite.ONE_PRESS
+                else calwrite.draft(store, mid, body.act, body.start, body.end, ACTOR))
     except Exception as e: return _cal_refusal(e)
     return {'ok': True, **out}
 

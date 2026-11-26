@@ -4,6 +4,7 @@ calendar.py only READS - every reply draft sees the owner's busy times. This is 
 itself: each act is DRAFTED as a review whose envelope says what the calendar will be told (Deliver kind 'calendar'), it
 waits in the approval queue like any reply, and only the owner's Send reaches `deliver` (verdicts._send_snapshot). The
 note box is the reply box; what it holds rides along as the RSVP's comment, or the new invite's body.
+His own Accept or Decline on an invite is that draft and its Send in one press (`rsvp`): the same card, the same door.
 
 Two providers, on the cards that already read the calendar:
 - Outlook: Graph events/{id}/accept | decline | tentativelyAccept (proposedNewTime) and POST events, as the mailbox the
@@ -17,7 +18,7 @@ What an invite IS comes from the mail system, never its words (counsel.is_invite
 meetingMessageType, or the iCalendar part's METHOD and SEQUENCE. Only a request nobody has answered is the owner's move;
 an answer, an update and a cancellation stay fyi.
 """
-import base64, json, re, time
+import base64, json, re, threading, time
 from datetime import datetime, timedelta, date, timezone
 from zoneinfo import ZoneInfo
 from loguru import logger
@@ -504,6 +505,39 @@ def draft(store, mid: int, act: str, start: str = None, end: str = None, actor: 
     return {'reviewId': rid, 'taskId': msg.get('TaskId'), 'say': head + (f' ({clash})' if clash else '') + f'. It waits for your {send_word()}.'}
 
 
+# ── Accept and Decline, pressed (the owner, 2026-11-26: "for calendar invites it should just show accept/decline button") ─────────
+# The press IS his yes, so it is the answer and its Send in one: the same card, sent through the one door every Send takes
+# (verdicts.decide). No note rides along - none was shown to him. Propose a new time needs his words, and stays a draft.
+ONE_PRESS, WENT = ('accept', 'decline'), {'accept': 'Accepted', 'decline': 'Declined'}
+_PRESS = threading.Lock()                             # one press at a time: two at once must find one answer, not make two
+
+
+def rsvp(store, mid: int, act: str, actor: str = 'owner') -> dict:
+    """{reviewId, taskId, sent, say, fix}: the invite answered at the press. An answer the calendar already took is said again and
+    nothing is sent; one still on its way, or that nobody could confirm, is checked - never sent beside. A send that failed stays on
+    its card (`sent` False, `say` why, `fix` the way past it). Raises as `draft` does where no answer can be set up at all."""
+    if act not in ONE_PRESS: raise ValueError(f'not a one-press answer: {act}')
+    from . import verdicts
+    with _PRESS:
+        mine = [r for r in store.reviews_for_message(int(mid)) if env_of(r).get('kind') == 'calendar' and env_of(r).get('act') != 'schedule']
+        if (r := next((r for r in mine if r.get('DeliveryState') == 'sent'), None)):
+            env = env_of(r)
+            return {'reviewId': r['ReviewId'], 'taskId': r.get('TaskId'), 'sent': True, 'say': went_line(env), 'fix': None}
+        r = next((r for r in mine if r.get('Status') == 'pending' and r.get('DeliveryState') in ('sending', 'unknown')), None)
+        rid = r['ReviewId'] if r else draft(store, mid, act, actor=actor, note='')['reviewId']
+        out = verdicts.decide(store, store.get_review(rid), 'approve', None, None, actor)
+        r = store.get_review(rid) or {}
+        sent = bool(out.get('ok') and not out.get('send_error') and r.get('DeliveryState') == 'sent')
+        return {'reviewId': rid, 'taskId': r.get('TaskId'), 'sent': sent, 'fix': out.get('send_fix'),
+                'say': went_line(env_of(r)) if sent else str(out.get('send_error') or 'The calendar was not told.')}
+
+
+def went_line(env: dict) -> str:
+    "\"Accepted Budget sync - sent to erin@northwind.example\": what a one-press answer says once the calendar took it."
+    to = ', '.join(env.get('to') or [])
+    return f"{WENT.get(env.get('act'), 'Answered')} {env.get('subject') or 'the meeting'}" + (f' - sent to {to}' if to else '')
+
+
 # ── a meeting asked for in the chat (the owner, 2026-10-28: "schedule a meeting" opened an agent's job) ──────────────────────────
 def can_book(store) -> bool:
     """A card that can put a meeting on a calendar is connected - Outlook with a mailbox, or a Gmail card signed in with Google.
@@ -788,7 +822,7 @@ def _ok(r, what: str):
 
 
 def deliver(store, env: dict, note: str) -> dict:
-    """Tell the calendar what the owner approved. Called from verdicts._send_snapshot only - behind Send, never before it."""
+    """Tell the calendar what the owner approved. Called from verdicts._send_snapshot only - behind his press, never before it."""
     act, tz, note = env.get('act'), cal.tz_of(store), str(note or '').strip()
     c = store.get_connector(int(env.get('connector_id') or 0), with_secret=True)
     if not c or not c.get('Active'): raise RuntimeError('the calendar card it was drafted for is gone or switched off')

@@ -102,6 +102,57 @@ class AgendaTests(unittest.TestCase):
         self.assertEqual(ag['events'], []); self.assertIn('Calendars.Read', ag['errors'][0])
         self.assertIn('COULD NOT READ', cal.render(ag))
 
+    # ── every calendar at the same time (a tester's install, 2026-11-26: Monday's calendar took 30 s and more) ──
+    BOXES = ('me@corp.example', 'erin@corp.example', 'gail@corp.example')
+
+    def _three(self):
+        s = self._store(); cid = s.get_connector_by_type('outlook')['ConnectorId']
+        for b in self.BOXES[1:]: s.save_source({'Channel': 'email', 'Address': b, 'Owner': 'me', 'Active': 1, 'ConnectorId': cid}, 't')
+        return s
+
+    def _graph(self, wait=0., down=''):
+        "Graph, one meeting per mailbox at 09:00, 10:00, 11:00 - each answer `wait` seconds away, and `down`'s a 500."
+        import time
+        d = (datetime.now() + timedelta(days=1)).strftime('%Y-%m-%d')
+        def get(url, **kw):
+            mb = url.split('/users/')[1].split('/')[0]; h = 9 + self.BOXES.index(mb); time.sleep(wait)
+            class R:
+                status_code, text = (500, 'server error') if mb == down else (200, '')
+                def json(self): return {'value': [{'subject': f'With {mb}', 'start': {'dateTime': f'{d}T{h:02d}:00:00'},
+                                                   'end': {'dateTime': f'{d}T{h:02d}:30:00'}, 'showAs': 'busy'}]}
+            return R()
+        return get
+
+    def test_three_slow_calendars_are_read_at_once_and_merged_in_order(self):
+        import time
+        s, t0 = self._three(), time.monotonic()
+        with mock.patch('taskuary.channels.graph_token', return_value='tok'), mock.patch('taskuary.calendar.requests.get', self._graph(wait=2.)):
+            ag = cal.agenda(s, days=3)
+        took = time.monotonic() - t0; print(f'three 2-second calendars: {took:.2f}s')
+        self.assertLess(took, 4, 'one after another is 6 seconds')
+        self.assertEqual([e['mailbox'] for e in ag['events']], list(self.BOXES)); self.assertEqual(ag['errors'], [])
+
+    def test_a_calendar_that_fails_is_named_and_the_others_are_shown(self):
+        from taskuary import lookups
+        s = self._three(); s.set_setting('calendar_enabled', '1', 't')
+        with mock.patch('taskuary.channels.graph_token', return_value='tok'), mock.patch('taskuary.calendar.requests.get', self._graph(down=self.BOXES[1])):
+            ag = cal.agenda(s, days=3); said = lookups.calendar_read(s, {'days': 3})
+        self.assertEqual([e['mailbox'] for e in ag['events']], [self.BOXES[0], self.BOXES[2]])
+        self.assertEqual(len(ag['errors']), 1); self.assertTrue(ag['errors'][0].startswith(self.BOXES[1] + ':'))
+        for b in (self.BOXES[0], self.BOXES[2]): self.assertIn(f'With {b}', said)
+        self.assertIn(f'could not read one calendar: {self.BOXES[1]}', said)
+
+    def test_a_calendar_that_never_answers_is_named_when_the_wait_is_over_and_holds_nothing_up(self):
+        import threading, time
+        never = threading.Event()
+        jobs = [('a', lambda: [{'start': '1'}]), ('stuck', lambda: never.wait(30) and []), ('c', lambda: [{'start': '3'}])]
+        t0 = time.monotonic()
+        try:
+            with mock.patch.object(cal, 'READ_WAIT', 0.5): events, errors = cal.read_all(jobs)
+        finally: never.set()
+        self.assertLess(time.monotonic() - t0, 3)
+        self.assertEqual([e['start'] for e in events], ['1', '3']); self.assertEqual(len(errors), 1); self.assertTrue(errors[0].startswith('stuck: no answer'))
+
     def test_context_whenever_the_switch_is_on(self):
         s = self._store()
         with mock.patch('taskuary.calendar.agenda', return_value={'events': [], 'errors': [], 'sources': ['outlook: me@corp.example'],

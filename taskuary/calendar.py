@@ -16,7 +16,8 @@ Two sources, both read-only, both riding credentials already on a connector card
 The same read is a tool (`calendar` in reports.REGISTRY) so an agent can check before it
 commits anyone to a time.
 """
-import json, re, time
+import contextvars, json, re, time
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as StillOut
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 from loguru import logger
@@ -160,6 +161,26 @@ def unreadable(e) -> str:
     return plain_failure(e)[:240]
 
 
+# EVERY CALENDAR AT THE SAME TIME (the owner, 2026-11-26: "pull up my calendar for Monday" waited 30 s and more): each mailbox and each
+# Google account was read after the one before it, up to 20 s apiece, and one mailbox that failed took its card's others with it
+READ_WAIT = 25      # seconds the calendars are waited on together: one read's own connect-and-read time, and a little
+READERS = 8         # calendars read at once
+
+def read_all(jobs: list) -> tuple:
+    """(events, errors) of `jobs` - [(name, read)], one per calendar - all read at once, their events in the order given. A calendar that
+    fails, or is still out when the wait is over, is named in errors and holds nothing else up."""
+    if not jobs: return [], []
+    ex = ThreadPoolExecutor(min(READERS, len(jobs)), thread_name_prefix='calendar')
+    futs = [ex.submit(contextvars.copy_context().run, read) for _, read in jobs]
+    until, events, errors = time.monotonic() + READ_WAIT, [], []
+    for (name, _), fu in zip(jobs, futs):
+        try: events += fu.result(max(0., until - time.monotonic()))
+        except StillOut: errors.append(f'{name}: no answer within {READ_WAIT} seconds')
+        except Exception as e: errors.append(f'{name}: {unreadable(e)}')
+    ex.shutdown(wait=False, cancel_futures=True)        # a read still out is left to its own timeout, never waited on
+    return events, errors
+
+
 def agenda(store, days: int = DAYS, start: datetime = None, tid: int = None) -> dict:
     """{events, errors, sources, start, end, tz} - every calendar the cards can reach, from `start`
     (now, unless a caller wants the whole day) for `days` days. `tid`: read for the agent on that task - its own profile's calendars
@@ -169,7 +190,7 @@ def agenda(store, days: int = DAYS, start: datetime = None, tid: int = None) -> 
     now = datetime.now(tz).replace(second=0, microsecond=0)
     start = start or now
     end = start + timedelta(days=days)
-    events, errors, sources = [], [], []
+    sources, jobs = [], []
     # ...THE DEMO'S OWN WEEK (demo.agenda, as Find times reads it): its Outlook card is a prop, and read it went to Microsoft and drew a real
     # sign-in refusal, trace ids and all, on the demo's day card (the overnight fix round, 2026-11-12)
     from . import demo
@@ -181,15 +202,15 @@ def agenda(store, days: int = DAYS, start: datetime = None, tid: int = None) -> 
                  and (not s.get('ConnectorId') or s['ConnectorId'] == ol['ConnectorId']) and may_use(store, tid, s['Address'])]
         if boxes:
             sources.append(f"outlook: {', '.join(boxes)}")
-            try: events += outlook_events(json.loads(ol.get('ConfigJson') or '{}'), ol.get('Secret'), boxes, start, end, tz)
-            except Exception as e: errors.append(unreadable(e))
+            cfg = json.loads(ol.get('ConfigJson') or '{}')
+            jobs += [(mb, lambda cfg=cfg, sec=ol.get('Secret'), mb=mb: outlook_events(cfg, sec, [mb], start, end, tz)) for mb in boxes]
     for gm in store.connectors_by_type('gmail', with_secret=True):
         if not gm.get('Active') or not may_use(store, tid, gm['ConnectorId']): continue
         cfg = json.loads(gm.get('ConfigJson') or '{}')
         if cfg.get('google_refresh_token'):
             sources.append(f"google: {cfg.get('address') or 'primary'}")
-            try: events += google_events(cfg, start, end, tz)
-            except Exception as e: errors.append(unreadable(e))
+            jobs.append((sources[-1], lambda cfg=cfg: google_events(cfg, start, end, tz)))
+    events, errors = read_all(jobs)
     events.sort(key=lambda e: e['start'])
     return {'events': events[:MAX_EVENTS], 'errors': errors, 'sources': sources, 'start': _iso(start), 'end': _iso(end),
             'tz': tz_name(tz)}

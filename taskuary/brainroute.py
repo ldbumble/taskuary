@@ -182,6 +182,11 @@ def _own(store, pick: str, field: str, cfg=None) -> str:
     except ValueError: return ''
 
 
+def quick_of(store, pick: str) -> str:
+    "An AI card's own QUICK model - the light_model the owner named on it - or '' when it has none (or is no card)."
+    return _own(store, pick, 'light_model') if str(pick or '').startswith('connector:') else ''
+
+
 def strong_of(store, pick: str, cfg=None) -> str:
     """This brain's STRONG gear - the owner's strong_model on its CLI connection or its AI card - or '' when it has none.
     Blank is no strong tier, and nothing is inferred from a model's name (setup never assumes an AI) - but a CLI with gears of its own

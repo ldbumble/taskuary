@@ -539,7 +539,8 @@ def page(sid: str) -> dict:
     # ...and what the site is called for him (signin.site_name): a page reached by a bare address by its own title, never "127.0.0.5"
     form = signin.form_state(sid) if rc == 0 else {}         # ...and whether a password box of it holds one (pw): an account's form
     pg = _PAGES[str(sid)] = {'url': url, 'open': bool(st.get('open')), 'elements': snap[:SNAP_MAX] if rc == 0 else '',
-                             'fields': signin.form_fields(sid, form), 'pw': bool(form.get('pw')), 'name': signin.site_name(url, sid) if url else ''}
+                             'fields': signin.form_fields(sid, form), 'pw': bool(form.get('pw')), 'name': signin.site_name(url, sid) if url else '',
+                             'multi': bool(form.get('multi'))}
     return pg
 
 
@@ -834,6 +835,20 @@ def last_press(store, tid, act: dict, pg: dict) -> dict | None:
     return {'hold': True, 'what': f"Publish your post on {pg.get('name') or p.get('network') or 'the site'}", 'why': WHY['speaks'], 'kind': 'speaks'}
 
 
+# ...AND AN ENTER IN THAT POST'S BOX IS A LINE OF IT, NEVER ITS SEND, BY FACT TOO (walk 24, 2026-11-25: writing the post he had handed over, the
+# agent pressed Enter for a line break in the box - and the judge called the key "Post to your X account", a second card for one post, which
+# the agent took back itself). Read off the page, not the key's name: the focus is in a box of many lines (a text area, an editable region -
+# `multi`), where the browser's own Enter adds a line and sends no form. Only while a post he handed over is being written: its send is its
+# own press, held above. Anywhere else what an Enter does is the judge's to read, as before
+def line_break(store, tid, act: dict, pg: dict) -> bool:
+    v, sub = _verb(act.get('args') or [])
+    if not (v == 'press' and sub(1) in ('enter', 'return') and pg.get('multi')): return False
+    from . import cardqueue, proposals
+    if not (store and tid and (r := cardqueue.in_flight(store, int(tid)))): return False
+    try: return proposals.is_post(json.loads(r.get('FinalText') or r.get('DraftText') or '{}'))
+    except (TypeError, ValueError): return False
+
+
 # ── held: the proposal, and the agent told why ────────────────────────────────────────────────────────────────────────────
 def _pending(store, tid: int, sid: str, args: list, url: str = ''):
     """The same act already waiting on this task - an agent that tries it again gets the same card, not a second one. The same ref on
@@ -892,8 +907,8 @@ def _check(store, tid: int, sid: str, cmd: str, brain=None, cwd: str = '') -> di
                          "Use snapshot, get text or click instead.")
         # ...PLAIN TYPING PASSES WITHOUT A VERDICT: nothing leaves the page until something is pressed, and a model call per box was six
         # seconds a box - four boxes a sign-up, thirteen sign-ups (the vendor walk, 2026-11-18)
-        if typing(a): continue
-        if vs is None: vs = iter(judge(store, [x for x in todo[i:] if not x.get('read') and not typing(x)], pg, brain, said=said))
+        if typing(a) or line_break(store, tid, a, pg): continue
+        if vs is None: vs = iter(judge(store, [x for x in todo[i:] if not x.get('read') and not typing(x) and not line_break(store, tid, x, pg)], pg, brain, said=said))
         v = next(vs)
         if not v['hold'] and (his := last_press(store, tid, a, pg)): v = his
         if not v['hold']: continue

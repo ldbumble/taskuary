@@ -1501,6 +1501,7 @@ def scope(c) -> int | None:
 # THE FORM AS IT STANDS: the user name a box names as the user's, whether a password box holds one, whether that password is a NEW one (`new`: a
 # box the page marks autocomplete=new-password, or a password typed twice - its structure, never its words), and the boxes the agent filled - by
 # name, never a password or a card's - so a held card can fill the page again. FORM_PW, the password itself, is read only to seal it (pressing), never kept elsewhere
+# ...and `multi`: the focus is in a box of many lines (a text area, an editable region) - where the browser's own Enter adds a line and sends no form
 FORM = "(() => { " + DEEP + r"""
   const vis = (e) => { const r = e.getBoundingClientRect(); return !e.disabled && r.width > 2 && r.height > 2; };
   const ins = deepAll('input, select, textarea').filter(vis), texty = (e) => ['text', 'email', 'tel', ''].includes(e.type);
@@ -1508,7 +1509,9 @@ FORM = "(() => { " + DEEP + r"""
   const keep = ins.filter((e) => (e.name || e.id) && e.type !== 'password' && e.type !== 'hidden' && !/^cc-/.test(e.autocomplete || '')
     && (e.type === 'checkbox' || e.type === 'radio' ? e.checked : e.value));
   const pv = deepAll('input[type=password]').filter((e) => !!e.value), fs = deepAll('form');
+  const at = deepActive();
   return { href: location.href, top: window === window.top, title: document.title, user: user ? String(user.value).slice(0, 200) : '',
+           multi: !!at && (at.tagName === 'TEXTAREA' || !!at.isContentEditable),
            pw: pv.length > 0, password: ins.some((e) => e.type === 'password'), pay: ins.some((e) => /^cc-/.test(e.autocomplete || '')),
            new: pv.some((e) => e.autocomplete === 'new-password') || (pv.length > 1 && pv.every((e) => e.value === pv[0].value)),
            fields: keep.slice(0, 30).map((e) => ({ k: e.name || e.id, t: e.type, f: fs.indexOf(e.form),

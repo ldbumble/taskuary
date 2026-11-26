@@ -1239,3 +1239,26 @@ def test_the_last_press_of_a_post_he_handed_over_waits_for_him_whatever_the_judg
     [p] = held()
     assert (p['what'], p['args'], p['card']) == ('Publish your post on X', ['click', '@e11'], card), p
     assert bg.held_says(p).startswith('Publish your post on X - the page holds "Day four, done. Northwind closes the month in four days."')
+
+
+def test_an_enter_in_the_box_of_a_post_he_handed_over_is_a_line_of_it_never_a_second_post_card():
+    """Walk 24, 2026-11-25 (the Claude CLI): writing the X post he had handed over, the agent pressed Enter for a line break in the post box,
+    and the judge called the key "Post ... to your X account" - a second card for one post, which the agent withdrew itself. A fact of the
+    page: the focus is in a box of many lines, where Enter adds a line; the post's send is its own press. Where no post of his is being
+    written, or the focus is in a one-line box, what an Enter does is still the judge's to read."""
+    s = MemoryStore(); tid = Factory(s).task('Post the four-day close')
+    post = {'action': 'run_tool', 'type': 'x_post', 'network': 'X', 'text': 'Day four, done.\n\nNorthwind closes the month in four days.'}
+    card = s.add_review({'TaskId': tid, 'Kind': 'action', 'Status': 'pending', 'DraftText': json.dumps(post), 'Reason': 'the agent proposes to post on X'})
+    snap = '- textbox "What is happening?!" [ref=e9]\n- button "Post" [ref=e11]'
+    speaks = {'big': True, 'kind': 'speaks', 'sure': True, 'irreversible': True, 'what': 'Post "Day four, done." to your X account'}
+    held = lambda: [json.loads(r['DraftText']) for r in s._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action' AND Status='pending'", (tid,))
+                    if json.loads(r['DraftText']).get('action') == 'browser_act']
+    def enter(multi):
+        pg = {'url': 'https://x.example/home', 'open': True, 'elements': snap, 'name': 'X', 'multi': multi, 'fields': [{'k': 'text', 't': 'textarea', 'f': 0, 'v': 'Day four, done.'}]}
+        with mock.patch.object(bg, 'page', return_value=pg), verdict(speaks), mock.patch.object(bg, 'watch', None), \
+             mock.patch.object(bg, '_run', lambda sid, a, w, t: (0, '')), mock.patch('taskuary.signin.acting', lambda *a, **k: None):
+            return bg.check(s, tid, 'run1', 'agent-browser press Enter', Brain(None))
+    s.decide_review(card, 'approved', json.dumps({**post, 'result': {'browser': True}}), 'owner')            # ...he pressed Post via the browser
+    assert enter(True) == {} and held() == [], 'a line break in the post box is the agent\'s typing'
+    out = enter(False)
+    assert out['hookSpecificOutput']['permissionDecision'] == 'deny' and len(held()) == 1, 'in a one-line box an Enter sends its form: the judge\'s word stands'

@@ -31,11 +31,17 @@ def store(**settings):
     return s
 
 
-def ingested(s, m, intent='task', wrote=True):
+def arrived(s, m, intent='task', wrote=True):
+    "-> (what ingest answered, what it set going: each (fn, *args))"
     with mock.patch('taskuary.ingest._spawn') as spawn, mock.patch.object(senders, 'wrote_to', return_value=wrote), \
          mock.patch.object(general, 'provider_options', return_value=[{'pick': 'cli:claude', 'type': 'cli'}]):
         out = ingest_message(s, m, llm=llm_says(intent))
-    return out, [getattr(c[0][0], '__name__', '') for c in spawn.call_args_list]
+    return out, [c[0] for c in spawn.call_args_list]
+
+
+def ingested(s, m, intent='task', wrote=True):
+    out, set_going = arrived(s, m, intent, wrote)
+    return out, [getattr(c[0], '__name__', '') for c in set_going]
 
 
 def finished_task(s):
@@ -378,6 +384,47 @@ class PassInTests(unittest.TestCase):
             ingested(s, mail(**AGAIN)); ingest._pass_general(s, tid, mail(**AGAIN))
         send.assert_not_called()
         self.assertFalse([a for a in s._rows('SELECT * FROM audit WHERE EntityId=?', (str(tid),)) if 'sent' in a['Action']])
+
+
+# THE OWNER, 2026-11-26: a colleague sent a picture with no words on a finished task's thread - read alone it was nothing to do, and was
+# filed onto the task. 46 s later their words came, the task reopened, and its agent was typed the words alone; the rail showed the task
+# and, beside it, an FYI row for the picture. The channel saves a message's files once ingest has answered, as every poller does
+PICTURE = dict(external_id='x2', body='(no text - see the attachment)', sent_at='2026-10-28 12:25:44')
+WORDS = dict(external_id='x3', body='The calendar roll-up did not work - see the picture.', sent_at='2026-10-28 12:26:30')
+
+
+def picture_then_words(s):
+    "-> (the picture's message id, what the words set going)"
+    pic, set_going = arrived(s, mail(**PICTURE), 'fyi')
+    assert (pic['status'], set_going) == ('filed', []), (pic, set_going)
+    s.add_attachment({'MessageId': pic['message_id'], 'Name': 'shot.png', 'ContentType': 'image/png', 'Path': '/files/shot.png'})
+    return pic['message_id'], arrived(s, mail(**WORDS))[1]
+
+
+class FiledLineJoinsTheWorkTests(unittest.TestCase):
+    def test_a_live_coding_agent_is_typed_the_picture_filed_before_the_words_then_the_words(self):
+        s = store(); tid = finished_task(s); s.update_task(tid, {'Kind': 'coding'}, 't')
+        with mock.patch.dict(terminal.SESSIONS, {'p1': Live(tid)}, clear=True):
+            _pic, set_going = picture_then_words(s)
+            self.assertEqual([c[0].__name__ for c in set_going], ['_pass_coding', '_pass_coding'])
+            with mock.patch.object(terminal, 'queue_codex', return_value=False), mock.patch.object(terminal, 'type_into', side_effect=lambda t, x, done=None: done(True)) as typed:
+                for fn, *args in set_going: fn(*args)
+        first, second = [c[0][1] for c in typed.call_args_list]
+        self.assertIn('/files/shot.png', first); self.assertNotIn('roll-up', first)        # the picture, by its path on this machine
+        self.assertIn('The calendar roll-up did not work', second)
+
+    def test_the_picture_is_the_tasks_own_line_and_no_fyi_row_beside_the_task(self):
+        from datetime import datetime
+        from taskuary import processing_unread as pu
+        s = store(); tid = finished_task(s); s.set_setting(pu.FILED_SINCE, '2026-01-01 00:00:00', 't')
+        news = lambda: [(c['tid'], c['mid']) for c in pu.filed_news(s, datetime.now())]
+        pic, _ = arrived(s, mail(**PICTURE), 'fyi')
+        self.assertEqual(news(), [(tid, pic['message_id'])])                 # news on a task that stays closed: its own row, until work comes
+        self.assertEqual(s.get_task(tid)['Status'], 'done')
+        arrived(s, mail(**WORDS))
+        self.assertEqual(news(), [])                                          # ...one row for one thing: the task's
+        m = s.get_message(pic['message_id'])
+        self.assertEqual((m['TaskId'], m['Status'], s.get_task(tid)['Status']), (tid, 'routed', 'open'))      # moved onto the work, never deleted
 
 
 if __name__ == '__main__': unittest.main()

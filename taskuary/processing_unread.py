@@ -719,8 +719,7 @@ FILED_SINCE = 'fyi_filed_since'     # what was filed before this shipped is not 
 def filed_news(store, now, *, include_read=False, keys=None, days=14) -> list:
     "One FYI card per task that had a line filed onto it (ingest's filed road), the newest speaking, `more` the rest unread."
     from . import funnel
-    from .autoreply import is_auto
-    from .ingest import is_ours, own_addresses
+    from .ingest import filed_is_news, own_addresses
     from .store import OWN_CHANNELS
     # app start stamps it (processing_startup.initialize): a read writes nothing, and a home not started yet raises nothing older than now
     since = store.get_setting(FILED_SINCE) or now.strftime('%Y-%m-%d %H:%M:%S')
@@ -731,12 +730,7 @@ def filed_news(store, now, *, include_read=False, keys=None, days=14) -> list:
         WHERE m.Status='filed' AND IFNULL(m.Direction,'in')='in' AND IFNULL(m.Channel,'') NOT IN (%s) AND replace(m.CreatedAt,'T',' ')>=?
         ORDER BY m.MessageId""" % ','.join('?' * len(OWN_CHANNELS)), (*OWN_CHANNELS, floor))
     own = own_addresses(store)
-    def news(r):
-        "triage read it (its stored verdict) and it was not the same notice come again"
-        try: v = json.loads(r.get('Verdict') or 'null')
-        except (TypeError, ValueError): v = None
-        return isinstance(v, dict) and v.get('repeat') != 'same'
-    rows = [r for r in rows if not is_ours(r) and not is_auto(r) and str(r.get('FromEmail') or '').lower() not in own and news(r)]
+    rows = [r for r in rows if filed_is_news(store, r, own)]
     if not rows: return []
     states = {k: v for k, v in store.funnel_states().items() if k.startswith(FILED)}
     tid_of = {r['MessageId']: r['TaskId'] for r in rows}

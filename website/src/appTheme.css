@@ -3,6 +3,13 @@ html[data-theme="dark"] { color-scheme: dark; }
 /* Native controls and selection share the page's palette, including portals and crash screens. */
 html[data-theme="dark"] ::selection { background: #526779; color: #eeeae3; }
 
+/* A PRESS SHOWS UNDER THE POINTER THE MOMENT IT GOES DOWN (the owner, 2026-11-26: "you have to click twice for it to go? is it that or it just
+   takes a second"): the app's own buttons - the walk's chips, Next and Back, the up arrows, a rail row - lit under a hover and then showed
+   nothing until what they did was drawn, so a press whose answer took a beat read as a press that missed. One shade down while it is held, at
+   once, on every button that takes a press. Never a size or a place: a button that shrinks under the pointer can lose its own click. (A
+   Material button already answers with its ripple, and a row is not shaded for the press of a button inside it.) */
+:is(button, [role=button]):active:not(:disabled, [aria-disabled=true], .MuiButtonBase-root, :has(:is(button, [role=button]):active)) { filter: brightness(.9); transition-duration: 0s; }
+
 /* ONE FRAME FOR WHAT AN AGENT SETS DOWN (the owner, 2026-11-23: "action cards and artifacts should have white border raised like it does after
    you click send. make it pop"; "all action and artifacts should be in line with chat, look part of it"): every action card (an email, a post,
    a bulk run, a held step - waiting, pressed and sent alike), every file it made or showed, and every block of a view it drew stand on the same

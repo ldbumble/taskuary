@@ -46,8 +46,9 @@ import { plural } from "./timeWords.js";
 import { openAppLink } from "./appLinks.js";
 import { openRun } from "./funnelPile.js";
 import { routeOfHash } from "./canvasLinks.js";
-import { NewPlaybook, PB_EMPTY, PB_OPEN, PlaybookDetail, PlaybookRow, RecentlyDeleted as PlaybooksDeleted, pbOpen, usePlaybooks } from "./PlaybookShelf.jsx";
-import { NEW_PB, takePlaybookAsk } from "./playbookOpen.js";
+import { NewSkill, PB_EMPTY, PB_OPEN, SkillDetail, SkillRow, RecentlyDeleted as SkillsDeleted, pbOpen, useSkills } from "./SkillShelf.jsx";
+import { NEW_PB, takeSkillAsk } from "./skillOpen.js";
+import ImportSkill from "./ImportSkill.jsx";
 import SetupWithAi, { onBuilt } from "./SetupWithAi.jsx";
 import { useViewExtras } from "./pageView.js";
 import { isDigest } from "./MorningDigest.jsx";
@@ -351,7 +352,7 @@ const LINE_CHIP = { timeline: "Reports", alert: "reached you", send: "sent out",
 // one report its own editor - drawn through the canvas's frame instead of this tab's rail.
 export default function ReportsView({ onOpenTask = null, browse = null, browseState = {}, onBrowseState = null }) {
   const [sources, setSources] = useState(null);
-  const pbs = usePlaybooks();          // the third shelf: Reports / Workflows / Playbooks (PlaybookShelf.jsx)
+  const pbs = useSkills();          // the third shelf: Reports / Workflows / Skills (SkillShelf.jsx)
   const [types, setTypes] = useState([]);
   const [connectors, setConnectors] = useState([]);
   const [syncing, setSyncing] = useState(false);
@@ -610,7 +611,7 @@ export default function ReportsView({ onOpenTask = null, browse = null, browseSt
     // No shelf named (the sidebar, "Run a report or workflow") is the reports themselves: three chips over nothing was a page
     // with no list on it, one press short of what the door says
     const section = openSource && isWorkflowSource(openSource) ? "workflows" : openSource && isDashboardSource(openSource) ? "dashboards"
-      : sectionOr(browseState.section, ["reports", "dashboards", "workflows", "playbooks"]);
+      : sectionOr(browseState.section, ["reports", "dashboards", "workflows", "skills"]);
     const back = () => { setDraft(null); load(); pbs.load(); onBrowseState?.({ ...browseState, section, open: null }); };
     const pbSlug = pbOpen(browseState.open), pbBook = pbs.books.find((b) => b.slug === pbSlug);
     const sectionRows = section === "workflows" ? workflowSources : section === "reports" ? reportSources : section === "dashboards" ? dashboardSources : [];
@@ -620,30 +621,31 @@ export default function ReportsView({ onOpenTask = null, browse = null, browseSt
     const missing = typeof browseState.open === "number" && !sources.some((x) => x.SourceId === browseState.open);
     return browse({
       title: "Reports", wide: true,
-      summary: `${plural(reportSources.length, "report")} · ${plural(dashboardSources.length, "dashboard")} · ${plural(workflowSources.length, "routine")} · ${plural(pbs.books.length, "playbook")} · reports read and summarise, dashboards show the numbers, routines act, playbooks say how a kind of job is done`,
-      // DASHBOARDS BESIDE REPORTS (the owner, 2026-10-23): Reports, Dashboards, Workflows, Playbooks - and the + New chips in that order
+      summary: `${plural(reportSources.length, "report")} · ${plural(dashboardSources.length, "dashboard")} · ${plural(workflowSources.length, "routine")} · ${plural(pbs.books.length, "skill")} · reports read and summarise, dashboards show the numbers, routines act, skills say how a kind of job is done`,
+      // DASHBOARDS BESIDE REPORTS (the owner, 2026-10-23): Reports, Dashboards, Workflows, Skills - and the + New chips in that order
       sections: [{ key: "reports", label: "Reports", n: reportSources.length },
         { key: "dashboards", label: placeName("dashboards").split(" → ").pop(), n: dashboardSources.length },
         { key: "workflows", label: "Routines", n: workflowSources.length },
-        { key: "playbooks", label: "Playbooks", n: pbs.books.length },
+        { key: "skills", label: "Skills", n: pbs.books.length },
         // both ways in, always - not the open shelf's only: a new workflow was one click into Workflows away (the owner, 2026-10-15:
         // "it should say new workflow and new report right away without clicking in"). "new-invoices" is reached from the new workflow
-        // ...and the third (the owner, 2026-10-22: "no new playbook ui either??"): New playbook's own dialog, opened on its shelf
+        // ...and the third (the owner, 2026-10-22: "no new skill ui either??"): New skill's own dialog, opened on its shelf
         { key: "new-report", label: "+ New report" }, { key: "new-dashboard", label: DASH.new }, { key: "new-agent", label: "+ New routine" },
-        { key: NEW_PB, label: "+ New playbook" }],
+        { key: NEW_PB, label: "+ New skill" }],
       section,
       onSection: (key) => {
         setDraft(null); setDashDraft(null);
-        if (key === NEW_PB) takePlaybookAsk();      // a blank one: words New handed and never landed are not this press's
+        if (key === NEW_PB) takeSkillAsk();      // a blank one: words New handed and never landed are not this press's
         onBrowseState?.(key === "new-report" ? { section: "reports", open: "new-report" }
           : key === "new-dashboard" ? { section: "dashboards", open: "new-dashboard" }
-          : key === NEW_PB ? { section: "playbooks", open: null, newPb: Date.now() }
+          : key === NEW_PB ? { section: "skills", open: null, newPb: Date.now() }
           : key === "new-invoices" || key === "new-agent" ? { section: "workflows", open: key } : { section: key, open: null });
       },
       // the tab's own tools, beside its list: run what is due, and describe one for the AI to draft
-      tools: section === "playbooks" ? (browseState.open == null ? <Box sx={{ display: "flex", flexDirection: "column" }}>
-        <NewPlaybook key={browseState.newFor || browseState.newPb || ""} connectorType={browseState.newFor || ""} asked={!!browseState.newPb} onDone={pbs.load} button={false}
-          onManual={() => onBrowseState?.({ section: "playbooks", open: `${PB_OPEN}new` })} />
+      tools: section === "skills" ? (browseState.open == null ? <Box sx={{ display: "flex", flexDirection: "column" }}>
+        <NewSkill key={browseState.newFor || browseState.newPb || ""} connectorType={browseState.newFor || ""} asked={!!browseState.newPb} onDone={pbs.load} button={false}
+          onManual={() => onBrowseState?.({ section: "skills", open: `${PB_OPEN}new` })} />
+        <Box sx={{ mt: 1.5 }}><ImportSkill onDone={pbs.load} /></Box>
         {!!pbs.err && <Typography variant="body2" sx={{ mt: 1, fontWeight: 600, color: "var(--tq-danger, #6b2733)" }}>✗ {pbs.err}</Typography>}</Box> : null)
       : section && browseState.open == null ? (
         <Box sx={{ mt: 1.5, display: "flex", flexDirection: "column", gap: 1 }}>
@@ -664,23 +666,23 @@ export default function ReportsView({ onOpenTask = null, browse = null, browseSt
           {note && <Typography variant="body2" sx={{ fontWeight: 600, color: note.ok ? "var(--tq-success, #47654a)" : "var(--tq-danger, #6b2733)" }}>{note.ok ? "✓" : "✗"} {note.detail}</Typography>}
         </Box>
       ) : null,
-      cards: section === "playbooks" ? [...pbs.books.map((b) => ({ key: `pb-${b.slug}`, node: <PlaybookRow b={b}
-          onOpen={() => onBrowseState?.({ section: "playbooks", open: `${PB_OPEN}${b.slug}` })} onToggle={(on) => pbs.setOn(b.slug, on)} /> })),
+      cards: section === "skills" ? [...pbs.books.map((b) => ({ key: `pb-${b.slug}`, node: <SkillRow b={b}
+          onOpen={() => onBrowseState?.({ section: "skills", open: `${PB_OPEN}${b.slug}` })} onToggle={(on) => pbs.setOn(b.slug, on)} reload={pbs.load} /> })),
           // ...and under them, Recently deleted - with nothing on the shelf the shelf's own empty line still leads
           ...(pbs.deleted.length ? [
             ...(pbs.books.length ? [] : [{ key: "pb-none", node: <Typography sx={{ fontSize: 12.5, color: FAINT, p: 1 }}>{pbs.err || PB_EMPTY}</Typography> }]),
-            { key: "pb-deleted", node: <PlaybooksDeleted items={pbs.deleted} onRestore={pbs.restore} /> }] : [])]
+            { key: "pb-deleted", node: <SkillsDeleted items={pbs.deleted} onRestore={pbs.restore} /> }] : [])]
         : [...sectionRows.map((x) => ({ key: String(x.SourceId), node: row(x) })),
           ...(sectionRows.length && binKinds ? [{ key: "recently-deleted", node: <RecentlyDeleted kinds={binKinds} onRestored={load} /> }] : [])],
-      detail: browseState.open != null && !missing ? (pbSlug != null ? <PlaybookDetail key={pbSlug} slug={pbSlug} onGone={back} />
+      detail: browseState.open != null && !missing ? (pbSlug != null ? <SkillDetail key={pbSlug} slug={pbSlug} onGone={back} />
         : wizard(back, (sid) => onBrowseState?.({ ...browseState, open: sid }))) : null,
-      openLabel: pbSlug != null ? (pbSlug === "new" ? "a new playbook being written (Reports - Playbooks)" : `the playbook "${pbBook?.title || pbSlug}" (Reports - Playbooks), its words open`)
+      openLabel: pbSlug != null ? (pbSlug === "new" ? "a new skill being written (Reports - Skills)" : `the skill "${pbBook?.title || pbSlug}" (Reports - Skills), its words open`)
         : browseState.open === "new-report" ? "a new report being set up (Reports)"
         : section === "dashboards" && !openSource && browseState.open != null ? "a new dashboard being set up (Reports - Dashboards)"
         : openSource && section === "dashboards" ? `the dashboard "${titleOf(openSource)}" (Reports - Dashboards), drawn with its buttons`
         : openSource ? (section === "workflows" ? `the routine "${titleOf(openSource)}" (Routines), its steps open`
           : `the report "${titleOf(openSource)}" (Reports), its editor open`) : "",
-      empty: section === "playbooks" ? (pbs.err || (pbs.loaded ? PB_EMPTY : "Reading the playbooks…")) : section === "dashboards" ? DASH.empty : section === "workflows" ? "No routines yet - + New routine describes one and sets it up." : "No reports yet - + New report walks you through one.",
+      empty: section === "skills" ? (pbs.err || (pbs.loaded ? PB_EMPTY : "Reading the skills…")) : section === "dashboards" ? DASH.empty : section === "workflows" ? "No routines yet - + New routine describes one and sets it up." : "No reports yet - + New report walks you through one.",
       note: missing ? `That report (#${browseState.open}) is not here any more - these are the ones there are.` : "",
     });
   }

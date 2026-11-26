@@ -28,7 +28,7 @@ def install_processing_changes(app, store):
         '/api/fixture/task/chat-saved',
         '/api/fixture/task/closed-asked',
         '/api/fixture/task/closeout-rounds',
-        '/api/fixture/task/playbook-failed',
+        '/api/fixture/task/skill-failed',
         '/api/fixture/general/canvas',
         '/api/fixture/general/rest',
         '/api/fixture/signin/link',
@@ -469,22 +469,22 @@ def install_processing_changes(app, store):
                                '+++ b/app/census/sync.py\n@@ -1,2 +1,4 @@\n def sync(site):\n+    if not site.manager:\n+        continue\n-    pass\n'}, finished=True)
         return {'taskId': tid}
 
-    @app.post('/api/fixture/task/playbook-failed')
-    def playbook_failed(body: dict):
-        """A playbook set up in the owner's own words whose general agent could not start - its run FAILED with the reason, and a
+    @app.post('/api/fixture/task/skill-failed')
+    def skill_failed(body: dict):
+        """A skill set up in the owner's own words whose general agent could not start - its run FAILED with the reason, and a
         restart then cut it off - with a long mail beside it in From. The owner's 2026-10-26 laptop screen: the title said twice, the
         reason at the foot of a scroller inside a scroller, the dock a third of the height. Invented words and people."""
         if body: raise HTTPException(422, 'this fixed fixture accepts only an empty object')
-        from taskuary import general, origin, playbooks, terminal, workerstate as ws
+        from taskuary import general, origin, skills, terminal, workerstate as ws
         text = ('most group chats are fyi, but if a message asks me for something by name, put it on my list and draft a short reply '
                 'I can send as it is')
-        tid = playbooks.setup_task(store, text, None, '', 'owner')['taskId']
+        tid = skills.setup_task(store, text, None, '', 'owner')['taskId']
         para = 'Gail asked the site group who signs the snag list, then the thread moved on to parking and the floor plan. '
         store.add_message({'TaskId': tid, 'Channel': 'email', 'ExternalId': f'fixture-pb-{tid}', 'ConversationId': f'fixture-pb-{tid}',
                            'FromName': 'Gail Moreno', 'FromEmail': 'gail@northwind.example', 'Subject': 'Site ops digest',
                            'BodyText': '\n\n'.join(para * 3 for _ in range(14)), 'SentAt': (datetime.now() - timedelta(hours=4)).isoformat(' '),
                            'Status': 'routed'})
-        why = f'Playbook setup could not start: {origin.no_reviewer(store)}. You can retry in this conversation.'
+        why = f'Skill setup could not start: {origin.no_reviewer(store)}. You can retry in this conversation.'
         sid = f'fixture-pb-{tid}'
         ws.record(store, tid, sid, 'working', source='fixture')
         store.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, why)
@@ -1368,7 +1368,7 @@ def install_processing_changes(app, store):
             return f.message(task_id=tid, subject=subject, body=words, from_name=who, from_email=email, conversation_id=f'email:stress-{n}', sent_at=f.ago(minutes=30), **kw)
         title = None
         if kind in MATRIX or kind in ('failed', 'saved', 'coding_saved'):
-            tid = (matrix_state({'state': kind}) if kind in MATRIX else {'failed': playbook_failed, 'saved': chat_saved, 'coding_saved': coding_saved}[kind]({}))['taskId']
+            tid = (matrix_state({'state': kind}) if kind in MATRIX else {'failed': skill_failed, 'saved': chat_saved, 'coding_saved': coding_saved}[kind]({}))['taskId']
             # ...its own number on its title: the states share theirs, and a row is found by its words
             if tid: title = f"{(store.get_task(tid) or {}).get('Title')} ({n})"; store._exec('UPDATE task SET Title=? WHERE TaskId=?', (title, tid))
             # ...a rail item with no task is found by its own words (the stress world empties the rail first, so they are its only row)

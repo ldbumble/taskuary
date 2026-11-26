@@ -203,7 +203,7 @@ def state(store, item: dict, verbs: list) -> tuple:
     kind, lane, tid = str(it.get('kind') or ''), str(it.get('lane') or ''), it.get('tid')
     t = (store.get_task(int(tid)) or {}) if tid else {}
     if t.get('Status') in ('done', 'dropped'): return 'closed', {}
-    # AN ACTION WAITS FOR THE OWNER'S YES (card.pending - a `git push` the shell gate held, a proposal, a playbook): read before an agent asking
+    # AN ACTION WAITS FOR THE OWNER'S YES (card.pending - a `git push` the shell gate held, a proposal, a skill): read before an agent asking
     # or at work, which lit nothing over the Approve it waited on (the 2026-11-02 audit) - its Approve is lit
     from . import card
     if tid and (r := card.pending(store, tid, 'acts')):

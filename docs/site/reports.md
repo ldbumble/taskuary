@@ -257,7 +257,7 @@ under Reports and never goes through triage; its agent works it like any other t
   phone - in the header and under **Came from**, with a link back to the routine.
 - **A mail can start it.** Describe, in words, the mail that should start it under **Start when a
   mail like this arrives** ("a vendor sends an invoice for something we ordered"). Triage is shown
-  every such routine beside your playbooks; when a mail is one, that routine runs and its run is
+  every such routine beside your skills; when a mail is one, that routine runs and its run is
   the mail's task, with the mail filed on it. Its steps read the mail as `{{mail.from}}`,
   `{{mail.subject}}` and `{{mail.body}}` - as data, never pasted into a query. Approvals work as on
   any run. A routine that hands to an agent is not started by a sender who may not start one by
@@ -298,19 +298,43 @@ print(json.dumps([{"invoice": r["invoice"], "fee": round(r["amount"] * 0.02, 2)}
   **Save this as a routine** card with the script shown whole. Approve saves it; nothing is saved
   or run before your press.
 
-## Playbooks
+## Skills
 
-The third shelf on the Reports page, beside Reports and Routines. A **playbook** is how this
-company does one kind of job - when it starts, which connections it uses, the steps, what an agent
-may do alone, what to ask first and what counts as done. Triage matches arriving mail to a
-playbook's `when` line, and the agent working that task is handed the playbook.
+The third shelf on the Reports page, beside Reports and Routines. A **skill** is how this
+company does one kind of job, written in your words. It is a folder with a `SKILL.md` in it - the
+same format Claude Code and other agents use: a `name`, a one-line `description` of what the job
+is and when to use it, then how it is done. Triage matches arriving mail to a skill by its
+description, every agent sees the names and descriptions of your skills, and reads one whole when
+it fits the job. However many you keep, triage and the agents are shown only each skill's name
+and a short description - 120 characters at most - the way tools are listed; the rest of a skill
+is read only by the agent that picks it. With more than one profile, a skill's row has a
+**Profile** picker: one profile's, or all profiles'. A task or a mail is shown its own profile's
+skills and the ones left to all.
 
-- **New playbook** builds one with AI from a past email or your own words - the draft appears in
+A skill is something an agent reads, never a permission. Whatever one says, every send, post or
+change still waits for your press.
+
+Skills were called playbooks before. Yours were moved over the first time this version started,
+wording untouched; the old folder (`~/.taskuary/playbooks`) is still there as a backup.
+
+- **New skill** builds one with AI from a past email or your own words - the draft appears in
   the conversation with its **Approve** - or opens the editor to write it by hand.
-- When an agent finishes a kind of job that will recur and no playbook covers it, Taskuary
-  proposes one on the task; approve it and the next mail like it is matched.
-- Each playbook has an **on/off switch**: off keeps it, and triage stops matching it. Settings →
-  How mail is sorted → **Use playbooks** turns them all off at once.
+- The agent that did a kind of job can offer its skill itself: one card behind the send it
+  follows - "Make a skill for this kind of email, so the next agent can use it?" - with the
+  skill it drafted for you to read and edit. Approve saves it; nothing reads a finished task to
+  draft one behind your back, and no task is reopened for one.
+- **Export** on a skill's row saves its folder as one zip - the file to send someone. It drops into
+  Claude Code's or another agent's skills folder as it is.
+- **Import** takes a zip, a folder or a single `SKILL.md`. You see the whole text first, and one
+  press saves it; it never replaces a skill you have (a name already taken comes in under a new
+  one). Nothing in an imported skill runs, and nothing it says - "send without asking", a list of
+  allowed tools - lets an agent act without your press. It is marked *imported* on the shelf and
+  to the agents.
+- A routine can **use a skill**: its editor's *Uses skill* names one of yours, and the agent reads
+  it on every run. The routine's own instructions - its script, or the words its AI steps work
+  by - stay the routine's; the skill is a link, edited here, and its row says which routines use it.
+- Each skill has an **on/off switch**: off keeps it, and triage stops matching it. Settings →
+  How mail is sorted → **Use skills** turns them all off at once.
 
 ## Stateful routines
 

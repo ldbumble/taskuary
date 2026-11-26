@@ -1,7 +1,7 @@
 """A general agent runs on the AI the person set up - never on claude because nobody chose anything.
 
 A fresh install where the person had set up only Codex: a researcher task started on a claude that was signed out (a claude
-connection left behind, first in the list, was the fallback), and a playbook the person created themselves was refused on Codex
+connection left behind, first in the list, was the fallback), and a skill the person created themselves was refused on Codex
 as "a stranger's task - start it with claude". The rule: the brain the owner chose; else only an AI that is connected, starts
 here and did not fail its test; else "No AI is connected". Fake CLIs only - nothing here starts a real one."""
 import json
@@ -10,7 +10,7 @@ from unittest import mock
 
 import pytest
 
-from taskuary import agents, brainroute, cli_connections as clic, config, general, llm, origin, playbooks
+from taskuary import agents, brainroute, cli_connections as clic, config, general, llm, origin, skills
 from taskuary.store import MemoryStore
 
 
@@ -80,7 +80,7 @@ def _researcher(s):
 
 
 def _job(s):
-    """The owner's own general job (it was a playbook-authoring task: playbooks are built by the Assistant on their page now, build.py)."""
+    """The owner's own general job (it was a skill-authoring task: skills are built by the Assistant on their page now, build.py)."""
     return s.create_task({'Title': 'Check the Payworth invoice against the purchase order', 'Kind': 'general', 'Status': 'open',
                           'OriginBase': 'owner'}, 'owner')
 
@@ -129,7 +129,7 @@ def test_a_refusal_never_names_another_tool(world):
 
 
 # ── Claude only ───────────────────────────────────────────────────────────────────────────────────────────────────
-def test_a_claude_only_home_runs_the_researcher_and_a_playbook_on_claude(world):
+def test_a_claude_only_home_runs_the_researcher_and_a_skill_on_claude(world):
     world['installed'] |= {'claude'}
     s, cfg = _home(('claude',), tests={'claude': True}, settings={'default_brain': 'claude', 'assistant_ai': 'cli:claude'})
     _run(s, cfg, _researcher(s)); _run(s, cfg, _job(s))
@@ -138,7 +138,7 @@ def test_a_claude_only_home_runs_the_researcher_and_a_playbook_on_claude(world):
 
 # ── An API connector only ─────────────────────────────────────────────────────────────────────────────────────────
 @pytest.mark.parametrize('typ', ['hipaa_ai', 'openai'])
-def test_an_api_only_home_runs_the_researcher_and_a_playbook_on_the_connector(world, typ):
+def test_an_api_only_home_runs_the_researcher_and_a_skill_on_the_connector(world, typ):
     s, cfg = _home(connector=typ)
     for tid in (_researcher(s), _job(s)):
         said = _run(s, cfg, tid)

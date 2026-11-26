@@ -1,6 +1,6 @@
 """What triage decided, what the owner made of it, and what the next verdict is told.
 
-Triage answers about ten things - intent, kind, title, summary, checklist, playbook,
+Triage answers about ten things - intent, kind, title, summary, checklist, skill,
 repository, and a chat line's relationship - and until now exactly ONE of them ever learned from
 being corrected. Picking a repository writes a weighted, task-keyed edge into the project graph
 (projects.learn_task_repository): one owner choice is a visible hypothesis at .72, two independent
@@ -17,7 +17,7 @@ Two halves, and the first is what makes the second possible:
   rewritten summary teaches nothing if nothing remembers what it was rewritten from.
 - routing_fact keeps the LESSON, keyed to a signal the NEXT message can carry.
 
-What a correction is worth depends on the field. `kind` and `playbook` are ROUTING - a
+What a correction is worth depends on the field. `kind` and `skill` are ROUTING - a
 correction generalises straight to the next message like it. `system` is the one the owner types
 ("this is ADP, not ledger"): the fact that was missing entirely, because the only map triage had
 was a list of git repositories. Title, summary and checklist are deliberately NOT here - correcting
@@ -28,7 +28,8 @@ from loguru import logger
 from .projects import CONTEXT_CONFIDENCE, PUBLIC_MAIL, ROUTE_CONFIDENCE
 
 # ...and how hard the work is and what data it carries (the router's judgements, 2026-10-25): a correction says it of the next one like it
-FIELDS = ('kind', 'playbook', 'system', 'difficulty', 'data_class')
+FIELDS = ('kind', 'skill', 'system', 'difficulty', 'data_class')
+OLD_FIELD = {'playbook': 'skill'}       # a lesson kept before playbooks were named skills says the same thing
 # A chat's "subject" is the ROOM ("Teams chat with Gail Moreno"), so a topic key made from it
 # says "chats with Robin", which is wrong in both directions: it would not fire on the same ask
 # from anyone else, and it would damp a real bug she reports tomorrow. Chat learns by sender only.
@@ -105,14 +106,14 @@ def facts_for(store, msg: dict) -> list:
     facts = store.routing_facts(signals=signals_of(msg))
     for tier in TIERS:
         for f in facts:
-            if f['Signal'] != tier or f['Field'] in spoken: continue
+            if f['Signal'] != tier or OLD_FIELD.get(f['Field'], f['Field']) in spoken: continue
             conf = float(f['Confidence'] or 0)
             # A stated fact is certain about ITSELF, never about its reach: "clocking in is ADP"
             # being the owner's own words says nothing about whether everyone at their company
             # writes about clocking in. So the owner's word clears the bar for the person they
             # said it about, and the company tier still has to earn its scope from evidence.
             if not (f['Confirmed'] and tier != 'sender_domain') and conf < FLOOR.get(tier, ROUTE_CONFIDENCE): continue
-            rows.append({'field': f['Field'], 'value': f['Value'], 'seen_on': tier,
+            rows.append({'field': OLD_FIELD.get(f['Field'], f['Field']), 'value': f['Value'], 'seen_on': tier,
                          'times': int(f['EvidenceCount'] or 0), 'confidence': round(conf, 2),
                          'owner_stated': bool(f['Confirmed']),
                          'tentative': not f['Confirmed'] and conf < ROUTE_CONFIDENCE})

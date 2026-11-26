@@ -85,12 +85,12 @@ def test_an_agent_with_no_shell_takes_back_an_email_by_its_marker():
     assert waiting(s, tid) == [('slot', gail)]
 
 
-def test_a_playbook_the_agent_proposed_is_its_own_to_take_back_and_the_ledgers_is_not():
+def test_a_skill_the_agent_proposed_is_its_own_to_take_back_and_the_ledgers_is_not():
     s = MemoryStore(); tid = own_task(s, 'general')
-    mine = s.add_review({'TaskId': tid, 'Kind': 'action', 'Status': 'pending', 'Reason': 'the agent proposes a playbook',
-                         'DraftText': json.dumps({'action': 'write_playbook', 'slug': 'w-9', 'text': '# Send our W-9'})})
+    mine = s.add_review({'TaskId': tid, 'Kind': 'action', 'Status': 'pending', 'Reason': 'the agent proposes a skill',
+                         'DraftText': json.dumps({'action': 'save_skill', 'slug': 'w-9', 'text': '# Send our W-9'})})
     s.add_review({'TaskId': tid, 'Kind': 'action', 'Status': 'pending', 'Reason': 'what the ledger counted',
-                  'DraftText': json.dumps({'action': 'amend_playbook', 'slug': 'w-9', 'block': 'Counted: 3 of 4 sent as drafted', 'text': '# Send our W-9'})})
+                  'DraftText': json.dumps({'action': 'save_skill', 'slug': 'w-9', 'block': 'Counted: 3 of 4 sent as drafted', 'text': '# Send our W-9'})})
     assert [r['rid'] for r in verdicts.unsent(s, tid)] == [mine]
     assert verdicts.withdraw(s, tid, 'the owner said the steps are wrong', 'assistant', which=str(mine))['ok']
     assert s.get_review(mine)['Status'] == 'closed_unsent'

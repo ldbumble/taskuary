@@ -1,5 +1,5 @@
 """A workflow an arriving mail starts (the owner, 2026-10-21): the workflow says in words which mail starts it, triage is shown those
-the way it is shown the playbooks, and the run it names is that mail's task - once, through the one road every run takes.
+the way it is shown the skills, and the run it names is that mail's task - once, through the one road every run takes.
 Everyone here is invented."""
 import json
 from unittest import mock

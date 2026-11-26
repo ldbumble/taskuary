@@ -160,7 +160,7 @@ const Choice = ({ f }) => f.editable
   : <span data-tq-act-choice={f.key}>{(f.choices || []).find((c) => String(c.value) === String(f.value))?.label || String(f.value ?? "")}</span>;
 
 // ...NEW WORDS FOR OLD (the owner, 2026-11-24: "to edit text it should show the edited text?" ... "show also where it changed in the full text"):
-// a routine's instructions, a report's question, a playbook page - the new text whole, read as tracked changes: what it adds lit, what it takes
+// a routine's instructions, a report's question, a skill page - the new text whole, read as tracked changes: what it adds lit, what it takes
 // out struck where it stood. A click puts him in the plain words to change, and he stays there - what it adds still lit as he types, a tick where
 // words went - so nothing under the pointer moves on the way to Approve. `was`: the words before; `marks`: false shows the new words bare
 const MARKED = { "& ins": { textDecoration: "none", bgcolor: "var(--tq-added, rgba(111, 158, 110, 0.28))", borderRadius: "2px" },

@@ -24,7 +24,7 @@ Click everything once, screenshot it, LOOK at the shot:
   AI harness choice), Live interaction. Type in a box (autosave shows it saved), Test, Sync now (what it pulls / what it got), Enable,
   Remove (one confirm - cancel it).
 - **Settings**: every section, every switch flipped and flipped back, every picker.
-- **Reports, dashboards, Hub, About you, AI routing, Profiles, Playbooks**: open, edit, run, Send to agent.
+- **Reports, dashboards, Hub, About you, AI routing, Profiles, Skills**: open, edit, run, Send to agent.
 - **The rail**: Next, Back, search (open a closed task, type in it), FYI Send to agent (chip on the Agent box), Mark done, Remind me
   (confirm a date), Not for me, Watch it, Change.
 - **New**: an ask, an ask with a file, an ask that restates an open task.
@@ -118,13 +118,13 @@ Screenshots of the walk that found them were taken on 0.4.1.2. Fix each PATTERN 
 **C. Builder words and raw values on screen** - plain words from one wording function, the app's own font.
 - "Run CLI agents over ACP... Agent Client Protocol", "Default: on - unchanged" on every row, "fine-grained PAT", "Board's repo
   picker", "coding agent's issue loop", "Baileys", "JOB.md", "0 reports (built under Reports)", "triage".
-- Reports rows in monospace; a run line "0.0s · nothing to say - no post · read 0 sender/subject lines"; all-caps "PLAYBOOKS - WHAT
+- Reports rows in monospace; a run line "0.0s · nothing to say - no post · read 0 sender/subject lines"; all-caps "SKILLS - WHAT
   THIS CONNECTION DOES FOR US"; Profiles rows "OUTSIDE information", "OUR OWN figures".
 - Step lines centred and quoting raw search queries; "next: the reply to gail@northwind.example" (an address, not a name).
 - File chips cut to "Q... 44 KB"; "a chat message cannot carry one".
 
 **Smaller**: an agent's decision left as prose ("For you to do: decide...") instead of a card; "Thinking..." under a finished answer;
-the header chip cut off ("Claude C..."); help text boxes narrower than their fields; "+ New playbook" wrapping alone; Hub's JOB.md
+the header chip cut off ("Claude C..."); help text boxes narrower than their fields; "+ New skill" wrapping alone; Hub's JOB.md
 tooltip covering search; New on "Working..." ~20 s before the task appeared.
 
 **Not yet walked**: search, FYI Send to agent, Settings toggles (the tool found no names for them), a Remind me date saved, autosave.

@@ -62,6 +62,22 @@ export const WorkstreamSelect = ({ taskId, value, onDone }) => {
   );
 };
 
+// WHOSE A SKILL IS (the owner, 2026-11-26): one profile's, or every profile's - a task or a mail is offered its own profile's skills and
+// the ones left to all. On the skill's row, saved as it is picked; not drawn while there is one profile.
+export const SkillProfile = ({ skill, reload }) => {
+  const xs = useWorkstreams();
+  if (xs.length < 2 || !skill?.slug) return null;
+  const pick = async (slug) => { try { await api.put(`/api/skills/${skill.slug}/workstream`, { workstream: slug }); } catch { /* the reload says what stands */ } reload?.(); };
+  return (
+    <select data-tq-skill-profile={skill.slug} aria-label={`${skill.title}: which profile`} value={skill.profile || ""}
+      onClick={(e) => e.stopPropagation()} onChange={(e) => pick(e.target.value)}
+      style={{ fontSize: 12.5, padding: "2px 6px", borderRadius: 6, border: `1px solid ${BORDER}`, background: "var(--tq-panel, #fff)", color: INK, flexShrink: 0 }}>
+      <option value="">All profiles</option>
+      {xs.map((w) => <option key={w.slug} value={w.slug}>{w.name}</option>)}
+    </select>
+  );
+};
+
 // WHOSE ACCOUNT A CONNECTION IS (the owner, 2026-11-26): one profile's, or every profile's - a task's agent uses its own profile's
 // accounts and the ones left to all. Saved as it is picked, like everything on a connection card; not drawn while there is one profile.
 export const AccountProfile = ({ conn, reload }) => {

@@ -186,12 +186,14 @@ def evidence(store, since: str, limit: int = 40) -> list:
     return [f"out{r['Id']}: {_sentence(store, r)}" for r in rows]
 
 
-# ── the work facts (build step 5): per playbook, no model; playbook_facts.py says what they mean ───────────────────────────
+# ── the work facts (build step 5): per skill, no model; skill_facts.py says what they mean ───────────────────────────
+# ...the skill a closed task was worked from: `playbook` is the same fact as the ledger wrote it before the name changed
+OF_SKILL = "COALESCE(json_extract(FactsJson, '$.skill'), json_extract(FactsJson, '$.playbook'))"
 def work_facts(store, slug: str) -> dict:
     """How a KIND of work has gone: its resolved closes, how many came open again, how many closed with the last mail still
     asking something, and how many of those came open again."""
     rows = store._rows("SELECT Verdict, json_extract(FactsJson, '$.asked') asked FROM outcome WHERE Kind='task.closed' AND ResolvedAt IS NOT NULL "
-                       "AND json_extract(FactsJson, '$.playbook')=?", (str(slug),))
+                       f"AND {OF_SKILL}=?", (str(slug),))
     back, asked = [r['Verdict'] == 'reopened' for r in rows], [bool(r['asked']) for r in rows]
     return {'closes': len(rows), 'reopened': sum(back), 'closed_with_open_question': sum(asked), 'reopened_after_open_question': sum(a and b for a, b in zip(asked, back))}
 

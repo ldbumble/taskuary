@@ -1092,11 +1092,11 @@ def test_then_is_kept_on_the_card_whatever_road_raised_it_and_a_rewrite_without_
     """One rule on every road a card is raised by - an agent's tool (general CLI, Codex, API agents over MCP), `taskuary --reply/--draft --then`
     (the CLI's endpoint, server._raising) and a TASKUARY-PROPOSE mark - kept on the card itself, so a restart between the card and his press
     keeps it. A later raise of the same card speaks for it: rewritten with no `then`, its press wakes nobody."""
-    s = MemoryStore(); tid = Factory(s).task('Write the onboarding playbook')
+    s = MemoryStore(); tid = Factory(s).task('Write the onboarding skill')
     text = '# Onboarding\nwhen: a new hire starts\nDay one: the laptop.'
     doors = {'propose': lambda t, p: {'ok': bool(q := proposals.queue(s, t, p)), 'review': q and q['reviewId']}}
     def raise_(then, words):
-        p = {'action': 'write_playbook', 'slug': 'onboarding', 'text': words}
+        p = {'action': 'save_skill', 'slug': 'onboarding', 'text': words}
         if road == 'tool': agenttools.call(s, tid, 'propose', {'kind': 'act', **p, **({'then': then} if then else {})}, doors)
         elif road == 'marker': proposals.queue(s, tid, {**p, **({'then': then} if then else {})})
         else:
@@ -1118,12 +1118,12 @@ def test_the_to_do_a_card_does_is_ticked_by_its_press_and_nobody_is_woken_for_it
     """Walk 22, 2026-11-25 (Codex): every card carried `then: "mark the to-do complete"`, so every Send, Post and bulk run woke the agent to tick
     a box and say under the card what the card already said. The card names the to-do it does (`todo`); the press that goes ticks it - plain
     code, no `then`, nobody woken - and with several cards for one to-do, only once the last has gone."""
-    s = MemoryStore(); tid = Factory(s).task('Write the onboarding playbook')
-    todo = s.merge_task_checklist(tid, ['Save the onboarding playbook'], 'owner')[0]['id']
+    s = MemoryStore(); tid = Factory(s).task('Write the onboarding skill')
+    todo = s.merge_task_checklist(tid, ['Save the onboarding skill'], 'owner')[0]['id']
     doors = {'propose': lambda t, p: {'ok': bool(q := proposals.queue(s, t, p)), 'review': q and q['reviewId']}}
     done = lambda: next(i['done'] for i in s.task_checklist(tid) if i['id'] == todo)
     for slug in ('onboarding', 'offboarding'):
-        agenttools.call(s, tid, 'propose', {'kind': 'act', 'action': 'write_playbook', 'slug': slug, 'todo': todo,
+        agenttools.call(s, tid, 'propose', {'kind': 'act', 'action': 'save_skill', 'slug': slug, 'todo': todo,
                                             'text': f'# {slug}\nwhen: a new hire starts\nDay one: the laptop.'}, doors)
     a, b = s._rows("SELECT * FROM review WHERE TaskId=? ORDER BY ReviewId", (tid,))
     assert not card.carries_on(a) and 'todo' not in a['DraftText'], 'the to-do is the card\'s record, never part of what runs'

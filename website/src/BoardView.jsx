@@ -453,14 +453,14 @@ export default function BoardView({ onOpenTask, active = true }) {
                     display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
                     {t.Title}
                   </Typography>
-                  {t.Playbook && (
-                    <Typography variant="caption" title={t.Playbook.uses?.length ? `uses ${t.Playbook.uses.join(", ")}` : ""}
+                  {t.Skill && (
+                    <Typography variant="caption" title={t.Skill.uses?.length ? `uses ${t.Skill.uses.join(", ")}` : ""}
                       sx={{ color: "var(--tq-warning, #6b5f45)", display: "block", mt: 0.35, fontSize: 9.5, fontWeight: 600,
                         whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                      Playbook · {t.Playbook.title}
+                      Skill · {t.Skill.title}
                     </Typography>
                   )}
-                  {!t.Playbook && t.Source === "report" && t.SearchSources && (
+                  {!t.Skill && t.Source === "report" && t.SearchSources && (
                     <Typography variant="caption" sx={{ color: "var(--tq-warning, #6b5f45)", display: "block", mt: 0.35, fontSize: 9.5,
                       whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                       Report · {String(t.SearchSources).split(",")[0]}

@@ -81,7 +81,7 @@ export function installDemoWorkflows(state) {
   detail[DUPES_TASK] = {
     task: { TaskId: DUPES_TASK, Title: `Duplicate vendor bills - ${a.at.slice(0, 16)}`, Summary: "WORKFLOW RUN: Duplicate vendor bills - started by its schedule.\n4 steps, run by code; a model only where a step says AI.",
       Kind: "general", Status: "done", Priority: "normal", Assignee: null, Source: "workflow", SourceRef: `workflow:${DUPES}`, Tags: "workflow-trigger:schedule",
-      CreatedBy: "schedule", CreatedAt: a.at, UpdatedAt: a.at, ClosedAt: a.at, Checklist: null, ChecklistMd: "", Playbook: null },
+      CreatedBy: "schedule", CreatedAt: a.at, UpdatedAt: a.at, ClosedAt: a.at, Checklist: null, ChecklistMd: "", Skill: null },
     ref: `TQ-00${DUPES_TASK}`, messages: [], checklist: [], attachments: [], artifacts: [], routes: [], runs: [], audit: [], reviews: [], session: null, transcript: null,
     comments: [`Routine run (schedule): 4 steps, run by code - a model only where a step asks for one. No triage.`,
       ...a.steps.filter((r) => r.status !== "repaired").map((r, i) => `Step ${i + 1}/4 ${r.label}: ${r.head}`), a.summary].map((Body, i) => ({ CommentId: 6100 + i, TaskId: DUPES_TASK, Actor: "workflow", ActorType: "agent", Body, CreatedAt: a.at })),

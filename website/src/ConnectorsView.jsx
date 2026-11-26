@@ -1442,7 +1442,7 @@ const DATA_META = {
       text: "Opens the bank's own sign-in (Teller Connect). The token for that login lands on this card; the browser never keeps it." },
     howto: ["teller.io → sign up → create an application. The dashboard hands you an application id and, for development and production, a certificate.pem and private_key.pem — save both somewhere on this machine and put their paths on the card. Sandbox needs no certificate and accepts any login at its fake banks, which is how to try the loop first.",
       "Paste the application id and pick the environment - each saves itself - then Connect a bank: the bank's sign-in opens in a modal, you sign in, and the access token for that login lands on this card. One card is one bank login - Add another for a second bank.",
-      "Test lists the accounts under the login. Build the reports on the REPORTS tab: 'Bank & card — transactions' for one account (its last four digits) or all of them, so many days back; switch on 'can become work (triage decides)' and every new transaction arrives as a message - the front door of the card-to-books playbook (docs/beyond-code.md).",
+      "Test lists the accounts under the login. Build the reports on the REPORTS tab: 'Bank & card — transactions' for one account (its last four digits) or all of them, so many days back; switch on 'can become work (triage decides)' and every new transaction arrives as a message - the front door of the card-to-books skill (docs/beyond-code.md).",
       "The development environment is free up to 100 bank logins; production is the same code with production keys and Teller's pricing.",
       "Spend as a number, not a list: the 'teller_spend' report totals what left each card over a window (days 0 = today) and adds a TOTAL row. Its headline starts with the total on purpose — an alert of 'more than 500' on this report therefore compares DOLLARS, not the number of rows, which is how you get 'tell me if I spend over 500 today'. Cents are ignored by that comparison."],
     agent: ["GET {base}/api/connectors/{cid}/teller/status{hdr}: has_app says whether the application id is saved, connected whether a token is. Neither is yours to make - the owner signs up at teller.io and signs in at their bank through Connect a bank on the card. Ask for the application id and the certificate paths, save them in ConfigJson, then ask them to press Connect a bank.",
@@ -1457,7 +1457,7 @@ const DATA_META = {
     howto: ["bridge.simplefin.org \u2192 create an account (it is $1.50/month or $15/year, billed to you, and it is the only cost here) \u2192 link your banks under Financial Institutions. There is no application to register, no approval to wait for and no client certificate.",
       "On your SimpleFIN account, My Accounts \u2192 Apps \u2192 Get a setup token. Paste it here and press Connect with a setup token. It is spent by that press: a re-connect needs a fresh one.",
       "Test lists the accounts the token carries. One token can carry SEVERAL banks, so unlike the Teller card this is usually one card for everything \u2014 pick an account per report by a word of its name.",
-      "Build the reports on the REPORTS tab: 'Bank & card \u2014 transactions (SimpleFIN)' for one account or all of them, so many days back; switch on 'can become work (triage decides)' and every new transaction arrives as a message \u2014 the front door of the card-to-books playbook (docs/beyond-code.md).",
+      "Build the reports on the REPORTS tab: 'Bank & card \u2014 transactions (SimpleFIN)' for one account or all of them, so many days back; switch on 'can become work (triage decides)' and every new transaction arrives as a message \u2014 the front door of the card-to-books skill (docs/beyond-code.md).",
       "Spend as a number, not a list: the 'simplefin_spend' report totals what left each account over a window (days 0 = today) and adds a TOTAL row. Its headline starts with the total on purpose \u2014 an alert of 'more than 500' on this report therefore compares DOLLARS, not the number of rows. Cents are ignored by that comparison.",
       "Two limits worth knowing before you schedule anything: the bridge refreshes about once a day (so 'today' means as of the last sync), and it allows 24 reads a day \u2014 this card caches one response behind all four reports and refuses past 20 rather than letting your token be disabled."],
     agent: ["GET {base}/api/connectors/{cid}/simplefin/status{hdr}: connected says whether the access URL is on the card. The setup token is NOT yours to make or to ask for casually \u2014 the owner gets it from their own SimpleFIN account and pastes it into the card. Nothing else needs saving first.",
@@ -2549,38 +2549,38 @@ function ConnectorIdentity({ conn, reload, onCreated, addOnly = false }) {
 }
 
 /* ── "Remove connection" on every detail page: wipes creds/config, turns sources off ── */
-/* The second door to a playbook (docs/beyond-code.md): the card is where you look for "what does
-   this thing do for us", so it lists every playbook whose `uses:` line names this connection, and
-   opens each on Reports → Playbooks (#playbook=<slug>), where the words are edited. */
-function CardPlaybooks({ type }) {
+/* The second door to a skill (docs/beyond-code.md): the card is where you look for "what does
+   this thing do for us", so it lists every skill whose `uses:` line names this connection, and
+   opens each on Reports → Skills (#skill=<slug>), where the words are edited. */
+function CardSkills({ type }) {
   const [books, setBooks] = useState(null);
   useEffect(() => {
     let live = true;
-    api.get("/api/playbooks").then(({ data }) => { if (live) setBooks((data.data || []).filter((b) => (b.uses || []).includes(type))); })
+    api.get("/api/skills").then(({ data }) => { if (live) setBooks((data.data || []).filter((b) => (b.uses || []).includes(type))); })
       .catch(() => { if (live) setBooks([]); });
     return () => { live = false; };
   }, [type]);
   if (!books) return null;
-  const go = (slug) => { openAppLink(`playbook=${slug}`); };
+  const go = (slug) => { openAppLink(`skill=${slug}`); };
   return (
     <Box sx={{ mt: 3, p: 1.5, border: `1px solid ${BORDER}`, borderRadius: 2, bgcolor: PANEL }}>
       <Typography variant="caption" sx={{ color: "var(--tq-success, #6f8a6e)", fontWeight: 600, letterSpacing: 1, display: "block", mb: 0.75 }}>
-        Playbooks - what this connection does for you
+        Skills - what this connection does for you
       </Typography>
       {books.length === 0 && (
         <Typography variant="body2" sx={{ color: DIM, mb: 1 }}>
-          No playbook names this connection yet. One is drafted for you the first time an agent finishes a job with it; approve it on the task and the next such job runs on it.
+          No skill names this connection yet. One is drafted for you the first time an agent finishes a job with it; approve it on the task and the next such job runs on it.
         </Typography>
       )}
       {books.map((b) => (
         <Box key={b.slug} onClick={() => go(b.slug)} sx={{ display: "flex", alignItems: "baseline", gap: 1, py: 0.5, cursor: "pointer",
           "&:hover .pb-t": { textDecoration: "underline" } }}>
           <Typography className="pb-t" variant="body2" sx={{ color: INK, fontWeight: 600, whiteSpace: "nowrap" }}>{b.title}</Typography>
-          <Typography variant="caption" sx={{ color: FAINT }} noWrap>when: {b.when}</Typography>
+          <Typography variant="caption" sx={{ color: FAINT }} noWrap>{b.description}</Typography>
         </Box>
       ))}
       <Button size="small" variant="text" startIcon={<AddIcon sx={{ fontSize: 15 }} />} onClick={() => go(`new:${type}`)} sx={{ mt: 0.5 }}>
-        New playbook for this connection
+        New skill for this connection
       </Button>
     </Box>
   );
@@ -3187,7 +3187,7 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
       {/* ...nor a sign-in card (Outlook, Teams, Gmail): under its one-button sign-in, a greyed Get AI to set it up and its Connect an AI
           were two more things to read for nothing (the setup sweep, 2026-10-28) */}
       {!NO_AI_WALK.includes(conn.Type) && <AiSetup conn={conn} steps={m.howto || []} fields={m.fields || []} secretLabel={m.secretLabel} agentSteps={m.agent || []} reload={reload} />}
-      <CardPlaybooks type={conn.Type} />
+      <CardSkills type={conn.Type} />
       <RemoveConnection conn={conn} reload={reload} onBack={leave} channel={m.channel} />
     </Box>
     </DraftProvider>
@@ -3214,7 +3214,7 @@ function MssqlDetail({ conn, reload, onBack, onCreated }) {
       {tab === "Setup" && <MssqlConnection conn={conn} drivers={drivers} reload={reload} />}
       {tab === "Guide" && <Steps steps={MSSQL_HOWTO} />}
       <AiSetup conn={conn} steps={MSSQL_HOWTO} agentSteps={MSSQL_AGENT} reload={reload} />
-      <CardPlaybooks type={conn.Type} />
+      <CardSkills type={conn.Type} />
       <RemoveConnection conn={conn} reload={reload} onBack={onBack} channel="data" />
     </Box>
   );
@@ -3290,7 +3290,7 @@ function ReasonDetail({ conn, reload, onBack, onCreated }) {
       <Crumb section="Connections" onBack={onBack} title={conn.Name} /><AccountProfile conn={conn} reload={reload} />
       <ConnectorIdentity conn={conn} reload={reload} onCreated={onCreated} />
       <ReasonPanel conn={conn} reload={reload} />
-      <CardPlaybooks type={conn.Type} />
+      <CardSkills type={conn.Type} />
       <RemoveConnection conn={conn} reload={reload} onBack={onBack} />
     </Box>
   );
@@ -3345,7 +3345,7 @@ function DesktopDetail({ conn: savedConn, reload, onBack, onCreated }) {
       </Box>
       <TestLine test={test} mt={1} />
       {draft.err && <Typography role="alert" sx={{ mt: 1, color: "var(--tq-danger, #8a3646)", fontSize: 12 }}>{draft.err}</Typography>}
-      <CardPlaybooks type={conn.Type} />
+      <CardSkills type={conn.Type} />
       <RemoveConnection conn={conn} reload={reload} onBack={onBack} />
     </Box>
   );
@@ -3414,7 +3414,7 @@ function AgentToolDetail({ conn, reload, onBack, onCreated }) {
             startIcon={sign === "signing" ? <CircularProgress size={12} /> : null}>{SIGN_LABEL[sign]}</Button>)}
       </Box>
       {(said || []).map((l) => <Typography key={l} variant="caption" sx={{ color: DIM, display: "block", mt: .5 }}>{l}</Typography>)}
-      <CardPlaybooks type={conn.Type} />
+      <CardSkills type={conn.Type} />
       <RemoveConnection conn={conn} reload={reload} onBack={onBack} />
     </Box>
   );
@@ -3460,7 +3460,7 @@ function WinrmDetail({ conn, reload, onBack, onCreated }) {
         </Box>
       )}
       <AiSetup conn={conn} steps={WINRM_HOWTO} fields={[["machine name", "host"]]} agentSteps={WINRM_AGENT} reload={reload} />
-      <CardPlaybooks type={conn.Type} />
+      <CardSkills type={conn.Type} />
       <RemoveConnection conn={conn} reload={reload} onBack={onBack} channel="data" />
     </Box>
   );
@@ -3896,7 +3896,7 @@ function DataDetail({ conn: savedConn, meta, sources: savedSources = [], reload,
       {tab === "Setup" && meta.discovers && (
         <CloudObjects conn={conn} meta={meta} objects={objects} reload={reload} />
       )}
-      <CardPlaybooks type={conn.Type} />
+      <CardSkills type={conn.Type} />
       <RemoveConnection conn={conn} reload={reload} onBack={leave} channel="data" />
     </Box>
     </DraftProvider>

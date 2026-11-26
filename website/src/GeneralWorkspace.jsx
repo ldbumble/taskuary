@@ -762,8 +762,8 @@ function AssistantThread({ task, onAsked, onStop, selectionRef, attachmentsRef, 
             {cards}
             {/* ...under everything only while the list names no turn for it (a read behind, a chat with no turn yet) */}
             {!askAt && askNode}
-            {/* ...a chat whose page places no cards itself (a walk's, a journey's): a drafted playbook and a held act are approved here */}
-            {!turnCards && !!drafts?.length && <Box data-tq-playbook-drafts="" sx={{ mt: 1.5, mx: { xs: 1, sm: 2 }, p: 1.5, border: `1px solid ${BORDER}`, borderRadius: 1.5, bgcolor: "var(--tq-panel, #fff)" }}>
+            {/* ...a chat whose page places no cards itself (a walk's, a journey's): a drafted skill and a held act are approved here */}
+            {!turnCards && !!drafts?.length && <Box data-tq-skill-drafts="" sx={{ mt: 1.5, mx: { xs: 1, sm: 2 }, p: 1.5, border: `1px solid ${BORDER}`, borderRadius: 1.5, bgcolor: "var(--tq-panel, #fff)" }}>
               <Typography variant="caption" sx={{ display: "block", color: DIM, mb: 0.75 }}>{askNote(drafts[0])}</Typography>
               {drafts.map((r) => <ReviewDecision key={r.ReviewId} review={r} onChanged={onDraftDecided} />)}</Box>}
             {!turnCards && !!acts?.length && <Box data-tq-browser-acts="" sx={{ mt: 1.5, mx: { xs: 1, sm: 2 }, p: 1.5, border: `1px solid ${BORDER}`, borderRadius: 1.5, bgcolor: "var(--tq-panel, #fff)" }}>
@@ -1080,7 +1080,7 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
   const thread = (
     <PermitProvider taskId={task.TaskId} perms={perms} onAnswered={conv.load}>
     <LevelCtx.Provider value={level}><ChatCtx.Provider value={chat}><AgentNameCtx.Provider value={made ? "Taskuary" : AGENT_TURN}><ShownCtx.Provider value={placed.by}>
-    <WorkCtx.Provider value={{ reviews, checklist: steps, acts: [...(data?.browserActs || []), ...(data?.playbookDrafts || [])], next,
+    <WorkCtx.Provider value={{ reviews, checklist: steps, acts: [...(data?.browserActs || []), ...(data?.skillDrafts || [])], next,
       cards: data?.cards || [], refresh }}>
     {/* ...and each file in the turn that made it (placeMade): one no turn made, or a page no turn holds, is not drawn in the conversation */}
     <OutputsCtx.Provider value={{ tid: task.TaskId, listed: placeMade(data?.outputs, turnsNow), versions: data?.turnOutputs }}>
@@ -1092,7 +1092,7 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
         prompt={ownPrompt || prompt} onPromptUsed={promptUsed}
         asking={turn && viewShown ? null : asking} onAnswer={answerAsk} noComposer={noComposer}
         name={name}
-        drafts={data?.playbookDrafts || []} acts={actsHere} onDraftDecided={refresh} seed={seed}
+        drafts={data?.skillDrafts || []} acts={actsHere} onDraftDecided={refresh} seed={seed}
         chat={chat} reading={chat && readingOf(data?.thread || task?.ThreadJson)?.asking
           ? <div className="tq-aui-ask" data-tq-chat-ask="">{readingOf(data?.thread || task?.ThreadJson).asking}</div> : null}
         came={chat ? came : null} closedLine={chat ? closedLine : ""} queued={chat ? queued : null} stopTries={chat ? stopTries : null} hold={conv.list?.hold || null} trustOnRow={trustOnRow} idle={conv.list?.idle || ""} onTrusted={() => { conv.load(); onAnswered?.(); onChanged?.(); }}

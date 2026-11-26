@@ -75,7 +75,7 @@ def test_an_owner_requested_assistant_task_is_the_owner_s_at_the_base(ref):
     s.add_message({'TaskId': t, 'Channel': 'email', 'FromEmail': 'someone@vendor.example', 'Status': 'routed'})
     assert origin.of_task(s, t)[0] == 'stranger'                        # a stranger's message on it still lowers it
 
-@pytest.mark.parametrize('ref', ['assistant:idea:3', 'assistant:playbook', None])
+@pytest.mark.parametrize('ref', ['assistant:idea:3', 'assistant:skill', None])
 def test_an_advisor_idea_and_the_rest_stay_a_stranger_s(ref):
     s = MemoryStore(); t = s.create_task({'Title': 'x', 'Kind': 'general', 'Source': 'assistant', 'SourceRef': ref}, 'assistant')
     assert origin.of_task(s, t)[0] == 'stranger'

@@ -1024,7 +1024,7 @@ DEFAULT_SETTINGS = {'attach_threshold': '0.42',
                     # an agent may PROPOSE high-impact actions (open a PR, comment publicly,
                     # close an issue, run a tool); each lands on the task for approval
                     'proposals_enabled': '1',
-                    # triage matches mail to the playbooks, and a recurring job is proposed as one (playbooks.menu / draft)
+                    # triage matches mail to the skills, and a recurring job is proposed as one (skills.menu / draft)
                     'playbooks_enabled': '1',
                     # Share -> Shared link: a read-only page for one result on this network (sharing.py). Off: no link exists
                     'share_links_lan': '0',
@@ -2468,15 +2468,15 @@ class SQLiteStore:
                 facts['who'] = was_row['Assignee'][7:].lower(); facts['due'] = was_row.get('DueAt')
                 try: facts['late_days'] = max(0, (datetime.now().date() - datetime.strptime(str(was_row.get('DueAt') or '')[:10], '%Y-%m-%d').date()).days)
                 except ValueError: pass
-            # ...the playbook it was worked from, and whether the last mail on it asked something - what the ledger counts about a
-            # KIND of work (playbook_facts.py, build step 5): "closed with a question open" is the model's intent, never a word match
-            from . import playbooks as _pb
+            # ...the skill it was worked from, and whether the last mail on it asked something - what the ledger counts about a
+            # KIND of work (skill_facts.py, build step 5): "closed with a question open" is the model's intent, never a word match
+            from . import skills as _pb
             if _pb.of_task(was_row):
                 # ...and still open only when the owner's own word did not come after it (the review, 2026-10-12: the opening mail alone
                 # counted every task as closed on an open question)
                 li = self.last_inbound_on_task(task_id); v = self.message_verdict(li['MessageId']) if li else None
                 own = self.own_reply_on_thread(li.get('ConversationId'), task_id) if li else None
-                facts.update(playbook=_pb.of_task(was_row), asked=bool(v and v.get('intent') in ('task', 'reply_only')
+                facts.update(skill=_pb.of_task(was_row), asked=bool(v and v.get('intent') in ('task', 'reply_only')
                                                                     and not (own and str(own.get('SentAt') or '') >= str(li.get('SentAt') or ''))))
             outcomes.record(self, 'task.closed', 'task', task_id, actor, facts=facts)
         self._bump_snapshots()
@@ -4938,7 +4938,7 @@ class SQLiteStore:
                         'ORDER BY r.RouteId DESC LIMIT 1', tuple(mids))
         return (row or {}).get('Reason') or ''
     def list_messages(self, task_id): return self._rows('SELECT * FROM message WHERE TaskId=? ORDER BY SentAt', (task_id,))
-    def playbook_examples(self, query='', before=0):
+    def skill_examples(self, query='', before=0):
         """Page through imported incoming email, including old and already filed requests."""
         where, args = ["Channel='email'", "Direction='in'"], []
         if before:

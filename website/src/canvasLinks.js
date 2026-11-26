@@ -12,12 +12,12 @@ const REPORT_BUCKETS = ["workflows", "new-invoices", "new-agent"];
 export const SETTINGS_PAGES = ["config", "policies", "phone", "audit", "updates"];
 // ABOUT YOU's sections (the owner, 2026-11-06): You, Docs and Memory left Settings for one page of their own; every old link to them
 // lands here (aboutAt). `you` is the identity page, opened at once
-// ...and PLAYBOOKS WENT BACK TO REPORTS the same day (the owner: "it's more about how you work, not about you"): pbAt
+// ...and SKILLS WENT BACK TO REPORTS the same day (the owner: "it's more about how you work, not about you"): pbAt
 export const ABOUT_PAGES = ["you", "docs", "memory"];
 const aboutAt = (section, n, more = {}) => ({ kind: "browse", area: "about",
   state: { section: ABOUT_PAGES.includes(section) ? section : null, open: section === "you" ? "you" : null, ...more }, n });
 // a document by name: LEARNED.md's own view is Memory's sentences, its What changed list is still the document's
-const pbAt = (n, more = {}) => ({ kind: "browse", area: "reports", state: { section: "playbooks", open: null, ...more }, n });
+const pbAt = (n, more = {}) => ({ kind: "browse", area: "reports", state: { section: "skills", open: null, ...more }, n });
 const docAt = (doc, view, n) => (doc === "learned" && !view ? aboutAt("memory", n) : aboutAt("docs", n, { open: `d:${doc}`, ...(view ? { view } : {}) }));
 
 // WHO A REPORT IS SENT TO, ASKED IN THE CHAT (the owner, 2026-11-02: "send this report to gail@northwind.example every run"): the
@@ -32,8 +32,11 @@ export function routeOfHash(hash) {
 // a link to one task - opened over setup, never under it (AssistantView's first read of setup)
 export const opensTask = (hash) => canvasRequestFromHash(hash)?.kind === "task";
 
+// a link written while skills were called playbooks - in a comment on a task, a bookmark, an old card - opens the same place
+const renamed = (h) => h.replace(/^#playbook=/, "#skill=").replace(/^#(report|about|settings)=(new-)?playbook(s?)(?=$|&)/, "#$1=$2skill$3");
+
 export function canvasRequestFromHash(hash, n = 0) {
-  const h = String(hash || "");
+  const h = renamed(String(hash || ""));
   let m;
   if ((m = /^#task=(\d+)/.exec(h))) return { kind: "task", tid: Number(m[1]), n };
   // a message by id - a card's "<name>'s message", a bell, the setup list, a digest line: ITS card on the table, the one the walk shows
@@ -53,9 +56,9 @@ export function canvasRequestFromHash(hash, n = 0) {
       // the dashboards' shelf: the list, a new one being described, or a draft New built (dashboards.py)
       : v === "dashboards" ? { section: "dashboards", open: null } : v === "new-dashboard" ? { section: "dashboards", open: "new-dashboard" }
       : v === "draft-dashboard" ? { section: "dashboards", open: "draft" }
-      : v === "workflows" ? { section: "workflows", open: null } : v === "playbooks" ? { section: "playbooks", open: null }
-        // ...and New playbook asked for (New's Playbook tab): the shelf, its dialog open - `newPb` numbers the ask, so a second one opens it again
-        : v === "new-playbook" ? { section: "playbooks", open: null, newPb: n + 1 }
+      : v === "workflows" ? { section: "workflows", open: null } : v === "skills" ? { section: "skills", open: null }
+        // ...and New skill asked for (New's Skill tab): the shelf, its dialog open - `newPb` numbers the ask, so a second one opens it again
+        : v === "new-skill" ? { section: "skills", open: null, newPb: n + 1 }
         : REPORT_BUCKETS.includes(v) ? { section: "workflows", open: v }
           : /^\d+$/.test(v) ? { section: "reports", open: Number(v), ...(/&fix=(\d+)/.test(h) ? { fix: Number(/&fix=(\d+)/.exec(h)[1]) } : {}),
             ...(routeOfHash(h) ? { route: routeOfHash(h) } : {}) }
@@ -75,11 +78,11 @@ export function canvasRequestFromHash(hash, n = 0) {
   // one section of Connections, its cards open ("#connections=AI — voice": the crossed-out mic's Set up voice AI)
   if ((m = /^#connections=([^&]+)/.exec(h))) return { kind: "browse", area: "connections", state: { section: decodeURIComponent(m[1]), open: null }, n };
   if (/^#connections$/.test(h)) return { kind: "browse", area: "connections", state: { section: null, open: null }, n };
-  // About you, and one section of it (#about=docs&doc=soul[&view=changes]); its few hours' Playbooks (#about=playbooks, #about=new-playbook)
+  // About you, and one section of it (#about=docs&doc=soul[&view=changes]); its few hours' Skills (#about=skills, #about=new-skill)
   // land on Reports again
   if ((m = /^#about(?:=([\w-]*))?(?:&doc=(\w+))?(?:&view=(\w+))?/.exec(h))) {
     if (m[1] === "docs" && m[2]) return docAt(m[2], m[3], n);
-    return m[1] === "new-playbook" ? pbAt(n, { newPb: n + 1 }) : m[1] === "playbooks" ? pbAt(n) : aboutAt(m[1] || "", n);
+    return m[1] === "new-skill" ? pbAt(n, { newPb: n + 1 }) : m[1] === "skills" ? pbAt(n) : aboutAt(m[1] || "", n);
   }
   if (/^#settings$/.test(h)) return { kind: "browse", area: "settings", state: { section: null, open: null }, n };
   // ...and a topic and an open post on it (#hub=<topic>&post=<id>): Back from an opened post left the Hub entirely - the address said
@@ -96,10 +99,10 @@ export function canvasRequestFromHash(hash, n = 0) {
     const asked = decodeURIComponent(m[1] || "config") || "config", g = m[2] ? MOVED[decodeURIComponent(m[2])] || decodeURIComponent(m[2]) : "";
     // the phone's knobs left Configuration for Phone & chats: search and the Assistant still say their group, and land on the page
     const [page, group] = asked === "config" && g === PHONE_GROUP ? ["phone", ""] : [asked, g];
-    // PLAYBOOKS LEFT SETTINGS for the Reports page
+    // SKILLS LEFT SETTINGS for the Reports page
     // (the owner, 2026-10-21) - an old link to them still lands, on their new shelf
     // ...and About you took them, with Docs, Memory and the identity page (2026-11-06)
-    if (page === "playbooks") return pbAt(n);
+    if (page === "skills") return pbAt(n);
     if (page === "docs" || page === "memory") return aboutAt(page, n);
     if (page === "about") return aboutAt("you", n);
     if (!SETTINGS_PAGES.includes(page)) return { kind: "browse", area: "settings", state: { section: null, open: null }, n };
@@ -109,10 +112,10 @@ export function canvasRequestFromHash(hash, n = 0) {
     const knob = (page !== "config" || group) && /&key=([^&]+)/.test(h) ? decodeURIComponent(/&key=([^&]+)/.exec(h)[1]) : "";
     return { kind: "browse", area: "settings", state: { section: page, open: page === "config" ? (group || null) : page, ...(knob ? { knob } : {}) }, n };
   }
-  // a connector card's "new playbook for this connection" (#playbook=new:<type>): the Playbooks shelf, its New playbook asked for that card
-  if ((m = /^#playbook=new:([\w-]+)/.exec(h))) return pbAt(n, { newFor: m[1] });
-  // a playbook: Reports -> Playbooks, that one open in its editor (#playbook=new is a new one)
-  if ((m = /^#playbook=([\w.-]+)/.exec(h))) return pbAt(n, { open: `pb:${m[1]}` });
+  // a connector card's "new skill for this connection" (#skill=new:<type>): the Skills shelf, its New skill asked for that card
+  if ((m = /^#skill=new:([\w-]+)/.exec(h))) return pbAt(n, { newFor: m[1] });
+  // a skill: Reports -> Skills, that one open in its editor (#skill=new is a new one)
+  if ((m = /^#skill=([\w.-]+)/.exec(h))) return pbAt(n, { open: `pb:${m[1]}` });
   return null;
 }
 
@@ -143,7 +146,7 @@ export function hashFor(area, s = {}) {
     return `#settings=${p}${s.knob ? `&key=${enc(s.knob)}` : ""}`;
   }
   if (area === "reports") {
-    if (s.section === "playbooks") return /^pb:[\w.-]+$/.test(String(s.open || "")) ? `#playbook=${s.open.slice(3)}` : "#report=playbooks";
+    if (s.section === "skills") return /^pb:[\w.-]+$/.test(String(s.open || "")) ? `#skill=${s.open.slice(3)}` : "#report=skills";
     if (s.section === "workflows") return s.open === "draft" ? "#report=draft-workflow" : REPORT_BUCKETS.includes(s.open) ? `#report=${s.open}` : "#report=workflows";
     if (s.section === "dashboards") return typeof s.open === "number" ? `#report=${s.open}` : s.open === "draft" ? "#report=draft-dashboard"
       : s.open === "new-dashboard" ? "#report=new-dashboard" : "#report=dashboards";
@@ -153,7 +156,7 @@ export function hashFor(area, s = {}) {
   }
   return "";
 }
-// the one place an address names - "#connector=" and "#connections" are both the Connections landing, "#playbook=x" is Playbooks -
+// the one place an address names - "#connector=" and "#connections" are both the Connections landing, "#skill=x" is Skills -
 // so two spellings of the same place are never two steps of history; "" for an address that is no place of the canvas
 // ...and the Board, the one full-screen view, by its own address (BOARD): no canvas request, so nothing else reads it as a page
 export const BOARD = "#board";

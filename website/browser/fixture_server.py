@@ -163,11 +163,11 @@ def _install_fresh_routes(app, store):
                                 "DraftText": body.get("draft") or "Hi Erin, here is a long review of every flaw we found in the tool, one by one. Alex"})
         return {"taskId": tid, "reviewId": rid, "messageId": mid}
 
-    @app.post("/api/fixture/playbook")
-    def fixture_playbook(body: dict = Body(...)):
-        "A playbook proposal on task `taskId`, as a job's ending drafts it - beside the reply that waits (browser/send-and-close over a playbook)."
+    @app.post("/api/fixture/skill")
+    def fixture_skill(body: dict = Body(...)):
+        "A skill proposal on task `taskId`, as a job's ending drafts it - beside the reply that waits (browser/send-and-close over a skill)."
         from taskuary import proposals
-        made = proposals.queue(store, int(body["taskId"]), {"action": "write_playbook", "slug": body.get("slug") or "vendor-review",
+        made = proposals.queue(store, int(body["taskId"]), {"action": "save_skill", "slug": body.get("slug") or "vendor-review",
                                "text": "# Review a vendor tool\n\nWhen: a colleague asks for our review of a vendor tool.\n\n1. Collect the flaws.\n2. Send the review.\n",
                                "why": "colleagues ask for vendor reviews every month"}, "assistant")
         return {"reviewId": (made or {}).get("reviewId")}

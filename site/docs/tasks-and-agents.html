@@ -57,7 +57,7 @@
 <div class="entry on">
       <a class="page" href="./tasks-and-agents" aria-current="page">Tasks and agents</a>
       <button class="chev" type="button" aria-expanded="true" aria-label="Hide Tasks and agents's sections"></button>
-      <div class="secs"><a class="sec" href="#a-tasks-two-sections" data-sec="a-tasks-two-sections">A task's two sections</a><a class="sec" href="#sending-work-to-an-agent" data-sec="sending-work-to-an-agent">Sending work to an agent</a><a class="sec" href="#a-general-task-is-one-chat" data-sec="a-general-task-is-one-chat">A general task is one chat</a><a class="sec" href="#coding-agents-and-general-agents" data-sec="coding-agents-and-general-agents">Coding agents and general agents</a><a class="sec" href="#sessions-and-transcripts" data-sec="sessions-and-transcripts">Sessions and transcripts</a><a class="sec" href="#several-agents-in-one-repository" data-sec="several-agents-in-one-repository">Several agents in one repository</a><a class="sec" href="#checklists-and-closing" data-sec="checklists-and-closing">Checklists and closing</a><a class="sec" href="#replies" data-sec="replies">Replies</a><a class="sec" href="#brains-and-playbooks" data-sec="brains-and-playbooks">Brains and playbooks</a><a class="sec" href="#the-task-view-and-the-board" data-sec="the-task-view-and-the-board">The task view and the Board</a><a class="sec" href="#the-work-rail" data-sec="the-work-rail">The work rail</a><a class="sec" href="#how-work-is-ordered" data-sec="how-work-is-ordered">How work is ordered</a></div>
+      <div class="secs"><a class="sec" href="#a-tasks-two-sections" data-sec="a-tasks-two-sections">A task's two sections</a><a class="sec" href="#sending-work-to-an-agent" data-sec="sending-work-to-an-agent">Sending work to an agent</a><a class="sec" href="#a-general-task-is-one-chat" data-sec="a-general-task-is-one-chat">A general task is one chat</a><a class="sec" href="#coding-agents-and-general-agents" data-sec="coding-agents-and-general-agents">Coding agents and general agents</a><a class="sec" href="#sessions-and-transcripts" data-sec="sessions-and-transcripts">Sessions and transcripts</a><a class="sec" href="#several-agents-in-one-repository" data-sec="several-agents-in-one-repository">Several agents in one repository</a><a class="sec" href="#checklists-and-closing" data-sec="checklists-and-closing">Checklists and closing</a><a class="sec" href="#replies" data-sec="replies">Replies</a><a class="sec" href="#brains-and-skills" data-sec="brains-and-skills">Brains and skills</a><a class="sec" href="#the-task-view-and-the-board" data-sec="the-task-view-and-the-board">The task view and the Board</a><a class="sec" href="#the-work-rail" data-sec="the-work-rail">The work rail</a><a class="sec" href="#how-work-is-ordered" data-sec="how-work-is-ordered">How work is ordered</a></div>
     </div>
 <div class="entry">
       <a class="page" href="./security">Security</a>
@@ -77,7 +77,7 @@
 <div class="entry">
       <a class="page" href="./reports">Reports and the Advisor</a>
       <button class="chev" type="button" aria-expanded="false" aria-label="Show Reports and the Advisor's sections"></button>
-      <div class="secs" hidden><a class="sec" href="./reports#a-report-is-a-pipeline">A report is a pipeline</a><a class="sec" href="./reports#sources">Sources</a><a class="sec" href="./reports#letting-the-ai-write-the-source-cards">Letting the AI write the source cards</a><a class="sec" href="./reports#the-ai-pass">The AI pass</a><a class="sec" href="./reports#where-a-run-goes">Where a run goes</a><a class="sec" href="./reports#schedules">Schedules</a><a class="sec" href="./reports#the-advisor">The Advisor</a><a class="sec" href="./reports#routines">Routines</a><a class="sec" href="./reports#playbooks">Playbooks</a><a class="sec" href="./reports#stateful-routines">Stateful routines</a><a class="sec" href="./reports#sage-intacct-specifically">Sage Intacct, specifically</a><a class="sec" href="./reports#api">API</a></div>
+      <div class="secs" hidden><a class="sec" href="./reports#a-report-is-a-pipeline">A report is a pipeline</a><a class="sec" href="./reports#sources">Sources</a><a class="sec" href="./reports#letting-the-ai-write-the-source-cards">Letting the AI write the source cards</a><a class="sec" href="./reports#the-ai-pass">The AI pass</a><a class="sec" href="./reports#where-a-run-goes">Where a run goes</a><a class="sec" href="./reports#schedules">Schedules</a><a class="sec" href="./reports#the-advisor">The Advisor</a><a class="sec" href="./reports#routines">Routines</a><a class="sec" href="./reports#skills">Skills</a><a class="sec" href="./reports#stateful-routines">Stateful routines</a><a class="sec" href="./reports#sage-intacct-specifically">Sage Intacct, specifically</a><a class="sec" href="./reports#api">API</a></div>
     </div>
 <div class="entry">
       <a class="page" href="./advisor">The Advisor</a>
@@ -515,7 +515,7 @@ for you.</p>
 <code>general</code> task goes to a general agent, in a chat instead: research, planning, writing, a post, a
 spreadsheet or a dashboard, a form filled in a browser. Whatever it sets up waits for your press.</p>
 <p>Both run on a <strong>brain</strong> - a CLI such as Claude Code or Codex, or an API connection, with the model
-chosen on it (see <a href="#brains-and-playbooks">Brains and playbooks</a>). You start one with <strong>Send to agent</strong> on a task, or from <strong>+ New → Give an agent a job</strong>, which asks
+chosen on it (see <a href="#brains-and-skills">Brains and skills</a>). You start one with <strong>Send to agent</strong> on a task, or from <strong>+ New → Give an agent a job</strong>, which asks
 whether the job is general or coding - coding only with <a href="#developer-mode">Developer mode</a> on.</p>
 <h3 id="developer-mode">Developer mode<a class="anchor" href="#developer-mode" aria-label="Link to this section">#</a></h3>
 <p>Coding agents are for developers, so they come with <strong>Developer mode</strong> - a switch in setup (&quot;Are you
@@ -607,19 +607,20 @@ reply sent. Edit it in place, or ask in the box for a different one.</p>
 task to waiting, because an external answer is now required. An ordinary reply from an
 owner-controlled task is just an update: it leaves both the task status and any useful session
 alone.</p>
-<h2 id="brains-and-playbooks">Brains and playbooks<a class="anchor" href="#brains-and-playbooks" aria-label="Link to this section">#</a></h2>
+<h2 id="brains-and-skills">Brains and skills<a class="anchor" href="#brains-and-skills" aria-label="Link to this section">#</a></h2>
 <p>Two levels, and the difference is worth holding onto:</p>
 <ul>
 <li>A <strong>brain</strong> is what does the thinking — a CLI tool (Claude Code, Codex, …) or an API connector, with
 the model chosen on that connection.</li>
-<li>A <strong>playbook</strong> is a job — when it starts, which connections it uses, the steps, what an agent
-may do alone, what to ask first, and what counts as done.</li>
+<li>A <strong>skill</strong> is a job — what it is, when to use it, and how it is done here, in your words.
+It is a <code>SKILL.md</code> in a folder of its own, the format Claude Code and other agents use.</li>
 </ul>
-<p>A recurring kind of job gets its own page the first time an agent does it: on close, Taskuary
-asks whether that will recur and drafts the playbook onto the task. Approve it, and the next
-message like it is matched to that playbook by triage, and the agent finds it with its playbooks tool.</p>
-<p>Each connector card lists the playbooks that name it, and the words themselves are edited on
-<strong>Reports → Playbooks</strong>, where each has an on/off switch.</p>
+<p>A recurring kind of job gets its own skill when the agent that did it offers one: a card after
+its send goes, asking whether to make a skill of this kind of job, with the skill it drafted.
+Approve it, and the next message like it is matched to that skill by triage, and every agent
+sees it by name and reads it when it fits.</p>
+<p>Each connector card lists the skills that name it, and the words themselves are edited on
+<strong>Reports → Skills</strong>, where each has an on/off switch.</p>
 <h2 id="the-task-view-and-the-board">The task view and the Board<a class="anchor" href="#the-task-view-and-the-board" aria-label="Link to this section">#</a></h2>
 <p>A task opens in the Assistant&#39;s canvas as its task view - from the rail, from a link, from a notification or from the
 Board. The Board, full screen from the top bar, shows every agent&#39;s task in its state&#39;s column. Both say the same

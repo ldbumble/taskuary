@@ -31,8 +31,7 @@ def worked(s):
 
 
 def agent_closes(s, tid, said='the run failed on a missing secret; re-added it and the re-run passed'):
-    with mock.patch('taskuary.playbooks.draft', return_value=None):
-        return selfclose.declare(s, tid, said, 'assistant')
+    return selfclose.declare(s, tid, said, 'assistant')
 
 
 def test_the_agents_own_ending_leaves_its_write_up_and_the_task_open(s):

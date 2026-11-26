@@ -690,7 +690,7 @@ def run_fred_series(cfg):
 
 
 # ---- the screen: conditions in CONFIG, matches out ------------------------------------------
-# The threshold lives here and not in a playbook. A playbook is prose flattened onto a command
+# The threshold lives here and not in a skill. A skill is prose flattened onto a command
 # line; a number living in prose is a number re-judged by a model every run, and it will drift.
 OPS = {'<': lambda a, b: a < b, '<=': lambda a, b: a <= b, '>': lambda a, b: a > b,
        '>=': lambda a, b: a >= b, '==': lambda a, b: a == b, '!=': lambda a, b: a != b}

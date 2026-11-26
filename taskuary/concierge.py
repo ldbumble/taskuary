@@ -978,7 +978,7 @@ def cannot(item: dict | None, verb: str, store=None) -> str:
     # ...a task's or an agent's row with no draft carries the Approve of an act waiting there for the owner's yes (the 2026-11-02 audit)
     if verb == 'approve' and need and not item.get(need) and item.get('tid') and store is not None:
         from . import card
-        if card.pending(store, item['tid'], 'acts'): return ''           # ...any act to Approve: a held step, a proposal, a close-out, a playbook
+        if card.pending(store, item['tid'], 'acts'): return ''           # ...any act to Approve: a held step, a proposal, a close-out, a skill
     if need and not item.get(need):
         # the item's own line, not "TQ-0006 is assistant asked you: Should I…?." glued into a sentence (2026-10-06)
         state = str(item.get('why') or funnel.lane_word(item) or 'waiting').strip().rstrip('.')
@@ -1743,17 +1743,17 @@ def _paged(store, tid: int, item: dict | None, kind: str, p: dict, text: str, ac
 # a new job's words go into New, on the tab that starts it, its own filled button the one to press: an agent for work, a note to self for
 # a to-do (the owner, 2026-10-19: "for hand this to coding agent match buttons") - and an agent's, since 2026-11-02, pressed for them (_new)
 NEW_TAB = {'general': ('agent', 'general', 'regular_agent'), 'coding': ('agent', 'terminal', 'coding_agent'), 'task': ('note', '', ''),
-           'report': ('report', '', ''), 'workflow': ('workflow', '', ''), 'routine': ('workflow', '', ''), 'playbook': ('playbook', '', ''),
+           'report': ('report', '', ''), 'workflow': ('workflow', '', ''), 'routine': ('workflow', '', ''), 'skill': ('skill', '', ''),
            # ...and New's other tabs (the whole-app design, 2026-10-28): a message the owner starts, drafted for their Send; a goal; a dashboard
            'send': ('send', '', ''), 'goal': ('goal', '', ''), 'dashboard': ('dashboard', '', '')}
 NEW_ONLY = ('send', 'goal', 'dashboard')          # New's tabs alone: no task kind, so on a phone they are the desk's
-# ...a report or a routine is an agent's job now (_new): its tools set it up. A playbook and a dashboard keep their builders - the owner asked
-# for the playbook's own page by name (2026-10-22: "this is not playbook ui?"), and no agent tool saves a dashboard
+# ...a report or a routine is an agent's job now (_new): its tools set it up. A skill and a dashboard keep their builders - the owner asked
+# for the skill's own page by name (2026-10-22: "this is not skill ui?"), and no agent tool saves a dashboard
 WORK_KINDS = ('report', 'workflow', 'routine')
 # ...each the button New's tab draws (NewSheet.jsx) for what still comes up in New: a note, a goal (Plan it while an AI can plan the steps),
-# a playbook's and a dashboard's builder
-NEW_PRESS = {'note': 'Note it', 'goal': 'Track it', 'playbook': 'Set up with AI', 'dashboard': 'Set up with AI'}
-OPENED = {'note': 'New on a note', 'goal': 'New on a goal', 'playbook': 'New on a playbook', 'dashboard': 'a new dashboard'}
+# a skill's and a dashboard's builder
+NEW_PRESS = {'note': 'Note it', 'goal': 'Track it', 'skill': 'Set up with AI', 'dashboard': 'Set up with AI'}
+OPENED = {'note': 'New on a note', 'goal': 'New on a goal', 'skill': 'New on a skill', 'dashboard': 'a new dashboard'}
 def new_press(store, kind: str) -> str:
     from . import capabilities
     return 'Plan it' if kind == 'goal' and capabilities.has_ai(store, 'assistant') else NEW_PRESS[kind]
@@ -2525,11 +2525,11 @@ def pages_block(store) -> str:
             # list had (2026-10-26)
             f"- a report or workflow: #report=<id>{' - ' + reps if reps else ''}; a new report #report=new; a new workflow "
             '#report=new-agent; a new dashboard #report=new-dashboard; the Reports page and its list of reports #report=reports; the '
-            'workflows #report=workflows; the dashboards #report=dashboards; the playbooks #report=playbooks\n'
+            'workflows #report=workflows; the dashboards #report=dashboards; the skills #report=skills\n'
             # ...and NEW ITSELF, blank (canvasLinks #new-task): "I want to start something new" had no address, and a job with no words yet
             # is not task.create_from_text's to write (2026-11-02)
             '- New, the card that starts something, empty on one of its tabs: #new-task&kind=<agent|send|note|meeting|goal|report|dashboard|'
-            'workflow|playbook> (#new-task alone opens Send something)\n'
+            'workflow|skill> (#new-task alone opens Send something)\n'
             '- settings and About you, page by page:\n' + _screens() + '\n' + THIS_APP + '\n\n')
 
 
@@ -4291,13 +4291,11 @@ def save_live(store, tid: int, actor: str = 'owner') -> bool:
     try: s = terminal.session_for(tid)
     except Exception: s = None
     if not (s and getattr(s, 'alive', False)): return False
-    shut = wrapup.CLOSING.set(actor == 'owner')         # ...his close's own ending asks him nothing new (wrapup.CLOSING)
     try: wrapup.wrap(store, tid, close=False, actor=actor, sid=getattr(s, 'sid', None), no_reply=True)
     except ValueError as e:
         if not str(e).startswith('nothing to wrap up'): return _kept(store, tid, actor, e)
         return False                   # ...a session that wrote nothing has nothing to lose: the close stops it as before
     except Exception as e: return _kept(store, tid, actor, e)
-    finally: wrapup.CLOSING.reset(shut)
     return True
 
 
@@ -5160,7 +5158,7 @@ def propose_direct(store, verb: str, key: str, text: str = '', actor: str = 'own
 # ── setting things up from the chat (PW-194..197): sorted and gathered by AI, confirmed, created through the tabs' roads ──
 SETUP_QUESTIONS = 'setup_questions'
 SETUP_SORT_SYSTEM = ('You sort one set-up request from the owner of a small company\'s assistant. Answer JSON only: '
-                     '{"kind": "report" | "routine" | "playbook" | "connection" | "investigate", "provider": "<connector type or null>", '
+                     '{"kind": "report" | "routine" | "skill" | "connection" | "investigate", "provider": "<connector type or null>", '
                      '"why": "<one sentence>", '
                      '"recurs": <for a routine: {"schedule": "<when it runs, in the owner\'s words>", "objective": "<the job, without the clock>", '
                      '"repo": "<a repository the owner named, or null>", "skill": "<a skill the owner named, its slash-command name, or null>"}; '
@@ -5177,11 +5175,11 @@ SETUP_SORT_SYSTEM = ('You sort one set-up request from the owner of a small comp
                      # (the owner, 2026-10-29: "every Monday at noon run the user management review skill" became a one-off agent task)
                      'A ROUTINE is a job that DOES work again and again on a clock - an agent run, a skill run, a review that opens tasks or '
                      'drafts - "every Monday at noon run the access review skill in northwind/ledger". Answer routine and fill recurs. '
-                     # it had no word for one, so "can I build a playbook for it?" sorted to investigate and became an agent's job (the
-                     # owner, 2026-10-22: "this is not playbook ui?")
-                     'A PLAYBOOK says how one kind of recurring REQUEST is handled from now on - when someone asks for this, gather that, '
-                     'prepare it for the owner\'s review; triage matches new mail to it. A request to build, make or set up a playbook, '
-                     'or to have a recurring kind of ask handled the same way every time, is playbook. '
+                     # it had no word for one, so "can I build a skill for it?" sorted to investigate and became an agent's job (the
+                     # owner, 2026-10-22: "this is not skill ui?")
+                     'A SKILL says how one kind of recurring REQUEST is handled from now on - when someone asks for this, gather that, '
+                     'prepare it for the owner\'s review; triage matches new mail to it. A request to build, make or set up a skill, '
+                     'or to have a recurring kind of ask handled the same way every time, is skill. '
                      'A CONNECTION adds or configures a system Taskuary talks to (mail, chat, a database, a books system, an AI provider) - '
                      'name its type from connector_types when you can. '
                      # "connect my zoho email" opened Zoho Invoice: the sort saw bare types, and a mail account shares its maker's name (TQ-1251)
@@ -5254,7 +5252,7 @@ def sort_setup(store, text: str, llm, before: str = '') -> dict:
     except Exception as e:
         logger.warning(f'concierge: the set-up sort failed - {e}'); out = {}
     kind = str(out.get('kind') or 'report').lower(); prov = str(out.get('provider') or '').lower().strip()
-    return {'kind': kind if kind in ('report', 'routine', 'playbook', 'connection', 'investigate') else 'report', 'provider': prov if prov in types else None,
+    return {'kind': kind if kind in ('report', 'routine', 'skill', 'connection', 'investigate') else 'report', 'provider': prov if prov in types else None,
             'why': str(out.get('why') or '')[:300], 'title': _title_cut(out.get('title') or ''),
             'name': str(out.get('name') or '').strip()[:80], 'signs_in': str(out.get('signs_in') or '').strip()[:120],
             **({'recurs': recurs_of(out.get('recurs'))} if kind == 'routine' else {})}
@@ -5383,7 +5381,7 @@ def setup_turn(store, tid: int, text: str, ask: str, item: dict | None, actor: s
     # ON THE DESK A SET-UP IS ITS OWN PAGE (routes): a report is New's report box, a connection its card, digging
     # an agent's job in New - each with its own button to press; nothing is composed into a card to confirm here
     if routes():
-        if sort['kind'] in ('report', 'playbook'): return _new(store, tid, item, sort['kind'], ask)
+        if sort['kind'] in ('report', 'skill'): return _new(store, tid, item, sort['kind'], ask)
         if sort['kind'] == 'routine': return _new(store, tid, item, 'workflow', ask, recurs=sort.get('recurs') or recurs_of({'objective': ask}), lead=vault)
         if sort['kind'] == 'investigate': return _new(store, tid, item, 'general', ask, lead=vault)
         if sort.get('provider'):
@@ -5400,9 +5398,9 @@ def setup_turn(store, tid: int, text: str, ask: str, item: dict | None, actor: s
             name = (store.get_connector_by_type(prov) or {}).get('Name') or prov
             return _page(store, tid, item, f'#connector={prov}', f"Opened {name}'s card under Connections - fill it in and test it there. "
                                                                  'A key or password goes on the card, never in this chat.')
-    # ...a phone has no New: the playbook is said where it is made, and nothing is started from a chat line
-    if sort['kind'] == 'playbook':
-        say_ = f"A playbook is made under {places.name('playbooks')} - New playbook there builds it from your words or a past email. Nothing has changed."
+    # ...a phone has no New: the skill is said where it is made, and nothing is started from a chat line
+    if sort['kind'] == 'skill':
+        say_ = f"A skill is made under {places.name('skills')} - New skill there builds it from your words or a past email. Nothing has changed."
         rec(say_); return {'say': say_, 'options': [], 'decision': None}
     if sort['kind'] == 'investigate':
         return _walkthrough(store, tid, ask, item, actor, f"This needs digging before it can be configured{' - ' + sort['why'] if sort.get('why') else ''}.",

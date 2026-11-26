@@ -1,5 +1,5 @@
 """THE WRITE-UP RUNS BEHIND THE PRESS (the owner, 2026-10-20). Mark done on a task with a live agent, Close agent on the Wall and
-Stop and save all end a session the same way - its transcript becomes the report, the handbook and the playbook are asked, and
+Stop and save all end a session the same way - its transcript becomes the report, the handbook and the skill are asked, and
 for a close the task closes - and that took as long as the AI did, 18 s with the page held under "Writing up this session".
 
 Now the press starts ONE job the server owns and returns at once. The job harvests the session first - the transcript and the
@@ -120,7 +120,6 @@ def _run(store, tid, record, harvested: dict = None, harvest_done=None, job: str
     def saved(h):
         _save(store, tid, record, h)
         if harvest_done: harvest_done.set()
-    shut = wrapup.CLOSING.set(bool(close) and actor == 'owner')
     try:
         wrapup.wrap(store, tid, close=False, actor=actor, sid=record.get('sid'), no_reply=bool(record.get('no_reply')),
                     harvested=harvested, on_harvest=saved)
@@ -132,7 +131,6 @@ def _run(store, tid, record, harvested: dict = None, harvest_done=None, job: str
         if failed.startswith('nothing to wrap up'): logger.info(f'write-up of task {tid}: {failed} - closing it plainly'); failed = ''
         else: logger.warning(f'write-up of task {tid} failed: {failed}')
     finally:
-        wrapup.CLOSING.reset(shut)
         if harvest_done: harvest_done.set()
     try:
         if close and not failed: stage(tid, 'closing'); _close(store, tid, actor, failed)

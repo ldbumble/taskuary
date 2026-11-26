@@ -290,9 +290,12 @@ def check(store, mid: int, actor: str = 'owner') -> dict:
 
 # ── freezing one ───────────────────────────────────────────────────────────────────────
 def skill_md(metric: dict, fixtures: list) -> str:
-    """The certified definition as a skill file - the shape reports.py already loads."""
-    spec = spec_of(metric)
-    lines = [f"# {metric.get('Label') or metric['Name']}", '',
+    """The certified definition as a SKILL.md - one of the owner's skills (skills.py), which a report or a routine names to use."""
+    from . import skills
+    spec, label = spec_of(metric), metric.get('Label') or metric['Name']
+    lines = [skills.front(f"metric-{slug(metric['Name'])}", f"The verified definition of {label} as this organisation computes it. Use when a "
+                                                               f"report or a question needs {metric['Name']}."),
+             f"# {label}", '',
              f"Verified definition of **{metric['Name']}** as this organisation computes it. Use it as "
              'written; do not re-derive the query. It was proved against the known numbers below.', '',
              '## What it means', (metric.get('Definition') or '').strip() or '_(not written)_', '',
@@ -313,10 +316,8 @@ def skill_md(metric: dict, fixtures: list) -> str:
 
 
 def write_skill(store, metric: dict, actor: str = 'owner') -> str:
-    name = f"metric-{slug(metric['Name'])}"
-    folder = config.home() / 'skills' / name
-    folder.mkdir(parents=True, exist_ok=True)
-    (folder / 'SKILL.md').write_text(skill_md(metric, store.list_fixtures(metric['MetricId'])), encoding='utf-8')
+    from . import skills
+    name = skills.write(f"metric-{slug(metric['Name'])}", skill_md(metric, store.list_fixtures(metric['MetricId'])))
     if metric.get('Skill') != name: store.update_metric(metric['MetricId'], {'Skill': name}, actor)
     logger.info(f"semantic: wrote skill {name} for verified metric {metric['Name']}")
     return name

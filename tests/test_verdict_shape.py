@@ -165,10 +165,10 @@ class TriageUsesItTests(unittest.TestCase):
         self.assertFalse(plain['schema']['additionalProperties'])
         for asked in ('intent', 'why', 'title', 'kind'):          # triage routes: no summary, no to-dos (2026-11-23)
             self.assertIn(asked, plain['schema']['properties'], asked)
-        for unasked in ('repository', 'relationship', 'playbook', 'profile'):
+        for unasked in ('repository', 'relationship', 'skill', 'profile'):
             self.assertNotIn(unasked, plain['schema']['properties'], unasked)
-        with_repos = triage.verdict_schema(candidates=[], playbooks='- pto: x')
-        for asked in ('relationship', 'related_message_ids', 'existing_task_id', 'playbook', 'thread'):
+        with_repos = triage.verdict_schema(candidates=[], skills='- pto: x')
+        for asked in ('relationship', 'related_message_ids', 'existing_task_id', 'skill', 'thread'):
             self.assertIn(asked, with_repos['schema']['properties'], asked)
         # ...and never where coding work is done: the coding agent picks its repository (repochoice, 2026-11-06)
         for never in ('repository', 'needs_repo_choice', 'repo_reason'): self.assertNotIn(never, with_repos['schema']['properties'], never)
@@ -353,7 +353,7 @@ BASE = {'intent': 'task', 'why': 'Erin asks for the numbers', 'title': 'Send Eri
 NOTHING = {
     'the rare group': {'danger': None, 'needs_browser': False, 'needs_desktop': False, 'meet': None},
     'the work': {'kind': None, 'priority': 'regular', 'priority_why': '', 'due': None, 'data_class': 'ordinary', 'wrapper': []},
-    'the menus': {'playbook': None, 'workflow': None, 'workstream': None},
+    'the menus': {'skill': None, 'workflow': None, 'workstream': None},
     'joining': {'same_as': None, 'new_job': None, 'refines': None, 'task_title': None, 'reword': None, 'rests_on': None, 'serves': None},
     'a chat line': {'relationship': None, 'related_message_ids': None, 'existing_task_id': None},
     'the thread': {'thread': {'asking': '', 'your_part': '', 'others': [], 'asks': [], 'aside': []}},
@@ -361,7 +361,7 @@ NOTHING = {
 SHOWN = dict(thread={'thread_task': {'tid': 9, 'status': 'open', 'watching': True}, 'open_work': [{'tid': 7, 'title': 'Close the Q3 books'}],
                      'exchange': ['[#3] Erin Blake: can you send the numbers?'], 'open_goals': [{'tid': 5, 'steps': [{'id': 's1'}]}]},
              candidates=[{'id': 11, 'who': 'Erin Blake', 'when': '09:00', 'text': 'the numbers?', 'task_id': 7}],
-             playbooks='- pto: a leave request', workflows='- refund: a refund request', workstreams='- finance: the day job')
+             skills='- pto: a leave request', workflows='- refund: a refund request', workstreams='- finance: the day job')
 
 
 def _answers(j, lean=True, carries=False, **kw):

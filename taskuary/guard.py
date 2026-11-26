@@ -80,7 +80,7 @@ DENIED = (
     (r'POST|PUT|PATCH', r'^/api/settings', 'the settings decide what agents may do'),
     (r'PUT', r'^/api/combine/', "how far triage combines a connection's messages is the owner's setting"),
     (r'POST|PUT|PATCH|DELETE', r'^/api/policies', 'the rules'),
-    (r'POST|PUT|PATCH|DELETE', r'^/api/(docs?|playbooks)(/|$)', 'SOUL.md, the playbooks and the rest are the owner\'s word, not an agent\'s - propose, do not write'),
+    (r'POST|PUT|PATCH|DELETE', r'^/api/(docs?|skills)(/|$)', 'SOUL.md, the skills and the rest are the owner\'s word, not an agent\'s - propose, do not write'),
     (r'POST', r'^/api/update$', 'replacing the program is the owner\'s decision'),
     (r'POST', r'^/api/quit$', 'stopping Taskuary stops every agent with it - the owner\'s decision'),
     (r'POST|PUT|PATCH|DELETE', r'^/api/(invoice-batches|reports/\d+/invoice-batches)(/|$)',

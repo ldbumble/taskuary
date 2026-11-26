@@ -410,7 +410,7 @@ export async function clickRail(page, label) {
   // document open over its list goes Back first, then the card with that title is opened
   if (!(await page.$("#tqSettingsRail"))) {
     // a rail GROUP heading is the list's grouping in the canvas: "clicking" it is being on the list
-    if (["Operator documents", "Profiles", "Playbooks"].includes(label)) {
+    if (["Operator documents", "Profiles", "Skills"].includes(label)) {
       await page.evaluate(() => document.querySelector("[data-tq-browse-chip][aria-pressed=true]")?.click());
       await page.waitForSelector("[data-tq-browse-card]");
       return;

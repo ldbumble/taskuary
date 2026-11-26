@@ -52,7 +52,7 @@ SEED_CHUNK, SEED_CHUNK_GAP = 160, .03
 # 12000) for the same reason, on the same day somebody noticed the message body had it too.
 # 6000 blew the ceiling: a coding seed also carries AGENT_CHARS (2600, AGENT.md, every worker's
 # shared rules) on top of this document, and the worst case (ASK 12,000 + CONTEXT 4,000 + AGENT.md
-# 2,600 + this 6,000 + a playbook block) ran past SEED_CEILING's 24,000. 5600 clears the coding document's
+# 2,600 + this 6,000 + a skill block) ran past SEED_CEILING's 24,000. 5600 clears the coding document's
 # measured 4,884 - the whole point of raising this - with room for an edit (4900 cleared it by 16
 # characters, a trap for whoever next touches that doc), while the ceiling stays reachable only in a
 # genuinely maximal seed, where the trim below cuts the ask and nothing else. 6400 since the ask-before-deploy
@@ -1987,8 +1987,11 @@ def seed_text(store, tid: int, instruction: str = None, repo: str = None, cwd: s
     from . import semantic
     layer = ' '.join(semantic.block(store).split())
     if layer: parts.append(layer)
+    # ...and HIS SKILLS by name and description (skills.brief), the list every agent's context carries - never on a stranger's task
+    from . import skills as _skills
+    if not stranger and (known := _skills.brief(store, t, sep=' ')): parts.append(known)
     # NO RULE BLOCKS (the owner, 2026-11-23: "code should never tell an agent what to do ... profiles do nothing"): AGENT.md, the profile's
-    # document and the matched playbook no longer ride the seed - the fence (security) does, and how a to-do is ticked, the shell's one tool
+    # document and the matched skill no longer ride the seed - the fence (security) does, and how a to-do is ticked, the shell's one tool
     parts.append(f'{FENCE_LINE} {TICK_LINE}')
     # the rules are the owner's document, written for every session; a stranger's runs fewer commands (cli.STRANGER_ACTS),
     # and told to read the wall first, its first step was a refusal (live check 2026-10-14)
@@ -2043,7 +2046,7 @@ def seed_text(store, tid: int, instruction: str = None, repo: str = None, cwd: s
     # A command line has a hard limit (32767 on Windows) and the OS does not warn - it refuses
     # or clips. If we are over, the ASK is what gives, never the rules that keep an agent
     # inside its checkout, and it gives out loud. `tail` used to run from FROM to the end of the
-    # WHOLE prompt - rules, playbook and the closing WHAT TO DO along with it - so a genuinely
+    # WHOLE prompt - rules, skill and the closing WHAT TO DO along with it - so a genuinely
     # over-ceiling ask cut those instead of itself, contradicting the comment above it
     # (test_the_trim_cuts_only_the_message_never_the_rules_or_the_closing_instructions, 2026-09-17).
     # RULES (AGENT.md - every worker) always follows the ask directly (agent.md is seeded for every

@@ -28,7 +28,7 @@ What one run of the Advisor report hands the model, today:
 
 Two more inputs reach the Advisor at **reflection**, the pass that rewrites `LEARNED.md`, rather
 than on a report run: `LEARNED.md` itself, whole, hypotheses included, the outcome ledger
-below, and what you pressed while its line was shown. A matching playbook reaches its line on an
+below, and what you pressed while its line was shown. A matching skill reaches its line on an
 item (below); your mutes are designed as an input and not yet read.
 
 None of this is copied into a prompt you cannot see. The report's **Preview** shows exactly what one
@@ -191,10 +191,13 @@ counted numbers underneath. The lines are the model's reading; the numbers are t
 own lines above the block are yours and survive every recompile. The page is read wherever the hub's
 dossier is read: the reply drafter, triage's context, meeting prep, and the Advisor's bigger read.
 
-Facts about kinds of work go to the playbook they belong to, as a proposal: once a playbook has
+Facts about kinds of work go to the skill they belong to, as a proposal: once a skill has
 five closes on the ledger, reflection writes a bullet block - how often a close came open again,
 and how often the ones closed with a question still open did - and it waits for your yes on the
-Review queue. Nothing edits a playbook on its own; your own lines on it are never touched.
+Review queue. Your edits teach it too: when you change an agent's draft before sending it, on a
+task worked from a skill, the next reflection reads what was drafted beside what you sent and
+suggests the update to that skill as the same kind of card. Nothing edits a skill on its own;
+your own lines on it are never touched.
 
 ## The outcome ledger
 
@@ -225,7 +228,7 @@ same decay: "a green PR from the coding agent is merged as it stands"; "when an 
 the PR, you say yes". Facts about other
 people ("Ray answers in three days and needs a second chase") and about kinds of work ("closing
 from a thread with an open question reopens 40%; ask first") go elsewhere: a page per person
-derived from the ledger, and work facts proposed into the playbook they belong to (both below).
+derived from the ledger, and work facts proposed into the skill they belong to (both below).
 
 ## The one rule
 
@@ -244,5 +247,5 @@ ledger with its daily sweep and reflection reading it; the Advisor on the event,
 prompt-box pill and the notes in the clock menu; a page per person and a per-person day, with the
 slipped lane and its four answers; and triage naming which goal step a mail serves (the mail lands
 under that step, and may tick a box nobody holds), opening a goal for the open-ended ask with the
-planner proposing its steps, and work facts proposed into playbooks.
+planner proposing its steps, and work facts proposed into skills.
 Next, kept in mind but not built: earned autonomy.

@@ -1330,12 +1330,12 @@ class TheList(unittest.TestCase):
         from taskuary import verdicts, waitroom
         self.say('Draft it.', 'l-one'); self.rest()
         self.brain.delay = HOLD
-        self.assertEqual(verdicts.in_words({'playbook': 'vendor-review', 'path': '/home/alex/notes/vendor-review.md', 'steps': [1, 2]}),
-                         'playbook: vendor-review, path: vendor-review.md')                    # words: no JSON, no folder of his
-        rid = self.s.add_review({'TaskId': self.tid, 'Kind': 'action', 'Status': 'pending', 'DraftText': '{}', 'Reason': 'write playbook',
+        self.assertEqual(verdicts.in_words({'skill': 'vendor-review', 'path': '/home/alex/notes/vendor-review.md', 'steps': [1, 2]}),
+                         'skill: vendor-review, path: vendor-review.md')                    # words: no JSON, no folder of his
+        rid = self.s.add_review({'TaskId': self.tid, 'Kind': 'action', 'Status': 'pending', 'DraftText': '{}', 'Reason': 'write skill',
                                  'NextStep': 'tell Gail it is up'})          # ...a step of its own follows his press (card.carries_on)
         self.s.decide_review(rid, 'approved', '{}', 'owner')          # ...the press: its card's event is what the woken turn is told
-        self.assertTrue(general.approved(self.s, self.tid, 'Approve', 'write playbook - playbook: vendor-review', review=rid))
+        self.assertTrue(general.approved(self.s, self.tid, 'Approve', 'write skill - skill: vendor-review', review=rid))
         self.at_work()
         self.say('And tell Gail.', 'l-two', wait=False)
         def check():

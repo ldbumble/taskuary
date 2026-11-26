@@ -11,7 +11,7 @@ export const routeIntent = (reason) => {
 export const routeWhy = (reason) => String(reason || "").replace(/^triage:\s*[^\u00b7]*?\s-\s/, "");
 
 const DISPLAY_KEYS = new Set([
-  "intent", "kind", "playbook", "why", "title", "summary", "checklist",
+  "intent", "kind", "skill", "why", "title", "summary", "checklist",
   "repository", "needs_repo_choice", "repo_reason", "relationship", "related_message_ids",
   "existing_task_id", "notes", "notes_left",
 ]);

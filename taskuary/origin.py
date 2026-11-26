@@ -67,7 +67,7 @@ def of_message(store, row: dict, memo: dict = None, seen: dict = None) -> tuple:
     return ('trusted' if ok else 'stranger'), why
 
 # concierge.setup_task's refs: a walkthrough, a coding hand-off, an agent job - each the owner's own sentence. An Advisor
-# idea ('assistant:idea:<n>') carries what was read, and is not here. A playbook stores its own base (playbooks.setup_task):
+# idea ('assistant:idea:<n>') carries what was read, and is not here. A skill stores its own base (skills.setup_task):
 # the owner's, or its example mail's sender's when that is worse.
 OWNER_REFS = ('assistant:setup', 'assistant:handoff', 'assistant:agent')
 

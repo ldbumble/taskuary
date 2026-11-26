@@ -1,7 +1,7 @@
 """A wrap asks its three questions at once and applies the answers in today's order (2026-10-20).
 
-The report, the handbook and the playbook question were asked one after another - 18 s of a Mark done with a 6-second brain.
-The handbook's and the playbook's are now asked AHEAD, beside the report's, exactly as they will be asked; each function still
+The report, the handbook and the skill question were asked one after another - 18 s of a Mark done with a 6-second brain.
+The handbook's and the skill's are now asked AHEAD, beside the report's, exactly as they will be asked; each function still
 runs at its own place in the ending and takes the answer to the question it asks there. With a deterministic brain the
 ending writes exactly what the serial one wrote - the same comments, entries, proposals, reviews, audit and status - the
 brain is asked the same questions, and no more than three at once."""
@@ -10,7 +10,7 @@ from unittest import mock
 
 import pytest
 
-from taskuary import handbook, playbooks, wrapup
+from taskuary import handbook, skills, wrapup
 from taskuary.store import MemoryStore
 
 BILL = """# Post a card transaction as an AP bill
@@ -36,8 +36,8 @@ class Brain:
             time.sleep(LAT); s = str(system)
             if 'determination' in s:
                 return json.dumps({'determination': 'Matched the charge.', 'actions': 'Created bill 1043', 'summary': 'Posted the bill.', 'outcome': 'did_work'})
-            if 'playbook' in s.lower() and 'entries' not in s:
-                return json.dumps({'playbook': {'slug': 'card-bill', 'text': BILL, 'why': 'card charges recur every week'}})
+            if 'skill' in s.lower() and 'entries' not in s:
+                return json.dumps({'skill': {'slug': 'card-bill', 'text': BILL, 'why': 'card charges recur every week'}})
             return json.dumps({'entries': [{'earned': True, 'why_earned': 'took three tries to find the vendor mapping rule',
                                             'title': 'Card charges map to vendor 87', 'body': 'Use expense account 6120.',
                                             'topic': 'finance', 'kind': 'howto'}]})
@@ -69,7 +69,7 @@ def ended(s, tid):
 
 @pytest.mark.parametrize('close', [False, True])
 def test_asked_ahead_the_ending_writes_what_the_serial_ending_wrote(close, monkeypatch, tmp_path):
-    monkeypatch.setattr(playbooks, 'folder', lambda: tmp_path / 'playbooks')
+    monkeypatch.setattr(skills, 'folder', lambda: tmp_path / 'skills')
     monkeypatch.setattr(handbook, 'enabled', lambda store: True)
     monkeypatch.setattr(handbook, 'from_stranger', lambda store, tid: False)
     runs = {}
@@ -84,17 +84,17 @@ def test_asked_ahead_the_ending_writes_what_the_serial_ending_wrote(close, monke
         runs[how] = (ended(s, tid), sorted(brain.asked), {k: v for k, v in out.items() if k != 'artifacts'}, took, brain.most)
     (a, qa, oa, _, _), (b, qb, ob, _, most) = runs['serial'], runs['ahead']
     assert b == a, {k: (a[k], b[k]) for k in a if a[k] != b.get(k)}
-    # ...his close asks no playbook (wrapup.asks_playbook): what needs his press was raised with the work, never by the ending his close runs
-    assert qb == qa and len(qa) == (2 if close else 3), 'the brain was asked the same questions'
+    # ...no ending asks whether the job was a skill: the agent that did it offers one itself, as a card (the owner, 2026-11-26)
+    assert qb == qa and len(qa) == 2, 'the brain was asked the same questions'
     assert ob == oa
     written = json.dumps(a)
-    assert 'Card charges map to vendor 87' in written and ('write_playbook' in written) != close and 'AGENT REPORT' in written, 'every answer was applied'
+    assert 'Card charges map to vendor 87' in written and 'save_skill' not in written and 'AGENT REPORT' in written, 'every answer was applied'
     assert 2 <= most <= 3, f'asked at once: {most} questions were in flight together'  # a count, not a clock: CI runners are too noisy to time
 
 
 def test_a_question_whose_inputs_moved_is_asked_again_at_its_place(monkeypatch, tmp_path):
     """Asked ahead, then the state the question reads changed before its place: the answer ahead is not used."""
-    monkeypatch.setattr(playbooks, 'folder', lambda: tmp_path / 'playbooks')
+    monkeypatch.setattr(skills, 'folder', lambda: tmp_path / 'skills')
     monkeypatch.setattr(handbook, 'enabled', lambda store: True)
     monkeypatch.setattr(handbook, 'from_stranger', lambda store, tid: False)
     s, tid = world(); brain = Brain()
@@ -107,4 +107,4 @@ def test_a_question_whose_inputs_moved_is_asked_again_at_its_place(monkeypatch, 
         wrapup.wrap(s, tid, close=False, actor='owner', no_reply=True)
     wrapup.forget(tid)
     users = [u for _, u in brain.asked]
-    assert sum('Retitled while the report was written' in u for u in users) == 2, 'both later questions were asked again, as they now read'
+    assert sum('Retitled while the report was written' in u for u in users) == 1, 'the later question was asked again, as it now reads'

@@ -45,11 +45,11 @@ class LiveWork(unittest.TestCase):
         self.assertTrue(concierge.close_after_send(self.s, self.tid)['closed'])
         self.assertEqual(self.s.get_task(self.tid)['Status'], 'done')
 
-    def test_a_playbook_answer_does_not_close_under_a_live_agent(self):
+    def test_a_skill_answer_does_not_close_under_a_live_agent(self):
         self.s.update_task(self.tid, {'Status': 'waiting', 'Tags': proposals.HELD}, 'owner')
         term.SESSIONS['run1'] = SimpleNamespace(sid='run1', task_id=self.tid, alive=True)
         with mock.patch.object(proposals, 'owed', return_value=False):
-            proposals.playbook_answered(self.s, self.tid, 'owner')
+            proposals.skill_answered(self.s, self.tid, 'owner')
         t = self.s.get_task(self.tid)
         self.assertNotEqual(t['Status'], 'done'); self.assertNotIn(proposals.HELD, str(t.get('Tags') or ''))
 

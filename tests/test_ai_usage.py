@@ -213,7 +213,7 @@ def _triage_system(learned='Alex cares about the rota.', who='erin@northwind.exa
     seen = []
     def brain(system, user, **kw): seen.append(system); return '{"intent": "fyi", "why": "x"}'
     classify_intent({'from_email': who, 'subject': 's', 'body': 'b'}, llm=brain, notes=[f'{who}: rota changes are tasks'], learned=learned,
-                    playbooks='- rota: when a rota changes', workflows='- invoices: when an invoice arrives', soul='Alex runs operations.')
+                    skills='- rota: when a rota changes', workflows='- invoices: when an invoice arrives', soul='Alex runs operations.')
     return seen[0]
 
 

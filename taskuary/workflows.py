@@ -3,9 +3,9 @@
 A WORKFLOW is a scheduled or hand-run job the owner configured on the Reports tab's Workflows shelf: the
 `agent` source with its write grant, or the monthly invoice job. It carries its objective, its configured
 inputs, the connections it names, its steps (a saved skill), what it may do, what it must ask first, and
-when it is done. A PROCEDURE is a playbook (playbooks.py): how this company handles ONE kind of incoming
+when it is done. A PROCEDURE is a skill (skills.py): how this company handles ONE kind of incoming
 request, chosen by triage when a message is an instance of it. The two were one shelf; converting every
-playbook into a scheduled job would have been wrong, so the existing definitions stay exactly where they
+skill into a scheduled job would have been wrong, so the existing definitions stay exactly where they
 are and this module only reads them apart (PW-207).
 
 A triggered workflow used to run inside the report loop through a coding CLI, then file its answer as a
@@ -63,20 +63,38 @@ def _names(store, ids) -> list:
     return out
 
 
+# A ROUTINE HAS TWO PARTS (the owner, 2026-11-26): its own instructions - a script, or the words its AI steps work by - and, OPTIONALLY,
+# one of his skills it uses to do the job (`skill`, on the routine or on one agent step). Not everything is a skill: the instructions
+# stay the routine's, and the skill is a link to the one library (skills.py) - edited there, read here on every run.
+def skill_text(cfg: dict, skill: str) -> str:
+    """The words of the skill a routine uses, '' with none. A CODING ROUTINE'S SKILL IS THE CLI'S OWN (the owner, 2026-10-29): typed as its
+    slash command in the repository (slash_of), so Claude Code finds it in that repo's .claude/skills or the user's ~/.claude/skills -
+    Taskuary's own skills folder is a general routine's."""
+    if not skill or runs_on(cfg) == 'coding': return ''
+    from . import skills
+    return skills.read(skill) or ''
+
+
+def uses_skill(store) -> dict:
+    "{skill: [the routines and reports that use it, by title]} - what the Skills shelf says beside each, read off the saved setups."
+    out = {}
+    for s in store.list_sources(active_only=False):
+        if s.get('Channel') != 'report': continue
+        cfg = cfg_of(s)
+        named = [cfg.get('skill'), *(x.get('skill') for x in cfg.get('flow') or [] if isinstance(x, dict))]
+        for k in dict.fromkeys(str(x).strip().lstrip('/') for x in named if x):
+            out.setdefault(k, []).append(str(cfg.get('title') or s.get('Address') or ''))
+    return out
+
+
 def definition(store, src) -> dict:
     """The workflow as data (PW-203), read from the source it has always been stored on."""
     cfg = cfg_of(src); sid = src.get('SourceId') if isinstance(src, dict) else None
     # a saved flow that is one agent step carries its words on that step (flow.steps_of), not on the config
     lone = cfg['flow'][-1] if isinstance(cfg.get('flow'), list) and cfg['flow'] and isinstance(cfg['flow'][-1], dict) else {}
     if lone.get('kind') == 'agent': cfg = {**cfg, 'prompt': cfg.get('prompt') or lone.get('prompt'), 'skill': cfg.get('skill') or lone.get('skill')}
-    skill, steps = str(cfg.get('skill') or '').strip().lstrip('/'), ''
-    # A CODING ROUTINE'S SKILL IS THE CLI'S OWN (the owner, 2026-10-29): typed as its slash command in the repository (slash_of), so Claude
-    # Code finds it in that repo's .claude/skills or the user's ~/.claude/skills - Taskuary's own skills folder is a general routine's
-    if skill and runs_on(cfg) != 'coding':
-        from . import config
-        p = config.home() / 'skills' / skill / 'SKILL.md'
-        try: steps = p.read_text(encoding='utf-8') if p.is_file() else ''
-        except OSError: steps = ''
+    skill = str(cfg.get('skill') or '').strip().lstrip('/')
+    steps = skill_text(cfg, skill)
     return {'source_id': sid, 'type': cfg.get('type'), 'title': cfg.get('title') or (src.get('Address') if isinstance(src, dict) else '') or '',
             'objective': str(cfg.get('prompt') or cfg.get('objective') or '').strip(), 'skill': skill, 'steps': steps,
             'inputs': cfg.get('inputs') or {},
@@ -95,9 +113,9 @@ def definition(store, src) -> dict:
 
 def catalog(store) -> dict:
     """Configured workflows on one shelf, request procedures on the other - never the same thing (PW-203/207)."""
-    from . import playbooks
+    from . import skills
     flows = [definition(store, s) for s in store.list_sources(active_only=False) if s.get('Channel') == 'report' and is_workflow(s)]
-    procs = [{'slug': b['slug'], 'title': b['title'], 'when': b['when'], 'uses': b['uses'], 'about_code': b['about_code']} for b in playbooks.list_all()]
+    procs = [{'slug': b['slug'], 'title': b['title'], 'description': b['description'], 'uses': b['uses'], 'about_code': b['about_code']} for b in skills.list_all()]
     return {'workflows': flows, 'procedures': procs}
 
 
@@ -275,8 +293,13 @@ def script_routine(store, p: dict) -> tuple:
     # online for that job and naming it (`based_on`), never from Taskuary's own profiles alone. One card, one save, as the script's
     if not script.strip() and str(p.get('prompt') or '').strip() and title:
         kind = 'report' if str(p.get('kind') or '').lower() == 'report' else 'routine'
+        # ...and the skill of his it uses, where it names one: a link, never a copy - and never to one that is not there
+        from . import skills
+        uses = str(p.get('skill') or '').strip().lstrip('/')
+        if uses and skills.read(uses) is None: return {}, f'no skill is named {uses!r} - name one the skills tool lists, or leave `skill` out'
         cfg = {'type': 'agent', **({'access': 'write'} if kind == 'routine' else {}), 'title': title, 'prompt': str(p['prompt']).strip(),
-               'goal': ' '.join(str(p.get('why') or '').split())[:300], **({'based_on': based} if based else {}), **{k: p[k] for k in CLOCK if p.get(k)}}
+               'goal': ' '.join(str(p.get('why') or '').split())[:300], **({'based_on': based} if based else {}),
+               **({'skill': skills.key(uses)} if uses else {}), **{k: p[k] for k in CLOCK if p.get(k)}}
         if why := schedule_error(cfg): return {}, why
         if any(x.get('Channel') == 'report' and str(x.get('Address') or '').casefold() == title.casefold() for x in store.list_sources(active_only=False)):
             return {}, f'a routine or report named {title!r} already exists - give this one its own name, or change that one (change_routine)'
@@ -511,7 +534,7 @@ def running(store, sid) -> dict | None:
 
 # ── a mail starts it (the owner, 2026-10-21: "a workflow can be started by an incoming mail") ───────────────────────────────────
 # A workflow may say, in words, which arriving mail starts it (`on_mail`, the editor's "Start when a mail like this arrives") - the
-# playbook's `when`, for a job instead of a procedure. Triage is shown these the way it is shown the playbooks and names the one a
+# skill's `when`, for a job instead of a procedure. Triage is shown these the way it is shown the skills and names the one a
 # mail is an instance of (triage.classify_intent `workflow`); the run is then that mail's task, through the one road below.
 MAIL_NAME = 'workflow-'
 

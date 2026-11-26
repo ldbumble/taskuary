@@ -8,7 +8,7 @@ from unittest import mock
 import pytest
 from fastapi.testclient import TestClient
 
-from taskuary import handbook, playbooks, server, terminal, writeup, wrapup
+from taskuary import handbook, skills, server, terminal, writeup, wrapup
 from taskuary.store import MemoryStore
 
 SESSION = 'matched the hardware store to vendor 87, expense account 6120, created bill 1043 for 84.10. ' * 8
@@ -21,7 +21,7 @@ def brain(system, user, **kw):
     time.sleep(LAT)
     if 'determination' in str(system):
         return json.dumps({'determination': 'Matched the charge.', 'actions': 'Created bill 1043', 'summary': 'Posted the bill.', 'outcome': 'did_work'})
-    return json.dumps({'entries': [], 'playbook': None})
+    return json.dumps({'entries': [], 'skill': None})
 
 
 def rows(s):
@@ -39,7 +39,7 @@ def rows(s):
 @pytest.fixture
 def world(monkeypatch, tmp_path):
     monkeypatch.setattr(handbook, 'enabled', lambda store: False)
-    monkeypatch.setattr(playbooks, 'folder', lambda: tmp_path / 'playbooks')
+    monkeypatch.setattr(skills, 'folder', lambda: tmp_path / 'skills')
     monkeypatch.setattr(writeup, '_folder', lambda store: str(tmp_path))
     closed, order = [], []
     def transcript_for(store, tid): order.append('harvest'); return SESSION, 'coding', f'sid-{tid}'
@@ -147,7 +147,7 @@ def test_mark_done_on_a_chat_agents_task_answers_before_its_ending_asks_any_ai(w
     from taskuary import general
     make, _ = world
     s, _coding = make(); c = TestClient(server.app); tid = chat_task(s)
-    # ...the ending held once its harvest is saved, not behind an AI: his own close drafts nothing new (wrapup.CLOSING, 2026-11-23), so an
+    # ...the ending held once its harvest is saved, not behind an AI: an ending drafts nothing new (no skill question, 2026-11-26), so an
     # AI-held ending was not held at all, and a fast runner (macOS CI) had it done before the press's answer was read
     gate, real = threading.Event(), wrapup.wrap
     def held(store, tid_, **k):

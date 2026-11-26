@@ -37,7 +37,7 @@ const NO_AI_LINE = "No AI is connected, so an agent can't run this yet - connect
 const NO_AI_PLAN = "No AI is connected to plan the steps - connect one, or choose Track it and add the steps yourself.";
 import { connectorNamed } from "./connectorCatalog.js";
 import { openAppLink } from "./appLinks.js";
-import { NEW_PB, askPlaybook } from "./playbookOpen.js";
+import { NEW_PB, askSkill } from "./skillOpen.js";
 import { place } from "./words.js";
 import { label as btn } from "./buttons.js";
 import { aiFor, capabilities, useCapabilities } from "./capabilities.js";
@@ -48,7 +48,7 @@ import SwitchAi from "./SwitchAi.jsx";
 
 // what the card IS, as its title: New's own box asks, and a card the Assistant wrote from it says what it made of the words
 const TITLE = { chat: "What do you need?", agent: "An agent's job", workflow: "A routine", report: "A report", dashboard: "A dashboard",
-  playbook: "A playbook", send: "A message", meeting: "A meeting", goal: "A goal", note: "A note" };
+  skill: "A skill", send: "A message", meeting: "A meeting", goal: "A goal", note: "A note" };
 
 const Label = ({ children }) => (
   <Typography sx={{ ...mono, fontSize: 9.5, fontWeight: 600, letterSpacing: ".11em",
@@ -151,7 +151,7 @@ const AboutField = React.memo(forwardRef(function AboutField({ kind, how, onRead
     if (bus?.current || onWords) { clearTimeout(timer.current); timer.current = setTimeout(() => { bus?.current?.(next); onWords?.(next); }, 200); }
   };
   // ...and a picture pasted or dropped into it goes with the words (a note to self keeps words only)
-  const withPics = pics && !["note", "playbook", "chat"].includes(kind);     // ...New playbook and the chat hand-off take words only
+  const withPics = pics && !["note", "skill", "chat"].includes(kind);     // ...New skill and the chat hand-off take words only
   return (
     <>
     <TextField fullWidth multiline minRows={kind === "note" ? 2 : 3} value={value} autoFocus
@@ -163,7 +163,7 @@ const AboutField = React.memo(forwardRef(function AboutField({ kind, how, onRead
         : kind === "send" ? "the census numbers he asked for, plus why Site 7 moved"
         : kind === "agent" ? (how === "general" ? "why did Site 3's census move four points in July?"
           : "work out why the nightly export drops the last facility")
-        : kind === "playbook" ? "when someone asks for their leave balance, gather it from payroll and draft the reply for my review"
+        : kind === "skill" ? "when someone asks for their leave balance, gather it from payroll and draft the reply for my review"
         : kind === "chat" ? "what's still open with Payworth, and which of it comes first?"
         : "chase the Payworth AP replacement"}
       // SAID, NOT TYPED (the owner, 2026-09-30: "can't ... use voice notes to write this prompt?"): the composer's own mic,
@@ -340,9 +340,9 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
           .catch((e) => { setText(about); throw e; }).finally(() => setSentLine(""));
         setText(""); pics.clear(); setOk(`${data.ref} — ${data.joined ? "already that work: its agent was told." : "an agent is on it."}`);
         onDone?.(); openIt(data.taskId);
-      } else if (kind === "playbook") {
-        // the one road to a playbook is the shelf's New playbook: this press is its Set up with AI, made there once with these words
-        askPlaybook(about, true); onClose?.(); openAppLink(`report=${NEW_PB}`);
+      } else if (kind === "skill") {
+        // the one road to a skill is the shelf's New skill: this press is its Set up with AI, made there once with these words
+        askSkill(about, true); onClose?.(); openAppLink(`report=${NEW_PB}`);
       } else if (kind === "goal") {
         // PLAN IT WITH NO AI SAYS SO (owner-approved, 2026-10-21): it promised "planning the steps; they land in a moment" and none came
         if (plan && !aiFor(await capabilities(), "assistant")) {
@@ -372,11 +372,11 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
   // a hand-off is the one Send to agent / Send to coding agent (buttons.json); the others are this form's own words
   const verb = kind === "send" ? (mode === "task" ? btn("regular_agent") : "Draft it")
     : kind === "agent" ? btn(how === "general" ? "regular_agent" : "coding_agent") : kind === "goal" ? (plan ? "Plan it" : "Track it")
-    : kind === "playbook" ? "Set up with AI" : kind === "chat" ? "Go" : "Note it";
+    : kind === "skill" ? "Set up with AI" : kind === "chat" ? "Go" : "Note it";
 
   const aboutLabel = kind === "goal" ? "What does done look like" : kind === "send" ? "What's this about"
     : kind === "agent" ? (how === "general" ? "What should it find out or write" : "What should it do")
-    : kind === "playbook" ? "What should this playbook do" : kind === "chat" ? "What do you need" : "What do you want to remember";
+    : kind === "skill" ? "What should this skill do" : kind === "chat" ? "What do you need" : "What do you want to remember";
 
   // the card: a bordered block in the conversation's width, Esc closes it, nothing floats over the page
   const Shell = inline ? Box : Dialog;
@@ -394,7 +394,7 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
 
       {/* NEW IS ONE BOX (the owner, TQ-1397: "we could have new as you just ask ... you ask the agent what you need and it should do it"): no
           tabs. The words go to the Assistant, which makes them what they are - an agent's job it starts, a routine, a report, a dashboard,
-          a playbook, a message, a meeting, a goal or a note (concierge._new) - and that card comes up in the chat with only its own fields */}
+          a skill, a message, a meeting, a goal or a note (concierge._new) - and that card comes up in the chat with only its own fields */}
       <DialogContent sx={{ display: "flex", flexDirection: "column", gap: 2, pt: 2.5 }}>
         {kind === "send" && (
           <>
@@ -487,9 +487,9 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
               Shorthand is fine — this is what you are telling the drafter, not what they read.
             </Typography>
           )}
-          {kind === "playbook" && (
+          {kind === "skill" && (
             <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.75 }}>
-              It opens under Reports → Playbooks, where Taskuary drafts the steps with you — Approve there saves it.
+              It opens under Reports → Skills, where Taskuary drafts the steps with you — Approve there saves it.
             </Typography>
           )}
         </Box>}
@@ -555,9 +555,9 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
 
       {/* ...NO CANCEL BESIDE THE × (the design walk, 2026-11-20: two ways to close one card) - the × at its top and Esc close it */}
       {!REPEATS.includes(kind) && kind !== "meeting" && !agentBox && <ButtonBar>
-        {/* ...a playbook's Set up with AI opens the build in the chat: a door, out of the Assistant's view (the owner, 2026-11-02) */}
+        {/* ...a skill's Set up with AI opens the build in the chat: a door, out of the Assistant's view (the owner, 2026-11-02) */}
         <Button size="small" variant="contained" disableElevation disabled={!canGo || busy} onClick={submit}
-          {...(kind === "playbook" ? { "data-tq-view-skip": "" } : {})}
+          {...(kind === "skill" ? { "data-tq-view-skip": "" } : {})}
           startIcon={busy ? <CircularProgress size={12} sx={{ color: "#fff" }} /> : null}>{busy ? "Working…" : verb}</Button>
       </ButtonBar>}
     </Shell>

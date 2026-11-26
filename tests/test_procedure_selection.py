@@ -1,16 +1,16 @@
 """A saved request procedure is selected in triage and delivered to whichever worker kind the
 verdict names - selecting it never makes the task a coding job (PW-205, PW-206).
 
-A playbook match used to force kind='coding' in the classifier ("an agent works a playbook, whatever
+A skill match used to force kind='coding' in the classifier ("an agent works a skill, whatever
 kind said"), so a PTO request whose procedure is a general job started a coding session in some
-checkout. Now the procedure rides on the task as its `playbook:` tag whatever the kind, the kind is
-the model's own (general by default), and the same playbook block that seeds a coding session is in
+checkout. Now the procedure rides on the task as its `skill:` tag whatever the kind, the kind is
+the model's own (general by default), and the same skill block that seeds a coding session is in
 the general worker's prompt too.
 """
 import json, unittest
 from unittest import mock
 
-from taskuary import ingest, playbooks, triage
+from taskuary import ingest, skills, triage
 from taskuary.store import MemoryStore
 
 PTO = """# Handle a PTO request
@@ -30,23 +30,23 @@ MSG = {'external_id': 'pto1', 'channel': 'email', 'from_email': 'sam@ours.exampl
 
 class ProcedureTests(unittest.TestCase):
     def setUp(self):
-        playbooks.write('pto-request', PTO)
-        self.addCleanup(lambda: playbooks.delete('pto-request'))
+        skills.write('pto-request', PTO)
+        self.addCleanup(lambda: skills.delete('pto-request'))
 
     def test_selecting_a_procedure_leaves_the_kind_to_the_model(self):
         for kind in ('general', 'task'):
-            llm = lambda *a, **k: json.dumps({'intent': 'task', 'kind': kind, 'why': 'a PTO request', 'playbook': 'pto-request'})
-            out = triage.classify_intent(MSG, llm=llm, playbooks=playbooks.menu())
-            self.assertEqual((out['playbook'], out['kind']), ('pto-request', kind))
+            llm = lambda *a, **k: json.dumps({'intent': 'task', 'kind': kind, 'why': 'a PTO request', 'skill': 'pto-request'})
+            out = triage.classify_intent(MSG, llm=llm, skills=skills.menu())
+            self.assertEqual((out['skill'], out['kind']), ('pto-request', kind))
 
     def test_a_pto_request_becomes_a_general_task_with_its_procedure_and_no_coder(self):
         s = MemoryStore(); s.set_setting('coding_auto_enabled', '1', 't'); s.upsert_agent('coding', 'coding', 'cli', '{}')
-        llm = lambda *a, **k: json.dumps({'intent': 'task', 'kind': 'general', 'why': 'a PTO request', 'playbook': 'pto-request'})
+        llm = lambda *a, **k: json.dumps({'intent': 'task', 'kind': 'general', 'why': 'a PTO request', 'skill': 'pto-request'})
         spawned = []
         with mock.patch.object(ingest, '_spawn', side_effect=lambda f, *a: spawned.append(f.__name__)):
             out = ingest.ingest_message(s, dict(MSG), llm=llm)
         t = s.get_task(out['task_id'])
-        self.assertEqual(t['Kind'], 'general'); self.assertEqual(playbooks.of_task(t), 'pto-request')
+        self.assertEqual(t['Kind'], 'general'); self.assertEqual(skills.of_task(t), 'pto-request')
         self.assertNotIn('_auto_code', spawned)
 
 

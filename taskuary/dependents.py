@@ -2,18 +2,18 @@
 
 Remove wipes the card's credentials and settings and switches its sources off (store.reset_connector). What reads through
 the card breaks quietly after that: a report or workflow that names it, a brain pointed at it, a card that borrows its
-Microsoft app, a reply draft that would leave through it, a rule kept for its mailbox, a playbook whose `uses:` names its
+Microsoft app, a reply draft that would leave through it, a rule kept for its mailbox, a skill whose `uses:` names its
 kind. Each is found the way its own reader finds the card, so the line says what Remove would actually break. Remove
 still acts at once - this is a line to read, not a question to answer."""
 import json
 
-from . import flow, playbooks, reports, settings_schema, workflows
+from . import flow, skills, reports, settings_schema, workflows
 from .kinds import ASSISTANT
 
 # the settings a brain is picked on, in the words their own pages use (settings_schema labels the rest)
 BRAIN_WORDS = {'triage_ai': 'AI that sorts your mail', 'triage_backup_ai': 'backup AI that sorts your mail', 'concierge_ai': f'AI for {ASSISTANT}',
                'assistant_ai': 'AI for task agents', 'judge_ai': 'AI that decides where reports go'}
-ORDER = ('workflow', 'report', 'brain', 'card', 'draft', 'rule', 'playbook', 'source')
+ORDER = ('workflow', 'report', 'brain', 'card', 'draft', 'rule', 'skill', 'source')
 
 
 def _cfg(s) -> dict:
@@ -78,6 +78,6 @@ def of(store, cid: int) -> list:
     boxes = {a for ch, a in own if ch == 'email' and a}
     found['rule'] = [p['Name'] or '' for p in store._rows('SELECT Name, Mailbox FROM policy WHERE Active=1')
                      if str(p['Mailbox'] or '').lower() in boxes]
-    if default: found['playbook'] = [b['title'] for b in playbooks.list_all() if c['Type'] in (b.get('uses') or [])]
+    if default: found['skill'] = [b['title'] for b in skills.list_all() if c['Type'] in (b.get('uses') or [])]
     found['source'] = [s.get('Address') or '' for s in mine if s.get('Active')]
     return [{'kind': k, 'names': found[k]} for k in ORDER if found[k]]

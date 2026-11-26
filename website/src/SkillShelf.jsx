@@ -1,0 +1,123 @@
+// SKILLS LIVE ON THE REPORTS PAGE, beside reports and workflows (the owner, 2026-10-21: "Reports / Workflows / Skills"; Settings
+// is for regular configuration). A skill is how this company does one kind of job - triage matches arriving mail to its description
+// - so it sits with the other things that do work, not with the knobs. The list is the skills on disk, each with its own
+// on/off switch (off = kept, never matched); one opens in the skill editor (DocsView, which owns the words and Delete).
+// ...About you held them for a few hours on 2026-11-06, and gave them back (the owner: "it's more about how you work, not about you").
+import React, { useCallback, useEffect, useState } from "react";
+import { Box, Button, Switch, Typography } from "@mui/material";
+import AddIcon from "@mui/icons-material/Add";
+import FileDownloadOutlinedIcon from "@mui/icons-material/FileDownloadOutlined";
+import MenuBookIcon from "@mui/icons-material/MenuBook";
+import api from "./api.js";
+import DocsView from "./DocsView.jsx";
+import NewSkillDialog from "./NewSkillDialog.jsx";
+import { BORDER, DIM, FAINT, INK, PANEL, mono } from "./theme.jsx";
+import { plural } from "./timeWords.js";
+import { takeSkillAsk } from "./skillOpen.js";
+import { SkillProfile } from "./Workstream.jsx";
+
+export { PB_OPEN, pbOpen } from "./skillOpen.js";
+
+export function useSkills() {
+  const [books, setBooks] = useState(null);              // null until read (collectionsStartNull): "none yet" is not "not read"
+  const [deleted, setDeleted] = useState(null);          // Recently deleted: kept 30 days, Restore puts one back as it was
+  const [err, setErr] = useState("");
+  const load = useCallback(async () => {
+    try { const { data } = await api.get("/api/skills"); setBooks(data.data || []); setDeleted(data.deleted || []); setErr(""); }
+    catch (e) { setErr(e?.response?.data?.detail || "The skills could not be read."); }
+  }, []);
+  useEffect(() => { load(); }, [load]);
+  // ...switched off is kept for later and never matched by triage (PUT /api/skills/<slug>/enabled)
+  const setOn = useCallback(async (slug, on) => {
+    setBooks((bs) => (bs || []).map((b) => (b.slug === slug ? { ...b, enabled: on } : b)));
+    try { await api.put(`/api/skills/${slug}/enabled`, { on }); }
+    catch (e) { setErr(e?.response?.data?.detail || "It could not be switched."); }
+    load();
+  }, [load]);
+  const restore = useCallback(async (slug) => {
+    try { await api.post(`/api/skills/${slug}/restore`); }
+    catch (e) { setErr(e?.response?.data?.detail || "It could not be restored."); }
+    load();
+  }, [load]);
+  return { books: books || [], deleted: deleted || [], loaded: books !== null, err, load, setOn, restore };
+}
+
+// EXPORT: the skill's folder as one zip, saved by the browser - the file to send someone (taskuary/skillshare.py)
+export async function exportSkill(slug) {
+  const { data } = await api.get(`/api/skills/${slug}/export`, { responseType: "blob" });
+  const url = URL.createObjectURL(data), a = document.createElement("a");
+  a.href = url; a.download = `${slug}.zip`; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+export function SkillRow({ b, onOpen, onToggle, reload }) {
+  const on = b.enabled !== false;
+  return (
+    <Box data-tq-skill={b.slug} onClick={onOpen}
+      sx={{ display: "flex", alignItems: "center", gap: 1.5, py: 1.25, px: 0.5, cursor: "pointer", borderBottom: `1px solid ${BORDER}`,
+        opacity: on ? 1 : 0.7, "&:hover": { bgcolor: "var(--tq-panel, #faf8f4)" } }}>
+      <MenuBookIcon sx={{ fontSize: 18, color: "var(--tq-link, #55697a)", flexShrink: 0 }} />
+      <Box sx={{ flex: 1, minWidth: 0 }}>
+        <Typography sx={{ color: INK, fontWeight: 600, fontSize: 13.5 }} noWrap>{b.title}
+          {b.origin === "imported" && <Box component="span" data-tq-skill-imported="" sx={{ ml: 1, fontWeight: 500, fontSize: 11.5, color: FAINT }}>imported</Box>}
+        </Typography>
+        <Typography variant="caption" sx={{ color: DIM, display: "block" }} noWrap>{b.description || "—"}</Typography>
+        {!!b.uses?.length && <Typography variant="caption" sx={{ ...mono, color: FAINT, display: "block" }} noWrap>uses {b.uses.join(" · ")}</Typography>}
+        {!!b.used_by?.length && <Typography variant="caption" data-tq-skill-used-by="" sx={{ color: FAINT, display: "block" }} noWrap>used by {b.used_by.join(", ")}</Typography>}
+      </Box>
+      <SkillProfile skill={b} reload={reload} />
+      <Button size="small" variant="text" data-tq-skill-export={b.slug} startIcon={<FileDownloadOutlinedIcon sx={{ fontSize: 15 }} />}
+        onClick={(e) => { e.stopPropagation(); exportSkill(b.slug).catch(() => {}); }} sx={{ flexShrink: 0, color: DIM, minWidth: 0 }}>Export</Button>
+      <Typography variant="caption" sx={{ color: on ? DIM : FAINT, flexShrink: 0 }}>{on ? "triage matches it" : "off - kept, not matched"}</Typography>
+      <Switch size="small" checked={on} inputProps={{ "aria-label": `${b.title}: ${on ? "on" : "off"}` }}
+        onClick={(e) => e.stopPropagation()} onChange={() => onToggle(!on)} />
+    </Box>
+  );
+}
+
+// RECENTLY DELETED, under the shelf: Delete is at once (no "are you sure" - the owner, 2026-10-21), so this is its undo.
+// Restore brings one back exactly - its words, its on/off switch, its place; after 30 days it is gone for good.
+export function RecentlyDeleted({ items, onRestore }) {
+  if (!items?.length) return null;
+  return (
+    <Box data-tq-skills-deleted="" sx={{ mt: 2 }}>
+      <Typography sx={{ fontSize: 12, fontWeight: 600, color: DIM, px: 0.5, mb: 0.5 }}>Recently deleted</Typography>
+      {items.map((d) => (
+        <Box key={d.slug} data-tq-skill-deleted={d.slug}
+          sx={{ display: "flex", alignItems: "center", gap: 1.5, py: 1, px: 0.5, borderBottom: `1px solid ${BORDER}` }}>
+          <MenuBookIcon sx={{ fontSize: 18, color: FAINT, flexShrink: 0 }} />
+          <Box sx={{ flex: 1, minWidth: 0 }}>
+            <Typography sx={{ color: DIM, fontWeight: 600, fontSize: 13.5 }} noWrap>{d.title}</Typography>
+            <Typography variant="caption" sx={{ color: FAINT, display: "block" }} noWrap>
+              not matched · gone for good {d.days_left > 0 ? `in ${plural(d.days_left, "day")}` : "today"}
+            </Typography>
+          </Box>
+          <Button size="small" variant="outlined" onClick={() => onRestore(d.slug)}>Restore</Button>
+        </Box>
+      ))}
+    </Box>
+  );
+}
+
+// the section's own tool: one road to a new skill, the dialog that builds it with AI or opens the editor on a blank one
+// ...a connector card's link (#skill=new:<type>) arrives with `connectorType`, the dialog open for that card
+// ...and `asked` (+ New skill, New's Skill tab): open at once, with the words New handed over (skillOpen.askSkill) - taken
+// once, so this button pressed again later opens a blank one
+// ...`button`: false where the shelf's own "+ New skill" pill is the press - two of them stood one over the other (the product audit, 2026-11-08)
+export function NewSkill({ onManual, onDone, connectorType = "", asked = false, button = true }) {
+  const [ask, setAsk] = useState(() => (asked ? takeSkillAsk() || { text: "", start: false } : null));
+  const [open, setOpen] = useState(!!connectorType || !!ask);
+  const shut = () => { setOpen(false); setAsk(null); };
+  return <>
+    {button && <Button size="small" variant="outlined" disableElevation startIcon={<AddIcon sx={{ fontSize: 15 }} />} onClick={() => setOpen(true)}
+      sx={{ mt: 1.5, alignSelf: "flex-start" }}>New skill</Button>}
+    {open && <NewSkillDialog connectorType={connectorType} initialText={ask?.text || ""} autoStart={!!ask?.start}
+      onClose={() => { shut(); onDone?.(); }} onManual={() => { shut(); onManual(); }} />}
+  </>;
+}
+
+export function SkillDetail({ slug, onGone }) {
+  return <Box sx={{ bgcolor: PANEL }}><DocsView sel={{ group: "skills", doc: slug }} onSel={() => {}} onGone={onGone} /></Box>;
+}
+
+export const PB_EMPTY = "No skills yet - New skill builds one from a past email or your own words, Import brings in one somebody sent you, and an agent proposes one when it finishes a job that will recur.";

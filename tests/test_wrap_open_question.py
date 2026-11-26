@@ -83,7 +83,7 @@ class OpenQuestionAtWrap(unittest.TestCase):
         s.add_comment(tid, 'owner', general.USER_TYPE, 'Payworth says it is fixed - retry the login.')
         s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, NOTE)
         ev(s, tid, 'turn_end', NOTE); ev(s, tid, 'input_needed', ASK, rid='q1')
-        with mock.patch('taskuary.responder.write_draft') as wd, mock.patch('taskuary.playbooks.draft', return_value=None):
+        with mock.patch('taskuary.responder.write_draft') as wd:
             out = wrapup.wrap(s, tid, close=False, actor='owner')
         wd.assert_not_called(); self.assertFalse(out['drafting'])
         general.report_note(s, tid)                                    # the session's own close, after: the same answer, not a second note

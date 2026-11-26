@@ -78,14 +78,10 @@ ACTIONS = {
     # a workflow step that failed, fixed by the model on the owner's say-so (flow.repair): the new list is saved only past their yes
     'repair_workflow': ("change this workflow's steps to the repaired list", ('source_id', 'flow'), None),
     'change_setup': ("change a report's or dashboard's setup", ('source_id', 'patch'), None),
-    # the on-close "did this session do a kind of job that will recur?" answer (playbooks.draft),
-    # and an agent that knows it did: a playbook is filed only past the owner's click
-    'write_playbook': ('file a new PLAYBOOK - how this kind of job is done here - for the next agent to follow',
-                       ('slug', 'text'), 'playbooks_enabled'),
-    # what the outcome ledger counted about a kind of work, as a block on its playbook (playbook_facts.py): reflection proposes it,
-    # the owner's yes writes it - a derived line never edits a playbook on its own (spec 2026-10-12, build step 5)
-    # ...and lessons onto a playbook page (playbooks.with_lessons, the owner 2026-11-05)
-    'amend_playbook': ('add what was learned to a playbook', ('slug', 'text'), 'playbooks_enabled'),
+    # an agent that did a kind of job that will recur: its SKILL.md is filed only past the owner's click (skills.py). A change to one
+    # he has is the same card - what the outcome ledger counted about a kind of work as a `block` on it (skill_facts.py), or `lessons`
+    # onto it (skills.with_lessons, the owner 2026-11-05): a derived line never edits a skill on its own
+    'save_skill': ('save a SKILL - how this kind of job is done here - for the next agent to use', ('slug', 'text'), 'playbooks_enabled'),
     # An instruction that BELONGS in a switch should be written there, not left as a note the
     # classifier merely weighs - but nothing may change a switch on its own. So it arrives as a
     # proposal: the assistant says which switch it means, the owner's click applies it, and only the
@@ -244,7 +240,7 @@ def _edited(p: dict, final_text, fields: dict = None) -> dict:
 
 # A CHANGE TO SOMETHING STORED IS SHOWN AS WHAT IT WILL BE (the owner, 2026-11-24: "to edit text it should show the edited text?"): a routine's or
 # a report's new words each in a box of their own beside what they were (workflows.change_card), a setting's old value beside its new one, a
-# playbook page beside the page it replaces - so the card can mark where it changed
+# skill page beside the page it replaces - so the card can mark where it changed
 CHANGES = ('repair_workflow', 'change_setup')
 def change_card(store, p: dict) -> dict:
     a = p.get('action')
@@ -257,9 +253,9 @@ def change_card(store, p: dict) -> dict:
             try: return json.loads((store.get_connector_by_type(c['connector']) or {}).get('ConfigJson') or '{}').get(c['name'])
             except ValueError: return None
         return {**p, 'changes': [{**c, 'was': was(c)} for c in setting_changes(p)[0]]}
-    if a in PLAYBOOKS and str(p.get('slug') or '').strip() not in ('', 'new'):
-        from . import playbooks
-        return {**p, 'was_text': playbooks.read(p['slug']) or ''}
+    if a == SKILL and str(p.get('slug') or '').strip() not in ('', 'new'):
+        from . import skills
+        return {**p, 'was_text': skills.read(p['slug']) or ''}
     return p
 
 
@@ -310,7 +306,7 @@ SETTING_ALLOW = {
     'funnel_hours': 'how far back the pipe reaches',
     'funnel_max': 'how much the pipe holds at once',
     'calendar_enabled': 'read your calendar',
-    'playbooks_enabled': 'let agents follow and propose playbooks',
+    'playbooks_enabled': 'let agents follow and propose skills',
     'agent_issues_enabled': 'treat GitHub issues as the tracker (off = GitHub items are rows on the work rail, not tasks)',
     'email_signature': 'the signature under every email you send',        # ...an agent's word on how he signs (server.agent_remember)
 }
@@ -323,7 +319,7 @@ SETTING_VALUES = {'answer_to_agent': ('auto', 'ask', 'off')}   # timeline_fade r
 # A REFUSAL NAMES THE SWITCH THAT REFUSED, AND OPENS IT (design round 2, 2026-11-18): "the owner has that switch off" named none, and an agent
 # told the owner to "turn on pull requests under Policies" - a page of mail rules with no such switch. Each switch by its label where the owner
 # sees it, and the link that opens that place
-SWITCHES = {'playbooks_enabled': ('Use playbooks', words.name('sorting'), words.href('sorting') + '&key=playbooks_enabled')}
+SWITCHES = {'playbooks_enabled': ('Use skills', words.name('sorting'), words.href('sorting') + '&key=playbooks_enabled')}
 def _switch_ok(store, name) -> bool: return not name or store.get_setting(name, '1') == '1'
 def switch_off(name) -> str:
     """The switch `name` said as the owner finds it - and as HIS CHOICE (the owner, 2026-11-25: "it should find a way around it"): "only the
@@ -465,11 +461,11 @@ def validate(store, p: dict) -> tuple:
     # is told the limit and its count, and shortens it before he sees it
     from .connectorcatalog import action_for, too_long
     if a == 'run_tool' and (long := too_long(action_for(p.get('type')), p)): return False, long
-    # NOTHING EMPTY IS PUT IN FRONT OF THE OWNER: a playbook that could not be filed, or says nothing of how the job is done, is refused at
+    # NOTHING EMPTY IS PUT IN FRONT OF THE OWNER: a skill that could not be filed, or says nothing of how the job is done, is refused at
     # this one gate - the tool, a marker in the agent's words, the on-close question - and its writer is told what it lacks
-    if a == PLAYBOOK:
-        from . import playbooks
-        try: playbooks.check(str(p.get('text') or ''))
+    if a == SKILL:
+        from . import skills
+        try: skills.check(str(p.get('text') or ''))
         except ValueError as e: return False, str(e)
     from . import trackers
     if (a == 'close_item' or p.get('type') in trackers.TYPES) and (why := trackers.check(p)): return False, why
@@ -731,20 +727,13 @@ _ISSUE = re.compile(r'github\.com/([^/]+/[^/]+)/issues/(\d+)')
 _PULL = re.compile(r'github\.com/([^/]+/[^/]+)/pull/(\d+)')
 
 
-# ── close-out and playbook are TWO things (the owner, 2026-10-01) ────────────────────────────────────────────────────
-# Neither closes the task: its close-out (the reply sent, the pull request merged or closed, the issue closed) and the
-# playbook proposal its agent left (approved or dismissed) are each said on the task, and only the owner's Mark done closes it
-# (2026-10-18: "sending and closing are two steps, never automatic"). A sent reply used to dismiss the undecided playbook.
-PLAYBOOK = 'write_playbook'
-# ...and lessons proposed for a playbook (amend_playbook) are the same kind of ask: the owner's yes or no on how a kind of
-# job is done, never a close-out owed on the task - so it holds, settles and counts as the playbook does (the owner, 2026-11-05)
-PLAYBOOKS = (PLAYBOOK, 'amend_playbook')
-
-
-# A PLAYBOOK PROPOSAL IS ALWAYS SEEN (the owner, 2026-10-21). It is drafted after the task's ending, and a task that closed itself
-# with nobody to answer - a workflow run, the owner's own chat, a coding session - was done by then: a pending review on a done task
-# is shown nowhere (store._VISIBLE_PENDING), so the proposal waited where nobody could find it. Such a task waits for it instead,
-# marked HELD, and goes back to done once the owner answers it, yes or no - the close was already theirs or the agent's.
+# ── A SKILL ITS AGENT OFFERED IS A CARD OF THE LINE LIKE ANY OTHER (the owner, 2026-11-26) ───────────────────────────────────────────
+# It is raised by the agent that did the job, while the work is on his screen, and it waits as every proposal waits: an agent's own
+# finish does not cancel it (owed), and the last one answered puts the task back on him (settle). Nothing drafts one after a task's
+# ending any more, so nothing has to bring a closed task back for it.
+SKILL = 'save_skill'
+# ...a task held open for one BEFORE that (the side model drafted it after the close, and the task was marked to wait): its answer
+# still lets it go (skill_answered). Nothing sets the mark now.
 HELD = 'held:playbook'
 
 
@@ -753,31 +742,10 @@ def _pending(store, tid, sort):
     return pending(store, tid, sort)
 
 
-def owner_closed(store, tid: int) -> bool:
-    "Is task `tid` closed, and by him - the close the last write to it was - not by a road or its agent?"
-    from .processing_unread import OWNER_ACTORS
-    t = store.get_task(tid) or {}
-    return t.get('Status') in ('done', 'dropped') and str(t.get('UpdatedBy') or '') in OWNER_ACTORS
-
-
-def hold_for_playbook(store, tid: int, actor: str) -> None:
-    t = store.get_task(tid) or {}
-    if t.get('Status') != 'done': return
-    # ...BUT A TASK THE OWNER CLOSED STAYS CLOSED (his live app, 2026-11-23: Send and close, then the task came back asking for a playbook):
-    # only new work from outside reopens his close - a proposal raised after it is put down with the close, as the close puts down what waits
-    if owner_closed(store, tid):
-        from .concierge import CLOSED_TASK
-        while (r := _pending(store, tid, 'playbook')): store.decide_review(r['ReviewId'], 'no_reply', None, actor, note=CLOSED_TASK)
-        return
-    tags = [x for x in str(t.get('Tags') or '').split(',') if x.strip()]
-    store.update_task(tid, {'Status': 'waiting', 'Tags': ','.join([*tags, HELD])}, actor)
-    store.add_comment(tid, actor, 'agent', 'Kept open for its playbook proposal - approve or dismiss it, and the task closes again.')
-
-
-def playbook_answered(store, tid: int, actor: str) -> None:
+def skill_answered(store, tid: int, actor: str) -> None:
     t = store.get_task(tid) or {}
     tags = [x for x in str(t.get('Tags') or '').split(',') if x.strip()]
-    if HELD not in tags or _pending(store, tid, 'playbook'): return
+    if HELD not in tags or _pending(store, tid, 'skill'): return
     from . import workerstate as ws          # ...never back to done under work still live on it (a Continue since, 2026-11-01)
     store.update_task(tid, {'Tags': ','.join(x for x in tags if x != HELD)}, actor)
     if not owed(store, tid) and not ws.live_work(store, tid):
@@ -896,7 +864,7 @@ def bears(store, r: dict, m: dict | None, at: float = 0.) -> bool:
 def _older(store, tid: int, inputs) -> list:
     """The pending cards an input stands after and bears on (`bears`) - set_aside_drafts' and written_past's ONE rule, read only. `inputs`:
     (when it came, the message - None for his own line). Every kind: a reply, an email, a calendar answer, the agent's act or held step, and
-    Taskuary's own close-out, playbook or routine step alike (the owner, 2026-11-16: a close-out's Push stood lit above his newer line, and he
+    Taskuary's own close-out, skill or routine step alike (the owner, 2026-11-16: a close-out's Push stood lit above his newer line, and he
     scrolled up to press it). Only an email he wrote himself is his, never set aside, and a reply owed that nobody wrote is no card yet."""
     from .conversation import ep
     inputs = [(at, m) for at, m in inputs or () if at]
@@ -1001,21 +969,20 @@ def _cut(w: str, n: int = 60) -> str: return (w := ' '.join(str(w or '').split()
 
 
 def owed(store, tid: int) -> bool:
-    """Something of the close-out still waits on the owner: a reply, a close-out act, any other proposal - not the playbook (card.holds_close)."""
+    """Something still waits on the owner's press: a reply, a close-out act, any other proposal, a skill its agent offered (card.holds_close)."""
     from .card import holds_close
-    return any(c['sort'] != 'playbook' for c in holds_close(store, tid))
+    return bool(holds_close(store, tid))
 
 
 def closed_out(store, tid: int, actor: str, said: str) -> None:
-    """The close-out is done: said on the task, with what still waits (its emails, its playbook). The task STAYS OPEN - only
+    """The close-out is done: said on the task, with what still waits (its emails). The task STAYS OPEN - only
     the owner's Mark done closes it (the owner, 2026-10-18: "sending and closing are two steps, never automatic"); this used
     to close it whenever nothing else waited."""
     from . import slots
     if (store.get_task(tid) or {}).get('Status') in ('done', 'dropped'): return
     n = len(slots.open_(store, tid))
     store.audit('task', tid, 'closed_out', actor)
-    rest = (f" {plural(n, 'email')} still to go." if n else ' Its playbook still waits on your approve or dismiss.' if _pending(store, tid, 'playbook')
-            else f" {buttons.label('close')} when the task is finished.")
+    rest = f" {plural(n, 'email')} still to go." if n else f" {buttons.label('close')} when the task is finished."
     store.add_comment(tid, actor, 'human', f'{said}{rest}')
 
 
@@ -1097,7 +1064,7 @@ def settle(store, rv: dict, verb: str, actor='owner') -> None:
     """After the owner answered a proposal: Approve ran only that act (the owner, 2026-10-18) - the task stays open for Mark
     done, and is said to be on them once nothing else of it waits; "not yet" on a close-out leaves it open and on them."""
     tid = rv.get('TaskId')
-    if tid and _action(rv) in PLAYBOOKS: return playbook_answered(store, tid, actor)
+    if tid and _action(rv) == SKILL and HELD in str((store.get_task(tid) or {}).get('Tags') or ''): return skill_answered(store, tid, actor)
     if not tid: return
     # a held step dismissed: the waiting agent hears it was not done
     if _action(rv) in HELD_ACTS and verb not in ('approve', 'edit'): _gate(_action(rv)).declined(store, tid, json.loads(rv.get('DraftText') or '{}'))
@@ -1153,13 +1120,13 @@ def execute(store, rv: dict, actor='owner', final_text: str = None, skip_checks:
     grant the permission.
 
     `final_text` is what was in the Review box when the owner approved. For a proposed
-    playbook the box shows the page itself (not the JSON envelope), so an edited page is
-    what gets filed - the owner tightening an `alone:` line before the first run is the point."""
+    skill the box shows the page itself (not the JSON envelope), so an edited page is
+    what gets filed - the owner tightening its words before the first run is the point."""
     p = json.loads(rv.get('DraftText') or '{}')
     edited = str(final_text or '').strip() and not str(final_text).lstrip().startswith('{')
     # ...a close-out's box too, EMPTY AS PROPOSED INCLUDED (the spine audit, 2026-11-09): a merge with no summary shows an empty box that
     # reads "GitHub writes the merge message" - what the owner typed into it was dropped, and GitHub wrote the message all the same
-    if edited and p.get('action') in ('write_playbook', 'amend_playbook', *CLOSEOUT): p['text'] = final_text.strip()
+    if edited and p.get('action') in (SKILL, *CLOSEOUT): p['text'] = final_text.strip()
     # a tracker close-out's box IS its comment: what the owner left there goes, emptied included (None = pressed off the card, as filed)
     if p.get('action') == 'close_item' and final_text is not None and not str(final_text).lstrip().startswith('{'): p['text'] = str(final_text).strip()
     # ...a GitHub comment's box IS its words: what the owner left there is what is posted
@@ -1254,15 +1221,15 @@ def _run(store, rv: dict, p: dict, tid, a: str, actor: str, edited, skip_checks:
                 store.set_setting(c['name'], str(c['value']), actor)
                 done.append(f"{c['name']} = {c['value']}")
         out = {'changed': done}
-    elif a in ('write_playbook', 'amend_playbook'):
-        from . import playbooks
-        if a == 'amend_playbook' and p.get('block') and not edited:      # the ledger's block onto the page as it is NOW (playbook_facts)
+    elif a == SKILL:
+        from . import skills
+        if p.get('block') and not edited:      # the ledger's block onto the page as it is NOW (skill_facts)
             from .people_pages import splice
-            p['text'] = splice(playbooks.read(p['slug']) or p['text'], p['block'])
-        elif a == 'amend_playbook' and p.get('lessons') and not edited:   # ...and its lessons, onto the page as it is NOW (with_lessons)
-            p['text'] = playbooks.with_lessons(playbooks.read(p['slug']) or p['text'], p['lessons'])
-        slug = playbooks.write(p['slug'], p['text'])
-        out = {'playbook': slug, 'path': str(playbooks.folder() / f'{slug}.md')}
+            p['text'] = splice(skills.read(p['slug']) or p['text'], p['block'])
+        elif p.get('lessons') and not edited:   # ...and its lessons, onto the page as it is NOW (with_lessons)
+            p['text'] = skills.with_lessons(skills.read(p['slug']) or p['text'], p['lessons'])
+        slug = skills.write(p['slug'], p['text'])
+        out = {'skill': slug, 'path': str(skills.path_of(slug))}
     elif a == 'repair_workflow':
         from . import flow, workflows
         if not isinstance(p.get('flow'), list): raise RuntimeError('the repaired steps are not a list')

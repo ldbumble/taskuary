@@ -278,7 +278,7 @@ def reflect(store, llm=None) -> bool:
     put_offs(store)
     for k, v in (('learn_pending', '0'), ('learn_reflect_failed', ''), ('learn_last_reflect', datetime.now().isoformat(sep=' ', timespec='seconds'))):
         store.set_setting(k, v, 'reflect')
-    for mod in ('people_pages', 'playbook_facts'):                # ...and what the window's outcomes name gets its page and its proposal
+    for mod in ('people_pages', 'skill_facts'):                # ...and what the window's outcomes name gets its page and its proposal
         try:
             import importlib
             if (done := importlib.import_module(f'.{mod}', __package__).refresh(store, llm)): logger.info(f"{mod}: {', '.join(done)}")

@@ -227,7 +227,7 @@ def _from_row(r: dict, store=None) -> dict:
 
 
 def _workflow_menu(store) -> str:
-    """The workflows a mail can start, for triage - shown beside the playbooks, the same way (workflows.mail_menu)."""
+    """The workflows a mail can start, for triage - shown beside the skills, the same way (workflows.mail_menu)."""
     try:
         from . import workflows
         return workflows.mail_menu(store)
@@ -235,13 +235,14 @@ def _workflow_menu(store) -> str:
         logger.debug(f'ingest: workflow menu skipped - {e}'); return ''
 
 
-def _playbook_menu(store=None) -> str:
-    """What triage is shown of the owner's playbooks - '' when there are none, so no words are spent."""
+def _skill_menu(store=None, msg: dict = None) -> str:
+    """What triage is shown of the owner's skills - each by name and short description, those of this mail's profile where he keeps
+    more than one - '' when there are none, so no words are spent."""
     try:
-        from . import playbooks
-        return playbooks.menu(store=store)
+        from . import skills
+        return skills.menu(store=store, msg=msg)
     except Exception as e:
-        logger.debug(f'ingest: playbook menu skipped - {e}'); return ''
+        logger.debug(f'ingest: skill menu skipped - {e}'); return ''
 
 
 def danger(store, msg: dict, mid=None, verdict: dict = None) -> str:
@@ -725,7 +726,7 @@ def reused_verdict(store, msg: dict) -> dict | None:
 def judge(store, msg: dict, llm, mine=(), me=(), home=None) -> tuple[dict, dict]:
     """What IS this message - triage's verdict, with everything around the message as evidence:
     the standing notes, who else has spoken on the thread, what the assistant already said about
-    it, the playbooks. Returns (intent, fail); `fail` carries the model's error when it threw.
+    it, the skills. Returns (intent, fail); `fail` carries the model's error when it threw.
 
     One brain, one question, wherever the message landed: a reply that joins an open task gets
     judged exactly like one that opens a new one (the owner, 2026-09-03: "the triage should
@@ -905,9 +906,9 @@ def _classify(store, msg, llm, thread, carried, lrn, notes, notes_left, me, cand
                              # a scheduled report carries its own brief - what the owner
                              # set it up to catch (reports.py: the card's watch_for)
                              watch=report_brief(msg),
-                             # ...and the playbooks: a message that is an instance of one is
-                             # tagged with it, and the agent is seeded from it (playbooks.py)
-                             playbooks=_playbook_menu(store), workflows=_workflow_menu(store), candidates=candidates,
+                             # ...and the skills: a message that is an instance of one is
+                             # tagged with it, and the agent is seeded from it (skills.py)
+                             skills=_skill_menu(store, msg), workflows=_workflow_menu(store), candidates=candidates,
                              # ...and what the owner corrected LAST time a message like this was
                              # judged. The loop closes here: a verdict, a correction, a better verdict.
                              routing_history=_routing_history(store, msg),
@@ -1288,7 +1289,7 @@ def _ingest(store, msg: dict, actor: str, llm, file_only: bool) -> dict:
         # it" left a colleague's question and a vendor's invoice under "on you" with nothing lit. What only he can press, the agent sets up as
         # its card; a start that may not happen says why under the arrival (not_started). Only a thread watched waits with no agent
         elif f['kind'] == 'task' and not watching: f['kind'] = 'general'
-        from . import playbooks as _pb
+        from . import skills as _pb
         # the verdict's own title leads (PW-074); the ask is the sender's own words (draft_task_fields) - an invite's, the calendar's facts
         if intent.get('title'): f['title'] = intent['title']
         if intent.get('invite') and intent.get('summary'): f['summary'] = intent['summary']
@@ -1311,7 +1312,7 @@ def _ingest(store, msg: dict, actor: str, llm, file_only: bool) -> dict:
             tid = store.create_task({'Title': f['title'], 'Summary': f['summary'], 'Kind': f['kind'],
                                      'Priority': f['priority'], 'Source': msg.get('channel') or 'api',
                                      'SourceRef': msg.get('source_link'),
-                                     **({'Tags': _pb.tag(intent['playbook'])} if intent.get('playbook') else {}),
+                                     **({'Tags': _pb.tag(intent['skill'])} if intent.get('skill') else {}),
                                      **({'Assignee': f'agent:{role}'} if role else {})}, actor)
             store.audit('task', tid, 'create', actor, 'agent', {'from': msg.get('from_email'), 'reason': r['reason']})
             if watching:
@@ -1397,7 +1398,7 @@ def _ingest(store, msg: dict, actor: str, llm, file_only: bool) -> dict:
            else f'{agent_word(f["kind"])} was set to start by itself')
     head = route_head(intent['intent'], f['kind'])
     reason = (f"triage: {head}" + (f" - {intent['why']}" if intent.get('why') else '')
-              + (f" · playbook {intent['playbook']}" if intent.get('playbook') else '')
+              + (f" · skill {intent['skill']}" if intent.get('skill') else '')
               + _notes_note()
               + f" · {r['reason']} · {act}")
     # the verdict itself, kept: the route row has always held what triage DECIDED in prose,

@@ -308,9 +308,9 @@ def _require_restricted_mode(cmd: str):
 # background - a subagent walking a repository, a shell left running - came back to nobody, and the turn ended "I'm waiting for the
 # walkthrough to finish, then I'll write the brief" (the owner, 2026-10-21). Claude Code's own switch turns background work off
 # (run_in_background on Bash and subagents, auto-backgrounding); Codex and the rest have no background mode to turn off.
-# ...AND WHAT IT LEARNS IS KEPT BY TASKUARY, FOR ONE PRESS (the recorded walk, 2026-11-11: asked to "save a playbook" the agent wrote a file
+# ...AND WHAT IT LEARNS IS KEPT BY TASKUARY, FOR ONE PRESS (the recorded walk, 2026-11-11: asked to "save a skill" the agent wrote a file
 # into Claude Code's own memory folder and told the owner "saved, with a pointer in MEMORY.md" - no card, nothing to approve, and a place
-# no other agent of his reads). The CLI's own memory is off for a chat agent: a playbook or a lesson goes through Taskuary's tools.
+# no other agent of his reads). The CLI's own memory is off for a chat agent: a skill or a lesson goes through Taskuary's tools.
 # ...and that one is off for EVERY CLI Taskuary starts, not only a chat agent (agents.child_env, terminal.clean_env - 2026-11-12)
 NO_MEMORY = {'CLAUDE_CODE_DISABLE_AUTO_MEMORY': '1'}
 HEADLESS_ENV = {'CLAUDE_CODE_DISABLE_BACKGROUND_TASKS': '1', **NO_MEMORY}

@@ -11,7 +11,7 @@ const step = (id, turn, command, about, status = "pending", extra = {}) => ({ Re
 test("two held steps of one turn are one card with one Approve; another turn's step is its own", () => {
   const a = step(1, 4, "git merge master && git push origin deploy", "Merge master into deploy and push"),
     b = step(2, 4, "git push origin master", "Push master"), c = step(3, 9, "git push origin v2", "Push the tag");
-  const other = { ReviewId: 5, TaskId: 7, Kind: "action", Status: "pending", DraftText: JSON.stringify({ action: "write_playbook", slug: "x" }) };
+  const other = { ReviewId: 5, TaskId: 7, Kind: "action", Status: "pending", DraftText: JSON.stringify({ action: "save_skill", slug: "x" }) };
   const gs = heldGroups([a, b, c, other]);
   assert.deepEqual(gs.map((g) => g.reviews.map((r) => r.ReviewId)), [[1, 2], [3], [5]]);
   assert.deepEqual(gs.map((g) => !!g.held), [true, true, false]);
@@ -43,7 +43,7 @@ test("pressed, the card stays in the turn with the press it took and what came o
   assert.deepEqual(keptHeld([done(1)], said("2026-11-09 10:00:00")).map((r) => r.ReviewId), [1]);
   assert.deepEqual(keptHeld([done(1)], said("2026-11-09 10:10:00")), []);
   // ...and after that it is still the card, in its own turn (the owner, 2026-11-09: "compact the land") - never a line in its place
-  const ask = { ReviewId: 9, TaskId: 7, Kind: "action", Status: "pending", DraftText: JSON.stringify({ action: "write_playbook", slug: "x" }) };
+  const ask = { ReviewId: 9, TaskId: 7, Kind: "action", Status: "pending", DraftText: JSON.stringify({ action: "save_skill", slug: "x" }) };
   const { asks, past } = splitHeld([{ ...done(1), CreatedAt: "2026-11-09 09:58:00" }, { ...done(2), CreatedAt: "2026-11-09 09:58:01" }, ask], [ask]);
   assert.deepEqual(asks.map((g) => g.key), ["rv9"]);
   assert.deepEqual(past.map((g) => [g.held, g.at, g.reviews.map((r) => r.ReviewId)]), [[true, "2026-11-09 09:58:00", [1, 2]]], "one card, in its turn");
@@ -53,10 +53,10 @@ test("pressed, the card stays in the turn with the press it took and what came o
 });
 
 
-// THE OVERNIGHT AUDIT, 2026-11-10: Approve on a playbook the agent set up took its card out of the chat at the press - nothing said it was
+// THE OVERNIGHT AUDIT, 2026-11-10: Approve on a skill the agent set up took its card out of the chat at the press - nothing said it was
 // approved, and Taskuary's note to the agent stood where it had been. A decided proposal is a pressed card in its turn, as held steps are
 test("an approved or dismissed proposal stays in its turn as its pressed card; a close-out's is its own card's", () => {
-  const pb = (id, Status, action = "write_playbook") => ({ ReviewId: id, TaskId: 7, Kind: "action", Status, CreatedAt: `2026-11-10 09:0${id}:00`,
+  const pb = (id, Status, action = "save_skill") => ({ ReviewId: id, TaskId: 7, Kind: "action", Status, CreatedAt: `2026-11-10 09:0${id}:00`,
     DraftText: JSON.stringify({ action, slug: "vendor-review", text: "# Vendor review" }) });
   const rows = [pb(1, "approved"), pb(2, "rejected"), pb(3, "pending"), pb(4, "approved", "merge_pr"), pb(5, "superseded")];
   assert.deepEqual(rows.filter(decidedAsk).map((r) => r.ReviewId), [1, 2]);

@@ -118,6 +118,12 @@ class WhatTheNextVerdictIsTold(unittest.TestCase):
         self.assertEqual(got['kind']['value'], 'task')
         self.assertEqual(got['system']['value'], 'ADP')
 
+    def test_a_lesson_kept_when_skills_were_playbooks_is_told_as_the_skill(self):
+        rmem.learn_correction(self.s, arrived(self.s), 'skill', 'timesheet-fix', 'owner')
+        self.s._exec("UPDATE routing_fact SET Field='playbook' WHERE Field='skill'")
+        got = {r['field']: r for r in rmem.facts_for(self.s, self.her)}
+        self.assertEqual(got['skill']['value'], 'timesheet-fix'); self.assertNotIn('playbook', got)
+
     def test_one_correction_is_offered_as_tentative(self):
         self.assertTrue({r['field']: r for r in rmem.facts_for(self.s, self.her)}['kind']['tentative'])
 

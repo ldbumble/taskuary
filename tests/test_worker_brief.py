@@ -178,7 +178,7 @@ class ScopedExtrasTests(unittest.TestCase):
         self.assertIn('a follow-up from Dana', user2)
 
 
-PLAYBOOK = """# Post a card transaction as an AP bill
+SKILL = """# Post a card transaction as an AP bill
 when:      a transaction or statement line from the card feed
 uses:      quickbooks (write: bills, vendors)
 steps:     match the merchant to a vendor -> create the bill dated the transaction date
@@ -189,21 +189,21 @@ done when: the bill exists in QuickBooks
 
 
 class PromptAuditTests(unittest.TestCase):
-    """PW-185: audit the built prompts with a playbook AND a saved preference competing for
+    """PW-185: audit the built prompts with a skill AND a saved preference competing for
     space on the task - no instruction block repeats, and the writing voice (WRITING STYLE)
     reaches only general (writing) work, never a coding run."""
     HEADERS = ('RULES (AGENT.md', 'CODING RULES (CODING.md', 'PROCEDURE FOR THIS JOB', 'WRITING STYLE',
                'OTHER AGENTS', 'THE WALL', 'ASKING THE OWNER')
 
     def setUp(self):
-        from taskuary import playbooks
+        from taskuary import skills
         import shutil
-        d = playbooks.folder()
+        d = skills.folder()
         if d.is_dir(): shutil.rmtree(d)
-        playbooks.write('bill', PLAYBOOK)
+        skills.write('bill', SKILL)
 
     def _task(self, s, kind):
-        tid = s.create_task({'Title': 'Transaction: 84.10', 'Kind': kind, 'Source': 'email', 'Tags': 'playbook:bill'}, 't')
+        tid = s.create_task({'Title': 'Transaction: 84.10', 'Kind': kind, 'Source': 'email', 'Tags': 'skill:bill'}, 't')
         s.add_message({'TaskId': tid, 'ExternalId': f'm{tid}', 'Channel': 'email', 'Subject': 'Transaction',
                        'FromEmail': 'alerts@card.example', 'BodyText': 'a new transaction posted', 'Status': 'routed'})
         put_note(s, {'Scope': 'global', 'ScopeKey': '', 'Note': 'Always CC finance on vendor threads.',

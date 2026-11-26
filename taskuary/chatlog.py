@@ -1029,7 +1029,7 @@ def advance(store, tid: int) -> None:
     it, as its last thing (drawn once that turn is no longer at work), else at the foot where an input came after every turn - with the
     line's "n of m · next" in it; a card that stood is updated in place as it
     is pressed, withdrawn or moved past, never moved; one held behind the front has no row, so nothing can draw it. A card outside the line
-    (Taskuary's own offer beside a reply - a playbook) stands as an `offer`, drawn only while no card of the line waits."""
+    (Taskuary's own offer beside a reply - a skill) stands as an `offer`, drawn only while no card of the line waits."""
     from . import cardqueue
     from .conversation import _card
     from .processing_unread import OWNER_ACTORS

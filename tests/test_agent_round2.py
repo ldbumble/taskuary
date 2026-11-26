@@ -3,7 +3,7 @@ OpenClaw's cron).
 
 5. A turn leaves no lesson: what an agent concluded never becomes memory about the owner (the owner, 2026-11-13). Its check-back
    still rides the summary.
-6. Playbooks are a menu: every one's `when` and its file, read by the agent itself; code no longer hands it one.
+6. Skills are a menu: every one's `when` and its file, read by the agent itself; code no longer hands it one.
 7. Search before asking: the search an agent already has also reads what earlier tasks settled (their own endings).
 8. Check-backs: the agent wakes on its own task at a time it set, on the reminders' clock, with its note as the turn.
 """
@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 from unittest import mock
 
 from fastapi.testclient import TestClient
-from taskuary import agenttools, checkback, config, general, guard, playbooks, remind, search, selfclose, server
+from taskuary import agenttools, checkback, config, general, guard, skills, remind, search, selfclose, server
 from taskuary.store import MemoryStore
 from tests.test_general_turn_ends_short import a_claude, turn
 
@@ -28,9 +28,9 @@ W9 = BILL.replace('Post a card transaction as an AP bill', 'Collect a vendor W-9
 
 
 def fresh_books(*pages):
-    d = playbooks.folder()
+    d = skills.folder()
     if d.is_dir(): shutil.rmtree(d)
-    return [playbooks.write(slug, text) for slug, text in pages]
+    return [skills.write(slug, text) for slug, text in pages]
 
 
 def owner_task(s, title='Post the Payworth card charge', **kw):
@@ -46,7 +46,7 @@ class NoLessonTests(unittest.TestCase):
     def setUp(self): fresh_books(('bill', BILL))
 
     def test_the_summary_carries_the_check_back_and_no_lesson(self):
-        text, summ = selfclose.summary_marker('Done.\n' + summary(lesson={'playbook': 'bill', 'text': 'Payworth is vendor 4471'},
+        text, summ = selfclose.summary_marker('Done.\n' + summary(lesson={'skill': 'bill', 'text': 'Payworth is vendor 4471'},
                                                                  check_back={'when': 'tomorrow 9am', 'what': 'the bill posted'}))
         self.assertEqual(text, 'Done.')
         self.assertNotIn('lesson', summ); self.assertEqual(summ['check_back']['what'], 'the bill posted')
@@ -59,7 +59,7 @@ class NoLessonTests(unittest.TestCase):
 
     def test_a_real_turn_leaves_its_check_back_and_teaches_the_memory_nothing(self):
         s = MemoryStore(); a_claude(self); tid = owner_task(s)
-        reply = 'Posted the bill as Payworth (vendor 4471).\n' + summary(lesson={'playbook': 'bill', 'text': 'Payworth is vendor 4471'},
+        reply = 'Posted the bill as Payworth (vendor 4471).\n' + summary(lesson={'skill': 'bill', 'text': 'Payworth is vendor 4471'},
                                                                           check_back={'when': 'in 2 days', 'what': 'the bill shows paid'})
         with mock.patch('taskuary.learning.learn_from') as lf: seen = turn(s, tid, reply)
         self.assertNotIn('A LESSON FOR NEXT TIME', seen['prompt'])
@@ -69,18 +69,91 @@ class NoLessonTests(unittest.TestCase):
         self.assertTrue(kept and not any('lesson' in k or 'check_back' in k for k in kept))     # taken off the summary, never drawn
 
 
-# ── 6. playbooks are a tool, and a plain task is handed context and one sentence (the owner, 2026-11-23) ──────────────────────
-class PlaybookToolTests(unittest.TestCase):
+# ── 6. skills are a tool, and a plain task is handed context and one sentence (the owner, 2026-11-23) ──────────────────────
+class SkillToolTests(unittest.TestCase):
     def setUp(self): fresh_books(('bill', BILL), ('w9', W9))
 
-    def test_a_plain_task_carries_the_one_sentence_and_no_playbook_profile_or_routine_block(self):
+    def test_a_plain_task_carries_the_one_sentence_and_no_skill_body_profile_or_routine_block(self):
         s = MemoryStore(); s.upsert_agent('marketer', 'marketing', 'cli', '{}')
-        tid = owner_task(s, Tags='playbook:bill', Assignee='agent:marketer')
+        tid = owner_task(s, Tags='skill:bill', Assignee='agent:marketer')
         system, user = general._prompt(s, tid)
         self.assertIn(selfclose.ONE_SENTENCE, system)
-        for block in ('PLAYBOOKS', 'PROCEDURE FOR THIS JOB', 'bills under $500', 'PROFILE RULES', 'MARKETER.md', 'RULES (AGENT.md',
+        for block in ('PROCEDURE FOR THIS JOB', 'bills under $500', 'PROFILE RULES', 'MARKETER.md', 'RULES (AGENT.md',
                       'OBJECTIVE', 'ALLOWED ACTIONS', 'DONE WHEN', 'ENDING EVERY TURN', 'YOUR ONE GOAL'):
             self.assertNotIn(block, system + user)
+
+    def test_every_agents_context_carries_the_skills_names_and_descriptions_and_no_body(self):
+        """The owner, 2026-11-26: every agent sees what skills there are - name and one line each, triage's pick said on its line - and
+        opens one itself when it fits. The same list its tool answers with and triage is shown; a stranger's task carries none."""
+        from taskuary import origin, terminal
+        s = MemoryStore(); tid = owner_task(s, Tags='skill:bill')
+        system = general._prompt(s, tid)[0]
+        listed = agenttools.call(s, tid, 'skills', {}, {})
+        self.assertIn(skills.BRIEF_HEAD + '\n' + listed, system)
+        self.assertIn('- bill: Post a card transaction as an AP bill. Use when a transaction line from the card feed\n', system)
+        self.assertIn('\nTriage read this task as: bill', system)                 # said after the list, never inside it: the list is every task's
+        self.assertNotIn('bills under $500', system)                              # the body is read by the tool, when it chooses
+        self.assertEqual(system, general._prompt(s, tid)[0])                      # the same bytes turn after turn: the kept prefix holds
+        self.assertEqual(listed.split('\nTriage read')[0], skills.menu(store=s))  # ...and triage's own menu, line for line
+        seed = terminal.seed_text(s, tid)
+        self.assertIn('- w9: Collect a vendor W-9. Use when a new vendor needs a W-9', seed); self.assertNotIn('bills under $500', seed)
+        with mock.patch.object(origin, 'of_task', return_value=('stranger', '')):
+            self.assertNotIn('- bill:', general._prompt(s, tid)[0]); self.assertNotIn('- bill:', terminal.seed_text(s, tid))
+        skills.set_on('w9', False); self.assertNotIn('- w9:', general._prompt(s, tid)[0])
+        s.set_setting('playbooks_enabled', '0', 't'); self.assertNotIn(skills.BRIEF_HEAD, general._prompt(s, tid)[0])
+
+    def test_a_hundred_and_twenty_skills_are_listed_like_tools_all_of_them_short_and_the_same_bytes_every_time(self):
+        """The owner, 2026-11-26: "it might become too many if there are 100 skills ... it should not be more than name and short
+        description like the way tools are called". Every skill is listed - none dropped past a count - as its name and at most 120
+        characters of its description, by name, so the block is the same on every call (cached once) and its size is bounded."""
+        import random
+        long = 'Answer a payer asking for the remittance advice of a denied claim, with the denial code and the appeal window. ' * 3
+        names = [f'billing-job-{i:03d}' for i in range(120)]
+        for n in random.Random(7).sample(names, len(names)):               # written in any order: listed by name
+            skills.write(n, f'---\nname: {n}\ndescription: "{long}Use when one arrives ({n})."\n---\n# {n}\n\nBODY-OF-{n}: look it up, then answer.\n')
+        s = MemoryStore(); tid = owner_task(s, Tags='skill:w9')
+        block = skills.brief(s, s.get_task(tid)); lines = block.splitlines()
+        listed = [l for l in lines if l.startswith('- ')]
+        self.assertEqual(len(listed), 122)                                  # the 120 and the two this class keeps: none left out
+        self.assertEqual([l.split(':')[0][2:] for l in listed], sorted(l.split(':')[0][2:] for l in listed))
+        for l in listed: self.assertLessEqual(len(l.split(': ', 1)[1]), skills.LIST_DESC, l)
+        self.assertNotIn('BODY-OF-', block)
+        self.assertLess(len(block), 22_000)                                 # ~5,500 tokens at the very most for 122 skills, paid once
+        self.assertLess(len(block) / len(listed), 185)                      # ...under 185 characters a skill, about 45 tokens, at the longest
+        self.assertEqual(lines[-1], 'Triage read this task as: w9')
+        other = owner_task(s)
+        self.assertEqual(skills.brief(s, s.get_task(other)), '\n'.join(lines[:-1]))    # another task: the same bytes, minus its own last line
+        self.assertEqual(skills.brief(s, s.get_task(tid)), block)
+        menu = skills.menu(store=s)
+        self.assertEqual(menu.splitlines(), listed); self.assertLess(len(menu), 22_000)   # triage: the same lines, whole - no cut at 3,000
+        from taskuary import triage
+        seen = {}
+        def llm(system, user, **k): seen['system'] = system; return json.dumps({'intent': 'task', 'kind': 'general', 'why': 'x', 'skill': 'billing-job-119'})
+        out = triage.classify_intent({'from_email': 'erin@vendor.example', 'subject': 'Remittance for claim 88', 'body': 'Please send it.'}, llm=llm, skills=menu)
+        self.assertIn('- billing-job-119: ', seen['system']); self.assertEqual(out.get('skill'), 'billing-job-119')     # the last one is offered too
+
+    def test_a_skill_of_one_profile_is_offered_to_that_profiles_tasks_and_one_left_to_all_to_every_task(self):
+        from taskuary import workstreams
+        s = MemoryStore(); mine = owner_task(s); theirs = owner_task(s)
+        self.assertIsNone(skills.profile_of(s, s.get_task(mine)))            # one profile, or none: nothing is told apart
+        skills.set_profile('bill', 'finance')
+        self.assertIn('- bill:', skills.brief(s, s.get_task(mine)))
+        workstreams.save(s, [{'slug': 'finance', 'name': 'Finance', 'status': 'active'}, {'slug': 'clinic', 'name': 'Clinic', 'status': 'active'}])
+        workstreams.set_task(s, mine, 'finance'); workstreams.set_task(s, theirs, 'clinic')
+        a, b = skills.brief(s, s.get_task(mine)), skills.brief(s, s.get_task(theirs))
+        self.assertIn('- bill:', a); self.assertIn('- w9:', a)                # its own profile's, and the one left to all
+        self.assertNotIn('- bill:', b); self.assertIn('- w9:', b)
+        self.assertIn('No skill is called', agenttools.call(s, theirs, 'skills', {'name': 'bill'}, {}))
+        self.assertIn('bills under $500', agenttools.call(s, mine, 'skills', {'name': 'bill'}, {}))
+        self.assertNotIn('- bill:', skills.menu(store=s, msg={'Workstream': 'clinic'})); self.assertIn('- bill:', skills.menu(store=s, msg={'Workstream': 'finance'}))
+        from fastapi.testclient import TestClient
+        with mock.patch.object(server, 'store', s):
+            c = TestClient(server.app)
+            self.assertEqual(c.put('/api/skills/w9/workstream', json={'workstream': 'clinic'}).json()['profile'], 'clinic')
+            self.assertEqual(c.put('/api/skills/w9/workstream', json={'workstream': 'nope'}).status_code, 422)
+            self.assertEqual({r['slug']: r['profile'] for r in c.get('/api/skills').json()['data']}, {'bill': 'finance', 'w9': 'clinic'})
+        self.assertTrue(guard.denied('PUT', '/api/skills/w9/workstream'))    # never an agent's own press
+        self.assertNotIn('- w9:', skills.brief(s, s.get_task(mine)))
 
     # AGENTS.md IS THE ONE SENTENCE, AS HIS FILE (the owner, 2026-11-23): read at every turn, short, and never the security lines
     def test_a_plain_task_reads_his_agents_md_and_an_edit_reaches_the_next_turn(self):
@@ -113,14 +186,15 @@ class PlaybookToolTests(unittest.TestCase):
         self.assertNotIn('w' * (selfclose.AGENTS_CHARS + 1), general._prompt(s, tid)[0])
 
     def test_the_tool_lists_them_and_reads_one_whole(self):
-        s = MemoryStore(); tid = owner_task(s, Tags='playbook:bill')
-        call = lambda **a: agenttools.call(s, tid, 'playbooks', a, {})
+        s = MemoryStore(); tid = owner_task(s, Tags='skill:bill')
+        call = lambda **a: agenttools.call(s, tid, 'skills', a, {})
         listed = call()
-        self.assertIn('- bill: when a transaction line from the card feed (triage read this task as one)', listed)
-        self.assertIn('- w9: when a new vendor needs a W-9', listed); self.assertNotIn('bills under $500', listed)
+        self.assertIn('- bill: Post a card transaction as an AP bill. Use when a transaction line from the card feed\n', listed)
+        self.assertTrue(listed.endswith('\nTriage read this task as: bill'))
+        self.assertIn('- w9: Collect a vendor W-9. Use when a new vendor needs a W-9', listed); self.assertNotIn('bills under $500', listed)
         self.assertIn('bills under $500', call(name='bill'))
-        playbooks.set_on('w9', False); self.assertNotIn('- w9:', call())
-        s.set_setting('playbooks_enabled', '0', 't'); self.assertEqual(call(), 'Playbooks are switched off.')
+        skills.set_on('w9', False); self.assertNotIn('- w9:', call())
+        s.set_setting('playbooks_enabled', '0', 't'); self.assertEqual(call(), 'Skills are switched off.')
 
     def test_end_turn_and_ask_owner_reach_the_turns_end_as_its_summary_and_question(self):
         s = MemoryStore(); tid = owner_task(s)

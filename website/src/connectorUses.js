@@ -2,7 +2,7 @@
 // press (#238). One of a kind is named, several are counted; drafts and sources are only ever counted.
 const WORDS = {
   workflow: ["workflow", "workflows"], report: ["report", "reports"], brain: ["", "AI brains"], card: ["card", "cards"],
-  draft: ["reply draft waiting", "reply drafts waiting", true], rule: ["rule", "rules"], playbook: ["playbook", "playbooks"],
+  draft: ["reply draft waiting", "reply drafts waiting", true], rule: ["rule", "rules"], skill: ["skill", "skills"],
   source: ["source it reads", "sources it reads", true],
 };
 

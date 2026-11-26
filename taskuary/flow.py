@@ -538,7 +538,9 @@ def agent_brief(store, src, step, ctx, recs, trigger, when) -> str:
     from . import workflows
     defn = workflows.definition(store, src)
     defn['objective'] = render(str(step.get('prompt') or ''), ctx).strip() or defn['objective']
-    if step.get('skill'): defn['skill'] = str(step['skill']).strip().lstrip('/')
+    # ...the skill THIS step uses, its words with it (workflows.skill_text): named on a step it rode as a name alone, and the run never read it
+    if step.get('skill'):
+        defn['skill'] = str(step['skill']).strip().lstrip('/'); defn['steps'] = workflows.skill_text(workflows.cfg_of(src), defn['skill'])
     run = {**({'done_so_far': done_so_far(recs, ctx.get('steps'))} if recs else {}), **({'mail': ctx['mail']} if ctx.get('mail') else {})}
     return workflows.brief(defn, trigger, when, run or None)
 

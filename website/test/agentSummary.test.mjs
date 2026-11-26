@@ -65,7 +65,7 @@ test("Next steps: nothing left only when no draft waits and no On you step is un
   assert.deepEqual(nextSteps({ summary: { nothing_left: true }, reviews, cards: false }).drafts, []);
 });
 
-// ...and a held browser act or a playbook waiting on Approve is something left too (review, Task 3.6)
+// ...and a held browser act or a skill waiting on Approve is something left too (review, Task 3.6)
 test("Next steps: an Approve still pending is never Nothing left to do here", () => {
   const held = [{ ReviewId: 7, Kind: "action", Status: "pending" }];
   const a = nextSteps({ summary: { nothing_left: true }, reviews: held });

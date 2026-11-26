@@ -427,9 +427,9 @@ _DECIDE = {
     'rerun':           'run the report on the table again',
     'report_off':      "pause the report on the table - off its clock - only when its findings are about something the owner said they do not care about",
     'remember':        "keep a fact about how the owner works in their memory - `text`, their words (\"I don't care about the legacy export job any more\" too), `subject` and `about`, as memory.remember's",
-    # ...and a PLAYBOOK, which has its own New playbook: "can I build a playbook for it?" was sent to a general agent as its job (the
-    # owner, 2026-10-22: "this is not playbook ui?")
-    'setup':           ('build a report, a playbook (how one kind of recurring request is handled from now on), a connection to another '
+    # ...and a SKILL, which has its own New skill: "can I build a skill for it?" was sent to a general agent as its job (the
+    # owner, 2026-10-22: "this is not skill ui?")
+    'setup':           ('build a report, a skill (how one kind of recurring request is handled from now on), a connection to another '
                         'system or an automation - `text`: the request. Never a to-do, and never an agent\'s job'),
     'confirm':         "the owner's yes to the card already waiting - only when one is",
     'cancel':          "the owner's no to it",

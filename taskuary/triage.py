@@ -286,7 +286,7 @@ def thread_of(j: dict, earlier: set):
     return th if any(th.values()) else None
 
 
-def verdict_schema(candidates=None, playbooks=None, same=False, goals=False, coding=True, workflows=None,
+def verdict_schema(candidates=None, skills=None, same=False, goals=False, coding=True, workflows=None,
                    earlier=False, thread_task=False, notes=False, workstreams=False, watched=False, lean=True, notices=False) -> dict:
     """The answer's shape as a JSON schema, for the brains whose wire can carry one (llm.ask_json).
 
@@ -331,7 +331,7 @@ def verdict_schema(candidates=None, playbooks=None, same=False, goals=False, cod
          # the message asks the owner to find a time to meet: how long and which days (its row's Find a time, calwrite.py)
          'meet': {'type': ['object', 'null'], 'additionalProperties': False, 'required': ['minutes', 'from', 'to'],
                   'properties': {'minutes': {'type': ['integer', 'null']}, 'from': {'type': ['string', 'null']}, 'to': {'type': ['string', 'null']}}}}
-    if playbooks: p['playbook'] = {'type': ['string', 'null']}
+    if skills: p['skill'] = {'type': ['string', 'null']}
     if workflows: p['workflow'] = {'type': ['string', 'null']}
     # which of the owner's workstreams it belongs to (workstreams.py, the owner 2026-11-01: triage sorts by them) - the best fit, null only when
     # two fit equally or none does (the owner, 2026-11-09: "when unsure" left most tasks under no workstream)
@@ -385,8 +385,8 @@ def verdict_schema(candidates=None, playbooks=None, same=False, goals=False, cod
 # thread, and the whole cached guide was billed again for it and the mail after. Every key a mail may carry is on the wire for all of them:
 # each one is read only against what that mail was shown (same_ids, home, candidates... in classify_intent), so a key it had no reason to
 # answer lands nowhere. Only what is the install's own - its menus, coding, the answer's shape - still shapes it.
-def wire_schema(playbooks=None, coding=True, workflows=None, notes=False, workstreams=False, lean=True) -> dict:
-    return verdict_schema([], playbooks, same=True, goals=True, coding=coding, workflows=workflows, earlier=True, thread_task=True,
+def wire_schema(skills=None, coding=True, workflows=None, notes=False, workstreams=False, lean=True) -> dict:
+    return verdict_schema([], skills, same=True, goals=True, coding=coding, workflows=workflows, earlier=True, thread_task=True,
                           notes=notes, workstreams=workstreams, watched=True, lean=lean, notices=True)
 
 
@@ -754,7 +754,7 @@ class Unreadable(ValueError):
 
 def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, images=None,
                     learned: str = None, system: str = None, notes_left: int = 0, mine=(),
-                    thread: dict = None, watch: str = None, playbooks: str = None,
+                    thread: dict = None, watch: str = None, skills: str = None,
                     candidates: list = None,
                     routing_history: list = None, seen: set = None, job: str = None,
                     coding: bool = True, workflows: str = None, connected: list = None, workstreams: str = None, lean: bool = True) -> dict:
@@ -801,9 +801,9 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
     WHERE coding work is done is not triage's to say (the owner, 2026-11-06: "let's take repo decision out of the triage - remove it
     completely"): it names the kind, and the coding agent picks its repository when it starts (repochoice.use, terminal.guess_repo).
 
-    `playbooks` is the menu of the owner's playbooks (playbooks.menu: slug, title and `when` each).
+    `skills` is the menu of the owner's skills (skills.menu: the name and description of each).
     A message that is an instance of one is answered with its slug, and that slug is what seeds
-    the session with the playbook instead of the coding profile's repository rules. Matching is a judgement
+    the session with the skill instead of the coding profile's repository rules. Matching is a judgement
     about the message, so it is made here, by the model that read it - never by a keyword rule."""
     raw_answer, parse_error = None, None
     note_ids = [i for i in map(note_id, notes or []) if i]
@@ -828,7 +828,7 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
             # judge and never restates the output shape, so asking for it again here is not
             # overriding the owner - it is the half of the prompt the document was never writing.
             # It is added LAST (below), not here: appended to the document it sat 16,000 characters
-            # from the answer, under the soul, the evidence, the playbooks and the repositories,
+            # from the answer, under the soul, the evidence, the skills and the repositories,
             # while the document's own opening line named a contract with no title and no summary.
             # On a long forwarded mail the model answered that line and dropped both, and the card
             # fell back to the raw body (TQ-0665, three times in eight replays). A SHAPE cannot
@@ -854,7 +854,7 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
             # From here down the code only LABELS what it hands over. Every sentence about how to judge it - the
             # report brief, kind, repositories, chat lines, same_as - lives in the guide (2026-10-09:
             # the owner, "why are there items in code in triage? I thought we removed them").
-            if playbooks: system += "\n\nPLAYBOOKS - the owner's written procedures, each with the arrival that starts it (when):\n" + str(playbooks)[:3000]
+            if skills: system += "\n\nSKILLS - how the owner does each kind of job, by name, with what it is and when it is used:\n" + str(skills)
             # THE OWNER'S WORKSTREAMS (the owner, 2026-11-01): which body of work this belongs to sorts it - a side product's tester is not
             # a day-job colleague, and a personal chat is never the job's. Context for the sort; how each is weighed is the guide's to say
             if workstreams: system += ("\n\nTHE OWNER'S WORKSTREAMS - the separate bodies of work they run (a personal one is their own life, "
@@ -865,11 +865,11 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
             if not coding: system += ('\n\nTHERE IS NO CODING AGENT on this install (no coding tool, or developer mode is off). Never choose '
                                       'kind coding - work that would be coding is general.')
             # THE CACHED CONTEXT, THEN THE NEW MAIL (the owner, 2026-11-10: "keep the triage context cached and then just the new info should
-            # query it"): the guide and the owner's documents (the same for hours), the playbooks, workstreams and workflows (for days), the
+            # query it"): the guide and the owner's documents (the same for hours), the skills, workstreams and workflows (for days), the
             # learned memory (a line added at 3pm re-bills only itself) - each a cached block (llm.stable) - and only what follows is this mail's
             fixed, menus, system = system[:cut], system[cut:], base[len(guide):]
             # WHAT IS THIS MESSAGE'S OWN comes after what every message shares (the owner, 2026-11-10: "32 million tokens?"): the guide, the
-            # owner's documents and memory, the playbooks, workstreams and workflows are the same bytes on every mail - the prefix a provider
+            # owner's documents and memory, the skills, workstreams and workflows are the same bytes on every mail - the prefix a provider
             # caches - and the evidence picked for this sender and the report's brief differ each time, so they follow
             if notes:
                 # already ranked and budgeted by ingest.relevant_notes. Evidence, never an order (PW-025): how much
@@ -959,7 +959,7 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
             # what was left out. Both exist because neither reaches every brain (TQ-0665).
             from .llm import ask_json, stable
             system = stable(fixed, menus, memory, rest=system, ttl='1h')
-            answer = ask_json(llm, system, user, want=wire_schema(playbooks, coding, workflows, bool(note_ids), bool(workstreams), lean),
+            answer = ask_json(llm, system, user, want=wire_schema(skills, coding, workflows, bool(note_ids), bool(workstreams), lean),
                               need=('title',), **({'max_tokens': TRIAGE_TOKENS} if takes_tokens(llm) else {}),
                               **({'images': images} if images else {}))
             raw_answer, j = answer.raw, answer.data
@@ -980,12 +980,12 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                 # ...and a coding verdict on an install with no coding tool is the general agent's: it tried to start a CLI that
                 # was not there and said "couldn't start" until someone noticed (2026-10-16)
                 if out.get('kind') == 'coding' and not coding: out['kind'] = 'general'
-                # a playbook the menu actually offered rides on the task as ITS PROCEDURE; it says how the job
+                # a skill the menu actually offered rides on the task as ITS PROCEDURE; it says how the job
                 # is done here, not who does it - the kind stays the model's own (PW-205: the old override to
                 # coding sent a PTO request, a general job, into a checkout)
-                pb = str(j.get('playbook') or '').strip().lower()
-                if playbooks and pb and out['intent'] == 'task' and re.search(rf'^- {re.escape(pb)}: ', playbooks, re.M):
-                    out['playbook'] = pb
+                pb = str(j.get('skill') or j.get('playbook') or '').strip().lower()      # ...a guide of his that still says `playbook` names the same thing
+                if skills and pb and out['intent'] == 'task' and re.search(rf'^- {re.escape(pb)}: ', skills, re.M):
+                    out['skill'] = pb
                 # ...and a WORKFLOW the arrival starts (workflows.mail_menu), checked against the lines it was shown the same way:
                 # a name nobody offered starts nothing
                 wf = str(j.get('workflow') or '').strip().lower()

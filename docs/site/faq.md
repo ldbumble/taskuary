@@ -70,9 +70,9 @@ corrected on the job:
   bear on the work. See [Connections](connections#data-and-report-sources).
 - **Your systems.** Connect what has an API; for what only has a web screen, the agent works it in
   the browser while you watch.
-- **Your jobs.** The first time an agent does a kind of job, Taskuary drafts a playbook — the
-  steps, what it may do alone, what to ask first, what counts as done. Approve it and the next job
-  like it follows it. See [Brains and playbooks](tasks-and-agents#brains-and-playbooks).
+- **Your jobs.** The first time an agent does a kind of job, it can draft a skill — what
+  the job is, when to use it, and how it is done. Approve it and the agent on the next job
+  like it reads it. See [Brains and skills](tasks-and-agents#brains-and-skills).
 - **Your judgment.** Each verdict you correct becomes a lesson for the next message like it. See
   [How it works](how-it-works).
 

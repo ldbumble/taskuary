@@ -61,7 +61,7 @@ export function BrowseFrame({ title, area = "", summary, sections = [], section,
         {/* a note with no list under it yet (a link to something that is gone) is said here, where it is seen */}
         {!!note && section == null && <Typography sx={{ mt: 1.25, fontSize: 12.5, color: "var(--tq-danger, #7a2f3c)", lineHeight: 1.5 }}>{note}</Typography>}
         {!!sections.length && (
-          // ...the shelves (each with its count) and the presses that make a new one (none) each a group that wraps as one: "+ New playbook"
+          // ...the shelves (each with its count) and the presses that make a new one (none) each a group that wraps as one: "+ New skill"
           // stood alone on a line of its own under the other three (the walk, 2026-11-21)
           <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1, mt: 1.5 }}>
             {[true, false].map((shelf) => <Box key={String(shelf)} data-tq-browse-group={shelf ? "shelves" : "new"} sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
@@ -140,7 +140,7 @@ export default function CanvasBrowse({ area, state, onState, live, onOpenCard, o
       {area === "connections" && <ConnectorsView onNavigate={onNavigate} {...common} />}
       {area === "reports" && <ReportsView onOpenTask={onOpenTask} {...common} />}
       {area === "settings" && <SettingsView onNavigate={onNavigate} {...common} />}
-      {/* ...and About you - docs, playbooks, memory - the same view on its own page (the owner, 2026-11-06) */}
+      {/* ...and About you - docs, skills, memory - the same view on its own page (the owner, 2026-11-06) */}
       {area === "about" && <SettingsView key="about" area="about" onNavigate={onNavigate} {...common} />}
       {area === "hub" && <Suspense fallback={<CircularProgress size={20} />}><HubView onOpenTask={onOpenTask} {...common} /></Suspense>}
     </Box>

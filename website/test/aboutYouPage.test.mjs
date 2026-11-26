@@ -25,12 +25,12 @@ test("under it, faint: when it was learned and from what - or that the owner wro
   assert.equal(fromWhere([{ kind: "message" }, { kind: "task" }, { kind: "idea" }, { kind: "message" }]), "mail you answered, what you did on tasks and more");
 });
 
-test("every old address of Docs and Memory still lands - and the Assistant's page map names the page, Playbooks on Reports", async () => {
+test("every old address of Docs and Memory still lands - and the Assistant's page map names the page, Skills on Reports", async () => {
   const words = JSON.parse(fs.readFileSync(new URL("../../taskuary/words.json", import.meta.url), "utf8")).places;
   for (const k of ["about", "docs", "memory"]) assert.match(words[k].name, /^About you → /, k);
   assert.equal(words.memory.href, "#about=memory");
-  assert.equal(words.playbooks.name, "Reports → Playbooks");
+  assert.equal(words.skills.name, "Reports → Skills");
   const { canvasRequestFromHash } = await import("../src/canvasLinks.js");
   for (const k of ["about", "docs", "memory"]) assert.equal(canvasRequestFromHash(words[k].href).area, "about", k);
-  assert.equal(canvasRequestFromHash(words.playbooks.href).area, "reports");
+  assert.equal(canvasRequestFromHash(words.skills.href).area, "reports");
 });

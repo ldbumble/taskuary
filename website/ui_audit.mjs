@@ -147,11 +147,11 @@ const inspect = (page) => page.evaluate(() => {
   if (await clickText(page, "Sage Intacct")) { await stop("connections-intacct"); for (const t of ["Guide", "Agent"]) { if (await clickText(page, t)) await stop(`connections-intacct-${t.toLowerCase()}`); } }
   else note("connections", "Sage Intacct card not found");
 
-  // Docs: each document and the Playbooks shelf
+  // Docs: each document and the Skills shelf
   await openTab("Docs"); await stop("docs");
   for (const d of ["TRIAGE.md", "STYLE.md", "CODING.md", "LEARNED.md"]) { if (await clickText(page, d)) await stop(`docs-${d.toLowerCase().replace(".md", "")}`); }
-  if (await clickText(page, "New playbook") || await clickText(page, "Write the first playbook")) await stop("docs-new-playbook");
-  else note("docs", "Playbooks shelf has no New button");
+  if (await clickText(page, "New skill") || await clickText(page, "Write the first skill")) await stop("docs-new-skill");
+  else note("docs", "Skills shelf has no New button");
 
   // Settings: every page
   await openTab("Settings"); await stop("settings");

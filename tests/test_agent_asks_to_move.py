@@ -64,7 +64,7 @@ class ReportReadsTheMoveTests(unittest.TestCase):
         with mock.patch.object(term, 'transcript_for', return_value=('fixed the export', 'coding', 'run1')), \
              mock.patch.object(term, 'close', return_value=True), mock.patch.object(wrapup, 'report_from_transcript', side_effect=rep), \
              mock.patch.object(wrapup, 'finish', return_value={}), mock.patch('taskuary.proposals.collect', return_value=[]), \
-             mock.patch('taskuary.playbooks.draft', return_value=None), mock.patch('taskuary.handbook.enabled', return_value=False):
+             mock.patch('taskuary.handbook.enabled', return_value=False):
             term.SESSIONS['run1'] = sess
             wrapup.wrap(s, tid, close=False, actor='owner')
             sess.sid = 'run2'; term.SESSIONS.clear(); term.SESSIONS['run2'] = sess

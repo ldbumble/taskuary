@@ -130,7 +130,7 @@ const read = (url) => {
         lastWorkedAt: last?.CreatedAt || task.UpdatedAt || task.CreatedAt, action: review ? "review" : "resume", reviewId: review?.ReviewId }];
     }).slice(0, 5) };
   }
-  if (p === "/api/playbooks/examples") {
+  if (p === "/api/skills/examples") {
     const params = new URLSearchParams(query(url)), q = (params.get("q") || "").toLowerCase();
     const before = Number(params.get("before") || 0);
     const rows = feedRows().filter((row) => row.Channel === "email" && row.Direction !== "out"
@@ -271,20 +271,20 @@ const dockTask = () => {
 const demoReply = (taskId, asked) => {
   if (numbersWorkflow && Number(taskId) === NUMBERS_TASK) return NUMBERS_RESULT;
   const task = state["/api/tasks/detail"]?.[String(taskId)]?.task;
-  if (task?.SourceRef === "assistant:playbook") {
-    const text = "# Prepare updated item numbers\nwhen: someone requests the latest figures for an item\n"
-      + "uses: connected reporting source (read)\nsteps: identify the item and reporting period; gather the latest figures; compare with the previous period; draft a summary with sources\n"
-      + "alone: read connected sources and prepare a draft\nask first: sending the summary or changing source data\ndone when: the owner has reviewed the sourced summary\n";
+  if (task?.SourceRef === "assistant:skill") {
+    const text = "---\nname: prepare-updated-item-numbers\ndescription: Prepare updated numbers for an item. Use when someone requests the latest figures for an item.\n---\n"
+      + "# Prepare updated item numbers\n\n1. Identify the item and the reporting period.\n2. Gather the latest figures from the connected reporting source.\n"
+      + "3. Compare them with the previous period.\n4. Draft a summary with its sources for the owner's review.\n";
     const reviews = (state["/api/reviews"] ||= { data: [] }).data;
     let review = reviews.find((r) => r.TaskId === Number(taskId) && r.Kind === "action");
     if (!review) {
       review = { ReviewId: ++nextId, TaskId: Number(taskId), Kind: "action", Status: "pending", Title: task.Title,
-        DraftText: JSON.stringify({ action: "write_playbook", slug: "prepare-updated-item-numbers", text, why: "Scripted playbook setup example" }),
-        Reason: "Review the example playbook before saving it", CreatedAt: new Date().toISOString() };
+        DraftText: JSON.stringify({ action: "save_skill", slug: "prepare-updated-item-numbers", text, why: "Scripted skill setup example" }),
+        Reason: "Review the example skill before saving it", CreatedAt: new Date().toISOString() };
       reviews.unshift(review);
       state["/api/tasks/detail"][String(taskId)].reviews.push(review);
     }
-    const preview = text.replace(/^(when|uses|steps|alone|ask first|done when):/gm, "**$1:**").replaceAll("\n", "\n\n");
+    const preview = text.replace(/^---\n[\s\S]*?\n---\n/, "");
     return `Here is the scripted example draft. In your own Taskuary, your AI adapts it to your answers and connections.\n\n${preview}\nThe draft is on the task (rv${review.ReviewId}) for you to edit. Nothing is saved to your real workspace from this demo.`;
   }
   if (task?.SourceRef !== "assistant:dock") return REPLIES[assistantBox(taskId).messages.length % REPLIES.length];

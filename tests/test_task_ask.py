@@ -219,7 +219,7 @@ class ContractTests(unittest.TestCase):
         self.assertNotIn('WHATEVER ELSE YOU ANSWER', sys)
 
     def test_the_shape_is_the_last_thing_the_model_reads(self):
-        """Appended to the DOCUMENT, it was then buried under the soul, the evidence, the playbooks
+        """Appended to the DOCUMENT, it was then buried under the soul, the evidence, the skills
         and the repositories, while the document's own first line named a contract without title or
         summary. On a long forwarded mail the model answered that line and dropped both - three
         times in eight replays of TQ-0665 - and the card fell back to the raw body. The shape is not
@@ -230,7 +230,7 @@ class ContractTests(unittest.TestCase):
             return json.dumps({'intent': 'task', 'kind': 'coding', 'why': 'asks for a change'})
         triage.classify_intent({'subject': 'Re: Hosting', 'body': 'check back in'}, llm=fake, system=self.DOC,
                                soul='The owner runs IS at a care provider.', notes=['2026-09-01 - not ours'],
-                               playbooks='- pto: PTO requests')
+                               skills='- pto: PTO requests')
         # ...with one line under it: how little of the shape an answer needs, naming title and summary as never dropped (2026-11-11)
         self.assertTrue(seen['sys'].rstrip().endswith(triage.TASK_FIELDS.rstrip() + '\n\n' + triage.lean_out()), seen['sys'][-400:])
 

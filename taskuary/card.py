@@ -1,11 +1,11 @@
 """ONE CARD (the design review, change 6: "six kinds of 'waiting on him', each with its own told-back road"). Whatever waits on the owner - a
-reply or an email to Send, an act to Approve (a proposal, a post, a held step, a close-out, a playbook, a bulk batch), the agent's question, a
+reply or an email to Send, an act to Approve (a proposal, a post, a held step, a close-out, a skill, a bulk batch), the agent's question, a
 step handed to him on a page (a sign-in, his turn), the landing question, a stranger's Trust - is read here as ONE object:
 
     {id, task, kind, sort, state, verb, what, rids, at, decided, by, error, front}
 
 kind   send | approve | answer | on_page | land | trust          (what his press is: words that go, an act that runs, a fact, his hands, ...)
-sort   reply | email | calendar | post | act | held | closeout | playbook | question | signin | turn | land | trust
+sort   reply | email | calendar | post | act | held | closeout | skill | question | signin | turn | land | trust
 state  pending -> pressed (a send under way) -> handed (his press gave its act to the agent) -> done | failed | withdrawn | set_aside
 
 The rows stay where they live (review, worker_event, landing's record): this module only reads them, one function per question -
@@ -30,13 +30,13 @@ def _p(r) -> dict: return cq._p(r)
 
 def sort_of(r: dict) -> str:
     "A review row's card, finer than its kind: what the page draws it as."
-    from .proposals import CLOSEOUT, HELD_ACTS, PLAYBOOKS, is_post
+    from .proposals import CLOSEOUT, HELD_ACTS, SKILL, is_post
     if r.get('Kind') != 'action':
         try: own = json.loads(r.get('Deliver') or '{}') or {}
         except (TypeError, ValueError): own = {}
         return 'calendar' if isinstance(own, dict) and own.get('kind') == 'calendar' else 'email' if r.get('Kind') == 'slot' else 'reply'
     p = _p(r); a = p.get('action')
-    return ('closeout' if p.get('closeout') or a in CLOSEOUT else 'playbook' if a in PLAYBOOKS else 'held' if a in HELD_ACTS
+    return ('closeout' if p.get('closeout') or a in CLOSEOUT else 'skill' if a == SKILL else 'held' if a in HELD_ACTS
             else 'post' if is_post(p) else 'act')
 
 
@@ -182,7 +182,7 @@ def front_review(store, tid) -> dict:
 
 
 def pending(store, tid, sort: str) -> dict | None:
-    """The review row of the oldest card of `sort` ('closeout', 'playbook', 'held', 'act', 'post', ...; 'acts': any act to Approve) still
+    """The review row of the oldest card of `sort` ('closeout', 'skill', 'held', 'act', 'post', ...; 'acts': any act to Approve) still
     waiting for his press on task `tid`, in the line or out of it - None when none does."""
     if not tid: return None
     for r in store._rows("SELECT * FROM review WHERE TaskId=? AND Status='pending' ORDER BY ReviewId", (int(tid),)):

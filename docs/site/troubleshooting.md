@@ -155,7 +155,7 @@ altered" is not, and it names the rows.
 | A coding session's full transcript | the task page → the **Agent work** step → the session's **More → Every step** |
 | A finished session's written result | `~/.taskuary/artifacts/` |
 | The context an agent was handed | `~/.taskuary/context/` |
-| Playbooks | `~/.taskuary/playbooks/*.md` |
+| Skills | `~/.taskuary/skills/<name>/SKILL.md` |
 | Backups (the newest three copies) | `~/.taskuary/backups/` |
 
 Under Docker, all of it is `/data` inside the container. `TASKUARY_HOME` moves it anywhere.

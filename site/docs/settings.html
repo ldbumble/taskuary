@@ -57,7 +57,7 @@
 <div class="entry">
       <a class="page" href="./tasks-and-agents">Tasks and agents</a>
       <button class="chev" type="button" aria-expanded="false" aria-label="Show Tasks and agents's sections"></button>
-      <div class="secs" hidden><a class="sec" href="./tasks-and-agents#a-tasks-two-sections">A task's two sections</a><a class="sec" href="./tasks-and-agents#sending-work-to-an-agent">Sending work to an agent</a><a class="sec" href="./tasks-and-agents#a-general-task-is-one-chat">A general task is one chat</a><a class="sec" href="./tasks-and-agents#coding-agents-and-general-agents">Coding agents and general agents</a><a class="sec" href="./tasks-and-agents#sessions-and-transcripts">Sessions and transcripts</a><a class="sec" href="./tasks-and-agents#several-agents-in-one-repository">Several agents in one repository</a><a class="sec" href="./tasks-and-agents#checklists-and-closing">Checklists and closing</a><a class="sec" href="./tasks-and-agents#replies">Replies</a><a class="sec" href="./tasks-and-agents#brains-and-playbooks">Brains and playbooks</a><a class="sec" href="./tasks-and-agents#the-task-view-and-the-board">The task view and the Board</a><a class="sec" href="./tasks-and-agents#the-work-rail">The work rail</a><a class="sec" href="./tasks-and-agents#how-work-is-ordered">How work is ordered</a></div>
+      <div class="secs" hidden><a class="sec" href="./tasks-and-agents#a-tasks-two-sections">A task's two sections</a><a class="sec" href="./tasks-and-agents#sending-work-to-an-agent">Sending work to an agent</a><a class="sec" href="./tasks-and-agents#a-general-task-is-one-chat">A general task is one chat</a><a class="sec" href="./tasks-and-agents#coding-agents-and-general-agents">Coding agents and general agents</a><a class="sec" href="./tasks-and-agents#sessions-and-transcripts">Sessions and transcripts</a><a class="sec" href="./tasks-and-agents#several-agents-in-one-repository">Several agents in one repository</a><a class="sec" href="./tasks-and-agents#checklists-and-closing">Checklists and closing</a><a class="sec" href="./tasks-and-agents#replies">Replies</a><a class="sec" href="./tasks-and-agents#brains-and-skills">Brains and skills</a><a class="sec" href="./tasks-and-agents#the-task-view-and-the-board">The task view and the Board</a><a class="sec" href="./tasks-and-agents#the-work-rail">The work rail</a><a class="sec" href="./tasks-and-agents#how-work-is-ordered">How work is ordered</a></div>
     </div>
 <div class="entry">
       <a class="page" href="./security">Security</a>
@@ -77,7 +77,7 @@
 <div class="entry">
       <a class="page" href="./reports">Reports and the Advisor</a>
       <button class="chev" type="button" aria-expanded="false" aria-label="Show Reports and the Advisor's sections"></button>
-      <div class="secs" hidden><a class="sec" href="./reports#a-report-is-a-pipeline">A report is a pipeline</a><a class="sec" href="./reports#sources">Sources</a><a class="sec" href="./reports#letting-the-ai-write-the-source-cards">Letting the AI write the source cards</a><a class="sec" href="./reports#the-ai-pass">The AI pass</a><a class="sec" href="./reports#where-a-run-goes">Where a run goes</a><a class="sec" href="./reports#schedules">Schedules</a><a class="sec" href="./reports#the-advisor">The Advisor</a><a class="sec" href="./reports#routines">Routines</a><a class="sec" href="./reports#playbooks">Playbooks</a><a class="sec" href="./reports#stateful-routines">Stateful routines</a><a class="sec" href="./reports#sage-intacct-specifically">Sage Intacct, specifically</a><a class="sec" href="./reports#api">API</a></div>
+      <div class="secs" hidden><a class="sec" href="./reports#a-report-is-a-pipeline">A report is a pipeline</a><a class="sec" href="./reports#sources">Sources</a><a class="sec" href="./reports#letting-the-ai-write-the-source-cards">Letting the AI write the source cards</a><a class="sec" href="./reports#the-ai-pass">The AI pass</a><a class="sec" href="./reports#where-a-run-goes">Where a run goes</a><a class="sec" href="./reports#schedules">Schedules</a><a class="sec" href="./reports#the-advisor">The Advisor</a><a class="sec" href="./reports#routines">Routines</a><a class="sec" href="./reports#skills">Skills</a><a class="sec" href="./reports#stateful-routines">Stateful routines</a><a class="sec" href="./reports#sage-intacct-specifically">Sage Intacct, specifically</a><a class="sec" href="./reports#api">API</a></div>
     </div>
 <div class="entry">
       <a class="page" href="./advisor">The Advisor</a>
@@ -124,8 +124,8 @@ remember to update it.</p>
 </div><p>The other Settings pages are documented where their subject is: <strong>Mail rules</strong>
 (<a href="how-it-works#what-triage-actually-decides">the deterministic layer</a>), <strong>Activity log</strong> (shown in
 Developer mode), and <strong>Updates</strong> (<a href="index#updating">updating</a>). Who you are, your documents and your
-memory are on a page of their own, <strong>About you</strong>, behind your initials in the top right corner. Playbooks are
-on the <a href="reports#playbooks">Reports page</a>. What you work on, the list setup grouped your mail into, is on
+memory are on a page of their own, <strong>About you</strong>, behind your initials in the top right corner. Skills are
+on the <a href="reports#skills">Reports page</a>. What you work on, the list setup grouped your mail into, is on
 About you too, under <strong>You</strong>: rename one, tick <strong>Personal</strong>, or untick one to leave it out. Each change saves as you make it.</p>
 <h2 id="how-to-read-this">How to read this<a class="anchor" href="#how-to-read-this" aria-label="Link to this section">#</a></h2>
 <p>Each setting shows what it does, and its shipped default. A few notes that apply throughout:</p>
@@ -313,10 +313,10 @@ agent</strong> group is not shown and every job goes to a general agent - see
 <p>Options: <code>followup</code>, <code>promise</code>, <code>prep</code>, <code>cold</code>, <code>idea</code></p>
 <p>Switch a kind off and it never appears in a post again; lines already posted keep their actions and conversation. &#39;idea&#39; is the only one that needs an AI connector — the others are read straight off the hub&#39;s own tables and your calendar. With &#39;idea&#39; off no model is called at all: the facts post in the hub&#39;s own words.</p>
 <h2 id="agents">Agents<a class="anchor" href="#agents" aria-label="Link to this section">#</a></h2>
-<h3 id="use-playbooks">Use playbooks<a class="anchor" href="#use-playbooks" aria-label="Link to this section">#</a></h3>
+<h3 id="use-skills">Use skills<a class="anchor" href="#use-skills" aria-label="Link to this section">#</a></h3>
 <p><code>playbooks_enabled</code> · type: switch · default: on</p>
-<p>New mail is matched to your playbooks, and agents may suggest new ones.</p>
-<p>On: a message that fits a playbook that is switched on becomes a task worked from it, and a finished job that will come back is suggested as a new playbook for your approval. Off: none is matched or suggested; the playbooks stay under Reports → Playbooks, where each can also be switched off by itself.</p>
+<p>New mail is matched to your skills, and agents may suggest new ones.</p>
+<p>On: a message that fits a skill that is switched on becomes a task worked from it, and a finished job that will come back is suggested as a new skill for your approval. Off: none is matched or suggested; the skills stay under Reports → Skills, where each can also be switched off by itself.</p>
 <h3 id="auto-start-the-assistant-on-general-tasks">Auto-start the assistant on general tasks<a class="anchor" href="#auto-start-the-assistant-on-general-tasks" aria-label="Link to this section">#</a></h3>
 <p><code>general_auto_enabled</code> · type: switch · default: on</p>
 <p>Every new general task (research, a question to think through, a job with no keyboard) opens its own assistant session with the ask already put. Off: the task waits for you to open it.</p>

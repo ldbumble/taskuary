@@ -57,7 +57,7 @@
 <div class="entry">
       <a class="page" href="./tasks-and-agents">Tasks and agents</a>
       <button class="chev" type="button" aria-expanded="false" aria-label="Show Tasks and agents's sections"></button>
-      <div class="secs" hidden><a class="sec" href="./tasks-and-agents#a-tasks-two-sections">A task's two sections</a><a class="sec" href="./tasks-and-agents#sending-work-to-an-agent">Sending work to an agent</a><a class="sec" href="./tasks-and-agents#a-general-task-is-one-chat">A general task is one chat</a><a class="sec" href="./tasks-and-agents#coding-agents-and-general-agents">Coding agents and general agents</a><a class="sec" href="./tasks-and-agents#sessions-and-transcripts">Sessions and transcripts</a><a class="sec" href="./tasks-and-agents#several-agents-in-one-repository">Several agents in one repository</a><a class="sec" href="./tasks-and-agents#checklists-and-closing">Checklists and closing</a><a class="sec" href="./tasks-and-agents#replies">Replies</a><a class="sec" href="./tasks-and-agents#brains-and-playbooks">Brains and playbooks</a><a class="sec" href="./tasks-and-agents#the-task-view-and-the-board">The task view and the Board</a><a class="sec" href="./tasks-and-agents#the-work-rail">The work rail</a><a class="sec" href="./tasks-and-agents#how-work-is-ordered">How work is ordered</a></div>
+      <div class="secs" hidden><a class="sec" href="./tasks-and-agents#a-tasks-two-sections">A task's two sections</a><a class="sec" href="./tasks-and-agents#sending-work-to-an-agent">Sending work to an agent</a><a class="sec" href="./tasks-and-agents#a-general-task-is-one-chat">A general task is one chat</a><a class="sec" href="./tasks-and-agents#coding-agents-and-general-agents">Coding agents and general agents</a><a class="sec" href="./tasks-and-agents#sessions-and-transcripts">Sessions and transcripts</a><a class="sec" href="./tasks-and-agents#several-agents-in-one-repository">Several agents in one repository</a><a class="sec" href="./tasks-and-agents#checklists-and-closing">Checklists and closing</a><a class="sec" href="./tasks-and-agents#replies">Replies</a><a class="sec" href="./tasks-and-agents#brains-and-skills">Brains and skills</a><a class="sec" href="./tasks-and-agents#the-task-view-and-the-board">The task view and the Board</a><a class="sec" href="./tasks-and-agents#the-work-rail">The work rail</a><a class="sec" href="./tasks-and-agents#how-work-is-ordered">How work is ordered</a></div>
     </div>
 <div class="entry">
       <a class="page" href="./security">Security</a>
@@ -77,7 +77,7 @@
 <div class="entry on">
       <a class="page" href="./reports" aria-current="page">Reports and the Advisor</a>
       <button class="chev" type="button" aria-expanded="true" aria-label="Hide Reports and the Advisor's sections"></button>
-      <div class="secs"><a class="sec" href="#a-report-is-a-pipeline" data-sec="a-report-is-a-pipeline">A report is a pipeline</a><a class="sec" href="#sources" data-sec="sources">Sources</a><a class="sec" href="#letting-the-ai-write-the-source-cards" data-sec="letting-the-ai-write-the-source-cards">Letting the AI write the source cards</a><a class="sec" href="#the-ai-pass" data-sec="the-ai-pass">The AI pass</a><a class="sec" href="#where-a-run-goes" data-sec="where-a-run-goes">Where a run goes</a><a class="sec" href="#schedules" data-sec="schedules">Schedules</a><a class="sec" href="#the-advisor" data-sec="the-advisor">The Advisor</a><a class="sec" href="#routines" data-sec="routines">Routines</a><a class="sec" href="#playbooks" data-sec="playbooks">Playbooks</a><a class="sec" href="#stateful-routines" data-sec="stateful-routines">Stateful routines</a><a class="sec" href="#sage-intacct-specifically" data-sec="sage-intacct-specifically">Sage Intacct, specifically</a><a class="sec" href="#api" data-sec="api">API</a></div>
+      <div class="secs"><a class="sec" href="#a-report-is-a-pipeline" data-sec="a-report-is-a-pipeline">A report is a pipeline</a><a class="sec" href="#sources" data-sec="sources">Sources</a><a class="sec" href="#letting-the-ai-write-the-source-cards" data-sec="letting-the-ai-write-the-source-cards">Letting the AI write the source cards</a><a class="sec" href="#the-ai-pass" data-sec="the-ai-pass">The AI pass</a><a class="sec" href="#where-a-run-goes" data-sec="where-a-run-goes">Where a run goes</a><a class="sec" href="#schedules" data-sec="schedules">Schedules</a><a class="sec" href="#the-advisor" data-sec="the-advisor">The Advisor</a><a class="sec" href="#routines" data-sec="routines">Routines</a><a class="sec" href="#skills" data-sec="skills">Skills</a><a class="sec" href="#stateful-routines" data-sec="stateful-routines">Stateful routines</a><a class="sec" href="#sage-intacct-specifically" data-sec="sage-intacct-specifically">Sage Intacct, specifically</a><a class="sec" href="#api" data-sec="api">API</a></div>
     </div>
 <div class="entry">
       <a class="page" href="./advisor">The Advisor</a>
@@ -456,7 +456,7 @@ does not hold the next one back.</li>
 phone - in the header and under <strong>Came from</strong>, with a link back to the routine.</li>
 <li><strong>A mail can start it.</strong> Describe, in words, the mail that should start it under <strong>Start when a
 mail like this arrives</strong> (&quot;a vendor sends an invoice for something we ordered&quot;). Triage is shown
-every such routine beside your playbooks; when a mail is one, that routine runs and its run is
+every such routine beside your skills; when a mail is one, that routine runs and its run is
 the mail&#39;s task, with the mail filed on it. Its steps read the mail as <code>{{mail.from}}</code>,
 <code>{{mail.subject}}</code> and <code>{{mail.body}}</code> - as data, never pasted into a query. Approvals work as on
 any run. A routine that hands to an agent is not started by a sender who may not start one by
@@ -493,18 +493,40 @@ you; you read it in the editor before you save.</li>
 <strong>Save this as a routine</strong> card with the script shown whole. Approve saves it; nothing is saved
 or run before your press.</li>
 </ul>
-<h2 id="playbooks">Playbooks<a class="anchor" href="#playbooks" aria-label="Link to this section">#</a></h2>
-<p>The third shelf on the Reports page, beside Reports and Routines. A <strong>playbook</strong> is how this
-company does one kind of job - when it starts, which connections it uses, the steps, what an agent
-may do alone, what to ask first and what counts as done. Triage matches arriving mail to a
-playbook&#39;s <code>when</code> line, and the agent working that task is handed the playbook.</p>
+<h2 id="skills">Skills<a class="anchor" href="#skills" aria-label="Link to this section">#</a></h2>
+<p>The third shelf on the Reports page, beside Reports and Routines. A <strong>skill</strong> is how this
+company does one kind of job, written in your words. It is a folder with a <code>SKILL.md</code> in it - the
+same format Claude Code and other agents use: a <code>name</code>, a one-line <code>description</code> of what the job
+is and when to use it, then how it is done. Triage matches arriving mail to a skill by its
+description, every agent sees the names and descriptions of your skills, and reads one whole when
+it fits the job. However many you keep, triage and the agents are shown only each skill&#39;s name
+and a short description - 120 characters at most - the way tools are listed; the rest of a skill
+is read only by the agent that picks it. With more than one profile, a skill&#39;s row has a
+<strong>Profile</strong> picker: one profile&#39;s, or all profiles&#39;. A task or a mail is shown its own profile&#39;s
+skills and the ones left to all.</p>
+<p>A skill is something an agent reads, never a permission. Whatever one says, every send, post or
+change still waits for your press.</p>
+<p>Skills were called playbooks before. Yours were moved over the first time this version started,
+wording untouched; the old folder (<code>~/.taskuary/playbooks</code>) is still there as a backup.</p>
 <ul>
-<li><strong>New playbook</strong> builds one with AI from a past email or your own words - the draft appears in
+<li><strong>New skill</strong> builds one with AI from a past email or your own words - the draft appears in
 the conversation with its <strong>Approve</strong> - or opens the editor to write it by hand.</li>
-<li>When an agent finishes a kind of job that will recur and no playbook covers it, Taskuary
-proposes one on the task; approve it and the next mail like it is matched.</li>
-<li>Each playbook has an <strong>on/off switch</strong>: off keeps it, and triage stops matching it. Settings →
-How mail is sorted → <strong>Use playbooks</strong> turns them all off at once.</li>
+<li>The agent that did a kind of job can offer its skill itself: one card behind the send it
+follows - &quot;Make a skill for this kind of email, so the next agent can use it?&quot; - with the
+skill it drafted for you to read and edit. Approve saves it; nothing reads a finished task to
+draft one behind your back, and no task is reopened for one.</li>
+<li><strong>Export</strong> on a skill&#39;s row saves its folder as one zip - the file to send someone. It drops into
+Claude Code&#39;s or another agent&#39;s skills folder as it is.</li>
+<li><strong>Import</strong> takes a zip, a folder or a single <code>SKILL.md</code>. You see the whole text first, and one
+press saves it; it never replaces a skill you have (a name already taken comes in under a new
+one). Nothing in an imported skill runs, and nothing it says - &quot;send without asking&quot;, a list of
+allowed tools - lets an agent act without your press. It is marked <em>imported</em> on the shelf and
+to the agents.</li>
+<li>A routine can <strong>use a skill</strong>: its editor&#39;s <em>Uses skill</em> names one of yours, and the agent reads
+it on every run. The routine&#39;s own instructions - its script, or the words its AI steps work
+by - stay the routine&#39;s; the skill is a link, edited here, and its row says which routines use it.</li>
+<li>Each skill has an <strong>on/off switch</strong>: off keeps it, and triage stops matching it. Settings →
+How mail is sorted → <strong>Use skills</strong> turns them all off at once.</li>
 </ul>
 <h2 id="stateful-routines">Stateful routines<a class="anchor" href="#stateful-routines" aria-label="Link to this section">#</a></h2>
 <p><strong>Monthly Zoho invoices</strong> is the first routine on the Reports page that is not a query returning

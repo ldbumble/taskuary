@@ -68,7 +68,7 @@ def _rel(p) -> str:
     A path that tries to BE a root - absolute, UNC, or a drive switch - is refused here rather than
     quietly joined onto one, and so is any '..' segment. Backslashes are normalized because the
     owner will type the Windows path they see in Explorer and the agent will pass the posix one it
-    read in a playbook; refusing one of the two would be a trap, not a check.
+    read in a skill; refusing one of the two would be a trap, not a check.
     """
     s = str(p or '').strip().replace('\\', '/')
     if not s: return ''

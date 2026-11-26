@@ -797,17 +797,20 @@ def passed(rv: dict | None) -> bool:
     return bool(rv) and rv.get('Status') == 'superseded' and rv.get('DecideNote') in (SET_ASIDE, NOT_NEEDED, PAGE_LEFT)
 
 
-def finished_without(store, tid: int) -> list:
+def finished_without(store, tid: int, card: int = None) -> list:
     """A STEP HELD IN A TURN THAT THEN FINISHED THE JOB IS NOT LEFT LIT UNDER ITS ANSWER (the owner, 2026-11-16: a research turn's PDF read-back
     was held, it finished the report another way, and the Approve stood live under the complete answer). The turn's own word that its goal is
-    met and checked (its summary's nothing_left - no reading of it) greys the steps held in that same turn in place, with the true line. ->
-    the review ids."""
+    met and checked (its summary's nothing_left - no reading of it) greys the steps held in that same turn in place, with the true line.
+    AND A STEP HELD ON A CARD'S BROWSER ROAD ENDS WITH THAT ROAD (`card`, cardqueue.done - walk 24, 2026-11-25: a look at the page was held on
+    the way to a post, the agent went on without it, the post went up on its own Approve - and the look stayed pending on a card that read
+    "Posted", with no button anywhere and the task "waiting for your input" for good). -> the review ids."""
     from .shellgate import turn_of
     turn, out = turn_of(store, int(tid)), []
     for r in store._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action' AND Status='pending' AND DeliveryClaim IS NULL", (int(tid),)):
         try: p = json.loads(r.get('DraftText') or '{}') or {}
         except (TypeError, ValueError): p = {}
-        if isinstance(p, dict) and p.get('action') in HELD_ACTS and p.get('turn') == turn and store.decide_review(r['ReviewId'], 'superseded', None, 'taskuary', note=NOT_NEEDED):
+        if isinstance(p, dict) and p.get('action') in HELD_ACTS and (p.get('turn') == turn if card is None else p.get('card') == card) \
+                and store.decide_review(r['ReviewId'], 'superseded', None, 'taskuary', note=NOT_NEEDED):
             out.append(r['ReviewId'])
     if out: store.audit('task', tid, 'cards_passed', 'taskuary', 'system', {'rids': out, 'why': NOT_NEEDED})
     return out

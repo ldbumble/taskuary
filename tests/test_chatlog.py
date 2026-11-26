@@ -1041,3 +1041,28 @@ def test_a_card_raised_after_his_newest_line_stands_under_that_line_never_as_a_t
     was = where()
     s.decide_review(post, 'rejected', None, 'owner'); cardqueue._SEEN.clear(); chatlog.read(s, tid)
     assert where() == was and chatlog.live_card(s, tid)['review'] == mail
+
+
+def test_a_step_held_on_a_cards_road_that_the_agent_went_on_without_ends_with_the_card_nothing_stays_pending_with_no_button():
+    """Walk 24 (2026-11-25, the real Claude CLI): Post via the browser on the X card; on the way a look at the page was held, then the final
+    Post; the Post stood as the card's step, he approved it and the post went up - and the look stayed pending for good, a row of a card that
+    read "Posted": no button anywhere, and the task's header and rail said the agent waited on him. A step held on a card's road ends with
+    that road, with its one true line. Invented posts."""
+    from unittest import mock
+    from taskuary import cardqueue, conversation, general, proposals, taskstate
+    s, tid = world()
+    conversation.hear(s, tid, turn=True)
+    x = s.add_review({'TaskId': tid, 'Kind': 'action', 'Status': 'pending', 'Origin': 'agent', 'Reason': 'the post you asked for',
+                      'DraftText': json.dumps({'action': 'run_tool', 'type': 'x_post', 'text': 'We close the month in four days.'})})
+    s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'The post is set up.')
+    chatlog.read(s, tid)
+    with mock.patch.object(general, 'to_agent', return_value='woke'): assert proposals.via_browser(s, x, '')['ok']
+    hold = lambda what, **p: proposals.queue(s, tid, {'action': 'browser_act', 'sid': 's1', 'site': 'x.example', 'what': what, 'why': 'it is his to allow', **p}, 'agent')['reviewId']
+    look = hold('Run a script on the page', args=['eval', 'document.title'], command='agent-browser eval document.title')
+    post = hold('Publish your post on X', args=['click', '@e20'], command='agent-browser click @e20')
+    s.decide_review(post, 'approved', None, 'owner'); assert cardqueue.done(s, tid, 'Posted on x.example') == [x]; cardqueue._SEEN.clear()
+    rv = s.get_review(look)
+    assert proposals.passed(rv) and rv['DecideNote'] == proposals.NOT_NEEDED, 'the look it went on without is over with the card'
+    assert not s._rows("SELECT 1 AS x FROM review WHERE TaskId=? AND Status='pending'", (tid,)) and cardqueue.row_over(s, tid)
+    assert taskstate.standing(s, tid)['waits_on'] != 'you', 'nothing waits on him'
+    assert chatlog.live_card(s, tid) is None

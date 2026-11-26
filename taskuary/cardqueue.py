@@ -55,6 +55,8 @@ def done(store, tid: int, said: str) -> list:
     from . import card, ledger
     ledger.went(store, r['ReviewId'])                    # ...it went live: on the record (ledger.py), as an act its card ran is
     card.went(store, r)                                  # ...and the to-do it does is ticked, as any card's that went
+    from .proposals import finished_without
+    finished_without(store, tid, r['ReviewId'])          # ...and a step held on its road that it went without is over with it: nothing pending, no button
     return [r['ReviewId']]
 
 

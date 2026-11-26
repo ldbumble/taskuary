@@ -2,6 +2,12 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.4.6.3 - 2026-11-26
+
+- An availability view: who can make which times, the best slot worked out on the page
+- Accept and Decline on a calendar invite tell the calendar at the press
+- A view shown again moves from what it was; the availability scene starts by itself
+
 ## 0.4.6.2 - 2026-11-26
 
 - A later line that is work upgrades the fyi filed before it

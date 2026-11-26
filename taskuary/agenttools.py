@@ -364,7 +364,7 @@ SHORT = {
     'guide': "Read one of Taskuary's how-tos (browser, number, propose ...).",
     'run_system': "Run one tool on one of the owner's systems: {type, connector_id, ...its fields}.",
     'web_search': "Search the web through this task's AI card.",
-    'show': 'Charts (bar, line, pie), tables, number tiles, checklists in this chat, live with sliders, toggles, selects, dates, '
+    'show': 'Charts, tables, tiles, checklists, who is free when in this chat, live with sliders, toggles, dates, '
             'and choices whose pick comes back to you - or hands the owner files you made, one artifact a call.',
     'draw_image': "Draw a picture, a file of this task.",
     'tick': "Tick or untick a to-do (`item`: its id).",

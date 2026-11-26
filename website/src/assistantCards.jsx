@@ -24,6 +24,7 @@ import { ChannelIcon, DraftField, LinkedText, TaskuaryMark, channelColor, cleanT
 import { openAppLink } from "./appLinks.js";
 import { CardErr, failOf } from "./failure.jsx";
 import { press, sure } from "./press.js";
+import { hisText } from "./heldEdits.js";
 import { DASH, place } from "./words.js";
 import Dashboard from "./dashboard/Dashboard.jsx";
 import { snapshotOf } from "./dashboard/slice.js";
@@ -683,7 +684,8 @@ export function ReplyCard({ card, onDone, onSent, onOpenTask, onTimeline }) {
     if (co) return reviewText(rv);
     try { const p = JSON.parse(rv.DraftText || ""); return p.text || `${p.action}${p.why ? ` — ${p.why}` : ""}`; } catch { return rv?.DraftText || ""; }
   };
-  const value = text ?? draft();
+  // ...his own words where he typed any on this card elsewhere (heldEdits.js): never the draft under them
+  const value = text ?? (mate ? null : hisText(rv)) ?? draft();
   const stale = !!(rv?.Stale ?? card.stale);          // a raw review row's Stale is 0, which React would draw
   // a GitHub author is their login - their "address" is GitHub's own noreply mailbox, which nobody reads
   const onGithub = String(rv?.Channel || "").toLowerCase() === "github";

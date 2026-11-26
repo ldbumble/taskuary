@@ -331,6 +331,16 @@ def _ran(res) -> dict:
     return {'headline': str(head)[:200], **({'output': body[:2000]} if body or not isinstance(res, dict) else {}), **({'url': url} if url else {})}
 
 
+def left(rv: dict, final_text, fields: dict = None):
+    "The proposal as he pressed it, where that is not as it was filed (a press that failed keeps it as its FinalText) - None for one unchanged."
+    try: p = json.loads(rv.get('DraftText') or '{}')
+    except ValueError: return None
+    if p.get('action') not in ('run_tool', *CHANGES): return None
+    try: his = as_left(p, final_text, fields)
+    except ValueError: return None
+    return json.dumps(his, default=str) if his != p else None
+
+
 def receipt(rv: dict, final_text, out: dict, fields: dict = None) -> str:
     """What an approved proposal keeps as its FinalText: as proposed, with the owner's edit and what it did - so a post still says
     "Posted" and its link when the chat is read again."""

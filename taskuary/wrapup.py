@@ -589,9 +589,11 @@ def agent_reply(store, task_id: int, text: str, agent: str = 'agent', run_id: in
         store.decide_review(live['ReviewId'], 'closed_unsent', None, agent, note=REPLACED); live = None
     # ...AND THE OWNER'S HAND ON IT MAKES IT HIS (OWNER_SID): a new letter is never written over his edit or his readdress - his version is
     # closed as replaced, kept under Not sent, the new card goes to whom he chose, and the agent is told what he had left there
-    mine = next((r for r in (held, live) if r and r.get('DraftSid') == OWNER_SID and _words(r.get('DraftText')) != _words(text)), None)
+    # ...his words typed into its box and not pressed yet are that hand too (store.hold_review_edit): the card closed keeps them as its words
+    from .store import his_words as typed
+    mine = next((r for r in (held, live) if r and (typed(r) or r.get('DraftSid') == OWNER_SID) and _words(typed(r) or r.get('DraftText')) != _words(text)), None)
     if mine:
-        store.decide_review(mine['ReviewId'], 'closed_unsent', None, agent, note=REPLACED)
+        store.decide_review(mine['ReviewId'], 'closed_unsent', typed(mine) or None, agent, note=REPLACED)
         held, live = ({} if mine is held else held), (None if mine is live else live)
     why = f'{agent} wrote this reply in its session - approve to send'
     if sent:
@@ -654,7 +656,7 @@ def agent_reply(store, task_id: int, text: str, agent: str = 'agent', run_id: in
     att = _told(store, rid, attach_files(store, rid, files, agent))
     return {'ok': True, 'review_id': rid, 'message_id': mid, 'answers': ans or mid, 'to': m.get('FromName') or m.get('FromEmail') or '', **ends, **carries(store, rid),
             **({'owner_wrote_on_the_thread_while_you_worked': meanwhile} if meanwhile else {}),
-            **({'replaced_the_owners_version': str(mine.get('DraftText') or '')} if mine else {}),
+            **({'replaced_the_owners_version': str(typed(mine) or mine.get('DraftText') or '')} if mine else {}),
             **({'recipients': {'to': env.get('to') or [], 'cc': env.get('cc') or []}} if env else {}),
             **({'new_on_thread': new} if new else {}),
             **({'people': many} if len(many) > 1 else {}), **att}

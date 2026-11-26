@@ -9,6 +9,7 @@ import { Box, Typography } from "@mui/material";
 
 import api from "./api";
 import { press, sure } from "./press.js";
+import { hisText } from "./heldEdits.js";
 import { openReply, useDraftJob } from "./replyDraft.js";
 import { mono } from "./theme.jsx";
 import { cleanText } from "./ui.jsx";
@@ -134,7 +135,8 @@ function Draft({ item, busy, play }) {
   const action = rv.Kind === "action";
   const co = closeoutOf(rv);
   const parsed = () => { try { const p = JSON.parse(rv.DraftText || ""); return p.text || `${p.action}${p.why ? ` — ${p.why}` : ""}`; } catch { return rv.DraftText || ""; } };
-  const value = text ?? (action ? parsed() : rv.DraftText || "");
+  // ...his own words where he typed any on this card elsewhere (heldEdits.js): never the draft under them
+  const value = text ?? hisText(rv) ?? (action ? parsed() : rv.DraftText || "");
   const who = rv.FromName || rv.FromEmail || "them";
   const send = () => play("approve", item.key, async () => {
     return sure(await press(api, item.rid, { verb: "approve", final_text: action ? null : value }, action ? 2 : 1), "sent");      // the one press (press.js)

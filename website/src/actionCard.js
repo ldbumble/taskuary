@@ -64,6 +64,14 @@ export const isWords = (f) => !!f?.edit && f.type === "line";
 export const changed = (act, p, values) => Object.fromEntries((act?.fields || [])
   .filter((f) => f.edit && (f.type === "choice" || isWords(f)) && values && f.key in values && String(values[f.key] ?? "") !== String(p?.[f.key] ?? f.default ?? ""))
   .map((f) => [f.key, values[f.key]]));
+// THE PRESS SENDS WHAT THE CARD SHOWS (rule 2): the words in its box as he left them, the picks and lines he moved, against the proposal it
+// was drawn from (`shown`: one changed since does not run). His no carries none of it
+export const pressOf = (verb, act, p, text, values) => {
+  const moved = verb === "approve" ? changed(act, p, values) : {};
+  return { verb, final_text: verb === "approve" ? text : null, shown: p, ...(Object.keys(moved).length ? { fields: moved } : {}) };
+};
+// ...and the card reads what he pressed - his words, his picks - wherever the press ended: gone, or failed
+export const asLeft = (act, p, text, values) => ({ ...p, ...values, [textKey(act)]: text });
 // where the card stands: waiting on the press, gone with its words and link, or not gone (`live` false: a caller that only reads it)
 export const viaBrowserSaid = (network) => `Handed to the agent - it puts this up on ${network || "the site"} in the browser, and its Post waits for you`;
 export const stateOf = (row, live = true) => {

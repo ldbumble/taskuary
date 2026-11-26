@@ -4,14 +4,14 @@
 // action) renders through the same card: proposalPresentation() gives it its own title, its
 // destination and its own labels, and nothing is sent to a sender.
 import React, { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { heldEdit as editOf, holdEdit, onHeld } from "./heldEdits.js";
+import { seedEdit, holdEdit, onHeld, keepEdits, flushEdit, unsaved } from "./heldEdits.js";
 import { Alert, Box, Button, Typography, Menu, MenuItem } from "@mui/material";
 import api from "./api";
 import ReplyFiles from "./ReplyFiles.jsx";
 import { holdInView } from "./inView.js";
 import { filesPromised, filesShort } from "./replyFiles.js";
 import { outcomeOf, proposalFrom, proposalPresentation, receiptOf, resultOf, reviewStatusLabel, reviewText } from "./reviewProposal.js";
-import { actionFor, cardOf, changed, faceOf, fieldsOf, hasBox, headOf, lengthOf, pressable as actPressable, shownOf, stateOf, textKey, valuesOf, viaBrowserSaid, wordsOf } from "./actionCard.js";
+import { actionFor, asLeft, cardOf, changed, faceOf, fieldsOf, hasBox, headOf, lengthOf, pressable as actPressable, pressOf, shownOf, stateOf, textKey, valuesOf, viaBrowserSaid, wordsOf } from "./actionCard.js";
 import { asLive, MovedPast } from "./PassedCard.jsx";
 import { FileDialog } from "./PublishedPages.jsx";
 import { withoutSignature } from "./signature.js";
@@ -24,7 +24,7 @@ import { fmtDateTime } from "./dates.js";
 import { acted, announce, repeatClick, useLit, useVerbs } from "./actionRow.js";
 import { useFoldBar } from "./foldBar.js";
 import { hint as btnHint, label as btn } from "./buttons.js";
-import { boxText, editAfterRefile, useDraftJob } from "./replyDraft.js";
+import { boxText, editAfterRefile, heldWords, useDraftJob } from "./replyDraft.js";
 import ApprovalInterrupt from "./ApprovalInterrupt.jsx";
 import { interruptOf, resolveInterrupt } from "./approvalInterrupt.js";
 import { draftState, failureHead, failureWhy, replySendFailure, reviewDeliveryState, savedSendFailure, sendFix } from "./sendState.js";
@@ -96,8 +96,10 @@ export const InvoiceLine = ({ meta }) => (
 // ...and ONE DRAFT IN TWO PLACES reads the same in both (the agent's draft, 2026-11-02: Close out and the pop-up over the terminal): an edit in
 // either is told to the other card on the same draft, so a Send from either sends what the owner last typed
 // ...kept by the card's review, wherever it is drawn (heldEdits.js: one store for every card that takes his words)
-const heldEdit = (r) => editOf(r?.ReviewId, reviewText(r));
-const hold = (r, part) => holdEdit(r.ReviewId, reviewText(r), part);
+const heldEdit = (r) => seedEdit(r?.ReviewId, r?.OwnerEdit);
+const hold = (r, part) => holdEdit(r.ReviewId, part);
+// ...and on the server as he types (heldEdits.js): what is in a box is his there too, never written over
+keepEdits((id, edit) => api.post(`/api/reviews/${id}/held`, { edit }));
 // SEND AND CLOSE OUTLIVES THE PRESS (the owner, 2026-11-03): a send nobody could confirm comes back as Check delivery or Send anyway, and the
 // card may be drawn again meanwhile - which of Close out's two sends was pressed is held per draft, so the confirmed send still closes, or not
 const closing = new Set();
@@ -219,9 +221,13 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
     const w = was.current; was.current = { rid: r.ReviewId, filed };
     if (w.rid !== r.ReviewId) { const e = heldOf(r); setTextNow(e?.text ?? null); setCcNow(e?.cc ?? null); return; }
     if (w.filed === filed) return;
-    const keep = !!interrupt || compare?.reviewId === r.ReviewId;
-    if (keep && text != null) hold(r, { text });           // the owner's edit beside the refreshed draft stays theirs, held for the new one
-    setTextNow(editAfterRefile({ text, held: heldOf(r), keep }));
+    // ...BUT NEVER OVER WORDS HE TYPED (the owner, 2026-11-26): they stay in the box whatever is filed under them - the server writes no draft
+    // over words it holds for him, so a new draft here is one he asked for himself (Redraft, a rewrite: his words taken back there), or one
+    // filed in the moment before his keystrokes were saved, which keeps them
+    const keep = !!interrupt || compare?.reviewId === r.ReviewId || unsaved(r.ReviewId) || !!String(heldWords(r.OwnerEdit)).trim();
+    const now = editAfterRefile({ text, keep });
+    if (now == null && text != null) hold(r, { text: null });
+    setTextNow(now);
   }, [r.ReviewId, filed]);   // eslint-disable-line react-hooks/exhaustive-deps
   // A BLANK LEFT IN IT (the owner, 2026-10-30): Send pressed over a "[REASON]" says "Fill in [REASON] first" under the button, and the
   // line follows the box - it names what is still blank as the owner types, and is gone once nothing is
@@ -477,7 +483,8 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
     if (delivery.frozen || redrafting || repeatClick(no("redraft"), e)) return;
     announce(no("redraft"));
     setRedrafting(true);
-    try { await api.post(`/api/reviews/${r.ReviewId}/draft`); setText(null); onChanged?.(); }
+    // ...his own press for other words takes his back first (heldEdits.js): no draft is written over words he still holds
+    try { setText(null); await flushEdit(r.ReviewId); await api.post(`/api/reviews/${r.ReviewId}/draft`); onChanged?.(); }
     catch (e) { setErr(e?.response?.data?.detail || "Redraft failed"); }
     finally { acted(no("redraft")); setRedrafting(false); }
   };
@@ -841,16 +848,21 @@ export function ActReview({ row: was, tid, live = true, onChanged, past = false,
   const p = row?.post || {}, act = actionFor(p.type), st = stateOf(row, live), tk = textKey(act);
   // ...HIS WORDS AND PICKS ARE KEPT BY THE CARD'S REVIEW (heldEdits.js): drawn again elsewhere in the chat - set down under a later turn, a
   // tab come back to - the card reads them back, never the proposal's again. One moved past shows what it was filed with
-  const filed = row?.DraftText || JSON.stringify(p), kept = past ? null : editOf(row?.ReviewId, filed);
+  const kept = past ? null : seedEdit(row?.ReviewId, row?.OwnerEdit);
   const [text, setTextNow] = useState(kept?.text ?? String(p[tk] || "")), [vals, setValsNow] = useState(() => kept?.vals ?? valuesOf(act, p)), [copied, setCopied] = useState(false);
-  const setText = (v) => { if (!past) holdEdit(row.ReviewId, filed, { text: v }); setTextNow(v); };
-  const setVals = (f) => { const n = f(vals); if (!past) holdEdit(row.ReviewId, filed, { vals: n }); setValsNow(n); };
+  const setText = (v) => { if (!past) holdEdit(row.ReviewId, { text: v }); setTextNow(v); };
+  // ...his picks and lines are kept as the press sends them too (`fields`: only what he moved), so a press from another screen sends them
+  const setVals = (f) => { const n = f(vals), m = changed(act, p, n); if (!past) holdEdit(row.ReviewId, { vals: n, fields: Object.keys(m).length ? m : null }); setValsNow(n); };
+  // ...and one review drawn twice reads the same in both, as a reply's two cards do
+  useEffect(() => (past ? undefined : onHeld((id) => { const e = id === row?.ReviewId && seedEdit(id); if (e?.text != null) setTextNow(e.text); if (e?.vals) setValsNow(e.vals); })), [row?.ReviewId, past]);
   const [pressing, setBusy] = useState(""), [err, setErr] = useState(""), [viewing, setViewing] = useState(null), [setupAt, setSetupAt] = useState("");
   const done = answered && settled.mine && ["approved", "edited"].includes(settled.Status) ? settled : null;
   const busy = pressing || held;
   if (!act) return null;
   // ...gone by it, it reads what he pressed - his words, his picks - not the proposal's until the row comes back with them
-  const shown = done ? { ...p, ...vals, [tk]: text } : p, edit = !!st.live && !done && !busy;
+  // ...AND ONE HIS PRESS FAILED ON READS WHAT HE PRESSED TOO (the owner, 2026-11-26: a post he had edited failed and its card went back to the
+  // agent's words) - asLeft, until the row comes back with them (its FinalText, verdicts)
+  const shown = answered && settled.mine ? asLeft(act, p, text, vals) : p, edit = !!st.live && !done && !busy;
   const fs = fieldsOf(act, shown, !!st.live && !done), post = act.kind === "post", w = wordsOf(act, done || st.live ? vals : p);
   // ...EVERY POST CARRIES ITS PICTURE (the owner, 2026-11-20): one its network takes no upload for is shown all the same, to save and add by hand
   const img = fs.find((f) => f.type === "image" && f.value) || (p.image ? { key: "image", value: p.image, manual: true } : null);
@@ -862,7 +874,7 @@ export function ActReview({ row: was, tid, live = true, onChanged, past = false,
   const moved = changed(act, p, vals), edits = Object.keys(moved).length ? { fields: moved } : {};
   const decide = async (verb) => {
     setBusy(verb); setErr("");
-    const o = await press(api, row.ReviewId, { verb, final_text: verb === "approve" ? text : null, shown: p, ...(verb === "approve" ? edits : {}) }, 2);
+    const o = await press(api, row.ReviewId, pressOf(verb, act, p, text, vals), 2);
     const line = landed(o) || o.kind === "already" ? "" : failLine(o, post ? "posted" : "sent"), status = o.data?.status;
     if (status && status !== "pending") setSettled({ Status: status, ActError: line, url: o.data.result?.url || "", mine: o.kind !== "already" });
     else setErr(line);

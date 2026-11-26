@@ -2749,7 +2749,7 @@ def _assistant_payload(task_id: int, session=None):
         c = store.get_connector(int(p['connector_id'])) if str(p.get('connector_id') or '').isdigit() else None
         try: who = json.loads((c or {}).get('ConfigJson') or '{}').get('member_name') or ''
         except ValueError: who = ''
-        cards.append({**{k: r.get(k) for k in ('ReviewId', 'Status', 'CreatedAt', 'DecidedAt', 'Reason', 'ActError')}, 'post': p, 'after': at_turn(r.get('CreatedAt')),
+        cards.append({**{k: r.get(k) for k in ('ReviewId', 'Status', 'CreatedAt', 'DecidedAt', 'Reason', 'ActError', 'OwnerEdit')}, 'post': p, 'after': at_turn(r.get('CreatedAt')),
                       'network': _proposals.POSTS.get(p['type']) or (_cat.by_type(act['card']) or {}).get('title') or act['card'],
                       'as': who or (c or {}).get('Name') or '',
                       'connect': outbound.review_connect(store, r) if r.get('Status') == 'pending' else None})
@@ -4591,6 +4591,8 @@ def open_reply(mid: int, body: OpenReplyBody = None):
     if rv and rv.get('MessageId') != mid:
         draft = ''                    # a correct old draft is still wrong for a newer conversation
     if body is not None and body.redraft: draft = ''          # write it again over what is there
+    # ...his own ask for other words, so the ones he typed into the box are taken back with it (store.his_words_back)
+    if rv and body is not None and (body.redraft or (body.instruction or '').strip()): store.his_words_back(rid)
     # ...and so do the owner's own words for it: "reply to Marcus: yes, Thursday at 2 works" found the draft written before
     # and showed it unchanged - it said to check the calendar (2026-10-06)
     if body is not None and (body.instruction or '').strip():
@@ -5606,6 +5608,10 @@ def press_review(st, rid: int, body: DecideBody, background: BackgroundTasks = N
             # update - so the owner is interrupted with what arrived. Their own edit is kept for comparison, the
             # draft is refreshed from the current context, and the refreshed draft needs its own yes.
             yours = str(body.final_text or '').strip()
+            # ...AND STAY IN ITS BOX (the owner, 2026-11-26): the draft written for what arrived is offered beside them, never put over them
+            if yours and yours != str(rv.get('DraftText') or '').strip():
+                from .store import his_edit
+                st.hold_review_edit(rid, {**his_edit(rv), 'text': yours})
             if yours and yours != str(rv.get('DraftText') or '').strip() and rv.get('TaskId'):
                 st.add_comment(rv['TaskId'], ACTOR, 'human', f'Your edited reply, kept for comparison - the thread moved before it was sent:\n{yours[:4000]}')
             draft, kept = None, None
@@ -7951,6 +7957,7 @@ def draft_review(rid: int, body: DraftBody = None):
     if deliver.get('kind') == 'calendar': raise HTTPException(422, 'the note on a calendar answer is yours to write - or leave it empty')
     # THE OWNER'S WORDS FOR IT ARE KEPT on the review (the owner, 2026-10-23: a Redraft's instruction is stored and remembered)
     if body and (body.instruction or '').strip(): _keep_instruction(rid, body.instruction)
+    store.his_words_back(rid)                     # ...his own ask for other words: the ones he typed are taken back with it
     try:
         if rv.get('Kind') == 'slot':
             from . import outbox as ob
@@ -8041,6 +8048,16 @@ def _owners(rid: int):
     "The owner's hand is on this draft (an edit, a readdress, a file): theirs now, never held as an earlier agent session's (wrapup.stale_draft)."
     from .wrapup import OWNER_SID
     store.set_review_sid(rid, OWNER_SID)
+
+class HeldBody(BaseModel): edit: dict | None = None
+@app.post('/api/reviews/{rid}/held')
+def hold_review_edit(rid: int, body: HeldBody):
+    "What he has typed into a waiting card, kept as he types it (store.hold_review_edit) - nothing is decided or sent, and the draft stays as filed."
+    rv = store.get_review(rid)
+    if not rv: raise HTTPException(404, 'review not found')
+    ok = store.hold_review_edit(rid, body.edit)
+    if ok and body.edit and rv.get('Kind') != 'action': _owners(rid)
+    return {'ok': ok}
 
 @app.patch('/api/reviews/{rid}')
 def save_review_text(rid: int, body: TextBody):

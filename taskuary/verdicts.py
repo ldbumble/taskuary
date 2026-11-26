@@ -842,6 +842,13 @@ def _decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = N
     store.recover_review_deliveries(rv['ReviewId'])
     rv = store.get_review(rv['ReviewId']) or rv
     if rv.get('DeliveryClaim'): return _delivery_busy(store, rv['ReviewId'])
+    # A PRESS THAT CARRIES NO WORDS OF ITS OWN SENDS HIS (store.hold_review_edit): pressed on the rail, the phone or by the Assistant, a card he
+    # had edited on the task went as its agent wrote it. Never over a send already attempted, whose saved text is what is checked
+    from .store import his_edit
+    if verb_in in ('approve', 'edit') and rv.get('DeliveryState') not in ('unknown', 'sending') and (mine := his_edit(rv)):
+        if final_text is None: final_text = mine.get('text')
+        if rv.get('Kind') == 'action' and fields is None: fields = mine.get('fields') or mine.get('words') or ({'answers': mine['answers']} if mine.get('answers') else None)
+        cc, bcc, subject = (mine.get(k) if v is None else v for k, v in (('cc', cc), ('bcc', bcc), ('subject', subject)))
     # A CARD THE CONVERSATION MOVED PAST presses nothing, from any page or phone however stale (proposals.move_on, the owner 2026-11-10)
     from . import proposals
     # ...nor one it moved past that no agent has heard yet (written_past): greyed on every surface from the moment the input came
@@ -990,8 +997,10 @@ def _decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = N
                     # ...AND IS OVER (the owner, 2026-11-16: no Try again): what the agent set up failed and is its again - the card keeps
                     # the error, the agent is woken with it (decide) and sets up what goes next. A close-out is Taskuary's own, and a
                     # refusal before it ran (the owner's own edit, a switch off, ChecksRed) has its own way on: those still wait
+                    # ...WITH HIS WORDS ON IT (the owner, 2026-11-26: a post he had edited failed, and its card read as the agent wrote it):
+                    # what he pressed is what the card keeps, and what its agent is told failed (cardqueue._words)
                     if getattr(e, 'ran', False) and not isinstance(e, proposals.ChecksRed) and proposals._action(rv) not in proposals.CLOSEOUT:
-                        store.decide_review(rid, 'superseded', None, actor, proposals.FAILED_NOTE)
+                        store.decide_review(rid, 'superseded', proposals.left(rv, final, fields), actor, proposals.FAILED_NOTE)
                     return {'ok': False, 'status': (store.get_review(rid) or {}).get('Status') or 'pending', 'sent': None, 'send_error': str(e)[:300], 'act_failed': True,
                             **({'offers': e.offers, 'refused': True} if isinstance(e, proposals.ChecksRed) else {}),
                             # a grant the token lacks (github.Refused.needs): the owner's to add - a retry only repeats it

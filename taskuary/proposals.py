@@ -460,7 +460,8 @@ def validate(store, p: dict) -> tuple:
     # ...AND NO CARD STANDS OVER ITS NETWORK'S LIMIT (the owner's live task, 2026-11-25: an X post read "314 of 280" on his screen): its agent
     # is told the limit and its count, and shortens it before he sees it
     from .connectorcatalog import action_for, too_long
-    if a == 'run_tool' and (long := too_long(action_for(p.get('type')), p)): return False, long
+    from . import signatures
+    if a == 'run_tool' and (long := too_long(action_for(p.get('type')), p, signatures.post(store) if is_post(p) else '')): return False, long
     # NOTHING EMPTY IS PUT IN FRONT OF THE OWNER: a skill that could not be filed, or says nothing of how the job is done, is refused at
     # this one gate - the tool, a marker in the agent's words, the on-close question - and its writer is told what it lacks
     if a == SKILL:
@@ -609,6 +610,11 @@ def queue(store, task_id: int, p: dict, actor='agent', refused: list | None = No
         from . import workflows
         p, routine = workflows.change_of(store, task_id, p) if actor != 'workflow' else ({}, 'change_routine is an agent\'s ask')
         p = p or {'action': 'change_routine'}
+    # ...AND A POST ENDS WITH HIS SAVED POST SIGNATURE, put on here and never by its agent (signatures.post_signed): before the limit is counted,
+    # so the card that stands is within it. A routine's step is his own saved words, and goes as he saved it
+    if is_post(p) and actor != 'workflow':
+        from . import signatures
+        p = {**p, 'text': signatures.post_signed(store, p.get('text'))}
     ok, why = validate(store, p) if not routine else (False, routine)
     if ok and several: ok, why = False, several
     # ...and on an account of another profile it is the move card that goes up, never that account's own (workstreams.may_use, the one wall)

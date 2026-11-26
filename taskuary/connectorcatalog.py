@@ -173,13 +173,18 @@ def length(f: dict, text) -> int:
     "How long `text` is against field `f`'s `max`: its characters, each link as `link_counts` where the field declares it."
     t = str(text or '')
     return len(LINK.sub(lambda m: 'x' * int(f['link_counts']), t) if (f or {}).get('link_counts') else t)
-def too_long(act: dict, p: dict) -> str:
-    "'' when every limited field of `p` is within its network's limit, else what to shorten, with the limit and its count."
+def too_long(act: dict, p: dict, sig: str = '') -> str:
+    """'' when every limited field of `p` is within its network's limit, else what to shorten, with the limit and its count. `sig`: the
+    owner's saved post signature (signatures.post) - where the words end with it, how much of the count is his and what is left for the rest."""
     for f in (act or {}).get('fields') or []:
-        if f.get('max') and (n := length(f, (p or {}).get(f['key']))) > int(f['max']):
+        if f.get('max') and (n := length(f, t := (p or {}).get(f['key']))) > int(f['max']):
             who = (by_type(act.get('card')) or {}).get('title') or act.get('card') or 'This network'
             link = f", a link counting {f['link_counts']}" if f.get('link_counts') else ''
-            return f"{who} allows {f['max']} characters in a {str(f.get('label') or f['key']).lower()}{link}; this one is {n} - shorten it"
+            said = f"{who} allows {f['max']} characters in a {str(f.get('label') or f['key']).lower()}{link}; this one is {n}"
+            if not (sig and str(t).rstrip().endswith(sig)): return f'{said} - shorten it'
+            left = int(f['max']) - (own := length(f, sig)) - 2            # ...the blank line between the words and it
+            if left < 1: return f"{said}, and the owner's saved post signature alone is {own} - it does not fit on {who} until he shortens it in Settings"
+            return f"{said}, {own} of them the owner's saved post signature, which Taskuary puts under every post - shorten the words above it to {left} or fewer"
     return ''
 # A FIELD AS ITS CARD SAYS IT (the card gallery, 2026-11-25: a QuickBooks bill read "Write quickbooks bill on QuickBooks Online", "amount: 200" and
 # "vendor: Payworth (id 58)" in one box): money in its unit ("$200.00"), a thing the system runs on an id by its name with the id beside it,

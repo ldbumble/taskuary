@@ -1014,6 +1014,8 @@ DEFAULT_SETTINGS = {'attach_threshold': '0.42',
                     'email_signature': '',
                     # that signature under every email Taskuary prepares - drafts, the owner's own typed replies, forwards (signatures.py)
                     'sign_replies': '1',
+                    # the owner's own footer under every post an agent sets up, exactly as saved (signatures.post_signed) - blank: none
+                    'post_signature': '',
                     # watch the CI of a task's pull request and hand red builds back to the
                     # agent that wrote the code: off | watch (status only) | feedback
                     'ci_watch': 'off',

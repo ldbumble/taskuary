@@ -214,6 +214,27 @@ def move_cards(store) -> int:
     return len(rows)
 
 
+# ── the skills a home starts with ────────────────────────────────────────────────────────────────────────────────────────────────
+# A FEW EVERYDAY JOBS, WRITTEN ONCE (the owner, 2026-11-26: "did you seed with a few skills and one that includes interview"): a website, a
+# document, a spreadsheet, slides, charts, research - shipped beside the code and filed into his library like any skill of his, his to edit,
+# switch off or delete. A context for the agent that picks one, as every skill is - never a permission
+STARTERS, SEEDED = Path(__file__).parent / 'starter_skills', '_seeded.json'
+
+
+def seed() -> list:
+    """Each starter skill filed into this home's library ONCE - the names it filed. A name already offered here (SEEDED) is never offered
+    again, so one he deleted stays gone and one he rewrote stays his; a folder of that name already there - his own, an imported one - is
+    never touched. A home from before them gets each it has no skill named for, at its next start."""
+    d, had, went = folder(), set(_json(SEEDED, [])), []
+    names = sorted(p.parent.name for p in STARTERS.glob(f'*/{FILE}'))
+    for s in names:
+        if s in had or (d / s).exists(): continue
+        (d / s).mkdir(parents=True); shutil.copyfile(STARTERS / s / FILE, d / s / FILE); went.append(s)
+    if set(names) - had: _save(SEEDED, sorted(had | set(names)))
+    if went: logger.info(f"skills: {len(went)} starter skill(s) filed - {', '.join(went)}")
+    return went
+
+
 # DELETE IS AT ONCE, AND RECOVERABLE (the owner, 2026-10-21: no "are you sure" on an action). The folder stays where it is and a
 # stamp beside it says when it was deleted: triage, the shelf and the cards stop seeing it, Recently deleted lists it, and Restore
 # drops the stamp - the words, the on/off switch and the shelf order (its mtime) come back exactly. KEEP_DAYS later purge() removes it.

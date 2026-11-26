@@ -335,6 +335,9 @@ def then_of(c) -> str:
 # record, never by reading the words for meaning: a `then` naming the to-do this card does (`todo`, which its press ticks - went) wakes nobody
 def carries_on(c, store=None) -> bool:
     "Whether his confirmed press on card `c` (a review row, or the landing question's proposal) wakes its agent for a next act of its own."
+    # ...HIS ANSWERS TO ITS QUESTIONS ARE ITS TO GO ON WITH (locked rule 4: his answer reaches the agent once) - a questions card names no `then`
+    from .proposals import ASKS
+    if (c or {}).get('Kind') == 'action' and _p(c).get('action') == ASKS: return True
     if not (then := then_of(c).casefold()): return False
     if store is None or not (c or {}).get('ReviewId'): return True
     own = [i for i in store.task_checklist(int(c['TaskId'])) if i['id'] in _todos(store, c['ReviewId'])]

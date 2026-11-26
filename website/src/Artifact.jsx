@@ -33,7 +33,7 @@ export default function Artifact({ as = "div", label = null, press = null, wide 
 // `fields`: [{key, type, label, value, editable, onChange, ...}] in the order they read; type `line` (a line of words: a subject, a title),
 // `heading` (a bold title line), `text` (the words: a body, a post, a comment), `choice` (a pick, on the line under the label), `to` and `people`
 // (an email's recipients), `read` (a fact it goes by: where it goes), `picture` (one picture, once - the one-item rule), `change` (new words for
-// old: the new text whole, marked where it changes against `was`).
+// old: the new text whole, marked where it changes against `was`), `ask` (one of the agent's questions: a pick and a line to answer in).
 // `press`: [{id, label, tone: p | s | q | x, run, disabled, title, spin, hidden, attrs}] - p the press named by what it does, s the others, q a
 // quiet one (Dismiss), x a no in red. `after`: {mark, label, line, link: {href, text}} - what the press did. `items`: a bulk card's rows.
 export function ReviewCard({ id = "", kind = "", state = "waiting", label: title = null, face = "", fields = [], files = null, before = null, press = [],
@@ -180,9 +180,24 @@ function Change({ f }) {
   </Box>;
 }
 
+// ...ONE OF THE AGENT'S QUESTIONS (questionsCard.js): the question, a pick where it gave choices - pressed again it is let go - and a line to
+// type his own answer in; once the card is pressed, what he answered, read-only where it stood
+export const Ask = ({ f }) => (
+  <Box data-tq-ask={f.key} sx={{ mb: 1.25 }}>
+    <Typography component="div" data-tq-ask-question="" sx={{ fontSize: 13, fontWeight: 600, color: INK, lineHeight: 1.4, mb: 0.5, overflowWrap: "anywhere" }}>{f.label}</Typography>
+    {!f.editable ? <Typography data-tq-ask-answer="" sx={{ fontSize: 13, lineHeight: 1.5, color: f.value ? INK : FAINT, whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{f.value || "No answer"}</Typography> : <>
+      {(f.choices || []).length > 0 && <Box role="group" aria-label={f.label} sx={{ display: "flex", flexWrap: "wrap", gap: 0.75, mb: 0.5 }}>
+        {f.choices.map((c) => <Button key={c} size="small" disableElevation variant={f.value === c ? "contained" : "outlined"} aria-pressed={f.value === c} data-tq-ask-choice={c}
+          onClick={() => f.onChange(f.value === c ? "" : c)} sx={{ textTransform: "none", minWidth: 0, maxWidth: "100%", textAlign: "left" }}>{c}</Button>)}</Box>}
+      <OneLine f={{ ...f, value: (f.choices || []).includes(f.value) ? "" : f.value }} data-tq-ask-line={f.key} placeholder={(f.choices || []).length ? "Or write your own" : "Your answer"}
+        sx={{ ...FOCUS_RING, width: "100%", borderBottom: "1px dashed var(--tq-border, #d9e0d6)", fontSize: 13, color: INK, py: 0.25, "&:focus": { borderBottomColor: "var(--tq-border-strong, #6f8a6e)" } }} /></>}
+  </Box>
+);
+
 function Field({ f, onView }) {
   const [open, setOpen] = useState(false);
   if (f.type === "change") return <Change f={f} />;
+  if (f.type === "ask") return <Ask f={f} />;
   if (f.type === "to") return <Box data-tq-to-line="" sx={{ display: "flex", alignItems: "baseline", columnGap: 2, flexWrap: "wrap" }}>
     <ToRow to={f.value} disabled={!f.editable} needs={!!f.needs} who={f.who || ""} onSave={f.onSave} />{f.trail}</Box>;
   if (f.type === "people") return f.editable ? <CcRow cc={f.value} setCc={f.onChange} channel="email" label={f.label} autoOpen={!!f.autoOpen} onClose={f.onClose} />

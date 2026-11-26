@@ -34,7 +34,8 @@ function AboutWorkstreams() {
   const change = (v) => { setText(v); setMsg(""); clearTimeout(timer.current); timer.current = setTimeout(() => save(v), 700); };
   return (
     <Box data-tq-about-workstreams="" sx={{ mb: 3 }}>
-      <Typography sx={{ fontSize: 11.5, color: FAINT, mb: 1 }}>What you work on</Typography>
+      {/* ...with two kept they are his PROFILES, each with its own accounts, job section and what was learned under it (2026-11-26) */}
+      <Typography sx={{ fontSize: 11.5, color: FAINT, mb: 1 }}>{parseWorkstreams(text).filter((r) => r.kept && r.keep !== false).length > 1 ? "Your profiles" : "What you work on"}</Typography>
       {!d ? <CircularProgress size={16} /> : <WorkstreamsSection d={d} text={text} onChange={change} heading={false}
         later="What you work on is still being read from your mail - it fills in on its own." />}
       {msg && <Typography variant="caption" sx={{ color: msg === "Saved" ? FAINT : "var(--tq-danger, #6b2733)", display: "block", mt: 0.5 }}>{msg}</Typography>}

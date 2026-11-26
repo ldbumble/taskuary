@@ -539,3 +539,68 @@ class ARunOfHisReportIsAskedOnOneCard(unittest.TestCase):
             proposals.execute(s, rv, 'owner')
         run.assert_called_once_with(sid, by='owner')
         self.assertEqual(c.post(f'/api/reports/{sid}/rerun', headers=agent()).status_code, 403)       # ...on no task of its own: no card
+
+
+class ACallOnAnotherProfilesAccountIsTheMoveCard(unittest.TestCase):
+    """PROFILES (the owner, 2026-11-26): Alex Doyle works at Northwind and runs Harbor Bakery. A connection tagged to Harbor Bakery is
+    used by a Harbor task's agent alone; a Northwind agent's call on it runs nothing and is never a flat no - one card, "Move this task
+    to Harbor Bakery", whose press moves it. An untagged connection serves both, and with one profile there is no wall at all."""
+    def setUp(self):
+        from taskuary import workstreams as W
+        s, self.W = server.store, W
+        self.was = s.get_setting(W.KEY)
+        W.save(s, [{'name': 'Northwind'}, {'name': 'Harbor Bakery'}])
+        self.tid = s.create_task({'Title': 'Close the Northwind quarter', 'Kind': 'general', 'Status': 'open'}, 'owner')
+        self.bakery = s.create_task({'Title': 'Order flour for Harbor Bakery', 'Kind': 'general', 'Status': 'open'}, 'owner')
+        W.set_task(s, self.tid, 'northwind', 'owner'); W.set_task(s, self.bakery, 'harbor-bakery', 'owner')
+        self.card = s.get_connector_by_type('linkedin')
+        s.save_connector({'ConnectorId': self.card['ConnectorId'], 'Active': 1, 'Roles': 'tool'}, 'test')
+        W.tag_account(s, 'harbor-bakery', connector_id=self.card['ConnectorId'])
+        self.ran = []
+        me = lambda cfg: self.ran.append(cfg) or {'rows': [{'name': 'Harbor Bakery'}], 'columns': ['name']}
+        self.patch = mock.patch.dict(REGISTRY, {'linkedin_me': me, 'linkedin_post': lambda cfg: self.ran.append(cfg) or ('posted', 'urn:li:share:1')})
+        self.patch.start()
+
+    def tearDown(self):
+        self.patch.stop()
+        s = server.store
+        self.W.tag_account(s, '', connector_id=self.card['ConnectorId'])
+        s.save_connector({'ConnectorId': self.card['ConnectorId'], 'Active': 0}, 'test')
+        s.set_setting(self.W.KEY, self.was or '', 'test')
+
+    def read(self, tid): return c.post('/api/tools/run', headers=agent(tid), json={'task_id': tid, 'type': 'linkedin_me'})
+
+    def test_nothing_runs_one_card_goes_up_and_his_press_moves_the_task(self):
+        s = server.store
+        r = self.read(self.tid)
+        self.assertEqual(r.status_code, 202, r.text)
+        j = r.json()
+        self.assertEqual(self.ran, [])                                   # the account was never called
+        self.assertIn('Harbor Bakery', j['says']); self.assertIn('Northwind', j['says']); self.assertIn('nothing was run', j['says'])
+        rv = s.get_review(j['review'])
+        p = json.loads(rv['DraftText'])
+        self.assertEqual((rv['TaskId'], rv['Status'], p['action'], p['profile']), (self.tid, 'pending', 'move_profile', 'harbor-bakery'))
+        self.assertTrue(card.then_of(rv))                                # his press wakes the agent to make its call
+        # ...a second call, and a write through the propose door, stand behind the same card: never a pile, never the account's own card
+        self.assertEqual(self.read(self.tid).json()['review'], j['review'])
+        w = c.post('/api/tools/run', headers=agent(self.tid), json={'task_id': self.tid, 'type': 'linkedin_post', 'text': 'Fresh loaves.'})
+        self.assertEqual((w.status_code, w.json()['review']), (202, j['review']))
+        self.assertEqual(self.ran, [])
+        # ...his press is the move, and the same call then runs
+        proposals.execute(s, rv, 'owner')
+        self.assertEqual(s.get_task(self.tid)['Workstream'], 'harbor-bakery')
+        self.assertTrue(self.read(self.tid).json()['ok']); self.assertEqual(len(self.ran), 1)
+
+    def test_its_own_profiles_agent_an_untagged_account_and_the_owner_are_never_stopped(self):
+        self.assertTrue(self.read(self.bakery).json()['ok'])             # Harbor's own task
+        self.assertTrue(c.post('/api/tools/run', headers=owner(), json={'type': 'linkedin_me'}).json()['ok'])      # his own call is his
+        self.W.tag_account(server.store, '', connector_id=self.card['ConnectorId'])
+        self.assertTrue(self.read(self.tid).json()['ok'])                # untagged: every profile's
+        self.assertEqual(len(self.ran), 3)
+
+    def test_with_one_profile_there_is_no_wall(self):
+        self.W.save(server.store, [{'name': 'Northwind'}])
+        self.assertTrue(self.read(self.tid).json()['ok']); self.assertEqual(len(self.ran), 1)
+
+    def test_no_agent_may_raise_the_move_itself(self):
+        self.assertIn('move_profile', proposals.NOT_ASKED)

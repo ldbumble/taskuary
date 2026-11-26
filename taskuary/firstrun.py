@@ -976,8 +976,10 @@ def workstreams_page(store) -> dict:
     from . import workstreams as W, wsboot
     st = (_JOB.get(store) or {}).get('workstreams') or {}
     if st.get('state') in ('running', 'failed'): return {'state': st['state'], 'why': st.get('why') or '', 'text': ''}
-    rows = [{'slug': w['slug'], 'name': w['name'], 'about': w['about'], 'personal': w['personal'], 'section': _sec(W.section(store, w['slug'])), 'kept': True}
-            for w in W.streams(store)]
+    # ...each profile with what is its own, once there are two (the owner, 2026-11-26): its accounts and what was learned under it
+    own = lambda w: {'accounts': W.accounts(store, w['slug']), 'memories': W.memories(store, w['slug'])} if W.shown(store) else {}
+    rows = [{'slug': w['slug'], 'name': w['name'], 'about': w['about'], 'personal': w['personal'], 'section': _sec(W.section(store, w['slug'])), 'kept': True,
+             **own(w)} for w in W.streams(store)]
     rows += [{**{k: p[k] for k in ('slug', 'name', 'about', 'personal', 'section')}, 'kept': False, 'keep': False} for p in wsboot.proposals(store)]
     return {'state': 'ready' if rows else 'none', 'why': '', 'text': json.dumps(rows) if rows else ''}
 

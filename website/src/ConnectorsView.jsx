@@ -45,6 +45,7 @@ import { isPollField, pollSecondsField } from "./pollFields.js";
 import { githubInboundValue } from "./githubInbound.js";
 import { ALWAYS, ENDS, HI, LO, MARKS, SAYS, clampLevel, combines, defaultLevel, kindOf } from "./combineLevel.js";
 import { useSaveNote } from "./SaveNote.jsx";
+import { AccountProfile } from "./Workstream.jsx";
 import { plainError } from "./apiError.js";
 import { namesRestart, pairAgain, restartBridge, startBridge } from "./waBridge.js";
 import { waLine, waPair } from "./waStatus.js";
@@ -3138,7 +3139,7 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
     {/* a box left saves what its typing was waiting to save */}
     <Box sx={{ maxWidth: 980, mx: "auto" }} onBlur={draft.flush}>
       {note}
-      <Crumb section="Connections" onBack={onBack} title={conn.Name} />
+      <Crumb section="Connections" onBack={onBack} title={conn.Name} /><AccountProfile conn={conn} reload={reload} />
       <ConnectorIdentity conn={conn} reload={reload} onCreated={onCreated} />
       {MS_ACCESS.includes(conn.Type) && <MsAccess conn={conn} />}
       {/* WhatsApp has no agent box: there is nothing for an agent to do that the pairing box does not do
@@ -3203,7 +3204,7 @@ function MssqlDetail({ conn, reload, onBack, onCreated }) {
   if (!conn) return null;
   return (
     <Box sx={{ maxWidth: 980, mx: "auto" }}>
-      <Crumb section="Connections" onBack={onBack} title={conn.Name} />
+      <Crumb section="Connections" onBack={onBack} title={conn.Name} /><AccountProfile conn={conn} reload={reload} />
       <ConnectorIdentity conn={conn} reload={reload} onCreated={onCreated} />
       <Typography variant="body2" sx={{ color: DIM, mb: 1.5 }}>
         The connection only — build the scheduled reports (query + AI summary) under Reports.
@@ -3286,7 +3287,7 @@ function MssqlConnection({ conn, drivers, reload }) {
 function ReasonDetail({ conn, reload, onBack, onCreated }) {
   return (
     <Box sx={{ maxWidth: 980, mx: "auto" }}>
-      <Crumb section="Connections" onBack={onBack} title={conn.Name} />
+      <Crumb section="Connections" onBack={onBack} title={conn.Name} /><AccountProfile conn={conn} reload={reload} />
       <ConnectorIdentity conn={conn} reload={reload} onCreated={onCreated} />
       <ReasonPanel conn={conn} reload={reload} />
       <CardPlaybooks type={conn.Type} />
@@ -3314,7 +3315,7 @@ function DesktopDetail({ conn: savedConn, reload, onBack, onCreated }) {
   };
   return (
     <Box sx={{ maxWidth: 980, mx: "auto" }}>
-      <Crumb section="Connections" onBack={onBack} title={conn.Name} />
+      <Crumb section="Connections" onBack={onBack} title={conn.Name} /><AccountProfile conn={conn} reload={reload} />
       <ConnectorIdentity conn={conn} reload={reload} onCreated={onCreated} />
       <Typography variant="body2" sx={{ color: DIM, mb: 1.5, maxWidth: 720 }}>
         Your agents read and operate the desktop apps on this computer through their accessibility tree - the list of buttons
@@ -3390,7 +3391,7 @@ function AgentToolDetail({ conn, reload, onBack, onCreated }) {
   const name = { claude: "Claude Code", codex: "Codex" };
   return (
     <Box sx={{ maxWidth: 980, mx: "auto" }}>
-      <Crumb section="Connections" onBack={onBack} title={conn.Name} />
+      <Crumb section="Connections" onBack={onBack} title={conn.Name} /><AccountProfile conn={conn} reload={reload} />
       <ConnectorIdentity conn={conn} reload={reload} onCreated={onCreated} />
       <Typography variant="body2" sx={{ color: DIM, mb: 1.5, maxWidth: 720 }}>{CATALOGUE.find((c) => c.type === conn.Type)?.desc}</Typography>
       {st?.url && <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 1 }}>MCP server <code>{st.url}</code>
@@ -3437,7 +3438,7 @@ function WinrmDetail({ conn, reload, onBack, onCreated }) {
 
   return (
     <Box sx={{ maxWidth: 980, mx: "auto" }}>
-      <Crumb section="Connections" onBack={onBack} title={conn.Name} />
+      <Crumb section="Connections" onBack={onBack} title={conn.Name} /><AccountProfile conn={conn} reload={reload} />
       <ConnectorIdentity conn={conn} reload={reload} onCreated={onCreated} />
       <Typography variant="body2" sx={{ color: DIM, mb: 1.5 }}>
         Run PowerShell ON a machine you can RDP into (your Windows credentials) — the connection only;
@@ -3831,7 +3832,7 @@ function DataDetail({ conn: savedConn, meta, sources: savedSources = [], reload,
   return (
     <DraftProvider value={draft.ctx}>
     <Box sx={{ maxWidth: 980, mx: "auto" }} onBlur={draft.flush}>
-      <Crumb section="Connections" onBack={onBack} title={conn.Name} />
+      <Crumb section="Connections" onBack={onBack} title={conn.Name} /><AccountProfile conn={conn} reload={reload} />
       <ConnectorIdentity conn={conn} reload={reload} onCreated={onCreated} />
       {MS_ACCESS.includes(conn.Type) && <MsAccess conn={conn} />}
       <Typography variant="body2" sx={{ color: DIM, mb: 1.5 }}>

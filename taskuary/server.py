@@ -3661,8 +3661,19 @@ class WorkstreamBody(BaseModel):
 
 @app.get('/api/workstreams')
 def list_workstreams():
-    """The owner's workstreams, for the task's picker and the labels (workstreams.py). Proposed ones are the Advisor's cards, not here."""
-    return {'data': [{k: w[k] for k in ('slug', 'name', 'about', 'personal', 'status')} for w in hub_ws.streams(store)]}
+    """The owner's profiles, for the task's picker, the labels and a connection card's picker (workstreams.py). Proposed ones are the
+    Advisor's cards, not here."""
+    return {'data': [{k: w[k] for k in ('slug', 'name', 'about', 'personal', 'status')} for w in hub_ws.shown(store)]}
+
+
+class AccountProfileBody(BaseModel):
+    workstream: str = ''; source_id: int | None = None
+
+@app.put('/api/connectors/{cid}/workstream')
+def set_account_workstream(cid: int, body: AccountProfileBody):
+    """The Profile picker on a connection card (the owner, 2026-11-26): this account is one profile's, or every profile's ('')."""
+    try: return hub_ws.tag_account(store, body.workstream, connector_id=cid, source_id=body.source_id, actor=ACTOR)
+    except ValueError as e: raise HTTPException(422, str(e))
 
 
 class WorkstreamsAnswerBody(BaseModel):
@@ -6066,7 +6077,7 @@ def agent_messages(request: Request, task_id: int, sender: str = '', subject: st
     """`taskuary --search` from an agent's own shell: the owner's mail and messages by sender, subject, words and date (mailsearch)."""
     from . import mailsearch, search
     _owner_history(request, task_id)
-    try: hits = mailsearch.search(store, sender, subject, words, since, until, limit)
+    try: hits = mailsearch.search(store, sender, subject, words, since, until, limit, tid=task_id)
     except ValueError as e: raise HTTPException(422, str(e))
     # ...and what earlier tasks settled on those words (search.outcomes): the CLI's one search reads both, so it asks the owner neither
     done = search.outcomes(store, f'{subject} {words}', skip=task_id) if (words or subject).strip() else []
@@ -6083,7 +6094,11 @@ def agent_message(mid: str, request: Request, task_id: int):
         # ...but never a stranger's words: a stranger's session is refused this door outright (guard.stranger_denied), so whoever asks here
         # runs full (agenttools.UNVOUCHED)
         if agenttools.unvouched(store, task_id, {'id': n}): raise HTTPException(403, agenttools.UNVOUCHED)
-    else: _owner_history(request, task_id)
+    else:
+        _owner_history(request, task_id)
+        raw = store.get_message(n) or {}                                           # ...and never mail in an account of another profile
+        if (mv := hub_ws.move_card(store, task_id, raw.get('SourceName'), f'read message m{n}', raw.get('Channel') or 'email')):
+            raise HTTPException(403, mv['says'])
     m = mailsearch.message(store, n)
     if not m: raise HTTPException(404, agenttools.no_message(n))
     return m
@@ -6674,8 +6689,8 @@ def agent_propose(body: AgentProposeBody, request: Request):
     except ValueError as e: raise HTTPException(422, str(e))
     q = proposals.queue(store, body.task_id, p, 'agent', refused=(miss := []))
     if not q: raise HTTPException(422, proposals.refusal_line(miss[0] if miss else ''))
-    return {'ok': True, 'queued': True, 'review': q['reviewId'], 'says': "A card already asks this and waits on the owner's press - no second card."
-            if q.get('already') else "Waiting on the owner's press - nothing happens until they approve it."}
+    return {'ok': True, 'queued': True, 'review': q['reviewId'], 'says': q.get('says') or ("A card already asks this and waits on the owner's press - no second card."
+            if q.get('already') else "Waiting on the owner's press - nothing happens until they approve it.")}
 
 # ...and the calendar and a share, SET UP like an email (calwrite.answer / meeting, sharing.agent_share): a card with the owner's press
 class AgentInviteBody(BaseModel): task_id: int; answer: str; start: str | None = None; end: str | None = None; note: str | None = None
@@ -9393,6 +9408,11 @@ def tool_run(body: dict, request: Request):
         from .agenttools import refusal
         raise HTTPException(403, refusal(f'{t} has no connection card an owner turned on - it is not an agent tool',
                                          "work it with your session's own tools, or on one of his systems", see=('list_systems', 'lists them')))
+    # ...AND ON AN ACCOUNT OF ANOTHER PROFILE, the one card that moves the task there (workstreams.may_use, the one wall): nothing runs
+    if (wtid := guard.session_tid(cfg['server'], request.headers)) and (
+            m := hub_ws.move_card(store, wtid, conn['ConnectorId'], proposals_words(t, conn, body))):
+        if not m['review']: raise HTTPException(403, m['says'])
+        return JSONResponse({'ok': True, 'queued': True, 'review': m['review'], 'says': m['says']}, status_code=202)
     # ...AN AGENT'S POST ON A NETWORK NOT CONNECTED is its card all the same, Connect where Post would be (outbound.review_connect): "the
     # connection is off - turn it on" sent the agent to say in words what the card's own Connect does (design round 2, 2026-11-18)
     # ...AND ANY CALL ON A CONNECTION SWITCHED OFF is a card whose press switches it on and runs it - its Connect where it is not set up
@@ -9446,6 +9466,7 @@ def tool_run(body: dict, request: Request):
         # card's, sending the card's token to a host of the caller's choosing (reports.query_only)
         # ...and the card checked above is the card that runs: query_only drops connector_id, which fell back to the first of the type
         tool_cfg = {**query_only(body), 'type': t, 'connector_id': conn['ConnectorId']}
+        if t == 'calendar': tool_cfg['_task'] = wtid           # ...whose call: an agent's reads its own profile's calendars (calendar.agenda)
         # SQL commits only on a card the owner raised to write; at read, the batch is rolled back (mssql.run_query)
         if t in ('mssql', 'database'): tool_cfg['_write'] = guard.scope_of(cfg['server'], request.headers) != guard.AGENT and scopes.rank(scopes.scope_of(conn)) >= scopes.rank('write')
         if t in hub_tools:
@@ -9460,6 +9481,12 @@ def tool_run(body: dict, request: Request):
         return {'ok': False, 'error': failed(t, e)}               # ...bounded there, its next step kept
     store.audit('tool', (conn or {}).get('ConnectorId', 0), 'run', actor, detail={'type': t, 'headline': str(head)[:200]})
     return {'ok': True, 'headline': head, 'output': (out or '')[:20000]}
+
+def proposals_words(t: str, conn: dict, body: dict) -> str:
+    "An agent's connector call in the words its card would say it (proposals.tool_words) - the `then` of the card that stands in its way."
+    from . import proposals
+    from .reports import query_only
+    return proposals.tool_words(store, {**query_only(body), 'type': t, 'connector_id': conn['ConnectorId']})
 
 def _sql_writes(body) -> bool:
     "Does this statement do more than read, by its grammar (db.read_only)? An empty one is the executor's to refuse."
@@ -9509,7 +9536,7 @@ def _agent_proposes(request: Request, t: str, conn: dict, body: dict, why: str):
     if not q: raise HTTPException(403, proposals.refusal_line(miss[0] if miss else ''))
     store.audit('tool', conn['ConnectorId'], 'run_proposed', 'agent', detail={'type': t, 'task': tid, 'review': q['reviewId']})
     return JSONResponse({'ok': True, 'queued': True, 'review': q['reviewId'],
-                         'says': f"Waiting on the owner's press: this {why}. Nothing was sent; it runs only when they press Approve."},
+                         'says': q.get('says') or f"Waiting on the owner's press: this {why}. Nothing was sent; it runs only when they press Approve."},
                         status_code=202)
 
 @app.post('/api/reports/compose')

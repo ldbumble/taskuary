@@ -2081,7 +2081,7 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
         {workContext && <Typography sx={{ fontSize: 12.5, color: FAINT }}>Works from: {workContext}</Typography>}
         {facts.pills.filter((p) => p.tone === "alert" && p.key !== "priority").map((p) => (
           <Typography key={p.key} data-tq-fact-alert={p.key} sx={{ fontSize: 12.5, color: ALERT_INK, fontWeight: 600 }}>{p.label}: {p.value}{pickOnAlert(p, { ml: 1 })}</Typography>))}
-        {/* which workstream it is under, and the picker that moves it - as the repo picker moves it to a checkout (the owner, 2026-11-01) */}
+        {/* which profile it is under, and the picker that moves it - as the repo picker moves it to a checkout (the owner, 2026-11-01) */}
         <WorkstreamSelect taskId={selected} value={detail?.workstream} onDone={() => { loadDetail(selected); loadTasks(); }} />
       </Box>
     </Box>
@@ -2971,6 +2971,9 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
                     letterSpacing: "-.005em" }} noWrap>
                     {t.Title}
                   </Typography>
+                  {/* ...and WHICH PROFILE it is under, a quiet word by the title - only once he keeps two (the owner, 2026-11-26) */}
+                  {detail?.workstream?.name && <Typography data-tq-task-profile="" noWrap title={`Profile: ${detail.workstream.name}`}
+                    sx={{ color: FAINT, fontSize: 11.5, flexShrink: 1, minWidth: 0 }}>{detail.workstream.name}</Typography>}
                   {/* THE STATUS, TOP RIGHT: the rail's own mark and word for this task (railStatus.taskStatus) - its logo ringed while an
                       agent works. A task Taskuary closed under a working agent says so on its hover (the list row's "agent stopped"). */}
                   {/* ...and beside it the agent's check-back, its × cancelling it (CheckBackChip, the owner 2026-11-06) - desktop only */}

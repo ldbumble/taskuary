@@ -129,6 +129,9 @@ ACTIONS = {
     # like a card, so only one at a time"): raised by Taskuary from the step its agent handed over, never an agent's marker - his press is
     # his I'm done, the step's own hand-back
     'page_step': ("do a step on the agent's page that only he can", ('request',), None),
+    # A CALL ON AN ACCOUNT OF ANOTHER PROFILE (workstreams.move_card, the owner 2026-11-26): raised by the wall, never an agent's marker - his
+    # press moves the task there, as the task's own picker does (workstreams.set_task)
+    'move_profile': ('move this task to another profile', ('profile',), None),
 }
 FAILED_NOTE = 'failed'      # a pressed act that failed: settled, its error kept (ActError) - its agent sets up what goes next
 HELD_ACTS = ('browser_act', 'shell_act', 'desktop_act', 'page_step')     # raised by a hook before the act ran - never an agent's marker
@@ -150,7 +153,7 @@ def _gate(a: str):
 # WHAT NO AGENT MAY ASK FOR, AND THE MARKS NONE MAY PUT ON ITS OWN ASK - one list for both doors: the marker (parse) and the tool
 # (agenttools.proposal_of). They were two, and had drifted (the spine audit, 2026-11-09): the tool's did not name the held steps, so an agent
 # could file a "held step" of its own - a command of its choosing, on the card the owner reads as one Taskuary stopped
-NOT_ASKED = ('merge_pr', 'close_item', 'repair_workflow', 'change_setup', 'use_desktop', 'start_task', 'switch_ai', 'rerun_report', 'use_repo', *HELD_ACTS)
+NOT_ASKED = ('merge_pr', 'close_item', 'repair_workflow', 'change_setup', 'use_desktop', 'start_task', 'switch_ai', 'rerun_report', 'use_repo', 'move_profile', *HELD_ACTS)
 MARKS = ('closeout', 'flow_run')
 
 # A POST IS DRAWN AS THE POST (the owner, 2026-11-05: "it's not showing the post and the image as a linkedin post and asking me if i want to
@@ -609,6 +612,12 @@ def queue(store, task_id: int, p: dict, actor='agent', refused: list | None = No
         p = p or {'action': 'change_routine'}
     ok, why = validate(store, p) if not routine else (False, routine)
     if ok and several: ok, why = False, several
+    # ...and on an account of another profile it is the move card that goes up, never that account's own (workstreams.may_use, the one wall)
+    if ok and actor == 'agent' and p.get('action') == 'run_tool' and str(p.get('connector_id') or '').isdigit():
+        from . import workstreams
+        if (m := workstreams.move_card(store, task_id, int(p['connector_id']), tool_words(store, p))):
+            if not m['review']: ok, why = False, m['says']
+            else: return {'reviewId': m['review'], 'action': 'move_profile', 'says': m['says']}
     # ...and a write its system can check is read against it now (reports.checked): the card says each thing by name, and one that cannot
     # happen as asked is answered with why - never found out at his press
     if ok and p.get('action') == 'run_tool' and actor != 'workflow':
@@ -692,7 +701,8 @@ def queue(store, task_id: int, p: dict, actor='agent', refused: list | None = No
             else f"start \"{p['title']}\" as its own task" if p['action'] == 'start_task'
             else f"run this task on {p.get('ai') or p['pick']}" if p['action'] == 'switch_ai'
             else f"run \"{p.get('title') or p['source_id']}\" now" if p['action'] == 'rerun_report'
-            else f"work in {p['path']} on this task" if p['action'] == 'use_repo' else why)
+            else f"work in {p['path']} on this task" if p['action'] == 'use_repo'
+            else f"move this task to {p.get('name') or p['profile']}" if p['action'] == 'move_profile' else why)
     # ...nor a held browser act: the agent did not propose it, it tried it, and the hook stopped it (browsergate.check)
     # ...a shell step by what it does, never its raw line: the card folds the command under "Show the command"
     reason = (str(p.get('what') or 'a step on the page only you can do') if p['action'] == 'page_step' else       # ...his step, in the words it was handed over with
@@ -1305,6 +1315,10 @@ def _run(store, rv: dict, p: dict, tid, a: str, actor: str, edited, skip_checks:
     elif a == 'switch_ai':
         from .server import ContinueBody, continue_work      # ...the task head's own hand-over (SwitchAi), on his press
         out = {'ai': p.get('ai') or p['pick'], **{k: v for k, v in continue_work(int(tid), ContinueBody(pick=p['pick'])).items() if k in ('continued', 'kind')}}
+    elif a == 'move_profile':
+        from . import workstreams
+        workstreams.set_task(store, int(tid), str(p['profile']), actor)
+        out = {'profile': p['profile'], 'said': f"This task is under {p.get('name') or p['profile']} now."}
     elif a == 'use_desktop':
         from . import agentdesktop
         out = agentdesktop.let(store, tid, actor)

@@ -1452,7 +1452,8 @@ class SQLiteStore:
             for col in ('Subject', 'ValidTo'):
                 if col not in llcols: self.cx.execute(f'ALTER TABLE learned_line ADD COLUMN {col} TEXT')
             # WHICH WORKSTREAM each item is under (the design 2026-11-01, workstreams.py): a day job, a side product, personal - '' unplaced
-            for t in ('task', 'message', 'idea', 'learned_line'):
+            # ...and which one an ACCOUNT is tagged to - a connection, a mailbox (workstreams.of_account); '' serves every profile
+            for t in ('task', 'message', 'idea', 'learned_line', 'connector', 'source'):
                 if 'Workstream' not in {r[1] for r in self.cx.execute(f'PRAGMA table_info({t})')}:
                     self.cx.execute(f'ALTER TABLE {t} ADD COLUMN Workstream TEXT')
             # a verified 'this mailbox wrote to them' hit, remembered so the mail server is asked once per address (PW-080)
@@ -6274,7 +6275,7 @@ class SQLiteStore:
                          (source_id, customer_id, before_period))
 
     # channel connectors (secrets are write-only: list/get never return them)
-    _CONN_SAFE = "ConnectorId, Type, Name, ConfigJson, Active, Roles, Scope, LastSyncAt, LastError, LastErrorAt, (Secret IS NOT NULL AND Secret != '') HasSecret"
+    _CONN_SAFE = "ConnectorId, Type, Name, ConfigJson, Active, Roles, Scope, Workstream, LastSyncAt, LastError, LastErrorAt, (Secret IS NOT NULL AND Secret != '') HasSecret"
     def list_connectors(self):
         """Every card, secrets left out. ASKED A DOZEN TIMES A PAGE READ (the owner's restart, 2026-11-16: /api/setup, the first run, the
         agents and the rail each asked it again, ~340 cards each time): kept until a connector is written - change_gen's trigger counts every

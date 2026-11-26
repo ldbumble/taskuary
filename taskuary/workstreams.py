@@ -1,4 +1,9 @@
-"""WORKSTREAMS - the owner's separate bodies of work (the design 2026-11-01, docs/superpowers/specs/2026-11-01-advisor-understands-the-owner-design.md).
+"""PROFILES - the owner's hats, one per body of work, as a browser keeps profiles (the owner, 2026-11-26). The code's word for one
+is `workstream` (the design 2026-11-01, docs/superpowers/specs/2026-11-01-advisor-understands-the-owner-design.md).
+
+A profile has its accounts (a connection or a mailbox tagged to it - an untagged one serves every profile), its own section of JOB.md
+and what was learned under it. A task's agent uses its own profile's accounts and the untagged ones: `may_use` is the one wall, and
+every door an agent's call goes through asks it. Nothing else in the app changes with a second profile.
 
 Someone who runs a day job, a side product with a small team and a personal life over the same apps was judged by the day job's norms
 everywhere: one flat JOB.md, one title, one company, and nothing that said which hat a mail, a task, an idea or a memory line was under.
@@ -9,7 +14,8 @@ picker and the Advisor's cards write it); JOB.md carries what a model reads abou
 workstream (`<!-- ws:<slug>:start -->` ... `<!-- ws:<slug>:end -->`), the owner's own lines outside the markers surviving as always.
 One workstream may be PERSONAL: it is never learned from and never raised (the owner, 2026-11-01: personal asks are FYI).
 
-Placing an item reads the strongest signal first: the thread it is on, then the mailbox or chat group (only one that serves a single
+Placing an item reads the strongest signal first: the account it came in on when that is tagged (plain code, before any model), the
+thread it is on, then the mailbox or chat group (only one that serves a single
 workstream decides), the repository, the people on it, their domain - and else triage's model, which has the list and names the best
 fit - nothing only when two fit equally or none does (the owner, 2026-11-09)."""
 import json, re
@@ -71,8 +77,81 @@ def upsert(store, w: dict, actor: str = 'workstreams') -> dict:
     return get(store, w['slug'])
 
 
+STAMPED = ('task', 'message', 'idea', 'learned_line', 'memory_line', 'connector', 'source')      # every table that says which profile a row is under
+
 def remove(store, slug: str, actor: str = 'owner'):
+    """The profile goes, and so does its name on everything that carried it: a line learned under a removed one was hidden from every
+    placed task for good (memory._bears), and its accounts stayed walled to a profile nobody could move a task to."""
     save(store, [w for w in streams(store, True) if w['slug'] != slug], actor)
+    for t in STAMPED: store._exec(f"UPDATE {t} SET Workstream='' WHERE Workstream=?", (slug,))
+
+
+# ── A PROFILE'S ACCOUNTS, AND THE ONE WALL (the owner, 2026-11-26) ────────────────────────────────────────────────────────────────────
+def of_account(store, account, channel: str = 'email') -> str:
+    """The profile an account is tagged to - '' when it serves every profile. `account` is a connection (its id or row) or the address
+    a mailbox or chat is read by on `channel`: that source's own tag, else its card's. A tag counts only while two profiles are kept:
+    with one, every account is that one's and the app is as it was."""
+    live = {w['slug'] for w in streams(store)}
+    if len(live) < 2 or account in (None, ''): return ''
+    if isinstance(account, dict): account = account.get('ConnectorId') or account.get('connector_id')
+    own, cid = '', int(account) if isinstance(account, int) or str(account).isdigit() else None
+    if cid is None:
+        a = str(account).strip().lower()
+        rows = [s for s in store.list_sources(False) if str(s.get('Address') or '').strip().lower() == a]
+        if (s := next((s for s in rows if str(s.get('Channel') or '').lower() == str(channel or '').lower()), rows[0] if rows else None)):
+            own, cid = s.get('Workstream') or '', s.get('ConnectorId')
+        else:                                                   # a mail card's own address, read with no source row (outbound.mailboxes)
+            from .channels import _cfg
+            cid = next((c['ConnectorId'] for c in store.list_connectors()
+                        if a and a in _low([(k := _cfg(c)).get('address'), k.get('account')])), None)
+    tag = own if own in live else ((store.get_connector(cid) or {}).get('Workstream') or '') if cid else ''
+    return tag if tag in live else ''
+
+
+def tag_account(store, slug: str, connector_id: int = None, source_id: int = None, actor: str = 'owner') -> dict:
+    """The owner's pick on a connection card: this account is one profile's, or ('') every profile's. One row, one tag - an account in
+    two profiles cannot be stored."""
+    slug = slug or ''
+    if slug and not get(store, slug): raise ValueError(f'no profile {slug}')
+    t, col, n = ('source', 'SourceId', source_id) if source_id else ('connector', 'ConnectorId', connector_id)
+    if not n or not store._one(f'SELECT 1 AS x FROM {t} WHERE {col}=?', (int(n),)): raise ValueError('no such account')
+    store._exec(f'UPDATE {t} SET Workstream=? WHERE {col}=?', (slug, int(n)))
+    store.audit(t, int(n), 'set_workstream', actor, detail={'to': slug})
+    return {'workstream': slug}
+
+
+def may_use(store, tid, account, channel: str = 'email') -> bool:
+    """THE ONE WALL: may the agent on task `tid` use this account - it is untagged, or tagged to the task's own profile. Asked by every
+    door an AGENT's call goes through (a connector call, a send-from mailbox, a mail read, the calendar); the owner's own presses are
+    his and are never asked."""
+    if not tid: return True
+    tag = of_account(store, account, channel)
+    return not tag or tag == of_task(store, int(tid))
+
+
+def move_card(store, tid, account, then: str = '', channel: str = 'email') -> dict | None:
+    """An agent's call on an account its task may not use is never run and never a flat no: ONE card on the task, "Move this task to
+    <profile>" - his press is the move the task's own picker makes, and the call is the card's `then`. None when the task may use the
+    account; else {review, says} - the facts the call is answered with."""
+    if may_use(store, tid, account, channel): return None
+    slug = of_account(store, account, channel)
+    name, mine = names(store)[slug], names(store).get(of_task(store, int(tid)))
+    c = store.get_connector(int(account)) if isinstance(account, int) or str(account).isdigit() else None
+    what = (c or {}).get('Name') or (c or {}).get('Type') or str(account.get('Name') if isinstance(account, dict) else account)
+    fact = f"{what} is an account of the profile {name}, and this task is " + (f"under {mine}" if mine else 'under no profile') + ': nothing was run'
+    from . import proposals
+    from .selfclose import CARD_TAIL
+    q = proposals.queue(store, int(tid), {'action': 'move_profile', 'profile': slug, 'name': name, 'why': f"it needs {what}"[:200],
+                                          **({'then': then} if then else {})}, 'taskuary', refused=(miss := []))
+    if not q: return {'review': None, 'says': f"{fact} - {miss[0] if miss else 'the move was not put to him'}."}
+    return {'review': q['reviewId'], 'says': f"{fact}. Moving this task to {name}: {CARD_TAIL}"}
+
+
+def own_mailbox(store, tid) -> str | None:
+    "The first mailbox tagged to the task's own profile - where its mail leaves from when it came in on none it may use."
+    from .outbound import mailboxes
+    ws = of_task(store, int(tid)) if tid else ''
+    return next((m['address'] for m in mailboxes(store) if ws and of_account(store, m['address']) == ws), None)
 
 
 # ── PLACING AN ITEM ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -107,10 +186,13 @@ def by_signals(xs: list, m: dict) -> tuple:
 
 
 def of_message(store, m: dict) -> str:
-    """The workstream of one message: its own if stamped, else the thread's, else its signals. '' when nothing decides."""
+    """The workstream of one message: its own if stamped, else the tagged account it came in on, else the thread's, else its signals.
+    '' when nothing decides."""
     if m.get('Workstream'): return m['Workstream']
     xs = streams(store)
     if not xs: return ''
+    # THE ACCOUNT DECIDES (the owner, 2026-11-26): mail into a mailbox tagged to a profile is that profile's, on a thread another started too
+    if (s := of_account(store, m.get('SourceName'), m.get('Channel') or 'email')): return s
     if m.get('ConversationId'):
         r = store._one("SELECT Workstream FROM message WHERE ConversationId=? AND IFNULL(Workstream,'')<>'' ORDER BY MessageId DESC LIMIT 1",
                        (m['ConversationId'],))
@@ -223,9 +305,28 @@ def of_evidence(store, ids) -> str:
     return _one(hits)
 
 
+def shown(store) -> list:
+    """The profiles a screen names - on a task, a rail row, a connection card's picker: all of them once there are two, none while
+    there is one (the owner, 2026-11-26: with one profile the app looks exactly as it did)."""
+    xs = streams(store)
+    return xs if len(xs) > 1 else []
+
+
+def memories(store, slug: str) -> list:
+    "What was learned under one profile, as its lines read - About you lists them beside its section of JOB.md."
+    from . import memory
+    return [r['Text'] for r in memory.rows(store) if r.get('Workstream') == slug]
+
+
+def accounts(store, slug: str) -> list:
+    "The accounts tagged to one profile, by name: its connections, and the mailboxes tagged apart from their card."
+    return ([c.get('Name') or c['Type'] for c in store.list_connectors() if c.get('Workstream') == slug]
+            + [s['Address'] for s in store.list_sources(False) if s.get('Workstream') == slug and s.get('Address')])
+
+
 def label(store, slug: str) -> dict | None:
-    """What a screen shows beside an item: {slug, name, personal} - None when it has no workstream."""
-    w = get(store, slug) if slug else None
+    """What a screen shows beside an item: {slug, name, personal} - None when it has no workstream, or there is only the one."""
+    w = next((w for w in shown(store) if w['slug'] == slug), None) if slug else None
     return {'slug': w['slug'], 'name': w['name'], 'personal': w['personal']} if w else None
 
 

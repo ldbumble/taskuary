@@ -604,10 +604,12 @@ def _no_placeholder(body, subject=''):
         raise RuntimeError(GUARD.format(mark=redact.MARK))
 
 
-def mailboxes(store) -> list:
+def mailboxes(store, tid=None) -> list:
     """The mailboxes a new email can be sent FROM: each active email source, then any mail card's own address - one row per
-    address, the connector that sends as it beside it (the owner, 2026-10-09: "add from mailbox picker")."""
+    address, the connector that sends as it beside it (the owner, 2026-10-09: "add from mailbox picker"). `tid`: only those the
+    agent on that task may use - its profile's and the untagged ones (workstreams.may_use)."""
     from .channels import _cfg
+    from .workstreams import may_use
     out, seen = [], set()
     cards = {c['ConnectorId']: c for c in store.list_connectors() if c['Active'] and c['Type'] in MAILBOXES}
     def add(address, cid):
@@ -617,7 +619,7 @@ def mailboxes(store) -> list:
     for s_ in store.list_sources():
         if s_.get('Channel') == 'email': add(s_.get('Address'), s_.get('ConnectorId'))
     for cid, c in cards.items(): add(_cfg(c).get('address') or _cfg(c).get('account'), cid)
-    return out
+    return [m for m in out if may_use(store, tid, m['address'])] if tid else out
 
 
 def _box(store, mailbox): return next((m for m in mailboxes(store) if m['address'].lower() == str(mailbox or '').strip().lower()), None) if mailbox else None
@@ -640,9 +642,10 @@ def card_signature(store, mailbox) -> str:
 
 def task_mailbox(store, tid) -> str | None:
     """The mailbox a task's mail came IN on - its newest inbound email's - while a connected card still sends as it. A new
-    message on that task goes out from there by default, not from whichever Outlook card happens to be first."""
+    message on that task goes out from there by default, not from whichever Outlook card happens to be first. Never one of another
+    profile's: a task moved to a profile answers from that profile's own."""
     if not tid: return None
-    have = {m['address'].lower(): m['address'] for m in mailboxes(store)}
+    have = {m['address'].lower(): m['address'] for m in mailboxes(store, tid)}
     for m in reversed(store.list_messages(int(tid))):
         if m.get('Direction') == 'out' or str(m.get('Channel') or '').lower() != 'email': continue
         a = have.get(str(m.get('SourceName') or '').strip().lower())
@@ -656,8 +659,10 @@ def sending_mailbox(store, rv: dict, msg: dict = None) -> str | None:
     try: env = json.loads((rv or {}).get('Deliver') or '{}') or {}
     except (TypeError, ValueError): env = {}
     if env.get('mailbox'): return env['mailbox']
-    if msg and msg.get('Direction') != 'out' and '@' in str(msg.get('SourceName') or ''): return msg['SourceName']
-    return task_mailbox(store, (rv or {}).get('TaskId'))
+    from . import workstreams
+    tid = (rv or {}).get('TaskId')
+    if msg and msg.get('Direction') != 'out' and '@' in str(msg.get('SourceName') or '') and workstreams.may_use(store, tid, msg['SourceName']): return msg['SourceName']
+    return task_mailbox(store, tid) or workstreams.own_mailbox(store, tid)
 
 
 def send_out(store, channel: str, to, subject: str, body: str, cc: list = None, attachments: list = None,

@@ -845,7 +845,7 @@ PRESSES = {'remind': lambda d: f"set a reminder for {clock_of(d.get('to'))} - pu
            'priority': lambda d: f"changed its priority from {d.get('from')} to {d.get('to')}",
            'handoff': lambda d: f"handed this to {d.get('to')} by {d.get('channel')}", 'reopened': lambda d: 'reopened it', 'reopen': lambda d: 'reopened it',
            'split_into_task': lambda d: f"split part of it off as its own task: {d.get('title') or ''}".rstrip(': '),
-           'set_repo': lambda d: 'changed where its code lives', 'set_workstream': lambda d: 'changed its workstream',
+           'set_repo': lambda d: 'changed where its code lives', 'set_workstream': lambda d: 'changed its profile',
            'not_coding': lambda d: 'said it is not coding work', 'funnel_later': lambda d: 'put it for later',
            'close_from_assistant': lambda d: 'marked it done',      # every surface's close (concierge.close_task) writes this one row
            # ...Redraft / Draft with AI on a task an agent works: the press goes to that agent (responder.to_agent)

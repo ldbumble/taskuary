@@ -341,6 +341,10 @@ export function WorkstreamsConfirm({ text, onChange }) {
               {!kept ? <Typography sx={{ fontSize: 12.5, color: DIM }}>Left out - Taskuary won't use this.</Typography> : <>
                 {r.about && <Typography sx={{ fontSize: 13, color: DIM }}>{r.about}</Typography>}
                 {r.section && <Box sx={{ mt: 0.25, "& ul": { pl: 2.5, my: 0.25 }, "& li": { fontSize: 13.5, lineHeight: 1.5 } }}><Md text={r.section} /></Box>}
+                {/* ...and, once there are two profiles, what else is this one's own: its accounts and what was learned under it (2026-11-26) */}
+                {!!r.accounts?.length && <Typography data-tq-profile-accounts="" sx={{ fontSize: 12.5, color: DIM, mt: 0.5 }}>Accounts: {r.accounts.join(", ")}</Typography>}
+                {!!r.memories?.length && <Box data-tq-profile-memories="" sx={{ mt: 0.5, "& ul": { pl: 2.5, my: 0.25 }, "& li": { fontSize: 12.5, lineHeight: 1.5, color: DIM } }}>
+                  <Typography sx={{ fontSize: 12.5, color: DIM }}>Learned here:</Typography><Md text={r.memories.map((x) => `- ${x}`).join("\n")} /></Box>}
               </>}
             </Box>
           </Box>); })}

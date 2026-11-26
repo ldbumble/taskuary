@@ -139,3 +139,117 @@ def test_the_api_lists_workstreams_moves_a_task_and_the_task_carries_its_label(s
         assert r.status_code == 200 and r.json()['label'] == {'slug': 'ledger-app', 'name': 'Ledger app', 'personal': False}
         assert c.get(f'/api/tasks/{t}').json()['workstream']['name'] == 'Ledger app'
         assert c.put(f'/api/tasks/{t}/workstream', json={'workstream': 'nope'}).status_code == 422
+
+
+# ── PROFILES (the owner, 2026-11-26): a profile's accounts, the arrival they decide, and the one wall ─────────────────────────────────
+# Alex Doyle works at Northwind and runs Harbor Bakery on the side: a mailbox each, tagged to its profile, and one mailbox nobody tagged.
+import json
+from taskuary import mailsearch, outbound, slots
+
+NW_BOX, HB_BOX, SHARED = 'alex@northwind.example', 'alex@harbor.example', 'alex@home.example'
+GAIL = 'gail@harbor.example'
+
+
+@pytest.fixture
+def two():
+    s = MemoryStore()
+    s.set_setting('owner_email', NW_BOX, 'test')
+    W.save(s, [{'name': 'Northwind'}, {'name': 'Harbor Bakery'}])
+    card = lambda t, name, box: s.save_connector({'Type': t, 'Name': name, 'Active': 1, 'ConfigJson': json.dumps({'address': box})}, 't')
+    s.nw, s.hb, s.shared = card('outlook', 'Northwind mail', NW_BOX), card('imap', 'Harbor mail', HB_BOX), card('imap', 'Home mail', SHARED)
+    W.tag_account(s, 'northwind', connector_id=s.nw); W.tag_account(s, 'harbor-bakery', connector_id=s.hb)
+    return s
+
+
+def test_mail_into_a_tagged_mailbox_is_that_profiles_whatever_its_thread_and_no_model_reads_the_hat(two):
+    f = Factory(two)
+    t = f.task(title='Flour order')
+    first = f.message(task_id=t, from_email=GAIL, source_name=NW_BOX, conversation_id='conv-flour')
+    ingest._place(two, first, t)
+    assert two.get_message(first)['Workstream'] == 'northwind'
+    # ...the same thread, now into Harbor's mailbox: the account decides, never the thread's stamp or triage's word
+    later = f.message(from_email=GAIL, source_name=HB_BOX, conversation_id='conv-flour')
+    ingest._place(two, later, None, said='northwind')
+    assert two.get_message(later)['Workstream'] == 'harbor-bakery'
+    seen = []
+    def brain(system, user, **kw):
+        seen.append("THE OWNER'S WORKSTREAMS" in system)
+        return '{"intent": "fyi", "why": "a note", "title": "Flour", "summary": "x", "priority": "regular", "priority_why": "", "sender_class": "person"}'
+    msg = {'subject': 'flour', 'body': 'two sacks', 'from_email': GAIL, 'from_name': 'Gail Moreno', 'channel': 'email'}
+    for box in (HB_BOX, SHARED): ingest._classify(two, {**msg, 'source_name': box}, brain, {}, None, '', '', 0, (), None)
+    assert seen == [False, True]                                  # only mail on an untagged account is put to the model with the list
+
+
+def test_an_untagged_account_serves_every_profile_and_a_tagged_one_only_its_own(two):
+    f = Factory(two)
+    nw, hb, none = f.task(title='Northwind close'), f.task(title='Bakery rota'), f.task(title='Unplaced')
+    W.set_task(two, nw, 'northwind', 'owner'); W.set_task(two, hb, 'harbor-bakery', 'owner')
+    assert W.of_account(two, two.hb) == W.of_account(two, HB_BOX) == 'harbor-bakery' and W.of_account(two, SHARED) == ''
+    assert [W.may_use(two, t, two.shared) for t in (nw, hb, none)] == [True, True, True]
+    assert [W.may_use(two, t, HB_BOX) for t in (nw, hb, none)] == [False, True, False]
+    assert [m['address'] for m in outbound.mailboxes(two, nw)] == [NW_BOX, SHARED]        # what its agent may send from
+    assert [m['address'] for m in outbound.mailboxes(two)] == [NW_BOX, HB_BOX, SHARED]    # his own picker: all of them
+    with pytest.raises(ValueError): W.tag_account(two, 'no-such-profile', connector_id=two.hb)
+
+
+def test_an_agent_naming_another_profiles_mailbox_gets_the_one_move_card_and_nothing_is_drafted(two):
+    f = Factory(two)
+    t = f.task(title='Northwind close'); W.set_task(two, t, 'northwind', 'owner')
+    out = slots.draft(two, t, 'Hi Gail,\n\nThe order is in.', to=GAIL, subject='Order', mailbox=HB_BOX)
+    assert not out['ok'] and 'Harbor Bakery' in out['why'] and 'nothing was run' in out['why']
+    cards = two._rows("SELECT * FROM review WHERE TaskId=? AND Status='pending'", (t,))
+    assert [(json.loads(r['DraftText'])['action'], json.loads(r['DraftText'])['profile']) for r in cards] == [('move_profile', 'harbor-bakery')]
+    assert cards[0]['NextStep'] == f'email {GAIL} from {HB_BOX}'                           # his press wakes the agent to do what it was doing
+    slots.draft(two, t, 'Hi Gail,\n\nAgain.', to=GAIL, subject='Order', mailbox=HB_BOX)
+    assert len(two._rows("SELECT 1 AS x FROM review WHERE TaskId=? AND Status='pending'", (t,))) == 1    # one card, however often it asks
+    # ...his press is the move the task's own picker makes, and then the mailbox is the task's own
+    from taskuary import proposals
+    proposals.execute(two, cards[0], 'owner')
+    assert two.get_task(t)['Workstream'] == 'harbor-bakery' and W.may_use(two, t, HB_BOX)
+    assert slots.draft(two, t, 'Hi Gail,\n\nThe order is in.', to=GAIL, subject='Order', mailbox=HB_BOX)['ok']
+
+
+def test_a_reply_leaves_from_the_tasks_own_profile_and_an_agents_search_reads_no_other_profiles_mail(two):
+    f = Factory(two)
+    t = f.task(title='Supplier question')
+    mid = f.message(task_id=t, from_email=GAIL, from_name='Gail Moreno', source_name=NW_BOX, subject='Supplier invoice', body='the invoice for flour')
+    f.message(from_email=GAIL, from_name='Gail Moreno', source_name=HB_BOX, subject='Bakery invoice', body='the invoice for ovens')
+    W.set_task(two, t, 'harbor-bakery', 'owner')                  # he moves it: its answer is Harbor's now, from Harbor's mailbox
+    assert outbound.sending_mailbox(two, {'TaskId': t}, two.get_message(mid)) == HB_BOX
+    other = f.task(title='Northwind audit'); W.set_task(two, other, 'northwind', 'owner')
+    assert {h['subject'] for h in mailsearch.search(two, words='invoice')} == {'Supplier invoice', 'Bakery invoice'}       # his own search
+    assert [h['subject'] for h in mailsearch.search(two, words='invoice', tid=other)] == ['Supplier invoice']       # ...and a Northwind agent's: the mail in Northwind's mailbox
+
+
+def test_with_one_profile_nothing_is_labelled_picked_or_walled(two):
+    f = Factory(two)
+    t = f.task(title='Bakery rota'); W.set_task(two, t, 'northwind', 'owner')
+    assert W.label(two, 'northwind') and len(W.shown(two)) == 2
+    W.remove(two, 'harbor-bakery')
+    assert W.shown(two) == [] and W.label(two, 'northwind') is None            # no label by a title, no picker on a card or a task
+    assert W.of_account(two, HB_BOX) == '' and W.may_use(two, t, HB_BOX)       # ...and every account is the one profile's
+    with mock.patch.object(server, 'store', two):
+        c = TestClient(server.app)
+        assert c.get('/api/workstreams').json()['data'] == [] and c.get(f'/api/tasks/{t}').json()['workstream'] is None
+    from taskuary import funnel
+    items = [{'key': f'task:{t}', 'tid': t}]
+    funnel._label_workstreams(two, items)
+    assert 'workstream' not in items[0]
+
+
+def test_a_removed_profile_leaves_no_stamp_behind(two):
+    f = Factory(two)
+    t = f.task(title='Bakery rota'); W.set_task(two, t, 'harbor-bakery', 'owner')
+    W.upsert(two, {'name': 'Ledger app'})                         # a third, so two are still kept after the removal
+    W.remove(two, 'harbor-bakery')
+    assert two.get_task(t)['Workstream'] == '' and two.get_connector(two.hb)['Workstream'] == ''
+    assert W.may_use(two, f.task(title='Northwind close'), HB_BOX)
+
+
+def test_the_card_picker_tags_an_account_through_the_api(two):
+    with mock.patch.object(server, 'store', two):
+        c = TestClient(server.app)
+        assert c.put(f'/api/connectors/{two.shared}/workstream', json={'workstream': 'harbor-bakery'}).json() == {'workstream': 'harbor-bakery'}
+        assert next(x for x in c.get('/api/connectors').json()['data'] if x['ConnectorId'] == two.shared)['Workstream'] == 'harbor-bakery'
+        assert c.put(f'/api/connectors/{two.shared}/workstream', json={'workstream': ''}).status_code == 200 and W.of_account(two, SHARED) == ''
+        assert c.put(f'/api/connectors/{two.shared}/workstream', json={'workstream': 'nope'}).status_code == 422

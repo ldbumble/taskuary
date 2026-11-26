@@ -160,9 +160,11 @@ def unreadable(e) -> str:
     return plain_failure(e)[:240]
 
 
-def agenda(store, days: int = DAYS, start: datetime = None) -> dict:
+def agenda(store, days: int = DAYS, start: datetime = None, tid: int = None) -> dict:
     """{events, errors, sources, start, end, tz} - every calendar the cards can reach, from `start`
-    (now, unless a caller wants the whole day) for `days` days."""
+    (now, unless a caller wants the whole day) for `days` days. `tid`: read for the agent on that task - its own profile's calendars
+    and the untagged ones (workstreams.may_use)."""
+    from .workstreams import may_use
     tz = tz_of(store)
     now = datetime.now(tz).replace(second=0, microsecond=0)
     start = start or now
@@ -176,13 +178,13 @@ def agenda(store, days: int = DAYS, start: datetime = None) -> dict:
     for ol in store.connectors_by_type('outlook', with_secret=True):
         if not ol.get('Active'): continue
         boxes = [s['Address'] for s in store.list_sources() if s.get('Channel') == 'email' and s.get('Address')
-                 and (not s.get('ConnectorId') or s['ConnectorId'] == ol['ConnectorId'])]
+                 and (not s.get('ConnectorId') or s['ConnectorId'] == ol['ConnectorId']) and may_use(store, tid, s['Address'])]
         if boxes:
             sources.append(f"outlook: {', '.join(boxes)}")
             try: events += outlook_events(json.loads(ol.get('ConfigJson') or '{}'), ol.get('Secret'), boxes, start, end, tz)
             except Exception as e: errors.append(unreadable(e))
     for gm in store.connectors_by_type('gmail', with_secret=True):
-        if not gm.get('Active'): continue
+        if not gm.get('Active') or not may_use(store, tid, gm['ConnectorId']): continue
         cfg = json.loads(gm.get('ConfigJson') or '{}')
         if cfg.get('google_refresh_token'):
             sources.append(f"google: {cfg.get('address') or 'primary'}")
@@ -353,6 +355,6 @@ def run_calendar(cfg: dict):
     if st is None: raise RuntimeError('the calendar tool reads the connector cards - it needs the store')
     from .reports import days_of
     days = days_of(cfg, DAYS)
-    ag = agenda(st, days)
+    ag = agenda(st, days, tid=cfg.get('_task'))
     head = f"{len(ag['events'])} event(s) in the next {days} days" + (f" · {len(ag['errors'])} calendar(s) unreadable" if ag['errors'] else '')
     return head, (render(ag) or 'no calendar is connected - the Outlook card reads calendars once Calendars.Read is granted')

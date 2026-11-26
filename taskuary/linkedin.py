@@ -291,31 +291,17 @@ def mp4_seconds(path):
     return None
 
 
-def converter() -> str:
-    "An ffmpeg on this computer that writes an MP4 - on the PATH, or the one imageio-ffmpeg carries - or ''. Nothing is installed for it."
-    import shutil
-    if (f := shutil.which('ffmpeg')): return f
-    try:
-        import imageio_ffmpeg
-        return imageio_ffmpeg.get_ffmpeg_exe()
-    except Exception: return ''
-
-
 def video_why(path) -> str:
-    "'' when LinkedIn takes this video as it is; else what is wrong with it and the way past, said to the agent that raised the post."
+    "'' when LinkedIn takes this video as it is; else the fact that keeps it off the card - what LinkedIn takes and what this file is."
     from pathlib import Path
     p = Path(path)
     with open(p, 'rb') as f: mp4 = p.suffix.lower() in VIDEO_TYPES and f.read(8)[4:] == b'ftyp'        # ...by its bytes too: a WebM renamed is no MP4
-    if not mp4:
-        to = p.with_name(p.stem + '-linkedin.mp4') if p.suffix.lower() in VIDEO_TYPES else p.with_suffix('.mp4')
-        how = (f'the ffmpeg on this computer converts it - "{ff}" -i "{p}" -c:v libx264 -pix_fmt yuv420p -c:a aac -movflags +faststart "{to}" - '
-               f'and the post is raised with {to.name}') if (ff := converter()) else 'no ffmpeg is on this computer to convert it with: raise the post with an MP4 (H.264) of it'
-        return f'{p.name} is not an MP4, the one video format LinkedIn takes: {how}'
+    if not mp4: return f"LinkedIn takes MP4 (H.264) video; {p.name} is {'no MP4 inside' if p.suffix.lower() in VIDEO_TYPES else p.suffix.lstrip('.').upper() or 'not one'}"
     n, secs = p.stat().st_size, mp4_seconds(p)
     if not VIDEO_MIN <= n <= VIDEO_MAX:
-        return f'{p.name} is {max(1, n // 1024):,} KB - LinkedIn takes a video from 75 KB to 500 MB: raise the post with one inside that'
+        return f'{p.name} is {max(1, n // 1024):,} KB - LinkedIn takes a video from 75 KB to 500 MB'
     if secs is not None and not VIDEO_SECS[0] <= secs <= VIDEO_SECS[1]:
-        return f'{p.name} runs {secs:.0f} seconds - LinkedIn takes a video from 3 seconds to 30 minutes: raise the post with one inside that'
+        return f'{p.name} runs {secs:.0f} seconds - LinkedIn takes a video from 3 seconds to 30 minutes'
     return ''
 
 

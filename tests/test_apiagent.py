@@ -710,8 +710,11 @@ class TheSessionTests(unittest.TestCase):
         with self._patched(Down()):
             try: self._down_session(s, tid).send_prompt('make it a one-page PDF too', echo=False)
             except Exception: pass
-        self.assertEqual(s.get_review(rid)['Status'], 'pending')
-        self.assertNotIn(rid, proposals.written_past(s, tid))
+        # ...raised again under his line, the greyed one left where it stood (the owner, 2026-11-25: "Never bring back things on top. It's a chat.")
+        from taskuary import cardqueue
+        again = cardqueue.again_of(s, rid)
+        self.assertEqual((s.get_review(again)['Status'], s.get_review(again)['DraftText']), ('pending', 'Hi Paula - the total is 103,190.'))
+        self.assertNotIn(again, proposals.written_past(s, tid))
         self.assertIn('The AI stopped before it answered - trying again at', [c['Body'] for c in s.list_comments(tid)][-1])
 
     def test_a_card_that_takes_no_tools_is_offered_only_the_ways_that_are_here(self):

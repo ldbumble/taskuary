@@ -844,34 +844,35 @@ def set_aside_drafts(store, tid: int, before: float = 0., mails=()) -> list:
     return out
 
 
-UNTIL = 'greyed until this turn ends - it stands again as it was unless a card raised in the turn takes its place'
+UNTIL = 'greyed until this turn ends - it is raised again under his newest line as it was unless a card raised in the turn takes its place'
 def comes_back(store, r: dict) -> bool:
     """Is `r` a card HIS OWN LINE greyed (set_aside_drafts' record of it) that stands again by itself when the turn ends (restore_set_aside) -
     what its agent is told of it (UNTIL)? Never a held step, nor one a message on its thread passed."""
+    from .cardqueue import again_of
     if not (r.get('Status') == 'superseded' and r.get('DecideNote') == SET_ASIDE and r.get('TaskId') and _action(r) not in HELD_ACTS): return False
+    if again_of(store, r['ReviewId']): return False              # ...raised again once already: this one stays greyed where it stood
     return any(r['ReviewId'] in (json.loads(a['Detail'] or '{}').get('line') or []) for a in store._rows(
         "SELECT Detail FROM audit WHERE EntityType='task' AND EntityId=? AND Action='cards_passed' AND CreatedAt>=?", (int(r['TaskId']), str(r.get('DecidedAt') or ''))))
 
 
 def restore_set_aside(store, tid: int) -> list:
-    """A CARD HIS LINE GREYED THAT THE TURN DID NOT REPLACE STANDS AGAIN WHEN THE TURN ENDS, LIVE WHERE IT STOOD (walk 23, 2026-11-25: a bug
+    """A CARD HIS LINE GREYED THAT THE TURN DID NOT REPLACE IS RAISED AGAIN UNDER HIS NEWEST LINE WHEN THE TURN ENDS (walk 23, 2026-11-25: a bug
     report greyed a waiting LinkedIn post and a reply for good, and each agent told him it "is ready on the card for you to press" - bringing
     one back was left to the agent's keep_card, which one road in three called). Plain code, every road (workerstate.record's turn_end) and
-    every kind: each card set aside since the agent's turn before this one ended comes back as it was - never one a card raised since takes
+    every kind: each card set aside since the agent's turn before this one ended comes back as it was, a new card under the line (cardqueue.keep;
+    the owner: "Never bring back things on top. It's a chat.") with the greyed one left where it stood - never one a card raised since takes
     the place of (the same card by its name, cardqueue.what: the rewrite is what greys it for good), one the agent withdrew, nor a held step
     (its gate holds it anew when it is run again). And a turn the AI never answered sets nothing aside the same way (design round 4, H3: a
-    draft stood greyed for 43 minutes while the provider failed turn after turn). -> ids."""
+    draft stood greyed for 43 minutes while the provider failed turn after turn). -> the new cards' ids."""
     from . import cardqueue
-    from .conversation import ep
     since = str((store.last_worker_event(int(tid), kinds=('turn_end',)) or {}).get('CreatedAt') or '')
     us = cardqueue._units(store, int(tid), set())
     name, out = (lambda u: cardqueue.what(store, u, True)), []
     for u in us:
         rs = [r for r in u['rows'] if str(r.get('DecidedAt') or '') >= since and comes_back(store, r)]
         if not rs or any(v is not u and v['rids'] != [LAND] and v['rows'][0]['ReviewId'] > rs[-1]['ReviewId'] and name(v) == name(u) for v in us): continue
-        out += [r['ReviewId'] for r in rs if store.restore_review(r['ReviewId'])]
-    if out: store.audit('task', tid, 'cards_restored', 'taskuary', 'system', {'rids': out})
-    return out
+        out += [r['ReviewId'] for r in rs]
+    return list((cardqueue.keep(store, int(tid), ' + '.join(f'rv{i}' for i in out), 'taskuary').get('kept') or {}).values()) if out else []
 
 
 def bears(store, r: dict, m: dict | None, at: float = 0.) -> bool:

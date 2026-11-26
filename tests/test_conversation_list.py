@@ -763,11 +763,15 @@ class TheList(unittest.TestCase):
                                                                                          ('slot', 'pending', 'Ray - call me about the Mill.')])      # ...his own stands where it stood
         self.assertIn(f'(the email to paula@northwind.example): {proposals.UNTIL}', self.brain.calls[-1])       # ...and its agent is told
         self.assertEqual(conversation.flow_breaks(now, got), [])
-        # ...AND THE TURN THAT WROTE NO NEW ONE LEAVES IT STANDING AGAIN WHERE IT STOOD (walk 23, 2026-11-25: greyed for good, with "it is ready
-        # on the card for you to press" said over it)
+        # ...AND THE TURN THAT WROTE NO NEW ONE RAISES IT AGAIN UNDER HIS LINE (walk 23, 2026-11-25: greyed for good, with "it is ready on the
+        # card for you to press" said over it) - never live again above it (the owner, 2026-11-25: "Never bring back things on top. It's a chat.")
         self.brain.delay = 0; self.rest()
-        self.assertEqual(s.get_review(its)['Status'], 'pending')
-        self.assertIn((its, 'pending'), [(c['review'], c['status']) for x in self.list()['items'] if x['id'] == turn['id'] for c in x['cards']])
+        self.assertTrue(proposals.passed(s.get_review(its))); again = cardqueue.again_of(s, its)
+        self.assertEqual((s.get_review(again)['Status'], s.get_review(again)['DraftText']), ('pending', s.get_review(its)['DraftText']))
+        items = self.list()['items']
+        self.assertIn((its, 'passed'), [(c['review'], c['status']) for x in items if x['id'] == turn['id'] for c in x['cards']])
+        self.assertIn((again, 'pending'), [(c['review'], c['status']) for x in items[next(i for i, x in enumerate(items) if x['id'] == turn['id']) + 1:]
+                                           for c in x.get('cards') or []])
 
 
     def test_redraft_on_a_task_its_agent_works_wakes_that_agent(self):
@@ -820,9 +824,10 @@ class TheList(unittest.TestCase):
         turns = [x for x in self.list()['items'] if x['kind'] == 'turn']
         self.assertEqual([(c['review'], c['status'], c.get('was', {}).get('text')) for c in turns[-2]['cards']], [(rid - 1, 'approved', None), (rid, 'passed', 'Hi Gail, which date? Alex')])
         self.assertEqual(turns[-1]['cards'], [])
-        self.brain.delay = 0; self.rest()                   # ...and the turn that did not write it again leaves it live where it stood (walk 23)
+        self.brain.delay = 0; self.rest()                   # ...and the turn that did not write it again raises it again under his line (walk 23)
         turns = [x for x in self.list()['items'] if x['kind'] == 'turn']
-        self.assertEqual([[(c['review'], c['status']) for c in t['cards']] for t in turns[-2:]], [[(rid - 1, 'approved'), (rid, 'pending')], []])
+        self.assertEqual([[(c['review'], c['status']) for c in t['cards']] for t in turns[-2:]],
+                         [[(rid - 1, 'approved'), (rid, 'passed')], [(cardqueue.again_of(self.s, rid), 'pending')]])
 
     def test_an_empty_reply_is_drawn_only_where_its_record_says_why_and_then_in_the_turn(self):
         """The owner, 2026-11-13: "why would you have empty write a reply box, unless the agent said i'm not sure what to respond, feel free to

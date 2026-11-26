@@ -403,7 +403,9 @@ def test_a_card_he_writes_past_greys_in_its_place_on_every_agents_road_and_its_a
     if kind not in proposals.HELD_ACTS:
         # ...WHAT THE TURN DOES NOT REPLACE STANDS AGAIN WHEN IT ENDS (walk 23, 2026-11-25): told so, and the chat's turn - run to its end here - left it live
         assert f'Card rv{rid} ' in heard and proposals.UNTIL in told, heard
-        if agent == 'general': assert rv['Status'] == 'pending', rv; return
+        # ...as a new card under his line: the greyed one stays where it stood (the owner, 2026-11-25: "Never bring back things on top")
+        if agent == 'general':
+            assert proposals.passed(rv) and s.get_review(cardqueue.again_of(s, rid))['Status'] == 'pending', rv; return
     assert proposals.passed(rv), rv
     assert f'Card rv{rid} ' in heard and 'greyed' in told, heard
     # ...and it keeps its record: never pressable, said so
@@ -414,7 +416,8 @@ def test_a_card_he_writes_past_greys_in_its_place_on_every_agents_road_and_its_a
 def test_a_card_his_line_greyed_that_still_stands_comes_back_under_it_as_it_was():
     """Walk 6 (the owner, 2026-11-23): every input greyed every waiting card, and the only way to keep one was a new proposal - the same three
     posts proposed four times, and a reply to Paula greyed by Gail's unrelated line. His line greys them; each that still stands comes back
-    as it was, the same card where it stood - at once by keep_card, else when the turn ends (walk 23, 2026-11-25). Invented people."""
+    as it was, a new card under his newest line - at once by keep_card, else when the turn ends - never live again above it (the owner,
+    2026-11-25: "Never bring back things on top. It's a chat."). Invented people."""
     from taskuary import agenttools, conversation
     s = MemoryStore(); tid = Factory(s).task('Post the Q3 headline and answer Paula')
     s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'The post and the reply wait for your press.')
@@ -428,11 +431,16 @@ def test_a_card_his_line_greyed_that_still_stands_comes_back_under_it_as_it_was(
     out = json.loads(agenttools.call(s, tid, 'keep_card', {'which': f'rv{post} + rv{reply}'}, {}))
     assert out['ok'] and set(out['kept']) == {f'rv{post}', f'rv{reply}'}, out
     new = [int(out['kept'][f'rv{x}'][2:]) for x in (post, reply)]
-    assert new == [post, reply] and all(s.get_review(x)['Status'] == 'pending' for x in new), 'the same card, live again where it stood'
-    assert proposals.written_past(s, tid) == set()
+    for old, rid in zip((post, reply), new):
+        o, n = s.get_review(old), s.get_review(rid)
+        assert (n['Status'], n['Kind'], n['DraftText'], n['Deliver']) == ('pending', o['Kind'], o['DraftText'], o['Deliver']), 'the same card'
+        assert proposals.passed(o), 'the greyed one keeps its record where it stood'
+    assert proposals.written_past(s, tid) == set(), 'nothing it brought back sits above his newest line'
     assert set(cardqueue.state(s, tid)['live']) | cardqueue.held(s, tid) == set(new)
     again = json.loads(agenttools.call(s, tid, 'keep_card', {'which': f'rv{new[0]}'}, {}))
     assert not again['ok'] and 'still waits for his press' in again['why'], 'only a greyed card is kept, and the refusal says the way on'
+    twice = json.loads(agenttools.call(s, tid, 'keep_card', {'which': f'rv{post}'}, {}))
+    assert not twice['ok'] and f'as rv{new[0]}' in twice['why'], 'a greyed card is raised again once'
 
 
 def test_a_held_step_is_run_again_never_kept():

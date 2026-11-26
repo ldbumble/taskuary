@@ -327,9 +327,20 @@ def test_a_card_his_line_greyed_stands_again_at_the_turns_end_unless_the_turn_re
     assert all(proposals.passed(w.s.get_review(r)) for r in rids), 'his line greys what waited, the second he types'
     assert 'Greyed until this turn ends' in cardqueue.screen(w.s, w.tid), cardqueue.screen(w.s, w.tid)
     ws.record(w.s, w.tid, 'run1', 'turn_end', text='It is filled in now - the card is ready for your press.', source='api')
-    assert all(w.s.get_review(r)['Status'] == 'pending' for r in rids), 'the turn replaced nothing, and its card stayed greyed'
-    assert w.cards()[rids[0]]['status'] == 'pending' and 'Waiting for his press now' in cardqueue.screen(w.s, w.tid)
+    w.s.add_comment(w.tid, 'assistant', general.ASSISTANT_TYPE, 'It is filled in now - the card is ready for your press.')
+    # ...as a new card under his line, never live again above it (the owner, 2026-11-25: "Never bring back things on top. It's a chat.")
+    assert all(proposals.passed(w.s.get_review(r)) for r in rids), 'the greyed card came back live above his newer line'
+    again = [cardqueue.again_of(w.s, r) for r in rids]
+    assert all(again) and all(w.s.get_review(n)['Status'] == 'pending' for n in again), 'the turn replaced nothing, and nothing stands again'
+    assert [(w.s.get_review(n)['DraftText'], w.s.get_review(n)['Deliver']) for n in again] == [(w.s.get_review(r)['DraftText'], w.s.get_review(r)['Deliver']) for r in rids], 'as it was'
+    chatlog.advance(w.s, w.tid); cardqueue._SEEN.clear(); items = chatlog.read(w.s, w.tid)['items']
+    at = lambda rid: next(i for i, x in enumerate(items) for k in ([x] if x['kind'] == 'card' else x.get('cards') or []) if k['review'] == rid)
+    line = next(i for i, x in enumerate(items) if 'The post box on the page is empty.' in json.dumps(x))
+    assert at(rids[0]) < line < at(again[0]), [x['kind'] for x in items]
+    assert w.cards()[again[0]]['status'] == 'pending' and 'Waiting for his press now' in cardqueue.screen(w.s, w.tid)
+    ws.record(w.s, w.tid, 'run1', 'turn_end', text='Still there.', source='api')
+    assert [cardqueue.again_of(w.s, r) for r in rids] == again and len(w.s._rows('SELECT 1 FROM review WHERE TaskId=?', (w.tid,))) == 2 * len(rids), 'raised again once'
     _line(w, 'Make it shorter.')
     new = _waiting(w, kind)                                             # ...the turn writes it again: the rewrite is what greys the old one for good
     ws.record(w.s, w.tid, 'run1', 'turn_end', text='Shorter now.', source='api')
-    assert all(proposals.passed(w.s.get_review(r)) for r in rids) and all(w.s.get_review(r)['Status'] == 'pending' for r in new)
+    assert all(proposals.passed(w.s.get_review(r)) for r in again) and all(w.s.get_review(r)['Status'] == 'pending' for r in new)

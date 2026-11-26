@@ -160,15 +160,17 @@ def unheard(store, tid: int) -> bool:
         "SELECT * FROM review WHERE TaskId=? AND Status IN ('approved','edited') AND DecidedAt>?", (int(tid), _last_answer(store, int(tid)) or '')))
 
 
-# A CARD HIS INPUT GREYED THAT STILL STANDS COMES BACK AS IT WAS (the owner, 2026-11-23 - walk 6: the same three posts proposed four
-# times, each a model call and one more grey copy, and a reply to Paula greyed by Gail's unrelated message). An input greys what it bears on
-# (proposals.set_aside_drafts) and what the turn it starts does not replace stands again where it stood when that turn ends, by plain code
+# A CARD HIS INPUT GREYED THAT STILL STANDS COMES BACK UNDER HIS NEWEST LINE AS IT WAS (the owner, 2026-11-23 - walk 6: the same three posts
+# proposed four times, each a model call and one more grey copy, and a reply to Paula greyed by Gail's unrelated message). An input greys what
+# it bears on (proposals.set_aside_drafts) and what the turn it starts does not replace is raised again when that turn ends, by plain code
 # (proposals.restore_set_aside; walk 23: left to this verb, two roads in three never called it) - the verb only brings one back sooner
+# ...AS A NEW CARD UNDER THE LINE, NEVER LIVE AGAIN ABOVE IT (the owner, 2026-11-25: "Never bring back things on top. It's a chat."): the
+# greyed one stays greyed where it stood, and is raised again once (again_of)
 # ...AND AN ACT HIS PRESS HANDED TO ITS AGENT THAT CANNOT BE DONE COMES BACK (walk 7, 2026-11-23: Post via the browser on the X card,
 # no X account to sign in with; it could not be withdrawn - "nothing unsent" - and every card behind it waited for good, the Reddit one greyed
 # with no reason). Kept with `why`: the press it had ends failed where he pressed it, saying why, and the card stands again for his press -
 # Post via the browser to try again, Dismiss to skip it - so the line moves on. His word to drop it is withdraw_draft's (verdicts.withdraw)
-KEEP = ('Kept: {ids} stand{s} again for his press, as {it} was - nothing was rewritten.')
+KEEP = ('Kept: {ids} stand{s} again under the newest line, as {it} was - nothing was rewritten.')
 UNDONE = 'handed to its agent, which could not do it'
 LIKE, MORE = ('MessageId', 'RunId', 'Kind', 'DraftText', 'Reason', 'Deliver', 'Origin'), ('AnswersMid', 'Instructions', 'FilesPromised', 'DraftBy', 'DraftWhy')
 IDS = r'\s*(?:rv)?\d+(?:\s*[,+]\s*(?:rv)?\d+)*\s*'      # 'rv12 + rv13': the ids of a card of many, its one handle
@@ -187,9 +189,9 @@ def named(store, tid: int, which: str) -> list:
 
 
 def keep(store, tid: int, which, by: str = 'agent', why: str = '') -> dict:
-    """Each greyed card `which` names ('rv12 + rv13') on task `tid` stands again where it stood, the same card - and an act his press handed
-    to its agent that it could not do (handed) is raised again as a new card, with `why`, which its failed press then says.
-    Never one that went, was turned down or is live; a held step is run again instead (its gate holds it anew)."""
+    """Raise again each greyed card `which` names ('rv12 + rv13') on task `tid` as a new card, the same words and envelope, drawn under the
+    newest line - and an act his press handed to its agent that it could not do (handed), with `why`, which its failed press then says.
+    Never one that went, was turned down, is live or was raised again already; a held step is run again instead (its gate holds it anew)."""
     import re
     from . import bulkcard
     from .proposals import HELD_ACTS, SET_ASIDE, _action
@@ -200,7 +202,7 @@ def keep(store, tid: int, which, by: str = 'agent', why: str = '') -> dict:
     for i in ids:
         r = store.get_review(i)
         if not r or r.get('TaskId') != int(tid): bad.append(f'rv{i}: no card of this task has that id'); continue
-        if (mine := handed(r)):
+        if handed(r):
             if not (w := ' '.join(str(why or '').split())[:300]):
                 bad.append(f'rv{i}: say in `why` what stopped it (no account to sign in with, the site refused) - his card says it'); continue
             p = {k: v for k, v in json.loads(r['FinalText']).items() if k != 'result'}
@@ -208,10 +210,8 @@ def keep(store, tid: int, which, by: str = 'agent', why: str = '') -> dict:
             r = {**r, 'DraftText': json.dumps(p)}
         elif not (r['Status'] == 'superseded' and r.get('DecideNote') == SET_ASIDE):
             bad.append(f"rv{i}: not greyed by an input ({_card_status(r)}) - only a greyed card is kept; raise a new one where it is still needed"); continue
+        elif (n := again_of(store, i)): bad.append(f'rv{i}: it stands again already, as rv{n}'); continue
         if r['Kind'] == 'action' and _action(r) in HELD_ACTS: bad.append(f'rv{i}: a step held for his press - run it again and Taskuary holds it anew'); continue
-        if not mine:                                # ...greyed by an input: the same card, live again where it stood (proposals.restore_set_aside's one road)
-            if store.restore_review(i): kept[i] = i
-            continue
         new = store.add_review({**{k: r.get(k) for k in LIKE}, 'TaskId': int(tid), 'Status': 'pending'})
         rest = {k: r.get(k) for k in MORE}
         if r.get('Batch'): rest['Batch'] = batch.setdefault(r['Batch'], bulkcard.new_key())
@@ -224,6 +224,13 @@ def keep(store, tid: int, which, by: str = 'agent', why: str = '') -> dict:
                        else ' + '.join(f'rv{v}' for v in kept.values()),
                        s='s' if one else '', it='it' if one else 'they')
     return {'ok': bool(kept), **({'kept': {f'rv{k}': f'rv{v}' for k, v in kept.items()}, 'says': says} if kept else {}), **({'why': '; '.join(bad)} if bad else {})}
+
+
+def again_of(store, rid) -> int | None:
+    "The card greyed card `rid` was raised again as (keep's record), or None."
+    for a in store._rows("SELECT Detail FROM audit WHERE EntityType='task' AND Action='cards_kept' AND Detail LIKE ?", (f'%"{int(rid)}"%',)):
+        if (n := (json.loads(a['Detail'] or '{}').get('kept') or {}).get(str(int(rid)))): return int(n)
+    return None
 
 
 def _card_status(r) -> str:

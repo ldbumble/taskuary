@@ -217,9 +217,9 @@ TOOLS = {
                               "correct a reply, just propose the new one; an email IN PLACE of another is the new one's `replaces` - "
                               "one call, one Send left.",
                        _S({'why': _STR, 'which': _STR}, ('why',)), ('POST', '/api/agent/withdraw-draft')),
-    'keep_card': ('own', "A card the owner's newest line or a new message greyed stands again for his press at once, the same card where "
-                         "it stood (it does so by itself when the turn ends). `which`: the card as the screen fact names it (a card of "
-                         "many: its ids, 'rv1 + rv2'). "
+    'keep_card': ('own', "A card the owner's newest line or a new message greyed comes back under the newest line at once, the same words "
+                         "and envelope (one his line greyed does so by itself when the turn ends). `which`: the card as the screen fact "
+                         "names it (a card of many: its ids, 'rv1 + rv2'). "
                          "One his press handed you that you cannot do (no account, the site refused): keep it with `why` - his card says it.",
                   _S({'which': _STR, 'why': _STR}, ('which',)), ('GET', '/api/tasks/1')),
     'hand_over': ('own', "A step on your browser's page only the owner can do - a sign-in or code you cannot type, an \"I'm not a robot\" "
@@ -375,7 +375,7 @@ SHORT = {
     'propose_land': "How your work lands (rebase, merge, pr ...), as the owner's buttons.",
     'reply_not_needed': 'The reply waiting here is no longer needed; say why.',
     'withdraw_draft': 'Take back a reply, email or proposal you set up that has not gone out.',
-    'keep_card': 'Bring back a card greyed by the newest input, as it was.',
+    'keep_card': 'Bring back a card greyed by the newest input, as it was, under that input.',
     'hand_over': 'A page step only the owner can do (sign-in, paying): a card.',
     'sign_form': "Fill and sign a PDF form with the owner's saved signature.",
     'answer_invite': "Answer this task's meeting invite: accept, decline or propose.",

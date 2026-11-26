@@ -5892,14 +5892,6 @@ class SQLiteStore:
             self.cx.commit(); self._writes += 1
         if cur.rowcount: self._review_changed(rid)
         return bool(cur.rowcount)
-    def restore_review(self, rid) -> bool:
-        "A card the conversation set aside, live again (proposals.restore_set_aside) - never one that went or that he decided."
-        with self.lock:
-            cur = self.cx.execute("UPDATE review SET Status='pending', FinalText=NULL, DecidedBy=NULL, DecidedAt=NULL, DecideNote=NULL "
-                                  "WHERE ReviewId=? AND Status='superseded' AND DeliveryClaim IS NULL", (rid,))
-            self.cx.commit(); self._writes += 1
-        if cur.rowcount: self._review_changed(rid)
-        return bool(cur.rowcount)
     def pending_review(self, task_id, kind=None, live_only=True):
         """The task's newest pending review ROW, for a road that DECIDES about it - re-draft into it, answer it, retire it, dismiss it on a
         close. It is NOT what waits on his press: a draft held behind another card or one the thread moved past is still found here.

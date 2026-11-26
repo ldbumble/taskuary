@@ -540,6 +540,12 @@ def _asking(store, tid: int) -> bool:
 
 def _card_call(store, tid: int, name: str, args: dict, doors: dict, skip=()) -> str:
     args = _arguments(args)
+    # ...WHAT STANDS BESIDE `items` IS SHARED BY EVERY ITEM - never one more of them (walk 23, 2026-11-25: one version beside `items`, the other
+    # inside it; the one beside them went nowhere, one card stood with one version and the agent said "both")
+    if TOOLS[name][0] == 'propose' and isinstance((args or {}).get('items'), list) and (its := [x for x in args['items'] if isinstance(x, dict)]) \
+            and (dead := sorted(k for k, v in args.items() if k not in ('items', 'replaces') and all(k in it and it[k] != v for it in its))):
+        raise ValueError(refusal(f"`{'`, `'.join(dead)}` is given beside `items` and again, differently, in every item - what stands beside them is shared by "
+                                 "all, so it would be used by none; nothing was raised", "give each version (or each person's) as its own item, and beside them only what they share"))
     # ...ONE item is one card, as if given whole (2026-11-17: a lone break_out stood as "1 step - review a few, then do them all", "Approve all 1")
     if TOOLS[name][0] == 'propose' and isinstance((args or {}).get('items'), list) and len(args['items']) == 1 and isinstance(args['items'][0], dict):
         args = {**{k: v for k, v in args.items() if k != 'items'}, **args['items'][0]}
@@ -634,11 +640,17 @@ def _many(store, tid: int, name: str, args: dict, doors: dict) -> str:
     # filed is new, and only new ones are batched
     stand = [r['ReviewId'] for r in store._rows(f"SELECT ReviewId FROM review WHERE TaskId=? AND Status='pending' AND ReviewId IN ({','.join('?' * len(mine))})",
                                                 (int(tid), *mine))] if mine else []
-    mine = [r for r in stand if r > top]
+    mine_all, mine = mine, [r for r in stand if r > top]
     # ...AND ITEMS THAT ARE ONE LETTER WRITTEN SEVERAL WAYS ARE ITS VERSIONS, ON THAT ONE CARD (walk 22, 2026-11-25: "Yes - Thursday 2pm" and
     # "No - keep Friday" for one reply; each item rewrote the same card and only the last stood): kept on it for him to pick from, the first in
     # its box - what he picks, and changes, is what his Send sends
+    # ...WHETHER EACH ITEM REWROTE THE CARD OR TOOK ITS PLACE (walk 23, 2026-11-25: on a task with an earlier draft the second version closed the
+    # first as replaced and stood alone - one card, one version, answered as "a tab each, 1 of them", and the agent said "both"): where ONE
+    # letter stands of all the call filed, every item's words are that letter's versions, in the order given
     picks = {r: list(dict.fromkeys(v)) for r, v in words.items() if r in stand and len(set(v)) > 1}
+    if len(stand) == 1 and not picks and not went and len(alls := list(dict.fromkeys(w for r in dict.fromkeys(mine_all) for w in words[r] if w.strip()))) > 1 \
+            and (store.get_review(stand[0]) or {}).get('Kind') != 'action':
+        picks = {stand[0]: alls}
     for r, v in picks.items(): store.set_review_versions(r, v)
     if old and stand: _take_back(store, tid, doors, old, stand)
     # ...and only MANY OF THE SAME THING is one card (the owner, 2026-11-20): posts for different networks are different things - each its own
@@ -648,6 +660,7 @@ def _many(store, tid: int, name: str, args: dict, doors: dict) -> str:
     n = len(stand)
     card = (f"They stand as ONE card holding {len(next(iter(picks.values())))} versions: the owner picks one, changes it if he likes, and sends that one." if picks and n == 1
             else 'They stand as ONE card: the owner does them all with one press; you hear the whole run once.' if bulk
+            else f'ONE card stands of the {len(items)} items given: each wrote that same card, and its words are those of the last item.' if n == 1 and len(items) > 1
             else f'They stand as one card with a tab each, {n} of them: the owner sees and presses each, in any order; you hear how they went once the last is answered, or at once if a press fails.')
     shown = ((f"{len(went)} of {len(items)} sent at once - a routine's email to what its owner saved into it goes without a press; say they went."
               + (f" Not sent: {'; '.join(held)}." if held else '') + (f" The {n} unsent stand for the owner's Send{' as ONE card' if bulk else ', one at a time'}." if n else '')) if went

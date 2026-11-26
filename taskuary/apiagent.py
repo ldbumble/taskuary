@@ -586,6 +586,13 @@ def size(msgs: list, tools=()) -> int:
     pics = sum(len(p['image_url'].get('url') or '') - IMAGE_CHARS for m in msgs for p in (m.get('content') if isinstance(m.get('content'), list) else ())
                if isinstance(p, dict) and isinstance(p.get('image_url'), dict))
     return len(json.dumps({'messages': _read(msgs), 'tools': list(tools or ())}, separators=(',', ':'), ensure_ascii=False, default=str)) - pics
+def shape(a, deep: int = 3):
+    """A CALL'S ARGUMENTS BY THEIR SHAPE, for the server's log (walk 23, 2026-11-25: "two versions" became one card and what the agent had
+    passed was in no log): every key it gave, a number or a switch as it is, a text by its length alone - never his words, an address or a
+    secret - and a list by each item's own shape."""
+    if isinstance(a, dict): return {str(k)[:40]: shape(v, deep - 1) for k, v in list(a.items())[:30]} if deep else f'object({len(a)})'
+    if isinstance(a, list): return [shape(v, deep - 1) for v in a[:12]] + ([f'+{len(a) - 12} more'] if len(a) > 12 else []) if deep else f'list({len(a)})'
+    return a if isinstance(a, (bool, int, float)) or a is None else f'text({len(str(a))})'
 def _whole_from(msgs: list, keep: int = KEEP_STEPS) -> int:
     "Where whole answers begin: the step at the last block boundary at least `keep` steps back (0: everything whole)."
     steps = [i for i, m in enumerate(msgs) if m.get('tool_calls')]
@@ -743,6 +750,7 @@ def turn(brain, store, tid: int, sid: str, system: str, user: str, max_tokens: i
                 try: a = json.loads(f.get('arguments') or '{}') or {}
                 except ValueError: a = {}
                 if trace: trace('tool_call', name, {'tool_call_id': cid, 'args': a})
+                logger.info(f'apiagent: task {tid} calls {name} {json.dumps(shape(a), ensure_ascii=False)[:1200]}')
                 if name in (DEFERRED.get((tid, sid)) or {}): load(tid, sid, tools, [name])       # called by the name it was given: loaded as it runs
                 if name == 'browser_open': load(tid, sid, tools, BROWSER_MORE)
                 key, again = (name, json.dumps(a, sort_keys=True, default=str)), False

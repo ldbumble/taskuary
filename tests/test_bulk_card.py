@@ -555,3 +555,47 @@ def test_a_bulk_run_that_all_went_wakes_nobody_and_one_with_a_failure_wakes_its_
     told, woke = [], []
     with mock.patch.object(github.requests, 'patch', GitHub(bad={7}).patch): press(s, out['batch'], told=told, woke=woke)
     assert len(woke) == 1 and '1 failed' in woke[0] and 'issue was deleted' in woke[0], woke
+
+
+def test_versions_stand_on_the_one_card_also_where_each_item_took_the_place_of_the_one_before():
+    """Walk 23, 2026-11-25 (the HIPAA road): "two versions - one yes, one declining" became ONE card holding only the decline, answered as "one
+    card with a tab each, 1 of them", and the agent told him it had drafted both. Where an item's letter does not rewrite the one before it
+    but takes its place (the earlier one closed as replaced), the one card that stands still holds every item's words as its versions."""
+    from test_own_ask_no_reply import mailed_task
+    from taskuary import wrapup
+    s = MemoryStore(); tid = mailed_task(s, 'general')
+    yes, no = 'Hi Erin, yes - I will speak on the panel. Alex', 'Hi Erin, thank you, but I have to decline this time. Alex'
+    real = wrapup.agent_reply
+    def replacing(store, task_id, text, *a, **k):
+        # ...each item files a letter of its own: the one standing is closed as replaced first, as a later turn's letter closes an earlier one
+        for r in store._rows("SELECT ReviewId FROM review WHERE TaskId=? AND Status='pending' AND Kind='draft_reply'", (task_id,)):
+            store.decide_review(r['ReviewId'], 'closed_unsent', None, 'assistant', note=wrapup.REPLACED)
+        return real(store, task_id, text, *a, **k)
+    with mock.patch.object(server, 'store', s), mock.patch.object(wrapup, 'agent_reply', replacing):
+        out = call(tid, 'propose', kind='reply', items=[{'text': yes}, {'text': no}])
+    [rv] = s._rows("SELECT * FROM review WHERE TaskId=? AND Status='pending' AND TRIM(IFNULL(DraftText,''))<>''", (tid,))
+    assert out['ok'] and out['on_the_card'] == 1 and '2 versions' in out['shown'], out
+    assert rv['DraftText'] == yes and json.loads(rv['Versions']) == [yes, no], 'both versions on the one card that stands, the first in its box'
+
+
+def test_words_given_beside_items_that_every_item_gives_again_are_answered_with_the_fix_never_dropped():
+    """The same walk's other shape: one version written beside `items` and the other inside it. What stands beside `items` is shared by every
+    item; where every item gives its own, the one beside them would go nowhere - one card, one version, and "both" said. Answered with the
+    exact fix, and nothing is filed."""
+    from test_own_ask_no_reply import mailed_task
+    s = MemoryStore(); tid = mailed_task(s, 'general')
+    with mock.patch.object(server, 'store', s):
+        r = c.post(f'/api/mcp?task={tid}', headers=hdr(tid), json={'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call', 'params': {'name': 'propose', 'arguments': {
+            'kind': 'reply', 'text': 'Hi Erin, yes - I will speak on the panel. Alex', 'items': [{'text': 'Hi Erin, thank you, but I have to decline. Alex'}]}}}).json()['result']
+    said = r['content'][0]['text']
+    assert r['isError'] and '`text`' in said and 'its own item' in said, said
+    assert not s._rows("SELECT 1 FROM review WHERE TaskId=? AND TRIM(IFNULL(DraftText,''))<>''", (tid,)), 'nothing was filed'
+    # ...a field the items share is theirs as ever
+    with mock.patch.object(server, 'store', s):
+        out = call(tid, 'propose', kind='email', subject='October close', text='The October close is done. Alex',
+                   items=[{'to': 'gail@northwind.example'}, {'to': 'paula@northwind.example'}])
+    assert out['ok'] and out['on_the_card'] == 2, out
+    # ...and what its agent passed is on the server's record by its shape - each key, a text by its length, never a word of his (apiagent.shape)
+    from taskuary import apiagent
+    assert apiagent.shape({'kind': 'reply', 'text': 'Hi Erin - yes.', 'answers': 12, 'items': [{'text': 'x' * 400, 'to': ['erin@northwind.example']}]}) == {
+        'kind': 'text(5)', 'text': 'text(14)', 'answers': 12, 'items': [{'text': 'text(400)', 'to': 'list(1)'}]}, "a call's shape names no word of his"

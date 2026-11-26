@@ -2,6 +2,33 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.4.6.1 - 2026-11-26
+
+- The old agent types leave what was left of them: no per-type AI, no type list, one coding row
+- An AI card's harness CLI asks its model through Taskuary's own relay, so a file it opened itself leaves masked
+- The card relay runs on its own threads, and answers its own computer on whichever address the server listens
+- Profiles: an account is one profile's or everyone's, and a task's agent uses only its own
+- About you adds a profile by name, and the two profile routes are the owner's alone
+- A press lands on the button the pointer went down on, and shows under the pointer at once
+- A card that waits is the last thing in the chat, a no wakes nobody while another waits, and a press never changes the tab shown
+- Playbooks are skills: one library of SKILL.md folders, the old pages moved over once
+- A skill goes out as a zip and comes in as text for one press
+- Every agent's context carries the skills' names and descriptions
+- A chip on a prompt box is as wide as its words
+- The agent's call decides a card's shape, a no never wakes the agent, and the rules are pinned as plain tests
+- The agent that did the job offers its skill; no side model drafts one at a task's end
+- His edits to a draft feed the skill's reflection, and come back as a card
+- What he typed into a card is kept by its review, wherever the card is drawn
+- A routine can use a skill: an optional link beside its own instructions
+- A card is drawn once, in its place: the list card's bar has its room, the rule's net is said as one, and a post's edits are read back
+- Lock the owner's card rules: nothing in the chat goes away, nothing after a waiting card, a Dismiss never wakes - rule 10 and its contract tests (his written OK, 2026-11-26)
+- A Follow up line in the brief carries its door, and a press prepares the follow-up
+- Skills are listed like tools: every one, name and a short description, the same bytes each call
+- Security round 5: launch key, comment rule, decoded words, device prefix, Enter, memory size
+- Security round 5: an AWS call is what its operation is, a card's connection is the card's, a press covers what was shown, and the mask reads JSON
+- Widening an old connector table keeps every column, and the rail trigger watches an account's profile
+- A torn read of config.toml no longer mints a new agent token
+
 ## 0.4.6.0 - 2026-11-26
 
 - The old agent types leave what was left of them: no per-type AI, no type list, one coding row

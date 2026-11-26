@@ -206,7 +206,9 @@ class Holding(unittest.TestCase):
         with mock.patch('taskuary.workerstate._live', return_value=self.sess), mock.patch.object(ad, '_run') as run:
             self.assertTrue(verdicts.decide(self.s, rv, 'reject')['ok'])
         run.assert_not_called()
-        self.assertIn('did not approve it', self.heard()[0])
+        # ...told as his own with the agent's next turn: his no never wakes it (the owner, 2026-11-26)
+        from taskuary import events
+        self.assertEqual(self.heard(), []); self.assertIn('did not approve it', events.take(self.s, self.tid)[0])
 
     def test_his_yes_to_a_press_in_an_app_stands_for_the_task_and_his_no_is_told_not_asked_again(self):
         # the roads audit, 2026-11-19 (#7): the desktop gate asks the one rule the browser's and the shell's do (gate.decide)

@@ -180,11 +180,14 @@ class Holding(unittest.TestCase):
         sg.check(self.s, self.tid, 'run1', 'git push origin fix-export', 'Bash', r'C:\work\ledger', about='  ship the export fix  ')
         [rv] = self.pending(); self.assertEqual(json.loads(rv['DraftText'])['about'], 'ship the export fix')
 
-    def test_dismiss_tells_the_agent_it_was_not_done(self):
+    def test_dismiss_tells_the_agent_it_was_not_done_with_its_next_turn_and_wakes_nobody(self):
+        # his no never wakes the agent (the owner, 2026-11-26): it is the task's event, told as his own in the turn his next line starts
+        from taskuary import events
         self.held(); [rv] = self.pending()
         with mock.patch('taskuary.workerstate._live', return_value=self.sess):
             self.assertTrue(verdicts.decide(self.s, rv, 'reject')['ok'])
-        self.assertIn('did not approve it', self.heard()[0]); self.assertIn('git push origin fix-export', self.heard()[0])
+        said = events.take(self.s, self.tid)[0]
+        self.assertEqual(self.heard(), []); self.assertIn('did not approve it', said); self.assertIn('git push origin fix-export', said)
 
 
 class Running(unittest.TestCase):
@@ -692,7 +695,9 @@ class ReadingOutside(unittest.TestCase):
         gate.tool_call(self.read(os.path.join(self.docs, 'conftest.py')), self.ctx); [rv] = self.pending()
         with mock.patch('taskuary.workerstate._live', return_value=self.sess):
             self.assertTrue(verdicts.decide(self.s, rv, 'reject')['ok'])
-        self.assertIn('did not approve it', self.heard()[0]); self.assertIn(browsergate.OWNER_NO, self.heard()[0])
+        from taskuary import events
+        said = events.take(self.s, self.tid)[0]            # ...with its next turn: his no wakes nobody (2026-11-26)
+        self.assertEqual(self.heard(), []); self.assertIn('did not approve it', said); self.assertIn(browsergate.OWNER_NO, said)
 
     def test_the_context_file_taskuary_wrote_for_the_task_is_its_to_read_and_no_other_tasks(self):
         """Recorded on the real CLI, 2026-11-16: the brief points the agent at its context file in Taskuary's home, and its Read was refused

@@ -527,7 +527,9 @@ class Holding(unittest.TestCase):
         with mock.patch('taskuary.workerstate._live', return_value=self.sess), mock.patch.object(bg, '_run') as run:
             self.assertTrue(verdicts.decide(self.s, rv, 'reject')['ok'])
         run.assert_not_called()
-        self.assertIn('did not approve it', self.heard()[0])
+        # ...told as his own with the agent's next turn: his no never wakes it (the owner, 2026-11-26)
+        from taskuary import events
+        self.assertEqual(self.heard(), []); self.assertIn('did not approve it', events.take(self.s, self.tid)[0])
 
 
 PAY = 'http://127.0.0.1:8765/checkout'

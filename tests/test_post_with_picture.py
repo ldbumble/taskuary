@@ -162,9 +162,11 @@ class OnePress(unittest.TestCase):
         drew = {'data': PNG + b'drawn', 'mime': 'image/png', 'provider': 'pictures', 'label': 'Pictures', 'model': 'm', 'prompt': 'a four-day close'}
         with mock.patch.object(images, 'generate', return_value=drew), mock.patch.object(outbound, 'connect_fix', return_value=None):
             said = agenttools._call(s, self.tid, 'draw_image', {'prompt': 'a four-day close'}, {})
-        row = json.loads(said.partition(agenttools.FILES_MARK)[2])[0]
+        [made] = list(outputs.folder(self.tid).glob('image-*.png'))
+        self.assertIn(str(made), said)                                                                # ...its answer says where the file is
+        self.assertEqual((outputs.pages(s, self.tid), outputs.calls(self.tid)), ([], []), 'drawn into the chat by itself: only a card or `show` draws it')
+        row = json.loads(agenttools.show_files(s, self.tid, [str(made)]).partition(agenttools.FILES_MARK)[2])[0]      # ...shown, it has a handle too
         self.assertTrue(row['path'].startswith('shown:'))
-        self.assertIn(str(outputs.folder(self.tid) / row['name']), said)                              # ...and its answer says where the file is
         for handle in (row['path'], row['name'], str(outputs.folder(self.tid) / row['name'])):
             r = self.propose(text='We close the month in four days.', image=handle)
             self.assertEqual(r.status_code, 200, f'{handle}: {r.text}')

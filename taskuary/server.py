@@ -2835,7 +2835,9 @@ def _revisioned(got, rev: str = ''):
 
 @app.get('/api/tasks/{task_id}/assistant')
 def assistant_state(task_id: int, rev: str = ''):
-    return _revisioned(_assistant_payload(task_id), rev)
+    out = _assistant_payload(task_id)
+    if demo.enabled(): demo.scene_opened(store, task_id)          # ...the one scripted scene, where it was asked for: it starts once its chat is open
+    return _revisioned(out, rev)
 
 def _left_now(task_id: int) -> None:
     """A HELD STEP WHOSE BROWSER HAS LEFT ITS PAGE IS GREYED BEFORE IT IS SERVED (browsergate.left_now; the walk, 2026-11-19: an Approve looked

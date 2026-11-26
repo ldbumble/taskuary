@@ -1,5 +1,36 @@
 # General assistant product demo
 
+## A team finds a time (availability view)
+
+`taskuary-availability.webm` (about 36 seconds, no sound; `taskuary-availability.png` is a still of it) shows one
+thread where a team looks for an hour next week, and nothing else on the screen: the film is the task's own panel.
+The first mail is there; nobody types. The task's agent starts on it by itself, as it does on any arrival, and
+draws one view of who can make which times - each person's ranges on a time axis, how many are free in each
+stretch, the best slot banded with its count. Each reply lands, and the same view is drawn again under it, moving
+from what it was: a new bar grows in, the band travels to the new best slot, the count goes on. No older copy
+stays above. It ends on the invite for the best slot, as a card waiting for a press. Nothing is sent.
+
+It is recorded from the demo world, never a live mailbox: `website/record-availability.mjs` starts
+`taskuary --demo` itself on a throwaway home and a free port with `TASKUARY_DEMO_SCENE=availability`, which adds
+the thread's task and plays the scene once when that task is first opened (`taskuary/demo.py`, `SCENE`). The
+people are the repository's invented ones at `northwind.example`. The replies and the agent's turns go through the
+roads real ones take, and the view is the spec a real agent hands `show` (`availability`, the same `id` each
+time): the counts and the best slot are worked out by the page, not written in the script.
+
+```powershell
+# from website/: build the app the demo serves
+npm exec --yes --package=node@22 -- node node_modules/vite/bin/vite.js build
+# from the repository root; Playwright is not a dependency here, so name its package folder
+$env:TASKUARY_PLAYWRIGHT = "<...>\node_modules\playwright"
+npm exec --yes --package=node@22 -- node website/record-availability.mjs            # --dark for the dark theme, --out <folder>, --name <file name>
+```
+
+The page is drawn at the density that makes the task panel 1440 real pixels wide, and the panel alone is
+photographed as it changes (about twenty times a second) - Playwright's own video keeps a page at one pixel a
+point whatever its density, so its words came out small or stretched. The frames are put together by the ffmpeg in
+Playwright's browsers folder. The recorder fails on a page error or on any request that leaves this computer, and
+saves a still of the panel at each beat beside the film.
+
 ## Dashboard and Advisor showcase
 
 `website/record-showcase.mjs` records a separate, short tour of the current static

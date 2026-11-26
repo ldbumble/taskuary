@@ -190,6 +190,28 @@ Open and Download. The complete conversation is **The whole conversation ›** u
 files a Markdown record of what it did under `~/.taskuary/artifacts/` — the outcome, not a copy of
 the terminal.
 
+### What an agent draws in its chat
+
+Where a picture says more than a paragraph, the agent draws one in its turn, on the same raised card as everything
+else it sets down. A view never sends, pays or closes anything.
+
+| It draws | What you see |
+|---|---|
+| **Numbers** | tiles with a figure, how it moved and a note; bar, line, area and pie charts; a table with its money, counts and percents lined up |
+| **Lists** | a checklist with how far along it is, numbered steps, a plain list, a note |
+| **A what-if** | a slider, toggle, select or date that moves a value on your screen, and the tiles, charts and cells worked out from it change as you move it |
+| **A question** | a choice, or a button with an answer - your pick goes back to the agent once |
+| **Who can make which times** | a row a person, their ranges as bars on one time axis with the days side by side, how many people are free in each stretch, and the best slot banded and said with its count - "Tue, Dec 1 · 3–4pm, 6 of 7" - who cannot make it and who has not replied |
+
+The agent gives the availability view only who and the hours each named. How many fit each slot and which slot is
+best - the most people for the meeting's length; between equals the longer shared stretch, then the earlier - are
+counted on the page, the same every time.
+
+A view the agent names is one view, kept up to date - a chart, a table, any of them. When new input changes it the
+agent shows it again, and it is drawn once, under the newest line, as it now is: no older copy stays above it. On a
+thread finding a time, that is the availability view under the newest reply, its bars and count filled in. With
+"reduce motion" on, it is drawn without moving.
+
 ### When the agent opens a browser
 
 With the optional `agent-browser` tool installed, the page the agent is on appears live beside

@@ -110,14 +110,17 @@ TOOLS = {
                      "and cells worked out from it ({\"$expr\": \"seats * 12\"}) change on his screen as he moves it; a choice or a button "
                      "whose pick comes back to you once, as his press. `elements` maps an id to {type, props, children?, on?}; `root` is drawn "
                      "first. Rows a Taskuary tool gave you as records ([{column: value}]) go into a table's or chart's `rows` as they are. "
+                     "An availability draws who can make which times - each person's ranges on one time axis, how many are free in "
+                     "each slot and the best slot, counted on the page from the ranges alone. Any view with an `id` shown again under that "
+                     "`id` is drawn once, where you just showed it, as it now is - no older copy stays above it. "
                      "Types: grid, stats, chart, table, checklist, list, steps, text, note, badge, button, slider, toggle, select, date, "
-                     "choice - their props and worked examples are the guide tool's `show` topic. A view never sends, pays or closes. "
+                     "choice, availability - their props and worked examples are the guide tool's `show` topic. A view never sends, pays or closes. "
                      "A bad spec comes back saying what to fix. `files`: full paths of files you made - a picture,"
                      " a PDF, a page, or any file that is text - each is copied onto the task and drawn in this "
                      "chat as it is, a picture as the picture; several in one call (versions of one thing) stand as one artifact, "
                      f"separate calls as separate ones. {SHOW_WHAT} It is the one road onto the owner's screen: a viewer, a browser or an app opened on the computer is not"
                      " on it, and its answer says what was shown.",
-             _S({'title': _STR, 'root': _STR, 'elements': {'type': 'object', 'additionalProperties': __import__('taskuary.viewspec', fromlist=['x']).element_schema()},
+             _S({'title': _STR, 'id': _STR, 'root': _STR, 'elements': {'type': 'object', 'additionalProperties': __import__('taskuary.viewspec', fromlist=['x']).element_schema()},
                  'state': {'type': 'object'}, 'files': {'type': 'array', 'items': _STR}}),
              ('GET', '/api/tasks/1')),
     # ...and A PICTURE, drawn by the owner's image model (images.pick: an image card, or an AI card whose models include one) - the one road to

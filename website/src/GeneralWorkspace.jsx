@@ -18,7 +18,7 @@ import { AttachChip, fileChips, fileState, usePromptImages, useSendWhenUp } from
 import { holdUnsent } from "./unsent.js";
 import { baseName } from "./agentSteps.js";
 import { AgentSteps, PermitCtx } from "./AgentStepRows.jsx";
-import { chatSource, checkBackDue, waitingShown, eventsOf, turnSteps, hasParts, isPastCard, standing, heldAtEnd, AT_END, anchorOf, anchorShift, endAt, openAt, OPEN_HOLD, shrinkHeld, SHRINK_HOLD, turnParts, waitsLast, noCard, workCount, folds, ranUnder, foldLine, paintable, withMine, waitingChips, workingLine, waitingOn, askTurn, onYouTurn, askedFirst, runsOf, patchSteps, askOn, asksOff } from "./chatStream.js";
+import { chatSource, checkBackDue, waitingShown, eventsOf, turnSteps, hasParts, isPastCard, standing, heldAtEnd, AT_END, anchorOf, anchorShift, endAt, openAt, OPEN_HOLD, shrinkHeld, SHRINK_HOLD, turnParts, waitsLast, noCard, workCount, folds, ranUnder, foldLine, paintable, withMine, waitingChips, workingLine, waitingOn, askTurn, onYouTurn, askedFirst, runsOf, patchSteps, askOn, asksOff, viewHomes, viewAt } from "./chatStream.js";
 import { stepLabel } from "./agentSteps.js";
 export { checkBackDue };
 import { detailFor, ownDetail, useOwnDetail } from "./chatDetail.js";
@@ -264,7 +264,8 @@ const TurnWorkView = ({ data, now, k }) => {
     : p.type === "edit" ? [{ id: p.id, kind: "edit", summary: p.summary, status: "done" }] : [])) }} />;
   const draw = (p, i, lvl) => p.type === "said" ? <Md key={p.id} text={p.text} /> : p.type === "edit" ? <EditRow key={p.id} p={p} />
     : p.type === "plan" ? <PlanRow key={p.id} p={p} />
-    : p.type === "view" ? <ViewSpec key={p.id} spec={p.spec} taskId={outs?.tid} />
+    // ...a view shown again under its name is drawn once, at its newest place; an older copy is never kept above it (chatStream.viewHomes)
+    : p.type === "view" ? (viewAt(outs?.views, k, p) ? <ViewSpec key={p.id} spec={p.spec} was={outs?.views?.get(p.spec.id)?.was} taskId={outs?.tid} /> : null)
     // ...a file the agent showed (show `files`) is drawn by its kept copy, placed in its turn by the server for both chats (ShownCtx), never twice
     : p.type === "files" ? null
     : lvl === "everything" ? <AgentSteps key={p.id} data={{ steps: p.steps }} />
@@ -413,7 +414,8 @@ const ConvTurn = ({ t, more, ran = 0, cards, name, ask = null, later = false, ow
   const made = at ? turnFiles({ listed: at.listed, id: key, words, did: sum?.did, tid: at.tid, skip }) : [];
   const names = new Set(made.map((f) => f.name));
   const rest = shownOnce(at ? outputRefs(words, at.tid, at.listed).files : [], shown).rest.filter((p) => !names.has(p.name) && !skip.has(p.name));
-  const quiet = !live && !hasParts(parts) && !words && !t.fail && !cards?.length && !made.length && !rest.length && !ask;
+  // ...a turn whose only part is a view shown again since stands at that newer place: nothing of its own here, so no head over nothing
+  const quiet = !live && !hasParts(parts.filter((p) => p.type !== "view" || viewAt(at?.views, t.id, p))) && !words && !t.fail && !cards?.length && !made.length && !rest.length && !ask;
   // ...and never under the turn's own open question (the audit, 2026-11-15: "What is your plate number?" in its words, then "For you to do:
   // Tell me your plate number"): what it asks him IS what is left to him, said once. THE TURN'S OWN, KEPT (design round 5, I3): the list says
   // which turns say it (`on_you`, conversation.left_on_him), settled once - it never leaves a turn for the next one
@@ -1083,7 +1085,7 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
     <WorkCtx.Provider value={{ reviews, checklist: steps, acts: [...(data?.browserActs || []), ...(data?.skillDrafts || [])], next,
       cards: data?.cards || [], refresh }}>
     {/* ...and each file in the turn that made it (placeMade): one no turn made, or a page no turn holds, is not drawn in the conversation */}
-    <OutputsCtx.Provider value={{ tid: task.TaskId, listed: placeMade(data?.outputs, turnsNow), versions: data?.turnOutputs }}>
+    <OutputsCtx.Provider value={{ tid: task.TaskId, listed: placeMade(data?.outputs, turnsNow), versions: data?.turnOutputs, views: viewHomes(turnsNow) }}>
     <LocalFiles.Provider value={{ tid: task.TaskId }}>
       <AssistantThread key={task.TaskId} task={task} list={conv.list} reloadList={conv.load}
         onAsked={dropAsk} onStop={stopRun} selectionRef={selectionRef}

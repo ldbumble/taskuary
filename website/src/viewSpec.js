@@ -4,6 +4,7 @@
 // still draws only what the catalog allows. Anything else is null, and ViewSpec.jsx shows the JSON as text. Pure: test/viewSpec.test.mjs.
 import cat from "../../taskuary/viewspec.json" with { type: "json" };
 import { VERBS, label } from "./buttons.js";
+import { minsOf } from "./availability.js";
 
 export const MARK = "TASKUARY-VIEW ";
 const { caps: CAPS, every: EVERY } = cat;
@@ -112,7 +113,15 @@ const KIND = {
     : isObj(o) && text(o.text) ? { text: text(o.text), done: o.done === true } : null)),
   points: (v) => all(list(v), (o) => (isObj(o) && text(o.label) && ((typeof o.value === "number" && Number.isFinite(o.value)) || exprOf(o.value))
     ? { label: text(o.label), value: exprOf(o.value) ? { $expr: exprOf(o.value) } : o.value, ...(o.highlight === true ? { highlight: true } : {}) } : null)),
-  records: (v) => list(v),            // ...a chart's: made its points in element()
+  // who can make which times (viewspec._avail): a name once, its ranges {day, from, to} with from before to - none given is no reply yet
+  avail: (v) => { const ps = all(list(v, CAPS.people), (o) => {
+      if (!isObj(o) || !text(o.name) || Object.keys(o).some((k) => k !== "name" && k !== "ranges")) return null;
+      if (o.ranges == null) return { name: text(o.name) };
+      const rs = Array.isArray(o.ranges) && o.ranges.length <= CAPS.ranges ? o.ranges.map((r) => (isObj(r) && Object.keys(r).every((k) => ["day", "from", "to"].includes(k))
+        && text(r.day, 20) && minsOf(r.from) != null && minsOf(r.to) != null && minsOf(r.from) < minsOf(r.to) ? { day: text(r.day, 20), from: r.from.trim(), to: r.to.trim() } : null)) : [null];
+      return rs.includes(null) ? null : { name: text(o.name), ranges: rs }; });
+    return ps && new Set(ps.map((p) => p.name)).size === ps.length && new Set(ps.flatMap((p) => (p.ranges || []).map((r) => r.day))).size <= CAPS.days ? ps : null; },
+  records: (v) => list(v),           // ...a chart's: made its points in element()
   num: (v) => (typeof v === "number" && Number.isFinite(v) ? v : null),
   // a control's value: the state name it moves - "seats", "/seats" or json-render's {$bindState: "/seats"}
   bind: (v) => { const n = isObj(v) ? v.$bindState : v; const s = typeof n === "string" ? n.trim().replace(/^\//, "") : "";
@@ -170,6 +179,7 @@ function element(e) {
   if (e.on != null && (!on || e.type !== "button")) return null;
   if (e.type === "button" && ["verb" in out, "open" in out, !!on].filter(Boolean).length !== 1) return null;
   if (e.type === "slider" && !(out.min < out.max)) return null;
+  if (e.type === "availability" && !((out.minutes ?? 30) >= 15 && (out.minutes ?? 30) <= 480)) return null;
   const kids = e.children ?? [];
   if (!Array.isArray(kids) || kids.length > CAPS.children || kids.some((k) => typeof k !== "string")) return null;
   return { type: e.type, props: out, ...(on ? { on } : {}), children: kids };
@@ -207,7 +217,8 @@ export function normalise(spec) {
   if (!walk(spec.root)) return null;
   const title = spec.title == null ? "" : text(spec.title), state = stateOf(spec.state, out);
   if (title === null || state === null) return null;
-  const id = !asks(out) ? "" : typeof spec.id === "string" && /^[\w-]{1,64}$/.test(spec.id) ? spec.id : hash(JSON.stringify({ title, root: spec.root, elements: out }));
+  // ...and A VIEW NAMED (its own `id`) is one view: shown again it is drawn once, at its newest place, as it now is (chatStream.viewHomes)
+  const id = typeof spec.id === "string" && /^[\w-]{1,64}$/.test(spec.id) ? spec.id : asks(out) ? hash(JSON.stringify({ title, root: spec.root, elements: out })) : "";
   return { title, root: spec.root, elements: out, ...(Object.keys(state).length ? { state } : {}), ...(id ? { id } : {}) };
 }
 

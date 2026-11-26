@@ -77,6 +77,53 @@ class TheCheck(unittest.TestCase):
         self.assertEqual(json.loads(spec), viewspec.check(SPEC))
 
 
+class WhoCanMakeWhichTimes(unittest.TestCase):
+    "availability: the agent gives who and their ranges - the counts and the best slot are the page's (availability.js); a view's id names it"
+    TEAM = [{'name': 'Erin Blake', 'ranges': [{'day': '2026-12-01', 'from': '14:00', 'to': '16:00'}]},
+            {'name': 'Ray Colton', 'ranges': [{'day': '2026-12-02', 'from': '10:00', 'to': '12:00'}, {'day': '2026-12-01', 'from': ' 15:00', 'to': '16:00'}]},
+            {'name': 'Paula Vance', 'ranges': []}, {'name': 'Omar Keller'}]
+
+    def test_it_passes_as_given_no_reply_and_none_kept_apart(self):
+        v = viewspec.check({**one('availability', {'title': 'Product ideas session', 'minutes': 60, 'people': self.TEAM}), 'id': 'times'})
+        ps = v['elements']['a']['props']['people']
+        self.assertEqual(ps[0], self.TEAM[0])
+        self.assertEqual(ps[1]['ranges'][1], {'day': '2026-12-01', 'from': '15:00', 'to': '16:00'})
+        self.assertEqual((ps[2], ps[3]), ({'name': 'Paula Vance', 'ranges': []}, {'name': 'Omar Keller'}))      # none of the times; no reply yet
+        self.assertEqual(v['id'], 'times')
+        self.assertIn('"id":"times"', viewspec.shown({**one('availability', {'people': self.TEAM}), 'id': 'times'}))     # ...and it rides the answer
+
+    def test_what_it_cannot_draw_is_refused_saying_what_to_fix(self):
+        bad = lambda people, says, **more: self.assertRaisesRegex(ValueError, says, viewspec.check, one('availability', {'people': people, **more}))
+        at = lambda **r: [{'name': 'Erin Blake', 'ranges': [{'day': '2026-12-01', 'from': '14:00', 'to': '16:00', **r}]}]
+        bad([], 'needs people')
+        bad(at(to='13:00'), r'ranges\[0\]\.from must be before its to')
+        bad(at(**{'from': '2pm'}), r'ranges\[0\]\.from must be a time on a 24-hour clock, like 09:30 or 14:00')
+        bad(at(count=4), r'has count - it takes day, from, to')                    # a count is never the agent's to give
+        bad([{'name': 'Erin Blake', 'fits': True}], 'has fits - it takes name, ranges')
+        bad([{'name': 'Erin Blake'}, {'name': 'Erin Blake'}], 'listed twice')
+        bad([{'name': 'Erin Blake', 'ranges': 'Tuesday afternoon'}], 'must be a list of')
+        bad([{'name': f'Person {i}'} for i in range(13)], 'at most 12')
+        bad([{'name': 'Erin Blake', 'ranges': [{'day': f'2026-12-0{d}', 'from': '09:00', 'to': '10:00'} for d in range(1, 9)]}], 'spans 8 days - at most 7')
+        bad(self.TEAM, 'minutes .* must be 15 to 480', minutes=5)
+        bad(self.TEAM, 'props has best - a availability takes people, minutes', best='Tue 3pm')        # the best slot is worked out, never taken
+        self.assertRaisesRegex(ValueError, 'id must be a short name', viewspec.check, {**one('availability', {'people': self.TEAM}), 'id': 'the times!'})
+
+    def test_a_view_he_can_answer_keeps_an_id_of_its_own(self):
+        "The same choice shown twice is two questions: the agent's name for a view never stands in for the id his answer is kept under."
+        ask = {**one('choice', {'label': 'Which day?', 'options': ['Tue', 'Wed']}), 'id': 'times'}
+        a, b = (json.loads(viewspec.shown(ask).split(viewspec.MARK)[1])['id'] for _ in range(2))
+        self.assertNotEqual(a, b); self.assertNotIn('times', (a, b))
+
+    def test_the_tool_takes_it_and_its_guide_says_what_it_draws(self):
+        from taskuary import guides
+        schema = agenttools.TOOLS['show'][2]['properties']
+        self.assertIn('availability', schema['elements']['additionalProperties']['properties']['type']['enum'])
+        self.assertEqual(schema['elements']['additionalProperties']['properties']['props']['properties']['people']['items']['required'], ['name'])
+        self.assertIn('id', schema)
+        viewspec.check(json.loads(guides.AVAILABILITY))            # the guide's own example is a spec that passes
+        self.assertIn('availability {people', guides.SHOW_TYPES)
+
+
 class TheNewBlocks(unittest.TestCase):
     "grid, badge and note; a title and a description on every block; a tile's trend and format, a column's format, a highlighted point"
     NEW = {'root': 'g', 'elements': {

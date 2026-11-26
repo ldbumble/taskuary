@@ -1030,6 +1030,7 @@ def seed(store) -> int:
     store._exec("UPDATE message SET MailMetaJson=json_set(IFNULL(MailMetaJson, '{}'), '$.auth', 'pass') WHERE Channel='email' AND "
                 "IFNULL(Direction, 'in')<>'out' AND lower(FromEmail) LIKE ?", (f"%@{OWNER_EMAIL.rsplit('@', 1)[1]}",))
     seed_set_ups(store, f)
+    seed_scene(store, f)
     seed_ai_usage(store)          # ...and the morning's asks, for their "AI used" folds
     run_dashboards(store)
     # ...AND THE PEOPLE WHOSE LETTERS IT HAS DRAFTS FOR ARE ONES SHE TRUSTS (CI 2026-11-19: the vendor's invoice - the tour's Send - stood
@@ -1657,3 +1658,110 @@ def start_sessions(store) -> int:
         terminal.SESSIONS[r.sid] = r
         n += 1
     return n
+
+
+# ── THE SCENE: A TEAM FINDS A TIME (the owner, 2026-11-26: many mails on one thread, and a visual that keeps up with them) ───────────────────
+# One thread, a reply every few seconds, and the agent's ONE view of who can make which times filled in as each lands - the spec a real agent
+# hands `show` (viewspec `availability`, the same `id` each time, so the chat keeps one full view, under the newest reply) - then the invite for the best slot as its card
+# (calwrite.meeting). Off unless TASKUARY_DEMO_SCENE=availability, so the demo everyone opens is as it was. It starts by itself when its
+# task is first opened - nobody prompts it - and plays once. No count is written here: the page works the overlap and the best slot out of the ranges (availability.js).
+SCENE_ENV, SCENE_PACE, SCENE_SID, SCENE_PLAYED = 'TASKUARY_DEMO_SCENE', 'TASKUARY_DEMO_SCENE_PACE', 'demo-scene', 'demo_scene_played'
+SCENE_TITLE, SCENE_ABOUT = 'Product ideas session - a time next week?', 'Product ideas session'
+SCENE_BEAT = 2.6                     # seconds between replies unless SCENE_PACE says: the film's pace (website/record-availability.mjs)
+# who, what they wrote ({0} {1} {2}: next week's Tuesday, Wednesday and Thursday by name), the ranges that names as (day, from, to), and what
+# the agent says once it is on the view. The first is the mail that opens the thread
+SCENE = (
+    ('Marcus Reed', "Let's get an hour next week for the new product ideas - bring one each. I can do {0} 1-4 or {1} 9-11. Reply-all with what works for you.",
+     ((0, '13:00', '16:00'), (1, '09:00', '11:00')),
+     "I'll keep this up to date as the replies come in - your own free hours are from your calendar - then set up the invite."),
+    ('Paula Vance', "I'm at the Fairhaven site most of the week - only {1} 10-11 or {2} 9-10 for me, sorry.", ((1, '10:00', '11:00'), (2, '09:00', '10:00')), ''),
+    ('Ray Colton', '{1} 10-12 is best. I could also do {0} 3-4.', ((1, '10:00', '12:00'), (0, '15:00', '16:00')), ''),
+    ('Erin Blake', '{0} 2-4 works for me.', ((0, '14:00', '16:00'),), ''),
+    ('Gail Moreno', '{0} 3-5, or {2} morning, 9-11.', ((0, '15:00', '17:00'), (2, '09:00', '11:00')), ''),
+    ('Omar Keller', 'Back from the vendor visit {0} lunchtime - any time after 2:30 that day, or {1} 10-12.', ((0, '14:30', '17:00'), (1, '10:00', '12:00')),
+     'Everyone has answered. **{0} 3-4 PM** works for six of the seven - Paula can only make {1} or {2}. The invite is ready for your press.'),
+)
+SCENE_OWN = ((0, '14:00', '17:00'), (1, '09:00', '11:00'), (2, '09:00', '12:00'))      # the owner's own free hours those days, clear of the scripted week (agenda)
+SCENE_SLOT = (0, '15:00', '16:00')                                                       # ...the hour the invite is for: the view's best slot once all have answered
+def scene_on() -> bool: return os.environ.get(SCENE_ENV) == 'availability'
+def _scene_days() -> list:
+    "Tuesday, Wednesday and Thursday of next week."
+    mon = date.today() + timedelta(days=7 - date.today().weekday())
+    return [mon + timedelta(days=n) for n in (1, 2, 3)]
+def _scene_addr(who: str) -> str: first, last = who.lower().split(); return f"{first[0]}{last}@{OWNER_EMAIL.rsplit('@', 1)[1]}"
+
+
+def scene_view(n: int) -> dict:
+    "The view once `n` of the thread's people have written: each with the ranges they named, the rest listed with none - no reply yet."
+    days = [str(d) for d in _scene_days()]
+    rs = lambda xs: [{'day': days[d], 'from': a, 'to': b} for d, a, b in xs]
+    people = [{'name': 'You', 'ranges': rs(SCENE_OWN)}] + [{'name': who, **({'ranges': rs(xs)} if i < n else {})} for i, (who, _, xs, _) in enumerate(SCENE)]
+    return {'id': 'times', 'root': 'a', 'elements': {'a': {'type': 'availability', 'props': {
+        'title': f'{SCENE_ABOUT} - one hour next week', 'minutes': 60, 'people': people}}}}
+
+
+def _scene_mail(store, f, tid: int, i: int, decision: str, why: str) -> int:
+    who, said, _, _ = SCENE[i]
+    mid = f.message(task_id=tid, subject=('RE: ' if i else '') + SCENE_TITLE, body=said.format(*(d.strftime('%A') for d in _scene_days())),
+                    from_name=who, from_email=_scene_addr(who), sent_at=_at(0), conversation_id='email:demo-scene',
+                    MailMetaJson=json.dumps({'auth': 'pass'}))          # ...a colleague's mail, verified as her Outlook stamps it (seed)
+    f.route(mid, tid, decision, why)
+    return mid
+
+
+def seed_scene(store, f):
+    "The thread's first mail on a task of its own, when the scene is asked for - made last, so every other id is as it was."
+    if not scene_on(): return None
+    tid = f.task(title=SCENE_TITLE, status='open', kind='general', source='email',
+                 Summary=f'{SCENE[0][0]} is looking for an hour next week for the new product ideas, and asked everyone to reply with their times.')
+    _scene_mail(store, f, tid, 0, 'create', 'a thread finding a time for a meeting: an agent can keep track of the replies')
+    return tid
+
+
+def scene_opened(store, tid: int) -> bool:
+    """THE SCENE STARTS BY ITSELF, once, when its task's chat is first read (the owner, 2026-11-26: nobody prompts it - the mail is there and
+    the task's agent starts on it, as an arrival starts one): played behind that read. False for any other task and once it has played."""
+    if not scene_on() or store.get_setting(SCENE_PLAYED) or (store.get_task(tid) or {}).get('Title') != SCENE_TITLE: return False
+    store.set_setting(SCENE_PLAYED, '1', 'demo')
+    store.update_task(tid, {'Status': 'in_progress', 'Assignee': 'agent:general'}, 'triage')
+    threading.Thread(target=_play_scene, args=(store, tid), daemon=True).start()
+    return True
+
+
+def _play_scene(store, tid: int):
+    """Each reply as the real roads take one: the mail filed on the thread and heard with the turn it wakes (conversation.hear), the agent's
+    `show` call and the server's own checked answer as its trace (chatlog.feed), its words filed as its answer - and at the end the invite, a card."""
+    from . import calwrite, chatlog, conversation, general, live, session_artifacts, viewspec
+    from .testing import Factory
+    f, pace, days = Factory(store), float(os.environ.get(SCENE_PACE) or SCENE_BEAT), _scene_days()
+    f.actor = 'triage'
+    told = lambda: live.emit(live.RUN, task_id=int(tid))
+    rest = lambda secs: time.sleep(secs * pace / SCENE_BEAT)            # ...every pause keeps its share of the pace: at 0 it plays at once (the tests)
+    def show(n):
+        spec = scene_view(n); out = viewspec.shown(spec)
+        chatlog.feed(store, tid, SCENE_SID, 'trace', {'type': 'tool_call', 'name': 'mcp__taskuary__show', 'detail': {'tool_call_id': f'times-{n}', 'args': spec}})
+        chatlog.feed(store, tid, SCENE_SID, 'trace', {'type': 'tool_result', 'name': f'times-{n}', 'detail': {'tool_call_id': f'times-{n}', 'result': out}})
+        session_artifacts.view(store, tid, out.partition(viewspec.MARK)[2]); told()
+    words = lambda i: SCENE[i][3].format(*(d.strftime('%A') for d in days))
+    def answer(i):
+        if words(i): rest(.7); store.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, words(i))
+        elif (t := chatlog.open_turn(store, tid)): chatlog.flush(store, tid); chatlog.update(store, tid, t['Key'], state='done', ended=time.time())      # ...a turn that only drew
+        store._poke('task-changed', task_id=int(tid))
+    try:
+        rest(3.2)                           # ...the thread's first mail read, then the agent's turn begins on it by itself (conversation.hear)
+        conversation.hear(store, tid, turn=True, sid=SCENE_SID); store._poke('task-changed', task_id=int(tid))
+        rest(.9); chatlog.feed(store, tid, SCENE_SID, 'trace', {'type': 'prompt'}); chatlog.at_work(store, tid, SCENE_SID); told()
+        rest(1.4); show(1); answer(0)
+        for i in range(1, len(SCENE)):
+            rest(SCENE_BEAT)
+            _scene_mail(store, f, tid, i, 'attach', 'same')
+            conversation.hear(store, tid, turn=True, sid=SCENE_SID); store._poke('task-changed', 'feed-changed', task_id=int(tid))
+            rest(.9); chatlog.feed(store, tid, SCENE_SID, 'trace', {'type': 'prompt'}); chatlog.at_work(store, tid, SCENE_SID); told()
+            rest(.9); show(i + 1)
+            if i == len(SCENE) - 1:
+                rest(2.2)                   # ...the view as it now stands has its beat before the invite and the last words come under it
+                d, a, b = SCENE_SLOT
+                calwrite.meeting(store, tid, [_scene_addr(w) for w, *_ in SCENE], SCENE_ABOUT, 60, start=f'{days[d]} {a}', end=f'{days[d]} {b}',
+                                 note='One hour on the new product ideas - bring one each.')
+            answer(i)
+    except Exception as e: logger.warning(f'demo: the scene stopped - {e}')

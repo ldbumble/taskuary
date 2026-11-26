@@ -209,3 +209,65 @@
 .tq-view-said { font-size: 13px; color: var(--d-muted); }
 /* A VALUE THAT COULD NOT BE WORKED OUT says so where it stands, in plain words - the view around it still draws */
 .tq-view-err { font-size: 12.5px; line-height: 1.4; color: var(--v-warn); overflow-wrap: anywhere; }
+
+/* WHO CAN MAKE WHICH TIMES (ViewSpec's Availability): the best slot and its count over a grid - a row a person, the days side by side on one
+   axis, each range a soft bar in the accent, the people who fit the best slot a step stronger, "People free" counted under them, and one
+   band down every row where the best slot is. One accent, nothing else coloured; the hairlines are the view's own */
+.tq-avl { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.tq-avl-best { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; min-width: 0; }
+.tq-avl-best > div:first-child { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.tq-avl-best .lbl { font-size: 13px; font-weight: 500; color: var(--d-muted); }
+.tq-avl-best .when { font-size: 22px; line-height: 1.2; font-weight: 700; letter-spacing: -.015em; color: var(--d-ink); font-variant-numeric: tabular-nums; text-wrap: balance; }
+.tq-avl-best .fit { display: flex; align-items: center; gap: 8px; flex: none; }
+.tq-avl-best .fit b { min-width: 1ch; text-align: right; font-size: 34px; line-height: 1; font-weight: 700; letter-spacing: -.02em; color: var(--d-s1); font-variant-numeric: tabular-nums; }
+.tq-avl-best .fit span { font-size: 12.5px; line-height: 1.3; color: var(--d-muted); white-space: nowrap; }
+.tq-avl-grid { position: relative; display: grid; grid-template-columns: minmax(0, max-content) minmax(0, 1fr); column-gap: 12px; row-gap: 3px; align-items: center; min-width: 0;
+  max-height: max(var(--v-body), 280px); overflow-y: auto; scrollbar-width: thin; padding: 4px 0; }   /* ...a long team scrolls in its card, as a table does (--v-body) */
+.tq-avl-name { display: flex; align-items: center; gap: 7px; max-width: 132px; min-width: 0; font-size: 13px; line-height: 20px; color: var(--d-ink2); white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; }
+.tq-avl-name::before { content: ""; flex: none; box-sizing: border-box; width: 8px; height: 8px; border-radius: 50%; border: 1.5px solid var(--d-axis); }
+.tq-avl-name.fit { color: var(--d-ink); font-weight: 600; }
+.tq-avl-name.fit::before { background: var(--d-s1); border-color: var(--d-s1); }
+.tq-avl-name.wait { color: var(--d-muted); }
+.tq-avl-name.wait::before { border-style: dashed; }
+.tq-avl-name.sum { margin-top: 3px; font-size: 12px; color: var(--d-muted); }
+.tq-avl-name.sum::before { visibility: hidden; }
+.tq-avl-track { position: relative; height: 20px; min-width: 0; }
+.tq-avl-track.head, .tq-avl-track.axis { height: 16px; font-size: 11.5px; line-height: 16px; color: var(--d-muted); }
+.tq-avl-track.head > span { position: absolute; top: 0; text-align: center; font-size: 12.5px; font-weight: 600; color: var(--d-ink2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tq-avl-track.axis > span { position: absolute; top: 0; transform: translateX(-50%); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.tq-avl-track.sum { margin-top: 3px; }
+.tq-avl-track > em { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-style: normal; font-size: 12px; color: var(--d-muted); }
+/* ...a bar carries no words: the band crosses it, and hours written in it were cut by the band or by a short bar ("9am-12p") - its hours are
+   read off the axis, said whole on a hover and to a screen reader on its row */
+.tq-avl-bar { position: absolute; top: 3px; bottom: 3px; box-sizing: border-box; border-radius: 6px;
+  background: color-mix(in srgb, var(--d-s1) 20%, var(--d-surface)); transform-origin: left center; }
+.tq-avl-track.fit .tq-avl-bar { background: color-mix(in srgb, var(--d-s1) 42%, var(--d-surface)); }
+:root[data-theme="dark"] .tq-avl-bar { background: color-mix(in srgb, var(--d-s1) 34%, var(--d-surface)); }   /* ...still read as bars on the dark frame */
+:root[data-theme="dark"] .tq-avl-track.fit .tq-avl-bar { background: color-mix(in srgb, var(--d-s1) 66%, var(--d-surface)); }
+.tq-avl-seg { position: absolute; top: 2px; bottom: 2px; box-sizing: border-box; border-radius: 5px; overflow: hidden; display: flex; align-items: center; justify-content: center;
+  font-style: normal; font-size: 11.5px; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--d-ink2);
+  background: color-mix(in srgb, var(--d-s1) calc(var(--k, 0) * 38%), var(--d-chip)); box-shadow: inset 0 0 0 1px var(--d-surface); }
+.tq-avl-seg.best { background: var(--d-s1); color: #fff; }
+/* ...the hours' hairlines and the days' rules under the bars; the best slot's band over them, never in the pointer's way */
+.tq-avl-lay { position: absolute; inset: 0; grid-column: 2; pointer-events: none; }
+.tq-avl-lay.under > i { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--d-grid); }
+.tq-avl-lay.under > i.sep { background: var(--d-axis); }
+.tq-avl-band { position: absolute; top: -4px; bottom: -3px; box-sizing: border-box; border-radius: 8px; border: 1.5px solid var(--d-s1);
+  background: color-mix(in srgb, var(--d-s1) 8%, transparent); opacity: 0; }
+.tq-avl-band[data-on] { opacity: 1; }
+.tq-avl-who { margin: 0; display: flex; flex-wrap: wrap; gap: 2px 18px; font-size: 13px; line-height: 1.45; color: var(--d-muted); }
+/* ...AS REPLIES COME the view is shown again in place: a new range grows from its start, one that changed slides, the counts fade in, the band
+   moves to the new best slot and its number lands; nothing moves for prefers-reduced-motion */
+@media (prefers-reduced-motion: no-preference) {
+  .tq-avl-bar { animation: tq-avl-in .6s cubic-bezier(.16, 1, .3, 1) backwards;
+    transition: left .5s cubic-bezier(.16, 1, .3, 1), width .5s cubic-bezier(.16, 1, .3, 1), background-color .45s; }
+  .tq-avl-seg { animation: tq-avl-fade .45s ease-out backwards; transition: left .5s cubic-bezier(.16, 1, .3, 1), width .5s cubic-bezier(.16, 1, .3, 1), background-color .45s, color .45s; }
+  .tq-avl-band { transition: left .65s cubic-bezier(.16, 1, .3, 1), width .65s cubic-bezier(.16, 1, .3, 1), opacity .35s; }
+  .tq-avl-name, .tq-avl-name::before { transition: color .45s, background-color .45s, border-color .45s; }
+  .tq-avl-best .fit b { animation: tq-avl-land .5s cubic-bezier(.16, 1, .3, 1); }
+}
+.tq-avl-bar.kept { animation: none; }     /* ...a bar that was there before this draw moves from where it stood: only a new one grows in */
+@keyframes tq-avl-in { from { transform: scaleX(0); opacity: 0; } }
+@keyframes tq-avl-fade { from { opacity: 0; } }
+@keyframes tq-avl-land { from { transform: translateY(5px); opacity: .35; } }

@@ -1461,3 +1461,25 @@ def test_a_search_engine_page_read_as_the_fallback_is_its_results_never_its_menu
     out = apiagent._results_only(page)
     assert out.startswith('PAGE https://html.search.example') and 'Argentina' not in out and 'Past Year' not in out
     assert out.split('\n')[1] == 'Northwind Paper Supply' and 'paper.example/prices' in out
+
+
+def test_a_connected_system_is_found_by_its_own_name_on_every_road():
+    """Walk 23, 2026-11-25 (the HIPAA road): asked for a QuickBooks bill with QuickBooks connected, the agent searched its tools for
+    "quickbooks", "bill" and "accounting", found none - the words searched were the tools', and a system is reached through run_system -
+    browsed for the site, and told him twice "no QuickBooks or accounting tool is connected here". find_tools reads the two tools that reach
+    his systems by what list_systems answers too: on the API agent's road and on a CLI's, the same search."""
+    from taskuary import agenttools, docsync
+    SYSTEMS = 'YOUR SYSTEMS - QuickBooks Online (connector_id 4; tools: quickbooks_bill - create a bill, quickbooks_vendors)'
+    def post(url, json=None, headers=None, timeout=None):
+        r = mock.Mock(status_code=200); r.json.return_value = agenttools.rpc(json, lambda n, a: f'{n} answered', ()); return r
+    s = MemoryStore(); tid = s.create_task({'Title': 'A bill for Payworth', 'Kind': 'general', 'Status': 'open'}, 'owner')
+    core = apiagent.tools_for(tid, 'q', False, post=post)
+    assert not {'list_systems', 'run_system'} & {t['function']['name'] for t in core}, 'offered as the work needs them'
+    with mock.patch.object(docsync, 'agent_systems', return_value=SYSTEMS):
+        for asked in ('quickbooks', 'create a bill'):
+            tools = list(core)
+            said = apiagent.find(tid, 'q', tools, asked, s)
+            assert 'run_system' in said and 'run_system' in {t['function']['name'] for t in tools}, f'{asked}: {said}'      # ...found, and loaded for the turn
+            assert 'run_system' in agenttools.call(s, tid, 'find_tools', {'query': asked}, {}), f"{asked}: a CLI's find_tools finds it too"
+    with mock.patch.object(docsync, 'agent_systems', return_value=''):
+        assert 'run_system' not in apiagent.find(tid, 'q', list(core), 'quickbooks', s), 'nothing connected by that name: no tool is named for it'

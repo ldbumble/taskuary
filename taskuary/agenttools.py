@@ -395,11 +395,19 @@ def instructions(name: str) -> str:
     "One tool's whole description and parameters, as find_tools answers it."
     c, d, s, _ = TOOLS[name]
     return f'{name}: {d}\nParameters: {json.dumps(s, ensure_ascii=False)}'
-def found(query, names: dict) -> list:
-    "The tools of `names` ({name: description}) that `query` asks for: by name, else by most of its words in a name and description (at most 4)."
+SYSTEM_TOOLS = ('list_systems', 'run_system')
+def found(query, names: dict, store=None) -> list:
+    """The tools of `names` ({name: description}) that `query` asks for: by name, else by most of its words in a name and description (at most 4).
+    A CONNECTED SYSTEM IS FOUND BY ITS OWN NAME (walk 23, 2026-11-25: "quickbooks" found nothing - the words searched were the tools', and
+    QuickBooks is reached through run_system - so the agent told him twice "no QuickBooks or accounting tool is connected here"): the two tools
+    that reach his systems are searched by what list_systems answers too - each system's name, its tools and what they do."""
     q = str(query or '').strip().lower()
     if q in names: return [q]
     ws = [w for w in re.findall(r'[a-z0-9_]+', q) if len(w) > 2]
+    if store is not None and any(n in names for n in SYSTEM_TOOLS):
+        from .docsync import agent_systems
+        try: names = {**names, **{n: f'{names[n]} {agent_systems(store)}' for n in SYSTEM_TOOLS if n in names}}
+        except Exception as e: logger.debug(f'find_tools: the connected systems were not read - {e}')
     score = lambda n: sum((w in n) * 3 + (w in str(names[n]).lower()) for w in ws)
     return [n for n in sorted(names, key=lambda n: -score(n)) if score(n)][:4]
 # THE CORE UP FRONT, THE REST ON DEMAND, ON A CARD'S HARNESS TOO (the review, 2026-11-23): Claude Code and his own Codex defer an MCP server's
@@ -822,7 +830,7 @@ def _call(store, tid: int, name: str, args: dict, doors: dict, skip=()) -> str:
         return _out(guides.read(a.get('topic')))
     if name == 'find_tools':
         # ...only this session's own: on the owner's own ask "reply to the sender" found propose_reply, and calling it answered "unknown tool"
-        hits = found(a.get('query'), {n: d for n, (_, d, _s, _) in TOOLS.items() if n not in skip})
+        hits = found(a.get('query'), {n: d for n, (_, d, _s, _) in TOOLS.items() if n not in skip}, store)
         if not hits and str(a.get('query') or '').strip().lower() in skip:
             return f"{a['query'].strip()} is not offered on this task - tools/list names the ones it has; say what you need in words to find one of them."
         return '\n\n'.join(map(instructions, hits)) if hits else (f"No tool fits {a.get('query')!r} - name one, or say what it should do in other words. Work no tool of Taskuary's does (a file to make, a page to "

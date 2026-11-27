@@ -755,11 +755,8 @@ def _continue(store, tid, rid, site, actor, code=False, words=None):
         store.add_comment(tid, actor, 'agent', f'{did}, but no agent is running on this task to tell - open it to continue.')
         return False
     if term.stranger_now(store, tid, sess): return False             # the task says why nothing went in
-    # ...and the chat shows what woke the agent's next answer (the owner, 2026-11-05: "why is there taskuary twice"): a short trigger line
-    try:
-        from .general import BRIEF_ACTOR, USER_TYPE
-        if hasattr(sess, 'send_prompt'): store.add_comment(tid, BRIEF_ACTOR, USER_TYPE, f'{did}.')
-    except Exception as e: logger.debug(f'signin: the trigger line for task {tid} was not filed - {e}')
+    # ...and NO LINE UNDER ITS CARD (the owner, 2026-11-27: "if you write something it's not the card, not below it"): the step's card
+    # (pagestep) reads done; a trigger line filed here stood under it as "You pressed Signed in on <site>"
     # THE ASK IS OVER THE MOMENT THE SIGN-IN IS PAST, not when the agent's next turn ends (the recorded walk, 2026-11-11: a chat agent's turn
     # runs inside this call, so all the while it worked the task still read "Sign in to ... to continue" and the page beside it "your turn")
     ws.record(store, tid, sess.sid, 'answered', request_id=rid, text=DONE, source='owner' if actor == 'owner' else 'api')

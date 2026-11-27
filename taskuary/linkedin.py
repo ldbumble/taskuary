@@ -63,11 +63,13 @@ def _fail(r):
         said = body.get('message') or body.get('error_description') or json.dumps(body)[:300]
     except ValueError:
         said = (r.text or '')[:300]
-    if r.status_code in (401, 403):
-        raise RuntimeError(f'LinkedIn refused the token ({r.status_code}): {said}. '
-                           'Check the token has not expired (they last 60 days) and that the app '
-                           'has the Share on LinkedIn product added, which grants w_member_social.')
-    raise RuntimeError(f'LinkedIn returned {r.status_code}: {said}')
+    # ...with the status it answered, as a fact on the failure (proposals.passing reads it: a 5xx or a 429 is worth his second try, a 400 is not)
+    e = RuntimeError(f'LinkedIn refused the token ({r.status_code}): {said}. '
+                     'Check the token has not expired (they last 60 days) and that the app '
+                     'has the Share on LinkedIn product added, which grants w_member_social.'
+                     if r.status_code in (401, 403) else f'LinkedIn returned {r.status_code}: {said}')
+    e.status = r.status_code
+    raise e
 
 
 # TWO self-serve products, not one, and this is what stops a first sign-in dead:

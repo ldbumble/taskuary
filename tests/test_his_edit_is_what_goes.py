@@ -14,7 +14,7 @@ and what the agent is told are the real code. No browser, no model. Invented peo
 import json, time
 from unittest import mock
 
-import pytest
+import pytest, requests
 from fastapi.testclient import TestClient
 
 from taskuary import bulkcard, cardqueue, connectorcatalog as cat, conversation, general, linkedin, outbound, pagestep, proposals, reports, scopes, server, trackers, workflows
@@ -278,3 +278,133 @@ def test_what_he_typed_is_kept_only_while_the_card_waits_and_only_what_a_card_le
     assert not w.s.get_review(rid).get('OwnerEdit'), 'taken back, nothing is held'
     w.s.decide_review(rid, 'rejected', None, 'owner')
     assert not c.post(f'/api/reviews/{rid}/held', headers=OWNER, json={'edit': {'text': HIS}}).json()['ok'], 'a card already answered takes no edit'
+
+
+# ── a press that failed: Try again only where a second try could get past it ────────────────────────────────────────────────────────────
+def _far_side(t, ran, fail):
+    "Executor `t` stood in: what `fail()` hands back is raised - what the far side answered, as a failure carries it."
+    def run(cfg):
+        ran.append(cfg)
+        if (e := fail()): raise e
+        return ('done', 'it went')
+    return mock.patch.dict(reports.REGISTRY, {t: run}), mock.patch.object(reports, 'resolve_cfg', side_effect=lambda store, cfg: dict(cfg)), \
+        mock.patch.object(reports, 'checked', side_effect=lambda store, p: p)
+
+
+def _answered(status):
+    e = RuntimeError(f'the network answered {status}'); e.status = status
+    return e
+
+
+PASSING = {'no answer in time': lambda: requests.Timeout('no answer in 30 seconds'), 'unreachable': lambda: requests.ConnectionError('no route'),
+           'down': lambda: _answered(503), 'over its limit': lambda: _answered(429)}
+REFUSALS = {'the content': lambda: _answered(400), 'the token': lambda: _answered(403), 'unsaid': lambda: RuntimeError(REFUSED)}
+
+
+@pytest.mark.parametrize('why', sorted(PASSING))
+def test_a_failure_a_second_try_could_get_past_is_his_to_try_again_with_his_words(w, why):
+    ran, left = [], [PASSING[why]]
+    a, b, d = _far_side('linkedin_post', ran, lambda: left.pop()() if left else None)
+    with a, b, d:
+        rid = w.act(w.write('linkedin_post'))
+        out = w.press(rid, final_text=HIS)
+        assert not out.get('ok') and out.get('retry') and out['status'] == 'superseded', out
+        drawn, rv = w.drawn(rid), w.s.get_review(rid)
+        assert drawn['ActError'] and drawn['ActRetry'] == 1 and drawn['post']['text'] == HIS, 'the failed card reads his words, and lights Try again'
+        assert json.loads(rv['DraftText'])['text'] == FILED and len(w.woken) == 1, 'a failure is told to its agent once, as any is'
+        out = w.press(rid)                                             # Try again: the press alone, from any screen
+    assert out.get('ok') and len(ran) == 2 and ran[1]['text'] == HIS, (out, ran)
+    rv = w.s.get_review(rid)
+    assert rv['Status'] == 'approved' and json.loads(rv['FinalText'])['text'] == HIS and not w.drawn(rid)['ActRetry']
+    assert not w.press(rid).get('ok') and len(ran) == 2, 'pressed again, nothing more went'
+
+
+def test_the_try_that_fails_too_is_over(w):
+    ran = []
+    a, b, d = _far_side('linkedin_post', ran, PASSING['down'])
+    with a, b, d:
+        rid = w.act(w.write('linkedin_post'))
+        assert w.press(rid, final_text=HIS).get('retry')
+        out = w.press(rid)
+        rv = w.s.get_review(rid)
+        assert not out.get('ok') and not out.get('retry') and rv['Status'] == 'superseded' and len(ran) == 2, (out, rv)
+        assert json.loads(rv['FinalText'])['text'] == HIS and not w.drawn(rid)['ActRetry'], 'one Try again: then the failed card keeps his words and offers none'
+        w.press(rid)
+    assert len(ran) == 2, 'a third press ran nothing'
+
+
+def test_try_again_is_gone_once_its_agent_has_set_up_what_goes_next(w):
+    "One way on at a time: the card its agent raised after the failure is the one to press - the failed one never posts beside it."
+    ran = []
+    a, b, d = _far_side('linkedin_post', ran, PASSING['down'])
+    with a, b, d:
+        rid = w.act(w.write('linkedin_post'))
+        assert w.press(rid, final_text=HIS).get('retry') and w.drawn(rid)['ActRetry'] == 1
+        w.act(w.write('linkedin_post'))
+        assert not w.drawn(rid)['ActRetry'] and not w.press(rid).get('ok') and len(ran) == 1
+
+
+@pytest.mark.parametrize('why', sorted(REFUSALS))
+def test_what_the_far_side_refused_offers_no_try_again_and_wakes_its_agent_once(w, why):
+    ran = []
+    a, b, d = _far_side('linkedin_post', ran, REFUSALS[why])
+    with a, b, d:
+        rid = w.act(w.write('linkedin_post'))
+        out = w.press(rid, final_text=HIS)
+    rv = w.s.get_review(rid)
+    assert not out.get('ok') and not out.get('retry') and rv['Status'] == 'superseded' and not rv.get('ActRetry'), (out, rv)
+    assert len(w.woken) == 1 and w.drawn(rid)['post']['text'] == HIS
+
+
+# ── the same thing brought up again shows his version ───────────────────────────────────────────────────────────────────────────────────
+def test_the_same_letter_saved_again_by_its_agent_leaves_his_version_standing(w):
+    from taskuary import slots
+    rid = slots.draft(w.s, w.tid, FILED, to='erin@northwind.example', subject='The scheduler', agent='assistant')['review_id']
+    filed = w.s.get_review(rid)['DraftText']
+    w.typed(rid, text=HIS)
+    again = slots.draft(w.s, w.tid, FILED, to='erin@northwind.example', subject='The scheduler', agent='assistant')
+    rv = w.s.get_review(rid)
+    assert again.get('ok') and again['review_id'] == rid and 'replaced_the_owners_version' not in again, again
+    assert rv['Status'] == 'pending' and rv['DraftText'] == filed and his_words(rv) == HIS, 'nothing changed: the card stands as he left it'
+    sent = []; a, b = _mail(sent)
+    with a, b: assert w.press(rid).get('ok')
+    assert sent[0]['body'].strip() == HIS
+
+
+def test_a_card_raised_again_as_it_was_carries_what_he_typed(w):
+    "cardqueue.keep raises the same card again under his line - every column but what came of the old one: the same thing, so his words ride with it."
+    rid = w.letter()
+    w.typed(rid, text=HIS)
+    assert his_words({k: v for k, v in w.s.get_review(rid).items() if k not in cardqueue.CAME_OF}) == HIS
+
+
+# ── the thread moved under his Send ─────────────────────────────────────────────────────────────────────────────────────────────────────
+def _thread(s):
+    from taskuary import operations
+    tid = s.create_task({'Title': 'The October numbers', 'Kind': 'reply', 'Status': 'open', 'Source': 'email'}, 'router')
+    msg = lambda ext, at, body: s.add_message({'TaskId': tid, 'ExternalId': ext, 'ConversationId': 'conv-1', 'Channel': 'email', 'SourceName': 'alex@northwind.example',
+                                               'Subject': 'October numbers', 'FromName': 'Erin Blake', 'FromEmail': 'erin@northwind.example', 'SentAt': at,
+                                               'BodyText': body, 'Status': 'routed'})
+    first = msg('m1', '2026-11-06 09:00:00', 'Could you send the October numbers?')
+    rid = s.add_review({'TaskId': tid, 'MessageId': first, 'Kind': 'draft', 'Status': 'pending', 'DraftText': 'Here they are.', 'Reason': 'needs a reply'})
+    s.pin_review_context(rid, first, operations.message_revision(s, tid))
+    msg('m2', '2026-11-06 10:30:00', 'Actually - September too, please.')
+    return rid
+
+
+@pytest.mark.parametrize('edited', [True, False])
+def test_a_draft_refreshed_under_his_send_is_said_only_where_one_was_written_and_never_over_his_words(edited):
+    s = MemoryStore(); rid, sent = _thread(s), []
+    def reply(*a, **k): sent.append(str((a, k))); return {'channel': 'email', 'to': ['erin@northwind.example'], 'cc': []}
+    press = lambda **body: c.post(f'/api/reviews/{rid}/decide', headers=OWNER, json={'verb': 'approve', **body}).json()
+    with mock.patch.object(server, 'store', s), mock.patch('taskuary.responder.draft_reply', return_value='Both months are attached.'),          mock.patch('taskuary.outbound.reply_to_message', side_effect=reply):
+        out = press(final_text=HIS if edited else 'Here they are.')
+        rv = s.get_review(rid)
+        assert out.get('stale') and not sent, out
+        if edited:
+            assert rv['DraftText'] == 'Here they are.' and his_words(rv) == HIS, 'no draft was written over his words'
+            assert 'Your words are kept' in out['send_error'] and 'refreshed it' not in out['send_error'], out['send_error']
+            assert out['interrupt']['yours'] == HIS and 'Both months' in out['interrupt']['refreshed'], 'the new draft is offered beside his, his to take'
+            assert press().get('ok') and HIS.split('\n')[0] in sent[0], sent
+        else:
+            assert 'Both months' in rv['DraftText'] and 'I refreshed it' in out['send_error'], (rv['DraftText'], out['send_error'])

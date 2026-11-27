@@ -331,6 +331,26 @@ def _ran(res) -> dict:
     return {'headline': str(head)[:200], **({'output': body[:2000]} if body or not isinstance(res, dict) else {}), **({'url': url} if url else {})}
 
 
+def passing(e) -> bool:
+    """Is this a failure the same press could get past on a second try - no answer in time, the far side unreachable, down or over its limit?
+    Read off the failure's type and the status it carries, never its words. One the far side REFUSED (a 4xx: the content, the token) is not:
+    the same press gets the same no, and its agent finds another way."""
+    import requests
+    from .general import _chain
+    for x in _chain(e):
+        if isinstance(x, (requests.Timeout, requests.ConnectionError, TimeoutError, ConnectionError)): return True
+        s = getattr(x, 'status', None) or getattr(getattr(x, 'response', None), 'status_code', None)
+        if isinstance(s, int) and (s in (408, 425, 429) or s >= 500): return True
+    return False
+
+
+def retryable(store, rv: dict) -> bool:
+    """Does this failed card offer Try again? Its press failed where a second try could get past it (verdicts: ActRetry 1), it has not been
+    tried again, and nothing has been set up on its task since - once its agent raised what goes next, that card is the way on."""
+    return bool(rv and rv.get('Kind') == 'action' and rv.get('Status') == 'superseded' and rv.get('DecideNote') == FAILED_NOTE and rv.get('ActRetry') == 1
+                and not store._one('SELECT 1 AS x FROM review WHERE TaskId=? AND ReviewId>? LIMIT 1', (rv.get('TaskId'), rv['ReviewId'])))
+
+
 def left(rv: dict, final_text, fields: dict = None):
     "The proposal as he pressed it, where that is not as it was filed (a press that failed keeps it as its FinalText) - None for one unchanged."
     try: p = json.loads(rv.get('DraftText') or '{}')

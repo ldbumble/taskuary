@@ -5,7 +5,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { flushEdit, heldEdit, hisText, holdEdit, keepEdits, onHeld, savedEdit, seedEdit, unsaved } from "../src/heldEdits.js";
-import { actionFor, asLeft, pressOf, stateOf, textKey, valuesOf } from "../src/actionCard.js";
+import { actionFor, asLeft, cardOf, pressOf, stateOf, textKey, triesAgain, valuesOf } from "../src/actionCard.js";
 import { editAfterRefile, heldWords } from "../src/replyDraft.js";
 import { press } from "../src/press.js";
 
@@ -82,4 +82,18 @@ test("a draft filed under a reply's open box never replaces words he typed - onl
   // ...his own Redraft, or a rewrite he asked the Assistant for: the server took his words back, and the new draft shows
   assert.equal(editAfterRefile({ text: typed, keep: false }), null);
   assert.equal(editAfterRefile({ text: "", keep: true }), null, "an emptied box holds no words");
+});
+
+test("a failed card offers Try again only where the server says a second try could get past it, once", () => {
+  const p = post(), failed = { ReviewId: 709, Kind: "action", Status: "superseded", DraftText: JSON.stringify(p), FinalText: JSON.stringify({ ...p, text: HIS }),
+    ActError: "no answer in 30 seconds", ActRetry: 1 };
+  assert.equal(triesAgain(failed), true);
+  assert.equal(triesAgain({ ...failed, ActRetry: null }), false, "what the far side refused is over: its agent's to get round");
+  assert.equal(triesAgain({ ...failed, ActRetry: 2 }), false, "tried again already");
+  assert.equal(triesAgain({ ...failed, Status: "pending" }), false, "a card that waits has its own press");
+  assert.equal(triesAgain({ ...failed, Status: "approved", ActError: null }), false);
+  // ...and the same review drawn as a card from its row (a list, the rail) carries it, with the words he pressed
+  const row = cardOf(failed);
+  assert.equal(triesAgain(row), true);
+  assert.equal(row.post.text, HIS, "the failed card reads what he pressed");
 });

@@ -1333,6 +1333,8 @@ class SQLiteStore:
             # ...and WHAT HE HAS TYPED INTO A WAITING CARD, NOT PRESSED YET (hold_review_edit): it lived in the page alone, so nothing here knew
             # the card's words were his - a later draft was written over them, and a press from another surface sent the generated ones
             if 'OwnerEdit' not in rvcols: self.cx.execute('ALTER TABLE review ADD COLUMN OwnerEdit TEXT')
+            # ...and that its failed press is his to TRY AGAIN, once (review_act_failed `retry`: a failure a second try could get past)
+            if 'ActRetry' not in rvcols: self.cx.execute('ALTER TABLE review ADD COLUMN ActRetry INTEGER')
             # ...and the agent's word that the reply is NO LONGER NEEDED (someone else answered, the owner already did) - kept as the why
             if 'NotNeeded' not in rvcols: self.cx.execute('ALTER TABLE review ADD COLUMN NotNeeded TEXT')
             # ...and the BULK CARD it is one row of (bulkcard.py): many of the same act raised together, one card, one press for them all
@@ -6053,10 +6055,19 @@ class SQLiteStore:
     def set_review_next_step(self, rid, then):
         "The agent's own step after his press on review `rid` (card.raising), None for none."
         self._exec('UPDATE review SET NextStep=? WHERE ReviewId=?', (then or None, rid))
-    def review_act_failed(self, rid, error, by):
-        "An act's press that failed: kept on the review, which still waits - with who pressed and when, as a failed send keeps them (finish_review_delivery)."
-        self._exec("UPDATE review SET ActError=?, DecidedBy=?, DecidedAt=? WHERE ReviewId=? AND Status IN ('pending','held','superseded')", (str(error or '')[:300] or None, by, _now(), rid))
+    def review_act_failed(self, rid, error, by, retry: bool = False):
+        """An act's press that failed: kept on the review, which still waits - with who pressed and when, as a failed send keeps them
+        (finish_review_delivery). `retry`: its card offers Try again (ActRetry 1) - once: tried again it is 2, and the try that fails too is over."""
+        self._exec("UPDATE review SET ActError=?, DecidedBy=?, DecidedAt=?, ActRetry=CASE WHEN ? THEN 1 ELSE ActRetry END WHERE ReviewId=? AND Status IN ('pending','held','superseded')",
+                   (str(error or '')[:300] or None, by, _now(), bool(retry), rid))
         self._review_changed(rid)
+    def review_try_again(self, rid) -> bool:
+        "His Try again on an act whose press failed (proposals.retryable): it waits again as it stood, its one second try spent."
+        with self.lock:
+            cur = self.cx.execute("UPDATE review SET Status='pending', ActRetry=2, FinalText=NULL, DecideNote=NULL WHERE ReviewId=? AND Status='superseded' AND ActRetry=1", (rid,))
+            self.cx.commit(); self._writes += 1
+        if cur.rowcount: self._review_changed(rid)
+        return bool(cur.rowcount)
     def hold_review_edit(self, rid, edit) -> bool:
         """WHAT HE TYPED INTO A WAITING CARD IS HIS, FROM THE KEYSTROKE (the owner, 2026-11-26: no edit of his is ever written over):
         `edit` is the card as he has left it and not pressed yet - {text, cc, bcc, subject, vals, words, answers}, only what he changed; None or

@@ -591,7 +591,8 @@ def agent_reply(store, task_id: int, text: str, agent: str = 'agent', run_id: in
     # closed as replaced, kept under Not sent, the new card goes to whom he chose, and the agent is told what he had left there
     # ...his words typed into its box and not pressed yet are that hand too (store.hold_review_edit): the card closed keeps them as its words
     from .store import his_words as typed
-    mine = next((r for r in (held, live) if r and (typed(r) or r.get('DraftSid') == OWNER_SID) and _words(typed(r) or r.get('DraftText')) != _words(text)), None)
+    # ...only where the agent wrote OTHER words (the owner, 2026-11-26): the same letter brought up again is no rewrite - his version stands
+    mine = next((r for r in (held, live) if r and (typed(r) or r.get('DraftSid') == OWNER_SID) and _words(r.get('DraftText')) != _words(text)), None)
     if mine:
         store.decide_review(mine['ReviewId'], 'closed_unsent', typed(mine) or None, agent, note=REPLACED)
         held, live = ({} if mine is held else held), (None if mine is live else live)

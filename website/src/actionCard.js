@@ -17,7 +17,7 @@ export const cardOf = (review) => {
   try { p = JSON.parse(review.FinalText || review.DraftText || ""); } catch { return null; }
   const act = isCardProposal(p) ? actionFor(p.type) : null;
   // ...and its connection not made, as the review says it (server _review_connect): the chat's card and this one say Connect alike
-  return act ? { ReviewId: review.ReviewId, Status: review.Status, CreatedAt: review.CreatedAt, Reason: review.Reason, ActError: review.ActError,
+  return act ? { ReviewId: review.ReviewId, Status: review.Status, CreatedAt: review.CreatedAt, Reason: review.Reason, ActError: review.ActError, ActRetry: review.ActRetry, OwnerEdit: review.OwnerEdit,
     post: p, network: act.title, as: "", connect: review.Status === "pending" ? review.Connect || null : null } : null;
 };
 
@@ -66,6 +66,9 @@ export const changed = (act, p, values) => Object.fromEntries((act?.fields || []
   .map((f) => [f.key, values[f.key]]));
 // THE PRESS SENDS WHAT THE CARD SHOWS (rule 2): the words in its box as he left them, the picks and lines he moved, against the proposal it
 // was drawn from (`shown`: one changed since does not run). His no carries none of it
+// ...A PRESS THAT FAILED WHERE A SECOND TRY COULD GET PAST IT offers Try again on its failed card, once (the owner, 2026-11-26; ActRetry 1:
+// proposals.retryable) - the same press with the words he left, which the server holds. Any other failure is its agent's to get round
+export const triesAgain = (row) => row?.Status === "superseded" && !!row?.ActError && row?.ActRetry === 1;
 export const pressOf = (verb, act, p, text, values) => {
   const moved = verb === "approve" ? changed(act, p, values) : {};
   return { verb, final_text: verb === "approve" ? text : null, shown: p, ...(Object.keys(moved).length ? { fields: moved } : {}) };

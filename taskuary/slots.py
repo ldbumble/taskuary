@@ -285,7 +285,10 @@ def draft(store, tid: int, text: str, to: str = '', subject: str = '', slot: str
     if rv and rv.get('Status') == 'pending' and agent != 'owner':
         from . import wrapup
         from .store import his_words
-        his = his_words(rv)
+        # ...only where the agent wrote OTHER words (the owner, 2026-11-26): the same letter saved again is no rewrite - his version stands
+        from .signatures import agent_signed
+        same = wrapup._words(rv.get('DraftText')) == wrapup._words(agent_signed(store, rv, text) or text)
+        his = '' if same else his_words(rv)
         if his or wrapup._turn_after(store, tid, rv): store.decide_review(rv['ReviewId'], 'closed_unsent', his or None, agent, note=wrapup.REPLACED); rv = None
     if rv and rv.get('Status') == 'pending':
         rid = rv['ReviewId']

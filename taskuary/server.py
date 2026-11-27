@@ -2749,7 +2749,8 @@ def _assistant_payload(task_id: int, session=None):
         c = store.get_connector(int(p['connector_id'])) if str(p.get('connector_id') or '').isdigit() else None
         try: who = json.loads((c or {}).get('ConfigJson') or '{}').get('member_name') or ''
         except ValueError: who = ''
-        cards.append({**{k: r.get(k) for k in ('ReviewId', 'Status', 'CreatedAt', 'DecidedAt', 'Reason', 'ActError', 'OwnerEdit')}, 'post': p, 'after': at_turn(r.get('CreatedAt')),
+        cards.append({**{k: r.get(k) for k in ('ReviewId', 'Status', 'CreatedAt', 'DecidedAt', 'Reason', 'ActError', 'OwnerEdit')}, 'post': p,
+                      'ActRetry': 1 if _proposals.retryable(store, r) else None, 'after': at_turn(r.get('CreatedAt')),
                       'network': _proposals.POSTS.get(p['type']) or (_cat.by_type(act['card']) or {}).get('title') or act['card'],
                       'as': who or (c or {}).get('Name') or '',
                       'connect': outbound.review_connect(store, r) if r.get('Status') == 'pending' else None})
@@ -5609,10 +5610,11 @@ def press_review(st, rid: int, body: DecideBody, background: BackgroundTasks = N
             # draft is refreshed from the current context, and the refreshed draft needs its own yes.
             yours = str(body.final_text or '').strip()
             # ...AND STAY IN ITS BOX (the owner, 2026-11-26): the draft written for what arrived is offered beside them, never put over them
-            if yours and yours != str(rv.get('DraftText') or '').strip():
+            mine = bool(yours) and yours != str(rv.get('DraftText') or '').strip()
+            if mine:
                 from .store import his_edit
                 st.hold_review_edit(rid, {**his_edit(rv), 'text': yours})
-            if yours and yours != str(rv.get('DraftText') or '').strip() and rv.get('TaskId'):
+            if mine and rv.get('TaskId'):
                 st.add_comment(rv['TaskId'], ACTOR, 'human', f'Your edited reply, kept for comparison - the thread moved before it was sent:\n{yours[:4000]}')
             draft, kept = None, None
             from .wrapup import agent_drafted
@@ -5646,8 +5648,12 @@ def press_review(st, rid: int, body: DecideBody, background: BackgroundTasks = N
                                   'triage': triage, 'yours': yours or None, 'refreshed': draft},
                     'send_error': ('New messages arrived after this draft. Nothing was sent. '
                                    + ('It is kept as its agent wrote it - read what arrived, and send it again if it still stands.' if kept is not None
+                                      # ...his own words stay in the box: the draft written for what arrived is offered beside them, never over them
+                                      else 'Your words are kept as you wrote them' + (' - a draft for what arrived is shown beside them' if draft else '')
+                                      + '; review and approve again.' if mine
+                                      # ...said only where a draft was written over the old one: a refresh that did not land is not one
                                       else 'I refreshed it with the latest context' + (f' - it now answers {moved_to}' if moved_to else '')
-                                      + '; review it and approve again.' if draft
+                                      + '; review it and approve again.' if draft and str(now.get('DraftText') or '') != str(rv.get('DraftText') or '')
                                       else f"Press {buttons.label('redraft')} to write it with the latest context before approving."))}
     return land(st, rv, body.verb, body.final_text, body.note, ACTOR,
                 learn_async=(background.add_task if background is not None else None), cc=body.cc, reply_text=body.reply_text, anyway=body.anyway, fields=body.fields,

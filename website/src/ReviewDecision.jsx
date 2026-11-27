@@ -11,7 +11,7 @@ import ReplyFiles from "./ReplyFiles.jsx";
 import { holdInView } from "./inView.js";
 import { filesPromised, filesShort } from "./replyFiles.js";
 import { outcomeOf, proposalFrom, proposalPresentation, receiptOf, resultOf, reviewStatusLabel, reviewText } from "./reviewProposal.js";
-import { actionFor, asLeft, cardOf, changed, faceOf, fieldsOf, hasBox, headOf, lengthOf, pressable as actPressable, pressOf, shownOf, stateOf, textKey, valuesOf, viaBrowserSaid, wordsOf } from "./actionCard.js";
+import { actionFor, asLeft, cardOf, changed, faceOf, fieldsOf, hasBox, headOf, lengthOf, pressable as actPressable, pressOf, shownOf, stateOf, textKey, triesAgain, valuesOf, viaBrowserSaid, wordsOf } from "./actionCard.js";
 import { asLive, MovedPast } from "./PassedCard.jsx";
 import { FileDialog } from "./PublishedPages.jsx";
 import { withoutSignature } from "./signature.js";
@@ -913,7 +913,12 @@ export function ActReview({ row: was, tid, live = true, onChanged, past = false,
   const ok = !busy && actPressable(act, p, text, vals) && !over;
   // ...his no, as every card draws it (tone x)
   const dismiss = { id: "dismiss", label: "Dismiss", tone: "x", disabled: !!busy, run: () => decide("reject"), attrs: { "data-tq-act-dismiss": "" } };
-  const pressRow = gone || !st.live ? [] : row?.connect ? [
+  // ...his one Try again on a card whose press failed where a second try could get past it: the press alone - the server holds his words
+  const again = async () => { setBusy("approve"); setErr(""); const o = await press(api, row.ReviewId, { verb: "approve" }, 2);
+    if (!landed(o) && o.kind !== "already") setErr(failLine(o, post ? "posted" : "sent")); if (o.kind !== "error") onChanged?.(); setBusy(""); };
+  const pressRow = triesAgain(row) && !past ? [{ id: "approve", label: busy === "approve" ? w.busy : btn("try_again"), tone: "p", spin: busy === "approve", disabled: !!busy,
+    run: again, title: hint("try_again"), attrs: { "data-tq-act-again": "" } }]
+    : gone || !st.live ? [] : row?.connect ? [
     ...(post ? [{ id: "browser", label: busy === "browser" ? "Handing it over…" : "Post via the browser", tone: "p", spin: busy === "browser", disabled: !ok || !text.trim(), run: viaBrowser,
       attrs: { "data-tq-act-browser": "" } }] : []),
     { id: "connect", label: row.connect.label, tone: post ? "s" : "p", run: connectRun(row.connect.href, setSetupAt), attrs: { "data-tq-act-connect": "", ...OPENS_UNDER } },

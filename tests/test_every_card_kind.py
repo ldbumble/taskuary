@@ -214,7 +214,7 @@ def test_a_post_put_up_through_the_browser_keeps_every_further_press_on_its_one_
     ws.record(w.s, w.tid, 'run1', 'input_needed', request_id='yourturn:signin-x', text='Your turn in the browser on x.example: sign in to X', source='api')
     got = w.cards()
     signin = pagestep.card_of(w.s, w.tid, 'yourturn:signin-x')
-    assert got[x]['status'] == 'pending' and got[x]['step'] == {'review': signin['ReviewId'], 'what': 'Your turn in the browser on x.example: sign in to X', 'press': 'done'}, got[x]
+    assert got[x]['status'] == 'pending' and got[x]['step'] == {'review': signin['ReviewId'], 'what': 'Your turn in the browser on x.example: sign in to X', 'card': x, 'press': 'done'}, got[x]
     assert signin['ReviewId'] not in got, 'his sign-in is on the post\'s card, never a card beside it'
     ws.record(w.s, w.tid, 'run1', 'answered', request_id='yourturn:signin-x', text="I'm done", source='owner')
     assert not w.cards()[x].get('step') and w.s.get_review(signin['ReviewId'])['Status'] == 'approved'

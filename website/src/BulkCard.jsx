@@ -16,7 +16,8 @@ import { savedEdit } from "./heldEdits.js";
 // what to check - with a tick box; the first few opened in their own card to review; one press does every ticked one, each by its own road, and a
 // bar IN the card says how far it is, failures counted as they come, Stop for the rest. Its agent hears the run once.
 const SAMPLE = 2;      // ...review a few: the first ones stand open in their single form
-export default function BulkReview({ rows = [], tid, onChanged, past: given = false }) {
+// `step`: the step held on the browser road of one of its tabs (chatlog.advance) - drawn on that tab's own card, its next press
+export default function BulkReview({ rows = [], tid, onChanged, past: given = false, step = null }) {
   const key = rows[0]?.Batch, [run, setRun] = useState(null), [skip, setSkip] = useState(() => new Set()), [open, setOpen] = useState(() => new Set());
   const [busy, setBusy] = useState(false), [err, setErr] = useState("");
   const read = useCallback(() => api.get(`/api/reviews/batch/${key}`).then(({ data }) => setRun(data)).catch(() => {}), [key]);
@@ -40,14 +41,14 @@ export default function BulkReview({ rows = [], tid, onChanged, past: given = fa
   const stop = () => api.post(`/api/reviews/batch/${key}/cancel`).then(({ data }) => setRun(data)).catch(() => {});
   const flip = (setter, id) => setter((s) => { const x = new Set(s); if (x.has(id)) x.delete(id); else x.add(id); return x; });
   // ...an item as the card of its own act: a list row opened to review, and a set's tab
-  const own = (r) => (isCardReview(r) ? <ActReview row={cardOf(r)} tid={tid} onChanged={onChanged} past={past} /> : <ReviewDecision review={r} onChanged={onChanged} past={past} />);
+  const own = (r) => (isCardReview(r) ? <ActReview row={cardOf(r)} tid={tid} onChanged={onChanged} past={past} step={step?.card === r.ReviewId ? step : null} /> : <ReviewDecision review={r} onChanged={onChanged} past={past} />);
   const shownRow = (r, i) => rowOpens(r.ReviewId, i, { open, sample: SAMPLE });
   const items = states.map(([r, s], i) => { const w = rowOf(r); return { id: r.ReviewId, target: w.target, line: w.line, flags: w.flags, failed: s.failed || "",
     mark: s.done ? "✓" : s.failed ? "!" : "–", struck: skip.has(r.ReviewId), ...(s.waiting ? { checked: !skip.has(r.ReviewId), locked: live, onCheck: () => flip(setSkip, r.ReviewId) } : {}),
       open: shownRow(r, i), onOpen: () => flip(setOpen, shownRow(r, i) ? -r.ReviewId : r.ReviewId),
       // ...while the run is at work an open row is looked at, never pressed: the run does it
       body: <div {...(live ? { inert: "" } : {})}>{own(r)}</div> }; });
-  const tabs = tabsOf(rows, run);
+  const tabs = tabsOf(rows, run, step);
   if (tabs) return <MovedPast on={past}><CardLine tabs={tabs}>{rows.map((r) => <div key={r.ReviewId}>{own(r)}</div>)}</CardLine></MovedPast>;
   const ran = live || ["finished", "stopped"].includes(run?.state);
   return (<MovedPast on={past}>

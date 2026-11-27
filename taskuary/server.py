@@ -6046,8 +6046,8 @@ def agent_reply(body: AgentReplyBody, request: Request):
                                   answers=body.answers, only=body.only, cc=body.cc, why_to=body.why_to, mailbox=body.mailbox)
 
 class AgentDraftBody(BaseModel):
-    task_id: int; text: str; to: str = ''; subject: str = ''; slot: str = ''; agent: str = 'agent'; files: list[AgentFile] = []; cc: list[str] = []
-    mailbox: str = ''; guessed: list[str] = []; then: str | None = None
+    task_id: int; text: str; to: str | list[str] = ''; subject: str = ''; slot: str = ''; agent: str = 'agent'; files: list[AgentFile] = []; cc: list[str] = []
+    mailbox: str = ''; guessed: list[str] = []; then: str | None = None; replaces: bool = False
 
 @app.post('/api/agent/draft')
 def agent_draft(body: AgentDraftBody, request: Request):
@@ -6058,7 +6058,7 @@ def agent_draft(body: AgentDraftBody, request: Request):
     from . import wrapup
     files = _agent_files(body.files, body.task_id)
     with _raising(body.task_id, body.then):
-        out = slots.draft(store, body.task_id, body.text, body.to, body.subject, body.slot, body.agent, cc=body.cc, mailbox=body.mailbox, guessed=body.guessed, carries=files)
+        out = slots.draft(store, body.task_id, body.text, body.to, body.subject, body.slot, body.agent, cc=body.cc, mailbox=body.mailbox, guessed=body.guessed, carries=files, replaces=body.replaces)
     if out.get('ok') and files: out = {**out, **wrapup.attach_files(store, out['review_id'], files, body.agent)}
     return {**out, **wrapup.carries(store, out['review_id'])} if out.get('ok') and out.get('review_id') else out
 
@@ -6671,7 +6671,6 @@ async def mcp_rpc(request: Request, task: int = 0):
                              'error': {'code': -32001, 'message': 'agents cannot do this: a session uses the tools of its OWN task'}}, status_code=403)
     doors = {'tool_run': lambda b: tool_run(b, request),
              'tick': lambda tid, item, done: agent_tick(AgentTickBody(task_id=tid, item=item, done=done), request),
-             'not_needed': lambda tid, why: agent_not_needed(AgentNotNeededBody(task_id=tid, why=why), request),
              'withdraw': lambda tid, why, which='', keep=0: agent_withdraw_draft(AgentWithdrawBody(task_id=tid, why=why, which=which, keep=keep), request),
              'check_back': lambda tid, when, what: agent_check_back(AgentCheckBackBody(task_id=tid, when=when, what=what), request),
              'todos': lambda tid, a: agent_todos(AgentTodosBody(**{k: v for k, v in a.items() if k in ('add', 'reword', 'merge')}, task_id=tid), request),
@@ -6680,7 +6679,7 @@ async def mcp_rpc(request: Request, task: int = 0):
              'remember': lambda tid, note, subject='', about='', signature=False: agent_remember(AgentRememberBody(task_id=tid, note=note, subject=subject, about=about, signature=signature), request),
              'ask_stronger': lambda tid, q, c: agent_ask_stronger(AgentAskStrongerBody(task_id=tid, question=q, context=c), request),
              'reply': lambda tid, text, to='', files=(), **who: agent_reply(AgentReplyBody(task_id=tid, text=text, to=to, files=list(files), **who), request),
-             'draft': lambda tid, text, to, subject, files=(), cc=(), mailbox='', guessed=(), slot='': agent_draft(AgentDraftBody(task_id=tid, text=text, to=to, subject=subject, slot=slot, files=list(files), cc=list(cc), mailbox=mailbox, guessed=list(guessed)), request),
+             'draft': lambda tid, text, to, subject, files=(), cc=(), mailbox='', guessed=(), slot='', replaces=False: agent_draft(AgentDraftBody(task_id=tid, text=text, to=to, subject=subject, slot=slot, files=list(files), cc=list(cc), mailbox=mailbox, guessed=list(guessed), replaces=replaces), request),
              'sign': lambda tid, a: agent_sign_form(AgentSignBody(**{**{k: v for k, v in a.items() if k in AgentSignBody.model_fields}, 'task_id': tid}), request),
              'propose': lambda tid, a: agent_propose(AgentProposeBody(**{**a, 'task_id': tid}), request),
              'answer_invite': lambda tid, a: agent_answer_invite(AgentInviteBody(**{**a, 'task_id': tid}), request),
@@ -6700,10 +6699,9 @@ async def mcp_rpc(request: Request, task: int = 0):
         if name == 'read_message' and agenttools.unvouched(store, task, args): raise HTTPException(403, agenttools.UNVOUCHED)
         out = agenttools.call(store, task, name, args, doors, skip)
         return out.body.decode() if isinstance(out, JSONResponse) else out
-    from .wrapup import no_correspondent
     from .general import GENERAL_KINDS
     from . import harness
-    skip = (agenttools.REPLY_TOOLS if no_correspondent(store, task) else ()) + (
+    skip = (
         agenttools.CODING_TOOLS if (store.get_task(task) or {}).get('Kind') in GENERAL_KINDS else ()) + (
         () if (card := harness.on_card(store, task)) else ('web_search',))         # ...the web through the card, only for its harness CLI (harness.py)
     # ...a stranger's session is served the owner's harmless tools and nothing else (agenttools.STRANGER_TOOLS)

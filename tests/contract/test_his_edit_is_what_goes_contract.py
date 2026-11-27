@@ -211,8 +211,13 @@ def test_a_letter_its_agent_writes_again_never_lands_in_the_box_he_typed_into(w)
     assert first.get('ok'), first
     rid = first['review_id']
     w.typed(rid, text=HIS)
-    again = slots.draft(w.s, w.tid, 'Hi Erin - a second go at it.', to='erin@northwind.example', subject='The scheduler', agent='assistant')
-    assert again.get('ok') and again['review_id'] != rid and again.get('replaced_the_owners_version') == HIS, again
+    # ...a letter is new unless it says what it replaces (the owner's OK, 2026-11-27): his card stands as he left it, the new one beside it
+    beside = slots.draft(w.s, w.tid, 'Hi Erin - and one more thing.', to='erin@northwind.example', subject='The scheduler', agent='assistant')
+    assert beside.get('ok') and beside['review_id'] != rid and 'replaced_the_owners_version' not in beside, beside
+    assert w.s.get_review(rid)['Status'] == 'pending' and his_words(w.s.get_review(rid)) == HIS, 'his card, as he left it'
+    again = slots.draft(w.s, w.tid, 'Hi Erin - a second go at it.', to='erin@northwind.example', subject='The scheduler', agent='assistant',
+                        slot=first['slot'], replaces=True)
+    assert again.get('ok') and again['review_id'] not in (rid, beside['review_id']) and again.get('replaced_the_owners_version') == HIS, again
     mine, new = w.s.get_review(rid), w.s.get_review(again['review_id'])
     assert mine['Status'] == 'closed_unsent' and mine['FinalText'] == HIS and FILED in mine['DraftText'], 'his version, kept as he left it'
     assert 'a second go' in new['DraftText'] and not his_words(new), 'the new letter is its own card, as its agent wrote it'

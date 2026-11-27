@@ -552,10 +552,11 @@ def withdraw(store, tid: int, why: str, by: str, which='', keep: int = 0) -> dic
         done, bad = [g['review_id'] for _, g in got if g.get('ok')], [f"rv{x}: {g.get('why')}" for x, g in got if not g.get('ok')]
         return {'ok': bool(done), 'review_id': done[0] if done else None, 'review_ids': done, **({'why': '; '.join(bad)[:600]} if bad else {})}
     left = [r for r in unsent(store, tid) if r['rid'] != keep]
-    if not left: return {'ok': False, 'why': 'nothing unsent is waiting on this task, so there is nothing to withdraw'}
+    # ...NONE NAMED IS THE REPLY, PUT DOWN AS NOT NEEDED (one take-back tool, the card-tool design 2026-11-27): reply_not_needed was this call
+    if not which and not keep and (any(r['kind'] in ('draft', 'draft_reply') for r in left) or not left): return not_needed(store, tid, why, by)
     if which.isdigit(): hit = [r for r in left if r['rid'] == int(which)]
     elif which: hit = [r for r in left if which in r['to'].casefold() or which in r['what'].casefold()]
-    else: hit = [r for r in left if r['kind'] in ('draft', 'draft_reply')][:1] or (left if len(left) == 1 and not left[0].get('handed') else [])
+    else: hit = left if len(left) == 1 and not left[0].get('handed') else []
     if len(hit) != 1:
         return {'ok': False, 'why': ('several match - ' if hit else 'name which one - ' if not which else f'nothing unsent matches {which!r} - ') +
                 'give its review id: ' + '; '.join(f"{r['rid']}: {r['what']}" for r in (hit or left))}

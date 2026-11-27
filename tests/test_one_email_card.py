@@ -108,7 +108,8 @@ def test_an_email_set_up_again_after_his_send_failed_keeps_his_pressed_card():
     with mock.patch.object(outbound, 'send_out', side_effect=RuntimeError('550 mailbox unavailable')), \
          mock.patch.object(outbound, 'send_block', return_value=''), mock.patch('taskuary.learning.learn_from'):
         assert verdicts.decide(s, s.get_review(rid), 'approve', 'Hi Paula - 3pm, and bring the Friday figures.')['delivery'] == 'failed'
-    again = slots.draft(s, tid, 'Hi Paula - 3pm.', to='paula@northwind.example', subject='Q4 review')
+    # ...set up again IN ITS PLACE (`replaces`, the card-tool design 2026-11-27: a letter is new unless it says what it replaces)
+    again = slots.draft(s, tid, 'Hi Paula - 3pm.', to='paula@northwind.example', subject='Q4 review', slot=slots.of_review(s.get_review(rid)), replaces=True)
     assert again['ok'] and again['review_id'] != rid
     old = s.get_review(rid)
     assert old['Status'] == 'closed_unsent' and 'bring the Friday figures' in old['DraftText']
@@ -134,3 +135,42 @@ def test_the_agents_why_for_an_email_or_a_reply_is_kept_on_its_card_and_a_rewrit
     agenttools.call(s, tid, 'propose', {'kind': 'reply', 'text': 'Yes, Friday works.', 'why': 'Erin needs a yes by Thursday.'},
                     {'reply': lambda *a, **k: {'ok': True, 'review_id': rep}})
     assert s.get_review(rep)['DraftWhy'] == 'Erin needs a yes by Thursday.'
+
+
+# ── THE CALL'S SHAPE IS THE CARD (the card-tool design, 2026-11-27, the owner's OK) ──────────────────────────────────────────────────────
+def _own_ask(s, title='The agenda'):
+    s.set_setting('owner_email', 'alex@northwind.example', 't')
+    return s.create_task({'Title': title, 'Kind': 'general', 'Status': 'open', 'OriginBase': 'owner'}, 'owner')
+
+
+# "Email Erin and Gail the agenda" is ONE email to both: `to` is a list, and the card's To holds every one of them
+def test_an_email_to_two_people_is_one_email_with_both_on_its_to():
+    from taskuary import agenttools, slots
+    s = MemoryStore(); tid = _own_ask(s)
+    door = lambda tid, text, to, subject, files=(), cc=(), mailbox='', guessed=(), slot='', replaces=False: slots.draft(
+        s, tid, text, to, subject, slot, 'assistant', cc=cc, mailbox=mailbox, guessed=guessed, replaces=replaces)
+    with mock.patch.object(outbound, 'new_from', return_value=None):
+        out = json.loads(agenttools.call(s, tid, 'propose', {'kind': 'email', 'to': ['erin@northwind.example', 'Gail Moreno <gail@northwind.example>'],
+                                                             'subject': 'Agenda', 'text': 'Hi both - the agenda is below.'}, {'draft': door}))
+    assert out['ok'], out
+    env = json.loads(s.get_review(out['review_id'])['Deliver'])
+    assert env['to'] == ['erin@northwind.example', 'gail@northwind.example'], env
+    assert len(s._rows("SELECT 1 FROM review WHERE TaskId=?", (tid,))) == 1
+
+
+# ...and a second email to the same person is a second card - a card is new unless it says what it `replaces` (it was rewritten in place
+# unless the agent knew `slot: "new"`, and two letters to one person are the owner's to send)
+def test_a_second_letter_to_one_person_is_its_own_card_unless_it_says_what_it_replaces():
+    from taskuary import slots
+    s = MemoryStore(); tid = _own_ask(s, 'Portal seats')
+    with mock.patch.object(outbound, 'new_from', return_value=None):
+        a = slots.draft(s, tid, 'Paula - please add Erin to the portal.', to='paula@northwind.example', subject='Portal seat', agent='assistant')
+        b = slots.draft(s, tid, 'Paula - the invoice for October is attached.', to='paula@northwind.example', subject='Invoice', agent='assistant')
+        assert a['ok'] and b['ok'] and a['review_id'] != b['review_id'], (a, b)
+        assert [r['Status'] for r in s._rows("SELECT Status FROM review WHERE TaskId=? ORDER BY ReviewId", (tid,))] == ['pending', 'pending']
+        same = slots.draft(s, tid, 'Paula - please add Erin to the portal.', to='paula@northwind.example', subject='Portal seat', agent='assistant')
+        assert same['review_id'] == a['review_id'], 'the same letter again is the card already waiting'
+        c = slots.draft(s, tid, 'Paula - please add Erin AND Ray to the portal.', to='paula@northwind.example', subject='Portal seat',
+                        agent='assistant', slot=a['slot'], replaces=True)
+    assert c['review_id'] == a['review_id'] and 'AND Ray' in s.get_review(a['review_id'])['DraftText'], 'replaces rewrites the card it names'
+    assert len(s._rows("SELECT 1 FROM review WHERE TaskId=? AND Status='pending'", (tid,))) == 2

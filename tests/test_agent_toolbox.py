@@ -1373,3 +1373,81 @@ class APostIsAKindOfTheOneReviewTool(unittest.TestCase):
         self.assertTrue(err); self.assertIn('no post card', said); self.assertIn('linkedin', said); self.assertFalse(self.cards())
         said, err = tool(self.tid, 'propose', kind='post', network='Twitter', text='Hi')
         self.assertFalse(err, said); self.assertEqual(json.loads(self.cards()[0]['DraftText'])['type'], 'x_post')
+
+
+class TheCardIsNamedOneWay(unittest.TestCase):
+    """THE SHAPE OF THE CALL IS THE CARD (the card-tool design, 2026-11-27, the owner's OK: "agents will do the right thing if you design it
+    right"): a tick waits for the press of the card it was made beside; the card a call is about is its `card` on every tool, and old names
+    still work for a saved session; one take-back tool. Invented people."""
+    def setUp(self):
+        from taskuary import conversation
+        self.s, self.tid, _ = world()
+        self.p = mock.patch.object(server, 'store', self.s); self.p.start()
+        conversation.hear(self.s, self.tid, turn=True)
+    def tearDown(self): self.p.stop()
+    def todo(self, text): return self.s.add_checklist_items(self.tid, [{'text': text}], 'triage')[0]['id']
+    def done(self, i): return next(x['done'] for x in self.s.task_checklist(self.tid) if x['id'] == i)
+    def email(self, to, text, **more):
+        said, err = tool(self.tid, 'propose', kind='email', to=to, subject='Offsite', text=text, **more); self.assertFalse(err, said)
+        return json.loads(said)['review_id']
+
+    def test_a_tick_beside_a_waiting_card_waits_for_his_press_and_his_no_leaves_it_open(self):
+        "Walks 25 and 26: `tick` right after raising the card read the task as done while nothing had gone."
+        from taskuary import outbound, verdicts
+        a, b = self.todo('Email Gail the agenda'), self.todo('Email Erin the agenda')
+        ga = self.email('gail@northwind.example', 'Hi Gail - the agenda is below. Alex')
+        said, err = tool(self.tid, 'tick', item=a, done=True)
+        self.assertFalse(err, said); self.assertIn('his press', said); self.assertFalse(self.done(a))
+        with mock.patch.object(outbound, 'send_out', return_value={'channel': 'email', 'to': ['gail@northwind.example'], 'cc': []}):
+            self.assertTrue(verdicts.decide(self.s, self.s.get_review(ga), 'approve')['ok'])
+        self.assertTrue(self.done(a), 'it ticks when his press goes')
+        er = self.email('erin@northwind.example', 'Hi Erin - the agenda is below. Alex')
+        tool(self.tid, 'tick', item=b, done=True)
+        verdicts.decide(self.s, self.s.get_review(er), 'reject')
+        self.assertFalse(self.done(b), 'his no leaves it open')
+
+    def test_the_todo_a_card_does_names_the_email_it_is(self):
+        "`slot` folds into `todo`: the to-do an email does is the email triage listed, filled - never a second one beside it."
+        from taskuary import slots
+        sid = slots.add(self.s, self.tid, [{'to': 'Gail from the venue', 'about': 'the agenda', 'kind': 'email'}], 'triage')[0]['id']
+        rid = self.email('gail@northwind.example', 'Hi Gail - the agenda is below. Alex', todo=sid)
+        self.assertEqual(slots.of_review(self.s.get_review(rid)), sid)
+        self.assertEqual(len(slots.all_(self.s, self.tid)), 1)
+
+    def test_a_card_is_named_card_on_every_tool_and_the_old_names_still_work(self):
+        one = self.email('gail@northwind.example', 'Hi Gail - Friday. Alex')
+        two = self.email('gail@northwind.example', 'Hi Gail - and bring the slides. Alex')
+        self.assertNotEqual(one, two, 'a second letter to one person is its own card')
+        three = self.email('gail@northwind.example', 'Hi Gail - Friday at noon. Alex', replaces=f'rv{one}')
+        self.assertEqual(three, one, 'replaces rewrites the card it names')
+        said, err = tool(self.tid, 'withdraw_draft', card=f'rv{two}', why='the slides are not ready'); self.assertFalse(err, said)
+        self.assertEqual(self.s.get_review(two)['Status'], 'closed_unsent')
+        said, err = tool(self.tid, 'withdraw_draft', which=f'rv{one}', why='Gail cancelled'); self.assertFalse(err, said)
+        self.assertEqual(self.s.get_review(one)['Status'], 'closed_unsent')
+        listed = {t['name'] for t in rpc(self.tid, 'tools/list').json()['result']['tools']}
+        self.assertNotIn('reply_not_needed', listed)
+        self.assertNotIn('which', json.dumps(agenttools.TOOLS['withdraw_draft'][2])); self.assertIn('card', agenttools.TOOLS['keep_card'][2]['properties'])
+
+    def test_an_invite_in_place_of_the_letter_that_asked_for_times_is_one_call(self):
+        "Both roads swapped the reply asking for times for the invite in two calls, withdraw_draft then set_up_meeting."
+        from taskuary import verdicts
+        ask = self.email('gail@northwind.example', 'Hi Gail - which times suit you? Alex')
+        inv = self.s.add_review({'TaskId': self.tid, 'Kind': 'action', 'Status': 'pending', 'DraftText': '{}'})
+        doors = {'meeting': lambda tid, a: {'ok': True, 'review_id': inv, 'got': sorted(a)},
+                 'withdraw': lambda tid, why, which='', keep=0: verdicts.withdraw(self.s, tid, why, 'agent', which, keep=keep)}
+        out = json.loads(agenttools.call(self.s, self.tid, 'set_up_meeting', {'with': ['gail@northwind.example'], 'title': 'Offsite', 'replaces': f'rv{ask}'}, doors))
+        self.assertEqual(out['replaced'], ask); self.assertNotIn('replaces', out['got'])
+        self.assertEqual(self.s.get_review(ask)['Status'], 'closed_unsent'); self.assertIn('replaces', agenttools.TOOLS['set_up_meeting'][2]['properties'])
+
+    def test_withdraw_with_no_card_puts_the_reply_down_and_the_old_tool_name_still_does(self):
+        from taskuary import outbound
+        mid = self.s.add_message({'TaskId': self.tid, 'ExternalId': 'q1', 'Channel': 'email', 'SourceName': 'alex@northwind.example', 'FromName': 'Ray Colton',
+                                  'FromEmail': 'ray@northwind.example', 'Subject': 'Lunch', 'BodyText': 'Lunch Friday?', 'Status': 'routed'})
+        self.s.update_task(self.tid, {'OriginBase': 'email'}, 'owner')
+        mk = lambda: self.s.add_review({'TaskId': self.tid, 'MessageId': mid, 'Kind': 'draft_reply', 'Status': 'pending', 'DraftText': 'Yes, Friday.'})
+        r1 = mk()
+        said, err = tool(self.tid, 'withdraw_draft', why='Erin already answered'); self.assertFalse(err, said)
+        self.assertEqual(self.s.get_review(r1)['Status'], 'closed_unsent')
+        r2 = mk()
+        said, err = tool(self.tid, 'reply_not_needed', why='he answered it himself'); self.assertFalse(err, said)
+        self.assertEqual(self.s.get_review(r2)['Status'], 'closed_unsent')

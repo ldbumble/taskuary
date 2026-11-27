@@ -284,8 +284,8 @@ def cards_waiting(store) -> int:
     n = 0
     for r in store._rows("SELECT ReviewId, DraftText FROM review WHERE Kind='action' AND Status='pending'"):
         p = _draft(r)
-        if p.get('action') not in CHANGES or 'texts' in p: continue
-        try: store._exec("UPDATE review SET DraftText=? WHERE ReviewId=? AND Status='pending'", (json.dumps(change_card(store, p)), r['ReviewId'])); n += 1
+        if p.get('action') not in CHANGES or (now := change_card(store, p)) == p: continue
+        try: store._exec("UPDATE review SET DraftText=? WHERE ReviewId=? AND Status='pending'", (json.dumps(now), r['ReviewId'])); n += 1
         except Exception as e: logger.warning(f"rv{r['ReviewId']}: its change card is drawn as filed - {e}")
     return n
 
@@ -1230,6 +1230,8 @@ def execute(store, rv: dict, actor='owner', final_text: str = None, skip_checks:
     if p.get('action') == 'close_item' and final_text is not None and not str(final_text).lstrip().startswith('{'): p['text'] = str(final_text).strip()
     # ...a GitHub comment's box IS its words: what the owner left there is what is posted
     if edited and p.get('action') == 'comment_issue': p['body'] = final_text.strip()
+    # ...A CHANGE'S CARD IS DRAWN FROM WHAT ITS PRESS SAVES (workflows.change_card), and one on file that draws anything else saves nothing
+    if p.get('action') in CHANGES and 'texts' in p and change_card(store, p) != p: raise RuntimeError(CHANGED)
     p = as_left(p, final_text, fields)
     ok, why = validate(store, p)
     if not ok: raise RuntimeError(f'refused at execution: {why}')

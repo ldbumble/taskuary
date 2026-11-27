@@ -420,7 +420,7 @@ def test_a_repair_that_changes_the_goal_waits_for_the_owner(site):
         proposals.execute(s, {'ReviewId': 0, 'TaskId': tid, 'DraftText': json.dumps(p)})      # the owner's yes keeps it
         assert workflows.cfg_of(s.get_source(src['SourceId']))['flow'] == fixed()
         with pytest.raises(RuntimeError, match='do not hold'):                              # a list that does not hold is never saved
-            proposals.execute(s, {'ReviewId': 0, 'TaskId': tid, 'DraftText': json.dumps({**p, 'was': fixed(), 'flow': [{'id': 's1', 'kind': 'task'}]})})
+            proposals.execute(s, {'ReviewId': 0, 'TaskId': tid, 'DraftText': json.dumps(workflows.change_card({**p, 'was': fixed(), 'flow': [{'id': 's1', 'kind': 'task'}]}))})
 
 
 def test_repairs_stop_at_the_cap_and_never_loop(site):

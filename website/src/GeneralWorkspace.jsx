@@ -18,7 +18,7 @@ import { AttachChip, fileChips, fileState, usePromptImages, useSendWhenUp } from
 import { holdUnsent } from "./unsent.js";
 import { baseName } from "./agentSteps.js";
 import { AgentSteps, PermitCtx } from "./AgentStepRows.jsx";
-import { chatSource, checkBackDue, waitingShown, eventsOf, turnSteps, hasParts, isPastCard, standing, heldAtEnd, AT_END, anchorOf, anchorShift, endAt, openAt, OPEN_HOLD, shrinkHeld, SHRINK_HOLD, turnParts, waitsLast, noCard, workCount, folds, ranUnder, foldLine, paintable, withMine, waitingChips, workingLine, waitingOn, askTurn, onYouTurn, askedFirst, runsOf, patchSteps, askOn, asksOff, viewHomes, viewAt } from "./chatStream.js";
+import { chatSource, checkBackDue, waitingShown, eventsOf, turnSteps, hasParts, isPastCard, standing, heldAtEnd, AT_END, anchorOf, anchorShift, endAt, openAt, OPEN_HOLD, shrinkHeld, SHRINK_HOLD, turnParts, waitsLast, noCard, folds, ranUnder, foldLine, paintable, withMine, waitingChips, workingLine, waitingOn, askTurn, onYouTurn, askedFirst, runsOf, onCard, withAnswer, folding, patchSteps, askOn, asksOff, viewHomes, viewAt } from "./chatStream.js";
 import { stepLabel } from "./agentSteps.js";
 export { checkBackDue };
 import { detailFor, ownDetail, useOwnDetail } from "./chatDetail.js";
@@ -242,11 +242,12 @@ const Fold = ({ k, label, quiet = false, force = false, children }) => {
 // ONE RULE FOR EVERY FOLD OF A TURN'S WORK: it is drawn round steps of work. One with none in it - only Taskuary's own notes, as a turn the app
 // started holds before its first step - read "Along the way ▸" over nothing he could see (the overnight walk, 2026-11-11): its notes stand open
 // ...and one holding a call that waits on his answer stands open while it waits: the ask is on that call's row (AgentStepRows PermitCtx)
-const WorkFold = ({ k, quiet = false, parts, draw }) => { const n = workCount(parts), byCall = React.useContext(PermitCtx)?.byCall;
+// ...and one of a card's turn holding only its words is a fold all the same: the card is all that stands (chatStream.runsOf `card`)
+const WorkFold = ({ k, quiet = false, parts, draw }) => { const n = folding(parts), byCall = React.useContext(PermitCtx)?.byCall;
   const asked = parts.some((p) => (p.steps || []).some((st) => askOn(st, byCall)));
   return n ? <Fold k={k} quiet={quiet} force={asked} label={foldLine(parts)}>{parts.map((p, i) => draw(p, i, "everything"))}</Fold>
     : <>{parts.filter((p) => p.type !== "said").map((p, i) => draw(p, i, "everything"))}</>; };
-const TurnWorkView = ({ data, now, k }) => {
+const TurnWorkView = ({ data, now, k, card = false }) => {
   const at = React.useContext(WorkCtx);
   const outs = React.useContext(OutputsCtx), key = foldKey(k), level = levelOf(data?.level, React.useContext(LevelCtx)), chat = React.useContext(ChatCtx);
   // ...AND A TURN THAT ENDED HAS NOTHING STILL AT WORK (the owner, 2026-11-05: a step kept its spinner under the answer): a call that never got
@@ -274,7 +275,7 @@ const TurnWorkView = ({ data, now, k }) => {
   // decides from the turn's first row and never again. SUMMARY: what it said and showed where it said it, each run of work between them behind
   // its own quiet "n steps" line that climbs as it works (the owner, 2026-11-17) and opens on every step at a press - keyed by its first part,
   // so the turn's end moves nothing. STEPS and EVERYTHING: every row as it comes
-  if (level === "summary") return <>{runsOf(parts).map((r) => (r.fold ? <WorkFold key={r.id} k={`${key}:${r.id}`} quiet parts={r.parts} draw={draw} />
+  if (level === "summary") return <>{runsOf(parts, card).map((r) => (r.fold ? <WorkFold key={r.id} k={`${key}:${r.id}`} quiet parts={r.parts} draw={draw} />
     : r.parts.map((p, i) => draw(p, i, "everything"))))}</>;
   return <>{parts.map((p, i) => draw(p, i, level))}</>;
 };
@@ -427,17 +428,18 @@ const ConvTurn = ({ t, more, ran = 0, cards, name, ask = null, later = false, ow
   // ...`opening`: its agent's process really is starting (conversation.items) - said on any turn then, and only then
   // ...naming what no row in sight says: its rows stand open at a level that lists them, inside the newest fold he opened, and on the dock's
   // trail (no WorkCtx) always. What it is writing is its own row, streamed into it - never said again on this line
-  const lastFold = runsOf(parts).findLast((r) => r.fold), level = levelOf(t.level, React.useContext(LevelCtx));
+  const card = onCard(t, !!ask), laid = withAnswer(parts, t.text && t.tail != null ? t.tail : words, card);
+  const lastFold = runsOf(laid, card).findLast((r) => r.fold), level = levelOf(t.level, React.useContext(LevelCtx));
   const folded = useFoldOpen(lastFold ? `${foldKey(t.id)}:${lastFold.id}` : ""), work = React.useContext(WorkCtx), open = folded || !work || level !== "summary";
   const doing = live ? workingLine(parts, stepLabel, { starting: t.state === "starting" || !!t.opening, later: later && !t.opening, ask: React.useContext(WaitOnCtx), thinking: t.thinking || "", open }) : "";
   // ...and of its filed answer only what its streamed words did not already say (chatlog.read `tail`): nothing said twice, nothing moved
-  const said = t.text && t.tail != null ? t.tail : words;
+  const said = card ? "" : t.text && t.tail != null ? t.tail : words;
   if (quiet) return null;
   return <div className={`tq-aui-message tq-aui-agent${words && !live ? " tq-copy-host" : ""}${more ? " tq-aui-agent-more" : ""}`} data-tq-item={t.id} data-tq-chat-line={key} data-tq-turn={t.state}>
     {!!words && !live && <CopyCorner text={words} label="Copy this answer" />}
     {!more && <div className="tq-aui-role">{name}{live ? <RunClock start={turnStart(t)} at={turnAt(t)} /> : <TurnTime t={t} secs={ran} />}</div>}
     <div className="tq-aui-agent-body">
-      <TurnWorkView data={{ parts, level: t.level }} now={live} k={t.id} />
+      <TurnWorkView data={{ parts: laid, level: t.level }} now={live} k={t.id} card={card} />
       {/* ...WHAT IT MADE, WHERE IT STOOD WHILE IT WORKED (the API walk, 2026-11-20): under its work, above its words - an answer that comes at the
           turn's end was drawn over a picture already on screen, and the picture jumped down */}
       {!!rest.length && <PublishedPages pages={rest} open />}

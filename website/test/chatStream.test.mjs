@@ -262,6 +262,42 @@ test("a pushed row patches its turn in place, and a turn lays out the same at wo
 });
 
 
+// A TURN THAT ENDS ON A CARD SHOWS ONLY THE CARD (the owner, 2026-11-27: "yes only the card, fold the words into steps. only say things if it
+// needs me in the card"): its words - and its answer, last - are rows of its one steps line, in order; nothing of it stands above the card.
+// A turn with no card says its words where it said them, its answer under its work, as before
+test("a turn that ends on a card is its steps fold, its words inside it in order; one without a card shows its words", async () => {
+  const { eventsOf, foldLine, folding, onCard, runsOf, turnParts, withAnswer } = await import("../src/chatStream.js");
+  const said = (id, t) => ({ id, k: "said", text: t }), page = (id, u) => ({ id, k: "tool", name: "WebFetch", args: { url: u }, status: "completed" });
+  const steps = [said("s:x:m:1", "Looking at the launch pages."), page("s:x:c1", "https://a.example/launch"), page("s:x:c2", "https://b.example/launch"),
+    said("s:x:m:2", "Setting the post up.")];
+  const parts = turnParts(eventsOf(steps, false));
+  const lay = (t, answer = "It is ready for your press.", ask = false) => { const card = onCard(t, ask);
+    return runsOf(withAnswer(parts, answer, card), card).map((r) => (r.fold ? { fold: foldLine(r.parts), rows: r.parts.map((p) => p.text || p.type) } : r.parts[0].text)); };
+  const card = { id: "t:1", kind: "turn", cards: [{ id: "c-1", review: 41, status: "pending" }] };
+  assert.deepEqual(lay(card), [{ fold: "2 steps - read 2 pages (a.example, b.example)", rows: ["Looking at the launch pages.", "work", "Setting the post up.", "It is ready for your press."] }],
+    "one steps line and nothing beside it: its words and answer inside, in order");
+  assert.deepEqual(lay({ ...card, cards: [{ ...card.cards[0], status: "approved" }] }), lay(card), "pressed, it stays as it was drawn");
+  assert.deepEqual(lay({ id: "t:1", kind: "turn", cards: [] }, "", true), [{ fold: "2 steps - read 2 pages (a.example, b.example)", rows: ["Looking at the launch pages.", "work", "Setting the post up."] }],
+    "the question it asked is its card too");
+  assert.deepEqual(lay({ id: "t:1", kind: "turn", cards: [] }), ["Looking at the launch pages.", { fold: "2 steps - read 2 pages (a.example, b.example)", rows: ["work"] }, "Setting the post up."],
+    "no card: its words where it said them, its answer drawn under its work (SaidText) as before");
+  // ...and a card's turn that did no work is a fold of its words all the same
+  const words = runsOf(withAnswer(turnParts(eventsOf([said("s:x:m:1", "Here is the reply.")], false)), "Send when ready.", true), true);
+  assert.equal(words.length, 1); assert.ok(words[0].fold && folding(words[0].parts)); assert.equal(foldLine(words[0].parts), "2 notes");
+  assert.equal(folding([{ type: "work", id: "w", steps: [] }]), false, "a fold of nothing he could see is no fold");
+});
+
+// ...AND WHAT HE NEEDS TO PRESS IS ON THE CARD: the agent's why for it, wherever its kind keeps it
+test("a card's why is read off its review: a letter's DraftWhy, an act's proposal, a post's own", async () => {
+  const { cardWhy } = await import("../src/reviewProposal.js");
+  assert.equal(cardWhy({ Kind: "draft_reply", DraftWhy: "erin needs a yes by Thursday." }), "Erin needs a yes by Thursday.");
+  assert.equal(cardWhy({ Kind: "action", DraftText: JSON.stringify({ action: "run_tool", type: "linkedin_post", text: "We launched.", why: "the launch went live today" }) }),
+    "The launch went live today");
+  assert.equal(cardWhy({ post: { type: "x_post", text: "We launched.", why: "same launch, for X" } }), "Same launch, for X");
+  assert.equal(cardWhy({ Kind: "slot", DraftText: "Hi" }), "");
+});
+
+
 // THE AGENT'S OWN WORDS ARE THE ROW (the owner, 2026-11-23: adopt the open-source model): an ACP agent's call reads by its title, an icon by
 // its kind and the files it named - never our reading of its command; Taskuary's own tools and a road that gives no title keep our words
 test("a titled call is the agent's title, kind and files; our own tools and an untitled call keep our words", async () => {

@@ -141,12 +141,20 @@ export const workCount = (parts) => workRows(parts).length;
 // said and showed standing where it said it, each run of work between them one fold of its own - keyed by its first part, so a run that grows,
 // and the turn's end, leave every fold where it was and as he left it (open or shut). A grouping that wraps rows, never one that moves them
 export const SHOWN_PARTS = ["said", "view", "files"];
-export const runsOf = (parts) => (parts || []).reduce((out, p) => {
-  if (SHOWN_PARTS.includes(p.type)) out.push({ id: p.id, parts: [p] });
+// ...AND A TURN THAT ENDS ON A CARD SHOWS ONLY THE CARD (the owner, 2026-11-27: "yes only the card, fold the words into steps. only say things if
+// it needs me in the card"): its words are rows of its fold, in order with its steps - its answer last - and what he needs to press is on the
+// card. `card`: the turn has a card, or the question it asked, drawn under it (onCard)
+export const runsOf = (parts, card = false) => (parts || []).reduce((out, p) => {
+  if (SHOWN_PARTS.includes(p.type) && !(card && p.type === "said")) out.push({ id: p.id, parts: [p] });
   else if (out.at(-1)?.fold) out.at(-1).parts.push(p);
   else out.push({ id: p.id, fold: true, parts: [p] });
   return out;
 }, []);
+export const onCard = (t, ask = false) => !!ask || !!(t?.cards || []).length;
+// ...its answer the fold's last row; a turn without a card says it under its work, as ever
+export const withAnswer = (parts, said, card) => (card && String(said || "").trim() ? [...(parts || []), { type: "said", text: said, id: "answer" }] : parts || []);
+// ...and a fold is drawn round its steps, or round its words where it holds only words (a card's turn that did no work)
+export const folding = (parts) => workCount(parts) > 0 || (parts || []).some((p) => p.type === "said" && String(p.text || "").trim());
 // A PERMISSION ASKED IS ON ITS CALL'S ROW (the owner, 2026-11-23: "just permissions to push something" in the row, Zed-style - action cards
 // stay cards): the request waiting on him (permissions.pending, by the call it names) drawn on that row, each option by the agent's own name
 // for it where it gave one; the requests no row in the list names stand as their card, as before
@@ -203,7 +211,7 @@ const calls = (r) => r.n || 1;
 const callsOf = (r) => (r.type === "edit" ? 1 : calls(r));
 export const foldLine = (parts) => {
   const rows = workRows(parts), n = rows.reduce((t, r) => t + callsOf(r), 0);
-  if (!n) return "";
+  if (!n) { const k = (parts || []).filter((p) => p.type === "said" && String(p.text || "").trim()).length; return k ? plural(k, "note") : ""; }
   const kinds = [], by = new Map();
   for (const r of rows) { const k = r.type === "edit" ? "edit" : r.kind; if (!by.has(k)) { by.set(k, []); kinds.push(k); } by.get(k).push(r); }
   // ...AND THE SKILL IT USED LEADS (walk 25, 2026-11-26: which skill did a job was said by one AI in its own words and by the others not at

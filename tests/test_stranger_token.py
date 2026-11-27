@@ -282,3 +282,22 @@ def test_an_agent_session_reads_its_own_task_and_not_its_neighbours():
             assert guard.agent_read_denied(SRV(), h, 'GET', f'/api/terminals/{sid}/screen', server._stranger_file_task), sid
     finally: terminal.SESSIONS.clear(); terminal.SESSIONS.update(was)
     assert c.get(f'/api/tasks/{u}').status_code == 200                                     # the owner reads everything, as before
+
+
+def test_an_agent_session_reads_its_own_tasks_drafts_and_cards_and_not_its_neighbours():
+    "Red team round 6: the drafts list, a draft's files, its close-out and a bulk card's run answered a session with any task's."
+    s = server.store
+    t, mid = _task(frm='erin@northwind.example'); u, mid2 = _task(frm='gail@northwind.example')
+    mine = s.add_review({'TaskId': t, 'MessageId': mid, 'Kind': 'reply', 'DraftText': 'Thursday works for me.', 'Status': 'pending'})
+    theirs = s.add_review({'TaskId': u, 'MessageId': mid2, 'Kind': 'reply', 'DraftText': 'The offer stands at the figure we discussed.', 'Status': 'pending'})
+    s.cx.execute("UPDATE review SET Batch=? WHERE ReviewId=?", ('ab12', mine)); s.cx.execute("UPDATE review SET Batch=? WHERE ReviewId=?", ('cd34', theirs)); s.cx.commit()
+    ids = lambda h: {r['ReviewId'] for r in c.get('/api/reviews', headers=h).json()['data']} & {mine, theirs}
+    assert ids(AGENT(t)) == {mine} and ids(AGENT(u)) == {theirs}
+    assert ids(AGENT()) == set(), 'a session that proves no task reads no task\'s drafts'
+    assert ids({}) == {mine, theirs}, 'the owner\'s page reads them all, as before'
+    for p in (f'/api/reviews/{theirs}/closeout', f'/api/reviews/{theirs}/attachment?name=offer.pdf', '/api/reviews/batch/cd34', '/api/reviews/batch/none'):
+        assert c.get(p, headers=AGENT(t)).status_code == 403, p
+        assert c.get(p, headers=AGENT()).status_code == 403, p
+    assert c.get('/api/reviews/batch/ab12', headers=AGENT(t)).status_code == 200
+    assert c.get(f'/api/reviews/{mine}/closeout', headers=AGENT(t)).status_code == 404      # its own: the route's own answer (no close-out on a reply)
+    assert c.get('/api/reviews/batch/cd34').status_code == 200

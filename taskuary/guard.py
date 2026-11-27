@@ -384,7 +384,9 @@ def stranger_denied(method: str, path: str, query, tid: int, owner_of) -> str:
 # (general.is_dock) reads across the work, as it is for. Searches the session is told of (AGENT_READS) and the feed are unchanged.
 _OWN_READS = ((re.compile(r'^/api/tasks/(\d+)(/.*)?$'), 'task'), (re.compile(r'^/api/task-outputs/(\d+)(/.*)?$'), 'task'),
               (re.compile(r'^/api/messages/(\d+)(/.*)?$'), 'message'), (re.compile(r'^/api/attachments/(\d+)$'), 'attachment'),
-              (re.compile(r'^/api/task-artifacts/(\d+)$'), 'artifact'), (re.compile(r'^/api/terminals/([^/]+)/screen$'), 'terminal'))
+              (re.compile(r'^/api/task-artifacts/(\d+)$'), 'artifact'), (re.compile(r'^/api/terminals/([^/]+)/screen$'), 'terminal'),
+              # ...and a task's drafts and cards (red team round 6: a reply's files, its close-out and a bulk card's run answered any session)
+              (re.compile(r'^/api/reviews/batch/([^/]+)$'), 'batch'), (re.compile(r'^/api/reviews/(\d+)(/.*)?$'), 'review'))
 AGENT_SCOPE_WHY = "a session reads its own task - its messages, files and agents' screens - never another task's or your own panes"
 
 def agent_read_denied(server: dict, headers, method: str, path: str, owner_of, dock=None) -> str:
@@ -397,6 +399,13 @@ def agent_read_denied(server: dict, headers, method: str, path: str, owner_of, d
             tid = int(m[1]) if kind == 'task' else owner_of(kind, m[1])
             return '' if tid and owns_task(server, headers, tid) else AGENT_SCOPE_WHY
     return ''
+
+
+def own_only(server: dict, headers, dock=None):
+    """The one task a list read is cut to for this caller: None for the owner and the Assistant's guide chat - they read across the work -
+    else the task an agent-scope session proves, 0 where it proves none (no task's rows)."""
+    if scope_of(server, headers) != AGENT or (str(dock or '').isdigit() and owns_task(server, headers, int(dock))): return None
+    return proof_tid(server, headers) or 0
 
 
 def token_matches(got, *want) -> bool:

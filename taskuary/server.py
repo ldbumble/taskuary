@@ -584,6 +584,8 @@ def _stranger_file_task(kind: str, aid):
         t = hub_term.SESSIONS.get(str(aid))
         return getattr(t, 'task_id', None) if t is not None and getattr(t, 'agent', '') else None
     if kind == 'message': return (store.get_message(int(aid)) or {}).get('TaskId')
+    if kind == 'review': return (store.get_review(int(aid)) or {}).get('TaskId')
+    if kind == 'batch': return next((r['TaskId'] for r in store._rows('SELECT TaskId FROM review WHERE Batch=? LIMIT 1', (str(aid),))), None)
     aid = int(aid)
     if kind == 'artifact': return (store.get_task_artifact(aid) or {}).get('TaskId')
     mid = (store.get_attachment(aid) or {}).get('MessageId')
@@ -5524,9 +5526,12 @@ def get_run(run_id: int):
     return r
 
 @app.get('/api/reviews')
-def reviews(status: str = None):
+def reviews(request: Request, status: str = None):
     from .verdicts import context_moved
     rows = store.list_reviews(status)
+    # ...a session reads its own task's drafts, never every task's (guard.own_only; the owner's page reads them all, as ever)
+    if (only := guard.own_only(cfg['server'], request.headers, store.get_setting('assistant_dock_task_id'))) is not None:
+        rows = [r for r in rows if r.get('TaskId') == only]
     memo, sigs, many = {}, {}, len(outbound.mailboxes(store)) > 1
     for r in rows:
         r['CanSend'], r['SendBlock'] = _review_send_state(memo, r)

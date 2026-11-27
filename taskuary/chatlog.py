@@ -1317,7 +1317,7 @@ def _migrate(store, tid: int, legacy=None):
     "One try at the freeze: True done now, False not to be done (done already, no copy yet), None when the log was written to under the list."
     from . import cardqueue
     if migrated(store, tid) or not backed_up(store): return False
-    n, got = rev(store, tid), legacy if legacy is not None else _legacy(store, tid)
+    n, got = _stamp(store, tid), legacy if legacy is not None else _legacy(store, tid)
     live = set((cardqueue.state(store, int(tid)) or {}).get('live') or [])
     # ...A LIST THAT HELD NOTHING HE SAW HAS NOTHING TO FREEZE (a new coding task read as its first start began: the old list drew no line yet,
     # the freeze wiped the line the press had heard, and his line stood by the box for good under the task's title, answered): the log is the record
@@ -1325,7 +1325,7 @@ def _migrate(store, tid: int, legacy=None):
     items, keep = got.get('items') or [], all(bare(x) for x in got.get('items') or [])   # ...still drawn: the turn at work is written beside it
     with store.lock:
         if migrated(store, tid): return False
-        if legacy is None and rev(store, tid) != n: return None
+        if legacy is None and _stamp(store, tid) != n: return None
         # ...what dual-write wrote before is the warm-up: the list is the record
         if not keep:
             store.cx.execute('DELETE FROM chatlog WHERE TaskId=?', (int(tid),))
@@ -1363,6 +1363,12 @@ def _migrate(store, tid: int, legacy=None):
                          (int(tid),))
         store.cx.commit()
     return True
+
+
+# ...AND A CARD RAISED SINCE IS A LOG WRITTEN TO (macOS CI, 2026-11-27: the cards worker raised a sign-in's card between the list and the freeze;
+# the list had no card, the freeze wrote none and cleared where the worker had noted it - pending, drawn nowhere for good)
+def _stamp(store, tid: int) -> tuple:
+    with store.lock: return rev(store, tid), store.cx.execute('SELECT MAX(ReviewId) m FROM review WHERE TaskId=?', (int(tid),)).fetchone()['m']
 
 
 def _legacy(store, tid: int) -> dict:

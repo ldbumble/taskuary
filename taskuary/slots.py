@@ -194,6 +194,12 @@ def draft(store, tid: int, text: str, to: str = '', subject: str = '', slot: str
         if channel != 'email': return {'ok': False, 'why': f'{channel} has no From - only an email leaves from a mailbox'}
         mailbox, why = from_box(store, tid, mailbox, agent, f'email {to} from')
         if why: return {'ok': False, 'why': why}
+    elif channel == 'email' and agent != 'owner':         # no From named and none it may leave from: said now, never found out at his press
+        from . import outbound, words
+        from .agenttools import refusal
+        try: outbound.new_from(store, tid)
+        except outbound.Fixable as e:
+            return {'ok': False, 'why': refusal(f'Nothing was drafted: {e}', f"tell the owner in one line, with the place a mailbox is connected: {words.link('mail')}")}
     cc = [a for a in (split(x)[1] for x in ([cc] if isinstance(cc, str) else cc or [])) if a]
     if cc and channel != 'email': return {'ok': False, 'why': f'{channel} has no cc - only an email can copy somebody in'}
     if bad := [a for a in cc if not is_address(a)]: return {'ok': False, 'why': f"cc is a list of email addresses, one to an entry - {', '.join(bad)} is not one"}

@@ -448,3 +448,54 @@ def test_with_a_card_for_each_profile_an_agents_call_runs_on_its_own(two):
     with pytest.raises(ValueError): reports.tool_card(two, t, tid=f.task(title='Unplaced'))
     W.remove(two, 'harbor-bakery')
     with pytest.raises(ValueError): reports.tool_card(two, t, tid=hb)                   # one profile: two cards are two cards, as before
+
+
+def _sent(two, rid):
+    "Press Send on card `rid` with the provider stood in: (what the press answered, the mailbox each send left from)."
+    from taskuary import verdicts
+    with mock.patch.object(outbound, 'send_out', return_value={'channel': 'email', 'to': [GAIL]}) as send:
+        out = verdicts.decide(two, two.get_review(rid), 'approve')
+    return out, [c.kwargs.get('mailbox') for c in send.call_args_list]
+
+
+def test_a_new_email_with_no_from_leaves_from_its_tasks_own_profile_never_the_first_card(two):
+    """Round 6: a new email on a task no mail came in on named no From, and left from the first Outlook card - Northwind's, on Harbor's task.
+    It leaves from its task's own profile's mailbox, else one every profile shares; with neither it is refused with the fact and the place
+    a mailbox is connected - at the draft for its agent, and at the press for a card that already stood."""
+    f = Factory(two)
+    hb = f.task(title='Bakery rota'); W.set_task(two, hb, 'harbor-bakery', 'owner')
+    letter = lambda t, **kw: slots.draft(two, t, 'Hi Gail,\n\nThe rota is up.', to=GAIL, subject='Rota', **kw)
+    out = letter(hb)
+    assert out['ok'] and out['from'] == HB_BOX == outbound.new_from(two, hb)          # its agent is told where it goes from, and its card says so
+    assert _sent(two, out['review_id'])[1] == [HB_BOX]
+    # ...Harbor's mailbox gone: the one nobody tagged serves every profile
+    two.save_connector({'ConnectorId': two.hb, 'Active': 0}, 't')
+    out = letter(hb, slot='new')
+    assert out['ok'] and out['from'] == SHARED
+    # ...and that one gone too: only Northwind's is left. The card that stood is not sent from it - the failure stays on it, with its fix
+    two.save_connector({'ConnectorId': two.shared, 'Active': 0}, 't')
+    res, boxes = _sent(two, out['review_id'])
+    assert boxes == [] and not res['ok'] and 'Harbor Bakery' in res['send_error'] and res['send_fix'] == {'label': outbound.MAIL[0], 'href': outbound.MAIL[1]}
+    assert two.get_review(out['review_id'])['Status'] == 'pending'
+    no = letter(hb, slot='new')
+    assert not no['ok'] and 'Harbor Bakery' in no['why'] and 'Nothing was drafted' in no['why'] and outbound.MAIL[1] in no['why']
+    # ...a task under no profile is kept from every profile's own mailbox the same way; naming one in From is its move card, as before
+    assert not letter(f.task(title='Unplaced'), slot='new')['ok']
+
+
+def test_with_one_profile_a_new_email_and_every_read_are_as_they_were(two):
+    "One profile, or none: nothing is walled - a new email with no From names none and the sender's own first card decides, as before."
+    from taskuary import agenttools
+    f, hb, nw, mine, theirs = _both(two)
+    W.remove(two, 'harbor-bakery')
+    for t in (hb, nw, f.task(title='Unplaced')):
+        assert outbound.new_from(two, t) is None and [m['address'] for m in outbound.mailboxes(two, t)] == [NW_BOX, HB_BOX, SHARED]
+        said = agenttools.call(two, t, 'search_messages', {'words': 'invoice'}, {})
+        assert 'Flour invoice' in said and 'Payroll invoice' in said
+        assert 'salaries in it' in agenttools.call(two, t, 'read_message', {'id': theirs}, {})
+        assert len(mailsearch.message(two, mine, t)['messages']) == 2
+    out = slots.draft(two, hb, 'Hi Gail,\n\nThe rota is up.', to=GAIL, subject='Rota')
+    assert out['ok'] and 'from' not in out
+    assert _sent(two, out['review_id'])[1] == [None]
+    W.save(two, [])                                                                    # ...and with no profile at all
+    assert outbound.new_from(two, hb) is None and W.may_use(two, hb, NW_BOX)

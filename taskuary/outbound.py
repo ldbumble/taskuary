@@ -665,6 +665,21 @@ def sending_mailbox(store, rv: dict, msg: dict = None) -> str | None:
     return task_mailbox(store, tid) or workstreams.own_mailbox(store, tid)
 
 
+def new_from(store, tid) -> str | None:
+    """THE MAILBOX A NEW EMAIL WITH NO FROM LEAVES FROM (the red team, round 6: it left from the first Outlook card, another profile's): where
+    its task's mail came in, else its task's own profile's, else one every profile shares - never another profile's. None: no mailbox is
+    kept from this task, and the sender's own fallback (send_out's first card) decides, as before. Fixable, with the place a mailbox is
+    connected, when every connected one is another profile's."""
+    from . import workstreams
+    if (box := task_mailbox(store, tid) or workstreams.own_mailbox(store, tid)): return box
+    mine, every = mailboxes(store, tid), mailboxes(store)
+    if not tid or len(mine) == len(every): return None
+    if mine: return mine[0]['address']
+    name = workstreams.names(store).get(workstreams.of_task(store, int(tid)))
+    raise Fixable((f"this task is under the profile {name}, and no connected mailbox is {name}'s or every profile's" if name else
+                   "this task is under no profile, and every connected mailbox is one profile's own") + ', so it has no mailbox to leave from', *MAIL)
+
+
 def reply_from(m: dict) -> str | None:
     "The mailbox a reply to message `m` leaves from - the one it came in on (reply_to_message); None for a chat's line."
     box = str((m or {}).get('SourceName') or '').strip()
@@ -674,12 +689,14 @@ def reply_from(m: dict) -> str | None:
 def leaves_from(store, rv: dict) -> str | None:
     """THE MAILBOX A CARD'S SEND LEAVES FROM, as the send itself takes it (verdicts.send) - what its card and its agent are told, so neither
     says another (walk 25: "goes from alex@northwind.example" over a reply leaving from Harbor's). A new email's own pick, else its
-    task's mailbox; a reply's is where the mail it answers came in. None: a chat's line, an act, or no mailbox known before the send."""
+    task's (new_from); a reply's is where the mail it answers came in. None: a chat's line, an act, or no mailbox known before the send."""
     try: env = json.loads((rv or {}).get('Deliver') or '{}') or {}
     except (TypeError, ValueError): env = {}
     if not isinstance(env, dict) or env.get('kind') not in (None, '', 'reply') or (rv or {}).get('Kind') == 'action': return None
     if new_mail(env):
-        return (env.get('mailbox') or task_mailbox(store, rv.get('TaskId'))) if str(env.get('channel') or 'email').lower() == 'email' else None
+        if str(env.get('channel') or 'email').lower() != 'email': return None
+        try: return env.get('mailbox') or new_from(store, rv.get('TaskId'))
+        except Fixable: return None
     mid = rv.get('AnswersMid') or rv.get('MessageId')
     return reply_from(store.get_message(mid)) if mid else None
 

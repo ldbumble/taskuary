@@ -54,7 +54,7 @@ import { label as btn } from "./buttons.js";
 import { placeName } from "./words.js";
 import { plural } from "./timeWords.js";
 import ConnectAi from "./ConnectAi.jsx";
-import ReviewDecision, { ActReview, MoreCardsCtx } from "./ReviewDecision.jsx";
+import ReviewDecision, { ActReview, AskedCard, MoreCardsCtx } from "./ReviewDecision.jsx";
 import { askNote, heldActsLine, proposalFrom } from "./reviewProposal.js";
 import BriefLine from "./BriefLine.jsx";
 import { OneBox } from "./AgentSummary.jsx";
@@ -406,7 +406,7 @@ const TurnTime = ({ t, secs }) => {
 };
 const NONE = new Set();
 // `later`: a turn after the chat's first - its agent starting again is the work going on, never "waiting for the agent" (workingLine)
-const ConvTurn = ({ t, more, ran = 0, cards, name, ask = null, later = false, owes = false, newest = false, skip = NONE }) => {
+const ConvTurn = ({ t, more, ran = 0, cards, name, ask = null, asked = null, onAnswer = null, later = false, owes = false, newest = false, skip = NONE }) => {
   const live = t.state === "working" || t.state === "starting";
   const parts = useMemo(() => turnParts(eventsOf(turnSteps(t), live), { live }), [t.steps, t.fail, live]);
   const key = t.answer || t.id, at = useTurnOutputs(key), shown = React.useContext(ShownCtx)[key];
@@ -415,7 +415,7 @@ const ConvTurn = ({ t, more, ran = 0, cards, name, ask = null, later = false, ow
   const names = new Set(made.map((f) => f.name));
   const rest = shownOnce(at ? outputRefs(words, at.tid, at.listed).files : [], shown).rest.filter((p) => !names.has(p.name) && !skip.has(p.name));
   // ...a turn whose only part is a view shown again since stands at that newer place: nothing of its own here, so no head over nothing
-  const quiet = !live && !hasParts(parts.filter((p) => p.type !== "view" || viewAt(at?.views, t.id, p))) && !words && !t.fail && !cards?.length && !made.length && !rest.length && !ask;
+  const quiet = !live && !hasParts(parts.filter((p) => p.type !== "view" || viewAt(at?.views, t.id, p))) && !words && !t.fail && !cards?.length && !made.length && !rest.length && !ask && !asked?.length;
   // ...and never under the turn's own open question (the audit, 2026-11-15: "What is your plate number?" in its words, then "For you to do:
   // Tell me your plate number"): what it asks him IS what is left to him, said once. THE TURN'S OWN, KEPT (design round 5, I3): the list says
   // which turns say it (`on_you`, conversation.left_on_him), settled once - it never leaves a turn for the next one
@@ -465,6 +465,9 @@ const ConvTurn = ({ t, more, ran = 0, cards, name, ask = null, later = false, ow
       {/* ...AND ITS CARDS ARE ITS LAST THING, a turn at work's too (the owner, 2026-11-26): one still waiting from before this turn stands under
           all the turn says while it works, its working line too - nothing is ever drawn under a card he has yet to press */}
       {!!cards?.length && <div data-tq-turn-cards="">{cards}</div>}
+      {/* ...AND WHAT IT ASKED HIM IN WORDS, THE QUESTIONS CARD AT ITS FOOT (the owner, 2026-11-27: "shouldn't all questions if possible be a card?"):
+          answered on it or in the box, and kept there with his answer (chatlog.asked_in) */}
+      {!!asked?.length && <div data-tq-turn-asked=""><AskedCard qs={asked} onAnswer={asked.some((q) => q.open) ? onAnswer : null} /></div>}
     </div></div>;
 };
 const RetryCtx = React.createContext(null);
@@ -504,7 +507,7 @@ const wasCard = (c, rv) => <ReviewDecision key={c.id} past review={c.what !== "a
   : rv || { ReviewId: c.review, Kind: "action", DraftText: JSON.stringify({ what: c.was.text }) }} />;
 /* `items`: the server's list, with this page's own lines the server has not answered for yet (`mine`) already merged in by their names.
    `nodes`: the cards the page draws, by the review each is of ([{key, rid, node}]); `next`: the reply that waits, at the card it is. */
-function Conversation({ items: served, nodes = [], posts = [], reviews = [], next = null, landing: landed = null, landAt, name, tid, onChanged, ask = null, askAt = "", queue = null }) {
+function Conversation({ items: served, nodes = [], posts = [], reviews = [], next = null, landing: landed = null, landAt, name, tid, onChanged, ask = null, askAt = "", asked = {}, onAnswer = null, queue = null }) {
   // ONE CARD AT A TIME (cardqueue.py): what waits behind the card that stands is drawn nowhere until it comes forward - the landing question
   // too. Separate calls are separate cards, one after another, never tabs of one another (the owner, 2026-11-26); a set raised in one call is
   // its own one card (BulkCard.jsx: tabs, or the list)
@@ -558,7 +561,7 @@ function Conversation({ items: served, nodes = [], posts = [], reviews = [], nex
     // clock, no Stop x, and the head over it read that turn's "ran 27s"): only a finished turn after a turn folds into it
     // ...AND NEVER INTO ONE THAT FAILED (the Continue round, 2026-11-18): Try again's turn stands under the failure it is past, and folded, its head
     // went the moment it answered - its words left under the failure's head, with no time of their own
-    if (x.kind === "turn") return <ConvTurn key={x.id} t={x} more={folds(prev, x)} ran={ranUnder(items, i)} name={name} ask={x.id === askAt ? ask : null}
+    if (x.kind === "turn") return <ConvTurn key={x.id} t={x} more={folds(prev, x)} ran={ranUnder(items, i)} name={name} ask={x.id === askAt ? ask : null} asked={asked?.[x.id] || null} onAnswer={onAnswer}
       cards={cardsOf(x)} skip={owned} owes={x.id === owes} later={items.slice(0, i).some((y) => y.kind === "turn")} newest={!items.slice(i + 1).some((y) => y.kind === "turn")} />;
     if (x.kind === "line") return <ConvLine key={x.id} x={x} more={prev?.kind === "line"} />;
     if (x.kind === "arrival") return <div key={x.id} className="tq-aui-message tq-aui-brief" data-tq-item={x.id}><Arrived mail={[x]} prev={prev?.kind === "arrival" ? prev : null} /></div>;
@@ -745,7 +748,10 @@ function AssistantThread({ task, onAsked, onStop, selectionRef, attachmentsRef, 
   const landAt = landS && (landS.ask || landS.landed) ? landS.at || "" : null;
   // WHAT THE AGENT ASKS STANDS IN THE TURN THAT ASKED IT (conversation.items `asking.turn`): one node, drawn there
   // ...but a step handed to him on the page is its card (pagestep): its words and I'm done stand there once, never again as a line here
-  const askNode = asking && !waitsOnPage(asking) ? <AgentAsks asking={asking} name={name} onAnswer={onAnswer} /> : null;
+  // ...and a question it asked in words is its turn's questions card (chatlog.asked_in), never a second line here - only an approval, a stalled
+  // turn, or a question no drawn turn holds yet stays this line
+  const askedBy = list?.asked || {}, carded = !!asking && merged.items.some((x) => x.kind === "turn" && (askedBy[x.id] || []).some((q) => q.request_id === asking.request_id));
+  const askNode = asking && !waitsOnPage(asking) && !carded ? <AgentAsks asking={asking} name={name} onAnswer={onAnswer} /> : null;
   const askAt = askTurn(asking, merged.items);
   const askWords = askPlaceholder(asking);
   return (
@@ -761,7 +767,7 @@ function AssistantThread({ task, onAsked, onStop, selectionRef, attachmentsRef, 
               <div className="tq-aui-welcome-title">Work on this with your assistant</div>
               <div className="tq-aui-welcome-copy">Research, plan, write, analyze, or coordinate. This conversation stays on the task.</div></div></div>}
             <RetryCtx.Provider value={retry}><StopTriesCtx.Provider value={stopTries}><AgainCtx.Provider value={again}><WaitOnCtx.Provider value={waitingOn(list)}><Conversation items={merged.items} nodes={turnCards || []} posts={nextAt?.cards || []} reviews={nextAt?.reviews || []} next={askedFirst(asking, nextAt?.reviews) ? null : nextAt?.next || null}
-              landing={landNode} landAt={landAt} name={turnName} tid={task.TaskId} onChanged={nextAt?.refresh} ask={askNode} askAt={askAt} queue={list?.queue || null} /></WaitOnCtx.Provider></AgainCtx.Provider></StopTriesCtx.Provider></RetryCtx.Provider>
+              landing={landNode} landAt={landAt} name={turnName} tid={task.TaskId} onChanged={nextAt?.refresh} ask={askNode} askAt={askAt} asked={askedBy} onAnswer={onAnswer} queue={list?.queue || null} /></WaitOnCtx.Provider></AgainCtx.Provider></StopTriesCtx.Provider></RetryCtx.Provider>
             {/* WHAT THE SOURCE WAITS ON THE OWNER FOR, while it works too (`cards`): the agent's permission cards, a CLI's screen while it asks */}
             {cards}
             {/* ...under everything only while the list names no turn for it (a read behind, a chat with no turn yet) */}

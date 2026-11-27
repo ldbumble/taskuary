@@ -29,3 +29,16 @@ test("Settings: the switch is a schema knob in a group always shown, and saving 
   assert.match(k.desc, /Off: every job goes to a general agent\./);
   assert.match(read("SettingsView.jsx"), /if \(ok && name === "developer_mode"\) refreshCapabilities\(\);/);
 });
+
+// WALK 25 (2026-11-26): "the top bar changes between shots: Board appears and disappears" - Developer mode read off until its first read
+// landed, so each load drew Chat · Game and pushed Board in a beat later. The last read is drawn from the first frame
+test("the top bar opens on Developer mode as this browser last read it, and off where it never has", async () => {
+  const { devSeen, rememberDev } = await import("../src/devSeen.js");
+  const kept = new Map(), store = { getItem: (k) => kept.get(k) ?? null, setItem: (k, v) => kept.set(k, String(v)) };
+  assert.equal(devSeen(store), false, "never read: off, no coding door flashes");
+  rememberDev(true, store); assert.equal(devSeen(store), true, "on at the last read: Board from the first frame");
+  rememberDev(false, store); assert.equal(devSeen(store), false, "switched off: gone from the first frame");
+  const shut = { getItem: () => { throw new Error("blocked"); }, setItem: () => { throw new Error("blocked"); } };
+  rememberDev(true, shut); assert.equal(devSeen(shut), false, "storage refused: it reads as before");
+  assert.equal(devSeen(null), false);
+});

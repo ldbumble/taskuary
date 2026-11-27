@@ -49,6 +49,9 @@ export const railStatus = (item, cantSend = false, page = null) => chatReady(rai
 const railStatus_ = (item, cantSend = false, page = null) => {
   if (agentGone(item, page)) return taskStatus({ state: page.state, cantSend });
   if (!item?.lane) return null;
+  // ...A TASK HE ANSWERED, NO AGENT ON IT, READS "you answered" (funnel.one_state marks the row `answered`; walk 25, 2026-11-26: "on you" over an
+  // invite he had accepted): the server's status as it said it - the row keeps its place under Tasks, and its lane's word is not its state
+  if (item.answered && item.status?.key) return fromServer(item.status);
   if (owedNoDraft(item)) return said(OWED, { ...rowMeta(item), ...KIND_META[OWED] }, false);
   const copy = cantSend && !item.not_sent && item.lane === "approve" && item.kind === "review";
   // ...a FINISHED run's row (processing_unread: lane yours, `finished`) is the agent's finish, as its line says: the pill read "on you"

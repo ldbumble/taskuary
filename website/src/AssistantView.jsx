@@ -103,7 +103,7 @@ import { onFirstRun, readFirstRun } from "./firstRunState.js";
 import FeedView from "./FeedView.jsx";
 import { MORE_PX, SECTION_WORDS, backAt, dueWord, holdsNew, levelOf, madeRow, placed, pressOnto, pulledRow, rowOfTask, withWalk } from "./funnelPile.js";
 import { STAYS, dropHeld, ghostsOf, keepHeld, movedEntry } from "./movedFyi.js";
-import { isImportant, level as priorityOf } from "./priority.js";
+import { isImportant, urgentMark } from "./priority.js";
 import { age, ago, band, bandUntil, plural } from "./timeWords.js";
 const GeneralWorkspace = lazyView(loadGeneral);
 import CanvasItem, { CANVAS_ITEM_HEIGHT, showsTask, wordsCap } from "./CanvasItem.jsx";
@@ -762,11 +762,16 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
                 const inBatch = batched(i);
                 // URGENT IS A QUIET SHADE ON THE ROW, IN ITS PLACE (the owner, 2026-10-22: "remove the urgent section and just add quiet
                 // shading around it") - no heading of its own, no icon, no word; Next walks it in its place
+                const goal = String(i.kind || "").startsWith("goal");
+                const page = i.tid ? pageRead(i.tid) : null, why = rowWhy(i, page);
+                const st = i.settling || goal || i.kind === "meeting" ? null : railStatus(i, !canSend(sendCaps, i.channel), page);
                 const hot = !i.settling && isUrgent(i);
                 // ...and the DOT says the stored priority whatever the band (2026-10-26): a draft waiting for the owner's yes, a blocked agent,
                 // a goal or a wait on someone never reaches band 1, so an urgent one drew regular's sage - raising important to urgent
                 // visibly lowered its mark. The owner's ruling (2026-10-25): the category IS the dot's colour. The band and the walk stay
-                const urgentDot = !i.settling && (hot || priorityOf(i.priority) === "urgent");
+                // ...UNTIL IT IS ANSWERED OR DONE (walk 25, 2026-11-26: the red dot stood on a task whose reply had gone an hour before, "agent
+                // done" beside it): urgent is on him NOW - a row whose own status reads done wears none (priority.urgentMark)
+                const urgentDot = urgentMark(i, hot, st);
                 // ...and IMPORTANT a quieter mark of its own, in its place too - never a move (the owner, 2026-10-25: "show it as a mark
                 // in its row's place"); urgent outranks it, so an urgent row wears urgent's shade alone
                 const imp = isImportant(i, hot);
@@ -787,9 +792,6 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
                 // same reading the task header's pill takes). The words and emoji on the row's right go, so the title has the room; the
                 // state's words are the icon's label and hover. A row in a band whose heading already says it (fyi, report) wears none;
                 // a goal keeps its own mark. Urgent is the row's shading, a meeting its time.
-                const goal = String(i.kind || "").startsWith("goal");
-                const page = i.tid ? pageRead(i.tid) : null, why = rowWhy(i, page);
-                const st = i.settling || goal || i.kind === "meeting" ? null : railStatus(i, !canSend(sendCaps, i.channel), page);
                 const shown = st && (st.spins || meta.word !== BAND_SAYS[level]) ? st : null;
                 const word = i.settling ? ""
                   : i.kind === "meeting" ? `invite · ${fmtTime12(i.when)}`

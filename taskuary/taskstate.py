@@ -155,10 +155,11 @@ def _held(k: str, st: dict) -> str:
     """The state key as where it stands says it: never "agent done" while anybody's input is awaited (walks 14-16: "agent done" right after
     the send that asked Erin something, and over the agent's own question to him)."""
     if st['waits_on'] == 'you' and k in ('agentdone', 'theirs'): return 'held' if st.get('trust') else 'blocked'     # ...a stranger's Trust is no agent's ask
-    if st['waits_on'] == 'them' and k in ('agentdone', 'yours'): return 'theirs'
+    if st['waits_on'] == 'them' and k in ('agentdone', 'yours', 'answered'): return 'theirs'
+    if st['waits_on'] == 'you' and k == 'answered': return 'yours'
     # ...and never while the next move is its agent's - their answer to read, a check-back come due - and nothing runs it (walk 18: "agent
     # done" over Erin's reply that reached no agent): waiting to start, the task's line saying why
-    if st['waits_on'] == 'agent' and k in ('agentdone', 'theirs', 'yours'): return 'queued'
+    if st['waits_on'] == 'agent' and k in ('agentdone', 'theirs', 'yours', 'answered'): return 'queued'
     return k
 
 
@@ -274,7 +275,7 @@ class TaskState:
     @cached_property
     def key(self) -> str:
         "Its state key, for the Tasks list, the Board, the page and the stage (stages.facts) - `base` as where it stands says it (standing)."
-        k = _held(self.base, standing(self.store, self.tid, self.base)) if self.base in ('agentdone', 'theirs', 'yours') else self.base
+        k = _held(self.base, standing(self.store, self.tid, self.base)) if self.base in ('agentdone', 'theirs', 'yours', 'answered') else self.base
         # ...A WATCHED TASK WITH NOTHING OWED IS WATCHED, never "on you" (the owner, 2026-11-25): somebody else handles it (watch.py) - a card,
         # the agent's question or anybody's answer awaited still reads as it does
         from . import watch
@@ -351,7 +352,11 @@ class TaskState:
         if (chat := _chat_resting(store, t)): return chat
         if str(t.get('Assignee') or '').startswith('agent:') or _general_waiting(store, t): return 'queued'
         if st == 'waiting': return 'theirs'
-        return 'yours'
+        # ...AND A TASK NO AGENT WORKS WHOSE ONE ASK HE ANSWERED IS ANSWERED, never "on you" (walk 25, 2026-11-26: Accept pressed on an invite,
+        # the calendar told, and the header read "on you" over "asked 3 minutes ago"): his own answer is the newest word on it - the one fact
+        # the row's lit move reads too (rulebook.answered). They write again, and it is his again
+        from . import rulebook
+        return 'answered' if self.inbound and rulebook.answered(store, {'tid': tid}, self.inbound) else 'yours'
 
 
 def never_ran(store, t: dict, session: dict) -> bool:

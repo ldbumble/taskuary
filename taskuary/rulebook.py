@@ -369,14 +369,17 @@ def last_word(store, tid):
 
 def answered(store, item: dict, last_in: dict):
     """When the owner's own reply - one sent from here (its review) or typed anywhere (an outgoing message) - went after `last_in`, the
-    newest such; None when none did."""
+    newest such; None when none did. An answer with no words is one too (walk 25, 2026-11-26: Accept on an invite told the calendar, and
+    the task read "asked you" on): a card of the task that went, whatever it carried - never an agent's act or a routine's email."""
     tid, mid = item.get('tid'), item.get('mid')
     try: r = store.sent_reply(task_id=int(tid)) if tid else store.sent_reply(message_id=int(mid)) if mid else None
     except Exception: r = None
     try: outs = [m for m in _msgs(store, item, 'task' if tid else 'message', tid or mid) if str(m.get('Direction') or 'in') == 'out']
     except Exception: outs = []
     last = _dt(last_in.get('SentAt') or last_in.get('CreatedAt'))
-    ats = [_dt((r or {}).get('DecidedAt') or (r or {}).get('CreatedAt'))] + [_dt(m.get('SentAt') or m.get('CreatedAt')) for m in outs]
+    try: took = store._rows("SELECT DecidedAt, CreatedAt FROM review WHERE TaskId=? AND DeliveryState='sent' AND Kind NOT IN ('action','slot')", (int(tid),)) if tid else []
+    except Exception: took = []
+    ats = [_dt((x or {}).get('DecidedAt') or (x or {}).get('CreatedAt')) for x in (r, *took)] + [_dt(m.get('SentAt') or m.get('CreatedAt')) for m in outs]
     went = [a for a in ats if a and last and a > last]
     return max(went) if went else None
 

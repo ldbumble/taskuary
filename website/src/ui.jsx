@@ -63,6 +63,7 @@ export { agentAssignee, assignedAgent, assigneeLabel } from "./agentIdentity.js"
 import { ROLES, ACTION_COLORS, TAGS, ASSISTANT, ALERT, BORDER, CATPPUCCIN, TASK_STATUS_COLORS, mono, DIM, FAINT, INK, PANEL, ACCENT2, PANEL2, label } from "./theme.jsx";
 import { MESSAGE, shownAgent } from "./kinds.js";
 import { codingChoice, codingChoices } from "./brainOptions.js";
+import { devSeen, rememberDev } from "./devSeen.js";
 // a waiting note the Assistant passed on keeps the owner's words and its own version apart (waitroom.SEP): the owner's are what is shown
 export const ownWords = (note) => String(note || "").split("\x1f")[0].trim();
 
@@ -777,11 +778,13 @@ const agentsOf = (data) => ({
 });
 // agentsRead: [] read is "no AI connected"; [] not yet read is nothing yet. codingReady: a coding agent can start (agents.coding_ready)
 const AGENTS_UNREAD = { agents: [], models: {}, kinds: {}, brains: {}, brainList: [], brainModels: {}, generalBrains: [], generalRuns: null, codingOptions: [], codingPick: "", agentsRead: false, codingReady: false, devMode: false };
+// ...and Developer mode as this browser last read it, from the first frame (devSeen.js): the Board tab stood out of the top bar on every load
+// and came in a beat later
 export const useAgents = () => {
-  const [v, setV] = useState(() => agentsLast || AGENTS_UNREAD);
+  const [v, setV] = useState(() => agentsLast || { ...AGENTS_UNREAD, devMode: devSeen() });
   useEffect(() => {
     let on = true;
-    const read = () => api.get("/api/agents").then(({ data }) => { agentsLast = agentsOf(data); if (on) setV(agentsLast); }).catch(() => {});
+    const read = () => api.get("/api/agents").then(({ data }) => { agentsLast = agentsOf(data); rememberDev(agentsLast.devMode); if (on) setV(agentsLast); }).catch(() => {});
     read(); window.addEventListener(SETUP_CHANGED, read);      // ...and again when an AI card or setting moves (wrote.movesSetup)
     return () => { on = false; window.removeEventListener(SETUP_CHANGED, read); };
   }, []);

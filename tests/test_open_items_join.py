@@ -87,6 +87,23 @@ class WhatItWaitsOnTests(unittest.TestCase):
         self.assertIn("also waiting for Gail's input", line)
 
 
+    def test_the_agent_working_it_is_on_its_line(self):
+        """Walk 25 (2026-11-26): a colleague's chat line about a printer's typo joined the owner's OWN website task, which its agent was
+        working - the same business's name stood in both. Triage was shown that task as one line with nothing about an agent on it, where a
+        task the message touches says so (agent_on_it): what tells a follow-up to that very work from a different ask."""
+        from taskuary import general
+        s = MemoryStore()
+        mine = s.create_task({'Title': 'Harbor Bakery website', 'Summary': 'Build me a simple website for Harbor Bakery', 'Kind': 'general',
+                              'Source': 'manual', 'OriginBase': 'owner'}, 'owner')
+        quiet = s.create_task({'Title': 'Renew the parking permit', 'Summary': 'Renew it before March'}, 'owner')
+        general.OPENING.add(mine)
+        try: lines = {int(re.search(r'\(tid (\d+)\)', l)[1]): l for l in context.open_items(s)}
+        finally: general.OPENING.discard(mine)
+        self.assertIn('an agent is on it: working', lines[mine]); self.assertIn('| yours |', lines[mine])
+        self.assertNotIn('an agent is on it', lines[quiet])
+        self.assertNotIn('an agent is on it', next(l for l in context.open_items(s) if f'(tid {mine})' in l), 'gone with the agent')
+
+
 class OpenItemsBoundTests(unittest.TestCase):
     def test_bounded_newest_first_and_no_closed_work(self):
         s = MemoryStore()

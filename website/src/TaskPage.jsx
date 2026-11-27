@@ -28,7 +28,7 @@ import { SlotPicker } from "./CalendarPick.jsx";
 import { onPressing, useVerbs } from "./actionRow.js";
 import { BUTTONS_AT, FOCUS_EDGE, MOVES_AT, OPENS_FORM, PaneMoves, SEC_NAME, SpineMoves, TaskButtons } from "./TaskRow.jsx";
 import { closedBy, closedResult, pressBeat, pressOver, pressedOn } from "./pressResult.js";
-import { taskMoves } from "./taskMoves.js";
+import { calMoves, taskMoves } from "./taskMoves.js";
 import { senderName } from "./personName.js";
 import { MADE_RUN } from "./madeTask.js";
 import { choice, hint as btnHint, hintOfRow, label as btn, labelOfRow, liveVerb } from "./buttons.js";   // theme.jsx owns `label`
@@ -2431,12 +2431,9 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
   // ...and while an agent works the task they stand greyed, not gone (taskMoves: one toolbar in every state) - it is answering for him
   const calCard = !!pendingReview && deliveryMeta(pendingReview).kind === "calendar";
   const calOn = notDone && !calCard ? detail?.calendar || null : null, calOff = liveSession ? { disabled: true, why: "an agent is working on it" } : {};
-  const calVerbs = !calOn ? [] : (calOn.invite ? [
-    { id: "accept_invite", group: "decide", tone: "s", label: btn("accept_invite"), run: () => calAnswer("accept"), title: btnHint("accept_invite") },
-    { id: "decline_invite", group: "decide", tone: "s", label: btn("decline_invite"), run: () => calAnswer("decline"), title: btnHint("decline_invite") },
-    { id: "propose_time", group: "decide", tone: "s", label: btn("propose_time"), run: (e, a) => setSlotAt({ act: "propose", at: steady(a || e?.currentTarget) || document.body }), title: btnHint("propose_time") },
-  ] : [{ id: "find_time", group: "decide", tone: "s", label: btn("find_time"), run: (e, a) => setSlotAt({ act: "schedule", at: steady(a || e?.currentTarget) || document.body }), title: btnHint("find_time") }])
-    .map((v) => ({ ...v, ...calOff }));
+  const calVerbs = calMoves(calOn, { accept: () => calAnswer("accept"), decline: () => calAnswer("decline"),
+    propose: (e, a) => setSlotAt({ act: "propose", at: steady(a || e?.currentTarget) || document.body }),
+    find: (e, a) => setSlotAt({ act: "schedule", at: steady(a || e?.currentTarget) || document.body }) }, { label: btn, hint: btnHint }, calOff);
   // THE STATUS IN THE HEADER IS THE RAIL'S (the redesign, owner-approved 2026-10-21): the same mark and word the rail row wears for this
   // task - the live session's own word first, then the rail's row (on the canvas), then the server's state (railStatus.taskStatus)
   // ...and the rail's agent lane only while no newer read of this task takes it back: a rail built while the agent worked said "agent
@@ -2465,7 +2462,7 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
   // with why where they do not apply now; only the stage moves below come and go with what they act on
   const closedNow = !notDone || reopening === selected;
   const ownMoves = !t ? [] : taskMoves({ made: made?.moves, closed: closedNow, closedWith: reopening !== selected ? closedResult(selected, closedNow) : "", live: liveSession, reopening: reopening === selected, finishing, waitingDraft: !!pendingReview,
-    watching, own: madeByHim(t), away: remindWaiting(t) ? `Back ${remindDay(t.RemindAt)}` : "", manual, repo: { held: heldRepo, can: !isGeneral && canCode },
+    watching, invite: !!calOn?.invite, own: madeByHim(t), away: remindWaiting(t) ? `Back ${remindDay(t.RemindAt)}` : "", manual, repo: { held: heldRepo, can: !isGeneral && canCode },
     // ...held for a sender he has not trusted: its Trust is the row's lit move, wherever the chat that says why is folded (detail.origin.held)
     trust: detail?.origin?.held ? { label: detail.origin.trust?.person || "Trust them", busy: trusting === "person", hint: HELD_TRUST_HINT } : null },
   { trust: () => trustPress(""), reopen, done: askFinish, note: (e, a) => setNoteAt(steady(a || e?.currentTarget)), nat: notATask, remind: (e, a) => remindHere(steady(a || e?.currentTarget)), watch: watchIt,

@@ -380,7 +380,9 @@ const OWN = {
   // ...and the tools the prompt rebuild made of its protocols (2026-11-23): its one question, the skills it reads, a step it hands him
   // ...its `withdraw` takes the question BACK (walk 19, S7: "asked you a question" over a turn that had withdrawn it - no question drawn)
   askowner: (a) => (a.withdraw === true ? { kind: "plan", summary: "Took back its question" } : { kind: "plan", summary: "Asked you a question", tried: "Could not ask you" }),
-  skills: (a) => ({ kind: "read", summary: a.name ? `Read your skill ${quoted(a.name)}` : "Read your skills" }),
+  // ...and ONE HE NAMED IS THE SKILL THE TURN USED, a row of its own kind (walk 25, 2026-11-26: read among "read 3 files", and no AI's words
+  // said which skill did the job): never counted with the files, and first on the turn's one line (chatStream.foldLine)
+  skills: (a) => (a.name ? { kind: "skill", summary: `Read your skill ${quoted(a.name)}` } : { kind: "read", summary: "Read your skills" }),
   routines: (a) => ({ kind: "read", summary: a.name ? `Read your routine ${quoted(a.name)}` : "Read your routines" }),
   handover: () => ({ kind: "page", summary: "Handed you a step on the page", tried: "Could not hand you the step" }),
 };

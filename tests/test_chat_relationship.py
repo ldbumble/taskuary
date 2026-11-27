@@ -257,3 +257,48 @@ def test_an_unsure_line_in_a_one_to_one_chat_joins_the_task_triage_named_not_the
     with mock.patch.object(ingest, 'judge', return_value=({'intent': 'reply_only', 'relationship': 'uncertain', 'same_as': mailed}, None)):
         route, _ = ingest.chat_route(s, msg, {}, llm=lambda *a, **k: '{}')
     assert route['decision'] == 'attach' and route['task_id'] == mailed, route
+
+
+class ABurstWithAPictureTests(unittest.TestCase):
+    """Walk 25 (2026-11-26): a colleague sent a picture with no words, then the words 46 s later. The picture was read alone as nothing to do
+    and filed with no task; the words opened a task - and the picture was not on it: its agent went looking, and dug the file out of
+    Taskuary's own folder by shell. The words' triage was shown the picture's line as an empty string - nothing said a file had come - so it
+    could not name it. And a later line that JOINED a task left the line it rests on behind, where one that opened a task took it along."""
+    def setUp(self):
+        self.s = MemoryStore()
+
+    def picture(self, at, name='menu-board.png'):
+        r = line(self.s, '', at, verdict(intent='fyi'), name='Gail')
+        self.assertEqual((r['status'], r['task_id']), ('filed', None))
+        self.s.add_attachment({'MessageId': r['message_id'], 'Name': name, 'ContentType': 'image/png', 'Size': 2048})
+        return r['message_id']
+
+    def test_the_line_after_a_picture_is_shown_the_file_and_the_task_it_opens_holds_both(self):
+        pic, seen = self.picture(f'{TODAY} 09:00:00'), []
+        r = line(self.s, 'The printer got the price wrong on this - can you ask them to fix it?', f'{TODAY} 09:00:46',
+                 verdict(relationship='continues', related=[pic], seen=seen), name='Gail')
+        shown = seen[0]['user']['same_day_lines']
+        self.assertEqual([(c['id'], c.get('files')) for c in shown], [(pic, ['menu-board.png'])], 'a line that is only a file says so')
+        self.assertEqual(r['status'], 'created')
+        self.assertEqual(sorted(m['MessageId'] for m in self.s.list_messages(r['task_id'])), [pic, r['message_id']])
+        self.assertEqual(self.s.get_message(pic)['Status'], 'routed', 'the fyi is the task\'s own now - no row of its own')
+
+    def test_a_line_with_no_file_is_shown_as_it_always_was(self):
+        first, seen = line(self.s, 'the menu board is back from the printer', f'{TODAY} 09:00:00', verdict(intent='fyi'), name='Gail'), []
+        line(self.s, 'can you ask them to fix the price?', f'{TODAY} 09:01:00', verdict(seen=seen), name='Gail')
+        self.assertEqual([sorted(c) for c in seen[0]['user']['same_day_lines']], [['id', 'task_id', 'text', 'when', 'who']])
+
+    def test_a_line_that_joins_a_task_brings_the_filed_line_it_rests_on(self):
+        first = line(self.s, 'Can you ask the printer about the menu board?', f'{TODAY} 09:00:00', verdict(), name='Gail')
+        pic = self.picture(f'{TODAY} 09:05:00')
+        with mock.patch.object(ingest, '_spawn'):
+            r = line(self.s, 'that is the typo I meant - the price', f'{TODAY} 09:05:40',
+                     verdict(relationship='continues', related=[first['message_id'], pic]), name='Gail')
+        self.assertEqual((r['status'], r['task_id']), ('attached', first['task_id']))
+        self.assertEqual(sorted(m['MessageId'] for m in self.s.list_messages(first['task_id'])), [first['message_id'], pic, r['message_id']])
+
+    def test_a_line_that_is_nothing_to_do_upgrades_nothing(self):
+        first = line(self.s, 'Can you ask the printer about the menu board?', f'{TODAY} 09:00:00', verdict(), name='Gail')
+        pic = self.picture(f'{TODAY} 09:05:00')
+        line(self.s, 'thanks!', f'{TODAY} 09:06:00', verdict(intent='fyi', relationship='continues', related=[first['message_id'], pic]), name='Gail')
+        self.assertIsNone(self.s.get_message(pic)['TaskId'])

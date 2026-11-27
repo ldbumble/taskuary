@@ -659,3 +659,25 @@ test("a withdrawn question reads as taken back, never as asked (walk 19, S7)", (
   assert.equal(describeCall("mcp__taskuary__ask_owner", { withdraw: true }).summary, "Took back its question");
   assert.equal(describeCall("mcp__taskuary__ask_owner", { question: "Does 2 pm work?" }).summary, "Asked you a question");
 });
+
+// WALK 25 (2026-11-26): "skills come from two worlds and the agent names either, or none" - one AI named its own tool's skills beside his, the
+// other two read his "website" skill and never said so, and the turn's one line read "4 steps - read 3 files, ..." with the skill counted as a
+// file. Which skill a turn used is drawn from its own call, on every road the same: a row of its own, named, first on the turn's line
+test("the skill a turn read is named on its row and leads the turn's one line, whichever AI ran it", async () => {
+  const { turnParts, foldLine } = await import("../src/chatStream.js");
+  const call = (id, name, args) => ({ type: "tool_call", name, detail: { tool_call_id: id, args } }), done = (id) => ({ type: "tool_result", name: id, detail: { tool_call_id: id, result: "ok" } });
+  const work = (skill) => [call("m1", "mcp__taskuary__search_messages", { words: "bakery" }), done("m1"),
+    call("r1", "Read", { file_path: "C:/work/menu.md" }), done("r1"), call("r2", "Read", { file_path: "C:/work/hours.md" }), done("r2"),
+    call("w1", "WebSearch", { query: "bakery sites" }), done("w1"), skill, done("k1")];
+  for (const name of ["mcp__taskuary__skills", "skills", "taskuary__skills"]) {          // ...as a CLI, an API road and Codex each name the one tool
+    const parts = turnParts(work(call("k1", name, { name: "website" })));
+    const row = parts.flatMap((p) => p.steps || []).find((s) => /skill/.test(s.summary));
+    assert.equal(row.summary, "Read your skill 'website'", name); assert.equal(row.kind, "skill", "never counted as a file read");
+    assert.match(foldLine(parts), /^5 steps - read your skill 'website', /, name);
+    assert.doesNotMatch(foldLine(parts), /read 3 files/, "the skill is no file");
+  }
+  // ...the list alone names no skill: it chose none
+  const listed = turnParts(work(call("k1", "mcp__taskuary__skills", {})));
+  assert.doesNotMatch(foldLine(listed), /^5 steps - read your skill/);
+  assert.equal(describeCall("mcp__taskuary__skills", {}).summary, "Read your skills");
+});

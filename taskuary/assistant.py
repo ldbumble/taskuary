@@ -2117,20 +2117,27 @@ def _run(store, llm, instruction, watch_source_ids, watch_sources, systems_only=
             say = budget([x | {'why': x['action'].get('why', '')} for x in props if x['key'] not in have and fresh(state, x, now)]
                          + list(say), c['max'])
         except Exception as e: logger.warning(f'assistant: the health check was skipped - {e}')
+    # ...and what the job-ideas look raised since the last post joins it - its evidence checked in code already, never judged or triaged again
+    from . import lookout
+    looked = lookout.unposted(store) if advisor else []
     # THE SECOND LOOK (ideacheck, the design's S7): a kind under 80% useful, an item the owner acted on today, and a line the model says
-    # they would already know are held - said in the post's own record of what it read, never raised
-    if say and not systems_only:
+    # they would already know are held - said in the post's own record of what it read, never raised. ONE LOOK FOR BOTH KINDS OF IDEA (the
+    # real-model check, 2026-11-27): the look's ideas skipped it, so generic advice that quoted a real line went straight through
+    if (say or looked) and not systems_only:
         from . import ideacheck
+        rows = [{'key': i['Key'], 'kind': i.get('Kind'), 'text': i['Text'], 'action': (a := json.loads(i.get('ActionJson') or '{}') or {})
+                 | {'mid': a.get('mid') or (a.get('on') or {}).get('mid')},
+                 'why': a.get('why') or '', 'landed': True} for i in looked]
         # its own brain call (job='advisor'), never the post's own answer
-        say, held = ideacheck.check(store, say, memo=None if asked else f'advisor_idea_check_mark:{report_id or ""}')
+        kept, held = ideacheck.check(store, say + rows, memo=None if asked else f'advisor_idea_check_mark:{report_id or ""}')
+        say, keys = [s for s in kept if not s.get('landed')], {s['key'] for s in kept}
+        lookout.hold_raised(store, [i for i in looked if i['Key'] not in keys], dict(held))
+        looked = [i for i in looked if i['Key'] in keys]
         if held: rv['held'] = [{'key': k, 'why': w} for k, w in held]
     stamp = now.strftime('%Y-%m-%d %H:%M:%S')
     # the report's routing card reads the lines BEFORE they post; a judge that fails leaves the run
     # unjudged, and an unjudged run reaches the owner (reports.decide's rule)
     d = _judged(judge, say) if say and judge else None
-    # ...and what the job-ideas look raised since the last post joins it, as it stands - checked already, never judged or triaged again
-    from . import lookout
-    looked = lookout.unposted(store) if advisor else []
     if not say and not looked:
         # Nothing to say is the normal outcome of a monitor and it posts NOTHING - unless the owner
         # chose "every run", in which case the check still says it ran, in one line, with what it

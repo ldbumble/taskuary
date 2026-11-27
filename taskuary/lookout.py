@@ -1060,6 +1060,12 @@ def _hold(store, held_: list):
     store.set_setting(HELD_KEY, json.dumps((rows + held(store))[:HELD_CAP]), 'advisor')
 
 
+def hold_raised(store, rows: list, why: dict):
+    "Ideas a look raised that the post's second look held (ideacheck): put down by the Advisor, never posted, and in the held list the next look reads."
+    for r in rows: store.set_idea_status(r['IdeaId'], 'dismissed', 'advisor')
+    _hold(store, [({'family': r.get('Kind'), 'title': r.get('Text')}, why.get(r['Key']) or 'held by the second look') for r in rows])
+
+
 def _skipped(store, why: str, loud: bool):
     "A pass that did not run says why - at INFO from a scheduled look, and once per new reason from the clock's quarter-hour tick."
     try: was = (json.loads(store.get_setting(SKIP_KEY) or '{}') or {}).get('why')

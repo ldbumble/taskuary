@@ -824,3 +824,24 @@ def test_an_idea_about_a_person_stands_on_counts_or_dates_never_on_a_line_read_f
     assert by('out again tomorrow, family thing') == (None, 'it is about a person and rests on no count or date')
     assert by('3 replies late since 2026-11-02')[0]['refs'] == ['msg900']
     assert by('out again tomorrow, family thing', who=None)[0], 'an idea about no one is checked as before'
+
+
+def test_the_posts_second_look_reads_the_looks_ideas_too_and_one_it_holds_is_never_posted():
+    """ONE SECOND LOOK (the real-model check, 2026-11-27): the look's ideas joined the post "checked already, never judged again", so advice
+    that only restated one line, a real line quoted, went straight to the owner. The same ideacheck now reads both kinds of idea."""
+    from unittest import mock
+    s, ids = lookout_world.busy()
+    ph = f"msg{ids['phish'][-1]}"
+    raised = lookout.tick(s, brain({'reads': [rd('spend', q='phishguard')]}, {'ideas': [idea('money', 'PhishGuard charged invoice INV-2207 twice in 5 days - $380 to claim back', [ph],
+                                                   quotes=[{'ref': ph, 'quote': 'the same $380 twice in 5 days'}],
+                                                   stake={'expr': '380', 'unit': '$ once', 'assume': []})]}), force=True)['raised']
+    notes = []
+    def second(system, user, **k): notes.append(user); return '{"known": [1]}'
+    post = lambda system, user, **k: '{"verdicts": []}' if 'YOUR INSTRUCTION' not in system else json.dumps({'say': []})
+    with mock.patch('taskuary.llm.build_llm', return_value=second):
+        out = assistant.run(s, llm=post, force=True)
+    i = s.get_idea(raised[0])
+    assert notes and 'PhishGuard charged invoice INV-2207 twice' in notes[0], 'the look idea was read by the second look'
+    assert not i['MessageId'] and i['Status'] == 'dismissed' and i['DecidedBy'] == 'advisor' and not out.get('message_id')
+    assert {'key': i['Key'], 'why': 'the owner would already know it'} in out['reviewed']['held']
+    assert any(h['title'] == i['Text'] for h in lookout.held(s)), 'the next look reads why it was held'

@@ -64,16 +64,17 @@ class DeskTests(unittest.TestCase):
         self.assertIn('Nobody called Zed', concierge.route_to(self.s, 'Zed')[1])
 
     def test_a_draft_with_no_mailbox_to_send_it_says_so(self):
-        # the visual audit, 2026-11-13: "Drafted it on TQ-0002 - it waits for your Send" over a card whose only button was Connect email
+        # the visual audit, 2026-11-13: "Drafted it on TQ-0002 - it waits for your Send" over a card whose only button was Connect email.
+        # The draft is now its task's agent's card, and the card picks its own road (Send or Connect); the Assistant says only what it did
         tid = self.s.create_task({'Title': 'chat', 'Kind': 'general', 'Status': 'open'}, 'owner')
-        made = {'taskId': tid + 1, 'ref': 'TQ-0099', 'draft': 'Hi Gail', 'reviewId': 7}
         params = {'channel': 'email', 'to': 'gail@northwind.example', 'about': 'the Q3 numbers'}
-        with mock.patch('taskuary.outbox.compose', return_value=made), mock.patch('taskuary.capabilities.can_send_draft', return_value=False):
+        with mock.patch('taskuary.outbox.compose', return_value={'taskId': tid + 1, 'ref': 'TQ-0099', 'asked': True}),              mock.patch.object(concierge, 'start_refusal', return_value=''):
             said = concierge._made_now(self.s, tid, 'outbox', params)['say']
-        self.assertIn('Connect email', said); self.assertNotIn('waits for your Send', said)
-        # ...and it reads what the card reads (walk 20: "nothing can send email yet" over a card whose Send worked - a report's send list said so)
-        with mock.patch('taskuary.outbox.compose', return_value=made), mock.patch('taskuary.outbound.send_channels', return_value=[]),              mock.patch('taskuary.capabilities.can_send_draft', side_effect=lambda st, rid: rid == 7):
-            self.assertIn('waits for your Send', concierge._made_now(self.s, tid, 'outbox', params)['say'])
+        self.assertIn('Asked the agent on TQ-0099', said); self.assertNotIn('Drafted it', said)
+        # ...and with nothing to write it, nothing is made and the way past it is named (no dead end)
+        with mock.patch.object(concierge, 'start_refusal', return_value='No AI is connected'):
+            out = concierge._made_now(self.s, tid, 'outbox', params)
+        self.assertIn('Nothing was made', out['say']); self.assertIn('](#', out['say'])
 
     def test_a_name_with_its_address_is_that_address(self):
         # the visual audit, 2026-11-13: "draft a reminder to Gail Moreno <gail@northwind.example>" - the address was in the ask, and the

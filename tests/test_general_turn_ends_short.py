@@ -106,10 +106,10 @@ class AShortTurnWakesTheAgentOnceTests(unittest.TestCase):
         seen = turn(s, tid, [asked + summ, 'There is no connection for Payworth, so I am using the browser.'],
                     judge=lambda *a, **k: json.dumps({'unfinished': False, 'why': '', 'asks_secret': True}))
         self.assertEqual(len(seen['prompts']), 2)                     # told once, by the one wake
-        for want in ('asked the owner for a password', 'you do not need the password', 'hand_over'): self.assertIn(want, seen['prompts'][1])
-        # ...and never told one is saved (design round 6, D8: "Taskuary will sign it in with your saved details", with nothing saved): the vault's
-        # answer is Taskuary's own line to say
-        self.assertIn("whether one is saved is not yours to know", browserview.SIGNIN_LINE)
+        for want in ('asked the owner for a password', 'needs no password of yours', 'hand_over'): self.assertIn(want, seen['prompts'][1])
+        # ...and never told one is saved (design round 6, D8: "Taskuary will sign it in with your saved details", with nothing saved): the
+        # line says what Taskuary does, never what the vault holds
+        self.assertIn('Taskuary sign in with what it keeps, else the owner', browserview.SIGNIN_LINE)
         bodies = [str(c['Body']) for c in s.list_comments(tid)]
         self.assertTrue(any('using the browser' in b for b in bodies)); self.assertFalse(any('TASKUARY: your last answer' in b for b in bodies))
         self.assertIn('asks_secret', hooks.ENDED_SYSTEM)
@@ -121,7 +121,7 @@ class AShortTurnWakesTheAgentOnceTests(unittest.TestCase):
         self.assertNotIn(asked, str(turns))
         self.assertNotIn('summary', turns[0], "the taken-back answer's summary goes with its words (the recorded walk, 2026-11-12)")
         self.assertNotIn('Gail asked Alex', str(turns))
-        self.assertIn('do not mention it', seen['prompts'][1])
+        self.assertIn('it is no longer shown as your answer', seen['prompts'][1])   # the fact, no "do not mention it" order
 
     def test_a_woken_turn_that_ends_short_again_is_not_woken_again(self):
         s = MemoryStore(); a_claude(self); tid = researcher(s)

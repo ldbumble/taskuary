@@ -174,7 +174,7 @@ class TheCardAgentTests(unittest.TestCase):
         why = 'agent-browser could not be downloaded (GitHub: refused; npm: refused) - check the internet connection, a VPN, or a company firewall'
         sess, brain, m = self.turn(why)
         back = brain.seen[1][2]['content']
-        self.assertIn(why, back); self.assertIn('never stop on this', back); self.assertIn('or send them to a settings page', back); m.start.assert_not_called()
+        self.assertIn(why, back); self.assertIn('nothing was done in it', back); m.start.assert_not_called()   # the fact; how to go on is the agent's
 
 
 class TheCliAgentTests(unittest.TestCase):
@@ -209,8 +209,8 @@ class TheCliAgentTests(unittest.TestCase):
         sess, system, m = self.turn(wanted=True, why='Chrome could not be downloaded')
         self.assertIn('THE BROWSER DID NOT OPEN for this task (Chrome could not be downloaded)', system)
         self.assertNotIn('install agent-browser under', system)
-        # ...and a Try again button is the way past, never "send another message" (the 2026-11-18 walks)
-        self.assertIn('"retry": true', system); self.assertNotIn('sending another message', system)
+        # ...and never "send another message" (the 2026-11-18 walks); its summary's `retry` (the tool's own field) draws Try again
+        self.assertNotIn('sending another message', system)
 
     def test_the_reason_is_his_words_the_raw_detail_folded(self):
         """The 2026-11-18 walks: "browser fixture blocked outbound socket connection to ('140.82.114.3', 443)" and "agent-browser" were read

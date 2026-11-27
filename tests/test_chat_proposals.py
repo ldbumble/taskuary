@@ -360,9 +360,7 @@ class NoCodingToolTests(unittest.TestCase):
         from taskuary import agents, counsel
         s = MemoryStore()
         with mock.patch.object(agents, 'coding_ready', return_value=False): text = counsel.for_chat(s)
-        self.assertNotRegex(text.lower(), r'coding|repositor'); self.assertIn('Send to agent', text)
-        with mock.patch.object(agents, 'coding_ready', return_value=True): text = counsel.for_chat(s)
-        self.assertIn('OPTIONS: ' + ' | '.join(w for _, w in buttons.choices('agent')), text)    # the card's own answers, by name
+        self.assertNotRegex(text.lower(), r'coding|repositor')      # COUNSEL says who and what (2026-11-27): no card answers listed in it
 
     def test_an_owners_copy_that_still_talks_coding_gets_the_one_rule(self):
         from taskuary import agents, counsel

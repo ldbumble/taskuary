@@ -280,7 +280,7 @@ class AppPagesTests(unittest.TestCase):
     def test_the_desk_assistant_knows_the_pages_and_the_phone_does_not(self):
         s = store()
         with concierge.delivering(concierge.DESK): desk = concierge._system(s)
-        self.assertIn('DO FIRST, SHOW SECOND', desk)
+        self.assertIn('APP PAGES', desk)
         for link in ('#connector=intacct', '#cli-agents', '#report=new-agent', '#settings=policies'): self.assertIn(link, desk)
         # setup is the Setup button at the top, never a link the chat opens (the owner, 2026-10-19)
         self.assertNotIn('#setup', desk); self.assertIn('the Setup button at the top', desk)

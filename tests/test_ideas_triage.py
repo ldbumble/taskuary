@@ -342,7 +342,7 @@ class OneProblemOneRowTests(unittest.TestCase):
         told = next(x['user'] for x in seen if 'YOUR EARLIER LINES' in x['user'] and text in x['user'])
         self.assertIn('ALREADY RAISED (not data', told)
         self.assertIn(f'{task_ref(tid)} Rotate the Spendly API key', told.split('OPEN TASKS:')[1])
-        self.assertIn('ALREADY RAISED is not data', seen[0]['system']); self.assertIn('left out while it stays the same', seen[0]['system'])
+        self.assertIn('ALREADY RAISED is not data', seen[0]['system'])   # the fact; the repeat is kept out by the key (said 0 above)
         self.assertIn('ALREADY RAISED', again['inputs'], 'what it was shown is what the run keeps')
 
 if __name__ == '__main__':
@@ -365,6 +365,6 @@ class AdvisorBriefTests(unittest.TestCase):
         brief = ingest.advisor_brief(s, {}, post)
         self.assertIn('I would add a classifier prompt', brief)
         self.assertIn('14 messages in 30 days', brief); self.assertNotIn('raw data', brief)
-        self.assertIn('Write to the owner as "you"', brief)
+        self.assertIn('raised this idea for the owner', brief)        # whose idea and for whom, as a fact (no how-to-write line)
         mail = s.add_message({'Channel': 'email', 'Subject': 'hi', 'BodyText': 'hello', 'Status': 'routed'})
         self.assertIsNone(ingest.advisor_brief(s, {}, mail))                  # anything else keeps its own ask

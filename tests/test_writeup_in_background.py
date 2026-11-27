@@ -268,34 +268,34 @@ def test_stop_pressed_twice_from_two_places_runs_one_write_up(world, monkeypatch
 
 
 # MARK DONE ON A LIVE AGENT, FROM ANYWHERE (the owner, 2026-11-02): the chat's, the phone's and the walk's close - the task.complete
-# operation - killed the pty with nothing kept. Now the live session is saved as Stop and save saves it, and only then closed
+# operation. REVISED (the owner's ruling, 2026-11-27): Mark done just stops the agent and closes the task - the chat is the record, no
+# write-up runs behind it, and nothing a write-up needs can keep the task open
 class Live:
     alive, sid, mode, task_id = True, 'sid-live', '', None
 
 
-def test_a_close_on_a_live_agent_saves_its_work_first(world):
+def test_a_close_on_a_live_agent_stops_it_and_closes_the_task(world):
     make, order = world
     s, tid = make(); c = TestClient(server.app)
     with mock.patch('taskuary.terminal.session_for', lambda t: None if 'close' in order else Live()):
         op = c.post('/api/operations', json={'kind': 'task.complete', 'target': tid, 'params': {}}).json()
         r = c.post(f"/api/operations/{op['id']}/execute", json={'version': op['version']}).json()
     assert r['status'] == 'done', r
-    assert order.index('harvest') < order.index('close'), 'harvested before the session was ended'
+    assert order.count('close') == 1 and 'harvest' not in order, 'the session was ended once, with no write-up'
     assert (s.get_task(tid) or {}).get('Status') == 'done'
-    assert any(str(x.get('Body') or '').startswith(wrapup.REPORT) for x in s.list_comments(tid)), 'the report was kept'
     wrapup.forget(tid)
 
 
-def test_a_close_whose_save_fails_keeps_the_task_open_and_says_why(world):
-    make, _ = world
+def test_a_close_never_waits_on_a_write_up_that_would_fail(world):
+    make, order = world
     s, tid = make(); c = TestClient(server.app)
-    with mock.patch('taskuary.terminal.session_for', lambda t: Live()), \
+    with mock.patch('taskuary.terminal.session_for', lambda t: None if 'close' in order else Live()), \
          mock.patch('taskuary.session_artifacts.coding', side_effect=RuntimeError('disk full')):
         op = c.post('/api/operations', json={'kind': 'task.complete', 'target': tid, 'params': {}}).json()
         r = c.post(f"/api/operations/{op['id']}/execute", json={'version': op['version']}).json()
-    assert r['status'] == 'error' and 'disk full' in str(r.get('error')), r
-    assert (s.get_task(tid) or {}).get('Status') not in ('done', 'dropped')
-    assert any(str(x.get('Body') or '').startswith(writeup.FAILED) and 'still open' in x['Body'] for x in s.list_comments(tid))
+    assert r['status'] == 'done', r
+    assert (s.get_task(tid) or {}).get('Status') == 'done'
+    assert not any(str(x.get('Body') or '').startswith(writeup.FAILED) for x in s.list_comments(tid))
     wrapup.forget(tid)
 
 

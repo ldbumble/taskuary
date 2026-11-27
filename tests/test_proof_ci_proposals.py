@@ -524,7 +524,7 @@ class ProposalTests(unittest.TestCase):
         p = {'action': 'save_skill', 'slug': 'refunds', 'text': '# Refunds\nwhen: a customer asks for a refund\nsteps: check the order, then refund it'}
         ok, why = proposals.validate(s, p)
         self.assertFalse(ok); self.assertIn('"Use skills" is off', why)
-        self.assertIn("the owner's choice", why); self.assertIn('go on without it', why); self.assertNotIn('turns it on', why)
+        self.assertIn("the owner's choice", why); self.assertIn('nothing waits on it', why); self.assertNotIn('turns it on', why)
         s.set_setting('playbooks_enabled', '1', 'owner')
         self.assertTrue(proposals.validate(s, p)[0])
 

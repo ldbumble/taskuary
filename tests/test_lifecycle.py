@@ -97,7 +97,8 @@ class LifecycleTests(unittest.TestCase):
         with mock.patch('taskuary.terminal.live_sessions', return_value=[]):
             out = railwalk.start(s)
         self.assertEqual(out['item']['rid'], r); self.assertEqual(out['say'], f"Next up: {out['item']['ref']}.")
-        self.assertIn('removed Bulk Approve and Deny', str(out['item'])); self.assertIn(buttons.label('approve'), [c['label'] for c in out['chips']])
+        self.assertIn('removed Bulk Approve and Deny', str(out['item']))
+        self.assertNotIn(buttons.label('approve'), [c['label'] for c in out['chips']])   # the rail never approves: the card in the task is the one press
         # 8. approving SENDS - and only sends (the owner, 2026-10-18: "sending and closing are two steps"); Mark done closes the
         #    task, and the pipe empties and says so
         sent = {'channel': 'email', 'to': ['craig@northwind.example'], 'cc': []}

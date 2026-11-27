@@ -103,7 +103,7 @@ class HistgenTests(unittest.TestCase):
         self.assertIn('paula@corp.example: 1 mails, 1 answered', seen['u'])    # who writes in, and whether answered
         self.assertIn('gail@corp.example: 1 mails', seen['u'])                 # who the owner writes to
         self.assertIn('THREADS THE OWNER STARTED', seen['u'])                   # a sent mail on no inbound thread
-        self.assertIn('never say what is a task', seen['s'])                   # importance, not intent
+        self.assertIn('The job defines IMPORTANCE, not intent', seen['s'])    # importance, not intent
         ev = histgen.STATUS['evidence']
         self.assertTrue(any(l.startswith('writes to you') for l in ev) and any(l.startswith('you write to') for l in ev))
 

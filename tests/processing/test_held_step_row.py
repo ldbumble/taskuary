@@ -36,7 +36,8 @@ def test_the_row_of_a_held_step_says_approve_and_has_no_redraft(store):
     r = row(store, tid)
     assert (r['kind'], r['rid']) == ('action', held['reviewId']), 'the task has no mail: its held step is its card'
     drawn = {b['verb']: b['label'] for b in concierge.row_buttons(store, r)}
-    assert drawn['approve'] == buttons.label('approve', 'action') == next(c['label'] for c in concierge.chips_for(store, r) if c.get('verb') == 'approve')
+    assert drawn['approve'] == buttons.label('approve', 'action')
+    assert not [c for c in concierge.chips_for(store, r) if c.get('verb') == 'approve']    # the rail never approves: the card in the task is the one press
     assert 'redraft' not in drawn and 'no draft' in concierge.cannot(r, 'redraft', store)
 
 

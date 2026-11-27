@@ -5037,19 +5037,20 @@ def reclassify_message(mid: int, body: ReclassifyBody, background: BackgroundTas
     if was == road: return {'ok': True, 'road': road, 'changed': False, 'was': was}
     src = _teach_reclassify(m, was, road, background)
     store.audit('message', mid, 'reclassified', ACTOR, detail={'from': was or None, 'to': road, 'learned': src or None})
-    # the panel reads the road off the newest route row, so the correction has to be written where
-    # the verdict lives - otherwise the pill still shows what triage said
-    store.add_route(mid, m.get('TaskId'),
-                    {'fyi': 'file', 'reply': 'reply', 'coding': 'create', 'general': 'create', 'task': 'create'}[road],
-                    None, f'triage: {_road_head(road)} - you reclassified this'
-                          + (f' (triage called it {_road_head(was)})' if was else '') + ' - the verdict is in memory for next time',
-                    [], ACTOR)
     out = {'ok': True, 'road': road, 'changed': True, 'was': was, 'learned': src or None}
     if road == 'fyi': file_message(mid, NotATaskBody(learn=False), background)     # ...taught once, as the road it should have taken
     elif road == 'reply': out['reply'] = open_reply(mid, None)
     elif road == 'coding': out['agent'] = dispatch_message(mid, DispatchBody(agent=body.agent, kind='coding'), background)
     elif road == 'general': out['chat'] = chat_message(mid, background)
     else: out['task'] = mine_message(mid, MineBody(kind='task'), background)
+    # the panel reads the road off the newest route row, so the correction has to be written where
+    # the verdict lives - otherwise the pill still shows what triage said; written AFTER the road's own act, whose rows
+    # (a reply now handed to the task's agent: 'promoted by the owner') would otherwise be the newest
+    store.add_route(mid, (store.get_message(mid) or m).get('TaskId'),
+                    {'fyi': 'file', 'reply': 'reply', 'coding': 'create', 'general': 'create', 'task': 'create'}[road],
+                    None, f'triage: {_road_head(road)} - you reclassified this'
+                          + (f' (triage called it {_road_head(was)})' if was else '') + ' - the verdict is in memory for next time',
+                    [], ACTOR)
     return out
 
 

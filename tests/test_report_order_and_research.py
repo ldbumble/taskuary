@@ -104,9 +104,10 @@ class ResearchIsAWalkThroughTests(unittest.TestCase):
         system = ' '.join(concierge._system(MemoryStore()).split())
         # 2026-09-24: research is a HAND-OFF to a regular agent - it was sent to the set-up walk, which the contract's
         # own WORKERS list contradicted (regular_agent[researcher]), and the model split the difference by asking
-        self.assertIn('Research is never a set-up - it is a hand-off to a regular agent', system)
-        self.assertIn('a CHANGE to a system - code, data, a server, an error to fix - goes to', system)   # reading one is not (2026-10-06)
-        self.assertIn('A polite request is not a question', system)
+        # ...said now by the tools themselves (COUNSEL cut to facts, 2026-11-27): a regular agent is the one that does not write code
+        from taskuary import toolcatalog
+        self.assertIn('send it to an agent that does not write code', toolcatalog.describe('regular_agent'))
+        self.assertIn('send it to a coding agent', toolcatalog.describe('coding_agent'))
 
     def test_a_walk_through_opens_a_general_task_and_starts_no_agent(self):
         s = MemoryStore()

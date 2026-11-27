@@ -187,17 +187,17 @@ class TheOffer(unittest.TestCase):
         s2, theirs, _, _ = world(stranger=True)
         self.assertFalse(general.browser_offered(s2, theirs, 'cli:claude'))                 # a stranger's words get no browser...
         line = browserview.STRANGER_LINE.format(why='a new sender')                         # ...and its agent can say so
-        self.assertIn('a new sender', line); self.assertIn('press Trust by their name', line); self.assertIn('open the link yourself', line)
+        self.assertIn('a new sender', line); self.assertIn('Trust by their name on the task opens it', line); self.assertIn('not followed by an agent', line)
 
     def test_the_offer_names_only_taskuarys_browser_and_asks_for_a_plain_reason(self):
         b = browserview.brief(open_now=False)
         self.assertIn('NO BROWSER IS OPEN', b); self.assertIn('agent-browser open <url>', b); self.assertIn('guide `browser`', b)
         g = browserview.guide()
-        self.assertIn('never a browser tool of your own CLI', g); self.assertIn('IF A STEP FAILS OR IS REFUSED', g)
-        self.assertIn('"held for the owner"', g); self.assertIn('his press on the card runs it', g)
-        # ...and the owner hears the browser is not set up - never a tool's name to install, nor "ask me again": its Try again (2026-11-18)
+        self.assertIn('is not one Taskuary can show to the owner', g)       # only Taskuary's browser, said as a fact (2026-11-27)
+        self.assertIn('"held for the owner"', g); self.assertIn('Taskuary holds for their press', g)
+        # ...and the agent is told the browser is not set up - never a tool's name to install (2026-11-18); its summary's `retry` draws Try again
         gone = browserview.NOT_SET_UP
-        self.assertIn('The browser is not set up on this computer yet', gone); self.assertNotIn('agent-browser', gone); self.assertIn('"retry": true', gone)
+        self.assertIn('THIS COMPUTER HAS NO BROWSER FOR AGENTS YET', gone); self.assertNotIn('agent-browser', gone); self.assertNotIn('install', gone)
 
 
 class TheTurn(unittest.TestCase):
@@ -230,7 +230,7 @@ class TheTurn(unittest.TestCase):
 
     def test_no_agent_browser_and_a_strangers_task_each_say_why(self):
         _, _, sess, system, kw = self.turn(installed=False)
-        self.assertIn('The browser is not set up on this computer yet', system)
+        self.assertIn('THIS COMPUTER HAS NO BROWSER FOR AGENTS YET', system)
         # ...and its hold hook rides anyway: a launch that gained it once a browser came changed its --settings and reopened the warm
         # conversation on a follow-up (2026-11-16) - the hook only asks whether this chat's browser is held
         self.assertEqual(kw.get('hold_sid'), sess.sid)
@@ -263,5 +263,5 @@ class AWarmConversationStaysWarm(unittest.TestCase):
         (sys1, _), (sys2, user2) = seen
         self.assertEqual(sys1, sys2, 'the system the conversation was opened with is the one it goes on with')
         self.assertEqual(first_kw.get('hold_sid'), kw.get('hold_sid'), 'its --settings (the hold hook) the same')
-        self.assertIn('The browser is not set up on this computer yet', sys1)
+        self.assertIn('THIS COMPUTER HAS NO BROWSER FOR AGENTS YET', sys1)
         self.assertIn('NO BROWSER IS OPEN for this task yet', user2, 'the browser now there is told in the turn')

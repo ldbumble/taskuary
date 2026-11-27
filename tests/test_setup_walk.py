@@ -61,7 +61,7 @@ class WalkStartsTests(unittest.TestCase):
         r, _ = post(s, 'set up a weekly refunds report', sessions)
         text, kw = sessions['s'].said[0]
         self.assertFalse(kw.get('as_owner', True), 'the opening turn is an instruction, not the owner speaking')
-        self.assertIn('walk', text.lower())
+        self.assertIn('just asked for this', text)          # a fact about the ask (no "begin the walk" order, 2026-11-27)
         # and the owner is not quoted twice: their ask is said once, and it is their own turn
         said = [c for c in s.list_comments(r.json()['taskId']) if 'refunds report' in (c['Body'] or '')]
         self.assertEqual(len(said), 1)

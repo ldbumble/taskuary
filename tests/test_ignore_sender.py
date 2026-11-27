@@ -68,10 +68,9 @@ class IgnoreScopeInstructionTests(unittest.TestCase):
         # the three are tools in the index the chat is sent (2026-09-25: one format, decisions included)
         for verb in ('not_ours', 'not_ours_sender', 'block_sender'):     # "this kind" retired 2026-09-25
             self.assertIn(verb, toolcatalog.block(), verb)
-        # a blank store loads the shipped template - prove the rule REACHES the model, not just the file
-        system = ' '.join(concierge._system(MemoryStore()).split())
-        # ...and the question itself is the Not ours card's now, not a line of options (2026-09-25)
-        self.assertIn('just this once | from now on | a rule in Settings', system)
+        # ...and the question itself is the Not ours card's, said by its tool (COUNSEL cut to facts, 2026-11-27): a bare ignore is
+        # just this once, and its card asks how far
+        self.assertIn('its card then asks how far: from now on, or as a rule', toolcatalog.describe('not_ours'))
 
     def test_an_fyi_says_why_triage_filed_it_and_what_can_be_done(self):
         """"nothing - read it if you like" is not an offer, and the verdict without its reason is

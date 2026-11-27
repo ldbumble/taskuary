@@ -2473,6 +2473,7 @@ def _task_detail(task_id: int, rev: str = '', opened: bool = False, whole: bool 
     routes = d.get('routes') or []
     if not whole: _cut_messages(d, {r.get('MessageId') for r in d['reviews']} | {m['MessageId'] for m in full if m.get('Danger')})
     memo, sigs, here = {}, {}, {m['MessageId']: m for m in full}
+    many = len(outbound.mailboxes(store)) > 1
     from . import chatlog as _chatlog
     for r in d.get('reviews') or []:
         # ...AND WHAT AN OWED REPLY NEEDS IS SAID ONCE: by the turn it stands in, where that turn said anything (chatlog.card_said - the ask's one rule)
@@ -2480,7 +2481,7 @@ def _task_detail(task_id: int, rev: str = '', opened: bool = False, whole: bool 
         r['CanSend'], r['SendBlock'] = _review_send_state(memo, r)
         r['Connect'] = _review_connect(memo, r)
         r['Signature'] = signatures.for_review(store, r, here.get(r.get('MessageId')), memo=sigs)     # what goes under it: the reply box shows it
-        r['From'] = outbound.shown_from(store, r)
+        r['From'] = outbound.shown_from(store, r, many)
     # the owner's own mail has nobody behind it to answer (wrapup.from_owner): the page's Reply doors read this, never a guess
     from .ingest import own_addresses, row_recipients
     from .wrapup import from_owner, reads_reply_row
@@ -5526,12 +5527,12 @@ def get_run(run_id: int):
 def reviews(status: str = None):
     from .verdicts import context_moved
     rows = store.list_reviews(status)
-    memo, sigs = {}, {}
+    memo, sigs, many = {}, {}, len(outbound.mailboxes(store)) > 1
     for r in rows:
         r['CanSend'], r['SendBlock'] = _review_send_state(memo, r)
         r['Connect'] = _review_connect(memo, r)
         r['Signature'] = signatures.for_review(store, r, memo=sigs)
-        r['From'] = outbound.shown_from(store, r)
+        r['From'] = outbound.shown_from(store, r, many)
         moved, latest = context_moved(store, r)          # material change only (PW-240), never a polling timestamp
         r['Stale'] = bool(moved)
         if r['Stale'] and latest:

@@ -684,9 +684,11 @@ def leaves_from(store, rv: dict) -> str | None:
     return reply_from(store.get_message(mid)) if mid else None
 
 
-def shown_from(store, rv: dict) -> str | None:
-    "leaves_from, for the card - only where he has two mailboxes to tell apart: with one, its card is as it was."
-    return leaves_from(store, rv) if len(mailboxes(store)) > 1 else None
+def shown_from(store, rv: dict, many: bool = None) -> str | None:
+    """leaves_from, for the card - only where he has two mailboxes to tell apart: with one, its card is as it was. `many`: that count,
+    asked once by a caller drawing many cards (a page's read asks the database a bounded number of times, never once per card)."""
+    if many is None: many = len(mailboxes(store)) > 1
+    return leaves_from(store, rv) if many else None
 
 
 def send_out(store, channel: str, to, subject: str, body: str, cc: list = None, attachments: list = None,

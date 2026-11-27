@@ -33,14 +33,19 @@ function AboutWorkstreams() {
   };
   const change = (v) => { setText(v); setMsg(""); clearTimeout(timer.current); timer.current = setTimeout(() => save(v), 700); };
   // ADD A PROFILE (the owner, 2026-11-26): named here, with one profile too - it is how he gets a second; its accounts are tagged on their cards
-  const [adding, setAdding] = useState(null);
+  const [adding, setAdding] = useState(null), sending = useRef(false);
   const add = async () => {
     const name = String(adding || "").trim();
     if (!name) return setAdding(null);
+    // ...Enter, then the box losing focus while that add is under way, is one add: the second said "there is already a profile" over the first's yes
+    if (sending.current) return undefined;
+    sending.current = true;
     try {
       const { data } = await api.post("/api/about/workstreams", { name });
       setD(data); setText(data.text || ""); was.current = parseWorkstreams(data.text); loadWorkstreams(true); setAdding(null); setMsg("Saved");
     } catch (e) { setMsg(e?.response?.data?.detail || "could not add it"); }
+    sending.current = false;
+    return undefined;
   };
   return (
     <Box data-tq-about-workstreams="" sx={{ mb: 3 }}>

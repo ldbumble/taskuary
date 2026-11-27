@@ -20,6 +20,7 @@ import api from "./api";
 import { DIM, FAINT, INK } from "./theme.jsx";
 import { useVerbs } from "./actionRow.js";
 import { Md } from "./md.jsx";
+import { loadWorkstreams } from "./Workstream.jsx";
 
 import { DRAFTS, STEPS, WS_LATER, canSkip, counter, skipTo, wsAnswer } from "./aboutWork.js";
 export { DRAFTS, MAIL_AT, STEPS, canSkip, skipTo } from "./aboutWork.js";
@@ -130,7 +131,7 @@ export default function FirstRunAbout({ onSaved, onBack, onStep, again = false, 
   const accept = (k) => (drafts[k].state === "ready" || edited[k]) && texts[k].trim()
     ? api.post("/api/setup/first-run/about/accept", { doc: k, text: texts[k] }) : Promise.resolve();
   // ...and the workstreams under the job, sent with the same Next - still grouping, kept with the defaults once they land (wsAnswer)
-  const acceptWs = () => { const x = wsAnswer(drafts.workstreams, texts.workstreams, edited.workstreams); return x ? api.post("/api/setup/first-run/about/accept", x) : Promise.resolve(); };
+  const acceptWs = () => { const x = wsAnswer(drafts.workstreams, texts.workstreams, edited.workstreams); return x ? api.post("/api/setup/first-run/about/accept", x).then(() => { loadWorkstreams(true); }) : Promise.resolve(); };   // ...two kept here are his profiles at once: the pickers and labels read the list again
   // ON ITS STEP THE GROUPING IS UNDER WAY (the owner, 2026-11-06): queued behind the job as the mailboxes are passed; one never started
   // (setup reopened, a draft cleared) starts as the step opens - once, so a mail that shows nothing is not read over and over
   const wsStarted = useRef(false);

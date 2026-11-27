@@ -3721,7 +3721,9 @@ def add_about_workstream(body: NewProfileBody):
     from . import firstrun
     name = ' '.join(body.name.split())[:60]
     if not name: raise HTTPException(422, 'give the profile a name')
-    if hub_ws.get(store, hub_ws.slugify(name)): raise HTTPException(422, f'there is already a profile called {name}')
+    # ...one he put by (unticked in the list), named again, comes back with what it was placed by - "there is already a profile" was said of
+    # a row that stood unticked; only a kept one is refused
+    if (had := hub_ws.get(store, hub_ws.slugify(name))) and had['status'] != 'proposed': raise HTTPException(422, f'there is already a profile called {name}')
     hub_ws.upsert(store, {'name': name}, ACTOR)
     return firstrun.workstreams_page(store)
 

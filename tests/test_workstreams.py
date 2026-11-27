@@ -265,6 +265,13 @@ def test_about_you_adds_a_profile_by_name_with_one_kept_too(two):
         assert [w['slug'] for w in W.shown(two)] == ['northwind', 'harbor-bakery'] and W.start('harbor-bakery') in two.get_doc('job')
         assert c.post('/api/about/workstreams', json={'name': 'harbor bakery'}).status_code == 422       # one name, one profile
         assert c.post('/api/about/workstreams', json={'name': '  '}).status_code == 422
+        # ...one he unticked is put by, not gone: with one profile left nothing is picked or walled, and naming it again brings it back
+        W.tag_account(two, 'harbor-bakery', connector_id=two.hb)
+        c.put('/api/about/workstreams', json={'items': [{'slug': 'harbor-bakery', 'keep': False}]})
+        assert W.shown(two) == [] and W.may_use(two, Factory(two).task(title='Northwind close'), HB_BOX)
+        r = c.post('/api/about/workstreams', json={'name': 'Harbor Bakery'})
+        assert r.status_code == 200 and [w['slug'] for w in W.shown(two)] == ['northwind', 'harbor-bakery']
+        assert W.of_account(two, HB_BOX) == 'harbor-bakery'                    # ...its accounts still its own
 
 
 def _draft_door(s): return lambda tid, text, to, subject, files, cc, mailbox, **kw: slots.draft(s, tid, text, to, subject, cc=cc, mailbox=mailbox, **kw)

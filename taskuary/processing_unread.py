@@ -712,22 +712,26 @@ def fold_fyi_threads(cards: list) -> list:
 # the newest line speaking, until he walks past it. `filed:<mid>` is that row's key: walked past (or put down) at a message, every line
 # filed onto its task up to it is read. Only what triage read is news - not his own lines, an auto-reply, a notice come again unchanged, or what Taskuary
 # wrote itself (a report's run, an Advisor line joined to its task: the task's row speaks for it).
+# ...ONLY ON A CLOSED TASK (the owner, 2026-11-27: "if it gets brought into a task and a agent looks at it we don't need it again in fyi"): a
+# colleague's Teams line filed onto his OPEN task was drawn in its chat, its agent read it and answered - and an FYI row said it again, and Next
+# opened the task he was on. Triage's one decision is whether a line belongs to a task; where it does and the task is open, the task's row and
+# its agent have it - no second row. A closed task has no row on the rail and no agent on it, so this row is the only place it shows.
 FILED = 'filed:'
 FILED_SINCE = 'fyi_filed_since'     # what was filed before this shipped is not raised now: 84 rows on the owner's rail at once
 
 
 def filed_news(store, now, *, include_read=False, keys=None, days=14) -> list:
-    "One FYI card per task that had a line filed onto it (ingest's filed road), the newest speaking, `more` the rest unread."
+    "One FYI card per CLOSED task that had a line filed onto it (ingest's filed road), the newest speaking, `more` the rest unread."
     from . import funnel
     from .ingest import filed_is_news, own_addresses
     from .store import OWN_CHANNELS
     # app start stamps it (processing_startup.initialize): a read writes nothing, and a home not started yet raises nothing older than now
     since = store.get_setting(FILED_SINCE) or now.strftime('%Y-%m-%d %H:%M:%S')
     floor = max(str(since), (now - timedelta(days=days)).strftime('%Y-%m-%d %H:%M:%S'))
-    rows = store._rows("""SELECT m.*, t.Title AS TaskTitle, t.Status AS TaskStatus,
+    rows = store._rows("""SELECT m.*, t.Title AS TaskTitle,
             (SELECT r.VerdictJson FROM route r WHERE r.MessageId=m.MessageId AND r.VerdictJson IS NOT NULL ORDER BY r.RouteId DESC LIMIT 1) AS Verdict
         FROM message m JOIN task t ON t.TaskId=m.TaskId
-        WHERE m.Status='filed' AND IFNULL(m.Direction,'in')='in' AND IFNULL(m.Channel,'') NOT IN (%s) AND replace(m.CreatedAt,'T',' ')>=?
+        WHERE m.Status='filed' AND t.Status IN ('done','dropped') AND IFNULL(m.Direction,'in')='in' AND IFNULL(m.Channel,'') NOT IN (%s) AND replace(m.CreatedAt,'T',' ')>=?
         ORDER BY m.MessageId""" % ','.join('?' * len(OWN_CHANNELS)), (*OWN_CHANNELS, floor))
     own = own_addresses(store)
     rows = [r for r in rows if filed_is_news(store, r, own)]
@@ -753,14 +757,13 @@ def filed_news(store, now, *, include_read=False, keys=None, days=14) -> list:
         if keys is not None and key not in keys: continue
         who = r.get('FromName') or r.get('FromEmail') or r.get('SourceName') or r.get('Channel') or 'Someone'
         line = next((x.strip() for x in str(r.get('BodyText') or r.get('Subject') or '').splitlines() if x.strip()), '')
-        closed = r.get('TaskStatus') in ('done', 'dropped')
-        said = f"{who} wrote on {r.get('TaskTitle') or funnel.task_ref(tid)}{' (closed)' if closed else ''}: {funnel._cut(line, 160)}"
+        said = f"{who} wrote on {r.get('TaskTitle') or funnel.task_ref(tid)} (closed): {funnel._cut(line, 160)}"
         deferred = held.get(tid, 0) >= r['MessageId']
         card = funnel._item(key, 'fyi', 'fyi', said, who=who, when=r.get('SentAt'), mid=r['MessageId'], tid=tid, channel=r.get('Channel') or '',
-                            category='info', preview=r.get('BodyText') or '', why='kept on its task - nothing new to do on it' + (', which stays closed' if closed else ''),
+                            category='info', preview=r.get('BodyText') or '', why='kept on its task - nothing new to do on it, which stays closed',
                             email=r.get('FromEmail') or '', cid=r.get('ConversationId'), subject=funnel._short(r.get('Subject') or '', 140))
         unread = bool(fresh) and not deferred
-        card.update(filed=True, closed=closed, unread=unread, deferred=deferred, more=max(0, len(fresh) - 1), aliases=[],
+        card.update(filed=True, closed=True, unread=unread, deferred=deferred, more=max(0, len(fresh) - 1), aliases=[],
                     member_ids=[f"message:{x['MessageId']}" for x in fresh or [r]], arrived_at=str(r.get('SentAt') or r.get('CreatedAt') or ''),
                     status='filed', source=r.get('SourceName') or '')
         card.update(order_band=funnel._band(card), actionable=unread and not funnel._not_yet(card))

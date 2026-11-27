@@ -128,6 +128,16 @@ def test_a_connector_read_runs_at_once_with_no_card(w):
     assert w.cards() == []
 
 
+def test_a_write_through_run_system_is_the_one_card_road_and_waits_under_his_question(w):
+    """The owner, 2026-11-27 ("yes do all 10"): run_system filed its own write card around the card road - and could raise one under the
+    agent's standing question (rule 4). A write asked there is the card propose raises, by its road: refused while the question stands."""
+    from taskuary import selfclose
+    w.agent('ask_owner', questions=[{'question': 'Which account should the bill go under?'}])
+    try: said, err = w.agent('run_system', connector_id=w.qb, **BILL)
+    finally: selfclose.take_marks(w.tid)                    # ...his answer, as the turn's end files it
+    assert err and 'your question to the owner stands' in said and w.cards() == [] and w.books.posted == [], said
+
+
 # ── 2. HIS PRESS DOES IT; THE AGENT IS WOKEN ONLY BY A NEXT STEP OR A FAILURE ─────────────────────────────────────────────────────────────
 
 def test_a_press_with_no_then_that_succeeds_wakes_nobody_even_while_its_agent_works(w):

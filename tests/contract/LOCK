@@ -1,8 +1,8 @@
 # The owner's lock on the basic interactions: sha256 of each contract file and of CLAUDE.md's locked section.
 # contract tests are the owner's: change only with his written OK (tests/test_contract_lock.py).
-c26dc4d06b831aca65b17088967553566dcd6f0202fd289c787b87beb2393023  tests/contract/test_agent_job_contract.py
+595c64384c5eb5271747e5f80240eee7fd517b7708278dedd225ef3ff325e4a0  tests/contract/test_agent_job_contract.py
 202ae3ecc219c6788924ddcfdff8de8162f52bf9f67827b40a95575c5a95a65d  tests/contract/test_cards_stay_contract.py
-59c554ec6c46af018c1892a8df41f4a739f2e83c0360ee585160a4525aee4d6f  tests/contract/test_connector_writes_contract.py
+c14974258e0cc60414c3a220685c65ee86dc635c999124963a76acec3183eae0  tests/contract/test_connector_writes_contract.py
 ffa3d0945b36e4790b9a87d3373225672938954a3c88ff16ce1f214fc7dde512  tests/contract/test_his_edit_is_what_goes_contract.py
-777d43c120a9de3c63dd92b4c60ea968766a12643d137c5747c34677c2e52676  CLAUDE.md#The basic interactions (locked)
+aa1ea71488277385ecd52261b80a88e12e7dc391459be4acfaee30842364074d  CLAUDE.md#The basic interactions (locked)
 e8afc1d762ae5d428f25a71f8fd8a3f9d863ae573be3dddf9477b8fda8b8ca6f  taskuary/templates/agents.md

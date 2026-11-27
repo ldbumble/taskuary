@@ -175,7 +175,8 @@ product: fix the code, never the test.
    A failed execution stays on its card, with the way past it, and its agent is woken once with what
    failed and why. His no is told to the agent as his own.
 3. **Wake.** His press executes without waking the agent, at work or at rest, unless the card
-   carries its `then` - the agent's own next act after the press - or the execution fails. A press
+   carries its `then` - the agent's own next act after the press, named `after_press` in its tools
+   (the owner, 2026-11-27: "yes do all 10"; a saved session's `then` is the same) - or the execution fails. A press
    Taskuary confirmed went is its own check: a `then` that only does what the press did (the to-do
    the card does, which the press ticks) wakes nobody. A press with no `then` that went wakes nobody,
    and answers the question the agent asked about that card; a bulk card's run is the same, once.
@@ -205,6 +206,8 @@ product: fix the code, never the test.
    A routine's write step waits too, unless he pressed "Always approve this step" on it: that
    routine's step, exactly as saved, then runs unpressed; any other target, executor or an agent's
    own call during the run is a card as usual. Taken back under Settings → Agent permissions.
+   A write asked through `run_system` is the card `propose` raises, by its one road, so every rule
+   here holds for it too (the owner, 2026-11-27: "yes do all 10").
 10. **Cards stay** (the owner, 2026-11-26: "Things on chat don't go away. No text after an approval
    card until the approval card is denied or approved, then the agent moves on. Cards never just
    disappear."). Nothing drawn in the chat ever disappears, hides or moves by itself. A card raised

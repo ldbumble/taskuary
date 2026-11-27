@@ -8,6 +8,7 @@ import { CardLine, ReviewCard } from "./Artifact.jsx";
 import { DIM, FAINT } from "./theme.jsx";
 import api from "./api";
 import { savedEdit } from "./heldEdits.js";
+import { cardWhy } from "./reviewProposal.js";
 
 // WHAT ONE CALL RAISED TOGETHER IS ONE CARD (the owner, 2026-11-26; taskuary/cardqueue.py sets): DIFFERENT acts - the same post for X, for Reddit,
 // for LinkedIn - are a tab each in the one frame (CardLine), each tab the card of its own act with its own press; the server says which
@@ -51,16 +52,18 @@ export default function BulkReview({ rows = [], tid, onChanged, past: given = fa
   const tabs = tabsOf(rows, run, step);
   if (tabs) return <MovedPast on={past}><CardLine tabs={tabs}>{rows.map((r) => <div key={r.ReviewId}>{own(r)}</div>)}</CardLine></MovedPast>;
   const ran = live || ["finished", "stopped"].includes(run?.state);
+  // ...and the call's why, said once on its face where every row shares it (agenttools._many: the call's own fields ride on every item)
+  const why = rows.every((r) => cardWhy(r) === cardWhy(rows[0])) ? cardWhy(rows[0]) : "";
   return (<MovedPast on={past}>
     <ReviewCard id={key} kind="bulk" state={live ? "going" : waiting.length ? "waiting" : "done"} data-tq-bulk-card={key} label={`${countOf(rows)} - review a few, then do them all`}
       // ...ITS BAR HAS ITS ROOM FROM THE FIRST FRAME (the owner, 2026-11-26: nothing on a card moves at his press - the rows dropped 37 px as the
       // bar came in over them): kept empty and unseen until the run begins
-      before={<Box {...(ran ? { "data-tq-bulk-progress": "" } : { "aria-hidden": true, "data-tq-bulk-room": "" })} sx={{ mb: 1, visibility: ran ? "visible" : "hidden" }}>
+      before={<>{!!why && <Typography data-tq-card-why="" sx={{ fontSize: 12.5, mb: 0.75 }}>{why}</Typography>}<Box {...(ran ? { "data-tq-bulk-progress": "" } : { "aria-hidden": true, "data-tq-bulk-room": "" })} sx={{ mb: 1, visibility: ran ? "visible" : "hidden" }}>
         <LinearProgress variant="determinate" value={ran ? progress(run) : 0} sx={{ height: 6, borderRadius: 3 }} />
         <Typography variant="caption" sx={{ color: DIM }}>{!ran ? `0 of ${rows.length}`
           : <>{`${(run.done || 0) + (run.failed || 0) + (run.left || 0)} of ${run.total} · ${run.done || 0} done`}{run.failed ? ` · ${run.failed} failed` : ""}{run.left ? ` · ${run.left} left out` : ""}
           {run.state === "stopped" ? ` · stopped${waiting.length && !past ? " - the rest still waits" : ""}` : run.state === "cancelling" ? " · stopping after this one" : run.state === "finished" ? " · finished" : ""}</>}</Typography>
-      </Box>} items={items}
+      </Box></>} items={items}
       press={live ? [{ id: "stop", label: "Stop the rest", tone: "s", disabled: run.state === "cancelling", run: stop, attrs: { "data-tq-bulk-stop": "" } }]
         : waiting.length ? [{ id: "run", label: pressOf(rows, n), tone: "p", disabled: busy || !n, run: go, attrs: { "data-tq-bulk-press": "" } }] : []}
       tail={<>{!!err && <Typography variant="caption" role="alert" sx={{ color: "var(--tq-danger, #7a2f3c)" }}>{err}</Typography>}

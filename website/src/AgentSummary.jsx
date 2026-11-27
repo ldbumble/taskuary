@@ -92,7 +92,7 @@ export default function AgentSummary({ summary, reviews = [], checklist = [], ac
 }
 
 // A TO-DO NO AGENT HAS TOUCHED (the owner, 2026-11-06): under what came in - which says the ask and the To do already - the cards the chat would
-// hold (`cards`: a draft and its Send, an email owed), the drafter's why over them, and the one box. The box is Send to agent's road (the
+// hold (`cards`: a draft and its Send, an email owed - each says its own why) and the one box. The box is Send to agent's road (the
 // dispatch, which makes the task the general agent's) with the owner's own words; from its first turn on, the chat is the agent's.
 export function NoAgentChat({ task, reviews = [], cards = null, closed = "", onStarted }) {
   const [text, setText] = useState(() => unsent(task.TaskId)), [busy, setBusy] = useState(false), [err, setErr] = useState("");
@@ -103,7 +103,6 @@ export function NoAgentChat({ task, reviews = [], cards = null, closed = "", onS
     else keepUnsent(task.TaskId, text);
   }, [task.TaskId, text]);
   const pics = usePromptImages({ files: true });          // ...a dropped, pasted or picked file goes with the words (the owner, 2026-11-05)
-  const why = String((reviews || []).find((r) => r?.Status === "pending" && r.DraftWhy)?.DraftWhy || "").trim();
   const send = async () => {
     const words = text.trim();
     if ((!words && !pics.paths.length) || busy || pics.busy) return;
@@ -120,9 +119,8 @@ export function NoAgentChat({ task, reviews = [], cards = null, closed = "", onS
   };
   return (
     <Box data-tq-no-agent-chat="" sx={{ minWidth: 0, display: "flex", flexDirection: "column" }}>
-      {!!(cards || why) && <Box sx={{ pb: 1 }}>
-        {!!why && <><Head first>What I did</Head><Typography data-tq-draft-why="" sx={LINE}>{why}</Typography></>}
-        {cards ? <Box>{hasReply(reviews) && <DraftHead />}{cards}</Box> : null}
+      {!!cards && <Box sx={{ pb: 1 }}>
+        <Box>{hasReply(reviews) && <DraftHead />}{cards}</Box>
       </Box>}
       {/* ...a closed one says how it closed over the box - typing there reopens it (server._refuse_closed_chat) */}
       {!!closed && <div className="tq-aui-closed" data-tq-chat-closed="">{closed}</div>}

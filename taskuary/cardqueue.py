@@ -600,6 +600,11 @@ def screen(store, tid: int, skip=()) -> str:
     # ...AND A STEP HANDED TO HIM ON A PAGE IS WAITING ON HIM TOO (walk 9, 2026-11-23: "Nothing waits for his press" while the robot check it had
     # handed him was still owed - the agent lost it): read off the one record of what he was asked (workerstate's open requests), as the page is
     waiting += [f"Handed to him on the page, NOT done yet: {_flat(q.get('text'))}" for q in on_page(store, tid)]
+    # ...AND ITS OWN QUESTION, WHERE IT STANDS (the owner, 2026-11-27: a resumed agent told him "the topic question is on your task card"): a card
+    # in his chat until he answers it there or in his box (chatlog.asked_in) - read off the record of what it asked, as the page is
+    from .taskstate import open_question
+    if (q := open_question(store, tid)):
+        waiting.append(f"Your question, waiting for his answer as its card in his chat (on the card or in his box): {_flat(' | '.join(q.get('questions') or [q.get('text')]), 400)}")
     if not (waiting or settled): return ''
     lines = [f'- {x}' for _, x in sorted(settled, key=lambda p: str(p[0]))][-SETTLED:] + ([f'- {x}' for x in waiting] or [NOTHING])
     return '\n'.join([SCREEN_HEAD, *lines])

@@ -954,15 +954,18 @@ def _call(store, tid: int, name: str, args: dict, doors: dict, skip=()) -> str:
             if not p: raise ValueError(refusal(why, 'call ask_owner again with them so'))
             if not (q := proposals.queue(store, int(tid), p, 'agent', refused=(miss := []))):
                 raise ValueError(refusal(miss[0] if miss else 'the card could not be raised', 'go on with what does not hang on his answers'))
-            return (f"Asked - your {len(p[proposals.ASKS])} questions stand as one card (rv{q['reviewId']}) for his answers; they come to you together at his press, "
-                    "and nothing is raised under it until then.")
+            return (f"Asked - your {len(p[proposals.ASKS])} questions stand as one card (rv{q['reviewId']}) in his chat for his answers; they come to you together "
+                    "at his press, and nothing is raised under it until then.")
         if not str(a.get('question') or '').strip(): raise ValueError('`question` is empty - write the one thing you need from the owner')
         selfclose.keep_mark(tid, 'ask', selfclose.ask_mark(a['question'], a.get('choices') if isinstance(a.get('choices'), list) else ()))
         # ...asked about a card of this task, his press on that card answers it (card.asked_about)
         if (k := str(a.get('card') or '').strip().lower().removeprefix('rv')).isdigit() and (store.get_review(int(k)) or {}).get('TaskId') == int(tid):
             from .card import ASKED
             store.audit('review', int(k), ASKED, 'agent', 'agent', {'question': ' '.join(str(a['question']).split())})
-        return 'Asked - it stands on the task as their question, and their answer comes to you. Go on with what does not hang on it.'
+        # ...WHERE HE SEES IT, SAID AS IT IS (the owner, 2026-11-27): "it stands on the task" was retold to him as "the question is on your task
+        # card" - a place he has none. It is a card in his chat (chatlog.asked_in), at the foot of this turn
+        return ("Asked - it is drawn in his chat as a question card under your words when this turn ends; his answer, given on the card or "
+                "typed in his box, comes to you once. Go on with what does not hang on it.")
     if name == 'skills':
         from . import skills
         return _out(skills.lookup(store, store.get_task(tid), str(a.get('name') or '')))

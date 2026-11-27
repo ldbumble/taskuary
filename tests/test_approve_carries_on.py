@@ -495,7 +495,7 @@ def test_a_card_raised_again_is_the_whole_card_its_versions_and_its_then():
     assert cardqueue.keep(s, tid, f'rv{rid}', 'agent')['ok']
     o, n = s.get_review(rid), s.get_review(cardqueue.again_of(s, rid))
     assert proposals.passed(o) and n['Status'] == 'pending'
-    assert json.loads(n['Versions']) == two and n['NextStep'] == 'put the panel in the calendar', (n['Versions'], n['NextStep'])
+    assert [v['text'] for v in json.loads(n['Versions'])] == two and n['NextStep'] == 'put the panel in the calendar', (n['Versions'], n['NextStep'])
     same = {k for k in o if k not in cardqueue.CAME_OF}
     assert {k: n[k] for k in same} == {k: o[k] for k in same}, 'every column the card carries'
 

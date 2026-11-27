@@ -267,7 +267,7 @@ export function filesOf(e, result) {
   const j = s.indexOf(MARK, i), upto = s.slice(i + FILES_MARK.length, j < 0 ? undefined : j), raw = upto.slice(0, upto.lastIndexOf("]") + 1).replace(/ ⏎ /g, "\n");
   let rows; try { rows = JSON.parse(raw); } catch { return null; }
   const files = (Array.isArray(rows) ? rows : []).filter((r) => isObj(r) && ARTIFACT.test(String(r.url || "")) && text(r.name))
-    .map((r) => ({ id: r.id, name: text(r.name), path: `shown:${r.id}`, kind: "shown", content_type: String(r.content_type || ""), size: Number(r.size) || 0, url: r.url }));
+    .map((r) => ({ id: r.id, name: text(r.name), ...(text(r.title) ? { title: text(r.title) } : {}), path: `shown:${r.id}`, kind: "shown", content_type: String(r.content_type || ""), size: Number(r.size) || 0, url: r.url }));
   return files.length ? { type: "files", files } : null;
 }
 export function viewOf(e, result) {

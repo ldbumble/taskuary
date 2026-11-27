@@ -167,7 +167,9 @@ product: fix the code, never the test.
 
 1. **Raise.** The agent supplies the content; Taskuary builds one valid card and picks the road
    from the connection's state: connected, its press goes through the connection; not connected,
-   the post goes up through the browser at his press, with Connect beside it. A bad card (over the
+   the post goes up through the browser at his press, with Connect beside it - that one press is his
+   yes for the site's own Post of exactly those words, and no second card asks it again (the owner,
+   2026-11-27: "yes do all 10"). A bad card (over the
    network's limit as the network counts it, a picture that is not there) is never shown: the agent
    is answered with the exact fix. A field the card does not draw is ignored.
 2. **Press.** Approve or Send executes exactly what was shown, once. A second press does nothing.
@@ -186,7 +188,8 @@ product: fix the code, never the test.
 5. **Hand-off on a page.** A step handed to him shows that step; his "I'm done" wakes the agent
    once. The agent may open and read a connected service's site, and hand him its sign-in where
    reading needs it; posting or sending there goes only through its card. Where a service is not
-   connected its card comes first, and its sign-in is his step only after his press. No
+   connected its card comes first, and its sign-in is his step only after his press - drawn on that
+   card, as its next step. No
    sign-in is put to him beside a card that waits: one thing is asked at a time, and what the
    browser shows belongs to the card on his screen.
 6. **The turn's end.** Exactly one of needs-him / done / working. The chat shows words, cards and
@@ -194,14 +197,18 @@ product: fix the code, never the test.
    picture is drawn on its card only.
 7. **Restart.** A restart between a card and its press keeps all of the above.
 8. **Bulk, one component.** The agent chooses by how it calls, never a count: one call with
-   `items` (one act to many people, versions of one thing) is one card that does every item with
-   one press, exactly as shown; separate calls are separate cards, one after another. Files handed
+   `items` (one act to many people) is one card that does every item with one press, exactly as
+   shown; one call with `versions` (one thing written several ways, on any card with words) is one
+   card where he picks one, and only that one goes (the owner, 2026-11-27: "yes do all 10");
+   separate calls are separate cards, one after another. Files handed
    over in one call are one artifact holding all of them. A review card and a file artifact are
    drawn by the same component (`website/src/Artifact.jsx`).
 9. **Every write waits for his press.** An agent's call that writes, changes, creates, deletes or
    sends on any connector is a card, at any Authority; nothing runs before his press. What is a
    write is the executor's line in `scopes.ACTIONS` - one not listed is a write; a read (a query, a
    search, a report pulling data) runs with no card. Only Taskuary's own store is written unpressed.
+   A post card pressed for the browser is that press: the site's own Post of exactly its words goes
+   on it; other words, or another site, wait for his press.
    A routine's write step waits too, unless he pressed "Always approve this step" on it: that
    routine's step, exactly as saved, then runs unpressed; any other target, executor or an agent's
    own call during the run is a card as usual. Taken back under Settings → Agent permissions.

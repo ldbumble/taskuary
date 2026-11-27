@@ -1243,6 +1243,39 @@ def test_the_last_press_of_a_post_he_handed_over_waits_for_him_whatever_the_judg
     assert bg.held_says(p).startswith('Publish your post on X - the page holds "Day four, done. Northwind closes the month in four days."')
 
 
+def test_his_press_on_the_post_card_is_his_yes_for_its_sites_post_with_exactly_his_words():
+    """The owner, 2026-11-27 ("yes do all 10"): a post on a network not connected cost three presses for one post - the card, its sign-in, then a
+    "Publish your post" card for the same words. His press on the card is his yes for that site's own Post: on the card's own site, with a box
+    of the form holding exactly the words he pressed, the click goes with no second card, and the card is done once it ran. Other words, or
+    another site, still wait for his press."""
+    from taskuary import cardqueue, connectorcatalog as cat
+    site = 'https://' + cat.by_type('x')['hosts'][0]
+    s = MemoryStore(); tid = Factory(s).task('Post the four-day close')
+    post = {'action': 'run_tool', 'type': 'x_post', 'network': 'X', 'text': 'Day four, done.\n\nNorthwind closes the month in four days.'}
+    card = s.add_review({'TaskId': tid, 'Kind': 'action', 'Status': 'pending', 'DraftText': json.dumps(post), 'Reason': 'the agent proposes to post on X'})
+    s.decide_review(card, 'approved', json.dumps({**post, 'result': {'browser': True}}), 'owner')            # ...he pressed Post via the browser
+    snap = '- textbox "What is happening?!" [ref=e9]\n- button "Post" [ref=e11]'
+    speaks = {'big': True, 'kind': 'speaks', 'sure': True, 'irreversible': True, 'what': 'Post to your X account'}
+    held = lambda: [json.loads(r['DraftText']) for r in s._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action' AND Status='pending'", (tid,))
+                    if json.loads(r['DraftText']).get('action') == 'browser_act']
+    def click(words, url=site + '/compose/post'):
+        pg = {'url': url, 'open': True, 'elements': snap, 'name': 'X', 'fields': [{'k': 'text', 't': 'textarea', 'f': 0, 'v': words}]}
+        with mock.patch.object(bg, 'page', return_value=pg), verdict(speaks), mock.patch.object(bg, 'watch', None), \
+             mock.patch.object(bg, '_run', lambda sid, a, w, t: (0, '')), mock.patch('taskuary.signin.acting', lambda *a, **k: None):
+            return bg.check(s, tid, 'run1', "agent-browser click '@e11'", Brain(None))
+    out = click('Day four, done.\n\nNorthwind closes the month in four days. And we hired twelve people.')
+    assert out['hookSpecificOutput']['permissionDecision'] == 'deny' and held(), 'words other than his wait for his press'
+    s._exec("UPDATE review SET Status='closed_unsent' WHERE TaskId=? AND ReviewId<>?", (tid, card)); bg.PUBLISHING.clear()
+    out = click('Day four, done.\n\nNorthwind closes the month in four days.', url='https://social.vendor.example/compose')
+    assert out['hookSpecificOutput']['permissionDecision'] == 'deny' and held(), 'his words on another site wait for his press'
+    s._exec("UPDATE review SET Status='closed_unsent' WHERE TaskId=? AND ReviewId<>?", (tid, card)); bg.PUBLISHING.clear()
+    assert click('Day four, done.\n\nNorthwind closes the month in four days.') == {} and held() == [], 'his words on its site: no second card'
+    assert cardqueue.handed(s.get_review(card)), 'pressed, not yet posted'
+    with mock.patch.object(bg, 'outcome', lambda *a, **k: ''), mock.patch.object(bg, 'did', lambda *a, **k: ''):
+        bg.after(s, tid, 'run1', "agent-browser click '@e11'", 0)
+    assert not cardqueue.handed(s.get_review(card)) and cardqueue.in_flight(s, tid) is None, 'the card is done once its Post ran'
+
+
 def test_an_enter_in_the_box_of_a_post_he_handed_over_is_a_line_of_it_never_a_second_post_card():
     """Walk 24, 2026-11-25 (the Claude CLI): writing the X post he had handed over, the agent pressed Enter for a line break in the post box,
     and the judge called the key "Post ... to your X account" - a second card for one post, which the agent withdrew itself. A fact of the

@@ -751,6 +751,8 @@ export function ActReview({ row: was, tid, live = true, onChanged, past = false,
     // ...each line labelled, as its card declares it says it: money in its unit, a thing by its name with its id (shownOf)
     ...fs.filter((f) => ["line", "money"].includes(f.type) && has(f)).sort((a, b) => !!b.heading - !!a.heading)
       .map((f) => ({ ...f, type: f.heading ? "heading" : "line", value: f.editable ? vals[f.key] : shownOf(f, shown), editable: edit && f.editable, onChange: set(f.key) })),
+    // ...the versions its agent gave of the words, a pick over the box as on a letter (versionPick): his press sends the box - the one he picked
+    ...(st.live && !gone ? versionPick(versionsOf(row), text, edit, setText) : []),
     ...(hasBox(act) ? [{ key: tk, type: "text", label: fs.find((f) => f.key === tk)?.label || "Words", box: !!st.live && !gone, value: st.live && !gone ? text : shown[tk],
       editable: edit && !gone, onChange: setText, dim: !gone && !st.live, over: over ? `${n} of ${max} characters` : "" }] : []),
     ...(pic ? [{ key: "image", type: "picture", value: img.value, file: pic, alt: p.alt || pic.name,
@@ -788,7 +790,7 @@ export function ActReview({ row: was, tid, live = true, onChanged, past = false,
         // ...and its agent's why, what he needs to know to press: the card is all its turn shows (chatStream.runsOf `card`)
         : !!cardWhy(row) && <Typography data-tq-card-why="" sx={{ fontSize: 12.5, color: INK, mb: 0.75 }}>{cardWhy(row)}</Typography>}
       tail={st.live && !gone && row?.connect && <Typography data-tq-not-connected="" sx={{ fontSize: 11.5, color: FAINT }}>{row.connect.says}{post
-        ? " - Post via the browser has the agent put it up there, and its last Post waits for you" : row.connect.waits ? ` - ${row.connect.waits}` : ""}</Typography>}
+        ? " - Post via the browser has the agent put it up there, with these words: your press is its Post" : row.connect.waits ? ` - ${row.connect.waits}` : ""}</Typography>}
       under={<>{row?.connect && st.live && !gone && setupUnder(setupAt, () => setSetupAt(""), () => decide("approve"))}
         <FileDialog file={viewing} onClose={() => setViewing(null)} /></>} />
   </MovedPast>);

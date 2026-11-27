@@ -36,6 +36,7 @@ dependencies = [
     "pywinpty>=2; sys_platform=='win32'",        # ConPTY: the interactive agent terminal
     "tzdata; sys_platform=='win32'",             # Windows ships no IANA tz database: ZoneInfo(TZID) on an invite needs it
     "pyte>=0.8",                                 # a real VT emulator: how a session transcript is read
+    "imageio-ffmpeg>=0.4",                       # an ffmpeg with no install: a post's video made the MP4 its network takes (linkedin.as_mp4)
 ]
 
 [project.optional-dependencies]

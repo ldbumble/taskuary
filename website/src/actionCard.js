@@ -17,7 +17,7 @@ export const cardOf = (review) => {
   try { p = JSON.parse(review.FinalText || review.DraftText || ""); } catch { return null; }
   const act = isCardProposal(p) ? actionFor(p.type) : null;
   // ...and its connection not made, as the review says it (server _review_connect): the chat's card and this one say Connect alike
-  return act ? { ReviewId: review.ReviewId, Status: review.Status, CreatedAt: review.CreatedAt, Reason: review.Reason, ActError: review.ActError, ActRetry: review.ActRetry, OwnerEdit: review.OwnerEdit,
+  return act ? { ReviewId: review.ReviewId, Status: review.Status, CreatedAt: review.CreatedAt, Reason: review.Reason, ActError: review.ActError, ActRetry: review.ActRetry, OwnerEdit: review.OwnerEdit, Versions: review.Versions,
     post: p, network: act.title, as: "", connect: review.Status === "pending" ? review.Connect || null : null } : null;
 };
 
@@ -76,7 +76,7 @@ export const pressOf = (verb, act, p, text, values) => {
 // ...and the card reads what he pressed - his words, his picks - wherever the press ended: gone, or failed
 export const asLeft = (act, p, text, values) => ({ ...p, ...values, [textKey(act)]: text });
 // where the card stands: waiting on the press, gone with its words and link, or not gone (`live` false: a caller that only reads it)
-export const viaBrowserSaid = (network) => `Handed to the agent - it puts this up on ${network || "the site"} in the browser, and its Post waits for you`;
+export const viaBrowserSaid = (network) => `Handed to the agent - it puts this up on ${network || "the site"} in the browser, with these words`;
 export const stateOf = (row, live = true) => {
   const s = row?.Status, act = actionFor(row?.post?.type), w = wordsOf(act, row?.post || {});
   // ...a post handed to its agent for the site says so, never "Posted" before anything went up (the owner, 2026-11-22)

@@ -428,9 +428,18 @@ def isolated_runtime_boundaries():
         ps = command[:4] == ['ps', '-o', 'pid=,stat=,lstart=', '-p'] and len(command) == 5 and all(x.isdigit() for x in command[4].split(','))
         return command == ['/bin/sh', '-c', spawn.WATCH_SH] or ps or command == ['ps', '-A', '-o', 'pid=,ppid=']   # ...and spawn.end's tree read
 
+    def ffmpeg_own(argv) -> bool:
+        "The ffmpeg imageio-ffmpeg ships (linkedin.as_mp4: a post's video made the MP4 its network takes), on files of this run's own temp root only."
+        command = [str(x) for x in (argv if isinstance(argv, (list, tuple)) else [argv])]
+        try: import imageio_ffmpeg; own = Path(imageio_ffmpeg.__file__).resolve().parent
+        except ImportError: return False
+        if not command or not Path(command[0]).resolve().is_relative_to(own): return False
+        files = [Path(x) for x in command[1:] if Path(x).is_absolute()]
+        return command[1:] == ['-version'] or (bool(files) and all(f.resolve().is_relative_to(_TEST_ROOT) for f in files))
+
     def allowed_process(argv, kwargs) -> bool:
         return (reviewed_python(argv) or git_allowed(argv, kwargs) or bool((g := shell_git(argv)) and git_allowed(g, kwargs))
-                or spawn_own(argv))
+                or spawn_own(argv) or ffmpeg_own(argv))
 
     def guarded_popen(argv, *args, **kwargs):
         if allowed_process(argv, kwargs): return real_popen(argv, *args, **kwargs)

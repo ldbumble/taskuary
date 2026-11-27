@@ -6035,10 +6035,14 @@ class SQLiteStore:
         self._exec("UPDATE review SET NotNeeded=? WHERE ReviewId=? AND Status='pending'", (by_sentence(why, 300) or None, rid))
         self._review_changed(rid)
     def set_review_versions(self, rid, versions: list):
-        "The versions of review `rid`'s words its agent gave for him to pick from (agenttools._many) - the first stands in its box; None for none."
-        if versions and his_words(self.get_review(rid)): return     # ...nor are versions set over his own words
-        self._exec('UPDATE review SET DraftText=?, Versions=? WHERE ReviewId=?', (versions[0], json.dumps(versions), rid)) if versions else \
-            self._exec('UPDATE review SET Versions=NULL WHERE ReviewId=?', (rid,))
+        """The versions of review `rid`'s words its agent gave for him to pick from (agenttools.versions_of), kept as [{label, text}] - the first
+        stands in its box (an act's box is its proposal's, which already holds it); None for none."""
+        vs = [{'label': str(v.get('label') or f'Version {i + 1}'), 'text': str(v.get('text') or '')} for i, v in
+              enumerate(v if isinstance(v, dict) else {'text': v} for v in versions or [])]
+        if vs and his_words(rv := self.get_review(rid)): return     # ...nor are versions set over his own words
+        if not vs: self._exec('UPDATE review SET Versions=NULL WHERE ReviewId=?', (rid,))
+        elif (rv or {}).get('Kind') == 'action': self._exec('UPDATE review SET Versions=? WHERE ReviewId=?', (json.dumps(vs), rid))
+        else: self._exec('UPDATE review SET DraftText=?, Versions=? WHERE ReviewId=?', (vs[0]['text'], json.dumps(vs), rid))
         self._review_changed(rid)
     def set_review_next_step(self, rid, then):
         "The agent's own step after his press on review `rid` (card.raising), None for none."

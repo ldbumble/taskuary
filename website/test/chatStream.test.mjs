@@ -279,6 +279,10 @@ test("a turn that ends on a card is its steps fold, its words inside it in order
   assert.deepEqual(lay({ ...card, cards: [{ ...card.cards[0], status: "approved" }] }), lay(card), "pressed, it stays as it was drawn");
   assert.deepEqual(lay({ id: "t:1", kind: "turn", cards: [] }, "", true), [{ fold: "2 steps - read 2 pages (a.example, b.example)", rows: ["Looking at the launch pages.", "work", "Setting the post up."] }],
     "the question it asked is its card too");
+  // ...and the question drawn as the turn's questions card (chatlog.asked_in), no live ask beside it: its words held the question too, and stood
+  // unfolded above that card - the question twice
+  assert.ok(onCard({ id: "t:1", kind: "turn", cards: [] }, false, [{ request_id: "q1", text: "Which city?", open: true }]), "the turn's questions card is its card");
+  assert.ok(!onCard({ id: "t:1", kind: "turn", cards: [] }, false, []));
   assert.deepEqual(lay({ id: "t:1", kind: "turn", cards: [] }), ["Looking at the launch pages.", { fold: "2 steps - read 2 pages (a.example, b.example)", rows: ["work"] }, "Setting the post up."],
     "no card: its words where it said them, its answer drawn under its work (SaidText) as before");
   // ...and a card's turn that did no work is a fold of its words all the same

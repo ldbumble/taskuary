@@ -138,14 +138,14 @@ export const workCount = (parts) => workRows(parts).length;
 export const SHOWN_PARTS = ["said", "view", "files"];
 // ...AND A TURN THAT ENDS ON A CARD SHOWS ONLY THE CARD (the owner, 2026-11-27: "yes only the card, fold the words into steps. only say things if
 // it needs me in the card"): its words are rows of its fold, in order with its steps - its answer last - and what he needs to press is on the
-// card. `card`: the turn has a card, or the question it asked, drawn under it (onCard)
+// card. `card`: the turn has a card, or the question it asked, drawn under it (onCard) - live (`ask`) or as its questions card (`asked`)
 export const runsOf = (parts, card = false) => (parts || []).reduce((out, p) => {
   if (SHOWN_PARTS.includes(p.type) && !(card && p.type === "said")) out.push({ id: p.id, parts: [p] });
   else if (out.at(-1)?.fold) out.at(-1).parts.push(p);
   else out.push({ id: p.id, fold: true, parts: [p] });
   return out;
 }, []);
-export const onCard = (t, ask = false) => !!ask || !!(t?.cards || []).length;
+export const onCard = (t, ask = false, asked = []) => !!ask || !!(asked || []).length || !!(t?.cards || []).length;
 // A TURN'S ANSWER IS WHAT THE AGENT SAID, OR WHAT IT SHOWED - NEVER BOTH (the owner, 2026-11-27: "it's either or to visualize or explain"):
 // where its own last words are empty (Codex ends on its tools; an opening only is no answer, general.read_summary) the answer filed is its
 // end_turn `did` - the record's summary, there for the rail and the phone - and a turn that showed a view or files would say what it showed

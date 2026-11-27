@@ -408,7 +408,7 @@ const ConvTurn = ({ t, more, ran = 0, cards, name, ask = null, asked = null, onA
   // ...`opening`: its agent's process really is starting (conversation.items) - said on any turn then, and only then
   // ...naming what no row in sight says: its rows stand open at a level that lists them, inside the newest fold he opened, and on the dock's
   // trail (no WorkCtx) always. What it is writing is its own row, streamed into it - never said again on this line
-  const card = onCard(t, !!ask), laid = withAnswer(parts, answer, card);
+  const card = onCard(t, !!ask, asked), laid = withAnswer(parts, answer, card);
   const lastFold = runsOf(laid, card).findLast((r) => r.fold), level = levelOf(t.level, React.useContext(LevelCtx));
   const folded = useFoldOpen(lastFold ? `${foldKey(t.id)}:${lastFold.id}` : ""), work = React.useContext(WorkCtx), open = folded || !work || level !== "summary";
   const doing = live ? workingLine(parts, stepLabel, { starting: t.state === "starting" || !!t.opening, later: later && !t.opening, ask: React.useContext(WaitOnCtx), thinking: t.thinking || "", open }) : "";

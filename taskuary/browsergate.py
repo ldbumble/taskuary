@@ -34,6 +34,7 @@ program by its full path, `npx`, its own DevTools client, a script). This gates 
 """
 import json, os, re, shlex, shutil, subprocess, threading, time
 from .say import said as _said            # a failure written to the chat is said in his words (say.py)
+from pathlib import Path
 from urllib.parse import urlsplit
 from loguru import logger
 from .gate import BIG as _BIG4, TABLE, deny as _deny, says as _says
@@ -903,7 +904,7 @@ def _verdict(act: dict, v: dict | None, pg: dict, said: str, mine: bool = False)
 # for one post: the card, its sign-in, then a "Publish your post" card for the same words). On that card's own site, with a box of the form
 # holding exactly the words he pressed, the site's Post goes, and the card is done once it ran (after). Words other than his wait for his press.
 PUBLISHING = {}                 # session -> the card whose site Post the gate let through, settled once its command ran (after)
-def last_press(store, tid, act: dict, pg: dict) -> dict | None:
+def last_press(store, tid, act: dict, pg: dict, sid: str = '') -> dict | None:
     flat = lambda s: ' '.join(str(s or '').split()).casefold()
     if not (p := _handed(store, tid, act, pg)): return None
     words, boxes = flat(p.get('text') or p.get('body')), [flat(f.get('v')) for f in _written(pg)] + [flat(pg.get('typed'))]
@@ -912,8 +913,34 @@ def last_press(store, tid, act: dict, pg: dict) -> dict | None:
     from . import cardqueue, connectorcatalog as cat
     site = cat.site_card(_site(pg.get('url')))
     if words in boxes and site and site['type'] == (cat.action_for(p.get('type')) or {}).get('card'):
-        return {'hold': False, 'what': what, 'why': '', 'card': cardqueue.in_flight(store, int(tid))['ReviewId']}
+        r = cardqueue.in_flight(store, int(tid))
+        if not (pic := _picture_why(tid, sid, p, pg, r.get('DecidedAt'))): return {'hold': False, 'what': what, 'why': '', 'card': r['ReviewId']}
+        return {'hold': True, 'what': what, 'why': f'{pic}, so his press on the card is no yes for this Post', 'kind': 'speaks'}
     return {'hold': True, 'what': what, 'why': WHY['speaks'], 'kind': 'speaks'}
+# ...AND ONLY WITH THE PICTURE HIS CARD CARRIES (the card-tool round, 2026-11-28: the words were checked, the picture was not - any file the agent
+# put beside them, or one where the card had none, went up on his one press). Facts code can see: each upload the session ran since his press
+# (after: UPLOADS), by its content against the picture pinned on his card (proposals.PINNED); else a file box of the page naming it
+UPLOADS = {}                    # session -> [(when, sha256 of its content - '' unread, its name)] of each upload it ran
+def _picture_why(tid, sid, p: dict, pg: dict, since) -> str:
+    "'' where what goes up beside the words is his card's picture, or none where it has none - else that fact, in words."
+    from .conversation import ep
+    from .proposals import PINNED, picture_print
+    ups = [u for u in UPLOADS.get(str(sid), []) if u[0] >= int(ep(since) or 0)]
+    files = [re.sub(r'^.*[/\\]', '', str(f['v'])) for f in pg.get('fields') or [] if isinstance(f, dict) and f.get('t') == 'file' and str(f.get('v') or '').strip()]
+    if not p.get('image'): return 'a file was put on the page and his card carries no picture' if ups or files else ''
+    want, name = p.get(PINNED) or picture_print(tid, p), Path(str(p['image'])).name
+    if ups and want and all(u[1] == want for u in ups) or not ups and files and all(f == name for f in files): return ''
+    return f"the picture on the page could not be checked to be his card's ({name})"
+def _uploaded(tid, sid, cmd: str) -> None:
+    "Each file an upload in `cmd` put on the page, kept for its session (UPLOADS)."
+    import hashlib
+    from . import outputs
+    for a in acts(cmd):
+        for f in _own_args(a['args'])[2:] if a['verb'] == 'upload' else ():
+            path = Path(f).expanduser() if Path(f).expanduser().is_absolute() else outputs.named(int(tid), f) if tid else None
+            try: sha = hashlib.sha256(path.read_bytes()).hexdigest() if path else ''
+            except OSError: sha = ''
+            UPLOADS.setdefault(str(sid), []).append((int(time.time()), sha, Path(f).name))
 def _handed(store, tid, act: dict, pg: dict) -> dict | None:
     "The card he handed over that this act would send - in flight, with words of its own, and the act a click on no box of the form and no link - else None."
     if act.get('verb') != 'click' or fills(act, pg) or follows(act, pg): return None
@@ -1022,7 +1049,7 @@ def _check(store, tid: int, sid: str, cmd: str, brain=None, cwd: str = '') -> di
         if typing(a) or line_break(store, tid, a, pg): continue
         if vs is None: vs = iter(judge(store, [x for x in todo[i:] if not x.get('read') and not typing(x) and not line_break(store, tid, x, pg)], pg, brain, said=said))
         v = next(vs)
-        if (his := last_press(store, tid, a, pg)): v = his
+        if (his := last_press(store, tid, a, pg, sid)): v = his
         if not v['hold']:
             if v.get('card'): PUBLISHING[str(sid)] = v['card']
             continue
@@ -1153,7 +1180,8 @@ def after(store, tid, sid, cmd: str, rc: int = 0) -> str:
     # ...a card's site Post the gate let through (last_press) is that card done once it ran, as his yes to a held one is (_perform)
     if PUBLISHING.pop(str(sid), None) and rc == 0 and not out and store and tid:
         from . import cardqueue
-        cardqueue.done(store, int(tid), 'its Post on the site, pressed by its agent on his yes')
+        cardqueue.done(store, int(tid), 'its Post on the site, pressed by its agent on his yes'); UPLOADS.pop(str(sid), None)
+    if rc == 0: _uploaded(tid, sid, cmd)
     return '\n'.join(x for x in (out, did(sid, cmd, seen, rc)) if x)
 
 

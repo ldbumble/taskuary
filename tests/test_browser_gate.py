@@ -1276,6 +1276,45 @@ def test_his_press_on_the_post_card_is_his_yes_for_its_sites_post_with_exactly_h
     assert not cardqueue.handed(s.get_review(card)) and cardqueue.in_flight(s, tid) is None, 'the card is done once its Post ran'
 
 
+def test_his_one_press_post_goes_only_with_the_picture_his_card_carries():
+    """His press on the post card is his yes for the site's Post of exactly its words - and the check read only the words: the agent could put
+    any picture beside them, or one where the card had none, and it went up on his one press. The picture is checked where code can see it -
+    what was uploaded in the session since his press, by its content, against the picture pinned on his card. Where that does not hold, the
+    final Post waits for his press, saying so. Invented people."""
+    from taskuary import connectorcatalog as cat, outputs
+    site = 'https://' + cat.by_type('x')['hosts'][0]
+    s = MemoryStore(); tid = Factory(s).task('Post the four-day close')
+    d = outputs.folder(tid); d.mkdir(parents=True, exist_ok=True)
+    (d / 'close.png').write_bytes(b'the chart he saw'); (d / 'other.png').write_bytes(b'another picture')
+    words = 'Day four, done. Northwind closes the month in four days.'
+    snap = '- textbox "What is happening?!" [ref=e9]\n- button "Add photo" [ref=e10]\n- button "Post" [ref=e11]'
+    speaks = {'big': True, 'kind': 'speaks', 'sure': True, 'irreversible': True, 'what': 'Post to your X account'}
+    def handed(pic):
+        s._exec("UPDATE review SET Status='closed_unsent' WHERE TaskId=?", (tid,)); bg.PUBLISHING.clear(); bg.UPLOADS.clear()
+        post = {'action': 'run_tool', 'type': 'x_post', 'network': 'X', 'text': words, **({'image': pic, proposals.PINNED: proposals.picture_print(tid, {'image': pic})} if pic else {})}
+        card = s.add_review({'TaskId': tid, 'Kind': 'action', 'Status': 'pending', 'DraftText': json.dumps(post), 'Reason': 'the agent proposes to post on X'})
+        s.decide_review(card, 'approved', json.dumps({**post, 'result': {'browser': True}}), 'owner')            # ...he pressed Post via the browser
+    def upload(name):
+        with mock.patch.object(bg, 'outcome', lambda *a, **k: ''), mock.patch.object(bg, 'did', lambda *a, **k: ''):
+            bg.after(s, tid, 'run1', f"agent-browser upload '@e10' '{d / name}'", 0)
+    def click():
+        pg = {'url': site + '/compose/post', 'open': True, 'elements': snap, 'name': 'X', 'fields': [{'k': 'text', 't': 'textarea', 'f': 0, 'v': words}]}
+        with mock.patch.object(bg, 'page', return_value=pg), verdict(speaks), mock.patch.object(bg, 'watch', None), \
+             mock.patch.object(bg, '_run', lambda sid, a, w, t: (0, '')), mock.patch('taskuary.signin.acting', lambda *a, **k: None):
+            out = bg.check(s, tid, 'run1', "agent-browser click '@e11'", Brain(None))
+        held = [json.loads(r['DraftText']) for r in s._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action' AND Status='pending'", (tid,))]
+        return out, held
+    handed('close.png'); upload('close.png')
+    assert click() == ({}, []), 'his words and the picture his card carries: no second card'
+    for why, pic, up in (('no picture on the page is known to be his', 'close.png', None), ('another picture than his card\'s', 'close.png', 'other.png'),
+                         ('a picture where his card had none', None, 'other.png')):
+        handed(pic)
+        if up: upload(up)
+        out, held = click()
+        assert out['hookSpecificOutput']['permissionDecision'] == 'deny' and len(held) == 1, why
+        assert 'picture' in held[0]['why'], (why, held[0])
+
+
 def test_an_enter_in_the_box_of_a_post_he_handed_over_is_a_line_of_it_never_a_second_post_card():
     """Walk 24, 2026-11-25 (the Claude CLI): writing the X post he had handed over, the agent pressed Enter for a line break in the post box,
     and the judge called the key "Post ... to your X account" - a second card for one post, which the agent withdrew itself. A fact of the

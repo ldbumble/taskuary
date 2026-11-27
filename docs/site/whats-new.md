@@ -2,6 +2,19 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.4.6.8 - 2026-11-27
+
+- A sender-verification result counts only above the hop the receiving server wrote
+- A routine's change card draws every field of a step it adds, and its press saves only what it drew
+- A session's call is filed under the name its token may carry, never the owner's
+- A gate that cannot answer holds: its own threads, a cap on parked waits, and no let-through on a timeout
+- What a process holds under /proc waits for the owner; the system's own files there stay free
+- An agent's own tools read and act through its task's profile, by one check
+- A new email that names no From leaves from its task's own profile
+- A read whose words carry what the line read is a send, held like one
+- A session reads its own task's drafts and cards, never another task's
+- What a card showed beside its words is what its press sends: the envelope and the files
+
 ## 0.4.6.7 - 2026-11-26
 
 - A calendar invite lights Accept and Decline, and a task he answered reads answered

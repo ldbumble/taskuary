@@ -380,9 +380,38 @@ def test_an_empty_reply_box_in_front_is_never_told_as_waiting_for_his_press():
     s._exec('UPDATE review SET Batch=NULL WHERE ReviewId=?', (act,))
     s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'How many bags should I confirm?')
     cardqueue._SEEN.clear()
-    assert cardqueue.state(s, tid)['live'] == [box], 'the shape: the empty box is in front of the card its agent raised'
     said = cardqueue.screen(s, tid)
-    assert 'Waiting for his press now' not in said and 'no words in it' in said and 'paula@vendor.example' in said, said
+    assert 'no words in it' in said and 'paula@vendor.example' in said and said.count('Waiting for his press now') == 1, said
+    assert 'Waiting for his press now: the reply' not in said, said
+
+
+def test_an_empty_reply_box_never_holds_a_card_that_can_be_pressed():
+    """Walk 26, 2026-11-27, all three roads: a colleague's mail put an empty reply box on the task as it arrived - Send off, no Dismiss - and
+    its agent asked what to say. Every card raised after it (a move to another profile, a post) waited behind the box for good: raised, drawn
+    nowhere, and told to him as "ready". What waits in front must be pressable: the agent's card stands in front and is drawn, the box stays
+    lit where it was drawn, still his to type into - and his press on the card ends the row, box or no box. Invented people."""
+    from taskuary import cardqueue, conversation, general
+    s, tid = world()
+    mid = s.add_message({'TaskId': tid, 'ExternalId': 'g1', 'Channel': 'email', 'FromName': 'Gail Moreno', 'FromEmail': 'gail@northwind.example',
+                         'ToEmail': 'alex@northwind.example', 'Subject': 'Flour order', 'BodyText': 'Twenty bags as usual? Gail', 'Status': 'routed'})
+    conversation.hear(s, tid, turn=True)
+    box = _rv(s, tid, mid, text='')
+    s.set_review_draft_needs(box, 'the number of bags')
+    s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'I will write to Gail once the order is settled.')
+    cards = lambda: {c['review']: c['status'] for x in chatlog.read(s, tid)['items'] for c in ([x] if x['kind'] == 'card' else x.get('cards') or [])}
+    assert cards() == {box: 'pending'} and cardqueue.state(s, tid)['live'] == [box], 'alone, the box is the one thing in front'
+    conversation.hear(s, tid, [general.new_line_id()], standing=True, turn=True)
+    act, then = (_rv(s, tid, act=w) for w in ('move this task to Northwind', 'tell Gail it moved'))
+    s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'The move card is ready.')
+    cardqueue._SEEN.clear()
+    q = cardqueue.state(s, tid)
+    assert (q['live'], q['held'], cardqueue.alone(q)) == ([act], [then], [str(box)]), q
+    assert cardqueue.line(q).startswith('1 of 2'), 'the box is no one of the line the cards stand in'
+    assert cards() == {box: 'pending', act: 'pending'}, 'both drawn: the card to press, and the box where it stood'
+    assert not cardqueue.row_over(s, tid)
+    for r in (act, then): s.decide_review(r, 'approved', None, 'owner'); cardqueue._SEEN.clear()
+    assert cardqueue.row_over(s, tid), 'a box with nothing to press keeps no agent from its next step'
+    assert cards()[box] == 'pending' and cardqueue.state(s, tid)['live'] == [box]
 
 
 def test_a_tab_he_said_no_to_is_marked_so_never_as_one_that_went():

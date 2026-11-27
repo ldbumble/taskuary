@@ -167,7 +167,7 @@ def _units(store, tid: int, past: set) -> list:
 # once; the agent is woken when the row is over, or at once by a press that fails (general.failed). THE ONE ANSWER to "is the row finished"
 def row_over(store, tid: int) -> bool:
     "Does nothing on task `tid` wait for his press? A card its press handed to the agent to do (handed) is the agent's now, not his."
-    return not any(u['rids'] == [LAND] or _waits(u) for u in state(store, tid)['units'])
+    return not any(pressable(u) and (u['rids'] == [LAND] or _waits(u)) for u in state(store, tid)['units'])
 
 
 def unheard(store, tid: int) -> list:
@@ -296,6 +296,11 @@ def _state(store, tid: int) -> dict:
     from .proposals import written_past
     us = _units(store, tid, past := written_past(store, int(tid)))
     waiting = [u for u in us if u['done'] is None]
+    # ...WHAT WAITS IN FRONT MUST BE PRESSABLE (walk 26, 2026-11-27: an empty reply box put up as the mail arrived - Send off, no Dismiss - stood
+    # in front for good, and the card its agent raised behind it was drawn nowhere while the agent said it was there): a card with nothing on
+    # it to press holds no card that has. It stays lit where it is drawn, beside the line (`fronts`), and is no one of the line's count
+    boxes = [u for u in waiting if not pressable(u)] if any(pressable(u) for u in waiting) else []
+    us, waiting = ([u for u in xs if not any(u is b for b in boxes)] for xs in (us, waiting))
     # ...the run it is one of: each card that stood for his press, raised while the one before it still waited or with nothing of his between
     runs = _runs(store, tid, [u for u in us if _stood(u)])
     if not waiting: return {'live': [], 'held': [], 'n': 0, 'of': 0, 'next': '', 'units': [], 'runs': runs, 'past': past, 'fronts': []}
@@ -308,7 +313,14 @@ def _state(store, tid: int) -> dict:
     # queued, the front is drawn, and its agent hears the row once it is over (row_over)
     live = front['rids']
     return {'live': live, 'held': held, 'n': n, 'of': len(run), 'next': what(store, waiting[1]) if len(waiting) > 1 else '', 'units': waiting,
-            'runs': runs, 'past': past, 'fronts': [u['rids'] for r in runs if (u := _front(r)) and u is not front]}
+            'runs': runs, 'past': past, 'fronts': [u['rids'] for r in runs if (u := _front(r)) and u is not front] + [b['rids'] for b in boxes]}
+
+
+def pressable(u: dict) -> bool:
+    """Has this card anything on it to press - his, or (handed) its agent's to finish? All but a reply box nobody has written: its Send is off
+    until it holds words, and it has no Dismiss. By the words its row holds, never what he is typing into it: his typing moves no card."""
+    from .conversation import DRAFTS
+    return not u['rows'] or any(r['Kind'] not in DRAFTS or str(r.get('DraftText') or '').strip() for r in _waits(u)) or any(handed(r) for r in u['rows'])
 
 
 def _front(run: list) -> dict | None:

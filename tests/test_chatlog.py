@@ -1032,24 +1032,25 @@ def test_the_answer_draws_only_what_its_words_did_not_say_a_file_by_its_name_or_
     assert unsaid('Two vendor files.', []) == 'Two vendor files.' and unsaid('Two vendor files.', [{'k': 'tool'}]) == 'Two vendor files.'
 
 
-def test_a_permission_asked_is_its_calls_update_with_the_agents_options_and_clears_when_it_runs():
-    """THE ASK BELONGS TO THE CALL'S ROW (the ACP spec: a request_permission's toolCall IS that call's update; Zed draws it in the call's card):
-    Codex announces a read with no input and asks for it with the input and its own kind - the ask fills only what the call left out, the row
-    carries the agent's options while it waits, and they are gone from it once the call runs."""
+def test_a_permission_asked_fills_its_calls_gaps_and_is_never_a_row_of_its_own():
+    """THE ASK BELONGS TO THE CALL'S ROW (the ACP spec: a request_permission's toolCall IS that call's update): Codex announces a read with no
+    input and asks for it with the input and its own kind - the ask fills only what the call left out. gate.check answers every ask, so nothing
+    of it is drawn: an ask for a call the agent never announced (Codex's MCP approval) stood as a row "MCP tool call approval"."""
     from taskuary import acp, conversation
     s, tid = world()
     conversation.hear(s, tid, turn=True)
     put = lambda u: chatlog.feed(s, tid, 'sid1', 'acp', u)
+    opts = [{'optionId': 'ok', 'name': 'Yes', 'kind': 'allow_once'}, {'optionId': 'no', 'name': 'No', 'kind': 'reject_once'}]
     put({'sessionUpdate': 'tool_call', 'toolCallId': 'call_9', 'kind': 'read', 'title': 'Read', 'status': 'pending'})
     put(acp.asked_update({'toolCall': {'toolCallId': 'call_9', 'kind': 'execute', 'title': "powershell.exe -Command 'Get-Content notes.md'",
-                                       'rawInput': {'command': ['powershell.exe', '-Command', 'Get-Content notes.md']}},
-                          'options': [{'optionId': 'ok', 'name': 'Yes', 'kind': 'allow_once'}, {'optionId': 'no', 'name': 'No', 'kind': 'reject_once'}]}))
-    row = lambda: next(x for x in chatlog.read(s, tid, 'everything')['items'][-1]['steps'] if x['k'] == 'tool')
-    r = row()
-    assert (r['title'], r['tool_kind'], r['call']) == ('Read', 'read', 'call_9'), 'what the call said stands; the ask only fills its gaps'
-    assert r['text'] == 'Get-Content notes.md' and [o['name'] for o in r['ask']] == ['Yes', 'No'], r
-    put({'sessionUpdate': 'tool_call_update', 'toolCallId': 'call_9', 'status': 'in_progress'})
-    assert not row().get('ask'), 'answered and running: nothing waits on the row'
+                                       'rawInput': {'command': ['powershell.exe', '-Command', 'Get-Content notes.md']}}, 'options': opts}))
+    put(acp.asked_update({'toolCall': {'toolCallId': 'mcp_elicit_1', 'title': 'MCP tool call approval', 'kind': 'other'}, 'options': opts}))
+    # ...and one asked before its call said anything is that call's row once the call's own update comes (a push held, then failed)
+    put(acp.asked_update({'toolCall': {'toolCallId': 'k-held', 'title': 'git push origin main', 'kind': 'execute'}, 'options': opts}))
+    put({'sessionUpdate': 'tool_call_update', 'toolCallId': 'k-held', 'status': 'failed'})
+    rows = [x for x in chatlog.read(s, tid, 'everything')['items'][-1]['steps'] if x['k'] == 'tool']
+    assert [(r['title'], r['tool_kind'], r['call']) for r in rows] == [('Read', 'read', 'call_9'), ('git push origin main', 'execute', 'k-held')],         'what the call said stands; an ask alone is no row'
+    assert rows[0]['text'] == 'Get-Content notes.md' and 'ask' not in rows[0], rows[0]
 
 
 def test_a_plan_is_one_row_replaced_whole_and_the_sessions_state_is_no_row():

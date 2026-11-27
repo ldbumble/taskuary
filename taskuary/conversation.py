@@ -416,7 +416,7 @@ def _served(u):
 
 def acp_steps(updates: list) -> list:
     "An ACP session's kept updates (codingchat.record_update) as steps - {k, text|name+args, at} - with each step's place (`n`) and its `line`."
-    out, by, compacts = [], {}, {}
+    out, by, compacts, asks = [], {}, {}, {}
     def chunk(k, t, at, **x):
         if not t: return
         # ...ONE MESSAGE IS ONE STEP: the adapter names the message each chunk is of (`messageId`), and two messages said back to back in one
@@ -452,20 +452,22 @@ def acp_steps(updates: list) -> list:
             if was is not None and out[was]['k'] == 'plan': out[was] = {**out[was], 'items': p['items']}
             else: out.append(p)
         elif kind in ('tool_call', 'tool_call_update'):
-            s = by.get(u.get('toolCallId'))
+            s, ask = by.get(u.get('toolCallId')), _meta(u, 'taskuary', 'ask') is not None
             if not s:
-                if kind == 'tool_call_update' and not (u.get('rawInput') or u.get('title') or u.get('kind')): continue
+                # ...A PERMISSION ASKED IS NO STEP OF ITS OWN (gate.check answers it; nothing draws the ask): one for a call not announced yet
+                # waits for that call's own first update - Codex's MCP approval, never followed under its id, stood as "MCP tool call approval"
+                if ask: asks[u.get('toolCallId')] = u; continue
+                if (a := asks.pop(u.get('toolCallId'), None)): u = {**a, **u, '_meta': u.get('_meta') or {}}
+                elif kind == 'tool_call_update' and not (u.get('rawInput') or u.get('title') or u.get('kind')): continue
                 s = by[u.get('toolCallId')] = {'k': 'tool', 'id': str(u.get('toolCallId') or ''), 'at': at, 'args': {},
                                                'name': _meta(u, 'taskuary', 'tool') or _meta(u, 'claudeCode', 'toolName') or _ACP_TOOL.get(u.get('kind')) or
                                                u.get('title') or u.get('kind') or 'tool'}
                 out.append(s)
             # ...A PERMISSION ASKED FOR IT is its update too (acp.asked_update): it fills what the call's own updates left out - never what they
-            # said (Codex asks with its own kind, the command wrapped) - and the call waits on the answer with the agent's options, until it runs
-            if (ask := _meta(u, 'taskuary', 'ask')) is not None:
-                s['ask'] = ask
+            # said (Codex asks with its own kind, the command wrapped)
+            if ask:
                 u = {k: v for k, v in u.items() if k in ('toolCallId', 'locations', '_meta') or k == 'rawInput' and not s['args']
                      or k == 'title' and not s.get('title') or k == 'kind' and not s.get('tool_kind')}
-            elif u.get('status') in ('in_progress', 'completed', 'failed'): s.pop('ask', None)
             # ...AND THE AGENT'S OWN WORDS FOR IT (the owner, 2026-11-23: adopt the open-source model): its title as it upgrades it, its kind, its
             # files - what the row says (agentSteps.stepsOf); ours only for Taskuary's own tools and a road that gives none (acp_of_trace)
             if isinstance(u.get('title'), str) and u['title'].strip(): s['title'] = u['title'].strip()[:300]

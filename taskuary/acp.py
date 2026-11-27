@@ -57,11 +57,10 @@ class ACPStartError(ACPAgentError):
 
 def asked_update(params: dict) -> dict:
     """A session/request_permission as the update of its call it is (the spec: its toolCall IS a ToolCallUpdate for that call), marked as the
-    ask, with the agent's own options by their names - so the call's row is where it is asked (conversation.acp_steps). {} without a call."""
+    ask - it fills only the gaps of a call the agent announced, and is never a row of its own (conversation.acp_steps). {} without a call."""
     tc = (params or {}).get('toolCall') or {}
     if not isinstance(tc, dict) or not tc.get('toolCallId'): return {}
-    opts = [{'id': o.get('optionId'), 'name': o.get('name'), 'kind': o.get('kind')} for o in params.get('options') or [] if isinstance(o, dict)]
-    meta = {**(tc.get('_meta') or {}), 'taskuary': {'ask': opts}}
+    meta = {**(tc.get('_meta') or {}), 'taskuary': {'ask': True}}
     return {**{k: v for k, v in tc.items() if k != 'status'}, 'sessionUpdate': 'tool_call_update', '_meta': meta}
 
 

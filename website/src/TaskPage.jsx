@@ -2719,8 +2719,8 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
         {...(sentHere?.id === r.ReviewId ? { closing: sentHere.closing, kept: sentHere.kept } : {})} /> }))];
   // ...the reply that went is that card in its turn, so the chat's cards say it no second time - no "What was sent", no To over it
   const sentCarded = !!sentReview && turnCards.some((c) => c.key === `sent:${sentReview.ReviewId}`);
-  // ...the reply in it only once it is written or something was said about it (replyCardShown): a reply owed that nobody wrote is the agent's
-  // to draft - never an empty box at the chat's foot. A to-do no agent has touched (no turns) keeps its card over its box: there it is the way in
+  // ...the reply in it only once it is written (replyCardShown): a reply owed that nobody wrote is the agent's to draft - never an empty box
+  // in the chat. A to-do no agent has touched (no turns) keeps its card over its box: there it is the way in
   const chatReview = !inTurns ? pendingReview : null;        // ...in a chat with turns the reply is its turn's card (replyNode)
   const chatBody = (pendingReview = chatReview) => <>
       {/* HAND IT TO A PERSON, IN THE CHAT (the owner, 2026-10-29: "you click the button and the matching UI opens in its pane"): on

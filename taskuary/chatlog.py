@@ -1297,7 +1297,9 @@ def migrate(store, tid: int, legacy=None) -> bool:
     # since the list was built is no longer that list's - it is built again, and a log that never holds still is frozen by a later read
     for _ in range(FREEZE_TRIES):
         if (done := _migrate(store, tid, legacy)) is not None: return done
-    return False
+    # ...AND A LOG THAT NEVER HELD STILL IS FROZEN ONCE UNDER THE LOCK (macOS CI, 2026-11-26: a card raised by the read itself wrote the log on
+    # every try, the tries ran out, and the read drew the turn without its card): the list built while nothing else can write is the log's own
+    with store.lock: return bool(_migrate(store, tid, _legacy(store, tid)))
 
 
 FREEZE_TRIES = 3

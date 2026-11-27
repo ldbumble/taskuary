@@ -426,6 +426,20 @@ class ReadingOutside(unittest.TestCase):
         self.assertTrue(rg.command_paths(live, self.work) and set(rg.command_paths(live, self.work)) == {here}, rg.command_paths(live, self.work))
         self.assertTrue(rg.of_command(self.s, self.tid, live, self.work)[0])
 
+    @unittest.skipIf(os.name == 'nt' or not os.path.isdir('/proc/self'), '/proc is Linux')
+    def test_what_a_process_holds_waits_and_the_systems_own_files_are_read_freely(self):
+        """Red team round 6: /proc was open whole, as a program's folder is - so another process's environment (its tokens), command line,
+        memory and open files were read unasked. The system's account of itself and a process's plain facts still are; the rest waits."""
+        from taskuary import readgate as rg
+        held = lambda cmd: rg.of_command(self.s, self.tid, cmd, self.work)[0]
+        for cmd in ('cat /proc/1/environ', 'cat /proc/self/environ', f'cat /proc/{os.getppid()}/cmdline', 'cat /proc/*/environ', 'grep -ra TOKEN /proc',
+                    'head -c 64 /proc/self/mem', 'cat /proc/self/task/*/environ'):
+            self.assertTrue(held(cmd), cmd)
+        for cmd in ('cat /proc/cpuinfo', 'cat /proc/meminfo', 'cat /proc/self/status', 'cat /proc/1/stat', 'ls /proc', 'cat /proc/sys/kernel/hostname'):
+            self.assertEqual(held(cmd), [], cmd)
+        self.assertTrue(rg.judge(self.s, self.tid, ['/proc/1/environ'], self.work)[0], "a file tool's read is the same read")
+        self.assertEqual(rg.judge(self.s, self.tid, ['/proc/meminfo'], self.work)[0], [])
+
     @unittest.skipUnless(os.name == 'nt', '%ProgramData% is a Windows folder')
     def test_the_names_in_a_machine_wide_programs_folder_are_listed_and_what_its_files_hold_still_waits(self):
         """The real-CLI check, 2026-11-26: an agent looking for a converter ran `ls C:/ProgramData/chocolatey/bin | grep ffmpeg`, it was held

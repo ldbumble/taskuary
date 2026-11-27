@@ -62,6 +62,21 @@ def kept_secret() -> list:
     out = [Path(home()).resolve(), *(Path.home() / c for c in _CREDS)]
     return [p for p in dict.fromkeys(out) if p.exists()]
 
+# WHAT A PROCESS HOLDS IS NEVER THE SYSTEM'S OWN FILES (red team round 6: /proc was open whole, as a program's folder is - and under it sit
+# every process's environment, command line, memory and open files, where its tokens are). The one rule for both gates: the system's account
+# of itself (cpuinfo, meminfo, loadavg) and a process's plain facts (_PROC_FACTS) are anyone's to read; everything else under a process -
+# any pid, `self`, a glob or a variable in the pid's place - and /proc read whole, is what that process holds
+_PROC_FACTS = {'status', 'stat', 'statm', 'limits', 'comm', 'cgroup', 'sched', 'schedstat', 'oom_score', 'mounts', 'mountinfo'}
+def proc_kept(p) -> bool:
+    "Is rooted path `p` under /proc what a process holds, or /proc itself - never one of the system's own files or a process's plain facts?"
+    ps = [x for x in posixpath.normpath(str(p or '').replace('\\', '/')).split('/') if x]
+    if not str(p or '').replace('\\', '/').startswith('/') or ps[:1] != ['proc']: return False
+    ps = ps[1:]
+    if not ps: return True
+    if re.fullmatch(r'[a-z_][\w.-]*', ps[0], re.I) and ps[0].lower() not in ('self', 'thread-self'): return False
+    if ps[1:2] == ['task'] and len(ps) > 3: ps = ps[2:]                     # ...one of its threads is the process: /proc/<pid>/task/<tid>/environ
+    return not (len(ps) == 2 and ps[1].lower() in _PROC_FACTS)
+
 def _names() -> list:
     "Protected folders by their home-relative name, so `cd ~ && cat .ssh/x` and `../../.ssh/x` are seen without any root in sight."
     ns = [_cf(c) for c in _CREDS]
@@ -113,6 +128,7 @@ def _text_hit(text: str, own: list, prot: list, cwd: str = ''):
         rel = cur and '://' not in tok and not re.match(r'(/|[a-z]:/)', tok) and ('/' in tok or tok.startswith('..'))
         n = _pn(posixpath.join(cur, tok) if rel else tok); a = re.sub(r'^/(?=[a-z]:/)', '', n)   # "/c:/x" as bash on Windows writes it
         if _under(a, own): continue
+        if proc_kept(n): return f'it names {tok}, which is what a process holds'
         if _under(a, prot) or _above(a, prot) and re.match(r'([a-z]:)?/', a) or any(re.search(r'(^|/)' + re.escape(s) + r'(/|$)', n) for s in _names()):
             return f'it names {tok}'
     return ''
@@ -494,6 +510,7 @@ def check(payload: dict, tid: int, store=None) -> dict:
         if not inp.get(k): continue
         raw = _strip(inp[k])
         if raw.startswith('//'): return _deny(f'{inp[k]} is a network path')
+        if any(proc_kept(p) for p in (raw, *_forms(inp[k], cwd))): return _deny(f'{inp[k]} is what a process holds')
         for p in _forms(inp[k], cwd):
             if _under(p, prot) and not _under(p, own): return _deny(f'{inp[k]} is a protected file')
             if tool in _WRITE_TOOLS and _is_conf(p): return _deny(f'{inp[k]} is read as configuration, or run, by a later session of the owner')

@@ -102,7 +102,7 @@ def test_withdraw_by_its_marker_and_by_the_cli_door():
 def test_the_cli_and_tools_offer_withdraw():
     from taskuary import agenttools, cli, floor
     assert 'withdraw_draft' in cli.STRANGER_ACTS and '--withdraw-draft' in floor.TASKUARY_OK
-    assert 'withdraw_draft' in agenttools.TOOLS and 'withdraw_draft' not in agenttools.REPLY_TOOLS     # an own ask's emails are taken back too
+    assert 'withdraw_draft' in agenttools.TOOLS and 'reply_not_needed' not in agenttools.TOOLS     # one take-back tool, an own ask's emails too
 
 
 def test_the_owners_presses_since_the_last_turn_are_in_the_turns_context():

@@ -166,12 +166,14 @@ def test_a_meeting_for_next_week_is_offered_next_weeks_days_and_raised_again_it_
         mon = date.today() + timedelta(days=7 - date.today().weekday())
         days = {(mon + timedelta(days=i)).strftime('%b %#d' if __import__('os').name == 'nt' else '%b %-d') for i in range(5)}
         assert all(any(d in line for d in days) for line in s.get_review(first['review'])['DraftText'].splitlines() if line.startswith('- ')), s.get_review(first['review'])['DraftText']
+        # ...the same meeting again is the card that stands (a letter is new only with other words, or `replaces` - the card-tool design)
         again, bad = call(tid, 'set_up_meeting', **ask)
-        assert not bad and again['ok'] and again['review'] != first['review'], again
+        assert not bad and again['ok'] and again['review'] == first['review'], again
     done = next(i for i in slots.all_(s, tid) if i.get('rid') == first['review'])
     s.tick_checklist_item(tid, done['id'], True, 'owner')
-    no = slots.draft(s, tid, 'Another time?', 'ray@northwind.example', 'Meeting next week', done['id'], 'agent')
-    assert not no['ok'] and 'slot: "new"' in no['why'], no
+    # ...and a letter on a line already done is a new card of its own, never a refusal
+    more = slots.draft(s, tid, 'Another time?', 'ray@northwind.example', 'Meeting next week', done['id'], 'agent')
+    assert more['ok'] and more.get('review') != first['review'], more
 
 
 def test_with_no_calendar_a_meeting_is_an_email_proposing_the_time_and_a_person_he_named_on_another_task_is_known():

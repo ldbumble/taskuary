@@ -77,7 +77,7 @@ def test_an_automated_notice_has_nobody_to_reply_to_on_every_road():
     assert not out['ok'] and out['why'].startswith(wrapup.NOTICE) and s.list_reviews('pending') == []
     names = lambda t: {x['name'] for x in c.post(f'/api/mcp?task={t}', headers=hdr(t),
                                                 json={'jsonrpc': '2.0', 'id': 1, 'method': 'tools/list'}).json()['result']['tools']}
-    with mock.patch.object(server, 'store', s): assert not names(tid) & set(agenttools.REPLY_TOOLS)
+    with mock.patch.object(server, 'store', s): assert 'reply_not_needed' not in names(tid)
     # ...and once a person writes on the same thread, they are the one a reply answers
     pid = s.add_message({'TaskId': tid, 'ExternalId': 'n-2', 'ConversationId': 'c-9', 'Channel': 'email', 'FromName': 'Gail Moreno',
                          'FromEmail': 'gail@northwind.example', 'Subject': 'Re: Run failed', 'BodyText': 'Is main fixed?',
@@ -93,7 +93,7 @@ def test_the_reply_tools_are_not_offered_on_the_owners_own_ask():
     names = lambda tid: {t['name'] for t in c.post(f'/api/mcp?task={tid}', headers=hdr(tid),
                                                  json={'jsonrpc': '2.0', 'id': 1, 'method': 'tools/list'}).json()['result']['tools']}
     with mock.patch.object(server, 'store', s):
-        assert not names(own) & set(agenttools.REPLY_TOOLS) and set(agenttools.REPLY_TOOLS) <= names(mailed)
+        assert 'reply_not_needed' not in names(own) | names(mailed) and 'withdraw_draft' in names(own) & names(mailed)     # one take-back tool on both
         r = c.post(f'/api/mcp?task={own}', headers=hdr(own), json={'jsonrpc': '2.0', 'id': 2, 'method': 'tools/call',
                                                                    'params': {'name': 'propose', 'arguments': {'kind': 'reply', 'text': 'hi'}}}).json()['result']
         assert r['isError'] and 'nobody is behind this task' in r['content'][0]['text']

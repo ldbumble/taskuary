@@ -396,8 +396,8 @@ SHORT = {
     'answer_invite': "Answer this task's meeting invite: accept, decline or propose.",
     'set_up_meeting': "Set up a meeting for the owner's press, from who can make which times.",
     'share': "Share a report or dashboard of the owner's with a person.",
-    'propose': "One card for his press: a reply, an email, a post to its `networks` (a tab each), a routine, a GitHub push or PR - the "
-               "draft itself, his to edit; nothing runs till his press. `kind` says which; one act to many: `items`; versions to pick from: `versions`.",
+    'propose': "One card for his press: a reply, an email, a post to its `networks` (a tab each), a routine, a GitHub push or PR - his "
+               "to edit, run only at his press. `kind` says which; one act to many: `items`; versions to pick from: `versions`.",
     'find_tools': "A tool's instructions by name, or tools by need.",
 }
 def lean(s):

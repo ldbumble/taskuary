@@ -1428,7 +1428,7 @@ def take_corrections(store, tid: int, corrections) -> int:
             if not said or scrub(said) != said: continue
             if c.get('kind') == 'redraft':
                 rv = store.pending_review(tid, 'draft_reply')
-                if c.get('review') is not None and (not rv or rv.get('ReviewId') != c['review']): rv = next((r for r in store._rows('SELECT * FROM review WHERE ReviewId=? AND TaskId=?', (c['review'], tid))), None)
+                if (n := str(c.get('card', c.get('review')) or '').lower().removeprefix('rv')).isdigit() and (not rv or rv.get('ReviewId') != int(n)): rv = next((r for r in store._rows('SELECT * FROM review WHERE ReviewId=? AND TaskId=?', (int(n), tid))), None)
                 if not rv: continue
                 from . import byrecipient
                 byrecipient.keep_instruction(store, rv['ReviewId'], said)

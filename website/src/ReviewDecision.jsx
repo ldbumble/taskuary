@@ -258,7 +258,8 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onSent = null, t
   // sends: SENDING AND CLOSING ARE TWO STEPS (the owner, 2026-10-18) - the task's own Mark done is the close
   // ...a calendar card's press is its act, and a share's names who it is for (sharing.agent_share's `share`)
   const calWord = isCal ? CAL_PRESS[meta.act] : "", shareTo = String(meta.share?.to || "").split(/\s+/)[0];
-  const sendWord = calWord || (shareTo ? `Share with ${shareTo}` : btn("approve")), stays = `the task stays open until you ${btn("close")}`;
+  // ...and a letter from his other profile's mailbox moves its task there with the same press (workstreams.press_moves, the owner 2026-11-27)
+  const sendWord = calWord || (shareTo ? `Share with ${shareTo}` : r.Moves ? `Move to ${r.Moves.to} and send` : btn("approve")), stays = `the task stays open until you ${btn("close")}`;
   // A CHAT REPLY THAT PROMISES A FILE (U17): WhatsApp and the other chats carry words only, so a send went out with the promise and
   // without the file. The move becomes answering by email with the file; sending the words alone stays beside it.
   const chatFile = !proposal && !co && !isSlot && !r.Stale && !delivery.frozen && canSendIt
@@ -508,6 +509,7 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onSent = null, t
       ...(meta.clash ? [{ key: "clash", type: "read", label: "Clashes", value: `This ${meta.clash}.` }] : [])]
     // ...WHICH MAILBOX IT LEAVES FROM, where he has two (outbound.shown_from; walk 25: the agent said "goes from" one, the card said none)
     : email ? [...(r.From ? [{ key: "from", type: "read", label: "From", value: r.From }] : []),
+      ...(r.Moves && !shut ? [{ key: "moves", type: "read", label: "Moves", value: `this task from ${r.Moves.from} to ${r.Moves.to}, as it sends` }] : []),
       { key: "to", type: "to", value: replyContext(filedDelivery), editable: editing && !off, needs: needsTo, who: String(meta.needs || [].concat(meta.to || []).join(", ")),
         onSave: async (to) => { await api.put(`/api/reviews/${r.ReviewId}/envelope`, { to }); onChanged?.(); }, trail: ccLinks },
       ...(editing ? [...(ccOpen || ccNow.length ? [{ key: "cc", type: "people", label: "CC", value: ccNow, editable: true, onChange: setCc, autoOpen: ccOpen && !ccNow.length, onClose: () => setCcOpen(false) }] : []),

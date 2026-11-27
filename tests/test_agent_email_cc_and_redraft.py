@@ -30,13 +30,14 @@ def test_a_cc_that_is_no_address_is_refused_out_loud():
     assert slots.draft(s, tid, 'Hi', to='19:abc@thread.v2', channel='teams', cc=[GAIL])['ok'] is False
 
 
-def test_two_addresses_in_to_are_refused_at_the_draft_never_at_the_send():
+def test_two_addresses_in_to_are_one_email_to_both_never_one_recipient_at_the_send():
     # "paula@...; gail@..." (Outlook's own way of writing a list) stood on the card as ONE recipient, and failed only when the owner pressed
-    # Send - the provider refused the whole string. A mailto: link copied as the address went the same way
+    # Send - the provider refused the whole string. A mailto: link copied as the address went the same way. `to` is a list now (the card-tool
+    # design, 2026-11-27): a line holding two addresses is each of them, on one email
     s = MemoryStore(); tid = own_task(s, 'general')
-    for to in (f'{PAULA}; {GAIL}', f'{PAULA}, {GAIL}'):
+    for to in (f'{PAULA}; {GAIL}', f'{PAULA}, {GAIL}', [PAULA, GAIL]):
         out = slots.draft(s, tid, 'Hi both', to=to, subject='Q4')
-        assert out['ok'] is False and 'cc' in out['why'] and not waiting(s, tid), out
+        assert out['ok'] and deliver(s, out['review_id'])['to'] == [PAULA, GAIL], out
     out = slots.draft(s, tid, 'Hi Paula', to=f'mailto:{PAULA}', subject='Q4')
     assert out['ok'] and deliver(s, out['review_id'])['to'] == [PAULA]
 
@@ -69,12 +70,13 @@ def test_the_agents_email_fills_the_slot_it_names_rather_than_adding_another():
     s = MemoryStore(); tid = own_task(s, 'general')
     sid = slots.add(s, tid, [{'to': 'Ray Colton', 'about': 'The badge list'}], 'owner')[0]['id']
     with mock.patch.object(server, 'store', s):
-        out = json.loads(call(tid, 'propose_email', to='ray.colton@northwind.example', subject='The badge list', text='Hi Ray - the list.', slot=sid)[0])
+        out = json.loads(call(tid, 'propose_email', to='ray.colton@northwind.example', subject='The badge list', text='Hi Ray - the list.', todo=sid)[0])
     owed = slots.all_(s, tid)
     assert out['ok'] and [(i['id'], i.get('rid')) for i in owed] == [(sid, out['review_id'])]
     assert deliver(s, out['review_id'])['to'] == ['ray.colton@northwind.example'] and waiting(s, tid) == [('slot', out['review_id'])]
+    # ...named by the card's `todo`, the to-do it does (the card-tool design, 2026-11-27: `slot` folded into it)
     from taskuary import agenttools
-    assert 'slot' in agenttools.TOOLS['propose'][2]['properties'] and not agenttools.TOOLS['propose'][2].get('required')
+    assert 'slot' not in agenttools.TOOLS['propose'][2]['properties'] and not agenttools.TOOLS['propose'][2].get('required')
 
 
 def test_an_email_the_agent_rewrites_after_the_owner_prompted_is_a_new_card_the_old_one_its_record():
@@ -89,4 +91,5 @@ def test_an_email_the_agent_rewrites_after_the_owner_prompted_is_a_new_card_the_
     assert new != old
     assert s.get_review(old)['Status'] == 'closed_unsent' and s.get_review(old)['DecideNote'] == wrapup.REPLACED
     assert 'long version' in s.get_review(old)['DraftText'], 'the old card keeps its words'
-    assert slots.draft(s, tid, 'Hi Paula - short: Q4 is on track, numbers attached.', to=PAULA)['review_id'] == new, 'saved twice in its turn: in place'
+    again = slots.draft(s, tid, 'Hi Paula - short: Q4 is on track, numbers attached.', to=PAULA, slot=slots.of_review(s.get_review(new)), replaces=True)
+    assert again['review_id'] == new, 'saved again in its turn IN ITS PLACE: rewritten'

@@ -516,8 +516,8 @@ def agent_reply(store, task_id: int, text: str, agent: str = 'agent', run_id: in
     A message the work's answer already went to takes another only as a follow-up: `follow_up` (the agent says the owner
     asked for it) or the owner's own words in the conversation since the send.
     WHO HEARS IT IS THE AGENT'S CALL (the owner, 2026-11-06: "the agent decides who needs to know ... if it's sensitive only to that
-    person"): `answers` - the mail it replies to, an earlier one included; `only` - that mail's sender alone, nobody copied; `cc` - who
-    else is copied (replacing the thread's), an address not on the thread said so on the card; `why_to` - the one line the card says why.
+    person"): `answers` - the mail it replies to, an earlier one included; `only` - that mail's sender alone; `cc` - who else is copied, ON
+    TOP of the thread's own (with `only`: those alone), an address not on the thread said so on the card; `why_to` - the one line the card says why.
     `mailbox`: the From the agent named - checked as an email's is (slots.from_box), and a reply leaves from where its mail came in."""
     text = str(text or '').strip()
     if not text and files:
@@ -564,19 +564,24 @@ def agent_reply(store, task_id: int, text: str, agent: str = 'agent', run_id: in
         return {'ok': False, 'no_reply': True, 'why': f'{NOTICE} Nothing was saved.'}
     # ...AND A `from` IS NEVER DROPPED IN SILENCE (walk 25: a reply "from" another profile's mailbox answered ok, its card said no From, and
     # the agent told him it went from there): the one check an email's From gets, then the fact of where a reply leaves from
+    move = ''
     if mid and str(mailbox or '').strip():
         from .slots import from_box
-        box, why = from_box(store, task_id, mailbox, agent, 'reply from')
+        box, why = from_box(store, mailbox)
         if why: return {'ok': False, 'why': why}
-        from .outbound import Fixable, reply_box
-        try: own = reply_box(store, task_id, store.get_message(answers or mid) or {})       # ...its task's own profile's, once moved: the card's From
+        from .outbound import Fixable, mailboxes, reply_box, reply_from
+        from .workstreams import move_to, of_account
+        # ...ONE OF HIS OTHER PROFILE'S IS THIS CARD'S, ITS PRESS MOVING THE TASK THERE (workstreams.move_to, the owner's OK 2026-11-27): it then
+        # leaves from where a reply of the moved task does - the mailbox its mail came in on where that profile may use it, else the profile's own
+        move, msg = ('' if agent == 'owner' else move_to(store, task_id, box)), store.get_message(answers or mid) or {}
+        try: own = reply_box(store, task_id, msg) if not move else (came if (came := reply_from(msg)) and of_account(store, came) in ('', move) else
+                   next((m['address'] for m in mailboxes(store) if of_account(store, m['address']) == move), None))
         except Fixable as e: return {'ok': False, 'why': f'{e} - nothing was saved.'}
         if box.lower() != str(own or '').lower():
             return {'ok': False, 'why': (f'this reply leaves from {own}' if own else 'only an email leaves from a mailbox')
                                         + f' - nothing was saved. An email from {box} is its own email: kind email with `to` and `from`.'}
     # ...and who else hears it: `only` is the sender alone, so it copies nobody; an address the thread never had is said on the card
     ccs = _addrs(cc)
-    if only and ccs: return {'ok': False, 'why': '--only sends it to that one person - leave --cc out, or drop --only to copy others'}
     from .slots import is_address
     bad = [a for a in ccs or [] if not is_address(a)]
     if bad: return {'ok': False, 'why': f"{', '.join(bad)} is not an email address - nothing was saved"}
@@ -629,7 +634,10 @@ def agent_reply(store, task_id: int, text: str, agent: str = 'agent', run_id: in
     named = None
     if ans or only or ccs is not None:
         from .outbound import reply_envelope
-        if (named := reply_envelope(store, m, 'reply_to' if only else 'reply_all')) and ccs is not None: named = {**named, 'cc': [a for a in ccs if a not in named['to']]}
+        # ...a `cc` ADDS to who the thread copies (the card-tool design, 2026-11-27: "reply, and copy Gail" dropped everyone already on it) -
+        # `only` is the one way to narrow: the sender, and those it names
+        if (named := reply_envelope(store, m, 'reply_to' if only else 'reply_all')) and ccs is not None:
+            named = {**named, 'cc': [a for a in dict.fromkeys([*(named.get('cc') or []), *ccs]) if a not in named['to']]}
     chose = bool(str(to or '').strip() or answers or only or ccs is not None)
     mine = next((r for r in (held, live) if r and his_hand(store, r) and (
         _words(r.get('DraftText')) != _words(text) or repoints(r, named if chose else None, files))), None)
@@ -645,7 +653,7 @@ def agent_reply(store, task_id: int, text: str, agent: str = 'agent', run_id: in
     # ...and why it goes to whom it goes, when the agent chose: the card says it beside the To and Cc
     pick = ' '.join(str(why_to or '').split())[:300]
     if only or ccs is not None or pick:
-        why += f" - {'only to the sender' if only else 'recipients chosen by the agent'}{': ' + pick if pick else ''}"
+        why += f" - {'only to the sender' + (' and ' + ', '.join(ccs) if ccs else '') if only else 'recipients chosen by the agent'}{': ' + pick if pick else ''}"
         if new: why += f" (copies {', '.join(new)}, not on this thread before)"
     if held:
         rid = held['ReviewId']; store.unhold_review(rid, why)
@@ -668,6 +676,9 @@ def agent_reply(store, task_id: int, text: str, agent: str = 'agent', run_id: in
         if (env := named or reply_envelope(store, m, 'reply_to' if only else 'reply_all')): store.set_review_envelope(rid, env)
     if mine and not (str(to or '').strip() or answers or only or ccs is not None) and (his := store.review_envelope(mine['ReviewId'])):
         store.set_review_envelope(rid, his)
+    # ...and the move its press makes, and the From it leaves with, ride on its envelope - none where this save names none
+    if not stands and (env := store.review_envelope(rid)) and (env.get('move') or move):
+        store.set_review_envelope(rid, {**{k: v for k, v in env.items() if k not in ('move', 'mailbox')}, **({'move': move, 'mailbox': box} if move else {})})
     from .signatures import agent_signed, for_review
     wrote = str(text or '').strip()
     text = agent_signed(store, store.get_review(rid) or rv, text, m) or text
@@ -694,9 +705,10 @@ def agent_reply(store, task_id: int, text: str, agent: str = 'agent', run_id: in
     # answer said "This card carries no file" beside "attached": [4 files]
     att = _told(store, rid, attach_files(store, rid, [] if stands else files, agent))
     from .outbound import leaves_from
+    from .slots import moves_said
     return {'ok': True, 'review_id': rid, 'message_id': mid, 'answers': ans or mid, 'to': m.get('FromName') or m.get('FromEmail') or '', **ends, **carries(store, rid),
             **({'from': box} if (box := leaves_from(store, store.get_review(rid) or {})) else {}),
-            **({'owner_wrote_on_the_thread_while_you_worked': meanwhile} if meanwhile else {}),
+            **({'new_on_thread': new} if new else {}), **moves_said(store, task_id, move, box),
             **({'replaced_the_owners_version': str(typed(mine) or mine.get('DraftText') or '')} if mine else {}),
             **({'recipients': {'to': env.get('to') or [], 'cc': env.get('cc') or []}} if env else {}),
             **({'new_on_thread': new} if new else {}),

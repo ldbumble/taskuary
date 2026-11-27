@@ -15,6 +15,7 @@ question or a page step through workerstate.answer. The desk, the phone and the 
 events read of the presses since its cursor."""
 import json, re
 from contextlib import contextmanager
+from datetime import datetime
 
 from . import cardqueue as cq
 
@@ -396,6 +397,17 @@ def _todos(store, rid) -> set:
         except ValueError: d = {}
         if d.get('todo'): out.add(str(d['todo']))
     return out
+
+
+# ...AND A TICK MADE BESIDE A CARD THAT WAITS IS THAT CARD'S (the card-tool design, 2026-11-27, the owner's OK; walks 25-26: an agent raised the
+# post and ticked "post on X" at once, and the task read done while nothing had gone): the to-do is tied to the cards its turn raised that
+# still wait, ticked by `went` as his press goes - never by his no
+def tie(store, tid, todo: str, since: float) -> list:
+    "The cards raised on task `tid` since `since` (epoch) that still wait, each now doing to-do `todo`: their ids, [] for none."
+    at = datetime.fromtimestamp(int(since)).isoformat(sep=' ', timespec='seconds')
+    rids = [r['ReviewId'] for r in store._rows("SELECT ReviewId FROM review WHERE TaskId=? AND Status IN ('pending','held') AND CreatedAt>=?", (int(tid), at))]
+    for rid in rids: store.audit('review', rid, FULFILS, 'agent', 'agent', {'todo': todo})
+    return rids
 
 
 def went(store, rv: dict) -> list:

@@ -145,7 +145,7 @@ TOOLS = {
                         "sentences: who asked, for whom. did: result first, then what you did. "
                         "on_you: owner-only steps no card or question carries, each with why. nothing_left: goal met and "
                         "checked. answer_is_result: your words are what was asked. retry: another try may work. corrections: [{kind: "
-                        "redraft|ask, review: draft id|null, said: his words}].",
+                        "redraft|ask, card: draft id|null, said: his words}].",
                  _S({'name': _STR, 'about': _STR, 'did': _STR, 'on_you': {'type': 'array', 'items': _STR}, 'nothing_left': {'type': 'boolean'},
                      'answer_is_result': {'type': 'boolean'}, 'retry': {'type': 'boolean'}, 'corrections': {'type': 'array', 'items': {'type': 'object'}},
                      'check_back': {'type': 'object', 'properties': {'when': _STR, 'what': _STR}}}, ('did',)), ('GET', '/api/tasks/1')),
@@ -220,21 +220,19 @@ TOOLS = {
                                 "until the owner presses.",
                      _S({'how': {'type': 'string', 'enum': ['rebase', 'merge', 'pr', 'discard', 'push']}, 'why': _STR, 'deploy': _STR}, ('how',)),
                      ('POST', '/api/agent/propose-land')),
-    'reply_not_needed': ('own', "The reply waiting here is no longer needed (someone else answered, the owner already did); `why` in "
-                                "one line. The draft is put down - kept under Not sent, never sent or deleted - and the page shows only "
-                                "your turn saying so.", _S({'why': _STR}, ('why',)), ('POST', '/api/agent/not-needed')),
-    'withdraw_draft': ('own', "Take back something you set up here that has not gone out - the reply, an email, a post, another "
-                              "proposal. `which`: what it is or who it "
-                              "was to, as the screen fact names it (a card of many: all its ids, 'rv1 + rv2'); none for the reply. `why`: one line on what changed."
-                              " It is kept under Not sent with the owner's Bring it back; what already went is never touched. A new "
-                              "reply takes the old one's place; an email IN PLACE of another is the new one's `replaces` - "
-                              "one call, one Send left.",
-                       _S({'why': _STR, 'which': _STR}, ('why',)), ('POST', '/api/agent/withdraw-draft')),
+    # ...ONE TAKE-BACK TOOL, AND THE CARD IS ITS `card` ON EVERY TOOL (the card-tool design, 2026-11-27, the owner's OK): reply_not_needed was
+    # this with no card, and the same card was `which`, `replaces`, `card` or `review` by the tool - the old names are still read (aliased)
+    'withdraw_draft': ('own', "Take back something you set up here that has not gone out - a reply no longer needed (someone else answered, "
+                              "the owner already did), an email, a post, another proposal. `card`: its id or who it was to, as the screen "
+                              "fact names it (a card of many: 'rv1 + rv2'); none for the reply. `why`: one line on what changed. It is kept "
+                              "under Not sent with the owner's Bring it back; what already went is never touched. A new card IN PLACE of "
+                              "another is the new one's `replaces` - one call, one Send left.",
+                       _S({'why': _STR, 'card': _STR}, ('why',)), ('POST', '/api/agent/withdraw-draft')),
     'keep_card': ('own', "A card the owner's newest line or a new message greyed comes back under the newest line at once, the same words "
-                         "and envelope. `which`: the card as the screen fact "
+                         "and envelope. `card`: the card as the screen fact "
                          "names it (a card of many: its ids, 'rv1 + rv2'). "
                          "One his press handed you that you cannot do (no account, the site refused): keep it with `why` - his card says it.",
-                  _S({'which': _STR, 'why': _STR}, ('which',)), ('GET', '/api/tasks/1')),
+                  _S({'card': _STR, 'why': _STR}, ('card',)), ('GET', '/api/tasks/1')),
     'hand_over': ('own', "A step on your browser's page only the owner can do - a sign-in or code you cannot type, an \"I'm not a robot\" "
                          "check, paying, a fact only he knows. Taskuary signs in by itself where it keeps what is needed, else hands him "
                          "ONE card on that page; you are told when it is done. `what`: the step in a "
@@ -265,10 +263,11 @@ TOOLS = {
                                   " `guessed` is marked guessed on the invite card), `title`, `minutes`"
                                   " (15, 30, 45, 60). With no `start`/`end` it takes the first time free on the owner's calendar and "
                                   "theirs where it can see it; `within` (this_week, next_week) narrows the days. The owner's calendar"
-                                  " adds a Teams or Meet link unless `online` is false. `note`: the invite's words. An invite card "
-                                  "with the owner's Send invite - nothing is sent until they press it.",
+                                  " adds a Teams or Meet link unless `online` is false. `note`: the invite's words. `replaces`: the "
+                                  "unsent card it takes the place of. An invite card with the owner's Send invite - nothing is sent until "
+                                  "they press it.",
                        _S({'with': {'type': 'array', 'items': _STR}, 'title': _STR, 'minutes': _INT, 'within': _STR, 'start': _STR, 'end': _STR,
-                           'note': _STR, 'online': {'type': 'boolean'}, 'guessed': {'type': 'array', 'items': _STR}}, ('with', 'title')),
+                           'note': _STR, 'online': {'type': 'boolean'}, 'guessed': {'type': 'array', 'items': _STR}, 'replaces': _STR}, ('with', 'title')),
                        ('POST', '/api/agent/meeting')),
     'share': ('propose', "Share a report or dashboard of the owner's - one they have, or a routine saved from this task (search_tasks finds it): `report` its number (the N of #report=N), `to` the person, `text` the"
                          " message with it - what it shows, the numbers that matter. `via`: chat (this task's chat with them) or "
@@ -279,18 +278,18 @@ TOOLS = {
     # ANYTHING FOR HIS REVIEW IS ONE TOOL, ONE CARD (the owner, 2026-11-24: "anything that requires review should be a white artifact with
     # editable text instead of hard coding post"): a post had a tool of its own and a run_tool shape, a reply and an email two more, and an
     # agent asked for three posts found none of them and wrote prose. One door; its `kind` is the road the press takes (_review) - the card is
-    # the same editable raised card whatever it holds. ...`slot` (the agent walk, 2026-11-10): triage had put "an email to Ray Colton" on the
+    # the same editable raised card whatever it holds. ...`todo` (the agent walk, 2026-11-10): triage had put "an email to Ray Colton" on the
     # task; the agent names the checklist line it fills - no name is matched here
     'propose': ('propose', "Anything for the owner's review and press: one card in this chat - the draft itself, its words his to edit - and nothing "
                            "happens until he presses it. `kind` is where it goes on the press:\n"
                            "- reply: to a person on this task, on the channel of the message it answers (email, WhatsApp, Teams...). `to`: a "
                            "name or address, else the newest message's sender. `answers`: the number of the message it replies to (THE MAIL "
-                           "ON THIS TASK). `only: true` to that mail's sender alone, `cc` instead of the thread's own, `why_to` one line on "
-                           "why - the card shows it. A new reply takes the old one's place.\n"
-                           "- email: `to`, `subject` (back to someone who mailed on this task, their subject with \"Re: \"), `text`; `cc`; "
-                           "`from` a connected mailbox (list_systems names them) - else the one this task's mail came in on; `slot` the id "
-                           "of the checklist line it is (\"-> email to ..., slot <id>\"), \"new\" for a second, separate email to someone "
-                           "you already wrote to this turn; `guessed` any address on it you guessed - the card says so.\n"
+                           "ON THIS TASK). `only: true` to that mail's sender alone (with `cc`: and those), `cc` copied beside the thread's "
+                           "own, `why_to` one line on why - the card shows it. A new reply takes the old one's place.\n"
+                           "- email: `to` (a list: one email to all of them), `subject` (back to someone who mailed on this task, their "
+                           "subject with \"Re: \"), `text`; `cc`; `from` a connected mailbox (list_systems names them; one of his other "
+                           "profile's: his press moves this task there and sends) - else the one this task's mail came in on; `guessed` any "
+                           "address on it you guessed - the card says so.\n"
                            "- post: `networks`, every network it goes to (" + ', '.join(NETWORKS) + "), each {network} or with its own "
                            "`text`, `media`, `subreddit`, `title` (Reddit's); beside them `text`, `media` a picture or video file in your task folder, `link` - for "
                            "each network that gives none. ONE card, a tab per network, each pressed by itself; "
@@ -314,11 +313,11 @@ TOOLS = {
                            "skill of his it uses, browser?: true | false, daily_at | cron | every_minutes?, rename?: its new name} (one of Taskuary's own "
                            "setups changed: a routine holds what to do, when, with which connections, and the skill it uses - the routines "
                            "tool reads one as it is saved; the card shows each field that changes and the routine as the press leaves it).\n"
-                           "`attach`: files that go with it. `why`: one line on why. `replaces`: the review id (or recipient) of an unsent "
-                           "card this takes the place of, withdrawn in the same call.",
-                {'type': 'object', 'properties': {'kind': {'type': 'string', 'enum': list(KINDS)}, 'text': _STR, 'to': _STR, 'subject': _STR,
-                                                  'cc': {'type': 'array', 'items': _STR}, 'answers': _INT, 'only': {'type': 'boolean'}, 'why_to': _STR,
-                                                  'from': _STR, 'slot': _STR, 'guessed': {'type': 'array', 'items': _STR},
+                           "`attach`: files that go with it. `why`: one line on why. Each call is a new card unless it `replaces` an unsent "
+                           "one (its id, or who it was to) - withdrawn in the same call.",
+                {'type': 'object', 'properties': {'kind': {'type': 'string', 'enum': list(KINDS)}, 'text': _STR, 'to': {'type': 'array', 'items': _STR},
+                                                  'subject': _STR, 'cc': {'type': 'array', 'items': _STR}, 'answers': _INT, 'only': {'type': 'boolean'},
+                                                  'why_to': _STR, 'from': _STR, 'guessed': {'type': 'array', 'items': _STR},
                                                   'networks': {'type': 'array', 'items': {'type': 'object', 'properties': {'network': {'type': 'string', 'enum': list(NETWORKS)}}}}, 'media': _STR, 'link': _STR,
                                                   'title': _STR, 'name': _STR, 'action': _STR, 'attach': _ATTACH, 'why': _STR, 'replaces': _STR},
                  'additionalProperties': True}, ('POST', '/api/agent/propose')),
@@ -337,14 +336,17 @@ ANNOTATIONS = {'read': {'readOnlyHint': True, 'openWorldHint': False}, 'reach': 
 STRANGER_TOOLS = ('remind', 'check_back')
 
 
-# ...and on the owner's own ask (wrapup.no_correspondent) there is nobody to reply to: reply_not_needed is not offered, and propose's reply
-# road refuses (_review). withdraw_draft is not one of them - an own ask's emails and posts are the agent's to take back too
-REPLY_TOOLS = ('reply_not_needed',)
 # ...THE OLD NAMES OF THE ONE REVIEW TOOL, for a session whose history still calls them: each is propose with its kind, never listed
 ALIAS = {'propose_reply': 'reply', 'propose_email': 'email', 'propose_post': 'post'}
+# ...and the old take-back tool, and the card's old names (`which`, `review`), read as the one tool and its `card`
+RENAMED, CARD_WAS = {'reply_not_needed': 'withdraw_draft'}, ('which', 'review')
 def aliased(name, args):
-    "(the tool, its arguments) as propose runs an old name's call - its kind set - else as given."
-    return ('propose', {**_arguments(args), 'kind': ALIAS[name]}) if name in ALIAS else (name, args)
+    "(the tool, its arguments) as an old name's call runs now - propose with its kind, the tool it is now, its card as `card` - else as given."
+    if name in ALIAS: return 'propose', {**_arguments(args), 'kind': ALIAS[name]}
+    name = RENAMED.get(name, name)
+    if name in ('withdraw_draft', 'keep_card') and isinstance(args, dict) and 'card' not in args and (was := [args[k] for k in CARD_WAS if k in args]):
+        args = {**{k: v for k, v in args.items() if k not in CARD_WAS}, 'card': was[0]}
+    return name, args
 # ...and the tools only a coding agent has a use for are not offered on any other task (2026-11-09): a general agent called find_repos
 # for a WhatsApp bug report - and four tool schemas rode on every turn for nothing
 CODING_TOOLS = ('note_peers', 'use_repo', 'find_repos', 'propose_land')
@@ -398,7 +400,6 @@ SHORT = {
     'use_repo': "Pick the git checkout this task's work belongs in.",
     'find_repos': 'The git checkouts you may work in, newest commit first.',
     'propose_land': "How your work lands (rebase, merge, pr ...), as the owner's buttons.",
-    'reply_not_needed': 'The reply waiting here is no longer needed (`why`).',
     'withdraw_draft': 'Take back a reply, email or proposal you set up that has not gone out.',
     'keep_card': 'Bring back a card greyed by the newest input, as it was, under that input.',
     'hand_over': 'A page step only the owner can do (sign-in, paying): a card.',
@@ -605,6 +606,12 @@ def _card_call(store, tid: int, name: str, args: dict, doors: dict, skip=()) -> 
     if name == 'tick' and (args or {}).get('done', True) is not False and (bad := _failed_now(store, tid)):
         raise ValueError(refusal(f'not ticked: {bad} failed in this turn', 'tick it once that is done'))
     from . import card, cardqueue
+    # ...AND A TICK BESIDE A CARD THAT WAITS WAITS WITH IT (card.tie): it ticks as his press goes, never on his no
+    if name == 'tick' and (args or {}).get('done', True) is not False and any(i['id'] == (it := str(args.get('item') or '').strip().strip('[]'))
+                                                                             for i in store.task_checklist(int(tid))) \
+            and (tied := card.tie(store, tid, it, _turn_began(store, tid))):
+        return _j({'ok': True, 'item': it, 'done': False, 'says': f"Not ticked yet: it ticks when his press on {', '.join(f'rv{r}' for r in tied)} goes; "
+                                                                  'his no leaves it open.'})
     raises = TOOLS[name][0] == 'propose'
     # A QUESTION TO HIM HOLDS THE TURN THERE (the owner's live task, 2026-11-25: "it asked a question, then underneath it created the post that was
     # greyed out ... if it asks a question it has to wait there"): a card raised under the agent's own standing question was greyed by his answer
@@ -613,6 +620,8 @@ def _card_call(store, tid: int, name: str, args: dict, doors: dict, skip=()) -> 
         raise ValueError(refusal('your question to the owner stands - nothing was raised', 'wait for his answer, then raise it; if this card does '
                                  'not hang on the question, take the question back with ask_owner withdraw: true and raise it'))
     then, todo, args = ((args or {}).get('then'), (args or {}).get('todo'), {k: v for k, v in (args or {}).items() if k not in ('then', 'todo')}) if raises else (None, None, args)
+    # ...an email's to-do IS the line it fills (`slot` folded into `todo`, the card-tool design 2026-11-27; `slot` still read for a saved session)
+    if todo and name == 'propose' and str(args.get('kind') or '').strip().lower() == 'email' and not args.get('slot'): args = {**args, 'slot': str(todo).strip().strip('[]')}
     try:
         with (card.raising(store, tid, then, todo) if raises else contextlib.nullcontext()):
             if raises and isinstance((args or {}).get('items'), list): out = _many(store, tid, name, args, doors)
@@ -652,11 +661,14 @@ for _t in TOOLS.values():
     if _t[0] == 'propose':
         _t[2]['properties']['then'] = {'type': 'string', 'description': 'your own NEXT ACT after his press, if any (not a check, not bookkeeping - Taskuary confirms the act itself and records the press)'}
         _t[2]['properties']['todo'] = {'type': 'string', 'description': "the id of this task's to-do this card does, if one - Taskuary ticks it when his press has gone"}
+def _names(card, r: dict) -> bool:
+    "Does `card` - an id (rv12, 12) or who or what it was to - name unsent card `r` (verdicts.unsent's row)?"
+    k = str(card).casefold().strip().removeprefix('rv')
+    return r['rid'] == int(k) if k.isdigit() else bool(k) and (k in r['to'].casefold() or k in r['what'].casefold())
 def _take_back(store, tid: int, doors: dict, old, stand: list) -> None:
     "The one unsent card `old` names (its id, or who or what it was to), withdrawn - never one of `stand`, the cards the call itself stands as."
     from . import verdicts
-    k = str(old).casefold().removeprefix('rv')
-    hit = [r['rid'] for r in verdicts.unsent(store, tid) if r['rid'] not in stand and (r['rid'] == int(k) if k.isdigit() else k in r['to'].casefold() or k in r['what'].casefold())]
+    hit = [r['rid'] for r in verdicts.unsent(store, tid) if r['rid'] not in stand and _names(old, r)]
     if len(hit) == 1: doors['withdraw'](tid, 'a new proposal takes its place', str(hit[0]))
 def _many(store, tid: int, name: str, args: dict, doors: dict) -> str:
     from . import bulkcard
@@ -1003,19 +1015,21 @@ def _call(store, tid: int, name: str, args: dict, doors: dict, skip=()) -> str:
     if name == 'find_repos':
         from . import repochoice
         return _out(repochoice.says_found(repochoice.find(store, str(a.get('query') or '')), repochoice.folders(store)))
-    if name == 'reply_not_needed': return _j(doors['not_needed'](tid, str(a.get('why') or '')))
-    if name == 'withdraw_draft': return _j(doors['withdraw'](tid, str(a.get('why') or ''), str(a.get('which') or '')))
+    if name == 'withdraw_draft': return _j(doors['withdraw'](tid, str(a.get('why') or ''), str(a.get('card') or '')))
     if name == 'hand_over':
         from . import browserview
         return _j(browserview.hand_over(store, tid, str(a.get('what') or ''), str(a.get('site') or '')))
     if name == 'keep_card':
         from . import cardqueue
-        return _j(cardqueue.keep(store, tid, a.get('which'), 'agent', str(a.get('why') or '')))
+        return _j(cardqueue.keep(store, tid, a.get('card'), 'agent', str(a.get('why') or '')))
     if name == 'sign_form':
         out = doors['sign'](tid, a)
         return out['says'] if out.get('says') else _j(out)
     if name == 'answer_invite': return _j(doors['answer_invite'](tid, a))
-    if name == 'set_up_meeting': return _j(doors['meeting'](tid, a))
+    if name == 'set_up_meeting':
+        from . import verdicts
+        was = verdicts.unsent(store, tid)
+        return _j(replaced(store, doors, tid, was, doors['meeting'](tid, {k: v for k, v in a.items() if k != 'replaces'}), a.get('replaces'), 'the invite takes its place'))
     if name == 'share': return _j(doors['share'](tid, a))
     if name == 'propose': return _versioned(store, tid, a, doors)
     raise ValueError(f'no tool {name!r} - tools/list names them; use one of those')
@@ -1068,9 +1082,14 @@ def _review(store, tid: int, a: dict, doors: dict) -> str:
         return _j(card_roads(store, said_once(replaced(store, doors, tid, was, out, a.get('replaces'), f"the reply to {a.get('to') or 'the newest mail'} takes its place")), {}))
     if k == 'email':
         was, files = verdicts.unsent(store, tid), attached(store, tid, a.get('attach'))
-        out = read_back(doors['draft'](tid, str(a.get('text') or ''), str(a.get('to') or ''), str(a.get('subject') or ''), files,
+        # ...`replaces` naming an email of this task's rewrites THAT card (slots.draft): a letter is new unless it says what it replaces
+        from . import slots
+        old = next((r for r in was if r['kind'] == slots.KIND and _names(a['replaces'], r)), None) if a.get('replaces') else None
+        slot = slots.of_review(store.get_review(old['rid'])) if old else str(a.get('slot') or '').strip()
+        to = [str(x) for x in a['to']] if isinstance(a.get('to'), list) else str(a.get('to') or '')
+        out = read_back(doors['draft'](tid, str(a.get('text') or ''), to, str(a.get('subject') or ''), files,
                                        a.get('cc') or (), str(a.get('from') or ''), **({'guessed': a['guessed']} if a.get('guessed') else {}),
-                                       **({'slot': str(a['slot']).strip()} if a.get('slot') else {})), files)
+                                       **({'slot': slot} if slot else {}), **({'replaces': True} if old else {})), files)
         out = whyd(store, out, a)
         return _j(card_roads(store, said_once(replaced(store, doors, tid, was, out, a.get('replaces'), f"the email to {a.get('to') or 'someone else'} takes its place")), {}))
     if k == 'post' and not post_type(a.get('network')):
@@ -1213,8 +1232,8 @@ def replaced(store, doors, tid: int, was: list, out, old, why: str):
     if w.get('ok'): return {**o, 'replaced': w.get('review_id')}
     # ...this very call already took its place (a new reply supersedes the old one itself): "nothing unsent to withdraw" read to the agent
     # as its earlier reply having gone out, and it told the owner to check before Send - four times in one chat (the owner, 2026-11-09)
-    k, now = str(old).casefold().removeprefix('rv'), {r['rid'] for r in verdicts.unsent(store, tid)}
-    hit = [r['rid'] for r in was if (r['rid'] == int(k) if k.isdigit() else k in r['to'].casefold() or k in r['what'].casefold())]
+    now = {r['rid'] for r in verdicts.unsent(store, tid)}
+    hit = [r['rid'] for r in was if _names(old, r)]
     gone = next((i for i in hit if i not in now and (store.get_review(i) or {}).get('Status') == 'closed_unsent'), None)
     return {**o, 'replaced': gone} if gone else {**o, 'not_replaced': w.get('why')}
 
@@ -1330,7 +1349,7 @@ PROTOCOLS = ('2025-06-18', '2025-03-26', '2024-11-05')
 
 def rpc(msg: dict, run, skip=(), portable: bool = False) -> dict | None:
     """One JSON-RPC message in, its answer out (None for a notification). `run(name, args)` executes a tool and returns text; `skip`: the
-    tools this session is not offered (REPLY_TOOLS on the owner's own ask). `portable`: schemas every provider takes (an API card's model
+    tools this session is not offered (CODING_TOOLS on a general task). `portable`: schemas every provider takes (an API card's model
     behind its harness CLI - Gemini refused propose's top-level anyOf, "parameters schema should be of type OBJECT", and with it the turn)."""
     mid, m, p = msg.get('id'), msg.get('method'), msg.get('params') or {}
     ok = lambda r: {'jsonrpc': '2.0', 'id': mid, 'result': r}
@@ -1351,7 +1370,7 @@ def rpc(msg: dict, run, skip=(), portable: bool = False) -> dict | None:
         if portable and name == USE:
             name, args = as_called(SERVER, USE, args)
             if name == USE: return err(-32602, 'use_tool runs a tool by its `name` - find_tools names them')
-        if name in ALIAS and name not in skip:
+        if name not in skip:
             try: name, args = aliased(name, args)
             except ValueError: pass
         if name not in TOOLS or name in skip: return err(-32602, f"unknown tool {name!r} - this task's tools are the ones tools/list names")

@@ -552,10 +552,11 @@ def withdraw(store, tid: int, why: str, by: str, which='', keep: int = 0) -> dic
         done, bad = [g['review_id'] for _, g in got if g.get('ok')], [f"rv{x}: {g.get('why')}" for x, g in got if not g.get('ok')]
         return {'ok': bool(done), 'review_id': done[0] if done else None, 'review_ids': done, **({'why': '; '.join(bad)[:600]} if bad else {})}
     left = [r for r in unsent(store, tid) if r['rid'] != keep]
-    if not left: return {'ok': False, 'why': 'nothing unsent is waiting on this task, so there is nothing to withdraw'}
+    # ...NONE NAMED IS THE REPLY, PUT DOWN AS NOT NEEDED (one take-back tool, the card-tool design 2026-11-27): reply_not_needed was this call
+    if not which and not keep and (any(r['kind'] in ('draft', 'draft_reply') for r in left) or not left): return not_needed(store, tid, why, by)
     if which.isdigit(): hit = [r for r in left if r['rid'] == int(which)]
     elif which: hit = [r for r in left if which in r['to'].casefold() or which in r['what'].casefold()]
-    else: hit = [r for r in left if r['kind'] in ('draft', 'draft_reply')][:1] or (left if len(left) == 1 and not left[0].get('handed') else [])
+    else: hit = left if len(left) == 1 and not left[0].get('handed') else []
     if len(hit) != 1:
         return {'ok': False, 'why': ('several match - ' if hit else 'name which one - ' if not which else f'nothing unsent matches {which!r} - ') +
                 'give its review id: ' + '; '.join(f"{r['rid']}: {r['what']}" for r in (hit or left))}
@@ -682,7 +683,12 @@ def decide(store, rv: dict, verb_in: str, *a, closes: bool = False, always: bool
     fr = _draft(rv).get('flow_run') if always else None
     if always and (verb_in != 'approve' or not isinstance(fr, dict) or not fr.get('key')):
         return {'ok': False, 'status': rv.get('Status'), 'sent': None, 'send_error': 'only a routine\'s own write step can be always approved - nothing was run'}
+    # ...A LETTER FROM HIS OTHER PROFILE'S MAILBOX MOVES ITS TASK THERE AT HIS SEND (workstreams.moved_by, the owner's OK 2026-11-27): the move
+    # first, as his picker makes it, so the send leaves as the moved task's; one refused before anything went puts it back
+    from . import workstreams
+    was = workstreams.moved_by(store, rv, a[2] if len(a) > 2 else kw.get('actor', 'owner')) if verb_in in ('approve', 'edit') else None
     out = _decide(store, rv, verb_in, *a, **kw)
+    if was is not None and not out.get('ok') and out.get('delivery') not in ('failed', 'unknown', 'sent'): workstreams.set_task(store, int(rv['TaskId']), was, 'taskuary')
     if always and out.get('ok'):
         from . import flow
         out['always'] = flow.grant(store, fr, a[2] if len(a) > 2 else kw.get('actor', 'owner'))

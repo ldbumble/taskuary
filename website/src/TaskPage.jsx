@@ -113,7 +113,7 @@ import { sentStands, WENT } from "./sentLine.js";
 import { FullText } from "./assistantCards.jsx";
 import { isCardReview } from "./actionCard.js";
 import { AgentRecord, ResultSummary } from "./AgentRecord.jsx";
-import LandingCard, { LANDING_DIFF } from "./LandingCard.jsx";
+import LandingCard from "./LandingCard.jsx";
 import { readingOf } from "./threadReading.js";
 import AiUsed from "./AiUsed.jsx";
 import CodeChanges from "./CodeChanges.jsx";
@@ -2298,7 +2298,6 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
   // its facts - a draft that waits, a run that is over, a failure's way past it), the same field the canvas's row fills from. No Advisor
   // reads a task, and nothing is asked beside the read the page already makes
   const rec = notDone && detail?.task?.TaskId === selected ? detail?.recommended || null : null;
-  const filled = (verb) => liveVerb(rec?.verb) === verb;
   // THE CALENDAR'S ANSWERS (calwrite.py, server task_detail's `calendar`): an invite waiting on the owner is answered from the row -
   // Accept, Decline, Propose a new time - and a thread asking for a time offers Find a time. Accept and Decline tell the calendar at
   // the press, and the answer's card says what went (or what failed, with the way past it); the others DRAFT into the chat for the
@@ -2376,11 +2375,8 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
       // its card's Send sends - only with no AI connected they stand, folded in the ▾, so the owner is never stuck (concierge._shows, the same)
       ...(manual && replyMessage && !liveSession && !calAsk?.invite && (stage !== "reply" || !pendingReview) ? [{ id: "reply", group: "more", label: openingReply ? "Drafting…" : replyPrimary,
         disabled: !!openingReply, run: () => (pendingReview ? setOpenStage("reply") : openReply(true)), title: hintOfRow("reply") }] : []),
-      // REVIEW CHANGES STAYS AFTER THE SESSION IS GONE (the owner, 2026-11-10: "yes, keep it"): lit on work left to review (rulebook
-      // changes_waiting), it opens the task's own landing card's diff - one road to the diff (LandingCard LANDING_DIFF); the checkout's
-      // drawer only where no card stands to take it
-      ...(!liveSession && filled("review_changes") ? [{ id: "diff", group: "agent", label: labelOfRow("diff"), title: hintOfRow("diff"), run: () => {
-        const ask = { taskId: t.TaskId, handled: false }; window.dispatchEvent(new CustomEvent(LANDING_DIFF, { detail: ask })); if (!ask.handled) setDiffOpen(true); } }] : []),
+      // ...and NO REVIEW CHANGES LIT BY TASKUARY'S OWN RULE (the owner, 2026-11-27: inside a task only its agent recommends): the work left to
+      // review is the agent's to hand over, as a card or a view
       ...(liveSession ? [
         // NO STOP AND SAVE (the owner, 2026-11-10: "no need for stop and save button"): the x on the running turn is the one stop, and
         // typing carries the work on

@@ -1602,6 +1602,10 @@ def one_state(store, payload: dict, observed=_OBSERVE) -> dict:
         # read "on you" off the row's own lane - "agent done" is no lane): the row is the chat's done row, as an idled agent's is (paused_conversation)
         if st and st['key'] == 'chat_done' and i.get('lane') in ('yours', 'queued') and (t := store.get_task(int(tid))):
             i.update({k: v for k, v in chat_done(store, t).items() if k in ('kind', 'lane', 'who', 'why', 'chat_done')}, status=st); continue
+        # ...AND A TASK HE ANSWERED WITH NO AGENT ON IT READS SO ON ITS ROW (walk 25, 2026-11-26: "on you" and "asked 3 minutes ago" over the invite
+        # he had accepted): the task's own row under Tasks, as a chat's done row is - no ask stands on it, an urgent one's shade neither
+        if st and st['key'] == 'answered' and i.get('lane') in ('yours', 'asked', 'time'):
+            i.pop('urgent_request', None); i.update(lane='yours', answered=True, why=st.get('hint') or i.get('why') or '', status=st); continue
         if not st or st['key'] not in LANES or i.get('lane') in OWN_WORDS or (st['key'] == 'yours' and i.get('lane') in ARRIVAL_WORDS): continue
         i['lane'], i['status'] = st['key'], st
     return payload

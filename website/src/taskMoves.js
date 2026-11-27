@@ -19,6 +19,15 @@ const madeMoves = (words) => words.filter((a) => !MADE_STARTS.has(a.verb))
   .sort((a, b) => (b.own ? 1 : 0) - (a.own ? 1 : 0) || (MADE_ORDER.indexOf(a.verb) + 1 || 99) - (MADE_ORDER.indexOf(b.verb) + 1 || 99))
   .map((a, i) => ({ id: `w:${a.verb || a.label}`, group: a.own || i < 3 ? "decide" : "more", tone: a.own ? "p" : "s", label: a.label, title: a.title,
     ...(a.disabled ? { disabled: true, why: a.title || "" } : {}), run: (e, anchor) => a.onClick?.({ currentTarget: anchor || e?.currentTarget }) }));
+// A CALENDAR INVITE'S ANSWER IS THE TASK'S ONE WAY ON (the owner, 2026-11-26: "for calendar invites it should just show accept/decline
+// button"; walk 25: both sat in More ▾ at 1280 px under "Accept, decline or propose a new time"): Accept and Decline stand first on the row,
+// lit, and never fold (`unblocks`, as Trust on a held task); a new time needs his words and stands beside them. `cal`: the task's calendar
+// ask ({ invite } - calwrite.of_task), null once the calendar has his answer; `off`: greyed with why while an agent works the task
+export const calMoves = (cal, run, w, off = {}) => (!cal ? [] : cal.invite ? [
+  { id: "accept_invite", group: "decide", tone: "p", unblocks: true, label: w.label("accept_invite"), run: run.accept, title: w.hint("accept_invite") },
+  { id: "decline_invite", group: "decide", tone: "p", unblocks: true, label: w.label("decline_invite"), run: run.decline, title: w.hint("decline_invite") },
+  { id: "propose_time", group: "decide", tone: "s", label: w.label("propose_time"), run: run.propose, title: w.hint("propose_time") },
+] : [{ id: "find_time", group: "decide", tone: "s", label: w.label("find_time"), run: run.find, title: w.hint("find_time") }]).map((v) => ({ ...v, ...off }));
 export function taskMoves(s, run, w) {
   if (s.made) return madeMoves(s.made);
   const off = (why) => (why ? { disabled: true, why } : {}), shut = off(s.closed ? CLOSED : "");
@@ -35,7 +44,7 @@ export function taskMoves(s, run, w) {
       ? { id: "reopen", group: "decide", tone: "s", label: s.reopening ? "Reopening…" : w.label("reopen"), run: run.reopen, ...off(s.reopening ? "it is reopening" : ""), title: w.hint("reopen") }
       // ...a live session has no primary; nor a waiting draft: its Send, under the draft, is the move (2026-10-06), so Mark done stands outlined
       : { id: "done", group: "more", label: s.finishing ? "Marking done…" : w.label("done"), ...off(s.finishing ? "it is closing" : ""), run: run.done, title: w.doneHint,
-        promote: !s.live && !s.waitingDraft && !(s.trust && !s.watching), beside: s.live, onCard: s.waitingDraft && !s.live },
+        promote: !s.live && !s.waitingDraft && !(s.trust && !s.watching) && !s.invite, beside: s.live, onCard: s.waitingDraft && !s.live },
     // ...Mark done with words: its card opens in the conversation, under the item
     { id: "close-note", group: "more", label: w.label("close-note"), run: run.note, title: w.hint("close-note"), ...off(s.closed ? CLOSED : s.live ? LIVE : "") },
     // ONE VERB FOR IT, button and dialog (U13)

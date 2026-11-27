@@ -68,3 +68,11 @@ test("while the task is held for its sender the chat says it - Came from has no 
   const fs = readFileSync(new URL("../../taskuary/server.py", import.meta.url), "utf8");
   assert.match(fs, /\*\*\(\{'held': True\} if o\['origin'\] == 'stranger' and origin\.hold\(store, task_id\) else \{\}\)/, "the one function that says a task is held");
 });
+
+// WALK 25 (2026-11-26): a "Trust them" chip stood beside a stranger's calendar invite - which holds nothing and is answered by Accept or
+// Decline. The server offered no trust for it (senders.trust_offer: null); the line's fallback word drew a press anyway
+test("where the server offers no trust the line draws no press", () => {
+  const l = strangerLine({ origin: { origin: "stranger", why: "sent by someone not in your people", trust: null }, calendar: { invite: true } });
+  assert.equal(l.trust, null); assert.equal(l.trustOrg, null);
+  assert.equal(strangerLine({ origin: { origin: "stranger", trust: { person: "Trust Jo", org: null } } }).trust, "Trust Jo");
+});

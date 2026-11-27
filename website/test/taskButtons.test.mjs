@@ -129,3 +129,21 @@ test("a task he made himself offers no Watch it; one he is watching can still st
   assert.ok(ids({ own: false }).includes("watch"));
   assert.ok(ids({ own: true, watching: true }).includes("watch"));
 });
+
+// WALK 25 (2026-11-26): a calendar invite's task said "Accept, decline or propose a new time" and lit Mark done, Close with a note, Remind me,
+// Not for me, Watch it - Accept and Decline sat inside More ▾ at 1280 px, on all three roads. The owner: "for calendar invites it should just
+// show accept/decline button". They are the row's first moves, lit, and no fold takes them
+test("a calendar invite: Accept and Decline stand first on the row, lit, and never fold; Mark done is not the lit one", async () => {
+  const { calMoves, taskMoves } = await import("../src/taskMoves.js"), { rowOf, splitRow } = await import("../src/actionRow.js");
+  const w = { label: (k) => k, hint: () => "", doneHint: "", natTitle: "", repo: "", repoHint: "" }, run = new Proxy({}, { get: () => () => {} });
+  const verbs = [...calMoves({ invite: true }, run, w), ...taskMoves({ invite: true, repo: {} }, run, w)];
+  const row = taskButtons(splitRow(rowOf({ list: verbs, ref: "" }), { open: "from" }).by);
+  assert.deepEqual(row.slice(0, 2).map((x) => [x.v.id, x.v.tone, x.grp]), [["accept_invite", "p", "finish"], ["decline_invite", "p", "finish"]]);
+  const folded = foldRow(row, 99).shown.map((x) => x.v?.id);
+  assert.ok(folded.includes("accept_invite") && folded.includes("decline_invite"), "never folded into More");
+  assert.notEqual(row.find((x) => x.v?.id === "done").v.tone, "p", "Mark done is not what the invite asks");
+  // ...while an agent works the task they stand greyed with why, and a thread asking for a time lights nothing
+  assert.ok(calMoves({ invite: true }, run, w, { disabled: true, why: "an agent is working on it" }).every((v) => v.disabled && v.why));
+  assert.deepEqual(calMoves({ invite: false, meet: true }, run, w).map((v) => [v.id, v.tone]), [["find_time", "s"]]);
+  assert.deepEqual(calMoves(null, run, w), []);
+});

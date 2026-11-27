@@ -230,6 +230,27 @@ class OnePress(unittest.TestCase):
         self.assertEqual((again['sent'], again['reviewId']), (True, r['reviewId']))
         self.assertEqual(len(g.calls), 1); self.assertEqual(len(s.reviews_for_message(mid)), 1)
 
+    def test_after_his_answer_the_task_reads_answered_never_on_you(self):
+        """Walk 25 (2026-11-26): he pressed Accept on an invite no agent worked, the calendar was told, the card read "Accepted" - and the
+        header read "on you" over "Jo Lane asked 3 minutes ago". His answer is the newest word on it: the task, its rail row and the move
+        the row lights all read that he answered. They write again, and it is his again."""
+        from taskuary import funnel, rulebook, taskstate
+        s = outlook_store(); out = arrive(s, sent_at=(datetime.now() - timedelta(minutes=3)).strftime('%Y-%m-%d %H:%M:%S'))
+        tid, mid = out['task_id'], out['message_id']
+        self.assertEqual(taskstate.state(s, s.get_task(tid)), 'yours')
+        self.assertTrue(self.press(s, mid, 'accept', Fake())['sent'])
+        self.assertEqual(taskstate.state(s, s.get_task(tid)), 'answered')
+        st = taskstate.status(s, s.get_task(tid))
+        self.assertEqual((st['key'], st['word']), ('answered', 'you answered'))
+        self.assertTrue(rulebook.answered(s, {'tid': tid}, s.get_message(mid)), 'an answer with no words is his answer')
+        for lane in ('asked', 'yours'):                           # ...and its rail row says so, whichever word its arrival gave it
+            row = funnel.one_state(s, {'items': [{'key': f'msg:{mid}', 'kind': 'asked', 'lane': lane, 'tid': tid, 'mid': mid}]}, observed=())['items'][0]
+            self.assertEqual((row['status']['key'], row['lane'], row.get('answered'), row.get('urgent_request')), ('answered', 'yours', True, None), row)
+        s.add_message({'TaskId': tid, 'Channel': 'email', 'SourceName': ME, 'FromEmail': ERIN, 'FromName': 'Erin Blake', 'Status': 'routed',
+                       'Subject': 'Re: Budget sync', 'BodyText': 'Can you bring the numbers?',
+                       'SentAt': (datetime.now() + timedelta(minutes=5)).strftime('%Y-%m-%d %H:%M:%S')})
+        self.assertEqual(taskstate.state(s, s.get_task(tid)), 'yours')
+
     def test_a_refused_answer_stays_on_its_card_and_the_next_press_sends_one(self):
         s = outlook_store(); out = arrive(s); tid, mid = out['task_id'], out['message_id']
         bad = Fake({'/accept': R(403, {'error': 'denied'})}); r = self.press(s, mid, 'accept', bad, wakes=1)

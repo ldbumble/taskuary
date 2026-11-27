@@ -8,3 +8,7 @@ const LEGACY = { low: "regular", normal: "regular", medium: "regular", high: "im
 export const level = (v) => { const s = String(v || "").trim().toLowerCase(); return PRIORITIES.includes(s) ? s : LEGACY[s] || "regular"; };
 // a row is important when its task (or the ask triage judged) is - and urgent outranks it: an urgent row wears urgent's shade alone
 export const isImportant = (item, urgent = false) => !urgent && !item?.settling && level(item?.priority) === "important";
+// THE URGENT MARK ON A ROW: the stored priority's dot, whatever its band (the owner, 2026-10-25: the category is the dot's colour) - and gone
+// once the row's own status says it is answered or done (walk 25, 2026-11-26: the red dot stayed on tasks whose reply had already gone).
+// `hot`: the row is in the urgent band (lanes.isUrgent); `st`: the row's status as the rail draws it (railStatus), null where it draws none
+export const urgentMark = (item, hot = false, st = null) => !item?.settling && st?.role !== "done" && (hot || level(item?.priority) === "urgent");

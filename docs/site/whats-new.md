@@ -2,6 +2,46 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.4.6.12 - 2026-11-27
+
+- Delete the task page's pre-chat code: start form, Continue, Run another, strong re-run
+- Delete dead backend roads: the strong re-run, Run another, two continue routes, retired kinds
+- Cut each scenario's how-to from what agents are told, keeping the facts
+- An idea a monitor raised from his own systems is as trusted as they are
+- The reply card is Send and Dismiss; a blank is refused at the raise
+- Tell a session on Taskuary's own words a fact, not a sentence to say
+- A task on Taskuary's own words says what its agent goes without, with Trust
+- Mark done stops the agent and closes the task - no write-up behind it
+- Nothing of Taskuary's is drawn under a card that waits
+- A coding agent's held step is the task's one action card, never a permission box
+- The task's row lights no Review changes of its own
+- The rail never approves: the card inside the task is the one press
+- A run's end puts up no card the agent did not raise, and chases nobody
+- No "Waiting on you" heading of Taskuary's own over the cards that wait
+- Say the gates' holds and the browser's road as facts, never the agent's lines
+- Cut the how-to and scripted lines from what a task's agent is told
+- Say the one-shot calls' inputs and output shapes, not how to think or what to say
+- The agent's question is a card in the turn that asked it, and the agent is told where it is
+- Draw the agent's questions in words as the questions card at its turn's foot
+- Every drafting press asks the task's agent; the side writer's doors are gone
+- Page: drafting presses ask the task's agent; no Draft with AI box, Redraft or Chase
+- Tell the Assistant and the Advisor facts and tools, not their lines
+- A press on a page step's card is said by the card, not a line under it
+- COUNSEL.md and ADVISOR.md say who and what, not how to behave
+- The Advisor's report prompt names what it reads, not how to read it
+- A line joined to an open task is the task's: no FYI row, no walk stop
+- The brief keeps a Voice: one fact about how the owner reads; the dead for_discussion goes
+- Not for me says it is the put-down when no scope was said, and that its card asks how far
+- A correction never closes or moves on; a coding ask with no coding here ends on Send to agent
+- About a person the Advisor's look stands on counts or dates
+- One second look for both kinds of Advisor idea
+- A turn that ends on a card shows only the card: its words fold into its steps
+- What he needs to press is on the card: every card draws its agent's why
+- Read the owner's addresses once per rail build, not once per row
+- Ask the profile wall once per card, and not at all where it cannot refuse
+- A post goes to its networks: one call, one card, a tab per network
+- Point the tests at what the design-audit fixes made true
+
 ## 0.4.6.11 - 2026-11-27
 
 - An invitation is a task unless it is spam

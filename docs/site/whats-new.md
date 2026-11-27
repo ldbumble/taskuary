@@ -2,6 +2,13 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.4.6.7 - 2026-11-26
+
+- A calendar invite lights Accept and Decline, and a task he answered reads answered
+- The Board tab is drawn from the first frame where Developer mode was on at the last read
+- A burst's picture is shown to the line after it and comes onto its task; an open task says the agent on it
+- The skill a turn read is named first on the turn's one line, on every AI's road
+
 ## 0.4.6.6 - 2026-11-26
 
 - Lock the owner's rule 11: his edit is what goes, on every card - its tests join the contract (his written OK, 2026-11-26)

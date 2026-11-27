@@ -58,6 +58,18 @@ class TheExeShipsWhatTheWheelShipsTests(unittest.TestCase):
                       'if this read moves, both packaging lists have to follow it')
 
 
+class TheVideoConverterShipsTests(unittest.TestCase):
+    def test_the_exe_collects_imageio_ffmpeg_with_its_binary(self):
+        """A post's video is made an MP4 by the ffmpeg imageio-ffmpeg ships (linkedin.as_mp4). It is a runtime dependency
+        of the wheel, but the exe only carries what the spec collects - and get_ffmpeg_exe() finds the binary as a data
+        file of imageio_ffmpeg.binaries, which only collect_all (data files and submodules, as PyInstaller's own
+        imageio_ffmpeg hook takes) brings along."""
+        self.assertIn('imageio-ffmpeg', (ROOT / 'pyproject.toml').read_text(encoding='utf-8'))
+        call = re.search(r'^datas, bins, hidden = _collect\((.+?)\)$', (ROOT / 'taskuary.spec').read_text(encoding='utf-8'), re.M)
+        self.assertTrue(call, 'taskuary.spec no longer collects its packages in one _collect call')
+        self.assertIn("'imageio_ffmpeg'", call.group(1))
+
+
 class TheSpecStillParsesTests(unittest.TestCase):
     def test_the_spec_is_valid_python(self):
         ast.parse((ROOT / 'taskuary.spec').read_text(encoding='utf-8'))

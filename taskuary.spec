@@ -32,8 +32,9 @@ def _collect(*names):
 
 # the interactive terminal needs pywinpty's binaries too (conpty.dll, winpty-agent.exe...); pyte
 # renders session transcripts (terminal.render) and wcwidth, which it uses, ships data tables;
-# pip rides along so the Install button works on the exe as well (deps._pip_here)
-datas, bins, hidden = _collect('winpty', 'wcwidth', 'pip', *BUNDLE)
+# pip rides along so the Install button works on the exe as well (deps._pip_here); imageio_ffmpeg with its ffmpeg binary, a data
+# file of imageio_ffmpeg.binaries that get_ffmpeg_exe() looks for (as PyInstaller's own hook collects it): a post's video made MP4
+datas, bins, hidden = _collect('winpty', 'wcwidth', 'pip', 'imageio_ffmpeg', *BUNDLE)
 
 a = Analysis(['taskuary/desktop.py'],
              # templates/ too: the operator documents (SOUL.md, CODING.md, TRIAGE.md...) seed the store

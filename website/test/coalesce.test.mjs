@@ -67,6 +67,6 @@ test("a Send lets go when the decide answers, and after a minute with no answer 
   const card = read("ReviewDecision.jsx");
   assert.equal((card.match(/const out = await press\(api, (closeout|r)\.ReviewId,/g) || []).length, 2, "both decide calls are the one press, which carries the timeout (onePress.test.mjs)");
   assert.doesNotMatch(card, /await onSent\(\); setBusy\(false\)/, "busy never waits on the re-read after the send");
-  assert.equal((card.match(/setBusy\(false\); await onSent\(\{ closes: [^\n]+(\}\); return;|\n\s+said: [^\n]+\}\); return;)/g) || []).length, 2);
+  assert.equal((card.match(/setBusy\(false\); await onSent\(\{(\}\); return;|\n\s+said: [^\n]+\}\); return;)/g) || []).length, 2);
   assert.equal((card.match(/if \(!data\) \{ if \(out\.kind === "unknown"\) onChanged\?\.\(\); else setErr\(/g) || []).length, 2, "a timeout reads the review again, no line of its own");
 });

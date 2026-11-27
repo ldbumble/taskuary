@@ -199,10 +199,8 @@ test("Mark done and Remind me put the task down AT THE PRESS, as Next does, and 
   assert.ok(remind.indexOf("onLeave?.()") < remind.indexOf("await act(until)"), "the reminder too");
   assert.match(remind, /if \(leaving\) onStay\?\.\(msg\)/);
   assert.match(view, /putDown: \(key, tid = null\) => \{ leftKey\.current = key; setExpanded\(false\); setFoldedKey\(key\); setNextComing\(true\);[^}]*setLeaving\(\(l\) => \[\.\.\.l\.filter\(\(x\) => x\.tid !== tid\), \{ tid, key, was, at: null \}\]\)/, "folded, the dots under it - beside any put down before it");
-  // ...and off the RAIL at the press as well, a live session's Mark done included: it waited on an 18-second write-up
-  // first, sitting under For later the whole time (the owner, 2026-10-01: "it first went to Later ... did not disappear")
-  const stop = task.slice(task.indexOf("const stopAndFinish = async"), task.indexOf("const markDoneHint"));
-  assert.ok(stop.indexOf("onLeave?.()") > -1 && stop.indexOf("onLeave?.()") < stop.indexOf("writeUpThenClose("), "put down before the write-up");
+  // ...and a live session's Mark done is the same press (the owner, 2026-11-27: it stops the agent and closes - no write-up first)
+  assert.match(task, /const askFinish = \(\) => finish\("done"\);/);
   assert.match(view, /onLeave=\{\(\) => canvas\.putDown\(c\.key, c\.tid\)\}/);
   assert.match(view, /items: asPressed\(pile\.items, \{ leaving: leaving\.map\(\(x\) => x\.tid\)/, "the rail drops it (funnelPile.asPressed)");
   assert.match(view, /stillLeaving\(l, pile\)/, "until the server's pile has let it go - or put it For later - a reopened task is never hidden");
@@ -295,7 +293,7 @@ test("a live session's Mark done stands on the bar, outlined, and Next is outlin
 
 test("a draft waiting under the card holds the move: the bar fills nothing - not Start an agent, not Next", () => {
   // the UX review, 2026-10-07: a drafted reply wore a filled Send on the card AND a filled Start an agent on the bar
-  const r = rowOf({ ref: "TQ-3", list: [v("start-agent", "agent", { lead: true }), v("done", "more", { promote: false, onCard: true }), v("next", "next")] });
+  const r = rowOf({ ref: "TQ-3", list: [v("start-agent", "agent", { lead: true }), v("done", "more", { promote: false }), v("next", "next")] });
   assert.deepEqual(filled(r), []);
   assert.equal(r.next.tone, "s");
 });
@@ -335,10 +333,9 @@ test("one border around the three layers: the suggestion, the row and the box si
 // The draft's own Send lives UNDER THE DRAFT only (the owner, 2026-10-22, reversing the bar's copy of 2026-10-19), and the bar keeps no
 // empty slot for it (2026-10-25: "we should not have empty space here"). Advised, it is lit on the card, the bar unchanged.
 test("the draft's own Send is never on the bar and leaves no empty slot; advised it is lit on the card, the bar unchanged", async () => {
-  const { advisedAny, advisedIn, clustersOf, holdsMove } = await import("../src/actionRow.js");
+  const { advisedAny, advisedIn, clustersOf } = await import("../src/actionRow.js");
   const list = [v("12:approve", "decide", { tone: "p", label: "Send", card: true }), v("12:redraft", "decide", { label: "Redraft", card: true }),
-    v("remind", "more", { label: "Remind me" }), v("done", "more", { promote: false, onCard: true, label: "Mark done" }), v("next", "next")];
-  assert.ok(holdsMove(list));
+    v("remind", "more", { label: "Remind me" }), v("done", "more", { promote: false, label: "Mark done" }), v("next", "next")];
   assert.equal(advisedAny(list, { verb: "approve", label: "Send" })?.id, "12:approve", "found, so no advice:approve is drawn");
   assert.equal(advisedIn(list, { verb: "approve", label: "Send" })?.id, "12:approve", "the Advisor's line finds the Send under the draft");
   const quiet = rowOf({ ref: "", list });

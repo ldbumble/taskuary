@@ -27,6 +27,11 @@ def task_with(s, channel='email', body='Could you fix the August export?'):
     return tid, mid
 
 
+def owed(s, tid, mid):
+    "The reply owed as triage raised it at arrival: a run's end makes none of its own (wrapup.raise_reply, the owner 2026-11-27)."
+    return s.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft', 'Status': 'pending', 'Origin': 'triage', 'Reason': 'needs a reply'})
+
+
 def refresh_that(**out):
     """A stand-in for the server's context refresh: returns what the poll found, or raises."""
     def f(store, tid, mid):
@@ -46,7 +51,7 @@ class NoHook(unittest.TestCase):
 class FreshnessTests(NoHook):
 
     def test_the_conversation_is_refreshed_before_the_reply_is_raised_and_an_unchanged_chain_raises_it_as_before(self):
-        s = MemoryStore(); tid, mid = task_with(s)
+        s = MemoryStore(); tid, mid = task_with(s); owed(s, tid, mid)
         wrapup.REFRESH = refresh_that(newer=False)
         order = []
         wrapup.REFRESH.calls = order
@@ -92,7 +97,7 @@ class FreshnessTests(NoHook):
         self.assertTrue(any('already answered' in (c.get('Body') or '') for c in s.list_comments(tid)))
 
     def test_a_changed_ask_is_answered_as_the_thread_stands_now(self):
-        s = MemoryStore(); tid, mid = task_with(s)
+        s = MemoryStore(); tid, mid = task_with(s); owed(s, tid, mid)
         newer = {}
         def poll(store, t, m):
             newer['mid'] = store.add_message({'TaskId': tid, 'ExternalId': 'x2', 'ConversationId': 'AAQk-x', 'Channel': 'email', 'SourceName': 'me@northwind.example',
@@ -107,7 +112,7 @@ class FreshnessTests(NoHook):
         self.assertIn('thread moved on', rv['Reason'])
 
     def test_a_refresh_that_fails_leaves_the_draft_visibly_unresolved(self):
-        s = MemoryStore(); tid, mid = task_with(s)
+        s = MemoryStore(); tid, mid = task_with(s); owed(s, tid, mid)
         wrapup.REFRESH = refresh_that(error='I could not refresh email: token expired')
         with mock.patch('taskuary.responder.draft_for_review', return_value='Fixed.'):
             out = wrapup.finish(s, tid, REP, None, 'coding')
@@ -118,7 +123,7 @@ class FreshnessTests(NoHook):
         self.assertEqual(s.get_task(tid)['Status'], 'waiting')
 
     def test_no_refresh_hook_means_the_freshness_is_unchecked_not_fresh(self):
-        s = MemoryStore(); tid, mid = task_with(s)
+        s = MemoryStore(); tid, mid = task_with(s); owed(s, tid, mid)
         with mock.patch('taskuary.responder.draft_for_review', return_value='Fixed.'):
             out = wrapup.finish(s, tid, REP, None, 'coding')
         self.assertEqual(out['freshness'], 'unchecked'); self.assertEqual(s.list_reviews('pending')[0]['Stale'], 0)
@@ -159,7 +164,7 @@ class CompletionScopeTests(NoHook):
                 self.assertEqual(s.get_task(tid)['Status'], 'waiting')
                 self.assertEqual((s.get_review(rid)['Status'], s.get_review(rid)['MessageId']), ('pending', mid))
                 self.assertEqual(s.get_review(rid)['DraftText'], 'Retained draft')
-                self.assertEqual(result['owed'], rid); draft.assert_not_called()
+                draft.assert_not_called()
                 send.assert_not_called()
                 self.assertEqual([s.get_message(mid), s.get_message(other)], messages)
                 self.assertEqual(s.funnel_states(), receipts)
@@ -187,7 +192,7 @@ class CompletionScopeTests(NoHook):
         owned, foreign = MemoryStore(), MemoryStore()
         self.addCleanup(owned.cx.close); self.addCleanup(foreign.cx.close)
         task_with(owned)  # Deliberately collide the two stores' local task/message IDs.
-        tid, mid = task_with(foreign)
+        tid, mid = task_with(foreign); owed(foreign, tid, mid)
         foreign.set_setting('notify_level', 'off', 'test')
         before = list(owned.cx.iterdump())
         wrapup.REFRESH = server._refresh_for_finish
@@ -218,7 +223,7 @@ class CompletionScopeTests(NoHook):
 class ResultAndReviewTests(NoHook):
 
     def test_the_saved_result_survives_a_failed_draft_which_stays_retryable(self):
-        s = MemoryStore(); tid, mid = task_with(s)
+        s = MemoryStore(); tid, mid = task_with(s); owed(s, tid, mid)
         s.add_comment(tid, 'coding', 'agent', 'REPORT: fixed the export')                 # the result, saved before finish
         with mock.patch('taskuary.responder.draft_for_review', side_effect=RuntimeError('no AI connector is set up to write replies')):
             out = wrapup.finish(s, tid, REP, None, 'coding')
@@ -229,25 +234,24 @@ class ResultAndReviewTests(NoHook):
         self.assertEqual(s.get_task(tid)['Status'], 'waiting')
 
     def test_a_repeated_completion_reuses_the_one_review_and_never_sends(self):
-        s = MemoryStore(); tid, mid = task_with(s)
+        s = MemoryStore(); tid, mid = task_with(s); owed(s, tid, mid)
         with mock.patch.object(outbound, 'reply_to_message') as send:
             one, two = wrapup.finish(s, tid, REP, None, 'coding'), wrapup.finish(s, tid, REP, None, 'coding')
         self.assertEqual(len(s.list_reviews('pending')), 1); send.assert_not_called()
-        self.assertEqual(one['owed'], two['owed'])                                        # the same review both times, never a second
 
     def test_a_held_review_is_the_one_reused(self):
         s = MemoryStore(); tid, mid = task_with(s)
         rid = s.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft', 'Status': 'pending', 'DraftText': 'early guess', 'Reason': 'needs a reply'})
         s.hold_reviews(tid, 'the agent is looking at it')
         out = wrapup.finish(s, tid, REP, None, 'coding')
-        self.assertEqual(out['owed'], rid); self.assertEqual(len(s.list_reviews('pending')), 1)
+        self.assertEqual([r['ReviewId'] for r in s.list_reviews('pending')], [rid])
 
 
 class UnsupportedSendTests(NoHook):
     """PW-237: the always-draft rule - a channel that cannot carry the reply hides Send, it does not hide the answer."""
     def test_a_github_reply_is_raised_for_his_send(self):
         # ...GitHub replies go on his Send since 2026-11-25 (his press is the yes; no switch gates them)
-        s = MemoryStore(); tid, mid = task_with(s, 'github')
+        s = MemoryStore(); tid, mid = task_with(s, 'github'); owed(s, tid, mid)
         with mock.patch('taskuary.responder.draft_for_review', return_value='Fixed.') as wd, mock.patch.object(outbound, 'reply_to_message') as send:
             out = wrapup.finish(s, tid, REP, None, 'coding')
         wd.assert_not_called(); send.assert_not_called()                                 # the reply owed is raised, its agent's to write
@@ -256,10 +260,17 @@ class UnsupportedSendTests(NoHook):
         self.assertEqual(rv['MessageId'], mid); self.assertEqual(s.get_task(tid)['Status'], 'waiting')
 
     def test_a_channel_switched_off_by_the_owner_drafts_too(self):
-        s = MemoryStore(); s.set_setting('reply_channels', 'email', 't'); tid, mid = task_with(s, 'slack')
+        s = MemoryStore(); s.set_setting('reply_channels', 'email', 't'); tid, mid = task_with(s, 'slack'); owed(s, tid, mid)
         with mock.patch('taskuary.responder.draft_for_review', return_value='Fixed.'):
             out = wrapup.finish(s, tid, REP, None, 'coding')
         self.assertEqual((out['drafting'], out['can_send']), (True, False)); self.assertEqual(len(s.list_reviews('pending')), 1)
+
+    def test_a_runs_end_raises_no_reply_owed_of_its_own(self):
+        "The owner, 2026-11-27: no empty card the agent never raised - the reply owed is the agent's to put up; the task waits on it."
+        s = MemoryStore(); tid, mid = task_with(s)
+        out = wrapup.finish(s, tid, REP, None, 'coding')
+        self.assertEqual((out['drafting'], out['message_id']), (True, mid))
+        self.assertEqual(s.list_reviews('pending'), []); self.assertEqual(s.get_task(tid)['Status'], 'waiting')
 
     def test_a_report_row_still_drafts_nothing_because_nobody_sent_it(self):
         s = MemoryStore(); tid, mid = task_with(s, 'report')

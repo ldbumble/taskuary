@@ -96,15 +96,15 @@ class FinishTests(unittest.TestCase):
         with mock.patch('taskuary.responder.draft_for_review', return_value='hi'):
             out = wrapup.finish(s, tid, {'summary': 'fixed'}, None, 'agent')
         self.assertEqual((out['drafting'], out['message_id'], out['can_send']), (True, mid, True))
-        self.assertEqual(len(s.list_reviews('pending')), 1)
-        self.assertEqual(s.get_task(tid)['Status'], 'waiting')   # the draft waits on the owner's word: send elsewhere, or close without sending
+        self.assertEqual(len(s.list_reviews('pending')), 0)       # ...the reply owed is the agent's card to raise (2026-11-27)
+        self.assertEqual(s.get_task(tid)['Status'], 'waiting')
 
     def test_a_channel_switched_off_raises_the_reply_but_hides_send(self):
         s = MemoryStore(); s.set_setting('reply_channels', 'email', 't')
         tid, _ = task_with(s, 'discord')
         with mock.patch('taskuary.responder.draft_for_review', return_value='hi') as wd:
             out = wrapup.finish(s, tid, {'summary': 'fixed'}, None, 'agent')
-        wd.assert_not_called(); self.assertTrue(out['owed'])          # the reply owed, its agent's to write (2026-11-10)
+        wd.assert_not_called()                                         # the reply owed, its agent's to write (2026-11-10)
         self.assertEqual((out['drafting'], out['can_send']), (True, False))
         self.assertIn('Settings', out['send_block'])
 
@@ -121,7 +121,7 @@ class FinishTests(unittest.TestCase):
         with mock.patch('taskuary.responder.draft_for_review', return_value='hi'):
             out = wrapup.finish(s, tid, {'summary': 'fixed'}, None, 'agent')
         self.assertEqual((out['drafting'], out['message_id']), (True, mid))
-        self.assertEqual(len(s.list_reviews('pending')), 1)
+        self.assertEqual(len(s.list_reviews('pending')), 0)
         self.assertEqual(s.get_task(tid)['Status'], 'waiting')
 
 

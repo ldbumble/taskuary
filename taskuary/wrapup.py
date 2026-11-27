@@ -484,13 +484,11 @@ def _addrs(v) -> list | None:
 
 
 # A LETTER WITH A BLANK LEFT TO FILL IS NO CARD (the recorded walk, 2026-11-11: a reply filed for the owner's Send read "Hi [NAME FROM ACCOUNT
-# PAGE]" - one press from going out so). A structure check, no reading of meaning: words alone in square brackets or doubled braces, as a
-# template leaves them - never a link's text, a numbered note or a ticked box. The agent is told its two ways on.
-_BLANK = re.compile(r"\[[A-Za-z][A-Za-z '/_-]{2,60}\](?!\()|\{\{[^{}\n]{1,60}\}\}")
-def blanks(text) -> list: return list(dict.fromkeys(m.group(0) for m in _BLANK.finditer(str(text or ''))))
+# PAGE]" - one press from going out so). The slots blanks.py finds, the one rule the draft box marks too: refused here, at the raise.
 def blank_why(text, store=None) -> str:
     "'' or what to tell the agent whose letter still holds a blank, or holds no words but its frame: what it can do next."
-    b = blanks(text)
+    from .blanks import find
+    b = find(text)
     if b: return f"the letter still has a blank left to fill ({', '.join(b[:3])}) - nothing was set up; a letter with it filled is."
     return ("the letter holds only its greeting and sign-off - there is no message in it yet, so nothing was set up."
             ) if store is not None and not message_of(store, text) else ''
@@ -845,8 +843,8 @@ def asks_to_move(store, task_id: int, rep: dict, actor: str = 'agent', keep_open
 def finish(store, task_id: int, rep: dict, run_id: int = None, actor: str = 'agent',
            owner_done: bool = False, keep_open: bool = False, no_reply: bool = False) -> dict:
     """The end of finished work: the conversation is refreshed, the ask reassessed, and the reply the
-    sender gets waits on you to send it - the agent's own, or, where it wrote none, the reply owed
-    (`owed`: its review, for ask_for_reply). Nothing to reply to means nothing to wait for, so it just closes.
+    sender gets waits on you to send it - the agent's own, where it wrote one (raise_reply). Nothing to reply to means nothing to wait
+    for, so it just closes.
 
     `keep_open` is ENDING THE RUN without ending the task: everything here still happens - the
     refresh, the reassessment, the reply - and the task's own status is left exactly as it was. The
@@ -863,15 +861,8 @@ def finish(store, task_id: int, rep: dict, run_id: int = None, actor: str = 'age
         from .outbound import can_reply, send_block
         m = store.get_message(mid) or {}
         if not can_reply(store, m.get('Channel')):
-            # a report cannot be replied to (nobody sent it), but its card may name somewhere its
-            # FINDINGS should go - the one configured exception to "work off a report lands on the
-            # timeline and nowhere else" (reports.findings_target)
-            from .reports import findings_target
-            tgt = findings_target(store, m)
-            if tgt:
-                deliver_findings(store, task_id, mid, run_id, rep, tgt)
-                if not keep_open: store.update_task(task_id, {'Status': 'waiting'}, actor)
-                return {'drafting': True, 'message_id': mid, 'can_send': True, 'send_block': '', 'freshness': 'unchecked'}
+            # ...a report's findings are filed with the task and nowhere else: one sent on is the agent's card to raise, never a
+            # message a side model drafts into a card nobody raised (the owner, 2026-11-27)
             # the always-draft rule (PW-237): a channel that cannot CARRY the reply hides Send and says why -
             # it does not hide the answer. Only a row nobody sent has nobody to answer.
             if no_one_behind(m.get('Channel')): mid = None
@@ -951,26 +942,10 @@ def finish(store, task_id: int, rep: dict, run_id: int = None, actor: str = 'age
     if due and due['action'] == 'close_issue': proposals.closeout(store, task_id, due, '' if mid else resolution_text(rep), actor)
     # a tracker's close-out carries the agent's result as its comment - Jira, Monday and Linear have no reply to carry it (outbound.NEVER)
     if due and due['action'] == 'close_item': proposals.closeout(store, task_id, due, resolution_text(rep), actor)
-    owed = raise_reply(store, task_id, mid, run_id, fresh=fresh, stopped=keep_open and cut_short(store, task_id)) if mid else None
+    if mid: raise_reply(store, task_id, mid, run_id, fresh=fresh, stopped=keep_open and cut_short(store, task_id))
     if due and due['action'] == 'merge_pr': proposals.closeout(store, task_id, due, '' if due.get('theirs') else resolution_text(rep), actor)
     return {'drafting': bool(mid), 'message_id': mid, 'can_send': bool(mid) and can_send,
-            'send_block': block if mid else '', 'freshness': fresh['state'], 'closeout': (due or {}).get('action'), 'owed': owed}
-
-
-def deliver_findings(store, task_id: int, mid: int, run_id: int, rep: dict, tgt: dict) -> None:
-    """A report's task finished and its card names somewhere the findings should go. Same shape as
-    every other outgoing message: a pending review carrying its destination, which the owner reads
-    and approves. Nothing about "a report started this" makes the sending automatic."""
-    from . import outbox
-    rid = store.add_review({'TaskId': task_id, 'MessageId': mid, 'RunId': run_id, 'Kind': 'draft_reply',
-                            'Status': 'pending', 'Deliver': json.dumps(tgt),
-                            'Reason': f"the report's findings, for {tgt['to']} - approve to send"})
-    try:
-        draft = outbox.draft_message(store, tgt['channel'], tgt['to'],
-                                     f"what we found looking into the \"{tgt['subject']}\" report", resolution_text(rep), mailbox=tgt.get('mailbox'))
-        store.update_review_draft(rid, draft, run_id)
-    except Exception as e:
-        logger.warning(f'findings draft failed for task {task_id}: {e}')
+            'send_block': block if mid else '', 'freshness': fresh['state'], 'closeout': (due or {}).get('action')}
 
 
 def _ended(store, tid: int, close: bool, actor: str):
@@ -1271,9 +1246,6 @@ def _wrap_session(store, tid, task, close, actor, sid, final_message, no_reply, 
         except Exception as e: logger.debug(f'handbook: nothing filed for task {tid} - {e}')
     store.audit('terminal', tid, 'wrap', actor, detail={'sid': found or sid, 'close': close})
     _ended(store, tid, close, actor)
-    # ...and the reply it owes and did not write is asked of it, once its run is put away (ask_for_reply) - only where the agent ended
-    # the run itself: one the owner ended is theirs to start again
-    if said and fin.get('owed'): ask_for_reply(store, tid, fin['owed'])
     return {'wrap': 'done', 'taskId': tid, 'report': report, 'proposed': proposed,
             'drafting': bool(fin.get('drafting')), 'can_send': bool(fin.get('can_send')), 'send_block': fin.get('send_block') or '',
             'freshness': fin.get('freshness') or 'unchecked', 'artifacts': [artifact] if artifact else [], 'asks': fin.get('asks')}
@@ -1287,10 +1259,9 @@ def cut_short(store, task_id: int) -> bool:
 
 def raise_reply(store, task_id: int, mid: int, run_id: int, fresh: dict = None, stopped: bool = False):
     """The run ended with a reply owed to the sender of `mid`: one review per answer (PW-236), the held one, else the pending one an earlier
-    ending raised, else a new one. The agent's own reply (agent_reply) stands as written. One it did not write is NOBODY'S DRAFT: the
-    review waits as the reply owed, with no words on it, and its agent is asked for it (ask_for_reply) - the review's id is returned then.
-    A tool-less writer used to draft it here from the run's report (the owner, 2026-11-10: "no more triage creates draft. agent should
-    be doing it")."""
+    ending raised. The agent's own reply (agent_reply) stands as written. NO NEW ONE IS MADE HERE (the owner, 2026-11-27: "remove any place
+    where the agent is not putting up cards"): the reply owed is a fact the agent already holds - the mail and its task - and the card is
+    its to raise; an empty review raised for it here, and the agent then asked for it, was Taskuary putting up the card and chasing it."""
     fresh = fresh or {}
     # ...and a run the owner STOPPED (Stop and save: the session ended, the task kept open) did not finish: its reply said "the agent finished
     # the work" over an agent stopped mid-turn (the overnight run, 2026-11-03)
@@ -1310,8 +1281,7 @@ def raise_reply(store, task_id: int, mid: int, run_id: int, fresh: dict = None, 
         rid = live['ReviewId']
         # ...a follow-up keeps saying it is one (agent_reply): these lines would make it the answer to the message again
         if not is_follow_up(live): store.update_review_reason(rid, why, run_id)
-    # ...a new one is the reply owed, as one owed at arrival is (ingest): a `draft` with no words, the agent's to write
-    else: rid = store.add_review({'TaskId': task_id, 'MessageId': mid, 'RunId': run_id, 'Kind': 'draft', 'Status': 'pending', 'Reason': why})
+    else: return None
     if (held or live) and (held or live).get('MessageId') != mid: store.update_review_message(rid, mid)
     rv = store.get_review(rid) or {}
     # a refresh that failed is an unresolved freshness state the owner sees: the reply waits, stale, for one that succeeds
@@ -1319,7 +1289,7 @@ def raise_reply(store, task_id: int, mid: int, run_id: int, fresh: dict = None, 
     # ...and words written before the work from the mail alone (an older build's triage draft) promise what the run had not looked at:
     # they are shown stale, never sent as the run's answer
     elif held and not agent_drafted(rv) and str(rv.get('DraftText') or '').strip(): store.mark_review_stale(rid)
-    if not agent_drafted(rv): return rid
+    if not agent_drafted(rv): return
     # the agent that did the work wrote this reply itself (agent_reply): its words stand and no second
     # model rewrites them - only a thread that moved on (or could not be checked) is flagged for a reread
     by = str(rv.get('DraftBy'))[len(AGENT_DRAFT):] or 'the agent'
@@ -1328,13 +1298,6 @@ def raise_reply(store, task_id: int, mid: int, run_id: int, fresh: dict = None, 
                                    + (' (the thread moved on after it was written - reread it)' if fresh.get('state') == 'changed' else ''), run_id)
 
 
-# ...AND THE AGENT IS ASKED FOR IT, ONCE. An agent that ended its run itself (`taskuary --done`) without the reply it owes is told so, by the
-# road every Taskuary word to an agent takes (general.to_agent) - write it, or say none is needed. Once per reply owed, kept on the review's own
-# audit: an agent that ends again without writing it is not told twice (no loop), and the reply waits as owed, its agent's start lit
-# (rulebook.reply_unwritten). A run the owner ended - Stop and save, Done - is not reopened for it: the same reply owed waits for their start.
-OWED = ('TASKUARY: your run ended, and no reply to {who} is written. A reply is propose, kind reply (or `taskuary --reply "<text>"`); '
-        'reply_not_needed (or `taskuary --reply-not-needed "<why>"`) puts it down.')
-ASKED = 'reply_asked'
 def owed_to(store, mid, rv: dict = None) -> str:
     "Who the reply is owed to: the people a message the owner asked for goes to (outbox), else whoever wrote message `mid`."
     try: d = json.loads((rv or {}).get('Deliver') or '{}') or {}
@@ -1342,18 +1305,5 @@ def owed_to(store, mid, rv: dict = None) -> str:
     if d.get('channel') and d.get('to'): return ', '.join(d['to']) if isinstance(d['to'], list) else str(d['to'])
     m = store.get_message(mid) or {}
     return m.get('FromName') or m.get('FromEmail') or 'the person who asked'
-def ask_for_reply(store, task_id: int, rid: int) -> str:
-    """Tell task `task_id`'s agent the reply on review `rid` is owed: 'told' / 'woke' as general.to_agent answers, '' where it was asked before,
-    is written or gone, or no agent can be asked - then the task says so in one line."""
-    rv = store.get_review(rid) or {}
-    if rv.get('Status') not in ('pending', 'held') or str(rv.get('DraftText') or '').strip(): return ''
-    if any(r.get('Action') == ASKED for r in store.list_audit('review', rid, 50) or []): return ''
-    from . import general
-    who = owed_to(store, rv.get('MessageId'), rv)
-    got = general.to_agent(store, task_id, OWED.format(who=who), 'router')
-    store.audit('review', rid, ASKED, 'router', detail={'how': got or 'nobody'})
-    if got: store.update_review_reason(rid, f'reply owed to {who} - its agent was asked to write it', rv.get('RunId'))
-    else: store.add_comment(task_id, 'router', 'agent', f'A reply to {who} is owed and no agent could be asked to write it.')
-    return got
 
 

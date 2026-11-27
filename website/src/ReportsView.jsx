@@ -1775,19 +1775,6 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
             <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.5 }}>
               A time missed while the app was closed runs once when it opens.
             </Typography>
-            {!!cfg.watch_for && (
-              <Box sx={{ mt: 1.25 }}>
-                <Box sx={{ display: "flex", gap: 1, mt: 1.25, flexWrap: "wrap", alignItems: "center" }}>
-                  <TextField size="small" value={(cfg.deliver_findings || {}).to || ""}
-                    onChange={(e) => setCfg({ ...cfg, deliver_findings: { ...(cfg.deliver_findings || { channel: "email" }), to: e.target.value } })}
-                    label="Send the findings to (optional)" placeholder="nobody — findings stay under Reports on your rail"
-                    sx={{ minWidth: 280, "& .MuiInputBase-root": { fontSize: 13 } }} />
-                  <Typography variant="caption" sx={{ color: FAINT, flex: 1, minWidth: 200 }}>
-                    Still drafted for your approval first — nothing about a report makes a send automatic.
-                  </Typography>
-                </Box>
-              </Box>
-            )}
             {!cfg.title && (
               <Typography variant="caption" sx={{ mt: 0.5, display: "block", color: "var(--tq-link, #55697a)", fontWeight: 600 }}>
                 No title yet — <Box component="span" sx={{ textDecoration: "underline", cursor: "pointer" }}

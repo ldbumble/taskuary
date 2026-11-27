@@ -44,7 +44,7 @@ export function taskMoves(s, run, w) {
       ? { id: "reopen", group: "decide", tone: "s", label: s.reopening ? "Reopening…" : w.label("reopen"), run: run.reopen, ...off(s.reopening ? "it is reopening" : ""), title: w.hint("reopen") }
       // ...a live session has no primary; nor a waiting draft: its Send, under the draft, is the move (2026-10-06), so Mark done stands outlined
       : { id: "done", group: "more", label: s.finishing ? "Marking done…" : w.label("done"), ...off(s.finishing ? "it is closing" : ""), run: run.done, title: w.doneHint,
-        promote: !s.live && !s.waitingDraft && !(s.trust && !s.watching) && !s.invite, beside: s.live, onCard: s.waitingDraft && !s.live },
+        promote: !s.live && !s.waitingDraft && !(s.trust && !s.watching) && !s.invite, beside: s.live },
     // ...Mark done with words: its card opens in the conversation, under the item
     { id: "close-note", group: "more", label: w.label("close-note"), run: run.note, title: w.hint("close-note"), ...off(s.closed ? CLOSED : s.live ? LIVE : "") },
     // ONE VERB FOR IT, button and dialog (U13)

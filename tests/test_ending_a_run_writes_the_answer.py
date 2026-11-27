@@ -3,8 +3,8 @@
 An agent that finished by itself drafted the reply (selfclose -> wrap(close=True) -> finish). The
 owner pressing "Stop and save" got the report filed and nothing to send, on the one road
 where they had just read the work and knew it was done (the owner, 2026-09-22). `close` now decides
-only whether the TASK ends with the run; the reply is raised either way. Since 2026-11-10 nobody but the agent writes it: one it did not
-write waits as the reply owed, and an agent that ended its own run is asked for it once.
+only whether the TASK ends with the run. Since 2026-11-10 nobody but the agent writes the reply, and since 2026-11-27 nothing at a run's end
+puts up a card for it either: the reply owed is a fact the agent holds, its card its own to raise - and nobody chases it for one.
 """
 import unittest
 from unittest import mock
@@ -40,11 +40,8 @@ class EndingTheRunTests(unittest.TestCase):
         # the run ended, not the task: open and `session saved`, not in progress with nobody on it (A1/A2, 2026-09-25)
         self.assertEqual((self.s.get_task(tid) or {})['Status'], 'open', 'the run ended, not the task')
         from taskuary import funnel; self.assertTrue(funnel.session_saved(self.s, tid))
-        rv = self.s.pending_review(tid) or {}
-        # ...as the reply owed, the agent's to write: no words on it, the same shape as one owed at arrival, so its agent's start is lit
-        self.assertEqual((rv.get('Kind'), rv.get('DraftText') or ''), ('draft', ''))
-        self.assertIn("Dana is owed - it is the agent's to write", rv.get('Reason'))
-        from taskuary import rulebook; self.assertTrue(rulebook.reply_unwritten(self.s, {'tid': tid}))
+        # ...and no empty card is put up for the reply owed: the agent's to raise (the owner, 2026-11-27)
+        self.assertIsNone(self.s.pending_review(tid))
         told.assert_not_called()                    # ...and the owner's Stop is not undone: the agent they ended is not reopened for it
 
     def test_ending_it_WITH_the_task_still_closes_it(self):
@@ -54,30 +51,15 @@ class EndingTheRunTests(unittest.TestCase):
         self.assertTrue(out['drafting'])
         self.assertEqual((self.s.get_task(tid) or {})['Status'], 'waiting', 'a reply is owed, so the task waits on it')
 
-    def test_an_agent_that_ends_its_run_without_the_reply_is_asked_for_it_once(self):
-        """`taskuary --done` with nobody's reply written: the agent that did the work is told, by the road every Taskuary word to it
-        takes (general.to_agent), that Dana is owed one - and never twice, however often it ends again without it."""
+    def test_an_agent_that_ends_its_run_without_the_reply_is_not_chased_for_it(self):
+        """`taskuary --done` with nobody's reply written: no empty card is raised in its place, and no Taskuary line chases the agent for it
+        (the owner, 2026-11-27) - the reply owed was a fact in its context from the start."""
         tid = _task_with_a_sender(self.s)
         ws.record(self.s, tid, f'sid{tid}', 'finished', text='Fixed the off-by-one.', source='cli')
         with self.drafted, self.summary, self.told as told:
             wrapup.wrap(self.s, tid, close=False, actor='coding')
-            rid = self.s.pending_review(tid)['ReviewId']
-            self.assertEqual(wrapup.ask_for_reply(self.s, tid, rid), '')            # ...asked once: a second ending says nothing again
-        told.assert_called_once()
-        self.assertEqual(told.call_args[0][:2], (self.s, tid))
-        self.assertIn('Dana is owed a reply that nobody has written', told.call_args[0][2])
-        self.assertIn('--reply-not-needed', told.call_args[0][2])
-        self.assertEqual(self.s.get_review(rid)['Reason'], 'reply owed to Dana - its agent was asked to write it')
-        self.assertFalse(str(self.s.get_review(rid).get('DraftText') or ''))
-
-    def test_where_no_agent_can_be_asked_the_reply_waits_owed_and_says_so(self):
-        tid = _task_with_a_sender(self.s)
-        ws.record(self.s, tid, f'sid{tid}', 'finished', text='Fixed the off-by-one.', source='cli')
-        with self.drafted, self.summary, mock.patch.object(general, 'to_agent', return_value=''):
-            wrapup.wrap(self.s, tid, close=False, actor='coding')
-        rv = self.s.pending_review(tid)
-        self.assertEqual((rv['Status'], rv.get('DraftText') or ''), ('pending', ''))
-        self.assertIn('A reply to Dana is owed and no agent could be asked to write it.', [c['Body'] for c in self.s.list_comments(tid)])
+        told.assert_not_called()
+        self.assertIsNone(self.s.pending_review(tid))
 
     def test_the_agents_own_reply_stands_and_nobody_is_asked(self):
         tid = _task_with_a_sender(self.s)

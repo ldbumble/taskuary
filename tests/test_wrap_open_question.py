@@ -55,6 +55,7 @@ class OpenQuestionAtWrap(unittest.TestCase):
     def test_finished_work_still_raises_the_reply_as_before(self):
         s = MemoryStore(); tid, mid = vendor_task(s)
         ev(s, tid, 'working'); ev(s, tid, 'turn_end', 'Retried from the allowed host - it connects and the files came through.')
+        s.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft', 'Status': 'pending', 'Origin': 'triage', 'Reason': 'needs a reply'})
         out, wd = self.finish(s, tid)
         wd.assert_not_called(); self.assertTrue(out['drafting'])         # the reply owed, its agent's to write (2026-11-10)
         self.assertTrue(s.list_reviews('pending')[0]['Reason'].startswith('the agent finished without writing the reply'))
@@ -63,6 +64,7 @@ class OpenQuestionAtWrap(unittest.TestCase):
         "The overnight run, 2026-11-03: Stop and save mid-turn left a draft saying 'the agent finished the work'."
         s = MemoryStore(); tid, mid = vendor_task(s)
         ev(s, tid, 'working'); ev(s, tid, 'stopped', 'the agent stopped in the middle of its turn')
+        s.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft', 'Status': 'pending', 'Origin': 'triage', 'Reason': 'needs a reply'})
         self.finish(s, tid)
         self.assertTrue(s.list_reviews('pending')[0]['Reason'].startswith('you stopped the agent'))
 

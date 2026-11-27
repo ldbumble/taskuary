@@ -104,7 +104,7 @@ test("an envelope whose To holds no address needs one - an address, or no To at 
 test("the card holds Send and opens To while the address is missing", async () => {
   const { readFileSync } = await import("node:fs");
   const rd = readFileSync(new URL("../src/ReviewDecision.jsx", import.meta.url), "utf8");
-  assert.match(rd, /needsTo && \[no\("approve"\), no\("send_close"\), no\("anyway"\)\]\.includes\(v\.id\) \? \{ \.\.\.v, disabled: true/);
+  assert.match(rd, /needsTo && \[no\("approve"\), no\("anyway"\)\]\.includes\(v\.id\) \? \{ \.\.\.v, disabled: true/);
   assert.match(rd, /needs: needsTo/, "its To field asks for the address");
 });
 // THE RECEIPT NAMES EVERYONE IT WENT TO (the walk, 2026-11-17): a mail to Erin copying Gail read "To erin@" on its sent card while the agent

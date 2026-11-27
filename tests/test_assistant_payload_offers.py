@@ -59,4 +59,4 @@ def test_a_held_browser_step_behind_the_front_is_on_no_view_and_the_detail_names
     assert [r['ReviewId'] for r in payload(s, tid)['browserActs']] == [front]
     with mock.patch.object(server, 'store', s):
         d = TestClient(server.app).get(f'/api/tasks/{tid}').json()
-    assert d['queue'] == {'live': [front], 'held': [behind], 'closes': "Save the portal's new settings"}
+    assert d['queue'] == {'live': [front], 'held': [behind]}

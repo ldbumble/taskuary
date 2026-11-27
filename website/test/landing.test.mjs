@@ -98,19 +98,12 @@ test("the push card has no Not now; a passed one is the same card with its butto
   assert.doesNotMatch(body, /w\.passed|!s\.passed &&/);
 });
 
-// REVIEW CHANGES STAYS AFTER THE SESSION IS GONE (the owner, 2026-11-10: "yes, keep it"): lit on work left to review, the row's button opens
-// the landing card's own diff - one road to the diff, never a second viewer; the checkout's drawer only where no card stands to take it
-test("the row's Review changes with no session open opens the landing card's diff", async () => {
+// INSIDE A TASK ONLY ITS AGENT RECOMMENDS (the owner, 2026-11-27): no Review changes lit on the row by Taskuary's own rule (rulebook
+// changes_waiting) - the work left to review is the agent's to hand over
+test("the task's row lights no Review changes of its own", async () => {
   const { readFileSync } = await import("node:fs");
-  const read = (f) => readFileSync(new URL(`../src/${f}`, import.meta.url), "utf8");
-  const card = read("LandingCard.jsx"), page = read("TaskPage.jsx");
-  assert.match(card, /export const LANDING_DIFF = "tq-landing-diff";/);
-  assert.match(card, /window\.addEventListener\(LANDING_DIFF, on\)/);
-  assert.match(card, /e\.detail\.handled = true; seeRef\.current\(\);/);
-  // ...the listener stands before the card's early return: hooks in one order on every render
-  assert.ok(card.indexOf("window.addEventListener(LANDING_DIFF") < card.indexOf("if (!s || (!s.ask && !s.landed && !s.changed)) return null;"));
-  assert.match(page, /!liveSession && filled\("review_changes"\) \? \[\{ id: "diff"/);
-  assert.match(page, /window\.dispatchEvent\(new CustomEvent\(LANDING_DIFF, \{ detail: ask \}\)\); if \(!ask\.handled\) setDiffOpen\(true\);/);
+  const page = readFileSync(new URL("../src/TaskPage.jsx", import.meta.url), "utf8");
+  assert.doesNotMatch(page, /filled\("review_changes"\)|LANDING_DIFF/);
 });
 
 // THE WORK'S CARD IS PART OF THE AGENT TURN THAT DID IT, OR NOT THERE (the owner, 2026-11-13: "stop putting worked on master at the bottom.

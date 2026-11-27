@@ -41,6 +41,16 @@ class LiveWork(unittest.TestCase):
             out = concierge.close_after_send(self.s, self.tid)
         self.assertTrue(out['closed']); self.assertEqual(out['kept_open'], []); self.assertTrue(job.called)
 
+    def test_mark_done_on_a_live_agent_stops_it_and_closes_with_no_write_up(self):
+        "The owner, 2026-11-27: Mark done just stops the agent and closes the task - no app write-up runs behind the press; the chat is the record."
+        term.SESSIONS['run1'] = SimpleNamespace(sid='run1', task_id=self.tid, alive=True, started=1)
+        from taskuary import wrapup
+        with mock.patch.object(wrapup, 'wrap', side_effect=AssertionError('a write-up ran at the close')), \
+             mock.patch.object(term, 'close') as stop:
+            self.assertTrue(concierge.close_task(self.s, self.tid, 'owner'))
+        stop.assert_called_once_with('run1')
+        self.assertEqual(self.s.get_task(self.tid)['Status'], 'done')
+
     def test_send_with_nothing_live_still_closes(self):
         self.assertTrue(concierge.close_after_send(self.s, self.tid)['closed'])
         self.assertEqual(self.s.get_task(self.tid)['Status'], 'done')

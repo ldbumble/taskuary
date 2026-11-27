@@ -1,6 +1,6 @@
-"""A blank left in a draft (the owner, 2026-10-30): Send refuses while a slot like "[REASON]" remains - at the one door
-(verdicts.decide), so the task page, the phone and the assistant all meet it - and only template slots count, never the brackets
-real mail carries. The edge cases are shared with the draft box's own marks (website/test/blanks.test.mjs)."""
+"""A blank left in a draft (the owner, 2026-10-30): an agent's letter holding a slot like "[REASON]" is refused at its raise (wrapup.blank_why),
+so no card ever shows one - and what the owner typed himself goes as he left it, with no second press. Only template slots count, never the
+brackets real mail carries. The edge cases are shared with the draft box's own marks (website/test/blanks.test.mjs)."""
 import json, unittest
 from taskuary import card
 from pathlib import Path
@@ -24,12 +24,6 @@ class RuleTests(unittest.TestCase):
         (a, b, s), = blanks.spans(t)
         self.assertEqual((t[a:b], s), ('[DATE]', '[DATE]'))
 
-    def test_the_refusal_names_them_plainly(self):
-        self.assertEqual(blanks.refusal('because [REASON].'), 'Fill in [REASON] first')
-        self.assertEqual(blanks.refusal('[DATE] and [REASON]'), 'Fill in [DATE] and [REASON] first')
-        self.assertEqual(blanks.refusal('[DATE], [TIME] and [REASON]'), 'Fill in [DATE], [TIME] and [REASON] first')
-        self.assertEqual(blanks.refusal('Re: [External] all filled in.'), '')
-
 
 def _reply(s, text, external='graph:BL1'):
     tid = s.create_task({'Title': 'answer Erin', 'Kind': 'general', 'Status': 'open'}, 'o')
@@ -44,64 +38,22 @@ def _sent(seen):
 
 
 class DoorTests(unittest.TestCase):
-    def test_a_blank_refuses_the_send_and_leaves_the_draft_pending(self):
-        s, seen = MemoryStore(), []
-        tid, rid = _reply(s, "I can't make Friday because [REASON].")
-        with _sent(seen): out = verdicts.decide(s, s.get_review(rid), 'approve')
-        self.assertEqual((out['ok'], out['send_error'], out['blanks']), (False, 'Fill in [REASON] first', ['[REASON]']))
-        self.assertEqual((seen, s.get_review(rid)['Status']), ([], 'pending'))
-
-    def test_the_owners_edit_is_what_is_checked(self):
-        s, seen = MemoryStore(), []
-        _tid, rid = _reply(s, "I can't make Friday because [REASON].")
-        with _sent(seen): out = verdicts.decide(s, s.get_review(rid), 'approve', "I can't make Friday - I'm away.")
-        self.assertTrue(out['ok'], out)
-        self.assertEqual(len(seen), 1)
-        s2 = MemoryStore(); _t, rid2 = _reply(s2, 'All set.')
-        with _sent(seen): out = verdicts.decide(s2, s2.get_review(rid2), 'approve', 'Moved to [DATE].')
-        self.assertEqual((out['send_error'], len(seen)), ('Fill in [DATE] first', 1))
-
-    def test_send_anyway_goes_past_the_blank_the_owner_was_asked_about(self):
-        # the owner, 2026-11-08: Send stays lit; its press asks "This still has [ROOM]. Send anyway?" and Send anyway goes (blanks.js blankAsk)
+    def test_what_he_sends_goes_as_he_left_it_blank_and_all(self):
+        # the ruling, 2026-11-27: one card, one press - no "Send anyway" second step; a blank is refused at the agent's raise, not at his press
         s, seen = MemoryStore(), []
         _tid, rid = _reply(s, 'The review is in [ROOM]. I will confirm by ___.')
-        with _sent(seen): out = verdicts.decide(s, s.get_review(rid), 'approve', blanks_ok=True)
+        with _sent(seen): out = verdicts.decide(s, s.get_review(rid), 'approve')
         self.assertTrue(out['ok'], out)
         self.assertEqual(seen, ['The review is in [ROOM]. I will confirm by ___.'])
 
-    def test_a_mail_tag_is_not_a_blank(self):
-        s, seen = MemoryStore(), []
-        _tid, rid = _reply(s, 'Re: [External] Payworth renewal - signed and attached [1].')
-        with _sent(seen): out = verdicts.decide(s, s.get_review(rid), 'approve')
-        self.assertTrue(out['ok'], out)
-
-    def test_the_endpoint_says_it_where_send_was_pressed(self):
-        s, seen = server.store, []
-        _tid, rid = _reply(s, 'Thanks,\n[Your name]', 'graph:BL3')
-        with _sent(seen), mock.patch.object(server, '_refresh_chat_context'):
-            r = server_client().post(f'/api/reviews/{rid}/decide', json={'verb': 'approve', 'final_text': 'Thanks,\n[Your name]'})
-        self.assertEqual(r.status_code, 200)
-        self.assertEqual((r.json()['ok'], r.json()['send_error']), (False, 'Fill in [Your name] first'))
-        self.assertEqual(seen, [])
-
-
-class CloseOutTests(unittest.TestCase):
-    """Close out's one press merges, then sends the reply: a blank in the reply stops it before the merge, not between the two."""
-    def test_the_merge_waits_for_the_blank(self):
-        from taskuary import github, proposals
-        from tests.test_closeout import GREEN, OPEN, armed, finish, with_pr, setUpModule as up, tearDownModule as down
-        up(); self.addCleanup(down)
-        s = armed(MemoryStore()); tid = with_pr(s); finish(s, tid)
-        reply = s.add_review({'TaskId': tid, 'Kind': 'draft', 'Status': 'pending', 'DraftText': 'Merged - it ships on [DATE].'})
-        with mock.patch.object(github, 'pr', return_value=OPEN), mock.patch.object(github, 'checks', return_value=GREEN), \
-             mock.patch.object(github, 'merge_pr', return_value='m') as merge:
-            out = verdicts.decide(s, card.pending(s, tid, 'closeout'), 'approve', reply_text='')
-            merge.assert_not_called()
-            self.assertEqual((out['ok'], out['send_error']), (False, 'Fill in [DATE] first'))
-            out = verdicts.decide(s, card.pending(s, tid, 'closeout'), 'approve', reply_text='Merged - it ships Friday.')
-        merge.assert_called_once()
-        self.assertTrue(out['ok'] and out['reply']['ok'], out)
-        self.assertEqual(s.get_review(reply)['FinalText'], 'Merged - it ships Friday.')
+    def test_the_agents_letter_with_a_blank_is_refused_at_the_raise_with_the_fix(self):
+        from taskuary import slots, wrapup
+        s = MemoryStore()
+        tid, _rid = _reply(s, 'x')
+        out = wrapup.agent_reply(s, tid, 'Hi Erin, I moved it to {{day}}.', 'assistant')
+        self.assertFalse(out['ok']); self.assertIn('{{day}}', out['why'])
+        out = slots.draft(s, tid, 'Hi Erin, the room is [ROOM].', to='erin@northwind.example', subject='Friday', agent='assistant')
+        self.assertFalse(out['ok']); self.assertIn('[ROOM]', out['why'])
 
 
 def server_client(): return TestClient(server.app)

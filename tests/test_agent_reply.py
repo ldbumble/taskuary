@@ -12,7 +12,7 @@ from unittest import mock
 
 from fastapi.testclient import TestClient
 
-from taskuary import wrapup, selfclose, server
+from taskuary import blanks, wrapup, selfclose, server
 from taskuary.store import MemoryStore
 
 REP = {'summary': 'fixed the export', 'outcome': 'did_work', 'determination': '', 'actions': ''}
@@ -64,8 +64,7 @@ class AgentReplyTests(NoHook):
         with mock.patch('taskuary.responder.draft_for_review', return_value='Fixed.') as redraft:
             out = wrapup.finish(s, tid, REP, None, 'coding')
         redraft.assert_not_called()
-        rv = s.get_review(out['owed'])
-        self.assertEqual((rv['Status'], rv.get('DraftText') or ''), ('pending', ''))
+        self.assertEqual((out['drafting'], s.list_reviews('pending')), (True, []))     # ...nor is an empty card put up for it (2026-11-27)
 
     def test_a_reply_that_already_went_out_is_not_put_back_on_the_table(self):
         # a resumed session saved its first session's reply again after the owner had sent it, and the sender's "Thanks!"
@@ -383,10 +382,10 @@ def test_a_letter_with_a_blank_left_to_fill_is_no_card():
     out = wrapup.agent_reply(s, tid, 'Hi [NAME FROM ACCOUNT PAGE],\n\nYour export is fixed.', 'assistant')
     assert out['ok'] is False and '[NAME FROM ACCOUNT PAGE]' in out['why'] and 'nothing was set up' in out['why']
     assert not s.pending_review(tid, 'draft_reply', live_only=False)
-    assert wrapup.blanks('Date: [date] and {{venue}}') == ['[date]', '{{venue}}']
+    assert blanks.find('Date: [date] and {{venue}}') == ['[date]', '{{venue}}']
     # ...never what a letter may carry in brackets: a link's text, a numbered note, a ticked box, a ticket's tag
     for fine in ('See [the notes](https://northwind.example/n).', 'As agreed [1], it is done.', '- [x] exported', 'Re: [TQ-0012] export'):
-        assert wrapup.blanks(fine) == [], fine
+        assert blanks.find(fine) == [], fine
     assert wrapup.agent_reply(s, tid, 'Hi Dana, the August export is fixed [1].', 'assistant')['ok']
 
 

@@ -1,6 +1,6 @@
-"""A BLANK LEFT IN A DRAFT (the owner, 2026-10-30): a drafted reply can hold a slot like "[REASON]" or "[DATE]" for the owner to
-fill, and Send went out with it. Send refuses while one remains - here, so the task page, the phone and the assistant all meet the
-same refusal (verdicts.decide is the one door) - and the draft box marks them (website/src/blanks.js, from the same blanks.json).
+"""A BLANK LEFT IN A DRAFT (the owner, 2026-10-30): a drafted reply can hold a slot like "[REASON]", "[DATE]" or "{{venue}}", and Send
+went out with it. A letter an agent files with one is refused at its raise, with the fix (wrapup.blank_why: locked rule 1, a bad card is
+never shown); what the owner types himself is his and goes as he left it. The draft box marks them (website/src/blanks.js, same blanks.json).
 
 Only template slots count, never the brackets real mail carries: a gateway's "[External]" tag, a markdown link "[text](url)", a
 footnote "[1]", a checkbox "[x]", code ("rows[INDEX]", anything in backticks) and quoted lines ("> ...") all go out as they are."""
@@ -11,9 +11,9 @@ _J = json.loads(Path(__file__).with_name('blanks.json').read_text(encoding='utf-
 NOT_SLOTS, SAID = frozenset(_J['not_slots']), frozenset(_J['said'])
 # a bracket not glued to a word before it (an index) and not a link's text or a reference's label after it
 BOX = re.compile(r'(?<![\w\]\\])\[([^\[\]\n]{1,160})\](?!\(|\[|:\s*(?:https?://|<))', re.A)
-# ...a choice left for the owner ("[Gail is joining / Gail is not joining]", the product audit 2026-11-08) and a bare line to fill ("by ___")
+# ...a choice left for the owner ("[Gail is joining / Gail is not joining]", the product audit 2026-11-08) and a bare line to fill ("by ___"), and a template's "{{venue}}"
 _CHOICE = re.compile(r'\S\s+/\s+\S')
-LINE = re.compile(r'(?<![\w_])_{3,}(?![\w_])')
+LINE = re.compile(r'(?<![\w_])_{3,}(?![\w_])|\{\{[^{}\n]{1,60}\}\}')
 _SHOUT = re.compile(r"[A-Z][A-Z0-9'’&/.,#_ -]*")
 _CUE = re.compile(r"(?ai)(?:%s)\b" % '|'.join(re.escape(c) for c in sorted(_J['cues'], key=len, reverse=True)))
 _PHRASE = re.compile(r"[A-Za-z][\w'’&/.,# -]{0,39}", re.A)
@@ -26,7 +26,7 @@ def is_slot(inner: str) -> bool:
     if not s or s.upper() in NOT_SLOTS or SAID & set(re.findall(r'[a-z]+', s.lower())): return False
     if re.fullmatch(r'_{2,}', s) or _CHOICE.search(s): return True
     if len(s) > 60: return False
-    if _SHOUT.fullmatch(s): return len(re.findall('[A-Z]', s)) >= 2
+    if _SHOUT.fullmatch(s): return len(re.findall('[A-Z]', s)) >= 2 and not re.search(r'\d', s)      # [TQ-0012] is a ticket's tag
     return bool(_PHRASE.fullmatch(s) and _CUE.match(s))
 
 
@@ -42,10 +42,3 @@ def spans(text: str) -> list:
 def find(text: str) -> list:
     """The blanks as written, each once."""
     return list(dict.fromkeys(s for *_, s in spans(text)))
-
-
-def refusal(text: str) -> str:
-    """'Fill in [REASON] first' while a blank remains; '' when the text can go."""
-    b = find(text)
-    if not b: return ''
-    return f"Fill in {b[0] if len(b) == 1 else ', '.join(b[:-1]) + ' and ' + b[-1]} first"

@@ -71,7 +71,4 @@ test("the page moves on from a Send only once the server says it went, and the w
   assert.ok(!landedSend({ ok: true, status: "pending", send_error: "delivery unknown" }));
   assert.ok(!landedSend({ ok: false, status: "approved" }));
   assert.match(read("ReviewDecision.jsx"), /verb === "approve" \? landedSend\(data\)/);
-  const page = read("TaskPage.jsx"), at = page.indexOf('const d = await walkLeave("sent")');
-  assert.ok(at > 0 && !/onLeave\?\.\(\);\s*$/.test(page.slice(page.lastIndexOf("if (closes && walkLeave)", at), at).trim()), "never put down before the answer");
-  assert.match(page, /if \(d\?\.kept\) \{[^\n]*\} else onLeave\?\.\(\); \}/);
 });

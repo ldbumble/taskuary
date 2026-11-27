@@ -113,7 +113,7 @@ class TheEnding(Base):
         mail(self.s, self.tid, 'g-2', 'One more - can you also add September?', '18:00:00')
         with mock.patch('taskuary.responder.draft_for_review', return_value='Sure.') as redraft:
             out = wrapup.finish(self.s, self.tid, REP, None, 'coding')
-        self.assertTrue(out['drafting']); self.assertTrue(out['owed'])
+        self.assertTrue(out['drafting']); self.assertEqual(pending(self.s, self.tid), [])     # ...its card the agent's to raise (2026-11-27)
         redraft.assert_not_called()                     # ...the agent's to write (2026-11-10), never a second voice's
 
 

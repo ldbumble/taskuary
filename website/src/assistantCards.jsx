@@ -40,8 +40,7 @@ import { age, ago, plural } from "./timeWords.js";
 import { SECTION, WORD, ideaWord } from "./lanes.js";
 import { kindLabel, AGENT_SHOWN } from "./kinds.js";
 import { sendBlockLine, draftState, failureHead, failureWhy, savedSendFailure } from "./sendState.js";
-import { blankAsk, blankSpans } from "./blanks.js";
-import { BlankAsk } from "./ReviewDecision.jsx";
+import { blankSpans } from "./blanks.js";
 import { askReply } from "./replyDraft.js";
 import { agentRuns } from "./taskFilter.js";
 import { progressLine } from "./checklist.js";
@@ -681,20 +680,15 @@ export function ReplyCard({ card, onDone, onSent, onOpenTask, onTimeline }) {
   // a GitHub author is their login - their "address" is GitHub's own noreply mailbox, which nobody reads
   const onGithub = String(rv?.Channel || "").toLowerCase() === "github";
   const who = rv ? (rv.FromName && rv.FromEmail && !onGithub ? `${rv.FromName} <${rv.FromEmail}>` : rv.FromName || rv.FromEmail || "them") : "";
-  // a reply still holding a blank asks once before it goes (ReviewDecision's BlankAsk, the owner 2026-11-08)
-  const [asked, setAsked] = useState(null);
-  useEffect(() => { setAsked(null); }, [value]);
-  const decide = async (verb, blanksOk = false) => {
-    const ask = verb !== "reject" && (!action || mate) && !blanksOk ? blankAsk(value) : "";
-    if (ask) { setAsked({ verb, line: ask }); return; }
-    setAsked(null); setBusy(verb); setErr("");
+  const decide = async (verb) => {
+    setBusy(verb); setErr("");
     try {
       // Decline and Finish anyway belong to the GitHub finish, whichever card is showing; the reply rides with them
       const onCo = ["close_pr", "merge_anyway"].includes(verb) && coRv ? coRv.ReviewId : card.rid;
       const withReply = mate || (onCo !== card.rid && !action);
       const o = await press(api, onCo, withReply
-        ? { verb, reply_text: verb !== "reject" ? value : null, blanks_ok: blanksOk }
-        : { verb, final_text: verb === "approve" ? value : null, blanks_ok: blanksOk }, action || coRv ? 2 : 1);     // an act or a finish on GitHub runs something
+        ? { verb, reply_text: verb !== "reject" ? value : null }
+        : { verb, final_text: verb === "approve" ? value : null }, action || coRv ? 2 : 1);     // an act or a finish on GitHub runs something
       if (o.kind === "refused") reloadGh();
       sure(o, "sent");                 // the one press (press.js): its line is thrown to this card's own reader
       const ran = ["approve", "merge_anyway"].includes(verb) || verb === co?.alt?.verb;
@@ -774,7 +768,6 @@ export function ReplyCard({ card, onDone, onSent, onOpenTask, onTimeline }) {
         {!action && rv && draftState({ ...rv, HasDraft: value.trim() ? 1 : 0 }).line && <div className={draftState(rv).state === "failed" ? "tq-card-err" : "tq-card-excerpt"}>{draftState({ ...rv, HasDraft: value.trim() ? 1 : 0 }).line}</div>}
         {!action && !card.closeout && sendBlockLine(rv) && <div className="tq-card-excerpt">{sendBlockLine(rv)}</div>}
         {gh && !blocked && gh.note && <div className="tq-card-excerpt">{capital(gh.note)}.</div>}
-        {asked && <BlankAsk line={asked.line} onSend={() => decide(asked.verb, true)} onCancel={() => setAsked(null)} />}
       </YourMove>
       {/* WHAT YOU ARE ANSWERING, said to be that (the owner, 2026-09-14: "though you need to see what
           you are responding to") - one press away, under the move */}

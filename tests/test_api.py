@@ -91,7 +91,7 @@ class GithubIngestTests(unittest.TestCase):
         with the switch off it cannot be SENT from here - Send is hidden, the reason said, and the
         owner's exit is Close without sending - but the answer itself is never suppressed."""
         from taskuary import wrapup
-        for on, status, reviews in ((False, 'waiting', 1), (True, 'waiting', 1)):
+        for on, status, reviews in ((False, 'waiting', 0), (True, 'waiting', 0)):      # ...the card is the agent's to raise (2026-11-27)
             s = self._store(on)
             tid = s.create_task({'Title': 'pr work', 'Kind': 'coding'}, 'o')
             s.add_message({'TaskId': tid, 'ExternalId': 'gh:o/app#5', 'Channel': 'github',

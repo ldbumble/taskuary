@@ -5,7 +5,7 @@
 // while it waits to land each part can be marked Keep or Revert, and the reverted ones are taken out of the branch first (landing.revert)
 // ...THE DIFF OPENS LIKE A PULL REQUEST, the whole window wide (the owner, 2026-11-08): the file list on the left, the diffs on the right - inside
 // a turn of the chat it was a column too narrow for either. The card's own list folds the generated files as that view does (diffView `generated`)
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Box, Button, CircularProgress, Dialog, DialogContent, IconButton, Typography } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
 import api from "./api";
@@ -25,8 +25,6 @@ const FileLine = ({ f }) => (
     <Box component="span" sx={{ color: "var(--tq-success, #47654a)" }}>+{f.plus}</Box> <Box component="span" sx={{ color: "var(--tq-danger, #7a2f3c)" }}>-{f.minus}</Box> {f.path}
   </Typography>);
 export const SHOWN = 8;
-// the row's Review changes asks the task's own card to open its diff (TaskPage): `handled` says a card took it
-export const LANDING_DIFF = "tq-landing-diff";
 
 export default function LandingCard({ taskId, onChanged, onState, inChat = false, initial = null, rev = "" }) {
   const [s, setS] = useState(initial), [diff, setDiff] = useState(null), [busy, setBusy] = useState(""), [said, setSaid] = useState(""),
@@ -38,12 +36,6 @@ export default function LandingCard({ taskId, onChanged, onState, inChat = false
   // ...AND READ AGAIN AS THE CHAT CHANGES (recorded on the real CLI, 2026-11-16): read once per task, a push the agent set up while the task
   // was open stood nowhere until he left and came back - and the email behind it in the line of cards (cardqueue) waited on a card unseen
   useEffect(() => { if (rev) load(); }, [rev]);   // eslint-disable-line react-hooks/exhaustive-deps
-  const seeRef = useRef(null);
-  useEffect(() => {
-    const on = (e) => { if (Number(e.detail?.taskId) === Number(taskId) && seeRef.current) { e.detail.handled = true; seeRef.current(); } };
-    window.addEventListener(LANDING_DIFF, on); return () => window.removeEventListener(LANDING_DIFF, on);
-  }, [taskId]);
-  seeRef.current = null;
   if (!s || (!s.ask && !s.landed && !s.changed)) return null;
   const w = landingWords(s);
   // THE DIFF OPENS AT THE PRESS (the owner, 2026-11-09: it waited for the read, and the button felt dead for a second): the window first, saying
@@ -51,9 +43,6 @@ export default function LandingCard({ taskId, onChanged, onState, inChat = false
   const readDiff = () => { setDiffErr(""); return api.get(`/api/tasks/${taskId}/landing`, { params: { full: true } }).then(({ data }) => setDiff(data?.data?.diff || ""))
     .catch((e) => { setDiff(null); setDiffErr(e?.response?.data?.detail || "The changes could not be read - close this and try again."); }); };
   const seeDiff = () => { if (open) return setOpen(false); setOpen(true); setDiff(null); readDiff(); };
-  // ...AND THE ROW'S REVIEW CHANGES OPENS THIS SAME VIEW (the owner, 2026-11-10: "yes, keep it"): lit on work left to review after its session
-  // is gone, it is one road to the diff - this card's - never a second viewer (TaskPage `diff`, LANDING_DIFF)
-  seeRef.current = s ? () => { setOpen(true); setDiff(null); readDiff(); } : null;
   const answer = async (how) => {
     if (how === "discard" && !sure) { setSure(true); return; }
     setBusy(how); setErr(""); setSure(false);

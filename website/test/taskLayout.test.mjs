@@ -2,7 +2,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import { SECTIONS, homeSection, liveTerminal, soloTodo, cameFrom, cameChip, judgedMarks, agentStatus, agentWord, reportLine, writeupAt, fromStatus, TAB_MOST, focusOf, fromLine, holderName, mainOf, nextInDrawer, sameWords, sectionFade, waitingOn, workPane } from "../src/taskLayout.js";
+import { SECTIONS, homeSection, liveTerminal, soloTodo, cameFrom, cameChip, judgedMarks, agentStatus, agentWord, reportLine, fromStatus, TAB_MOST, focusOf, fromLine, holderName, mainOf, nextInDrawer, sameWords, sectionFade, waitingOn, workPane } from "../src/taskLayout.js";
 import { STAGE, sectionOf } from "../src/stages.js";
 import { taskSource } from "./taskSource.mjs";
 
@@ -79,7 +79,7 @@ test("the main view follows where the task is up to: the work with Came from on 
   const page = fs.readFileSync(new URL("../src/TaskPage.jsx", import.meta.url), "utf8");
   // ...the right drawer and its lit tab went with the sections in a row (2026-10-27): the section the task is up to is its kind's and its
   // stage's (homeSection) - never the Advisor's (2026-11-06: its decision names no section)
-  assert.match(page, /if \(mainHeld\.current\.key !== mainKey\) mainHeld\.current = \{ key: mainKey, main: mainNow, sec: solo \? "from" : writingUp \? "agent" : homeSection\(t\?\.Kind, taskStage, chatSeen\.current\.on\) \};/);
+  assert.match(page, /if \(mainHeld\.current\.key !== mainKey\) mainHeld\.current = \{ key: mainKey, main: mainNow, sec: solo \? "from" : homeSection\(t\?\.Kind, taskStage, chatSeen\.current\.on\) \};/);
   assert.match(page, /const taskStage = stageOf\(\{ focus: restFocus, drafted: replyHas, closed: /, "the stage reads the focus, never the advice");
   // ...the focus the task opens on - a section opened by hand changes neither the stage nor the main view (the overnight walk, 2026-10-27)
   const restLine = page.match(/const restFocus = focusOf\(\{[^;]*;/)?.[0];
@@ -116,19 +116,6 @@ test("Stop and save on a task nobody sent keeps its Result the move; a reply, a 
   assert.equal(workPane({ stage: "reply", kind: "coding", hasSender: false, result: false }), "reply", "no Result: nothing to show instead");
 });
 
-test("a write-up under way is one line under the Result; one that failed is a card in the chat with its Try again", () => {
-  const pending = { state: "pending", stage: "report" }, failed = { state: "failed", error: "no screen" };
-  assert.equal(writeupAt(pending), "result");
-  assert.equal(writeupAt(failed), "chat");
-  assert.equal(writeupAt(null), null);
-  const src = taskSource();
-  // ...and no reply pill and no "Nobody sent this one" advice anywhere: the header's pill says where it stands (2026-10-25)
-  assert.doesNotMatch(src, /<LifecycleChip kind="reply"|Nobody sent this one|CLOSE_BY_HAND/);
-  assert.match(src, /const upAt = writeupAt\(writeup\), upFailed = upAt === "chat";/);
-  assert.match(src, /\{upFailed && <WriteupBlock/);
-  assert.doesNotMatch(src, /Closing the session and writing up what is on screen — the agent is not asked anything\.\s*<\/Typography>\s*\) : workspaceMode === "live" && peek/,
-    "the third hint line over the write-up is gone");
-});
 
 test("From folds to who and how many", () => {
   assert.equal(fromLine({ sender: { FromName: "Gail Moreno", Channel: "email" }, count: 3 }), "Gail Moreno · 3 messages");

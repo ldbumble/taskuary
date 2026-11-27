@@ -229,12 +229,13 @@ def cites(i: dict) -> list:
     ev = [str(e.get('ref') if isinstance(e, dict) else e).strip().lower() for e in a.get('evidence') or []]
     ev = [m.groups() if (m := _REF.match(e)) else ('?', e) for e in ev]
     return ([('msg', a['mid'])] if a.get('mid') else []) + ([('task', a['tid'])] if a.get('tid') else []) \
-        + [('msg', n) for n in cited_mids(a.get('why'))] + ev + ([('memory', a['memory'])] if a.get('memory') else [])
+        + [('msg', n) for n in cited_mids(a.get('why'))] + ev + ([('memory', a['memory'])] if a.get('memory') else []) \
+        + ([('report', m[1])] if (m := re.match(r'report:(\d+):', str(i.get('Key') or ''))) else [])    # ...the monitor that raised it
 
 def idea_rests_on(store, i: dict, tid=None, memo: dict = None, seen: dict = None) -> tuple:
     """(origin, why) of a task or a line an Advisor idea wrote: the worst of what it cites, and never more than trusted - Taskuary's words
-    are not the owner's ask. Fails closed: no citation at all, an id that is no stored message or task, a memory line, or a report it cites
-    as a whole is a stranger's. `seen`: what this one read has judged, so an idea citing its own task ends instead of looping."""
+    are not the owner's ask. Fails closed: no citation at all, an id that is no stored message or task, a memory line, or a digest it cites
+    as a whole is a stranger's; the monitor that raised it is as trusted as what it reads. `seen`: what this one read has judged, so an idea citing its own task ends instead of looping."""
     memo, seen = {} if memo is None else memo, {} if seen is None else seen
     k = ('idea', i['IdeaId'])
     if k in seen: return seen[k]                       # None while it is still being judged up this read: the caller skips it
@@ -254,6 +255,7 @@ def idea_rests_on(store, i: dict, tid=None, memo: dict = None, seen: dict = None
 def ref_origin(store, kind: str, x, memo: dict, seen: dict):
     "(origin, why) of one thing an idea cites; None while it is still being judged further up this read (a cycle)."
     if kind == 'memory': return memory_rests_on(store, str(x))
+    if kind == 'report': return _reads(_source_reads(store, x)) or ('stranger', f'report {x}, which reads nothing here')
     if kind not in ('msg', 'task') or not str(x).isdigit(): return 'stranger', f'{str(x)[:40]!r}, which is no message here'
     k = (kind, int(x))
     if k in seen: return seen[k]
@@ -277,14 +279,21 @@ def report_rests_on(store, row: dict) -> tuple:
     if not isinstance(bf, list) or not bf or not all(isinstance(s, dict) for s in bf):
         return 'stranger', "written by Taskuary's report, which kept no record of what it read"
     # ...and a source the owner has since switched off counts as off: the switch is their word now, not when the report ran
+    return _reads(bf + _source_reads(store, str(row.get('ConversationId') or '').removeprefix('report:'), ()), bf)
+
+def _source_reads(store, sid, gone=None) -> list:
+    "What report `sid` reads now (reports.built_from); `gone` where it is no longer here (None: a stranger's)."
     from .reports import built_from
-    sid = str(row.get('ConversationId') or '').removeprefix('report:')
-    src = store.get_source(int(sid)) if sid.isdigit() else None
-    try: now = built_from(json.loads(src.get('ConfigJson') or '{}')) if src else []
-    except (ValueError, TypeError, AttributeError): now = [{'label': 'its settings, which could not be read', 'own': False}]
-    if out := [s for s in bf + now if s.get('own') is not True]:
+    if not (src := store.get_source(int(sid)) if str(sid).isdigit() else None): return [{'label': f'report {sid}, which is not here', 'own': False}] if gone is None else list(gone)
+    try: return built_from(json.loads(src.get('ConfigJson') or '{}'), store)
+    except (ValueError, TypeError, AttributeError): return [{'label': 'its settings, which could not be read', 'own': False}]
+
+def _reads(reads: list, named=None):
+    "(origin, why) of a report's reads: trusted when every one is marked your own system - None for no reads at all."
+    if not reads: return None
+    if out := [s for s in reads if s.get('own') is not True]:
         return 'stranger', f"written by Taskuary's report from {str(out[0].get('label') or out[0].get('type') or 'a source')[:60]!r}, which is not marked as your own system"
-    return 'trusted', f"{REPORT_OK}: {', '.join(dict.fromkeys(str(s.get('label') or s.get('type'))[:40] for s in bf))}"[:300]
+    return 'trusted', f"{REPORT_OK}: {', '.join(dict.fromkeys(str(s.get('label') or s.get('type'))[:40] for s in named or reads))}"[:300]
 
 
 # ── A MEMORY LINE IS AS TRUSTED AS WHOSE WORDS IT CAME FROM (the owner, 2026-11-03) ──────────────────────────────────────────────────

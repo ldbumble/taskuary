@@ -1518,10 +1518,25 @@ def is_own(sub: dict) -> bool:
     if sub.get('type') in STORE_BACKED and sub.get('type') not in OWN_DATA: return False
     return own_default(sub.get('type')) if v is None or v == '' else v is True or str(v).lower() in ('1', 'true', 'on', 'yes')
 
-def built_from(cfg: dict) -> list:
+def built_from(cfg: dict, store=None) -> list:
     "[{type, label, own}] - the sources one run reads, as render_report picks them, recorded on its row so its trust is provenance."
+    if cfg.get('type') == 'assistant': return monitor_reads(cfg, store)
     subs = [s for s in (cfg.get('sources') or []) if s.get('type')] or [cfg]
     return [{'type': s.get('type') or 'rest', 'label': source_label(s, i), 'own': is_own(s)} for i, s in enumerate(subs, 1)]
+
+# A MONITOR (type 'assistant', the owner 2026-11-27: "it says no trust on own system") reads the systems written on it (`watch_sources`), the
+# saved reports it names (`watch_source_ids`) and, where it ticks one, Taskuary's blocks - everyone's mail, never his system. Its ideas carry
+# its id in their key (report:<id>:idea:...), so one raised from his own database is as trusted as that database (origin.cites)
+MAIL = {'type': 'taskuary', 'label': 'your mail and tasks', 'own': False}
+def monitor_reads(cfg: dict, store) -> list:
+    from .assistant import _ids, _inline
+    from . import assistantblocks as blk
+    def saved(i):
+        try: c = json.loads((store.get_source(i) or {}).get('ConfigJson') or 'null') if store else None
+        except (ValueError, TypeError): c = None
+        return built_from(c) if isinstance(c, dict) and c.get('type') != 'assistant' else [{'type': 'report', 'label': f'saved report {i}', 'own': False}]
+    out = (built_from({'sources': ws}) if (ws := _inline(cfg.get('watch_sources'))) else []) + [x for i in _ids(cfg.get('watch_source_ids')) for x in saved(i)]
+    return out + ([MAIL] if store is None or blk.reads_taskuary(blk.resolve(store, cfg)) else [])
 
 
 # the sources that put files on a run as they read (`_files`, render_report) - only these are handed the list, so no other

@@ -1497,8 +1497,10 @@ class TheShapeMakesTheRightCard(unittest.TestCase):
         tools = self.listed(); p = tools['propose']['inputSchema']['properties']
         self.assertEqual(set(p['kind']['enum']), {'reply', 'email', 'post', 'skill', 'routine', 'git', 'system', 'setting', 'break_out'})
         self.assertEqual(set(p['how']['enum']), {'push', 'pr', 'land', 'rebase', 'merge', 'discard', 'comment', 'close'})
-        for f in ('cwd', 'repo', 'deploy', 'routine', 'prompt', 'skill', 'changes', 'after_press'): self.assertIn(f, p)
+        for f in ('deploy', 'routine', 'skill', 'media', 'after_press'): self.assertIn(f, p)
         for gone in ('action', 'then'): self.assertNotIn(gone, p)
+        # ...and what is read but never listed (the tool budget, 2026-11-28): a default Taskuary fills, an alias of a listed field, a kind's own shape
+        for read in ('cwd', 'repo', 'prompt', 'changes'): self.assertNotIn(read, p)
         self.assertNotIn('propose_land', tools)
         d = agenttools.TOOLS['propose'][1]
         self.assertNotIn('push {cwd?', d); self.assertNotIn('save_routine', d); self.assertLess(len(d), 2600)
@@ -1509,6 +1511,20 @@ class TheShapeMakesTheRightCard(unittest.TestCase):
         said, err = tool(self.tid, 'propose', kind='act', action='git push')
         self.assertTrue(err); self.assertIn('`kind`', said); self.assertIn('git', said)
         for never in ('merge_pr', 'close_item', 'repair_workflow', 'questions'): self.assertNotIn(never, said)
+
+    def test_what_the_listing_leaves_out_is_still_read_by_its_card(self):
+        """The tool budget (2026-11-28): fields that alias a listed one or are Taskuary's own default are read, never listed. A routine's
+        instructions are its card's `text`; a setting card takes its `changes`; a turn's end still sets its check-back."""
+        cfg = {'type': 'agent', 'access': 'write', 'title': 'Social posts', 'flow': [{'id': 's1', 'kind': 'agent', 'label': 'Write', 'prompt': 'Write the posts.'}]}
+        self.s.save_source({'Channel': 'report', 'Address': 'Social posts', 'Owner': 'owner', 'Active': 1, 'ConfigJson': json.dumps(cfg)}, 'owner')
+        said, err = tool(self.tid, 'propose', kind='routine', routine='Weekly vendor check', text='List the vendors whose invoices are late.', daily_at='07:00')
+        self.assertFalse(err, said); self.assertNotIn('not used', said)
+        p = json.loads(self.cards()[-1]['DraftText'])
+        self.assertEqual((p['action'], p['title']), ('save_routine', 'Weekly vendor check')); self.assertIn('invoices are late', json.dumps(p))
+        said, err = tool(self.tid, 'propose', kind='setting', changes=[{'name': 'calendar_enabled', 'value': '0'}])
+        self.assertFalse(err, said); self.assertEqual(json.loads(self.cards()[-1]['DraftText'])['action'], 'settings')
+        said, err = tool(self.tid, 'end_turn', did='Set up.', check_back={'when': 'tomorrow 9am', 'what': 'see if the vendors answered'})
+        self.assertFalse(err, said); self.assertNotIn('could not', said.lower())
 
     def test_a_routine_is_changed_or_made_by_one_call_naming_it(self):
         cfg = {'type': 'agent', 'access': 'write', 'title': 'Social posts', 'flow': [{'id': 's1', 'kind': 'agent', 'label': 'Write', 'prompt': 'Write the posts.'}]}

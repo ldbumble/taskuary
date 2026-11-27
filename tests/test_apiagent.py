@@ -291,7 +291,9 @@ class OneRoundTripTests(unittest.TestCase):
         # ...and ask_owner's several questions asked as one card (the owner, 2026-11-26) are a field of its own, +~230
         # ...and what a view's `id` does - shown again, it is the one view redrawn - is on show's line (walk 26, 2026-11-27), +~115
         TOOL_CHARS = 7_400                # what every call carries before a word of the job: was ~15,000 (23 tools at ~650 characters); end_turn and ask_owner ride in it since the prompt's protocols became tools, and every act that raises a card since walk 10 (2026-11-23)
-        assert len(json.dumps(core, separators=(',', ':'))) < TOOL_CHARS
+        # ...WITH ROOM UNDER IT (the tool budget, 2026-11-28: ~7,395 of 7,400 used - the next field had nowhere to go): made by better shapes,
+        # never a raised limit - an alias of a listed field, a default Taskuary fills and a kind's own fields are read, not listed
+        assert len(json.dumps(core, separators=(',', ':'))) <= TOOL_CHARS - 300
         said = apiagent.find(1, 'p', list(core), 'meeting calendar')
         assert 'set_up_meeting:' in said and 'calendar:' in said, 'found by words, each with its whole instructions'
         seen, steps = [], iter([{'tool_calls': [{'id': 'a', 'function': {'name': 'find_tools', 'arguments': '{"query": "calendar"}'}}]},

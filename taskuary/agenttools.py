@@ -111,7 +111,7 @@ TOOLS = {
                      "notes - and controls: a slider, toggle, select or date that moves a value of the view's `state` and the charts, tiles "
                      "and cells worked out from it ({\"$expr\": \"seats * 12\"}) change on his screen as he moves it; a choice or a button "
                      "whose pick comes back to you once, as his press. `elements` maps an id to {type, props, children?, on?}; `root` is drawn "
-                     "first. Rows a Taskuary tool gave you as records ([{column: value}]) go into a table's or chart's `rows` as they are. "
+                     "first (none: the element no other holds). Rows a Taskuary tool gave you as records ([{column: value}]) go into a table's or chart's `rows` as they are. "
                      "An availability draws who can make which times - each person's ranges on one time axis, how many are free in "
                      "each slot and the best slot, counted on the page from the ranges alone. Any view with an `id` shown again under that "
                      "`id` is drawn once, where you just showed it, as it now is - no older copy stays above it. "
@@ -122,7 +122,7 @@ TOOLS = {
                      "chat as it is, a picture as the picture; several in one call (versions of one thing) stand as one artifact, "
                      f"separate calls as separate ones. {SHOW_WHAT} It is the one road onto the owner's screen: a viewer, a browser or an app opened on the computer is not"
                      " on it, and its answer says what was shown.",
-             _S({'title': _STR, 'id': _STR, 'root': _STR, 'elements': {'type': 'object', 'additionalProperties': __import__('taskuary.viewspec', fromlist=['x']).element_schema()},
+             _S({'title': _STR, 'id': _STR, 'elements': {'type': 'object', 'additionalProperties': __import__('taskuary.viewspec', fromlist=['x']).element_schema()},
                  'state': {'type': 'object'}, 'files': {'type': 'array', 'description': 'each a full path, or {path, title}'}}),
              ('GET', '/api/tasks/1')),
     # ...and A PICTURE, drawn by the owner's image model (images.pick: an image card, or an AI card whose models include one) - the one road to
@@ -143,18 +143,18 @@ TOOLS = {
                                                        'required': ['ids']}}}), ('POST', '/api/agent/todos')),
     # WHAT WAS A PROTOCOL TAUGHT IN PROSE IS A TOOL (the owner, 2026-11-23: "everything else the agent can do is a tool"): how a turn ends, the
     # one question only the owner can answer, and the company's skills - each said by its own description, never in every prompt
-    'end_turn': ('own', "Call once as your turn ends: where the task stands, shown on its page. name: the task in 3-6 words. about: 2-3 "
+    'end_turn': ('own', "Once, as your turn ends: where the task stands, for its page. name: the task in 3-6 words. about: 2-3 "
                         "sentences: who asked, for whom. did: result first, then what you did. "
                         "on_you: owner-only steps no card or question carries, each with why. nothing_left: goal met and "
-                        "checked. answer_is_result: your words are what was asked. retry: another try may work. corrections: [{kind: "
-                        "redraft|ask, card: draft id|null, said: his words}].",
+                        "checked. answer_is_result: your words are the result. retry: worth another try. corrections: [{kind: "
+                        "redraft|ask, card: its id|null, said: his words}].",
                  _S({'name': _STR, 'about': _STR, 'did': _STR, 'on_you': {'type': 'array', 'items': _STR}, 'nothing_left': {'type': 'boolean'},
-                     'answer_is_result': {'type': 'boolean'}, 'retry': {'type': 'boolean'}, 'corrections': {'type': 'array', 'items': {'type': 'object'}},
-                     'check_back': {'type': 'object', 'properties': {'when': _STR, 'what': _STR}}}, ('did',)), ('GET', '/api/tasks/1')),
+                     'answer_is_result': {'type': 'boolean'}, 'retry': {'type': 'boolean'}, 'corrections': {'type': 'array', 'items': {'type': 'object'}}},
+                 ('did',)), ('GET', '/api/tasks/1')),
     # ...ONE QUESTION OR SIX, ONE SHAPE, WITH ITS SUGGESTED ANSWER (the design audit, 2026-11-27: told to give "your recommended answer" with no
     # field for it, agents wrote "(recommended)" into a choice or the question): `question` and `choices` are still read, for a saved session
-    'ask_owner': ('own', "Ask what only the owner can tell you: `questions` (one, or 2-6 on one card), each with `choices` and `recommend`, "
-                         "your suggested answer. It stands until answered or withdrawn.",
+    'ask_owner': ('own', "Ask what only the owner can tell you: `questions`, one or 2-6 on one card; `recommend` is your suggested answer. It "
+                         "stands until answered or withdrawn.",
                   _S({'questions': {'type': 'array', 'items': {'type': 'object', 'properties': {'question': _STR, 'choices': {'type': 'array', 'items': _STR},
                                                                                               'recommend': _STR}}},
                       'withdraw': {'type': 'boolean'}, 'card': {'type': 'string', 'description': 'the card it is about (rv<id>), if any'}}), ('GET', '/api/tasks/1')),
@@ -293,7 +293,7 @@ TOOLS = {
                            "- skill: `skill` its name, `text` the SKILL.md whole (frontmatter `name`, `description`; then how the job is done "
                            "well). His own is drawn with the changes marked.\n"
                            "- routine: `routine` its title (none: the one this task is a run of; a new title makes one), and what changes: "
-                           "`prompt` its instructions, or `script` (standard-library Python, rows on stdin, JSON rows out) with `reads`, or "
+                           "`text` its instructions, or `script` (standard-library Python, rows on stdin, JSON rows out) with `reads`, or "
                            "`flow` its steps; `skill` it uses, `browser`, `daily_at` | `cron` | `every_minutes`, `goal`, `done_when`, `rename`.\n"
                            "- git: `how` push, pr, land, rebase, discard, comment, or merge / close the PR, issue or item this task opened or "
                            "came from (`text`). `cwd`, `repo`: its checkout and its origin by default; `deploy`: the branch it deploys.\n"
@@ -306,9 +306,7 @@ TOOLS = {
                                                   'subject': _STR, 'cc': {'type': 'array', 'items': _STR}, 'answers': _INT, 'only': {'type': 'boolean'},
                                                   'why_to': _STR, 'from': _STR, 'guessed': {'type': 'array', 'items': _STR},
                                                   'networks': {'type': 'array', 'items': {'type': 'object', 'properties': {'network': {'type': 'string', 'enum': list(NETWORKS)}}}}, 'media': _STR, 'link': _STR,
-                                                  'title': _STR, 'skill': _STR, 'routine': _STR, 'prompt': _STR,
-                                                  'how': {'type': 'string', 'enum': list(GIT_HOW)}, 'cwd': _STR, 'repo': _STR, 'deploy': _STR,
-                                                  'changes': {'type': ['array', 'object']},
+                                                  'title': _STR, 'skill': _STR, 'routine': _STR, 'how': {'type': 'string', 'enum': list(GIT_HOW)}, 'deploy': _STR,
                                                   'attach': _ATTACH, 'why': _STR, 'replaces': _STR},
                  'additionalProperties': True}, ('POST', '/api/agent/propose')),
     # ...and EVERY TOOL'S FULL INSTRUCTIONS, ON ASK (the owner, 2026-11-15: "MCP-style tools with simple JSON ... All methods can be searched
@@ -372,8 +370,8 @@ SHORT = {
     # ...and that A VIEW IS KEPT AS ONE UNDER ITS `id` is on the line (walk 26, 2026-11-27: replies came one by one and no road drew a view -
     # lean drops a parameter's words, so `id` was a bare string and the line named only what is drawn once)
     'show': 'Draws in this chat: charts, tables, tiles, checklists, who is free when, sliders, toggles, dates, choices whose pick '
-            'comes back to you; shown again under its `id`, a view is redrawn in place - or hands the owner files you made (a path or '
-            '{path, title}), one artifact a call.',
+            'comes back to you; shown again under its `id`, a view is redrawn in place - or hands the owner `files` you made, one '
+            'artifact a call.',
     'draw_image': "Draw a picture, a file of this task.",
     'tick': "Tick or untick a to-do (`item`: its id).",
     'todos': "Add, reword or merge this task's to-dos.",
@@ -396,8 +394,8 @@ SHORT = {
     'answer_invite': "Answer this task's meeting invite: accept, decline or propose.",
     'set_up_meeting': "Set up a meeting for the owner's press, from who can make which times.",
     'share': "Share a report or dashboard of the owner's with a person.",
-    'propose': "One card for his press: a reply, an email, a post to its `networks` (a tab each), a routine, a GitHub push or PR - his "
-               "to edit, run only at his press. `kind` says which; one act to many: `items`; versions to pick from: `versions`.",
+    'propose': "One card he can edit, run only at his press: a reply, an email, a post to its `networks` (a tab each), a routine, a "
+               "GitHub push, PR or merge. `kind` says which; one act to many: `items`; versions to pick from: `versions`.",
     'find_tools': "A tool's instructions by name, or tools by need.",
 }
 def lean(s):
@@ -1177,13 +1175,14 @@ ROUTINE = ('prompt', 'script', 'reads', 'flow', 'skill', 'browser', 'daily_at', 
 def routine_act(store, a: dict) -> dict:
     from . import workflows
     name, keep = str(a.get('routine') or '').strip(), {x: a[x] for x in ROUTINE if a.get(x) not in (None, '')}
+    if a.get('text') not in (None, '') and 'prompt' not in keep: keep['prompt'] = a['text']       # ...its instructions are the card's words
     if not name or workflows.named_setup(store, name): return {'action': 'change_routine', **({'routine': name} if name else {}), **keep}
     return {'action': 'save_routine', 'title': name, **keep, **({'why': str(a['goal'])} if a.get('goal') and not a.get('why') else {})}
 
 
 # A FIELD THE CARD DOES NOT USE IS SAID SO IN ITS ANSWER (the design audit, 2026-11-27: `subject` rode on almost every reply, `title` on others -
 # each left the agent sure it had set something). Locked rule 1: it is ignored, never a refusal - the card stands, and the answer names it
-USES = {'skill': ('skill', 'name', 'slug', 'text', 'why'), 'routine': ('routine', *ROUTINE), 'git': ('how', 'cwd', 'repo', 'deploy', 'why', 'title', 'text'),
+USES = {'skill': ('skill', 'name', 'slug', 'text', 'why'), 'routine': ('routine', 'text', *ROUTINE), 'git': ('how', 'cwd', 'repo', 'deploy', 'why', 'title', 'text'),
         'setting': ('changes', 'why'), 'break_out': ('title', 'summary', 'messages', 'todos', 'why')}
 NOT_DRAWN = {'reply': {'subject': "a reply's subject is its thread's", 'title': 'a reply has no title'}}
 COMMON = ('kind', 'replaces', 'attach', 'items')

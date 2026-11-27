@@ -381,7 +381,7 @@ def test_a_letter_with_a_blank_left_to_fill_is_no_card():
     s = MemoryStore(); s.set_setting('owner_name', 'Alex Doyle', 't')
     tid, _ = task_with(s)
     out = wrapup.agent_reply(s, tid, 'Hi [NAME FROM ACCOUNT PAGE],\n\nYour export is fixed.', 'assistant')
-    assert out['ok'] is False and '[NAME FROM ACCOUNT PAGE]' in out['why'] and 'ask the owner' in out['why']
+    assert out['ok'] is False and '[NAME FROM ACCOUNT PAGE]' in out['why'] and 'nothing was set up' in out['why']
     assert not s.pending_review(tid, 'draft_reply', live_only=False)
     assert wrapup.blanks('Date: [date] and {{venue}}') == ['[date]', '{{venue}}']
     # ...never what a letter may carry in brackets: a link's text, a numbered note, a ticked box, a ticket's tag
@@ -399,7 +399,7 @@ def test_a_letter_that_is_only_its_greeting_and_sign_off_is_no_card():
     tid, _ = task_with(s)
     for bare in ('Hi Erin,\n\nAlex Doyle', 'Hi Erin,\n\nThanks,\nAlex', 'Dear Erin,\n\nBest,\nAlex Doyle\nNorthwind', 'Hi Erin,'):
         out = wrapup.agent_reply(s, tid, bare, 'assistant')
-        assert out['ok'] is False and 'no message in it yet' in out['why'] and 'ask the owner' in out['why'], bare
+        assert out['ok'] is False and 'no message in it yet' in out['why'] and 'nothing was set up' in out['why'], bare
         assert not s.pending_review(tid, 'draft_reply', live_only=False), bare
         assert slots.draft(s, tid, bare, 'erin@northwind.example', 'Spend sheet', agent='assistant')['ok'] is False, bare
     assert wrapup.message_of(s, 'Hi Erin,\n\nFriday works.\n\nAlex Doyle') == 'Friday works.'

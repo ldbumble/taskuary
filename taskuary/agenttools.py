@@ -71,8 +71,8 @@ TOOLS = {
                          _S({'text': _STR}, ('text',)), ('GET', '/api/knowledge/search')),
     'owner_memory': ('read', "Look up the owner's memory: what they said (their rules, their hours, who handles what - each with the subject "
                              "it is kept under), the facts about their people, and what was learned from what they did that they confirmed. "
-                             "`about`: one person (a name or address) narrows it to them. What bears on this task is in your brief already; "
-                             "read this when the work turns on more. Read-only: a fact they tell you is kept with `remember`; a way of working "
+                             "`about`: one person (a name or address) narrows it to them. What bears on this task is in your brief already. "
+                             "Read-only: a fact they tell you is kept with `remember`; a way of working "
                              "they ask you to keep (a skill, a standing rule) is set up with `propose` save_skill for their Approve.",
                      _S({'about': _STR}), ('GET', '/api/agent/memory')),
     # WHAT THE OWNER TELLS ONE AGENT, EVERY READER KNOWS (the owner, 2026-11-14: "if the user tells you something, they should not have to say
@@ -226,8 +226,8 @@ TOOLS = {
     'withdraw_draft': ('own', "Take back something you set up here that has not gone out - the reply, an email, a post, another "
                               "proposal. `which`: what it is or who it "
                               "was to, as the screen fact names it (a card of many: all its ids, 'rv1 + rv2'); none for the reply. `why`: one line on what changed."
-                              " It is kept under Not sent with the owner's Bring it back; what already went is never touched. To "
-                              "correct a reply, just propose the new one; an email IN PLACE of another is the new one's `replaces` - "
+                              " It is kept under Not sent with the owner's Bring it back; what already went is never touched. A new "
+                              "reply takes the old one's place; an email IN PLACE of another is the new one's `replaces` - "
                               "one call, one Send left.",
                        _S({'why': _STR, 'which': _STR}, ('why',)), ('POST', '/api/agent/withdraw-draft')),
     'keep_card': ('own', "A card the owner's newest line or a new message greyed comes back under the newest line at once, the same words "
@@ -237,7 +237,7 @@ TOOLS = {
                   _S({'which': _STR, 'why': _STR}, ('which',)), ('GET', '/api/tasks/1')),
     'hand_over': ('own', "A step on your browser's page only the owner can do - a sign-in or code you cannot type, an \"I'm not a robot\" "
                          "check, paying, a fact only he knows. Taskuary signs in by itself where it keeps what is needed, else hands him "
-                         "ONE card on that page; you go on with the rest of the job and are told when it is done. `what`: the step in a "
+                         "ONE card on that page; you are told when it is done. `what`: the step in a "
                          "few words, as the page shows it; `site`: the site's domain, for a sign-in.",
                   _S({'what': _STR, 'site': _STR}, ('what',)), ('POST', '/api/agent/hand-over')),
     # THE FORM A MAIL BRINGS (the owner, 2026-11-04: a permission slip to sign for their kid - "the agent should sign it and say 'do you
@@ -397,7 +397,7 @@ SHORT = {
     'use_repo': "Pick the git checkout this task's work belongs in.",
     'find_repos': 'The git checkouts you may work in, newest commit first.',
     'propose_land': "How your work lands (rebase, merge, pr ...), as the owner's buttons.",
-    'reply_not_needed': 'The reply waiting here is no longer needed; say why.',
+    'reply_not_needed': 'The reply waiting here is no longer needed (`why`).',
     'withdraw_draft': 'Take back a reply, email or proposal you set up that has not gone out.',
     'keep_card': 'Bring back a card greyed by the newest input, as it was, under that input.',
     'hand_over': 'A page step only the owner can do (sign-in, paying): a card.',
@@ -583,7 +583,7 @@ def _card_call(store, tid: int, name: str, args: dict, doors: dict, skip=()) -> 
     if TOOLS[name][0] == 'propose' and isinstance((args or {}).get('items'), list) and len(args['items']) == 1 and isinstance(args['items'][0], dict):
         args = {**{k: v for k, v in args.items() if k != 'items'}, **args['items'][0]}
     if name == 'tick' and (args or {}).get('done', True) is not False and (bad := _failed_now(store, tid)):
-        raise ValueError(refusal(f'not ticked: {bad} failed in this turn', 'tick it once that is done; say in your answer what is still left'))
+        raise ValueError(refusal(f'not ticked: {bad} failed in this turn', 'tick it once that is done'))
     from . import card, cardqueue
     raises = TOOLS[name][0] == 'propose'
     # A QUESTION TO HIM HOLDS THE TURN THERE (the owner's live task, 2026-11-25: "it asked a question, then underneath it created the post that was
@@ -697,7 +697,7 @@ def _many(store, tid: int, name: str, args: dict, doors: dict) -> str:
             else 'They stand as ONE card: the owner does them all with one press; you hear the whole run once.' if bulk
             else f'ONE card stands of the {len(items)} items given: each wrote that same card, and its words are those of the last item.' if n == 1 and len(items) > 1
             else f'They stand as one card with a tab each, {n} of them: the owner sees and presses each, in any order; you hear how they went once the last is answered, or at once if a press fails.')
-    shown = ((f"{len(went)} of {len(items)} sent at once - a routine's email to what its owner saved into it goes without a press; say they went."
+    shown = ((f"{len(went)} of {len(items)} sent at once - a routine's email to what its owner saved into it goes without a press."
               + (f" Not sent: {'; '.join(held)}." if held else '') + (f" The {n} unsent stand for the owner's Send{' as ONE card' if bulk else ', one at a time'}." if n else '')) if went
              else card if n else 'Nothing was filed, so no card stands - fix what each item was refused for and call it again.')
     return _j({'ok': n > 0 or bool(went), **({'on_the_card': n} if n else {}), **({'batch': key} if len(mine) > 1 else {}), **({'sent': len(went)} if went else {}),
@@ -870,9 +870,9 @@ def _call(store, tid: int, name: str, args: dict, doors: dict, skip=()) -> str:
         # ...only this session's own: on the owner's own ask "reply to the sender" found propose_reply, and calling it answered "unknown tool"
         hits = found(a.get('query'), {n: d for n, (_, d, _s, _) in TOOLS.items() if n not in skip}, store, tid)
         if not hits and str(a.get('query') or '').strip().lower() in skip:
-            return f"{a['query'].strip()} is not offered on this task - tools/list names the ones it has; say what you need in words to find one of them."
-        return '\n\n'.join(map(instructions, hits)) if hits else (f"No tool fits {a.get('query')!r} - name one, or say what it should do in other words. Work no tool of Taskuary's does (a file to make, a page to "
-                                                   "read, code to run) is done with your session's own tools; a file for the owner is saved in your outputs folder.")
+            return f"{a['query'].strip()} is not offered on this task - tools/list names the ones it has, and find_tools finds one by words."
+        return '\n\n'.join(map(instructions, hits)) if hits else (f"No tool fits {a.get('query')!r} - find_tools takes a tool's name, or words for what it does. Work no tool of Taskuary's does (a file to make, "
+                                                   "a page to read, code to run) is your session's own tools'; a file for the owner is kept in your outputs folder.")
     if name == 'web_search':
         from . import apiagent, harness
         # ...SEVERAL SEARCHES IN ONE CALL RUN TOGETHER (the walk, 2026-11-22: a price check was minutes on the HIPAA road - each search its own
@@ -916,7 +916,7 @@ def _call(store, tid: int, name: str, args: dict, doors: dict, skip=()) -> str:
             card = _call(store, tid, 'show', {'title': fix['says'], 'root': 'go', 'elements': {'go': {'type': 'button', 'props': {'label': fix['label'], 'open': fix['href']}}}}, doors)
             return f"Nothing was drawn: {fix['says'].lower()}. His chat shows the card that connects one ({fix['label']}); the picture can be drawn once he has. {card}"
         try: out = images.run_image_generate(store, a, task_id=tid)
-        except RuntimeError as e: raise ValueError(refusal(f'nothing was drawn - {e}', 'say what the image model answered, or try again with another prompt'))
+        except RuntimeError as e: raise ValueError(refusal(f'nothing was drawn - {e}', 'try again with another prompt'))
         # ...A FILE OF THE TASK, DRAWN NOWHERE BY ITSELF (the re-walk, 2026-11-25: a picture the agent then did not use - it made a better one for
         # its cards - stood in the chat as a file of its own): a card that carries it draws it; `show` hands it to him where it is the answer
         return (f"Drew {out['name']} with {out['label']} - a file of this task, {out['file']}. Not in his chat: a card you name it on as its "
@@ -962,7 +962,7 @@ def _call(store, tid: int, name: str, args: dict, doors: dict, skip=()) -> str:
         if (k := str(a.get('card') or '').strip().lower().removeprefix('rv')).isdigit() and (store.get_review(int(k)) or {}).get('TaskId') == int(tid):
             from .card import ASKED
             store.audit('review', int(k), ASKED, 'agent', 'agent', {'question': ' '.join(str(a['question']).split())})
-        return 'Asked - it stands on the task as their question, and their answer comes to you. Go on with what does not hang on it.'
+        return 'Asked - it stands on the task as their question, and their answer comes to you. The rest of the job is not held by it.'
     if name == 'skills':
         from . import skills
         return _out(skills.lookup(store, store.get_task(tid), str(a.get('name') or '')))
@@ -973,7 +973,7 @@ def _call(store, tid: int, name: str, args: dict, doors: dict, skip=()) -> str:
     if name == 'ask_stronger':
         out = doors['ask_stronger'](tid, str(a.get('question') or ''), str(a.get('context') or ''))
         # ...no answer is a failure, never a result: "could not be started" read back as if it were the stronger model's word
-        if not out.get('ok'): raise ValueError(out.get('says') or 'the stronger model did not answer - go on with your own judgement')
+        if not out.get('ok'): raise ValueError(out.get('says') or 'the stronger model did not answer')
         return out['answer']
     if name == 'note_peers': return _j(doors['note_peers'](tid, str(a.get('to') or ''), str(a.get('text') or '')))
     if name == 'add_to_task': return _j(doors['note_peers'](tid, str(a.get('task') or ''), str(a.get('note') or ''), [str(f) for f in a.get('files') or [] if f], True))
@@ -1190,8 +1190,7 @@ def attached(store, tid: int, names) -> list:
 # A FILE ON A CARD IS ONE ITS AGENT HAS READ (the HIPAA walk, 2026-11-21): a script's quoting ate every `$` in the board pack - ",820,000" for
 # revenue - and the agent, which never looked at what it made, put all three files on a Send card to the board. The card's answer hands it
 # what each file it made says, read as the person will read it; a picture it is told to look at
-LOOK = ('WHAT THE FILES ON THIS CARD SAY - read them as the person will before you say they are ready: a number, a name or a page that came '
-        'out wrong is put right in the file, and the file attached again')
+LOOK = 'WHAT THE FILES ON THIS CARD SAY, as the person will read them'
 def read_back(out, files):
     "`out` with `files_say` - what each file the agent made says (attachtext) - where the card took any."
     import base64, mimetypes
@@ -1206,8 +1205,7 @@ def read_back(out, files):
 # ...and ONE THAT WAS NEVER KEPT is said as a fact with its way past it: "open the original message" asked of an agent that cannot open a
 # mailbox, and read_attachment said it as a plain answer, not a failure - an agent went on as if it had read the file
 def not_kept(name) -> str:
-    return (f"{name or 'that file'} was not kept by Taskuary, so it cannot be read or attached from here - tell the owner in one line that it "
-            "is on the original message in their mailbox, and go on with what you have")
+    return f"{name or 'that file'} was not kept by Taskuary, so it cannot be read or attached from here - it is on the original message in the owner's mailbox"
 
 
 def mail_file(store, tid: int, aid, kept: bool = True) -> tuple:
@@ -1244,7 +1242,7 @@ def own_message(store, tid: int, args: dict) -> bool:
 # steering an agent with every tool and no press of the owner's. Not read through these doors at all - the owner's Trust opens it, and their
 # Continue picks the work up under the reviewer, whose brief carries the task's own words fenced.
 UNVOUCHED = ("this message is from someone the owner has not vouched for, and this session runs with full tools, so it is not read here. "
-             "Tell the owner: Trust by that name on the task, or Continue, which picks the work up under the reviewer.")
+             "The owner's Trust by that name on the task opens it; his Continue picks the work up under the reviewer.")
 
 
 def unvouched(store, tid: int, args: dict) -> bool:
@@ -1404,7 +1402,7 @@ def failed(name: str, e: Exception) -> str:
     # ...cut to 1000 characters in what happened, never in the next step - and the step only one refusal wrote (steps_of), else none
     said, step = steps_of(str(detail if detail is not None else e).strip())
     said = said.strip()[:1000]
-    return _said(said, step) if said else refusal('it did not work, and said nothing about why', 'try it once more, or tell the owner it failed')
+    return _said(said, step) if said else refusal('it did not work, and said nothing about why', 'try it once more')
 
 
 # ── wiring it into a session ───────────────────────────────────────────────────────────────────────────────────────────────────────

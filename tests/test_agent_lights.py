@@ -81,7 +81,7 @@ def test_a_turn_worth_another_try_says_so_in_its_summary_and_never_asks_for_a_me
     _, summ = selfclose.summary_marker('The portal never loaded. [[TASKUARY-SUMMARY]]{"did": "Tried the portal", "retry": true}[[/TASKUARY-SUMMARY]]')
     assert summ['retry'] is True
     assert 'retry' not in selfclose.summary_marker('[[TASKUARY-SUMMARY]]{"did": "x", "retry": "maybe"}[[/TASKUARY-SUMMARY]]')[1]
-    assert '"retry"' in selfclose.SUMMARY_LINE and 'never ask the owner to send a message to try again' in selfclose.SUMMARY_LINE
+    assert '"retry"' in selfclose.SUMMARY_LINE and 'send a message' not in selfclose.SUMMARY_LINE
 
 def test_the_agent_is_never_told_of_a_try_again_button_its_page_may_not_draw():
     """Walk 17 (K5): told `retry` "draws Try again", a hand-back said "there's a Try again button on the task" over a page that drew none - the

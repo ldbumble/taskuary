@@ -566,9 +566,9 @@ def screen(store, tid: int, skip=()) -> str:
                 waiting.append(f"Waiting for his press now, drawn on the card he pressed as its last step ({what(store, {'rids': [(c := step_card(u, sp))['ReviewId']], 'rows': [{**c, 'Batch': None}]}, True)}): "
                                f"{step_says(sp)}")
             elif (h := next((x for x in u['rows'] if handed(x)), None)):
-                waiting.append(f"Handed to you by his press {clock(h.get('DecidedAt'))}, NOT done yet - do it; it is done once its own final press "
-                               f"has gone, and the next card waits until then. One you cannot do now: keep_card it with `why` (it stands again "
-                               f"for his press); one he drops: withdraw_draft it: {name(u, h)}")
+                waiting.append(f"Handed to you by his press {clock(h.get('DecidedAt'))}, NOT done yet; it is done once its own final press "
+                               f"has gone, and the next card waits until then. keep_card with `why` stands it again for his press; "
+                               f"withdraw_draft takes it back: {name(u, h)}")
             elif r and ids <= past: greyed(r, n)
             elif ids & (live | fronts):
                 # ...on the buttons its card draws where it has no Send (card.presses; walk 21: "ready to send" over Copy + Redraft)

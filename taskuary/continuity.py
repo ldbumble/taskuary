@@ -51,17 +51,8 @@ def previous_work(store, limit=5):
     return result
 
 
-RESUME_PROMPT = (
-    'The owner chose Resume for this task. Use the saved conversation and handover to pick up where '
-    'work stopped. Briefly say what is already done, then continue the next unfinished step. '
-    'Verify the current state before repeating any action. If you were waiting for an answer or '
-    'approval, restate that one question and wait; do not invent the answer or treat Resume as approval '
-    'to send, publish, or execute a pending action. If the result is ready, point the owner to it for review. '
-    # ...WHAT IT FINDS IS ITS OWN CONTEXT, NOT NEWS (the recorded walks, 2026-11-11: "Nothing was awaiting approval, so the next step is...",
-    # "Nothing was saved from before the pause", "Nothing had been done before this resume" - each check it was asked to make, read back)
-    'All of that is for you: tell the owner only what is done, what you are doing and what you need from them - never that something '
-    'was absent (nothing saved, nothing pending, nothing awaiting approval).'
-)
+RESUME_PROMPT = ('The owner chose Resume for this task: the saved conversation and handover are where work stopped. Resume is not an '
+                 'approval of anything pending - a send, a publish or an action still waits for its own press.')
 
 
 # ── what came in after the agent's last turn ─────────────────────────────────────────────────────────────────────────
@@ -169,8 +160,8 @@ def sent_block(store, tid, quote: int = 300, cmd: str = '') -> str:
     said = ' '.join(str(rv.get('FinalText') or rv.get('DraftText') or '').split())
     said = f' ("{said[:quote]}{"..." if len(said) > quote else ""}")' if quote and said else ''
     return (f'YOUR REPLY WENT OUT: the reply to {sent_to(store, rv)} was SENT at {clock(rv.get("DecidedAt"))}{said}, and nothing new '
-            'has come from them since - it is not waiting on anyone. Do not draft another reply unless the owner asks you for one'
-            + (f' (then: {cmd})' if cmd else '') + '.')
+            'has come from them since - it is not waiting on anyone.'
+            + (f' Another, on the owner\'s ask: {cmd}.' if cmd else ''))
 
 
 NEWS_SHOWN = 5            # how many of the messages since its last turn news_block says in their words

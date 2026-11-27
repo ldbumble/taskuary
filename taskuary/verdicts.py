@@ -545,7 +545,7 @@ def withdraw(store, tid: int, why: str, by: str, which='', keep: int = 0) -> dic
     from . import slots
     from .wrapup import WITHDRAWN
     why, which = ' '.join(str(why or '').split()), ' '.join(str(which or '').split()).casefold().removeprefix('rv')
-    if not why: return {'ok': False, 'why': 'say in one line why the draft no longer answers - what the newest message changed'}
+    if not why: return {'ok': False, 'why': '`why` is empty - one line on what the newest message changed'}
     # ...SEVERAL BY THEIR IDS, as a bulk card is named to its agent ("rv1 + rv2 + ...", cardqueue.says): each taken back, one call for the card
     if re.fullmatch(r'\d+(?:\s*[,+]\s*(?:rv)?\d+)+', which):
         got = [(x, withdraw(store, tid, why, by, x, keep)) for x in dict.fromkeys(re.findall(r'\d+', which))]

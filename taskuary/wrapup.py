@@ -72,8 +72,8 @@ PAUSE_SYSTEM = (
     'of this session. Write the handover note it will be given. From the transcript ALONE.\n'
     'Output ONLY this JSON: {"found": "...", "did": "...", "next": "..."} - found is what it worked '
     'out about the problem (causes, file and record names, ids, dead ends worth not repeating), did '
-    'is what it already changed, next is the concrete next step it was about to take. Say "nothing '
-    'yet" in a field rather than inventing.')
+    'is what it already changed, next is the concrete next step it was about to take; a field '
+    'the transcript does not show reads "nothing yet".')
 
 
 @aiusage.named('summary.pause')
@@ -491,10 +491,9 @@ def blanks(text) -> list: return list(dict.fromkeys(m.group(0) for m in _BLANK.f
 def blank_why(text, store=None) -> str:
     "'' or what to tell the agent whose letter still holds a blank, or holds no words but its frame: what it can do next."
     b = blanks(text)
-    if b: return (f"the letter still has a blank left to fill ({', '.join(b[:3])}) - nothing was set up. Fill it from what you can read, or ask "
-                  "the owner the one thing it needs and write the letter when you have it.")
-    return ("the letter holds only its greeting and sign-off - there is no message in it yet, so nothing was set up. Write what it says to them "
-            "and save it again, or ask the owner what it should say.") if store is not None and not message_of(store, text) else ''
+    if b: return f"the letter still has a blank left to fill ({', '.join(b[:3])}) - nothing was set up; a letter with it filled is."
+    return ("the letter holds only its greeting and sign-off - there is no message in it yet, so nothing was set up."
+            ) if store is not None and not message_of(store, text) else ''
 
 
 # ...AND A LETTER THAT IS ONLY ITS FRAME IS NO CARD (walk 14, 2026-11-24: "Hi Erin,\n\nAlex Doyle" was saved and answered "the card shows its
@@ -603,7 +602,7 @@ def agent_reply(store, task_id: int, text: str, agent: str = 'agent', run_id: in
                                                    'nothing was put on the table.')
         return {'ok': False, 'already_answered': True, 'review_id': sent['ReviewId'],
                 'why': f'a reply to {to} already went at {at}, and nothing new has come from them since - nothing was saved. '
-                       'Draft another only if the owner asked you to, and then say so: `taskuary --follow-up --reply "<text>"`.'}
+                       '`taskuary --follow-up --reply "<text>"` saves another, on the owner\'s ask.'}
     # an EARLIER SESSION'S draft is not rewritten into this one: it is closed as superseded, its words kept, and this is a new review
     sid = str(sid or _sid_now(store, task_id) or '') or None
     if sid and held and stale_draft(store, held, sid): supersede(store, held, agent); held = {}
@@ -1333,9 +1332,8 @@ def raise_reply(store, task_id: int, mid: int, run_id: int, fresh: dict = None, 
 # road every Taskuary word to an agent takes (general.to_agent) - write it, or say none is needed. Once per reply owed, kept on the review's own
 # audit: an agent that ends again without writing it is not told twice (no loop), and the reply waits as owed, its agent's start lit
 # (rulebook.reply_unwritten). A run the owner ended - Stop and save, Done - is not reopened for it: the same reply owed waits for their start.
-OWED = ('TASKUARY: your run ended and {who} is owed a reply that nobody has written. Write only that reply now (propose, kind reply, or '
-        '`taskuary --reply "<text>"`), or if none is needed say why (reply_not_needed, or `taskuary --reply-not-needed "<why>"`). The work '
-        'itself is done - nothing else.')
+OWED = ('TASKUARY: your run ended, and no reply to {who} is written. A reply is propose, kind reply (or `taskuary --reply "<text>"`); '
+        'reply_not_needed (or `taskuary --reply-not-needed "<why>"`) puts it down.')
 ASKED = 'reply_asked'
 def owed_to(store, mid, rv: dict = None) -> str:
     "Who the reply is owed to: the people a message the owner asked for goes to (outbox), else whoever wrote message `mid`."

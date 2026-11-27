@@ -3604,9 +3604,8 @@ def advisor_brief(store, msg: dict, mid: int) -> str | None:
     for i in store.list_ideas(mid=mid) or []:
         try: sources.append(json.loads(i.get('ActionJson') or '{}').get('mid'))
         except (TypeError, ValueError): pass
-    parts = ["Your Advisor (the report that reads the owner's work and suggests things) raised this idea for the owner. "
-             'Look into it and come back with what they should do: adopt it as written, change it, or drop it - '
-             'with the reasons. Write to the owner as "you".',
+    parts = ["Your Advisor (the report that reads the owner's work and suggests things) raised this idea for the owner, "
+             'who can adopt it as written, change it, or drop it.',
              'THE IDEA:\n' + (msg.get('BodyText') or msg.get('Subject') or '').strip()]
     for sid in dict.fromkeys(x for x in sources if x):
         src = store.get_message(int(sid)) or {}

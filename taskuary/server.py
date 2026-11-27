@@ -3383,8 +3383,8 @@ def resume_asking(actor: str = 'startup') -> list:
     return out
 
 
-HANDED_OVER = ("THE OWNER HANDED THIS TO YOU: triage first read it as the owner's to do themselves, and the owner chose an agent instead. "
-               "Do the work - what the summary says about who does it was triage's guess, not the owner's instruction.")
+HANDED_OVER = ("THE OWNER HANDED THIS TO YOU: triage first read it as the owner's to do themselves, and the owner chose an agent instead; "
+               "what the summary says about who does it was triage's guess, not the owner's word.")
 
 
 class ContinueBody(BaseModel):
@@ -6458,7 +6458,7 @@ def new_task_from(from_tid: int, title: str, ask: str, kind: str = 'general', mo
                                                      said=f'From {task_ref(from_tid)}: {ask}') or {}).get('tid')):
             store.add_comment(from_tid, agent, 'agent', f'Handed to {task_ref(same)}, which is already that work: {title}')
             return {'ok': True, 'task': task_ref(same), 'title': title, 'already': True, 'started': True,
-                    'next': f'{task_ref(same)} is already that same work - its agent was told; nothing new was made. Say so in one line'}
+                    'next': f'{task_ref(same)} is already that same work - its agent was told; nothing new was made'}
         made = not new
         if made:
             # ...the owner's ask, made at the door they asked from - the task they spoke on's ("agent" is no door: the Assistant named it one)
@@ -6488,11 +6488,11 @@ def _start_new_task(new: int, kind: str, ask: str, model: str) -> dict:
         # ...kept on the new task, where the owner meets it: a refusal said only in this answer left it open with nothing said (StartRefused
         # is kept by the door that raised it)
         if not isinstance(e, StartRefused): _start_failed(new, e)
-        return {'started': False, 'why': str(e.detail), 'next': f'{task_ref(new)} is made but its agent did not start - say why in your answer'}
+        return {'started': False, 'why': str(e.detail), 'next': f'{task_ref(new)} is made but its agent did not start'}
     # ...its first turn runs off this call: the agent that asked goes on with its own turn meanwhile
     if bg.tasks: threading.Thread(target=lambda: asyncio.run(bg()), daemon=True, name=f'new-task-{new}').start()
     if got.get('dispatch') == 'needs_repo': return {'started': False, 'why': got.get('reason'), 'next': 'the owner picks its checkout on that task'}
-    return {'started': bool(got.get('started') or got.get('existing')), 'next': f'say in one line that {task_ref(new)} is working on it'}
+    return {'started': bool(got.get('started') or got.get('existing')), 'next': f'{task_ref(new)} is working on it'}
 
 class AgentRememberBody(BaseModel): task_id: int; note: str = ''; subject: str = ''; about: str = ''; signature: bool = False; agent: str = 'agent'
 AGENT_KEEPS = 5          # new memory lines one task's agent may write in a day; a correction (a subject already kept) adds none and is always taken
@@ -6853,7 +6853,7 @@ def agent_sign_form(body: AgentSignBody, request: Request):
     except ValueError as e: raise HTTPException(422, str(e))
     except Exception as e:
         logger.warning(f'sign_form on task {tid} failed: {e}')
-        raise HTTPException(422, f'that PDF could not be filled ({type(e).__name__}) - say so to the owner; they can sign it by hand')
+        raise HTTPException(422, f'that PDF could not be filled ({type(e).__name__}) - the owner can sign it by hand')
     d = outputs.folder(tid); d.mkdir(parents=True, exist_ok=True)
     stem = re.sub(r'[^\w .()-]+', '-', Path(name).stem).strip(' .-') or 'form'
     out = next(d / f'{stem}-signed{f"-{i}" if i else ""}.pdf' for i in range(1000) if not (d / f'{stem}-signed{f"-{i}" if i else ""}.pdf').exists())
@@ -7093,7 +7093,7 @@ def calendar_prep(body: MeetingPrepBody):
 # and about its subject, and its answer is the brief, filed on the meeting's own task. It reads and writes to nobody.
 PREPARE_ASK = ("Prepare me for this meeting. Research the people on the invite and its subject through my saved mail and chats in "
                "Taskuary: who each person is to me, what we last said to each other, what is still open between us, and what has been "
-               "said about the subject. The reads below are where to start - search further for anything they leave open. Then answer "
+               "said about the subject. Answer "
                "with a SHORT brief: a line or two per person, the open questions, and what I should be ready to answer. Write to nobody.")
 
 @app.post('/api/calendar/prepare')
@@ -7800,15 +7800,10 @@ def concierge_setup(body: SetupBody2, background: BackgroundTasks):
     return made
 
 
-# What the walk is told to do first. It is an instruction, never the owner's words -
+# What the walk is told first: a fact of where he is, never the owner's words -
 # their ask is already the one human comment on the task, and repeating it back as a second user
 # turn is the conversation talking to itself.
-WALK_OPENING = (
-    "The owner just asked for this in the Assistant chat and is watching this conversation right "
-    "now. Begin the walk. Do not restate their ask and do not ask them to confirm they want it. "
-    "First line: whether this can be done from here, and name any part that cannot. Then take them "
-    "through the FIRST step only - the actual screen, sign-in or setting - and ask the single thing "
-    "you need from them to take it. One step per turn, then stop and wait.")
+WALK_OPENING = "The owner just asked for this in the Assistant chat and is watching this conversation now."
 
 
 def _walk_opens(task_id: int, text: str):

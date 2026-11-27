@@ -1715,7 +1715,6 @@ def _acp_gears(client, profile: dict, name: str, trace):
 
 STOP_GRACE = 2.0                 # seconds a stopped turn has to honour session/cancel before its process is closed
 NO_GOES_ON = 8                   # turns one prompt may go on for after a no of ours ended its turn (run_acp) - a loop of nos ends, as Cancelled
-NO_THEN = 'Go on with the rest of the job.'
 def run_acp(profile: dict, prompt: str, trace, resume: str = None, cancel=None, extra_env: dict = None, store=None):
     """One headless turn over ACP. Returns (result, session_id, diff) - run_cli's own contract, so
     nothing upstream can tell which road a run took.
@@ -1791,7 +1790,7 @@ def run_acp(profile: dict, prompt: str, trace, resume: str = None, cancel=None, 
                 if stop != 'cancelled' or (cancel is not None and cancel.is_set()) or not told: break
                 words, told[:] = '\n\n'.join(t['words'] for t in told), []
                 trace('progress', 'acp', 'a step it asked for was not run - it goes on, told why')
-                stop, said = client.prompt(f'{words}\n\n{NO_THEN}')
+                stop, said = client.prompt(words)
             conv.turns += 1; conv.used = time.time()
         ok = True
         # WHAT THE TURN USED, onto its route row (aiusage.Metered's meter): the adapter's count, else the CLI's own log (aiusage.acp_turn)

@@ -350,7 +350,7 @@ class CheckBackTests(unittest.TestCase):
                 s.set_setting('general_auto_enabled', '0', 'owner'); remind.tick(s); self.assertEqual(fired, [], 'the switch is off')
                 s.set_setting('general_auto_enabled', '1', 'owner'); remind.tick(s); remind.tick(s)
         self.assertEqual(len(fired), 1); self.assertEqual(fired[0][0], tid)
-        self.assertIn('Ray Colton', fired[0][1]); self.assertIn('chase', fired[0][1])
+        self.assertIn('Ray Colton', fired[0][1]); self.assertIn('is late', fired[0][1])
         self.assertTrue(checkback.woke(s, tid)); self.assertFalse(s.get_task(tid).get('CheckBackAt'))
         self.assertIsNone(rulebook.recommended(s, it), 'its woken agent speaks for it: no Chase lit over its turn')
 
@@ -378,7 +378,7 @@ class CheckBackTests(unittest.TestCase):
             s.set_setting('general_auto_enabled', '1', 'owner')
             other, _ = late_task('Signed lease'); remind.tick(s); remind.tick(s)
             self.assertEqual([t for t, _ in fired], [other], 'a first agent, once, on the task none has worked')
-            self.assertIn('Ray Colton', fired[0][1]); self.assertIn('chase', fired[0][1])
+            self.assertIn('Ray Colton', fired[0][1]); self.assertIn('is late', fired[0][1])
             room[0] = False; third, _ = late_task('Insurance card'); remind.tick(s)
         self.assertEqual(len(fired), 1); self.assertTrue(checkback.woke(s, third))
         self.assertEqual((s.get_dispatch(third) or {}).get('Turn'), 'replan', 'a full house queues its turn')

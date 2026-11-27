@@ -63,11 +63,9 @@ def batch(notes: list, after_restart: bool = False, remaining: int = 0, waited: 
     by = {_by(x) for x in notes}
     who = 'Taskuary' if 'router' in by else ('a teammate' if by == {TEAMMATE} else 'the owner and a teammate') if TEAMMATE in by else 'the owner'
     head = (f'{who[0].upper() + who[1:]} left {n} note{"s" if n > 1 else ""} for you{" after the last session ended" if after_restart else ""}. '
-            'Take them in order:' if after_restart or not waited else
-            f'While you were working, {who} queued {n} note{"s" if n > 1 else ""} for you. Take them in order, '
-            'after finishing the step you are on; if one conflicts with work already done, say so instead of undoing it:')
-    tail = (f' ({remaining} more note{"s" if remaining > 1 else ""} wait{"" if remaining > 1 else "s"} behind this one - the next comes when you stop again; '
-            'finish this and stop, do not ask for it.)' if remaining else '')
+            'Oldest first:' if after_restart or not waited else
+            f'While you were working, {who} queued {n} note{"s" if n > 1 else ""} for you, oldest first:')
+    tail = (f' ({remaining} more note{"s" if remaining > 1 else ""} wait{"" if remaining > 1 else "s"} behind this one - the next comes when your turn ends.)' if remaining else '')
     # ...the closing paragraph Taskuary's own notes share, word for word, is said once after them, not once each: thirty messages that came in
     # together each carried the same instructions, and the agent answered each with the same sentence (the recorded flood, 2026-11-11)
     ends = [n.rpartition('\n\n')[2] if '\n\n' in n else '' for n in (str(x.get('Note') or '') for x in notes if x.get('CreatedBy') == 'router')]

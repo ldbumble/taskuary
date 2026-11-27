@@ -649,9 +649,10 @@ def keep_seed(tid: int, seed: str):
 # you were working, the owner queued 1 note for you..." (the owner, 2026-11-09: only what they typed, or what came in on the thread, is an input)
 # ...WHO left them is a name of a few words (waitroom.batch: the owner, Taskuary, a teammate, both) - bounded, or a long step of words with no
 # stop in them was searched from every word to its end, and a 200 MB log's steps took minutes (2026-11-16)
-_QUEUED = re.compile(r'(?:While you were working, (?P<a>[\w ]{1,40}?) queued \d+ notes? for you\. Take them in order, after finishing the step you are on; '
-                     r'if one conflicts with work already done, say so instead of undoing it:|(?P<b>[\w ]{1,40}?) left \d+ notes? for you(?: after the last '
-                     r'session ended)?\. Take them in order:)')
+# ...its words before 2026-11-27 ("Take them in order, ...") too, as old records hold them
+_QUEUED = re.compile(r'(?:While you were working, (?P<a>[\w ]{1,40}?) queued \d+ notes? for you(?:, oldest first:|\. Take them in order, after finishing '
+                     r'the step you are on; if one conflicts with work already done, say so instead of undoing it:)|(?P<b>[\w ]{1,40}?) left \d+ notes? '
+                     r'for you(?: after the last session ended)?\. (?:Oldest first|Take them in order):)')
 _LEFT = re.compile(r'\s*\(\d+ more notes? waits? behind this one.*$', re.S)
 def queued(text):
     "[(k, text)] of a typed waiting-room batch - the owner's notes `you`, the rest `brief` - or None when `text` is not one."

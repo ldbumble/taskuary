@@ -416,7 +416,7 @@ def switch_off(name) -> str:
     """The switch `name` said as the owner finds it - and as HIS CHOICE (the owner, 2026-11-25: "it should find a way around it"): "only the
     owner turns it on" was passed on to him as a step, over a switch that ships on and that he turned off."""
     label, where, _ = SWITCHES[name]
-    return f'"{label}" is off on {where} - the owner\'s choice; nothing waits on it, so go on without it'
+    return f'"{label}" is off on {where} - the owner\'s choice; nothing waits on it'
 
 
 def parse(text: str) -> list:

@@ -13,9 +13,8 @@ from loguru import logger
 
 CLOSED = ('done', 'dropped')
 WHAT_CHARS = 300
-TURN = ("TASKUARY: the check-back you set on this task is due - {what}. Check it now with your tools, then answer with what you found and "
-        "what it means for the owner. If it is still not settled and time will settle it, set another check-back; otherwise say what is left.")
-LATE = "the answer you wait on is late ({line}) - draft the chase to whoever owes it as your reply card, or say in one line why not"
+TURN = "TASKUARY: the check-back you set on this task is due - {what}."
+LATE = "the answer you wait on is late ({line})"
 
 
 def _stamp(at: datetime = None) -> str: return f"{at or datetime.now():%Y-%m-%d %H:%M:%S}"

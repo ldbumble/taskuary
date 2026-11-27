@@ -153,7 +153,7 @@ def forget(tid: int) -> None:
 
 # ── the one road ────────────────────────────────────────────────────────────────────────
 OWNER_ENDS = ('the owner opened this session, so they complete the task - your summary is filed on it for them. '
-              'If whoever asked is owed a reply, save it now with `taskuary --reply "<text>"` - one written only in the chat is not kept')
+              'A reply written only in the chat is not kept; `taskuary --reply "<text>"` saves one')
 
 
 def declare(store, tid: int, summary: str = '', agent: str = 'agent', no_reply: bool = False, sid: str = None) -> dict:
@@ -269,13 +269,6 @@ def _wrap(store, tid: int, agent: str, why: str, final_message: str = '', no_rep
 MARKER = '[[TASKUARY-DONE]]'
 _MARK_RE = re.compile(r'\[\[\s*TASKUARY[-_ ]?DONE\s*\]\]\s*:?\s*(.*)', re.I)
 
-CHAT_LINE = (
-    f'ENDING THE TASK: when the work this task asked for is COMPLETE and you need nothing further '
-    f'from the owner, end your reply with a final line: {MARKER} <one sentence on what you did or '
-    f'found>. That files your ending and drafts the answer the person who asked will get - the owner closes the task and '
-    f'approves it before it leaves. Only on a real ending. Never write it when you have asked a '
-    f'question, offered options, or still need something; a conversation that is still going is '
-    f'not an ending, and neither is an answer the owner may want to push back on.')
 
 # ...SAID ONCE (the agent walk, 2026-11-10): each draft stood twice - its subject and body quoted in the answer, over the card that showed the
 # same words - and the owner, 2026-11-10: a replaced reply was quoted whole, with its scratch folder's path under it. One sentence, read
@@ -317,7 +310,7 @@ def guidance(store) -> str:
     "What every agent is told about how to work: AGENTS.md as the owner keeps it, cut at AGENTS_CHARS - the shipped text when it is empty, never none"
     return flat(store.doc(AGENTS_DOC) or '')[:AGENTS_CHARS].strip() or ONE_SENTENCE
 # ...and the one rule beside it, which is security: a secret found in his files goes out only on his press (the walk, 2026-11-04)
-SECRET_LINE = "A login or secret you find in the owner's files goes only in the draft that needs it - never in your answer, steps or summary."
+SECRET_LINE = "Your answer, steps and summary are shown and kept in logs; a login or secret from the owner's files is kept out of them, in only the draft that needs it."
 # ...and WHERE THE OWNER CLOSES IT (no CHAT_LINE: nobody wrote in, or the owner keeps the task to finish): the agent said "I couldn't
 # close the task from here", a failure over finished work (the desktop stress test, 2026-11-03). It is told whose press the close is
 # ...and ONE ANSWER TO "DID IT CLOSE": none of an agent's steps closes the task (the owner, 2026-11-16, "straight up lying": a coding agent ran
@@ -334,8 +327,8 @@ _REPLY_RE = re.compile(r'\[\[\s*TASKUARY[-_ ]?REPLY(?:\s+(?P<who>[^\]]*?))?\s*\]
 _WHO_RE = re.compile(r'(to|answers|only|cc|why)\s*=\s*(?:"([^"]*)"|(\S+))', re.I)
 REPLY_LINE = (f'REPLYING FOR THE OWNER: the answer the person who asked will get goes exactly between {REPLY_OPEN} and {REPLY_CLOSE} - '
               f'the block IS the draft waiting on the owner\'s approval, so its words are written once, there, and nowhere else in your '
-              f'answer. A file rides only if you name it on its own line: [[TASKUARY-ATTACH: <full path>]] - one you made in your working '
-              f'folder, or one under ATTACHED FILES; never say a file is attached otherwise. Who hears it is yours to decide, in the opening '
+              f'answer. A file rides only when named on its own line: [[TASKUARY-ATTACH: <full path>]] - one you made in your working '
+              f'folder, or one under ATTACHED FILES. Who hears it is yours to decide, in the opening '
               f'marker, each optional: [[TASKUARY-REPLY answers=<the mail number it replies to, when an earlier one> only=yes (its sender '
               f'alone, nobody copied) cc="<who else is copied, instead of the thread>" why="<one line: why it goes to whom it goes>"]].')
 
@@ -344,19 +337,12 @@ REPLY_LINE = (f'REPLYING FOR THE OWNER: the answer the person who asked will get
 # each turn closes on a block the page draws as three parts - what the task wants, what the agent did, what is on the owner (the parser
 # is Task 3.5's). Not `SUMMARY:`, which the brief already uses as the task-summary label.
 SUMMARY_OPEN, SUMMARY_CLOSE = '[[TASKUARY-SUMMARY]]', '[[/TASKUARY-SUMMARY]]'
-SUMMARY_LINE = (f'ENDING EVERY TURN: close with {SUMMARY_OPEN}{{"name": "<the task in three to six words, as a to-do list names it>", "about": "<two or three plain sentences from the whole thread: which '
-                f'conversation, what about, who asked, for whom, why - naming only people it shows in that role>", "did": "<the RESULT ITSELF '
-                f'first (the path, link, figure or name), then what you did; any part unmet or unchecked>", "on_you": ["<a step for what they '
-                f'asked that only they can take and no card or question can carry, a line each with why, said nowhere in your words above; [] when nothing_left>"],"nothing_left": <true only when the goal '
-                f'is met and you checked it>, "answer_is_result": <true when your words above ARE what was asked>, "retry": <true when what '
-                f'stopped you may work on another try (a page that did not load, a site that did not answer) - never ask the owner to send a message to try again>}}'
-                f'{SUMMARY_CLOSE} - valid JSON, plain words, no secret, "you" to the owner. A fact only they have (a phone number, a choice) is your one question, and a payment or other press of theirs is set up to its last press as a card: these are never an on_you step. When their newest message CORRECTS you, add "corrections": '
-                f'[{{"kind": "redraft" (their words for the draft) or "ask" (you misread the task), "review": <the draft\'s id or null>, '
-                f'"said": "<the correction, in their words>"}}], never shown. When what came in needs nothing from you or them - judged from '
-                f'the thread, not its wording; in a group chat banter, a question already answered, a reply that would only say "ok" or '
-                f'"thanks" (you are a participant there, not their voice) - the turn is ONE plain line ("Ray thanked you.") and '
-                f'{SUMMARY_OPEN}{{"did": "<that line>", "about": "", "on_you": []}}{SUMMARY_CLOSE}: no draft, no research, the waiting draft '
-                f'left as it is.')
+SUMMARY_LINE = (f'ENDING EVERY TURN: {SUMMARY_OPEN}{{"name": "<the task in three to six words>", "about": "<two or three sentences: which '
+                f'conversation, who asked, for whom>", "did": "<the result itself first (the path, link, figure or name), then what you did; any '
+                f'part unmet or unchecked>", "on_you": ["<an owner-only step no card or question carries, with why>"], "nothing_left": <the goal '
+                f'is met and checked>, "answer_is_result": <your words above are what was asked>, "retry": <another try may work>}}{SUMMARY_CLOSE} - valid JSON, "you" to the owner. When his newest message corrects you: '
+                f'"corrections": [{{"kind": "redraft" (his words for the draft) or "ask" (the task was misread), "review": <the draft\'s id or '
+                f'null>, "said": "<the correction, in his words>"}}], never shown.')
 _SUMMARY_RE = re.compile(r'\[\[\s*TASKUARY[-_ ]?SUMMARY\s*\]\](.*?)\[\[\s*/\s*TASKUARY[-_ ]?SUMMARY\s*\]\]', re.I | re.S)
 # ...and one that never closed: a live line is cut to 300-400 characters before it is drawn (agents.py), and a turn can end without
 # the closing tag - the opening tag through to the end goes, and so does a tag cut off part-way at the very end ("[[TASKUA")
@@ -499,13 +485,11 @@ def withdraw_markers(text: str) -> tuple:
 # said was ready: "anything an agent creates should not be hidden" - and the ruling: the agent decides, as it does on Claude.ai and ChatGPT,
 # and code draws what it showed). ONE sentence, in the show tool's own words on every road: the tool a CLI session is handed
 # (agenttools), the one an API brain is handed (apiagent) and the line a chat with no tool reads (SHOW_LINE)
-SHOW_WHAT = ('Whatever you make for the owner to look at - a query, a script, a document, a picture - show it: a file you only saved '
-             'is not in front of them.')
+SHOW_WHAT = 'A file only saved is not in front of the owner; a shown one is.'
 _SHOW_RE = re.compile(r'^[ \t]*\[\[\s*TASKUARY[-_ ]?SHOW\s*:?\s*(.+?)\s*\]\][ \t]*\n?', re.I | re.M)
-SHOW_LINE = ('SHOWING YOUR ANSWER: a table, a chart, a few numbers or a checklist is drawn in the chat by the `show` tool. Make a file '
-             'only for what show cannot draw (an image, a long page, a spreadsheet to keep, a query, a script) and name it on its own line, '
-             '[[TASKUARY-SHOW: <full path>]] (or show\'s `files`): it appears under this answer and stays on the task. ' + SHOW_WHAT +
-             ' A file only when it truly helps - never your working files, test data or drafts. An .html page runs with no network: put its data and scripts in it.')
+SHOW_LINE = ('SHOWING: a table, a chart, a few numbers or a checklist is drawn in the chat by the `show` tool. A file named on its own '
+             'line, [[TASKUARY-SHOW: <full path>]] (or show\'s `files`), appears under this answer and stays on the task. ' + SHOW_WHAT +
+             ' An .html page runs with no network.')
 
 
 def show_markers(text: str) -> tuple:
@@ -520,12 +504,9 @@ _ATTR_RE = re.compile(r'(slot|to|subject)\s*=\s*(?:"([^"]*)"|(\S+))', re.I)
 # ONE ROAD A SESSION (the agent walk, 2026-11-10): a chat was told the block, the tool and `taskuary --slot` at once, and wrote "an email to
 # Ray Colton" a second time beside the checklist line that asked for it. The block is how a session with none of Taskuary's tools writes an
 # email - one the checklist owes or one the work turned up; a session with the tools hears DRAFT_TOOL_LINE in its place (general.by_tool)
-DRAFT_LINE = (f'EMAILS THIS TASK NEEDS: write each as {DRAFT_OPEN} slot=<id> subject="<subject>"]]<the email>{DRAFT_CLOSE} - the one way '
-              'you draft an email here; the block IS the draft, its words written once, there, and nowhere else in your answer. A checklist '
-              'line marked "-> email to" is an email only you write - write it or ask the owner what it needs; `slot` is its id, and your '
-              'email fills it, never a second beside it. An email the checklist does not list takes to=<address> in place of slot (and beside '
-              'slot, when the line names a person whose address you found). The subject is for its reader, never this task\'s title; to '
-              'someone who mailed on this task, "Re: " their subject.')
+DRAFT_LINE = (f'EMAILS: {DRAFT_OPEN} slot=<id> subject="<subject>"]]<the email>{DRAFT_CLOSE} is one email draft - the block IS the '
+              'draft. A checklist line marked "-> email to" is filled by the block with its `slot` id; an email the checklist does not list '
+              'takes to=<address> in place of slot (beside slot, the address found for a person the line names).')
 
 
 def draft_markers(text: str) -> tuple:
@@ -546,9 +527,8 @@ def chat_marker(text: str) -> tuple:
 # so with a mark instead, and the mark takes the same road the command does (store.agent_tick).
 TICK_MARKER = '[[TASKUARY-TICK: <id>]]'
 _TICK_RE = re.compile(r'^[ \t]*\[\[\s*TASKUARY[-_ ]?TICK\s*:?\s*([A-Za-z0-9_-]+)\s*\]\][ \t]*\n?', re.I | re.M)
-TICK_CHAT_LINE = (f'TO-DOS HERE: you have no shell, so `taskuary --tick` is not yours to run. When you finish one of the checklist\'s '
-                  f'to-dos, put a line {TICK_MARKER} in your reply - the id in brackets after it - and Taskuary ticks it. One line per '
-                  f'to-do, only for what you actually did.')
+TICK_CHAT_LINE = (f'TO-DOS HERE: this session has no shell; a line {TICK_MARKER} in your reply - the id in brackets after the to-do - '
+                  f'ticks it, one line per to-do.')
 
 
 # ...and a session that HAS the tick tool (an AI card whose Taskuary toolbox answered) is told the tool, never "you have no shell"
@@ -569,9 +549,8 @@ def tick_markers(text: str) -> tuple:
 # it?" over the Send card that already asks it, while the summary line said the card IS the confirmation - the two now say one thing
 ASK_MARKER = '[[TASKUARY-ASK]]'
 _ASK_RE = re.compile(r'\[\[\s*TASKUARY[-_ ]?ASK\s*\]\]\s*:?\s*(.*)', re.I | re.S)
-ASK_LINE = (f'ASKING THE OWNER: a real blocker - a fact or a decision only they can give - is one question, asked once in your own words, with '
-            f'your recommended answer; end the reply with {ASK_MARKER} on its own line, which only marks that you wait on him. Never ask for '
-            f'permission to do what a card already asks (its Send, Post or Approve is that question).')
+ASK_LINE = (f'ASKING THE OWNER: {ASK_MARKER} on its own line at the end of the reply marks the question above it as one you wait on him '
+            f'for; his answer comes to you. A card\'s Send, Post or Approve is already its own question.')
 
 
 def without_ask(text: str) -> str:

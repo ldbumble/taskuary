@@ -131,9 +131,8 @@ def test_a_one_line_turn_files_its_line_alone_and_the_agent_is_told_it_may():
     said = f"Ray thanked you.\n{selfclose.SUMMARY_OPEN}{json.dumps({'did': 'Ray thanked you.', 'about': '', 'on_you': []})}{selfclose.SUMMARY_CLOSE}"
     rest, out = selfclose.summary_marker(said)
     assert rest == 'Ray thanked you.' and out['did'] == 'Ray thanked you.' and out['about'] == '' and out['on_you'] == []
-    # ...the model judges it: the instructions say ONE line and no draft, and never hand it a list of words to match
-    from taskuary import ingest
-    assert 'ONE' in selfclose.SUMMARY_LINE and 'no draft' in selfclose.SUMMARY_LINE
+    # ...the model judges it, never a list of words to match - and how short its turn is, is its own (no scripted "ONE line")
+    assert 'thanked' not in selfclose.SUMMARY_LINE
 
 
 # ── a refusal says why, and what to do next ─────────────────────────────────────────────────

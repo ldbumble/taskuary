@@ -187,8 +187,8 @@ def failed_line(body: str) -> tuple:
 # one plain line of its own - its time of the next try, the newest with its Try again (say_failure). Waits grow; a limit's own reset is waited out.
 RETRY_TURN = 'retry'
 RETRY_WAITS = (60, 120, 300, 600, 600, 600)
-AGAIN_PRESS = 'The owner pressed Try again under your last turn: do the step that stopped you once more, from where it stopped.'
-RETRY_ASK = "Taskuary tried your last turn again by itself: the AI could not answer it then. Do that turn's work now, from where it stopped."
+AGAIN_PRESS = 'The owner pressed Try again under your last turn, which stopped part-way.'
+RETRY_ASK = "Taskuary is trying your last turn again by itself: the AI could not answer it then."
 DOWN = ('The AI is over its limit', 'The AI stopped before it answered', "The AI didn't answer", "The AI couldn't be reached")
 def provider_down(e) -> str:
     """The plain words for an AI that could not answer now - over its limit, not answering, stopped before its answer - else ''.
@@ -437,31 +437,21 @@ _IMAGE_PATH = re.compile(r'(?P<path>(?:[A-Za-z]:\\|/)[^\r\n<>|"?*]+?\.(?:png|jpe
 # ERP is worse than one that says "I do not know this number yet, let us prove it" - so the
 # route from "I asked for a number" to "that number is now a certified metric" is written out here,
 # in the prompt, rather than left for the owner to know about.
-TEACH_ME = """TEACHING YOU A NUMBER
-When the owner asks for a figure out of a customised system and there is no certified definition
-for it, do not guess and do not present an unverified figure as the answer. Say what you do not
-know yet, then walk this through with them:
-1. Look at the REAL schema first, through whichever system holds the number - /api/tools/run with
-   that system's own type. Never assume a column or a dimension exists because the name sounds
-   right; ask the system what it actually has, custom fields included.
-2. Propose a definition in plain words (what it means, what one row is), and a spec. It names its
-   source and how to reduce the rows - {"source": "intacct", "object": "...", "value_field": "...",
-   "aggregate": "sum", "filters": [[...]]} for an ERP object read, or {"source": "mssql", "query":
-   "SELECT ..."} for a database. Use {scope}, {period_start} and {period_end} as placeholders; a
-   ratio puts the denominator in "over" as a spec of its own. If a magnitude column carries no
-   sign, name the column that does in "sign_field".
-   Save it: POST /api/semantic/metrics {"Name": "...", "Label": "...", "Grain": "...",
-   "Definition": "...", "Spec": {...}}.
-3. Try it: POST /api/semantic/metrics/<id>/try {"scope": "...", "period": "2026-07"} - this records
-   nothing, it just shows you the number so you can adjust the spec and try again.
-4. ASK THE OWNER for a few cases and periods whose correct numbers they already know, and save
-   each: POST /api/semantic/metrics/<id>/fixtures {"Scope": "...", "Period": "2026-07",
-   "Expected": 123456.78, "Source": "where they got it"}. Never invent one of these.
-5. Prove it: POST /api/semantic/metrics/<id>/check. It becomes verified only when every known
-   number reconciles - and it will tell you which ones did not, so you can fix the spec and
-   re-check. Write what you learned into the metric's Notes as you go.
-Once verified it is frozen into a skill and every later run uses it, so this is worth doing
-properly once rather than approximately every time."""
+TEACH_ME = """TEACHING YOU A NUMBER - how a figure out of a customised system becomes a certified metric
+- The system's REAL schema, custom fields included: /api/tools/run with that system's own type.
+- A definition and its spec: POST /api/semantic/metrics {"Name": "...", "Label": "...", "Grain": "...",
+  "Definition": "...", "Spec": {...}}. A spec names its source and how its rows reduce -
+  {"source": "intacct", "object": "...", "value_field": "...", "aggregate": "sum", "filters": [[...]]}
+  for an ERP object read, {"source": "mssql", "query": "SELECT ..."} for a database; {scope},
+  {period_start} and {period_end} are its placeholders; a ratio puts the denominator in "over" as a
+  spec of its own; "sign_field" names the column that carries the sign of an unsigned magnitude.
+- A try: POST /api/semantic/metrics/<id>/try {"scope": "...", "period": "2026-07"} shows the number
+  and records nothing.
+- Known numbers: POST /api/semantic/metrics/<id>/fixtures {"Scope": "...", "Period": "2026-07",
+  "Expected": 123456.78, "Source": "where they got it"} - figures the owner already knows to be right.
+- Proof: POST /api/semantic/metrics/<id>/check. It is verified only when every known number
+  reconciles, and it names the ones that did not. The metric's Notes hold what was learned.
+Once verified it is frozen into a skill, and every later run uses it."""
 
 
 def full_hands(store) -> bool:

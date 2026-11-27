@@ -199,7 +199,7 @@ def draft(store, tid: int, text: str, to: str = '', subject: str = '', slot: str
         from .agenttools import refusal
         try: outbound.new_from(store, tid)
         except outbound.Fixable as e:
-            return {'ok': False, 'why': refusal(f'Nothing was drafted: {e}', f"tell the owner in one line, with the place a mailbox is connected: {words.link('mail')}")}
+            return {'ok': False, 'why': refusal(f'Nothing was drafted: {e}', f"a mailbox is connected at {words.link('mail')}")}
     cc = [a for a in (split(x)[1] for x in ([cc] if isinstance(cc, str) else cc or [])) if a]
     if cc and channel != 'email': return {'ok': False, 'why': f'{channel} has no cc - only an email can copy somebody in'}
     if bad := [a for a in cc if not is_address(a)]: return {'ok': False, 'why': f"cc is a list of email addresses, one to an entry - {', '.join(bad)} is not one"}
@@ -352,7 +352,7 @@ def routine_sends(store, tid: int, rid: int, agent: str, missing: str = '') -> d
     except (TypeError, ValueError): to = 'them'
     # ...and said to the agent as it happened: told the card "waits and nothing went", it reported a sent email as waiting for a press
     if out.get('ok') and not out.get('send_error'):
-        return {'sent': True, 'says': f"Sent to {to} at once - a routine's email to what its owner saved into it goes without a press; say it went. No card waits on it."}
+        return {'sent': True, 'says': f"Sent to {to} at once - a routine's email to what its owner saved into it goes without a press. No card waits on it."}
     why = out.get('send_error') or out.get('error') or 'it did not go'
     return {'send_error': why, 'says': f"Not sent to {to}: {str(why).rstrip(' .')}. Its card waits on the task for the owner's Send."}
 

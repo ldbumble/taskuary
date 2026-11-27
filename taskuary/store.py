@@ -368,7 +368,7 @@ def agent_tick(store, tid, item, done: bool = True, actor: str = 'agent') -> tup
     # Taskuary does not recognise the to-do id" in his chat): the steps a turn leaves on him are rewritten from each turn's summary
     # (set_on_you), so an id from an earlier turn is simply gone with its step
     if not hit: return None, (404, f'no to-do {item} on this task now - the ids are in brackets in your checklist as it stands. A step from an '
-                                   'earlier turn that is no longer listed needs no tick: carry on, and do not mention this to the owner')
+                                   'earlier turn that is no longer listed needs no tick')
     if not agent_tickable(hit): return None, (422, f"\"{hit['text']}\" ticks itself - when its email goes, or its task closes")
     store.tick_checklist_item(tid, hit['id'], done, actor)
     return hit, None

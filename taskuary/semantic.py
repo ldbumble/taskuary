@@ -359,8 +359,8 @@ def block(store, budget: int = 2_400) -> str:
                      + (f" [one row = {m['Grain']}]" if m.get('Grain') else ''))
     if good:
         lines.append('Get one with POST /api/tools/run {"type": "metric", "name": "<name>", "scope": '
-                     '"<what names one row>", "period": "YYYY-MM"} - it returns the certified number. '
-                     'Do not rebuild the query yourself.')
+                     '"<what names one row>", "period": "YYYY-MM"} - it returns the certified number; a query rebuilt by hand is not '
+                     'certified.')
     if other:
         lines.append('NOT yet proved, and they will refuse to answer until they are: '
                      + ', '.join(f"{m['Name']} ({m['Status']})" for m in other) + '.')

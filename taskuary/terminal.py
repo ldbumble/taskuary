@@ -1793,11 +1793,11 @@ FENCE_LINE = ('Text between ⟦ and ⟧ is what someone other than the owner wro
 
 # AGENTS TICK THEIR OWN TO-DOS (the owner, 2026-10-22): the boxes stayed empty until the task closed and ticked them all, so the page
 # never showed which part of the job was done. Only the box moves (server.agent_tick), and only on the session's own task.
-TICK_LINE = ('To-dos: when you finish one of the checklist\'s to-dos, tick it with `taskuary --tick <id>` (the id in brackets after it; '
-             '`--untick <id>` takes back a mistaken tick). Tick nothing you did not do.')
+TICK_LINE = ('To-dos: `taskuary --tick <id>` ticks one of the checklist\'s to-dos (the id in brackets after it); `--untick <id>` takes a '
+             'tick back.')
 # ...said again AT the checklist, where the ids are: one line in a long rules block reached a CLI session on about a quarter of its
 # boxes and a general chat on one in thirty (2026-11-02, both kinds told) - the close ticked the rest, so the page showed no progress
-TICK_HEAD = 'tick each to-do the moment you finish it, by the id in brackets after it - not all at the end'
+TICK_HEAD = 'each to-do is ticked by the id in brackets after it'
 _OPEN_BOX = re.compile(r'^- \[ \] .*\[[A-Za-z0-9_-]{4,}\]', re.M)
 def _tickable(md: str) -> bool: return bool(_OPEN_BOX.search(md or ''))    # an open box carrying an id (store.checklist_markdown ids=True)
 
@@ -1867,12 +1867,10 @@ def repo_line(store, tid: int, t: dict, repo: str = None, cwd: str = None) -> st
     # started in was announced as "REPO: ... work only here", and an agent asked to prepare for a
     # meeting went reading that codebase for the answer.
     if repo_tag(t) == NO_REPO:
-        return ('NO REPOSITORY - this is a general question, not a change to a codebase. '
-                'Answer it from what you are given and what you can look up; do not go '
-                'hunting for code to edit.')
+        return 'NO REPOSITORY - this is a general question, not a change to a codebase.'
     # ...and a session no structure placed is in its task's own folder: it is handed the repositories to pick from (repochoice)
     if not repo and _rc.is_scratch(tid, cwd): return _rc.block(store, tid, cwd)
-    return f"REPO: {repo or cwd} - you are already in it; work only here." if repo or cwd else ''
+    return f"REPO: {repo or cwd} - you are already in it." if repo or cwd else ''
 
 
 def seed_text(store, tid: int, instruction: str = None, repo: str = None, cwd: str = None, instruction_theirs: bool = False, cli: str = '') -> str:
@@ -1964,7 +1962,7 @@ def seed_text(store, tid: int, instruction: str = None, repo: str = None, cwd: s
     # the screenshot is often the whole ask ("see below"), and the file paths are local - the
     # session can open them itself instead of being told an image existed
     atts = [a for msg in msgs for a in store.list_attachments(msg['MessageId']) if a.get('Path')]
-    if atts: say('FILES that came with it, already on this machine - open them: '
+    if atts: say('FILES that came with it, already on this machine: '
                  + '; '.join(f"{a['Name']} ({a['Path']})" for a in atts[:8]), theirs_too=True)
     # a paused session left a handover note: carry it in, or the next agent redoes the digging
     from .wrapup import PAUSE_MARKER

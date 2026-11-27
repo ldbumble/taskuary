@@ -207,7 +207,7 @@ class DeliveryTests(unittest.TestCase):
         typed = t.typed()
         self.assertIn('(1) also handle the null case', typed); self.assertIn('(2) rename the flag', typed)
         self.assertLess(typed.index('(1)'), typed.index('(2)'))
-        self.assertIn('after finishing the step you are on', typed)
+        self.assertIn('oldest first:', typed)
         self.assertEqual(s.waiting_notes(tid), [])
         self.assertEqual({w['How'] for w in s.waitroom(tid)}, {'typed'})
         self.assertTrue(any('waiting-room' in c['Body'] for c in s.list_comments(tid)))
@@ -240,7 +240,7 @@ class DeliveryTests(unittest.TestCase):
         # you are on", to an agent at rest). The chat still reads the typed line as Taskuary's head and the owner's words (sessionrecord.queued)
         self.assertNotIn('While you were working', t.typed()); self.assertNotIn('the step you are on', t.typed())
         from taskuary import sessionrecord
-        self.assertEqual(sessionrecord.queued(t.typed()), [('brief', 'The owner left 1 note for you. Take them in order:'),
+        self.assertEqual(sessionrecord.queued(t.typed()), [('brief', 'The owner left 1 note for you. Oldest first:'),
                                                            ('you', 'now do the same for the export path')])
 
     def test_a_question_for_the_owner_is_answered_by_what_they_write_next(self):

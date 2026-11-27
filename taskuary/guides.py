@@ -58,7 +58,7 @@ def _show():
 PROPOSE = ("THE SHAPES OF A `propose` run_tool: a new GitHub issue - {type: github_issue, repo: owner/name, title, "
            "body, labels?}, drawn with its Create issue button. On a Jira, Monday or Linear item - type jira_comment {body}, jira_move "
            "{status}, jira_assign {assignee}, jira_close {body?} (monday_ and linear_ the same); `item` is the one this task came from "
-           "unless you name another. Every one waits for the owner's press; always give `why`.")
+           "unless you name another. Every one waits for the owner's press.")
 
 # topic -> (what it is for, in one line; its text)
 GUIDES = {'browser': ("driving Taskuary's browser: looking at a page, signing in, a CAPTCHA, a step only the owner can do", _browser),

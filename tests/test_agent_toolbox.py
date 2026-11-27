@@ -973,7 +973,7 @@ class NewTaskTool(unittest.TestCase):
         from taskuary import origin
         with mock.patch.object(origin, 'of_message', return_value=('person', None)), mock.patch.object(origin, 'of_task', return_value=('person', None)):
             said, err = tool(self.tid, 'read_attachment', id=aid)
-        self.assertTrue(err, said); self.assertIn('tell the owner', said); self.assertNotIn('open the original', said)
+        self.assertTrue(err, said); self.assertIn("on the original message in the owner's mailbox", said); self.assertNotIn('open the original', said)
 
     def test_a_list_or_a_number_given_in_another_shape_is_read_as_the_schema_has_it(self):
         "A lone cc address, an `answers` written m12, an attachment named \"attachment 12\": read as meant - never a Pydantic dump or a cc spelled letter by letter."

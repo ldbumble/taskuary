@@ -410,7 +410,7 @@ _DECIDE = {
     'coding_agent':    ('send it to a coding agent - `text`: what is wanted; `as`: the repository (repos.list), only when sure. '
                         'Not sure which repository is no reason to ask - CALL it, and its card offers every repository to pick. '
                         '`new`: true when the job is NOT about the item on the table'),
-    'not_ours':        'file it, just this once - its card asks whether from now on, or as a rule',
+    'not_ours':        'file it, just this once - the put-down when no scope was said ("ignore it"); its card then asks how far: from now on, or as a rule',
     'not_ours_sender': 'file mail like this from this sender from now on - their mail still arrives and stays readable, and another kind from them is still judged',
     'block_sender':    'an exclusion rule in Settings: the sender never reaches triage again - only when they ask for a rule',
     'not_ours_kind':   "an Advisor idea only: put it down AND no more ideas like it - the Advisor's next run reads that",

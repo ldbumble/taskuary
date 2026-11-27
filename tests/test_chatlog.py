@@ -366,6 +366,25 @@ def test_each_tab_of_a_set_is_told_by_what_came_of_it_never_by_its_first_rows_fa
     assert 'Turned down by him' in got[x] and 'Done' in got[li] and 'Greyed by his line' in got[rd] and 'Turned down' not in got[rd], got
 
 
+def test_an_empty_reply_box_in_front_is_never_told_as_waiting_for_his_press():
+    """Walk 25, 2026-11-26: a reply was owed and its agent had asked what to say, so the empty box stood with that on it. Its agent then raised
+    a card of its own, which waited behind the box - and was told "Waiting for his press now: the reply to ..." for a box whose Send is off."""
+    from taskuary import cardqueue, conversation, general
+    s, tid = world()
+    mid = s.add_message({'TaskId': tid, 'ExternalId': 'p1', 'Channel': 'email', 'FromName': 'Paula Vance', 'FromEmail': 'paula@vendor.example',
+                         'ToEmail': 'alex@northwind.example', 'Subject': 'Flour order', 'BodyText': 'Twenty bags as usual? Paula', 'Status': 'routed'})
+    conversation.hear(s, tid, turn=True)
+    box = _rv(s, tid, mid, text='')
+    s.set_review_draft_needs(box, 'How many bags should I confirm?')
+    act = one_call(s, tid, [{'action': 'run_tool', 'type': 'linkedin_post', 'text': 'We shipped the ledger export.'}])[0]
+    s._exec('UPDATE review SET Batch=NULL WHERE ReviewId=?', (act,))
+    s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'How many bags should I confirm?')
+    cardqueue._SEEN.clear()
+    assert cardqueue.state(s, tid)['live'] == [box], 'the shape: the empty box is in front of the card its agent raised'
+    said = cardqueue.screen(s, tid)
+    assert 'Waiting for his press now' not in said and 'no words in it' in said and 'paula@vendor.example' in said, said
+
+
 def test_a_tab_he_said_no_to_is_marked_so_never_as_one_that_went():
     """The card gallery, 2026-11-25: one of three sent, the next dropped - and the dropped one's tab was ticked like the sent one. A tab
     settled without going (his no, a press that failed) says so (`no`); one that went, or still waits, does not."""

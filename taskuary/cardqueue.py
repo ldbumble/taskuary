@@ -522,7 +522,7 @@ def screen(store, tid: int, skip=()) -> str:
     (conversation._card) - sent, done with its link, failed and why, turned down. Told at the head of every turn and after every press and
     every card raised. `skip`: review ids said elsewhere in the same words (the reply draft's own block). '' on a task that never had a card."""
     from .continuity import clock
-    from .conversation import _card
+    from .conversation import DRAFTS, _card
     from .proposals import SET_ASIDE, UNTIL, comes_back, passed_why
     from . import general, landing
     st = state(store, tid); mark(store, tid, st)
@@ -559,7 +559,10 @@ def screen(store, tid: int, skip=()) -> str:
                 from . import card
                 ps = card.presses(store, r) if r and r.get('Kind') != 'action' else ('approve',)
                 shown = '' if 'approve' in ps else f" (its card: {card.press_words({'kind': card.SEND, 'presses': ps})})"
-                waiting.append(f'Waiting for his press now{outcome(r)}: {n}{shown}')
+                # ...AND A REPLY BOX WITH NO WORDS IN IT HAS NOTHING TO PRESS (walk 25, 2026-11-26: an empty reply stood in front of the card its
+                # agent had raised, told as "waiting for his press now" - its Send is off until somebody writes it)
+                if r and r.get('Kind') in DRAFTS and not _words(r): waiting.append(f'In front with no words in it, so nothing of it can be pressed: {n}')
+                else: waiting.append(f'Waiting for his press now{outcome(r)}: {n}{shown}')
             elif ids <= front: waiting.append(f'Comes forward once your turn ends (you are going on from his last press): {n}')
             # ...A CARD BEHIND THE FRONT COMES ONCE THE ONE IN FRONT IS PRESSED (separate calls are separate cards, one after another)
             elif ids & held: waiting.append(f'Raised, and behind the card in front - it comes forward at his press on that one: {n}')

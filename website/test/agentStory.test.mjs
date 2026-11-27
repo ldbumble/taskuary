@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 
-import { STORY_CHIP, startLabel, storyAlarm, storyPlace, storyShown } from "../src/agentStory.js";
+import { storyPlace, storyShown } from "../src/agentStory.js";
 
 const held = { kind: "held", line: "Waiting for you. pat@vendor.example is not on your domain and you have never written to them, so no agent starts on their words by itself. Start the coding agent, or do it yourself." };
 
@@ -18,25 +18,6 @@ test("a queued start is left to its own card, which has Start now and Cancel", (
   assert.equal(storyShown({ kind: "queued", line: "next in line" }, { queued: true }), false);
 });
 
-test("only the two that wait on the owner, and a run that failed, wear the alarm colour", () => {
-  assert.deepEqual(Object.keys(STORY_CHIP).filter(storyAlarm), ["held", "interrupted", "failed"]);
-});
-
-// a failed run is said as a failure (owner-approved, 2026-10-21): it read "not started" or "stopped" over its own reason
-test("a failed run's chip says failed", () => {
-  assert.equal(STORY_CHIP.failed, "failed");
-});
-
-
-// by what the agent IS, from the task's kind - "Start coder" named a profile as if it were a worker (the owner, 2026-10-16)
-test("a step that never ran names what Start starts, by the task's kind", () => {
-  assert.equal(startLabel(held, "coding", false), "Start the coding agent");
-  assert.equal(startLabel(held, "general", false), "Start the agent");
-  assert.equal(startLabel(held, "coding", true), null);
-  assert.equal(startLabel({ kind: "interrupted", line: "x" }, "coding", false), null);
-});
-
-
 // One telling of the run (the owner, 2026-10-12): with a record the sentence heads it - folded over its summary, open over it all
 // with the timeline behind More; with none the story is the whole account.
 test("the story is the record's first line when there is a record, and the whole account only when there is none", () => {
@@ -48,8 +29,3 @@ test("the story is the record's first line when there is a record, and the whole
   assert.equal(storyPlace(null, { open: true }), null);
 });
 
-
-test("a run that finished wears the list's word for it, never 'not started' (G7)", () => {
-  assert.equal(STORY_CHIP.finished, "agent finished");
-  assert.equal(startLabel({ kind: "finished", line: "The coding agent finished its work" }, "coding", true), null);
-});

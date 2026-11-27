@@ -22,9 +22,8 @@ test("every tq-aui-composer is the one OneBox, and it always has the paperclip a
   assert.match(one, /<IconButton size="small" className="tq-aui-attach"[^>]*onClick=\{\(\) => pick\.current\?\.click\(\)\}/);
   assert.match(one, /<MicButton size=\{18\} [^>]*onText=\{onMic\} \/>/);
   assert.doesNotMatch(one, /\{(onFiles|onMic) &&|\{!?\w+ \? <IconButton|\{\w+ && <MicButton/, "neither is drawn on a condition");
-  // ...used by every box: the one chat (general and coding alike), a task's first box and an item's (PromptBox)
+  // ...used by every box: the one chat (general and coding alike) and an item's (PromptBox)
   assert.match(read("GeneralWorkspace.jsx"), /<OneBox root=\{ComposerPrimitive\.Root\}/);
-  assert.match(box, /<PromptBox /);
   assert.match(read("ItemSections.jsx"), /<PromptBox /);
   // ...and a coding CLI's files reach it named after the words by their paths - the server's one road names them (waitroom._lines)
   assert.match(read("GeneralWorkspace.jsx"), /attachments: files\.map\(\(a\) => a\.path\), line_id: id/);

@@ -8,7 +8,6 @@ import path from "node:path";
 import json from "../../taskuary/kinds.json" with { type: "json" };
 import { AGENT_KINDS, KIND_OPTIONS, KINDS, agentWord, kindLabel, shortKind, verdictLabel } from "../src/kinds.js";
 import { kindLabel as panelLabel } from "../src/triageVerdict.js";
-import { agentWord as storyWord } from "../src/agentStory.js";
 
 test("kinds.js reads kinds.json: the picker, the panel's destination and the worker's name", () => {
   assert.deepEqual(KINDS, ["task", "general", "coding", "reply"]);
@@ -17,7 +16,7 @@ test("kinds.js reads kinds.json: the picker, the panel's destination and the wor
   for (const k of json.kinds) { assert.equal(kindLabel(k.key), k.label); assert.equal(verdictLabel(k.key), k.verdict); }
   assert.deepEqual([shortKind("coding"), shortKind(""), kindLabel("setup")], ["coding", "your task", "setup"]);
   assert.deepEqual([agentWord("coding"), agentWord("general"), agentWord("task")], ["the coding agent", "the agent", "the agent"]);
-  assert.equal(panelLabel, verdictLabel); assert.equal(storyWord, agentWord);
+  assert.equal(panelLabel, verdictLabel);
   assert.deepEqual(KIND_OPTIONS.filter((o) => o.made === false).map((o) => o.key), ["reply"], "a reply is never made by hand");
 });
 

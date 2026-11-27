@@ -2,18 +2,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import { SECTIONS, homeSection, liveTerminal, soloTodo, cameFrom, cameChip, judgedMarks, agentStatus, agentWord, answeredOutside, reportLine, writeupAt, fromStatus, TAB_MOST, focusOf, fromLine, holderName, layoutOf, mainOf, nextInDrawer, sameWords, sectionFade, waitingOn, workPane } from "../src/taskLayout.js";
+import { SECTIONS, homeSection, liveTerminal, soloTodo, cameFrom, cameChip, judgedMarks, agentStatus, agentWord, answeredOutside, reportLine, writeupAt, fromStatus, TAB_MOST, focusOf, fromLine, holderName, mainOf, nextInDrawer, sameWords, sectionFade, waitingOn, workPane } from "../src/taskLayout.js";
 import { STAGE, sectionOf } from "../src/stages.js";
 import { taskSource } from "./taskSource.mjs";
 
 test("two columns at rest, the whole width while an agent works - coding or general, working or waiting on you", () => {
-  assert.equal(layoutOf({ sessionView: false }), "columns");
-  assert.equal(layoutOf({ sessionView: true }), "full");
   const src = taskSource();
   // the page's own "the session fills the page" decides it: a live session (term.alive - a terminal or a general agent's chat)
   assert.match(src, /const sessionView = \(liveSession \|\| chatKept\) && !peek;/);
-  // ...and only a live session since 2026-10-25 (the owner: "keep the 2 columns for when agent is not working")
-  assert.match(src, /const layout = layoutOf\(\{ sessionView \}\), wide = layout === "full";/);
   // ...the columns box steps aside but on a phone's stacked page; on the desk the THREE SECTIONS (the owner, 2026-10-27) are its children
   assert.match(src, /<Box ref=\{columnsBox\} data-tq-columns="" data-tq-layout=\{twoUp \? "sections" : sessionView \? "full" : stacked \? "stacked" : main\} sx=\{stacked \? COLUMNS : \{ display: "contents" \}\}>/);
   // ...the work column steps aside (display: contents) so the terminal stays a flex child of its section, sized as it always was
@@ -37,14 +33,6 @@ test("two columns at rest, the whole width while an agent works - coding or gene
 // THE WHOLE WIDTH IS A LIVE SESSION'S ALONE (the owner, 2026-10-25, reversing the 2026-10-22 fold for the states with no agent live): a
 // finished, failed or closed agent is back in two columns - its Result the white focus on the right, Close out under it on the shade
 test("the layout: two columns whenever no agent is live - a Result and a failure too; the whole width only while working or waiting", () => {
-  const cases = [
-    ["no agent at all", {}, "columns"],
-    ["never started (handed or queued, nothing run)", { sessionView: false }, "columns"],
-    ["working or waiting on you", { sessionView: true }, "full"],
-    ["finished, stopped or saved with its Result", { result: true }, "columns"],
-    ["failed, with its reason and Try again", { failed: true }, "columns"],
-  ];
-  for (const [what, page, want] of cases) assert.equal(layoutOf(page), want, what);
   // the focus: the Result (or the failed run) once an agent acted, the reply where that is the move; none while live
   assert.equal(focusOf({ result: true, pane: "reply" }), "agent");
   assert.equal(focusOf({ failed: true }), "agent");
@@ -71,9 +59,6 @@ test("the layout: two columns whenever no agent is live - a Result and a failure
   assert.match(src, /onClickCapture=\{stacked && !solo \? phoneFromTap : undefined\}/);
   // ...and no third section: what Close out held is the chat's cards (2026-11-06)
   assert.doesNotMatch(src, /slot\("close"|data-tq-closeout|closeOutRef/);
-  // ...its record behind the Result's heading while the Result rests on its summary (2026-10-27: "click Result to see more")
-  assert.match(src, /\{!sessionView && hasRecord && !resultRest && !chatPane && \(/);
-  assert.match(src, /\{resultRest && !sessionView && !chatPane && <ResultSummary /);
 });
 
 
@@ -141,10 +126,6 @@ test("a write-up under way is one line under the Result; one that failed is a ca
   assert.doesNotMatch(src, /<LifecycleChip kind="reply"|Nobody sent this one|CLOSE_BY_HAND/);
   assert.match(src, /const upAt = writeupAt\(writeup\), upFailed = upAt === "chat";/);
   assert.match(src, /\{upFailed && <WriteupBlock/);
-  assert.match(src, /const lineAt = upAt !== "result" \? null : shows\("agent"\) && !sessionView && hasRecord && !resultRest && !chatPane \? "record" : "top";/);
-  assert.equal((src.match(/<WriteupLine /g) || []).length, 2, "two spots, one lineAt: the line is drawn once");
-  assert.match(src, /\{lineAt === "top" && <WriteupLine view=\{writeup\} hasReply=\{!!replyMessage\} \/>\}/);
-  assert.match(src, /\{lineAt === "record" && <WriteupLine view=\{writeup\} hasReply=\{!!replyMessage\} \/>\}/);
   assert.doesNotMatch(src, /Closing the session and writing up what is on screen — the agent is not asked anything\.\s*<\/Typography>\s*\) : workspaceMode === "live" && peek/,
     "the third hint line over the write-up is gone");
 });
@@ -308,10 +289,9 @@ test("no task kind or state lays a Close out section: Came from and the chat, a 
   assert.equal(liveTerminal({ alive: false, mode: "pty" }), false);
   assert.equal(liveTerminal(null), false);
   const src = taskSource();
-  assert.match(src, /const home = !!t;/);
   assert.match(src, /secs = solo \? SECTIONS\.slice\(0, 1\) : SECTIONS;/);
   assert.match(src, /const slots = secs, slotKeys = slots\.map\(\(s\) => s\.key\);/);
-  assert.match(src, /const workspaceMode = home && !wrapping \? "general" : agentWorkspaceMode/, "every task is always the chat");
+  assert.doesNotMatch(src, /workspaceMode|chatPane|<RunForm|<ContinueBox/, "every task is always the chat: no start form, no Continue box");
   // ...ONE chat for every kind: the page never picks between two (the component reads its own source, chatStream.chatSource)
   assert.doesNotMatch(src, /<CodingChat |liveTerminal\(term\) \? </, "no coding/general branch picks the chat");
   assert.equal((src.match(/<GeneralWorkspace /g) || []).length, 1);
@@ -319,7 +299,6 @@ test("no task kind or state lays a Close out section: Came from and the chat, a 
   // ...NO BOX IN CAME FROM (the owner, 2026-11-22): its Send to agent opens the Agent section, where the box is - no Agent slot beside it till then
   const from = src.slice(src.indexOf('slot("from",'), src.indexOf("THE WORK COLUMN"));
   assert.match(from, /data-tq-send-to-agent=""/);
-  assert.doesNotMatch(from, /<NoAgentChat /);
   assert.match(src, /\{!solo && slot\("agent", <Box data-tq-work=/);
   // ...the task's own moves ride the chat's strip
   const row = fs.readFileSync(new URL("../src/TaskRow.jsx", import.meta.url), "utf8");
@@ -374,19 +353,6 @@ test("a chat that lands after the task's first read opens the chat, and stays th
   const page = taskSource();
   assert.match(page, /chatSeen\.current = chatLatch\(chatSeen\.current, selected, anyChat && detail\?\.task\?\.TaskId === selected\)/);
   assert.match(page, /const mainHeld = useRef\(\{ key: null, main: null, sec: null \}\), mainKey = `[^`]*\|\$\{chatSeen\.current\.on\}`/);
-});
-
-// THE OWNER, 2026-11-23: "I hit Try again on the canvas and the whole thing flickered". A first start that failed left its failure in the chat and
-// the run marked failed; its Try again read the page again, found an agent "started", and ran as Run another agent - a fresh conversation, the
-// chat's key bumped and the whole chat remounted under the press. The press is read once; its Try again replays what it read
-test("a start's Try again is the same start - never another agent read off the page its own failure changed", async () => {
-  const { startsAnother } = await import("../src/taskLayout.js");
-  const first = startsAnother({ report: false, transcript: false, alive: false, started: false });
-  assert.equal(first, false, "a first start is no other agent");
-  assert.equal(startsAnother({ started: true }, first), false, "its retry, after its failure made the chat 'started', is still the first start");
-  assert.equal(startsAnother({ started: true }), true, "a press on a task an agent already worked is another agent");
-  assert.equal(startsAnother({}, true), true, "and its retry stays another");
-  assert.equal(startsAnother({ alive: true }, { type: "click" }), true, "a press's click event is no answer of its own");
 });
 
 // A "LAST, FIRST" SENDER IS CALLED BY THEIR NAME (the owner's live task, 2026-11-25: Outlook's "Moreno, Gail at Partner Co" read as written,

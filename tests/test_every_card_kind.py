@@ -234,11 +234,9 @@ def test_a_post_put_up_through_the_browser_keeps_every_further_press_on_its_one_
     assert got[x]['status'] == 'approved' and not got[x].get('step') and held not in got and not cardqueue.state(w.s, w.tid)['units']
 
 
-def test_a_step_he_dismisses_stays_one_card_and_the_task_is_not_done_over_the_work_it_stopped(w):
-    """Walk 25, 2026-11-26, two roads: the agent's work hung on a sign-in it handed him, and he pressed Dismiss. His no wakes nobody (locked 3) -
-    and the task read "agent done" with the job owed; a read between the card's settling and the step's own close raised a SECOND card for
-    the same step, drawn greyed under the one he had dismissed. One step is one card, and the task waits on him until a turn has heard his no."""
-    from taskuary import taskstate
+def test_a_step_he_dismisses_stays_one_card(w):
+    """Walk 25, 2026-11-26: he pressed Dismiss on a sign-in the agent handed him. His no wakes nobody (locked 3), and a read between the
+    card's settling and the step's own close raised a SECOND card for the same step, drawn greyed under the one he had dismissed."""
     ws.record(w.s, w.tid, 'run1', 'input_needed', request_id='yourturn:signin-li', text='Your turn in the browser on linkedin.example: sign in', source='api')
     got = w.cards(); step = pagestep.card_of(w.s, w.tid, 'yourturn:signin-li')['ReviewId']
     assert got[step]['status'] == 'pending'
@@ -249,11 +247,6 @@ def test_a_step_he_dismisses_stays_one_card_and_the_task_is_not_done_over_the_wo
     proposals.settle(w.s, w.s.get_review(step), 'reject')
     got = w.cards()
     assert steps() == [step] and got[step]['status'] == 'rejected' and not w.woken, 'his no: on its card, and nobody woken'
-    assert taskstate.state(w.s, w.s.get_task(w.tid)) == 'blocked', 'never "agent done" over the work his no stopped'
-    assert 'you turned down its step' in taskstate.said(taskstate.standing(w.s, w.tid))
-    # ...the turn that hears his no answers: where the task stands is that turn's to say again
-    time.sleep(1.1); w.s.add_comment(w.tid, 'assistant', general.ASSISTANT_TYPE, 'Understood - I will not sign in there.'); cardqueue._SEEN.clear()
-    assert taskstate.state(w.s, w.s.get_task(w.tid)) == 'agentdone'
 
 
 def test_a_sign_in_is_one_card_that_carries_its_way_to_the_fill_page(w):

@@ -112,7 +112,7 @@ def standing(store, tid, key: str = None) -> dict:
     return cardqueue.fresh(store, ('standing', int(tid), key), lambda: _standing(store, tid, key))
 def _standing(store, tid, key: str = None) -> dict:
     from datetime import datetime
-    from . import card, cardqueue, checkback, waiton, watch
+    from . import card, checkback, waiton, watch
     t = store.get_task(int(tid)) or {}
     out = {'waits_on': None, 'who': '', 'what': [], 'since': None, 'next': None, 'closed': not t or t.get('Status') in ('done', 'dropped'),
            'them': [], 'check': None, 'rids': [], 'watch': ''}
@@ -129,25 +129,12 @@ def _standing(store, tid, key: str = None) -> dict:
     if what: return {**out, 'waits_on': 'you', 'what': what, 'since': min((str(c['at']) for c in mine if c.get('at')), default=None),
                      'rids': [r for c in mine for r in c['rids'] if isinstance(r, int)], 'trust': bool(mine) and mine[0]['kind'] == card.TRUST,
                      'ask': next((c['what'] for c in mine if c['kind'] == card.ANSWER), '')}
-    # ...AND HIS NO ON A STEP OF ITS AGENT'S OWN ROAD, WHICH NO TURN HAS HEARD (walk 25, 2026-11-26: he dismissed the sign-in the agent's work
-    # hung on - his Dismiss wakes nobody - and the task read "agent done" with the job owed): the work stopped at his no, and the next word is his
-    if (no := turned_down(store, tid)):
-        return {**out, 'waits_on': 'you', 'what': [f"you turned down its step: {cardqueue.what(store, {'rids': [r['ReviewId']], 'rows': [r]})}" for r in no], 'since': no[0].get('DecidedAt')}
     if cb and str(cb['at']) <= f'{datetime.now():%Y-%m-%d %H:%M:%S}': return {**out, 'waits_on': 'agent', 'what': [f"its check-back: {cb['what']}"], 'since': cb['at']}
     # ...their line came in and its agent has not read it to a turn's end: the agent's move, the wait still standing (waiton.settle)
     if (a := next((x for x in w if x['answered']), None)):
         return {**out, 'waits_on': 'agent', 'what': [f"{a['who']}'s reply to read"], 'since': a['answered'].get('CreatedAt')}
     if w: return {**out, 'waits_on': 'them', 'who': w[0]['who'], 'what': [x['what'] for x in w], 'since': w[0]['since']}
     return out
-
-
-def turned_down(store, tid) -> list:
-    "The steps held on task `tid`'s agent's own road (proposals.HELD_ACTS) that he turned down since it last answered: its work stopped there, unheard."
-    from . import general, proposals
-    from .processing_unread import OWNER_ACTORS
-    return [r for r in store._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action' AND Status='rejected' AND DecidedAt>=? ORDER BY ReviewId",
-                                   (int(tid), general._last_answer(store, int(tid)) or ''))
-            if r.get('DecidedBy') in OWNER_ACTORS and proposals._action(r) in proposals.HELD_ACTS]
 
 
 def said(st: dict) -> str:

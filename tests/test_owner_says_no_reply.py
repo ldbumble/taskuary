@@ -23,8 +23,8 @@ class OwnerSaysNoReply(unittest.TestCase):
         s = store(); tid, rid = drafted_task(s)
         pending = lambda: [r['ReviewId'] for r in s._rows("SELECT ReviewId FROM review WHERE TaskId=? AND Status='pending'", (tid,))]
         self.assertEqual(pending(), [rid])
-        doors = {'not_needed': lambda t, why: verdicts.not_needed(s, t, why, 'coding')}
-        got = json.loads(agenttools.call(s, tid, 'reply_not_needed', {'why': 'Alex said no reply is needed'}, doors))
+        doors = {'withdraw': lambda t, why, which='', keep=0: verdicts.withdraw(s, t, why, 'coding', which, keep=keep)}
+        got = json.loads(agenttools.call(s, tid, 'withdraw_draft', {'why': 'Alex said no reply is needed'}, doors))
         self.assertTrue(got['ok'])
         rv = s.get_review(rid)
         self.assertEqual(rv['Status'], 'closed_unsent'); self.assertEqual(rv['NotNeeded'], 'Alex said no reply is needed')

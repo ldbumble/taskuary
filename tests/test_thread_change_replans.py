@@ -159,8 +159,8 @@ class ThreadChangeReplans(unittest.TestCase):
     def test_the_agent_marks_it_through_its_tool_or_the_cli(self):
         from taskuary import agenttools, cli, floor
         s = store(); tid, rid = drafted_task(s)
-        doors = {'not_needed': lambda t, why: verdicts.not_needed(s, t, why, 'assistant')}
-        self.assertTrue(json.loads(agenttools.call(s, tid, 'reply_not_needed', {'why': 'Gail Moreno answered this'}, doors))['ok'])
+        doors = {'withdraw': lambda t, why, which='', keep=0: verdicts.withdraw(s, t, why, 'assistant', which, keep=keep)}
+        self.assertTrue(json.loads(agenttools.call(s, tid, 'withdraw_draft', {'why': 'Gail Moreno answered this'}, doors))['ok'])
         self.assertEqual(s.get_review(rid)['NotNeeded'], 'Gail Moreno answered this')
         self.assertIn('--reply-not-needed', floor.TASKUARY_OK); self.assertIn('reply_not_needed', cli.STRANGER_ACTS)
 

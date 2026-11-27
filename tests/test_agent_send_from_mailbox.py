@@ -37,8 +37,9 @@ def test_the_email_leaves_from_the_mailbox_the_agent_named(s):
     tid = Factory(s).task(title='Volunteer training materials', kind='general', source='manual')
     out = slots.draft(s, tid, 'Hi, the training materials are attached.', 'erin@volunteers.example', 'Volunteer training materials', mailbox=SIDE.upper())
     assert out['ok'] and json.loads(s.get_review(out['review_id'])['Deliver'])['mailbox'] == SIDE
-    # a rewrite that names no From keeps the one picked
-    again = slots.draft(s, tid, 'Hi, the training materials, take two.', 'erin@volunteers.example', 'Volunteer training materials')
+    # a rewrite that names no From keeps the one picked (a rewrite says what it replaces: a new letter is a new card)
+    again = slots.draft(s, tid, 'Hi, the training materials, take two.', 'erin@volunteers.example', 'Volunteer training materials',
+                        slot=slots.of_review(s.get_review(out['review_id'])), replaces=True)
     assert again['review_id'] == out['review_id'] and json.loads(s.get_review(out['review_id'])['Deliver'])['mailbox'] == SIDE
     with mock.patch.object(outbound, 'send_out', return_value={'channel': 'email', 'to': ['erin@volunteers.example']}) as sent, \
          mock.patch.object(outbound, 'send_block', return_value=''), mock.patch('taskuary.learning.learn_from'):

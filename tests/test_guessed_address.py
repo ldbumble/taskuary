@@ -25,7 +25,7 @@ def test_the_card_says_which_address_is_guessed_until_the_owner_types_one():
 def test_a_rewrite_with_the_address_known_clears_the_mark():
     s = MemoryStore(); tid = own_task(s, 'general')
     rid = slots.draft(s, tid, 'Hi Erin', to=ERIN, subject='Q4', guessed=[ERIN])['review_id']
-    assert slots.draft(s, tid, 'Hi Erin, again', to=ERIN, subject='Q4')['review_id'] == rid
+    assert slots.draft(s, tid, 'Hi Erin, again', to=ERIN, subject='Q4', slot=slots.of_review(s.get_review(rid)), replaces=True)['review_id'] == rid
     assert 'guessed' not in s.get_review(rid)['Reason'] and 'wrote this email' in s.get_review(rid)['Reason']
 
 

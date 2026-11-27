@@ -36,10 +36,8 @@ def card_id(store, tid: int, request_id) -> int | None:
     return next((r['ReviewId'] for r in rows if json.loads(r['DraftText'] or '{}').get('request') == str(request_id)), None)
 
 
-def sync(store, tid: int) -> None:
-    """Each step handed to him on a page has its card, and a card whose step has ended is settled by how it ended: answered (his I'm done, the
-    page moving on, the sign-in going in) it is done; taken back or overtaken, withdrawn. Derived from the requests as they stand, on every
-    road that raises or closes one - called where the line is written (chatlog.advance) and where a step is handed over."""
+def _raise(store, tid: int) -> tuple:
+    "The open steps by request, and the cards waiting after each open step without one has had its card raised."
     from . import proposals, workerstate as ws
     open_, cards = {r['RequestId']: r for r in _open(store, tid)}, _cards(store, tid)
     have = {json.loads(c['DraftText']).get('request') for c in cards}
@@ -55,6 +53,17 @@ def sync(store, tid: int) -> None:
         from .signin import fills
         proposals.queue(store, int(tid), {'action': ACT, 'request': rid, 'ev': r['Id'], 'sid': str(r.get('Sid') or ''), 'what': ' '.join(str(r.get('Text') or '').split())[:300],
                                           **({'site': site} if site else {}), **({'fill': True} if signin and fills(r.get('Text')) else {})}, 'taskuary')
+    return open_, _cards(store, tid)
+
+
+def sync(store, tid: int) -> None:
+    """Each step handed to him on a page has its card, and a card whose step has ended is settled by how it ended: answered (his I'm done, the
+    page moving on, the sign-in going in) it is done; taken back or overtaken, withdrawn. Derived from the requests as they stand, on every
+    road that raises or closes one - called where the line is written (chatlog.advance) and where a step is handed over."""
+    from . import workerstate as ws
+    # ...THE LOOK AND THE RAISE ARE ONE STEP (CI, 2026-11-27: the line written on one thread and the hand-over on another each found no card for
+    # the sign-in and each raised one - two cards for one step, the second behind the first with no press of its own)
+    with store.lock: open_, cards = _raise(store, tid)
     if not (gone := [c for c in cards if json.loads(c['DraftText']).get('request') not in open_]): return
     from . import browsergate, browserview, signin
     how = {e['RequestId']: str(e.get('Text') or '') for e in ws.events(store, int(tid)) if e['Kind'] == 'answered'}

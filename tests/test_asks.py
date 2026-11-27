@@ -580,7 +580,7 @@ def test_a_send_pick_sends_that_email_and_only_it(s):
 def test_an_email_changed_after_it_was_shown_is_not_sent(s):
     tid, a, b, c = three_emails(s)
     _, rows = asks.phone_text(s, s.get_task(tid), 'approve', 'x')
-    slots.draft(s, tid, 'Hi Ray - rewritten after you looked.', to='ray@northwind.example')
+    slots.draft(s, tid, 'Hi Ray - rewritten after you looked.', to='ray@northwind.example', slot=slots.of_review(s.get_review(a)), replaces=True)
     with mock.patch('taskuary.outbound.send_out', return_value=SENT) as sent:
         said = remote_assistant.run_act(s, dict(rows)['Send to Ray Colton'], None)
     assert not sent.called and 'changed' in said

@@ -184,16 +184,16 @@ def test_the_agent_fills_a_slot_by_id(s):
 
 
 def test_by_recipient_and_again_rewrites_the_same_draft_and_says_so_and_new_is_a_second_letter(s):
-    """Saved to one person twice in its turn, a letter is rewritten in place (no duplicate copy - the owner) - and, the card audit 2026-11-22,
-    the agent is told it rewrote it: told nothing, it said two emails were ready. A second, different letter to them (legit, the owner
-    2026-11-13) is asked for with slot "new"."""
+    """Saved to one person twice, the same letter is the one card (no duplicate copy - the owner); a different letter to them is a second
+    card (legit, the owner 2026-11-13); only `replaces` rewrites the waiting one in place (the card-tool design, 2026-11-27)."""
     tid = typed(s, FOUR[:1])
-    a = slots.draft(s, tid, 'first', to='PAULA@northwind.example'); b = slots.draft(s, tid, 'second', to='paula@northwind.example')
-    assert a['review_id'] == b['review_id'] and s.get_review(a['review_id'])['DraftText'] == 'second'
-    assert 'rewrote' not in a and b['rewrote'] == a['review_id'] and 'slot="new"' in b['says']
-    c = slots.draft(s, tid, 'And the venue for Friday.', to='paula@northwind.example', slot='new')
-    assert c['ok'] and c['review_id'] != a['review_id'] and 'rewrote' not in c
+    a = slots.draft(s, tid, 'first', to='PAULA@northwind.example')
+    assert slots.draft(s, tid, 'first', to='paula@northwind.example')['review_id'] == a['review_id']
+    c = slots.draft(s, tid, 'And the venue for Friday.', to='paula@northwind.example')
+    assert c['ok'] and c['review_id'] != a['review_id']
     assert s.get_review(a['review_id'])['Status'] == s.get_review(c['review_id'])['Status'] == 'pending'
+    b = slots.draft(s, tid, 'second', to='paula@northwind.example', slot=slots.of_review(s.get_review(a['review_id'])), replaces=True)
+    assert a['review_id'] == b['review_id'] and s.get_review(a['review_id'])['DraftText'] == 'second'
 
 
 def test_a_chat_id_is_no_mailbox(s):

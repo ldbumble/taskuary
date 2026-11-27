@@ -1096,8 +1096,11 @@ def _review(store, tid: int, a: dict, doors: dict) -> str:
         # ...`replaces` naming an email of this task's rewrites THAT card (slots.draft): a letter is new unless it says what it replaces
         from . import slots
         old = next((r for r in was if r['kind'] == slots.KIND and _names(a['replaces'], r)), None) if a.get('replaces') else None
-        slot = slots.of_review(store.get_review(old['rid'])) if old else str(a.get('slot') or '').strip()
         to = [str(x) for x in a['to']] if isinstance(a.get('to'), list) else str(a.get('to') or '')
+        # ...only a letter to the SAME people: "send it to Gail instead" is Gail's new card, Paula's withdrawn - never Paula's card repointed
+        who = lambda x: {slots.split(y)[1].casefold() for y in (x if isinstance(x, list) else str(x).split(',')) if str(y).strip()}
+        if old and who(to) and who(to) != who(old['to']): old = None
+        slot = slots.of_review(store.get_review(old['rid'])) if old else str(a.get('slot') or '').strip()
         out = read_back(doors['draft'](tid, str(a.get('text') or ''), to, str(a.get('subject') or ''), files,
                                        a.get('cc') or (), str(a.get('from') or ''), **({'guessed': a['guessed']} if a.get('guessed') else {}),
                                        **({'slot': slot} if slot else {}), **({'replaces': True} if old else {})), files)

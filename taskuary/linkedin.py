@@ -315,7 +315,8 @@ def as_mp4(path):
     out = next(o for i in itertools.count(1) if not (o := p.with_name(f"{p.stem}{f'-{i}' if i > 1 else ''}.mp4")).exists())
     try:
         import imageio_ffmpeg
-        r = subprocess.run([imageio_ffmpeg.get_ffmpeg_exe(), '-y', '-loglevel', 'error', '-i', str(p), '-c:v', 'libx264', '-pix_fmt', 'yuv420p',
+        from . import spawn
+        r = spawn.run([imageio_ffmpeg.get_ffmpeg_exe(), '-y', '-loglevel', 'error', '-i', str(p), '-c:v', 'libx264', '-pix_fmt', 'yuv420p',
                             '-vf', 'scale=trunc(iw/2)*2:trunc(ih/2)*2', '-c:a', 'aac', '-movflags', '+faststart', str(out)],
                            capture_output=True, text=True, timeout=CONVERT_WAIT)
     except (ImportError, RuntimeError, OSError, subprocess.SubprocessError) as e: raise RuntimeError(str(e)[:200] or 'no converter') from e

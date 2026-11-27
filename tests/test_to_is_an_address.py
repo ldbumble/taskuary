@@ -65,12 +65,20 @@ def test_a_name_never_reaches_the_provider_as_the_recipient():
         outbound.send_out(MemoryStore(), 'email', ['Northwind Bank'], 'Allowlist', 'Hi')
 
 
-# ...and ONE address: an agent's `to` of "paula@..., gail@..." stood on the card as a single recipient the provider refused at Send, and
-# "paula@" stood as if it were one. Refused at the tool with the way on - the others go in `cc`, or each gets its own email
-@pytest.mark.parametrize('to', ['paula@northwind.example, gail@northwind.example', 'paula@northwind.example; gail@northwind.example', 'paula@', 'Paula Vance <paula@northwind.example>, gail@northwind.example'], ids=['comma', 'semicolon', 'cut-short', 'named-and-bare'])
-def test_a_to_that_is_not_one_address_is_refused_before_it_stands(to):
+# ...and EACH address whole: an agent's `to` of "paula@..., gail@..." stood on the card as a single recipient the provider refused at Send, and
+# "paula@" stood as if it were one. `to` is a list now (the card-tool design, 2026-11-27): a line of addresses is one email to each of them,
+# its To holding every one apart; a cut-short address is refused at the tool before anything stands
+@pytest.mark.parametrize('to', ['paula@northwind.example, gail@northwind.example', 'paula@northwind.example; gail@northwind.example',
+                                'Paula Vance <paula@northwind.example>, gail@northwind.example',
+                                ['paula@northwind.example', 'gail@northwind.example']], ids=['comma', 'semicolon', 'named-and-bare', 'list'])
+def test_a_to_of_several_addresses_is_one_email_to_each_of_them(to):
     s = MemoryStore(); tid = own_task(s, 'general')
     out = slots.draft(s, tid, 'Hi Paula', to=to, subject='Q4')
-    assert out['ok'] is False and 'is not one email address' in out['why'] and '`cc`' in out['why']
+    assert out['ok'] and json.loads(s.get_review(out['review_id'])['Deliver'])['to'] == ['paula@northwind.example', 'gail@northwind.example']
+
+def test_a_to_that_is_not_an_address_is_refused_before_it_stands():
+    s = MemoryStore(); tid = own_task(s, 'general')
+    out = slots.draft(s, tid, 'Hi Paula', to='paula@', subject='Q4')
+    assert out['ok'] is False and 'is not an email address' in out['why'] and '`to` is a list' in out['why']
     assert not s._rows("SELECT * FROM review WHERE TaskId=?", (tid,)), 'nothing stands for his Send'
     assert slots.draft(s, tid, 'Hi Paula', to='paula@northwind.example', subject='Q4', cc=['gail@northwind.example'])['ok']

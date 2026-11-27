@@ -404,25 +404,27 @@ class DeskRoutes(unittest.TestCase):
 
     def test_an_answer_on_an_fyi_never_names_a_button_it_does_not_draw(self):
         """The API walk, design round 5 (2026-11-19): on a colleague's FYI chat he typed "reply to Ray proposing Friday, for my press" and was told
-        "Use Reply below" - an FYI has no Reply. An answer naming a button the item does not draw is asked again once, told the ones it has."""
+        "Use Reply below" - an FYI had no Reply then. An answer naming a button the item does not draw is asked again once, told the ones it has.
+        An FYI a person wrote draws Reply now (the owner, 2026-11-27); Mark done it never draws."""
         s = store()
         m = s.add_message({'ExternalId': 'ray-1', 'ConversationId': 'ray-1', 'Channel': 'email', 'Subject': 'Vendor review', 'FromName': 'Ray Colton',
                            'FromEmail': 'ray@northwind.example', 'SentAt': ago(1), 'BodyText': 'can we move the vendor review to Friday instead?', 'Status': 'filed'})
         s.add_route(m, None, 'file', None, 'triage: fyi', [], 'triage'); funnel.invalidate()
         item = fyis(s)[0]
-        self.assertNotIn('Reply', concierge.on_screen(s, item)); self.assertIn(buttons.label('regular_agent'), concierge.on_screen(s, item))
+        gone = buttons.label('close')
+        self.assertNotIn(gone, concierge.on_screen(s, item)); self.assertIn(buttons.label('regular_agent'), concierge.on_screen(s, item))
         said = []
         def llm(system, user, **kw):
             said.append(user)
-            return ('Use Reply below to draft the note to Ray proposing Friday.' if len(said) == 1 else
+            return (f'Then use {gone} below to put the note to Ray proposing Friday away.' if len(said) == 1 else
                     f"Press {buttons.label('regular_agent')} and an agent drafts the note to Ray for your press.")
         with mock.patch.object(terminal, 'live_sessions', return_value=[]):
             out = concierge.say(s, 'it clashes with my 2pm - reply to Ray proposing Friday instead, for my press', key=item['key'], llm=llm)
-        self.assertEqual(len(said), 2); self.assertIn('Reply, which is no button on his screen', said[1])
+        self.assertEqual(len(said), 2); self.assertIn(f'{gone}, which is no button on his screen', said[1])
         self.assertIn(f"its buttons are {', '.join(concierge.on_screen(s, item))}", said[1])
-        self.assertNotIn('Reply below', out['say']); self.assertIn(buttons.label('regular_agent'), out['say'])
+        self.assertNotIn(f'{gone} below', out['say']); self.assertIn(buttons.label('regular_agent'), out['say'])
         # ...a button it does draw, or a word at the head of a sentence, is never asked about
-        self.assertEqual(concierge.unreal_buttons(s, f"Reply is not here; press {buttons.label('regular_agent')}.", item), [])
+        self.assertEqual(concierge.unreal_buttons(s, f"{gone} is not here; press {buttons.label('regular_agent')}.", item), [])
 
     def test_a_page_beside_the_item_keeps_the_item_on_the_table(self):
         # the router's own Settings page, beside the item: the next ask carries both, and "this" is still the item (verify, 2026-10-19)

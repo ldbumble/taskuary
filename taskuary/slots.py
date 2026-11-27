@@ -276,6 +276,7 @@ def draft(store, tid: int, text: str, to: str = '', subject: str = '', slot: str
         return bool(rv and rv.get('Status') in ('pending', 'held') and str(rv.get('DraftText') or '').strip() and not _same(store, rv, text, agent)
                     and not _turn_after(store, tid, rv))
     named = next((i for i in all_(store, tid) if str(slot or '').strip() and i['id'] == str(slot).strip()), None)
+    gone = named if named and named.get('done') else None
     if named and (named.get('done') or (waits(named) and not replaces)): named = None
     hit = named or next((i for i in open_(store, tid) if want and str(i['out'].get('to')).casefold() == want and not waits(i)), None) or \
           (want and _reopen(store, tid, want, agent))
@@ -284,6 +285,9 @@ def draft(store, tid: int, text: str, to: str = '', subject: str = '', slot: str
         # a slot that named a person: the address the agent found is where this one goes (never guessed by us)
         hit = _point(store, tid, hit, ' '.join(str(to).split()), agent)
     if not hit:
+        # ...a line already done is said as done, never "name the slot" for the slot it named
+        if not want and gone: return {'ok': False, 'why': f"the email to {gone['out'].get('to')} was already sent or dropped - for another letter to them, "
+                                                          "call again with `to` and no `slot`"}
         if not want: return {'ok': False, 'why': 'name the slot (--slot) or who it goes to (--to)'}
         made = add(store, tid, [{'to': to, 'about': subject, 'kind': channel, **({} if agent == 'owner' else {'by': 'agent'}), **({'name': name} if name else {})}], f'agent:{agent}', again=True,
                    twice=True)

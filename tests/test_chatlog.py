@@ -343,6 +343,23 @@ def test_a_step_handed_over_on_one_tab_of_a_set_is_that_tabs_next_press():
     assert [(t['name'], t['done']) for t in tabs] == [('X', False), ('LinkedIn', True)]
 
 
+def test_a_step_read_on_two_threads_at_once_has_one_card():
+    """CI, 2026-11-27: the line was written on one thread while the hand-over read it on another - each found the sign-in with no card and
+    each raised one, the second drawn behind the first with no press of its own. The look and the raise are one step."""
+    import threading, time
+    from unittest import mock
+    from taskuary import pagestep, proposals, workerstate as ws
+    s, tid = world()
+    ws.record(s, tid, 'run1', 'input_needed', request_id='signin:x.example', text='Sign in to X so the post can go out', source='api')
+    real, go = proposals.queue, threading.Barrier(2)
+    def slow(*a, **k): time.sleep(0.2); return real(*a, **k)
+    with mock.patch.object(proposals, 'queue', side_effect=slow):
+        ts = [threading.Thread(target=lambda: (go.wait(), pagestep.sync(s, tid))) for _ in range(2)]
+        for x in ts: x.start()
+        for x in ts: x.join()
+    assert len(pagestep._cards(s, tid)) == 1
+
+
 def test_each_tab_of_a_set_is_told_by_what_came_of_it_never_by_its_first_rows_fate():
     """Walk 25, 2026-11-26, two roads: three posts in one call - he dismissed X, POSTED LinkedIn and never answered Reddit, which his next,
     unrelated line greyed. Its agent was told "Turned down by him: rv7 + rv8 + rv9" - the first row's fate for the whole card - and said "you

@@ -5,7 +5,7 @@ from taskuary import concierge, toolcatalog
 
 
 def test_approve_says_a_finish_card_merges_first():
-    for text in (toolcatalog.DECISIONS['approve'], toolcatalog.PURPOSE['review.approve']):
+    for text in (toolcatalog.DECISIONS['approve'],):
         t = text.lower()
         assert 'merge' in t and 'first' in t, text
         assert 'finish card' in t, text

@@ -76,9 +76,9 @@ import CloseNote from "./CloseNote.jsx";
 import { AttachImage, ImageTray, usePromptImages, useSendWhenUp } from "./promptImages.jsx";
 import { startsItems } from "./ItemSections.jsx";
 import { handToItem } from "./itemHand.js";
-import { afterCancel, afterConfirm, afterExecute, holdsProposal, markExecuted, proposalSay } from "./proposalCard.js";
+import { afterCancel, afterConfirm, afterExecute, holdsProposal, proposalSay } from "./proposalCard.js";
 import { AGENT_VERBS, LEVEL_META, LEVEL_ROLE, arrivals, isUrgent, arrivedAt, asPressed, withOpened, stillLeaving, bandsOf, canAdvance as canWalkOn, cardFor, currentItemFromPile, madeHere, displayRevision, drawOrder, fillCaps, followsItem, foldsAs, inOrder, interactiveCardIndex, drawnKey, tableCardIndex, keysOf, liveBrowseId, pastView, lastActIndex, chipsOf, receiptChips, CAPPED, FLOOR, FOOT_PX, levelLabel, nextMarkerKey, trimCaps, ROW_PX, refreshCurrentPresentation, refreshPilePresentation, rowMeta, itemVerbs, tableItemOf, settledHistory, sinceOpener, walkOf, walkPlace } from "./funnelPile.js";
-import { FYI_PAGE, ageHover, subLine, answersTo, awayFromClear, closedElsewhere, coveredByReload, fyiHasRoom, fyiTail, heldSince, latestLine, pileRows, pinOf, rowKeys, sameRow, sentChips } from "./funnelPile.js";
+import { FYI_PAGE, ageHover, subLine, answersTo, awayFromClear, closedElsewhere, coveredByReload, fyiHasRoom, fyiTail, heldSince, latestLine, pileRows, pinOf, rowKeys, sameRow } from "./funnelPile.js";
 import { railStatus, rowWhy } from "./railStatus.js";
 import { UndoLine } from "./Removed.jsx";
 import { StatusLogo } from "./StatusMark.jsx";
@@ -1040,7 +1040,7 @@ function Line({ m, lastBrief = false, live, last, moves = false, actions, fresh,
   const table = live && canvas && m.card && !foldsAs(canvas.folded, m.card.key) && !canvas.browsing ? wordsCap(canvas.height) : null;
   const card = live && m.card && kind ? {
     proposal: <ProposalCard p={m.proposal || c} onConfirm={actions.confirm} onCancel={actions.cancel} onPreview={actions.preview} />,
-    reply: <ReplyCard card={c} onDone={actions.done} onSent={actions.sent} onOpenTask={actions.openTask} onTimeline={actions.timeline} />,
+    reply: <ReplyCard card={c} onOpenTask={actions.openTask} onTimeline={actions.timeline} />,
     meeting: <MeetingCard card={c} onDone={actions.done} onOpenTask={actions.openTask} table={table} />,
     report: <ReportCard card={c} onOpenTask={actions.openTask} onTimeline={actions.timeline} onDone={actions.done} table={table} />,
     dashboard: <DashboardCard card={c} onOpenTask={actions.openTask} onDone={actions.done} table={table} />,
@@ -2485,15 +2485,6 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true, r
     const elsewhere = !!d.target;
     const mid = cur?.mid, verb = d.verb;
     try {
-      // their yes (or no) to the card already on the table, said instead of clicked: the server ran it
-      // before it answered, so the only thing left here is to stop the card saying "proposed" and move
-      // the walk on if the item is off the table. Falling through to the receipt below announced a
-      // failure over a success and left the walk sitting on finished work (2026-09-10 walk).
-      if (verb === "confirm" || verb === "cancel") {
-        setMsgs((m) => markExecuted(m, data?.executed));
-        if (data?.settled) walkOn(); else loadPile();
-        return;
-      }
       if (verb === "next") {
         // the capture is kept: the table did not change, so the token still names the pick the rail
         // shows - and the server takes anything else that moved fresh (processing_navigation.reserve)
@@ -2829,20 +2820,6 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true, r
     if (error) setMsgs((m) => [...m.map((x) => (x.done && x.card?.key === current ? { ...x, done: false } : x)),
       { id: `r${Date.now()}`, role: "receipt", status: "error", chips: [{ verb: "next", label: btn("next") }],
         text: error?.response ? "Not done - it is still here." : "Not done - Taskuary didn't answer. It is still here; press it again." }]);
-  };
-  // A SEND KEEPS THE ITEM ON THE TABLE (the owner, 2026-10-18: "sending and closing are two steps"): the card folds to its line and
-  // the row by the prompt is the two ways on - Mark done (the one close) while there is a task, and Next. Nothing is settled and the
-  // walk does not move: done() above did both, as if the send had finished the task.
-  // ...and NO "Sent to Erin Blake." LINE (the owner, 2026-10-22: "yes"): the folded card wears the button's badge ("✓ Send") and
-  // carries the two words itself (`sent` keeps them on the row once it has folded - Line), so they stand while it is the newest line
-  const sent = (pressed, tid = null, ref = null) => {
-    // ...on THE SENT TASK's line: a Send that closed it has already drawn the row below at its press (rule 5, 7), and the newest card
-    // is that one - marked sent, the next task folded under a badge it never earned and never reached the table (the walk table's W28)
-    setMsgs((m) => { let i = -1;
-      if (tid) for (let j = m.length - 1; j >= 0; j -= 1) if (Number(m[j]?.card?.tid) === Number(tid)) { i = j; break; }
-      if (i < 0) i = interactiveCardIndex(m);
-      return i < 0 ? m : m.map((x, j) => (j === i ? { ...x, done: true, sent: true, ...(pressed ? { pressed } : {}), ...sentChips(tid, ref) } : x)); });
-    loadPile();
   };
   // Setting Taskuary up: the scripted walk, one stop per message so the conversation keeps the
   // trail. Nothing here reaches a model - a question typed during it is an ordinary turn, answered
@@ -3242,7 +3219,7 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true, r
   // SEND TO AGENT WITH NO AI IS GREYED, ITS REASON THE HOVER - on a report, an FYI or a mail as on a task (trust audit F3, 2026-10-28): the
   // card's word stood live there and opened a "No AI connected" box (capabilities.cannotStart, the task page's own check)
   // A MOVE PRESSED ON THE TABLE'S TASK (TaskPage's onChanged): the rail lets its row go where the move put it (funnelPile.pinOf)
-  const actions = { noAi: cannotStart(caps), openRef: (n) => pressRowRef.current?.(n), movedTo, done, sent, start, handOff, welcome, openTask: onOpenTask, timeline, navigate: onNavigate, items: pileRows(pile),
+  const actions = { noAi: cannotStart(caps), openRef: (n) => pressRowRef.current?.(n), movedTo, done, start, handOff, welcome, openTask: onOpenTask, timeline, navigate: onNavigate, items: pileRows(pile),
     reminded: (out, c) => remindReceipt(out, c?.tid, c?.ref, c?.key),
     next: () => runChip({ verb: "next" }), leave, reload: () => loadPile(true), changed: tablePressed,
     // an earlier line back on the table - or the folded item itself, which only unfolds: it never left the table

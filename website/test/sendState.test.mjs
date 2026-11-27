@@ -129,5 +129,6 @@ test("a send that failed is still said after a reload: the card reads it from th
   const card = readFileSync(new URL("../src/ReviewDecision.jsx", import.meta.url), "utf8");
   assert.match(card, /savedSendFailure\(r\)/, "the reply's card reads the saved failure");
   assert.doesNotMatch(card, /\{sendErr && \(/, "and draws one failure, wherever it was read from");
-  assert.match(readFileSync(new URL("../src/assistantCards.jsx", import.meta.url), "utf8"), /savedSendFailure\(mate \|\| rv\)/, "the walk's card reads it too");
+  // ...and the walk draws no card of its own for it: it opens the task at this one (the owner, 2026-11-27: one action card)
+  assert.doesNotMatch(readFileSync(new URL("../src/assistantCards.jsx", import.meta.url), "utf8"), /savedSendFailure|press\(api/, "the walk's card never sends");
 });

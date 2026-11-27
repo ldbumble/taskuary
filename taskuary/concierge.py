@@ -1131,7 +1131,9 @@ def chips_for(store, item: dict | None, first: str = None) -> list:
     # approval. A typed answer still reaches it (decide, the phone).
     # ...NOR STOP AND SAVE ON THE DESK (the owner, 2026-11-10: "no need for stop and save button"): the x on the running turn is the one
     # stop, and typing carries the work on. The phone keeps its stop as a choice - it has no turn to put an x on
-    if routes(): verbs = [v for v in verbs if v != 'stop_agent']
+    # ...NOR SEND FROM THE RAIL (the owner, 2026-11-27: "ANY approval is ONE ACTION CARD"): its card inside the task is the one press; the
+    # phone keeps its numbered choice, its own text yes being his to decide
+    if routes(): verbs = [v for v in verbs if v not in ('stop_agent', 'approve', 'send_close')]
     # A REPORT THAT FAILED says "run it again" - so Run it again leads, where there is a report to run (B7)
     if item.get('kind') == 'report' and item.get('bad') and item.get('source_id'): verbs = ['rerun'] + [v for v in verbs if v != 'rerun']
     first = canon_verb(first) if first else first             # an old word typed (Later, Handled) promotes the button it became
@@ -1239,7 +1241,7 @@ def _there() -> str: return 'bring it up' if routes() else 'do it there'
 # the operation a tool names -> the row's own button for it (buttons.json); a question for the sender is Reply's - the row has no Ask sender
 # since the owner took it off (2026-10-27), and the parked question an agent or the phone writes still waits in Review for its Send
 # ...and task.watch is Watch it: "watch this, it is Gail's problem" was refused as having no button, the row's Watch it beside it (2026-11-01)
-KIND_BUTTON = {'task.complete': 'close', 'item.settle': 'close', 'task.defer': 'defer', 'task.watching': 'watch', 'task.watch': 'watch', 'task.reopen': 'reopen', 'review.approve': 'approve',
+KIND_BUTTON = {'task.complete': 'close', 'item.settle': 'close', 'task.defer': 'defer', 'task.watching': 'watch', 'task.watch': 'watch', 'task.reopen': 'reopen',
                'agent.continue': 'continue', 'agent.stop': 'stop_agent', 'agent.answer': 'answer_agent', 'task.split': 'split', 'task.merge': 'split',
                'task.handoff': 'forward', 'task.clarify': 'reply', 'task.share': 'share_result', 'task.not_a_task': 'remove',
                'message.retriage': 'retriage', 'task.set_kind': 'change_kind', 'task.set_repo': 'pick_repo', 'dispatch.prepare': 'regular_agent',
@@ -4208,11 +4210,6 @@ def _route(store, tid: int, kind: str, target: int, params: dict, named: str, it
         record(store, tid, 'assistant', said)
         return {'say': said, 'options': [], 'chips': [], 'decision': None,
                 'light': {'verb': '', 'label': '', 'key': on.get('key') or '', 'tid': on.get('tid'), 'ref': on.get('ref') or ''}}
-    # ...and a REPLY DRAFT has no Reject (ReviewDecision, the owner 2026-10-01): the miss names the two buttons that are its way out, so
-    # "reject the draft" ends on one of them rather than "not something done from here" (the task-page audit, 2026-11-02)
-    if kind == 'review.reject':
-        raise CallMiss(f"A reply draft is never rejected here: {buttons.label('redraft')} (redraft) writes it again, {buttons.label('close')} (close) "
-                       "closes the task with nothing sent. CALL the one they meant, or ask which. Nothing was changed.")
     raise CallMiss(f"{kind} has no button the owner presses here, so it is not yours to run from the chat - say in plain words where they "
                    "do it, or that it is not something done from here. Nothing was changed.")
 
@@ -4909,6 +4906,7 @@ def run_proposal(store, op: dict, actor: str = 'owner') -> dict:
     return out
 
 
+TYPED_YES = 'Nothing ran - what waits for your yes is pressed on its card.'
 def confirm_open(store, tid: int, item: dict | None, cancelled: bool, actor: str = 'owner') -> dict:
     """The owner's yes (or no) to the card already in front of them, in words instead of a click.
 
@@ -6295,8 +6293,11 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
         # ...and with DEVELOPER MODE OFF the general agent takes it, said in one clause with where the switch is (the owner, 2026-11-02)
         from . import agents as _ag
         if not _ag.developer_mode(store): reply = f"{reply} {DEV_MODE_OFF}".strip() if DEV_MODE_OFF not in (reply or '') else reply
-    # their yes to the card already waiting on it - the button, said in words (the only road a phone has)
-    if verb in ('confirm', 'cancel'): return confirm_open(store, tid, item, verb == 'cancel', actor)
+    # their yes to the card already waiting on it - the button, said in words: the only road a phone has. ON THE DESK A TYPED YES RUNS NOTHING
+    # (the owner, 2026-11-27: "ANY approval is ONE ACTION CARD"): what waits is pressed on its card, and the words are only his line
+    if verb in ('confirm', 'cancel'):
+        if not routes(): return confirm_open(store, tid, item, verb == 'cancel', actor)
+        reply, decision, verb = TYPED_YES, None, None
     # NOTHING ON THE TABLE, BUT THE WORDS NAME IT: "reply to Marcus: yes" came back as reply ON TQ-0004 and was answered
     # "Nothing is on the table ... name the one you mean" - the owner had named it, and so had the model (2026-10-06). The
     # named item is the target, exactly as it is when something else is on the table.

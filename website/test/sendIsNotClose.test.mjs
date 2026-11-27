@@ -5,7 +5,6 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { hint, label } from "../src/buttons.js";
-import { sentChips } from "../src/funnelPile.js";
 
 
 test("Send only sends and Approve only runs - each says the task stays open until Mark done", () => {
@@ -16,11 +15,6 @@ test("Send only sends and Approve only runs - each says the task stays open unti
   assert.equal(label("close"), "Mark done");
   const all = JSON.stringify(JSON.parse(readFileSync(new URL("../../taskuary/buttons.json", import.meta.url), "utf8")).verbs);
   assert.doesNotMatch(all, /Send & close|no_close/);
-});
-
-test("a send offers Mark done only where there is a task, and Next always", () => {
-  assert.deepEqual(sentChips(12, "TQ-12").chips.map((c) => [c.verb, c.label, c.tid ?? null]), [["close", "Mark done", 12], ["next", "Next", null]]);
-  assert.deepEqual(sentChips(null).chips.map((c) => c.verb), ["next"], "no task, no Mark done");
 });
 
 

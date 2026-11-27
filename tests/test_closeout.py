@@ -497,10 +497,10 @@ class HeldPullRequestWordsTests(unittest.TestCase):
 class WordsTests(unittest.TestCase):
     def test_the_walk_offers_merge_not_run_it_and_never_not_ours(self):
         item = {'kind': 'action', 'lane': 'approve', 'rid': 1, 'tid': 1, 'mid': 1, 'closeout': proposals.CLOSEOUT['merge_pr'], 'title': 'Fix the nightly export'}
-        labels = [c['label'] for c in concierge.chips_for(MemoryStore(), item)]
+        with concierge.delivering(concierge.PHONE): labels = [c['label'] for c in concierge.chips_for(MemoryStore(), item)]
         self.assertIn('Approve', labels)                        # ONE name: approve in its proposal state (buttons.json, 2026-10-17)
         # the same word whether a reply rides along - the sentence under it says the reply goes too
-        self.assertIn('Approve', [c['label'] for c in concierge.chips_for(MemoryStore(), {**item, 'rides': True})])
+        with concierge.delivering(concierge.PHONE): self.assertIn('Approve', [c['label'] for c in concierge.chips_for(MemoryStore(), {**item, 'rides': True})])
         # ...and no "then" line explains it on the phone any more: buttons do the talking (the design, phase A, 2026-10-23)
         from taskuary import remote_assistant
         self.assertFalse(hasattr(remote_assistant, 'then_line'))

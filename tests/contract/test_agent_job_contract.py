@@ -538,6 +538,22 @@ def test_one_call_for_three_people_is_one_card_that_sends_all_three_on_one_press
     assert again.status_code == 409 and len(sent) == 3
 
 
+def test_versions_of_one_thing_are_one_card_and_only_the_one_he_picks_goes(w):
+    """The owner, 2026-11-27 ("yes do all 10"): versions of one thing are their own field, never `items` - three versions of one post given as
+    items were the bulk card, one press posting all three. `versions` is ONE card holding each, labelled; his press sends the one he picked
+    into its box, and nothing of the others goes."""
+    yes, no = 'Hello Erin - yes, Thursday works. Alex', 'Hello Erin - thank you, but I cannot make Thursday. Alex'
+    said, err = w.agent('propose', kind='email', to='erin@cedar.example', subject='Thursday', versions=[{'label': 'Yes', 'text': yes}, {'label': 'Decline', 'text': no}])
+    assert not err and json.loads(said)['ok'], said
+    [rv] = w.s._rows("SELECT * FROM review WHERE TaskId=? AND Status='pending' AND Kind<>'action'", (w.tid,))
+    assert not rv['Batch'] and [v['label'] for v in json.loads(rv['Versions'])] == ['Yes', 'Decline'], 'one card, each version on it by its label'
+    assert len(card.waiting(w.s, w.tid, asks=False, trust=False)) == 1
+    sent = []
+    with _mail(sent), w.wakes():
+        out = c.post(f"/api/reviews/{rv['ReviewId']}/decide", headers=OWNER, json={'verb': 'approve', 'final_text': no}).json()
+    assert out.get('ok') and len(sent) == 1 and no in sent[0][2] and yes not in sent[0][2], (out, sent)
+
+
 def test_three_separate_calls_are_three_cards_in_line_one_at_a_time(w):
     """...and "if separate emails need to be sent they should come one after another": a call each is a card each - one in front of him, the
     others behind it, each sent by its own press."""

@@ -121,7 +121,7 @@ TOOLS = {
                      f"separate calls as separate ones. {SHOW_WHAT} It is the one road onto the owner's screen: a viewer, a browser or an app opened on the computer is not"
                      " on it, and its answer says what was shown.",
              _S({'title': _STR, 'id': _STR, 'root': _STR, 'elements': {'type': 'object', 'additionalProperties': __import__('taskuary.viewspec', fromlist=['x']).element_schema()},
-                 'state': {'type': 'object'}, 'files': {'type': 'array', 'items': _STR}}),
+                 'state': {'type': 'object'}, 'files': {'type': 'array', 'description': 'each a full path, or {path, title}'}}),
              ('GET', '/api/tasks/1')),
     # ...and A PICTURE, drawn by the owner's image model (images.pick: an image card, or an AI card whose models include one) - the one road to
     # images.run_image_generate an agent has; with nothing to draw with, its answer is his Connect card (the owner, 2026-11-25)
@@ -379,9 +379,9 @@ SHORT = {
     'web_search': "Search the web through this task's AI card.",
     # ...and that A VIEW IS KEPT AS ONE UNDER ITS `id` is on the line (walk 26, 2026-11-27: replies came one by one and no road drew a view -
     # lean drops a parameter's words, so `id` was a bare string and the line named only what is drawn once)
-    'show': 'Draws in this chat: charts, tables, tiles, checklists, a grid of who is free when, live with sliders, toggles, dates, and '
-            'choices whose pick comes back to you; a view shown again under its `id` is redrawn as it now is, where you show it, no old '
-            'copy above - or hands the owner files you made, one artifact a call.',
+    'show': 'Draws in this chat: charts, tables, tiles, checklists, who is free when, sliders, toggles, dates, choices whose pick '
+            'comes back to you; shown again under its `id`, a view is redrawn in place - or hands the owner files you made (a path or '
+            '{path, title}), one artifact a call.',
     'draw_image': "Draw a picture, a file of this task.",
     'tick': "Tick or untick a to-do (`item`: its id).",
     'todos': "Add, reword or merge this task's to-dos.",
@@ -407,8 +407,8 @@ SHORT = {
     'set_up_meeting': "Set up a meeting for the owner's press.",
     'share': "Share a report or dashboard of the owner's with a person.",
     'propose': "One card for the owner's press: a reply, an email, a post to its `networks` (a tab each), GitHub/Jira issue, "
-               "comment, PR, push, order on a system, script for save_routine - the draft itself, his to edit; nothing done till his press. "
-               "`kind` (an act names its `action`); many of one act: `items`; `then` your step after his press.",
+               "comment, PR, push, order on a system, script for save_routine - his to edit, done only at his press. "
+               "`kind` (an act names its `action`); one act to many: `items`; versions to pick from: `versions`; `then`: your step after it.",
     'find_tools': "A tool's instructions by name, or tools by need.",
 }
 def lean(s):
@@ -589,6 +589,9 @@ def _networks(a: dict) -> dict:
 
 def _card_call(store, tid: int, name: str, args: dict, doors: dict, skip=()) -> str:
     args = _arguments(args)
+    if name == 'propose' and args.get('versions') not in (None, '', []) and args.get('items') is not None:
+        raise ValueError(refusal("`items` is one act to many people and `versions` one card's words to pick from - nothing was raised",
+                                 'give the versions alone, or each person their own item'))
     if name == 'propose' and args.get('networks') not in (None, '', []) and str(args.get('kind') or 'post').strip().lower() == 'post': args = _networks(args)
     # ...WHAT STANDS BESIDE `items` IS SHARED BY EVERY ITEM - never one more of them (walk 23, 2026-11-25: one version beside `items`, the other
     # inside it; the one beside them went nowhere, one card stood with one version and the agent said "both")
@@ -634,12 +637,14 @@ def _card_call(store, tid: int, name: str, args: dict, doors: dict, skip=()) -> 
 # then send them all out"): any card's tool takes `items` - each item that tool's own fields, over the ones given beside them - and files each
 # by its own door, as one call would; the rows share one Batch, which the line of cards and the chat hold as ONE card with one press
 ITEMS = {'type': 'array', 'items': {'type': 'object'},
-         'description': "one act for many people, or versions of one thing: a list of objects, each with this tool's own fields - fields "
+         'description': "one act for many people: a list of objects, each with this tool's own fields - fields "
                         "beside `items` are shared by all. They stand as ONE card, done with one press; you hear how they went once. Unrelated "
                         "acts are separate calls: one card each, one after another."}
 # ...on the one review tool (an email, a post, a close, a SQL write, an API call) - an invite answers one meeting, the landing question is one
 # per checkout
 TOOLS['propose'][2]['properties']['items'] = ITEMS
+TOOLS['propose'][2]['properties']['versions'] = {'type': 'array', 'items': {'type': 'object'},
+                                                 'description': "versions of one card's words, [{label, text}]: ONE card, he picks one and only that one goes"}
 # ...and on every card a tool raises, the agent's own step after his press (card.raising): that press wakes it only where it names one
 # ...AND THE TO-DO THE CARD DOES (walk 22, 2026-11-25: Codex put `then: "mark to-do ... complete"` on every card, so every Send woke it to tick a
 # box and say it went): the press's record is Taskuary's - it ticks the to-do as the press goes (card.went), and nobody is woken for it
@@ -662,7 +667,7 @@ def _many(store, tid: int, name: str, args: dict, doors: dict) -> str:
     old = args.get('replaces') if not any('replaces' in it for it in items) else None
     if len(items) > 500: raise ValueError(f'{len(items)} items is past what one card holds (500) - split them, or narrow the list')
     key, top = bulkcard.new_key(), (store._one('SELECT MAX(ReviewId) AS m FROM review') or {}).get('m') or 0
-    refused, went, held, mine, says, words = [], [], [], [], [], {}
+    refused, went, held, mine, says = [], [], [], [], []
     for i, it in enumerate(items):
         # ...each named as the agent gave it: a post's network by its name ("x: ..."), never "item 2" of a list it never wrote
         tag = str(it["network"]) if base.get('kind') == 'post' and it.get('network') else f'item {i + 1}'
@@ -681,7 +686,7 @@ def _many(store, tid: int, name: str, args: dict, doors: dict) -> str:
         # ...the card EACH item filed, by its own answer - never every card raised on the task meanwhile: a reply drafted for a mail that came
         # in as the items were filed, or the agent's own call beside this one, joined the card and went with its one press
         if isinstance(got, dict) and isinstance(rid := got.get('review_id', got.get('review')), int):
-            mine.append(rid); words.setdefault(rid, []).append(str((store.get_review(rid) or {}).get('DraftText') or ''))
+            mine.append(rid)
         # ...and what the files on each say (read_back), once a block: several mails with the same deck answered with no read-back at all
         if isinstance(got, dict) and got.get('files_say'): says.append(got['files_say'])
     # ...ONE CALL IS ONE CARD, WHATEVER ITS COUNT (the owner, 2026-11-25: "if it's 3 of the same email to different people then it goes in a bulk
@@ -692,18 +697,7 @@ def _many(store, tid: int, name: str, args: dict, doors: dict) -> str:
     # filed is new, and only new ones are batched
     stand = [r['ReviewId'] for r in store._rows(f"SELECT ReviewId FROM review WHERE TaskId=? AND Status='pending' AND ReviewId IN ({','.join('?' * len(mine))})",
                                                 (int(tid), *mine))] if mine else []
-    mine_all, mine = mine, [r for r in stand if r > top]
-    # ...AND ITEMS THAT ARE ONE LETTER WRITTEN SEVERAL WAYS ARE ITS VERSIONS, ON THAT ONE CARD (walk 22, 2026-11-25: "Yes - Thursday 2pm" and
-    # "No - keep Friday" for one reply; each item rewrote the same card and only the last stood): kept on it for him to pick from, the first in
-    # its box - what he picks, and changes, is what his Send sends
-    # ...WHETHER EACH ITEM REWROTE THE CARD OR TOOK ITS PLACE (walk 23, 2026-11-25: on a task with an earlier draft the second version closed the
-    # first as replaced and stood alone - one card, one version, answered as "a tab each, 1 of them", and the agent said "both"): where ONE
-    # letter stands of all the call filed, every item's words are that letter's versions, in the order given
-    picks = {r: list(dict.fromkeys(v)) for r, v in words.items() if r in stand and len(set(v)) > 1}
-    if len(stand) == 1 and not picks and not went and len(alls := list(dict.fromkeys(w for r in dict.fromkeys(mine_all) for w in words[r] if w.strip()))) > 1 \
-            and (store.get_review(stand[0]) or {}).get('Kind') != 'action':
-        picks = {stand[0]: alls}
-    for r, v in picks.items(): store.set_review_versions(r, v)
+    mine = [r for r in stand if r > top]
     if old and stand: _take_back(store, tid, doors, old, stand)
     # ...ONE CALL IS ONE CARD (the owner, 2026-11-26: what the agent raised together stands together - and two calls are never tabs of one card):
     # its rows share a Batch. Many of the SAME act is the list card, one press doing them all; DIFFERENT acts - posts for different networks,
@@ -712,9 +706,9 @@ def _many(store, tid: int, name: str, args: dict, doors: dict) -> str:
     from . import cardqueue
     bulk = len(mine) > 1 and not cardqueue.is_set(bulkcard.rows(store, key))
     n = len(stand)
-    card = (f"They stand as ONE card holding {len(next(iter(picks.values())))} versions: the owner picks one, changes it if he likes, and sends that one." if picks and n == 1
-            else 'They stand as ONE card: the owner does them all with one press; you hear the whole run once.' if bulk
-            else f'ONE card stands of the {k} items given: each wrote that same card, and its words are those of the last item.' if n == 1 and (k := len(items) - len(refused)) > 1
+    card = ('They stand as ONE card: the owner does them all with one press; you hear the whole run once.' if bulk
+            else f'ONE card stands of the {k} items given: each wrote that same card, and its words are those of the last item - versions of one '
+                 'thing for him to pick from go in `versions`.' if n == 1 and (k := len(items) - len(refused)) > 1
             else 'It stands as one card; the rest were refused.' if n == 1
             else f'They stand as one card with a tab each, {n} of them: the owner sees and presses each, in any order; you hear how they went once the last is answered, or at once if a press fails.')
     shown = ((f"{len(went)} of {len(items)} sent at once - a routine's email to what its owner saved into it goes without a press."
@@ -1023,10 +1017,33 @@ def _call(store, tid: int, name: str, args: dict, doors: dict, skip=()) -> str:
     if name == 'answer_invite': return _j(doors['answer_invite'](tid, a))
     if name == 'set_up_meeting': return _j(doors['meeting'](tid, a))
     if name == 'share': return _j(doors['share'](tid, a))
-    if name == 'propose': return _review(store, tid, a, doors)
+    if name == 'propose': return _versioned(store, tid, a, doors)
     raise ValueError(f'no tool {name!r} - tools/list names them; use one of those')
 
 # THE ROAD A REVIEW'S PRESS TAKES, by its kind - the one place that knows one (TOOLS' propose): the card it files is the same card for all
+# VERSIONS OF ONE THING ARE THEIR OWN FIELD (the design audit, 2026-11-27; the owner: "yes do all 10"): they were guessed from `items` that
+# landed on one letter, and for a post never were - three versions of one LinkedIn post stood as the bulk card, one press posting all three.
+# `versions` is ONE card on any card with words: the first in its box, each labelled for his pick; what his press sends is the box - his pick
+def versions_of(a: dict) -> list:
+    "The call's `versions` as [{label, text}] - [] for none; ValueError with the fix for a set that is no set of versions."
+    vs = a.get('versions')
+    if vs in (None, '', []): return []
+    vs = [v if isinstance(v, dict) else {'text': v} for v in (vs if isinstance(vs, list) else [vs])]
+    vs = [{'label': str(v.get('label') or '').strip() or f'Version {i + 1}', 'text': str(v.get('text') or '').strip()} for i, v in enumerate(vs)]
+    if len(vs) < 2 or not all(v['text'] for v in vs):
+        raise ValueError(refusal('`versions` holds two or more, each with its `text`', 'give each version as {label, text}; one version is plain `text`'))
+    return vs
+def _versioned(store, tid: int, a: dict, doors: dict) -> str:
+    if not (vs := versions_of(a)): return _review(store, tid, a, doors)
+    out = _review(store, tid, {**{k: v for k, v in a.items() if k != 'versions'}, 'text': vs[0]['text']}, doors)
+    try: got = json.loads(out)
+    except (TypeError, ValueError): return out
+    if isinstance(got, dict) and got.get('ok') and isinstance(rid := got.get('review_id', got.get('review')), int):
+        store.set_review_versions(rid, vs)
+        return _j({**got, 'versions': f"ONE card holding {len(vs)} versions: the owner picks one, changes it if he likes, and only that one goes."})
+    return out
+
+
 def _review(store, tid: int, a: dict, doors: dict) -> str:
     from . import verdicts
     from .proposals import post_of, post_type

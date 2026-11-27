@@ -194,8 +194,10 @@ product: fix the code, never the test.
    picture is drawn on its card only.
 7. **Restart.** A restart between a card and its press keeps all of the above.
 8. **Bulk, one component.** The agent chooses by how it calls, never a count: one call with
-   `items` (one act to many people, versions of one thing) is one card that does every item with
-   one press, exactly as shown; separate calls are separate cards, one after another. Files handed
+   `items` (one act to many people) is one card that does every item with one press, exactly as
+   shown; one call with `versions` (one thing written several ways, on any card with words) is one
+   card where he picks one, and only that one goes (the owner, 2026-11-27: "yes do all 10");
+   separate calls are separate cards, one after another. Files handed
    over in one call are one artifact holding all of them. A review card and a file artifact are
    drawn by the same component (`website/src/Artifact.jsx`).
 9. **Every write waits for his press.** An agent's call that writes, changes, creates, deletes or

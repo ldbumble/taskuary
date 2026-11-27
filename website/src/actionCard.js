@@ -17,7 +17,7 @@ export const cardOf = (review) => {
   try { p = JSON.parse(review.FinalText || review.DraftText || ""); } catch { return null; }
   const act = isCardProposal(p) ? actionFor(p.type) : null;
   // ...and its connection not made, as the review says it (server _review_connect): the chat's card and this one say Connect alike
-  return act ? { ReviewId: review.ReviewId, Status: review.Status, CreatedAt: review.CreatedAt, Reason: review.Reason, ActError: review.ActError, ActRetry: review.ActRetry, OwnerEdit: review.OwnerEdit,
+  return act ? { ReviewId: review.ReviewId, Status: review.Status, CreatedAt: review.CreatedAt, Reason: review.Reason, ActError: review.ActError, ActRetry: review.ActRetry, OwnerEdit: review.OwnerEdit, Versions: review.Versions,
     post: p, network: act.title, as: "", connect: review.Status === "pending" ? review.Connect || null : null } : null;
 };
 

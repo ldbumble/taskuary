@@ -123,13 +123,15 @@ test("what went names the copied, as the agent says it; the To line keeps the To
 });
 
 
-test("versions of one letter are a pick on its one card: the box holds one, a pick puts another in, his own words say so", async () => {
-  // walk 22 (2026-11-25): "Yes - Thursday" and "No - keep Friday" stood as one card holding only the last
+test("versions of one card's words are a pick on it by their labels: the box holds one, a pick puts another in, his own words say so", async () => {
+  // walk 22 (2026-11-25): "Yes - Thursday" and "No - keep Friday" stood as one card holding only the last; 2026-11-27: `versions` carry labels
   const { versionPick, versionsOf } = await import("../src/replyDelivery.js");
-  const vs = versionsOf({ Versions: JSON.stringify(["Yes - Thursday.", "No - Friday."]) });
-  assert.deepEqual(vs, ["Yes - Thursday.", "No - Friday."]); assert.deepEqual(versionsOf({ Versions: null }), []); assert.deepEqual(versionsOf({ Versions: "[\"one\"]" }), []);
+  const vs = versionsOf({ Versions: JSON.stringify([{ label: "Yes", text: "Yes - Thursday." }, { label: "Decline", text: "No - Friday." }]) });
+  assert.deepEqual(vs, [{ label: "Yes", text: "Yes - Thursday." }, { label: "Decline", text: "No - Friday." }]);
+  assert.deepEqual(versionsOf({ Versions: JSON.stringify(["a", "b"]) }), [{ label: "Version 1", text: "a" }, { label: "Version 2", text: "b" }]);
+  assert.deepEqual(versionsOf({ Versions: null }), []); assert.deepEqual(versionsOf({ Versions: "[\"one\"]" }), []);
   let picked = null; const [f] = versionPick(vs, "Yes - Thursday.", true, (t) => { picked = t; });
-  assert.equal(f.type, "choice"); assert.equal(f.value, 0); assert.deepEqual(f.choices.map((c) => c.label), ["Version 1 of 2", "Version 2 of 2"]);
+  assert.equal(f.type, "choice"); assert.equal(f.value, 0); assert.deepEqual(f.choices.map((c) => c.label), ["Yes", "Decline"]);
   f.onChange("1"); assert.equal(picked, "No - Friday.");
   assert.deepEqual(versionPick(vs, "Yes, but at 3.", true, () => {})[0].choices.at(-1), { value: "", label: "Your words" });
   assert.deepEqual(versionPick([], "x", true, () => {}), []);

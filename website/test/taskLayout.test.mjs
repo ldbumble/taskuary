@@ -2,7 +2,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import { SECTIONS, homeSection, liveTerminal, soloTodo, cameFrom, cameChip, judgedMarks, agentStatus, agentWord, answeredOutside, reportLine, writeupAt, fromStatus, TAB_MOST, focusOf, fromLine, holderName, layoutOf, mainOf, nextInDrawer, sameWords, sectionFade, waitingOn, workPane } from "../src/taskLayout.js";
+import { SECTIONS, homeSection, liveTerminal, soloTodo, cameFrom, cameChip, judgedMarks, agentStatus, agentWord, answeredOutside, reportLine, fromStatus, TAB_MOST, focusOf, fromLine, holderName, layoutOf, mainOf, nextInDrawer, sameWords, sectionFade, waitingOn, workPane } from "../src/taskLayout.js";
 import { STAGE, sectionOf } from "../src/stages.js";
 import { taskSource } from "./taskSource.mjs";
 
@@ -94,7 +94,7 @@ test("the main view follows where the task is up to: the work with Came from on 
   const page = fs.readFileSync(new URL("../src/TaskPage.jsx", import.meta.url), "utf8");
   // ...the right drawer and its lit tab went with the sections in a row (2026-10-27): the section the task is up to is its kind's and its
   // stage's (homeSection) - never the Advisor's (2026-11-06: its decision names no section)
-  assert.match(page, /if \(mainHeld\.current\.key !== mainKey\) mainHeld\.current = \{ key: mainKey, main: mainNow, sec: solo \? "from" : writingUp \? "agent" : homeSection\(t\?\.Kind, taskStage, chatSeen\.current\.on\) \};/);
+  assert.match(page, /if \(mainHeld\.current\.key !== mainKey\) mainHeld\.current = \{ key: mainKey, main: mainNow, sec: solo \? "from" : homeSection\(t\?\.Kind, taskStage, chatSeen\.current\.on\) \};/);
   assert.match(page, /const taskStage = stageOf\(\{ focus: restFocus, drafted: replyHas, closed: /, "the stage reads the focus, never the advice");
   // ...the focus the task opens on - a section opened by hand changes neither the stage nor the main view (the overnight walk, 2026-10-27)
   const restLine = page.match(/const restFocus = focusOf\(\{[^;]*;/)?.[0];
@@ -131,23 +131,6 @@ test("Stop and save on a task nobody sent keeps its Result the move; a reply, a 
   assert.equal(workPane({ stage: "reply", kind: "coding", hasSender: false, result: false }), "reply", "no Result: nothing to show instead");
 });
 
-test("a write-up under way is one line under the Result; one that failed is a card in the chat with its Try again", () => {
-  const pending = { state: "pending", stage: "report" }, failed = { state: "failed", error: "no screen" };
-  assert.equal(writeupAt(pending), "result");
-  assert.equal(writeupAt(failed), "chat");
-  assert.equal(writeupAt(null), null);
-  const src = taskSource();
-  // ...and no reply pill and no "Nobody sent this one" advice anywhere: the header's pill says where it stands (2026-10-25)
-  assert.doesNotMatch(src, /<LifecycleChip kind="reply"|Nobody sent this one|CLOSE_BY_HAND/);
-  assert.match(src, /const upAt = writeupAt\(writeup\), upFailed = upAt === "chat";/);
-  assert.match(src, /\{upFailed && <WriteupBlock/);
-  assert.match(src, /const lineAt = upAt !== "result" \? null : shows\("agent"\) && !sessionView && hasRecord && !resultRest && !chatPane \? "record" : "top";/);
-  assert.equal((src.match(/<WriteupLine /g) || []).length, 2, "two spots, one lineAt: the line is drawn once");
-  assert.match(src, /\{lineAt === "top" && <WriteupLine view=\{writeup\} hasReply=\{!!replyMessage\} \/>\}/);
-  assert.match(src, /\{lineAt === "record" && <WriteupLine view=\{writeup\} hasReply=\{!!replyMessage\} \/>\}/);
-  assert.doesNotMatch(src, /Closing the session and writing up what is on screen — the agent is not asked anything\.\s*<\/Typography>\s*\) : workspaceMode === "live" && peek/,
-    "the third hint line over the write-up is gone");
-});
 
 test("From folds to who and how many", () => {
   assert.equal(fromLine({ sender: { FromName: "Gail Moreno", Channel: "email" }, count: 3 }), "Gail Moreno · 3 messages");
@@ -279,7 +262,7 @@ test("the chat knows the owner answered outside Taskuary: its Draft reply is not
   assert.equal(answeredOutside({ messages: ins, outside: [] }), null);
   // ...and its Draft reply is not the lit move there: the empty draft box with its filled Draft with AI is not drawn, the reply button is outlined
   const src = taskSource();
-  assert.match(src, /&& !writeup && !outside/);
+  assert.match(src, /&& !emailsWaiting && !outside/);
   assert.match(src, /variant=\{outside \? "outlined" : "contained"\}/);
 });
 
@@ -311,7 +294,7 @@ test("no task kind or state lays a Close out section: Came from and the chat, a 
   assert.match(src, /const home = !!t;/);
   assert.match(src, /secs = solo \? SECTIONS\.slice\(0, 1\) : SECTIONS;/);
   assert.match(src, /const slots = secs, slotKeys = slots\.map\(\(s\) => s\.key\);/);
-  assert.match(src, /const workspaceMode = home && !wrapping \? "general" : agentWorkspaceMode/, "every task is always the chat");
+  assert.match(src, /const workspaceMode = home \? "general" : agentWorkspaceMode/, "every task is always the chat");
   // ...ONE chat for every kind: the page never picks between two (the component reads its own source, chatStream.chatSource)
   assert.doesNotMatch(src, /<CodingChat |liveTerminal\(term\) \? </, "no coding/general branch picks the chat");
   assert.equal((src.match(/<GeneralWorkspace /g) || []).length, 1);

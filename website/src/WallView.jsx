@@ -10,7 +10,7 @@ import OpenInFullIcon from "@mui/icons-material/OpenInFull";
 import DragIndicatorIcon from "@mui/icons-material/DragIndicator";
 import CloseIcon from "@mui/icons-material/Close";
 import DoneAllIcon from "@mui/icons-material/DoneAll";
-import { ClosingCover, closeAgentWork } from "./closeAgent.jsx";
+import { ClosingCover, completeTask } from "./closeAgent.jsx";
 import api from "./api";
 import { onLive } from "./live.js";
 import { PANEL, BORDER, DIM, FAINT, INK, ACCENT, ROLES, mono } from "./theme.jsx";
@@ -126,19 +126,16 @@ export default function WallView({ onOpenTask, refresh = 0, active = true }) {
     window.addEventListener("pointercancel", finish);
   };
   useEffect(() => () => drag.current?.cleanup?.(), []);
-  // CLOSE AGENT (the owner, 2026-10-15: "add a close agent button on top which should do the same exact thing and save down the
-  // agent's last work"). It is the task page's Mark done on a live session, run through the same code (closeAgent.jsx): the
-  // session's write-up is saved with the task, then the task closes. The pane is held, covered, until that is done.
-  // No confirm box on either close (the owner, 2026-10-19): the press is the decision; the hover says what it does.
+  // CLOSE AGENT (the owner, 2026-10-15: "should do the same exact thing"). It is the task page's Mark done, run through the same code
+  // (closeAgent.jsx): the agent stops and the task closes (the owner, 2026-11-27) - the chat is the record. The pane is held, covered, until
+  // that is done. No confirm box on either close (the owner, 2026-10-19): the press is the decision; the hover says what it does.
   const closeAgent = async (s) => {
     const mark = (on) => { const w = { ...wrappingRef.current }; if (on) w[s.sid] = true; else delete w[s.sid]; wrappingRef.current = w; setWrapping(w); };
     mark(true); setWrapErrors((e) => { const n = { ...e }; delete n[s.sid]; return n; }); setWrapNotice("");
     try {
-      const wrote = await closeAgentWork(api, s.taskId);
+      await completeTask(api, s.taskId);
       const t = tasks[s.taskId] || {};
-      const report = typeof wrote?.report === "string" ? wrote.report : "";
-      setWrapDone({ tid: s.taskId, ref: t.ref || `TQ-${String(s.taskId).padStart(4, "0")}`, drafting: false, writing: wrote?.writing === true,
-        line: report.replace(/^(?:AGENT|CODER) REPORT\s*/, "").split("\n").map((x) => x.trim()).find(Boolean)?.replace(/[.\s]+$/, "") || "" });   // the notice adds its own full stop
+      setWrapDone({ tid: s.taskId, ref: t.ref || `TQ-${String(s.taskId).padStart(4, "0")}` });
       setSessions((ss) => (ss || []).filter((x) => x.sid !== s.sid));
       setOrder((o) => o.filter((sid) => sid !== s.sid));
     } catch (e) {
@@ -177,11 +174,7 @@ export default function WallView({ onOpenTask, refresh = 0, active = true }) {
       {wrapNotice && <Alert severity="error" onClose={() => setWrapNotice("")} sx={{ mb: 1 }}>{wrapNotice}</Alert>}
       {wrapDone && <Alert severity="success" onClose={() => setWrapDone(null)} sx={{ mb: 1 }}
         action={<Button color="inherit" size="small" onClick={() => onOpenTask?.(wrapDone.tid)}>Open {wrapDone.ref}</Button>}>
-        {/* the write-up runs on the server and closes the task after it (writeup.py): until the close lands - the task leaves the
-            active list, which a task-changed event reloads - the notice says what is true now, in the closing card's own words */}
-        {wrapDone.writing && tasks[wrapDone.tid] && !["done", "dropped"].includes(tasks[wrapDone.tid].Status)
-          ? <>Writing up {wrapDone.ref}. The task closes when that is filed.</>
-          : <>Wrapped up {wrapDone.ref}{wrapDone.line ? ` — ${wrapDone.line}` : ""}. {wrapDone.drafting ? "A reply is drafted for your approval on the task; the task closes when you send or dismiss it." : "The task is closed."}</>}
+        Stopped the agent and closed {wrapDone.ref}.
       </Alert>}
       <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, mb: 1.25 }}>
         <Typography sx={{ color: INK, fontWeight: 600, fontSize: 15 }}>The wall</Typography>
@@ -274,7 +267,7 @@ export default function WallView({ onOpenTask, refresh = 0, active = true }) {
                   </Box>
                 </Box>
                 {/* closing: the task page's card over the whole pane, so nothing in it can be typed into until it is done */}
-                {wrapBusy && <ClosingCover mode="done" />}
+                {wrapBusy && <ClosingCover />}
                 {/* the session itself fills the middle */}
                 <Box sx={{ flex: 1, minHeight: 0, p: 0.75, display: "flex", flexDirection: "column", "& > *": { flex: 1, minHeight: 0 } }}>
                   {s.mode === "assistant"

@@ -4298,39 +4298,12 @@ def forward_item(store, item: dict, who: str, text: str, actor: str = 'owner') -
                      'draft': True, 'why': 'a hand-off waits for your yes', 'when': _ts(datetime.now())}}
 
 
-class KeptOpen(ValueError):
-    "A close that could not save the live agent's work first: the task stays open, and this says why."
-
-
-def save_live(store, tid: int, actor: str = 'owner') -> bool:
-    """Write up the agent live on this task - working or parked - the way Stop and save does (wrapup.wrap, no reply: the close
-    dismisses drafts), so a close never ends a session it has not kept. False when nothing is live. Raises KeptOpen when the save fails."""
-    from . import terminal, wrapup
-    try: s = terminal.session_for(tid)
-    except Exception: s = None
-    if not (s and getattr(s, 'alive', False)): return False
-    try: wrapup.wrap(store, tid, close=False, actor=actor, sid=getattr(s, 'sid', None), no_reply=True)
-    except ValueError as e:
-        if not str(e).startswith('nothing to wrap up'): return _kept(store, tid, actor, e)
-        return False                   # ...a session that wrote nothing has nothing to lose: the close stops it as before
-    except Exception as e: return _kept(store, tid, actor, e)
-    return True
-
-
-def _kept(store, tid, actor, e):
-    "The save failed: said on the task, and the close refused (KeptOpen)."
-    from . import writeup
-    why = str(e) or type(e).__name__
-    logger.warning(f'concierge: the agent on {task_ref(tid)} was not saved, so it stays open - {why}')
-    store.add_comment(tid, actor, 'human', f'{writeup.FAILED}: {why} - {writeup.KEPT}.')
-    raise KeptOpen(f"It is still open - the agent's work could not be saved first: {why}") from e
-
-
 CLOSED_TASK = 'the owner closed the task'      # the note on a draft the task's close put down: the close's own doing, never a verdict on the draft (episodes.py)
 def close_task(store, tid: int, actor: str = 'owner', save: bool = True, status: str = 'done', note: str = '', press: bool = None) -> bool:
     """THE ONE CLOSE, from every door: the pending draft on it is dismissed first (a closed task must not
-    leave a reply waiting for a yes), its live agent saved and stopped, then the task itself - `status` done, or dropped for a put-down
-    (Let it go, a batch folded away); `note` is the door's own line on the task. False when already closed with no draft."""
+    leave a reply waiting for a yes), its live agent stopped, then the task itself - `status` done, or dropped for a put-down
+    (Let it go, a batch folded away); `note` is the door's own line on the task. False when already closed with no draft.
+    `save`: kept for its callers - nothing is written up at a close any more."""
     # ...and a write-up running for this task (writeup.py) finishes first: a close from anywhere - the task page, the chat, an
     # operation - never ends the session before its transcript is harvested, and lands on what the write-up left
     from . import writeup
@@ -4340,11 +4313,8 @@ def close_task(store, tid: int, actor: str = 'owner', save: bool = True, status:
     closed = t.get('Status') in ('done', 'dropped')
     rv = store.pending_review(tid, live_only=False)
     if closed and not rv: return False
-    # ...and A LIVE AGENT IS SAVED BEFORE THE CLOSE (the owner, 2026-11-02: Mark done "will save the result and move on"): working or
-    # parked waiting on you, its session is written up as Stop and save writes it - then the close. The chat's, the phone's and the walk's
-    # close killed the pty with nothing kept. A save that fails keeps the task open and says why (KeptOpen). `save=False`: a filing (Not ours,
-    # a message filed away) archives the task, and an agent's write-up never holds that up
-    if save and not closed and not writeup.in_job(): save_live(store, tid, actor); rv = store.pending_review(tid, live_only=False)
+    # ...and A LIVE AGENT IS STOPPED, NOT WRITTEN UP (the owner, 2026-11-27: Mark done just stops the agent and closes the task): its chat is
+    # the record, and no second voice summarises it on the way out (below)
     # A READY REPLY PUT DOWN UNSENT is said on the task, once - Mark done threw it away without a word, and the task kept saying a
     # reply was owed (walk 2026-10-29). No confirm: closing is the owner's decision; the draft stays on its review
     dropped = False

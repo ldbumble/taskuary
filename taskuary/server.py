@@ -3189,8 +3189,7 @@ def update_task(task_id: int, body: TaskBody, background: BackgroundTasks = None
         _teach_line(task_id, 'priority', f"triage made it {level(t.get('Priority'))}; the owner made it {fields['Priority']}", background)
     if closing:
         from . import concierge
-        try: concierge.close_task(store, task_id, ACTOR, save=closing == 'done', status=closing)
-        except concierge.KeptOpen as e: raise HTTPException(409, str(e))      # the live agent's save failed: still open, and why
+        concierge.close_task(store, task_id, ACTOR, save=closing == 'done', status=closing)
     if t.get('Status') in ('done', 'dropped') and fields.get('Status') in ('open', 'in_progress', 'waiting'):
         # A self-close is remembered in-process to prevent duplicate hooks. Reopening is a new
         # lifecycle, so a later automated run must be allowed to settle again.

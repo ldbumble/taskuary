@@ -45,16 +45,12 @@ export const workPane = ({ stage, kind, hasSender, codeRun = false, result = fal
   return hasSender && !["coding", "general"].includes(kind) ? "reply" : "agent";
 };
 
-// A WRITE-UP UNDER WAY IS ONE LINE under the Result it writes up (the owner, 2026-10-29); one that FAILED is a card in the chat, with its
-// Try again, where its draft would have stood: "chat", "result" or null
-export const writeupAt = (writeup) => (!writeup ? null : writeup.state === "failed" ? "chat" : "result");
-
 // WHAT WAITS ON THE OWNER'S SEND, which makes the stage: `waits` - a reply draft, a proposal or a drafted email waiting for Send (the next
-// move); `has` - that, or a reply that went, a close, a write-up that failed, an answer given outside. An email the checklist owes with
+// move); `has` - that, or a reply that went, a close, an answer given outside. An email the checklist owes with
 // NOTHING DRAFTED for it is not a draft (the owner, 2026-11-02); the server's stage reads the same (stages.facts `drafted`)
-export const replyHolds = ({ pending = false, sent = false, proposals = 0, checklist = [], reviews = [], ended = false, outside = 0, closed = false, writeup = false } = {}) => {
+export const replyHolds = ({ pending = false, sent = false, proposals = 0, checklist = [], reviews = [], ended = false, outside = 0, closed = false } = {}) => {
   const waits = !!(pending || proposals || waitingEmails(checklist, reviews));
-  return { has: waits || !!(sent || ended || outside || closed || writeup), waits };
+  return { has: waits || !!(sent || ended || outside || closed), waits };
 };
 
 // THE ONE LINE From folds to: who it came from and how many messages ("Gail Moreno · 3 messages"), a workflow's name, or - with

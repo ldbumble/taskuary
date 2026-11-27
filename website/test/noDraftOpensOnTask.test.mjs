@@ -27,7 +27,7 @@ test("a drafted email waiting for Send, a reply draft or something that went ope
   assert.equal(opensOn(replyHolds({ checklist: [owed], pending: true })), "agent");
   assert.equal(opensOn(replyHolds({ proposals: 1 })), "agent");
   assert.deepEqual(replyHolds({ sent: true }), { has: true, waits: false });
-  for (const k of ["ended", "closed", "writeup"]) assert.equal(replyHolds({ [k]: true }).has, true, k);
+  for (const k of ["ended", "closed"]) assert.equal(replyHolds({ [k]: true }).has, true, k);
   assert.equal(replyHolds({ outside: 1 }).has, true);
   // ...and every other kind opens on its chat, whatever waits
   assert.equal(homeSection("reply", "to_reply"), "agent");

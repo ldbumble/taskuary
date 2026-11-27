@@ -42,8 +42,7 @@ import { useViewExtras } from "./pageView.js";
 import { openReply as draftReply } from "./replyDraft.js";   // the component's own openReply below would shadow it, and call itself
 import { opError, runOperation } from "./taskOps.js";
 import { demoNo } from "./apiError.js";
-import { ClosingCard, WriteupBlock, WriteupLine, closeAfterSend, completeTask, writeUpThenClose } from "./closeAgent.jsx";
-import { writeupView } from "./writeupState.js";
+import { completeTask } from "./closeAgent.jsx";
 import { agentName } from "./agentWork.js";
 import { loadGeneral } from "./lazyGeneral.js";
 import { lazyView } from "./lazyView.jsx";
@@ -100,7 +99,7 @@ import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 // Recover once automatically; a real module error still reaches the view boundary on retry.
 import { autostartPlan, isGeneralKind, opensOnRegular } from "./autostart.js";
 import { agentWorkspaceMode, barContinues } from "./taskWorkspace.js";
-import { SECTIONS, cameFrom, cameChip, judgedMarks, chatLatch, homeSection, liveTerminal, soloTodo, startsAnother, replyHolds, agentStatus, agentWord, answeredOutside, reportLine, askInBody, askIsTitle, writeupAt, focusOf, fromLine as fromLineOf, fromStatus, layoutOf, sameWords, sectionFade, waitingOn, workPane } from "./taskLayout.js";
+import { SECTIONS, cameFrom, cameChip, judgedMarks, chatLatch, homeSection, liveTerminal, soloTodo, startsAnother, replyHolds, agentStatus, agentWord, answeredOutside, reportLine, askInBody, askIsTitle, focusOf, fromLine as fromLineOf, fromStatus, layoutOf, sameWords, sectionFade, waitingOn, workPane } from "./taskLayout.js";
 import { mainView, stageOf } from "./stages.js";
 import { chatOf, taskStatus } from "./railStatus.js";
 import { StatusPill } from "./StatusMark.jsx";
@@ -745,15 +744,6 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
   const [generalRevision, setGeneralRevision] = useState(0);
   // the waiting room: notes for the agent, typed in when it stops (waitroom.py)
   const [waitText, setWaitText] = useState("");
-  const [wrapping, setWrapping] = useState(false);   // declared up here: the poll effect below reads it
-  const [wrapped, setWrapped] = useState(null);      // the closing report, shown where the session was
-  // Stop and save's write-up, running on the server: {id, n, job} - the task, how many notes it had at the press, and the job the
-  // press started. The chat draws it (writeupView: the job's own stage, from the detail's `writeup`) until the draft replaces it.
-  const [writingUpAt, setWritingUpAt] = useState(null);
-  const pressedHere = writingUpAt?.id === selected ? writingUpAt : null;
-  const writeup = writeupView({ pressed: pressedHere, server: detail?.task?.TaskId === selected ? detail?.writeup : null,
-    comments: detail?.comments, review: pendingReplyReview(detail?.reviews || []) });
-  const writingUp = writeup?.state === "pending" ? selected : null;
   const cardsRef = useRef(null);
   // Once a live session disappears, its report and reply draft are still being filed. Keep
   // checking briefly so the page cannot freeze forever on the pre-close status it last saw.
@@ -901,7 +891,7 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
     if (sessionAtWork) sessionSettleUntil.current = Date.now() + 120000;
     const settling = detailTaskStatus === "in_progress" && hasTranscript
       && (hasAgentReport || Date.now() < sessionSettleUntil.current);
-    if (!((running || wrapping || settling || writingUp === selected) && selected)) return undefined;
+    if (!((running || settling) && selected)) return undefined;
 
     // Terminal bytes already travel over their own websocket. Turning each output frame into a
     // task + waitroom fetch made switching and typing wait behind the terminal's own repaints.
@@ -909,7 +899,7 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
     // ...and it CALMS while nothing moves (2026-11-09): a running agent's page read the same task every 3 s, at up to 4 s a read on a
     // busy home. Unchanged reads stretch the gap to 12 s; a changed one - or a task-changed poke, which reads at once - brings it back.
     return pollCalming(active, async () => { const was = detailMoves.current; await loadDetail(selected); return detailMoves.current !== was; }, 3000, 12000);
-  }, [active, detailTaskStatus, hasAgentReport, hasRunningRun, hasTranscript, loadDetail, selected, sessionAtWork, wrapping, writingUp]);
+  }, [active, detailTaskStatus, hasAgentReport, hasRunningRun, hasTranscript, loadDetail, selected, sessionAtWork]);
 
   // THE MENUS' CHANGES ARE THE TASK TOOLS (Stream B, the owner 2026-10-18: "every act leaves a receipt"): who does it, priority and
   // who holds it run down the operations road, so each is recorded and said in the chat when the task is on the Assistant's table
@@ -970,39 +960,7 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
     } catch (e) { setErr(e?.response?.data?.detail || "Could not send the note - press send again."); }
   };
 
-  // Finish the AGENT RUN, not the task. It files the durable result, closes this session and drafts
-  // the reply to whoever asked (wrapup.wrap -> finish(keep_open=True)); completing the task stays a
-  // separate control, because what the work was worth is the owner's verdict and not the run's.
-  // THE WRITE-UP RUNS BEHIND THE PRESS (writeup.py, 2026-10-20): the server harvests the session and answers at once; the
-  // report lands on the task when the job has written it (the poll below reads it), and a failure is said on the task.
-  // ...and the agent is put down AT THE PRESS, the write-up's pending line in its pane (the owner, 2026-10-21: "it
-  // looks frozen"): the harvest the press waits for is the block's first step, not a pause with the pane still up.
-  // ...once per press: a double press posted /wrap twice before the first had put the pane down (the agents walk, 2026-10-26)
-  const wrapFlight = useRef(null);
-  const wrapUp = async () => {
-    if (!canWrap && !pressedHere) return;          // ...a write-up that failed here is tried again on the session it left open
-    const id = selected, n = (detail?.comments || []).length, sid = term?.sid || pressedHere?.sid || null;
-    if (wrapFlight.current === id) return;
-    wrapFlight.current = id;
-    setErr(""); setWritingUpAt({ id, n, sid }); setTerm(null);
-    try {
-      const { data } = await api.post(`/api/tasks/${id}/wrap`, { close: false, background: true });
-      loadTasks(); onChanged?.();
-      if (stale(id)) return;                    // moved on meanwhile: the report is on the task's history
-      setWritingUpAt({ id, n, sid, job: data?.job || "?" }); loadDetail(id);   // "?": no job named - the task's notes say when it is done
-    } catch (e) {
-      if (stale(id)) return;
-      setWritingUpAt(null); findTerm(id);      // nothing was written up: the session comes back as it was
-      setErr(e?.response?.data?.detail || "Could not save the agent's work - try again.");
-    } finally { if (wrapFlight.current === id) wrapFlight.current = null; }
-  };
-  // Pausing is not finishing: no report, no reply draft, the task stays open. What it worked
-  // out becomes a handover note that gets typed into the NEXT session, because a pty has no
-  // resumable id - killing the session used to throw all of that away.
   useEffect(() => {
-    setWrapping(false); setWrapped(null);
-    // a press on another task is that task's: back on it, a job still writing is read from the server's own word (detail.writeup)
-    setWritingUpAt((w) => (w?.id === selected ? w : null));
     setOpeningReply(false);
     setOpenStage(null); setResultOpen(false);
   }, [selected]);
@@ -1145,7 +1103,6 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
   // has answered can be closed out after its provider session is gone (wrapup.py, 2026-09-07).
   const hasGeneralHistory = (detail?.comments || []).some((c) =>
     c.ActorType === "assistant_user" || c.ActorType === "assistant_agent");
-  const canWrap = !!term || !!detail?.transcript || hasGeneralHistory;
   const findTerm = useCallback(async (tid) => {
     if (!tid) { setTerm(null); return; }
     try {
@@ -1178,8 +1135,6 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
   useEffect(() => {
     const live = detail?.session;
     if (!live?.alive || live.taskId !== selected) return;
-    // ...never the session Stop and save is writing up: its pty lives until the report is safe, and adopting it put the agent back
-    if (pressedHere?.sid && live.sid === pressedHere.sid) return;
     if (live.sid === goneSid.current) return;
     if (live.sid !== term?.sid) setTerm(live);
     else if (liveWord !== sessionWord(term)) setTerm((was) => (was?.sid === live.sid ? { ...was, ...live } : was));
@@ -1189,12 +1144,12 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
   // walk, 2026-10-29). Only an idle one - a turn in flight is never put out by a read that may predate it.
   useEffect(() => {
     if (detail?.session?.alive || detail?.task?.TaskId !== selected) return;
-    if (term?.alive && term.mode === "assistant" && term.taskId === selected && term.busy === false && !pressedHere) setTerm(null);
+    if (term?.alive && term.mode === "assistant" && term.taskId === selected && term.busy === false) setTerm(null);
     // ...AND ANY OTHER SESSION HELD HERE AS LIVE IS ASKED FOR AGAIN (the recorded restart, 2026-11-11: Taskuary restarted under a coding
     // agent's turn - the chat said "Cut short when Taskuary restarted", the rail and the box were at rest, and the header read "agent
     // working" for as long as the page stayed open: the session it held was the one from before the restart, and nothing ever said it
     // had gone). The server's own word for the session, never this read's - which may predate a session just started
-    else if (term?.alive && term.mode !== "assistant" && term.taskId === selected && !pressedHere) findTerm(selected);
+    else if (term?.alive && term.mode !== "assistant" && term.taskId === selected) findTerm(selected);
   }, [detail, selected]);   // eslint-disable-line react-hooks/exhaustive-deps
   const openTerm = useCallback(async (body) => {
     try {
@@ -1240,7 +1195,7 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
 
   // Closing it is this view's; what comes NEXT is the page around it (TasksView moves to the next live row, the canvas
   // walks on) - `onFinish(status, close)` runs the close itself so the list can pre-record the state it is about to see.
-  // `beaten`: the press's result was shown already (stopAndFinish's own beat)
+  // `beaten`: the press's result was shown already
   const finish = async (status, note, beaten = false) => {
     setFinishing(true);
     // PUT DOWN AT THE PRESS (the owner, 2026-10-01: "you hit mark done it closes ... why does it take an extra second or 2?"): the
@@ -1313,37 +1268,18 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
   const queuedRow = (listRow?.State === "queued" ? listRow?.Queued : null) || (detail?.task?.TaskId === selected ? detail?.queued : null) || null;
   // No "are you sure" box on a live session (the owner, 2026-10-19: "this should be a hover over the buttons"): the press
   // is the decision, and what it does to the agent is said on the button's hover (markDoneHint).
-  const askFinish = () => (liveSession ? stopAndFinish() : finish("done"));
-  // MARK DONE ON A LIVE SESSION ends it the way Stop and save does (the owner, 2026-09-29: "make it the same like
-  // when you hit stop session"): the terminal goes at once for the write-up's progress line, the result is filed, and
-  // only then is the task closed. The close used to kill the pty with no write-up while the terminal stayed on screen
-  // for the whole request. No reply is drafted - the close dismisses drafts - and a write-up that fails still closes.
-  const stopAndFinish = async () => {
-    const id = selected;
-    // ...and it is put down at the press like any close: the write-up below takes as long as the AI does (18 s on
-    // 2026-10-01), and the task sat open on the page and the rail all that time - under For later, already seen
-    await pressBeat("done");
-    closedBy(id, "done");
-    onLeave?.();
-    // ...and the write-up runs on the server, which closes the task after it (writeup.py, 2026-10-20): the press is answered once
-    // the session is harvested, and the page walks on. A write-up that cannot start closes the task here, as before.
-    if (canWrap && await writeUpThenClose(api, id)) {
-      if (stale(id)) return;
-      setTerm(null);
-      return closedHere("done");
-    }
-    await finish("done", undefined, true);
-  };
+  // MARK DONE STOPS THE AGENT AND CLOSES THE TASK (the owner, 2026-11-27): no write-up of the app's own runs behind it - the chat is the record
+  const askFinish = () => finish("done");
   // what Mark done does HERE - it said "ends the live agent session" with no session in sight (T11), and a waiting
   // draft is kept on the task, never thrown away: it can be brought back and sent later
-  const markDoneHint = ["Closes the task", liveSession ? "and stops the agent - what it did so far is written up and saved with the task first" : "",
+  const markDoneHint = ["Closes the task", liveSession ? "and stops the agent - its chat stays on the task" : "",
     pendingReplyReview(detail?.reviews || []) ? "- your draft stays on it, to send later if you want" : ""].filter(Boolean).join(" ") + ".";
   // what fills the page: the session, unless the owner stepped back to the task behind it (peek)
   // ...AND A CHAT TASK'S CONVERSATION KEEPS ITS PAGE when its agent idles out or the app restarts (the owner, 2026-11-05: the layout never
   // changes with the session): the chat, its box and its strip stay as they are while live - only the header line and the status move
   // ...AND A CLOSED ONE TOO (the owner, 2026-11-05): done or dropped, the same chat, its box - typing reopens it (server._refuse_closed_chat) -
   // and its strip, where Reopen stands in Mark done's place (actionRow.splitRow)
-  const chatKept = isGeneral && hasGeneralHistory && !liveTerminal(term) && !!t && !wrapping;
+  const chatKept = isGeneral && hasGeneralHistory && !liveTerminal(term) && !!t;
   const sessionView = (liveSession || chatKept) && !peek;
   // ...and a stage you opened by hand does not outlive the session you opened it on. The agent
   // finishes, its wrap-up writes the reply (wrapup.wrap), and the page went on showing the closed
@@ -1634,11 +1570,11 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
   // (the owner, 2026-11-22: "that belongs in the agent section. if they hit send to agent it goes there"): its Send to agent adds the Agent
   // section and opens it, where the box is - typing there starts the agent
   const [toAgent, setToAgent] = useState(null);
-  const solo = toAgent !== selected && soloTodo({ kind: t?.Kind, started: !!(term || hasRecord || generalStarted || hasGeneralHistory || queuedRow || agentOpening || failedRun || writeup) }),
+  const solo = toAgent !== selected && soloTodo({ kind: t?.Kind, started: !!(term || hasRecord || generalStarted || hasGeneralHistory || queuedRow || agentOpening || failedRun) }),
     secs = solo ? SECTIONS.slice(0, 1) : SECTIONS;
   // ...AND THERE IT IS ALWAYS THE CHAT (the owner, 2026-11-06): no AI connected, a start waiting its turn or one that failed, nothing started yet -
   // the one box under the conversation, never the old Send to agent form with its own pickers and button
-  const workspaceMode = home && !wrapping ? "general" : agentWorkspaceMode({ isGeneral, generalStarted, session: term, wrapping });
+  const workspaceMode = home ? "general" : agentWorkspaceMode({ isGeneral, generalStarted, session: term });
   // ...AND THERE THE AGENT SECTION IS ONE CHAT (the owner, 2026-11-04: "i want this to be a chat? where is the prompt box"): the reading, each
   // turn, the owner's words, each new mail, and the box under them - always, Continue's own road. The Result's summary, "The whole
   // conversation", the record under it and the Continue press are not drawn: the chat is all of them (GeneralWorkspace `chat`)
@@ -1674,7 +1610,7 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
   const codeRun = !!fromWorkflow?.byCode && !term?.alive && !generalStarted && !detail?.transcript && !report;
   // ...and Stop and save pressed here makes the reply the move - writing, failed or drafted - never whichever step the computed focus picks
   // once the job is done; while it writes, the agent's part holds its one line
-  const restStage = sessionView || writingUp ? "agent" : (pressedHere || writeup ? "reply" : peek ? "task" : focusStage({
+  const restStage = sessionView ? "agent" : (peek ? "task" : focusStage({
     kind: t?.Kind, task: taskState, agent: codeRun ? null : agentState, reply: replyState, hasSender: !!replyMessage,
     // what the agent is parked ON decides whether the proposal or the agent opens: an agent
     // waiting for approval is released by the very proposal sitting in stage 3
@@ -1682,11 +1618,9 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
     emails: emailsWaiting, record: hasRecord, out: wentOut(reviews),
   }));
   const stage = sessionView ? "agent" : (openStage || restStage);
-  // ...the write-up's place: its progress a line under the Result, a failure a card in the chat with Try again (taskLayout.writeupAt)
-  const upAt = writeupAt(writeup), upFailed = upAt === "chat";
   // ...and what waits on a Send - a draft, a proposal, emails - or went (taskLayout.replyHolds): the stage reads it
   const { has: replyHas, waits: sendWaits } = replyHolds({ pending: !!pendingReview, sent: !!sentReview, proposals: proposals.length, checklist: detail?.checklist,
-    reviews: detail?.reviews, ended: !!ended, outside: sentOutside.length, closed: ["done", "dropped"].includes(t?.Status), writeup: upFailed });
+    reviews: detail?.reviews, ended: !!ended, outside: sentOutside.length, closed: ["done", "dropped"].includes(t?.Status) });
   // ...and neither on a task waiting on a person (the owner, 2026-10-25): nothing is yours until they answer
   const paneRest = waitFor && !openStage ? "" : workPane({ stage, kind: t?.Kind, hasSender: !!replyMessage, codeRun, result: resultShown, replyHas, picked: !!openStage });
   const list = !!(detail?.batch || t?.DoneWhen || (!t?.DoneWhen && todo.length));
@@ -1723,8 +1657,8 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
     || (reviews || []).some((r) => r?.Status === "pending");
   const chatSeen = useRef(null);
   chatSeen.current = chatLatch(chatSeen.current, selected, anyChat && detail?.task?.TaskId === selected);
-  const mainHeld = useRef({ key: null, main: null, sec: null }), mainKey = `${selected}|${detail?.task?.TaskId === selected}|${!!term?.alive}|${sessionView}|${stacked}|${twoUp}|${liveSession ? "live" : t?.Status}|${!!writingUp}|${solo}|${chatSeen.current.on}`;
-  if (mainHeld.current.key !== mainKey) mainHeld.current = { key: mainKey, main: mainNow, sec: solo ? "from" : writingUp ? "agent" : homeSection(t?.Kind, taskStage, chatSeen.current.on) };
+  const mainHeld = useRef({ key: null, main: null, sec: null }), mainKey = `${selected}|${detail?.task?.TaskId === selected}|${!!term?.alive}|${sessionView}|${stacked}|${twoUp}|${liveSession ? "live" : t?.Status}|${solo}|${chatSeen.current.on}`;
+  if (mainHeld.current.key !== mainKey) mainHeld.current = { key: mainKey, main: mainNow, sec: solo ? "from" : homeSection(t?.Kind, taskStage, chatSeen.current.on) };
   const main = mainHeld.current.main;
   // ...and a section the owner OPENED stays open under them: only another task, an agent starting or stopping, the task closing or
   // reopening or the width folds it - not the detail landing, the Advisor's late pick, the write-up ending, or the status catching up
@@ -1770,7 +1704,7 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
   // GitHub finish to approve, a proposal, emails owed or a write-up under way have their own box
   // ...never on an INVITE (the owner, 2026-11-08): its answer is the calendar's card - Accept, Decline, Propose a new time - not an email
   const replyEmpty = !!replyMessage && !detail?.calendar?.invite && !pendingReview && !sentReview && !reviews.some(isUnsentReply) && !ended && !liveSession && !closeoutRv && !allProposals.length
-    && !owesEmails && !emailsWaiting && !writeup && !outside
+    && !owesEmails && !emailsWaiting && !outside
     && !!t && !["done", "dropped"].includes(t.Status);
   // the one line From folds to while an agent works (sessionView)
   const fromLine = fromLineOf({ sender: ownSource, count: sourceCount, workflow: fromWorkflow, made: t ? `${detail.ref} · ${madeAt}` : "" });
@@ -1785,7 +1719,6 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
   // the news line is said once, at the top of the task stage; open, the agent step is just its record
   const storyAt = storyPlace(news ? null : story, { open: shows("agent") && !sessionView, hasRecord });
   // ...and the write-up's line stands in ONE place of the Agent pane: in the open record, else under the Result's summary or the step's top
-  const lineAt = upAt !== "result" ? null : shows("agent") && !sessionView && hasRecord && !resultRest && !chatPane ? "record" : "top";
   // the Agent work row with nothing in it: no agent at work, none ran, no story to tell, and not the open half
   const agentEmpty = !term?.alive && !wide && !shows("agent") && !hasRecord && !["line", "story", "summary"].includes(storyAt);
   // A HELD STEP CARRIES ITS TRUST PRESSES (the owner, 2026-10-26: "we should have button on untrusted user to either trust user or trust
@@ -2705,11 +2638,7 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
         <Handoff key={handSaid ? `${handSaid.to}|${handSaid.note}` : "h"} taskId={selected} said={handSaid} onLeave={() => { setHandoff("sending"); onLeave?.(); }}
           onStay={(msg) => { setHandoff(true); onStay?.(msg); }} onSent={handedOff} />
       </Box>}
-      {/* STOP AND SAVE'S WRITE-UP, where its draft will stand (writeupState.js): the job's own stage until the draft
-          replaces this block in place - or, if it stopped, that it did, with Try again and the reply button */}
-      {upFailed && <WriteupBlock view={writeup} hasReply={!!replyMessage} onRetry={canWrap || pressedHere ? wrapUp : null}
-        onDraft={() => openReply(true)} draftLabel={replyPrimary} />}
-      {!writeup && ((pendingReview || proposals.length || kept.length || replyMessage || owesEmails || ended || sentOutside.length) ? (
+      {((pendingReview || proposals.length || kept.length || replyMessage || owesEmails || ended || sentOutside.length) ? (
         <Box sx={{ mt: 0.5 }}>
           {/* THE INVITE, AND WHAT IT CLASHES WITH (calwrite.of_task), over the row's Accept / Decline / Propose a new time */}
           {calAsk?.invite && <Typography data-tq-invite="" variant="body2" sx={{ mb: 1, color: INK }}>{calAsk.line}
@@ -2877,7 +2806,7 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
   const waits = !!(chatReview || proposals.length - (inTurns ? asks.length : 0) || (owesEmails && !inTurns) || handoff);
   // ...ONLY WHAT CAN STILL BE DONE (the owner, 2026-11-05: "it's a chat nothing else"): a draft waiting on Send, an invite to answer, emails owed -
   // never a closed task's "Mark done 11m ago", a reply sent outside or a draft closed without sending; the chat says those
-  const chatCards = sentBox ? <SentReview {...sentBox} /> : !["done", "dropped"].includes(t?.Status) && (waits || (!inTurns && kept.length) || upFailed
+  const chatCards = sentBox ? <SentReview {...sentBox} /> : !["done", "dropped"].includes(t?.Status) && (waits || (!inTurns && kept.length)
     || chatReplyShown({ replyMessage, pendingReview: chatReview, sentReview: null }) || calAsk?.invite) ? <Box ref={cardsRef} data-tq-chat-cards="" data-tq-waits={waits ? "" : undefined}
       sx={{ minWidth: 0, "& textarea": { fontSize: "13.5px !important", lineHeight: "1.5 !important", color: INK } }}>{chatBody()}</Box> : null;
   return (
@@ -3237,7 +3166,6 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
                     data-tq-full-result="" aria-expanded="true" onClick={() => setResultOpen(false)}
                     sx={{ borderRadius: 999, px: 2, fontSize: 13, fontWeight: 600, textTransform: "none", color: INK, borderColor: "var(--tq-border, #c9c3b8)" }}>
                     ‹ Back to the result</Button></Box>}
-                  {lineAt === "top" && <WriteupLine view={writeup} hasReply={!!replyMessage} />}
                   {shows("agent") && <>
                   {/* WHO CLOSED IT AND WHY, one plain line over its work (the owner, 2026-10-21: "I have no idea what the agent did
                       and why it closed"): the agent's own done sentence, else its report's first line (server taskstate.closed_why) */}
@@ -3296,7 +3224,6 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
                           result={resultShown} diff={diffRun ? diffStat(diffRun.DiffText) : null} bare={focus === "agent"}
                           diffOpen={diffShown} onDiff={foldDiff ? () => setDiffShown((v) => !v) : null} />
                         {diffRun && <Box data-tq-diff="" sx={{ mt: 0.75, display: foldDiff && !diffShown ? "none" : "block" }}><DiffBlock text={diffRun.DiffText} /></Box>}
-                        {lineAt === "record" && <WriteupLine view={writeup} hasReply={!!replyMessage} />}
                       </Box>
                     );
                     // the sender wrote again since: every run is history, never the page's lead - each one line, newest first, that opens in
@@ -3420,8 +3347,6 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
                         onChanged={() => { findTerm(selected); loadDetail(selected); onChanged?.(); }} />
                     </React.Suspense>
                   </Box>
-                ) : workspaceMode === "wrapping" ? (
-                  <ClosingCard mode={wrapping} />
                 ) : null}
                 {/* runs from before sessions (and any API-driven run) keep their trace here */}
                 {!sessionView && detail.runs.length > 0 && (

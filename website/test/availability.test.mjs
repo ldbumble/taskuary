@@ -2,7 +2,7 @@
 // the page draws only a spec the catalog allows, and a view shown again under its `id` is one view under the newest line. Invented people.
 import assert from "node:assert/strict";
 import test from "node:test";
-import { dayLabel, minsOf, overlap, rangeLabel, ticksOf, timeLabel } from "../src/availability.js";
+import { dayLabel, gridView, minsOf, overlap, rangeLabel, ticksOf, timeLabel } from "../src/availability.js";
 import { MARK, normalise } from "../src/viewSpec.js";
 import { viewAt, viewHomes } from "../src/chatStream.js";
 
@@ -23,6 +23,15 @@ test("times read as minutes and say themselves the way a person would", () => {
   assert.equal(timeLabel(870), "2:30pm"); assert.equal(timeLabel(720), "12pm"); assert.equal(timeLabel(0), "12am");
   assert.equal(rangeLabel(840, 960), "2–4pm"); assert.equal(rangeLabel(660, 780), "11am–1pm"); assert.equal(rangeLabel(540, 630), "9–10:30am");
   assert.equal(dayLabel(TUE), "Tue, Dec 1"); assert.equal(dayLabel("Next Tuesday"), "Next Tuesday");
+});
+
+test("an invite set up from who can make which times draws that grid, a spec the catalog allows", () => {
+  // the design audit, 2026-11-27: set_up_meeting takes the view's people and ranges (calwrite.from_people), and the invite card draws them
+  const spec = gridView({ minutes: 60, people: TEAM });
+  assert.equal(spec.elements.a.type, "availability");
+  assert.deepEqual(spec.elements.a.props, { people: TEAM, minutes: 60 });
+  assert.ok(normalise(spec), "the view the card draws is a view the page accepts");
+  assert.equal(gridView({ people: [] }), null); assert.equal(gridView(undefined), null);
 });
 
 test("the best slot fits the most people, with its count, who fits and who does not", () => {

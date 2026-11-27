@@ -60,3 +60,8 @@ export function ticksOf(lo, hi, n = 1) {
   for (let m = Math.ceil(lo / 60 / step) * step * 60; m <= hi; m += step * 60) out.push(m);
   return out;
 }
+
+// AN INVITE SET UP FROM WHO CAN MAKE WHICH TIMES DRAWS THAT GRID (taskuary/calwrite.py from_people; the design audit, 2026-11-27): the
+// availability view itself over the people and ranges the agent gave - its best slot, banded, is the one the invite holds (calwrite.best_slot)
+export const gridView = (grid) => (Array.isArray(grid?.people) && grid.people.length
+  ? { root: "a", elements: { a: { type: "availability", props: { people: grid.people, minutes: grid.minutes || 30 } } } } : null);

@@ -343,6 +343,29 @@ def test_a_step_handed_over_on_one_tab_of_a_set_is_that_tabs_next_press():
     assert [(t['name'], t['done']) for t in tabs] == [('X', False), ('LinkedIn', True)]
 
 
+def test_each_tab_of_a_set_is_told_by_what_came_of_it_never_by_its_first_rows_fate():
+    """Walk 25, 2026-11-26, two roads: three posts in one call - he dismissed X, POSTED LinkedIn and never answered Reddit, which his next,
+    unrelated line greyed. Its agent was told "Turned down by him: rv7 + rv8 + rv9" - the first row's fate for the whole card - and said "you
+    turned down the X and Reddit posts"; it could not keep the one he never answered, and could have posted the posted one again."""
+    from taskuary import cardqueue, conversation, general
+    s, tid = world()
+    conversation.hear(s, tid, turn=True)
+    x, li, rd = one_call(s, tid, [{'action': 'run_tool', 'type': t, 'text': 'We shipped the ledger export.'} for t in ('x_post', 'linkedin_post', 'reddit_post')])
+    s._exec("UPDATE review SET CreatedAt=datetime(CreatedAt, '-5 seconds') WHERE TaskId=?", (tid,))
+    s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'Three posts are set up.')
+    chatlog.read(s, tid)
+    s.decide_review(x, 'rejected', None, 'owner'); s.decide_review(li, 'approved', None, 'owner'); cardqueue._SEEN.clear()
+    told = lambda: {next(i for i in (x, li, rd) if f'rv{i},' in l): l for l in cardqueue.screen(s, tid).splitlines()[1:] if 'rv' in l}
+    got = told()
+    assert 'Turned down by him' in got[x] and 'Done' in got[li] and 'Waiting for his press now' in got[rd], got
+    assert not any(f'rv{a} + rv{b}' in l for l in got.values() for a in (x, li, rd) for b in (x, li, rd)), 'each tab alone'
+    line = general.new_line_id()
+    conversation.hear(s, tid, [line], standing=True); cardqueue._SEEN.clear()
+    assert s.get_review(rd)['Status'] == 'superseded'
+    got = told()
+    assert 'Turned down by him' in got[x] and 'Done' in got[li] and 'Greyed by his line' in got[rd] and 'Turned down' not in got[rd], got
+
+
 def test_a_tab_he_said_no_to_is_marked_so_never_as_one_that_went():
     """The card gallery, 2026-11-25: one of three sent, the next dropped - and the dropped one's tab was ticked like the sent one. A tab
     settled without going (his no, a press that failed) says so (`no`); one that went, or still waits, does not."""

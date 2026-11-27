@@ -2,6 +2,12 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.4.6.5 - 2026-11-26
+
+- A change card is the document being changed, with the edits marked; a skill is changed by its name
+- His words in a card are what goes; a video post carries no alt text
+- Try again on a failed card where a second try could work; the same thing again keeps his version
+
 ## 0.4.6.4 - 2026-11-26
 
 - An availability view: who can make which times, the best slot worked out on the page

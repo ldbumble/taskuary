@@ -274,6 +274,28 @@ def test_the_endpoint_files_the_draft_on_the_sessions_own_task(s):
     assert r.json()['ok'] and slots.all_(s, tid)[0]['rid']
 
 
+def test_a_session_never_files_its_letter_as_the_owners_own(s):
+    # red team round 6: the door took who wrote it from the call's body, so a session that named itself the owner filed "your email" - none of
+    # an agent's checks ran on it (a blank left to fill went through), and his later line did not grey it. Who acted is the token's to say
+    from fastapi.testclient import TestClient
+    from taskuary import config, guard, server
+    srv = config.load()['server']
+    tid = typed(s, FOUR[:1])
+    mine = {'X-Taskuary-Token': srv['agent_token'], guard.TASK_HDR: guard.task_proof(srv, tid)}
+    post = lambda **b: TestClient(server.app).post('/api/agent/draft', json={'task_id': tid, 'to': 'paula@northwind.example', **b}, headers=mine).json()
+    with mock.patch.object(server, 'store', s):
+        blank = post(text='Paula, please wire it to [ACCOUNT] today.', agent='owner')
+        assert not blank.get('ok') and not s._rows("SELECT 1 FROM review WHERE TaskId=?", (tid,)), 'a blank left to fill is no letter, whoever it says wrote it'
+        for who in ('owner', 'Owner', ' owner ', 'routine'):
+            out = post(text='Paula, tab 1 is fine as it stands.', agent=who)
+            rv = s.get_review(out['review_id'])
+            assert rv['DraftBy'] == 'agent:agent' and 'your email' not in rv['Reason'], who
+        assert s.get_review(post(text='Paula, tab 1 is fine.', agent='coding')['review_id'])['DraftBy'] == 'agent:coding', 'its own name is kept'
+        # ...and the owner's own call is still his
+        own = TestClient(server.app).post('/api/agent/draft', json={'task_id': tid, 'to': 'ray@northwind.example', 'text': 'Ray, see tab 2.', 'agent': 'owner'}).json()
+        assert 'your email' in s.get_review(own['review_id'])['Reason']
+
+
 # ── triage and the assistant say what closes a task ──────────────────────────────────────
 from taskuary import concierge, triage
 

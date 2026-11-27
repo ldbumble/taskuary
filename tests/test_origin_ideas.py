@@ -2,7 +2,7 @@
 
 An Advisor idea's task is judged through what the idea CITES - the mail it names, the mids its why names, lookout's evidence ids, the task
 it is about - never through the summary it read them in. Citing nothing, or an id that resolves to nothing, is a stranger's: fail closed."""
-import json
+import json, re
 from taskuary import origin, assistant
 from taskuary.ingest import HOLD_TAG
 from taskuary.store import MemoryStore
@@ -127,6 +127,14 @@ def test_a_report_s_own_task_stays_a_stranger_s():
     s.add_message({'TaskId': t, 'Channel': 'report', 'SourceName': 'Nightly checks', 'BodyText': 'all clear', 'Status': 'routed'})
     o, why = origin.of_task(s, t)
     assert o == 'stranger' and origin.no_history_line(s, t) == origin.OURS_NO_HISTORY_LINE
+
+# ...TOLD AS A FACT, NEVER A SCRIPT (the owner, 2026-11-27, over an agent reciting "I didn't read your earlier mail because..."): the code
+# says what the session cannot do and why; the words the agent answers in are its own
+def test_the_agent_is_told_a_fact_about_the_owner_s_history_not_a_sentence_to_say():
+    s = _store(); t = _task(s, _idea(s, why='a vendor asked for a file'))
+    line = origin.no_history_line(s, t)
+    assert line and 'mail, memory or history' in line and 'Taskuary wrote it' in line
+    assert '"' not in line and not re.search(r'\b(say|never|when)\b', line, re.I), line
 
 def test_an_idea_line_joining_a_colleague_s_task_lowers_it_only_when_it_cites_a_stranger():
     s = _store(); t = s.create_task({'Title': 'a', 'Source': 'email'}, 'router'); _mail(s, 'erin@northwind.example', tid=t)

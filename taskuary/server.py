@@ -6597,7 +6597,7 @@ def agent_propose(body: AgentProposeBody, request: Request):
 class AgentInviteBody(BaseModel): task_id: int; answer: str; start: str | None = None; end: str | None = None; note: str | None = None
 class AgentMeetingBody(BaseModel):
     task_id: int; title: str = ''; minutes: int = 30; within: str = ''; start: str | None = None; end: str | None = None; note: str = ''
-    online: bool = True; people: list[str] = Field([], alias='with'); guessed: list[str] = []
+    online: bool = True; people: list[str] = Field([], alias='with'); guessed: list[str] = []; grid: dict | None = None
     model_config = {'populate_by_name': True}
 class AgentShareBody(BaseModel): task_id: int; report: int | None = None; to: str = ''; text: str = ''; via: str = ''
 
@@ -6621,7 +6621,7 @@ def agent_meeting(body: AgentMeetingBody, request: Request):
     """A new meeting set up on the session's OWN task (calwrite.meeting): its invite card waits on the owner's Send invite."""
     from . import calwrite
     return _agent_set_up(request, body.task_id, lambda: calwrite.meeting(store, body.task_id, body.people, body.title, body.minutes, body.within,
-                                                                          body.start, body.end, body.note, body.online, guessed=body.guessed))
+                                                                          body.start, body.end, body.note, body.online, guessed=body.guessed, grid=body.grid))
 
 @app.post('/api/agent/share')
 def agent_share(body: AgentShareBody, request: Request):
@@ -9387,6 +9387,14 @@ def _agent_proposes(request: Request, t: str, conn: dict, body: dict, why: str):
     if not store.get_task(tid): raise HTTPException(404, 'no such task')
     p = {**{k: v for k, v in query_only(body).items() if k not in _NOT_PROPOSED},
          'action': 'run_tool', 'type': t, 'connector_id': conn['ConnectorId'], 'why': str((body or {}).get('why') or '')[:300]}
+    # ...A WRITE ASKED THROUGH run_system IS HANDED BACK TO propose'S ROAD (agenttools; the design audit, 2026-11-27): one road to the card, whose
+    # rules - its step after the press, its `replaces`, nothing raised under a standing question - hold for it too
+    if (body or {}).get('_hand'): return {'ok': True, 'write': p}
+    # ...and a shell's call that comes here is held by the question all the same (locked rule 4)
+    from . import cardqueue
+    if cardqueue.asking(store, tid):
+        from .agenttools import refusal
+        raise HTTPException(409, refusal('your question to the owner stands - nothing was raised', 'wait for his answer, then call it again'))
     q = proposals.queue(store, tid, p, 'agent', refused=(miss := []))
     if not q: raise HTTPException(403, proposals.refusal_line(miss[0] if miss else ''))
     store.audit('tool', conn['ConnectorId'], 'run_proposed', 'agent', detail={'type': t, 'task': tid, 'review': q['reviewId']})

@@ -42,6 +42,7 @@ const connectRun = (href, setAt) => () => (setupType(href) ? setAt((x) => (x ? "
 const OPENS_UNDER = { "data-tq-opens-under": "" };
 import { FOCUS_RING, pressable } from "./pressable.js";
 import { draftCanSend, useCapabilities } from "./capabilities.js";
+import { gridView } from "./availability.js";
 import { blankSpans } from "./blanks.js";
 import { outputRow } from "./taskOutputs.js";
 import { ReviewCard } from "./Artifact.jsx";
@@ -112,6 +113,7 @@ const CAL_RANKS = Object.fromEntries(Object.keys(CAL_OTHER).map((a) => [`cal:${a
 // WHAT A SHARE SHARES, OVER ITS PRESS (the owner, 2026-11-08: "the agent shows the dashboard inline in the chat"): the dashboard as Reports
 // draws it, from its last run - lazy, so a card with none never loads the charts
 const Dashboard = React.lazy(() => import("./dashboard/Dashboard.jsx"));
+const ViewSpec = React.lazy(() => import("./ViewSpec.jsx"));
 // ...AS LAST READ, ON ITS FIRST FRAME (recorded 2026-11-12: each time the task was opened its card stood at "Loading…" and then grew by the
 // dashboard's ~370 px, the chat above it moving up by as much): the read still follows, and what it brings is the newest word
 const DASHBOARDS = new Map();
@@ -506,7 +508,8 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onSent = null, t
     ...(isCal ? [{ key: "meeting", type: "read", label: CAL_ACT[meta.act] || "Answer", value: [meta.subject || "the meeting", meta.when].filter(Boolean).join(" · ") },
       { key: "who", type: "read", label: meta.act === "schedule" ? "Invites" : "Tells", value: meta.act === "schedule" ? (meta.to || []).join(", ") || "them" : (meta.to || [])[0] || "the organizer",
         note: [meta.act === "propose" && meta.was ? `instead of ${meta.was}` : "", meta.link ? `with a ${meta.link} link, made when it is sent` : ""].filter(Boolean).join(" · ") },
-      ...(meta.clash ? [{ key: "clash", type: "read", label: "Clashes", value: `This ${meta.clash}.` }] : [])]
+      ...(meta.clash ? [{ key: "clash", type: "read", label: "Clashes", value: `This ${meta.clash}.` }] : []),
+      ...(newMeeting && gridView(meta.grid) ? [{ key: "times", type: "view", node: <React.Suspense fallback={null}><ViewSpec spec={gridView(meta.grid)} /></React.Suspense> }] : [])]
     // ...WHICH MAILBOX IT LEAVES FROM, where he has two (outbound.shown_from; walk 25: the agent said "goes from" one, the card said none)
     : email ? [...(r.From ? [{ key: "from", type: "read", label: "From", value: r.From }] : []),
       ...(r.Moves && !shut ? [{ key: "moves", type: "read", label: "Moves", value: `this task from ${r.Moves.from} to ${r.Moves.to}, as it sends` }] : []),

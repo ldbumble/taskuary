@@ -1122,12 +1122,11 @@ def test_the_to_do_a_card_does_is_ticked_by_its_press_and_nobody_is_woken_for_it
     todo = s.merge_task_checklist(tid, ['Save the onboarding skill'], 'owner')[0]['id']
     doors = {'propose': lambda t, p: {'ok': bool(q := proposals.queue(s, t, p)), 'review': q and q['reviewId']}}
     done = lambda: next(i['done'] for i in s.task_checklist(tid) if i['id'] == todo)
-    for slug in ('onboarding', 'offboarding'):
-        agenttools.call(s, tid, 'propose', {'kind': 'act', 'action': 'save_skill', 'slug': slug, 'todo': todo,
-                                            'text': f'# {slug}\nwhen: a new hire starts\nDay one: the laptop.'}, doors)
+    for name in ('Onboarding check', 'Offboarding check'):          # ...two cards for one to-do (one skill card stands on a task: two routines)
+        agenttools.call(s, tid, 'propose', {'kind': 'routine', 'routine': name, 'todo': todo, 'prompt': 'Day one: the laptop.'}, doors)
     a, b = s._rows("SELECT * FROM review WHERE TaskId=? ORDER BY ReviewId", (tid,))
     assert not card.carries_on(a) and 'todo' not in a['DraftText'], 'the to-do is the card\'s record, never part of what runs'
-    assert 'not bookkeeping' in agenttools.TOOLS['propose'][2]['properties']['then']['description']
+    assert 'never a wait on others' in agenttools.TOOLS['propose'][2]['properties']['after_press']['description']
     with mock.patch.object(general, 'to_agent', return_value='woke') as told:
         assert verdicts.decide(s, a, 'approve')['ok'] and not done(), 'a card for it still waits'
         assert verdicts.decide(s, b, 'approve')['ok'] and done()

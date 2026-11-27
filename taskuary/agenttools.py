@@ -18,7 +18,10 @@ from loguru import logger
 
 from . import words
 from .proposals import NETWORKS
-KINDS = ('reply', 'email', 'post', 'skill', 'act')         # propose's `kind`: the road its press takes (_review)
+KINDS = ('reply', 'email', 'post', 'skill', 'routine', 'git', 'system', 'setting', 'break_out')     # propose's `kind`: what his press does (_review)
+# ...A GIT JOB'S `how`, AS THE ACT ITS CARD ASKS (the design audit, 2026-11-27: "git push", "pr" and "push" were guessed as a free-text `action`) -
+# the landing card's own answers (landing.HOW) for work in a checkout, and the GitHub issue's comment or close
+GIT_HOW = {'push': 'push_direct', 'pr': 'open_pr', 'land': 'land', 'rebase': '', 'merge': '', 'discard': '', 'comment': 'comment_issue', 'close': 'close_issue'}
 # WHAT THE SKILL CARD ASKS HIM, in his own words for it (the owner, 2026-11-26) - of the mail the job came by, else of the job
 SKILL_OFFER = 'Make a skill for this kind of {}, so the next agent can use it?'
 from .selfclose import SHOW_WHAT
@@ -73,7 +76,7 @@ TOOLS = {
                              "it is kept under), the facts about their people, and what was learned from what they did that they confirmed. "
                              "`about`: one person (a name or address) narrows it to them. What bears on this task is in your brief already. "
                              "Read-only: a fact they tell you is kept with `remember`; a way of working "
-                             "they ask you to keep (a skill, a standing rule) is set up with `propose` save_skill for their Approve.",
+                             "they ask you to keep (a skill, a standing rule) is set up with `propose` kind skill for their Approve.",
                      _S({'about': _STR}), ('GET', '/api/agent/memory')),
     # WHAT THE OWNER TELLS ONE AGENT, EVERY READER KNOWS (the owner, 2026-11-14: "if the user tells you something, they should not have to say
     # it again"): kept in his words in the memory's store of what he said (memory.remember), in use at once for triage, every agent and the
@@ -99,9 +102,8 @@ TOOLS = {
     'web_search': ('reach', "Search the web - through this task's AI card's own search, else a connected search service - and read "
                             "what comes back. Read-only. `queries`: several searches at once - they run together, one answer for all.",
                    _S({'query': _STR, 'queries': {'type': 'array', 'items': _STR}}, ()), ('GET', '/api/search')),
-    'run_system': ('reach', "Run one tool on one of the owner's systems (list_systems): {type, connector_id, ...its fields}. Reads run"
-                           " at once; a file saved to SharePoint or OneDrive runs at write Authority and says where it landed. A "
-                           "send, post, pay or order never runs here - it waits for the owner's press, and you are told so.",
+    'run_system': ('reach', "Read one of the owner's systems (list_systems): {type, connector_id, ...its fields}; its rows come back. A "
+                           "write - a send, post, save, pay or order - is not run here: it is raised as the card propose kind system raises.",
                    {'type': 'object', 'properties': {'type': _STR, 'connector_id': _INT}, 'required': ['type'],
                     'additionalProperties': True}, ('POST', '/api/tools/run')),
     # ...and a VIEW in its own chat (viewspec.py, after Vercel's json-render): changes nothing outside the chat, so its door is the task's own read
@@ -149,22 +151,22 @@ TOOLS = {
                  _S({'name': _STR, 'about': _STR, 'did': _STR, 'on_you': {'type': 'array', 'items': _STR}, 'nothing_left': {'type': 'boolean'},
                      'answer_is_result': {'type': 'boolean'}, 'retry': {'type': 'boolean'}, 'corrections': {'type': 'array', 'items': {'type': 'object'}},
                      'check_back': {'type': 'object', 'properties': {'when': _STR, 'what': _STR}}}, ('did',)), ('GET', '/api/tasks/1')),
-    'ask_owner': ('own', "Ask the owner the one fact or decision only they can give, with your recommended answer. It stands "
-                         "until answered, closed or withdrawn; the answer comes to you. choices: short answers for a pick. "
-                         "questions: 2-6 on one card, answered together with one press (`question` heads it). "
-                         "withdraw takes it back.",
-                  _S({'question': _STR, 'choices': {'type': 'array', 'items': _STR}, 'withdraw': {'type': 'boolean'},
-                      'questions': {'type': 'array', 'items': {'type': 'object', 'properties': {'question': _STR, 'choices': {'type': 'array', 'items': _STR}}}},
-                      'card': {'type': 'string', 'description': 'the card it is about (rv<id>), if any'}}), ('GET', '/api/tasks/1')),
-    'skills': ('read', "How this company does each kind of job, written by the owner: with no `name`, the list of skills, each with its "
-                          "description; with a `name`, that skill's SKILL.md whole. Read-only.",
-                  _S({'name': _STR}), ('GET', '/api/tasks/1')),
+    # ...ONE QUESTION OR SIX, ONE SHAPE, WITH ITS SUGGESTED ANSWER (the design audit, 2026-11-27: told to give "your recommended answer" with no
+    # field for it, agents wrote "(recommended)" into a choice or the question): `question` and `choices` are still read, for a saved session
+    'ask_owner': ('own', "Ask what only the owner can tell you: `questions` (one, or 2-6 on one card), each with `choices` and `recommend`, "
+                         "your suggested answer. It stands until answered or withdrawn.",
+                  _S({'questions': {'type': 'array', 'items': {'type': 'object', 'properties': {'question': _STR, 'choices': {'type': 'array', 'items': _STR},
+                                                                                              'recommend': _STR}}},
+                      'withdraw': {'type': 'boolean'}, 'card': {'type': 'string', 'description': 'the card it is about (rv<id>), if any'}}), ('GET', '/api/tasks/1')),
+    'skills': ('read', "How this company does each kind of job, written by the owner: with no `skill`, the list of skills, each with its "
+                          "description; with a `skill` (its name), that skill's SKILL.md whole. Read-only.",
+                  _S({'skill': _STR}), ('GET', '/api/tasks/1')),
     # ...and his routines, read as they are saved (the owner, 2026-11-26): what one does, when, with what - and the skill it uses, by name
-    'routines': ('read', "The owner's routines, reports and dashboards as they are saved: with no `name`, the list - each with when it runs "
-                         "and the skill it uses; with a `name` (its title or number), that one whole: its goal, when it runs, whether it is "
+    'routines': ('read', "The owner's routines, reports and dashboards as they are saved: with no `routine`, the list - each with when it runs "
+                         "and the skill it uses; with a `routine` (its title or number), that one whole: its goal, when it runs, whether it is "
                          "driven in the browser, its connections, the skill it uses, and its instructions. A routine holds what to do, when "
                          "and with which connections; a skill it uses holds how the job is done well, and is read by the skills tool. Read-only.",
-                 _S({'name': _STR}), ('GET', '/api/tasks/1')),
+                 _S({'routine': _STR}), ('GET', '/api/tasks/1')),
     # ...and a wake of its own later on this task (checkback.py, the owner 2026-11-05) - for what only time settles
     'check_back': ('own', "Be woken on this task later: at `when` (\"tomorrow 9am\", \"in 2 days\", \"2026-11-12\") with `what` as your "
                           "next turn - a payment that should clear, a reply due by a date. One per task; a new one replaces it. "
@@ -213,13 +215,6 @@ TOOLS = {
     'find_repos': ('read', "The git checkouts under the folders you may look in, newest commit first: name (from origin), folder, "
                            "remote, last commit date. `query` narrows by name or folder. Read-only.",
                    _S({'query': _STR}), ('GET', '/api/agent/repos')),
-    'propose_land': ('propose', "How your work lands, as the owner's buttons. Your own branch: `how` rebase "
-                                "(rebase and fast-forward), merge (a merge commit), pr or discard. Commits straight on the shared base "
-                                "(master/main): `how` push, and `deploy` the branch a push to deploys (e.g. deploy, production) when it "
-                                "must go live - the card shows Push and Push & deploy. `why` in one line. Nothing lands, merges or pushes "
-                                "until the owner presses.",
-                     _S({'how': {'type': 'string', 'enum': ['rebase', 'merge', 'pr', 'discard', 'push']}, 'why': _STR, 'deploy': _STR}, ('how',)),
-                     ('POST', '/api/agent/propose-land')),
     # ...ONE TAKE-BACK TOOL, AND THE CARD IS ITS `card` ON EVERY TOOL (the card-tool design, 2026-11-27, the owner's OK): reply_not_needed was
     # this with no card, and the same card was `which`, `replaces`, `card` or `review` by the tool - the old names are still read (aliased)
     'withdraw_draft': ('own', "Take back something you set up here that has not gone out - a reply no longer needed (someone else answered, "
@@ -258,16 +253,17 @@ TOOLS = {
                                  " the calendar until they press it; a new call replaces it.",
                       _S({'answer': {'type': 'string', 'enum': ['accept', 'decline', 'propose']}, 'start': _STR, 'end': _STR, 'note': _STR},
                          ('answer',)), ('POST', '/api/agent/answer-invite')),
-    'set_up_meeting': ('propose', "Set up a meeting: `with` (names or addresses - names are looked up in the owner's mail and "
-                                  "directory; one nobody can place comes back to you; an address in"
-                                  " `guessed` is marked guessed on the invite card), `title`, `minutes`"
-                                  " (15, 30, 45, 60). With no `start`/`end` it takes the first time free on the owner's calendar and "
-                                  "theirs where it can see it; `within` (this_week, next_week) narrows the days. The owner's calendar"
-                                  " adds a Teams or Meet link unless `online` is false. `note`: the invite's words. `replaces`: the "
-                                  "unsent card it takes the place of. An invite card with the owner's Send invite - nothing is sent until "
-                                  "they press it.",
-                       _S({'with': {'type': 'array', 'items': _STR}, 'title': _STR, 'minutes': _INT, 'within': _STR, 'start': _STR, 'end': _STR,
-                           'note': _STR, 'online': {'type': 'boolean'}, 'guessed': {'type': 'array', 'items': _STR}, 'replaces': _STR}, ('with', 'title')),
+    # ...WHO CAN MAKE WHICH TIMES, IN THE VIEW'S OWN SHAPE (the design audit, 2026-11-27: every road drew the availability view, then worked the
+    # slot out again by hand in three date formats, and wrote prose into `guessed`): Taskuary picks the slot the view bands, and the card draws it
+    'set_up_meeting': ('propose', "Set up a meeting: `people`, each {name: a name or address, ranges?: [{day: YYYY-MM-DD, from, to}] the "
+                                  "times they can make, guessed?: true for an address you guessed} - the availability view's shape; `title`, "
+                                  "`minutes`. Given ranges, Taskuary takes the best slot - the most of them for `minutes` - and the invite "
+                                  "card draws who can make which times; none, the first time free on the owner's calendar and theirs "
+                                  "(`within`: this_week, next_week). `start`/`end` pin a time. `online` false: no Teams or Meet link. `note`: "
+                                  "the invite's words. `replaces`: the unsent card it takes the place of. Nothing is sent until his Send invite.",
+                       _S({'people': {'type': 'array', 'items': {'type': 'object', 'properties': {'name': _STR, 'ranges': {'type': 'array', 'items': {'type': 'object'}},
+                                                                                                 'guessed': {'type': 'boolean'}}}},
+                           'title': _STR, 'minutes': _INT, 'within': _STR, 'start': _STR, 'end': _STR, 'note': _STR, 'online': {'type': 'boolean'}, 'replaces': _STR}, ('title',)),
                        ('POST', '/api/agent/meeting')),
     'share': ('propose', "Share a report or dashboard of the owner's - one they have, or a routine saved from this task (search_tasks finds it): `report` its number (the N of #report=N), `to` the person, `text` the"
                          " message with it - what it shows, the numbers that matter. `via`: chat (this task's chat with them) or "
@@ -281,7 +277,7 @@ TOOLS = {
     # the same editable raised card whatever it holds. ...`todo` (the agent walk, 2026-11-10): triage had put "an email to Ray Colton" on the
     # task; the agent names the checklist line it fills - no name is matched here
     'propose': ('propose', "Anything for the owner's review and press: one card in this chat - the draft itself, its words his to edit - and nothing "
-                           "happens until he presses it. `kind` is where it goes on the press:\n"
+                           "happens until he presses it. `kind` is what his press does:\n"
                            "- reply: to a person on this task, on the channel of the message it answers (email, WhatsApp, Teams...). `to`: a "
                            "name or address, else the newest message's sender. `answers`: the number of the message it replies to (THE MAIL "
                            "ON THIS TASK). `only: true` to that mail's sender alone (with `cc`: and those), `cc` copied beside the thread's "
@@ -294,32 +290,26 @@ TOOLS = {
                            "`text`, `media`, `subreddit`, `title` (Reddit's); beside them `text`, `media` a picture or video file in your task folder, `link` - for "
                            "each network that gives none. ONE card, a tab per network, each pressed by itself; "
                            "on the press it goes up through the network's connection, else in the browser, his press the yes for the site's Post.\n"
-                           "- skill: `name`, `text` the SKILL.md whole - frontmatter `name` and `description` (what the job is and when to use "
-                           "it), then how the job is done well: its style, its steps, what good looks like. A skill holds how; a routine "
-                           "that uses it holds what and when. With the `name` of a skill he has (the skills tool lists them) the card is "
-                           "that skill's page with the changes marked, and his press saves it over the old one; with a new name it is a new "
-                           "skill for the next agent. It stands behind the cards already raised, and a new one takes a waiting one's place.\n"
-                           "- act: any other act Taskuary runs on his press, by `action`: comment_issue {body} (a public GitHub comment), "
-                           "close_issue, open_pr, land, push {cwd?: the checkout, deploy?: the branch that deploys it} (where the work is in a "
-                           "checkout - one the owner named counts - these three are its Push / Push & deploy / PR buttons), run_tool {type, "
-                           "connector_id, ...} (a send or order on one of their systems - a new GitHub issue and a Jira, Monday or Linear "
-                           "write are the guide tool's `propose` topic), settings {changes}, break_out {title, "
-                           "summary, messages: [m-ids], items: [to-do ids]} (a part of this task that is another matter, to a task of its "
-                           "own), save_routine {title, script: whole standard-library Python, rows on stdin and JSON rows out, reads?: {a "
-                           "source type and its keys}, prompt?: an AI step on its output, skill?: one of his skills it uses, daily_at?: \"07:00\" | cron? | "
-                           "every_minutes? - none: on demand} (a script you wrote for a job that will come again, kept as a routine), change_routine "
-                           "{routine?: the title of the routine, report or dashboard to change (none: the routine this task is a run of), "
-                           "prompt?: its instructions or question whole, or flow?: a routine's steps whole, goal?, done_when?, skill?: the "
-                           "skill of his it uses, browser?: true | false, daily_at | cron | every_minutes?, rename?: its new name} (one of Taskuary's own "
-                           "setups changed: a routine holds what to do, when, with which connections, and the skill it uses - the routines "
-                           "tool reads one as it is saved; the card shows each field that changes and the routine as the press leaves it).\n"
+                           "- skill: `skill` its name, `text` the SKILL.md whole (frontmatter `name`, `description`; then how the job is done "
+                           "well). His own is drawn with the changes marked.\n"
+                           "- routine: `routine` its title (none: the one this task is a run of; a new title makes one), and what changes: "
+                           "`prompt` its instructions, or `script` (standard-library Python, rows on stdin, JSON rows out) with `reads`, or "
+                           "`flow` its steps; `skill` it uses, `browser`, `daily_at` | `cron` | `every_minutes`, `goal`, `done_when`, `rename`.\n"
+                           "- git: `how` push, pr, land, rebase, merge, discard, or comment / close on the issue this task came from (`text`). "
+                           "`cwd` and `repo` default to your checkout and its origin; `deploy`: the branch a push deploys.\n"
+                           "- system: a write on his systems: `type`, `connector_id`, its fields (list_systems; the guide's `propose` topic).\n"
+                           "- setting: `changes` [{name, value}].\n"
+                           "- break_out: `title`, `summary`, `messages` [m-ids], `todos` [to-do ids] - a part of this task that is another job.\n"
                            "`attach`: files that go with it. `why`: one line on why. Each call is a new card unless it `replaces` an unsent "
                            "one (its id, or who it was to) - withdrawn in the same call.",
                 {'type': 'object', 'properties': {'kind': {'type': 'string', 'enum': list(KINDS)}, 'text': _STR, 'to': {'type': 'array', 'items': _STR},
                                                   'subject': _STR, 'cc': {'type': 'array', 'items': _STR}, 'answers': _INT, 'only': {'type': 'boolean'},
                                                   'why_to': _STR, 'from': _STR, 'guessed': {'type': 'array', 'items': _STR},
                                                   'networks': {'type': 'array', 'items': {'type': 'object', 'properties': {'network': {'type': 'string', 'enum': list(NETWORKS)}}}}, 'media': _STR, 'link': _STR,
-                                                  'title': _STR, 'name': _STR, 'action': _STR, 'attach': _ATTACH, 'why': _STR, 'replaces': _STR},
+                                                  'title': _STR, 'skill': _STR, 'routine': _STR, 'prompt': _STR,
+                                                  'how': {'type': 'string', 'enum': list(GIT_HOW)}, 'cwd': _STR, 'repo': _STR, 'deploy': _STR,
+                                                  'changes': {'type': ['array', 'object']},
+                                                  'attach': _ATTACH, 'why': _STR, 'replaces': _STR},
                  'additionalProperties': True}, ('POST', '/api/agent/propose')),
     # ...and EVERY TOOL'S FULL INSTRUCTIONS, ON ASK (the owner, 2026-11-15: "MCP-style tools with simple JSON ... All methods can be searched
     # later"): listed, a tool is its name, one line and its parameters (SHORT, lean); what it takes and its rules are read here
@@ -337,7 +327,7 @@ STRANGER_TOOLS = ('remind', 'check_back')
 
 
 # ...THE OLD NAMES OF THE ONE REVIEW TOOL, for a session whose history still calls them: each is propose with its kind, never listed
-ALIAS = {'propose_reply': 'reply', 'propose_email': 'email', 'propose_post': 'post'}
+ALIAS = {'propose_reply': 'reply', 'propose_email': 'email', 'propose_post': 'post', 'propose_land': 'git'}
 # ...and the old take-back tool, and the card's old names (`which`, `review`), read as the one tool and its `card`
 RENAMED, CARD_WAS = {'reply_not_needed': 'withdraw_draft'}, ('which', 'review')
 def aliased(name, args):
@@ -349,7 +339,7 @@ def aliased(name, args):
     return name, args
 # ...and the tools only a coding agent has a use for are not offered on any other task (2026-11-09): a general agent called find_repos
 # for a WhatsApp bug report - and four tool schemas rode on every turn for nothing
-CODING_TOOLS = ('note_peers', 'use_repo', 'find_repos', 'propose_land')
+CODING_TOOLS = ('note_peers', 'use_repo', 'find_repos')
 # ...AND THE FEW AN AGENT MUST KNOW FROM ITS FIRST TURN LOAD WITH IT (the owner, 2026-11-13: "i don't see the agents using the json renders"):
 # Claude Code defers an MCP server's tools - the model holds a bare name like `show` until it searches for it, and none of 8 sessions ever
 # did, so no view was drawn and every result came back as prose. These ride whole on every turn (Claude Code 2.1.285+, the per-tool
@@ -377,7 +367,7 @@ SHORT = {
     'calendar': "The owner's busy times for the next N days.",
     'list_systems': "The owner's other systems you may use, with their connector ids and tool types.",
     'guide': "Read one of Taskuary's how-tos (browser, number, propose ...).",
-    'run_system': "Run one tool on one of the owner's systems: {type, connector_id, ...its fields}.",
+    'run_system': "Read one of the owner's systems: {type, connector_id, ...its fields}; a write is raised as its card.",
     'web_search': "Search the web through this task's AI card.",
     # ...and that A VIEW IS KEPT AS ONE UNDER ITS `id` is on the line (walk 26, 2026-11-27: replies came one by one and no road drew a view -
     # lean drops a parameter's words, so `id` was a bare string and the line named only what is drawn once)
@@ -388,8 +378,8 @@ SHORT = {
     'tick': "Tick or untick a to-do (`item`: its id).",
     'todos': "Add, reword or merge this task's to-dos.",
     # end_turn and ask_owner are listed with their whole words: the fields ARE how they are used
-    'skills': "How this company does each kind of job: the list, or one by `name`.",
-    'routines': "The owner's routines and reports as saved: the list, or one by `name`.",
+    'skills': "How this company does each kind of job: the list, or one by `skill`.",
+    'routines': "The owner's routines and reports as saved: the list, or one by `routine`.",
     'check_back': 'Be woken on this task later, at `when`, with `what` as your next turn.',
     'remind': "Take the task off the owner's list until `when`.",
     'ask_stronger': 'Ask a stronger model one hard question; `context` is all it sees.',
@@ -399,17 +389,15 @@ SHORT = {
     'add_to_task': "Note and files to another task (TQ-0008); its agent hears it.",
     'use_repo': "Pick the git checkout this task's work belongs in.",
     'find_repos': 'The git checkouts you may work in, newest commit first.',
-    'propose_land': "How your work lands (rebase, merge, pr ...), as the owner's buttons.",
     'withdraw_draft': 'Take back a reply, email or proposal you set up that has not gone out.',
     'keep_card': 'Bring back a card greyed by the newest input, as it was, under that input.',
     'hand_over': 'A page step only the owner can do (sign-in, paying): a card.',
     'sign_form': "Fill and sign a PDF form with the owner's saved signature.",
     'answer_invite': "Answer this task's meeting invite: accept, decline or propose.",
-    'set_up_meeting': "Set up a meeting for the owner's press.",
+    'set_up_meeting': "Set up a meeting for the owner's press, from who can make which times.",
     'share': "Share a report or dashboard of the owner's with a person.",
-    'propose': "One card for the owner's press: a reply, an email, a post to its `networks` (a tab each), GitHub/Jira issue, "
-               "comment, PR, push, order on a system, script for save_routine - his to edit, done only at his press. "
-               "`kind` (an act names its `action`); one act to many: `items`; versions to pick from: `versions`; `then`: your step after it.",
+    'propose': "One card for his press: a reply, an email, a post to its `networks` (a tab each), a routine, a GitHub push or PR - the "
+               "draft itself, his to edit; nothing runs till his press. `kind` says which; one act to many: `items`; versions to pick from: `versions`.",
     'find_tools': "A tool's instructions by name, or tools by need.",
 }
 def lean(s):
@@ -583,7 +571,7 @@ def _networks(a: dict) -> dict:
     if not all(str(e.get('network') or '').strip() for e in es):
         raise ValueError(refusal('a post names no network', f"give `networks`: each a name ({', '.join(NETWORKS)}) or {{network, its own text ...}}"))
     if a.get('items') is not None: raise ValueError(refusal('a post takes its networks in `networks`, not `items`', 'give each network as an entry of `networks`'))
-    keep = {k: a[k] for k in ('kind', 'then', 'todo', 'replaces') if k in a}
+    keep = {k: a[k] for k in ('kind', 'after_press', 'then', 'todo', 'replaces') if k in a}
     shared = {k: v for k, v in a.items() if k not in (*keep, 'networks', 'network')}
     return {**keep, 'kind': 'post', 'items': [{**shared, **e} for e in es]}
 
@@ -619,7 +607,8 @@ def _card_call(store, tid: int, name: str, args: dict, doors: dict, skip=()) -> 
     if raises and cardqueue.asking(store, tid):
         raise ValueError(refusal('your question to the owner stands - nothing was raised', 'wait for his answer, then raise it; if this card does '
                                  'not hang on the question, take the question back with ask_owner withdraw: true and raise it'))
-    then, todo, args = ((args or {}).get('then'), (args or {}).get('todo'), {k: v for k, v in (args or {}).items() if k not in ('then', 'todo')}) if raises else (None, None, args)
+    then, todo, args = ((args or {}).get('after_press') or (args or {}).get('then'), (args or {}).get('todo'),
+                        {k: v for k, v in (args or {}).items() if k not in ('after_press', 'then', 'todo')}) if raises else (None, None, args)
     # ...an email's to-do IS the line it fills (`slot` folded into `todo`, the card-tool design 2026-11-27; `slot` still read for a saved session)
     if todo and name == 'propose' and str(args.get('kind') or '').strip().lower() == 'email' and not args.get('slot'): args = {**args, 'slot': str(todo).strip().strip('[]')}
     try:
@@ -635,10 +624,13 @@ def _card_call(store, tid: int, name: str, args: dict, doors: dict, skip=()) -> 
     try: got = json.loads(out)
     except ValueError: got = None
     if isinstance(got, dict) and got.get('ok') is False: _failed(store, tid, name)
+    # ...AND WHEN ITS STEP AFTER HIS PRESS WAKES IT, SAID AS IT STANDS (the design audit, 2026-11-27: `then: "When Gail and Ray reply ..."` ran
+    # at his Send, waking the agent with nothing to do): a wait on other people reads wrong here at once
+    if isinstance(got, dict) and got.get('ok') and str(then or '').strip():
+        got = {**got, 'after_press': f"You are woken when he presses it (once every card of this task that waits is settled), to: {' '.join(str(then).split())}"}
+        out = _j(got)
     from . import cardqueue
     if not (line := cardqueue.screen(store, tid)): return out
-    try: got = json.loads(out)
-    except ValueError: got = None
     return _j({**got, 'your_cards': line}) if isinstance(got, dict) else f'{out} {line}'
 
 
@@ -659,7 +651,8 @@ TOOLS['propose'][2]['properties']['versions'] = {'type': 'array', 'items': {'typ
 # box and say it went): the press's record is Taskuary's - it ticks the to-do as the press goes (card.went), and nobody is woken for it
 for _t in TOOLS.values():
     if _t[0] == 'propose':
-        _t[2]['properties']['then'] = {'type': 'string', 'description': 'your own NEXT ACT after his press, if any (not a check, not bookkeeping - Taskuary confirms the act itself and records the press)'}
+        # ...NAMED FOR WHEN IT RUNS (the design audit, 2026-11-27: `then` read as "then, once they reply"): `then` is still read, for a saved session
+        _t[2]['properties']['after_press'] = {'type': 'string', 'description': 'your own next act, woken at his press - never a wait on others (check_back)'}
         _t[2]['properties']['todo'] = {'type': 'string', 'description': "the id of this task's to-do this card does, if one - Taskuary ticks it when his press has gone"}
 def _names(card, r: dict) -> bool:
     "Does `card` - an id (rv12, 12) or who or what it was to - name unsent card `r` (verdicts.unsent's row)?"
@@ -778,12 +771,22 @@ def _end_check(store, tid: int, cb, doors: dict, skip=()) -> str:
     return f" The check-back is set for {out.get('when') or out.get('at')}: {out.get('what')}."
 
 
+# THE OBVIOUS NAME FOR WHAT A TOOL IS ABOUT IS READ AS ITS OWN (the design audit, 2026-11-27: `guide {"name": "browser"}` came first on every
+# browser job and was retried with `topic`; find_tools by `name` was refused 4 times): each is listed by one name and takes the other
+SAME = {'guide': {'name': 'topic', 'query': 'topic'}, 'find_tools': {'name': 'query'}, 'routines': {'name': 'routine'}, 'skills': {'name': 'skill'}}
+def renamed(name: str, args):
+    a = dict(args) if isinstance(args, dict) else args
+    for old, new in SAME.get(name, {}).items():
+        if isinstance(a, dict) and a.get(new) in (None, '') and a.get(old) not in (None, ''): a[new] = a.pop(old)
+    return a
+
+
 def _call(store, tid: int, name: str, args: dict, doors: dict, skip=()) -> str:
     """Run one tool for the session on task `tid`. `doors` are the server's own handlers for the acts that have one (tool_run, tick,
     reply, draft, propose), called with the caller's request so their own checks - owns_task, scopes, the send-to-proposal rule -
     are the ones that hold. Raises ValueError for a call the model can correct; the answer is text the model reads."""
     from . import mailsearch, verdicts
-    a = fit(name, args)
+    a = fit(name, renamed(name, args))
     if name == 'search_messages':
         hits = mailsearch.search(store, a.get('sender', ''), a.get('subject', ''), a.get('words', ''), a.get('since', ''), a.get('until', ''),
                                  a.get('limit') or 20, tid=tid)
@@ -912,8 +915,13 @@ def _call(store, tid: int, name: str, args: dict, doors: dict, skip=()) -> str:
         with ThreadPoolExecutor(len(qs)) as ex: got = list(ex.map(lambda q: _searched(one, q), qs))
         return _out('\n\n'.join(f'SEARCH: {q}\n{r}' for q, r in zip(qs, got)), fence_it=True)
     if name == 'run_system':
-        r = doors['tool_run']({**a, 'task_id': tid})
+        r = doors['tool_run']({**a, 'task_id': tid, '_hand': True})
         r = json.loads(r.body) if hasattr(r, 'body') else r                 # a 202 (queued) comes back as a response
+        # ...A WRITE IS THE CARD propose RAISES, ON ITS ROAD (the design audit, 2026-11-27: run_system filed the same card around propose's rules -
+        # no after_press, items or replaces, and a card raised under a standing question, locked rule 4): handed to it whole
+        if isinstance(r, dict) and isinstance(r.get('write'), dict):
+            card = {**{k: a[k] for k in ('after_press', 'then', 'todo', 'replaces') if k in a}, **{k: v for k, v in r['write'].items() if k != 'action'}}
+            return _card_call(store, tid, 'propose', {**card, 'kind': 'system'}, doors, skip)
         # ...a report's rows come back as records, the shape a view's table and chart take as they are (viewspec.records)
         if isinstance(r, dict) and (rs := __import__('taskuary.viewspec', fromlist=['x']).records(r.get('output'))): r = {**{k: v for k, v in r.items() if k != 'output'}, 'rows': rs}
         return _out(_j(r), fence_it=True)
@@ -972,17 +980,20 @@ def _call(store, tid: int, name: str, args: dict, doors: dict, skip=()) -> str:
             return f"Withdrawn: {'; '.join(gone)}" if gone else 'No question of yours stands on the task - nothing to withdraw.'
         # SEVERAL, ASKED TOGETHER, ARE ONE CARD (proposals 'questions'): his one press answers them all, and it is the question that stands -
         # one alone is the plain question it always was
-        if isinstance(qs := a.get('questions'), list) and len(qs) == 1 and isinstance(qs[0], dict): a, qs = {**a, **qs[0]}, None
+        # ...EACH WITH ITS SUGGESTED ANSWER FIRST AMONG HIS PICKS: one press takes it
+        qs = [{**q, 'choices': ([q['recommend']] if str(q.get('recommend') or '').strip() else []) + [c for c in (q.get('choices') if isinstance(q.get('choices'), list) else []) if c != q.get('recommend')]}
+              for q in (a.get('questions') if isinstance(a.get('questions'), list) else [{'question': a.get('question'), 'choices': a.get('choices')}]) if isinstance(q, dict)]
+        if len(qs) == 1: a, qs = {**a, **qs[0]}, None
         if isinstance(qs, list) and qs:
             if cardqueue.asking(store, tid):
                 raise ValueError(refusal('a question of yours to the owner already stands - nothing was raised', 'wait for his answer, or take it back with withdraw: true and ask these'))
-            p, why = proposals.asks_card(a.get('question'), qs)
+            p, why = proposals.asks_card(a.get('question') if isinstance(a.get('questions'), list) else '', qs)
             if not p: raise ValueError(refusal(why, 'call ask_owner again with them so'))
             if not (q := proposals.queue(store, int(tid), p, 'agent', refused=(miss := []))):
                 raise ValueError(refusal(miss[0] if miss else 'the card could not be raised', 'go on with what does not hang on his answers'))
             return (f"Asked - your {len(p[proposals.ASKS])} questions stand as one card (rv{q['reviewId']}) in his chat for his answers; they come to you together "
                     "at his press, and nothing is raised under it until then.")
-        if not str(a.get('question') or '').strip(): raise ValueError('`question` is empty - write the one thing you need from the owner')
+        if not str(a.get('question') or '').strip(): raise ValueError('`questions` holds no question - write the one thing you need from the owner')
         selfclose.keep_mark(tid, 'ask', selfclose.ask_mark(a['question'], a.get('choices') if isinstance(a.get('choices'), list) else ()))
         # ...asked about a card of this task, his press on that card answers it (card.asked_about)
         if (k := str(a.get('card') or '').strip().lower().removeprefix('rv')).isdigit() and (store.get_review(int(k)) or {}).get('TaskId') == int(tid):
@@ -994,10 +1005,10 @@ def _call(store, tid: int, name: str, args: dict, doors: dict, skip=()) -> str:
                 "typed in his box, comes to you once. The rest of the job is not held by it.")
     if name == 'skills':
         from . import skills
-        return _out(skills.lookup(store, store.get_task(tid), str(a.get('name') or '')))
+        return _out(skills.lookup(store, store.get_task(tid), str(a.get('skill') or '')))
     if name == 'routines':
         from . import workflows
-        return _out(workflows.lookup(store, str(a.get('name') or '')))
+        return _out(workflows.lookup(store, str(a.get('routine') or '')))
     if name == 'remember': return doors['remember'](tid, str(a.get('note') or ''), str(a.get('subject') or ''), str(a.get('about') or ''), bool(a.get('signature')))['says']
     if name == 'ask_stronger':
         out = doors['ask_stronger'](tid, str(a.get('question') or ''), str(a.get('context') or ''))
@@ -1007,8 +1018,6 @@ def _call(store, tid: int, name: str, args: dict, doors: dict, skip=()) -> str:
     if name == 'note_peers': return _j(doors['note_peers'](tid, str(a.get('to') or ''), str(a.get('text') or '')))
     if name == 'add_to_task': return _j(doors['note_peers'](tid, str(a.get('task') or ''), str(a.get('note') or ''), [str(f) for f in a.get('files') or [] if f], True))
     if name == 'note_lead': return _j(doors['note_lead'](tid, str(a.get('text') or ''), [str(r) for r in a.get('refs') or [] if r]))
-    # ...`deploy` with it: dropped here, "how push, deploy <branch>" drew Push alone and the agent asked for the deploy in words
-    if name == 'propose_land': return _j(doors['propose_land'](tid, str(a.get('how') or ''), str(a.get('why') or ''), **({'deploy': str(a['deploy'])} if a.get('deploy') else {})))
     if name == 'use_repo':
         out = doors['use_repo'](tid, str(a.get('path_or_name') or ''), str(a.get('why') or ''))
         return out.get('says') or _j(out)
@@ -1027,9 +1036,9 @@ def _call(store, tid: int, name: str, args: dict, doors: dict, skip=()) -> str:
         return out['says'] if out.get('says') else _j(out)
     if name == 'answer_invite': return _j(doors['answer_invite'](tid, a))
     if name == 'set_up_meeting':
-        from . import verdicts
+        from . import calwrite, verdicts
         was = verdicts.unsent(store, tid)
-        return _j(replaced(store, doors, tid, was, doors['meeting'](tid, {k: v for k, v in a.items() if k != 'replaces'}), a.get('replaces'), 'the invite takes its place'))
+        return _j(replaced(store, doors, tid, was, doors['meeting'](tid, calwrite.from_people({k: v for k, v in a.items() if k != 'replaces'})), a.get('replaces'), 'the invite takes its place'))
     if name == 'share': return _j(doors['share'](tid, a))
     if name == 'propose': return _versioned(store, tid, a, doors)
     raise ValueError(f'no tool {name!r} - tools/list names them; use one of those')
@@ -1063,11 +1072,13 @@ def _review(store, tid: int, a: dict, doors: dict) -> str:
     from .proposals import post_of, post_type
     from .wrapup import no_correspondent
     k = str(a.get('kind') or ('act' if a.get('action') else 'post' if a.get('network') else '')).strip().lower()
+    if k == 'act': a, k = old_act(a)
     if k not in KINDS: raise ValueError(refusal(f"`kind` {echo(a.get('kind'))!r} is not one of {', '.join(KINDS)}" if a.get('kind') else '`kind` was not given',
-                                                "call propose again with `kind`: reply, email, post, skill, or act with its `action`"))
+                                                f"call propose again with `kind`: {', '.join(KINDS)}"))
+    idle = unused(k, a)
     if k == 'reply' and no_correspondent(store, tid):
         raise ValueError(refusal('nobody is behind this task to read a reply - it is the owner\'s own ask, or a machine\'s notice',
-                                 'an email to someone is kind email with `to`; anything else for his press is kind act'))
+                                 'an email to someone is kind email with `to`; anything else for his press is its own kind'))
     if k == 'reply':
         who = {x: a[x] for x in ('answers', 'only', 'cc', 'why_to') if a.get(x) not in (None, '')}
         if str(a.get('from') or '').strip(): who['mailbox'] = str(a['from'])
@@ -1095,17 +1106,75 @@ def _review(store, tid: int, a: dict, doors: dict) -> str:
     if k == 'post' and not post_type(a.get('network')):
         raise ValueError(refusal(f"there is no post card for {echo(a.get('network'))!r}", f"give `networks` from {', '.join(NETWORKS)}; "
                                  "anywhere else, put it up in your browser - its final Post waits for his press"))
-    if k == 'act' and not str(a.get('action') or '').strip(): raise ValueError(refusal('an act needs its `action`', 'call propose again with `action` and its fields'))
+    if k == 'git' and not GIT_HOW.get(how := str(a.get('how') or '').strip().lower()):
+        if how not in GIT_HOW: raise ValueError(refusal(f"`how` {echo(how)!r} is not one of {', '.join(GIT_HOW)}" if how else '`how` was not given', 'call propose again with kind git and its `how`'))
+        return _j(idle(doors['propose_land'](tid, how, str(a.get('why') or ''), **({'deploy': str(a['deploy'])} if a.get('deploy') else {}))))
     rest = {x: v for x, v in a.items() if x not in ('replaces', 'kind')}
     # ONE SKILL CARD ON A TASK (the owner, 2026-11-26): what it asks is said for him, and a second takes the waiting one's place
     if k == 'skill':
         mail = any(str(m.get('Direction') or 'in') != 'out' and m.get('Status') != 'context' for m in store.list_messages(int(tid)))
-        rest = {'action': 'save_skill', 'slug': str(a.get('name') or a.get('slug') or 'new'), 'text': str(a.get('text') or ''),
+        rest = {'action': 'save_skill', 'slug': str(a.get('skill') or a.get('name') or a.get('slug') or 'new'), 'text': str(a.get('text') or ''),
                 **({'why': str(a['why'])} if a.get('why') else {}), 'offer': SKILL_OFFER.format('email' if mail else 'job')}
         a = {**a, 'replaces': a.get('replaces') or next((f"rv{r['rid']}" for r in verdicts.unsent(store, tid) if r['to'] == 'save_skill'), None)}
+    if k == 'git': rest = git_act(store, tid, a)
+    if k == 'routine': rest = routine_act(store, a)
+    if k == 'system': rest = {**rest, 'action': 'run_tool'}
+    if k == 'setting': rest = {**rest, 'action': 'settings'}
+    if k == 'break_out': rest = {'action': 'break_out', **{x: a[x] for x in ('title', 'summary', 'messages', 'why') if a.get(x)}, 'items': a.get('todos') or []}
     old, was, p = a.get('replaces'), verdicts.unsent(store, tid), post_of(rest) if k == 'post' else rest
     out = doors['propose'](tid, p)
-    return _j(card_roads(store, replaced(store, doors, tid, was, out, old, 'a new proposal takes its place'), p))
+    return _j(idle(card_roads(store, replaced(store, doors, tid, was, out, old, 'a new proposal takes its place'), p)))
+
+
+# AN OLD SESSION'S `kind: act` IS THE KIND ITS ACTION IS NOW (the design audit, 2026-11-27): a saved session goes on calling it so - each act an
+# agent may ask for is read as the kind that asks it; any other names the kinds, never every act Taskuary itself raises
+ACT_KIND = {'run_tool': 'system', 'settings': 'setting', 'break_out': 'break_out', 'save_routine': 'routine', 'change_routine': 'routine', 'save_skill': 'skill',
+            **{x: 'git' for x in ('push', 'push_direct', 'deploy', 'open_pr', 'land', 'comment_issue', 'close_issue')}}
+def old_act(a: dict) -> tuple:
+    "(the call as its kind takes it, that kind) - a ValueError naming the kinds for an act no agent asks for."
+    act = str(a.get('action') or '').strip()
+    if act not in ACT_KIND: raise ValueError(refusal(f"there is no act {echo(act)!r} - what his press does is the card's `kind`",
+                                                     f"call propose again with `kind`: {', '.join(KINDS)} (a push or a pull request is kind git with `how`)"))
+    b, k = {x: v for x, v in a.items() if x not in ('action', 'kind')}, ACT_KIND[act]
+    if k == 'git': b = {**b, 'how': next(h for h, x in GIT_HOW.items() if x == ('push_direct' if act in ('push', 'deploy') else act)), **({'text': a['body']} if a.get('body') else {})}
+    if act == 'save_routine': b = {**{x: v for x, v in b.items() if x != 'title'}, 'routine': a.get('title')}
+    if act == 'save_skill': b = {**b, 'skill': a.get('slug') or a.get('name')}
+    if act == 'break_out' and 'items' in b: b['todos'] = b.pop('items')
+    return b, k
+
+
+def git_act(store, tid: int, a: dict) -> dict:
+    """A git job's proposal: its act by `how`, from the checkout this task's work is in and the repository its origin pushes to, unless the
+    call names them (the HIPAA road, walk 26: a pull request refused for no `cwd`, then for no `repo` - four calls for one card)."""
+    from . import landing
+    cwd = str(a.get('cwd') or '') or landing.checkout(store, tid)
+    return {'action': GIT_HOW[a['how'].strip().lower()], **{x: str(a[x]) for x in ('why', 'repo', 'deploy', 'title') if a.get(x)}, **({'cwd': cwd} if cwd else {}),
+            **({'body': str(a['text'])} if a.get('text') else {})}
+
+
+# A ROUTINE IS NAMED BY ONE FIELD, AND ONE CALL MAKES OR CHANGES IT (walk 26: five calls to change one routine - "save_routine" with its name,
+# "change_routine" refused for `routine`, a `title` that renamed it): one he has by that title or number is changed, a new title is a new one
+ROUTINE = ('prompt', 'script', 'reads', 'flow', 'skill', 'browser', 'daily_at', 'cron', 'every_minutes', 'goal', 'done_when', 'rename', 'why')
+def routine_act(store, a: dict) -> dict:
+    from . import workflows
+    name, keep = str(a.get('routine') or '').strip(), {x: a[x] for x in ROUTINE if a.get(x) not in (None, '')}
+    if not name or workflows.named_setup(store, name): return {'action': 'change_routine', **({'routine': name} if name else {}), **keep}
+    return {'action': 'save_routine', 'title': name, **keep, **({'why': str(a['goal'])} if a.get('goal') and not a.get('why') else {})}
+
+
+# A FIELD THE CARD DOES NOT USE IS SAID SO IN ITS ANSWER (the design audit, 2026-11-27: `subject` rode on almost every reply, `title` on others -
+# each left the agent sure it had set something). Locked rule 1: it is ignored, never a refusal - the card stands, and the answer names it
+USES = {'skill': ('skill', 'name', 'slug', 'text', 'why'), 'routine': ('routine', *ROUTINE), 'git': ('how', 'cwd', 'repo', 'deploy', 'why', 'title', 'text'),
+        'setting': ('changes', 'why'), 'break_out': ('title', 'summary', 'messages', 'todos', 'why')}
+NOT_DRAWN = {'reply': {'subject': "a reply's subject is its thread's", 'title': 'a reply has no title'}}
+COMMON = ('kind', 'replaces', 'attach', 'items')
+def unused(k: str, a: dict):
+    "What adds to a card call's answer the fields it was given and did not use - with why, where one is known."
+    got = [x for x in a if a.get(x) not in (None, '', []) and x not in COMMON]
+    idle = [f"`{x}` ({NOT_DRAWN[k][x]})" for x in got if x in NOT_DRAWN.get(k, {})] + [f'`{x}`' for x in got if k in USES and x not in USES[k]]
+    line = (f"{', '.join(idle)} {'is' if len(idle) == 1 else 'are'} not a field of a {k} card - not used; the card stands without "
+            f"{'it' if len(idle) == 1 else 'them'}") if idle else ''
+    return lambda o: {**o, 'not_used': line} if line and isinstance(o, dict) and o.get('ok') else o
 
 
 # A PICTURE THE AGENT MADE, SHOWN IN ITS CHAT (the owner, 2026-11-09: a coding agent "opened the three screenshots in the image viewer" on a

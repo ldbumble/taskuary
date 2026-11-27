@@ -194,7 +194,7 @@ class ChangeTests(unittest.TestCase):
         own = self.s.create_task({'Title': 'Something else', 'Kind': 'general', 'Status': 'open'}, 'o')
         why = []
         self.assertIsNone(proposals.queue(self.s, own, {'action': 'change_routine', 'prompt': 'x', 'why': 'y'}, refused=why))
-        self.assertIn('did not come from a routine', why[0])
+        self.assertIn('no run of a routine', why[0])
 
     def test_any_routine_he_names_changes_its_instructions_and_clock_on_one_card(self):
         # the owner's live task, 2026-11-20: asked to rewrite his routine's instructions, the agent wrote them into a .txt and said "save them

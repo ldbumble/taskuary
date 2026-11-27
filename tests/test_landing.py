@@ -309,7 +309,7 @@ class LandingTests(unittest.TestCase):
         from taskuary import proposals
         self.on_master_with_origin()
         self.assertIsNone(landing.from_proposal(self.s, self.tid, {'action': 'comment_issue', 'body': 'x'}))
-        self.assertTrue(landing.from_proposal(self.s, self.tid, {'action': 'push', 'deploy': 'deploy', 'why': 'live is the ask'})['ok'])
+        self.assertTrue(landing.from_proposal(self.s, self.tid, {'action': 'push_direct', 'deploy': 'deploy', 'why': 'live is the ask'})['ok'])
         self.assertEqual([a['how'] for a in landing.state(self.s, self.tid)['answers']], ['push', 'deploy'])
         t2 = Factory(self.s).task(title='Round the totals', kind='coding'); landing.mark_start(self.s, t2, self.cwd)
         commit(self.cwd, 'totals.py', 'x\n'); landing.saw(self.s, t2, 'Bash', {'command': 'git commit -q -m totals'})
@@ -422,7 +422,7 @@ class LandingTests(unittest.TestCase):
         self.on_master_with_origin(); self.dev()
         held, said = landing.push_asked(self.s, self.tid, 'git add -A && git commit -m "round once" && git push origin master', self.cwd)
         self.assertFalse(held, 'nothing waits on the owner yet: the commit in the line has not run')
-        self.assertIn('propose_land', said); self.assertIn('without the push', said)
+        self.assertIn('propose (kind git, how push)', said); self.assertIn('without the push', said)
         self.assertIsNone(landing.state(self.s, self.tid)['proposal'])
         # ...output thrown away is no second step: the push alone is still the button
         self.assertTrue(landing.push_asked(self.s, self.tid, 'git push origin master 2>&1', self.cwd)[0])
@@ -434,9 +434,12 @@ class LandingTests(unittest.TestCase):
         # "how push, deploy <branch>" drew Push alone: the tool's door dropped `deploy`, and the agent asked for the deploy in words
         from taskuary import agenttools
         got = {}
-        agenttools.call(self.s, self.tid, 'propose_land', {'how': 'push', 'why': 'live is the ask', 'deploy': 'deploy'},
-                        {'propose_land': lambda tid, how, why, deploy='': got.update(how=how, deploy=deploy) or {'ok': True}})
-        self.assertEqual(got, {'how': 'push', 'deploy': 'deploy'})
+        # ...and a saved session's propose_land is propose kind git, its deploy carried the same (the design audit, 2026-11-27)
+        for name, a in (('propose', {'kind': 'git', 'how': 'push'}), ('propose_land', {'how': 'push'})):
+            got.clear()
+            agenttools.call(self.s, self.tid, name, {**a, 'why': 'live is the ask', 'deploy': 'deploy'},
+                            {'propose': lambda tid, p: got.update(p) or {'ok': True, 'review': 1}})
+            self.assertEqual((got['action'], got['deploy']), ('push_direct', 'deploy'))
 
     def test_what_the_card_cannot_do_is_held_the_old_way(self):
         self.on_master_with_origin(); self.dev()
@@ -568,7 +571,7 @@ class NamedCheckoutTests(unittest.TestCase):
         self.assertEqual((plan['branch'], plan['base'], plan['repo']), ('fix-rounding', 'master', 'northwind/ledger'))
         self.assertTrue(plan['title'].endswith('] Keep cents in totals'))
         other = tempfile.mkdtemp(); git(other, 'init', '-q', '-b', 'side'); commit(other, 'x.py', 'x\n')
-        self.assertEqual(ci.pr_plan(self.s, self.tid, {'cwd': other})['branch'], '')
+        self.assertNotEqual(ci.pr_plan(self.s, self.tid, {'cwd': other})['cwd'], other, 'a folder he never named is never the one it opens from')
 
     def test_a_pull_request_goes_into_the_repositorys_own_branch_and_is_never_raised_or_opened_with_nothing_committed(self):
         """Walk 22, 2026-11-25, both CLIs: "open a PR with this fix - it is uncommitted in my checkout". The repository's branch is main; the
@@ -624,16 +627,48 @@ class NamedCheckoutTests(unittest.TestCase):
         self.assertEqual(proposals._draft(rv)['pr']['repo'], 'northwind/ledger')
         self.assertTrue(rv['Reason'].endswith('Open a pull request from fix-rounding into master'), rv['Reason'])
 
+    def agent(self, **a):
+        "One propose call of the task's agent over /api/mcp: (its answer, was it an error)."
+        from fastapi.testclient import TestClient
+        from taskuary import config, guard, server
+        srv = config.load()['server']
+        hdr = {'X-Taskuary-Token': srv['agent_token'], guard.TASK_HDR: guard.task_proof(srv, self.tid)}
+        with mock.patch.object(server, 'store', self.s):
+            r = TestClient(server.app).post(f'/api/mcp?task={self.tid}', headers=hdr, json={'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call',
+                                                                                          'params': {'name': 'propose', 'arguments': a}}).json()['result']
+        return r['content'][0]['text'], r['isError']
+
+    def test_a_push_is_kind_git_from_the_checkout_he_named_with_no_folder_given(self):
+        """Walks 25-26: "git push", "pr" and "push" were guessed as a free-text `action`. The act is the kind: `kind: git, how: push`, and the
+        checkout is the one he named on the task - no `cwd` asked for."""
+        self.fix()
+        said, err = self.agent(kind='git', how='push', why='the rounding fix')
+        self.assertFalse(err, said); self.assertEqual(landing.state(self.s, self.tid)['proposal']['how'], 'push')
+
+    def test_a_pull_request_is_kind_git_its_checkout_and_repository_found_for_it(self):
+        """The HIPAA road took four calls for one PR: refused for no `cwd`, then for no `repo` - which the schema never named. Both default:
+        the checkout he named, and the repository its origin pushes to."""
+        from taskuary import proposals
+        was = git(self.cwd, 'config', '--get', 'remote.origin.url')
+        git(self.cwd, 'config', f'url.{was}.insteadOf', 'https://github.com/northwind/ledger.git')
+        git(self.cwd, 'config', 'remote.origin.url', 'https://github.com/northwind/ledger.git')
+        git(self.cwd, 'checkout', '-q', '-b', 'fix-rounding'); self.fix()
+        said, err = self.agent(kind='git', how='pr', title='Keep cents in totals')
+        self.assertFalse(err, said)
+        [rv] = self.s._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action' AND Status='pending'", (self.tid,))
+        p = proposals._draft(rv)
+        self.assertEqual((p['action'], p['pr']['repo'], p['pr']['branch']), ('open_pr', 'northwind/ledger', 'fix-rounding'))
+
     def test_propose_push_with_no_folder_takes_the_one_he_named(self):
         self.fix()
-        out = landing.from_proposal(self.s, self.tid, {'action': 'push', 'why': 'the rounding fix'})
+        out = landing.from_proposal(self.s, self.tid, {'action': 'push_direct', 'why': 'the rounding fix'})
         self.assertTrue(out['ok']); self.assertEqual(landing.state(self.s, self.tid)['proposal']['how'], 'push')
         self.assertIn('sees the Push card now', out['says'])
 
     def test_the_agent_is_told_its_push_card_waits_behind_another_not_that_it_is_up(self):
         # design round 6, D1: told "the owner sees it" whatever the page drew, the agent said three times a card was waiting that was not there
         self.fix(); Factory(self.s).review(self.tid, kind='slot', draft='Hi Gail, the fix is in.', reason='an email to gail@northwind.example')
-        out = landing.from_proposal(self.s, self.tid, {'action': 'push', 'why': 'the rounding fix'})
+        out = landing.from_proposal(self.s, self.tid, {'action': 'push_direct', 'why': 'the rounding fix'})
         self.assertIn('NOT on his screen yet', out['says']); self.assertNotIn('sees the', out['says'])
 
     def test_a_push_no_card_can_draw_is_refused_with_why_not_told_as_up(self):
@@ -644,7 +679,7 @@ class NamedCheckoutTests(unittest.TestCase):
 
     def test_a_checkout_with_no_remote_says_so_on_the_card_and_to_the_agent(self):
         git(self.cwd, 'remote', 'remove', 'origin'); self.fix()
-        with self.assertRaises(ValueError) as e: landing.from_proposal(self.s, self.tid, {'action': 'push', 'cwd': self.cwd, 'why': 'the fix'})
+        with self.assertRaises(ValueError) as e: landing.from_proposal(self.s, self.tid, {'action': 'push_direct', 'cwd': self.cwd, 'why': 'the fix'})
         self.assertIn('no remote to push to', str(e.exception)); self.assertIn('git remote add origin', str(e.exception))
         s = landing.state(self.s, self.tid)
         self.assertTrue(s['noRemote'] and not s['ask']); self.assertEqual(s['commits'], 1, 'only the commit made since the task began')
@@ -661,7 +696,7 @@ class NamedCheckoutTests(unittest.TestCase):
                               'Summary': f'Fix the rounding bug in the ledger totals. My checkout is at {self.cwd}'}, 'owner')
         st.add_transcript(tid, 'run1', 'Fixed the rounding.', 'claude', self.scratch); self.fix()
         with mock.patch.object(agents, 'developer_mode', return_value=False):
-            self.assertTrue(landing.from_proposal(st, tid, {'action': 'push', 'cwd': self.cwd, 'why': 'the rounding fix'})['ok'])
+            self.assertTrue(landing.from_proposal(st, tid, {'action': 'push_direct', 'cwd': self.cwd, 'why': 'the rounding fix'})['ok'])
             self.assertTrue(c.get(f'/api/tasks/{tid}').json()['checkout'], 'the card the agent was told is up is drawn')
             self.assertTrue(c.get(f'/api/tasks/{tid}/landing').json()['data']['ask'])
             # ...and a session that merely works in a git folder he never named draws no card, as its landing read returns none
@@ -675,7 +710,7 @@ class NamedCheckoutTests(unittest.TestCase):
         self.assertIsNone(landing.push_asked(self.s, self.tid, 'git push', other))
         self.assertFalse(landing.record(self.s, self.tid))
         t2 = self.s.create_task({'Title': 'Ask about the ledger', 'Kind': 'general', 'Status': 'open', 'Summary': f'From Ray: my checkout is at {self.cwd}'}, 'router')
-        with self.assertRaisesRegex(ValueError, 'no checkout'): landing.from_proposal(self.s, t2, {'action': 'push', 'cwd': self.cwd})
+        with self.assertRaisesRegex(ValueError, 'no checkout'): landing.from_proposal(self.s, t2, {'action': 'push_direct', 'cwd': self.cwd})
         self.assertFalse(landing.shown(self.s, t2), "a stranger's words name no checkout")
 
     def test_use_repo_takes_his_named_checkout_without_a_settings_visit(self):

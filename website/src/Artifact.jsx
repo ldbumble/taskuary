@@ -217,6 +217,8 @@ function Field({ f, onView }) {
   if (f.type === "change") return <Change f={f} />;
   if (f.type === "ask") return <Ask f={f} />;
   if (f.type === "facts") return <Facts f={f} />;
+  // ...A VIEW ON THE CARD, DRAWN BY THE ONE VIEW COMPONENT (an invite's who-can-make-which-times grid, ReviewDecision): its node, as given
+  if (f.type === "view") return <Box data-tq-card-view={f.key} sx={{ mb: 1 }}>{f.node}</Box>;
   if (f.type === "to") return <Box data-tq-to-line="" sx={{ display: "flex", alignItems: "baseline", columnGap: 2, flexWrap: "wrap" }}>
     <ToRow to={f.value} disabled={!f.editable} needs={!!f.needs} who={f.who || ""} onSave={f.onSave} />{f.trail}</Box>;
   if (f.type === "people") return f.editable ? <CcRow cc={f.value} setCc={f.onChange} channel="email" label={f.label} autoOpen={!!f.autoOpen} onClose={f.onClose} />

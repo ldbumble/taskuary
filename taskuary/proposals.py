@@ -316,7 +316,7 @@ def asks_card(question, qs) -> tuple:
     n = len(p[ASKS])
     if n < ASKS_MIN or n > ASKS_MAX or n != len(qs):
         return None, (f'`questions` holds {ASKS_MIN}-{ASKS_MAX}, each {{question, choices}} with its `question` in words - {len(qs)} came, {n} of them readable; '
-                      'one question alone is `question`, and more than six are the six the work hangs on')
+                      'one question alone is a list of one, and more than six are the six the work hangs on')
     return p, ''
 def asks_waiting(store, tid) -> list:
     "The questions cards of task `tid` that wait for his answers."
@@ -545,7 +545,7 @@ def validate(store, p: dict) -> tuple:
     a = p.get('action')
     # ...AND SAYS WHAT WOULD BE ONE (the owner's rules, part 4: nothing an agent calls answers without what to do next): a Claude agent
     # proposed its LinkedIn post twice as 'post_linkedin', was told only "unknown action", and handed the post to the owner as prose
-    if a not in ACTIONS: return False, (f"unknown action {a!r} - the actions are {', '.join(ACTIONS)}; a post, a send or a comment on one of "
+    if a not in ACTIONS: return False, (f"unknown action {a!r} - the actions an agent asks for are {', '.join([*(x for x in ACTIONS if x not in NOT_ASKED), 'change_routine'])}; a post, a send or a comment on one of "
                                         f"his systems is run_tool with its `type` one of {acts(a)}, and its words in `text` (connector_id "
                                         "where that system is connected)")
     words, need, switch = ACTIONS[a]

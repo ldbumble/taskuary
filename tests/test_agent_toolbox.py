@@ -368,7 +368,7 @@ class TheServer(unittest.TestCase):
         rv = self.s._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action'", (self.tid,))
         self.assertEqual(json.loads(rv[-1]['DraftText'])['action'], 'comment_issue')
         text, err = tool(self.tid, 'propose', action='merge_pr', repo='northwind/ledger', number=3, why='x')
-        self.assertTrue(err); self.assertIn("owner's own act", text)
+        self.assertTrue(err); self.assertIn("there is no act 'merge_pr'", text)       # ...the kinds an agent asks with, never the owner's own acts
 
     def test_a_post_card_is_told_back_as_the_button_it_stands_with(self):
         """Walk 8, 2026-11-20: the agent said "I can't post to LinkedIn directly" over a card lit Post to LinkedIn. Its result says each card's
@@ -821,7 +821,7 @@ class NewTaskTool(unittest.TestCase):
         self.assertNotIn('find_tools', agenttools.failed('propose_land', Bad()))
         with agenttools.door('tool'): self.assertIn('find_tools propose_land has its whole instructions', agenttools.failed('propose_land', Bad()))
         # ...and the page knows a bare tool name by the tool table itself (owntools.json, read by agentSteps.ownTool)
-        self.assertEqual(json.loads((Path(agenttools.__file__).parent / 'owntools.json').read_text(encoding='utf-8'))['tools'], sorted(agenttools.TOOLS))
+        self.assertEqual(json.loads((Path(agenttools.__file__).parent / 'owntools.json').read_text(encoding='utf-8'))['tools'], sorted({*agenttools.TOOLS, *agenttools.ALIAS}), 'every name the server answers, an old one a saved session calls too')
 
     # ...A LONG VALUE IS ECHOED CUT, AND THE CUT IS MARKED (the robustness judge, 2026-11-18): a 1300-character id read "'XXXX…40 chars' is not
     # a message id" with nothing to say it was cut, and a long check_back `when` came back as 1000 characters with no way on
@@ -993,7 +993,7 @@ class NewTaskTool(unittest.TestCase):
             said, err = tool(self.tid, 'search_messages', limit='ten')
             self.assertTrue(err); self.assertIn('`limit` is a number', said)
             for name, args, need in (('answer_invite', {}, '`answer`'), ('propose', {'why': 'x'}, '`kind`'), ('person', {}, '`name`'),
-                                     ('set_up_meeting', {'title': 'Renewal'}, '`with`')):
+                                     ('set_up_meeting', {'title': 'Renewal'}, '`people`')):
                 said, err = tool(self.tid, name, **args)
                 self.assertTrue(err, said); self.assertIn(f'{need} was not given', said); self.assertIn(f'call {name} again', said); self.assertNotIn('pydantic', said)
 
@@ -1002,7 +1002,7 @@ def test_an_agent_is_told_to_offer_to_keep_code_it_wrote_as_a_routine():
     """The owner, 2026-11-17: "if it generates code ... it should save it in taskuary deterministic scripts ... it should also offer you to
     save it for later". Asked to save the script it wrote, the agent left a .py in Downloads: save_routine sat only in propose's long words,
     which an agent reads by name (find_tools). The tool's own line says it."""
-    assert 'save_routine' in agenttools.SHORT['propose']
+    assert 'routine' in agenttools.SHORT['propose']
 
 
 class APostIsAKindOfTheOneReviewTool(unittest.TestCase):
@@ -1033,7 +1033,7 @@ class APostIsAKindOfTheOneReviewTool(unittest.TestCase):
         listed = {t['name']: t for t in rpc(self.tid, 'tools/list').json()['result']['tools']}
         self.assertTrue(listed['propose']['_meta']['anthropic/alwaysLoad']); self.assertNotIn('propose', agenttools.deferred())
         self.assertFalse({'propose_post', 'propose_email', 'propose_reply'} & set(listed))
-        self.assertEqual(set(listed['propose']['inputSchema']['properties']['kind']['enum']), {'reply', 'email', 'post', 'skill', 'act'})
+        self.assertEqual(set(listed['propose']['inputSchema']['properties']['kind']['enum']), set(agenttools.KINDS))
         for k in ('a reply', 'an email', 'a post', 'GitHub'): self.assertIn(k, agenttools.SHORT['propose'])
         # ...a post's networks are its own field on every road, the short listing too (the owner, 2026-11-27): one call, one card, a tab each
         from taskuary import apiagent
@@ -1451,3 +1451,91 @@ class TheCardIsNamedOneWay(unittest.TestCase):
         r2 = mk()
         said, err = tool(self.tid, 'reply_not_needed', why='he answered it himself'); self.assertFalse(err, said)
         self.assertEqual(self.s.get_review(r2)['Status'], 'closed_unsent')
+
+
+
+
+# ── THE CARD TOOLS' SHAPES (the design audit, 2026-11-27; the owner: "agents will do the right thing if you design it right") ──────────
+class TheShapeMakesTheRightCard(unittest.TestCase):
+    """Walks 25 and 26: a git or routine job hid behind a free-text `action` ("git push", "pr", "push" - five calls to change one routine, four to
+    raise one PR); run_system was a second road to the write card that skipped its rules; ask_owner had no field for the suggested answer; guide
+    and find_tools were called with `name` and refused. Each shape now carries its meaning. Invented people."""
+    def setUp(self):
+        self.s, self.tid, self.mid = world()
+        self.p = mock.patch.object(server, 'store', self.s); self.p.start()
+
+    def tearDown(self):
+        from taskuary import selfclose
+        selfclose.take_marks(self.tid); self.p.stop()
+    def cards(self): return self.s._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action' AND Status='pending' ORDER BY ReviewId", (self.tid,))
+    def listed(self): return {t['name']: t for t in rpc(self.tid, 'tools/list').json()['result']['tools']}
+
+    def test_the_act_is_the_kind_with_its_fields_in_the_schema(self):
+        tools = self.listed(); p = tools['propose']['inputSchema']['properties']
+        self.assertEqual(set(p['kind']['enum']), {'reply', 'email', 'post', 'skill', 'routine', 'git', 'system', 'setting', 'break_out'})
+        self.assertEqual(set(p['how']['enum']), {'push', 'pr', 'land', 'rebase', 'merge', 'discard', 'comment', 'close'})
+        for f in ('cwd', 'repo', 'deploy', 'routine', 'prompt', 'skill', 'changes', 'after_press'): self.assertIn(f, p)
+        for gone in ('action', 'then'): self.assertNotIn(gone, p)
+        self.assertNotIn('propose_land', tools)
+        d = agenttools.TOOLS['propose'][1]
+        self.assertNotIn('push {cwd?', d); self.assertNotIn('save_routine', d); self.assertLess(len(d), 2600)
+
+    def test_an_old_act_call_is_still_accepted_and_an_unknown_one_names_the_kinds(self):
+        said, err = tool(self.tid, 'propose', kind='act', action='settings', changes=[{'name': 'calendar_enabled', 'value': '0'}])
+        self.assertFalse(err, said); self.assertEqual(json.loads(self.cards()[0]['DraftText'])['action'], 'settings')
+        said, err = tool(self.tid, 'propose', kind='act', action='git push')
+        self.assertTrue(err); self.assertIn('`kind`', said); self.assertIn('git', said)
+        for never in ('merge_pr', 'close_item', 'repair_workflow', 'questions'): self.assertNotIn(never, said)
+
+    def test_a_routine_is_changed_or_made_by_one_call_naming_it(self):
+        cfg = {'type': 'agent', 'access': 'write', 'title': 'Social posts', 'flow': [{'id': 's1', 'kind': 'agent', 'label': 'Write', 'prompt': 'Write the posts.'}]}
+        self.s.save_source({'Channel': 'report', 'Address': 'Social posts', 'Owner': 'owner', 'Active': 1, 'ConfigJson': json.dumps(cfg)}, 'owner')
+        said, err = tool(self.tid, 'propose', kind='routine', routine='Social posts', prompt='Write punchier posts, one line each.')
+        self.assertFalse(err, said); [rv] = self.cards()
+        self.assertEqual(json.loads(rv['DraftText'])['action'], 'repair_workflow')
+        said, err = tool(self.tid, 'propose', kind='routine', routine='Weekly vendor check', prompt='List the vendors whose invoices are late.', daily_at='07:00')
+        self.assertFalse(err, said)
+        p = json.loads(self.cards()[-1]['DraftText'])
+        self.assertEqual((p['action'], p['title']), ('save_routine', 'Weekly vendor check'))
+
+    def test_a_write_through_run_system_is_the_propose_card_with_its_rules(self):
+        card = self.s.get_connector_by_type('linkedin')
+        self.s.save_connector({'ConnectorId': card['ConnectorId'], 'Active': 1, 'Roles': 'tool'}, 'test')
+        tool(self.tid, 'ask_owner', question='Should it name the customer?')
+        with mock.patch.dict(REGISTRY, {'linkedin_post': lambda cfg: ('posted', '')}):
+            said, err = tool(self.tid, 'run_system', type='linkedin_post', text='We shipped.')
+        self.assertTrue(err, said); self.assertIn('your question to the owner stands', said); self.assertEqual(self.cards(), [])
+        tool(self.tid, 'ask_owner', withdraw=True)
+        with mock.patch.dict(REGISTRY, {'linkedin_post': lambda cfg: ('posted', '')}):
+            said, err = tool(self.tid, 'run_system', type='linkedin_post', text='We shipped.', after_press='reply to Gail that it is up')
+        self.assertFalse(err, said); self.assertEqual(len(self.cards()), 1)
+        self.assertIn('woken when he presses it', said)
+        self.assertNotIn('never runs here', agenttools.TOOLS['run_system'][1])
+
+    def test_ask_owner_takes_questions_always_with_a_suggested_answer(self):
+        s = self.listed()['ask_owner']['inputSchema']['properties']
+        self.assertNotIn('question', s); self.assertIn('recommend', s['questions']['items']['properties'])
+        from taskuary import selfclose
+        said, err = tool(self.tid, 'ask_owner', questions=[{'question': 'How many seats?', 'choices': ['10', '40'], 'recommend': '20'}])
+        self.assertFalse(err, said)
+        [line] = [m[1] for m in selfclose._MARKS.get(self.tid, []) if m[0] == 'ask']
+        self.assertIn('How many seats? | 20 | 10 | 40', line)
+        selfclose.take_marks(self.tid)
+        self.assertFalse(tool(self.tid, 'ask_owner', question='Which plan?')[1], 'the old one-question call still asks')
+
+    def test_guide_find_tools_and_routines_take_the_obvious_name(self):
+        self.assertFalse(tool(self.tid, 'guide', name='browser')[1])
+        said, err = tool(self.tid, 'find_tools', name='propose'); self.assertFalse(err, said); self.assertIn('propose:', said)
+        self.assertFalse(tool(self.tid, 'routines', routine='Social posts')[1])
+        ls = self.listed()
+        self.assertEqual(set(ls['guide']['inputSchema']['properties']), {'topic'})
+        self.assertEqual(set(ls['find_tools']['inputSchema']['properties']), {'query'})
+        self.assertEqual(set(ls['routines']['inputSchema']['properties']), {'routine'})
+
+    def test_a_field_the_card_does_not_use_is_named_in_its_answer(self):
+        said, err = tool(self.tid, 'propose', kind='setting', changes=[{'name': 'calendar_enabled', 'value': '0'}], subject='Calendar off')
+        self.assertFalse(err, said); self.assertIn('`subject`', said); self.assertIn('not used', said); self.assertEqual(len(self.cards()), 1)
+
+    def test_a_card_with_a_step_after_his_press_says_when_it_wakes(self):
+        said, err = tool(self.tid, 'propose', kind='setting', changes=[{'name': 'calendar_enabled', 'value': '0'}], after_press='tell Gail the calendar is off')
+        self.assertFalse(err, said); self.assertIn('woken when he presses it', said)

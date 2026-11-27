@@ -311,6 +311,15 @@ def test_a_press_wakes_the_agent_only_if_the_card_has_a_then(w):
     assert w.net.posted == ['The portal is live.', 'A second post about the portal.']
 
 
+def test_its_next_act_is_named_after_press_and_a_saved_sessions_then_is_the_same(w):
+    """The owner, 2026-11-27 ("yes do all 10"): `then` was read as "then, once they reply" and woke the agent at his Send with nothing to do.
+    The field is named for when it runs, and the answer says so; a saved session's `then` is the same field."""
+    rid, said = w.post('linkedin', 'The portal is live.', after_press='reply to Gail that it is posted')
+    assert card.carries_on(w.s.get_review(rid)) and 'woken when he presses it' in said, said
+    w.press(rid)
+    assert len(w.woken) == 1, 'its next act wakes it once'
+
+
 def test_a_press_taskuary_confirmed_wakes_nobody_for_a_then_that_only_does_what_the_press_did(w):
     """The owner, 2026-11-25 ("Yes, change the rule"): a press whose act Taskuary confirmed went needs no check of the agent's. A `then` that
     names the to-do the card does - which its press ticks - is satisfied by the press; a `then` that is a real next act still wakes it."""

@@ -602,6 +602,65 @@ def within_days(within: str = '', first=None, last=None, today: date = None) -> 
     return today, today + timedelta(days=6)
 
 
+# ── WHO CAN MAKE WHICH TIMES, BOOKED (the design audit, 2026-11-27): the agent's set_up_meeting takes the availability view's own people and
+# ranges, and the slot is the one the view bands - worked out here by the page's arithmetic (website/src/availability.js `overlap`), never by
+# the model again: the most people free for `minutes` together, then the longer shared stretch, then the earlier
+def _hm(s) -> int:
+    m = re.fullmatch(r'\s*([01]?\d|2[0-3]):([0-5]\d)\s*', str(s or ''))
+    if not m: raise ValueError(f"{s!r} is not a time - give each range's from and to as HH:MM on a 24-hour clock")
+    return int(m[1]) * 60 + int(m[2])
+
+
+def best_slot(people: list, minutes: int = 30) -> dict | None:
+    "{day, from, to, who} - the best slot for `minutes` of `people` ([{name, ranges?: [{day, from, to}]}]), in minutes of its day - or None."
+    rows = []
+    for p in people:
+        days = {}
+        for r in p.get('ranges') or []: days.setdefault(str(r['day']), []).append([_hm(r['from']), _hm(r['to'])])
+        for d, rs in days.items():
+            rs.sort(); days[d] = [x for x in rs if x[0] < x[1]]
+            merged = []
+            for x in days[d]:
+                if merged and x[0] <= merged[-1][1]: merged[-1][1] = max(merged[-1][1], x[1])
+                else: merged.append(x)
+            days[d] = merged
+        rows.append((p['name'], days))
+    best = None
+    for day in sorted({d for _, ds in rows for d in ds}):
+        for a in sorted({m for _, ds in rows for r in ds.get(day, []) for m in r}):
+            fit = [(n, r) for n, ds in rows if (r := next((x for x in ds.get(day, []) if x[0] <= a and x[1] >= a + minutes), None))]
+            c = {'day': day, 'from': a, 'to': min(r[1] for _, r in fit), 'who': [n for n, _ in fit]} if fit else None
+            if c and (not best or len(c['who']) > len(best['who']) or (len(c['who']) == len(best['who']) and c['to'] - c['from'] > best['to'] - best['from'])): best = c
+    return best
+
+
+def from_people(a: dict) -> dict:
+    """set_up_meeting's call as the meeting door takes it: `people` [{name, ranges?, guessed?}] -> `with`, `guessed`, the best slot as its
+    start and end (unless the call pins them), and `grid` - the view the invite card draws. An old call's `with` goes as it came."""
+    ps = a.get('people')
+    if not isinstance(ps, list):
+        if not a.get('with'):
+            from .agenttools import refusal
+            raise ValueError(refusal('`people` was not given', 'call set_up_meeting again with them - who it is with, and the times each can make if known'))
+        return a
+    ps = [p if isinstance(p, dict) else {'name': str(p)} for p in ps if p]
+    if not all(str(p.get('name') or '').strip() for p in ps): raise ValueError("each of `people` needs its `name` - a name or an address")
+    out = {k: v for k, v in a.items() if k != 'people'}
+    out['with'] = [str(p['name']).strip() for p in ps]
+    out['guessed'] = [*(a.get('guessed') or []), *(str(p['name']).strip() for p in ps if p.get('guessed') is True)]
+    if not any(p.get('ranges') for p in ps): return out
+    if bad := next((r['day'] for p in ps for r in p.get('ranges') or [] if not re.fullmatch(r'\d{4}-\d{2}-\d{2}', str(r.get('day') or ''))), None):
+        raise ValueError(f"the day {bad!r} is not a date a calendar can hold - give each range's day as YYYY-MM-DD (2026-12-01)")
+    mins = int(a.get('minutes') or 30)
+    out['grid'] = {'minutes': mins, 'people': ps}
+    if not (a.get('start') and a.get('end')):
+        b = best_slot(ps, mins)
+        if not b: raise ValueError(f"no stretch of {mins} minutes is free for any of them in the ranges given - give their ranges again, or `start` and `end`")
+        hm = lambda m: f'{m // 60:02d}:{m % 60:02d}'
+        out['start'], out['end'] = f"{b['day']} {hm(b['from'])}", f"{b['day']} {hm(b['from'] + mins)}"
+    return out
+
+
 def _addrs(people) -> list:
     from .outbound import addrs
     return addrs([p for p in (people if isinstance(people, (list, tuple)) else [people]) if p])[:20]
@@ -711,13 +770,13 @@ LINK = {'outlook': 'Teams', 'google': 'Google Meet'}
 
 
 def _invite(store, tid: int, to: list, subject: str, start: str, end: str, note: str, actor: str, acct: dict, online: bool = False,
-            walled: bool = False) -> dict:
+            walled: bool = False, grid: dict = None) -> dict:
     """The invite as a review on task `tid` - the 'schedule' act every new meeting drafts, waiting on the owner's Send. {reviewId, head, clash}.
     `walled`: set up by the task's agent - a clash on a calendar its task may not use is said without its name (clash_line)."""
     line, clash = when(start, end), clash_line(store, start, end, tid=tid if walled else None)
     env = {'kind': 'calendar', 'channel': 'calendar', 'act': 'schedule', 'provider': acct['provider'], 'connector_id': acct['connector'],
            'mailbox': acct['mailbox'], 'subject': subject, 'to': to, 'clash': clash, 'start': start, 'end': end, 'when': line,
-           **({'link': LINK.get(acct['provider'], 'Teams')} if online else {})}
+           **({'link': LINK.get(acct['provider'], 'Teams')} if online else {}), **({'grid': grid} if grid else {})}
     head = f'Invite {", ".join(to)} to {subject} - {line}'
     rid = store.add_review({'TaskId': tid, 'Kind': 'outbound', 'Status': 'pending', 'DraftText': str(note or '').strip()[:4000],
                             'Deliver': json.dumps(env), 'Reason': f"{head}{' · ' + clash if clash else ''} - press {send_word()} and the calendar is told"})
@@ -757,7 +816,7 @@ def answer(store, tid: int, act: str, start: str = None, end: str = None, note: 
 
 
 def meeting(store, tid: int, who, subject: str, minutes: int = 30, within: str = '', start: str = None, end: str = None, note: str = '',
-            online: bool = True, actor: str = 'agent', guessed=()) -> dict:
+            online: bool = True, actor: str = 'agent', guessed=(), grid: dict = None) -> dict:
     """The agent's "set up a meeting" on task `tid`: who by name or address (people_of - a name nobody can place is said back), the first
     free time on the owner's calendar and theirs (suggest) unless one is named. {ok, review, to, when, link, says}. `guessed`: addresses
     the agent guessed for a name with none on record - the invite card says so (slots.with_guess), the owner's Send is the check (the owner,
@@ -771,7 +830,7 @@ def meeting(store, tid: int, who, subject: str, minutes: int = 30, within: str =
         if not free: raise ValueError('no free time in those days - name other days (within) or a start and end')
         start, end = free[0]['start'], free[0]['end']
     to, subject, acct = _checked(store, to, subject, start, end, tid)
-    got = _invite(store, int(tid), to, subject, start, end, note, actor, acct, online, walled=True)
+    got = _invite(store, int(tid), to, subject, start, end, note, actor, acct, online, walled=True, grid=grid)
     if (g := [a for a in (str(x).strip().lower() for x in guessed or ()) if a in {t.lower() for t in to}]):
         from .slots import with_guess
         store.update_review_reason(got['reviewId'], with_guess((store.get_review(got['reviewId']) or {}).get('Reason'), g))

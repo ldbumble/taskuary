@@ -1302,3 +1302,27 @@ def test_the_last_press_of_a_post_is_never_put_to_him_over_an_empty_box_the_agen
     click([words, pic])
     [p] = held()
     assert p['card'] == card and bg.held_says(p) == 'Publish your post on X - the page holds "Northwind now closes its books in four days." · the file close.png'
+
+
+def test_a_click_that_names_no_control_is_never_put_to_him_the_agent_is_told_the_fix():
+    """Walk 26, 2026-11-27 (HIPAA AI): the post typed and its picture on the page, the agent ran `agent-browser click @e6` bare in PowerShell,
+    which takes @e6 as its own - so `click` reached the gate naming nothing. It was held as the post's last press; he approved it twice, and
+    each ran a click on nothing: "the page did not take it". A press with nothing to press is no card: the agent is answered with the fix."""
+    s = MemoryStore(); tid = Factory(s).task('Post the four-day close')
+    post = {'action': 'run_tool', 'type': 'x_post', 'network': 'X', 'text': 'Northwind now closes its books in four days.'}
+    card = s.add_review({'TaskId': tid, 'Kind': 'action', 'Status': 'pending', 'DraftText': json.dumps(post), 'Reason': 'the agent proposes to post on X'})
+    s.decide_review(card, 'approved', json.dumps({**post, 'result': {'browser': True}}), 'owner')            # ...he pressed Post via the browser
+    pg = {'url': 'https://x.example/home', 'open': True, 'elements': '- textbox "What is happening?!" [ref=e4]\n- button "Post" [ref=e6]', 'name': 'X',
+          'fields': [{'k': 'text', 't': 'textarea', 'f': 0, 'v': 'Northwind now closes its books in four days.'}]}
+    speaks = {'big': True, 'kind': 'speaks', 'sure': True, 'irreversible': True, 'what': 'Post to X'}
+    def click(cmd):
+        with mock.patch.object(bg, 'page', return_value=pg), verdict(speaks), mock.patch.object(bg, 'watch', None), mock.patch.object(bg, '_run', lambda sid, a, w, t: (0, '')), \
+             mock.patch('taskuary.signin.acting', lambda *a, **k: None):
+            return bg.check(s, tid, 'run1', cmd, Brain(None))['hookSpecificOutput']['permissionDecisionReason']
+    held = lambda: [p for r in s._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action' AND Status='pending'", (tid,))
+                    if (p := json.loads(r['DraftText'])).get('action') == 'browser_act']
+    said = click('agent-browser click')
+    assert held() == [], 'a click on nothing is never his to approve'
+    assert 'naming nothing to click' in said and 'agent-browser click "@e6"' in said, said
+    click('agent-browser click "@e6"')
+    assert [p['args'] for p in held()] == [['click', '@e6']], 'named, the same press is held as ever'

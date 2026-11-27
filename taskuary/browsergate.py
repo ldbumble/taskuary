@@ -994,6 +994,12 @@ def _check(store, tid: int, sid: str, cmd: str, brain=None, cwd: str = '') -> di
         if a['verb'] == 'batch':
             return _deny(f"{NOT_RUN}: a batch that reads its steps from its input shows none of them. Pass each step as its own quoted argument "
                          '(agent-browser batch "fill @e2 ..." "click @e5"), or run them one per line.')
+        # ...AND AN ACT THAT NAMES NOTHING TO ACT ON IS NO CARD (walk 26, 2026-11-27: `agent-browser click @e6` typed bare in PowerShell reached
+        # here as `click` - the shell took @e6 as its own - and was held as "Post to X"; two Approves ran a click on nothing, each answered
+        # "the page did not take it"): answered with the fix, never judged, never put to him
+        if a['verb'] in _VERB and _own_args(a['args']) == [a['verb']]:
+            return _deny(f"{NOT_RUN}: `{EXE} {a['verb']}` reached Taskuary naming nothing to {_VERB[a['verb']].split()[0]} - what came after the verb was lost "
+                         f'on the way (a shell reads a bare @e6 as its own). Run it again with the control in quotes: {EXE} {a["verb"]} "@e6".')
         if a.get('read'):           # a box's value is read only where the page shows it is no password box
             c = control(a, pg)
             if not c.get('role') or 'password' in f"{c.get('name')} {c.get('role')}".lower():

@@ -208,3 +208,16 @@ def test_an_agents_launcher_run_by_the_app_runs_its_command_and_never_starts_the
     assert run('-m', 'taskuary.cli', '--version') == (0, 0)
     assert capsys.readouterr().out.startswith('taskuary ')
     assert run('-m', 'http.server') == (2, 0)            # ...and nothing but the launchers' own modules
+
+
+def test_an_agents_launcher_draws_no_splash_over_his_screen():
+    """The owner, 2026-11-27: an agent made a GIF by a script that took screenshots, and "the whole page flickered" - his recording shows the
+    packaged app's "Starting up" splash flashing over the chat at each command. Every launcher on an agent's PATH runs Taskuary.exe, whose
+    bootloader draws that splash before any of our code runs. A task's session tells the bootloader not to (PyInstaller 6:
+    PYINSTALLER_SUPPRESS_SPLASH_SCREEN=1), so every launcher and anything else it starts inherits it; the double-clicked app keeps its splash."""
+    import os
+    from taskuary import terminal
+    env = terminal.session_env('assistant', 7, sid='s1')
+    assert env['PYINSTALLER_SUPPRESS_SPLASH_SCREEN'] == '1'
+    assert os.environ.get('PYINSTALLER_SUPPRESS_SPLASH_SCREEN') is None, "the app's own environment - its own start - is left as it was"
+    assert env['PATH'].split(os.pathsep)[0] and terminal.session_env('assistant', 7, sid='s1', stranger=True)['PYINSTALLER_SUPPRESS_SPLASH_SCREEN'] == '1'

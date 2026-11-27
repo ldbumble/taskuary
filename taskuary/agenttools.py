@@ -757,11 +757,11 @@ def _call(store, tid: int, name: str, args: dict, doors: dict, skip=()) -> str:
     a = fit(name, args)
     if name == 'search_messages':
         hits = mailsearch.search(store, a.get('sender', ''), a.get('subject', ''), a.get('words', ''), a.get('since', ''), a.get('until', ''),
-                                 a.get('limit') or 20)
+                                 a.get('limit') or 20, tid=tid)
         return _out(mailsearch.says(hits, store), fence_it=bool(hits))
     if name == 'read_message':
         mid = mailsearch.message_id(a.get('id'))
-        m = mailsearch.message(store, mid)
+        m = mailsearch.message(store, mid, tid)
         if not m: raise ValueError(no_message(mid))
         return _out(_fitted(m, a.get('start')), fence_it=True)
     if name == 'read_attachment':
@@ -770,8 +770,10 @@ def _call(store, tid: int, name: str, args: dict, doors: dict, skip=()) -> str:
         # ...by the id as the attach parameter spells it ("attachment 12"), never Python's "invalid literal for int()"
         n = _AID.match(str(a['id']))
         x = store.get_attachment(int(n[1])) if n else None
-        if not x or not store.get_message(x.get('MessageId')) or (store.get_message(x['MessageId']) or {}).get('Channel') == 'assistant':
+        on = store.get_message(x['MessageId']) if x and x.get('MessageId') else None
+        if not on or on.get('Channel') == 'assistant':
             raise ValueError(refusal(f"there is no attachment {echo(a['id'])}", see=('read_message', "lists a message's attachments with their ids")))
+        mailsearch.wall(store, tid, on, f"read attachment {x['AttachmentId']}")      # a file is read as the mail it came on is
         p = Path(x['Path']) if x.get('Path') else None
         if not p or not p.is_file(): raise ValueError(not_kept(x.get('Name')))
         got = attachtext.read(x.get('Name'), p.read_bytes())
@@ -787,10 +789,13 @@ def _call(store, tid: int, name: str, args: dict, doors: dict, skip=()) -> str:
         return _out(_j({'task': t.get('Title'), 'summary': t.get('Summary'), 'status': t.get('Status'), 'done_when': t.get('DoneWhen'),
                         'checklist': items, **({'files': files_of(t)} if files_of(t) else {}), **({'on_record': rec} if rec else {})}), fence_it=True)
     if name == 'search_tasks':
-        from . import search
-        got = search.everything(store, a.get('words', ''))
+        from . import search, workstreams
+        # ...of its own profile's work alone: a task by the one check of a task (workstreams.sees), a message by the one of a mail read (mailsearch.mine)
+        ok = mailsearch.reader(store, tid)
+        its = lambda h: workstreams.sees(store, tid, h['tid']) if h.get('tid') else ok(store.get_message(h['mid']) or {}) if h.get('mid') else True
+        got = {'hits': [h for h in search.everything(store, a.get('words', '')).get('hits', []) if its(h)]}
         # ...and the endings of earlier tasks on those words (search.outcomes): what one already settled is not asked of the owner again
-        done = search.says_outcomes(search.outcomes(store, a.get('words', ''), skip=tid))
+        done = search.says_outcomes([h for h in search.outcomes(store, a.get('words', ''), skip=tid) if its(h)])
         # ...and what EXISTS on those words (ledger.find): an account a task made, a mail that went, an address he gave
         from . import ledger
         if rec := ledger.find(store, str(a.get('words') or '').split()): done = '\n'.join(x for x in (done, 'ON RECORD:\n' + '\n'.join(f'- {x}' for x in rec)) if x)
@@ -807,7 +812,7 @@ def _call(store, tid: int, name: str, args: dict, doors: dict, skip=()) -> str:
         if not who: return f"nobody in the owner's mail matches {echo(a.get('name'))} - try their address"
         if 'candidates' in who: return 'several people match - ask again with one of: ' + ', '.join(who['candidates'])
         # ...what the record holds on them (ledger.person): mail Taskuary sent them from any task, the address he gave, his promises
-        rec, ts, hits = ledger.person(store, who['address']), people.tasks_of(store, who['address'], skip=tid), mailsearch.search(store, who['address'], limit=8)
+        rec, ts, hits = ledger.person(store, who['address']), people.tasks_of(store, who['address'], skip=tid), mailsearch.search(store, who['address'], limit=8, tid=tid)
         # ...AND EVERY OTHER TASK THEY ARE ON, IN THE SAME ANSWER (walk 18, 2026-11-24): a second tool for them was never loaded, so an agent
         # answering one of a person's asks did not see that the same mail answered two more
         task = lambda t: f"- {t['ref']} {t['title']}" + (f" (asked as \"{t['asked']}\")" if t['asked'] and t['asked'] != t['title'] else '') + \
@@ -842,7 +847,7 @@ def _call(store, tid: int, name: str, args: dict, doors: dict, skip=()) -> str:
             from .calwrite import connect_fix
             fix = connect_fix(store)
             return f"No calendar is connected, so the owner's busy times cannot be read. Give the owner this link: [{fix['label']}]({fix['href']})"
-        head, body = run_calendar({'store': store, 'days': a.get('days') or 14})
+        head, body = run_calendar({'store': store, 'days': a.get('days') or 14, '_task': tid})
         return _out(f'{head}\n{body}', fence_it=True)
     if name == 'list_systems':
         from .docsync import agent_systems

@@ -313,6 +313,12 @@ def _drafted(rv) -> str:
     return rv.get('DraftText')
 
 
+def _refuses(e):
+    "A send that is refused before any provider is asked, as the send's own failure: `e` raised where the send would be."
+    def send(_): raise e
+    return send
+
+
 def _deliver_review(store, rv, final, verb, actor, note=None, cc=None, envelope=None, send_fn=None, anyway=False, bcc=None, subject=None):
     """Claim, send or reconcile, persist the outcome, then settle the task.
 
@@ -338,9 +344,11 @@ def _deliver_review(store, rv, final, verb, actor, note=None, cc=None, envelope=
     if bcc is not None: env['bcc'] = list(bcc)
     if subject is not None and ' '.join(str(subject).split()): env['subject'] = ' '.join(str(subject).split())[:200]
     # a NEW email on a task leaves from the mailbox the task's mail came in on - not the first Outlook card, which sent a
-    # second mailbox's business out under the first one's address. Nothing came in by mail: send_out's own fallback, as before
+    # second mailbox's business out under the first one's address. Nothing came in by mail: its profile's own, else send_out's own fallback
+    # as before - and where every mailbox is another profile's the send fails as any send does: kept on its card, with its fix (outbound.new_from)
     if outgoing and not env.get('kind') and str(env.get('channel') or '').lower() == 'email' and not env.get('mailbox'):
-        box = outbound.task_mailbox(store, rv.get('TaskId'))
+        try: box = outbound.new_from(store, rv.get('TaskId'))
+        except outbound.Fixable as e: box, send_fn = None, _refuses(e)
         if box: env['mailbox'] = box
     # ...A FILE THAT CAME ON THE TASK'S MAIL GOES ONLY WHILE THAT MAIL IS STILL THE TASK'S (agenttools.mail_file): checked at the door it was
     # attached by, and here again, before anything is claimed (an attempt already made is reconciled as it was, never refused here)

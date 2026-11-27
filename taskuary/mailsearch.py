@@ -36,16 +36,40 @@ def _day(x, name: str) -> str:
     except ValueError: raise ValueError(f'{name} {_echo(x, 40)!r} is not a date - give it as YYYY-MM-DD') from None
 
 
+class Walled(ValueError):
+    "A read of mail in an account of another profile: nothing was read, and its words are what the call is answered with (workstreams.move_card)."
+
+
+def mine(store, tid, m: dict) -> bool:
+    """THE ONE CHECK OF A MAIL READ, for every door an agent reads mail by (a search, a message, its thread, a file on it): the agent on
+    task `tid` reads its own task's messages, and mail in an account its task may use (workstreams.may_use). No `tid`: the owner's own read."""
+    from .workstreams import may_use
+    return not tid or str(m.get('TaskId') or '') == str(tid) or may_use(store, tid, m.get('SourceName'), m.get('Channel') or 'email')
+
+
+def reader(store, tid):
+    "mine, for many rows: one ask per account, however many messages it holds."
+    seen = {}
+    def ok(r):
+        k = (r.get('Channel'), r.get('SourceName'), str(r.get('TaskId') or '') == str(tid))
+        if k not in seen: seen[k] = mine(store, tid, r)
+        return seen[k]
+    return ok
+
+
+def wall(store, tid, m: dict, act: str):
+    "Raise Walled, its move card up on the task with `act` as the agent's next act, when message `m` is not `tid`'s to read (mine)."
+    if mine(store, tid, m): return
+    from .workstreams import move_card
+    mv = move_card(store, tid, m.get('SourceName'), act, m.get('Channel') or 'email')
+    raise Walled(mv['says'] if mv else 'that mail is in an account of another profile: nothing was read')
+
+
 def search(store, sender: str = '', subject: str = '', words: str = '', since: str = '', until: str = '', limit: int = 20, tid: int = None) -> list:
     """Messages matching every filter given, best match first when there are words, else newest first. `since`/`until` are dates
     (YYYY-MM-DD) on when it was SENT, `until` inclusive. The Assistant's own chat is not mail and is never a hit - nor, for the agent
     on task `tid`, is mail in an account of another profile (workstreams.may_use)."""
-    from .workstreams import may_use
-    seen = {}
-    def mine(r):
-        k = (r.get('Channel'), r.get('SourceName'))
-        if k not in seen: seen[k] = may_use(store, tid, k[1], k[0] or 'email')
-        return seen[k]
+    ok = reader(store, tid)
     who, subj = str(sender or '').strip().lower(), str(subject or '').strip().lower()
     want = tokens(f'{subject or ""} {words or ""}')
     lo, hi = _day(since, 'since'), _day(until, 'until')
@@ -60,7 +84,7 @@ def search(store, sender: str = '', subject: str = '', words: str = '', since: s
         rows = sorted(store.feed(limit=len(ids) or 1, days=3650, ids=ids, live_state=()), key=lambda r: rank[r['MessageId']])
     out = []
     for r in rows:
-        if r.get('Channel') == 'assistant' or not mine(r): continue
+        if r.get('Channel') == 'assistant' or not ok(r): continue
         if who and who not in f"{r.get('FromName') or ''} {r.get('FromEmail') or ''}".lower(): continue
         if subj and subj not in str(r.get('Subject') or '').lower(): continue
         if ids is None and want and not set(want) <= set(tokens(f"{r.get('Subject') or ''} {r.get('Preview') or ''} {_who(r)}")): continue
@@ -84,12 +108,14 @@ def message_id(x) -> int:
     return int(m.group(1))
 
 
-def message(store, mid) -> dict | None:
+def message(store, mid, tid=None) -> dict | None:
     """One message in full, with the thread it is on (oldest first, the owner's own replies included) and its attachments by the ids
-    read_attachment and sign_form take, by either door - None when there is none."""
+    read_attachment and sign_form take, by either door - None when there is none. `tid`: read for the agent on that task - Walled when
+    it is mail of another profile, and the thread shown is the part of it in accounts the task may use (mine)."""
     m = store.get_message(message_id(mid))
     if not m or m.get('Channel') == 'assistant': return None
-    thread = store.thread_messages(m.get('ConversationId'), m.get('Subject'), 40) or [m]
+    wall(store, tid, m, f"read message m{m['MessageId']}")
+    thread = list(filter(reader(store, tid), store.thread_messages(m.get('ConversationId'), m.get('Subject'), 40) or [m]))
     # ...with the addresses its words carry (channels.kept_links): "pay at the link below" was read whole and still had no link in it
     from .channels import kept_links
     return {**_hit(m), 'body': str(m.get('BodyText') or ''), 'to': str(m.get('RecipientsJson') or ''), 'links': kept_links(m),
@@ -120,15 +146,15 @@ def reach(store) -> str:
     return f"Its saved mail runs from {str(r['lo'])[:10]} to {str(r['hi'])[:10]}."
 
 
-def meeting_reads(store, who: list, subject: str, per: int = 3, cap: int = 12) -> list:
+def meeting_reads(store, who: list, subject: str, per: int = 3, cap: int = 12, tid=None) -> list:
     """What the saved mail already says about a meeting's people and its subject - the opening reads of Prepare (the owner,
     2026-10-25: "an agent to research about person and topic through your mails"). Handed to the agent in its brief, so a brain
-    with no shell starts from the same history a CLI would search; the agent searches on from there."""
+    with no shell starts from the same history a CLI would search; the agent searches on from there. `tid`: the task whose brief it is (mine)."""
     out, seen = [], set()
     def safe(f, *a, **k):
         try: return f(*a, **k)
         except Exception: return []
-    reads = [safe(search, store, sender=w, limit=per) for w in (who or [])[:6] if str(w or '').strip()] + [safe(on_subject, store, subject, per + 2)]
+    reads = [safe(search, store, sender=w, limit=per, tid=tid) for w in (who or [])[:6] if str(w or '').strip()] + [safe(on_subject, store, subject, per + 2, tid=tid)]
     for hits in reads:
         for h in hits:
             if h['id'] in seen: continue
@@ -136,12 +162,13 @@ def meeting_reads(store, who: list, subject: str, per: int = 3, cap: int = 12) -
     return out[:cap]
 
 
-def on_subject(store, subject: str, k: int, days: int = 365, pool: int = 400) -> list:
+def on_subject(store, subject: str, k: int, days: int = 365, pool: int = 400, tid=None) -> list:
     """Saved mail ALIKE IN MEANING to `subject` (a task's title), nearest first - textsim over the recent mail. No embedder: none, never
     a word match standing in for meaning (a title's 'brief me before the' is not what the mail is about)."""
     if not str(subject or '').strip(): return []
     from .concierge import newest_rows
-    try: rows = [r for r in newest_rows(store, days, cap=pool) if r.get('Channel') != 'assistant']
+    ok = reader(store, tid)
+    try: rows = [r for r in newest_rows(store, days, cap=pool) if r.get('Channel') != 'assistant' and ok(r)]
     except Exception: return []
     got = textsim.rank(store, subject, [(r['MessageId'], f"{r.get('Subject') or ''}. {r.get('Preview') or ''}") for r in rows], k=k)
     by = {r['MessageId']: r for r in rows}

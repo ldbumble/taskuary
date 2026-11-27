@@ -136,8 +136,8 @@ def tasks_of(store, address: str, skip=None, limit: int = 12) -> list:
     """A PERSON'S TASKS WITH THE OWNER (the owner, 2026-11-24: an agent on one of Gail's asks could not see her other three): every task with
     a message from them or to them, open and closed, newest message first - [{ref, title, asked, stands, closed, last}]: `asked` the subject
     they asked it under, `stands` where it stands in the words every reader reads (taskstate.said), `closed` the day it closed or '', `last`
-    its newest message's date. `skip`: a task id left out (the one asking)."""
-    from . import memory, taskstate
+    its newest message's date. `skip`: a task id left out (the one asking) - whose agent is shown its own profile's tasks (workstreams.sees)."""
+    from . import memory, taskstate, workstreams
     from .store import task_ref
     a = str(address or '').strip().lower()
     if '@' not in a: return []
@@ -152,7 +152,7 @@ def tasks_of(store, address: str, skip=None, limit: int = 12) -> list:
     last = lambda tid: str((store._one('SELECT MAX(SentAt) At FROM message WHERE TaskId=?', (tid,)) or {}).get('At') or '')[:10]
     out = []
     for tid, at in sorted(((tid, last(tid)) for tid in on), key=lambda o: o[1], reverse=True)[:limit]:
-        if not (t := store.get_task(tid)): continue
+        if not (t := store.get_task(tid)) or not workstreams.sees(store, skip, tid): continue
         shut = t.get('Status') in ('done', 'dropped')
         try: stands = '' if shut else taskstate.said(taskstate.standing(store, tid))
         except Exception: stands = t.get('Status') or ''

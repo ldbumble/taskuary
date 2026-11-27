@@ -334,3 +334,168 @@ def test_the_move_card_keeps_its_next_act_through_the_tool_door_so_his_press_wak
     rv = two._rows("SELECT * FROM review WHERE TaskId=? AND Status='pending'", (t,))[0]
     assert json.loads(rv['DraftText'])['action'] == 'move_profile'
     assert card.then_of(rv) == f'email {GAIL} from {HB_BOX}' and card.carries_on(rv, two)
+
+
+# ── THE WALL ON WHAT AN AGENT READS, AND ON A NEW EMAIL'S FROM (the red team, round 6) ───────────────────────────────────────────────────
+def _both(two):
+    "A Harbor task and a Northwind one, each profile with mail of its own on one thread."
+    f = Factory(two)
+    hb, nw = f.task(title='Bakery rota'), f.task(title='Northwind close')
+    W.set_task(two, hb, 'harbor-bakery', 'owner'); W.set_task(two, nw, 'northwind', 'owner')
+    theirs = f.message(from_email=GAIL, from_name='Gail Moreno', source_name=NW_BOX, subject='Payroll invoice', body='the payroll invoice, salaries in it',
+                       conversation_id='conv-inv')
+    mine = f.message(from_email=PAULA, from_name='Paula Vance', source_name=HB_BOX, subject='Flour invoice', body='the invoice for flour', conversation_id='conv-inv')
+    return f, hb, nw, mine, theirs
+
+
+def _calendars(two):
+    "A calendar each: Northwind's Outlook card reads its mailbox's, and Harbor has an Outlook card of its own. Returns Harbor's (card, mailbox)."
+    cid, box = two.save_connector({'Type': 'outlook', 'Name': 'Harbor calendar', 'Active': 1, 'ConfigJson': '{}'}, 't'), 'shop@harbor.example'
+    W.tag_account(two, 'harbor-bakery', connector_id=cid)
+    for c, a in ((two.nw, NW_BOX), (cid, box)): two.save_source({'Name': a, 'Address': a, 'Channel': 'email', 'ConnectorId': c, 'Active': 1}, 't')
+    return cid, box
+
+
+def test_an_agents_own_tools_read_no_other_profiles_mail_thread_or_file(two, tmp_path):
+    """The red team, round 6: the wall stood at the shell's search alone. The agent's own tools - search_messages, read_message by any id,
+    the thread a message of its own is on, read_attachment by any id - read another profile's mailbox. One check for a mail read
+    (mailsearch.mine), asked by every door."""
+    from taskuary import agenttools, general
+    f, hb, nw, mine, theirs = _both(two)
+    note = tmp_path / 'payroll.txt'; note.write_text('salaries: 1 2 3')
+    aid = two.add_attachment({'MessageId': theirs, 'Name': 'payroll.txt', 'ContentType': 'text/plain', 'Path': str(note)})
+    said = agenttools.call(two, hb, 'search_messages', {'words': 'invoice'}, {})
+    assert 'Flour invoice' in said and 'Payroll' not in said
+    for name, args in (('read_message', {'id': theirs}), ('read_attachment', {'id': aid})):
+        with pytest.raises(ValueError) as e: agenttools.call(two, hb, name, args, {})
+        assert 'Northwind' in str(e.value) and 'nothing was run' in str(e.value) and 'salaries' not in str(e.value)
+    cards = two._rows("SELECT * FROM review WHERE TaskId=? AND Status='pending'", (hb,))
+    assert [json.loads(r['DraftText'])['action'] for r in cards] == ['move_profile']             # never a flat no: the one card, however often
+    read = agenttools.call(two, hb, 'read_message', {'id': mine}, {})
+    assert 'the invoice for flour' in read and 'Payroll' not in read                              # ...its own, without the other mailbox's part of the thread
+    assert [h['subject'] for h in mailsearch.message(two, mine, hb)['messages']] == ['Flour invoice']
+    assert len(mailsearch.message(two, mine)['messages']) == 2                                    # his own read: the whole thread
+    # ...Northwind's own agent reads its file, and a task reads its own mail whichever mailbox it came in on (he moved it: its brief shows it)
+    assert 'salaries' in agenttools.call(two, nw, 'read_attachment', {'id': aid}, {})
+    two._exec('UPDATE message SET TaskId=? WHERE MessageId=?', (hb, theirs))
+    assert 'salaries in it' in agenttools.call(two, hb, 'read_message', {'id': theirs}, {})
+    # ...and the Assistant on the rail is his, across every profile
+    dock = general.dock_task(two)[0]['TaskId']
+    assert W.may_use(two, dock, NW_BOX) and W.may_use(two, dock, HB_BOX)
+
+
+def test_an_agents_calendar_tool_reads_only_its_own_profiles_calendars(two):
+    "Round 6: the calendar tool an agent calls read every calendar the cards reach - the shell's door alone handed it the task."
+    from datetime import timedelta
+    from taskuary import agenttools, calendar
+    _, box = _calendars(two)
+    hb = Factory(two).task(title='Bakery rota'); W.set_task(two, hb, 'harbor-bakery', 'owner')
+    day = lambda cfg, sec, boxes, start, end, tz: [{'start': f'{start + timedelta(days=1):%Y-%m-%d} 10:00', 'end': f'{start + timedelta(days=1):%Y-%m-%d} 11:00',
+                                                    'who': [], 'all_day': False, 'status': 'busy', 'where': '', 'subject': f'Standup of {boxes[0]}'}]
+    with mock.patch.object(calendar, 'outlook_events', day):
+        said = agenttools.call(two, hb, 'calendar', {'days': 7}, {})
+        assert f'Standup of {box}' in said and NW_BOX not in said
+        W.remove(two, 'harbor-bakery')                                                # one profile: every calendar is read, as before
+        said = agenttools.call(two, hb, 'calendar', {'days': 7}, {})
+        assert f'Standup of {box}' in said and f'Standup of {NW_BOX}' in said
+
+
+def test_a_meeting_an_agent_sets_up_goes_on_a_calendar_its_task_may_use(two):
+    "Round 6, the same class: the invite an agent set up went on the first Outlook card's calendar, whoever's task it was."
+    from taskuary import calwrite
+    cid, box = _calendars(two)
+    f = Factory(two)
+    hb, none = f.task(title='Bakery rota'), f.task(title='Unplaced')
+    W.set_task(two, hb, 'harbor-bakery', 'owner')
+    assert calwrite.account(two)['mailbox'] == NW_BOX                                  # his own New -> Meeting: the first card, as before
+    assert calwrite.account(two, tid=hb)['mailbox'] == box and not calwrite.can_book(two, none)
+    board = [{'start': '2030-01-07 10:00', 'end': '2030-01-07 11:00', 'subject': 'Northwind board', 'who': []}]
+    with mock.patch.object(calwrite, 'busy', lambda s, days=14, sure=False, tid=None: [] if tid else board), mock.patch.object(calwrite, 'require_write'):
+        out = calwrite.meeting(two, hb, [GAIL], 'Rota', start='2030-01-07 10:00', end='2030-01-07 10:30')
+    env = calwrite.env_of(two.get_review(out['review']))
+    assert env['mailbox'] == box and env['connector_id'] == cid
+    assert 'clashes with another meeting' in out['says'] and 'Northwind board' not in out['says']     # the time is his; whose meeting is not said
+
+
+def test_an_agents_search_across_tasks_shows_its_own_profiles_work(two):
+    "Round 6, the same class: search_tasks answered with the other profile's tasks and its mail, by another door than the mail search."
+    from taskuary import agenttools, people
+    f, hb, nw, mine, theirs = _both(two)
+    two._exec('UPDATE message SET TaskId=? WHERE MessageId=?', (nw, theirs))
+    free = f.task(title='Payroll form for the accountant')                             # under no profile: everyone's
+    said = agenttools.call(two, hb, 'search_tasks', {'words': 'payroll'}, {})
+    assert 'accountant' in said and 'Payroll invoice' not in said and 'Northwind close' not in said
+    said = agenttools.call(two, nw, 'search_tasks', {'words': 'payroll'}, {})
+    assert 'accountant' in said and 'Payroll invoice' in said
+    assert not people.tasks_of(two, GAIL, skip=hb) and [t['title'] for t in people.tasks_of(two, GAIL, skip=free)] == []
+    assert [t['title'] for t in people.tasks_of(two, GAIL)] == ['Northwind close']       # his own read
+    W.remove(two, 'harbor-bakery')                                                      # one profile: as before
+    assert 'Payroll invoice' in agenttools.call(two, hb, 'search_tasks', {'words': 'payroll'}, {})
+    assert [t['title'] for t in people.tasks_of(two, GAIL, skip=hb)] == ['Northwind close']
+
+
+def test_with_a_card_for_each_profile_an_agents_call_runs_on_its_own(two):
+    "A tool card for each profile was 'say which with connector_id' to an agent that may use one of them: the task's own is picked by code."
+    from taskuary import reports
+    books = lambda name: two.save_connector({'Type': 'quickbooks', 'Name': name, 'Active': 1, 'Roles': 'tool', 'ConfigJson': '{}'}, 't')
+    nwb, hbb = books('Northwind books'), books('Harbor books')
+    W.tag_account(two, 'northwind', connector_id=nwb); W.tag_account(two, 'harbor-bakery', connector_id=hbb)
+    f = Factory(two)
+    hb = f.task(title='Bakery rota'); W.set_task(two, hb, 'harbor-bakery', 'owner')
+    t = next(k for k in reports.REGISTRY if reports.card_of(k) == 'quickbooks')
+    assert reports.tool_card(two, t, tid=hb)['ConnectorId'] == hbb
+    with pytest.raises(ValueError): reports.tool_card(two, t)                           # with no task to go by, he is asked which
+    with pytest.raises(ValueError): reports.tool_card(two, t, tid=f.task(title='Unplaced'))
+    W.remove(two, 'harbor-bakery')
+    with pytest.raises(ValueError): reports.tool_card(two, t, tid=hb)                   # one profile: two cards are two cards, as before
+
+
+def _sent(two, rid):
+    "Press Send on card `rid` with the provider stood in: (what the press answered, the mailbox each send left from)."
+    from taskuary import verdicts
+    with mock.patch.object(outbound, 'send_out', return_value={'channel': 'email', 'to': [GAIL]}) as send:
+        out = verdicts.decide(two, two.get_review(rid), 'approve')
+    return out, [c.kwargs.get('mailbox') for c in send.call_args_list]
+
+
+def test_a_new_email_with_no_from_leaves_from_its_tasks_own_profile_never_the_first_card(two):
+    """Round 6: a new email on a task no mail came in on named no From, and left from the first Outlook card - Northwind's, on Harbor's task.
+    It leaves from its task's own profile's mailbox, else one every profile shares; with neither it is refused with the fact and the place
+    a mailbox is connected - at the draft for its agent, and at the press for a card that already stood."""
+    f = Factory(two)
+    hb = f.task(title='Bakery rota'); W.set_task(two, hb, 'harbor-bakery', 'owner')
+    letter = lambda t, **kw: slots.draft(two, t, 'Hi Gail,\n\nThe rota is up.', to=GAIL, subject='Rota', **kw)
+    out = letter(hb)
+    assert out['ok'] and out['from'] == HB_BOX == outbound.new_from(two, hb)          # its agent is told where it goes from, and its card says so
+    assert _sent(two, out['review_id'])[1] == [HB_BOX]
+    # ...Harbor's mailbox gone: the one nobody tagged serves every profile
+    two.save_connector({'ConnectorId': two.hb, 'Active': 0}, 't')
+    out = letter(hb, slot='new')
+    assert out['ok'] and out['from'] == SHARED
+    # ...and that one gone too: only Northwind's is left. The card that stood is not sent from it - the failure stays on it, with its fix
+    two.save_connector({'ConnectorId': two.shared, 'Active': 0}, 't')
+    res, boxes = _sent(two, out['review_id'])
+    assert boxes == [] and not res['ok'] and 'Harbor Bakery' in res['send_error'] and res['send_fix'] == {'label': outbound.MAIL[0], 'href': outbound.MAIL[1]}
+    assert two.get_review(out['review_id'])['Status'] == 'pending'
+    no = letter(hb, slot='new')
+    assert not no['ok'] and 'Harbor Bakery' in no['why'] and 'Nothing was drafted' in no['why'] and outbound.MAIL[1] in no['why']
+    # ...a task under no profile is kept from every profile's own mailbox the same way; naming one in From is its move card, as before
+    assert not letter(f.task(title='Unplaced'), slot='new')['ok']
+
+
+def test_with_one_profile_a_new_email_and_every_read_are_as_they_were(two):
+    "One profile, or none: nothing is walled - a new email with no From names none and the sender's own first card decides, as before."
+    from taskuary import agenttools
+    f, hb, nw, mine, theirs = _both(two)
+    W.remove(two, 'harbor-bakery')
+    for t in (hb, nw, f.task(title='Unplaced')):
+        assert outbound.new_from(two, t) is None and [m['address'] for m in outbound.mailboxes(two, t)] == [NW_BOX, HB_BOX, SHARED]
+        said = agenttools.call(two, t, 'search_messages', {'words': 'invoice'}, {})
+        assert 'Flour invoice' in said and 'Payroll invoice' in said
+        assert 'salaries in it' in agenttools.call(two, t, 'read_message', {'id': theirs}, {})
+        assert len(mailsearch.message(two, mine, t)['messages']) == 2
+    out = slots.draft(two, hb, 'Hi Gail,\n\nThe rota is up.', to=GAIL, subject='Rota')
+    assert out['ok'] and 'from' not in out
+    assert _sent(two, out['review_id'])[1] == [None]
+    W.save(two, [])                                                                    # ...and with no profile at all
+    assert outbound.new_from(two, hb) is None and W.may_use(two, hb, NW_BOX)

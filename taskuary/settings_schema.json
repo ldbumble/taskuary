@@ -265,13 +265,6 @@
       "type": "detail",
       "desc": "The mailbox and company details an agent's sign-up fills in - each sign-up still waits for your press."
     },
-    "acp_cli": {
-      "group": "Agent permissions",
-      "label": "Taskuary approves each step of an agent",
-      "type": "switch",
-      "desc": "Agents on Claude Code, Codex, Gemini and the other AI tools ask before each tool they use, and Taskuary answers by your rules. Off: they run on their own, as before.",
-      "help": "On (the default): each tool an agent wants to use is asked for first, and Taskuary answers by its own rules - its own tools and anything that only reads or works in the agent's folder are allowed; a tool that sends mail or chat, a push, a publish or a delete outside the folder waits for you, as it does in a pane. What the agent did is shown step by step, the same as before. Claude Code and Codex speak it through a small adapter, started with npx (installed with `npm i -g @agentclientprotocol/claude-agent-acp @agentclientprotocol/codex-acp`, each start is about 2 seconds quicker); it drives the CLI you already have, with its own login.\n\nIf an agent cannot start that way, that run goes on the command line instead and the log says so once. Off: every CLI run goes on the command line. Coding sessions in a terminal are not affected."
-    },
     "general_agent_hands": {
       "group": "Agent permissions",
       "label": "General agents can",

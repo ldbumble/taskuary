@@ -1382,11 +1382,10 @@ def acp_tracer(trace, name: str, held: dict = None) -> ACPSteps: return ACPSteps
 
 
 # ── the ACP road ─────────────────────────────────────────────────────────────────────────────────────────────────────────────
-ACP_SETTING = 'acp_cli'
 _FELL_BACK: set = set()
 # THE STORE AND TASK A RUN IS FOR, beside run_cli's arguments rather than in them: the ACP road's permission answers need both
 # (gate - the send filter's verdicts, a step held on this task), and run_cli's signature is the one every caller and test fake
-# shares. make_cli_llm sets it around its call; a run with none reads the switch's default and holds nothing on a task.
+# shares. make_cli_llm sets it around its call; a run with none holds nothing on a task.
 _RUN = contextvars.ContextVar('taskuary_run', default=(None, None))
 
 
@@ -1397,16 +1396,9 @@ def run_context(store, task_id=None):
     finally: _RUN.reset(tok)
 
 
-def acp_on(store) -> bool:
-    "The owner's 'Run CLI agents over ACP' (Settings, Agents). On unless switched off; a run with no store reads the default."
-    try: v = store.get_setting(ACP_SETTING) if store is not None else None
-    except Exception: v = None
-    return str('1' if v is None else v).strip().lower() not in ('0', 'false', 'off', 'no')
-
-
-def _acp_road(profile: dict, store=None) -> bool:
-    "Does this run go over ACP: a run marked for it (llm: a general agent's run with hands), the switch on, and a way to launch it."
-    if not (profile.get('acp_ok') and acp_on(store if store is not None else _RUN.get()[0])): return False
+def _acp_road(profile: dict) -> bool:
+    "Does this run go over ACP: a run marked for it (llm: a general agent's run with hands) and a way to launch it."
+    if not profile.get('acp_ok'): return False
     # ...never a stranger's run, whatever acp_ok says: its trimmed environment (strict_env) marks the floor argv carries (llm.make_cli_llm)
     if profile.get('strict_env'): return False
     return bool(profile.get('acp') or profile.get('acp_cmd') or clis_mod.acp_adapter(profile.get('cmd') or ''))
@@ -1880,10 +1872,10 @@ def run_cli(profile: dict, prompt: str, trace, resume: str = None, cancel=None, 
     # verbatim, so mail is the likeliest way one arrives here. See redact.py.
     prompt = redact.scrub(prompt)
     # The ACP road, for the profiles marked for it: the general agent's tool-using runs, on a CLI that speaks the protocol natively
-    # or through its adapter (claude, codex), while the owner's 'Run CLI agents over ACP' is on. Triage, the drafter, coding
+    # or through its adapter (claude, codex). Triage, the drafter, coding
     # sessions and every pane stay on the argv road below - and so does a run whose agent did not start over ACP (ACPStartError:
     # nothing ran), said once in the log. See docs/acp-transport.md.
-    if _acp_road(profile, store):
+    if _acp_road(profile):
         try: return run_acp(profile, prompt, trace, resume=resume, cancel=cancel, extra_env=extra_env, store=store)
         except acp_mod.ACPStartError as first:
             # ...A START THAT FAILED IS TRIED AGAIN ONCE BEFORE HE HEARS OF IT (the owner's live app, 2026-11-22: "session/new: Internal error" after
@@ -1898,9 +1890,6 @@ def run_cli(profile: dict, prompt: str, trace, resume: str = None, cancel=None, 
                 logger.warning(f"acp: {profile.get('cmd')} did not start twice - {str(e)[:300]}")
                 raise RuntimeError(HELD_ONLY.format(cli=_cli_name(str(profile.get('cmd') or '')).capitalize(), why='')) from e
             _fell_back(str(profile.get('cmd') or ''), e, trace)
-    # ...a run that may only go held (llm.make_cli_llm `held_only`) never takes the command line: there it would read and act unasked
-    elif profile.get('held_only'):
-        raise RuntimeError(HELD_ONLY.format(cli=_cli_name(str(profile.get('cmd') or '')).capitalize(), why=" - 'Taskuary approves each step of an agent' is off in Settings"))
     profile = with_cmd(profile, store); name = profile['cmd']
     family = _cli_name(name)
     args = list(profile.get('args') or preset_args(name) or ['-p'])
@@ -2238,7 +2227,7 @@ def warm_cli(profile: dict, resume: str = None, extra_env: dict = None, store=No
     brain, a CLI with no stream-json input): there is nothing to have ready."""
     profile = with_cmd(profile, store); name = profile['cmd']
     args = list(profile.get('args') or preset_args(name) or ['-p'])
-    if profile.get('keep_alive') and _acp_road(profile, store) and (ok := _warm_acp(profile, resume, extra_env, store, swap)) is not None: return ok
+    if profile.get('keep_alive') and _acp_road(profile) and (ok := _warm_acp(profile, resume, extra_env, store, swap)) is not None: return ok
     if not _keeps(profile, _cli_name(name), args): return False
     from . import clipool
     try: return clipool.warm(profile['keep_alive'], _resolve_cmd(name) + _own_settings(profile, name, args) + _model_args(profile, name),

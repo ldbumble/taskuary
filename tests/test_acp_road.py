@@ -240,7 +240,7 @@ def test_a_rule_that_raises_refuses():
     assert 'denied' in said
 
 
-# ── it falls back, and the switch turns it off ─────────────────────────────────────────────────────────────────────────────
+# ── it falls back, and there is no switch ─────────────────────────────────────────────────────────────────────────────────
 def test_an_agent_that_dies_at_initialize_runs_on_the_command_line_and_says_so_once():
     agents._FELL_BACK.discard(FAKE[0])
     seen, real_popen = [], agents.spawn.popen
@@ -272,7 +272,7 @@ def test_claude_with_no_way_to_launch_its_adapter_answers_on_the_command_line_ke
     try:
         with mock.patch.object(agents, '_resolve_cmd', side_effect=resolve), mock.patch.object(agents.pathcache, 'which', return_value=None), \
              agents.run_context(s, None):
-            assert agents._acp_road(prof, s)                                    # the switch is on and claude has an adapter: it tries
+            assert agents._acp_road(prof)                                       # claude has an adapter: it tries
             assert agents.warm_cli(prof, extra_env=env, store=s) and clipool.is_live(key)      # warmed: the argv process, since ACP cannot start
             out1 = agents.run_cli(prof, 'The owner says: compare them on price.', trace, extra_env=env, store=s)
             out2 = agents.run_cli(prof, 'The owner says: look at the south office first', trace, resume=out1[1], extra_env=env, store=s)
@@ -282,19 +282,16 @@ def test_claude_with_no_way_to_launch_its_adapter_answers_on_the_command_line_ke
     finally: clipool.close(key)
 
 
-def test_the_switch_off_keeps_every_run_on_the_command_line():
-    s = MemoryStore(); s.set_setting(agents.ACP_SETTING, '0', 'owner')
-    with mock.patch.object(agents, 'run_acp', side_effect=AssertionError('must not take the ACP road')), \
-         mock.patch.object(agents.spawn, 'popen', side_effect=RuntimeError('argv')):
-        with pytest.raises(RuntimeError, match='argv'): run(profile(args=['-p']), store=s)
-    assert agents.acp_on(MemoryStore()) and not agents.acp_on(s)
-
-
-def test_the_switch_is_a_setting_on_the_page_and_on_by_default():
+def test_there_is_no_switch_and_an_old_homes_saved_off_is_not_read():
+    "An agent's steps are asked for before they run, always: a home that saved the old switch off still takes the ACP road."
     from taskuary import settings_schema
     from taskuary.store import DEFAULT_SETTINGS
-    assert DEFAULT_SETTINGS[agents.ACP_SETTING] == '1'
-    assert settings_schema.knobs()[agents.ACP_SETTING]['type'] == 'switch'
+    assert 'acp_cli' not in DEFAULT_SETTINGS and 'acp_cli' not in settings_schema.knobs()
+    s = MemoryStore(); s.set_setting('acp_cli', '0', 'owner')
+    with mock.patch.object(agents, 'run_acp', return_value=('ok', 'sid', None)) as acp, \
+         mock.patch.object(agents.spawn, 'popen', side_effect=AssertionError('the command line must never be reached')):
+        run(profile(args=['-p'], held_only=True), store=s)
+    assert acp.called
 
 
 # ── gears, resume, a kept connection ──────────────────────────────────────────────────────────────────────────────────────
@@ -424,7 +421,7 @@ def test_codex_quick_and_full_work_on_a_task_go_held_and_claude_s_look_keeps_its
         brain = llm.make_cli_llm(s, name, task_id=tid, keep=f'general:{tid}', **how)
         with mock.patch.object(agents, 'run_cli', side_effect=lambda prof, *a, **k: (seen.update({prof['cmd']: prof}), ('ok', 'sid', None))[1]):
             brain('sys', 'list my Documents folder')
-    assert seen['codex'].get('held_only') and agents._acp_road(seen['codex'], s)
+    assert seen['codex'].get('held_only') and agents._acp_road(seen['codex'])
     assert '--dangerously-bypass-approvals-and-sandbox' not in clis.preset_args('codex')
     assert not seen['claude'].get('held_only')                                   # its reads are kept by its own permission rules
 
@@ -437,9 +434,6 @@ def test_a_held_only_run_that_cannot_start_over_acp_runs_nothing_and_says_so():
         return real_popen(cmd, **kw)
     with mock.patch.object(agents.spawn, 'popen', side_effect=popen):
         with pytest.raises(RuntimeError, match='nothing ran'): run(profile(args=['-p'], held_only=True), env={'FAKE_ACP_FAIL': 'init'}, store=s)
-    s.set_setting(agents.ACP_SETTING, '0', 'owner')                              # ...nor with the owner's ACP switch off
-    with mock.patch.object(agents, 'run_acp', side_effect=AssertionError('off')), mock.patch.object(agents.spawn, 'popen', side_effect=popen):
-        with pytest.raises(RuntimeError, match="Taskuary approves each step of an agent"): run(profile(args=['-p'], held_only=True), store=s)
 
 
 # ── a conversation the CLI no longer has (agents.Gone): the turn is said again to a fresh one, never the CLI's error ─────────────────────────

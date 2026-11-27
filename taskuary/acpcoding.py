@@ -1,6 +1,6 @@
 """A CODING SESSION OVER ACP (step 2 of docs/acp-transport.md, the owner 2026-11-06: "see the ACP CLI in action").
 
-A coding task on claude or codex, with the owner's 'Run CLI agents over ACP' on, runs as one ACP connection in the task's checkout instead
+A coding task on claude or codex runs as one ACP connection in the task's checkout instead
 of the CLI's TUI in a pty: the adapter (clis.ADAPTERS) launched by the general road's own code (agents.acp_launch, agents._acp_open), with
 the pane's argv carried over - Taskuary's MCP tools, the owner's send tools left out, the theme/hook settings - and the router's model
 and effort set as session options. The seed the pane would have had typed in is the first session/prompt.
@@ -19,7 +19,8 @@ does with the screen, this does with typed updates:
     call's result - and the agent's own words between them; nothing to show is no toggle, never a blank terminal;
   - the files it touches (a call's locations, an edit's diff) are on its card and on the blackboard while it works.
 
-An adapter that does not start puts today's pty in its place, said once (FELL_BACK). A turn that fails part-way is said, never retried."""
+An adapter that does not start runs nothing - no terminal takes its place, where no step would be asked for before it ran: the task says
+why and the way on (_not_started). A turn that fails part-way is said, never retried."""
 import os, re, threading, time, uuid
 from .say import said as _said            # a failure written to the chat is said in his words (say.py)
 from collections import deque
@@ -28,7 +29,6 @@ from loguru import logger
 
 from . import acp as acp_mod, codingchat, general
 
-FELL_BACK: set = set()            # the CLIs that did not start over ACP this process: said once in the log
 SCROLLBACK = 200_000
 HOT_S = 30                        # a file touched this recently is "under its hands" (touching)
 ECHO_SECS = 600                   # how long a steer's echo is waited for: it comes when the CLI takes the words in, after the tool at work
@@ -39,10 +39,11 @@ _SHELL = re.compile(r'^(bash|powershell|pwsh|shell|execute|terminal|local_shell|
 
 
 def wanted(store, profile: dict, mode: str, task_id) -> bool:
-    """Does this coding session run over ACP: a task's session, the owner's own (a stranger's runs on argv's floor), the switch on, and a
-    CLI whose adapter we ship (claude, codex). A native-ACP CLI keeps its pty here until its coding road is checked; any other CLI has none."""
-    from . import agents, clis, origin
-    if not str(task_id or '').isdigit() or mode != 'full' or not agents.acp_on(store): return False
+    """Does this coding session run over ACP: a task's session, the owner's own (a stranger's runs on argv's floor), and a CLI whose
+    adapter we ship (claude, codex) - for those it is the only road. A native-ACP CLI keeps its pty here until its coding road is checked;
+    any other CLI has none."""
+    from . import clis, origin
+    if not str(task_id or '').isdigit() or mode != 'full': return False
     # ...and A STRANGER'S TASK NEVER, whatever mode a caller passed: its floor (the CLI's reviewer, --strict-mcp-config, its settings file and
     # hooks, a trimmed environment) is argv's, and ACP's permission answer would allow what that reviewer refuses
     try:
@@ -81,7 +82,7 @@ class ACPCoding:
     quick = False
 
     def __init__(self, store, profile: dict, argv: list, args: list, cwd: str, label: str, task_id: int, agent: str, cli: str, model: str = None,
-                 resume: str = '', rows: int = 32, cols: int = 110, mode: str = 'full', fallback=None, sid: str = None):
+                 resume: str = '', rows: int = 32, cols: int = 110, mode: str = 'full', sid: str = None):
         from . import blackboard as bb, proof, witness
         # `sid`: an idled-out session's own, brought back as the same run (wake) - its chat, its questions and its record stay one
         self.sid, self.store, self.profile, self.model, self.mode = sid or uuid.uuid4().hex[:12], store, dict(profile), model, mode
@@ -95,7 +96,7 @@ class ACPCoding:
         self.buf, self.n, self.writes, self.ended, self.last, self.wrote_at, self.calm_until = deque(), 0, 0, None, time.time(), 0., 0
         self.seeded, self.accepted, self.seeding, self.draft, self.keyed_at, self.keep_transcript = '', None, True, '', 0., True
         self.subs, self.taps, self.geom_owner, self.failover, self.signed_out, self.relogin = [], [], None, None, False, False
-        self.witness, self.ext_id, self.resumed_from, self.fallback = witness.Witness(), '', resume or '', fallback
+        self.witness, self.ext_id, self.resumed_from = witness.Witness(), '', resume or ''
         self.dirty0, self._files = bb.dirty(cwd), ([], 0.)
         try: proof.mark_start(store, task_id, cwd)
         except Exception as e: logger.debug(f'acp coding {self.sid}: no proof start - {e}')
@@ -240,7 +241,7 @@ class ACPCoding:
             if isinstance(getattr(self.client, 'fresh_from', None), str): self._carry_over()
             if launch['adapter']: agents._acp_gears(self.client, prof, name, self._say)
         except Exception as e:
-            return self._fell_back(e)
+            return self._not_started(e)
         from . import terminal as term
         term.bind_ext(self, self.client.session_id)
         self.client.on_update, self.client.permit = self._update, self._permit
@@ -277,24 +278,17 @@ class ACPCoding:
         self.busy = bool(got) or self.busy
         return bool(got)
 
-    def _fell_back(self, e):
-        """The adapter did not get as far as a session: nothing ran, so today's pty takes its place - said once in the log per CLI and
-        on the task. No pty to fall back to (the start failed for a reason it shares) ends this one, said."""
-        from . import terminal as term
+    def _not_started(self, e):
+        """The adapter did not get as far as a session: nothing ran, and nothing runs in a terminal instead - there each step is only
+        reported after it ran, never asked for first. The task says why and the way on; his next line starts it again."""
+        from . import agents, terminal as term
         self.alive, self.ended, self.busy = False, time.time(), False
         if self.client: self.client.close()
         term.SESSIONS.pop(self.sid, None)
-        if self.cli not in FELL_BACK:
-            FELL_BACK.add(self.cli); logger.warning(f'acp: {self.cli} coding session did not start over ACP ({e}) - running it in its terminal')
-        if not self.fallback:
-            general.answered(self.task_id, every=True)
-            self.store.add_comment(self.task_id, 'router', 'agent', f'{self.cli} did not start over ACP ({_said(e)}).'); return self._emit_end()
-        self.store.add_comment(self.task_id, 'router', 'agent', f'{self.cli} did not start over ACP ({_said(e)}) - it runs in its terminal instead.')
-        try: self.fallback()
-        except Exception as x:
-            logger.warning(f'acp coding {self.sid}: the terminal fallback did not start either - {x}')
-            self.store.add_comment(self.task_id, 'router', 'agent', f'The terminal did not start either: {str(x)[:300]}')
-            term.release_task(self.store, self.task_id, 'terminal')
+        logger.warning(f'acp: {self.cli} coding session did not start ({e})')
+        general.answered(self.task_id, every=True)
+        self.store.add_comment(self.task_id, 'router', 'agent', agents.HELD_ONLY.format(cli=self.cli.capitalize(), why=f' ({_said(e)})'))
+        term.release_task(self.store, self.task_id, 'terminal')
         self._emit_end()
 
     def _watch(self):

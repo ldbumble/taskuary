@@ -56,7 +56,6 @@ def world(tmp_path, monkeypatch, request):
         tid = s.create_task({'Title': 'Comment the ledger totals', 'Kind': 'coding', 'Status': 'in_progress'}, 'owner')
         monkeypatch.setattr(agents, '_resolve_cmd', lambda name: [FAKE_ACP[0]])
         monkeypatch.setattr(terminal, 'pretrust', lambda *a, **k: False)
-        monkeypatch.setattr(acpcoding, 'FELL_BACK', set())
         monkeypatch.setenv('FAKE_ACP_THINK', '1.5')
     else:
         tid = s.create_task({'Title': 'Research the vendor', 'Kind': 'general', 'Status': 'open'}, 'owner')

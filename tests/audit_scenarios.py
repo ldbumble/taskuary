@@ -367,7 +367,6 @@ def world(backend: str, tmp: Path, monkeypatch):
         s.upsert_agent('coding', 'coding', 'cli', json.dumps({'cmd': 'claude', 'acp_cmd': FAKE_ACP, 'cwd': str(repo)}))
         monkeypatch.setattr(agents, '_resolve_cmd', lambda name: [FAKE_ACP[0]])
         monkeypatch.setattr(terminal, 'pretrust', lambda *a, **k: False)
-        monkeypatch.setattr(acpcoding, 'FELL_BACK', set())
     elif backend in ('cli', 'acp'):
         conn = {'cmd': 'claude', 'args': ['-p', '--dangerously-skip-permissions', '--output-format', 'stream-json', '--verbose'],
                 **({'acp_cmd': FAKE_ACP} if backend == 'acp' else {})}

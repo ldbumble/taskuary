@@ -104,7 +104,7 @@ def drafter(text):
             if text is None: raise RuntimeError('the drafting AI timed out')
             if text == 'SAME': return (store.get_review(rid) or {}).get('DraftText') or ''
             return text
-        st.enter_context(mock.patch.object(responder, 'write_draft', write))
+        st.enter_context(mock.patch.object(responder, 'draft_for_review', write))
         st.enter_context(mock.patch.object(responder, 'draft_for_message', lambda store, m, rid, **k: write(store, None, rid)))
     return f
 

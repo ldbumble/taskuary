@@ -5,17 +5,12 @@ back, the owner approved and it went out on the channel it came in on. There was
 "I need to tell Marcus the census moved" - the owner had to go to Outlook, which is the app
 Taskuary exists to keep them out of, and whatever they wrote there was invisible here.
 
-So: ＋ New on the Timeline, and two forks that both end in the same place.
+So: ＋ New on the Timeline. It becomes a task like any other and its agent works it (compose): it finds out what it needs,
+writes the message and raises its card - one approval at the end (the owner, 2026-11-27: "side model should never work in
+agent canvas"). The row on the Timeline is created at the moment you pressed the button, holding your ask (ask_row) - so the
+day's record includes what you started, not only what happened to you.
 
-- SAY IT NOW: the AI writes the message from your ask, in your voice (the same SOUL/STYLE/
-  LEARNED documents every reply uses - one voice, whichever direction the mail is travelling),
-  and parks it on the task. You read it and press send. Nothing leaves on its own.
-- FIND OUT FIRST: it becomes a task like any other and an agent works it. When the agent
-  finishes it drafts the message from what it actually found, and THAT lands on the task. Same
-  lifecycle, same buttons, same one approval at the end.
-
-The row on the Timeline is created either way, at the moment you pressed the button, holding
-your ask (ask_row) - so the day's record includes what you started, not only what happened to you.
+draft_message stays for the roads outside a task's canvas that still use it (a routine's email step, flow.py).
 
 Nothing here can send. `send_out` is reached from exactly one place (verdicts.decide, on an
 approved review carrying `Deliver`), which is what keeps "the owner approves everything that
@@ -28,7 +23,6 @@ from datetime import datetime
 from loguru import logger
 from . import capabilities
 
-MODES = ('draft', 'task')
 DRAFT_TOKENS = 400
 
 
@@ -112,25 +106,6 @@ def subject_for(store, about: str, llm=None) -> str:
         return fallback
 
 
-def redraft_review(store, review: dict, resolution: str = None, llm=None, instruction: str = None) -> str:
-    """Rewrite a new outbound message from its saved envelope, including all To/CC recipients - and the owner's instruction for it,
-    which this road dropped while every other redraft followed it (2026-10-23)."""
-    try: deliver = json.loads(review.get('Deliver') or '{}') or {}
-    except (TypeError, ValueError): deliver = {}
-    if not deliver.get('channel'): raise ValueError('this review has no outbound destination')
-    task = store.get_task(review.get('TaskId')) or {}
-    message = store.get_message(review.get('MessageId')) or {}
-    about = task.get('Summary') or message.get('BodyText') or task.get('Title') or ''
-    if resolution is None:
-        from .responder import resolution_of
-        resolution = resolution_of(store, review.get('TaskId')) if review.get('TaskId') else None
-    from .outbound import sending_mailbox
-    draft = draft_message(store, deliver['channel'], deliver.get('to'), '\n\n'.join(filter(None, [about, instruction])),
-                          resolution=resolution, llm=llm, cc=deliver.get('cc'), mailbox=sending_mailbox(store, review, message))
-    store.update_review_draft(review['ReviewId'], draft, review.get('RunId'))
-    return draft
-
-
 # THE ASK IS HIS INSTRUCTION, NOT MAIL HE SENT (2026-11-17): it was filed outbound with its recipient as its source - the page drew it as
 # "Sent by you", and the agent read "FROM You" with nobody named, as his own reply on the thread, beside a draft "to You", and asked him whom
 # it was for. Now it is his line as typed, from him (wrapup.from_owner), its recipients where every message keeps them, said as `asked`.
@@ -156,14 +131,11 @@ def asked(m) -> str:
     return (f'You asked to email {to}' if ch == 'email' else f'You asked to message {to} on {ch}') + (f' (cc {cc})' if cc else '')
 
 
-def compose(store, channel: str, to, about: str, mode: str = 'draft', subject: str = None,
-            repo: str = None, actor: str = 'owner', llm=None, cc: list = None, files=None) -> dict:
-    """Start something outbound. Returns {taskId, messageId, reviewId, mode, draft, subject}.
-
-    Both modes leave the same shape behind - a task, a Timeline row holding the owner's ask, and a
-    review carrying WHERE it goes - so the approve button, the audit trail and the reply-pending
-    tag on the Timeline are the ones that already exist. `files`: what he attached to his ask - the task's Files, beside his words."""
-    from . import outbound, terminal as term
+def compose(store, channel: str, to, about: str, subject: str = None, actor: str = 'owner', cc: list = None, files=None) -> dict:
+    """Start something outbound: a task holding his ask (ask_row), and his ask as his line to its agent (general.to_agent) - the agent finds
+    out what it needs, writes the message and raises its card for his Send (the owner, 2026-11-27: "side model should never work in agent
+    canvas"). `files`: what he attached to his ask, the task's Files. Returns {taskId, ref, messageId, subject, asked}. Nothing is sent here."""
+    from . import general, outbound
     from .store import task_ref
     channel, about = str(channel or '').strip().lower(), str(about or '').strip()
     if not about: raise ValueError('say what the message is about')
@@ -182,59 +154,26 @@ def compose(store, channel: str, to, about: str, mode: str = 'draft', subject: s
         to = str(to[0] if isinstance(to, (list, tuple)) and to else to or '').strip()
         cc = []
         if not to: raise ValueError('say who it goes to')
-    if mode not in MODES: raise ValueError(f"mode must be one of {', '.join(MODES)}")
     no = capabilities.send_refusal(store, channel)
     if no: raise ValueError(no)
-    subject = (subject or '').strip() or (subject_for(store, about, llm) if channel == 'email' else about.strip()[:120])
-
-    tid = store.create_task({'Title': subject[:300], 'Summary': about, 'Files': list(files or []),
-                             'Kind': 'coding' if mode == 'task' else 'reply',
-                             'Status': 'open', 'Priority': 'normal', 'Source': 'outbox',
-                             'Tags': f'repo:{repo}' if repo else None}, actor)
-    # ...a file he attached is the task's own, in its folder, named there - its drafter and its agent read it where they can (outputs.take_in_ask):
-    # told them under his words, the block built for their prompt from the field (general.with_files)
+    given = (subject or '').strip()
+    subject = given or ' '.join(about.split())[:120]
+    tid = store.create_task({'Title': subject[:300], 'Summary': about, 'Files': list(files or []), 'Kind': 'general', 'Status': 'open',
+                             'Priority': 'normal', 'Source': 'outbox'}, actor)
+    # ...a file he attached is the task's own, in its folder, named under his words (outputs.take_in_ask, general.with_files)
     from . import outputs
-    from .general import with_files
-    told = with_files(about, outputs.take_in_ask(store, tid, actor))
+    told = general.with_files(about, outputs.take_in_ask(store, tid, actor))
     to_text = ', '.join(to) if isinstance(to, list) else to
     mid = ask_row(store, tid, channel, to, cc, subject, about)
-    deliver = json.dumps({'channel': channel, 'to': to, 'cc': cc, 'subject': subject})
-    store.add_route(mid, tid, 'outbox', None,
-                    f'you started this from Taskuary - ' +
-                    ('an agent is finding out first, then it drafts the message'
-                     if mode == 'task' else 'drafted for you to approve, then it sends'), [], actor)
-
-    if mode == 'task':
-        # the review is created NOW and held: wrapup.raise_reply finds it when the agent finishes
-        # and asks its agent to write it from what was actually found. Without it, finishing an
-        # outbound task would look for a message to answer, find only ours, and draft nothing.
-        rid = store.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft_reply', 'Status': 'pending',
-                                'Reason': f'you asked for this to be looked into first - {to_text} hears back when it is',
-                                'Deliver': deliver})
-        store.hold_reviews(tid, 'held while an agent finds out - the message is written from what it finds')
-        try:
-            ses = term.start_on_task(store, tid, instruction=f'Find out what is needed to send this message to {to_text}: {told}', actor=actor, instruction_theirs=True)
-        except Exception as e:
-            logger.warning(f'outbox could not start an agent on {task_ref(tid)}: {e}')
-            store.add_comment(tid, 'router', 'agent', f'Could not start the agent ({_said(e)}) - start it from the task.')
-            ses = None
-        return {'taskId': tid, 'ref': task_ref(tid), 'messageId': mid, 'reviewId': rid,
-                'mode': mode, 'subject': subject, 'draft': None, 'session': ses}
-
-    draft = ''
-    try:
-        draft = draft_message(store, channel, to, told, llm=llm, cc=cc)
-    except Exception as e:
-        # a review with no draft is still the right row: "Draft with AI" retries it, and the
-        # owner can simply type the message themselves. Losing the row would lose the intent.
-        logger.warning(f'outbox draft failed for {task_ref(tid)}: {e}')
-        store.add_comment(tid, 'router', 'agent', f'Could not draft this ({_said(e)}) - write it yourself, or retry the draft.')
-    rid = store.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft_reply', 'Status': 'pending',
-                            'DraftText': draft, 'Deliver': deliver,
-                            'Reason': f'a message to {to_text} you started - approve to send it'})
-    store.audit('task', tid, 'outbox', actor, detail={'channel': channel, 'to': to, 'cc': cc, 'mode': mode})
-    return {'taskId': tid, 'ref': task_ref(tid), 'messageId': mid, 'reviewId': rid,
-            'mode': mode, 'subject': subject, 'draft': draft}
+    store.add_route(mid, tid, 'outbox', None, 'you started this from Taskuary - its agent writes it for you to approve, then it sends', [], actor)
+    store.audit('task', tid, 'outbox', actor, detail={'channel': channel, 'to': to, 'cc': cc})
+    said = (f'Email {to_text}' if channel == 'email' else f'Message {to_text} on {channel}') + (f", cc {', '.join(cc)}" if cc else '') \
+        + (f', subject "{given}"' if given else '') + f': {told}'
+    try: how = general.to_agent(store, tid, said, actor, frm='owner', wait=False)
+    except (ValueError, RuntimeError) as e:
+        logger.warning(f'outbox could not reach the agent on {task_ref(tid)} for {to_text}: {e}')
+        store.add_comment(tid, 'router', 'agent', f'Could not start the agent ({_said(e)}) - start it from the task.'); how = ''
+    return {'taskId': tid, 'ref': task_ref(tid), 'messageId': mid, 'subject': subject, 'asked': bool(how)}
 
 
 def work_of(store, tid: int) -> str:
@@ -249,69 +188,3 @@ def work_of(store, tid: int) -> str:
     if not path: return ''
     # its '# TQ-0001 - <title>' heading is the task's title, not a finding: a title quoting the ask is not a result
     return re.sub(r'^# .*\n+', '', path.read_text(encoding='utf-8', errors='replace'), count=1)[:6000]
-
-
-# SEND OUT RESULTS (the task bar's button): the message IS the results, told to the person who needs them. The task's own
-# title stood in as the brief when the owner wrote none - and a title quoting the original ask ("... (is the app on X or Y?)")
-# had the draft put the ask's question back to the recipient and say nothing of what was done (2026-10-09).
-RESULTS = ('Send them the RESULTS of this work: a short summary of what was done and what it means for them - the outcome, '
-           'not the internals (commits, hashes, pipelines, health checks, the steps a tool took). Do not repeat the original '
-           'request or put its questions back to them; ask them something only if the work below says it still needs them.')
-
-
-def results_brief(said: str) -> str:
-    said = str(said or '').strip()
-    return f'{said}\n\n({RESULTS})' if said else RESULTS
-
-
-def task_email(store, tid: int, to: str, about: str, cc: list = None, subject: str = None, files: list = None,
-               actor: str = 'owner', llm=None, channel: str = 'email', mailbox: str = None, name: str = '') -> dict:
-    """A message from inside a task - to tell someone it is done, or anything else the work owes them - whoever started it
-    (the owner, 2026-10-09: "even though i started it from the new button i want to be able to create email to send to
-    someone and notify it's done"; then "add from mailbox picker and teams/chat too"). The AI writes it from the owner's words
-    and what the work actually found; it becomes one of the task's outputs (slots.py), so it waits in Close out like any of
-    them, and sending it leaves the task open (slots._left) - Mark done closes it. An email can carry `files` ((name, bytes)
-    pairs), CC and the mailbox it goes FROM; a chat message (`to` is the chat id, `name` what to call it) carries only its words. Nothing is sent here."""
-    from . import outbound, slots, verdicts
-    task = store.get_task(tid)
-    if not task: raise ValueError('no such task')
-    if task.get('Status') in ('done', 'dropped'):
-        from .failures import Closed
-        raise Closed(tid, 'that task is closed - reopen it first')
-    channel = str(channel or 'email').lower()
-    if channel not in slots.KINDS: raise ValueError(f'{channel} cannot be sent from a task')
-    no = capabilities.send_refusal(store, channel)
-    if no: raise ValueError(no)
-    if channel == 'email':
-        who = outbound.addrs([to])
-        if not who: raise ValueError(f'not a valid email address: {to}')
-        cc = [a for a in outbound.addrs(cc or []) if a.lower() != who[0].lower()]
-        if mailbox and not any(m['address'].lower() == str(mailbox).lower() for m in outbound.mailboxes(store)):
-            raise ValueError(f'{mailbox} is not a connected mailbox')
-    else:
-        who = [' '.join(str(to or '').split())]
-        if not who[0]: raise ValueError('pick the chat it goes to')
-        if cc: raise ValueError(f'{slots.CHAT_NAMES[channel]} has no CC - only an email copies somebody in')
-        if files: raise ValueError(f'a {slots.CHAT_NAMES[channel]} message cannot carry files from here - send an email to attach them')
-        mailbox = None
-    said = str(about or '').strip()
-    about = results_brief(said)
-    draft = draft_message(store, channel, [name or who[0]] if channel != 'email' else who, about,
-                          resolution=work_of(store, tid) or None, llm=llm, cc=cc,
-                          attached=[n for n, _ in files or []] if channel == 'email' else None,
-                          mailbox=(mailbox or outbound.task_mailbox(store, tid)) if channel == 'email' else None)
-    subject = ((subject or '').strip() or subject_for(store, about, llm)) if channel == 'email' else ''
-    out = slots.draft(store, tid, draft, to=who[0], subject=subject, agent=actor, channel=channel, name=name)
-    if not out.get('ok'): raise ValueError(out.get('why') or 'the message could not be saved on the task')
-    rid = out['review_id']
-    # the slot keeps no CC, mailbox or brief: they ride in the envelope - the brief so "Regenerate with AI" writes from it again
-    rv = store.get_review(rid)
-    env = json.loads(rv.get('Deliver') or '{}') or {}
-    env.update({'cc': cc or [], 'about': said, 'by': 'owner', **({'mailbox': mailbox} if mailbox else {}), **({'name': name} if name else {})})
-    store.set_review_deliver(rid, json.dumps(env))
-    attached, refused = [], []
-    for fname, data in files or []:
-        try: verdicts.attach(store, rid, fname, data, actor); attached.append(fname)
-        except ValueError as e: refused.append(f'{fname}: {e}')
-    store.audit('task', tid, 'task_email', actor, detail={'channel': channel, 'to': who, 'cc': cc, 'from': mailbox, 'attached': attached})
-    return {'ok': True, 'review_id': rid, 'subject': subject, 'draft': draft, 'attached': attached, 'not_attached': refused}

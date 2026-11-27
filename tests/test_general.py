@@ -481,7 +481,7 @@ class GeneralApiTests(unittest.TestCase):
         """The button is offered until a result exists, and a stale page can press it twice."""
         store = MemoryStore(); tid = general_task(store); connect_openai(store)
         store.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'The finished plan')
-        with mock.patch.object(responder, 'write_draft'):
+        with mock.patch.object(responder, 'draft_for_review'):
             wrapup.wrap(store, tid, close=False, actor='owner')
             wrapup.wrap(store, tid, close=False, actor='owner')
         filed = [c for c in store.list_comments(tid) if str(c['Body']).startswith(wrapup.REPORT)]
@@ -499,7 +499,7 @@ class GeneralApiTests(unittest.TestCase):
                                  'Subject': 'Cash dashboard', 'BodyText': 'The balances still pull from the old accounts.'})
         store.attach_message(mid, tid)
         store.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'The dashboard still points at the legacy accounts.')
-        with mock.patch.object(responder, 'write_draft') as write_draft:
+        with mock.patch.object(responder, 'draft_for_review') as write_draft:
             out = wrapup.wrap(store, tid, close=True, actor='assistant')
         review = store.pending_review(tid, live_only=False)
         self.assertTrue(out['drafting'])

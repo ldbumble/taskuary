@@ -57,39 +57,11 @@ def test_an_empty_draft_never_replaces_good_text():
 
 def _redraft(s, mid, wrote):
     with mock.patch.object(server, 'store', s), mock.patch.object(server, '_refresh_chat_context', lambda **k: None), \
-         mock.patch('taskuary.responder.write_draft', wrote):
+         mock.patch('taskuary.responder.draft_for_review', wrote):
         return server.open_reply(mid, server.OpenReplyBody(redraft=True, instruction='say Friday at ten'))
 
 
-def test_a_rewrite_that_came_back_empty_says_so_and_keeps_the_draft():
-    s, tid, mid, rid = _chat()
-    out = _redraft(s, mid, lambda *a, **k: '')
-    assert out['changed'] is False and out['draft'] == 'Friday at ten works.' and 'empty' in out['why']
-    assert s.get_review(rid)['DraftText'] == 'Friday at ten works.'
 
 
-def test_a_rewrite_that_failed_says_why():
-    s, tid, mid, rid = _chat()
-    def boom(*a, **k): raise RuntimeError('the AI connector timed out')
-    out = _redraft(s, mid, boom)
-    assert out['changed'] is False and 'timed out' in out['why'] and s.get_review(rid)['DraftText'] == 'Friday at ten works.'
 
 
-def test_a_rewrite_that_wrote_the_same_words_is_not_called_rewritten():
-    s, tid, mid, rid = _chat()
-    out = _redraft(s, mid, lambda *a, **k: 'Friday at ten works.')
-    assert out['changed'] is False and out['why']
-
-
-def test_a_real_rewrite_is_changed():
-    s, tid, mid, rid = _chat()
-    out = _redraft(s, mid, lambda *a, **k: 'Friday at ten it is, Gail.')
-    assert out['changed'] is True and out['draft'] == 'Friday at ten it is, Gail.' == s.get_review(rid)['DraftText']
-
-
-def test_the_card_redraft_says_whether_it_changed():
-    s, tid, mid, rid = _chat()
-    with mock.patch.object(server, 'store', s), mock.patch.object(server, '_refresh_chat_context', lambda **k: None), \
-         mock.patch('taskuary.responder.write_draft', lambda *a, **k: ''):
-        out = server.draft_review(rid, server.DraftBody(instruction='say Friday'))
-    assert out['changed'] is False and out['draft'] == 'Friday at ten works.' and 'empty' in out['why']

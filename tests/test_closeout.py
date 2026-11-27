@@ -41,7 +41,7 @@ def finish(s, tid, pr=OPEN, **kw):
     prev, wrapup.REFRESH = wrapup.REFRESH, None
     try:
         # ...no writer at a run's end (2026-11-10): the reply is the agent's own, or owed
-        with mock.patch('taskuary.responder.write_draft', side_effect=AssertionError('a second voice drafted the reply')), \
+        with mock.patch('taskuary.responder.draft_for_review', side_effect=AssertionError('a second voice drafted the reply')), \
              mock.patch.object(github, 'pr', return_value=pr):
             return wrapup.finish(s, tid, {'summary': 'the export reads the new view', 'outcome': 'did_work'}, None, 'coding', **kw)
     finally: wrapup.REFRESH = prev

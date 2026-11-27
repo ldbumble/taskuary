@@ -59,6 +59,25 @@ class InterruptTests(unittest.TestCase):
         self.assertEqual((rv['Status'], rv['MessageId']), ('pending', later))
         self.assertTrue(any('my edited version' in (c['Body'] or '') for c in s.list_comments(tid)))   # not discarded
 
+    def test_on_a_task_an_agent_worked_nothing_is_rewritten_and_the_agent_is_never_told_he_pressed_redraft(self):
+        """The owner, 2026-11-27: "side model should never work in agent canvas". On a task its agent worked, Send after a new message
+        rewrote nothing of the agent's only when the agent had written it; a draft it had not written was handed to it as "The owner pressed
+        Redraft" - a press he never made. Now nothing is rewritten on such a task: nothing went, the card says so where it stands, and the
+        next press sends it. The agent hears what arrived as it hears every arrival."""
+        from taskuary import general
+        s = MemoryStore(); tid, first, rid = thread(s)
+        s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'I found the August export.')
+        arrives(s, tid)
+        with mock.patch.object(general, 'to_agent', side_effect=AssertionError('the agent was told of a press he never made')), \
+             mock.patch('taskuary.responder.draft_for_review', side_effect=AssertionError('a side model rewrote the agent\'s card')):
+            data, send = self.approve(s, rid, 'Here it is - my edited version.')
+            self.assertFalse(data['ok']); self.assertTrue(data['stale']); send.assert_not_called()
+            self.assertEqual(s.get_review(rid)['DraftText'], 'Here it is.', 'nothing written over it')
+            self.assertIn('Nothing was sent', data['send_error'])
+            self.assertFalse(s._rows("SELECT 1 FROM audit WHERE Action='redraft_asked'"))
+            again, send2 = self.approve(s, rid, 'Here it is - my edited version.')
+        self.assertTrue(again['ok']); send2.assert_called_once()
+
     def test_an_fyi_filed_with_nothing_to_do_does_not_interrupt(self):
         s = MemoryStore(); tid, first, rid = thread(s)
         arrives(s, tid, status='filed', body='FYI - the vendor newsletter.')

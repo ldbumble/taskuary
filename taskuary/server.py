@@ -390,7 +390,7 @@ async def owner_presence(request: Request, call_next):
 # ...and a line he types to its agent ends it on the line's own road (general.take_line), before the turn it waits on
 WATCH_ENDS = re.compile(r'^/api/(?:tasks/(?P<tid>\d+)(?:/(?:remind|dispatch|code|continue|continue-session|continue-work|resume|not-coding|'
                         r'not-a-task|split|merge|handoff|emails|offer|clarify|answer|wrap|repo|strong-again|agent/stop|pause))?'
-                        r'|reviews/(?P<rid>\d+)/(?:decide|closeout/[a-z_]+|draft)|messages/(?P<mid>\d+)/(?:reply|calendar|dispatch))$')
+                        r'|reviews/(?P<rid>\d+)/(?:decide|closeout/[a-z_]+)|messages/(?P<mid>\d+)/(?:reply|calendar|dispatch))$')
 
 def _end_watch(m) -> None:
     from . import watch
@@ -1884,73 +1884,32 @@ def _run_kind(op: dict, background: BackgroundTasks):
                                                 who=[w for w in e.get('who') or [] if w], link=e.get('join'),
                                                 instruction=str(p.get('text') or '') or None), background)
     if kind == 'calendar.answer':
-        # THE CALENDAR'S ANSWERS, by words (a phone chat; on the desk the words only light the row's button): drafted, never sent - a
-        # new time with none named is the first free one the row's picker would offer, there to change before Send
+        # THE CALENDAR'S ANSWERS, by words (a phone chat; on the desk the words only light the row's button): Accept and Decline drafted for
+        # his Send, never sent; a new time or a time to meet his ask to the task's agent (_cal_ask)
         from . import calwrite
         m = store.get_message(mid)
         if not m: raise HTTPException(404, 'that message is gone')
-        try: return calwrite.draft(store, mid, str(p.get('act') or ''), p.get('start'), p.get('end'), ACTOR)      # no time named: the first free one
+        if (act := str(p.get('act') or '')) not in calwrite.ONE_PRESS: return _cal_ask(mid, act)
+        try: return calwrite.draft(store, mid, act, actor=ACTOR)
         except calwrite.NoAccess as e: raise outbound.Fixable(str(e), e.fix['label'], e.fix['href'])
         except ValueError as e: raise HTTPException(422, str(e))
-    if kind in ('task.chase', 'task.let_go', 'task.elsewhere'):
-        # THE SLIPPED ANSWERS (spec 2026-10-12): each is an outcome. The item is the rail's card (a person's step, or a thread with
-        # a follow-up on it); the person is its `who_email`, the ledger's key. A chase is a draft for your yes, never a send.
-        import json as _json
-        # ...never `assistant` here: imported in this function it is a local name of all of it, and every Advisor idea's own words
-        # (idea.act, above) answered "local variable 'assistant' referenced before assignment" (the button stress, 2026-11-02)
-        from . import funnel, outcomes
+    if kind in ('task.let_go', 'task.elsewhere'):
+        # THE SLIPPED ANSWERS (spec 2026-10-12): each is an outcome. The item is the rail's card (a person's step, or a thread with a follow-up
+        # on it); the person is its `who_email`, the ledger's key. A chase is no answer here: lateness wakes the task's agent (checkback.late),
+        # and the agent raises the nudge as its card (the owner, 2026-11-27: "side model should never work in agent canvas")
+        # ...never `assistant` here: imported in this function it is a local name of all of it (the button stress, 2026-11-02)
+        from . import funnel, outcomes, rulebook
         key = str(p.get('key') or ''); item = funnel.next_item(store, key, include_surfaced=True) or funnel.item_for_key(store, key)
         if not item: raise HTTPException(404, 'that one is not on the rail any more')
-        # ...and only while it IS slipped: pressed after they wrote back, or on a card that never slipped, nothing is changed
-        # ...or a Chase the rule lit on a wait past its day (rulebook.adds) - it answers the thread rulebook.chase_thread names
-        from . import rulebook
-        ct = rulebook.chase_thread(store, item) if kind == 'task.chase' and item.get('lane') != 'forgotten' and 'chase' in rulebook.adds(store, item) else None
-        # ...or a watch back after a quiet week (watch.py): its Chase goes to the thread chase_thread names, its Let it go drops the task
+        # ...and only while it IS slipped, or a watch back after a quiet week (watch.py) whose Let it go drops the task
         quiet = item.get('lane') != 'forgotten' and rulebook.quiet_watch(store, item)
-        if item.get('lane') != 'forgotten' and not ct and not (quiet and kind == 'task.let_go'):
+        if item.get('lane') != 'forgotten' and not (quiet and kind == 'task.let_go'):
             raise HTTPException(409, 'That one is not slipped any more - they wrote back, or it moved on. Nothing was changed.')
         who, tid_, iid, text = str(item.get('who_email') or ''), item.get('tid'), item.get('idea'), str(p.get('text') or '').strip()[:300]
-        if ct: who, tid_ = ct['who'], ct['tid']
         task_ = store.get_task(tid_) if tid_ else None
         step = bool(task_ and str(task_.get('Assignee') or '').startswith('person:') and task_.get('Status') not in ('done', 'dropped'))   # a step somebody owes
         # ...and a watched task let go is put down the same way: the owner's press, nobody chasing it further (watch.py)
         step = step or bool(quiet and task_ and task_.get('Status') not in ('done', 'dropped'))
-        if kind == 'task.chase':
-            # the thread's last word FROM THE PERSON WHO OWES IT: a follow-up's own inbound, or the step's conversation filtered by them
-            a = item.get('action') or {}
-            if ct: mid = ct['mid']
-            elif a.get('type') == 'followup' and a.get('mid'): mid = a['mid']
-            else:
-                row = store._one("SELECT MessageId FROM message WHERE TaskId=? AND lower(FromEmail)=? AND Status!='context' ORDER BY SentAt DESC LIMIT 1",
-                                 (tid_, who)) if tid_ and who else None                      # the step's own mail from them
-                mid = (row or {}).get('MessageId')
-            if not mid and not ct: raise HTTPException(422, 'There is no thread with them to chase on - write to them from the task page, and the ledger will count it.')
-            n = (sum(1 for r in outcomes.rows_for(store, 'task', tid_) if _json.loads(r.get('FactsJson') or '{}').get('chase')) if tid_ else 0) + 1
-            cc = outcomes.chase_cc(store, who) if who else None
-            instr = f'a short chase to {who or "them"}, in my voice: no answer yet, what I need and by when' + (f'; copy {cc}, who gets them to answer' if cc else '')
-            # ITS MARK IS ITS OWN FIELD (review.Origin), its reason words: the card drew "chase:2 cc:<address>" under the draft, and the
-            # ledger knew a chase by that line's first six letters (the spine audit, 2026-11-09)
-            def mark(rid): store._exec('UPDATE review SET Reason=?, Origin=? WHERE ReviewId=?', (
-                'chase' + (f' {n}' if n > 1 else '') + ': no answer yet' + (f' · copying {cc}' if cc else ''), 'chase', rid))
-            if ct and not mid:
-                # nothing of theirs on it to answer: a new message to them from the task, waiting for the owner's yes like any draft
-                from . import outbox
-                try: got = outbox.task_email(store, tid_, who, instr, cc=[cc] if cc else None, actor=ACTOR)
-                except ValueError as e: raise HTTPException(422, str(e))
-                mark(got['review_id'])
-                return {'reviewId': got['review_id'], 'taskId': tid_, 'draft': got['draft'], 'drafting': not got['draft'], 'cc': cc}
-            if a.get('type') == 'followup': out = open_reply(mid, OpenReplyBody(instruction=instr, app_words=True))     # their thread: its newest line is theirs
-            else:
-                # a step somebody owes: the review answers THEIR last word, even when somebody else wrote on the thread since -
-                # open_reply would re-target to the newest line, and the chase would go to the wrong person
-                from . import responder
-                rv = store.pending_review(tid_) if tid_ else None
-                rid = rv['ReviewId'] if rv and rv.get('MessageId') == mid else store.add_review({'TaskId': tid_, 'MessageId': mid, 'Kind': 'draft', 'Status': 'pending', 'Origin': 'chase'})
-                try: draft = responder.write_draft(store, tid_, rid, actor=ACTOR, nudge=instr)
-                except Exception as e: logger.warning(f'chase draft on {task_ref(tid_)} not written: {e}'); draft = ''
-                out = {'reviewId': rid, 'taskId': tid_, 'draft': draft, 'drafting': not draft}
-            mark(out['reviewId'])
-            return {**out, 'cc': cc}
         # Let it go is a turn-down on the follow-up; answered elsewhere is a done. Only a step somebody OWES is dropped or closed -
         # a thread's own task is never touched for its follow-up (the review, 2026-10-12)
         if iid: assistant.act(store, iid, 'dismiss' if kind == 'task.let_go' else 'done', ACTOR)
@@ -4452,8 +4411,8 @@ def fetch_attachments(mid: int):
         raise HTTPException(422, str(e)[:300])
     return {'fetched': n, 'data': [_att_row(a) for a in store.list_attachments(mid)]}
 
-# ── answering the calendar (calwrite.py): his Accept or Decline tells the calendar at the press, once; a new time and a meeting
-# DRAFT into the approval queue for his Send ──
+# ── answering the calendar (calwrite.py): his Accept or Decline tells the calendar at the press, once; Propose a new time and Find a time
+# are his ask to the task's agent, which raises the answer as its card (answer_invite) ──
 def _cal_refusal(e) -> dict:
     """The one line a press that cannot be drafted answers with, and its way out (failures.py's fix shape) - 200, so the row
     says it where it was pressed instead of an error toast."""
@@ -4461,38 +4420,30 @@ def _cal_refusal(e) -> dict:
     if isinstance(e, calwrite.NoAccess): return {'ok': False, 'say': str(e), 'fix': e.fix}
     return {'ok': False, 'say': str(e)[:300], 'fix': None}
 
-@app.get('/api/messages/{mid}/calendar/slots')
-def calendar_slots(mid: int, act: str = 'schedule'):
-    """The 2-3 free times Propose a new time and Find a time offer - checked against the card's right to write FIRST, so a
-    read-only card says so at the press, not after a pick."""
-    from . import calwrite
-    m = store.get_message(mid)
-    if not m: raise HTTPException(404, 'message not found')
-    if act not in ('propose', 'schedule'): raise HTTPException(422, 'slots are for proposing or finding a time')
-    try:
-        calwrite.require_write(store, calwrite.account(store, m))
-        out = calwrite.slots_for(store, m, act)
-    except Exception as e: return _cal_refusal(e)
-    c = calwrite.invite_of(m) or {}
-    return {'ok': True, **out, 'act': act, 'subject': c.get('subject') if act == 'propose' else calwrite._title(m),
-            **({'now': calwrite.when(c.get('start'), c.get('end'))} if act == 'propose' and c.get('start') else {})}
-
-class CalendarBody(BaseModel):
-    act: str
-    start: str | None = None
-    end: str | None = None
+class CalendarBody(BaseModel): act: str
 
 @app.post('/api/messages/{mid}/calendar')
 def calendar_answer(mid: int, body: CalendarBody):
     """Accept or Decline, pressed: the calendar is told, once, and the answer's card says so - {ok, reviewId, taskId, sent, say, fix};
-    a send that failed stays on that card (`sent` false). Propose a new time or Find a time: the answer drafted as a review on the
-    message (and its task) for the owner's Send - {ok, reviewId, taskId, say}. What cannot be set up at all: {ok: false, say, fix}."""
+    a send that failed stays on that card (`sent` false). What cannot be set up at all: {ok: false, say, fix}. Propose a new time or Find a
+    time: his ask to the task's agent (_cal_ask) - {ok, taskId, say}."""
     from . import calwrite
     if not store.get_message(mid): raise HTTPException(404, 'message not found')
-    try: out = (calwrite.rsvp(store, mid, body.act, ACTOR) if body.act in calwrite.ONE_PRESS
-                else calwrite.draft(store, mid, body.act, body.start, body.end, ACTOR))
+    if body.act not in calwrite.ONE_PRESS: return _cal_ask(mid, body.act)
+    try: out = calwrite.rsvp(store, mid, body.act, ACTOR)
     except Exception as e: return _cal_refusal(e)
     return {'ok': True, **out}
+
+def _cal_ask(mid: int, act: str) -> dict:
+    """PROPOSE A NEW TIME / FIND A TIME ARE HIS ASK TO THE INVITE'S AGENT (the owner, 2026-11-27: "side model should never work in agent
+    canvas"): the press's label is his line (general.to_agent), the task made from the message where it has none - the agent reads his
+    calendar and raises the answer as its card (answer_invite). {ok, taskId, say}."""
+    from . import calwrite, general
+    if act not in ('propose', 'schedule'): raise HTTPException(422, f'not a calendar answer: {act}')
+    tid = store.get_message(mid).get('TaskId') or task_from_message(store, mid, ACTOR, 'general')
+    try: general.to_agent(store, tid, buttons.label('propose_time' if act == 'propose' else 'find_time'), ACTOR, frm='owner', wait=False)
+    except (ValueError, RuntimeError) as e: return _cal_refusal(e)
+    return {'ok': True, 'taskId': tid, 'say': f'Asked the agent on {task_ref(tid)} - its card lands in the task.'}
 
 # ── New → Meeting (calwrite.suggest / draft_new): free times for people and a length, a pick drafted on a task of its own ──
 def _no_calendar():
@@ -4526,181 +4477,47 @@ def meeting_new(body: MeetingBody):
     except Exception as e: return _cal_refusal(e)
 
 class OpenReplyBody(BaseModel):
-    draft: bool = True
-    instruction: str | None = None
-    # "make it shorter": write it AGAIN over the draft that is there. Without this the model
-    # claimed the edit and the next approve sent the untouched original (2026-09-03).
-    redraft: bool = False
-    # REPLY OPENS AT ONCE (the owner, 2026-10-01: "never waits on the AI"): the box now, the draft owed - the page asks
-    # /api/reviews/{rid}/draft for it behind the card, which reads the provider first as this door would have
-    later: bool = False
-    # LOOP THEM IN (the owner, 2026-10-13: "it should create reply with looping in the new person"): names or addresses copied
-    # on the reply - looked up among the people who have written, the hand-off's book; one nobody knows is said, not guessed
-    cc: list[str] | None = None
-    # the instruction is the app's own (a chase's brief), not the owner's words: it rides into the draft and is not kept as theirs
-    app_words: bool = False
-    # DRAFT WITH AI was pressed: every press that asks for a draft gets one now (open_reply), so it says no more than `draft`
-    ai: bool = False
-    # the Assistant's under-way line for this ("Rewriting the draft on TQ-n."): said again in its place with how it went (concierge.settle)
-    line: int | None = None
+    instruction: str | None = None   # his words for it - his line to the task's agent
+    verb: str = 'reply'              # the press it came from (reply, redraft): its label is his line where he typed nothing
+    line: int | None = None          # the Assistant's under-way line for it, said again in its place with how it went (concierge.settle)
+    write: bool = False              # WRITE IT YOURSELF (no AI connected - the bar's own Reply): the box for his own words, nobody behind it
 
 
 @app.post('/api/messages/{mid}/reply')
 def open_reply(mid: int, body: OpenReplyBody = None):
-    """Put a reply on the table for ANY message - the agent finished and you want to answer, or
-    triage never queued one. Creates the pending review (reusing one if it exists) and, unless
-    draft=false, writes the AI draft right now so the box comes back filled. Approving still
-    sends; nothing here does."""
+    """REPLY IS HIS ASK TO THE TASK'S AGENT (the owner, 2026-11-27: "side model should never work in agent canvas"): his words, else the
+    press's own label, are his line on the one road a line takes (general.to_agent) - the task made from the message where it has none, its
+    agent started where none ran. The agent writes the reply and raises its card; nothing is drafted here."""
     m = store.get_message(mid)
     if not m: raise HTTPException(404, 'message not found')
-    # NOBODY SENT IT, SO THERE IS NOBODY TO ANSWER. A finished session already knows this rule and
-    # skips the draft (wrapup.no_one_behind); this door did not ask, so pressing Write reply on a task
-    # the owner typed himself sent the drafter a thread with no correspondent in it - and it answered
-    # the OWNER, analysis first, with a letter suggested underneath, in the box whose button sends
-    # (the owner, 2026-09-22, TQ-0674). A channel that cannot CARRY a reply is a different question
-    # and still drafts (PW-237): there the answer is real, it just leaves by another road.
+    # NOBODY SENT IT, SO THERE IS NOBODY TO ANSWER (TQ-0674): work it, or write what you found on the task itself
     from .wrapup import no_one_behind
     if no_one_behind(m.get('Channel')):
         raise HTTPException(422, 'nobody sent this, so there is nobody to answer - work it, or write '
                                  'what you found on the task itself')
-    # ...nor did a person send a machine's notice (the owner, 2026-11-10: "reply by itself makes no sense on github"): the same words the row's
-    # missing Reply would say (concierge.cannot), so a door pressed from an old page puts nothing on the table
+    # ...nor did a person send a machine's notice (the owner, 2026-11-10: "reply by itself makes no sense on github")
     from .categories import automated
-    from . import concierge
+    from . import concierge, general
     if automated(m): raise HTTPException(422, concierge.cannot({'mid': mid, 'title': m.get('Subject') or 'this message'}, 'reply', store))
-    later = body is not None and body.later
-    # THE OWNER'S OWN MAIL A PROMISE WAS MADE IN is answered on the promise's task (store.promised_in): the mail sits on its thread's
-    # task, whose newest inbound line is somebody else's ask - the reply that keeps the promise goes to whom it was made to
+    # THE OWNER'S OWN MAIL A PROMISE WAS MADE IN is answered on the promise's task (store.promised_in)
     promise = store.promise_task(mid) if (m.get('Status') == 'context' or m.get('Direction') == 'out') else None
-    if not later:                     # the draft behind a box opened at once reads the provider itself (draft_review)
-        try: _refresh_chat_context(task_id=m.get('TaskId'), message_id=mid)
-        except RuntimeError as e: raise HTTPException(503, str(e))
-    # The requested row may no longer be the end of the conversation after that sync.  Draft and
-    # deliver against the newest inbound line, while keeping the same task/review.
-    if not promise: m = (_latest_context_message(m.get('TaskId'), mid) or store.get_message(mid) or m)
-    mid = m['MessageId']
-    # a FILED message stays filed: answering it is a reply, not a project, and promoting it to a
-    # task just to hold the review put a TQ badge on chatter. The review rides task-less.
-    tid = promise['TaskId'] if promise else m.get('TaskId')
-    # ...and a thread its own last reply CLOSED comes back when the owner opens another one. The
-    # draft was created on the done task, where the queue's visibility rule hides it, so the card
-    # asking for the yes said "already handled" over the message instead of showing the draft, and
-    # every click stacked one more invisible review (TQ-0426, 2026-09-07). Answering again is work.
-    if tid and (store.get_task(tid) or {}).get('Status') in ('done', 'dropped'):
-        store.update_task(tid, {'Status': 'waiting'}, ACTOR)
-    rv = store.pending_review(tid) if tid else None
-    rid = rv['ReviewId'] if rv else store.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft',
-                                                      'Status': 'pending', 'Reason': 'you opened a reply on this message'})
-    draft = before = (rv or {}).get('DraftText') or ''
-    if rv and rv.get('MessageId') != mid:
-        draft = ''                    # a correct old draft is still wrong for a newer conversation
-    if body is not None and body.redraft: draft = ''          # write it again over what is there
-    # ...his own ask for other words, so the ones he typed into the box are taken back with it (store.his_words_back)
-    if rv and body is not None and (body.redraft or (body.instruction or '').strip()): store.his_words_back(rid)
-    # ...and so do the owner's own words for it: "reply to Marcus: yes, Thursday at 2 works" found the draft written before
-    # and showed it unchanged - it said to check the calendar (2026-10-06)
-    if body is not None and (body.instruction or '').strip():
-        draft = ''
-        # ...and kept, not thrown away once the model has read them (2026-10-23) - the owner's own, never a chase's brief
-        if not body.app_words: _keep_instruction(rid, body.instruction)
-    # REPLY DRAFTS, AGENT OR NOT (the owner, 2026-11-03: "drafting reply is broken ... if its still working stay spinning until done"):
-    # Reply on a task no agent had worked opened a signature-only box under Draft with AI, nothing coming (2026-10-28). Every press that
-    # asks for a draft is owed one, and a writer with nothing to go on says so.
-    owed, failed, handed = not draft and (body is None or body.draft), False, False
-    if owed and not later:
-        try:
-            draft = (responder.write_draft(store, tid, rid, actor=ACTOR, nudge=_reply_nudge(body and body.instruction), pressed=True) if tid
-                     else responder.draft_for_message(store, m, rid, instruction=_reply_nudge(body and body.instruction)))
-        except responder.Handed:
-            # ...the task's agent writes it again and files its card (responder.to_agent): nothing failed, and the box keeps what it held
-            handed, draft = True, before
-        except Exception as e:
-            logger.warning(f'reply draft failed for message {mid}: {e}')   # the box opens empty; write it yourself
-            failed = True
-            # ...with the reason beside it (PW-046): what it needs is the owner's to read, whole - work for an agent, never a failure
-            try: (store.set_review_draft_needs if isinstance(e, responder.NotDrafted) else store.set_review_draft_error)(rid, str(e))
-            except Exception as e2: logger.debug(f'could not record the draft failure on review {rid}: {e2}')
-    # ...an empty one is refused there and said (store.EMPTY_DRAFT): the draft before it stays
-    if body is not None and body.redraft and not failed and not handed: store.update_review_draft(rid, draft, (rv or {}).get('RunId'))
-    # WHO IT GOES TO, AT ONCE: the envelope was pinned only when the AI's draft landed (responder.write_draft), so a fresh box -
-    # Write another above all - showed the sender alone and no CC for the seconds the model took (2026-10-13). It is a lookup on
-    # the message, nothing to wait for; a draft finds it set and keeps it, an envelope the owner set already stays.
-    if str(m.get('Channel') or '').lower() == 'email' and not store.review_envelope(rid):
-        env = outbound.reply_envelope(store, m)
-        if env: store.set_review_envelope(rid, env)
-    store.audit('review', rid, 'redraft' if (body is not None and body.redraft) else 'open_reply', ACTOR, detail={'message_id': mid})
-    looped, unknown = _loop_in(rid, m, (body.cc if body is not None else None) or [])
-    # A REWRITE IS SAID DONE ONLY WHEN THE DRAFT CHANGED: the Assistant said "Rewritten" over a box that stayed empty (2026-11-04) - `draft` is
-    # what the review holds now, and `changed`/`why` are the receipt's to read, never the writer's return
-    if handed: return {'reviewId': rid, 'taskId': tid, 'draft': draft, 'drafting': False, 'handed': True,
-                       'receipt': _handed_receipt(tid, body.line if body is not None else None)}
-    rewrite = owed and not later
-    got = _rewritten(rid, before) if rewrite else {}
-    # ...and the Assistant's under-way line for it ("Rewriting the draft on TQ-n.") is said again in its place, with the same receipt: a draft
-    # decided here now, or one already in the box (_draft_receipt) - one still being written is /draft's to say
-    receipt = None if owed and later else _draft_receipt(tid, got or _rewritten(rid, ''), body is not None and body.redraft, body.line if body is not None else None)
-    return {'reviewId': rid, 'taskId': tid, 'draft': got.get('draft', draft) if rewrite else draft, 'drafting': bool(owed and later), **got,
-            **({'receipt': receipt} if receipt else {}), **({'cc': looped} if looped else {}), **({'cc_unknown': unknown} if unknown else {})}
-
-
-def _draft_receipt(tid, got: dict, rewrite: bool = False, line=None) -> dict:
-    """{'status': done | failed, 'text'} for a reply's draft from what the review holds now (_rewritten: changed into something, or why not),
-    and the Assistant's under-way line for it said again in its place with the same words (concierge.settle, the owner 2026-11-04: "it says
-    it's doing things and it does not do them")."""
-    from . import concierge
-    ref, why = task_ref(tid) if tid else 'the card', '' if got.get('changed') else str(got.get('why') or 'no draft came back').rstrip(' .')
-    text = (f"{'Rewrote the draft' if rewrite else 'Drafted a reply'} on {ref} - read it before you {buttons.label('approve')}." if not why else
-            f"The draft on {ref} was not rewritten - {why}. It is as it was; edit it there, or ask again." if rewrite else
-            f"No reply was drafted on {ref} - {why}. Write it in the box, or press {buttons.label('redraft', 'none')}.")
-    concierge.settle(store, line, text, not why)
-    return {'status': 'failed' if why else 'done', 'text': text}
-
-
-def _handed_receipt(tid, line=None) -> dict:
-    "The receipt of a Redraft / Draft with AI the task's agent took (responder.Handed): said once, in the Assistant's line too."
-    from . import concierge
-    text = f'The agent on {task_ref(tid)} is writing the reply again - its new card lands in the task.'
-    concierge.settle(store, line, text, True)
-    return {'status': 'done', 'text': text}
-
-
-def _rewritten(rid: int, before: str) -> dict:
-    "What a (re)draft left on the review: its text now, whether that changed into something, and - when it did not - why, plainly."
-    rv = store.get_review(rid) or {}
-    now = str(rv.get('DraftText') or '')
-    changed = bool(now.strip()) and now != str(before or '')
-    why = '' if changed else (rv.get('DraftNeeds') or rv.get('DraftError') or ('it came back the same as before' if now.strip() else store_mod.EMPTY_DRAFT))
-    return {'draft': now, 'changed': changed, **({'why': by_sentence(str(why))} if why else {})}
-
-
-def _loop_in(rid: int, m: dict, who: list) -> tuple:
-    """Copy `who` on the reply: its envelope is the reply's own (Reply all, outbound.reply_envelope) with them in CC - the card
-    shows the CC line and Approve sends it. ([addresses copied], [names nobody by that name has written as])."""
-    from . import concierge, outbound
-    if not who: return [], []
-    found = [(w, concierge.person(store, w)) for w in who if str(w or '').strip()]
-    adds, unknown = [p['Email'].lower() for _, p in found if p and p.get('Email')], [w for w, p in found if not p]
-    if not adds or str(m.get('Channel') or '').lower() != 'email': return [], unknown     # a chat has members, not a cc
-    rv = store.get_review(rid) or {}
-    try: env = json.loads(rv.get('Deliver') or '{}') or {}
-    except ValueError: env = {}
-    if not env: env = outbound.reply_envelope(store, m) or {'kind': 'reply'}
-    have = {a.lower() for a in (env.get('to') or []) + (env.get('cc') or [])}
-    env['cc'] = list(env.get('cc') or []) + [a for a in dict.fromkeys(adds) if a not in have]
-    store.set_review_deliver(rid, json.dumps(env))
-    return [a for a in adds], unknown
-
-
-def _keep_instruction(rid: int, said: str):
-    "The owner's words for a draft: kept, and the second time for one person a style line (byrecipient.keep_instruction)."
-    from . import byrecipient
-    byrecipient.keep_instruction(store, rid, said)
-
-
-def _reply_nudge(instruction) -> str | None:
-    """The owner's own words on what to say ("tell Omar it is not owned here"), ridden into the draft."""
-    said = (instruction or '').strip()
-    return f"THE OWNER'S INSTRUCTION FOR THIS REPLY - follow it: {said}" if said else None
+    tid = promise['TaskId'] if promise else m.get('TaskId') or task_from_message(store, mid, ACTOR, 'general')
+    body = body or OpenReplyBody()
+    if body.write:
+        # ...and answering a thread its last reply closed is work again (TQ-0426): the task comes back, where its card is seen
+        if (store.get_task(tid) or {}).get('Status') in ('done', 'dropped'): store.update_task(tid, {'Status': 'waiting'}, ACTOR)
+        rv = store.pending_review(tid)
+        rid = rv['ReviewId'] if rv else store.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft', 'Status': 'pending',
+                                                          'Reason': 'you opened a reply on this message'})
+        if str(m.get('Channel') or '').lower() == 'email' and not store.review_envelope(rid) and (env := outbound.reply_envelope(store, m)):
+            store.set_review_envelope(rid, env)
+        return {'reviewId': rid, 'taskId': tid, 'ref': task_ref(tid)}
+    said = (body.instruction or '').strip() or buttons.label(body.verb if body.verb in ('reply', 'redraft') else 'reply')
+    try: how = general.to_agent(store, tid, said, ACTOR, frm='owner', wait=False)
+    except (ValueError, RuntimeError) as e: raise HTTPException(422, str(e))
+    text = f'Asked the agent on {task_ref(tid)} - its card lands in the task.'
+    concierge.settle(store, body.line, text, True)
+    return {'taskId': tid, 'ref': task_ref(tid), 'asked': bool(how), 'receipt': {'status': 'done', 'text': text}}
 
 
 class NotMineBody(BaseModel):
@@ -5359,7 +5176,8 @@ def split_msg(mid: int, body: SplitBody = None):
 
 class HandoffBody(BaseModel):
     to: str | None = None; channel: str = 'email'; note: str | None = None
-    text: str | None = None; draft_only: bool = False
+    text: str | None = None
+    ask: bool = False               # Send to agent: his ask to the task's agent, which writes the forward and raises its card
 
 # ── the agent wall (blackboard.py): what the agents leave for each other ─────────────────
 class NoteBody(BaseModel):
@@ -5429,21 +5247,21 @@ def send_targets():
 
 @app.post('/api/tasks/{task_id}/handoff')
 def handoff(task_id: int, body: HandoffBody):
-    """Hand the task to a PERSON: the AI writes the forward message from the task's own
-    context, you edit it, and it goes out on the channel you picked."""
+    """Hand the task to a PERSON: his own words go out on the channel he picked, at his press. `ask`: his ask to the task's agent instead
+    (general.to_agent) - it writes the forward and raises its card (the owner, 2026-11-27: "side model should never work in agent canvas")."""
     t = store.get_task(task_id)
     if not t: raise HTTPException(404, 'task not found')
+    text = (body.text or '').strip()
+    if body.ask:
+        if not body.to: raise HTTPException(422, 'who is it going to?')
+        from . import general
+        said = f"{buttons.label('forward')}: {body.to} by {body.channel}" + (f' - {text}' if text else '')
+        try: how = general.to_agent(store, task_id, said, ACTOR, frm='owner', wait=False)
+        except (ValueError, RuntimeError) as e: raise HTTPException(422, str(e))
+        return {'asked': bool(how), 'taskId': task_id}
     try:
-        text = (body.text or '').strip()
-        # only the DRAFT is the model's. A send with no words wrote the forward and sent it in the same step, unseen (the spine audit,
-        # 2026-11-09): what goes is what the owner was shown
-        if not text and not body.draft_only: raise HTTPException(422, 'write what it says first')
-        # a forward by email is an email from the owner: signed once, when the draft they see is made - their own words go as written
-        # (2026-11-17: signing again at send put a second name under their own sign-off, a line the box never showed)
-        if not text:
-            text = outbound.draft_handoff(store, task_id, body.to or 'a colleague', body.note)
-            if body.channel == 'email': text = responder.with_signature(text, responder.signature_for(store))
-        if body.draft_only: return {'draft': text}
+        # what goes is what the owner wrote (the spine audit, 2026-11-09)
+        if not text: raise HTTPException(422, 'write what it says first')
         subject = f"{task_ref(task_id)} {t.get('Title') or ''}".strip()
         chat = [m for m in store.list_messages(task_id) if m['Channel'] == 'teams'] if body.channel == 'teams' else []
         if chat:
@@ -5624,17 +5442,19 @@ def press_review(st, rid: int, body: DecideBody, background: BackgroundTasks = N
             if mine and rv.get('TaskId'):
                 st.add_comment(rv['TaskId'], ACTOR, 'human', f'Your edited reply, kept for comparison - the thread moved before it was sent:\n{yours[:4000]}')
             draft, kept = None, None
+            from . import general
             from .wrapup import agent_drafted
-            if agent_drafted(rv) and rv.get('TaskId'):
-                # AN AGENT'S OWN LETTER IS NEVER REWRITTEN HERE: the responder's fresh draft answered whoever wrote last, and the
-                # session's question to the person it meant was gone (2026-11-02). It stays as written, to whom it was written;
-                # what arrived is shown, and it now stands against the thread as it is - the next press sends it
+            # AN AGENT'S TASK IS NEVER REWRITTEN HERE, its own letter or not (the owner, 2026-11-27: "side model should never work in agent
+            # canvas"): the responder's fresh draft answered whoever wrote last, and the session's question to the person it meant was gone
+            # (2026-11-02). It stays as written, to whom it was written; its agent hears what arrived as every arrival, and is never told he
+            # pressed a Redraft he did not. What arrived is shown, and it now stands against the thread as it is - the next press sends it
+            if rv.get('TaskId') and (agent_drafted(rv) or general._last_said(st, rv['TaskId'])[0]):
                 from . import operations
                 st.pin_review_context(rid, rv['MessageId'], operations.message_revision(st, rv['TaskId']))
                 kept = draft = str(rv.get('DraftText') or '')
             else:
                 try:
-                    draft = (responder.write_draft(st, rv['TaskId'], rid, actor=ACTOR, pressed=True)
+                    draft = (responder.draft_for_review(st, rv['TaskId'], rid, pressed=True)
                              if rv.get('TaskId') else responder.draft_for_message(st, latest, rid))
                 except Exception as e:
                     logger.warning(f'could not refresh stale review {rid}: {e}')
@@ -6044,24 +5864,20 @@ def hub_retire(lid: int, request: Request):
     return {'retired': True, **out}
 
 class OutboxBody(BaseModel):
-    channel: str; to: str | list[str]; about: str; mode: str = 'draft'
+    channel: str; to: str | list[str]; about: str
     cc: list[str] = []
-    subject: str | None = None; repo: str | None = None
+    subject: str | None = None
     files: list[str] = []           # ...what he attached to the ask, beside his words: saved uploads only (prompt_images)
 
 @app.post('/api/outbox')
 def outbox(body: OutboxBody):
-    """＋ New → Send something. Start a message instead of answering one.
-
-    Two modes, one ending. 'draft' has the AI write it now, in the owner's voice, and parks it in
-    Review. 'task' sends an agent to find out first; when it finishes, the message is written
-    from what it actually found and lands in the same place. Neither one sends: the approved
-    review does, through the one door every outgoing message already goes through."""
+    """＋ New → Send something. Start a message instead of answering one: a task holding his ask, and its agent asked to write it
+    (outbox.compose) - the message comes back as the agent's card for his Send."""
     from . import outbox as ob
-    try: return ob.compose(store, body.channel, body.to, body.about, body.mode, body.subject,
-                           body.repo, ACTOR, cc=body.cc, files=prompt_images(body.files))
+    try: return ob.compose(store, body.channel, body.to, body.about, body.subject, ACTOR, cc=body.cc, files=prompt_images(body.files))
     except ValueError as e: raise HTTPException(422, str(e))
     except Exception as e: raise HTTPException(422, str(e)[:400])
+
 
 @app.get('/api/mailboxes')
 def mailboxes(task: int | None = None):
@@ -6077,30 +5893,27 @@ class TaskEmailBody(BaseModel):
 
 @app.post('/api/tasks/{task_id}/emails')
 def task_email(task_id: int, body: TaskEmailBody):
-    """The task bar's Email someone: the AI writes it from the owner's words and the work, it waits in Close out (outbox.task_email)."""
-    from . import outbox as ob, session_artifacts as sa
-    files = []
-    for f in body.attach or []:
-        kind = str(f.get('kind') or '')
-        # a file the agent made in the task's outputs folder (outputs.py) - the workbook itself, named inside THAT folder only;
-        # the list offered artifacts and mail attachments, so the one thing the owner wanted to send was not in it
-        if kind == 'output':
-            from . import outputs
-            path = outputs.resolve(task_id, str(f.get('path') or ''))
-            if not path: raise HTTPException(422, f"{f.get('path')} {GONE} - it is no longer in {task_ref(task_id)}'s folder")
-            files.append((path.name, path.read_bytes())); continue
-        fid = int(f.get('id') or 0)
+    """EMAIL A SUMMARY IS HIS ASK TO THE TASK'S AGENT (the owner, 2026-11-27: "side model should never work in agent canvas"): what he
+    filled in is his line on the one road a line takes (general.to_agent), its agent started where none ran - it writes the message and
+    raises its card for his Send. -> {ok, taskId, asked}."""
+    from . import general
+    if not store.get_task(task_id): raise HTTPException(404, 'task not found')
+    def name(f):
+        kind, fid = str(f.get('kind') or ''), int(f.get('id') or 0)
+        if kind == 'output': return Path(str(f.get('path') or '')).name
         row = store.get_task_artifact(fid) if kind == 'artifact' else store.get_attachment(fid) if kind == 'attachment' else None
-        # only a file of THIS task: the ids come from the page, and another task's file is not this one's to send
-        mine = row and (row.get('TaskId') == task_id if kind == 'artifact'
-                        else any(a.get('AttachmentId') == fid for a in (store.task_detail(task_id) or {}).get('attachments') or []))
-        path = (sa.confined(row.get('Path')) if kind == 'artifact' else _attachment_path(row.get('Path'))) if mine else None
-        if not path: raise HTTPException(422, f'that file is not on this task any more ({kind} {fid})')
-        files.append((row.get('Name') or path.name, path.read_bytes()))
-    try: return ob.task_email(store, task_id, body.to, body.about, body.cc, body.subject, files, ACTOR,
-                              channel=body.channel, mailbox=body.mailbox, name=body.name)
-    except ValueError as e: raise HTTPException(422, str(e))
-    except Exception as e: raise HTTPException(422, str(e)[:400])
+        # ...only a file of THIS task: the ids come from the page, and another task's file is not this one's to name
+        mine = row and (row.get('TaskId') == task_id if kind == 'artifact' else (store.get_message(row.get('MessageId')) or {}).get('TaskId') == task_id)
+        return (row or {}).get('Name') or '' if mine else ''
+    files = [n for n in map(name, body.attach or []) if n]
+    said = (f"{buttons.label('share')} to {body.to}" if body.channel == 'email' else f"{buttons.label('share')} to {body.name or body.to} on {body.channel}") \
+        + (f", cc {', '.join(body.cc)}" if body.cc else '') + (f', from {body.mailbox}' if body.mailbox else '') \
+        + (f', subject "{body.subject}"' if body.subject else '') + (f", with {', '.join(files)} attached" if files else '') \
+        + (f': {body.about.strip()}' if body.about.strip() else '')
+    try: how = general.to_agent(store, task_id, said, ACTOR, frm='owner', wait=False)
+    except (ValueError, RuntimeError) as e: raise HTTPException(422, str(e))
+    return {'ok': True, 'taskId': task_id, 'asked': bool(how)}
+
 
 class OwnNoteBody(BaseModel): title: str; body: str = ''; when: str | None = None
 
@@ -7990,68 +7803,6 @@ def release_review(rid: int):
     store.audit('review', rid, 'release', ACTOR)
     return {'ok': True}
 
-class DraftBody(BaseModel):
-    instruction: str | None = None     # a reply opened at once with the owner's words (open_reply's later)
-    line: int | None = None            # the Assistant's "Drafting a reply on TQ-n" line, said again with how it went (_draft_receipt)
-
-@app.post('/api/reviews/{rid}/draft')
-def draft_review(rid: int, body: DraftBody = None):
-    """(Re)generate the AI draft for a pending review inline. The main AI writes replies -
-    a coding CLI is the wrong (and expensive) tool for two sentences of email - unless the
-    owner deliberately configured an agent named `responder`. On a review a coding agent closed,
-    the redraft reads its report, so it reports the work instead of promising it."""
-    rv = store.get_review(rid)
-    if not rv: raise HTTPException(404, 'review not found')
-    # one of the task's emails (slots.py) is the agent's words: every redrafter here writes a reply to the sender
-    try: deliver = json.loads(rv.get('Deliver') or '{}') or {}
-    except (TypeError, ValueError): deliver = {}
-    # ...unless the owner started it from the task (outbox.task_email): it keeps their brief, and is written from it again
-    if rv.get('Kind') == 'slot' and deliver.get('by') != 'owner': raise HTTPException(422, 'the agent writes this email - ask it again, or edit it here')
-    # a calendar answer's note is the owner's one line: no redrafter writes an RSVP (calwrite.py)
-    if deliver.get('kind') == 'calendar': raise HTTPException(422, 'the note on a calendar answer is yours to write - or leave it empty')
-    # THE OWNER'S WORDS FOR IT ARE KEPT on the review (the owner, 2026-10-23: a Redraft's instruction is stored and remembered)
-    if body and (body.instruction or '').strip(): _keep_instruction(rid, body.instruction)
-    store.his_words_back(rid)                     # ...his own ask for other words: the ones he typed are taken back with it
-    try:
-        if rv.get('Kind') == 'slot':
-            from . import outbox as ob
-            chat = (deliver.get('channel') or 'email') != 'email'
-            draft = ob.draft_message(store, deliver.get('channel') or 'email', [deliver['name']] if chat and deliver.get('name') else deliver.get('to'), ob.results_brief('\n\n'.join(filter(None, [deliver.get('about'), _reply_nudge(body and body.instruction)]))),
-                                     resolution=ob.work_of(store, rv['TaskId']) or None, cc=deliver.get('cc'),
-                                     attached=None if chat else [f.get('name') for f in deliver.get('attachments') or []],
-                                     mailbox=None if chat else outbound.sending_mailbox(store, rv))
-            store.update_review_draft(rid, draft, rv.get('RunId'))
-        elif deliver.get('channel') and deliver.get('kind') != 'zoho_invoice':
-            from . import outbox as ob
-            draft = ob.redraft_review(store, rv, instruction=_reply_nudge(body and body.instruction))
-        elif rv.get('TaskId'):
-            _refresh_chat_context(task_id=rv.get('TaskId'), message_id=rv.get('MessageId'))
-            # the owner pressed for it (Draft with AI / Redraft): a writer's NO REPLY must not put the review down (responder.ASKED)
-            draft = responder.write_draft(store, rv['TaskId'], rid, actor=ACTOR, nudge=_reply_nudge(body and body.instruction), pressed=True)
-        else:
-            message = store.get_message(rv.get('MessageId'))
-            if not message: raise RuntimeError('the message behind this reply no longer exists')
-            _refresh_chat_context(message_id=message['MessageId'])
-            message = _latest_context_message(None, message['MessageId']) or message
-            draft = responder.draft_for_message(store, message, rid, instruction=_reply_nudge(body and body.instruction))
-    except responder.Handed:
-        return {'ok': True, 'handed': True, 'draft': str(rv.get('DraftText') or ''), 'changed': False,
-                'receipt': _handed_receipt(rv.get('TaskId'), body and body.line)}
-    except responder.NotDrafted as e:
-        # THE WRITER SAID WHAT IT NEEDS - no draft, and no failure: a plain line on the card and Send to agent / Continue lit (rulebook
-        # needs_agent). It was a 422 like any error, so the card drew a red app failure cut mid-word (walk 2026-10-29)
-        store.set_review_draft_needs(rid, str(e))
-        needs = by_sentence(str(e), 2000)
-        return {'ok': False, 'draft': '', 'needs': needs, 'receipt': _draft_receipt(rv.get('TaskId'), {'changed': False, 'why': needs}, False, body and body.line)}
-    except Exception as e:
-        store.set_review_draft_error(rid, str(e))     # visible beside the draft box, with Retry (PW-046)
-        _draft_receipt(rv.get('TaskId'), {'changed': False, 'why': by_sentence(str(e))}, False, body and body.line)
-        raise HTTPException(422, by_sentence(str(e)))
-    store.audit('review', rid, 'redraft', ACTOR)
-    # ...and an empty one never replaced the draft (store.update_review_draft): what the review holds is the answer, said changed or why not
-    if not str(draft or '').strip(): store.update_review_draft(rid, draft, rv.get('RunId'))
-    got = _rewritten(rid, rv.get('DraftText') or '')
-    return {'ok': True, **got, 'receipt': _draft_receipt(rv.get('TaskId'), got, bool(rv.get('DraftText')), body and body.line)}
 
 class EnvelopeBody(BaseModel): mode: str | None = None; to: list[str] | None = None; cc: list[str] | None = None
 

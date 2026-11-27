@@ -535,18 +535,12 @@ def test_a_slot_is_never_rewritten_into_a_reply_and_sends_the_words_shown(s):
     rid = slots.draft(s, tid, 'Tab 1 is fine.', to='paula@northwind.example')['review_id']
     later_inbound(s, tid)
     c, p = api(s)
-    with p, mock.patch('taskuary.server._refresh_chat_context', return_value={}), mock.patch('taskuary.responder.write_draft') as rewrite, \
+    with p, mock.patch('taskuary.server._refresh_chat_context', return_value={}), mock.patch('taskuary.responder.draft_for_review') as rewrite, \
          mock.patch('taskuary.outbound.send_out', return_value=SENT) as sent, mock.patch.object(outbound, 'send_block', return_value=''), \
          mock.patch('taskuary.learning.learn_from'):
         out = c.post(f'/api/reviews/{rid}/decide', json={'verb': 'approve'}).json()
     assert out.get('ok') and not rewrite.called and sent.called and s.get_review(rid)['DraftText'] == 'Tab 1 is fine.'
 
-
-def test_the_redraft_door_refuses_a_slot(s):
-    tid = typed(s, FOUR[:1]); rid = slots.draft(s, tid, 'Tab 1 is fine.', to='paula@northwind.example')['review_id']
-    c, p = api(s)
-    with p: r = c.post(f'/api/reviews/{rid}/draft', json={})
-    assert r.status_code == 422 and s.get_review(rid)['DraftText'] == 'Tab 1 is fine.'
 
 
 def test_the_last_slot_never_closes_past_a_pending_closeout(s):

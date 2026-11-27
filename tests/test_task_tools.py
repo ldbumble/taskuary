@@ -200,14 +200,15 @@ class ToolTests(unittest.TestCase):
         self.run_card(s, call(s, 'task.merge', ref=f'TQ-{gone:04d}', into=f'TQ-{keep:04d}')[0])
         self.assertEqual(s.get_task(gone)['Status'], 'dropped')
 
-    def test_hand_off_and_ask_the_sender_each_write_a_draft_and_send_nothing(self):
+    def test_hand_off_asks_the_tasks_agent_and_ask_the_sender_writes_a_draft_and_both_send_nothing(self):
+        from taskuary import general
         s, tid, mid, item = table()
-        with mock.patch('taskuary.outbound.draft_handoff', return_value='Can you take this one?'), \
-             mock.patch('taskuary.outbound.send_email') as sent:
+        with mock.patch.object(general, 'to_agent', return_value='woke') as asked, mock.patch('taskuary.outbound.send_email') as sent:
             self.run_card(s, call(s, 'task.handoff', key=item['key'], who='Erin')[0])
             sent.assert_not_called()
-        rv = s.pending_review(tid, live_only=False)
-        self.assertIn('erin@northwind.example', rv['Deliver'])
+        self.assertEqual(asked.call_args.args[1], tid)
+        self.assertIn('erin@northwind.example', asked.call_args.args[2])
+        self.assertIsNone(s.pending_review(tid, live_only=False), 'no forward is written in his name - the agent raises its card')
         s2, t2, _, i2 = table()
         self.run_card(s2, call(s2, 'task.clarify', key=i2['key'], text='Which date range do you need?')[0])
         self.assertTrue(any('Which date range' in (r.get('DraftText') or '') for r in s2.list_reviews('pending')))
@@ -218,9 +219,11 @@ class ToolTests(unittest.TestCase):
         s, tid, mid, item = table()
         p, _ = call(s, 'task.share', key=item['key'], who='Erin', about='the export is fixed')
         self.assertEqual((p['kind'], p.get('auto')), ('task.share', None))
-        with mock.patch('taskuary.outbox.task_email', return_value={'ok': True}) as te:
+        from taskuary import general
+        with mock.patch.object(general, 'to_agent', return_value='woke') as asked:
             self.run_card(s, p)
-        self.assertEqual(te.call_args.args[1:4], (tid, 'erin@northwind.example', 'the export is fixed'))
+        self.assertEqual(asked.call_args.args[1], tid)
+        self.assertIn('erin@northwind.example', asked.call_args.args[2]); self.assertIn('the export is fixed', asked.call_args.args[2])
         with mock.patch.object(server, 'store', s), mock.patch.object(server, 'retriage_message', return_value={'task_id': None}) as rt:
             server._run_operation({'kind': 'message.retriage', 'target': mid, 'params': {}}, None)
         rt.assert_called_once_with(mid)

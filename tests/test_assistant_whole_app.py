@@ -293,18 +293,19 @@ class EveryRoadIsOffered(unittest.TestCase):
     def test_new_send_something_comes_up_addressed(self):
         s = store()
         notice(s, 0, 'Gail Moreno', 'gail@northwind.example', 'May close', 'Numbers attached.')
-        # a recipient it can place: drafted on a task of its own and opened (the owner, 2026-11-12: "open task directly") - never sent
-        from taskuary import outbox
-        # ...from a mailbox that can send it (test_assistant_acts: with none, the line says Connect, not Send)
-        with mock.patch.object(outbox, 'draft_message', return_value='Hi Gail, the May numbers are attached.'), \
-                mock.patch('taskuary.capabilities.can_send_draft', return_value=True):
+        # a recipient it can place: a task of its own, opened (the owner, 2026-11-12: "open task directly"), and his ask is its agent's line -
+        # the agent writes it and raises its card (the owner, 2026-11-27: "side model should never work in agent canvas") - never sent
+        from taskuary import general, outbox
+        with mock.patch.object(outbox, 'draft_message', side_effect=AssertionError('a side model wrote it')), \
+                mock.patch.object(concierge, 'start_refusal', return_value=''), mock.patch.object(general, 'to_agent', return_value='started') as asked:
             out = call(s, 'task.create_from_text', kind='send', text='the May numbers', to='Gail Moreno')
-        tid = int(out['open'].split('=')[1]); rv = s.pending_review(tid)
-        self.assertNotIn('new', out); self.assertEqual(out['say'], f'Drafted it on TQ-{tid:04d} - it waits for your Send.')
-        self.assertEqual((rv['DraftText'], json.loads(rv['Deliver'])['to'], rv['Status']), ('Hi Gail, the May numbers are attached.', ['gail@northwind.example'], 'pending'))
-        # ...and with no AI to write it the task is still made, and says the draft is the owner's to write
+        tid = int(out['open'].split('=')[1])
+        self.assertNotIn('new', out); self.assertEqual(out['say'], f'Asked the agent on TQ-{tid:04d} to write it - its card waits for your Send.')
+        self.assertEqual(asked.call_args.args[1:3], (tid, 'Email gail@northwind.example: the May numbers'))
+        self.assertIsNone(s.pending_review(tid), 'no card in his name')
+        # ...and with no AI to run its agent nothing is made, and it says why
         out = call(s, 'task.create_from_text', kind='send', text='the June numbers', to='Gail Moreno')
-        self.assertTrue(out['say'].endswith('but the draft could not be written - write it there.'), out['say'])
+        self.assertIn('Nothing was made', out['say'])
         for k in ('goal', 'dashboard'): self.assertEqual(call(s, 'task.create_from_text', kind=k, text='x')['new']['kind'], k)
         with concierge.delivering(concierge.PHONE), self.assertRaises(concierge.CallMiss): call(s, 'task.create_from_text', kind='send', text='x')
 
@@ -315,11 +316,12 @@ class EveryRoadIsOffered(unittest.TestCase):
         s, grp = store(), '120363000000000001@g.us'
         s.save_connector({'Type': 'whatsapp', 'Name': 'WhatsApp', 'Active': 1}, 't')
         s.set_setting(wanames.KEY, json.dumps({grp: 'Northwind team', '120363000000000002@g.us': 'Northwind night shift'}), 't')
-        from taskuary import outbox
-        with mock.patch.object(outbox, 'draft_message', return_value='Everything is updated and the installer is ready.'),              mock.patch('taskuary.capabilities.send_refusal', return_value=''):
+        from taskuary import general
+        with mock.patch('taskuary.capabilities.send_refusal', return_value=''), mock.patch.object(concierge, 'start_refusal', return_value=''), \
+                mock.patch.object(general, 'to_agent', return_value='started') as asked:
             out = call(s, 'task.create_from_text', kind='send', channel='whatsapp', text='everything is updated and the installer is ready', to='Northwind team')
         tid = int(out['open'].split('=')[1])
-        self.assertEqual({k: json.loads(s.pending_review(tid)['Deliver'])[k] for k in ('channel', 'to')}, {'channel': 'whatsapp', 'to': grp})   # its Send stays the owner's
+        self.assertEqual(asked.call_args.args[2], f'Message {grp} on whatsapp: everything is updated and the installer is ready')   # its agent's card
         # ...a group nobody knows, or two that fit equally, place nobody: the ask goes to an agent, which finds or asks who (2026-11-17) -
         # never New with To empty
         for to in ('Payworth billing', 'Northwind'):

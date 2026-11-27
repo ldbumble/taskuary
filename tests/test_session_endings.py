@@ -96,7 +96,7 @@ class MergedPullRequestOwesNoReplyTests(unittest.TestCase):
                        'FromEmail': 'erin@northwind.example', 'BodyText': 'PR opened', 'Status': 'routed'})
         prev, wrapup.REFRESH = wrapup.REFRESH, None
         try:
-            with mock.patch('taskuary.responder.write_draft', return_value='Merged, thanks.') as draft:
+            with mock.patch('taskuary.responder.draft_for_review', return_value='Merged, thanks.') as draft:
                 out = wrapup.finish(s, tid, {'summary': 'merged', 'outcome': 'did_work'}, None, 'coding', no_reply=True)
         finally: wrapup.REFRESH = prev
         draft.assert_not_called()

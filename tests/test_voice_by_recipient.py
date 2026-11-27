@@ -36,12 +36,3 @@ def test_a_redraft_instruction_said_twice_for_one_person_becomes_their_style_lin
     assert said(4, 'ray@northwind.example', 'Make it shorter.') == '', 'one line, never written twice'
 
 
-def test_the_redraft_door_keeps_the_instruction():
-    from fastapi.testclient import TestClient
-    from taskuary import server
-    c = TestClient(server.app)
-    mid = server.store.add_message({'ExternalId': 'redraft-door-1', 'Channel': 'email', 'Subject': 'Q3', 'FromEmail': 'omar@northwind.example',
-                                    'BodyText': 'Numbers?', 'Status': 'filed'})
-    with mock.patch.object(responder, 'draft_for_message', return_value='Here they are.'):
-        for _ in range(2): c.post(f'/api/messages/{mid}/reply', json={'draft': True, 'redraft': True, 'instruction': 'Drop the sign-off'})
-    assert ('omar@northwind.example', 'Drop the sign-off') in byrecipient.lines(server.store)

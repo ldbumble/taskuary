@@ -34,7 +34,7 @@ def task_with(s, from_email, body=NOTICE, channel='email', sender=None):
 class NoOpEndingTests(unittest.TestCase):
     def test_a_robots_notice_with_nothing_done_drafts_no_reply(self):
         s = MemoryStore(); tid, _ = task_with(s, 'alerts@phishguard.example', sender='automated')
-        with mock.patch('taskuary.responder.write_draft') as wd:
+        with mock.patch('taskuary.responder.draft_for_review') as wd:
             out = wrapup.finish(s, tid, NOOP, None, 'coding')
         wd.assert_not_called()
         self.assertEqual((out['drafting'], out['message_id']), (False, None))
@@ -45,7 +45,7 @@ class NoOpEndingTests(unittest.TestCase):
     def test_a_person_who_asked_still_gets_the_answer(self):
         """The half that keeps this honest: "nothing was wrong" IS the reply they are waiting for."""
         s = MemoryStore(); tid, mid = task_with(s, 'ap@client.com', 'Is the importer broken again?')
-        with mock.patch('taskuary.responder.write_draft', return_value='I looked - it is running fine.'):
+        with mock.patch('taskuary.responder.draft_for_review', return_value='I looked - it is running fine.'):
             out = wrapup.finish(s, tid, NOOP, None, 'coding')
         self.assertEqual((out['drafting'], out['message_id']), (True, mid))
         self.assertEqual(s.get_task(tid)['Status'], 'waiting')
@@ -58,7 +58,7 @@ class NoOpEndingTests(unittest.TestCase):
         def raising(*a, **k):
             seen.append(s.get_task(tid)['Status']); return real(*a, **k)
         with mock.patch.object(wrapup, 'raise_reply', side_effect=raising), \
-             mock.patch('taskuary.responder.write_draft', side_effect=AssertionError('a second voice drafted the reply')):
+             mock.patch('taskuary.responder.draft_for_review', side_effect=AssertionError('a second voice drafted the reply')):
             out = wrapup.finish(s, tid, {'summary': 'fixed', 'outcome': 'did_work'}, None, 'coding')
         self.assertEqual(seen, ['waiting'])
         self.assertEqual((len(s.list_reviews('pending')), s.get_review(out['owed']).get('DraftText') or ''), (1, ''))
@@ -69,7 +69,7 @@ class NoOpEndingTests(unittest.TestCase):
         Whatever the run found, a machine reads no reply: by the class stored on the message, never by its address."""
         s = MemoryStore(); tid, _ = task_with(s, 'notifications@codehost.example', 'Run failed: CI - main (northwind/ledger)', sender='automated')
         rep = {'summary': 'fixed the failing import test and pushed', 'outcome': 'did_work'}
-        with mock.patch('taskuary.responder.write_draft', return_value='Fixed.') as wd:
+        with mock.patch('taskuary.responder.draft_for_review', return_value='Fixed.') as wd:
             out = wrapup.finish(s, tid, rep, None, 'coding')
         wd.assert_not_called()
         self.assertEqual((out['drafting'], out['message_id'], s.list_reviews('pending')), (False, None, []))
@@ -82,7 +82,7 @@ class NoOpEndingTests(unittest.TestCase):
         """Absent means did_work. An older report, a degraded one, or a model that ignored the
         field must never cost somebody their answer."""
         s = MemoryStore(); tid, mid = task_with(s, 'ap@client.com', 'Is the feed fixed?')
-        with mock.patch('taskuary.responder.write_draft', return_value='Fixed.'):
+        with mock.patch('taskuary.responder.draft_for_review', return_value='Fixed.'):
             self.assertEqual(wrapup.finish(s, tid, {'summary': 'fixed'}, None, 'coding')['message_id'], mid)
 
     def test_a_held_draft_means_somebody_is_waiting(self):
@@ -92,7 +92,7 @@ class NoOpEndingTests(unittest.TestCase):
         s.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft', 'Status': 'pending',
                             'Reason': 'needs a reply'})
         s.hold_reviews(tid, 'the agent is looking at it')
-        with mock.patch('taskuary.responder.write_draft', return_value='hi'):
+        with mock.patch('taskuary.responder.draft_for_review', return_value='hi'):
             self.assertTrue(wrapup.finish(s, tid, NOOP, None, 'coding')['drafting'])
 
     def test_a_reply_held_for_a_machine_goes_with_the_run(self):
@@ -100,7 +100,7 @@ class NoOpEndingTests(unittest.TestCase):
         s = MemoryStore(); tid, mid = task_with(s, 'alerts@phishguard.example', sender='automated')
         rid = s.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft', 'Status': 'pending', 'Reason': 'needs a reply'})
         s.hold_reviews(tid, 'the agent is looking at it')
-        with mock.patch('taskuary.responder.write_draft', return_value='hi') as wd:
+        with mock.patch('taskuary.responder.draft_for_review', return_value='hi') as wd:
             self.assertFalse(wrapup.finish(s, tid, {'summary': 'done', 'outcome': 'did_work'}, None, 'coding')['drafting'])
         wd.assert_not_called()
         self.assertEqual(s.get_review(rid)['Status'], 'no_reply')

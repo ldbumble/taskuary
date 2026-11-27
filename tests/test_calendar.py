@@ -180,39 +180,6 @@ class AgendaTests(unittest.TestCase):
         self.assertEqual([c.args[1] for c in ag.call_args_list], [cal.DAYS, 1])
 
 
-class ResponderTests(unittest.TestCase):
-    def test_the_draft_prompt_carries_the_calendar_and_the_task_says_so(self):
-        s = MemoryStore()
-        tid = s.create_task({'Title': 'Reimbursement app', 'Kind': 'reply', 'Status': 'open'}, 't')
-        mid = s.add_message({'TaskId': tid, 'ExternalId': 'c1', 'Channel': 'email', 'Subject': 'Reimbursement App',
-                             'FromEmail': 'marinda@corp.example', 'FromName': 'Marinda', 'SentAt': '2026-08-27 10:00:00', 'Status': 'routed',
-                             'BodyText': 'Are you available Tuesday at 1:00pm to go over it?'})
-        rid = s.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft', 'Status': 'pending'})
-        seen = {}
-        def llm(sys_, usr_, **k): seen['sys'] = sys_; return 'Tuesday at 1 I am in the budget review - could we do 2?'
-        with mock.patch('taskuary.calendar.context_for', return_value='\n\nYOUR CALENDAR - ...\n  Tue 2026-09-01:\n    13:00-14:00 · Budget review'):
-            out = responder.write_draft(s, tid, rid, llm=llm)
-        self.assertIn('YOUR CALENDAR', seen['sys']); self.assertIn('Budget review', seen['sys'])
-        self.assertIn('could we do 2', out)
-        self.assertTrue(any('Checked your calendar' in c['Body'] for c in s.list_comments(tid)))
-
-    def test_with_no_calendar_every_drafter_is_told_a_time_is_never_committed_to(self):
-        """One drafter refused to pick a slot with no calendar; another wrote "Fri 9-10 works" with none either (walk 2026-10-29).
-        The same rule reaches every writer, and the model applies it - no calendar paragraph means no slot is promised."""
-        s = MemoryStore()
-        tid = s.create_task({'Title': 'Quarterly sync', 'Kind': 'reply', 'Status': 'open'}, 't')
-        mid = s.add_message({'TaskId': tid, 'ExternalId': 'c2', 'Channel': 'email', 'Subject': 'Quarterly sync',
-                             'FromEmail': 'ray@northwind.example', 'FromName': 'Ray Colton', 'SentAt': '2026-08-27 10:00:00', 'Status': 'routed',
-                             'BodyText': 'Can we find an hour on Friday for the quarterly sync?'})
-        rid = s.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft', 'Status': 'pending'})
-        seen = {}
-        def llm(sys_, usr_, **k): seen['sys'] = sys_; return 'I will check my calendar and confirm a time.'
-        with mock.patch('taskuary.calendar.context_for', return_value=''):
-            responder.write_draft(s, tid, rid, llm=llm)
-        self.assertIn('A MEETING TIME is a commitment', seen['sys'])
-        self.assertIn('With no calendar below', responder.SYSTEM)
-
-
 class AgendaNeverBlocksThePileTests(unittest.TestCase):
     """The pile reads the calendar (funnel.from_calendar -> assistant._agenda -> calendar.agenda
     -> channels.graph_token), and that is a LIVE Microsoft call: a token POST plus one

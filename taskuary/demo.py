@@ -122,7 +122,7 @@ ALLOWED_WRITES = (
 )
 
 # What a confirmed proposal may run here: each writes the demo's own database and nothing else. Start (dispatch.prepare,
-# agent.*) would start a program on the host, Send (review.approve, task.clarify, task.chase) would mail someone, and
+# agent.*) would start a program on the host, Send (review.approve, task.clarify) would mail someone, and
 # reports, settings and connections reach systems - those stay refused, as before.
 LOCAL_OPS = {'task.complete', 'task.reopen', 'task.defer', 'task.watching', 'item.settle', 'message.file', 'task.not_a_task', 'message.reply',
              'preference.exclude_sender', 'preference.sender_rule', 'task.let_go', 'task.elsewhere', 'idea.act', 'memory.remember', 'memory.wrong',
@@ -191,7 +191,7 @@ def refuse_op(op) -> str:
     if kind == 'task.set_kind':
         from .kinds import AGENT
         return STARTS if str(p.get('kind') or '') in AGENT else ''
-    if kind in ('review.approve', 'task.clarify', 'task.chase', 'task.handoff', 'task.share', 'task.ask_agent'): return SENDS
+    if kind in ('review.approve', 'task.clarify', 'task.handoff', 'task.share', 'task.ask_agent'): return SENDS
     if kind in ('agent.stop', 'agents.stop'): return RECORDED
     if kind in ('dispatch.prepare', 'agent.continue', 'agent.answer', 'agent.tell', 'task.create_from_message', 'task.create_from_text',
                 'calendar.prepare', 'task.trust'): return STARTS

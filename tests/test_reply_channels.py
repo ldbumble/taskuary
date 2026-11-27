@@ -93,7 +93,7 @@ class FinishTests(unittest.TestCase):
     reply still gets its draft (the always-draft rule, PW-237) - Send is hidden and the reason said."""
     def test_a_github_reply_is_drafted_for_his_send(self):
         s = MemoryStore(); tid, mid = task_with(s, 'github')
-        with mock.patch('taskuary.responder.write_draft', return_value='hi'):
+        with mock.patch('taskuary.responder.draft_for_review', return_value='hi'):
             out = wrapup.finish(s, tid, {'summary': 'fixed'}, None, 'agent')
         self.assertEqual((out['drafting'], out['message_id'], out['can_send']), (True, mid, True))
         self.assertEqual(len(s.list_reviews('pending')), 1)
@@ -102,7 +102,7 @@ class FinishTests(unittest.TestCase):
     def test_a_channel_switched_off_raises_the_reply_but_hides_send(self):
         s = MemoryStore(); s.set_setting('reply_channels', 'email', 't')
         tid, _ = task_with(s, 'discord')
-        with mock.patch('taskuary.responder.write_draft', return_value='hi') as wd:
+        with mock.patch('taskuary.responder.draft_for_review', return_value='hi') as wd:
             out = wrapup.finish(s, tid, {'summary': 'fixed'}, None, 'agent')
         wd.assert_not_called(); self.assertTrue(out['owed'])          # the reply owed, its agent's to write (2026-11-10)
         self.assertEqual((out['drafting'], out['can_send']), (True, False))
@@ -110,7 +110,7 @@ class FinishTests(unittest.TestCase):
 
     def test_a_report_row_drafts_nothing_because_nobody_sent_it(self):
         s = MemoryStore(); tid, _ = task_with(s, 'report')
-        with mock.patch('taskuary.responder.write_draft') as wd:
+        with mock.patch('taskuary.responder.draft_for_review') as wd:
             out = wrapup.finish(s, tid, {'summary': 'fixed'}, None, 'agent')
         wd.assert_not_called()
         self.assertEqual((out['drafting'], out['can_send']), (False, False))
@@ -118,7 +118,7 @@ class FinishTests(unittest.TestCase):
 
     def test_email_still_drafts(self):
         s = MemoryStore(); tid, mid = task_with(s, 'email')
-        with mock.patch('taskuary.responder.write_draft', return_value='hi'):
+        with mock.patch('taskuary.responder.draft_for_review', return_value='hi'):
             out = wrapup.finish(s, tid, {'summary': 'fixed'}, None, 'agent')
         self.assertEqual((out['drafting'], out['message_id']), (True, mid))
         self.assertEqual(len(s.list_reviews('pending')), 1)
@@ -137,7 +137,7 @@ class WrapEndpointTests(unittest.TestCase):
         # over it, so that a stop hook and `taskuary --done` can end a task the same way
         with mock.patch.object(terminal, 'transcript_for', return_value=('did the work', 'claude', None)), \
              mock.patch.object(wrapup, 'report_from_transcript', return_value={'summary': 'fixed', 'determination': '', 'actions': ''}), \
-             mock.patch('taskuary.responder.write_draft', return_value='hi'):
+             mock.patch('taskuary.responder.draft_for_review', return_value='hi'):
             return c.post(f'/api/tasks/{tid}/wrap', json=body or {'close': True}).json()
 
     def test_mark_done_on_a_live_session_files_the_report_and_drafts_nothing(self):
@@ -168,7 +168,7 @@ class WrapEndpointTests(unittest.TestCase):
         with mock.patch.object(terminal, 'session_for', return_value=None), \
              mock.patch.object(terminal, 'transcript_for', return_value=('full transcript', 'claude', None)), \
              mock.patch.object(wrapup, 'report_from_transcript', return_value=compact), \
-             mock.patch('taskuary.responder.write_draft', side_effect=AssertionError('a second voice drafted the reply')):
+             mock.patch('taskuary.responder.draft_for_review', side_effect=AssertionError('a second voice drafted the reply')):
             wrapup.wrap(s, tid, close=True, actor='owner', final_message=final)
         from taskuary import responder
         source = responder.resolution_of(s, tid)

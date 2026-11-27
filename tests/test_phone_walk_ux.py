@@ -48,8 +48,7 @@ class ShowWhatYouAreApprovingTests(unittest.TestCase):
         and the options in the card's order - the verb, Next, More, then the rest."""
         s, item = store_with_a_draft()
         out = {'say': 'Tess is owed a reply - the draft is below.', 'item': item,
-               'chips': [{'verb': 'approve', 'label': 'Send the reply'}, {'verb': 'redraft', 'label': 'Redraft it'},
-                         {'verb': 'next', 'label': 'Next'}]}
+               'chips': [{'verb': 'approve', 'label': 'Send the reply'}, {'verb': 'next', 'label': 'Next'}]}
         text = remote_assistant.turn_text(out, store=s)
         self.assertIn('🟤 **You** · reply to', text)
         self.assertIn('the refund cleared this morning', text)          # in full: it is sent in your name
@@ -57,8 +56,8 @@ class ShowWhatYouAreApprovingTests(unittest.TestCase):
         self.assertNotIn('THEY WROTE', text)
         # no line explaining the first word (the design, phase A): the phone reads the desk's one decision, and Send says itself
         self.assertNotIn('sends the draft above', text)
-        # the draft's own words first, as the screen draws them under the draft (2026-10-06), then Next and More
-        self.assertIn('Reply with one of:\n1 · Send the reply\n2 · Redraft it\n3 · Next\n4 · More', text)
+        # the draft's own word first, as the screen draws it under the draft (2026-10-06), then Next and More
+        self.assertIn('Reply with one of:\n1 · Send the reply\n2 · Next\n3 · More', text)
         folded = remote_assistant.more_text(s, item)
         self.assertIn('THEY WROTE', folded); self.assertIn('did the refund land?', folded)
 
@@ -393,14 +392,14 @@ class TheVerbDoesTheThingTests(unittest.TestCase):
     def test_a_reply_with_no_draft_leads_with_what_the_decision_lit_and_nothing_of_its_own(self):
         """The lead is the ONE DECISION's (rulebook.decide), as the desk lights it - the phone's own fallback rules went (N18)."""
         out = {'say': 'Sam is owed a reply.', 'item': {'key': 'task:7', 'kind': 'review', 'lane': 'approve'},
-               'chips': [{'verb': 'close', 'label': 'Close without sending'}, {'verb': 'redraft', 'label': 'Redraft it'},
-                         {'verb': 'not_ours', 'label': 'Not ours'}, {'verb': 'next', 'label': 'Next'}]}
-        with mock.patch.object(remote_assistant, 'decision', return_value={'key': 'task:7', 'verb': 'redraft', 'line': ''}):
+               'chips': [{'verb': 'close', 'label': 'Close without sending'}, {'verb': 'not_ours', 'label': 'Not ours'},
+                         {'verb': 'next', 'label': 'Next'}]}
+        with mock.patch.object(remote_assistant, 'decision', return_value={'key': 'task:7', 'verb': 'not_ours', 'line': ''}):
             text = remote_assistant.turn_text(out, store=MemoryStore())
-        self.assertIn('Reply with one of:\n1 · Redraft it\n2 · Next\n3 · Close without sending\n4 · Not ours', text)
+        self.assertIn('Reply with one of:\n1 · Not ours\n2 · Next\n3 · Close without sending', text)
         with mock.patch.object(remote_assistant, 'decision', return_value={'key': 'task:7', 'verb': None, 'line': ''}):
             text = remote_assistant.turn_text(out, store=MemoryStore())
-        self.assertIn('Reply with one of:\n1 · Close without sending\n2 · Redraft it', text, 'nothing lit: the chips in the order the desk draws them')
+        self.assertIn('Reply with one of:\n1 · Close without sending\n2 · Next\n3 · Not ours', text, 'nothing lit: the chips in the order the desk draws them')
 
 
 class NoHintUnderAnAnswerTests(unittest.TestCase):
@@ -681,14 +680,3 @@ class ReplyWritesTheDraftAndShowsItTests(unittest.TestCase):
     """F4: Reply on a task with no draft wrote one, then looked it up by its review key before membership had caught up - and
     answered "I can't find that one" over the draft it had just written."""
 
-    def test_reply_on_a_plain_task_leads_to_its_ready_to_send_card(self):
-        s, t, mid = canonical_world()
-        def draft(store, item, verb, instruction):
-            return s.add_review({'TaskId': t, 'MessageId': mid, 'Kind': 'draft', 'Status': 'pending', 'DraftText': 'Yes - Thursday at 2 works.'})
-        item = {'key': f'task:{t}', 'kind': 'asked', 'tid': t, 'mid': mid, 'title': 'Confirm Thursday with Gail'}
-        with mock.patch.object(remote_assistant, '_draft', side_effect=draft), \
-             mock.patch('taskuary.terminal.live_sessions', return_value=[]):
-            text = remote_assistant.run_act(s, {'t': 'verb', 'verb': 'reply', 'key': f'task:{t}'}, item)
-        self.assertNotIn("can't find", text)
-        self.assertIn('Yes - Thursday at 2 works.', text)
-        self.assertIn('ready to send', text)

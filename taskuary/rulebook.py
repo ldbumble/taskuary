@@ -19,7 +19,7 @@ from loguru import logger
 from . import buttons, concierge, words
 
 RULES = words.ADVICE_RULE
-CHASE_DAYS = 3           # a wait past 3 working days is late (waiting_late): its agent is woken to chase (checkback.late), else Chase is lit
+CHASE_DAYS = 3           # a wait past 3 working days is late (waiting_late): its agent is woken to chase (checkback.late)
 # a failure is the fact whatever is lit: its sentence stands on the strip beside it (decide)
 FAILED = frozenset({'failed', 'failed_cause', 'report_failed'})
 EV = '_evidence'         # a fact's own ids (usual.py), carried beside the line's facts and handed on as the decision's evidence
@@ -490,39 +490,6 @@ def recommended_task(store, tid, known: dict = None) -> dict | None:
         return recommended(store, item, verbs, unlit=True)
 
 
-def chase_thread(store, item: dict) -> dict | None:
-    """WHERE A CHASE GOES for a wait the rule calls late but no follow-up ledger slipped (the 'theirs' lane past CHASE_DAYS working
-    days, a goal step past its day): {tid, who, mid} - the task the wait is on (the goal's late step, not the goal), the address it
-    waits on, and their newest mail on it to answer (mid None: the chase is a new message to them from the task). None when nobody's
-    address is known: a Chase with nobody to write to is a button that can only be refused (the dead-end sweep, 2026-10-23), so it is
-    not lit. The slipped lane keeps its own road (server task.chase)."""
-    it = item or {}
-    tid = it.get('tid')
-    t = store.get_task(int(tid)) if tid else None
-    if not t: return None
-    if str(it.get('kind') or '').startswith('goal') or is_goal(t):
-        today, best = date.today(), None
-        for x in store.goal_steps(int(t['TaskId'])):
-            c = x.get('child') or {}
-            try: late = (today - date.fromisoformat(str(c.get('DueAt') or '')[:10])).days
-            except ValueError: continue
-            if not x['done'] and c.get('TaskId') and late > 0 and (not best or late > best[1]): best = (c, late)
-        if not best: return None
-        t = best[0]
-    tid = int(t['TaskId'])
-    held = next((str(x).split(':', 1)[-1] for x in (t.get('WaitingOn'), t.get('Assignee')) if '@' in str(x or '')), '').strip().lower()
-    me = str(store.get_setting('owner_email') or '').strip().lower()
-    # ...from somebody who reads a reply (wrapup.reads_replies, the stress round 2026-11-10): a signing service's "viewed" or a list's digest
-    # filed on the task since was the newest mail, and Chase named the machine
-    from .wrapup import reads_replies
-    m = next((x for x in store._rows("SELECT MessageId, FromEmail, Channel, SenderClass, Status FROM message WHERE TaskId=? AND IFNULL(Direction,'in')<>'out' "
-                                     "AND Status!='context' AND IFNULL(FromEmail,'')<>'' AND lower(FromEmail)<>? AND (?='' OR lower(FromEmail)=?) "
-                                     'ORDER BY IFNULL(SentAt,CreatedAt) DESC LIMIT 50', (tid, me, held, held)) if reads_replies(x)), None)
-    who = str((m or {}).get('FromEmail') or held or '').lower()
-    return {'tid': tid, 'who': who, 'mid': int(m['MessageId']) if m else None} if '@' in who else None
-
-
-
 def _plain_why(*said, default: str = 'it stopped without saying why') -> str:
     """The first reason that is the owner's words: a raw refusal ("needs a repository first - working directory ...") is ours, said
     on the card's own failure box where its fix is - the line says what failed in plain words, or nothing it cannot say plainly."""
@@ -537,16 +504,10 @@ def quiet_watch(store, item: dict) -> bool:
 
 
 def adds(store, item: dict) -> list:
-    """The verbs the row draws only when they are its lit move: Chase on every waiting lane and goal with somebody to write to (the
-    design's "Chase (offered on every waiting lane)" and "(added to goals)") - lit once the wait is late (LATE) and no agent was woken to
-    chase it; Let it go on a watch back after a quiet week. The task's row draws a lit Chase (TaskPage's `chase` verb); the phone already
-    carries it on the slipped lane."""
+    """The verbs the row draws only when they are its move: Let it go on a watch back after a quiet week. A late wait lights nothing here:
+    it wakes the task's agent (checkback.late), which raises the nudge as its card (the owner, 2026-11-27)."""
     it = item or {}
-    lane, kind = it.get('lane'), str(it.get('kind') or '')
-    if it.get('tid') and quiet_watch(store, it): return (['chase'] if chase_thread(store, it) else []) + ['let_go']
-    if lane not in ('theirs', 'forgotten') and not kind.startswith('goal'): return []
-    try: return ['chase'] if lane == 'forgotten' or chase_thread(store, it) else []
-    except Exception: return []
+    return ['let_go'] if it.get('tid') and quiet_watch(store, it) else []
 
 
 # ── THE ROW'S REAL BUTTONS AND THE ONE DECISION EVERY SURFACE READS (moved from advisor.py, 2026-11-15) ──────────────────────────────────
@@ -836,7 +797,7 @@ def offered(store, item: dict, known: dict = None) -> list:
     THE BUTTONS THE ROW ACTUALLY DRAWS (the design, phase A, 2026-10-23): the verbs came from chips_for while the row drew row_buttons -
     why Review changes, Chase and Accept could never be lit, and why "Not ours" was picked on a task whose row has no Not ours. Only
     the row's moves count: its pickers (who does it, priority, assignee, the code's place), Attach and Close with a note set a field or
-    add to a move, and are never the move. Chase joins on a wait with somebody to write to (rulebook.adds); Next is added by the callers."""
+    add to a move, and are never the move. Let it go joins on a quiet watch (rulebook.adds); Next is added by the callers."""
     verbs = [buttons.chip(b['verb']) | {'label': b['label']} for b in concierge.row_buttons(store, item, known) if b['verb'] not in NOT_MOVES]
     # ...in the item's own order (its vocabulary, chips_for - a draft's Send first), the row's other moves after it
     first = [c['verb'] for c in concierge.chips_for(store, item)]

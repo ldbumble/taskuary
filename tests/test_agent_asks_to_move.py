@@ -83,7 +83,7 @@ class ReportReadsTheMoveTests(unittest.TestCase):
 class FinishAsksTests(unittest.TestCase):
     def test_a_move_is_not_done_and_drafts_no_reply_even_for_a_person(self):
         s = MemoryStore(); tid, _ = coding_task(s)
-        with mock.patch('taskuary.responder.write_draft') as wd:
+        with mock.patch('taskuary.responder.draft_for_review') as wd:
             out = wrapup.finish(s, tid, MOVE, None, 'coding')
         wd.assert_not_called()
         self.assertEqual((out['drafting'], out['asks']), (False, 'repo'))
@@ -98,7 +98,7 @@ class FinishAsksTests(unittest.TestCase):
 
     def test_the_owners_mark_done_still_closes(self):
         s = MemoryStore(); tid, _ = coding_task(s, sender='alerts@vendor.example')
-        with mock.patch('taskuary.responder.write_draft', return_value='x'):
+        with mock.patch('taskuary.responder.draft_for_review', return_value='x'):
             wrapup.finish(s, tid, MOVE, None, 'owner', owner_done=True, no_reply=True)
         self.assertEqual(s.get_task(tid)['Status'], 'done')
         self.assertFalse(funnel.held_for_repo(s.get_task(tid)))

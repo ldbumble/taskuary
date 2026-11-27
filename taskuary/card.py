@@ -71,14 +71,14 @@ def presses(store, r: dict) -> tuple:
     "ready to send" and a phone poll's Send over a Teams card that had only Copy)."""
     if r.get('Kind') == 'action': return ('approve',)
     from . import capabilities, outbound
-    if capabilities.can_send_draft(store, r.get('ReviewId')): return ('approve', 'redraft')
+    if capabilities.can_send_draft(store, r.get('ReviewId')): return ('approve',)
     fix = capabilities._safe(lambda: outbound.review_connect(store, r), None)
-    if not (fix and fix.get('label')): return ('copy', 'redraft')
-    return (f"connect:{fix['label']}", *(('copy',) if fix.get('waits') else ()), 'redraft')     # ...its draft kept to copy, where it says so
+    if not (fix and fix.get('label')): return ('copy',)
+    return (f"connect:{fix['label']}", *(('copy',) if fix.get('waits') else ()))     # ...its draft kept to copy, where it says so
 
 
 def press_words(c: dict) -> str:
-    "A card's buttons by their names, for a reader that reads words: 'Copy, Redraft - it cannot be sent from here'."
+    "A card's buttons by their names, for a reader that reads words: 'Copy - it cannot be sent from here'."
     from . import buttons
     ps = c.get('presses') or ()
     return ', '.join(v.partition(':')[2] or buttons.label(v, 'action' if c.get('kind') == APPROVE else None) for v in ps) + \

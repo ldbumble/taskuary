@@ -1046,14 +1046,14 @@ class ApiTests(unittest.TestCase):
                                                 'body': '[issue by kai - association: NONE]\ncan you explain this?',
                                                 'from_email': 'kai@users.noreply.github.com', 'channel': 'github'}).json()
         mid = push['message_id']
-        c.post(f'/api/messages/{mid}/reply')
+        c.post(f'/api/messages/{mid}/reply', json={'write': True})
         row = next(r for r in c.get('/api/reviews', params={'status': 'pending'}).json()['data'] if r['MessageId'] == mid)
         # github: his Send is the say-so (the owner, 2026-11-25) - no card switch over it; with no GitHub card set up, its Connect stands instead
         self.assertNotIn('replies are off', row['SendBlock']); self.assertTrue(row['CanSend'] or 'connected' in row['SendBlock'], row)
         push2 = c.post('/api/ingest/push', json={'external_id': 'cansend2', 'subject': 'rota',
                                                  'body': 'can you explain the rota?', 'from_email': 'a@b.example',
                                                  'channel': 'email'}).json()
-        c.post(f"/api/messages/{push2['message_id']}/reply")
+        c.post(f"/api/messages/{push2['message_id']}/reply", json={'write': True})
         row2 = lambda: next(r for r in c.get('/api/reviews', params={'status': 'pending'}).json()['data'] if r['MessageId'] == push2['message_id'])
         self.assertFalse(row2()['CanSend'])                    # no mailbox: its card says Connect email, never Send
         from taskuary.testing import mailbox
@@ -1066,7 +1066,7 @@ class ApiTests(unittest.TestCase):
         mid = server.store.add_message({'ExternalId': 'notice-reply', 'Channel': 'email', 'Subject': 'Run failed: CI - main', 'BodyText': 'The run failed.',
                                         'FromName': 'Code host', 'FromEmail': 'builds@codehost.example', 'Status': 'routed', 'SenderClass': 'automated'})
         before = len(server.store.list_reviews('pending'))
-        r = c.post(f'/api/messages/{mid}/reply', json={'draft': False})
+        r = c.post(f'/api/messages/{mid}/reply', json={'write': True})
         self.assertEqual(r.status_code, 422)
         self.assertIn('Nobody reads a reply', r.json()['detail'])
         self.assertEqual(len(server.store.list_reviews('pending')), before)
@@ -1080,11 +1080,11 @@ class ApiTests(unittest.TestCase):
         mid = server.store.add_message({'TaskId': tid, 'ExternalId': 'closed-thread-reply', 'Channel': 'whatsapp',
                                         'Subject': '', 'BodyText': "So what's their move if it's free?",
                                         'FromName': 'Tess', 'FromEmail': 'tess@example.com', 'Status': 'routed'})
-        rid = c.post(f'/api/messages/{mid}/reply', json={'draft': False}).json()['reviewId']
+        rid = c.post(f'/api/messages/{mid}/reply', json={'write': True}).json()['reviewId']
         rows = c.get('/api/reviews', params={'status': 'pending'}).json()['data']
         self.assertIn(rid, [r['ReviewId'] for r in rows])
         self.assertEqual(server.store.get_task(tid)['Status'], 'waiting')
-        self.assertEqual(c.post(f'/api/messages/{mid}/reply', json={'draft': False}).json()['reviewId'], rid)
+        self.assertEqual(c.post(f'/api/messages/{mid}/reply', json={'write': True}).json()['reviewId'], rid)
 
     def test_a_tasks_draft_says_who_it_answers_and_whether_its_channel_can_carry_it(self):
         """The walk's task card read its drafts from the task detail, which carried neither: every inbound reply said
@@ -1136,7 +1136,7 @@ class ApiTests(unittest.TestCase):
                                                 'body': 'can you check her accounts?', 'from_email': 'hr@work.example',
                                                 'channel': 'whatsapp'}).json()
         mid = push['message_id']
-        tid = c.post(f'/api/messages/{mid}/reply').json()['taskId']
+        tid = c.post(f'/api/messages/{mid}/reply', json={'write': True}).json()['taskId']
         rid = next(r['ReviewId'] for r in c.get('/api/reviews', params={'status': 'pending'}).json()['data']
                    if r['MessageId'] == mid)
         with mock.patch.object(server.outbound, 'reply_to_message',
@@ -1161,7 +1161,7 @@ class ApiTests(unittest.TestCase):
         carries the place that fixes it, on the answer and in the envelope a reload reads."""
         mid = c.post('/api/ingest/push', json={'external_id': 'sendfix1', 'subject': 'the cutover', 'body': 'still Thursday?',
                                                'from_email': 'ray@northwind.example', 'channel': 'whatsapp'}).json()['message_id']
-        c.post(f'/api/messages/{mid}/reply')
+        c.post(f'/api/messages/{mid}/reply', json={'write': True})
         rid = next(r['ReviewId'] for r in c.get('/api/reviews', params={'status': 'pending'}).json()['data'] if r['MessageId'] == mid)
         with mock.patch.object(server.outbound, 'reply_to_message', side_effect=server.outbound.Fixable('no mailbox', *server.outbound.MAIL)):
             out = c.post(f'/api/reviews/{rid}/decide', json={'verb': 'approve', 'final_text': 'Yes, Thursday.'}).json()
@@ -1314,31 +1314,17 @@ class ApiTests(unittest.TestCase):
         mid = server.store.add_message({'ExternalId': 'teams:fyi-reply', 'Channel': 'teams',
                                         'ConversationId': 'chat-fyi', 'Subject': 'Team update',
                                         'FromName': 'Robin', 'BodyText': 'Taking today off.', 'Status': 'filed'})
-        opened = c.post(f'/api/messages/{mid}/reply', json={'draft': False}).json()
+        opened = c.post(f'/api/messages/{mid}/reply', json={'write': True}).json()
         rid = opened['reviewId']
-        self.assertEqual(opened['draft'], '')
         self.assertEqual(c.patch(f'/api/reviews/{rid}', json={'body': 'Feel better. Talk tomorrow.'}).status_code, 200)
         detail = c.get(f'/api/messages/{mid}/thread').json()
         self.assertEqual(detail['reviews'][0]['ReviewId'], rid)
         self.assertEqual(detail['reviews'][0]['DraftText'], 'Feel better. Talk tomorrow.')
         self.assertEqual(next(r for r in server.store.feed() if r['MessageId'] == mid)['HasDraft'], 1)
 
-    def test_generate_with_ai_works_for_a_taskless_fyi_reply(self):
-        mid = server.store.add_message({'ExternalId': 'teams:fyi-generate', 'Channel': 'teams',
-                                        'ConversationId': 'chat-fyi-ai', 'Subject': 'Team update',
-                                        'FromName': 'Robin', 'BodyText': 'Taking today off.', 'Status': 'filed'})
-        rid = c.post(f'/api/messages/{mid}/reply', json={'draft': False}).json()['reviewId']
-        with mock.patch.object(server.responder, 'draft_for_message', side_effect=lambda st, m, rid, **k: st.update_review_draft(rid, 'Feel better soon.', None) or 'Feel better soon.') as draft:
-            out = c.post(f'/api/reviews/{rid}/draft').json()
-        self.assertEqual(out['draft'], 'Feel better soon.')
-        self.assertEqual(draft.call_args.args[2], rid)
 
-    def test_handoff_drafts_then_sends(self):
+    def test_handoff_sends_his_own_words(self):
         tid = c.post('/api/tasks', json={'Title': 'AD account for Christina'}).json()['taskId']
-        with mock.patch.object(server.outbound, 'draft_handoff', return_value='Ross - this one is yours: …') as d:
-            out = c.post(f'/api/tasks/{tid}/handoff', json={'to': 'ross@corp.com', 'draft_only': True}).json()
-        self.assertEqual(out['draft'], 'Ross - this one is yours: …')
-        self.assertEqual(d.call_args[0][2], 'ross@corp.com')
         with mock.patch.object(server.outbound, 'send_email', return_value={'channel': 'email', 'to': ['ross@corp.com']}):
             out = c.post(f'/api/tasks/{tid}/handoff', json={'to': 'ross@corp.com', 'text': 'take this please'}).json()
         self.assertEqual(out['sent']['to'], ['ross@corp.com'])
@@ -1347,9 +1333,9 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(c.post(f'/api/tasks/{tid}/handoff',
                                 json={'to': 'ross', 'channel': 'teams', 'text': 'x'}).status_code, 422)
         # ...and a send with no words is refused: it used to have the model write the forward and send it in one step, unseen
-        with mock.patch.object(server.outbound, 'draft_handoff', return_value='Erin - yours.') as d, mock.patch.object(server.outbound, 'send_email') as send:
+        with mock.patch.object(server.outbound, 'send_email') as send:
             no = c.post(f'/api/tasks/{tid}/handoff', json={'to': 'erin@northwind.example', 'text': '  '})
-        self.assertEqual((no.status_code, d.called, send.called), (422, False, False))
+        self.assertEqual((no.status_code, send.called), (422, False))
 
     def test_a_live_session_is_visible_work(self):
         """A pty session is not a 'run', so the board used to show a task as Queued while its
@@ -1456,42 +1442,7 @@ class ApiTests(unittest.TestCase):
         self.assertFalse([x for x in c.get('/api/reviews', params={'status': 'pending'}).json()['data'] if x['TaskId'] == tid])
         self.assertTrue([x for x in server.store.list_comments(tid) if 'nobody reads a reply' in x['Body']])
 
-    def test_a_reply_can_be_opened_on_any_message(self):
-        """After a coding agent ran (or triage filed it) there was NO way to answer from the panel -
-        nothing pending meant the draft box was unreachable. Opening a reply creates the review
-        and drafts it; opening again reuses the same one."""
-        tid = c.post('/api/tasks', json={'Title': 'an agent finished this', 'Kind': 'coding'}).json()['taskId']
-        mid = server.store.add_message({'TaskId': tid, 'ExternalId': 'graph:REPLY1', 'Channel': 'email',
-                                        'FromEmail': 'asker@corp.com', 'BodyText': 'is it fixed?', 'Status': 'routed'})
-        with mock.patch('taskuary.responder.write_draft', side_effect=lambda st, t, rid, **k: st.update_review_draft(rid, 'Fixed - deploys again tonight.', None) or 'Fixed - deploys again tonight.') as wd:
-            out = c.post(f'/api/messages/{mid}/reply', json={}).json()
-        self.assertEqual(out['draft'], 'Fixed - deploys again tonight.')
-        self.assertEqual(wd.call_args.args[2], out['reviewId'])
-        pend = [r for r in c.get('/api/reviews', params={'status': 'pending'}).json()['data'] if r['TaskId'] == tid]
-        self.assertEqual(len(pend), 1)
-        again = c.post(f'/api/messages/{mid}/reply', json={'draft': False}).json()
-        self.assertEqual(again['reviewId'], out['reviewId'])            # reused, never stacked
-        self.assertEqual(c.post('/api/messages/999999/reply', json={}).status_code, 404)
 
-    def test_replying_to_a_filed_message_creates_no_task(self):
-        """Answering chatter is a REPLY, not a project - promoting the filed message to a task
-        just to hold the review put a TQ badge on 'it was just his demo'. The review rides
-        task-less, still lands in the pending queue, and approving still sends."""
-        mid = server.store.add_message({'ExternalId': 'tg:FILED1', 'Channel': 'telegram',
-                                        'FromName': 'J. D. Ortiz', 'ConversationId': 'telegram:-100123',
-                                        'BodyText': 'It was just his demo. Ready to move over.', 'Status': 'filed'})
-        tasks_before = len(server.store.list_tasks())
-        with mock.patch('taskuary.responder.draft_for_message', side_effect=lambda st, m, rid, **k: st.update_review_draft(rid, 'Got it - send it over.', None) or 'Got it - send it over.'):
-            out = c.post(f'/api/messages/{mid}/reply', json={}).json()
-        self.assertIsNone(out['taskId'])
-        self.assertEqual(len(server.store.list_tasks()), tasks_before)          # no task materialized
-        pend = [r for r in c.get('/api/reviews', params={'status': 'pending'}).json()['data']
-                if r['ReviewId'] == out['reviewId']]
-        self.assertEqual(len(pend), 1)                                          # still visible in the queue
-        with mock.patch('taskuary.outbound.reply_to_message', return_value={'channel': 'telegram', 'to': []}):
-            r = c.post(f"/api/reviews/{out['reviewId']}/decide", json={'verb': 'approve', 'final_text': 'Got it.'}).json()
-        self.assertTrue(r['sent'])
-        self.assertEqual(len(server.store.list_tasks()), tasks_before)          # approving made none either
 
     def test_not_a_task_without_learning_deletes_and_teaches_nothing(self):
         """Someone answered 'yes' - that is chatter, not a verdict about the sender. The lighter

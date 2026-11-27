@@ -241,7 +241,7 @@ def test_waiting_on_someone_is_named_late_after_three_working_days_and_chase_is_
     it = {'key': f'task:{t}', 'kind': 'todo', 'lane': 'theirs', 'tid': t}
     f.message(task_id=t, subject='W-9?', direction='out', sent_at=at(d=1))
     assert rulebook.facts(s, it, _verbs('defer', 'chase'))['state'] == 'waiting'
-    assert rulebook.adds(s, it) == ['chase'], 'Chase is offered on every wait with somebody to write to - when to chase is the model\'s'
+    assert rulebook.adds(s, it) == [], 'no Chase lit by a rule - a late wait wakes its agent (checkback.late), the one road'
     s._exec("UPDATE message SET SentAt=? WHERE TaskId=?", (at(d=7), t))
     d = rulebook.facts(s, it, _verbs('defer', 'chase'))
     assert d['state'] == 'waiting_late' and d['line'].startswith('Ray Colton: ') and d['line'].endswith('days, no answer.')

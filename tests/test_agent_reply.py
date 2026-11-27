@@ -50,7 +50,7 @@ class AgentReplyTests(NoHook):
     def test_finishing_keeps_it_and_no_second_model_redrafts(self):
         s = MemoryStore(); tid, _ = task_with(s)
         wrapup.agent_reply(s, tid, OWN, 'coding')
-        with mock.patch('taskuary.responder.write_draft') as redraft:
+        with mock.patch('taskuary.responder.draft_for_review') as redraft:
             out = wrapup.finish(s, tid, REP, None, 'coding')
         redraft.assert_not_called()
         self.assertTrue(out['drafting'])
@@ -61,7 +61,7 @@ class AgentReplyTests(NoHook):
     def test_without_one_no_writer_drafts_it_and_it_waits_owed(self):
         """The owner, 2026-11-10: "no more triage creates draft. agent should be doing it" - at a run's end too."""
         s = MemoryStore(); tid, _ = task_with(s)
-        with mock.patch('taskuary.responder.write_draft', return_value='Fixed.') as redraft:
+        with mock.patch('taskuary.responder.draft_for_review', return_value='Fixed.') as redraft:
             out = wrapup.finish(s, tid, REP, None, 'coding')
         redraft.assert_not_called()
         rv = s.get_review(out['owed'])
@@ -360,7 +360,7 @@ class SaidOnceTests(NoHook):
         s.add_comment(tid, 'owner', general.USER_TYPE, 'Fix the export and answer Dana')
         s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'Fixed. The reply to Dana is saved.')
         wrapup.agent_reply(s, tid, OWN, 'assistant')
-        with mock.patch('taskuary.responder.write_draft') as redraft:
+        with mock.patch('taskuary.responder.draft_for_review') as redraft:
             wrapup.wrap(s, tid, close=True, actor='assistant')
         redraft.assert_not_called()
         self.assertEqual(self.notes(s, tid, 'is being written'), [])

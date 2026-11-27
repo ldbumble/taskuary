@@ -60,28 +60,6 @@ def test_a_reply_draft_is_signed_for_the_mailbox_it_answers(s):
     assert text.endswith('Alex Doyle\nContoso board') and 'Northwind' not in text
 
 
-def test_a_new_email_on_the_task_leaves_from_its_mailbox(s):
-    tid, _ = asked_on(s, CT)
-    llm = lambda system, user, max_tokens=0: 'Budget is final' if max_tokens <= 40 else 'Hi Erin,\n\nThe budget is final.'
-    with mock.patch.object(outbound, 'can_reply', return_value=True):
-        out = outbox.task_email(s, tid, 'erin@northwind.example', 'tell her', llm=llm)
-    with mock.patch('taskuary.outbound.send_out', return_value=SENT) as sent, mock.patch.object(outbound, 'send_block', return_value=''), \
-         mock.patch('taskuary.learning.learn_from'):
-        verdicts.decide(s, s.get_review(out['review_id']), 'approve')
-    assert sent.call_args.kwargs['mailbox'] == CT
-
-
-def test_the_owners_pick_and_a_task_with_no_mail_in_are_as_before(s):
-    tid, _ = asked_on(s, CT)
-    llm = lambda system, user, max_tokens=0: 'Budget is final' if max_tokens <= 40 else 'Hi Erin,\n\nThe budget is final.'
-    mine = Factory(s).task(title='Mine', source='manual')
-    for t, pick, want in ((tid, NW, NW), (mine, None, None)):
-        with mock.patch.object(outbound, 'can_reply', return_value=True):
-            out = outbox.task_email(s, t, 'erin@northwind.example', 'tell her', llm=llm, mailbox=pick)
-        with mock.patch('taskuary.outbound.send_out', return_value=SENT) as sent, mock.patch.object(outbound, 'send_block', return_value=''), \
-             mock.patch('taskuary.learning.learn_from'):
-            verdicts.decide(s, s.get_review(out['review_id']), 'approve')
-        assert sent.call_args.kwargs['mailbox'] == want
 
 
 def test_the_from_picker_starts_on_the_tasks_mailbox(s):
@@ -109,16 +87,6 @@ def test_the_box_shows_the_sending_mailboxs_signature_and_a_saved_edit_stays_as_
     finally: server.store = old
     assert r.json()['draft'] == 'Hi Paula,\n\nDone.'
 
-
-def test_a_new_email_on_the_task_is_signed_as_its_mailbox(s):
-    # it came in on the second mailbox; the email written from the task signed as STYLE.md's one learned signature - the first hat
-    tid, _ = asked_on(s, CT)
-    llm = lambda system, user, max_tokens=0: 'Budget is final' if max_tokens <= 40 else 'Hi Erin,\n\nThe budget is final.\n\nAlex'
-    with mock.patch.object(outbound, 'can_reply', return_value=True):
-        out = outbox.task_email(s, tid, 'erin@northwind.example', 'tell her', llm=llm)
-        picked = outbox.task_email(s, tid, 'erin@northwind.example', 'tell her', llm=llm, mailbox=NW)
-    assert out['draft'].endswith('Alex Doyle\nContoso board') and 'Northwind' not in out['draft']
-    assert picked['draft'].endswith('Alex Doyle\nNorthwind') and 'Contoso' not in picked['draft']
 
 
 def test_two_mailboxes_on_one_sign_in_sign_as_themselves(s):

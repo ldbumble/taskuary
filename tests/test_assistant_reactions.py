@@ -1522,15 +1522,11 @@ class ApiActionsTests(unittest.TestCase):
         queued = c.get(f"/api/tasks/{out['task_id']}/waitroom").json()
         self.assertTrue(any('drop the old rows' in str(x) for x in queued.get('data', [])))
 
-    def test_a_draft_can_be_redrafted_dismissed_or_sent(self):
+    def test_a_draft_can_be_dismissed(self):
         s = store()
         out = arrive(s, subject='Where is the June invoice?', body='Can you send it?', llm=brain('reply_only', None))
         rid = s.pending_review(out['task_id'])['ReviewId']
         c = self.client(s)
-        with mock.patch('taskuary.responder.draft_reply', return_value='Attached - sorry for the wait.'):
-            r = c.post(f'/api/reviews/{rid}/draft')
-        self.assertEqual(r.status_code, 200)
-        self.assertIn('Attached', s.get_review(rid)['DraftText'])
         r = c.post(f'/api/reviews/{rid}/decide', json={'verb': 'no_reply', 'final_text': None, 'note': 'nothing to say'})
         self.assertEqual(r.status_code, 200)
         self.assertNotEqual(s.get_review(rid)['Status'], 'pending')        # dismissed: nothing goes out

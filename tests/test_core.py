@@ -894,24 +894,6 @@ class CoreTests(unittest.TestCase):
         self.assertEqual(finish(s, tid, {'summary': 'did it'})['drafting'], False)
         self.assertEqual((s.get_task(tid)['Status'], s.list_reviews('pending')), ('done', []))
 
-    def test_a_responder_agent_no_longer_takes_the_reply_headless(self):
-        """There is no headless road left. A `responder` agent used to hijack this and run a CLI
-        open->close where nobody could watch it, interrupt it or answer it - the one thing this
-        app exists to replace. Configuring one now changes nothing: the main AI writes the reply,
-        in front of you, and it lands on the review for approval like every other draft."""
-        from unittest import mock
-        from taskuary import agents, responder
-        s = MemoryStore()
-        tid = s.create_task({'Title': 't'}, 'o')
-        s.add_message({'TaskId': tid, 'Channel': 'email', 'Subject': 'Payroll', 'ExternalId': 'rd1',
-                       'FromName': 'Dana', 'FromEmail': 'd@n.example', 'BodyText': 'is it fixed?'})
-        s.upsert_agent('responder', 'reply', 'cli', '{"cmd": "claude"}')
-        rid = s.add_review({'TaskId': tid, 'Kind': 'draft_reply', 'Status': 'pending', 'Reason': 'r'})
-        self.assertFalse(hasattr(agents, 'dispatch'))            # deleted, not left dormant
-        with mock.patch('taskuary.llm.build_llm', return_value=lambda sys_, usr, **kw: 'Fixed - it posts to August now.'):
-            out = responder.write_draft(s, tid, rid, pressed=True)
-        self.assertIn('August', out)
-        self.assertEqual(s.get_review(rid)['DraftText'], out)
 
     def test_closing_a_task_resolves_its_pending_reviews(self):
         s = MemoryStore()

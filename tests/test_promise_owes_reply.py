@@ -57,7 +57,7 @@ def test_the_task_page_answers_them_and_the_reply_lands_on_the_promise_task():
     c = TestClient(server.app)
     d = c.get(f'/api/tasks/{tid}').json()
     assert d['owed']['MessageId'] == sent and d['owed']['OwedTo'] == 'Erin Blake'
-    out = c.post(f'/api/messages/{sent}/reply', json={'draft': False}).json()
+    out = c.post(f'/api/messages/{sent}/reply', json={'write': True}).json()
     assert out['taskId'] == tid                                          # not the thread's task, whose newest ask is Erin's
     rv = s.get_review(out['reviewId'])
     assert rv['MessageId'] == sent and s.review_envelope(rv['ReviewId'])['to'] == ['erin@vendor.example']

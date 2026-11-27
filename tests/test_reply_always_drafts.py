@@ -85,26 +85,6 @@ class DraftFailureTests(unittest.TestCase):
         self.assertEqual(r.status_code, 422, r.text)
         return out
 
-    def test_a_draft_that_could_not_be_written_says_so_and_keeps_the_item_reply_needed(self):
-        out = self.asked()
-        rv = self.s.pending_review(out['task_id'])
-        self.assertEqual(rv['Status'], 'pending'); self.assertFalse(rv.get('DraftText'))
-        self.assertIn('no AI connector', rv['DraftError'])
-        row = next(r for r in self.s.feed(limit=10) if r['MessageId'] == out['message_id'])
-        self.assertEqual(row['HasDraft'], 0); self.assertIn('no AI connector', row['DraftError'])
-        self.assertEqual(row['ReviewStatus'], 'pending')
-
-    def test_a_successful_redraft_clears_the_failure(self):
-        out = self.asked()
-        rv = self.s.pending_review(out['task_id'])
-        self.assertTrue(rv['DraftError'])
-        def written(store_, tid, rid_, **k):
-            store_.update_review_draft(rid_, 'Tuesday at 3 works.', None); return 'Tuesday at 3 works.'
-        with mock.patch('taskuary.responder.write_draft', side_effect=written):
-            r = self.c.post(f"/api/reviews/{rv['ReviewId']}/draft")
-        self.assertEqual(r.status_code, 200)
-        rv = self.s.get_review(rv['ReviewId'])
-        self.assertEqual(rv['DraftText'], 'Tuesday at 3 works.'); self.assertFalse(rv['DraftError'])
 
 
 class SendBlockedTests(unittest.TestCase):

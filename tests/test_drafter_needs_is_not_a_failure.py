@@ -21,43 +21,13 @@ def reply_with_needs(s, said=LONG):
     rid = f.review(tid, mid)
     from taskuary import server
     with mock.patch.object(server, 'store', s), mock.patch.object(server, '_refresh_chat_context'), \
-         mock.patch.object(responder, 'write_draft', side_effect=lambda *a, **k: responder._answer(lambda *a, **k: said, 's', 'u', 100)):
+         mock.patch.object(responder, 'draft_for_review', side_effect=lambda *a, **k: responder._answer(lambda *a, **k: said, 's', 'u', 100)):
         assert server.draft_review(rid)['ok'] is False            # the owner pressed Draft with AI: the writer said what it needs
     return tid, rid
 
 
-def test_it_is_kept_whole_as_needs_never_as_a_failure():
-    s = MemoryStore(); tid, rid = reply_with_needs(s)
-    rv = s.get_review(rid)
-    assert not rv.get('DraftError') and rv['DraftNeeds'].startswith('not drafted - it needs the October invoice run')
-    assert 'nothing here can settle the number they are asking about' in rv['DraftNeeds']          # never cut at 240
-    assert rulebook.failure(s, {'tid': tid, 'rid': rid}) is None
-    assert not [o for o in s.operations_for(tid, []) if o.get('Status') == 'error']
 
 
-def test_the_facts_name_it_needs_an_agent_and_say_nothing_the_card_shows():
-    s = MemoryStore(); tid, rid = reply_with_needs(s)
-    item = {'tid': tid, 'rid': rid, 'kind': 'asked', 'key': f'task:{tid}'}
-    verbs = [{'verb': v} for v in ('reply', 'regular_agent', 'mine', 'next')]
-    assert rulebook.facts(s, item, verbs) == {'state': 'needs_agent', 'line': ''}, 'the reason is on the card; the move is the model\'s'
-    assert 'reply writer did not draft it' in rulebook.RULES['needs_agent']['is']
-    assert 'new_task' not in {v['verb'] for v in rulebook.offered(s, item)}
-
-
-def test_a_draft_written_after_clears_it():
-    s = MemoryStore(); tid, rid = reply_with_needs(s)
-    s.update_review_draft(rid, 'Hi Erin,\n\nThe credit note was counted twice; corrected.', None)
-    assert not s.get_review(rid).get('DraftNeeds')
-
-
-def test_a_redraft_that_needs_answers_plainly_not_with_a_422():
-    from taskuary import server
-    s = MemoryStore(); tid, rid = reply_with_needs(s)
-    with mock.patch.object(server, 'store', s), mock.patch.object(server, '_refresh_chat_context'), \
-         mock.patch.object(server.responder, 'write_draft', side_effect=responder.NotDrafted('not drafted - it needs the credit note. An agent can work it out')):
-        out = server.draft_review(rid)
-    assert out['ok'] is False and out['draft'] == '' and out['needs'].endswith('An agent can work it out')
-    assert s.get_review(rid)['DraftNeeds'].startswith('not drafted - it needs the credit note')
 
 
 def test_a_long_reason_is_cut_at_a_sentence_never_mid_word():

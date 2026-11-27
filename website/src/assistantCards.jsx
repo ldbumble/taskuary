@@ -6,11 +6,10 @@
 // it lives - the task, or the row on the Timeline - because everything is the chat.
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { cannotStart, draftCanSend, useCapabilities } from "./capabilities.js";
-import { movesOf, repeatClick, useVerbs } from "./actionRow.js";
+import { movesOf, useVerbs } from "./actionRow.js";
 import { choice, hint as btnHint, label as btn } from "./buttons.js";
 import { Box, Button, TextField } from "@mui/material";
 import SendRoundedIcon from "@mui/icons-material/SendRounded";
-import RefreshRoundedIcon from "@mui/icons-material/RefreshRounded";
 import DoneRoundedIcon from "@mui/icons-material/DoneRounded";
 import EventIcon from "@mui/icons-material/Event";
 import TerminalIcon from "@mui/icons-material/Terminal";
@@ -43,7 +42,7 @@ import { kindLabel, AGENT_SHOWN } from "./kinds.js";
 import { sendBlockLine, draftState, failureHead, failureWhy, savedSendFailure } from "./sendState.js";
 import { blankAsk, blankSpans } from "./blanks.js";
 import { BlankAsk } from "./ReviewDecision.jsx";
-import { openReply, useDraftJob } from "./replyDraft.js";
+import { askReply } from "./replyDraft.js";
 import { agentRuns } from "./taskFilter.js";
 import { progressLine } from "./checklist.js";
 import { RepoPicker } from "./RepoPicker.jsx";
@@ -664,14 +663,6 @@ export function ReplyCard({ card, onDone, onSent, onOpenTask, onTimeline }) {
     }).catch((e) => live && setErr(failOf(e)));
     return () => { live = false; };
   }, [card.rid, card.mid, card.presentation_revision]);
-  // A REPLY OPENED AT ONCE is drawn before its draft exists (replyDraft.js): "Drafting…" until it lands, then it fills the box;
-  // a draft that could not be written says why here
-  const job = useDraftJob(card.rid);
-  const drafting = job?.state === "drafting";
-  useEffect(() => {
-    if (job?.state === "done") setRv((r) => (r && !r.gone ? { ...r, DraftText: job.draft, HasDraft: job.draft ? 1 : 0, DraftError: null, DraftNeeds: job.needs || null } : r));
-    if (job?.state === "failed") setErr(`The draft could not be written - ${job.error}. Write it here, or Draft with AI again.`);
-  }, [job]);
   const action = rv?.Kind === "action";
   const co = closeoutOf(rv);
   // THE CARD READS GITHUB FIRST (closeoutState.js): Close out is live only when this repo's rules let it merge now
@@ -717,13 +708,6 @@ export function ReplyCard({ card, onDone, onSent, onOpenTask, onTimeline }) {
     } catch (e) { setErr(failOf(e)); }
     setBusy("");
   };
-  const redraft = async (e) => {
-    if (repeatClick(`${card.rid}:redraft`, e)) return;    // a double-click is one Redraft (actionRow.repeatClick)
-    setBusy("redraft"); setErr("");
-    try { const { data } = await api.post(`/api/reviews/${card.rid}/draft`); setRv((r) => ({ ...r, DraftText: data.draft, DraftNeeds: data.needs || null, Stale: false })); setText(null); }
-    catch (e) { setErr(failOf(e)); }
-    setBusy("");
-  };
   // SEND IT BACK TO THE AGENT (the owner, 2026-09-28: "don't see button to send back to agent?"): the one road every
   // agent continues down (/continue-work), your words the first thing it hears. When GitHub refuses the close-out, the
   // refusal IS the note - the agent is told what to fix, and the card comes back when it stops.
@@ -753,20 +737,7 @@ export function ReplyCard({ card, onDone, onSent, onOpenTask, onTimeline }) {
         {busy === "back" ? btn("approve", "busy") : btn("continue")}</Button>
     : action
     ? <Button size="small" variant="contained" disableElevation disabled={!!busy || !rv || (co && blocked)} title={co && blocked ? gh.reason : btnHint("approve", "action")} startIcon={<DoneRoundedIcon />} onClick={() => decide("approve")} sx={goSx}>{busy === "approve" ? (co ? co.busy : "Running…") : btn("approve", "action")}</Button>
-    : rv && !draftCanSend(caps, rv) && !card.closeout ? null : rv && !value.trim() && !stale ? (
-      /* NOTHING TO SEND YET: a disabled Send was the only button, and the redraft word it covers was
-         hidden as its duplicate - no way to get a draft from the card at all (2026-09-23) */
-      <Button size="small" variant="contained" disableElevation disabled={!!busy || drafting} startIcon={<RefreshRoundedIcon />}
-        onClick={redraft} sx={goSx}>{busy === "redraft" || drafting ? "Drafting…" : btn("redraft", "none")}</Button>
-    ) : stale ? (
-      /* the road out of the warning, on the card that carries it: a stale draft disabled the
-         only button here and named no way forward (the owner, 2026-09-21: "just reprocess it
-         then"). Refreshing is the primary action while the thread is ahead of the draft. */
-      <Button size="small" variant="contained" disableElevation disabled={!!busy || !rv}
-        startIcon={<RefreshRoundedIcon />} onClick={redraft} sx={goSx}
-        title={btnHint("redraft")}>
-        {busy === "redraft" ? "Drafting…" : btn("redraft")}</Button>
-    ) : (
+    : rv && !draftCanSend(caps, rv) && !card.closeout ? null : (
       <Button size="small" variant="contained" disableElevation disabled={!!busy || !rv || !value.trim() || blocked} title={blocked ? gh.reason : undefined} startIcon={<SendRoundedIcon />} onClick={() => decide("approve")} sx={goSx}>
         {busy === "approve" ? btn("approve", "busy") : btn("approve")}</Button>
     );
@@ -796,12 +767,11 @@ export function ReplyCard({ card, onDone, onSent, onOpenTask, onTimeline }) {
         {rv && (!action || mate) && <div className="tq-move-to">{`Your reply to ${replyTo} ${via} - it goes when you press ${btn("approve", action ? "action" : undefined)}${stopped ? ", once it can merge" : ""}. Edit it here first if you like.`}</div>}
         {rv && (
           <DraftField value={value} onChange={(e) => setText(e.target.value)} marks={!action || mate ? blankSpans(value) : []}
-            placeholder={drafting ? "Drafting…" : action && !mate ? "" : "Write your answer here"}
+            placeholder={action && !mate ? "" : "Write your answer here"}
             sx={{ mt: 0.75, "& .MuiOutlinedInput-root": { background: "var(--tq-panel, #fffdf9)" }, "& textarea": { fontSize: 13.5, lineHeight: 1.55 } }} />
         )}
-        {!action && stale && <div className="tq-card-err">{`New messages arrived after this draft. Press ${btn("redraft")} to write it from the latest message before sending.`}</div>}
-        {!action && rv && drafting && !value.trim() && <div className="tq-card-excerpt">Drafting… it fills in here when the AI is done - or write it yourself.</div>}
-        {!action && rv && !drafting && draftState({ ...rv, HasDraft: value.trim() ? 1 : 0 }).line && <div className={draftState(rv).state === "failed" ? "tq-card-err" : "tq-card-excerpt"}>{draftState({ ...rv, HasDraft: value.trim() ? 1 : 0 }).line}</div>}
+        {!action && stale && <div className="tq-card-err">New messages arrived after this draft - read them before you send it.</div>}
+        {!action && rv && draftState({ ...rv, HasDraft: value.trim() ? 1 : 0 }).line && <div className={draftState(rv).state === "failed" ? "tq-card-err" : "tq-card-excerpt"}>{draftState({ ...rv, HasDraft: value.trim() ? 1 : 0 }).line}</div>}
         {!action && !card.closeout && sendBlockLine(rv) && <div className="tq-card-excerpt">{sendBlockLine(rv)}</div>}
         {gh && !blocked && gh.note && <div className="tq-card-excerpt">{capital(gh.note)}.</div>}
         {asked && <BlankAsk line={asked.line} onSend={() => decide(asked.verb, true)} onCancel={() => setAsked(null)} />}
@@ -820,7 +790,7 @@ export function ReplyCard({ card, onDone, onSent, onOpenTask, onTimeline }) {
       )}
       {/* "Mark done" arrives as a conversation word; off the walk (no words), the same road is still offered
           under More actions */}
-      <Foot covers={["approve", "redraft"]} taskId={card.tid} openTask={onOpenTask}
+      <Foot covers={["approve"]} taskId={card.tid} openTask={onOpenTask}
         extra={[...(gh?.offers || []).map((o) => ({ verb: o, label: busy === o ? "…" : OFFER_LABEL[o], title: OFFER_HINT[o], disabled: !!busy || !rv,
           onClick: async () => {
             if (o === "anyway") return decide("merge_anyway");
@@ -830,10 +800,6 @@ export function ReplyCard({ card, onDone, onSent, onOpenTask, onTimeline }) {
           } })),
           ...(cop?.alt ? [{ verb: cop.alt.verb, label: busy === cop.alt.verb ? cop.alt.busy : cop.alt.label, title: `${cop.alt.label} ${cop.alt.then}.`,
           disabled: !!busy || !rv, onClick: () => decide(cop.alt.verb) }] : []),
-        // a draft's choices are Close out, Redraft or Mark done (the owner, 2026-10-01: "rejected is useless - it should be redraft
-        // or close task") - an empty or stale draft has its redraft as the move itself
-        ...(rv && !action && !stale && value.trim() ? [{ verb: "redraft", label: busy === "redraft" ? "Drafting…" : btn("redraft"),
-          title: btnHint("redraft"), disabled: !!busy, onClick: redraft }] : []),
         ...(card.tid && !conflict ? [{ verb: "back", label: btn("continue"), title: btnHint("continue"),
           disabled: !!busy, onClick: () => setBack((b) => (b === null ? "" : null)) }] : []),
         ...(card.tid && !nav.also?.length ? [{ verb: "finish", label: busy === "finish" ? "Closing…" : btn("close"),
@@ -1149,11 +1115,10 @@ export function MessageCard({ card, onDone, onOpenTask, onTimeline, onSurface, o
     }
     setBusy("");
   };
-  // the one immediate road for "asked you": a draft, sent only on your yes (PW-126) - its card at once, "Drafting…" until
-  // the model is done (the owner, 2026-10-01: "never waits on the AI")
+  // "asked you": his ask to the task's agent, which writes the reply and raises its card (replyDraft.askReply, the owner 2026-11-27)
   const draftReply = async () => {
     setBusy("reply"); setErr("");
-    try { const data = await openReply(api, card.mid); onSurface?.(data?.reviewId ? `review:${data.reviewId}` : null, data?.drafting ? "Drafting a reply…" : "Reply opened - write it, or Draft with AI"); }
+    try { const data = await askReply(api, card.mid); onSurface?.(data?.taskId ? `task:${data.taskId}` : null, data?.receipt?.text || ""); }
     catch (e) { setErr(failOf(e)); }
     setBusy("");
   };
@@ -1261,7 +1226,7 @@ export function MessageCard({ card, onDone, onOpenTask, onTimeline, onSurface, o
     ? handIt && <Button size="small" variant="contained" disableElevation disabled={!!busy} onClick={handIt} sx={moveSx}>
         {busy === "agent" ? "Handing it over…" : hand}</Button>
     // ...a Reply only where somebody reads one: the server's `replies` (wrapup.reads_reply_row, the owner 2026-11-10 - never a machine's notice)
-    : card.mid && card.replies && <Button size="small" variant="contained" disableElevation disabled={!!busy} onClick={draftReply} sx={moveSx}>{busy === "reply" ? "Drafting…" : btn("reply")}</Button>;
+    : card.mid && card.replies && <Button size="small" variant="contained" disableElevation disabled={!!busy} onClick={draftReply} sx={moveSx}>{busy === "reply" ? "Asking…" : btn("reply")}</Button>;
   const asker = String(card.who || "them").replace(/\s*<[^>]*>/g, "");
   // AN AGENT ALREADY DID IT (the owner, 2026-09-28: TQ-0796 read "who should take it? Hand to agent" under the report of
   // the agent that took it): once a report is filed the move is to close the task. It offered Continue beside it too, and finished

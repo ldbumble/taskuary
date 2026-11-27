@@ -92,7 +92,7 @@ def tracker_task(s, t='jira', item='NW-12', **over):
 def finish(s, tid):
     prev, wrapup.REFRESH = wrapup.REFRESH, None
     try:
-        with mock.patch('taskuary.responder.write_draft', return_value='unused'):
+        with mock.patch('taskuary.responder.draft_for_review', return_value='unused'):
             return wrapup.finish(s, tid, {'summary': 'The export reads the new view again; tonight\'s run will be full.', 'outcome': 'did_work'},
                                  None, 'general')
     finally: wrapup.REFRESH = prev

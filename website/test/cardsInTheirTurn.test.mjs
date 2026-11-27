@@ -20,14 +20,11 @@ test("what the foot's boxes said over a held act and a skill is said over its on
 // ONE ACTION BOX AT A TIME, A HARD RULE (the owner's live task, 2026-11-19): a held browser step stood at the front reading "1 of 2 · next: the
 // reply to Gail Moreno", and the reply's box was drawn under it - the page's reply block (`next`) and the letters were drawn with no look at
 // the line. What the line holds behind its front stands nowhere; while the front is another card, no door to write a reply stands beside it.
-test("a reply the line holds behind its front draws no box, and no reply door stands beside another card's front", async () => {
-  const { replyDoorOpen } = await import("../src/chatStream.js");
-  const q = { live: [744], held: [745] };
-  assert.equal(replyDoorOpen(q, null), false, "a door to write a reply beside the browser step's front");
-  assert.equal(replyDoorOpen({ live: [745], held: [] }, 745), true); assert.equal(replyDoorOpen({ live: [], held: [] }, null), true);
+test("a reply the line holds behind its front draws no box", async () => {
   const ws = read("GeneralWorkspace.jsx");
   // ...a card the line holds has no row in the log (chatlog.advance) and the page places none of its own: nothing to draw
   assert.doesNotMatch(ws, /looseCards|nextLoose|lettersHere/);
   assert.match(read("TaskPage.jsx"), /const chatReview = !inTurns \? pendingReview : null;/);
-  assert.match(read("TaskPage.jsx"), /!pendingReview && !inRow && !replyEmpty && replyDoorOpen\(detail\?\.queue, null\) && \(/);
+  // ...and no reply door of the page's own stands beside it: Reply is his ask to the task's agent (the owner, 2026-11-27)
+  assert.doesNotMatch(read("TaskPage.jsx"), /replyDoorOpen|data-tq-reply-again|data-tq-draft-ai/);
 });

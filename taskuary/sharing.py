@@ -4,7 +4,7 @@ bottom named share"). One Share, five ways out, each offered only where it can w
 
 - EMAIL THE RESULT: a draft on the same review road every send takes - the task's Close out when the result is a task's, else a task
   of its own like ＋ New's - with the result as its text and, at send, as clean HTML beside it (email_html). Nothing leaves here; the
-  page opens the draft for its Send. (Share's other email, "Email a summary", is the AI's message about a task's work - outbox.task_email.)
+  page opens the draft for its Send. (Share's other email, "Email a summary", is his ask to the task's agent - server.task_email.)
 - SHARED LINK: a frozen, escaped snapshot of the one result at /share/<token>, served by a SECOND server on its own port
   (share_app, `share_port`) that knows that one route and nothing else - the app and its /api stay on 127.0.0.1. It runs only
   while the owner has `share_links_lan` on. The token is shown once and only its hash is kept; a link expires (7 days by default)

@@ -178,7 +178,7 @@ class Assistant(unittest.TestCase):
         item = phone.pile(s)[0]
         with concierge.delivering(concierge.PHONE):
             verbs = [c['verb'] for c in concierge.chips_for(s, item)]
-        self.assertEqual(verbs[:4], ['send_close', 'approve', 'redraft', 'close'], 'Send and close first, then Send, as the desk draws them')
+        self.assertEqual(verbs[:3], ['send_close', 'approve', 'close'], 'Send and close first, then Send, as the desk draws them')
         p = phone.say(s, 'send it and close the task', key=item['key'], model='CALL: {"kind": "send_close", "params": {}}')['proposal']
         self.assertEqual((p['kind'], p['target'], p['label'], p['params'].get('close')), ('review.approve', rv['ReviewId'], 'Send and close', True))
         self.assertEqual(s.get_task(out['task_id'])['Status'], 'open', 'nothing happens until the yes')

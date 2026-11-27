@@ -24,49 +24,9 @@ def _stored(s, rid):
     return json.loads(fp) if fp else None
 
 
-def test_the_writer_names_the_files_and_the_line_never_reaches_the_draft():
-    s, seen = MemoryStore(), {}
-    tid, _, rid = _task(s)
-    out = 'Hi Erin,\n\nHere are the accruals for the 8/31 run.\nFILES PROMISED: PTO_Accruals.xlsx, PTO_Raw.zip'
-    responder.write_draft(s, tid, rid, llm=lambda system, user, **k: (seen.update(system=system), out)[1])
-    rv = s.get_review(rid)
-    assert 'FILES PROMISED' not in rv['DraftText'] and 'Here are the accruals' in rv['DraftText']
-    assert _stored(s, rid) == {'named': ['PTO_Accruals.xlsx', 'PTO_Raw.zip']}
-    assert responder.FILES in seen['system'], 'the writer is told how to say it'
 
 
-def test_a_promise_without_names_is_still_a_promise():
-    s = MemoryStore()
-    tid, _, rid = _task(s)
-    responder.write_draft(s, tid, rid, llm=lambda system, user, **k: 'Sending the sheet over now.\nFILES PROMISED: unnamed')
-    assert _stored(s, rid) == {'named': []}
 
-
-def test_words_about_attaching_are_not_a_promise_unless_the_writer_says_so():
-    s = MemoryStore()
-    tid, _, rid = _task(s)
-    responder.write_draft(s, tid, rid, llm=lambda system, user, **k: 'His logins were attached to an old leftover record - fixed now.')
-    assert _stored(s, rid) is None
-
-
-def test_a_redraft_without_a_promise_clears_the_last_one():
-    s = MemoryStore()
-    tid, _, rid = _task(s)
-    responder.write_draft(s, tid, rid, llm=lambda system, user, **k: 'Here it is.\nFILES PROMISED: a.xlsx')
-    assert _stored(s, rid)
-    responder.write_draft(s, tid, rid, llm=lambda system, user, **k: 'The numbers are in the body below.')
-    assert _stored(s, rid) is None
-
-
-def test_saving_the_same_text_again_keeps_the_writers_word_and_new_text_drops_it():
-    s = MemoryStore()
-    tid, _, rid = _task(s)
-    responder.write_draft(s, tid, rid, llm=lambda system, user, **k: 'Here it is.\nFILES PROMISED: a.xlsx')
-    text = s.get_review(rid)['DraftText']
-    s.update_review_draft(rid, text, None)                     # a Redraft door re-saving what the writer just wrote
-    assert _stored(s, rid) == {'named': ['a.xlsx']}
-    s.update_review_draft(rid, 'Different words from an agent.', None, by='agent:general')
-    assert _stored(s, rid) is None
 
 
 def test_a_reply_with_no_task_carries_the_word_too():

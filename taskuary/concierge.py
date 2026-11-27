@@ -101,7 +101,7 @@ def _call_json(s: str) -> dict:
     return got
 # what the owner can decide about the thing on the table - each is a button the card already has
 VERBS = ('reply', 'approve', 'send_close', 'not_ours', 'not_ours_sender', 'block_sender', 'remember', 'coding_agent', 'regular_agent', 'mine', 'close', 'stop_agent',
-         'chase', 'let_go', 'elsewhere',                 # the slipped card's answers (spec 2026-10-12)
+         'let_go', 'elsewhere',                          # the slipped card's answers (spec 2026-10-12)
          'accept_invite', 'decline_invite', 'propose_time', 'find_time',    # the calendar's answers (calwrite.py)
          'rerun', 'report_off', 'setup', 'next', 'answer_agent', 'redraft', 'not_ours_kind',
          # ...and a meeting's Prepare, a decision the model is taught (toolcatalog) - missing here, its CALL was dropped and "prepare me for
@@ -131,7 +131,7 @@ CHIP_HINTS = {v: buttons.hint(v) for v in buttons.VERBS if buttons.hint(v)}
 # useless - it should be redraft or close task")
 # ...and Watch it beside Remind me wherever a task carries it (watch.py, the owner, 2026-11-01)
 # ...and Send and close first, then Send, as the desk's Close out draws them (the owner, 2026-11-03); cannot() drops it off a task
-CHIPS ={'review': ('send_close', 'approve', 'redraft', 'close', 'defer', 'watch', 'not_ours', 'next'), 'action': ('approve', 'not_ours', 'next'),
+CHIPS ={'review': ('send_close', 'approve', 'close', 'defer', 'watch', 'not_ours', 'next'), 'action': ('approve', 'not_ours', 'next'),
          # a meeting is read and passed: Join is a link on the card, not a verb (the owner, 2026-10-02: "Meeting card should
          # only have a next button like what it has on desktop") - and Prepare beside it (the owner, 2026-10-25: "add prepare that
          # creates agent to research about person and topic through your mails")
@@ -194,8 +194,8 @@ def delivering(where: str):
     finally: DELIVERY.reset(token)
 
 # what the assistant says when a decision is carried out - the fact of what happens now, never a claim
-RECEIPTS = {'chase': "I'll draft the nudge - nothing goes out until you say so.", 'let_go': 'Put down.', 'elsewhere': 'Closed - they answered elsewhere.',
-            'reply': "I'll draft that - nothing goes out until you say so.", 'approve': f"Sending it as drafted - the task stays open until you {buttons.label('close')}.",
+RECEIPTS = {'let_go': 'Put down.', 'elsewhere': 'Closed - they answered elsewhere.',
+            'reply': "I'll ask for it on its task - nothing goes out until you say so.", 'approve': f"Sending it as drafted - the task stays open until you {buttons.label('close')}.",
             'send_close': 'Sending it as drafted, then closing the task - it stays open while anything on it still waits on you.',
             'not_ours': "Not for me, then - filed. Moving on.", 'not_ours_remember': "Filed, and remembered: this kind goes straight past you from now on.",
             'not_ours_sender': "Noted: mail like this from them files itself from now on. Moving on.",
@@ -205,7 +205,7 @@ RECEIPTS = {'chase': "I'll draft the nudge - nothing goes out until you say so."
             'report_off': "Paused - it stays under Reports, where its switch turns it back on. Moving on.",
             'setup': "I'll walk you through it, one step at a time - nothing is built and nothing changes until you say so.",
             'answer_agent': "Passing that on - right away if it's waiting on you, otherwise the moment it next pauses.",
-            'redraft': "Writing it again with that - the new draft lands below for your yes.", 'next': 'Next.'}
+            'redraft': "Asked for it again on its task, with that - its card lands there.", 'next': 'Next.'}
 
 # The end of the walk, in COUNSEL's calm voice: what is true, and nothing to do (2026-10-06). all_done() adds the
 # next meeting and a promise of the owner's that is due today - each only when there is one.
@@ -631,7 +631,7 @@ def facts(store, item: dict, whole: bool = False) -> str:
     if item.get('rid'):
         rv = store.get_review(item['rid']) or {}
         d = str(rv.get('DraftText') or '').strip()
-        lines.append(f"THE DRAFT (shown to the owner in the card):\n{_cut(d, 1200)}" if d else f"no draft yet - the card offers {buttons.label('redraft', 'none')}")
+        lines.append(f"THE DRAFT (shown to the owner in the card):\n{_cut(d, 1200)}" if d else 'no draft yet')
     if item['kind'] == 'agent':
         lines.append('the agent\'s last lines:\n' + '\n'.join(item.get('tail') or ['(nothing captured)']))
     if docs := documents_line(store, item): lines.append(docs)
@@ -767,9 +767,6 @@ def parse_decision(text: str) -> tuple[str, dict | None]:
     if (on := str(p.get('on') or p.get('ref') or '').strip()): d['on'] = on
     if p.get('new') is True or str(p.get('new')).lower() == 'true': d['new'] = True  # a job of its own, not the item's hand-off
     if verb in ('next', 'remember') and str(p.get('section') or '').strip(): d['section'] = str(p['section']).strip()[:40]   # a rail heading (rail_section); a memory's place
-    cc = p.get('cc')                                                                # a reply's people to loop in - looked up, never trusted
-    cc = [cc] if isinstance(cc, str) else cc if isinstance(cc, list) else []
-    if any(str(c or '').strip() for c in cc): d['cc'] = [str(c).strip()[:120] for c in cc if str(c or '').strip()][:6]
     return text[:m.start()].strip(), d
 
 
@@ -784,12 +781,12 @@ def parse_decision(text: str) -> tuple[str, dict | None]:
 NEEDS = {'reply': 'mid', 'approve': 'rid', 'send_close': 'rid', 'redraft': 'rid', 'not_ours': 'mid', 'not_ours_remember': 'mid',
          'not_ours_sender': 'mid', 'block_sender': 'mid', 'mine': 'mid', 'forward': 'mid', 'archive': 'mid',
          'rerun': 'source_id', 'report_off': 'source_id', 'close': 'tid', 'answer_agent': 'tid', 'split': 'key', 'defer': 'tid', 'watch': 'tid', 'continue': 'tid',
-         'chase': 'key', 'let_go': 'key', 'elsewhere': 'key',
+         'let_go': 'key', 'elsewhere': 'key',
          'accept_invite': 'mid', 'decline_invite': 'mid', 'propose_time': 'mid', 'find_time': 'mid', 'prepare': 'event'}
 SAYS_VERB = {'approve': 'approve', 'send_close': 'send and close', 'redraft': 'redraft', 'not_ours': 'file', 'not_ours_remember': 'file',
              'not_ours_sender': 'file', 'block_sender': 'write an exclusion rule for', 'coding_agent': 'hand to a coding agent', 'regular_agent': 'hand to an agent', 'mine': 'put on your list', 'forward': 'forward',
              'archive': 'archive', 'rerun': 'rerun', 'report_off': 'pause', 'close': 'close', 'answer_agent': 'answer', 'reply': 'reply to',
-             'split': 'split', 'defer': 'put away', 'watch': 'watch', 'continue': 'continue', 'chase': 'chase', 'let_go': 'let go', 'elsewhere': 'close as answered elsewhere', 'prepare': 'prepare for'}
+             'split': 'split', 'defer': 'put away', 'watch': 'watch', 'continue': 'continue', 'let_go': 'let go', 'elsewhere': 'close as answered elsewhere', 'prepare': 'prepare for'}
 
 def _coding(store) -> bool:
     from . import capabilities
@@ -857,13 +854,6 @@ def _replies_on(store, item) -> bool:
     except Exception: return True                     # an unreadable row keeps its Reply: the door still asks again
 
 
-def _chasable(store, item) -> bool:
-    if store is None: return False
-    from . import rulebook
-    try: return 'chase' in rulebook.adds(store, item)
-    except Exception: return False
-
-
 def _quiet_watch(store, item) -> bool:
     if store is None: return False
     from . import rulebook
@@ -882,11 +872,8 @@ def cannot(item: dict | None, verb: str, store=None) -> str:
     if verb == 'mine' and item.get('kind') == 'report':
         return f"{what} is a report - what you type in its box makes it a task, with the agent finding out what you asked about it."
     # the slipped answers belong to a slipped card: typed on anything else, or pressed after they wrote back, they do nothing
-    # ...save a Chase the rule lit on a wait past its day (rulebook.adds: 3 working days on 'theirs', a late goal step - the owner,
-    # 2026-10-23), which goes to the thread rulebook.chase_thread names
-    # ...and a watch back after a quiet week (watch.py): Chase them where there is somebody to write to, and Let it go
-    if verb in ('chase', 'let_go', 'elsewhere') and item.get('lane') != 'forgotten' and not (verb == 'chase' and _chasable(store, item)) \
-            and not (verb == 'let_go' and _quiet_watch(store, item)):
+    # ...and a watch back after a quiet week (watch.py): Let it go
+    if verb in ('let_go', 'elsewhere') and item.get('lane') != 'forgotten' and not (verb == 'let_go' and _quiet_watch(store, item)):
         return f"Nothing has slipped on {what} - nobody is quiet past their day on it."
     if item.get('kind') == 'idea' and item.get('idea') and (verb in IDEA_ACT or verb == 'defer'): return ''
     # A SENTENCE NAMES ONLY A BUTTON THE ITEM SHOWS (2026-10-17): these said Not ours, reply and Continue over cards with none of them
@@ -914,9 +901,8 @@ def cannot(item: dict | None, verb: str, store=None) -> str:
             return f"The reply on {what} is not the last card on it - {after} waits after it, so Send sends it and the task stays open."
         return cannot(item, 'approve', store)
     if verb == 'approve' and item.get('kind') in ('review', 'action') and not item.get('draft') and item.get('kind') == 'review':
-        # approving an empty draft SENT NOTHING and closed the task anyway (2026-09-03); the card's button is Draft with AI (redraft needs a rid)
-        how = f"Press {buttons.label('redraft', 'none')}, or say what to tell them" if item.get('rid') else 'Say what to tell them'
-        return f"There is nothing to approve yet - no reply has been drafted on {what}. {how}, and it lands here for your yes."
+        # approving an empty draft SENT NOTHING and closed the task anyway (2026-09-03)
+        return f"There is nothing to approve yet - no reply has been drafted on {what}. Say what to tell them, and its agent raises the card."
     # the calendar's answers belong to an invite still waiting on the owner, Find a time to a thread asking for one
     if verb in CAL_ACT:
         inv, meet = calendar_asks(store, item)
@@ -1076,10 +1062,10 @@ def chips_for(store, item: dict | None, first: str = None) -> list:
     if not item: return []
     kind = 'task' if str(item.get('kind') or '').startswith('goal') else item.get('kind')   # a goal is a task on the table (spec 2026-10-12)
     verbs = list(CHIPS[kind] if kind in CHIPS else ('next',))    # the handful's () is deliberate
-    # SLIPPED (spec 2026-10-12): the four answers, whatever row leads the item - Chase, Let it go, They answered elsewhere, Remind me
-    if item.get('lane') == 'forgotten': verbs = ['chase', 'let_go', 'elsewhere', 'defer', 'next']
-    # ...and a WATCH back after a quiet week (watch.py, the owner, 2026-11-01): Chase them / Let it go lead, the task's own moves after
-    elif item.get('tid') and _quiet_watch(store, item): verbs = ['chase', 'let_go'] + [v for v in verbs if v not in ('chase', 'let_go')]
+    # SLIPPED (spec 2026-10-12): its answers, whatever row leads the item - Let it go, They answered elsewhere, Remind me; the chase is its agent's
+    if item.get('lane') == 'forgotten': verbs = ['let_go', 'elsewhere', 'defer', 'next']
+    # ...and a WATCH back after a quiet week (watch.py, the owner, 2026-11-01): Let it go leads, the task's own moves after
+    elif item.get('tid') and _quiet_watch(store, item): verbs = ['let_go'] + [v for v in verbs if v != 'let_go']
     # AN INVITE WAITING ON YOUR ANSWER is answered here - Accept, Decline, Propose a new time, each drafted for your Send - and a
     # thread asking to meet offers Find a time beside Reply (calwrite.py, the owner, 2026-10-20). An email reply is not how an
     # invite is answered, nor is it a list's - but it may be handed to an agent to prepare, as its task page's own Send to agent does
@@ -1132,8 +1118,6 @@ def chips_for(store, item: dict | None, first: str = None) -> list:
         elif v == 'approve' and item.get('kind') == 'action': out.append(buttons.chip(v, 'action'))
         # on a task an agent holds, "mine" TAKES it - it is a task already (the owner, 2026-09-25); the name stays one name
         elif v == 'mine' and item.get('tid') and item.get('kind') != 'idea': out.append(buttons.chip(v) | {'hint': "Takes the work back - it stays on your list."})
-        # nothing drafted yet: there is nothing to RE-draft, and the card's own button already says Draft with AI
-        elif v == 'redraft' and not item.get('draft'): out.append(buttons.chip(v, 'none') | {'hint': 'Writes a reply for you to check - nothing goes out until you say so'})
         # ...and a dashboard is paused as a dashboard: its button read "Pause this report" (the walk, 2026-11-15)
         elif v == 'report_off' and item.get('dashboard'): out.append(buttons.chip(v, 'dashboard'))
         else: out.append(buttons.chip(v))
@@ -1821,10 +1805,10 @@ def no_start_chip(store, kind: str) -> dict:
 
 def _made_now(store, tid: int, op: str, params: dict, lead: str = '', actor: str = 'owner') -> dict:
     """What New's own press would make, made here and opened (`open`, the chat's and New's box's one road to a task): an agent's job down the
-    phone's road (task.create_from_text -> handoff_task), a message to a known recipient drafted on its own task (outbox.compose) - nothing
+    phone's road (task.create_from_text -> handoff_task), a message to a known recipient asked of its own task's agent (outbox.compose) - nothing
     sent. A start that did not happen says why, with no task to open."""
     # ...an agent with nothing to run it is not made at all: a task whose agent fails a second later is a dead end on the rail
-    if op != 'outbox' and (no := start_refusal(store, params.get('kind'))):
+    if (no := start_refusal(store, params.get('kind'))):
         chip = no_start_chip(store, params.get('kind'))
         say_ = f"{no} - [{chip['label']}]({chip['href']}), then ask again. Nothing was made."
         record(store, tid, 'assistant', say_)
@@ -1832,8 +1816,7 @@ def _made_now(store, tid: int, op: str, params: dict, lead: str = '', actor: str
     try:
         if op == 'outbox':
             from . import outbox
-            o = outbox.compose(store, params['channel'], params['to'], params['about'], 'draft', actor=actor, files=params.get('files'))
-            o = {**o, 'drafted': bool(o.get('draft'))}
+            o = outbox.compose(store, params['channel'], params['to'], params['about'], actor=actor, files=params.get('files'))
         else:
             done = run_proposal(store, operations.propose(store, op, 0, his_words(op, params), actor), actor)
             o = done.get('outcome') or {}
@@ -1844,13 +1827,8 @@ def _made_now(store, tid: int, op: str, params: dict, lead: str = '', actor: str
         say_ = f"{str(e)[:1].upper()}{str(e)[1:]}." .replace('..', '.') + ' Nothing was made.'
         record(store, tid, 'assistant', say_); return {'say': say_, 'options': [], 'chips': [], 'decision': None}
     ref = o.get('ref') or task_ref(o['taskId'])
-    # ...and with nothing connected to send it, the draft waits on the card's Connect, not a Send it does not have (the visual audit, 2026-11-13)
-    # - as the card itself reads it (capabilities.can_send_draft; walk 20: "nothing can send email yet" over a card whose Send worked)
-    from . import capabilities
-    gone = op != 'outbox' or capabilities.can_send_draft(store, o.get('reviewId'))
-    what = ((f"Drafted it on {ref} - it waits for your Send." if gone else f"Drafted it on {ref} - nothing can send {params.get('channel')} "
-             f"yet, so press Connect {params.get('channel')} there first.") if o.get('drafted') else f"Made {ref}, but the draft could not be written - write it there.") if op == 'outbox' \
-        else f"Told the agent on {ref} - it is that same work." if o.get('joined')         else f"Started {ref} - an agent is on it." if o.get('started') or o.get('existing') else f"Made {ref} - it waits its turn for an agent."
+    what = (f"Asked the agent on {ref} to write it - its card waits for your Send." if o.get('asked') else f"Made {ref}, but its agent could not be started - start it there.") \
+        if op == 'outbox' else f"Told the agent on {ref} - it is that same work." if o.get('joined') else f"Started {ref} - an agent is on it." if o.get('started') or o.get('existing') else f"Made {ref} - it waits its turn for an agent."
     return {**_did(store, tid, what + (f' {lead}' if lead else ''), op, o), 'open': f"#task={o['taskId']}"}
 
 
@@ -4203,33 +4181,18 @@ def person(store, who: str) -> dict | None:
 
 
 def forward_item(store, item: dict, who: str, text: str, actor: str = 'owner') -> dict:
-    """"Forward it to Erin" / "ask Dovid to handle it": the hand-off written for the owner's yes,
-    never sent from a sentence. The address comes from the people who have actually written (the
-    same book the task page's hand-off picker uses); a name nobody knows is said so, not guessed."""
-    from . import outbound
+    """"Forward it to Erin" / "ask Omar to handle it": his ask to the task's agent (general.to_agent), which writes the hand-off and raises
+    its card for his yes (the owner, 2026-11-27) - never sent from a sentence. The address comes from the people who have actually written
+    (the same book the task page's hand-off picker uses); a name nobody knows is said so, not guessed."""
     from .routing import tokens
     if not [w for w in tokens(who or '') if len(w) > 1]: raise ValueError('say who it goes to')
     hit = person(store, who)
     if not hit: raise ValueError(f"I have no address for {who} - nobody by that name has written here")
-    tid, mid = item.get('tid'), item.get('mid')
-    note = f"The owner said: {text.strip()}" if text else None
-    try: draft = outbound.draft_handoff(store, tid, hit.get('Name') or hit['Email'], note) if tid else ''
-    except Exception as e:
-        logger.warning(f'concierge: the hand-off draft failed - {e}'); draft = ''
-    if not draft:
-        draft = (f"Hi {(hit.get('Name') or '').split()[0] or 'there'},\n\nCan you take this one? "
-                 f"{item.get('who') + ' wrote: ' if item.get('who') else ''}{item.get('title') or ''}."
-                 f"{chr(10) + chr(10) + text.strip() if text else ''}\n\nThanks.")
-    subject = f"FW: {item.get('title') or 'this one'}"[:150]
-    rid = store.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft', 'Status': 'pending', 'DraftText': draft,
-                            'Deliver': json.dumps({'channel': 'email', 'to': [hit['Email']], 'subject': subject}),
-                            'Reason': f"you asked to hand this to {hit.get('Name') or hit['Email']}"})
-    store.audit('review', rid, 'forward_proposed', actor, detail={'to': hit['Email'], 'key': item.get('key')})
-    funnel.invalidate()
-    return {'reviewId': rid, 'to': hit.get('Name') or hit['Email'], 'email': hit['Email'],
-            'card': {'key': f'review:{rid}', 'kind': 'review', 'lane': 'approve', 'rid': rid, 'tid': tid, 'mid': mid,
-                     'ref': task_ref(tid) if tid else None, 'title': subject, 'who': hit.get('Name') or hit['Email'],
-                     'draft': True, 'why': 'a hand-off waits for your yes', 'when': _ts(datetime.now())}}
+    if not item.get('tid'): raise ValueError('there is no task to hand on')
+    tid, name = int(item['tid']), hit.get('Name') or hit['Email']
+    said = f"{buttons.label('forward')}: {name} <{hit['Email']}>" + (f' - {text.strip()}' if str(text or '').strip() else '')
+    how = general.to_agent(store, tid, said, actor, frm='owner', wait=False)
+    return {'taskId': tid, 'asked': bool(how), 'to': name, 'email': hit['Email']}
 
 
 class KeptOpen(ValueError):
@@ -4700,8 +4663,8 @@ _OPS = {'coding_agent': ('task.create_from_message', True), 'regular_agent': ('t
         # ...ending the session SETTLES the table, as AUTO below already says it does: it stayed False, so the walk held the same
         # item with the same button after it ran and the owner was stuck on it (2026-09-28: "it should just move to next")
         'stop_agent': ('agent.stop', True), 'rerun': ('report.rerun', True), 'report_off': ('report.pause', True), 'continue': ('agent.continue', False),
-        # the slipped card's answers (spec 2026-10-12): a chase is a draft for your yes; the other two settle the item
-        'chase': ('task.chase', False), 'let_go': ('task.let_go', True), 'elsewhere': ('task.elsewhere', True),
+        # the slipped card's answers (spec 2026-10-12): each settles the item - a chase is the task's agent's, woken by lateness (checkback.late)
+        'let_go': ('task.let_go', True), 'elsewhere': ('task.elsewhere', True),
         'test_connection': ('connection.test', False), 'split': ('task.split', False),
         # a meeting's Prepare: a researcher on its people and subject, reading the saved mail - the meeting stays on the table
         'prepare': ('calendar.prepare', False)}
@@ -4978,7 +4941,7 @@ def propose_for(store, dock_tid: int, decision: dict, item: dict | None, text: s
     elif verb == 'prepare':
         if not it.get('event'): raise ValueError('there is no meeting on the table to prepare for')
         target, params = 0, {'key': it['key'], 'text': d_text or None}
-    elif verb in ('chase', 'let_go', 'elsewhere'):
+    elif verb in ('let_go', 'elsewhere'):
         if not it.get('key'): raise ValueError('nothing is on the table')
         target, params = it.get('tid') or it.get('idea') or it.get('mid') or 0, {'key': it['key'], 'text': d_text or text or None}
     elif verb == 'approve':
@@ -6354,14 +6317,12 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
         # was (real-AI check, 2026-10-18). The draft is still theirs to send; it never reopens the task - Reopen task does
         # ...and a REWRITE promises nothing before it has run: the page runs it after this line, and when the drafting AI failed the chat read
         # "Rewriting the draft on TQ-1141 - it waits for your Send." over "I could not rewrite it here" (2026-10-26); its own receipt says
-        said = (f"{'Drafting a reply' if verb == 'reply' else 'Rewriting the draft'} on {target_item.get('ref') or _title_cut(str(target_item.get('title') or 'it'), 60)}"
-                + ('.' if verb == 'redraft' and routes() else f" - it waits for your {buttons.label('approve')}." if routes()
-                   else ' - nothing goes out until you say yes.')) + closed_note(store, target_item)
+        said = (f"Asking the agent on {target_item.get('ref') or _title_cut(str(target_item.get('title') or 'it'), 60)} to "
+                f"{'write the reply' if verb == 'reply' else 'write it again'} - its card waits for your {buttons.label('approve')}.") + closed_note(store, target_item)
         # ...and the line is UNDER WAY until the door that runs it says how it went: its id rides the decision, and the reply door says it
         # again in place - "Rewriting the draft on TQ-n." stood over an empty box as if done (the owner, 2026-11-04)
         cid = rec('assistant', said)
         d = {'verb': verb, 'text': decision.get('text') or '', **({'line': cid} if str(cid or '').isdigit() else {})}
-        if verb == 'reply' and decision.get('cc'): d['cc'] = decision['cc']            # LOOP THEM IN: the reply copies them (open_reply)
         if elsewhere: d['target'] = card_for(target_item)
         return {'say': said, 'options': [], 'chips': [], 'decision': d}
     if decision and verb == 'setup':                                     # a report, a connection: gathered, then confirmed (PW-194)

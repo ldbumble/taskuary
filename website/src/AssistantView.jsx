@@ -25,7 +25,7 @@ import api from "./api.js";
 import { DEMO_SAID, demoNo } from "./apiError.js";
 import { runOperation } from "./taskOps.js";
 import { SIDE_NAV } from "./sideNav.js";
-import { draftJob, openReply, rewriteReceipt } from "./replyDraft.js";
+import { askReply } from "./replyDraft.js";
 import { DEMO } from "./demoApi.js";
 import { lazyView } from "./lazyView.jsx";
 import AllDone from "./AllDone.jsx";
@@ -69,7 +69,6 @@ import { ReportLink } from "./BugReportDialog.jsx";
 import { openBugReport, shownError } from "./bugReportOpen.js";
 import { AgentSteps } from "./AgentStepRows.jsx";
 import { RemindPicker } from "./RemindMe.jsx";
-import { SlotPicker } from "./CalendarPick.jsx";
 import ContinueBox from "./ContinueBox.jsx";
 import { AgentAsk } from "./RunForm.jsx";
 import CloseNote from "./CloseNote.jsx";
@@ -1278,7 +1277,6 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true, r
   const [modelEl, setModelEl] = useState(null);         // the composer's model picker, open (chatAi)
   const [remindOn, setRemindOn] = useState(null);      // the walk's Remind me: { task, anchor }
   const [howOn, setHowOn] = useState(null);            // Not for me's how far: { at, c, how } - the pressed button and its answers
-  const [slotsOn, setSlotsOn] = useState(null);        // the walk's Propose a new time / Find a time: { item, act, anchor }
   // THE ASSISTANT'S LIT BUTTON (assistantLight.js): a typed act lights the row's own verb for it until a press or the table moves on
   const [lit, setLit] = useState(null);
   useEffect(() => onPressed(() => setLit(null)), []);
@@ -2499,41 +2497,13 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true, r
         // shows - and the server takes anything else that moved fresh (processing_navigation.reserve)
         deferInChat(() => surfaceRef.current?.(), 300); return;
       }
-      // the reply's card comes up at once and its draft fills in behind it - never a wait on the model (2026-10-01)
-      if (verb === "reply" && mid) {
-        const data = await openReply(api, mid, d.text || null, d.cc || null, false, d.line || null);
-        // a name to loop in that nobody by it has written as is said, never guessed: the card's CC row takes an address
-        if (data?.cc_unknown?.length) setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt",
-          text: `I have no address for ${data.cc_unknown.join(", ")} - add them in the reply's CC.` }]);
-        // ..."Drafting a reply" is under way, never done: a draft that did not come is said under it, with why (the server's receipt,
-        // the owner 2026-11-04: "it says it's doing things and it does not do them") - one that came is the card's own, Send lit
-        const failed = (rc) => rc?.status === "failed" && setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", status: "failed", text: rc.text }]);
-        failed(data?.receipt);
-        if (data?.reviewId && data.drafting) Promise.resolve(draftJob(data.reviewId)?.promise).then(() => {
-          const j = draftJob(data.reviewId);
-          failed(j?.receipt || (j?.state === "failed" ? { status: "failed", text: `No reply was drafted - ${j.error}.` } : null));
-        });
-        // ...wherever it was asked about: "send Omar the answer" with nothing on the table was told "it lands below for your
-        // yes", and the draft went onto his task with nothing landing here (2026-10-06)
-        // ...and its Send is lit: drafting is not sending, the owner's press is (the owner, 2026-10-19)
-        if (data.reviewId) {
-          setLit({ verb: "approve", label: btn("approve"), line: "", key: `review:${data.reviewId}`,
-                   tid: cur?.tid ? Number(cur.tid) : null, landed: false });
-          if (!elsewhere) putOnTable(null, "sync"); deferInChat(() => surfaceRef.current?.(`review:${data.reviewId}`), 300); return;
-        }
+      // A REPLY OR A REWRITE IS HIS ASK TO THE TASK'S AGENT (replyDraft.askReply, the owner 2026-11-27): it writes it and raises its card -
+      // the under-way line is said again in its place by the server, with its task a chip away
+      if ((verb === "reply" || verb === "redraft") && mid) {
+        const data = await askReply(api, mid, d.text || null, verb, d.line || null);
+        if (!d.line && data?.receipt) setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", tid: data.taskId, ref: data.ref, text: data.receipt.text,
+          chips: data.taskId ? [{ verb: "opentask", tid: data.taskId, label: `Open ${data.ref}` }] : [] }]);
         loadPile(); return;
-      }
-      if (verb === "redraft" && cur?.rid && mid) {
-        const { data } = await api.post(`/api/messages/${mid}/reply`, { draft: true, redraft: true, instruction: d.text || null, ...(d.line ? { line: d.line } : {}) });
-        // "below" only when it lands below: a redraft on another task said "read it below" over nothing (2026-10-19 UI walk) - there
-        // the receipt names the task and its chip opens it
-        const ref = cur.ref || `TQ-${String(cur.tid).padStart(4, "0")}`;
-        const there = elsewhere && cur.tid ? { tid: cur.tid, ref, chips: [{ verb: "opentask", tid: cur.tid, label: `Open ${ref}` }] } : {};
-        // ...and a rewrite that did not happen is drawn as the failure it is (✗) - a receipt with no status wore the tick (2026-10-26)
-        // ...and one that came back empty or unchanged is one that did not happen, said with why (rewriteReceipt, 2026-11-04)
-        setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", ...there, ...rewriteReceipt(data, there.tid ? ref : "") }]);
-        if (!elsewhere) { putOnTable(null, "sync"); deferInChat(() => surfaceRef.current?.(`review:${cur.rid}`), 300); } else loadPile();
-        return;
       }
       if (verb === "setting" || verb === "forwarded") { loadPile(); return; }   // Taskuary put these on the task itself
       setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", tid: cur?.tid, ref: cur?.ref,
@@ -2680,16 +2650,15 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true, r
   // ...and the start every item's own box takes his line by (ItemSections.startsItems): the box is this road, never a second one
   startsItems(startOnItem);
   // THE CALENDAR'S ANSWERS (calwrite.py): Accept and Decline tell the calendar at the press (the owner, 2026-11-26) and say what went;
-  // Propose a new time and Find a time open the free times first (SlotPicker) and land on the table as a draft with Send lit, as a
-  // reply does. A send that failed is that card, its way past it on it. A card that may not write says so in one line, with its
-  // sign-in as the way out (failures.py's fix).
+  // Propose a new time and Find a time are his ask to the task's agent, which raises the answer as its card (server _cal_ask). A send that
+  // failed is that card, its way past it on it. A card that may not write says so in one line, with its sign-in as the way out (failures.py's fix).
   const calendarDrafted = (data, item) => {
     if (!data?.ok) {
       setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", status: "error", text: data?.say || "That could not be drafted.", tid: item?.tid, ref: item?.ref,
         chips: [...(data?.fix?.href ? [{ verb: "go", href: data.fix.href, label: data.fix.label }] : []), { verb: "next", label: btn("next") }] }]);
       return;
     }
-    if (data.sent) {
+    if (data.sent || !data.reviewId) {
       setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", status: "done", text: data.say, tid: item?.tid, ref: item?.ref, chips: [{ verb: "next", label: btn("next") }] }]);
       putOnTable(null, "sync"); return;
     }
@@ -2697,9 +2666,9 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true, r
              tid: item?.tid ? Number(item.tid) : null, landed: false });
     putOnTable(null, "sync"); deferInChat(() => surfaceRef.current?.(`review:${data.reviewId}`), 300);
   };
-  const calendarAnswer = async (item, act, slot = null) => {
+  const calendarAnswer = async (item, act) => {
     setBusy(true); setErr("");
-    try { calendarDrafted((await api.post(`/api/messages/${item.mid}/calendar`, { act, ...(slot || {}) })).data, item); }
+    try { calendarDrafted((await api.post(`/api/messages/${item.mid}/calendar`, { act })).data, item); }
     catch (e) { setErr(errText(e)); } finally { setBusy(false); }
   };
   // ONE road for every action word in the chat. A word the assistant offered is a word that runs: the
@@ -2750,7 +2719,7 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true, r
     if (c.verb === "defer") { if (item?.tid) setRemindOn({ task: { TaskId: item.tid, RemindAt: item.remind_at || "" }, key: item.key, anchor: anchor || null, ref: item.ref, said: litDayRef.current }); return; }
     if (c.verb === "reply" || c.verb === "redraft") { await decide({ verb: c.verb }); return; }
     if ((c.verb === "accept_invite" || c.verb === "decline_invite") && item?.mid) { await calendarAnswer(item, c.verb === "accept_invite" ? "accept" : "decline"); return; }
-    if ((c.verb === "propose_time" || c.verb === "find_time") && item?.mid) { setSlotsOn({ item, act: c.verb === "propose_time" ? "propose" : "schedule", anchor: anchor || null }); return; }
+    if ((c.verb === "propose_time" || c.verb === "find_time") && item?.mid) { await calendarAnswer(item, c.verb === "propose_time" ? "propose" : "schedule"); return; }
     // A FAILED ACT'S WAY ON (concierge.recover): the same confirmation once more, or the close-out's own GitHub button
     if (c.verb === "retry" && c.op) {
       await runProposal({ id: c.op, version: c.version, kind: c.kind, label: btn("try_again"), key: item?.key, tid: item?.tid, ref: item?.ref,
@@ -3770,8 +3739,6 @@ export default function AssistantView({ onOpenTask, onNavigate, active = true, r
         {howOn.how.map(([verb, words]) => <MenuItem key={verb} dense data-tq-how={verb} sx={{ fontSize: 12.5 }}
           onClick={() => { const h = howOn; setHowOn(null); runChip({ ...h.c, verb, how: true }); }}>{words}</MenuItem>)}
       </Menu>}
-      {slotsOn && <SlotPicker mid={slotsOn.item.mid} act={slotsOn.act} anchor={slotsOn.anchor || document.body} onClose={() => setSlotsOn(null)}
-        onRefused={(data) => calendarDrafted(data, slotsOn.item)} onPick={(slot) => calendarAnswer(slotsOn.item, slotsOn.act, slot)} />}
       {old && <div className="tq-old-banner"><span>You are reading an earlier chat.</span>
         <button type="button" className="tq-chip" onClick={continueOld} disabled={busy || resetting}>Continue this chat</button>
         <button type="button" className="tq-chip" onClick={() => setOld(null)}>Back to today</button></div>}

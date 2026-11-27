@@ -93,17 +93,6 @@ class HandoffForwardsOnlyTests(unittest.TestCase):
         self.assertTrue(any('Handed off to hwhitfield@example.com' in (c['Body'] or '')
                             for c in s.list_comments(tid)))
 
-    def test_a_draft_only_preview_changes_nothing(self):
-        """Asking the AI to WRITE the forward is not sending it, so nothing may close."""
-        from fastapi.testclient import TestClient
-        from taskuary import server
-        s = server.store
-        tid = s.create_task({'Title': 'Still mine', 'Kind': 'reply', 'Status': 'waiting'}, 'router')
-        r = TestClient(server.app).post(f'/api/tasks/{tid}/handoff',
-                                        json={'draft_only': True, 'text': 'a draft'})
-        self.assertEqual(r.status_code, 200)
-        self.assertEqual(s.get_task(tid)['Status'], 'waiting')
-
 
 if __name__ == '__main__':
     unittest.main()

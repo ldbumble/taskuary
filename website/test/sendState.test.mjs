@@ -1,7 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { label } from "../src/buttons.js";
 import { sendBlockLine, draftState, failureHead, replyEnvelope, replySendFailure, reviewDeliveryState, sendFix } from "../src/sendState.js";
 
 // AN APPROVED STEP THAT FAILED IS NOT A REPLY THAT FAILED (2026-10-29): a held push that failed read "The reply was not sent."
@@ -81,8 +80,8 @@ test("a blocked channel yields the server's reason, an open one yields nothing",
 
 test("the draft state names a failed draft with its reason and offers the retry", () => {
   assert.deepEqual(draftState({ HasDraft: 0, DraftError: "no AI connector is set up to write replies" }),
-    { state: "failed", line: `Draft failed: no AI connector is set up to write replies. Press ${label("redraft", "none")} again or write the answer yourself.`, retry: true });
-  assert.deepEqual(draftState({ HasDraft: 0, DraftError: "" }), { state: "undrafted", line: "No draft yet — draft it with AI or write the answer.", retry: true });
+    { state: "failed", line: "Draft failed: no AI connector is set up to write replies. Ask its agent in the task's box, or write the answer yourself.", retry: true });
+  assert.deepEqual(draftState({ HasDraft: 0, DraftError: "" }), { state: "undrafted", line: "No draft yet — ask its agent in the task's box, or write the answer.", retry: true });
   assert.deepEqual(draftState({ HasDraft: 1, DraftError: "" }), { state: "drafted", line: "", retry: false });
   assert.deepEqual(draftState({ DraftText: "hello", DraftError: null }), { state: "drafted", line: "", retry: false });
 });
@@ -94,8 +93,6 @@ test("what the writer needs is a plain line, whole, never a failure - and the re
   assert.equal(draftState({ HasDraft: 1, DraftNeeds: why }).state, "drafted");
   const rd = readFileSync(new URL("../src/ReviewDecision.jsx", import.meta.url), "utf8");
   assert.match(rd, /\["needs", "failed", "empty", "kept"\]\.includes\(draftState\(r\)\.state\)/);
-  const job = readFileSync(new URL("../src/replyDraft.js", import.meta.url), "utf8");
-  assert.match(job, /needs: data\?\.needs/);
 });
 
 

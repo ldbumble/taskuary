@@ -439,8 +439,7 @@ export const thinkingLine = (text) => {
 export const askTurn = (asking, items) => (asking?.turn && (items || []).some((x) => x.kind === "turn" && x.id === asking.turn) ? asking.turn : "");
 // ONE ACTION BOX AT A TIME, A HARD RULE (cardqueue.py; the owner's live task, 2026-11-19: a held browser step read "1 of 2 · next: the reply
 // to Gail" and the reply's box stood under it): a card the line holds behind its front is drawn nowhere - the reply's block included, by its
-// review (`rid`) - and while the front is another card, no door to write a reply stands beside it either (`replyDoorOpen`)
-export const replyDoorOpen = (queue, rid) => !(queue?.live || []).length || (queue.live || []).includes(rid);
+// review (`rid`)
 // ...and A MISSING FACT IS ONE QUESTION (the owner's rule; recorded on the real CLI, 2026-11-15): while the agent waits on his answer, the reply
 // it could not write yet - no words, no email beside it - is not drawn under the question as an empty box over a greyed Send; his answer's
 // turn writes it (the server's list leaves it out of the turn the same way, conversation.items)

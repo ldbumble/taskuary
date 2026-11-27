@@ -65,7 +65,7 @@ def test_a_wait_past_its_due_day_is_named_late_counted_like_the_header_and_its_g
     assert step['state'] == 'waiting_overdue', 'late by its due day'
     assert step['line'].startswith('Ray') and step['line'].endswith(': 2 days late.'), 'the days past due, not since the ask'
     assert goal['state'] == 'goal_late' and goal['line'] == "Ray's schema sign-off: 2 days late.", 'the goal and its step say one count'
-    assert rulebook.adds(s, {'key': f'task:{k}', 'tid': k, 'lane': 'theirs', 'kind': 'task'}) == ['chase'], 'Chase is on the row for the model to light'
+    assert rulebook.adds(s, {'key': f'task:{k}', 'tid': k, 'lane': 'theirs', 'kind': 'task'}) == [], 'no Chase on the row - its agent is woken for the lateness'
 
 
 # ── 3. how soon the owner answers is no line on a task ─────────────────────────────────────────────────────────────────────────────

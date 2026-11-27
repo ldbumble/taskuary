@@ -24,8 +24,7 @@ def _task(title='ship the export'):
 class HandingItToAPerson(unittest.TestCase):
     def test_a_channel_this_install_cannot_send_on_is_refused_in_words(self):
         tid = _task()
-        with mock.patch('taskuary.outbound.can_reply', return_value=False), \
-             mock.patch('taskuary.outbound.draft_handoff', return_value='here you go'):
+        with mock.patch('taskuary.outbound.can_reply', return_value=False):
             r = c.post(f'/api/tasks/{tid}/handoff', json={'to': 'tess', 'channel': 'whatsapp', 'text': 'hi'})
         self.assertEqual(r.status_code, 422)
         self.assertIn('Connections', r.json()['detail'])
@@ -84,15 +83,20 @@ class HandingItToAPerson(unittest.TestCase):
         self.assertIn('refused', r.json()['detail'])
         self.assertEqual(c.get(f'/api/tasks/{tid}').json()['task']['Status'], was)
 
-    def test_a_draft_never_sends_anything(self):
+    def test_send_to_agent_is_his_ask_to_the_tasks_agent_and_nothing_is_written_or_sent(self):
+        """The owner, 2026-11-27: "side model should never work in agent canvas". Hand it to a person drafted the forward with a one-shot
+        writer; its Send to agent is now his line to the task's agent - whom, by what, his note - and the agent raises the forward's card."""
+        from taskuary import buttons, general, outbound
         tid = _task()
-        with mock.patch('taskuary.outbound.draft_handoff', return_value='a drafted forward'), \
-             mock.patch('taskuary.outbound.send_out') as send, \
-             mock.patch('taskuary.outbound.send_email') as mail:
-            r = c.post(f'/api/tasks/{tid}/handoff', json={'to': 'tess', 'channel': 'whatsapp', 'draft_only': True})
-        self.assertEqual(r.json()['draft'], 'a drafted forward')
-        send.assert_not_called()
-        mail.assert_not_called()
+        told = []
+        with mock.patch.object(general, 'to_agent', side_effect=lambda st, t, said, *a, **k: told.append((t, said, k.get('frm'))) or 'woke'),              mock.patch('taskuary.outbound.send_out') as send, mock.patch('taskuary.outbound.send_email') as mail:
+            r = c.post(f'/api/tasks/{tid}/handoff', json={'to': 'tess@vendor.example', 'channel': 'whatsapp', 'text': 'yours from here', 'ask': True})
+        self.assertEqual(r.json(), {'asked': True, 'taskId': tid})
+        self.assertEqual(told, [(tid, f"{buttons.label('forward')}: tess@vendor.example by whatsapp - yours from here", 'owner')])
+        send.assert_not_called(); mail.assert_not_called()
+        self.assertFalse(hasattr(outbound, 'draft_handoff'), 'the writer is gone')
+        # ...and a send with no words of his is refused, never written for him
+        self.assertEqual(c.post(f'/api/tasks/{tid}/handoff', json={'to': 'tess@vendor.example', 'channel': 'whatsapp'}).status_code, 422)
 
 
 if __name__ == '__main__':

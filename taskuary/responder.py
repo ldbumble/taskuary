@@ -1,16 +1,8 @@
-"""Replies: the other half of the funnel, and the cheap half.
+"""How the owner writes: his voice, his signature, his style - read by every road that files a letter.
 
-Most inbound mail does not need an agent, a repo or a session - it needs an answer. Triage
-already separates those (reply_only vs task); this writes the answer with the MAIN AI, in
-the owner's voice per SOUL.md, and parks it for approval. Approving sends it (see outbound).
-
-Drafting used to require a CLI agent named `responder`. Nobody has one, so reply-only mail
-sat in the queue undrafted - and the fallback was worse: the *coding* agent, opened on a
-repo, to write two sentences of email.
-
-Every reply comes through `write_draft`: the mail that only ever needed an answer, and the
-mail an agent just finished the work behind. The agent reports what it did; the reply is
-written here either way, so the sender always hears one voice.
+A REPLY IS THE TASK'S AGENT'S (the owner, 2026-11-27: "side model should never work in agent canvas"): Reply, Redraft and Draft with
+AI are his ask to that agent (server.open_reply). The one writer left here is the refresh of a draft no agent worked when the thread
+moved under his Send (server.press_review), which a locked contract test pins until he rules on it.
 """
 import re
 from loguru import logger
@@ -688,46 +680,6 @@ def resolution_of(store, task_id: int):
         return ('COMPLETE WORK SESSION TRANSCRIPT (the final response is near the end):\n'
                 + str(transcript['Text']).strip() + beside)
     return report
-
-
-def write_draft(store, task_id: int, review_id: int, actor: str = 'system', llm=None, nudge: str = None, pressed: bool = False) -> str:
-    """The one door every reply comes through - and there is only one road behind it now.
-
-    An agent named `responder` used to take this over and run HEADLESS: a CLI opened, worked
-    and closed where nobody could watch it, interrupt it or answer it. That is the thing this
-    app exists to replace, so it is gone. Coding work goes to a real session you can see
-    (terminal.start_on_task); a reply is two sentences and belongs to the main AI, which
-    writes it here in under a second and parks it for approval. `pressed`: the owner pressed for this draft (ASKED) - never put down as no reply.
-    ONLY THE OWNER'S PRESS ASKS IT (Draft with AI, Redraft, a chase): a reply owed at arrival or at a run's end is the task's agent's to write
-    (ingest.reply_to_agent, wrapup.raise_reply - the owner, 2026-11-10: "no more triage creates draft. agent should be doing it").
-    ...AND A PRESS ON A TASK AN AGENT WORKS IS THAT AGENT'S (decided 2026-11-12, rule 1: no second voice drafts): Redraft and Draft with AI
-    wake it, it writes the reply again and files its card - raised as Handed. This writer is for what no agent ever worked."""
-    if pressed and (got := to_agent(store, task_id, nudge)): raise Handed(got)
-    return draft_for_review(store, task_id, review_id, llm, None, nudge, pressed)
-
-
-class Handed(Exception):
-    "The press went to the task's agent (to_agent): it writes the reply again and files the card - nothing was drafted here."
-REDRAFT = 'The owner pressed {press} on the reply waiting on this task{said}.'
-def to_agent(store, tid: int, nudge: str = None) -> str:
-    """Hand the owner's Redraft / Draft with AI to task `tid`'s agent, as every word of Taskuary's to an agent goes (general.to_agent): 'told' or
-    'woke' - and his press is a line in the chat - or '' where no agent ever worked it."""
-    from . import general, buttons
-    t = store.get_task(int(tid)) if tid else None
-    if not t or t.get('Status') in ('done', 'dropped'): return ''
-    said, rv = str(nudge or '').split(': ', 1)[-1].strip() if nudge else '', store.pending_review(int(tid))
-    press = buttons.label('redraft') if rv and str(rv.get('DraftText') or '').strip() else buttons.label('redraft', 'none')
-    # ...his press is written first: the turn it wakes reads it with what the owner did since its last answer
-    store.audit('task', int(tid), 'redraft_asked', 'owner', 'human', {'said': said[:300]})
-    got = general.to_agent(store, int(tid), REDRAFT.format(press=press, said=f', saying: "{said}"' if said else ''))
-    if not got:
-        aid = (store._one("SELECT MAX(Id) AS i FROM audit WHERE EntityType='task' AND EntityId=? AND Action='redraft_asked'", (int(tid),)) or {}).get('i')
-        store._exec('DELETE FROM audit WHERE Id=?', (aid,))
-        # ...and the line a read drew for it meanwhile: the next audit row takes its freed Id, and that press's line was refused as this one's
-        # record changed (chatlog._frozen, Windows CI 2026-11-25: a second stale Send stood unsent)
-        from . import chatlog
-        chatlog.forget(store, int(tid), f'p:{aid}')
-    return got
 
 
 @aiusage.named('draft.reply')

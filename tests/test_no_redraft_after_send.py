@@ -73,7 +73,7 @@ class TheDoor(Base):
         rv = self.s.get_review(out['review_id'])
         # ...its time, and its day when that is not today ("5:33 PM on Oct 27") - CI ran past midnight UTC and the bare time no longer matched
         self.assertRegex(rv['Reason'], r'^a follow-up to your 5:33 PM( on \w{3} \d{1,2})? reply', rv['Reason'])
-        with mock.patch('taskuary.responder.write_draft') as redraft: wrapup.finish(self.s, self.tid, REP, None, 'coding')
+        with mock.patch('taskuary.responder.draft_for_review') as redraft: wrapup.finish(self.s, self.tid, REP, None, 'coding')
         redraft.assert_not_called()
         [rv] = pending(self.s, self.tid)
         self.assertEqual(rv['DraftText'], AGAIN); self.assertTrue(wrapup.is_follow_up(rv), rv['Reason'])
@@ -103,7 +103,7 @@ class AckBeforeWork(unittest.TestCase):
 
 class TheEnding(Base):
     def test_a_continued_run_ending_with_nothing_new_drafts_no_second_reply(self):
-        with mock.patch('taskuary.responder.write_draft') as redraft:
+        with mock.patch('taskuary.responder.draft_for_review') as redraft:
             out = wrapup.finish(self.s, self.tid, REP, None, 'coding')
         redraft.assert_not_called()
         self.assertFalse(out['drafting']); self.assertEqual(pending(self.s, self.tid), [])
@@ -111,7 +111,7 @@ class TheEnding(Base):
 
     def test_with_new_mail_the_ending_raises_the_reply_as_before(self):
         mail(self.s, self.tid, 'g-2', 'One more - can you also add September?', '18:00:00')
-        with mock.patch('taskuary.responder.write_draft', return_value='Sure.') as redraft:
+        with mock.patch('taskuary.responder.draft_for_review', return_value='Sure.') as redraft:
             out = wrapup.finish(self.s, self.tid, REP, None, 'coding')
         self.assertTrue(out['drafting']); self.assertTrue(out['owed'])
         redraft.assert_not_called()                     # ...the agent's to write (2026-11-10), never a second voice's

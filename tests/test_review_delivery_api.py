@@ -25,7 +25,7 @@ def test_changed_thread_still_checks_original_delivery_without_redrafting_or_res
         store.mark_review_stale(rid)
         with mock.patch.object(server, 'store', store), \
              mock.patch.object(server, '_refresh_chat_context') as refresh, \
-             mock.patch.object(responder, 'write_draft') as redraft, \
+             mock.patch.object(responder, 'draft_for_review') as redraft, \
              mock.patch.object(outbound, 'reply_to_message') as send, \
              mock.patch.object(outbound, 'reconcile_sent', return_value=checked) as reconcile:
             result = server.decide(rid, server.DecideBody(verb='approve'))

@@ -73,8 +73,7 @@ class EveryLabelIsOnTheList(unittest.TestCase):
             act = next(c for c in chips(ITEMS[2]) if c['verb'] == 'approve')
             self.assertEqual(act['label'], buttons.label('approve', 'action'))
             self.assertEqual(next(c for c in chips(ITEMS[3]) if c['verb'] == 'approve')['label'], buttons.label('approve', 'action'))
-            self.assertEqual(next(c for c in chips(ITEMS[1]) if c['verb'] == 'redraft')['label'], buttons.label('redraft', 'none'))
-            self.assertEqual(next(c for c in chips(ITEMS[0]) if c['verb'] == 'redraft')['label'], buttons.label('redraft'))
+            self.assertFalse([c for it in ITEMS for c in chips(it) if c['verb'] == 'redraft'], 'no Redraft: other words are his line to its agent')
         self.assertEqual(concierge.closeout_label(ITEMS[2]), buttons.label('approve', 'action'))
         self.assertEqual(proposals.CLOSE_WORD, buttons.label('approve', 'action'))
 

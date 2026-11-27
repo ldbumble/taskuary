@@ -139,17 +139,6 @@ class TurnTests(unittest.TestCase):
         self.assertNotIn('corrected file', last_receipt(s))
         self.assertFalse([c for c in s.list_comments(t) if 'corrected file' in (c.get('Body') or '')])
 
-    def test_a_rewrite_promises_nothing_before_it_has_run(self):
-        """The 2026-10-26 sweep: "Rewriting the draft on TQ-1141 - it waits for your Send." stood over the page's own "I could not rewrite
-        it here" when the drafting AI failed - the page runs the rewrite after this line, and its receipt says whether it worked."""
-        s = store()
-        t, m, r = drafted(s)
-        concierge.surface(s, key=f'review:{r}', llm=lambda *a, **k: 'Dana needs the corrected export.')
-        # ...on the phone; on the desk the task opens and its agent rewrites there (the owner, 2026-11-18 - test_assistant_router)
-        with phone(): out = concierge.say(s, 'make it warmer', key=f'review:{r}', llm=lambda *a, **k: 'CALL: {"kind": "redraft", "params": {"text": "warmer"}}')
-        self.assertEqual(out['decision']['verb'], 'redraft')
-        self.assertTrue(out['say'].startswith('Rewriting the draft on'), out['say'])
-        self.assertNotIn('waits for', out['say'])
 
     def test_a_typed_digit_is_kept_as_typed(self):
         """The 2026-10-25 sweep: "2" typed on the desk was saved as the button it numbered ("Mark done") - a second owner bubble beside the
@@ -1318,10 +1307,6 @@ class NonCoderWordsTests(unittest.TestCase):
         self.assertEqual(said, 'Away until Tuesday - it is under For later on your rail, and back in front of you that morning.')
         self.assertNotIn('Tasks', concierge.CHIP_HINTS['defer'])
 
-    def test_nothing_drafted_offers_draft_with_ai(self):
-        it = {'key': 'review:1', 'kind': 'review', 'rid': 1, 'mid': 2, 'tid': 3, 'title': 'Lease', 'draft': ''}
-        self.assertIn('Draft with AI', [c['label'] for c in concierge.chips_for(None, it)])
-        self.assertIn(buttons.label('redraft'), [c['label'] for c in concierge.chips_for(None, {**it, 'draft': 'Hi Gail'})])
 
     def test_with_no_coding_tool_a_coding_hand_off_is_send_to_agent(self):
         """B3: Coding agent was offered, then refused with "There is no coding agent on this computer"."""

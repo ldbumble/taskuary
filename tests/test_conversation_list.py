@@ -774,18 +774,6 @@ class TheList(unittest.TestCase):
                                            for c in x.get('cards') or []])
 
 
-    def test_redraft_on_a_task_its_agent_works_wakes_that_agent(self):
-        """Decided 2026-11-12 (rule 1: no second voice drafts): Redraft / Draft with AI on a task an agent works went to a one-shot writer that
-        rewrote the agent's card in a voice of its own. The press is his line in the chat and wakes the task's agent, which writes it again."""
-        from taskuary import responder
-        self.say('Draft it.', 'l-one'); self.rest()
-        rid = self.s.add_review({'TaskId': self.tid, 'MessageId': self.s.list_messages(self.tid)[0]['MessageId'], 'Kind': 'draft_reply', 'Status': 'pending',
-                                 'Channel': 'email', 'DraftText': 'Hi Gail, the Mill or the Quay. Alex'})
-        with mock.patch.object(responder, 'draft_for_review', side_effect=AssertionError('the one-shot writer drafted')):
-            with self.assertRaises(responder.Handed): responder.write_draft(self.s, self.tid, rid, actor='owner', nudge='THE OWNER SAYS: shorter', pressed=True)
-        self.assertTrue(until(lambda: len(self.brain.calls) == 2)); self.rest()
-        self.assertIn('write that reply again', self.brain.calls[-1].lower()); self.assertIn('"shorter"', self.brain.calls[-1])
-        self.assertIn('You asked the agent to write the reply again: "shorter".', [x.get('text') for x in self.list()['items'] if x['kind'] == 'press'])
 
     def test_the_agents_words_are_read_for_what_code_can_see(self):
         """The real-CLI walks, 2026-11-12 (rule 8: the agent talks like a person helping): "Overlap with TQ-0004", "set up for Alex to

@@ -100,8 +100,8 @@ export function draftState(rv) {
   // THE WRITER SAID WHAT IT NEEDS (store.set_review_draft_needs): no failure - a plain line, whole, and the Advisor lights Send to agent /
   // Continue. It came as a DraftError: red, cut mid-word, "New task to fix this" (walk 2026-10-29)
   if (rv?.DraftNeeds) { const s = String(rv.DraftNeeds).trim(); return { state: "needs", line: s.charAt(0).toUpperCase() + s.slice(1), retry: true }; }
-  if (rv?.DraftError) return { state: "failed", line: `Draft failed: ${rv.DraftError}. Press ${label("redraft", "none")} again or write the answer yourself.`, retry: true };
-  return { state: "undrafted", line: "No draft yet — draft it with AI or write the answer.", retry: true };
+  if (rv?.DraftError) return { state: "failed", line: `Draft failed: ${rv.DraftError}. Ask its agent in the task's box, or write the answer yourself.`, retry: true };
+  return { state: "undrafted", line: "No draft yet — ask its agent in the task's box, or write the answer.", retry: true };
 }
 // A CHAT DRAWS A REPLY CARD ONCE ITS AGENT HAS WRITTEN IT (the owner, 2026-11-27: "Agents don't just draw boxes unless it needs approval to send
 // email? why would it draw anything before that"): its words, for his press - never an empty box, whatever its record says of why it is empty.

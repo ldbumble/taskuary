@@ -40,7 +40,7 @@ class OpenQuestionAtWrap(unittest.TestCase):
     def tearDown(self): wrapup.REFRESH = self._prev
 
     def finish(self, s, tid):
-        with mock.patch('taskuary.responder.write_draft', return_value='draft') as wd:
+        with mock.patch('taskuary.responder.draft_for_review', return_value='draft') as wd:
             out = wrapup.finish(s, tid, {'summary': NOTE}, None, 'assistant', keep_open=True)
         return out, wd
 
@@ -83,7 +83,7 @@ class OpenQuestionAtWrap(unittest.TestCase):
         s.add_comment(tid, 'owner', general.USER_TYPE, 'Payworth says it is fixed - retry the login.')
         s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, NOTE)
         ev(s, tid, 'turn_end', NOTE); ev(s, tid, 'input_needed', ASK, rid='q1')
-        with mock.patch('taskuary.responder.write_draft') as wd:
+        with mock.patch('taskuary.responder.draft_for_review') as wd:
             out = wrapup.wrap(s, tid, close=False, actor='owner')
         wd.assert_not_called(); self.assertFalse(out['drafting'])
         general.report_note(s, tid)                                    # the session's own close, after: the same answer, not a second note

@@ -1290,7 +1290,7 @@ def raise_reply(store, task_id: int, mid: int, run_id: int, fresh: dict = None, 
     ending raised, else a new one. The agent's own reply (agent_reply) stands as written. One it did not write is NOBODY'S DRAFT: the
     review waits as the reply owed, with no words on it, and its agent is asked for it (ask_for_reply) - the review's id is returned then.
     A tool-less writer used to draft it here from the run's report (the owner, 2026-11-10: "no more triage creates draft. agent should
-    be doing it"); only the owner's own Draft with AI and Redraft still ask that writer (responder.write_draft, pressed)."""
+    be doing it")."""
     fresh = fresh or {}
     # ...and a run the owner STOPPED (Stop and save: the session ended, the task kept open) did not finish: its reply said "the agent finished
     # the work" over an agent stopped mid-turn (the overnight run, 2026-11-03)

@@ -21,7 +21,6 @@ import {
 import CloseIcon from "@mui/icons-material/Close";
 import { RemindPicker } from "./RemindMe.jsx";
 import { steady } from "./steadyAnchor.js";
-import { SlotPicker } from "./CalendarPick.jsx";
 import { onPressing, useVerbs } from "./actionRow.js";
 import { BUTTONS_AT, FOCUS_EDGE, MOVES_AT, PaneMoves, SEC_NAME, SpineMoves, TaskButtons } from "./TaskRow.jsx";
 import { closedBy, closedResult, pressBeat, pressOver, pressedOn } from "./pressResult.js";
@@ -35,7 +34,6 @@ import DifferenceIcon from "@mui/icons-material/Difference";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import api from "./api";
 import { useViewExtras } from "./pageView.js";
-import { openReply as draftReply } from "./replyDraft.js";   // the component's own openReply below would shadow it, and call itself
 import { opError, runOperation } from "./taskOps.js";
 import { demoNo } from "./apiError.js";
 import { WriteupBlock, closeAfterSend, completeTask, writeUpThenClose } from "./closeAgent.jsx";
@@ -69,7 +67,7 @@ import { WorkstreamSelect } from "./Workstream.jsx";
 import { Attachments, mentionsPicture } from "./Attachments.jsx";
 import { remotePicture, wordsOnly } from "./mailLinks.js";
 import ChatThread from "./ChatThread.jsx";
-import { ChannelIcon, asUtc, tsMs, useAgents, codingAgent, RunTrace, DiffFiles, timeAgo, fmtDateTime, cleanText, LinkedText, Empty, isWaiting, TaskuaryMark, DraftField, assignedAgent } from "./ui.jsx";
+import { ChannelIcon, asUtc, tsMs, useAgents, codingAgent, RunTrace, DiffFiles, timeAgo, fmtDateTime, cleanText, LinkedText, Empty, isWaiting, TaskuaryMark, assignedAgent } from "./ui.jsx";
 import { Md, looksMd } from "./md.jsx";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import ForwardToInboxIcon from "@mui/icons-material/ForwardToInbox";
@@ -90,7 +88,7 @@ import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 // Recover once automatically; a real module error still reaches the view boundary on retry.
 import { autostartPlan, isGeneralKind, opensOnRegular } from "./autostart.js";
 import { barContinues } from "./taskWorkspace.js";
-import { SECTIONS, cameFrom, cameChip, judgedMarks, chatLatch, homeSection, liveTerminal, soloTodo, replyHolds, agentStatus, agentWord, answeredOutside, reportLine, askInBody, askIsTitle, writeupAt, focusOf, fromLine as fromLineOf, fromStatus, sameWords, sectionFade, waitingOn, workPane } from "./taskLayout.js";
+import { SECTIONS, cameFrom, cameChip, judgedMarks, chatLatch, homeSection, liveTerminal, soloTodo, replyHolds, agentStatus, agentWord, reportLine, askInBody, askIsTitle, writeupAt, focusOf, fromLine as fromLineOf, fromStatus, sameWords, sectionFade, waitingOn, workPane } from "./taskLayout.js";
 import { mainView, stageOf } from "./stages.js";
 import { chatOf, taskStatus } from "./railStatus.js";
 import { StatusPill } from "./StatusMark.jsx";
@@ -107,7 +105,7 @@ import LandingCard, { LANDING_DIFF } from "./LandingCard.jsx";
 import AiUsed from "./AiUsed.jsx";
 import CodeChanges from "./CodeChanges.jsx";
 import { ChatDetail } from "./DetailSlider.jsx";
-import { chatSource, replyDoorOpen } from "./chatStream.js";
+import { chatSource } from "./chatStream.js";
 import TuneOutlinedIcon from "@mui/icons-material/TuneOutlined";
 import DifferenceOutlinedIcon from "@mui/icons-material/DifferenceOutlined";
 import AgentChannels from "./AgentChannels.jsx";
@@ -1397,23 +1395,21 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
     ? `Skill · ${t.Skill.title}${t.Skill.uses?.length ? ` · uses ${t.Skill.uses.join(", ")}` : ""}`
     : t?.Source === "report" && sourceMessage?.SourceName
       ? `Report · ${sourceMessage.SourceName}` : "";
-  const openReply = async (generate = false) => {
+  // REPLY IS HIS ASK TO THE TASK'S AGENT (the owner, 2026-11-27: "side model should never work in agent canvas"): it writes the reply and
+  // raises its card (server.open_reply). With no AI connected (`manual`) the box opens for his own words instead
+  const openReply = async () => {
     if (!replyMessage?.MessageId || openingReply) return;
     const id = selected;
-    setOpeningReply(generate ? "generate" : "write"); setErr("");
-    // THE BOX OPENS AT THE PRESS (the owner, 2026-10-30: "the top line says drafting then the box opens up. Box should open up right away and
-    // then you can spin in the box of drafting"): the draft's card comes up now, on its empty box with the spinner in it, and the draft fills it
-    setOpenStage("reply");
+    setOpeningReply(true); setErr("");
+    if (manual) setOpenStage("reply");
     try {
-      // the box at once and the AI's draft behind it, "Drafting…" in the decision meanwhile (replyDraft.js, 2026-10-01)
-      // ...agent work or not: Draft reply drafts and spins until the draft lands (2026-11-03); a press in the empty box is writing it yourself
-      const got = await (generate ? draftReply(api, replyMessage.MessageId, null, null, generate === "ai") : api.post(`/api/messages/${replyMessage.MessageId}/reply`, { draft: false }).then((r) => r.data));
+      await api.post(`/api/messages/${replyMessage.MessageId}/reply`, manual ? { write: true } : { verb: "reply" });
       if (stale(id)) return;
       await loadDetail(id);
       onChanged?.();
       // an empty box is for writing: the cursor goes in it, under the To line the reply already carries
-      if (!got?.drafting && !got?.draft) setTimeout(() => document.querySelector("[data-tq-draft-box] textarea")?.focus(), 0);
-    } catch (e) { if (!stale(id)) setErr(e?.response?.data?.detail || "Could not open the reply"); }
+      if (manual) setTimeout(() => document.querySelector("[data-tq-draft-box] textarea")?.focus(), 0);
+    } catch (e) { if (!stale(id)) setErr(e?.response?.data?.detail || "Could not ask the agent"); }
     if (!stale(id)) setOpeningReply(false);
   };
   // The task itself leads when no coding terminal is open. Triage already distilled an inbound
@@ -1666,9 +1662,6 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
   // ...and never a section the task no longer lays: its last one instead
   const picked = secPick.key === pickKey ? secPick.sec : mainHeld.current.sec;
   const section = twoUp ? (slotKeys.includes(picked) ? picked : slotKeys.at(-1)) : null, hereSec = solo ? "from" : homeSection(t?.Kind, taskStage, anyChat);
-  // THE OWNER ANSWERED OUTSIDE TASKUARY (taskLayout.answeredOutside): their own line in Teams or the mail client is the newest on the task -
-  // the chat's Draft reply is not the lit move there: Mark done is (the owner, 2026-10-29)
-  const outside = answeredOutside({ messages: taskMessages, outside: sentOutside, pending: !!pendingReview });
   const isOpen = (k) => section === k;
   const fadeMemo = useRef(null); fadeMemo.current = sectionFade(fadeMemo.current, section, selected, hereSec);
   const fades = fadeMemo.current.moved;
@@ -1688,7 +1681,7 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
   // ...a chat's strip carries the task's buttons (TaskButtons), live or not
   // ...and THE TASK'S BUTTONS ARE DRAWN ONCE (TaskButtons, BUTTONS_AT): on the Agent's strip when it is open, else the open pane's
   const buttonsHere = (k) => BUTTONS_AT === "strip" && k === (isOpen("agent") ? "agent" : slots.find((x) => isOpen(x.key))?.key);
-  const stripSkip = (v) => (v.id === "reply" && (replyEmpty || !!pendingReview));
+  const stripSkip = (v) => (v.id === "reply" && !!pendingReview);
   const foldTo = (k) => (to) => (hereSec && hereSec !== k && k !== "agent" ? hereSec : to);
   const slot = (k, body) => (!twoUp ? body
     : <Box data-tq-slot={k} data-tq-open={isOpen(k) ? "" : undefined} sx={{ ...SLOT(isOpen(k), closedW(k)),
@@ -1699,12 +1692,6 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
         {body}</Box>);
   // ...the chat is always drawn - open, or laid out of sight behind its tab - and the reply's cards are in it: there is no other half
   const pane = "agent", shows = (p) => p === pane;
-  // ...and a reply owed with nothing drafted shows its empty box in the chat, Draft with AI under it - only where nothing else waits there: a
-  // GitHub finish to approve, a proposal, emails owed or a write-up under way have their own box
-  // ...never on an INVITE (the owner, 2026-11-08): its answer is the calendar's card - Accept, Decline, Propose a new time - not an email
-  const replyEmpty = !!replyMessage && !detail?.calendar?.invite && !pendingReview && !sentReview && !reviews.some(isUnsentReply) && !ended && !liveSession && !closeoutRv && !allProposals.length
-    && !owesEmails && !emailsWaiting && !writeup && !outside
-    && !!t && !["done", "dropped"].includes(t.Status);
   // the one line From folds to while an agent works (sessionView)
   const fromLine = fromLineOf({ sender: ownSource, count: sourceCount, workflow: fromWorkflow, made: t ? `${detail.ref} · ${madeAt}` : "" });
   // the note a close was written with (server task.complete: "Closed out: ...") - the chat's closing line says it: the current round's
@@ -2139,37 +2126,25 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
   const filled = (verb) => liveVerb(rec?.verb) === verb;
   // THE CALENDAR'S ANSWERS (calwrite.py, server task_detail's `calendar`): an invite waiting on the owner is answered from the row -
   // Accept, Decline, Propose a new time - and a thread asking for a time offers Find a time. Accept and Decline tell the calendar at
-  // the press, and the answer's card says what went (or what failed, with the way past it); the others DRAFT into the chat for the
-  // owner's Send. A card that may not write says so on the error line with its sign-in as the way out (failures.py's fix).
+  // the press, and the answer's card says what went (or what failed, with the way past it); Propose a new time and Find a time are his
+  // ask to the task's agent, which raises the answer as its card (server _cal_ask). A card that may not write says so on the error line
+  // with its sign-in as the way out (failures.py's fix).
   const calAsk = notDone && !liveSession ? detail?.calendar || null : null;
-  const [slotAt, setSlotAt] = useState(null);           // { act, at } - Propose a new time / Find a time's free times
-  const calAnswer = async (act, slot = null) => {
+  const calAnswer = async (act) => {
     if (!calAsk) return;
     setErr(""); setStartFail(null);
     try {
-      const { data } = await api.post(`/api/messages/${calAsk.mid}/calendar`, { act, ...(slot || {}) });
-      if (!data?.ok) { setErr(data?.say || "That could not be drafted."); setStartFail({ text: data?.say || "", fix: data?.fix || null, retry: false }); return; }
-      if (!data.sent) setOpenStage("reply");
+      const { data } = await api.post(`/api/messages/${calAsk.mid}/calendar`, { act });
+      if (!data?.ok) { setErr(data?.say || "That did not go through."); setStartFail({ text: data?.say || "", fix: data?.fix || null, retry: false }); return; }
       loadDetail(selected); onChanged?.();
-    } catch (e) { setErr(e?.response?.data?.detail || e?.message || "That could not be drafted."); }
-  };
-  // A LATE ANSWER NO AGENT WAS WOKEN FOR IS CHASED FROM THE ROW (the owner, 2026-11-10: "job of agent is to be helpful and do as much as
-  // possible"): the task's recommended move lights Chase (rulebook.LATE) - a move its row draws only when it is the lit one. It drafts the
-  // nudge on the thread for the owner's Send (server task.chase), nothing goes out
-  const [chasing, setChasing] = useState(false);
-  const chase = async () => {
-    setChasing(true); setErr("");
-    try { await runOperation(api, "task.chase", t.TaskId, { key: `task:${t.TaskId}` }); setOpenStage("reply"); loadDetail(t.TaskId); onChanged?.(); }
-    catch (e) { setErr(opError(e, "The chase was not drafted - press it again.")); }
-    setChasing(false);
+    } catch (e) { setErr(e?.response?.data?.detail || e?.message || "That did not go through."); }
   };
   // ...and once a calendar card waits in the chat its press and its other answers are ON it: the bar holds them only while none does
   // ...and while an agent works the task they stand greyed, not gone (taskMoves: one toolbar in every state) - it is answering for him
   const calCard = !!pendingReview && deliveryMeta(pendingReview).kind === "calendar";
   const calOn = notDone && !calCard ? detail?.calendar || null : null, calOff = liveSession ? { disabled: true, why: "an agent is working on it" } : {};
   const calVerbs = calMoves(calOn, { accept: () => calAnswer("accept"), decline: () => calAnswer("decline"),
-    propose: (e, a) => setSlotAt({ act: "propose", at: steady(a || e?.currentTarget) || document.body }),
-    find: (e, a) => setSlotAt({ act: "schedule", at: steady(a || e?.currentTarget) || document.body }) }, { label: btn, hint: btnHint }, calOff);
+    propose: () => calAnswer("propose"), find: () => calAnswer("schedule") }, { label: btn, hint: btnHint }, calOff);
   // THE STATUS IN THE HEADER IS THE RAIL'S (the redesign, owner-approved 2026-10-21): the same mark and word the rail row wears for this
   // task - the live session's own word first, then the rail's row (on the canvas), then the server's state (railStatus.taskStatus)
   // ...and the rail's agent lane only while no newer read of this task takes it back: a rail built while the agent worked said "agent
@@ -2198,13 +2173,11 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
   { label: labelOfRow, hint: hintOfRow, doneHint: markDoneHint, natTitle: NAT_TITLE, repo: btn("pick_repo", repoOf(t) ? "set" : null), repoHint: heldRepo ? heldWhy : btnHint("pick_repo") });
   const rowVerbs = !t ? [] : closedNow || made ? ownMoves : [
       ...calVerbs,
-      ...(rec?.verb === "chase" && !liveSession ? [{ id: "chase", group: "decide", label: chasing ? "Drafting…" : rec.label || btn("chase"), disabled: chasing,
-        run: chase, title: btnHint("chase") }] : []),
       // ...an invite is answered by the calendar, not by an email back (calwrite.py)
       // NO REPLY OR HAND OFF ON THE BAR (the owner, 2026-11-08): the agent does them from the chat ("reply saying...", "hand this to Erin") and
       // its card's Send sends - only with no AI connected they stand, folded in the ▾, so the owner is never stuck (concierge._shows, the same)
-      ...(manual && replyMessage && !liveSession && !calAsk?.invite && (stage !== "reply" || !pendingReview) ? [{ id: "reply", group: "more", label: openingReply ? "Drafting…" : replyPrimary,
-        disabled: !!openingReply, run: () => (pendingReview ? setOpenStage("reply") : openReply(true)), title: hintOfRow("reply") }] : []),
+      ...(manual && replyMessage && !liveSession && !calAsk?.invite && (stage !== "reply" || !pendingReview) ? [{ id: "reply", group: "more", label: replyPrimary,
+        disabled: !!openingReply, run: () => (pendingReview ? setOpenStage("reply") : openReply()), title: hintOfRow("reply") }] : []),
       // REVIEW CHANGES STAYS AFTER THE SESSION IS GONE (the owner, 2026-11-10: "yes, keep it"): lit on work left to review (rulebook
       // changes_waiting), it opens the task's own landing card's diff - one road to the diff (LandingCard LANDING_DIFF); the checkout's
       // drawer only where no card stands to take it
@@ -2353,7 +2326,7 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
       {/* STOP AND SAVE'S WRITE-UP, where its draft will stand (writeupState.js): the job's own stage until the draft
           replaces this block in place - or, if it stopped, that it did, with Try again and the reply button */}
       {upFailed && <WriteupBlock view={writeup} hasReply={!!replyMessage} onRetry={canWrap || pressedHere ? wrapUp : null}
-        onDraft={() => openReply(true)} draftLabel={replyPrimary} />}
+        onDraft={() => openReply()} draftLabel={replyPrimary} />}
       {!writeup && ((pendingReview || proposals.length || kept.length || replyMessage || owesEmails || ended || sentOutside.length) ? (
         <Box sx={{ mt: 0.5 }}>
           {/* THE INVITE, AND WHAT IT CLASHES WITH (calwrite.of_task), over the row's Accept / Decline / Propose a new time */}
@@ -2368,18 +2341,6 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
               was sending you to another tab to do this card's own job is gone. */}
           {replyMessage && (
             <Box sx={{ display: "flex", alignItems: "center", gap: 0.8, flexWrap: "wrap" }}>
-              {/* ONE button, and it WRITES. "Write reply" opened an empty box and left the
-                  model behind a second press ("you should not have to hit draft with AI again
-                  to make it go" - the owner, 2026-09-22), and the twin beside it did the thing
-                  the first one was named for. The box is still editable, and Redraft below
-                  writes it again. */}
-              {!pendingReview && !inRow && !replyEmpty && replyDoorOpen(detail?.queue, null) && (
-                <Button size="small" variant={outside ? "outlined" : "contained"} disableElevation disabled={!!openingReply}
-                  sx={outside ? barBtn : primaryBtn} data-tq-reply-again={outside ? "" : undefined}
-                  startIcon={openingReply ? <CircularProgress size={12} /> : <ForwardToInboxIcon sx={{ fontSize: 16 }} />}
-                  title="Drafts the reply here, from this task's own context. Nothing is sent until you approve it."
-                  onClick={() => openReply(true)}>{openingReply ? "Drafting…" : replyPrimary}</Button>
-              )}
               <Box sx={{ flex: 1, minWidth: 12 }} />
               <Typography variant="caption" sx={{ color: FAINT, textAlign: "right", maxWidth: 320 }}>
                 {/* no More button: with these on the surface there is nothing left to hide */}
@@ -2455,30 +2416,6 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
                       label={f.size ? `${f.name} · ${sizeText(f.size)}` : f.name}
                       sx={{ height: 21, fontSize: 10.5, bgcolor: PANEL2, maxWidth: 320 }} />
                   ))}
-                </Box>
-              )}
-              {/* A REPLY OWED, NOTHING DRAFTED YET (the owner, 2026-10-27, on an invite: "Answering" and "To" and nothing to
-                  do): the empty reply box under the To line, as a draft with no words wears it (ReviewDecision's "No draft yet - hit Draft
-                  with AI"), and the same press - Draft with AI writes it here; a press in the box opens it to write by hand. The row's Reply
-                  is the same openReply */}
-              {/* ...only on a to-do no agent has touched (the owner, 2026-11-13): where an agent works the task it drafts, and a box nobody spoke
-                  of is not drawn (chatReview) */}
-              {replyEmpty && !inTurns && (
-                <Box data-tq-reply-empty="" sx={{ mt: 1 }}>
-                  <Box sx={{ position: "relative" }} onMouseDown={(e) => { if (!openingReply) { e.preventDefault(); openReply(false); } }}>
-                    <DraftField value="" onChange={() => {}} placeholder={openingReply === "generate" ? "Drafting…" : "No draft yet — hit Draft with AI"}
-                      inputProps={{ readOnly: true, style: { fontSize: 12.5, lineHeight: 1.45, cursor: "text" } }} />
-                    {openingReply === "generate" && <CircularProgress size={14} data-tq-drafting-spin=""
-                      sx={{ position: "absolute", top: 12, right: 12, color: FAINT }} />}
-                  </Box>
-                  <Box sx={{ display: "flex", alignItems: "center", gap: 1, mt: 1, flexWrap: "wrap" }}>
-                    {/* ...not lit on an INVITE (B15): its answer is the row's Accept or Decline, not an email */}
-                    <Button size="small" variant={calAsk?.invite ? "outlined" : "contained"} disableElevation disabled={!!openingReply}
-                      sx={calAsk?.invite ? barBtn : primaryBtn} data-tq-draft-ai=""
-                      startIcon={openingReply === "generate" ? <CircularProgress size={12} color="inherit" /> : null}
-                      title={btnHint("redraft")} onClick={() => openReply("ai")}>{openingReply === "generate" ? "Drafting…" : btn("redraft", "none")}</Button>
-                    <Typography variant="caption" sx={{ color: FAINT }}>Nothing is sent until you approve it.</Typography>
-                  </Box>
                 </Box>
               )}
               {/* the words that LEFT: an edit before the send is the FinalText - the draft read "keep it active" over a
@@ -2996,9 +2933,6 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
       {t && <CloseNote anchor={noteAt} taskRef={t.ref || ""} onClose={() => setNoteAtRaw(null)} onSubmit={closeWithNote} />}
       {t && <RemindPicker task={t} anchor={remindAt} onClose={() => setRemindAt(null)} onDone={reminded} act={remindAct} onLeave={onLeave} onStay={onStay}
         said={remindSaid} />}
-      {calAsk && slotAt && <SlotPicker mid={calAsk.mid} act={slotAt.act} anchor={slotAt.at} onClose={() => setSlotAt(null)}
-        onRefused={(data) => { setErr(data?.say || ""); setStartFail({ text: data?.say || "", fix: data?.fix || null, retry: false }); }}
-        onPick={(slot) => calAnswer(slotAt.act, slot)} />}
     </>
   );
 }

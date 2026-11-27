@@ -8,7 +8,7 @@ brain and the reply writer and never the agent doing the work.
 """
 import unittest
 
-from taskuary import agents, ingest, outbound, responder, terminal
+from taskuary import agents, ingest, responder, terminal
 from taskuary.store import MemoryStore
 from tests.memlines import note as put_note
 
@@ -89,26 +89,10 @@ class DocsReachThePromptTests(unittest.TestCase):
         # PW-184: SOUL stays with triage; JOB.md too - a worker that knows the mission starts helping with the mission instead of the ticket
         self.assertFlows(terminal.seed_text(s, _task(s)), [NOTE], forbid=[MARK['soul'], MARK['job'], MARK['agent'], MARK['coding']])
 
-    def test_task_context_and_the_handoff_writer_carry_them_too(self):
+    def test_task_context_carries_them_too(self):
         s = seeded()
         tid = _task(s)
         self.assertFlows(agents.task_context(s, tid), [NOTE])
-        seen = {}
-        outbound.draft_handoff(s, tid, 'x@y.com', None,
-                               llm=lambda sysm, usr, **k: (seen.update(p=sysm + usr), 'ok')[1])
-        self.assertFlows(seen['p'], [MARK['soul'], NOTE])
-
-    def test_the_handoff_writer_carries_the_agents_whole_result(self):
-        """Hand it to a person is also how a finished agent's result is sent on (2026-10-02), so the newest
-        AGENT REPORT rides whole - task_context alone cut it to 300 characters."""
-        s = seeded()
-        tid = _task(s)
-        s.add_comment(tid, 'coding', 'agent', 'AGENT REPORT\nan older run')
-        s.add_comment(tid, 'coding', 'agent', 'AGENT REPORT\n' + 'x' * 500 + ' THE-END-OF-IT')
-        seen = {}
-        outbound.draft_handoff(s, tid, 'gail@northwind.example', None, llm=lambda sysm, usr, **k: (seen.update(u=usr), 'ok')[1])
-        self.assertIn("The agent's result:\n" + 'x' * 500 + ' THE-END-OF-IT', seen['u'])
-        self.assertNotIn("The agent's result:\nan older run", seen['u'])
 
     def test_style_holds_an_untouched_template_out_of_prompts(self):
         """The one doc that is deliberately silent until it says something real - headings alone

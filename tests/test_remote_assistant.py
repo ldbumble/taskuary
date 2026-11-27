@@ -419,12 +419,11 @@ class SameWalkTests(unittest.TestCase):
         store, connector = armed_store()
         _t, m, _r = waiting(store)
         turn = {'say': "I'll draft that.", 'chips': [], 'decision': {'verb': 'reply', 'text': 'tell her it is sent'}}
-        with mock.patch.object(remote_assistant, '_draft', return_value=77) as draft, \
-             mock.patch.object(concierge, 'surface', return_value={'say': 'Here is the draft.', 'chips': []}) as nxt:
-            text = remote_assistant.carry_out(store, turn, {'mid': m})
-        draft.assert_called_once()
-        self.assertEqual(nxt.call_args.args[1], 'review:77')
-        self.assertIn('Here is the draft.', text)
+        # ...his ask to the task's agent (the owner, 2026-11-27: "side model should never work in agent canvas"), never a writer of its own
+        with mock.patch.object(remote_assistant, '_ask', return_value='Asked the agent on TQ-0001 - its card lands in the task.') as ask, \
+             mock.patch('taskuary.responder.draft_reply', side_effect=AssertionError('a side model wrote it')):
+            remote_assistant.carry_out(store, turn, {'mid': m})
+        self.assertEqual(ask.call_args.args[1:4], ({'mid': m}, 'reply', 'tell her it is sent'))
 
     def test_a_reply_aimed_at_someone_else_drafts_to_them_not_to_what_is_on_the_table(self):
         """"reply to Erin ..." while Dovid's mail is on the table drafted to DOVID: the phone read the
@@ -434,9 +433,9 @@ class SameWalkTests(unittest.TestCase):
         elsewhere = {'mid': m + 900, 'key': f'message:{m + 900}', 'ref': 'TQ-0099'}
         turn = {'say': "I'll draft that.", 'chips': [],
                 'decision': {'verb': 'reply', 'text': 'tell her it is sent', 'target': elsewhere}}
-        with mock.patch.object(remote_assistant, '_draft', return_value=77) as draft,              mock.patch.object(concierge, 'surface', return_value={'say': 'Here is the draft.', 'chips': []}):
+        with mock.patch.object(remote_assistant, '_ask', return_value='Asked.') as ask:
             remote_assistant.carry_out(store, turn, {'mid': m})
-        self.assertEqual(draft.call_args.args[1]['mid'], m + 900)
+        self.assertEqual(ask.call_args.args[1]['mid'], m + 900)
 
 
 class HandoffTests(unittest.TestCase):

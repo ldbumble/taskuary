@@ -1238,7 +1238,7 @@ class DurableWrapTests(unittest.TestCase):
         self.assertIn(rid, held)                                                # but visible, not vanished
         self.assertTrue(_wait(lambda: server.store.last_transcript(tid) is not None))
         terminal.SESSIONS.pop(t.sid, None)
-        with mock.patch('taskuary.responder.write_draft', return_value='The import is fixed.') as wd:
+        with mock.patch('taskuary.responder.draft_for_review', return_value='The import is fixed.') as wd:
             with mock.patch('taskuary.llm.build_llm', return_value=None):
                 out = c.post(f'/api/tasks/{tid}/wrap', json={'close': True}).json()
         self.assertTrue(out['drafting']); wd.assert_not_called()

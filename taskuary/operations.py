@@ -42,8 +42,7 @@ KINDS = {
     'task.create_from_text':    ('text', ('kind', 'text'), None),
     'message.archive':          ('message', (), 'dismissed'),
     'item.settle':              ('item', ('key', 'verb'), None),
-    'task.chase':               ('item', ('key',), None),          # the slipped card's answers (spec 2026-10-12)
-    'task.let_go':              ('item', ('key',), None),
+    'task.let_go':              ('item', ('key',), None),          # the slipped card's answers (spec 2026-10-12)
     'task.elsewhere':           ('item', ('key',), None),
     'calendar.answer':          ('message', ('act',), None),
     'meeting.new':              ('text', (), None),            # a meeting asked for in the chat: a task's Find a time, or where to find it (concierge._meeting)

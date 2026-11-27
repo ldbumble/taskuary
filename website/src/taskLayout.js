@@ -146,17 +146,6 @@ export const agentStatus = ({ name = "", word = "not started", said = "", made =
   lines: [[name, word].filter(Boolean).join(" · "), said, made ? `Made: ${made}` : ""].filter(Boolean),
   foot: word === "finished" ? "✓ Done" : "" });
 
-// ANSWERED OUTSIDE TASKUARY: the newest message on the task is the owner's own, typed in Teams, the mail client or a chat
-// (channels.ingest_own_message: a `context` row, Direction out) - not a reply sent from here coming back (taskLifecycle.sentElsewhere
-// already left those out of `outside`). `messages` the task's conversation with the replies sent from here in it. That message, or null
-// while anything came in after it, a reply went from here after it, or a draft waits.
-const ts = (m) => Date.parse(String(m?.SentAt || m?.CreatedAt || "").replace(" ", "T")) || 0;
-export const answeredOutside = ({ messages = [], outside = [], pending = false } = {}) => {
-  if (pending || !outside.length) return null;
-  const newest = [...messages].sort((a, b) => ts(b) - ts(a))[0];
-  return newest && outside.some((m) => m.MessageId === newest.MessageId) ? newest : null;
-};
-
 // THE ASK IS THE MESSAGE'S OWN WORDS when triage left no summary of its own (the task-view cleanup, owner-approved 2026-10-25): said
 // once, under the title, and From does not open the same words again as the message under it. Spacing and line breaks aside.
 const squash = (s) => String(s || "").replace(/\s+/g, " ").trim();

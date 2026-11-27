@@ -1,93 +1,88 @@
-"""Reply opens at once (the owner, 2026-10-01: "Reply opens at once with "Drafting…" and the draft fills in - never waits on
-the AI"). The press asked /reply to write the draft before it answered, so the card appeared only when the model was done.
-`later` opens the box now and says a draft is owed; the page then asks /api/reviews/{rid}/draft for it, which reads the
-provider first (the correctness gate) and carries the owner's own words on what to say."""
+"""A reply is the task's agent's (the owner, 2026-11-27: "side model should never work in agent canvas"). Reply, Redraft, Draft with AI,
+the Assistant's "reply to X" and the phone's Redraft were a one-shot writer drafting in the agent's place. Each press is now his line to the
+task's agent (general.to_agent) - his words, else the press's own label - the task made from the message where it has none. Nothing here
+drafts: the writer is never called."""
 import unittest
+from contextlib import ExitStack
 from unittest import mock
 
 from fastapi.testclient import TestClient
 
-from taskuary import responder, server
+from taskuary import buttons, general, outbox, responder, server
 from taskuary.store import MemoryStore
 
+WRITERS = (('taskuary.responder.draft_reply', 'the reply writer'), ('taskuary.responder.draft_for_message', 'the message writer'),
+           ('taskuary.outbox.draft_message', 'the outbox writer'))
 
-class ReplyOpensAtOnceTests(unittest.TestCase):
+
+def no_writer():
+    "Every side-model writer patched to fail the test the moment it is called."
+    st = ExitStack()
+    for path, who in WRITERS: st.enter_context(mock.patch(path, side_effect=AssertionError(f'{who} drafted in the agent\'s place')))
+    return st
+
+
+class ReplyAsksTheAgentTests(unittest.TestCase):
     def setUp(self):
         self.s = MemoryStore()
         p = mock.patch.object(server, 'store', self.s); p.start(); self.addCleanup(p.stop)
         self.c = TestClient(server.app)
-        self.s.set_setting('owner_email', 'alex@northwind.example', 'owner')       # ...Erin is a colleague: a stranger's task offers no card until Trust
+        self.s.set_setting('owner_email', 'alex@northwind.example', 'owner')
         self.tid = self.s.create_task({'Title': 'Rota for Tuesday', 'Kind': 'task', 'Status': 'open'}, 'owner')
         self.mid = self.s.add_message({'TaskId': self.tid, 'ExternalId': 'rota-1', 'Channel': 'email', 'Subject': 'Rota',
                                        'FromName': 'Erin Blake', 'FromEmail': 'erin@northwind.example',
                                        'BodyText': 'Can you cover Tuesday?', 'Status': 'routed'})
+        self.told = []
+        p = mock.patch.object(general, 'to_agent', side_effect=lambda st, tid, said, *a, **k: self.told.append((tid, said, k.get('frm'))) or 'started')
+        p.start(); self.addCleanup(p.stop)
 
-    def test_later_opens_the_box_without_the_model_and_says_a_draft_is_owed(self):
-        with mock.patch.object(responder, 'write_draft', side_effect=AssertionError('the press never waits on the model')), \
-             mock.patch.object(server, '_refresh_chat_context', side_effect=AssertionError('nor on the provider')):
-            r = self.c.post(f'/api/messages/{self.mid}/reply', json={'draft': True, 'later': True, 'ai': True})
+    def press(self, mid=None, **body):
+        with no_writer(): return self.c.post(f'/api/messages/{mid or self.mid}/reply', json=body)
+
+    def test_reply_is_his_line_to_the_tasks_agent(self):
+        r = self.press(verb='reply')
         self.assertEqual(r.status_code, 200, r.text)
-        out = r.json()
-        self.assertTrue(out['reviewId'])
-        self.assertEqual((out['draft'], out['drafting']), ('', True))
-        self.assertEqual(self.s.get_review(out['reviewId'])['Status'], 'pending')
+        self.assertEqual(self.told, [(self.tid, buttons.label('reply'), 'owner')])
+        self.assertTrue(r.json()['asked'])
+        self.assertIsNone(self.s.pending_review(self.tid), 'no review is made in his name')
 
-    def test_the_draft_behind_it_carries_the_owners_words(self):
-        rid = self.c.post(f'/api/messages/{self.mid}/reply', json={'draft': True, 'later': True, 'ai': True}).json()['reviewId']
-        seen = {}
-        def fake(store, tid, rid_, actor=None, nudge=None, **kw):
-            seen['nudge'] = nudge
-            store.update_review_draft(rid_, 'Yes, I can cover Tuesday.', None)
-            return 'Yes, I can cover Tuesday.'
-        with mock.patch.object(responder, 'write_draft', side_effect=fake), mock.patch.object(server, '_refresh_chat_context', return_value={}):
-            r = self.c.post(f'/api/reviews/{rid}/draft', json={'instruction': 'say yes'})
-        self.assertEqual(r.json()['draft'], 'Yes, I can cover Tuesday.')
-        self.assertIn('say yes', seen['nudge'])
-        # ...and an old caller with no body still redrafts
-        with mock.patch.object(responder, 'write_draft', side_effect=fake), mock.patch.object(server, '_refresh_chat_context', return_value={}):
-            self.assertEqual(self.c.post(f'/api/reviews/{rid}/draft').status_code, 200)
-        self.assertIsNone(seen['nudge'])
+    def test_redraft_with_words_is_those_words_and_without_them_its_label(self):
+        self.press(verb='redraft', instruction='shorter, and say Thursday works')
+        self.press(verb='redraft')
+        self.assertEqual([s for _, s, _ in self.told], ['shorter, and say Thursday works', buttons.label('redraft')])
 
-    def test_draft_reply_on_a_task_no_agent_worked_drafts(self):
-        """The owner, 2026-11-03: "drafting reply is broken ... if its still working stay spinning until done". The press reads
-        "Draft reply" and spins, and on a task no agent had worked it opened a signature-only box with Draft with AI under it - no
-        draft owed, nothing coming (the 2026-10-28 rule). The press drafts wherever there is someone to answer; a writer with
-        nothing to go on says what it needs (responder.NotDrafted). Writing by hand is the empty box's own press (`draft: False`)."""
-        with mock.patch.object(responder, 'write_draft', side_effect=AssertionError('the press never waits on the model')):
-            out = self.c.post(f'/api/messages/{self.mid}/reply', json={'draft': True, 'later': True}).json()
-        self.assertEqual((out['draft'], out['drafting']), ('', True))
-        self.assertEqual(self.s.get_review(out['reviewId'])['Status'], 'pending')
-        self.assertTrue(self.s.review_envelope(out['reviewId']))                            # To and Cc are filled at once
-        out2 = self.c.post(f'/api/messages/{self.mid}/reply', json={'draft': False}).json()    # the box pressed to write it yourself
-        self.assertEqual((out2['reviewId'], out2['draft'], out2['drafting']), (out['reviewId'], '', False))
+    def test_a_message_with_no_task_gets_one_and_its_agent_is_asked(self):
+        mid = self.s.add_message({'ExternalId': 'loose-1', 'Channel': 'email', 'Subject': 'Lunch', 'FromName': 'Gail Moreno',
+                                  'FromEmail': 'gail@northwind.example', 'BodyText': 'Lunch on Friday?', 'Status': 'filed'})
+        r = self.press(mid, instruction='yes, Friday')
+        tid = r.json()['taskId']
+        self.assertEqual(self.s.get_message(mid)['TaskId'], tid)
+        self.assertEqual(self.told, [(tid, 'yes, Friday', 'owner')])
 
-    def test_a_box_that_already_has_its_draft_owes_none(self):
-        rid = self.c.post(f'/api/messages/{self.mid}/reply', json={'draft': False}).json()['reviewId']
-        self.s.update_review_draft(rid, 'Already written.', None)
-        out = self.c.post(f'/api/messages/{self.mid}/reply', json={'draft': True, 'later': True}).json()
-        self.assertEqual((out['reviewId'], out['draft'], out['drafting']), (rid, 'Already written.', False))
+    def test_the_old_draft_door_is_gone(self):
+        self.assertIn(self.c.post('/api/reviews/1/draft').status_code, (404, 405))
+        for gone in ('write_draft', 'to_agent', 'Handed', 'REDRAFT'): self.assertFalse(hasattr(responder, gone), gone)
+        for gone in ('redraft_review', 'task_email', 'MODES'): self.assertFalse(hasattr(outbox, gone), gone)
 
+    def test_write_it_yourself_opens_the_box_for_his_words_with_nobody_behind_it(self):
+        "No AI connected: the bar's Reply opens a box for his own words - no agent asked, no writer."
+        out = self.press(write=True).json()
+        self.assertEqual(self.told, [])
+        rv = self.s.get_review(out['reviewId'])
+        self.assertEqual((rv['Status'], rv.get('DraftText') or ''), ('pending', ''))
 
-    def test_the_owners_words_for_it_owe_a_new_draft_over_the_old_one(self):
-        # "reply to Marcus: yes, Thursday at 2 works" found the draft written before and showed it unchanged (2026-10-06)
-        rid = self.c.post(f'/api/messages/{self.mid}/reply', json={'draft': False}).json()['reviewId']
-        self.s.update_review_draft(rid, 'I will check my calendar.', None)
-        out = self.c.post(f'/api/messages/{self.mid}/reply', json={'draft': True, 'later': True, 'instruction': 'yes, Tuesday works'}).json()
-        self.assertEqual((out['reviewId'], out['draft'], out['drafting']), (rid, '', True))
+    def test_the_phone_and_the_assistant_take_the_same_door(self):
+        from taskuary import remote_assistant
+        with no_writer(): said = remote_assistant._ask(self.s, {'mid': self.mid}, 'redraft', 'warmer')
+        self.assertEqual(self.told, [(self.tid, 'warmer', 'owner')])
+        self.assertIn('Asked the agent', said)
 
-    def test_no_review_is_said_to_be_drafting_by_itself(self):
-        """Nothing writes a draft at arrival any more (the owner, 2026-11-10: the reply is the task's agent's): a review with no draft is a
-        reply owed, and neither read of it claims a draft is on its way - only the owner's own press owes one."""
-        rid = self.c.post(f'/api/messages/{self.mid}/reply', json={'draft': False}).json()['reviewId']
-        rv = next(r for r in self.c.get(f'/api/tasks/{self.tid}').json()['reviews'] if r['ReviewId'] == rid)
-        self.assertFalse(rv.get('Drafting'))
-        self.assertFalse(next(r for r in self.c.get('/api/reviews').json()['data'] if r['ReviewId'] == rid).get('Drafting'))
-        calls = []
-        def fake(store, tid, rid_, actor=None, nudge=None, **kw):
-            calls.append(actor); store.update_review_draft(rid_, 'Yes, I can cover Tuesday.', None); return 'Yes, I can cover Tuesday.'
-        with mock.patch.object(responder, 'write_draft', side_effect=fake), mock.patch.object(server, '_refresh_chat_context', return_value={}):
-            r = self.c.post(f'/api/reviews/{rid}/draft')
-        self.assertEqual((r.status_code, r.json()['draft'], len(calls)), (200, 'Yes, I can cover Tuesday.', 1))      # the press writes at once, waiting on nothing
+    def test_no_card_offers_redraft(self):
+        from taskuary import card, concierge
+        rid = self.s.add_review({'TaskId': self.tid, 'MessageId': self.mid, 'Kind': 'draft', 'Status': 'pending', 'DraftText': 'Yes.'})
+        self.assertNotIn('redraft', card.presses(self.s, self.s.get_review(rid)))
+        self.assertNotIn('redraft', concierge.CHIPS['review'])
+
 
 if __name__ == '__main__':
     unittest.main()

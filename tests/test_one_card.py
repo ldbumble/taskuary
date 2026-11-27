@@ -76,7 +76,7 @@ def test_what_waits_is_every_kind_in_the_order_the_page_brings_them():
     assert {c['state'] for c in got} == {'pending'}
     # ...and its lines say each, the agent's question last
     # ...the reply's as its card draws it: no mailbox is connected here, so its Connect, never a Send (walk 21, card.presses)
-    assert lines[0]['line'] == 'a reply to erin@northwind.example is drafted - Connect email, Redraft - it cannot be sent from here'
+    assert lines[0]['line'] == 'a reply to erin@northwind.example is drafted - Connect email - it cannot be sent from here'
     assert lines[-1]['verb'] == 'answer_agent'
 
 
@@ -274,18 +274,18 @@ def test_a_draft_its_channel_cannot_send_is_copy_everywhere_it_is_named():
     mid = s.add_message({'TaskId': tid, 'ExternalId': 'tm1', 'ConversationId': 'teams:c1', 'Channel': 'teams', 'FromName': 'Paula Vance',
                          'FromEmail': 'paula@northwind.example', 'SentAt': '2026-11-23 09:00:00', 'BodyText': 'Which cost center?', 'Status': 'routed'})
     rid = s.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft', 'Status': 'pending', 'DraftText': 'Hi Paula, use IT-4410.'})
-    assert card.waiting(s, tid, asks=False)[0]['presses'] == ('connect:Connect Microsoft Teams', 'copy', 'redraft'), 'no Teams card: its Connect'
+    assert card.waiting(s, tid, asks=False)[0]['presses'] == ('connect:Connect Microsoft Teams', 'copy'), 'no Teams card: its Connect'
     with mock.patch('taskuary.outbound.review_connect', return_value=None):       # ...the walk's shape: a Teams card that reads, never posts
         (c,) = card.waiting(s, tid, asks=False)
-        assert c['presses'] == ('copy', 'redraft')
+        assert c['presses'] == ('copy',)
         (ln,) = card.lines(s, tid)
         assert ln['verb'] is None and 'Send' not in ln['line'] and 'Copy' in ln['line'] and 'cannot be sent from here' in ln['line']
         assert 'Copy' in taskstate.said(taskstate.standing(s, tid)) and 'cannot be sent from here' in taskstate.standing(s, tid)['what'][0]
-        assert '(its card: Copy, Redraft - it cannot be sent from here)' in cardqueue.screen(s, tid)
+        assert '(its card: Copy - it cannot be sent from here)' in cardqueue.screen(s, tid)
         assert ra.card_picks(s, {'tid': tid, 'rid': None}) == []
         assert concierge.cannot({'tid': tid, 'rid': rid, 'kind': 'agent', 'ref': f'TQ-{tid:04d}'}, 'approve', s)
     # ...and an email's card keeps its Send
     t2 = task(s); reply(s, t2)
     with mock.patch('taskuary.capabilities.can_send_draft', return_value=True):       # ...a mailbox that sends
-        assert card.waiting(s, t2, asks=False)[0]['presses'] == ('approve', 'redraft') and card.lines(s, t2)[0]['verb'] == 'approve'
+        assert card.waiting(s, t2, asks=False)[0]['presses'] == ('approve',) and card.lines(s, t2)[0]['verb'] == 'approve'
         assert [w for w, _ in ra.card_picks(s, {'tid': t2, 'rid': None})][:1] == ['Send'] and 'its card:' not in cardqueue.screen(s, t2)

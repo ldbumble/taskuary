@@ -263,11 +263,21 @@ class OnePress(unittest.TestCase):
         self.assertTrue(ok['sent'], ok); self.assertEqual(len(g.calls), 1)
         self.assertEqual(sorted(x['Status'] for x in s.reviews_for_message(mid)), ['approved', 'superseded'])
 
-    def test_a_new_time_still_waits_for_his_send(self):
+    def test_a_new_time_or_a_time_to_meet_is_his_ask_to_the_invites_agent(self):
+        """The owner, 2026-11-27: "side model should never work in agent canvas". Propose a new time and Find a time drafted the answer
+        in the agent's place; the press is now his line to the task's agent, which raises the answer as its card (answer_invite)."""
+        from fastapi.testclient import TestClient
+        from taskuary import buttons, general, server
         s = outlook_store(); out = arrive(s); g = Fake()
-        r = self.press(s, out['message_id'], 'propose', g)
+        with mock.patch.object(calwrite, 'draft', side_effect=AssertionError('the app drafted the answer')):
+            r = self.press(s, out['message_id'], 'propose', g, wakes=1)
         self.assertTrue(r['ok']); self.assertNotIn('sent', r); self.assertEqual(g.calls, [])
-        self.assertEqual(s.get_review(r['reviewId'])['Status'], 'pending')
+        self.assertEqual(s.reviews_for_message(out['message_id']), [], 'no card in his name')
+        with mock.patch.object(server, 'store', s), mock.patch.object(general, 'to_agent') as woke, \
+             mock.patch.object(calwrite, 'draft', side_effect=AssertionError('the app drafted the invite')):
+            TestClient(server.app).post(f"/api/messages/{out['message_id']}/calendar", json={'act': 'schedule'})
+        self.assertEqual(woke.call_args.args[1:3], (out['task_id'], buttons.label('find_time')))
+        self.assertEqual(woke.call_args.kwargs['frm'], 'owner')
 
 
 class DraftedThenSent(unittest.TestCase):
@@ -411,10 +421,6 @@ class TheWriteScope(unittest.TestCase):
         self.assertEqual(str(e.exception), calwrite.NO_CALENDAR)
         self.assertNotIn('refresh token', str(e.exception))
         self.assertEqual(e.exception.fix, {'label': 'Connect a calendar', 'href': '#connector=outlook'})
-        with mock.patch.object(server, 'store', s):
-            r = TestClient(server.app).get(f"/api/messages/{out['message_id']}/calendar/slots", params={'act': 'propose'}).json()
-        self.assertFalse(r['ok']); self.assertIn('No calendar is connected', r['say'])
-        self.assertNotEqual((r.get('fix') or {}).get('label'), 'Sign in again')
         # ...and a Gmail card that IS there, with no Google calendar on it yet, is still told how to add one - on that card
         gm = s.get_connector_by_type('gmail'); s.save_connector({'ConnectorId': gm['ConnectorId'], 'Active': 1}, 't')
         with self.assertRaises(calwrite.NoAccess) as e: calwrite.draft(s, out['message_id'], 'accept')
@@ -428,8 +434,6 @@ class TheWriteScope(unittest.TestCase):
             c = TestClient(server.app)
             r = c.post(f"/api/messages/{out['message_id']}/calendar", json={'act': 'accept'}).json()
             self.assertEqual((r['ok'], r['fix']['label']), (False, 'Sign in again'))
-            r = c.get(f"/api/messages/{out['message_id']}/calendar/slots", params={'act': 'propose'}).json()
-            self.assertFalse(r['ok']); self.assertIn('Calendar access', r['say'])
 
     def test_new_sign_ins_ask_for_write_and_old_ones_refresh_as_they_were(self):
         self.assertIn('Calendars.ReadWrite', msauth.SCOPES.split())
@@ -556,10 +560,11 @@ class AssistantTools(unittest.TestCase):
 
     def test_the_operation_drafts_and_never_sends(self):
         from fastapi.testclient import TestClient
-        from taskuary import server
+        from taskuary import general, server
         s = outlook_store(); out = arrive(s)
         g = Fake()
-        with mock.patch.object(server, 'store', s), mock.patch.object(calwrite, 'requests', g), mock.patch.object(calwrite, 'busy', return_value=BUSY):
+        with mock.patch.object(server, 'store', s), mock.patch.object(calwrite, 'requests', g), mock.patch.object(calwrite, 'busy', return_value=BUSY), \
+             mock.patch.object(general, 'to_agent') as asked:
             c = TestClient(server.app)
             for act in ('accept', 'propose'):
                 op = c.post('/api/operations', json={'kind': 'calendar.answer', 'target': out['message_id'], 'params': {'act': act}}).json()
@@ -567,8 +572,8 @@ class AssistantTools(unittest.TestCase):
                 self.assertEqual(r.status_code, 200, r.text)
         self.assertEqual(g.calls, [], 'nothing reached a calendar')
         pending = [json.loads(r['Deliver']) for r in s.reviews_for_message(out['message_id']) if r['Status'] == 'pending']
-        self.assertEqual([e['act'] for e in pending], ['propose'])
-        self.assertFalse(calwrite.clashes(s, pending[0]['new_start'], pending[0]['new_end'], events=BUSY))
+        self.assertEqual([e['act'] for e in pending], ['accept'])
+        self.assertEqual(asked.call_count, 1, 'a new time is his ask to its agent')
 
 
 class Clash(unittest.TestCase):

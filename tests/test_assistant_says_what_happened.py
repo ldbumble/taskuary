@@ -183,27 +183,6 @@ def test_a_start_the_door_refused_says_its_reason(s):
     assert out['outcome']['fix']['label'] == 'Connect a coding tool', out
 
 
-# ---- a reply's draft: the receipt is the box as it now is, and the under-way line says how it went (the walk drives the door itself) ---
-def under_way(s, text='Rewriting the draft on TQ-0001.'):
-    dock = general.dock_task(s)[0]['TaskId']
-    return concierge.record(s, dock, 'assistant', text), dock
-
-
-@pytest.mark.parametrize('before,after,why', [('Thanks - we pay on Friday.', '', 'came back empty'),
-                                              ('Thanks - we pay on Friday.', 'Thanks - we pay on Friday.', 'same as before'),
-                                              ('Thanks - we pay on Friday.', "Thanks - it goes out with Friday's run.", None)])
-def test_a_rewrite_says_what_the_box_holds_and_settles_its_line(s, before, after, why):
-    t = task(s, Kind='reply')
-    rid = s.add_review({'TaskId': t, 'Kind': 'draft', 'Status': 'pending', 'DraftText': before})
-    cid, dock = under_way(s)
-    s.update_review_draft(rid, after, None)                   # an empty one is refused there and said (store.EMPTY_DRAFT)
-    rc = server._draft_receipt(t, server._rewritten(rid, before), True, cid)
-    line = next(c_ for c_ in s.list_comments(dock) if c_['CommentId'] == cid)['Body']
-    if why: assert rc['status'] == 'failed' and why in rc['text'] and line.startswith('The draft on TQ-'), rc
-    else: assert rc['status'] == 'done' and rc['text'].startswith('Rewrote the draft on') and line.startswith('Rewrote the draft')
-    assert '"receipt": "' + ('error' if why else 'done') + '"' in line, 'the line kept says it as a receipt, tick or cross'
-
-
 def test_settle_touches_only_the_assistants_own_chat_line(s):
     t = task(s)
     cid = s.add_comment(t, 'owner', 'human', 'my own note')

@@ -162,11 +162,6 @@ def test_the_owners_instruction_stays_in_a_strangers_prompt_but_text_marked_thei
     assert 'they want X' not in seed and 'they want X' in _file(t)
     s2 = MemoryStore(); t2 = _owned(s2); assert 'ASK: fix it' in terminal.seed_text(s2, t2, instruction='fix it')
 
-def test_outbox_marks_its_about_text_as_theirs():
-    s = MemoryStore(); seen = {}
-    with mock.patch.object(terminal, 'start_on_task', side_effect=lambda st, tid, **k: seen.update(k) or {}):
-        outbox.compose(s, 'email', 'x@vendor.example', 'ask about the invoice', mode='task')
-    assert seen.get('instruction_theirs') is True
 
 def test_a_previous_report_and_a_handover_note_ride_in_the_file_for_a_stranger():
     s = MemoryStore(); t = _task(s, 'someone@vendor.example')

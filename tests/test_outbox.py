@@ -3,74 +3,40 @@ import json
 import unittest
 from unittest import mock
 
-from taskuary import outbox, verdicts
+from taskuary import outbox
 from taskuary.store import MemoryStore
 
 
+def compose(s, *a, **k):
+    "New -> Send something, its agent stood in: (what compose answered, [(task, his line)]) - no side model may write it."
+    told = []
+    with mock.patch('taskuary.general.to_agent', side_effect=lambda st, tid, said, *x, **y: told.append((tid, said, y.get('frm'))) or 'started'),          mock.patch('taskuary.outbox.draft_message', side_effect=AssertionError('a side model wrote it')),          mock.patch('taskuary.outbox.subject_for', side_effect=AssertionError('a side model wrote its subject')):
+        return outbox.compose(s, *a, **k), told
+
+
 class OutboxEmailTests(unittest.TestCase):
+    """New -> Send something is his ask to a task's agent (the owner, 2026-11-27: "side model should never work in agent canvas"): the task
+    holds his ask, and his line - whom, and what about - starts its agent, which writes the message and raises its card."""
     def setUp(self):
         self.s = MemoryStore()
 
-    def test_multiple_to_and_cc_are_saved_on_the_review_and_shown_to_the_drafter(self):
-        self.s.save_doc('style', '### Greeting & sign-off\n- Always end with:\n  Best,\n  Alex\n  Northwind Trading\n'
-                                    '### Tone & length\n- concise but complete\n', 'test')
-        seen = {}
-        def llm(system, user, max_tokens=0):
-            seen['system'], seen['user'] = system, user
-            return 'Hi all,\n\nThe report is ready.\n\nBest,\nAlex'
-        result = outbox.compose(self.s, 'email', ['a@example.com', 'b@example.com'], 'share the report',
-                                subject='Monthly report', cc=['copy@example.com'], llm=llm)
-        review = self.s.get_review(result['reviewId'])
-        deliver = json.loads(review['Deliver'])
-        self.assertEqual(deliver['to'], ['a@example.com', 'b@example.com'])
-        self.assertEqual(deliver['cc'], ['copy@example.com'])
-        self.assertIn('TO: a@example.com, b@example.com', seen['user'])
-        self.assertIn('CC: copy@example.com', seen['user'])
-        self.assertIn('Do NOT write a sign-off', seen['system'])         # the signature layer signs, never the writer (signatures.py)
-        self.assertIn('Northwind Trading', seen['system'])
+    def test_his_ask_is_his_line_to_its_agent_and_nothing_is_drafted_in_his_name(self):
+        made, told = compose(self.s, 'email', ['a@example.com', 'b@example.com'], 'share the report', subject='Monthly report', cc=['copy@example.com'])
+        self.assertEqual(told, [(made['taskId'], 'Email a@example.com, b@example.com, cc copy@example.com, subject "Monthly report": share the report', 'owner')])
+        self.assertTrue(made['asked'])
+        self.assertIsNone(self.s.pending_review(made['taskId']), 'no card in his name - the agent raises its own')
+        self.assertEqual(self.s.get_task(made['taskId'])['Kind'], 'general')
 
     def test_a_new_address_is_allowed_and_bad_or_missing_addresses_are_refused(self):
-        made = outbox.compose(self.s, 'email', 'never-seen@example.com', 'say hello',
-                              subject='Hello', llm=lambda *_a, **_k: 'Hello')
-        self.assertTrue(made['reviewId'])
-        with self.assertRaisesRegex(ValueError, 'valid email'):
-            outbox.compose(self.s, 'email', ['not-an-address'], 'say hello', subject='Hello',
-                           llm=lambda *_a, **_k: 'Hello')
-        with self.assertRaisesRegex(ValueError, 'at least one'):
-            outbox.compose(self.s, 'email', [], 'say hello', subject='Hello',
-                           llm=lambda *_a, **_k: 'Hello')
+        made, _ = compose(self.s, 'email', 'never-seen@example.com', 'say hello', subject='Hello')
+        self.assertTrue(made['taskId'])
+        with self.assertRaisesRegex(ValueError, 'valid email'): compose(self.s, 'email', ['not-an-address'], 'say hello', subject='Hello')
+        with self.assertRaisesRegex(ValueError, 'at least one'): compose(self.s, 'email', [], 'say hello', subject='Hello')
 
     def test_comma_pasted_addresses_are_split_and_to_cc_duplicates_are_removed(self):
-        made = outbox.compose(self.s, 'email', 'One@example.com, two@example.com', 'say hello',
-                              subject='Hello', cc=['one@example.com', 'three@example.com'],
-                              llm=lambda *_a, **_k: 'Hello')
-        deliver = json.loads(self.s.get_review(made['reviewId'])['Deliver'])
-        self.assertEqual(deliver['to'], ['One@example.com', 'two@example.com'])
-        self.assertEqual(deliver['cc'], ['three@example.com'])
-
-    def test_saved_cc_is_used_when_an_approval_client_does_not_override_it(self):
-        made = outbox.compose(self.s, 'email', ['to@example.com'], 'say hello', subject='Hello',
-                              cc=['copy@example.com'], llm=lambda *_a, **_k: 'Hello')
-        sent = {}
-        def send(_store, channel, to, subject, body, cc=None, attachments=None, mailbox=None):
-            sent.update(channel=channel, to=to, subject=subject, body=body, cc=cc)
-            return {'channel': channel, 'to': to, 'cc': cc}
-        with mock.patch('taskuary.outbound.send_out', side_effect=send):
-            verdicts.decide(self.s, self.s.get_review(made['reviewId']), 'approve', 'Hello')
-        self.assertEqual(sent['to'], ['to@example.com'])
-        self.assertEqual(sent['cc'], ['copy@example.com'])
-
-    def test_redraft_uses_the_saved_recipient_envelope(self):
-        made = outbox.compose(self.s, 'email', ['one@example.com', 'two@example.com'], 'send the result',
-                              subject='Result', cc=['copy@example.com'], llm=lambda *_a, **_k: 'First')
-        seen = {}
-        def llm(_system, user, max_tokens=0): seen['user'] = user; return 'Rewritten'
-        draft = outbox.redraft_review(self.s, self.s.get_review(made['reviewId']),
-                                      resolution='The result is 42.', llm=llm)
-        self.assertEqual(draft, 'Rewritten')
-        self.assertIn('TO: one@example.com, two@example.com', seen['user'])
-        self.assertIn('CC: copy@example.com', seen['user'])
-        self.assertIn('The result is 42.', seen['user'])
+        made, _ = compose(self.s, 'email', 'One@example.com, two@example.com', 'say hello', subject='Hello', cc=['one@example.com', 'three@example.com'])
+        r = json.loads(self.s.get_message(made['messageId'])['RecipientsJson'])
+        self.assertEqual((r['to'], r['cc']), (['One@example.com', 'two@example.com'], ['three@example.com']))
 
 
 class OwnersAskTests(unittest.TestCase):
@@ -79,9 +45,8 @@ class OwnersAskTests(unittest.TestCase):
     waiting "to You". Asked to make the email shorter, it asked him whom it was for."""
     def setUp(self):
         self.s = MemoryStore()
-        made = outbox.compose(self.s, 'email', 'gail@northwind.example', 'ask her for the March census numbers', subject='Census',
-                              llm=lambda *_a, **_k: 'Hi Gail,\n\nCould you send the March census numbers?')
-        self.tid, self.mid, self.rid = made['taskId'], made['messageId'], made['reviewId']
+        made, _ = compose(self.s, 'email', 'gail@northwind.example', 'ask her for the March census numbers', subject='Census')
+        self.tid, self.mid = made['taskId'], made['messageId']
 
     def test_the_ask_is_his_words_and_the_brief_says_whom_it_is_for(self):
         from taskuary import context, general, wrapup
@@ -98,15 +63,6 @@ class OwnersAskTests(unittest.TestCase):
         self.assertNotIn('to You', said)
         self.assertNotIn("The owner's own message on the thread", said, 'his ask is no reply of his on a thread')
         self.assertIn('The owner started a message to gail@northwind.example', said)
-
-    def test_a_first_turn_hears_the_card_his_line_moved_past_with_whom_and_what(self):
-        import time
-        from taskuary import general, proposals
-        self.assertTrue(proposals.set_aside_drafts(self.s, self.tid, time.time() + 5))
-        said = general.prompt_parts(self.s, self.tid)[2]       # no turn has answered yet: this is the agent's first
-        self.assertIn(f'rv{self.rid}', said)
-        self.assertIn('gail@northwind.example', said)
-        self.assertIn('Could you send the March census numbers?', said)
 
     def test_an_ask_filed_by_an_earlier_build_is_read_as_his_ask(self):
         import os, tempfile

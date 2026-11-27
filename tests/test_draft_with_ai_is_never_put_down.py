@@ -48,14 +48,6 @@ def test_the_writer_is_told_the_owner_wants_to_answer_only_when_they_pressed(s):
     assert responder.ASKED in seen[0] and responder.ASKED not in seen[1]
 
 
-def test_draft_with_ai_on_the_card_keeps_the_reply_when_the_writer_says_no_reply(s):
-    tid, rid = copied_ask(s)
-    with mock.patch.object(server, 'store', s), mock.patch.object(server, '_refresh_chat_context'), mock.patch.object(learning, 'learn_from'), \
-         mock.patch('taskuary.llm.build_llm', return_value=lambda *a, **k: 'NO REPLY'):
-        r = TestClient(server.app).post(f'/api/reviews/{rid}/draft', json={})
-    assert r.status_code == 422 and s.get_review(rid)['Status'] == 'pending' and s.get_task(tid)['Status'] == 'open'
-    assert s.get_review(rid)['DraftError']
-
 
 def test_readdressed_to_the_back_office_it_leaves_cc(s):
     tid, rid = copied_ask(s)

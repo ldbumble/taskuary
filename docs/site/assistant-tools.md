@@ -9,7 +9,7 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 
 | Bucket | What it is for | Tools, and what each needs |
 |---|---|---|
-| **table** | decide about the item on the table | reply(text, cc?), approve, send_close, redraft(text), mine, regular_agent(text, new?), coding_agent(text, as?, new?), not_ours, not_ours_sender, block_sender, not_ours_kind, close, next, answer_agent(text), stop_agent, rerun, report_off, remember(text, subject, about?), setup(text), confirm, cancel, chase, let_go, accept_invite, decline_invite, propose_time, find_time, prepare, elsewhere |
+| **table** | decide about the item on the table | reply(text), approve, send_close, redraft(text), mine, regular_agent(text, new?), coding_agent(text, as?, new?), not_ours, not_ours_sender, block_sender, not_ours_kind, close, next, answer_agent(text), stop_agent, rerun, report_off, remember(text, subject, about?), setup(text), confirm, cancel, let_go, accept_invite, decline_invite, propose_time, find_time, prepare, elsewhere |
 | **task** | change any task - the table's or one by ref | task.update(priority/title/assignee/due), task.set_kind(kind), task.set_repo(repo), task.check(item, done?, note?), task.checklist(add?, items?, emails?, drop?), task.watch(what?), task.comment(text), task.split(text), task.merge(into), task.reopen, task.not_a_task, task.complete(note?), task.defer(until), task.handoff(who, note?), task.clarify(text), task.share(who, about?), review.approve, review.reject |
 | **agents** | a task's agent; where work belongs | dispatch.prepare(kind, instructions?), agent.continue, agent.answer(text), agent.tell(text), agent.stop, agents.stop(refs/all), routing.remember(field, value), task.ask_agent(who, text) |
 | **new** | new work with no task yet | task.create_from_text(kind, text, channel?, to?), task.create_from_message(kind), meeting.new(who?, about?, when?, minutes?), task.setup(text) |
@@ -26,12 +26,11 @@ Decide about the item on the table.
 
 ### `reply`
 
-The "Reply" button ("Draft reply" when nothing is drafted yet): write a reply to the sender. Nothing is sent.
+The "Reply" button ("Draft reply" when nothing is drafted yet): ask the task's agent to write a reply to the sender. Its card waits for his Send; nothing is sent.
 
-- `text` - the gist, in the owner's words
-- `cc` (optional) - people to loop in on it, by name or address ("loop Gail in and ask her" is a reply with Gail copied)
+- `text` - the gist, in the owner's words, anyone to loop in named there
 
-<p class="runs">At once - a draft, nothing sent.</p>
+<p class="runs">At once - asks the task's agent, nothing sent.</p>
 
 ### `approve`
 
@@ -47,11 +46,11 @@ The "Send and close" button ("Approve and close" on a task's finish card with it
 
 ### `redraft`
 
-The "Redraft" button ("Draft with AI" when nothing is drafted yet): write the draft again.
+The "Redraft" button ("Draft with AI" when nothing is drafted yet): ask the task's agent to write the draft again.
 
 - `text` - the change
 
-<p class="runs">At once - a draft, nothing sent.</p>
+<p class="runs">At once - asks the task's agent, nothing sent.</p>
 
 ### `mine`
 
@@ -172,12 +171,6 @@ The owner's no to it.
 
 <p class="runs">At once.</p>
 
-### `chase`
-
-The "Chase them" button: chase the person who has gone quiet on the item - a short nudge in the owner's voice is drafted on the thread, copying whoever the ledger says moves them; nothing is sent.
-
-<p class="runs">Brings up its button for you to press.</p>
-
 ### `let_go`
 
 The "Let it go" button: let the quiet item go - the step somebody owed is dropped, or the follow-up is put down; three on one person and the Advisor stops raising them.
@@ -198,13 +191,13 @@ The "Decline" button: decline the invite waiting on the owner - drafted for thei
 
 ### `propose_time`
 
-The "Propose a new time" button: propose another time for the invite from its free times - drafted for their Send.
+The "Propose a new time" button: ask the invite's agent to propose another time - its answer is a card for their Send.
 
 <p class="runs">Brings up its button for you to press.</p>
 
 ### `find_time`
 
-The "Find a time" button: free times for the meeting a thread asks for - the pick drafted as an invite for their Send.
+The "Find a time" button: ask the task's agent to find a time for the meeting a thread asks for - its invite is a card for their Send.
 
 <p class="runs">Brings up its button for you to press.</p>
 
@@ -351,7 +344,7 @@ Remind me: put an open task away until a day and bring it back then - calendar o
 
 ### `task.handoff`
 
-Hand a task to a PERSON (send, forward or pass it on) - Hand it to a person comes up filled in for the owner's Send, nothing is sent from the chat.
+Hand a task to a PERSON (send, forward or pass it on) - the task's agent writes the hand-off and raises it as its card for the owner's Send, nothing is sent from the chat.
 
 - `who` - any email address, or the name of someone who has written here
 - `note` (optional) - a line for them
@@ -370,7 +363,7 @@ Prepare a question for the task's sender; it waits for the owner's yes, never se
 
 ### `task.share`
 
-Email what a task's work found; a draft for the owner's yes, never sent.
+Email what a task's work found; the task's agent writes it and raises its card for the owner's yes, never sent.
 
 - `who` - an address
 - `about` (optional)

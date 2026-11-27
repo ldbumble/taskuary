@@ -31,7 +31,7 @@ class OwnerSaysNoReply(unittest.TestCase):
         self.assertEqual(pending(), [])                       # no card left to draw, on any turn
         # ...and the session ending is no new draft in its place: the report's reply would have stood with Send again
         with mock.patch.object(wrapup, 'freshen', side_effect=AssertionError('no reply to refresh')), \
-             mock.patch('taskuary.responder.write_draft', side_effect=AssertionError('nothing to draft')):
+             mock.patch('taskuary.responder.draft_for_review', side_effect=AssertionError('nothing to draft')):
             out = wrapup.finish(s, tid, REP, None, 'coding')
         self.assertFalse(out['drafting'])
         self.assertIsNone(s.pending_review(tid, 'draft_reply', live_only=False)); self.assertIsNone(s.pending_review(tid, 'draft', live_only=False))

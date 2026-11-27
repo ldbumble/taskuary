@@ -232,19 +232,6 @@ class FileRoutesTests(unittest.TestCase):
             self.assertEqual(self.client.get(rows['review.docx']['url'], params={'preview': 'true'}).json(), doc)
 
     # -- the roads around the routes ---------------------------------------------------------------------------------------------
-    def test_email_someone_attaches_a_file_the_agent_made(self):
-        seen = {}
-        def draft(store, tid, to, about, cc, subject, files, actor, **kw):
-            seen['files'] = files; return {'ok': True, 'review_id': 1}
-        with mock.patch('taskuary.outbox.task_email', draft):
-            got = self.client.post(f'/api/tasks/{self.tid}/emails', json={'to': 'erin@northwind.example', 'attach': [
-                {'kind': 'output', 'path': 'TQ-0012 % Collected all-in-one v9.xlsx'}]})
-        self.assertEqual(got.status_code, 200, got.text)
-        self.assertEqual(seen['files'], [('TQ-0012 % Collected all-in-one v9.xlsx', (self.dir / 'TQ-0012 % Collected all-in-one v9.xlsx').read_bytes())])
-        with mock.patch('taskuary.outbox.task_email', draft):
-            for bad in ('../secret.txt', 'missing.xlsx'):
-                got = self.client.post(f'/api/tasks/{self.tid}/emails', json={'to': 'erin@northwind.example', 'attach': [{'kind': 'output', 'path': bad}]})
-                self.assertEqual(got.status_code, 422, bad)
 
     def test_a_terminal_agent_is_told_where_its_files_go(self):
         "By its environment - never the seed, which a real TUI types under a budget (test_terminal)."

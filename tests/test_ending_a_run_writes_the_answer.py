@@ -27,7 +27,7 @@ class EndingTheRunTests(unittest.TestCase):
         self.s = MemoryStore()
         # nothing at a run's end asks the tool-less writer any more (the owner, 2026-11-10: "no more triage creates draft. agent should be
         # doing it") - a call to it is the bug
-        self.drafted = mock.patch.object(responder, 'write_draft', side_effect=AssertionError('a second voice drafted the reply'))
+        self.drafted = mock.patch.object(responder, 'draft_for_review', side_effect=AssertionError('a second voice drafted the reply'))
         self.summary = mock.patch.object(wrapup, 'report_from_transcript',
                                           return_value={'summary': 'fixed the off-by-one', 'done': True})
         self.told = mock.patch.object(general, 'to_agent', return_value='told')

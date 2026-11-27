@@ -96,7 +96,7 @@ PURPOSE = {
                                  'plainly ("ADP"). It teaches triage and moves nothing.'),
     'task.split':               'split one arrival into two jobs - `text`',
     # A MEETING IS THE CALENDAR'S, NEVER AN AGENT'S JOB (the owner, 2026-10-28: "schedule a meeting" brought up Give an agent a job): the one
-    # scheduling move is a task's Find a time, drafted for Send (calwrite.draft) - concierge._meeting routes to it, or to New → Meeting
+    # scheduling move is a task's Find a time, its agent's card for Send - concierge._meeting routes to it, or to New → Meeting
     'meeting.new':              ('set up a meeting or call ("a meeting with Gail about the budget friday") - `who` optional: the names or '
                                  'addresses it is with, `about` optional: its subject, `when` optional: the day they said as YYYY-MM-DD (a weekday '
                                  'they name - "Thursday" - is its next date), or this_week / next_week, `minutes` optional: the '
@@ -125,12 +125,13 @@ PURPOSE = {
     # ...ANY ADDRESS (the owner, 2026-11-03): "a name or address that has written here" read as no road for an outside address, and the
     # Assistant sent the owner to forward it from their own mail - the form takes any address (person), and a name only one that wrote here
     'task.handoff':             ('hand a task to a PERSON (send, forward or pass it on) - `who` (any email address, or the name of someone who has '
-                                 "written here), `note` optional: a line for them - Hand it to a person comes up filled in for the owner's Send, "
-                                 'nothing is sent from the chat; `ref`'),
+                                 "written here), `note` optional: a line for them - the task's agent writes the hand-off and raises it as its card "
+                                 "for the owner's Send, nothing is sent from the chat; `ref`"),
     'task.merge':               "fold a task into the one it duplicates - `into`: the survivor's ref (TQ-0123); `ref` is the one folded away",
     'task.ask_agent':           ("ask a trusted teammate's coding agent over Reason Network - `who`: their name or person/session, `text`: "
                                  'the question; the reply is noted on the task; `ref`'),
-    'task.share':               "email what a task's work found - `who`: an address, `about` optional; a draft for the owner's yes, never sent; `ref`",
+    'task.share':               ("email what a task's work found - `who`: an address, `about` optional; the task's agent writes it and raises its "
+                                 "card for the owner's yes, never sent; `ref`"),
     'message.retriage':         'triage reads the message on the table again - one it could not sort',
     'task.clarify':             "prepare a question for the task's sender - `text`: the question; it waits for the owner's yes, never sent from here; `ref`",
     'task.reopen':              'reopen a task that was marked done - `ref`',
@@ -375,15 +376,15 @@ def block(store=None) -> str:
 # DECIDE lines and verbs on CALL lines; there is one line now, and concierge turns a CALL to one of these into
 # the decision road the card's buttons take. Each takes `on` for an item other than the one on the table.
 _DECIDE = {
-    'reply':           ("write a reply to the sender - `text`: the gist, in the owner's words; `cc`: people to loop in on it, by name "
-                        "or address (\"loop Gail in and ask her\" is a reply with Gail copied). Nothing is sent"),
+    'reply':           ("ask the task's agent to write a reply to the sender - `text`: the gist, in the owner's words, anyone to loop in "
+                        "named there. Its card waits for his Send; nothing is sent"),
     'approve':         ("the owner's yes to what is drafted on the item: sends the reply as it stands - on a task's finish card it merges "
                         "the pull request or closes the issue FIRST, then sends the reply; on an agent's proposal it runs that action and only "
                         "that. It never closes the task - that is send_close, or close, the owner's own Mark done - and never continues an "
                         "agent's session - that is agent.continue"),
     # ...and Close out's other send (the owner, 2026-11-03): "send it" is approve, "send it and close it" this
     'send_close':      'the same send, then the task closes - unless an agent or anything else on it still waits',
-    'redraft':         'write the draft again - `text`: the change',
+    'redraft':         "ask the task's agent to write the draft again - `text`: the change",
     'mine':            "make it a task on the owner's own list - no agent",
     'regular_agent':   ('send it to an agent that does not write code - `text`: the job; '
                         '`new`: true when the job is NOT about the item on the table - it becomes a task of its own. Taskuary\'s own '
@@ -414,13 +415,12 @@ _DECIDE = {
     'confirm':         "the owner's yes to the card already waiting",
     'cancel':          "the owner's no to it",
     # the slipped card's answers (spec 2026-10-12, build step 4): each is an outcome the ledger keeps
-    'chase':           "chase the person who has gone quiet on the item - a short nudge in the owner's voice is drafted on the thread, copying whoever the ledger says moves them; nothing is sent",
     'let_go':          'let the quiet item go - the step somebody owed is dropped, or the follow-up is put down; three on one person and the Advisor stops raising them',
     # the calendar's answers (calwrite.py): each DRAFTS for the owner's Send - nothing reaches a calendar before it
     'accept_invite':   "accept the invite waiting on the owner - drafted for their Send",
     'decline_invite':  "decline the invite waiting on the owner - drafted for their Send",
-    'propose_time':    "propose another time for the invite from its free times - drafted for their Send",
-    'find_time':       "free times for the meeting a thread asks for - the pick drafted as an invite for their Send",
+    'propose_time':    "ask the invite's agent to propose another time - its answer is a card for their Send",
+    'find_time':       "ask the task's agent to find a time for the meeting a thread asks for - its invite is a card for their Send",
     # ...and getting ready for one (the owner, 2026-10-25): a researcher, never a reply
     'prepare':         ("a meeting on the table only: an agent researches its people and subject through the owner's saved mail and chats "
                         "and files a short brief on the meeting's task - `text`: anything the owner wants it to look into. Nothing is sent"),
@@ -520,7 +520,7 @@ BUCKETS = (
 
 
 # what a tool takes, when its registry entry cannot say it: a tool that needs one of several, or takes its words as `text`
-HINTS = {'task.create_from_text': 'kind, text, channel?, to?', 'report.route': 'line, how, to?', 'pipe.remove': 'select, learn?','agents.stop': 'refs|all', 'page.open': 'page, query?', 'pipe.block': 'select, how?', 'pipe.mine': 'select', 'rule.change': 'about, how?', 'hub.vote': 'post, up?', 'memory.remember': 'note, subject, about?, signature?, doc?', 'memory.wrong': 'key, how?', 'button.light': 'button, ref?, note?', 'app.repair': 'name, how', 'issue.draft': 'kind, trying, happened', 'pipe.clear': 'select, scope?', 'pipe.defer': 'select, until', 'pipe.close': 'select', 'hub.publish': 'title, body, topic?, kind?, why_earned?', 'task.update': 'priority|title|assignee|due', 'reply': 'text, cc?', 'redraft': 'text', 'regular_agent': 'text, new?', 'coding_agent': 'text, as?, new?',
+HINTS = {'task.create_from_text': 'kind, text, channel?, to?', 'report.route': 'line, how, to?', 'pipe.remove': 'select, learn?','agents.stop': 'refs|all', 'page.open': 'page, query?', 'pipe.block': 'select, how?', 'pipe.mine': 'select', 'rule.change': 'about, how?', 'hub.vote': 'post, up?', 'memory.remember': 'note, subject, about?, signature?, doc?', 'memory.wrong': 'key, how?', 'button.light': 'button, ref?, note?', 'app.repair': 'name, how', 'issue.draft': 'kind, trying, happened', 'pipe.clear': 'select, scope?', 'pipe.defer': 'select, until', 'pipe.close': 'select', 'hub.publish': 'title, body, topic?, kind?, why_earned?', 'task.update': 'priority|title|assignee|due', 'reply': 'text', 'redraft': 'text', 'regular_agent': 'text, new?', 'coding_agent': 'text, as?, new?',
          'answer_agent': 'text', 'remember': 'text, subject, about?', 'setup': 'text', 'task.handoff': 'who, note?', 'task.share': 'who, about?', 'task.complete': 'note?',
          'dispatch.prepare': 'kind, instructions?', 'task.check': 'item, done?, note?', 'task.checklist': 'add?, items?, emails?, drop?', 'task.watch': 'what?', 'task.defer': 'until', 'meeting.new': 'who?, about?, when?, minutes?'}
 
@@ -711,7 +711,7 @@ def valid(kind: str, params: dict) -> str:
 DOCS_PAGE = 'docs/site/assistant-tools.md'
 # the decisions that do not wait for a card (concierge.AUTO, and the two that only ever write a draft)
 DECISION_RUNS = {'next': 'at once', 'confirm': 'at once', 'cancel': 'at once',
-                 'reply': 'at once - a draft, nothing sent', 'redraft': 'at once - a draft, nothing sent'}
+                 'reply': "at once - asks the task's agent, nothing sent", 'redraft': "at once - asks the task's agent, nothing sent"}
 
 
 def _cell(s: str) -> str: return str(s).replace('|', '/').replace('`', '').replace('\n', ' ').strip()

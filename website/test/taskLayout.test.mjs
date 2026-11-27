@@ -2,7 +2,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import { SECTIONS, homeSection, liveTerminal, soloTodo, cameFrom, cameChip, judgedMarks, agentStatus, agentWord, answeredOutside, reportLine, writeupAt, fromStatus, TAB_MOST, focusOf, fromLine, holderName, mainOf, nextInDrawer, sameWords, sectionFade, waitingOn, workPane } from "../src/taskLayout.js";
+import { SECTIONS, homeSection, liveTerminal, soloTodo, cameFrom, cameChip, judgedMarks, agentStatus, agentWord, reportLine, writeupAt, fromStatus, TAB_MOST, focusOf, fromLine, holderName, mainOf, nextInDrawer, sameWords, sectionFade, waitingOn, workPane } from "../src/taskLayout.js";
 import { STAGE, sectionOf } from "../src/stages.js";
 import { taskSource } from "./taskSource.mjs";
 
@@ -246,22 +246,6 @@ test("the task's own move fills a button and names no section; the Agent's tab s
   const src = taskSource();
   assert.doesNotMatch(src, /sectionHere|adviceIn|advisorAt|advisedHeld/);
   assert.doesNotMatch(src, /advisor: |warn\?\.advice/);
-});
-
-test("the chat knows the owner answered outside Taskuary: its Draft reply is not the lit move", () => {
-  const ins = [1, 2].map((i) => ({ MessageId: i, Direction: "in", Status: "routed", FromName: "Erin Blake", SentAt: `2026-10-29 11:${i}0:00` }));
-  const own = { MessageId: 3, Direction: "out", Status: "context", FromName: "You", Channel: "teams", SourceName: "Teams", SentAt: "2026-10-29 12:10:00" };
-  assert.equal(answeredOutside({ messages: [...ins, own], outside: [own] }), own);
-  assert.equal(answeredOutside({ messages: [...ins, own], outside: [own], pending: true }), null, "a draft waiting is a decision nobody took");
-  const again = { ...ins[0], MessageId: 4, SentAt: "2026-10-29 12:30:00" };
-  assert.equal(answeredOutside({ messages: [...ins, own, again], outside: [own] }), null, "she wrote again after it");
-  const sentHere = { MessageId: "review:9", ReviewSent: true, Direction: "out", SentAt: "2026-10-29 12:20:00" };
-  assert.equal(answeredOutside({ messages: [...ins, own, sentHere], outside: [own] }), null, "a reply sent from here since is not outside");
-  assert.equal(answeredOutside({ messages: ins, outside: [] }), null);
-  // ...and its Draft reply is not the lit move there: the empty draft box with its filled Draft with AI is not drawn, the reply button is outlined
-  const src = taskSource();
-  assert.match(src, /&& !writeup && !outside/);
-  assert.match(src, /variant=\{outside \? "outlined" : "contained"\}/);
 });
 
 // EVERY TASK IS CAME FROM AND ITS ONE CHAT (the owner, 2026-11-06, on a to-do still showing Close out: "i thought we removed this from everywhere?

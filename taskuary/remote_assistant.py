@@ -1095,7 +1095,7 @@ def respond(store, channel: str, chat: str, question: str, connector_id: int, po
             builtin = command(question) if not picked else ''
             if builtin:
                 if builtin == 'stop':
-                    for k in (NOTE_KEY, REDRAFT_KEY, AGENT_KEY, EDIT_KEY): store.set_setting(f'{k}:{channel}:{chat}', '', 'assistant')
+                    for k in (NOTE_KEY, AGENT_KEY, EDIT_KEY): store.set_setting(f'{k}:{channel}:{chat}', '', 'assistant')
                 forget_offered(store, channel, chat)
                 if builtin == 'stop' and (h := handoff(store)) and h['channel'] == channel and h.get('chat') == chat:
                     end_handoff(store, 'owner', HANDED_BACK)            # the walk was handed here: it goes back, and this chat is told
@@ -1111,12 +1111,6 @@ def respond(store, channel: str, chat: str, question: str, connector_id: int, po
                 rid, _, shown = edit.partition(':')
                 send(store, channel, chat, press_card(store, int(rid), 'edit', question, shown or None), connector_id)
                 return
-            redo = str(store.get_setting(f'{REDRAFT_KEY}:{channel}:{chat}') or '')
-            if redo and not picked:
-                forget_offered(store, channel, chat)
-                send(store, channel, chat, run_act(store, {'t': 'redraft', 'key': redo, 'how': told}, item), connector_id)
-                return
-            if redo: store.set_setting(f'{REDRAFT_KEY}:{channel}:{chat}', '', 'assistant')
             # ...and the line after Send to agent is what the agent should do: its words lead the hand-off (the owner, 2026-10-23)
             hand = str(store.get_setting(f'{AGENT_KEY}:{channel}:{chat}') or '')
             if hand and not picked:
@@ -1358,15 +1352,7 @@ def carry_out(store, out: dict, item: dict | None, actor: str = 'owner', lead: s
         if script and done.get('status') == 'done': return '\n\n'.join(x for x in (lead.strip(), script_words(store, script)) if x)
         if script: said.append(script_words(store, script))
     elif verb in ('reply', 'redraft') and (on or {}).get('mid'):
-        rid = _draft(store, on, verb, decision.get('text') or '')
-        if rid:                                             # the draft is the next thing to read, so go to it
-            # ...A DRAFT THAT WAS NOT WRITTEN IS SAID SO (the overnight walk, 2026-10-26): the drafting AI failing still left the review,
-            # empty, and the phone said "Drafting a reply on TQ-0002 - nothing goes out until you say yes." over a card reading "no reply
-            # drafted yet" - the desk says its rewrite did not happen (AssistantView decide). The card stays, its Draft with AI to try again
-            if not _draft_text(store, {'rid': rid}).strip(): said = ['I could not write that draft here - nothing is drafted yet.']
-            nxt = _draft_card(store, rid, actor)
-            return '\n\n'.join(said + [turn_text(nxt, store=store)])
-        said.append('I could not write that draft here - it is waiting on the task page.')
+        if (got := _ask(store, on, verb, decision.get('text') or '')).startswith('Not asked'): said = [got]      # ...its asking line was said already
     if walk_on:
         return _on(store, actor, said, done_with=(item or {}).get('key'))   # Next leaves the table as the desktop's does
     # AN ANSWER THAT NAMES A TASK BRINGS IT UP (the router rule): the desk opens a [TQ-…](#task=N) link the moment the answer lands;
@@ -1809,7 +1795,7 @@ def _run_act(store, act: dict, item: dict | None, actor: str = 'owner') -> str:
             # nothing to tap was a dead end (the 2026-10-22 re-walk). A section being walked stays walked
             here = asking() or {}
             if here.get('chat'):                                     # no Continue note waits, and no Redraft instruction
-                for k in (NOTE_KEY, REDRAFT_KEY, AGENT_KEY, EDIT_KEY): store.set_setting(f"{k}:{here['channel']}:{here['chat']}", '', 'assistant')
+                for k in (NOTE_KEY, AGENT_KEY, EDIT_KEY): store.set_setting(f"{k}:{here['channel']}:{here['chat']}", '', 'assistant')
             if not act.get('key'): return 'Left it - nothing moved.'
             back = concierge.surface(store, act['key'], actor=actor)
             return carry_out(store, back, back.get('item'), actor) if back.get('item') else stuck(store, 'Left it - nothing moved.')
@@ -1820,15 +1806,6 @@ def _run_act(store, act: dict, item: dict | None, actor: str = 'owner') -> str:
             except concierge.KeptOpen as e: return stuck(store, f'{task_ref(tid_)}: {e}')
             here = (item or {}).get('key')
             return _on(store, actor, [said], done_with=here)
-        if t == 'redraft':
-            here = asking() or {}
-            if here.get('chat'): store.set_setting(f"{REDRAFT_KEY}:{here['channel']}:{here['chat']}", '', 'assistant')
-            on = _item_for(store, act.get('key') or '', item)
-            if not (on or {}).get('mid'): return stuck(store, 'That draft is not in front of you any more - nothing changed.')
-            if (off := no_ai(store, 'write the draft')): return off
-            rid = _draft(store, on, 'redraft', act.get('how') or '')
-            if not rid: return stuck(store, 'I could not rewrite that draft here - the one you had is still waiting.')
-            return turn_text(_draft_card(store, rid, actor), store=store)
         if t == 'hand':
             # THE ANSWER TO "What should it do?": the hand-off's own proposal, carrying those words (or none - the item alone is the
             # job), run at once; only a repository still to choose is asked after it
@@ -1916,20 +1893,8 @@ def _run_act(store, act: dict, item: dict | None, actor: str = 'owner') -> str:
             rows = [(buttons.label(hand), {'t': 'hand', 'key': key, 'verb': hand, 'how': ''}), ('Cancel', {'t': 'stay', 'key': key})]
             return turn_text({'say': f"What should it do? Type it or send a voice note - or tap {buttons.label(hand)} to hand it over as it is.",
                               'item': None}, store=store, extra=rows)
-        if verb == 'redraft' and on.get('mid') and (off := no_ai(store, 'write the draft')): return off
-        # ...and only over WORDS to change: an empty draft (Reply with no AI) has nothing for "What should change?" to be about
-        if verb == 'redraft' and on.get('mid') and _draft_text(store, on).strip():
-            # REDRAFT ASKS WHAT TO CHANGE (A18, 2026-10-22): it rewrote at once with no instruction. The next typed line is the instruction
-            here = asking() or {}
-            if here.get('chat'): store.set_setting(f"{REDRAFT_KEY}:{here['channel']}:{here['chat']}", key, 'assistant')
-            rows = [('Shorter', {'t': 'redraft', 'key': key, 'how': 'Make it shorter.'}), ('Just rewrite', {'t': 'redraft', 'key': key, 'how': ''}),
-                    ('Cancel', {'t': 'stay', 'key': key})]
-            return turn_text({'say': 'What should change? Type it - "warmer", "say we pay on Friday" - or pick one.', 'item': None},
-                             store=store, extra=rows)
         if verb in ('reply', 'redraft') and on.get('mid'):
-            rid = _draft(store, on, verb, '')
-            if not rid: return stuck(store, 'I could not write that draft here - it is waiting on the task page.')
-            return turn_text(_draft_card(store, rid, actor), store=store)
+            return stuck(store, _ask(store, on, verb, ''))
         moved = _draft_moved(store, act, on)
         if moved: return moved
         prop = concierge.propose_direct(store, verb, key, actor=actor, table=bool(item and item.get('key') == key))
@@ -1957,7 +1922,6 @@ def _trust(store, tid: int, key: str, actor: str) -> str:
 
 
 NOTE_KEY = 'remote_continue_note'         # a Continue pick waiting for its note: the next typed line is it
-REDRAFT_KEY = 'remote_redraft'            # a Redraft pick waiting for what to change: the next typed line is it (A18)
 AGENT_KEY = 'remote_agent_ask'            # a Send to agent pick waiting for what it should do: the next typed or spoken line is it
 
 
@@ -2040,31 +2004,16 @@ def _remind(store, act: dict, actor: str) -> str:
     return _on(store, actor, [said], done_with=(asking_key(store) or None))
 
 
-def _draft_card(store, rid, actor: str = 'owner') -> dict:
-    """The draft just written, brought up. A review is found only once membership has been
-    reconciled, which the background does a moment later: the phone answered "I can't find that one" over the draft it had
-    just written (F4). The row is reconciled first when it is not there yet - the same recovery funnel.settle uses."""
-    from . import concierge, funnel
-    key = f'review:{rid}'
-    if not funnel.next_item(store, key, include_surfaced=True):
-        try:
-            from . import processing_all
-            processing_all.wait_settled(store)
-            store.reconcile_processing_membership(); funnel.invalidate()
-        except Exception as e: logger.debug(f'the phone could not reconcile the new draft: {e}')
-    return concierge.surface(store, key, actor=actor)
-
-
-def _draft(store, item: dict, verb: str, instruction: str):
-    """Write (or rewrite) the reply the owner just asked for - the same endpoint the page's word calls."""
+def _ask(store, item: dict, verb: str, instruction: str) -> str:
+    """Reply / Redraft from the phone: his ask to the task's agent, by the page's own door (server.open_reply) - the agent writes it and
+    raises its card. -> the line that says so, or why it could not go."""
+    from fastapi import HTTPException
     from .server import OpenReplyBody, open_reply
-    try:
-        data = open_reply(int(item['mid']), OpenReplyBody(draft=True, redraft=verb == 'redraft',
-                                                          instruction=instruction or None))
+    try: return open_reply(int(item['mid']), OpenReplyBody(verb=verb, instruction=instruction or None))['receipt']['text']
+    except HTTPException as e: return f'Not asked - {e.detail}'
     except Exception as e:
-        logger.warning(f'the phone could not open a reply on message {item.get("mid")}: {e}')
-        return None
-    return (data or {}).get('reviewId')
+        logger.warning(f'the phone could not ask the agent on message {item.get("mid")}: {e}')
+        return f'Not asked - {plain(e)}'
 
 
 # ── outbound: a turn, as words a chat can carry ─────────────────────────────────────────────────
@@ -3075,10 +3024,6 @@ def turn_text(out: dict, lead: str = '', store=None, extra: list = None, full: b
         lead_word = asked_for or (pick or {}).get('label')
         # ...and the decision's Next is Next first, as the desk lights it: nothing here needs a move from the owner
         first_ = [] if item.get('kind') in _LEADS_WITH_NEXT or (pick or {}).get('verb') == 'next' else [w for w in rest if w == lead_word][:1] or rest[:1]
-        # ...and the draft's own other word rides with it, ahead of Next - the screen draws Redraft beside the send, under the draft
-        # (the owner, 2026-10-06: "on whatsapp" the same order)
-        redo = {c['label'] for c in out.get('chips') or [] if isinstance(c, dict) and c.get('verb') == 'redraft'}   # Redraft, or Draft with AI
-        first_ += [w for w in rest if w in redo and w not in first_]
         more = [MORE] if store is not None and not (full and story) and more_text(store, item) else []
         words = first_ + nxt + more + [w for w in rest if w not in first_]
         if leads: words = leads + [w for w in words if w not in leads]

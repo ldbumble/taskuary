@@ -88,7 +88,7 @@ def run(s, kind, card, text=None):
 def test_a_slipped_card_offers_the_four_answers(s):
     t = person_step(s, 7)
     card = next(c for c in rail(s) if c.get('tid') == t)
-    assert [c['verb'] for c in concierge.chips_for(s, card)] == ['chase', 'let_go', 'elsewhere', 'defer', 'next']
+    assert [c['verb'] for c in concierge.chips_for(s, card)] == ['let_go', 'elsewhere', 'defer', 'next']
 
 def test_let_it_go_drops_the_step_and_writes_the_ledger(s):
     t = person_step(s, 7); card = next(c for c in rail(s) if c.get('tid') == t)
@@ -115,24 +115,6 @@ def test_three_let_gos_silence_one_person(s):
     whos = [c['action']['who_email'] for c in assistant.followups(s, 24, ('followup',))]
     assert whos == ['gail@northwind.example']
 
-def test_a_chase_opens_a_draft_on_the_thread_with_the_ledgers_cc(s):
-    iid, t = followup_idea(s, 6); card = next(c for c in rail(s) if c.get('idea') == iid)
-    for k in range(2):
-        t2 = s.create_task({'Title': f'x{k}'}, 'owner')
-        i = outcomes.record(s, 'reply.sent', 'task', t2, facts={'cid': f'y{k}', 'mid': 1, 'verb': 'approve', 'who': RAY, 'cc': ['omar@northwind.example'], 'chase': True, 'answer_days': 1.0}, at=ago(days=9))
-        outcomes.settle(s, i, 'answered', 'settled')
-    with mock.patch('taskuary.responder.write_draft', return_value='Ray - a quick nudge on the budget.') as wd:
-        r = run(s, 'task.chase', card)
-    assert r.status_code == 200, r.text
-    body = r.json(); rv = s.get_review(body['outcome']['reviewId'])
-    assert rv['Origin'] == 'chase' and body['outcome']['cc'] == 'omar@northwind.example'
-    assert rv['Reason'] == 'chase: no answer yet · copying omar@northwind.example'
-    assert 'omar' in (wd.call_args.kwargs.get('nudge') or '')
-
-def test_a_chase_with_no_thread_is_refused_plainly(s):
-    t = person_step(s, 7); card = next(c for c in rail(s) if c.get('tid') == t)
-    r = run(s, 'task.chase', card)
-    assert r.json()['status'] == 'error' and 'task page' in r.text               # refused, never a draft on nothing
 
 
 def test_the_followup_line_names_the_persons_day(s):
@@ -181,21 +163,10 @@ def test_the_three_answers_need_a_slipped_card(s):
     s.add_message({'ConversationId': 'c8', 'Channel': 'email', 'Subject': 'Plain', 'FromEmail': 'gail@northwind.example', 'SentAt': ago(hours=3), 'BodyText': 'q', 'Status': 'routed', 'TaskId': t})
     card = next(c for c in rail(s) if c.get('tid') == t)
     assert card['lane'] != 'forgotten'
-    for v in ('chase', 'let_go', 'elsewhere'): assert concierge.cannot(card, v, s)
+    for v in ('let_go', 'elsewhere'): assert concierge.cannot(card, v, s)
     r = run(s, 'task.let_go', card)
     assert r.json()['status'] == 'error' and s.get_task(t)['Status'] == 'open'
 
-def test_a_chase_on_a_step_goes_to_the_person_who_owes_it(s):
-    t = person_step(s, 7)
-    s.add_message({'ConversationId': 'c9', 'Channel': 'email', 'Subject': 'Schema', 'FromEmail': RAY, 'FromName': 'Ray Colton', 'SentAt': ago(days=9), 'BodyText': 'I will sign off.', 'Status': 'filed', 'TaskId': t})
-    gail = s.add_message({'ConversationId': 'c9', 'Channel': 'email', 'Subject': 'Re: Schema', 'FromEmail': 'gail@northwind.example', 'FromName': 'Gail Moreno', 'SentAt': ago(days=8), 'BodyText': 'Any news?', 'Status': 'filed', 'TaskId': t})
-    card = next(c for c in rail(s) if c.get('tid') == t)
-    with mock.patch('taskuary.responder.write_draft', return_value='Ray - a nudge.') as wd:
-        r = run(s, 'task.chase', card)
-    assert r.status_code == 200, r.text
-    rv = s.get_review(r.json()['outcome']['reviewId'])
-    assert rv['MessageId'] != gail and (s.get_message(rv['MessageId']) or {}).get('FromEmail') == RAY
-    assert 'ray@northwind.example' in (wd.call_args.kwargs.get('nudge') or '')
 
 def test_answered_elsewhere_on_a_thread_item_is_a_done_not_a_turn_down(s):
     iid, t = followup_idea(s, 6); card = next(c for c in rail(s) if c.get('idea') == iid)

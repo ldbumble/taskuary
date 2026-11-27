@@ -160,7 +160,7 @@ class QuietMovesTests(unittest.TestCase):
     def test_a_quiet_week_lights_chase_them_and_offers_let_it_go(self):
         s = store(); t = theirs(s); watch.watch(s, t); watch.due(s, datetime.now() + timedelta(days=8))
         it = {'tid': t, 'kind': 'task', 'lane': 'yours', 'key': f'task:{t}'}
-        self.assertEqual(rulebook.adds(s, it), ['chase', 'let_go'])
+        self.assertEqual(rulebook.adds(s, it), ['let_go'])
         d = rulebook.facts(s, it, [{'verb': 'chase'}, {'verb': 'let_go'}, {'verb': 'next'}])
         self.assertEqual(d, {'state': 'watch_quiet', 'line': 'A week watched; nothing on the thread.'})
         self.assertEqual(concierge.cannot(it, 'let_go', s), '')

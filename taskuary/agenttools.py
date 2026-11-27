@@ -1201,7 +1201,7 @@ def show_files(store, tid: int, paths) -> str:
     from . import outputs, session_artifacts
     from .general import file_name
     if isinstance(paths, str): paths = [paths]
-    roots, rows, why, drawn, reads, gave, named = _show_roots(), [], [], [], [], [], {}
+    roots, rows, why, drawn, reads, gave, named, ok = _show_roots(), [], [], [], [], [], {}, []
     for raw in list(paths or [])[:12]:
         # ...EACH FILE MAY CARRY ITS OWN TITLE (walk 26, 2026-11-27: a call per file, to title each, made three artifacts of one hand-over)
         raw, title = (raw.get('path') or '', ' '.join(str(raw.get('title') or '').split())[:120]) if isinstance(raw, dict) else (raw, '')
@@ -1219,11 +1219,15 @@ def show_files(store, tid: int, paths) -> str:
         if not p.is_file(): why.append(f'{n}: there is no such file'); continue
         # ...AND EVERY FILE IS READ BACK, DRAWN OR NOT (walk 10, 2026-11-23: a deck's ".pptx cannot be shown" read nothing back, and a stale
         # "212" in it went to the board after "update everything")
-        reads.append(p)
+        reads.append(p); ok.append((n, p, title))
         # ...and one of its task's folder is HANDED OVER: drawn in its turn as the file of the folder (this call's, one artifact), never also as a copy
         if p.is_relative_to(outputs.folder(tid).resolve()):
             gave.append(p)
             if title: named[p] = title
+    # ...HANDED BEFORE ITS COPY IS KEPT (the owner, 2026-11-27: a GIF shown in a turn at work "and the whole page flickered"): a chat read between
+    # the two drew the copy as a page of its own, then swapped it for the file - the copy is the agent's handle (FILES_MARK), never drawn (pages)
+    outputs.hand(tid, gave, named)      # ...this call's files together: one hand-over, one artifact
+    for n, p, title in ok:
         # ...A WORKBOOK OR A DOCUMENT IN THE TASK'S OWN OUTPUTS FOLDER IS ALREADY IN FRONT OF HIM (the walks, 2026-11-21: show answered ".xlsx
         # cannot be shown" while the chat drew the sheet, and the agent told him it could not be previewed): the page previews what it makes there
         # under the turn that made it (outputs.preview_of) - said so, never refused
@@ -1235,7 +1239,6 @@ def show_files(store, tid: int, paths) -> str:
         except OSError as e: why.append(f'{n}: {e}'); continue
         rows.append({'id': a['ArtifactId'], 'name': a.get('Name') or p.name, **({'title': title} if title else {}), 'path': f"shown:{a['ArtifactId']}", 'kind': 'shown',
                      'content_type': a.get('ContentType') or '', 'size': a.get('Size') or 0, 'url': f"/api/task-artifacts/{a['ArtifactId']}"})
-    outputs.hand(tid, gave, named)      # ...this call's files together: one hand-over, one artifact
     from . import attachtext
     say = attachtext.block(attachtext.of_paths(reads), SHOWN_SAY, file_cap=SHOWN_CHARS)
     if not rows and not drawn and not say: raise ValueError('nothing was shown - ' + '; '.join(why))

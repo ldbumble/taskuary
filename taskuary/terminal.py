@@ -155,7 +155,14 @@ def session_env(agent: str = '', task_id=None, cwd: str = '', sid: str = None, s
     if tok and str(task_id or '').isdigit(): out[guard.TASK_ENV] = guard.task_proof(srv, task_id)
     # ...and the browser and desktop presses held at the command, whatever AI runs it (gate): its folder first, then `taskuary`'s
     if task_id: out['PATH'] = os.pathsep.join(d for d in (gate.folder(), own_command(), os.environ.get('PATH', '')) if d)
+    # ...AND A LAUNCHER'S RUN PUTS NOTHING ON HIS SCREEN (the owner, 2026-11-27: an agent's script made a GIF from screenshots "and the whole page
+    # flickered" - the packaged app's "Starting up" splash flashed over the chat at every agent-browser command): in the packaged app those
+    # launchers run Taskuary.exe, whose bootloader draws its splash before any of our code runs (desktop.as_module closes it only after)
+    if task_id: out[SPLASH_OFF] = '1'
     return stranger_env(out, task_id, srv) if stranger else out
+
+
+SPLASH_OFF = 'PYINSTALLER_SUPPRESS_SPLASH_SCREEN'      # PyInstaller's bootloader (6.x) shows no splash where this is 1
 
 
 _OWN: dict = {}

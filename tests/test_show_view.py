@@ -550,6 +550,34 @@ def test_a_file_shown_can_carry_its_own_title_and_the_call_stays_one_artifact():
     finally: shutil.rmtree(out, ignore_errors=True); shutil.rmtree(outputs.turns_folder(tid), ignore_errors=True)
 
 
+def test_a_file_of_the_tasks_folder_shown_is_drawn_by_one_road_never_a_copy_beside_it():
+    """The owner, 2026-11-27: asked to slow a GIF down, the agent wrote it and showed it in a turn at work - "and the whole page flickered". show
+    handed the file over (drawn from the task's read, `outputs`) AND kept a copy that the chat's list drew as a shown page (`published`): the
+    list came a beat first, so the picture stood as a page with an empty preview, then was swapped for the file, and everything under it jumped.
+    A file of the task's folder is drawn as that file alone - handed before its copy is kept, and the copy (the agent's `shown:` handle) is no
+    page of the chat; one from the scratch folder is still a page."""
+    import shutil, tempfile
+    from pathlib import Path
+    from taskuary import config, outputs, session_artifacts
+    s = MemoryStore(); tid = s.create_task({'Title': 'Slow down the dancing GIF', 'Kind': 'general'}, 'owner')
+    out = outputs.folder(tid)
+    for d in (out, outputs.turns_folder(tid)): shutil.rmtree(d, ignore_errors=True)      # ...another test's task of the same number
+    out.mkdir(parents=True, exist_ok=True); gif = b'GIF89a' + bytes([0x40, 1, 0x20, 1]) + b'\0' * 16
+    (out / 'dance-slow.gif').write_bytes(gif)
+    scratch = Path(tempfile.mkdtemp(dir=config.home() / 'scratch')); (scratch / 'before.gif').write_bytes(gif)
+    real, seen = session_artifacts.shown, []
+    def copy(*a, **k): seen.append(outputs.handed(tid)); return real(*a, **k)
+    try:
+        with mock.patch.object(session_artifacts, 'shown', copy):
+            said = agenttools.show_files(s, tid, [str(out / 'dance-slow.gif'), str(scratch / 'before.gif')])
+        assert seen == [['dance-slow.gif']] * 2, 'handed over before any copy a chat could read is kept'
+        assert [p['name'] for p in outputs.pages(s, tid)] == ['before.gif'], "the folder's file is no shown page as well"
+        assert [r['name'] for r in json.loads(said.partition(agenttools.FILES_MARK)[2])] == ['dance-slow.gif', 'before.gif'], 'each keeps its handle'
+        agenttools.show_files(s, tid, [str(out / 'dance-slow.gif')])                 # ...shown again: still one road
+        assert [p['name'] for p in outputs.pages(s, tid)] == ['before.gif']
+    finally: shutil.rmtree(out, ignore_errors=True); shutil.rmtree(outputs.turns_folder(tid), ignore_errors=True); shutil.rmtree(scratch, ignore_errors=True)
+
+
 def test_each_show_call_is_a_hand_over_of_its_own():
     """The card gallery, 2026-11-25: a chart and its workbook, each shown by a call of its own in one turn, stood as one artifact "2 files".
     One call is one hand-over: the files of a call share its number, the next call's have the next, and the page draws each as its own."""

@@ -1022,7 +1022,10 @@ class APostIsAKindOfTheOneReviewTool(unittest.TestCase):
 
     def tearDown(self):
         import shutil
-        self.p.stop(); shutil.rmtree(self.d, True)
+        from taskuary import outputs
+        # ...and what `show` recorded as handed over: it lives in the home's shared output-turns folder under the same task number, and a
+        # later test's task 1 read this one's drafts.md as handed - the contract's working-files test failed whenever this file ran first
+        self.p.stop(); shutil.rmtree(self.d, True); shutil.rmtree(outputs.turns_folder(self.tid), True)
 
     def cards(self): return self.s._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action' AND Status='pending' ORDER BY ReviewId", (self.tid,))
 

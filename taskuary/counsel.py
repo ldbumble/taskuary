@@ -143,7 +143,7 @@ def msg_of(row: dict) -> dict:
 # COUNSEL.md is written for the chat. The morning brief, a reply to a suggestion and a worker's
 # prompt each borrow PART of it - the walkthrough rules (Current, Next, the bottom strip) are
 # the chat's alone, and letting them into a report prompt was role leakage (PW-242/243).
-CHAT_HEAD, GOAL_HEAD, VOICE_HEAD, DECIDING_HEAD = 'What I do, and what I never do', 'My goal', 'Voice', 'When the owner decides'
+GOAL_HEAD, VOICE_HEAD = 'My goal', 'Voice'
 _COMMENT = re.compile(r'<!--.*?-->', re.S)
 
 def load(store) -> str:
@@ -216,95 +216,3 @@ def check_budget(store, name: str, text: str) -> str:
         logger.warning(f'{name}: {len(text)} characters is past the {BUDGET} budget - read whole, but consider shortening it')
         store.audit('doc', 0, 'over_budget', 'system', detail={'doc': name, 'chars': len(text), 'budget': BUDGET})
     return text
-
-MARKER = '<!-- counsel:deciding -->'
-MATCH_MARKER = '<!-- counsel:match-first -->'     # the deciding section's first bullet, added 2026-10-01
-CALM_MARKER = '<!-- counsel:calm -->'             # the head of Voice: every line leaves the owner calmer, added 2026-10-06
-_CODING_WAS = ('Anything with a system to type at - a repository, a server, a database, a query, a file, an error: the coding '
-               'agent.')
-_CODING_NOW = ('READING a system (a query, a report) goes to a regular agent; a CHANGE to a system - code, data, a server, an '
-               'error to fix - to the coding agent.')
-
-def _squash(s): return ' '.join(str(s or '').split())
-
-def _goal_line(lines):
-    """Index of the REAL '## My goal' heading - never a line merely identical to it inside a fenced
-    code block, and never a mid-line match: a bare substring .replace() found both, gluing a stray
-    '#' onto '### My goal' and mangling a code sample (PW-256 review)."""
-    in_fence = False
-    for i, l in enumerate(lines):
-        if l.strip().startswith('```'): in_fence = not in_fence; continue
-        if not in_fence and l.strip() == f'## {GOAL_HEAD}': return i
-    return None
-
-def _calm_block(new_lines: list) -> list:
-    """The shipped Voice section's calm rule: its marker and the bullets under it, up to the next heading."""
-    i = next(n for n, l in enumerate(new_lines) if l.strip() == CALM_MARKER)
-    j = next((n for n in range(i + 1, len(new_lines)) if new_lines[n].startswith('## ')), len(new_lines))
-    block = new_lines[i:j]
-    while block and not block[-1].strip(): block.pop()
-    return block
-
-def _voice_line(lines):
-    """Index of the REAL '## Voice' heading (never one inside a fence), or None - _goal_line's rule."""
-    in_fence = False
-    for i, l in enumerate(lines):
-        if l.strip().startswith('```'): in_fence = not in_fence; continue
-        if not in_fence and l.strip() == f'## {VOICE_HEAD}': return i
-    return None
-
-def migrate(store) -> str:
-    """The shipped document gained `## When the owner decides` (the prose that left concierge.SYSTEM), then that section's
-    first bullet - match the words to the actions on the table, ask when unsure (the 2026-10-01 press audit) - and then the
-    calm rule at the head of Voice (every line leaves the owner calmer; the words they never hear, 2026-10-06).
-    A stock document - blank, never edited, or matching any previously shipped template - is replaced outright; an owner's
-    document keeps every word and gets whichever is missing: the section before the real My goal heading (or at the end),
-    the bullet right under the section's marker, the calm rule right under the real Voice heading (or a Voice section at the
-    end) - budget-checked and audited (PW-256, PW-258)."""
-    from pathlib import Path
-    tdir = Path(__file__).parent / 'templates'
-    new = tdir.joinpath('counsel.md').read_text(encoding='utf-8')
-    cur = store.get_doc('counsel')
-    row = store.get_doc_row('counsel')
-    stock = {_squash(p.read_text(encoding='utf-8')) for p in tdir.glob('history/counsel-*.md')}
-    # a STOCK document first: one that had both markers returned 'unchanged' before this test, so no template change after
-    # 0.3.7.4 ever reached an install that never edited it (2026-10-06)
-    if not (cur or '').strip() or (row and row.get('UpdatedBy') == 'template') or _squash(cur) in stock:
-        if cur and _squash(cur) == _squash(new): return 'unchanged'
-        store.save_doc('counsel', new, 'template'); return 'replaced'
-    added = []
-    # ...an owner's own copy keeps every word but the one sentence that sent READING a database to the coding agent
-    # (the owner, 2026-10-05: data is coding when it CHANGES; "open AP over 90 days" went to the coding agent, 2026-10-06)
-    if MARKER in cur and MATCH_MARKER in cur and _CODING_WAS in _squash(cur):
-        cur = re.sub(r'\s+'.join(map(re.escape, _CODING_WAS.split())), _CODING_NOW, cur, count=1)
-        added.append('reading-is-not-coding')
-    new_lines, lines = new.splitlines(), cur.rstrip('\n').splitlines()
-    if MARKER not in cur:
-        start = new_lines.index(f'## {DECIDING_HEAD}')
-        end = next((i for i in range(start + 1, len(new_lines)) if new_lines[i].startswith('## ')), len(new_lines))
-        section = new_lines[start:end]
-        while section and not section[-1].strip(): section.pop()
-        at = _goal_line(lines)
-        lines = lines + [''] + section if at is None else lines[:at] + section + [''] + lines[at:]
-        added.append(DECIDING_HEAD)
-    if not any(MATCH_MARKER in l for l in lines):
-        i = next(n for n, l in enumerate(new_lines) if l.strip() == MATCH_MARKER)
-        j = i + 2
-        while j < len(new_lines) and new_lines[j].startswith('  '): j += 1
-        at = next(n for n, l in enumerate(lines) if l.strip() == MARKER) + 1
-        if at < len(lines) and not lines[at].strip(): at += 1
-        lines = lines[:at] + new_lines[i:j] + lines[at:]
-        added.append('match-first')
-    if not any(CALM_MARKER in l for l in lines):
-        calm, at = _calm_block(new_lines), _voice_line(lines)
-        if at is None: lines = lines + ['', f'## {VOICE_HEAD}'] + calm
-        else:
-            at += 1
-            if at < len(lines) and not lines[at].strip(): at += 1
-            lines = lines[:at] + calm + lines[at:]
-        added.append('calm')
-    if not added: return 'unchanged'
-    text = '\n'.join(lines) + '\n'
-    store.save_doc('counsel', check_budget(store, 'counsel', text), 'migration')
-    store.audit('doc', 0, 'migrated', 'system', detail={'doc': 'counsel', 'section': ' + '.join(added)})
-    return 'appended'

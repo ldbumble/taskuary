@@ -76,7 +76,7 @@ def test_the_pass_reads_the_job_the_window_the_people_and_what_the_owner_said_be
     out = lookout.tick(s, llm, force=True)
     assert out == {'ran': True, 'raised': [], 'updated': [], 'held': [], 'calls': 1, 'deep': ['source:email']}, 'no idea is an answer, in one call'
     system, user = llm.seen[0]
-    assert 'credit' in system and 'communicate more' in system and 'diagnosis' in system, 'the bar is the prompt'
+    assert all(f'- {f}:' in system for f in lookout.FAMILIES), 'what it looks out for is the prompt'
     assert all(t in system for t in lookout.READS) and 'word for word' in system.lower(), 'it is told the tools it may read with, and that quotes are checked'
     assert JOB.splitlines()[1] in user
     assert '"Invoices waiting approval - week 0": 4 message(s)' in user and f"msg{ids['backlog'][0]}" in user, 'grouped, counted, citable'
@@ -718,13 +718,13 @@ def test_an_edited_advisor_md_line_reaches_the_look_and_the_post_and_an_empty_on
     lookout.tick(s, llm, force=True)
     system = llm.seen[0][0]
     assert 'Watch the vendor renewals at Northwind above all.' in system and '<!-- mine -->' not in system
-    assert 'communicate more' not in system, "the goals are his words, not the code's"
+    assert 'early_warning: a problem developing' not in system, "the goals are his words, not the code's"
     assert 'word for word' in system.lower() and all(t in system for t in lookout.READS), 'the evidence rules and the reads stay in code'
     post = []
     assistant.run(s, llm=lambda sy, u, **k: post.append(sy) or '{"say": []}', force=True)
     assert any('Watch the vendor renewals at Northwind above all.' in p for p in post if 'YOUR INSTRUCTION' in p), 'the twice-a-day post reads it too'
     s.save_doc('advisor', '<!-- only a comment -->\n', 'owner')
-    assert lookout.goals(s) == lookout.GOALS and 'never make one up' in lookout.goals(s), 'empty reads the shipped goals, never none'
+    assert lookout.goals(s) == lookout.GOALS and 'early_warning: a problem developing' in lookout.goals(s), 'empty reads the shipped goals, never none'
     assert 'advisor' in s.doc_names() and s.get_doc('advisor'), 'seeded like every owner document'
 
 

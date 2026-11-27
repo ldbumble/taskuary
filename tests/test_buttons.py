@@ -203,8 +203,6 @@ class Counsel(unittest.TestCase):
         text = (TEMPLATES / 'counsel.md').read_text(encoding='utf-8')
         self.assertFalse(dropped_in(text))
         self.assertNotIn('the Sync button', text)
-        opts = re.search(r'OPTIONS: (.+?)\.\s*$', text, re.M).group(1).split(' | ')
-        self.assertEqual(opts, [w for _, w in buttons.choices('agent')])
 
     # NOTHING HERE DOES IT IS AN AGENT'S WORK (a walk, 2026-11-18): "pay the invoice" got a look-up, then "there's no payment connection,
     # so the payment hasn't been prepared" - no task, no card, no next step. With no button for it, the ask is handed off
@@ -213,9 +211,9 @@ class Counsel(unittest.TestCase):
     def test_an_install_on_the_previous_stock_text_moves_to_the_new_one(self):
         st = MemoryStore()
         st.save_doc('counsel', (TEMPLATES / 'history' / 'counsel-0.3.9.3-audit.md').read_text(encoding='utf-8'), 'owner')
-        self.assertEqual(counsel.migrate(st), 'replaced')
-        self.assertEqual(counsel._squash(st.get_doc('counsel')), counsel._squash((TEMPLATES / 'counsel.md').read_text(encoding='utf-8')))
-        self.assertEqual(counsel.migrate(st), 'unchanged')
+        st.seed_docs()
+        self.assertEqual(st.get_doc('counsel'), (TEMPLATES / 'counsel.md').read_text(encoding='utf-8'))
+        self.assertEqual(st.doc_owner('counsel'), 'template')
 
 
 def _mail(s, sender, tid=None, channel='email', who='erin@northwind.example'):

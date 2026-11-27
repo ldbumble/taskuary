@@ -283,6 +283,13 @@ def email_from_soul(soul: str):
 # ('advisor', lookout.goals) is what the Advisor looks out for, read by its look and its twice-a-day post (the owner, 2026-11-24).
 OWNER_DOCS = ('soul', 'agents', 'job', 'digest', 'triage', 'style', 'counsel', 'advisor')     # LEARNED.md is written from the memory (memory.render), never a template
 UNREAD_DOCS = ('agent', 'coding', 'learned-before-r10')          # ...and an old install's copies of them are never listed, searched or shown (doc_names)
+
+def _fold(s) -> str: return ' '.join(str(s or '').split())
+def shipped_before(name: str) -> set:
+    "Every earlier shipped text of owner document `name` (templates/history/<name>-*.md), whitespace folded: a copy matching one is stock."
+    from pathlib import Path
+    return {_fold(p.read_text(encoding='utf-8')) for p in (Path(__file__).parent / 'templates' / 'history').glob(f'{name}-*.md')}
+
 TEMPLATE_OWNER = ('John Smith', 'john.smith@example.com')
 NO_NAME_YET = ("THE OWNER'S NAME IS NOT SET YET. Who the owner is comes from the mailbox the mail arrived in (addressed_to_you), never "
                "from a name: an ask addressed to that mailbox is the owner's, whatever name it greets.")
@@ -1778,27 +1785,7 @@ class SQLiteStore:
             self.cx.execute("UPDATE doc SET UpdatedBy='template' WHERE UpdatedBy='startup' AND Name<>'soul'")
             if self.cx.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='memory'").fetchone():   # an older install, not yet drained
                 self._heal_notes()
-            for name in OWNER_DOCS:
-                f = Path(__file__).parent / 'templates' / f'{name}.md'
-                if f.exists():
-                    txt = f.read_text(encoding='utf-8')
-                    self.cx.execute('INSERT OR IGNORE INTO doc (Name, Content, UpdatedBy, UpdatedAt) VALUES (?,?,?,?)',
-                                    (name, txt, 'template', _now()))
-                    # SOUL is the safety constitution every prompt is stacked on. An old UI/test
-                    # path could save it as an empty edited document, which disabled the shipped
-                    # boundaries forever because edited docs correctly stop following templates.
-                    # Empty carries no owner intent to preserve: restore the complete default, and
-                    # let the interview replace it only after the owner actually answers.
-                    # ...and not only SOUL: a document went blank on a live install (2026-09-01) and its
-                    # reader ran with nothing until somebody looked. Empty is empty.
-                    self.cx.execute("UPDATE doc SET Content=?, UpdatedBy='template', UpdatedAt=? "
-                                    "WHERE Name=? AND TRIM(IFNULL(Content,''))=''",
-                                    (txt, _now(), name))
-                    # a doc NOBODY ever touched keeps tracking the shipped template, so template
-                    # improvements reach existing installs - the first edit (owner or machine)
-                    # changes UpdatedBy and makes the document theirs, never overwritten again
-                    self.cx.execute("UPDATE doc SET Content=?, UpdatedAt=? WHERE Name=? AND UpdatedBy='template' AND Content<>?",
-                                    (txt, _now(), name, txt))
+            self.seed_docs()
             # A DOC THE OWNER HAS TOUCHED STOPS TRACKING THE TEMPLATE, which is right - and it means a
             # WRONG shipped rule stays wrong forever on exactly the installs that use the product most.
             # TRIAGE.md told the model "a stranger's pull request or issue is fyi - never task", so every
@@ -6789,6 +6776,36 @@ class SQLiteStore:
     def doc_owner(self, name):
         """Who last wrote it - 'template' means nobody has, and the shipped text still flows in."""
         r = self._one('SELECT UpdatedBy FROM doc WHERE Name=?', (name,)); return r['UpdatedBy'] if r else None
+    def seed_docs(self):
+        """The owner documents from their shipped templates: seeded where missing or blank, and kept on the template while nobody has
+        made them their own."""
+        from pathlib import Path
+        for name in OWNER_DOCS:
+            f = Path(__file__).parent / 'templates' / f'{name}.md'
+            if f.exists():
+                txt = f.read_text(encoding='utf-8')
+                self.cx.execute('INSERT OR IGNORE INTO doc (Name, Content, UpdatedBy, UpdatedAt) VALUES (?,?,?,?)',
+                                (name, txt, 'template', _now()))
+                # SOUL is the safety constitution every prompt is stacked on. An old UI/test
+                # path could save it as an empty edited document, which disabled the shipped
+                # boundaries forever because edited docs correctly stop following templates.
+                # Empty carries no owner intent to preserve: restore the complete default, and
+                # let the interview replace it only after the owner actually answers.
+                # ...and not only SOUL: a document went blank on a live install (2026-09-01) and its
+                # reader ran with nothing until somebody looked. Empty is empty.
+                self.cx.execute("UPDATE doc SET Content=?, UpdatedBy='template', UpdatedAt=? "
+                                "WHERE Name=? AND TRIM(IFNULL(Content,''), ' '||char(9,10,13))=''",
+                                (txt, _now(), name))
+                # a doc NOBODY ever touched keeps tracking the shipped template, so template
+                # improvements reach existing installs - the first edit (owner or machine)
+                # changes UpdatedBy and makes the document theirs, never overwritten again
+                self.cx.execute("UPDATE doc SET Content=?, UpdatedAt=? WHERE Name=? AND UpdatedBy='template' AND Content<>?",
+                                (txt, _now(), name, txt))
+                # ...and A COPY OF AN EARLIER SHIPPED TEXT tracks it too, whoever saved it (templates/history/<name>-*.md): a stock copy saved
+                # by a machine or an old release stayed on the old words for good - only the owner's own words are his
+                row = self.cx.execute("SELECT Content FROM doc WHERE Name=? AND UpdatedBy<>'template'", (name,)).fetchone()
+                if row and _fold(row['Content']) in shipped_before(name):
+                    self.cx.execute("UPDATE doc SET Content=?, UpdatedBy='template', UpdatedAt=? WHERE Name=?", (txt, _now(), name))
     def save_doc(self, name, content, actor):
         self._exec('INSERT INTO doc (Name, Content, UpdatedBy, UpdatedAt) VALUES (?,?,?,?) ON CONFLICT(Name) DO UPDATE SET Content=?, UpdatedBy=?, UpdatedAt=?',
                    (name, content, actor, _now(), content, actor, _now()))

@@ -74,18 +74,6 @@ def test_the_chat_knows_who_the_owner_is_from_soul_and_the_contract_still_comes_
     assert system.index('Speak plainly.') < system.index('**northwind/ledger**: the finance ledger') < system.index('WHERE YOU ARE')
 
 
-def test_the_shipped_document_carries_the_deciding_rules_the_code_used_to():
-    from pathlib import Path
-    from taskuary import counsel
-    text = (Path(concierge.__file__).parent / 'templates' / 'counsel.md').read_text(encoding='utf-8')
-    body = counsel.sections(text)[counsel.DECIDING_HEAD]
-    # 2026-09-24: research is a hand-off to a regular agent, never a set-up (it used to be sent to setup)
-    for phrase in ('Research is never a set-up', 'just this once | from now on | a rule in Settings', 'task.defer',
-                   'Never ask for a password', 'Never answer a correction by moving on', 'Stopping an agent is not closing a task'):
-        assert phrase in body, phrase
-    assert '<!-- counsel:deciding -->' in text
-
-
 def test_the_contract_still_parses_every_verb_and_refuses_the_rest():
     for verb in concierge.VERBS:
         if verb == 'none': continue

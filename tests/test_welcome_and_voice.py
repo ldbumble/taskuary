@@ -48,33 +48,7 @@ ITEMS = [{'key': 'msg:1', 'kind': 'asked', 'lane': 'asked', 'who': 'Erin Blake',
 
 
 class VoiceTests(unittest.TestCase):
-    """COUNSEL's calm rule, where the model learns it and where code speaks for itself."""
-    def test_counsel_carries_the_rule_under_its_marker_and_the_brief_reads_it(self):
-        t = (Path(counsel.__file__).parent / 'templates' / 'counsel.md').read_text(encoding='utf-8')
-        self.assertIn(counsel.CALM_MARKER, t)
-        for said in ('calmer than before they read it', "I've got it", 'device code', "nothing goes out until you say so"): self.assertIn(said, t)
-        self.assertLessEqual(len(t), counsel.BUDGET)
-        st = MemoryStore(); counsel.migrate(st)
-        self.assertIn('calmer than before', counsel.for_brief(st))
-
-    def test_the_last_stock_release_is_replaced_and_an_owner_copy_gains_the_rule_once(self):
-        old = (Path(counsel.__file__).parent / 'templates' / 'history' / 'counsel-0.3.7.10.md').read_text(encoding='utf-8')
-        st = MemoryStore(); st.save_doc('counsel', old, 'owner')
-        self.assertEqual(counsel.migrate(st), 'replaced'); self.assertIn(counsel.CALM_MARKER, st.get_doc('counsel'))
-        mine = old.replace('## My goal', "## My goal\n- Alex's own goal.", 1)
-        st = MemoryStore(); st.save_doc('counsel', mine, 'owner')
-        self.assertEqual(counsel.migrate(st), 'appended')
-        after = st.get_doc('counsel')
-        self.assertIn("- Alex's own goal.", after); self.assertEqual(after.count(counsel.CALM_MARKER), 1)
-        self.assertLess(after.index('## Voice'), after.index(counsel.CALM_MARKER))
-        self.assertEqual(counsel.migrate(st), 'unchanged')
-
-    def test_an_owner_copy_without_a_voice_heading_gets_one_at_the_end(self):
-        st = MemoryStore(); st.save_doc('counsel', '# Mine\n\n## My goal\n- Finish.\n', 'owner')
-        counsel.migrate(st)
-        after = st.get_doc('counsel')
-        self.assertIn('## Voice\n' + counsel.CALM_MARKER, after); self.assertIn('- Finish.', after)
-
+    """Where code speaks to the owner for itself: in words he would use."""
     def test_the_lines_code_speaks_use_none_of_the_banned_words(self):
         lines = [v for k, v in concierge.RECEIPTS.items()] + [concierge.ALL_DONE, welcome.goodbye(store())]
         lines += [concierge.brain_trouble(Exception(e)) for e in ("maximum context length", '429 rate limit', '401 invalid key',

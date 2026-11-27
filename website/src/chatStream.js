@@ -146,6 +146,17 @@ export const runsOf = (parts, card = false) => (parts || []).reduce((out, p) => 
   return out;
 }, []);
 export const onCard = (t, ask = false) => !!ask || !!(t?.cards || []).length;
+// A TURN'S ANSWER IS WHAT THE AGENT SAID, OR WHAT IT SHOWED - NEVER BOTH (the owner, 2026-11-27: "it's either or to visualize or explain"):
+// where its own last words are empty (Codex ends on its tools; an opening only is no answer, general.read_summary) the answer filed is its
+// end_turn `did` - the record's summary, there for the rail and the phone - and a turn that showed a view or files would say what it showed
+// twice ("the availability view shows the two windows" under the view). The summary stands in for an answer only where nothing was shown
+export const VISUALS = ["view", "files"];
+export const answerOf = (t, parts) => {
+  const sum = t?.summary, own = String(t?.text || "").trim() && String(t.text).trim() !== String(sum?.did || "").trim();
+  if (own) return t.text;
+  if ((parts || []).some((p) => VISUALS.includes(p.type))) return "";
+  return t?.text || (sum ? [sum.about, sum.did].map((x) => String(x || "").trim()).filter(Boolean).join("\n\n") : "");
+};
 // ...its answer the fold's last row; a turn without a card says it under its work, as ever
 export const withAnswer = (parts, said, card) => (card && String(said || "").trim() ? [...(parts || []), { type: "said", text: said, id: "answer" }] : parts || []);
 // ...and a fold is drawn round its steps, or round its words where it holds only words (a card's turn that did no work)

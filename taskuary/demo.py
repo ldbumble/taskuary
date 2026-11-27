@@ -159,7 +159,7 @@ REFUSALS = (
     (r'^/api/(reviews?/\d+/send|tasks/\d+/(handoff|clarify)|board/send|messages/\d+/send)', SENDS),
     # ...and Trust, whose whole effect is that an agent starts on the sender's words: it read "that would reach something real"
     # ...and a goal's step sent to an agent, which is a start like any other
-    (r'^/api/terminals(/|$)|^/api/tasks/\d+/(dispatch|code|continue|continue-session|continue-work|resume|trust|steps/[^/]+/start)$'
+    (r'^/api/terminals(/|$)|^/api/tasks/\d+/(dispatch|code|continue-work|resume|trust|steps/[^/]+/start)$'
      r'|^/api/messages/\d+/dispatch$|^/api/calendar/prepare$', STARTS),
     (r'^/api/tasks/\d+/(wrap|pause|agent/(cancel|stop))$', RECORDED),
     # ...what would ask an AI to read or plan again (a goal's Re-plan): none runs here
@@ -208,7 +208,7 @@ _ACTS = ((r'^/api/reviews?/(\d+)/(?:send|decide)$', 'review', 'review.approve', 
          (r'^/api/messages/(\d+)/send$', 'message', 'review.approve', 'the reply was not sent'),
          (r'^/api/tasks/(\d+)/clarify$', 'task', 'task.clarify', 'the question was not sent'),
          (r'^/api/tasks/(\d+)/handoff$', 'task', 'task.handoff', 'it was not handed over'),
-         (r'^/api/tasks/(\d+)/(?:continue|continue-session|continue-work|resume)$', 'task', 'agent.continue', 'the agent did not start again'),
+         (r'^/api/tasks/(\d+)/(?:continue-work|resume)$', 'task', 'agent.continue', 'the agent did not start again'),
          (r'^/api/tasks/(\d+)/(?:dispatch|code)$', 'task', 'dispatch.prepare', 'no agent started'),
          (r'^/api/operations/([^/]+)/execute$', 'op', None, ''))
 def refused(store, path: str, why: str) -> str:

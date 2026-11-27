@@ -44,7 +44,7 @@ SHOW_EXAMPLE = ('{"title":"Expense tools for 40 people","root":"top","elements":
              '"items":[{"text":"Pick the plan","done":true},{"text":"Invite the team","done":false}]}}}}')
 TOOLS = {
     'search_messages': ('read', "Search the owner's saved mail and chat messages by words, sender, subject and date (YYYY-MM-DD), "
-                                "best match first. It reaches only what Taskuary has polled: say how far back you looked. Read-only.",
+                                "best match first. It reaches only what Taskuary has polled. Read-only.",
                         _S({'words': _STR, 'sender': _STR, 'subject': _STR, 'since': _STR, 'until': _STR, 'limit': _INT}),
                         ('GET', '/api/agent/messages')),
     'read_message': ('read', "One saved message in full - body, recipients, its thread and its attachments' ids. `id`: m1073 or 1073."
@@ -92,7 +92,7 @@ TOOLS = {
     'list_systems': ('read', "The owner's other systems you may use (databases, ERPs, file shares, SharePoint...), each with its "
                              "connector id, Authority and tool types. Read-only.", _S({}), ('GET', '/api/connectors')),
     # ...and a how-to read when the work comes to one, instead of riding in every prompt (guides.py, 2026-11-09)
-    'guide': ('read', "Read one of Taskuary's how-tos before work that needs it - " + __import__('taskuary.guides', fromlist=['index']).index()
+    'guide': ('read', "Read one of Taskuary's how-tos - " + __import__('taskuary.guides', fromlist=['index']).index()
               + ". Read-only.", _S({'topic': _STR}, ('topic',)), ('GET', '/api/tasks/1')),
     # ...and THE WEB, for an API card's agent on its harness CLI (harness.py): that CLI's own hosted search goes to its vendor, so it is off,
     # and the search runs here - the card's model's own search through its endpoint (apiagent.search). Served only to such a session
@@ -222,9 +222,9 @@ TOOLS = {
                      ('POST', '/api/agent/propose-land')),
     'reply_not_needed': ('own', "The reply waiting here is no longer needed (someone else answered, the owner already did); `why` in "
                                 "one line. The draft is put down - kept under Not sent, never sent or deleted - and the page shows only "
-                                "your turn saying so; draft a new reply if something is still owed.", _S({'why': _STR}, ('why',)), ('POST', '/api/agent/not-needed')),
+                                "your turn saying so.", _S({'why': _STR}, ('why',)), ('POST', '/api/agent/not-needed')),
     'withdraw_draft': ('own', "Take back something you set up here that has not gone out - the reply, an email, a post, another "
-                              "proposal - when the goal changed or it no longer answers the newest message. `which`: what it is or who it "
+                              "proposal. `which`: what it is or who it "
                               "was to, as the screen fact names it (a card of many: all its ids, 'rv1 + rv2'); none for the reply. `why`: one line on what changed."
                               " It is kept under Not sent with the owner's Bring it back; what already went is never touched. To "
                               "correct a reply, just propose the new one; an email IN PLACE of another is the new one's `replaces` - "

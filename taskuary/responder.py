@@ -694,7 +694,7 @@ def resolution_of(store, task_id: int):
 
     Prefer the exact final agent response saved in the long-form artifact. Older sessions do not
     have that section, so their filed transcript is the fallback; only legacy records with neither
-    retain the compact AGENT REPORT (CODER REPORT on older rows). This is also what makes Review -> Redraft lossless.
+    retain the compact AGENT REPORT. This is also what makes Review -> Redraft lossless.
     """
     from .selfclose import DONE_SAID
     notes = list(reversed(store.list_comments(task_id)))
@@ -749,8 +749,7 @@ def write_draft(store, task_id: int, review_id: int, actor: str = 'system', llm=
 
 class Handed(Exception):
     "The press went to the task's agent (to_agent): it writes the reply again and files the card - nothing was drafted here."
-REDRAFT = ('The owner pressed {press} on the reply waiting on this task{said}. Write that reply again and save it in place of the one '
-           'waiting - its card shows it; say nothing of the old one.')
+REDRAFT = 'The owner pressed {press} on the reply waiting on this task{said}.'
 def to_agent(store, tid: int, nudge: str = None) -> str:
     """Hand the owner's Redraft / Draft with AI to task `tid`'s agent, as every word of Taskuary's to an agent goes (general.to_agent): 'told' or
     'woke' - and his press is a line in the chat - or '' where no agent ever worked it."""

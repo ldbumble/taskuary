@@ -1936,8 +1936,7 @@ def seed_text(store, tid: int, instruction: str = None, repo: str = None, cwd: s
     from .wrapup import is_report, report_body
     previous = next((report_body(c.get('Body')) for c in reversed(store.list_comments(tid)) if is_report(c.get('Body'))), '')
     if previous:
-        say('PREVIOUS SESSION RESULT: continue from this saved result; verify the current checkout '
-            f'before changing it and do not repeat finished work: {no_emails(_cut(previous, 3000, "previous result"))}', theirs_too=True)
+        say(f'PREVIOUS SESSION RESULT: {no_emails(_cut(previous, 3000, "previous result"))}', theirs_too=True)
     from .triage import strip_boilerplate
     # the one task brief both worker kinds read (brief.py, PW-183): objective, checklist, the latest
     # message in full and the conversation it sits in - history included, budgeted the way triage reads it
@@ -1971,8 +1970,7 @@ def seed_text(store, tid: int, instruction: str = None, repo: str = None, cwd: s
     from .wrapup import PAUSE_MARKER
     note = next((c['Body'] for c in reversed(store.list_comments(tid))
                  if str(c.get('Body') or '').startswith(PAUSE_MARKER)), None)
-    if note: say('HANDOVER: an earlier session on this task was paused and left this - '
-                 f'continue from it, do not start over: {no_emails(_cut(note, 3000, "handover note"))}', theirs_too=True)
+    if note: say(f'HANDOVER: an earlier session on this task was paused and left this: {no_emails(_cut(note, 3000, "handover note"))}', theirs_too=True)
     # SOUL.md rides in WITH the coding rules, because the coding rules refer to it: CODING.md says
     # "work only in the repository the task names (see the repository map in SOUL.md)" and
     # claimed it is "stacked on top of SOUL.md for every coding run" - and for a live session it
@@ -2015,7 +2013,7 @@ def seed_text(store, tid: int, instruction: str = None, repo: str = None, cwd: s
     # short on purpose: this line rides on the command line with a full path in it, and a canonical
     # tty caps a line at 1024 bytes (CI's fake TUI; macOS temp paths are long) - a wordy sentence here
     # pushed the seed over and the prompt arrived clipped
-    if cpath: parts.append(f'CONTEXT FILE: {cpath} - read it FIRST: what is already known (repo, Hub, past tasks) before you explore.')
+    if cpath: parts.append(f'CONTEXT FILE: {cpath} - what is already known (repo, Hub, past tasks).')
     # a browser the owner can WATCH exists only if the agent is told so - and told who types passwords
     from . import browserview as _bv
     if _bv.hint(): parts.append(_bv.hint())

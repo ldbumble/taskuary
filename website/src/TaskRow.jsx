@@ -38,7 +38,6 @@ const SPINE_MOVES = { ...MOVE_LOOK, display: "flex", flexDirection: "column", ga
   "& .tq-ab": { width: "100%", minWidth: 0, minHeight: 30, fontSize: 12.5, px: 1, py: 0.4, justifyContent: "center", textAlign: "center", whiteSpace: "normal",
     lineHeight: 1.2, height: "auto" } };
 export const SEC_NAME = { from: "Came from", agent: "Agent" };
-export const OPENS_FORM = new Set(["send-general", "start-agent", "run-another"]);   // the agent's moves that open its start box
 const stageBtn = (v, word = v.label, head = false) => <button key={v.id} type="button" className={`tq-ab ${v.tone} ${rankOf(v, head)}`} disabled={v.disabled} aria-disabled={v.disabled || undefined} data-tq-inert={v.inert ? "" : undefined} data-tq-verb={v.id}
   title={(v.disabled && v.why) || v.title || word} onClick={(e) => press(v.id, e, e.currentTarget, v.of)}><PressLabel v={v}>{word}</PressLabel></button>;
 // THE TASK'S OWN MOVES RIDE THE CHAT'S PANE (the owner, 2026-10-30, and 2026-11-06: one chat, no Close out): Mark done first (2026-11-02), a closed

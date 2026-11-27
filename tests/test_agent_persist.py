@@ -134,7 +134,6 @@ def test_a_one_line_turn_files_its_line_alone_and_the_agent_is_told_it_may():
     # ...the model judges it: the instructions say ONE line and no draft, and never hand it a list of words to match
     from taskuary import ingest
     assert 'ONE' in selfclose.SUMMARY_LINE and 'no draft' in selfclose.SUMMARY_LINE
-    assert 'one line of your own' in ingest.REPLAN                 # ...said once: the re-plan note no longer repeats the summary's rule
 
 
 # ── a refusal says why, and what to do next ─────────────────────────────────────────────────

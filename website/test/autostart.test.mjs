@@ -50,14 +50,15 @@ test("nothing happens without an autostart, or for a different task", () => {
 
 
 test("every kind the assistant workspace handles is a chat", () => {
-  for (const k of ["general", "Research", "marketing", "triage", "assistant", undefined])
-    assert.equal(isGeneralKind(k), true, String(k));
+  for (const k of ["general", "General", undefined]) assert.equal(isGeneralKind(k), true, String(k));
+  // ...the retired kinds are healed to general at start (store.py), so none is read here
+  for (const k of ["research", "marketing", "triage", "assistant"]) assert.equal(isGeneralKind(k), false, k);
   assert.equal(isGeneralKind("coding"), false);
   assert.equal(isGeneralKind("reply"), false);
 });
 
 test("Send to agent opens on the regular agent for the owner's task and a reply, the coding agent only for code (email walk 2026-10-29)", () => {
-  for (const k of ["task", "reply", "general", "research", undefined]) assert.equal(opensOnRegular(k), true, String(k));
+  for (const k of ["task", "reply", "general", undefined]) assert.equal(opensOnRegular(k), true, String(k));
   assert.equal(opensOnRegular("coding"), false);
   // ...and a task or a reply is still not the assistant's conversation (general.handles): its view would refuse it
   assert.equal(isGeneralKind("task"), false);

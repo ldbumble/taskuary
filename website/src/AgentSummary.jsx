@@ -2,20 +2,17 @@
 // drafts waiting on Send, the steps only the owner can take ("On you: …"), or "Nothing left to do here". Where the chat is the task's home the
 // drafts are their cards, inside Next steps (`next`, TaskPage's chat cards, so each draft is drawn once); elsewhere a
 // line each. An On you step's mark says whose it is, never a press.
-import React, { useEffect, useRef, useState } from "react";
+import React, { useRef } from "react";
 import { Box, CircularProgress, IconButton, Tooltip, Typography } from "@mui/material";
 import AttachFileIcon from "@mui/icons-material/AttachFile";
 import SendIcon from "@mui/icons-material/ArrowUpward";
-import api from "./api.js";
 import { hasReply, nextSteps, oneLine } from "./agentSummary.js";
 import { isCardReview } from "./actionCard.js";
 import { Md } from "./md.jsx";
 import { MicButton } from "./ui.jsx";
-import { MESSAGE } from "./kinds.js";
 import { senderName } from "./personName.js";
-import { keepUnsent, unsent } from "./unsent.js";
-import { AttachRow, IMAGE_ACCEPT, INLINE_CHIPS, fileChips, fileState, usePromptImages, useSendWhenUp } from "./promptImages.jsx";
-import { ALERT_INK, BORDER, DIM, FAINT, INK } from "./theme.jsx";
+import { AttachRow, IMAGE_ACCEPT, INLINE_CHIPS, fileChips, fileState, useSendWhenUp } from "./promptImages.jsx";
+import { DIM, FAINT, INK } from "./theme.jsx";
 
 // ...a chatbot's answer, split into sections to read (the owner, 2026-11-05): a short bold heading over each, no rules, no boxes but the email's
 const HEAD = { display: "block", color: INK, fontSize: 13.5, fontWeight: 700, mt: 1.5, mb: 0.25 };
@@ -87,48 +84,6 @@ export default function AgentSummary({ summary, reviews = [], checklist = [], ac
         {who(r) ? `A reply to ${who(r)} is drafted and waits for your Send.` : "A reply is drafted and waits for your Send."}</Typography>)}
       {next ? <Box sx={{ mt: 0.75 }}>{next}</Box> : null}
       {nothing && !lead && <Typography data-tq-nothing-left="" sx={{ ...LINE, color: DIM }}>Nothing left to do here.</Typography>}
-    </Box>
-  );
-}
-
-// A TO-DO NO AGENT HAS TOUCHED (the owner, 2026-11-06): under what came in - which says the ask and the To do already - the cards the chat would
-// hold (`cards`: a draft and its Send, an email owed), the drafter's why over them, and the one box. The box is Send to agent's road (the
-// dispatch, which makes the task the general agent's) with the owner's own words; from its first turn on, the chat is the agent's.
-export function NoAgentChat({ task, reviews = [], cards = null, closed = "", onStarted }) {
-  const [text, setText] = useState(() => unsent(task.TaskId)), [busy, setBusy] = useState(false), [err, setErr] = useState("");
-  // ...and words typed and not sent are this task's (unsent.js): back after a reload, and another task's box shows that task's own
-  const kept = useRef(task.TaskId);
-  useEffect(() => {
-    if (kept.current !== task.TaskId) { kept.current = task.TaskId; setText(unsent(task.TaskId)); }
-    else keepUnsent(task.TaskId, text);
-  }, [task.TaskId, text]);
-  const pics = usePromptImages({ files: true });          // ...a dropped, pasted or picked file goes with the words (the owner, 2026-11-05)
-  const why = String((reviews || []).find((r) => r?.Status === "pending" && r.DraftWhy)?.DraftWhy || "").trim();
-  const send = async () => {
-    const words = text.trim();
-    if ((!words && !pics.paths.length) || busy || pics.busy) return;
-    setBusy(true); setErr("");
-    // ...SENT IS NOT UNSENT, FROM THE PRESS (the recorded walk, 2026-11-11): the chat drew itself the moment the agent started, before this box
-    // had emptied, found the words still kept and put them back in its own box - under the same words in his bubble. A send that fails keeps them
-    keepUnsent(task.TaskId, "");
-    try {
-      const { data } = await api.post(`/api/tasks/${task.TaskId}/dispatch`, { kind: "general", instruction: words, files: pics.paths });
-      setText(""); pics.clear(); onStarted?.(data);
-    }
-    catch (e) { keepUnsent(task.TaskId, text); setErr(e?.response?.data?.detail || "Could not start the agent - check that an AI is connected under Connections, then send it again."); }
-    finally { setBusy(false); }
-  };
-  return (
-    <Box data-tq-no-agent-chat="" sx={{ minWidth: 0, display: "flex", flexDirection: "column" }}>
-      {!!(cards || why) && <Box sx={{ pb: 1 }}>
-        {!!why && <><Head first>What I did</Head><Typography data-tq-draft-why="" sx={LINE}>{why}</Typography></>}
-        {cards ? <Box>{hasReply(reviews) && <DraftHead />}{cards}</Box> : null}
-      </Box>}
-      {/* ...a closed one says how it closed over the box - typing there reopens it (server._refuse_closed_chat) */}
-      {!!closed && <div className="tq-aui-closed" data-tq-chat-closed="">{closed}</div>}
-      <PromptBox text={text} setText={setText} pics={pics} busy={busy} onSend={send} placeholder={MESSAGE}
-        label="Send to the agent" title="Starts the agent on this task with your words" boxAttrs={{ "data-tq-no-agent-box": "" }} sendAttrs={{ "data-tq-no-agent-send": "" }} />
-      {!!err && <Typography role="alert" sx={{ px: 1.5, pb: 1, fontSize: 12.5, color: ALERT_INK }}>{err}</Typography>}
     </Box>
   );
 }

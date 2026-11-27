@@ -232,7 +232,7 @@ test("the chat keeps one width at rest and at work, and the browser pane arrives
   assert.match(feed, /const folded = setupMode;/);
   assert.match(term, /new ResizeObserver\(\(\[e\]\) => flushSync\(\(\) => setWidth\(e\.contentRect\.width\)\)\);/, "the pane's own width is the frame's");
   assert.match(page, /bodyRO\.current = new ResizeObserver\(\(\[e\]\) => flushSync\(\(\) => setBodyW\(Math\.round\(e\.contentRect\.width\)\)\)\);/, "and the task's sections are sized for the width the frame has");
-  assert.match(page, /SECTION\(isOpen\("agent"\), openW\("agent"\), sessionView, liveSession, fades\), \.\.\.\(chatPane \? \{ pb: 0\.25, px: 1, pt: 0\.65 \} : \{\}\)/, "a chat's section keeps the live room at rest too");
+  assert.match(page, /SECTION\(isOpen\("agent"\), openW\("agent"\), sessionView, liveSession, fades\), pb: 0\.25, px: 1, pt: 0\.65 \}/, "a chat's section keeps the live room at rest too");
   // ...and a CODING agent's page is shown him too, while he is needed on it (the recorded coding walk, 2026-11-12: it asked to be signed in, and
   // with no chat session to name, no page was ever shown) - its session's own browser
   const chat = readFileSync(new URL("../src/GeneralWorkspace.jsx", import.meta.url), "utf8");

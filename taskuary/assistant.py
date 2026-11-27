@@ -1079,7 +1079,7 @@ def _done(store, days: float = 7) -> str:
     for t in ts:
         notes = [str(c.get('Body') or '') for c in reversed(store.list_comments(t['TaskId']))]
         said = next((b.split(':', 1)[1] for b in notes if b.startswith('The agent closed this itself:')), None)
-        rep = next((b for b in notes if b.startswith(('AGENT REPORT', 'CODER REPORT'))), None) if said is None else None
+        rep = next((b for b in notes if b.startswith('AGENT REPORT')), None) if said is None else None
         if rep:
             m = re.search(r'(?im)^summary:\s*(.+)$', rep)
             said = m.group(1) if m else rep.split('\n', 1)[-1]

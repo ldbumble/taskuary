@@ -8,6 +8,6 @@
     {"key": "task", "label": "your task", "hint": "Yours to do - no assistant works on it", "verdict": "My task list", "worker": "", "agent": false, "made": true, "triage": true},
     {"key": "general", "label": "agent · general", "hint": "An AI assistant works on it - research, writing, analysis, planning", "verdict": "Assistant", "worker": "the agent", "agent": true, "made": true, "triage": true},
     {"key": "coding", "label": "agent · coding", "hint": "Your coding tool works on it, in your code", "verdict": "Coding agent", "worker": "the coding agent", "agent": true, "made": true, "triage": true},
-    {"key": "reply", "label": "reply", "hint": "You approve a drafted reply - nothing else runs", "verdict": "Reply review", "worker": "", "agent": false, "made": false, "triage": false}
+    {"key": "reply", "label": "reply", "hint": "A message to answer - its agent sets the answer up for your Send", "verdict": "Reply review", "worker": "", "agent": false, "made": false, "triage": false}
   ]
 }

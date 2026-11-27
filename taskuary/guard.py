@@ -53,7 +53,7 @@ OWNER, AGENT, ANON, STRANGER = 'owner', 'agent', 'anon', 'stranger'
 # a new route can make something leave the machine or can widen what an agent may reach; never
 # make it conditional on a setting, and never let a document turn an entry off.
 DENIED = (
-    (r'POST', r'^/api/tasks/\d+/(resume|continue-session)$', 'resuming previous work is the owner\'s choice'),
+    (r'POST', r'^/api/tasks/\d+/resume$', 'resuming previous work is the owner\'s choice'),
     # an agent never answers its own question - and an answer now lets a held ask go (hooks.ask, 2026-09-28)
     (r'POST', r'^/api/tasks/\d+/worker/(answer|answers|release)$', 'answering an agent\'s question is the owner\'s'),
     (r'POST', r'^/api/tasks/\d+/view-answer$', "his pick on a view the agent showed is his press (viewspec.answer)"),
@@ -183,7 +183,7 @@ OWNER_ONLY = (
     (r'POST', r'^/api/sendfilter/(correct|scan)$', "which of the owner's own MCP tools count as sends is the owner's word"),
     # the router's rules, a judgement's correction and a step up to the strong model are the owner's (the router, 2026-10-25)
     (r'POST', r'^/api/ai/route_rules$', "which AI reads what is the owner's setting"),
-    (r'POST', r'^/api/tasks/\d+/(judged|strong-again)$', "correcting how hard a task is, or re-running it on the strong model, is the owner's press"),
+    (r'POST', r'^/api/tasks/\d+/judged$', "correcting how hard a task is is the owner's press"),
     (r'POST', r'^/api/task-outputs/\d+/open$', "only the owner's click opens a task's files folder on their desktop"),
     (r'POST', r'^/api/(bug-report/draft|open-url)$', "a bug report is drafted from the owner's own screen, and only the owner's click opens a page on their desktop"),
     (r'POST', r'^/api/messages/\d+/unsubscribe$', "leaving a mailing list is the owner's press - a newsletter's words never reach it (unsubscribe.py)"),

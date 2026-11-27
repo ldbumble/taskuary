@@ -3,11 +3,9 @@
 // Tasks tab; it is its own component now so the assistant canvas can show the very same view for the item on its table.
 // The list around it (TasksView) owns selection, filters and what comes next; this owns everything about one task.
 // Tasks: dense two-pane - list rows on the left, the selected task's full story right.
-import { says, subState } from "./laneSays.js";
+import { subState } from "./laneSays.js";
 import { outputRefs } from "./taskOutputs.js";
-import ContinueBox from "./ContinueBox.jsx";
 import { usePromptImages } from "./promptImages.jsx";
-import { ASK_WHAT, RunForm } from "./RunForm.jsx";
 import CheckBackChip from "./CheckBackChip.jsx";
 import SwitchAi from "./SwitchAi.jsx";
 import { switchChoices } from "./brainOptions.js";
@@ -17,43 +15,40 @@ import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from
 import { flushSync } from "react-dom";
 import { canSend, cannotStart, draftCanSend, useCapabilities } from "./capabilities.js";
 import {
-  Alert, Autocomplete, Box, Button, Checkbox, Chip, CircularProgress,
-  Drawer, IconButton, InputAdornment, Link, Menu, MenuItem, Popover, TextField, Tooltip, Typography, useMediaQuery,
+  Alert, Box, Button, Checkbox, Chip, CircularProgress,
+  Drawer, IconButton, Link, Menu, MenuItem, Popover, TextField, Tooltip, Typography, useMediaQuery,
 } from "@mui/material";
-import AddIcon from "@mui/icons-material/Add";
 import CloseIcon from "@mui/icons-material/Close";
 import { RemindPicker } from "./RemindMe.jsx";
 import { steady } from "./steadyAnchor.js";
 import { SlotPicker } from "./CalendarPick.jsx";
 import { onPressing, useVerbs } from "./actionRow.js";
-import { BUTTONS_AT, FOCUS_EDGE, MOVES_AT, OPENS_FORM, PaneMoves, SEC_NAME, SpineMoves, TaskButtons } from "./TaskRow.jsx";
+import { BUTTONS_AT, FOCUS_EDGE, MOVES_AT, PaneMoves, SEC_NAME, SpineMoves, TaskButtons } from "./TaskRow.jsx";
 import { closedBy, closedResult, pressBeat, pressOver, pressedOn } from "./pressResult.js";
 import { calMoves, taskMoves } from "./taskMoves.js";
 import { senderName } from "./personName.js";
 import { MADE_RUN } from "./madeTask.js";
-import { choice, hint as btnHint, hintOfRow, label as btn, labelOfRow, liveVerb } from "./buttons.js";   // theme.jsx owns `label`
+import { hint as btnHint, hintOfRow, label as btn, labelOfRow, liveVerb } from "./buttons.js";   // theme.jsx owns `label`
 import { PRIORITIES, level } from "./priority.js";
 import AltRouteIcon from "@mui/icons-material/AltRoute";
 import DifferenceIcon from "@mui/icons-material/Difference";
 import RefreshIcon from "@mui/icons-material/Refresh";
-import SearchIcon from "@mui/icons-material/Search";
 import api from "./api";
 import { useViewExtras } from "./pageView.js";
 import { openReply as draftReply } from "./replyDraft.js";   // the component's own openReply below would shadow it, and call itself
 import { opError, runOperation } from "./taskOps.js";
 import { demoNo } from "./apiError.js";
-import { ClosingCard, WriteupBlock, WriteupLine, closeAfterSend, completeTask, writeUpThenClose } from "./closeAgent.jsx";
+import { WriteupBlock, closeAfterSend, completeTask, writeUpThenClose } from "./closeAgent.jsx";
 import { writeupView } from "./writeupState.js";
 import { agentName } from "./agentWork.js";
 import { loadGeneral } from "./lazyGeneral.js";
 import { lazyView } from "./lazyView.jsx";
-import { outcomeOf } from "./dispatchOutcome.js";
 import { FailWays, failOf } from "./failure.jsx";
 import { noteKey, noteOf, progressLine, saveNote, settleTick, withTicks } from "./checklist.js";
 import { clock, fmtDate } from "./dates.js";
 import { deliveryCc, deliveryFiles, deliveryMeta, replyContext, sentCardOf } from "./replyDelivery.js";
 import { sizeText } from "./replyFiles.js";
-import { completionTransition, cutAway, filterForSelectedState, remindWaiting, remindDay } from "./taskFilter.js";
+import { remindWaiting, remindDay } from "./taskFilter.js";
 import ReviewDecision, { SentReview } from "./ReviewDecision.jsx";
 import BulkReview from "./BulkCard.jsx";
 import HeldSteps from "./HeldSteps.jsx";
@@ -63,34 +58,29 @@ import { progress as batchProgress } from "./batchItems.js";
 import CloseNote from "./CloseNote.jsx";
 import { onLive, touches } from "./live.js";
 import { pollCalming } from "./visible.js";
-import { PANEL, PANEL2, BORDER, DIM, FAINT, INK, card, frame, frameInner, label, step, PALETTE, hoverable, mono, ACCENT, ACCENT2, PILL_COLORS, ALERT, ALERT_BD, ALERT_INK, ALERT_TINT, BRAND } from "./theme.jsx";
+import { PANEL, PANEL2, BORDER, DIM, FAINT, INK, card, frame, frameInner, label, step, mono, ACCENT, ACCENT2, ALERT_INK } from "./theme.jsx";
 import RunSteps from "./RunSteps.jsx";
 import { askLine, byLine, cameFromLabel, cameFromWhere, channelName, filesByMessage, fromExpands, fromRows, groupConversations, groupMeta, headerFacts, isIdeaLine, isChat, madeByHim, madeLine, madeOf, rowText, sortedLine, todoSources, toLine, triageLine, triageSays, workflowOrigin } from "./taskSources.js";
 import { latestTriageVerdict, legacyTriageVerdict, parseTriageVerdict, routeIntent } from "./triageVerdict.js";
 import { Handoff } from "./Handoff.jsx";
 import { Reshape } from "./Reshape.jsx";
-import { RepoPicker, RepoSelect } from "./RepoPicker.jsx";
+import { RepoPicker } from "./RepoPicker.jsx";
 import { WorkstreamSelect } from "./Workstream.jsx";
 import { Attachments, mentionsPicture } from "./Attachments.jsx";
 import { remotePicture, wordsOnly } from "./mailLinks.js";
 import ChatThread from "./ChatThread.jsx";
-import { ChannelIcon, StateChip, stateOf, TASK_STATES, asUtc, tsMs, AgentPicker, useAgents, codingAgent, RunTrace, DiffBlock, DiffFiles, timeAgo, fmtDateTime, cleanText, LinkedText, Empty, FilterPills, Confirm, isWaiting, TaskuaryMark, DraftField, assignedAgent } from "./ui.jsx";
+import { ChannelIcon, asUtc, tsMs, useAgents, codingAgent, RunTrace, DiffFiles, timeAgo, fmtDateTime, cleanText, LinkedText, Empty, isWaiting, TaskuaryMark, DraftField, assignedAgent } from "./ui.jsx";
 import { Md, looksMd } from "./md.jsx";
-import TerminalIcon from "@mui/icons-material/Terminal";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
-import HistoryIcon from "@mui/icons-material/History";
 import ForwardToInboxIcon from "@mui/icons-material/ForwardToInbox";
 import CallSplitIcon from "@mui/icons-material/CallSplit";
 import AccountTreeIcon from "@mui/icons-material/AccountTree";
 import AttachFileIcon from "@mui/icons-material/AttachFile";
 import ChatBubbleOutlineIcon from "@mui/icons-material/ChatBubbleOutline";
 import SendIcon from "@mui/icons-material/Send";
-import { Divider, ListItemText } from "@mui/material";
-import { NoAgentChat } from "./AgentSummary.jsx";
+import { ListItemText } from "@mui/material";
 import { chatReplyShown } from "./agentSummary.js";
 import { replyCardShown } from "./sendState.js";
-import ThreadReading from "./ThreadReading.jsx";
-import { LastView } from "./BrowserPane.jsx";
 import OpenInFullIcon from "@mui/icons-material/OpenInFull";
 import CloseFullscreenIcon from "@mui/icons-material/CloseFullscreen";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
@@ -99,13 +89,13 @@ import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 // chunks by content, so that tab asks the new server for a filename the build no longer has.
 // Recover once automatically; a real module error still reaches the view boundary on retry.
 import { autostartPlan, isGeneralKind, opensOnRegular } from "./autostart.js";
-import { agentWorkspaceMode, barContinues } from "./taskWorkspace.js";
-import { SECTIONS, cameFrom, cameChip, judgedMarks, chatLatch, homeSection, liveTerminal, soloTodo, startsAnother, replyHolds, agentStatus, agentWord, answeredOutside, reportLine, askInBody, askIsTitle, writeupAt, focusOf, fromLine as fromLineOf, fromStatus, layoutOf, sameWords, sectionFade, waitingOn, workPane } from "./taskLayout.js";
+import { barContinues } from "./taskWorkspace.js";
+import { SECTIONS, cameFrom, cameChip, judgedMarks, chatLatch, homeSection, liveTerminal, soloTodo, replyHolds, agentStatus, agentWord, answeredOutside, reportLine, askInBody, askIsTitle, writeupAt, focusOf, fromLine as fromLineOf, fromStatus, sameWords, sectionFade, waitingOn, workPane } from "./taskLayout.js";
 import { mainView, stageOf } from "./stages.js";
 import { chatOf, taskStatus } from "./railStatus.js";
 import { StatusPill } from "./StatusMark.jsx";
-import { ASK_TAG, BROWSER_TAG } from "./newTask.js";
-import { completionFact, completionLine, waitingEmails, wentOut,
+import { ASK_TAG } from "./newTask.js";
+import { waitingEmails, wentOut,
   AGENT, agentPhase, focusStage, generalAnswered, stillWorking, hasCorrespondent, ownerControlsCompletion, pageState, pendingProposals, pendingReplyReview, reopenedDetail, replyPhase, replySource, sentElsewhere, sentReplyReview, sessionWord, taskPhase, isUnsentReply, unsentReplyReview,
 } from "./taskLifecycle.js";
 import { askNote, closeoutOf, decidedAsk, heldGroups, splitHeld } from "./reviewProposal.js";
@@ -113,9 +103,7 @@ import PassedCard, { isPassed, isReplaced } from "./PassedCard.jsx";
 import { sentStands, WENT } from "./sentLine.js";
 import { FullText } from "./assistantCards.jsx";
 import { isCardReview } from "./actionCard.js";
-import { AgentRecord, ResultSummary } from "./AgentRecord.jsx";
 import LandingCard, { LANDING_DIFF } from "./LandingCard.jsx";
-import { readingOf } from "./threadReading.js";
 import AiUsed from "./AiUsed.jsx";
 import CodeChanges from "./CodeChanges.jsx";
 import { ChatDetail } from "./DetailSlider.jsx";
@@ -127,16 +115,13 @@ import TokenOutlinedIcon from "@mui/icons-material/TokenOutlined";
 import ForumOutlinedIcon from "@mui/icons-material/ForumOutlined";
 import { draftAnswers } from "./pendingDrafts.js";
 import { replyRounds, roundReviews } from "./replyRounds.js";
-import { diffStat } from "./agentRecord.js";
-import AgentStory from "./AgentStory.jsx";
-import { startLabel, storyPlace, storyShown } from "./agentStory.js";
+import { storyPlace, storyShown } from "./agentStory.js";
 import { isPublished } from "./PublishedPages.jsx";
 import EmailSomeone from "./EmailSomeone.jsx";
 import { useShareParts } from "./Share.jsx";
 import { ago, filesLine, plural } from "./timeWords.js";
-import { AGENT_KINDS, KIND_OPTIONS, KINDS, kindLabel, shortKind, shownAgent } from "./kinds.js";
+import { AGENT_KINDS, KIND_OPTIONS, KINDS, kindLabel, shownAgent } from "./kinds.js";
 import { PICK_REPO, openAppLink, takeRepoPick } from "./appLinks.js";
-import { FOCUS_RING, pressable } from "./pressable.js";
 import { place } from "./words.js";
 import { announceRemoved, fromAnswer } from "./removed.js";
 import { aheadChat, aheadTask, heldSteps, heldTask, lastTask, heldTerm, keepTask, keepTerms, pageRead } from "./taskDetail.js";
@@ -328,7 +313,7 @@ export const tabW = (w) => (w > 0 ? Math.round(Math.min(TAB_W, Math.max(TAB_MIN,
 // ...a press on the reply's, the close's or the agent's own move opens the chat it is in (a draft's own are "<review>:<verb>"); Came from's act
 // where they stand
 const CHAT_VERBS = new Set(["reply", "done", "close-note", "hand", "accept_invite", "decline_invite", "propose_time", "find_time",
-  "continue", "run-another", "send-general", "start-agent", "diff", "fix", "strong-again"]);
+  "diff", "fix"]);
 const MINI_TAB = (here) => ({ appearance: "none", font: "inherit", cursor: "pointer", position: "absolute", top: 0, left: 0, bottom: 0, width: MINI_W,
   border: 0, bgcolor: "var(--tq-panel, #fff)", color: INK, display: "flex", flexDirection: "column", alignItems: "center", gap: 1.25, py: 1.5, px: 0, boxSizing: "border-box",
   "& [data-tq-tab-arrow]": { width: 26, height: 26, borderRadius: 99, display: "grid", placeItems: "center", flexShrink: 0, fontSize: 15, lineHeight: 1,
@@ -385,21 +370,6 @@ const HELD_TRUST_HINT = "No agent works this until you trust the sender - the pr
 const TRUST_PILL = { minHeight: 22, py: 0, px: 1.1, ml: 0.5, my: 0.25, fontSize: 12, lineHeight: 1.6, borderRadius: 999, textTransform: "none", color: INK, borderColor: BORDER, verticalAlign: "baseline" };
 // ...and the one filled move beside them. Every card's bar reads [ primaryBtn ] | [ barBtn ] [ barBtn ].
 const primaryBtn = { minHeight: 34, py: 0, px: 1.75, fontSize: 12.5 };
-// A LIVE SESSION'S CONTROLS LOOK LIKE CONTROLS. These were bare text buttons sitting next to
-// the outlined role/brain/repo pills, so the two things you could press had less edge than the
-// three facts you can only read - "buttons are still not clear what they are. and they are
-// floating" (the owner, 2026-09-16). Same pill geometry as the facts beside them, in the slate
-// the app uses for every control: the colour says pressable, the border says where it ends.
-// Not filled - filled is Mark done's, one strip up, and a live session has no primary.
-// ...and SMALL, because every row this bar spends is a row the terminal does not get.
-const liveCtl = { fontSize: 10.5, fontWeight: 600, height: 23, minHeight: 23, py: 0, px: 0.9,
-  borderRadius: 11.5, color: "var(--tq-link, #55697a)", bgcolor: "var(--tq-panel, #f1f4f7)", borderColor: "var(--tq-border, #c7d2dc)", whiteSpace: "nowrap",
-  "& .MuiButton-startIcon": { mr: 0.5, ml: 0 },
-  "&:hover": { borderColor: ACCENT, bgcolor: "var(--tq-inset, #e7eef4)" } };
-// the same pill as chipBtn, for a fact you read rather than a control you press
-const chipBtnStatic = { display: "inline-flex", alignItems: "center", height: 26, px: 1.25,
-  borderRadius: 13, bgcolor: "var(--tq-panel, #f4f1ec)", border: `1px solid ${BORDER}`, color: INK,
-  fontSize: 11.5, fontWeight: 600 };
 
 // ── the list rail's row ──────────────────────────────────────────────────────────────────
 // One word for the kind (kinds.shortKind): the agent's own name follows it on the same line, so "agent · coding ·
@@ -707,9 +677,7 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
     )).catch(() => {});
   }, []);
   const stale = (id) => selRef.current !== id;
-  const { agents, models, kinds, brains, brainList, brainModels, generalBrains, codingOptions, agentsRead, codingReady } = useAgents();
-  // an agent start with nothing to run on is greyed, the reason its hover - one check for both roads (capabilities.cannotStart)
-  const runWhy = (coding) => cannotStart(caps, { coding, read: agentsRead, codingReady }), noAiWhy = runWhy(false);
+  const { agents, kinds, brainModels, generalBrains, codingOptions, agentsRead } = useAgents();
   const pickerTask = useRef(null);         // initialize each task from its durable worker once
   const [err, setErr] = useState("");
   const [startFail, setStartFail] = useState(null);   // a failed agent start's ways past it (failures.py), drawn on the error line
@@ -718,16 +686,12 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
   const askTaken = (id) => { heldAsks.delete(id); setRun((current) => ({ ...current, instruction: "" })); };
   // the next run's pictures - pasted, dropped or attached - ride in its instruction as paths, like Continue's (ContinueBox)
   const runPics = usePromptImages();
-  // the repository the Start panel will open the coding session in (RepoSelect); null = not loaded / not offered
-  const [startRepo, setStartRepo] = useState(null);   // "" = the roster's default (served first)
   // Which KIND of worker this row is configuring. "Use non-coding agent" used to dispatch on the
   // spot, so there was no moment at which a profile or a brain could be chosen for it - the block
   // is called "Configure the next run" and could not configure that one (the owner, 2026-09-18).
   const [handOff, setHandOff] = useState(false);
   // A finished run should lead with what it accomplished. Harness/model/prompt choices stay
   // behind an explicit restart action instead of looking like the main thing to do next.
-  const [restartOpen, setRestartOpen] = useState(false);
-  const [boxAt, setBoxAt] = useState(0);              // each opening of the agent box, so a second press brings it into view again
   // ONE START PER TASK AT A TIME, HELD IN A REF (the agents walk, 2026-10-26): `startingAgent` was state, so a double press on Send to
   // agent passed its guard twice before React drew "Starting…" and posted two dispatches; and a start answered after the owner had
   // moved to another task was never cleared (`stale`), leaving every start there greyed "Starting…". Keyed by task, cleared always.
@@ -741,12 +705,8 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
   const endStart = (id) => { const { [id]: _, ...rest } = startFlights.current; startFlights.current = rest; setStarting(rest); };
   // a door that continued the conversation answered: it reads itself again in place - a remount drew it empty, then the same turns
   const [chatRead, setChatRead] = useState(0);
-  // ...but another agent's run is a new conversation: that one is mounted fresh (Run another agent)
-  const [generalRevision, setGeneralRevision] = useState(0);
   // the waiting room: notes for the agent, typed in when it stops (waitroom.py)
   const [waitText, setWaitText] = useState("");
-  const [wrapping, setWrapping] = useState(false);   // declared up here: the poll effect below reads it
-  const [wrapped, setWrapped] = useState(null);      // the closing report, shown where the session was
   // Stop and save's write-up, running on the server: {id, n, job} - the task, how many notes it had at the press, and the job the
   // press started. The chat draws it (writeupView: the job's own stage, from the detail's `writeup`) until the draft replaces it.
   const [writingUpAt, setWritingUpAt] = useState(null);
@@ -759,9 +719,6 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
   // checking briefly so the page cannot freeze forever on the pre-close status it last saw.
   const sessionSettleUntil = useRef(0);
   const [diffOpen, setDiffOpen] = useState(false);   // the pre-push review, in its own drawer
-  const [diffShown, setDiffShown] = useState(false);   // a Result's own diff, unfolded under What it made
-  const [resultOpen, setResultOpen] = useState(false);   // the Result unfolded past its summary, by a press on its heading
-  useEffect(() => { setDiffShown(false); }, [selected]);
   // THE TASK BEHIND THE SESSION. A live session takes the whole task page, and with it went the
   // one thing the X was expected to reach: the task itself - what it is, where it came from, its
   // thread (the owner, 2026-09-18: "even if the coding cli is open i want to be able to go back to
@@ -892,7 +849,7 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
   // Only a move from one task straight to another clears it: "That task is gone" empties the selection, and the list then
   // opens its first row - that message must survive the hop.
   const prevSel = useRef(selected);
-  useEffect(() => { setRestartOpen(false); if (selected && prevSel.current) setErr(""); prevSel.current = selected; }, [selected]);
+  useEffect(() => { if (selected && prevSel.current) setErr(""); prevSel.current = selected; }, [selected]);
   useEffect(() => {
     // a LIVE SESSION counts as much as a headless run here: the header chip is derived from
     // how long the pty has been quiet, so without re-asking it froze on whatever it said
@@ -901,7 +858,7 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
     if (sessionAtWork) sessionSettleUntil.current = Date.now() + 120000;
     const settling = detailTaskStatus === "in_progress" && hasTranscript
       && (hasAgentReport || Date.now() < sessionSettleUntil.current);
-    if (!((running || wrapping || settling || writingUp === selected) && selected)) return undefined;
+    if (!((running || settling || writingUp === selected) && selected)) return undefined;
 
     // Terminal bytes already travel over their own websocket. Turning each output frame into a
     // task + waitroom fetch made switching and typing wait behind the terminal's own repaints.
@@ -909,7 +866,7 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
     // ...and it CALMS while nothing moves (2026-11-09): a running agent's page read the same task every 3 s, at up to 4 s a read on a
     // busy home. Unchanged reads stretch the gap to 12 s; a changed one - or a task-changed poke, which reads at once - brings it back.
     return pollCalming(active, async () => { const was = detailMoves.current; await loadDetail(selected); return detailMoves.current !== was; }, 3000, 12000);
-  }, [active, detailTaskStatus, hasAgentReport, hasRunningRun, hasTranscript, loadDetail, selected, sessionAtWork, wrapping, writingUp]);
+  }, [active, detailTaskStatus, hasAgentReport, hasRunningRun, hasTranscript, loadDetail, selected, sessionAtWork, writingUp]);
 
   // THE MENUS' CHANGES ARE THE TASK TOOLS (Stream B, the owner 2026-10-18: "every act leaves a receipt"): who does it, priority and
   // who holds it run down the operations road, so each is recorded and said in the chat when the task is on the Assistant's table
@@ -919,17 +876,6 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
     setJudgeAt(null);
     try { await api.post(`/api/tasks/${selected}/judged`, patch); } catch (e) { setErr(opError(e, "That correction didn't go through - pick it again.")); }
     loadDetail(selected);
-  };
-  // RUN AGAIN ON THE STRONG MODEL (owner-approved, 2026-10-25): a failed or unsure agent, run once more on a strong
-  // model - a press in the ▾, never by itself: an agent that can act may have done half its work
-  const [strongGoing, setStrongGoing] = useState(false);
-  const strongAgain = async () => {
-    const id = selected;
-    if (!id || strongGoing) return;
-    setStrongGoing(true); setErr("");
-    try { await api.post(`/api/tasks/${id}/strong-again`); loadDetail(id); }
-    catch (e) { setErr(opError(e, "It could not run again on the strong model.")); }
-    finally { setStrongGoing(false); }
   };
   const change = async (kind, params) => {
     // ...and who does it, changed to an agent, starts that agent: where it could not start, the answer says why (server._start_chosen)
@@ -1000,11 +946,10 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
   // out becomes a handover note that gets typed into the NEXT session, because a pty has no
   // resumable id - killing the session used to throw all of that away.
   useEffect(() => {
-    setWrapping(false); setWrapped(null);
     // a press on another task is that task's: back on it, a job still writing is read from the server's own word (detail.writeup)
     setWritingUpAt((w) => (w?.id === selected ? w : null));
     setOpeningReply(false);
-    setOpenStage(null); setResultOpen(false);
+    setOpenStage(null);
   }, [selected]);
 
   const [handoff, setHandoff] = useState(false);
@@ -1323,7 +1268,6 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
     const body = String(c.Body || "").trimStart();
     return /^(?:AGENT|CODER) REPORT(?:\r?\n|$)/.test(body) && body.replace(/^(?:AGENT|CODER) REPORT/, "").trim();
   });
-  const diffRun = (detail?.runs || []).find((r) => r.DiffText);
   const liveRun = (detail?.runs || []).find((r) => r.Status === "running");
   // TWO QUESTIONS, TWO FLAGS. `liveCodingSession` answered both "is a session live on this page"
   // (so the whole page goes compact and the terminal gets the room) and "is this a coding CLI
@@ -1370,7 +1314,7 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
   // changes with the session): the chat, its box and its strip stay as they are while live - only the header line and the status move
   // ...AND A CLOSED ONE TOO (the owner, 2026-11-05): done or dropped, the same chat, its box - typing reopens it (server._refuse_closed_chat) -
   // and its strip, where Reopen stands in Mark done's place (actionRow.splitRow)
-  const chatKept = isGeneral && hasGeneralHistory && !liveTerminal(term) && !!t && !wrapping;
+  const chatKept = isGeneral && hasGeneralHistory && !liveTerminal(term) && !!t;
   const sessionView = (liveSession || chatKept) && !peek;
   // ...and a stage you opened by hand does not outlive the session you opened it on. The agent
   // finishes, its wrap-up writes the reply (wrapup.wrap), and the page went on showing the closed
@@ -1550,20 +1494,6 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
   // is the brain's - it is not a property of the task, so the card does not offer one. A live
   // session names the CLI it was ASKED to run; otherwise the roster says which brain the role uses.
   const runRole = t?.Kind === "coding" ? assignedAgent(t?.Assignee) || codingAgent(agents, kinds) : "";
-  // NAME THE BRAIN, NOT THE PRODUCT. `term.cli` is hardcoded to the string "taskuary" on every
-  // general session (general.info), so the one card that could not say which brain was running
-  // read "brain taskuary" - the product's own name, on the row whose whole job is to answer that
-  // (the owner, 2026-09-16). A general session reports what it actually reached for instead:
-  // `provider` is the connector's or the CLI's own label, `model` the gear it runs on.
-  // ...and once that session is GONE, what it actually ran on (detail.ranOn: the saved pick a general
-  // session resumes from, or the transcript's brain) - never the roster, which names what the role
-  // WOULD run on today. A researcher session on the owner's Azure connector read "brain claude" an
-  // hour after it closed, because that is the default for a role with no override (2026-09-22).
-  const runBrain = term?.provider || term?.cli || detail?.ranOn?.brain || (runRole && brains[runRole]) || "";
-  // ...and on a general session that brain is ALREADY on screen, as the live picker in the
-  // workspace toolbar a few pixels below - the same two facts twice, one of them editable and one
-  // of them stale ("why is it there, the model is below it?"). The pill goes where the picker is.
-  const brainPill = runBrain && !(isGeneral && term?.alive) ? runBrain : "";
   // the envelope on the reply, read from the same Deliver blob Review reads
   const replyOf = pendingReview || sentReview;
   const replyCc = deliveryCc(replyOf), replyFiles = deliveryFiles(replyOf);
@@ -1632,10 +1562,6 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
   // conversation (/assistant) - a second door to one room (the owner, 2026-09-29: "why do we need continue session if
   // it's still open?"). A coding agent keeps it: that button reopens its own CLI session, which nothing else here does.
   const barContinue = barContinues({ canContinue, isGeneral, ended: detail?.runEnded });   // ...and a general run that ended under it
-  // STOP AND SAVE ONLY WHILE THERE IS SOMETHING TO STOP (owner-approved, 2026-10-20): it stood on the row of an agent that was
-  // already stopped (G7), and then of one that had failed, finished or been cut off by a restart. A session that has ENDED offers
-  // what applies - Continue, Run another, Mark done, the write-up's own actions - and the live row keeps its Stop and save.
-  const agentBar = !term?.alive && !restartOpen && (isGeneral ? generalStarted : !!(report || detail?.transcript));
   // the list's row for this task carries the server's state (taskstate.py): the page reads the same verdict - and on the table,
   // where there is no row, the detail's own (pageState)
   const rowState = pageState(listRow, detail);
@@ -1655,38 +1581,21 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
   const hasRecord = !!(report || detail?.transcript || (isGeneral && generalStarted)
     || (detail?.artifacts || []).some((a) => (isPublished(a) && !isGeneral) || a.kind === "agent_result"));
   // EVERY TASK IS CAME FROM AND ITS ONE CHAT (the owner, 2026-11-06: "there should no longer be close out code anywhere"): general, reply,
-  // coding - a live coding CLI drawn in the same chat (GeneralWorkspace, chatStream.chatSource) - and a plain to-do
-  const home = !!t;
+  // coding - a live coding CLI drawn in the same chat (GeneralWorkspace, chatStream.chatSource) - and a plain to-do: no start form, no
+  // Continue or Run another agent press, no result pane - the chat is all of them
   // ...a to-do no agent has touched is ONE section: what came in (taskLayout.soloTodo) - no "Agent - not started" column. AND NO BOX IN IT, EVER
   // (the owner, 2026-11-22: "that belongs in the agent section. if they hit send to agent it goes there"): its Send to agent adds the Agent
   // section and opens it, where the box is - typing there starts the agent
   const [toAgent, setToAgent] = useState(null);
   const solo = toAgent !== selected && soloTodo({ kind: t?.Kind, started: !!(term || hasRecord || generalStarted || hasGeneralHistory || queuedRow || agentOpening || failedRun || writeup) }),
     secs = solo ? SECTIONS.slice(0, 1) : SECTIONS;
-  // ...AND THERE IT IS ALWAYS THE CHAT (the owner, 2026-11-06): no AI connected, a start waiting its turn or one that failed, nothing started yet -
-  // the one box under the conversation, never the old Send to agent form with its own pickers and button
-  const workspaceMode = home && !wrapping ? "general" : agentWorkspaceMode({ isGeneral, generalStarted, session: term, wrapping });
-  // ...AND THERE THE AGENT SECTION IS ONE CHAT (the owner, 2026-11-04: "i want this to be a chat? where is the prompt box"): the reading, each
-  // turn, the owner's words, each new mail, and the box under them - always, Continue's own road. The Result's summary, "The whole
-  // conversation", the record under it and the Continue press are not drawn: the chat is all of them (GeneralWorkspace `chat`)
-  const chatPane = home && workspaceMode === "general";
   // THE RESULT (the redesign, owner-approved 2026-10-21): an agent that has stopped and saved - or finished, or stopped - with a record
   // to show; the work column's agent half is its result then, the session one "Replay the session" line in it
   // ...never when the sender wrote AGAIN after it (`news`): that result answers what came before, and the page leads with what is on
   // you now - the new message in From, the reply and Continue in the work - with the earlier session folded under Agent work
   // (the owner, 2026-10-22: "it opens up to result ... this is from earlier session ... we need to know what to do now")
   const resultShown = !term?.alive && hasRecord && !news && [AGENT.saved, AGENT.stopped, AGENT.finished].includes(agentState);
-  // ...but THE RESULT FOLDS TWICE (the owner, 2026-10-27: "just the summary - and then click Result to see more"): at rest, folded or open, it
-  // is its summary and what it made (ResultSummary); its heading unfolds the rest - the full message, the record, the replay - and folds it back
-  // ...but a run that FAILED says why, with Try again, first (the owner, 2026-10-26: "you can't see what you have to do"): it never rests
-  // ...and THE WORK TAKES THE WHOLE WIDTH once an agent has acted (the owner, 2026-10-22: "on a regular agent that is completed we should
-  // also only show the agent result with the From expandable over the top"): working or waiting, finished with its Result, or failed
-  // with its Try again - From folds to its one line over it. Two columns only where no agent ever ran (taskLayout.layoutOf).
-  const layout = layoutOf({ sessionView }), wide = layout === "full";
   const settled = (resultShown || failedRun) && !term?.alive;   // the agent acted and is gone: its Result, or the run that failed
-  // ...whose record line already names the AI it ran on ("Claude Code (on this computer) · 07:05 · 6s"): an "AI claude" pill under
-  // it said it twice (the agents walk, 2026-10-26)
-  const factBrain = isGeneral && settled ? "" : brainPill;
   const replyState = replyPhase(reviews);   // the current round's (replyRounds.js)
   // ONE question per page. A running session is itself the agent stage, so it is never folded; the
   // hand-picked stage wins over the computed one until you leave the task (start an agent on a task
@@ -1724,9 +1633,6 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
   const twoUp = !narrow;
   const slots = secs, slotKeys = slots.map((s) => s.key);
   const flow = twoUp && timeline.length > 1;
-  // ...and at rest it is the agent's whole answer under its summary line, what it made, and one link to the conversation (the owner,
-  // 2026-10-28: "when agent is done or stopped it should just show what the agent did not the full agent chat")
-  const resultRest = resultShown && !resultOpen && !failedRun;
   // ...read off ONE STAGE (stages.json, the owner 2026-10-26: "are these modes defined well anywhere besides the UI"): the focus and what
   // waits on a Send make it, and the stage names the main view and the section it is up to - the server and the Assistant read the same
   // ...and a section OPENED BY HAND is not where the task is up to (2026-10-27, the overnight walk): Agent work clicked open over a draft
@@ -1782,7 +1688,7 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
   // ...a chat's strip carries the task's buttons (TaskButtons), live or not
   // ...and THE TASK'S BUTTONS ARE DRAWN ONCE (TaskButtons, BUTTONS_AT): on the Agent's strip when it is open, else the open pane's
   const buttonsHere = (k) => BUTTONS_AT === "strip" && k === (isOpen("agent") ? "agent" : slots.find((x) => isOpen(x.key))?.key);
-  const stripSkip = (v) => (runFormOpen && OPENS_FORM.has(v.id)) || (v.id === "continue" && failedFix) || (v.id === "reply" && (replyEmpty || !!pendingReview));
+  const stripSkip = (v) => (v.id === "reply" && (replyEmpty || !!pendingReview));
   const foldTo = (k) => (to) => (hereSec && hereSec !== k && k !== "agent" ? hereSec : to);
   const slot = (k, body) => (!twoUp ? body
     : <Box data-tq-slot={k} data-tq-open={isOpen(k) ? "" : undefined} sx={{ ...SLOT(isOpen(k), closedW(k)),
@@ -1811,10 +1717,6 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
     : t?.Status === "dropped" ? "Dropped - nobody works it any more" : "";
   // the news line is said once, at the top of the task stage; open, the agent step is just its record
   const storyAt = storyPlace(news ? null : story, { open: shows("agent") && !sessionView, hasRecord });
-  // ...and the write-up's line stands in ONE place of the Agent pane: in the open record, else under the Result's summary or the step's top
-  const lineAt = upAt !== "result" ? null : shows("agent") && !sessionView && hasRecord && !resultRest && !chatPane ? "record" : "top";
-  // the Agent work row with nothing in it: no agent at work, none ran, no story to tell, and not the open half
-  const agentEmpty = !term?.alive && !wide && !shows("agent") && !hasRecord && !["line", "story", "summary"].includes(storyAt);
   // A HELD STEP CARRIES ITS TRUST PRESSES (the owner, 2026-10-26: "we should have button on untrusted user to either trust user or trust
   // domain and then we won't have issue again"): the box that says why nothing started holds them, and Came from then shows none.
   // A press lifts the hold - the box says so and the normal Start is offered; nothing starts by itself
@@ -1834,7 +1736,6 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
   };
   // the one white section on the shaded body (taskLayout.focusOf); a live session has no shade and no focus - it is the page
   const focus = focusOf({ live: !!term?.alive, result: resultShown, failed: failedRun, pane, waiting: !!waitFor, list, owed: sendWaits });
-  const chatBelow = focus === "agent" && workspaceMode === "general" && shows("agent") && !liveSession && !resultRest;   // its chat joins the focus under it
   // ...Came from as a left drawer only over a live session now (stages.json `drawer`); the right drawer went with the three sections
   const fromDrawer = main === "work" && !twoUp;
   useEffect(() => { setFromSide(false); }, [main]);
@@ -2105,18 +2006,11 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
   const heldRepo = String(t?.Tags || "").split(/[\s,]+/).includes("held:repo");
   const pickRepo = () => { setRepoPick(true); if (heldRepo) setResumeAfterRepo({ dispatch: true }); };
   pickRepoRef.current = pickRepo;
-  // only a folded heading is a control: exactly one stage is open, so clicking the open one has
-  // nothing to do and must not offer a chevron that does nothing.
-  const stageProps = (name) => name === "agent" && resultShown
-    ? { folded: !shows(name) || resultRest, onToggle: () => { if (!shows(name)) { setOpenStage(name); setResultOpen(true); } else setResultOpen((v) => !v); } }
-    : { folded: !shows(name), onToggle: shows(name) ? null : () => setOpenStage(name) };
   const startCodingAgent = async () => {
     const id = selected;
     if (!beginStart(id, "coding")) return;
     setErr(""); setStartFail(null);
     try {
-      // the repository chosen in the panel is pinned first - the tag is the override the start obeys
-      if (startRepo) await api.put(`/api/tasks/${id}/repo`, { repo: startRepo, ...(run.agent ? { agent: run.agent } : {}) });
       // ANOTHER AGENT WHILE ONE RUNS (Run another agent): the live one is paused first - its handover is filed for the next
       // session, no report and no reply draft - since the dispatch refuses a second worker on a task (409)
       if (term?.alive) { await api.post(`/api/tasks/${id}/pause`, {}); if (!stale(id)) setTerm(null); }
@@ -2126,10 +2020,7 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
       const data = await runOperation(api, "dispatch.prepare", id, { kind: "coding", agent: run.agent || null, brain: run.brain || null, pick: run.brain ? null : run.pick || null,
         model: run.model || null, instructions: run.instruction.trim() || null, files: runPics.paths });
       if (!stale(id)) setTerm(data?.session || null);
-      if (!stale(id)) {
-        askTaken(id); runPics.clear();
-        setRestartOpen(false);
-      }
+      if (!stale(id)) { askTaken(id); runPics.clear(); }
     } catch (e) {
       if (stale(id)) return;
       // A repository still to choose is the same QUESTION here as on the terminal road: open the
@@ -2141,75 +2032,6 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
       } else { setErr(msg); setStartFail({ ...failOf(e), text: msg, again: startCodingAgent }); }
     } finally { endStart(id); }
   };
-  const startGeneralAgent = async (again) => {
-    const id = selected;
-    if (!beginStart(id, "general")) return;
-    setErr(""); setStartFail(null);
-    // RUN ANOTHER AGENT is a second agent, not Continue (the owner, 2026-10-27: "it just opened the same window instead of a new one"):
-    // the box under that title asks for a new conversation (general.new_run) - a live one is paused first, as the coding start does
-    // ...read at the press; its Try again replays it (taskLayout.startsAnother)
-    const another = startsAnother({ report, transcript: detail?.transcript, alive: term?.alive, started: generalStarted }, again);
-    try {
-      if (another && term?.alive) { await api.post(`/api/tasks/${id}/pause`, {}); if (!stale(id)) setTerm(null); }
-      // one shared dispatch whatever the task's kind was: it switches the kind, starts (or reuses) the
-      // assistant session and records the live worker - a relabelled task is not a started one (PW-213)
-      // brain and model - whichever of them was chosen; blank means "as configured"
-      const { data } = await api.post(`/api/tasks/${id}/dispatch`,
-        { kind: "general", pick: run.pick || null, model: run.model || null, ...(another ? { fresh: true } : {}),
-          // what was typed in the box goes to it - this sent the pickers and dropped the words
-          instruction: run.instruction.trim() || null, files: runPics.paths });
-      const outcome = outcomeOf(data);
-      if (!stale(id)) setTerm(outcome.state === "started" || outcome.state === "existing" ? (data.session || null) : null);
-      // where the code is, still to say: the same question the coding start asks - it came back quietly and nothing opened
-      if (!stale(id) && outcome.state === "needs_repo") { setRepoPick(true); setResumeAfterRepo({ dispatch: true }); }
-      if (!stale(id)) { askTaken(id); runPics.clear(); setRestartOpen(false); }
-      // ...and the pane draws the new agent's conversation, not the one it had loaded
-      if (!stale(id) && another) setGeneralRevision((n) => n + 1);
-      await Promise.all([loadDetail(id), loadTasks()]);
-      onChanged?.();
-    } catch (e) {
-      if (!stale(id)) {
-        const msg = e?.response?.data?.detail || "Could not start the agent - check that an AI is connected under Connections, then press it again.";
-        setErr(msg); setStartFail({ ...failOf(e), text: msg, again: () => startGeneralAgent(another) });
-      }
-    } finally { endStart(id); }
-  };
-  // START AN AGENT ON A GOAL (the owner, 2026-10-12): the goal is up to its first step not done. That step becomes a task
-  // of its own if it is not one yet (the goal's repository rides along), the regular agent starts on it through the one
-  // dispatch door, and the step opens on the table so what the agent does is what you see.
-  const startGoalStep = async () => {
-    const id = selected;
-    if (!beginStart(id, "step")) return;
-    setErr(""); setStartFail(null);
-    try {
-      const { data: got } = await api.get(`/api/tasks/${id}/steps`);
-      const step = (got.steps || []).find((s) => !s.done);
-      if (!step) { setErr("Every step is done - close the goal, or add a step."); return; }
-      const child = step.tid || (await api.post(`/api/tasks/${id}/steps/${step.id}/start`)).data.taskId;
-      // `via`: the press was made HERE, so a start that fails is left on the goal, where its line is read (server._pressed_on)
-      // ...with what was said in the box: the owner's words are the step's ask, the step and the goal its material
-      const { data } = await api.post(`/api/tasks/${child}/dispatch`, { kind: "general", pick: run.pick || null, model: run.model || null, via: id,
-        instruction: run.instruction.trim() || null, files: runPics.paths });
-      if (!stale(id)) { askTaken(id); runPics.clear(); setRestartOpen(false); }
-      const outcome = outcomeOf(data);
-      if (outcome.state === "needs_repo") setErr(`${outcome.text} - open the step and pick one.`);
-      await Promise.all([loadDetail(id), loadTasks()]);
-      onChanged?.();
-      (onOpenTask || onSelect)?.(child);
-    } catch (e) {
-      // ...with its ways past it as buttons on the error, as the task's own start has: the sentence stood alone (the matrix's verify, 2026-10-20)
-      if (!stale(id)) { const msg = e?.response?.data?.detail || "Could not start the agent on the next step"; setErr(msg); setStartFail({ ...failOf(e), text: msg, again: startGoalStep }); }
-    } finally { endStart(id); }
-  };
-  // CONTINUE SESSION is the rail's box here too (T14): one road (/continue-work) for a coding and a regular agent, and
-  // what you type is the first thing it hears. The page had two older roads with no note (continue-session, resume).
-  const [continueAt, setContinueAtRaw] = useState(null);
-  // ON THE CANVAS IT OPENS IN THE AGENT PANE, where Run another agent's box does (the owner, 2026-10-29: "both should open in the agent
-  // window ... Continue box should be inside the canvas always"): pressed here, or lit by the Assistant (tq-continue-here)
-  // ...AT ANY WIDTH, AND NEVER THROUGH THE ASSISTANT (the owner, 2026-11-09: "the agent does not wait for it"): a narrow canvas handed the
-  // press to the Assistant's conversation to draw the box there, and with that conversation folded away a lit Continue did nothing. The
-  // task draws its own box; over a session's screen, which has no pane for the card, the box opens on the button itself
-  const [continueCard, setContinueCard] = useState(null);   // { note } while the pane's Continue card is open
   // ...AND WHERE THE AGENT SECTION IS ONE CHAT, ITS BOX IS THE CONTINUE BOX (the owner, 2026-11-04: "the box under them - always, Continue's own
   // road"): a card above the conversation was a second box saying "Continue" over one already reading "Write to pick the session back up".
   // The note goes into the chat's box, the cursor with it - to send or change
@@ -2219,24 +2041,16 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
     if (twoUp) openSection("agent");
     setTimeout(() => { const el = document.querySelector("[data-tq-agent-room] .tq-aui-input"); el?.scrollIntoView({ block: "nearest" }); el?.focus({ preventScroll: true }); }, 60);
   };
-  const setContinueAt = (a) => {
-    if (a) setRestartOpen(false);                 // one card under the conversation at a time
-    if (a && canvas && t && !sessionView) { if (chatPane) intoChat(""); else setContinueCard({ note: "" }); return; }
-    if (!a) setContinueCard(null);
-    setContinueAtRaw(a);
-  };
   // CLOSE WITH A NOTE rides the same way: a card in the conversation on the canvas, a popover elsewhere, and the close is
   // this view's own Mark done (finish), so the walk puts the task down exactly as it does for the button
   const [noteAt, setNoteAtRaw] = useState(null);
   const closeWithNote = async (note) => { const failed = await finish("done", note); if (failed) throw new Error(failed); };
   const setNoteAt = (a) => {
-    if (a) setRestartOpen(false);
     if (a && canvas && t) { window.dispatchEvent(new CustomEvent("tq-close-note", { detail: { task: t, ref: t.ref || `TQ-${String(t.TaskId).padStart(4, "0")}`, close: closeWithNote } })); return; }
     setNoteAtRaw(a);
   };
   const continued = () => {
     const id = selected;
-    if (!stale(id)) setResultOpen(true);
     if (!stale(id)) setChatRead((n) => n + 1);
     Promise.all([loadDetail(id), loadTasks()]).then(() => onChanged?.());
   };
@@ -2266,74 +2080,6 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
       if (!stale(id)) { const msg = e?.response?.data?.detail || e?.message || `It could not be handed to ${o.label}.`; setErr(msg); setStartFail({ ...failOf(e), text: msg, again: () => switchAi(o) }); }
     } finally { endStart(id); }
   };
-  const tryAgain = async () => {
-    const id = selected;
-    if (!beginStart(id, "resume")) return;
-    setErr(""); setStartFail(null);
-    try { await api.post(`/api/tasks/${id}/continue-work`, { note: null }); continued(); }
-    catch (e) {
-      if (!stale(id)) { const msg = e?.response?.data?.detail || e?.message || "It could not start again."; setErr(msg); setStartFail({ ...failOf(e), text: msg, again: tryAgain }); }
-    } finally { endStart(id); }
-  };
-  // A RUN THAT ENDED ASKING THE OWNER (workerstate.left_asking - a restart cut it off at "go ahead?"): its Continue IS the answer - the box
-  // shows the question and what is typed goes to the agent as it picks up (the owner, 2026-11-03: "it's asking me question but the ai closed
-  // the agent why?"). The same button and box, said as what they are
-  const leftAsking = (!term?.alive && detail?.leftAsking?.[0]) || "";
-  // ...said Continue, never "Answer it", and filled by nothing (the owner, 2026-11-10: "yes remove that button. the agent itself asks that
-  // question. Never need that button"): the box shows its question, and the row lights nothing over an agent that asks
-  const continueWord = startingAgent === "resume" ? (failedRun ? "Trying again…" : "Continuing…") : failedRun ? btn("try_again") : labelOfRow("continue");
-  // WHAT THE OPEN AGENT PANE ALREADY DRAWS, so its heading's stage moves (PaneMoves) never say a press twice: the start box stands open
-  // (RunForm) and its own button is the start; a failed general run's Try again stands under its reason (data-tq-failed-fix) - unless
-  // its fix (Connect an AI) stands there instead
-  // ...never on its own for a chat task no agent has started (the owner, 2026-11-05: "when no agent starts you should just show what the incoming
-  // message was on top right like all other input prompts. then prompt box on bottom will trigger or start the agent. No need for the box") - the
-  // chat's own box starts it; a press of Send to agent (a coding one too) still opens this
-  const runFormOpen = !home && (restartOpen || (!term?.alive && !liveRun && !report && !detail?.transcript && (!isGeneral || !generalStarted)));
-  const failedFix = failedRun && isGeneral && !resultOpen && !sessionView && !runFix && canContinue;
-  // ...and Continue picks the agent's conversation back up, so the Result unfolds to it (it rests on its summary otherwise) - once it is
-  // SENT (continued), not at the press that opens the box: unfolding there swapped the summary for the full record under the new box, the
-  // pane blanked while it loaded, and a "Back to the result" stood over the result it was already showing (the owner, 2026-10-30)
-  // ...and a failed run's Try again the same: unfolded at the press, its reason and button went and the conversation hidden under them came up
-  // before anything was sent - then again as the start landed (the owner, 2026-11-23: "the whole thing flickered"); continued() unfolds it once sent
-  const continuePress = (e, a) => (failedRun ? tryAgain() : setContinueAt(steady(a || e?.currentTarget)));
-  // THE NEW STEP'S BOX - Send to agent's / Run another agent's start, or Continue's - drawn once, placed by the layout (first in the desk's pane)
-  // ...a function: the start box it holds (nextRunForm) is built further down
-  const newStep = () => (<>
-    {/* ONE BOX FOR EVERY START: a general task nobody has started had its own row of pickers and a button that started at
-        once with nothing said - it is the same box now, with the words, the mic and the pictures */}
-    {runFormOpen
-      && <Box data-tq-run-form="">{nextRunForm}</Box>}
-    {continueCard && !runFormOpen && !sessionView && <Box data-tq-continue-pane="" sx={{ mt: 1.25 }}>
-      <ContinueBox inline task={t} taskRef={detail?.ref || ""} initial={continueCard.note || ""} asked={leftAsking} signin={(!term?.alive && detail?.leftSignin) || ""} onClose={() => setContinueCard(null)}
-        onPress={() => window.dispatchEvent(new CustomEvent("tq-continuing", { detail: { tid: selected } }))}
-        onFail={() => window.dispatchEvent(new CustomEvent("tq-continuing", { detail: { tid: null } }))}
-        onDone={() => { setContinueCard(null); continued(); }} /></Box>}
-  </>);
-  // THE BAR THE AGENT CARD ACTS THROUGH, built here so it can ride inside the heading beside the
-  // chip - where the Task and Reply strips keep theirs. Group one is THIS session, group two is
-  // another one, and exactly one move is filled. It is an element, not a component: the handlers
-  // it calls are declared just above, and a component defined mid-render remounts on every keystroke.
-  const agentBarRow = (
-    <Box onClick={(e) => e.stopPropagation()} sx={{ display: "flex", alignItems: "center", gap: 0.8, flexWrap: "wrap" }}>
-      {runFix && <Button size="small" variant="contained" disableElevation sx={primaryBtn} data-tq-run-fix=""
-        onClick={() => openAppLink(runFix.href)}>{runFix.label}</Button>}
-      {barContinue && !chatPane && <Button size="small" variant={runFix ? "outlined" : "contained"} disableElevation disabled={!!startingAgent} sx={runFix ? barBtn : primaryBtn}
-        startIcon={startingAgent === "resume" ? <CircularProgress size={12} /> : failedRun ? <RefreshIcon sx={{ fontSize: 16 }} /> : <HistoryIcon sx={{ fontSize: 16 }} />}
-        title={failedRun ? btnHint("try_again") : isGeneral
-          ? "Reopens the saved provider conversation and continues from its existing context."
-          : `Reopens ${detail?.resumable?.agent}'s own session in ${detail?.resumable?.cwd}. It still has what it read, changed and asked.`}
-        onClick={continuePress}>
-        {continueWord}</Button>}
-      {!isGeneral && <>
-        {canContinue && <Divider orientation="vertical" flexItem sx={{ mx: 0.4, my: 0.6, borderColor: BORDER }} />}
-        <Button size="small" variant={canContinue ? "outlined" : "contained"} disableElevation
-          sx={canContinue ? barBtn : primaryBtn}
-          startIcon={<RefreshIcon sx={{ fontSize: 16, color: canContinue ? "var(--tq-success, #6f8a6e)" : undefined }} />}
-          title="A fresh agent, with new instructions if you want. It gets what the last one saved, not its whole conversation."
-          onClick={() => setRestartOpen(true)}>{labelOfRow("run-another")}</Button>
-      </>}
-    </Box>
-  );
   // ON THE ASSISTANT CANVAS THE BUTTONS LEAVE THE CARD (layout B, 2026-09-30): the item registers its verbs and the ONE row above the chat
   // line draws them (ActionRow) - the decision first, the session's verbs next, the rest behind More, Next at the end. They are
   // THESE handlers, unchanged: the row calls the latest closure, so a press costs what the old button cost. The Tasks tab
@@ -2370,19 +2116,9 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
     [...w.children].forEach((k) => ro.observe(k)); ro.observe(w);
     return () => ro.disconnect();
   });
-  // ON THE CANVAS THE CHAT'S OWN STRIP RIDES IN THIS STEP'S HEADING: a row for "Agent work" and a second for the agent's name, its
-  // brain and Full screen took two lines off the answer (the owner, 2026-10-18: "make the agent space take up more space")
-  const [chatTools, setChatTools] = useState(null);
-  const agentUp = !!canvas && shows("agent") && workspaceMode === "general" && !liveSession;
-  useEffect(() => {
-    // ...and back down when another step opens: Task opened from there kept the scroll, its own heading out of sight
-    if (!agentUp) { if (canvas && stepsBox.current) stepsBox.current.scrollTop = 0; return undefined; }
-    const f = requestAnimationFrame(() => {
-      const s = stepsBox.current, h = agentHead.current;
-      if (s && h) s.scrollTop += h.getBoundingClientRect().top - s.getBoundingClientRect().top;
-    });
-    return () => cancelAnimationFrame(f);
-  }, [agentUp, t?.TaskId]);
+  const agentUp = !!canvas && shows("agent") && !liveSession;
+  // ...and back down when another step opens: Task opened from there kept the scroll, its own heading out of sight
+  useEffect(() => { if (!agentUp && canvas && stepsBox.current) stepsBox.current.scrollTop = 0; }, [agentUp, t?.TaskId]);   // eslint-disable-line react-hooks/exhaustive-deps
   const pageRef = useRef(null);
   // WHAT THE ASSISTANT IS TOLD OF THIS TASK when the owner asks about it (pageView.js): which task it is - it reads the page, and brings up
   // or points at what is on it; the work in it is its agent's (the owner, 2026-11-18)
@@ -2443,21 +2179,12 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
     closed: ["done", "dropped"].includes(t?.Status), cantSend: !!pendingReview && cantSend, page: rail?.tid ? pageRead(rail.tid) : null,
     owed: pendingReview ? !String(pendingReview.FinalText || pendingReview.DraftText || "").trim() : null });
   const continueHere = !liveSession && notDone && (barContinue || (stage !== "agent" && canContinue));
-  // ...NO SEND TO AGENT WHERE THE CHAT IS HOME (the owner, 2026-11-06): its one box starts the agent - no AI, waiting its turn or failed alike
-  const sendGeneral = isGeneral && !generalStarted && notDone && !liveSession && !home;
-  const startHere = !home && !liveSession && notDone && !continueHere && !sendGeneral && (stage !== "agent" || (agentBar && !isGeneral));
   const ranBefore = !!(report || detail?.transcript);
   // held on where the code is: before any run that is a start waiting, after one it is the agent asking to move the work (wrapup.asks_to_move)
   const heldWhy = ranBefore ? "The agent found the work is not in this code - choose where it is and it starts there"
     : "Not started: it needs to know where the code is - it starts once you choose";
-  // RUN ANOTHER AGENT, on the bar and for any task an agent has worked (the owner, 2026-10-05: "don't see run another agent under
-  // more? it should be not in more"). It was offered only behind More, only on a coding task, only once its session had ended -
-  // so a general task could never be handed to the coding agent from here. It opens the agent step; a live session is paused
-  // (its handover kept for the next) when the new one starts (startCodingAgent).
-  // THE AGENT BOX, OPENED: the agent step, its box open in it and brought into view - one box at a time on the canvas (tq-next-run)
-  const openBox = () => { if (canvas) window.dispatchEvent(new CustomEvent("tq-next-run")); setOpenStage("agent"); setRestartOpen(true); setBoxAt((n) => n + 1); };
-  const runAnother = { id: "run-another", group: "agent", label: labelOfRow("run-another"), disabled: !!noAiWhy, why: noAiWhy,
-    run: openBox, title: hintOfRow("run-another") };
+  // THE ASSISTANT'S SEND TO AGENT ON THIS TASK opens its agent step, the chat's box in it - one box at a time on the canvas (tq-next-run)
+  const openBox = () => { if (canvas) window.dispatchEvent(new CustomEvent("tq-next-run")); setOpenStage("agent"); if (twoUp) openSection("agent"); };
   // THE TASK'S OWN MOVES ARE ONE TOOLBAR (taskMoves.js, the owner 2026-11-23): the same buttons in every state - held, at work, closed - greyed
   // with why where they do not apply now; only the stage moves below come and go with what they act on
   const closedNow = !notDone || reopening === selected;
@@ -2487,38 +2214,12 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
         // NO STOP AND SAVE (the owner, 2026-11-10: "no need for stop and save button"): the x on the running turn is the one stop, and
         // typing carries the work on
         ...(liveCodingSession ? [{ id: "diff", group: "agent", label: labelOfRow("diff"), run: () => setDiffOpen(true), title: hintOfRow("diff") }] : []),
-        ...(!chatPane ? [runAnother] : []),
       ] : continueHere ? [
         // ...not a second Connect an AI on the canvas (the owner, 2026-10-26: "why would we need connect an ai? if you don't get through ai
         // setup the whole thing doesn't work"): the Result's line says why and points at Connections
-        ...(runFix && !(inRow && runFix.href === place("ai").href) ? [{ id: "fix", group: "decide", tone: "p", label: runFix.label, run: () => openAppLink(runFix.href), title: btnHint("fix") }] : []),
-        ...(chatPane ? [] : [{ id: "continue", group: "agent", lead: !pendingReview && !runFix && !leftAsking, label: continueWord, disabled: !!startingAgent || !!noAiWhy, why: noAiWhy,
-          run: continuePress, title: failedRun ? btnHint("try_again") : hintOfRow("continue") }])]
-      // EVERY START OPENS THE BOX FIRST (the owner, 2026-10-23: "you need to write prompt what about the email or attachment is the
-      // issue"): Send to agent on a general task, on a goal, with no coding tool - each started at the press with nothing said. It
-      // opens the agent box now - what to do, typed or a voice note, pictures, which agent - and only the box's own Start starts it
-      : sendGeneral ? [{ id: "send-general", group: "agent", lead: !pendingReview, label: startingAgent === "general" ? "Starting…" : labelOfRow("send-general"),
-        disabled: !!startingAgent || !!noAiWhy, why: noAiWhy, run: openBox,
-        // ON THE BAR, not in the Agent work card (the owner, 2026-10-05: "send to agent on general task should be on bottom not inline")
-        title: hintOfRow("send-general") }]
-      // ON A GOAL the agent starts on the step the goal is up to - the first box not done: its child, made if it has none - and
-      // that step opens on the table (the owner, 2026-10-12: "it should start an agent on what it's up to"); the box says what first
-      : startHere && t?.DoneWhen ? [{ id: "start-agent", group: "agent", lead: !pendingReview, label: startingAgent === "step" ? "Starting…" : labelOfRow("start-agent"),
-        disabled: !!startingAgent || !!noAiWhy, why: noAiWhy, run: openBox, title: hintOfRow("start-agent") }]
-      // WITH NO CODING TOOL CONNECTED the general agent is simply THE agent (B3): its box is the general agent's alone
-      : startHere && !canCode && !ranBefore ? [{ id: "start-agent", group: "agent", lead: !pendingReview, label: startingAgent === "general" ? "Starting…" : labelOfRow("start-agent"),
-        disabled: !!startingAgent || !!noAiWhy, why: noAiWhy, run: openBox, title: hintOfRow("start-agent") }]
-      // it OPENS the step where the agent and its instructions are chosen - nothing starts until that step's own button
-      : startHere ? [{ id: "start-agent", group: "agent", lead: !pendingReview, label: ranBefore ? labelOfRow("run-another") : labelOfRow("start-agent"),
-        run: openBox, title: ranBefore ? hintOfRow("run-another") : hintOfRow("start-agent") }] : []),
+        ...(runFix && !(inRow && runFix.href === place("ai").href) ? [{ id: "fix", group: "decide", tone: "p", label: runFix.label, run: () => openAppLink(runFix.href), title: btnHint("fix") }] : [])]
+      : []),
       ...ownMoves,
-      // ...whenever an agent has worked it and the bar's lead is not already the agent step (a paused general session had neither)
-      // ...never on a chat task (the owner, 2026-11-05: "we can remove those 2 buttons like continue agent or start new agent. Just type and it
-      // continues") - nor its stronger-model twin
-      ...(!chatPane && !liveSession && (ranBefore || generalStarted) && !startHere ? [runAnother] : []),
-      ...(!chatPane && !liveSession && detail?.strongAgain && (failedRun || ((ranBefore || generalStarted) && detail?.judged?.sure === false))
-        ? [{ id: "strong-again", group: "more", label: strongGoing ? "Starting…" : labelOfRow("strong-again"), disabled: strongGoing || !!startingAgent,
-          run: strongAgain, title: `${hintOfRow("strong-again")} - on ${detail.strongAgain.brain}, ${detail.strongAgain.model}` }] : []),
     ];
   // ...off the canvas the same row's presses run here, on these verbs (TaskButtons `act`), and say what they did on their button (pressedOn)
   const actHere = (id, e, a) => { const v = rowVerbs.find((x) => x.id === id); if (!v || v.disabled) return undefined; pressedOn(id); return v.run?.(e, a); };
@@ -2556,107 +2257,21 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
       // ...a closed task's result is drafted on a task of its own (sharing.email): that one opens instead
       onShared: (how, out) => { if (how !== "email") return; if (out?.task_id && out.task_id !== t?.TaskId) { onOpenTask?.(out.task_id); return; }
         loadDetail(selected); onChanged?.(); setOpenStage("reply"); } });
-  // CONFIGURE THE NEXT RUN, IN LINE (the owner, 2026-10-05: "should be the bottom like continue session and it should replace the
-  // continue session box"): on the canvas the agent step's form is a card under the conversation, in Continue's place - one card at
-  // a time - and it closes when the agent starts (startCodingAgent / startGeneralAgent close restartOpen on success)
-  // WITH NO CODING TOOL CONNECTED the form is the general agent's and nothing else (B3): no repository picker, no Start coding
-  // session, no "Pick a repo first", no switch to a "non-coding" agent and back - there is only the one agent
-  // ...and A GOAL'S box starts its next step, which is the regular agent's work (startGoalStep)
-  const goalRun = !!t?.DoneWhen && !ranBefore && !generalStarted;
-  const generalOnly = handOff || !canCode || goalRun;
-  // THE ONE BOX (RunForm, the owner 2026-10-23): what to do - typed or a voice note, pictures too - and which agent, before anything
-  // starts. A goal's box starts its next step; a general task's, the regular agent; a coding task's, the coding agent or the other
-  const runText = (f) => setRun((r) => { const instruction = typeof f === "function" ? f(r.instruction) : f;
-    if (instruction) heldAsks.set(selRef.current, instruction); else heldAsks.delete(selRef.current);
-    return { ...r, instruction }; });
-  const nextRunForm = (
-                    <RunForm title={report || detail?.transcript || term?.alive || generalStarted ? labelOfRow("run-another") : labelOfRow("start-agent")}
-                      value={run.instruction} onValue={runText} pics={runPics} autoFocus={restartOpen}
-                      placeholder={ASK_WHAT}
-                      note={goalRun ? "It starts on the goal's next step, with what you write here." : "It gets the task, its messages and files, and what was saved last time."}
-                      /* coding asks ONE question (which CLI); a hand-off asks two - which brain, which model - and both reach the session. */
-                      picker={<AgentPicker models={models} coding={!generalOnly} model={run.model}
-                          brains={brainList} brainModels={brainModels} brain={run.brain || ""}
-                          generalBrains={generalBrains} brainsRead={agentsRead} codingReady={codingReady} pick={run.pick || ""}
-                          browser={String(t?.Tags || "").split(/[\s,]+/).includes(BROWSER_TAG)}
-                          onPick={(p) => setRun((r) => ({ ...r, pick: p }))}
-                          onBrain={(b) => setRun((r) => ({ ...r, brain: b, model: "" }))}
-                          onModel={(m) => setRun((r) => ({ ...r, model: m }))} size={28} />}
-                      actions={<>
-                        {!generalOnly && <span title={runWhy(true) || undefined}><Button size="small" variant="contained" disableElevation
-                          disabled={!!startingAgent || runPics.busy || !agentsRead || !!runWhy(true)}
-                          startIcon={startingAgent === "coding" ? <CircularProgress size={11} /> : <TerminalIcon sx={{ fontSize: 14 }} />}
-                          data-tq-agent-start="coding" onClick={startCodingAgent}>
-                          {startingAgent === "coding" ? "Starting…" : btn("coding_agent")}
-                        </Button></span>}
-                        {/* NO REPOSITORY CHOSEN IS NO HOLD (the owner, 2026-11-06): the agent picks it once it starts (use_repo) - the
-                            RepoSelect below still pins one first when the owner chooses */}
-                        {/* it SWITCHES the row rather than dispatching on the spot: the pickers above
-                            become the brain and model, and the next press starts it */}
-                        {!generalOnly && <Button size="small" variant="outlined" disabled={!!startingAgent}
-                          startIcon={<TaskuaryMark size={13} />}
-                          onClick={() => { setHandOff(true); setRun((r) => ({ ...r, agent: "", pick: "", model: "" })); }}>{choice("agent", "regular_agent")}</Button>}
-                        {generalOnly && <span title={noAiWhy || undefined}><Button size="small" variant="contained" disableElevation
-                          disabled={!!startingAgent || runPics.busy || !!noAiWhy}
-                          startIcon={startingAgent === "general" || startingAgent === "step" ? <CircularProgress size={11} /> : <TaskuaryMark size={13} />}
-                          data-tq-agent-start="general" onClick={goalRun ? startGoalStep : startGeneralAgent}>
-                          {startingAgent === "general" || startingAgent === "step" ? "Starting…" : btn("regular_agent")}
-                        </Button></span>}
-                        {/* ...and the coding agent is one press away from a hand-off, never chosen for the owner */}
-                        {handOff && canCode && !goalRun && <Button size="small" variant="outlined" disabled={!!startingAgent}
-                          startIcon={<TerminalIcon sx={{ fontSize: 14 }} />}
-                          onClick={() => { setHandOff(false); setRun((r) => ({ ...r, agent: codingAgent(agents, kinds), pick: "", model: "" })); }}>{choice("agent", "coding_agent")}</Button>}
-                        {(restartOpen || report || detail?.transcript) && <Button size="small" variant="text"
-                          onClick={() => setRestartOpen(false)}>Cancel</Button>}
-                      </>}>
-                      {!generalOnly && <RepoSelect taskId={selected} agent={run.agent} instruction={run.instruction}
-                        value={startRepo} onChange={setStartRepo} />}
-                    </RunForm>
-  );
-  // IN THE AGENT BOX, NOT UNDER THE CONVERSATION (the owner, 2026-10-22: "you can't tell it opened up on bottom ... show up in the
-  // agent box ... like we had originally"): the card under the table opened out of sight; the form sits in the work column and is
-  // brought into view when it opens
-  // ...and its words box takes the cursor, every time a door opens it (boxAt) - a second press found it open and did nothing
-  // ...the pane's Continue card the same: its section opens, the card in view, its words box taking the cursor; a Continue the Assistant
-  // lit for this task (AssistantView, tq-continue-here) is claimed here, with its notes
-  useEffect(() => {
-    if (!continueCard) return undefined;
-    if (twoUp) openSection("agent");
-    const f = requestAnimationFrame(() => {
-      const el = document.querySelector("[data-tq-continue-pane]");
-      el?.scrollIntoView({ block: "nearest", behavior: "smooth" }); el?.querySelector("textarea")?.focus({ preventScroll: true });
-    });
-    return () => cancelAnimationFrame(f);
-  }, [continueCard]);   // eslint-disable-line react-hooks/exhaustive-deps
   // A TASK IS NEVER ITS HEAD OVER NOTHING (the nothing-above run, 2026-11-18: New's first task drew its head over an empty room for ~337 ms
   // while the chat's own code was still coming): the task is drawn once its chat can be, the loading card with its title until then
   const [chatIn, setChatIn] = useState(() => GeneralWorkspace.ready());
   useEffect(() => { if (!chatIn) GeneralWorkspace.load().then(() => setChatIn(true), () => setChatIn(true)); }, [chatIn]);
   const claimRef = useRef(null);
-  claimRef.current = canvas && active && t && !sessionView ? (d) => { if (Number(d?.tid) !== Number(selected)) return false; setRestartOpen(false); if (chatPane) intoChat(d.note); else setContinueCard({ note: d.note || "" }); return true; } : null;
+  claimRef.current = canvas && active && t && !sessionView ? (d) => { if (Number(d?.tid) !== Number(selected)) return false; intoChat(d.note); return true; } : null;
   useEffect(() => {
     const on = (e) => { if (claimRef.current?.(e.detail)) e.detail.claim?.(); };
     window.addEventListener("tq-continue-here", on);
     return () => window.removeEventListener("tq-continue-here", on);
   }, []);
-  useEffect(() => { setContinueCard(null); }, [selected]);
-  // ...and the box is in the Agent section: the row's Send to agent opens that section, or the press opened a box
-  // nobody could see (CI, 0.3.9.48 - the drawer stayed shut over it)
-  useEffect(() => {
-    if (!restartOpen) return undefined;
-    setContinueCard(null);                        // one box in the pane at a time
-    if (twoUp) openSection("agent");
-    const f = requestAnimationFrame(() => {
-      const el = document.querySelector("[data-tq-run-form]");
-      el?.scrollIntoView({ block: "nearest", behavior: "smooth" }); el?.querySelector("textarea")?.focus({ preventScroll: true });
-    });
-    return () => cancelAnimationFrame(f);
-  }, [restartOpen, boxAt]);
   // THE ROW'S SEND TO AGENT ON THE CANVAS (AssistantView: an Advisor pick or a chip naming this task) opens this same box, never a start
   useEffect(() => {
     const on = (e) => {
       if (Number(e.detail?.tid) !== Number(selRef.current)) return;
-      if (typeof e.detail?.coding === "boolean" && !t?.DoneWhen) setHandOff(!e.detail.coding || !canCode);
       openBox();
     };
     window.addEventListener("tq-agent-ask", on);
@@ -3001,10 +2616,10 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
                   )}
                   {/* ONE X, TWO STEPS BACK. With the session filling the page, X first steps back to
                       the task behind it - the session keeps running; from the task, X goes to the list.
-                      ...but a CHAT is the task itself (chatPane): stepping back drew the same chat, and "Back to task" did nothing he could
+                      ...but a CHAT is the task itself: stepping back drew the same chat, and "Back to task" did nothing he could
                       see (design round 6, D8, recorded) - its X goes to the list, the agent still at work */}
-                  {(!made || onClose) && <Tooltip title={sessionView && !chatPane ? "Back to the task — the session keeps running" : "Close — back to the list (the task stays)"}>
-                    <IconButton aria-label={sessionView && !chatPane ? "Back to task" : "Close task"} size="small" onClick={() => (sessionView && !chatPane ? setPeek(true) : dismiss())}><CloseIcon sx={{ fontSize: 15 }} /></IconButton>
+                  {(!made || onClose) && <Tooltip title="Close — back to the list (the task stays)">
+                    <IconButton aria-label="Close task" size="small" onClick={dismiss}><CloseIcon sx={{ fontSize: 15 }} /></IconButton>
                   </Tooltip>}
                 </Box>
               </Box>
@@ -3153,7 +2768,7 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
                 {!solo && slot("agent", <Box data-tq-work={twoUp ? "" : undefined} data-tq-agent-section="" role={twoUp ? "region" : undefined} aria-label={twoUp ? "Agent" : undefined}
                   // ...A CHAT IS ONE WIDTH, AT REST AND AT WORK: the section's own room (20px at rest, 8px round a live session) moved the chat 12px
                   // and widened it 24px the moment its agent started, and back when it stopped (sampled every frame, 2026-11-11) - the live room, always
-                  sx={twoUp ? { ...SECTION(isOpen("agent"), openW("agent"), sessionView, liveSession, fades), ...(chatPane ? { pb: 0.25, px: 1, pt: 0.65 } : {}) } : { display: "contents" }}>
+                  sx={twoUp ? { ...SECTION(isOpen("agent"), openW("agent"), sessionView, liveSession, fades), pb: 0.25, px: 1, pt: 0.65 } : { display: "contents" }}>
                 {/* THE SESSION IS THE PAGE. Your CLI, in this task's repo, with the task in
                     its lap - you type into it like any other terminal. Everything below is
                     reference material about the same task, folded away. */}
@@ -3177,205 +2792,6 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
                         onChanged={() => { loadDetail(t.TaskId); loadTasks(); onChanged?.(); }} /></Box>}
                   </Box>
                 )}
-                {/* ONE SHORT LINE, LIVE OR NOT. A running session has always been a single strip -
-                    heading, chip, controls - while the stopped card answered with a heading, a
-                    sentence under it, and a row of buttons under that: three lines for the same
-                    question (the owner, 2026-09-17: keep the stopped header as short as the
-                    one a running agent gets). The bar rides IN the heading now, so
-                    the sentence and the row that held it both go. */}
-                {/* a queued start: what it waits for, or why it could not start - with Start now and Cancel (T10) */}
-                {/* ...the task's own read too: the table opens a task with no list row, and the row lags the task's read (2026-11-04) */}
-                {!liveSession && queuedRow && !chatPane && <Box sx={{ mb: 1 }}>
-                  <QueuedStart taskId={t.TaskId} queued={queuedRow} line={chatPane} onChanged={() => { loadTasks(); loadDetail(t.TaskId); }} />
-                </Box>}
-                {/* ...and NONE OVER A CHAT (the owner, 2026-11-05: "don't like Taskuary answered"): the chat says who said what, its live steps and
-                    clock say it is working, the task header's chip says the state - the line over it was a label, not an action */}
-                {!codeRun && !chatPane && <Box ref={agentHead} data-tq-agent-head="" data-tq-focus={focus === "agent" ? "" : undefined} sx={{ ...card, ...step, mb: liveSession ? 0.55 : 0,
-                  px: liveSession ? 1 : sessionView ? 1.5 : 0, py: liveSession ? 0.55 : shows("agent") ? (agentBar ? 0.8 : 1.5) : 1.1,
-                  ...(sessionView ? {} : { borderTop: 0, pt: 0 }),
-                  flexShrink: 0,
-                  display: liveSession ? "flex" : "block", alignItems: "center",
-                  gap: liveSession ? 1 : 0, flexWrap: "wrap",
-                  /* ...the chat's Full screen keeps its icon alone where the heading has no room for its word (a narrow pane, the owner
-                     2026-11-03): the title is read first; the press, its tooltip and its name stay */
-                  ...(liveSession && inRow ? { containerType: "inline-size", "@container (max-width: 620px)": { "& [data-tq-full-word]": HIDDEN_WORDS,
-                    "& [data-tq-head-tools] .MuiButton-startIcon": { mr: 0 } } } : {}),
-                  ...(focus === "agent" ? { ...FOCUS, ...(chatBelow ? { borderBottom: 0, borderRadius: "10px 10px 0 0", pb: 0.5 } : {}) } : {}) }}>
-                  <Box sx={{ minWidth: 0, flex: liveSession ? "0 1 auto" : "initial" }}>
-                    {/* the agent by NAME, not by which binary is running: "Agent running · <CLI>
-                        · <profile> (your CLI)" named a product and a profile (the owner, 2026-09-08) */}
-                    {/* A LIVE SESSION IS NOT A WORKING ONE. This asked only whether a pty existed,
-                        so the heading read "<agent> is working" directly above its own chip saying
-                        "agent · needs you" - on an agent that had been parked on a question for an
-                        hour (the owner, 2026-09-11, TQ-0499). agentState is the session's own word
-                        (taskLifecycle.agentPhase); the heading now says what the chip says. */}
-                    {/* AN EMPTY AGENT WORK ROW IS QUIET (the owner, 2026-10-25: Agent work stays where it is, the reply is what the eye should
-                        land on): no agent ran, nothing to say - a smaller, dimmer line, the same press opening it */}
-                    <WorkflowHeading number="2" sec={twoUp && !sessionView ? SECTIONS[1] : null} here={hereSec === "agent"} quiet={agentEmpty} title={<span>{!term?.alive ? (chatPane && hasGeneralHistory ? `${agentName(t)} answered` : resultShown ? "Result" : "Agent work")
-                      : answered ? `${agentName(t)} answered`
-                      : agentState === AGENT.waiting ? says(subState(term), agentName(t))   /* asked, approval, stuck (T6) */
-                        : `${agentName(t)} is working`}</span>}
-                    /* ...and the agent's state is the task header's pill alone (StatusPill): its chip here said it a second time, one above
-                       the other, live or stopped (the owner, 2026-11-03) */
-                    chip={resultShown ? shareBadge : null} tone={PALETTE.sage} {...stageProps("agent")}
-                    /* ...in the three sections the one way to the full record is its button under the summary (the owner, 2026-10-27: "why are
-                       there 2 buttons for full results?"): the heading neither folds nor says "Result" there */
-                    {...(twoUp && !sessionView && resultShown ? { onToggle: null, folded: false, sub: "" } : {})}
-                    tools={inRow && workspaceMode === "general" && liveSession
-                      ? <Box ref={setChatTools} data-tq-head-tools="" sx={{ display: "flex", alignItems: "center", gap: 0.8, flexWrap: "nowrap", minWidth: 0 }} /> : null}
-                    /* folded, this heading carried NOTHING - it passed no action at all, so the one
-                       card that can actually be picked back up was the one row you could not act on.
-                       It gets the move that matches its state, the way the Task strip does. */
-                    action={inRow ? null
-                      : shows("agent") && agentBar ? agentBarRow :
-                      !shows("agent") && !term?.alive && !["done", "dropped"].includes(t.Status)
-                      ? <Box onClick={(e) => e.stopPropagation()} sx={{ display: "flex", alignItems: "center", gap: 0.35 }}>
-                          {/* a regular agent's conversation is continued too - "Start an agent" read as starting over (T15) */}
-                          {detail?.resumable || (isGeneral && generalStarted) ? (
-                            <Button size="small" variant="contained" disableElevation disabled={!!startingAgent}
-                              sx={{ fontSize: 11, minHeight: 26, py: 0, px: 1.25 }}
-                              startIcon={startingAgent === "resume" ? <CircularProgress size={11} /> : <HistoryIcon sx={{ fontSize: 14 }} />}
-                              title={detail?.resumable ? `Reopens ${detail.resumable.agent}'s own session in ${detail.resumable.cwd}.` : "Picks its conversation back up."}
-                              onClick={continuePress}>{continueWord}</Button>
-                          ) : (
-                            <Button size="small" variant="contained" disableElevation
-                              sx={{ fontSize: 11, minHeight: 26, py: 0, px: 1.25 }}
-                              startIcon={<TerminalIcon sx={{ fontSize: 14 }} />}
-                              title="Opens the agent step so you can choose the agent and add instructions."
-                              onClick={() => setOpenStage("agent")}>
-                              {report || detail?.transcript ? labelOfRow("run-another") : labelOfRow("start-agent")}</Button>
-                          )}
-                        </Box>
-                      : null} />
-                  </Box>
-                  {/* ...THE NEW STEP'S BOX FIRST (the owner, 2026-10-29): Send to agent's, Run another agent's and Continue's box stand at the top of
-                      the Agent pane, under its strip, and the last run's report below it - not past it, a scroll away */}
-                  {twoUp && newStep()}
-                  {/* folded with no record, the step says its one sentence; open with none, the story is the whole account (storyPlace) */}
-                  {(storyAt === "line" || storyAt === "story") && <AgentStory story={story} compact={storyAt === "line"} onTrust={trustPress} trusting={trusting} />}
-                  {/* ...folded over a record, its sentence and what happened - the draft it wrote opens below it (2026-09-22) */}
-                  {storyAt === "summary" && !resultShown && !chatPane && <AgentRecord {...recordProps} story={story} folded />}
-                  {resultRest && !sessionView && !chatPane && <ResultSummary taskId={selected} stamp={recordProps.stamp} said={story?.said || ""} ended={story?.kind === "interrupted" ? story.line || "" : ""}
-                    pages={(detail?.artifacts || []).filter((a) => isPublished(a) || a.kind === "shown")}
-                    onRecord={twoUp ? () => { if (!shows("agent")) setOpenStage("agent"); setResultOpen(true); } : null} />}
-                  {/* ...and the page its browser last stood on: the view outlives the session, under whichever way the ended agent is shown
-                      (BrowserPane.LastView, the owner 2026-10-28) - but not in a chat task, whose answer is in the chat (the owner, 2026-11-05:
-                      "for browser we don't really want to show it unless they need login") */}
-                  {workspaceMode === "general" && !sessionView && !term?.alive && !chatPane && <Box sx={{ mt: 1, "&:empty": { display: "none" } }}><LastView taskId={t.TaskId} narrow={narrow} /></Box>}
-                  {/* ...opened, one press back to the result */}
-                  {resultShown && !failedRun && !sessionView && twoUp && !resultRest && !chatPane && <Box sx={{ mt: 1.5 }}><Button size="small" variant="outlined"
-                    data-tq-full-result="" aria-expanded="true" onClick={() => setResultOpen(false)}
-                    sx={{ borderRadius: 999, px: 2, fontSize: 13, fontWeight: 600, textTransform: "none", color: INK, borderColor: "var(--tq-border, #c9c3b8)" }}>
-                    ‹ Back to the result</Button></Box>}
-                  {lineAt === "top" && <WriteupLine view={writeup} hasReply={!!replyMessage} />}
-                  {shows("agent") && <>
-                  {/* WHO CLOSED IT AND WHY, one plain line over its work (the owner, 2026-10-21: "I have no idea what the agent did
-                      and why it closed"): the agent's own done sentence, else its report's first line (server taskstate.closed_why) */}
-                  {/* AN AGENT CLOSED IT: nothing waits on you (the redesign, owner-approved 2026-10-21) - said first, over who closed it and why */}
-                  {/* ...never on a chat task (the owner, 2026-11-05: "Don't want the top line nothing to do here"): the agent says it in the chat */}
-                  {!chatPane && !term?.alive && t?.Status === "done" && rowState === "agentdone" && (
-                    <Typography data-tq-handled="" sx={{ color: "var(--tq-success, #47654a)", fontSize: 13, fontWeight: 600, mt: 0.9 }}>Nothing to do. It's handled.</Typography>)}
-                  {!chatPane && !term?.alive && t?.Status === "done" && detail?.closedWhy && (
-                    <Typography data-tq-closed-why="" sx={{ color: INK, fontSize: 12.5, lineHeight: 1.45, mt: 0.9 }}>{detail.closedWhy}</Typography>)}
-                  {/* ...and the note it was closed with, one muted line, whole on hover: opened later on its work, the note stood only in a
-                      folded section (the owner, 2026-10-23: "write on it marked done with note") */}
-                  {!term?.alive && t?.Status === "done" && !detail?.closedWhy && !!closedNote && (
-                    <Typography data-tq-closed-note="" noWrap title={closedNote} sx={{ color: DIM, fontSize: 12.5, mt: 0.9 }}>
-                      ✓ {btn("close_note")}: {closedNote}</Typography>)}
-                  {term?.alive && !inRow && (
-                    // on a phone the two buttons take their own row: sharing one with the heading, they
-                    // stacked over the "agent · needs you" chip (2026-09-20)
-                    <Box sx={{ display: "flex", alignItems: "center", justifyContent: "flex-end",
-                      gap: 0.35, flexWrap: "wrap", flex: { xs: "1 0 100%", sm: 1 }, minWidth: 0, mt: liveSession ? { xs: 0.5, sm: 0 } : 1 }}>
-                      {/* A LIVE SESSION HAS NO PRIMARY. "Answer agent" / "Give new prompt" opened a
-                          Dialog whose whole body was the SAME TellAgent that was then inline under
-                          the terminal - a modal copy of a control on the page (the owner, 2026-09-16:
-                          "answer agent really does nothing, it's just type into the prompt window").
-                          While an agent is working the next move is typing, so nothing here is filled;
-                          the notification stays on the chip and beside the waiting room. */}
-                      {liveCodingSession && <Button size="small" variant="outlined" sx={liveCtl} startIcon={<DifferenceIcon sx={{ fontSize: 13 }} />}
-                        title="A viewer of the agent's diff. Nothing is approved or committed here."
-                        onClick={() => setDiffOpen(true)}>{labelOfRow("diff")}</Button>}
-                      {/* NO STOP AND SAVE BESIDE THE CHAT (the owner, 2026-11-10: "no need for stop and save button"): the x on the running
-                          turn stops the agent, and typing carries the work on */}
-                      {/* A STUCK AGENT (a rate limit, a token ceiling) had only the two moves above, and neither gets the work done:
-                          the way on is another agent - startCodingAgent pauses this one and files its handover first */}
-                      {!isGeneral && agentState === AGENT.waiting && subState(term) === "stalled" && (
-                        <Button size="small" variant="contained" disableElevation sx={liveCtl} startIcon={<RefreshIcon sx={{ fontSize: 13 }} />}
-                          title="Pauses this one (its notes are kept) and starts a fresh agent - you choose which."
-                          onClick={() => setRestartOpen(true)}>{labelOfRow("run-another")}</Button>
-                      )}
-                    </Box>
-                  )}
-                  {/* WHAT THE AGENT DID AND THOUGHT, one card for every CLI and the general agent (AgentRecord): what happened,
-                      its last message (named the reply only when the draft is in it), what it made, and every step behind one button. It was
-                      two blocks (a saved answer with no report, or the report) reading two different stores. */}
-                  {/* ...and a session that ENDED is this one block too - its state, what happened, More - where a "Session closed"
-                      card under the step told the same run a second time, and the story above it a third (the owner, 2026-10-12) */}
-                  {!sessionView && hasRecord && !resultRest && !chatPane && (() => {
-                    // A RESULT'S DIFF IS FOLDED (the task-view cleanup, owner-approved 2026-10-25): "N files changed +a −b · Show diff" in What
-                    // it made, so the chat's cards stay on screen at a laptop - the raw diff pushed it under the dock. Once the card is 1200px wide
-                    // the diff stands open beside the report instead, where the room is
-                    const foldDiff = !!diffRun && resultShown;
-                    const record = (
-                      <Box sx={{ mt: 1.25, "&:empty": { display: "none" }, ...(foldDiff ? { "@container (min-width: 1200px)": { display: "grid",
-                        gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)", columnGap: 2, alignItems: "start",
-                        "& [data-tq-diff-toggle]": { display: "none" }, "& > [data-tq-diff]": { display: "block", mt: 0 } } } : {}) }}>
-                        {/* a chat shows its pages under the answer that made them; a terminal's are kept here */}
-                        <AgentRecord {...recordProps} story={storyAt === "record" ? story : null} inChat={workspaceMode === "general"}
-                          result={resultShown} diff={diffRun ? diffStat(diffRun.DiffText) : null} bare={focus === "agent"}
-                          diffOpen={diffShown} onDiff={foldDiff ? () => setDiffShown((v) => !v) : null} />
-                        {diffRun && <Box data-tq-diff="" sx={{ mt: 0.75, display: foldDiff && !diffShown ? "none" : "block" }}><DiffBlock text={diffRun.DiffText} /></Box>}
-                        {lineAt === "record" && <WriteupLine view={writeup} hasReply={!!replyMessage} />}
-                      </Box>
-                    );
-                    // the sender wrote again since: every run is history, never the page's lead - each one line, newest first, that opens in
-                    // place (EarlierRuns, 2026-10-29), where the whole record was one fold; the diff it left stays one fold under them
-                    return news ? <Box data-tq-earlier-session="" sx={{ mt: 1 }}><AgentRecord {...recordProps} history title="Before they wrote again" />
-                      {diffRun && <Fold title="The diff it left"><DiffBlock text={diffRun.DiffText} /></Fold>}</Box> : record;
-                  })()}
-                  {/* A FAILED GENERAL RUN IS ITS REASON AND ITS FIX (trust audit S1, 2026-10-28): the conversation under the reason said it twice -
-                      it is one quiet link, the Result's own (ResultSummary), and one press back */}
-                  {/* ...its fix under the reason: the chat's own Try again went with the chat (on the row it may fold into its menu) */}
-                  {/* ...and never a Try again on a chat task (the owner, 2026-11-05: "what is this garbage try again button? never want to see
-                      that"): what is typed is the retry - only a fix it cannot do without (Connect an AI) is offered */}
-                  {failedRun && isGeneral && !resultOpen && !sessionView && (runFix || (canContinue && !chatPane)) && (
-                    <Box data-tq-failed-fix="" sx={{ mt: 1, display: "flex", gap: 0.75, flexWrap: "wrap" }}>
-                      {runFix ? <Button size="small" variant="contained" disableElevation sx={primaryBtn} data-tq-run-fix="" onClick={() => openAppLink(runFix.href)}>{runFix.label}</Button>
-                        : <span title={noAiWhy || undefined}><Button size="small" variant="contained" disableElevation sx={primaryBtn} disabled={!!startingAgent || !!noAiWhy}
-                            startIcon={startingAgent === "resume" ? <CircularProgress size={12} /> : <RefreshIcon sx={{ fontSize: 16 }} />}
-                            title={noAiWhy || btnHint("try_again")} onClick={continuePress}>{continueWord}</Button></span>}
-                    </Box>)}
-                  {failedRun && isGeneral && hasGeneralHistory && !sessionView && !chatPane && (
-                    <Box sx={{ mt: 0.75 }}><Button size="small" data-tq-full-result="" aria-expanded={resultOpen ? "true" : "false"}
-                      onClick={() => { if (!resultOpen && !shows("agent")) setOpenStage("agent"); setResultOpen(!resultOpen); }}
-                      sx={{ fontSize: 11, minHeight: 0, p: 0, minWidth: 0, textAlign: "left" }}>
-                      {resultOpen ? "‹ Hide the conversation" : "The whole conversation ›"}</Button></Box>)}
-                  {!twoUp && newStep()}
-                  {/* folded onto the live bar these facts share a ROW with the controls, where a
-                      rule above them is stray chrome - they get a rule beside them instead, so the
-                      pills you press and the pills you read are two groups and not five in a line */}
-                  {(term?.alive || report || detail?.transcript) && !restartOpen && !(twoUp && resultRest) && (factBrain || repoOf(t)) && (
-                    <Box sx={{ display: "flex", alignItems: "center", gap: 0.7, flexWrap: "wrap",
-                      ...(liveSession
-                        ? { ml: 0.9, pl: 1.1, borderLeft: `1px solid ${BORDER}`, flexShrink: 0 }
-                        : { mt: 1.25 }) }}>
-                      {/* plain words on the facts (the audit, 2026-10-17): "role" and "brain" were the app's own vocabulary */}
-                      {factBrain && <Box sx={{ ...chipBtnStatic }}
-                        title={(factBrain === detail?.ranOn?.brain ? "The AI that did this work. Which AI the agents use is set in Settings, not per task."
-                          : "The AI that does the work. Which AI the agents use is set in Settings, not per task.")
-                          + (detail?.routeWhy ? ` Last AI call: ${detail.routeWhy}` : "")}>
-                        <Box component="span" sx={{ color: FAINT, fontWeight: 600 }}>AI</Box>&nbsp;{factBrain}</Box>}
-                      {/* the repository pill only where a coding tool is connected (B3) */}
-                      {!isGeneral && canCode && <Button size="small" variant="outlined" sx={chipBtn}
-                        startIcon={<AccountTreeIcon sx={{ fontSize: 14, color: "var(--tq-link, #55697a)" }} />}
-                        title={heldRepo ? heldWhy : btnHint("pick_repo")}
-                        onClick={pickRepo}>{repoOf(t) || PICK_CODE.toLowerCase()}</Button>}
-                      {!isGeneral && canCode && heldRepo && !repoOf(t) && <Typography variant="caption" sx={{ color: "var(--tq-danger, #6b2733)", fontWeight: 600 }}>not started - {PICK_CODE.toLowerCase()}</Typography>}
-                    </Box>
-                  )}
-                  </>}
-                </Box>}
                 {repoPick && (
                   <Box data-tq-repo-picker="" sx={{ ...card, mb: 1, bgcolor: PANEL2 }}>
                     <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.75 }}>
@@ -3403,7 +2819,7 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
                 {/* ...while its session is live, or when you open Agent work yourself: drawn whenever the task had a chat, it
                     stayed on screen after End session with the reply folded under it, where a coding session's terminal goes
                     (the owner, 2026-10-13: "it should just move to the close out section when you close out agent run") */}
-                {workspaceMode === "general" && (liveSession || shows("agent")) ? (
+                {(liveSession || shows("agent")) && (
                   /* the chat is this task's session: it gets the room a terminal gets, not the
                      height of its own content squeezed between the cards above and below it. On the canvas that room is the
                      VIEW'S: the chat body is a size container (assistantView.css .tq-chat-body) and the view is 100cqh + 14px tall,
@@ -3417,32 +2833,22 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
                      well (CanvasItem keeps the whole height only for data-tq-agent-room="live") */
                   /* ...AND A CHAT TASK'S CHAT IS A PANE AT REST TOO ("chat"): its box stays on screen under the newest turn, as any chat app's,
                      never a scroll below a chat as tall as its words (the owner, 2026-11-04: "where is the prompt box") */
-                  <Box data-tq-agent-room={liveSession ? "live" : chatPane ? "chat" : "rest"} sx={liveSession || chatPane ? { flex: "1 1 0", minHeight: canvas ? "max(240px, calc(100cqh - 113px))" : { xs: 360, md: 420 }, mb: canvas && !chatPane ? 1 : 0,
-                    display: "flex", flexDirection: "column", "& > *": { flex: 1, minHeight: 0 },
-                    // ...except while its agent is starting and has said nothing: the room is that one line (GeneralWorkspace `quiet`) - never
-                    // a chat task's chat, whose box stays at the card's foot from the first second (the stress run, 2026-11-05: 485px empty under it)
-                    ...(!chatPane ? { "&:has([data-tq-starting])": { flex: "0 0 auto", minHeight: 0, "& > *": { flex: "0 0 auto" } } } : {}) }
-                    : { flex: "0 0 auto", mb: canvas ? 1 : 0, display: "flex", flexDirection: "column", "& > *": { flex: "0 0 auto" },
-                      ...(chatBelow ? { bgcolor: "var(--tq-panel, #fff)", border: `1px solid ${FOCUS_EDGE}`, borderTop: 0, borderRadius: "0 0 10px 10px", overflow: "hidden" } : {}),
-                      // ...a finished agent's chat is the rest of its Result, behind the Result heading while the Result rests on its summary
-                      // (the owner, 2026-10-27) - unless it holds a question the agent is waiting on you for, which is the move itself
-                      // ...or that is at work again - a turn under way is the move, never a rest (2026-10-28, CI: a working agent's chat stood hidden)
-                      // ...or holds a draft waiting for its Send
-                      ...(!chatPane && (resultRest || (failedRun && !resultOpen)) ? { "&:not(:has([data-tq-asking], [data-tq-agent-notice], .tq-aui-thinking, .tq-aui-thread [data-tq-working], [data-tq-waits], [data-tq-on-you]))": { display: "none" } } : {}) }}>
+                  <Box data-tq-agent-room={liveSession ? "live" : "chat"} sx={{ flex: "1 1 0", minHeight: canvas ? "max(240px, calc(100cqh - 113px))" : { xs: 360, md: 420 }, mb: 0,
+                    display: "flex", flexDirection: "column", "& > *": { flex: 1, minHeight: 0 } }}>
                     <React.Suspense fallback={<Box sx={{ flex: 1, display: "grid", placeItems: "center" }}><CircularProgress size={22} /></Box>}>
                       {/* ONE CHAT FOR EVERY KIND (the owner, 2026-11-06: "one shared chat object for coding and regular"): the component reads its own
                           source (chatStream.chatSource) - a coding task's sessions, or the general agent's conversation - and the branch's landing
                           card joins it wherever the task works in a checkout */}
-                      <GeneralWorkspace key={`${t.TaskId}-${generalRevision}`} task={t} compact onSession={generalSession} reread={chatRead} trustOnRow={!watching}
-                        queued={chatPane && !liveSession && queuedRow && !queuedRow.retryTurn ? <QueuedStart taskId={t.TaskId} queued={queuedRow} line onChanged={() => { loadTasks(); loadDetail(t.TaskId); }} /> : null}
+                      <GeneralWorkspace key={t.TaskId} task={t} compact onSession={generalSession} reread={chatRead} trustOnRow={!watching}
+                        queued={!liveSession && queuedRow && !queuedRow.retryTurn ? <QueuedStart taskId={t.TaskId} queued={queuedRow} line onChanged={() => { loadTasks(); loadDetail(t.TaskId); }} /> : null}
                         stopTries={queuedRow?.retryTurn ? () => api.delete(`/api/tasks/${t.TaskId}/dispatch`).then(() => { loadTasks(); loadDetail(t.TaskId); }).catch(() => {}) : null}
                         liveSid={term?.alive && term.mode === "assistant" ? term.sid : ""}
                         mails={storedMessages} reviews={detail?.reviews || []} checklist={detail?.checklist || null} next={chatCards}
                         onAnswered={() => { findTerm(selected); loadTasks(); loadDetail(selected); onChanged?.(); }}
-                        toolsAt={canvas ? chatTools : null} noAiSaid={!notDone || (failedRun && runFix?.href === place("ai").href)} noTools={!liveSession} noComposer={isGeneral && continueHere && !chatPane} chat={home}
-                        opening={agentOpening} seed={chatPane ? chatSeed : null}
-                        came={home ? { label: cameChip(sourceMessage) || (sources.length ? cameFromLabel(sources) : fromWorkflow ? `Routine · ${fromWorkflow.title}` : made?.came || "Came from"),
-                          title: "Where this came from - opens it", onOpen: twoUp ? () => openSection("from") : null } : null}
+                        noAiSaid={!notDone || (failedRun && runFix?.href === place("ai").href)} noTools={!liveSession} chat
+                        opening={agentOpening} seed={chatSeed}
+                        came={{ label: cameChip(sourceMessage) || (sources.length ? cameFromLabel(sources) : fromWorkflow ? `Routine · ${fromWorkflow.title}` : made?.came || "Came from"),
+                          title: "Where this came from - opens it", onOpen: twoUp ? () => openSection("from") : null }}
                         closedLine={closedSaid} term={term}
                         turnCards={made ? [{ key: MADE_RUN, rid: MADE_RUN, node: made.turn }] : turnCards} made={made}
                         landing={detail?.checkout && <LandingCard key={`land-${t.TaskId}`} taskId={t.TaskId} inChat
@@ -3450,9 +2856,7 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
                         onChanged={() => { findTerm(selected); loadDetail(selected); onChanged?.(); }} />
                     </React.Suspense>
                   </Box>
-                ) : workspaceMode === "wrapping" ? (
-                  <ClosingCard mode={wrapping} />
-                ) : null}
+                )}
                 {/* runs from before sessions (and any API-driven run) keep their trace here */}
                 {!sessionView && detail.runs.length > 0 && (
                   <Fold title={`Run traces · ${detail.runs.length}`}>
@@ -3589,7 +2993,6 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
       {shareMenu}
       {t && <EmailSomeone open={emailOpen} task={t} detail={detail} onClose={() => setEmailOpen(false)}
         onDrafted={() => { setEmailOpen(false); loadDetail(selected); loadTasks(); onChanged?.(); setOpenStage("reply"); }} />}
-      {t && <ContinueBox task={t} anchor={continueAt} asked={leftAsking} signin={(!term?.alive && detail?.leftSignin) || ""} onClose={() => setContinueAt(null)} onDone={continued} />}
       {t && <CloseNote anchor={noteAt} taskRef={t.ref || ""} onClose={() => setNoteAtRaw(null)} onSubmit={closeWithNote} />}
       {t && <RemindPicker task={t} anchor={remindAt} onClose={() => setRemindAt(null)} onDone={reminded} act={remindAct} onLeave={onLeave} onStay={onStay}
         said={remindSaid} />}
@@ -3614,42 +3017,5 @@ const Fold = ({ title, children }) => (
   </Box>
 );
 
-// ONE ROW ON A DESKTOP, TWO ON A PHONE. The bar is flexShrink: 0 so it never loses a button, which
-// at 390px meant it kept its width by sitting ON the title ("A… w…" under the continue button,
-// the save button cut off at the card's edge, 2026-09-18). Below sm the bar takes the whole next line.
-// `quiet`: a step with nothing in it - smaller and dimmer, so the step that holds the move is the one read (2026-10-25)
-// `sec`: the section it heads in the desk's three (2026-10-27) - then its line is the sections' one style (SectionHead): "2 · AGENT", one dim
-// descriptor (its own title where that is not the section's name, its description), "up to here" where the task is
 // THE REPLY THAT JUST WENT, where its draft stood (TaskPage sentHere): its card, pressed - SentCard
 
-const WorkflowHeading = ({ number, title, description, chip, tone, folded, onToggle, action, tools, quiet = false, sec = null, here = false, sub = undefined }) => (
-  <Box {...pressable(onToggle)} aria-expanded={onToggle ? !folded : undefined} data-tq-quiet={quiet ? "" : undefined}
-    sx={{ ...FOCUS_RING, display: "flex", alignItems: "center", gap: 1, minWidth: 0, flexWrap: { xs: "wrap", sm: "nowrap" },
-    cursor: onToggle ? "pointer" : "default", opacity: quiet ? 0.6 : 1,
-    "&:hover [data-tq-fold-mark]": onToggle ? { color: INK } : undefined }}>
-    {/* no step number any more: From is a column of its own, not step 1 (the redesign, 2026-10-21) - the tone says whose move it is */}
-    <Box data-tq-step={number} sx={{ width: quiet ? 7 : 9, height: quiet ? 7 : 9, borderRadius: "50%", bgcolor: tone, flexShrink: 0, ...(sec ? { display: "none" } : {}) }} />
-    {sec ? <Box data-tq-section-head="" sx={{ minWidth: 0, flex: 1, display: "flex", alignItems: "baseline", gap: 1.25, flexWrap: "wrap" }}>
-      <Typography sx={{ ...SECTION_NAME, flexShrink: 0, display: "flex", alignItems: "center", gap: 0.25 }}>
-        {sec.name}
-        {onToggle && <ExpandMoreIcon data-tq-fold-mark="" sx={{ fontSize: 16, color: FAINT, flexShrink: 0, transform: folded ? "rotate(-90deg)" : "none", transition: "transform .15s, color .15s" }} />}
-      </Typography>
-    </Box> : <Box sx={{ minWidth: tools ? 72 : 0, flex: tools ? "1 1 auto" : 1 }}>
-      {/* A FOLDED SECTION IS A HEADING OF THE WORK, not a row to press (the owner, 2026-10-27: "on the task there is a Close out button, but
-          I thought it's a sidebar thing that pulls out?"): faded, with its arrow at the far edge, folded Close out read as a stray button
-          under the Result. It wears the open heading's own weight now, its fold mark beside its name */}
-      {/* ...beside the chat's own controls it is one line that ends in … (the owner, 2026-11-03: "Tasku… / answ…" under the brain picker): the
-          controls give way first (GeneralWorkspace), and nothing beside it folds */}
-      <Typography data-tq-head-title="" sx={{ color: quiet ? DIM : INK, fontSize: quiet ? 12.5 : 14, fontWeight: 600, lineHeight: 1.3, display: "flex", alignItems: "center", gap: 0.25,
-        ...(tools ? { display: "block", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } : {}) }}>
-        {title}
-        {onToggle && <ExpandMoreIcon data-tq-fold-mark="" sx={{ fontSize: 18, color: FAINT, flexShrink: 0, transform: folded ? "rotate(-90deg)" : "none", transition: "transform .15s, color .15s" }} />}
-      </Typography>
-      {description && !folded && <Typography sx={{ color: FAINT, fontSize: 12, display: "block", lineHeight: 1.4 }}>{description}</Typography>}
-    </Box>}
-    {/* the one action a stage cannot afford to hide when it folds. Its click is its own, not the fold's. */}
-    {action && <Box onClick={(e) => e.stopPropagation()} sx={{ display: "flex", flexShrink: 0, flexBasis: { xs: "100%", sm: "auto" }, order: { xs: 9, sm: 0 } }}>{action}</Box>}
-    {tools && <Box onClick={(e) => e.stopPropagation()} sx={{ display: "flex", flexShrink: 1, minWidth: 0 }}>{tools}</Box>}
-    {chip && <Box data-tq-head-chip="" sx={{ display: "flex", flexShrink: 0 }}>{chip}</Box>}
-  </Box>
-);

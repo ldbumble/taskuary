@@ -8,8 +8,7 @@ import AccountTreeIcon from "@mui/icons-material/AccountTree";
 import CheckIcon from "@mui/icons-material/Check";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import api from "./api";
-import { namedRepo } from "./repoNames.js";
-import { ACCENT, PANEL, PANEL2, BORDER, DIM, FAINT, INK, mono } from "./theme.jsx";
+import { ACCENT, PANEL, BORDER, DIM, FAINT, INK, mono } from "./theme.jsx";
 import { openAppLink } from "./appLinks.js";
 import { LOCAL, place } from "./words.js";
 
@@ -150,45 +149,3 @@ export const RepoPicker = ({ taskId, agent = "", hasSession, onDone }) => {
   );
 };
 
-// THE REPOSITORY, CHOSEN BEFORE START. The Start panel said nothing about where a session would open, and the
-// picker above only appeared once a start had already failed or guessed (the owner, 2026-09-24: "when i hit start
-// coding agent then the repo picker showed up, but it should be there always"). This is that choice as a
-// dropdown beside the brain: the repository the instruction NAMES ("check this in ledger") first, else the one
-// pinned on the task, else what the task itself says - and the parent pins the choice before it starts the session. Left
-// empty, the agent picks it (use_repo).
-export { namedRepo };   // now in repoNames.js, so the New card's picker and a test can import it without JSX
-
-export const RepoSelect = ({ taskId, agent = "", instruction = "", value, onChange }) => {
-  const [data, setData] = useState(null);
-  const [manual, setManual] = useState(false);
-  useEffect(() => {
-    let live = true; setData(null); setManual(false);
-    api.get(`/api/tasks/${taskId}/repos`, { params: agent ? { agent } : {} }).then(({ data: d }) => live && setData(d)).catch(() => live && setData({ data: [] }));
-    return () => { live = false; };
-  }, [taskId, agent]);
-  const rows = data?.data || [];
-  const tagged = rows.find((r) => r.tagged)?.repo || "";
-  const suggested = namedRepo(rows, instruction) || tagged || (data?.picked && data.picked !== NO_REPO ? data.picked : "");
-  // follow the words until the owner picks by hand; a hand pick stays
-  useEffect(() => { if (data && !manual && suggested !== value) onChange?.(suggested); }, [data, suggested, manual]);   // eslint-disable-line react-hooks/exhaustive-deps
-  if (!data || !rows.length) return null;
-  const row = rows.find((r) => r.repo === value);
-  return (
-    <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, flexWrap: "wrap", mt: 0.75 }}>
-      <AccountTreeIcon sx={{ fontSize: 15, color: DIM }} />
-      <Typography variant="caption" sx={{ color: DIM, fontWeight: 600 }}>code</Typography>
-      <select className="tq-start-repo" aria-label="which code" value={value || ""} onChange={(e) => { setManual(true); onChange?.(e.target.value); }}
-        style={{ fontSize: 12.5, padding: "4px 6px", borderRadius: 6, border: `1px solid ${BORDER}`, background: "var(--tq-panel, #fff)", color: INK, minWidth: 220 }}>
-        {!value && <option value="">the agent picks…</option>}
-        {rows.map((r) => <option key={r.repo} value={r.repo}>{r.repo}{r.has_path ? "" : ` (not ${LOCAL})`}</option>)}
-      </select>
-      <Typography variant="caption" sx={{ color: FAINT }}>
-        {!value ? "the agent picks it when it starts - or choose one"
-          : value === namedRepo(rows, instruction) ? "named in your instruction"
-          : value === tagged ? "pinned on this task"
-          : manual ? "your choice" : (data.why || "from the task")}
-        {row && !row.has_path ? " - no local folder yet: you will be asked for it" : ""}
-      </Typography>
-    </Box>
-  );
-};

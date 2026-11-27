@@ -36,8 +36,6 @@ class NoAI(unittest.TestCase):
     def test_start_and_send_to_agent(self): self.refused(self.c.post(f'/api/tasks/{self.tid}/dispatch', json={'kind': 'coding'}))
     def test_run_another_agent(self): self.refused(self.c.post(f'/api/tasks/{self.tid}/dispatch', json={'kind': 'coding', 'fresh': True}))
     def test_continue(self): self.refused(self.c.post(f'/api/tasks/{self.tid}/continue-work', json={'note': 'also the weekly one'}))
-    def test_continue_session(self): self.refused(self.c.post(f'/api/tasks/{self.tid}/continue-session', json={}))
-    def test_continue_with_instruction(self): self.refused(self.c.post(f'/api/tasks/{self.tid}/continue', json={'instruction': 'add a test'}))
 
     def test_the_assistant_and_phone_start(self):
         with self.assertRaises(HTTPException) as e: server.dispatch_task(self.tid, server.DispatchBody(kind='coding'), BackgroundTasks())

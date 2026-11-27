@@ -51,12 +51,10 @@ def test_a_line_that_finds_the_session_ended_starts_it_again_instead_of_being_dr
 def test_a_change_on_the_thread_is_said_plainly_first():
     """The owner, 2026-11-05: "if i respond myself or user in the channel that takes care of the task that should also trigger the chat to
     say i see you responded there. we are good or whatever they feel like is next steps"."""
+    # ...as a fact - that he answered, in his own words; what the agent says of it is its own (the owner, 2026-11-23: the code never tells
+    # an agent how to do its job)
     own = ingest.replan_turn(mail('Done - sent it over this morning.'), own=True)
-    assert 'I see you answered' in own and 'took care of it' in own and 'nothing left' in own
-    assert own.startswith("THE THREAD CHANGED: you already answered")
-    # ...and in the summary too: a chat task draws a turn's summary in place of its words, and the line that said "I see you answered Ray
-    # there" was in the words alone - the re-think read as if it had not seen the owner's reply (the chat-model stress run, 2026-11-05)
-    assert '''Start the summary's "did" with that same line''' in own
+    assert own.startswith("THE THREAD CHANGED: you already answered") and "the owner's own words" in own and 'Done - sent it over' in own
 
 
 def test_two_mails_of_one_poll_go_in_in_the_order_they_came_whichever_thread_wakes_first():

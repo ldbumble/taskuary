@@ -17,6 +17,12 @@ from taskuary import agents, climodels, continuity, hooks, server, terminal, wit
 from taskuary.store import MemoryStore
 
 
+def resume(tid):
+    "server.continue_session - the road Continue (continue-work) takes to reopen the CLI's own conversation - as (status, body)"
+    try: return 200, server.continue_session(tid)
+    except server.HTTPException as e: return e.status_code, {'detail': e.detail}
+
+
 def coding(store, name='claude', cmd='claude'):
     store.upsert_agent(name, 'coding', 'cli', json.dumps({'cmd': cmd, 'args': ['-p']}))
 
@@ -179,7 +185,7 @@ def test_continuing_a_coding_session_reopens_that_conversation_not_a_new_one(tmp
     store.add_transcript(tid, 'pane-1', 'what was on the screen', 'claude', str(tmp_path))
     with mock.patch.object(server, 'store', store), mock.patch.dict(terminal.SESSIONS, {}, clear=True), \
          mock.patch.object(server.hub_term, 'start_on_task', return_value={'sid': 's2'}) as start:
-        out = TestClient(server.app).post(f'/api/tasks/{tid}/continue-session').json()
+        out = resume(tid)[1]
     assert out['resumed'] == 'claude-thread' and out['agent'] == 'claude'
     assert start.call_args.kwargs['resume'] == 'claude-thread'
     assert start.call_args.kwargs['cwd'] == str(tmp_path)
@@ -191,7 +197,7 @@ def test_continuing_a_finished_coding_task_puts_it_back_in_progress(tmp_path):
     store.add_transcript(tid, 'pane-1', 'what was on the screen', 'claude', str(tmp_path))
     with mock.patch.object(server, 'store', store), mock.patch.dict(terminal.SESSIONS, {}, clear=True), \
          mock.patch.object(server.hub_term, 'start_on_task', return_value={'sid': 's2'}):
-        assert TestClient(server.app).post(f'/api/tasks/{tid}/continue-session').status_code == 200
+        assert resume(tid)[0] == 200
     assert store.get_task(tid)['Status'] == 'open'          # by the one rule a typed line reopens a task by (general.reopen, 2026-11-10)
 
 
@@ -201,7 +207,7 @@ def test_a_dismissed_task_is_still_refused(tmp_path):
     store.add_transcript(tid, 'pane-1', 'what was on the screen', 'claude', str(tmp_path))
     with mock.patch.object(server, 'store', store), mock.patch.dict(terminal.SESSIONS, {}, clear=True), \
          mock.patch.object(server.hub_term, 'start_on_task') as start:
-        assert TestClient(server.app).post(f'/api/tasks/{tid}/continue-session').status_code == 409
+        assert resume(tid)[0] == 409
     assert not start.called
 
 
@@ -210,8 +216,8 @@ def test_nothing_saved_refuses_rather_than_quietly_starting_a_fresh_agent(tmp_pa
     store.add_transcript(tid, 'pane-1', 'a session that never bound an id', 'claude', str(tmp_path))
     with mock.patch.object(server, 'store', store), mock.patch.dict(terminal.SESSIONS, {}, clear=True), \
          mock.patch.object(server.hub_term, 'start_on_task') as start:
-        r = TestClient(server.app).post(f'/api/tasks/{tid}/continue-session')
-    assert r.status_code == 409 and 'saved session' in r.json()['detail']
+        code, r = resume(tid)
+    assert code == 409 and 'saved session' in r['detail']
     assert not start.called
 
 
@@ -222,8 +228,8 @@ def test_a_checkout_that_moved_refuses_rather_than_resuming_in_the_wrong_tree(tm
     store.add_transcript(tid, 'pane-1', 'what was on the screen', 'claude', gone)
     with mock.patch.object(server, 'store', store), mock.patch.dict(terminal.SESSIONS, {}, clear=True), \
          mock.patch.object(server.hub_term, 'start_on_task') as start:
-        r = TestClient(server.app).post(f'/api/tasks/{tid}/continue-session')
-    assert r.status_code == 409 and 'no longer exists' in r.json()['detail']
+        code, r = resume(tid)
+    assert code == 409 and 'no longer exists' in r['detail']
     assert not start.called
 
 
@@ -267,7 +273,7 @@ def test_continuing_resumes_on_the_cli_that_made_the_conversation_not_the_defaul
     store = MemoryStore(); coding(store); tid = task(store)
     store.note_session_id(tid, 'pane-1', 'codex-thread', 'claude', str(tmp_path), 'codex')
     with mock.patch.object(server, 'store', store), mock.patch.dict(terminal.SESSIONS, {}, clear=True),          mock.patch.object(server.hub_term, 'start_on_task', return_value={'sid': 's2'}) as start:
-        TestClient(server.app).post(f'/api/tasks/{tid}/continue-session')
+        resume(tid)
     assert (start.call_args.kwargs['resume'], start.call_args.kwargs['brain']) == ('codex-thread', 'codex')
 
 

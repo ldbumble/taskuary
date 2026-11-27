@@ -33,8 +33,7 @@ SCROLLBACK = 200_000
 HOT_S = 30                        # a file touched this recently is "under its hands" (touching)
 ECHO_SECS = 600                   # how long a steer's echo is waited for: it comes when the CLI takes the words in, after the tool at work
 # What a turn under his stop is told (_unanswered): his stop stands - only what he wrote into the stopped turn is answered
-STOPPED_ON = ('The owner stopped your turn. What follows reached you during that turn and you had not answered it. Answer it now, and go back '
-              'to the work you were stopped in only if it asks you to:')
+STOPPED_ON = 'The owner stopped your turn. What follows reached you during that turn, unanswered:'
 _SHELL = re.compile(r'^(bash|powershell|pwsh|shell|execute|terminal|local_shell|exec_command|cmd)$', re.I)
 
 

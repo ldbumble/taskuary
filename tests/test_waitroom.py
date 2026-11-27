@@ -485,10 +485,9 @@ class DripTests(unittest.TestCase):
             while time.time() < end and ('flood 9 of 9' not in t.typed() or t.typing or len(s.waiting_notes(tid)) > 1): time.sleep(.05)
             typed = t.typed()
             for i in range(1, 10): self.assertEqual(typed.count(f'flood {i} of 9'), 1)
-            self.assertEqual(typed.count(' '.join(ingest.REPLAN.split())[:200]), 1)
             self.assertEqual([w['Note'] for w in s.waiting_notes(tid)], ['and rename the flag'])
             # ...and more than one message holds waits whole for the next stop: never cut
-            big = [x for x in ({'WId': i, 'CreatedBy': 'router', 'Note': f'{"word " * 300}{i}\n\n{ingest.REPLAN}'} for i in range(9))]
+            big = [x for x in ({'WId': i, 'CreatedBy': 'router', 'Note': f'{"word " * 300}{i}\n\nA closing every note shares.'} for i in range(9))]
             fit = waitroom.together([], big)
             self.assertEqual(len(waitroom.together([{'Note': 'and the tax line?', 'CreatedBy': 'owner', 'line': 7}], big)), len(fit))      # ...behind a line he typed, too
             self.assertTrue(0 < len(fit) < 9); self.assertLessEqual(len(waitroom.batch(fit, remaining=9 - len(fit))), waitroom.MAX_BATCH - 1)

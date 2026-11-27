@@ -532,7 +532,7 @@ def _task_whole(store, tid: int) -> str:
     if notes:
         out.append('ITS NOTES (oldest first):\n' + '\n'.join(
             f"  {str(c.get('CreatedAt') or '')[:16]} {c.get('Actor') or '?'}: "
-            f"{_cut(c.get('Body'), 1500 if str(c.get('Body') or '').lstrip().startswith(('AGENT REPORT', 'CODER REPORT')) else 300)}" for c in notes))
+            f"{_cut(c.get('Body'), 1500 if str(c.get('Body') or '').lstrip().startswith('AGENT REPORT') else 300)}" for c in notes))
     return _cut('\n'.join(out), 7000)
 
 
@@ -1260,11 +1260,6 @@ PHONE_NEEDS = {'task.set_kind': 'kind', 'task.set_repo': 'repo', 'task.defer': '
 WAITS = 'Nothing happens until you say yes.'
 
 
-def _story(store, t: int):
-    try: return funnel.agent_story(store, t)
-    except Exception: return None
-
-
 def _shows(store, it: dict, b: str, known: dict = None) -> bool:
     """The task page's own button for `b` (buttons.json `row`) is drawn on this item now - the few whose being there turns on state.
     `known`: what the row's reader holds of the task already ({task, story, judged, ended, saved, ai}) and what its other buttons read
@@ -1274,18 +1269,9 @@ def _shows(store, it: dict, b: str, known: dict = None) -> bool:
     tid = it.get('tid')
     task = lambda: once('task', lambda: store.get_task(int(tid)) or {})
     saved = lambda: once('saved', lambda: store.resumable_session(tid))
-    story = lambda: once('story', lambda: _story(store, int(tid)))
     if b == 'reopen': return bool(it.get('closed')) or str(task().get('Status') or '') in ('done', 'dropped')
     if b == 'stop_agent': return _on_task(tid)
-    # the task page draws it only on an open task whose agent failed or whose reader was unsure (brainroute.strong_offered)
-    if b == 'strong_again':
-        from . import brainroute, workerstate
-        return not it.get('closed') and brainroute.strong_offered(task() or None, once('judged', lambda: brainroute.judged(store, int(tid))),
-                                                                  once('ended', lambda: workerstate.ended(store, int(tid))), story())
     if b == 'continue': return bool(saved()) and not _general(store, it)
-    # ...Run another agent only where one ever ran (the owner, 2026-11-09): a task held for a new sender is an agent's, and nothing ran on it
-    if b == 'run_another': return _on_task(tid) or bool(saved() or store.last_transcript(tid) or store.list_runs(int(tid))
-                                                              or (story() or {}).get('kind') not in (None, 'held', 'idle', 'queued', 'none'))
     # ...and Review changes on work left to review after its session is gone (the owner, 2026-11-10: "yes, keep it"): the same fact that lights
     # it (rulebook.changes_waiting), so the lit button always has something to open - the landing card's own diff (TaskPage `diff`)
     if b == 'review_changes':

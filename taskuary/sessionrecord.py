@@ -773,9 +773,9 @@ _REPORT = re.compile(r'^(Determination|Actions|Summary):[ \t]*', re.M)
 
 
 def parse_report(body: str) -> dict:
-    """An AGENT REPORT comment (CODER REPORT on older rows), back into its parts: decided / changed / summary, and the session's LAST MESSAGE.
+    """An AGENT REPORT comment, back into its parts: decided / changed / summary, and the session's LAST MESSAGE.
     A general chat's note is its last answer and nothing else, so it is all `last`."""
-    rep, _, last = re.sub(r'^(AGENT REPORT|CODER REPORT|HANDOVER NOTE)\n?', '', str(body or '')).strip().partition('\n\nLAST MESSAGE\n')
+    rep, _, last = re.sub(r'^(AGENT REPORT|HANDOVER NOTE)\n?', '', str(body or '')).strip().partition('\n\nLAST MESSAGE\n')
     parts = _REPORT.split(rep)
     if len(parts) < 3: return {'last': (last or rep).strip()}
     f = dict(zip(parts[1::2], (x.strip() for x in parts[2::2])))

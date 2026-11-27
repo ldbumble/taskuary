@@ -2081,11 +2081,13 @@ class SQLiteStore:
                 try: c = json.loads(cj or '{}')
                 except ValueError: continue
                 if (n := from_old_rules(c)) != c: self.cx.execute('UPDATE source SET ConfigJson=? WHERE SourceId=?', (json.dumps(n), sid_))
-            # data heal: 'triage' was a fourth Kind the pickers never offered, so those tasks
+            # data heal: 'triage' (and the retired 'research', 'marketing', 'assistant') was a Kind the pickers never offered, so those tasks
             # showed a kind the dropdown could not represent - and every one of them had a
             # coding agent dispatched at it, because the gate was "not a reply" and not the
             # kind itself. They are plain tasks on the owner's list: 'general'.
-            self.cx.execute("UPDATE task SET Kind='general' WHERE Kind='triage'")
+            self.cx.execute("UPDATE task SET Kind='general' WHERE Kind IN ('triage', 'research', 'marketing', 'assistant')")
+            # ...and the agent report's marker from when one profile was special: one marker, so every reader takes one
+            self.cx.execute("UPDATE comment SET Body='AGENT REPORT'||substr(Body, 13) WHERE Body LIKE 'CODER REPORT%'")
             # data heal: timestamps stored as raw ISO/UTC ('...T18:44:00Z') sorted above later
             # local rows and lied about the hour - normalize the survivors once
             for mid, sent in self.cx.execute("SELECT MessageId, SentAt FROM message WHERE SentAt LIKE '%T%'").fetchall():
@@ -4986,7 +4988,7 @@ class SQLiteStore:
             FROM task t
             LEFT JOIN comment c ON c.CommentId=(SELECT MAX(c2.CommentId) FROM comment c2
                 WHERE c2.TaskId=t.TaskId AND (c2.ActorType='assistant_agent'
-                    OR c2.Body LIKE 'HANDOVER NOTE%' OR c2.Body LIKE 'AGENT REPORT%' OR c2.Body LIKE 'CODER REPORT%'))
+                    OR c2.Body LIKE 'HANDOVER NOTE%' OR c2.Body LIKE 'AGENT REPORT%'))
             LEFT JOIN transcript tr ON tr.TranscriptId=(SELECT MAX(tr2.TranscriptId) FROM transcript tr2 WHERE tr2.TaskId=t.TaskId)
             WHERE COALESCE(t.SourceRef,'') NOT IN ('assistant:dock','assistant:concierge')
                 AND (t.Status IN ('open','waiting','in_progress') OR (t.Status='done'

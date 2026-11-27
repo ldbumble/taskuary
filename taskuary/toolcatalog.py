@@ -187,7 +187,7 @@ PURPOSE = {
     'review.each':              ('"approve all the drafts": brings the next draft waiting for a Send up with its Send lit, and says how many '
                                  'are left - each one still goes only by its own press; CALL it again for the one after'),
     'button.light':             ('light any button a row draws, by its name - `button`: the verb (THE BUTTONS BY NAME, or a row\'s own: '
-                                 'review_changes, run_another, attach, pick_repo, change_kind...), `ref` when it is not the row on the table; `note`: a close_note\'s '
+                                 'review_changes, attach, pick_repo, change_kind...), `ref` when it is not the row on the table; `note`: a close_note\'s '
                                  'note, the owner\'s reason in their words. A put-down (close, close_note with its note, remove, not_ours) is pressed'),
     'task.setup':               'open a walk-through with the assistant, for a set-up that needs digging first - `text`; `title`: a few words naming the job for the task list',
     # (the owner, 2026-09-07: "are you adding endpoints for report setup and connector setup and
@@ -467,8 +467,7 @@ CHIP_TOOL = {'defer': 'task.defer', 'continue': 'agent.continue', 'test_connecti
 # ...and the buttons that are the page's alone: each answers the screen it is on, never a sentence (a test holds every
 # button in buttons.json to one of the three)
 PAGE_ONLY = {'new_task': "the page's own New task - the model makes one with task.create_from_text", 'fix': "wears the failure's own fix", 'try_again': 'repeats the press it stands under', 'trust_start': "a refused start's own way on - the owner's word on a stranger, never the model's", 'walk_here': 'the walk handed to a phone chat, brought back to the desk',
-             'review_changes': "opens the agent's diff", 'back': "the walk's step up the list - the row above the one on the table; button.light back brings it up", 'run_another': 'a second agent from the task page',
-             'strong_again': "a failed or unsure agent's re-run on a strong model - the owner's press, never the model's (the router)",
+             'review_changes': "opens the agent's diff", 'back': "the walk's step up the list - the row above the one on the table; button.light back brings it up",
              'new_task': 'the model makes one with task.create_from_text; naming the button too pushed the index over its cap',
              'report_bug': 'a failure the app cannot fix opens the bug report, which the owner reads before it goes',
              'attach': "opens the file picker on the draft - a file is the owner's to choose",

@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { landingTurn } from "./landing.js";
-import { createPortal } from "react-dom";
 import { says, subState } from "./laneSays.js";
 import {
   AssistantRuntimeProvider, ComposerPrimitive, ThreadPrimitive, useLocalRuntime,
@@ -603,7 +602,7 @@ const PendingStrip = ({ items, now = false, later = "", onRetry = null, onDrop =
 </div>; };
 
 function AssistantThread({ task, onAsked, onStop, selectionRef, attachmentsRef, onSent, onClearAttachments, onAttach, onAttachBack, pics = null,
-  prompt, onPromptUsed, name = "Taskuary", asking, onAnswer, drafts = [], acts = [], onDraftDecided, noComposer = false,
+  prompt, onPromptUsed, name = "Taskuary", asking, onAnswer, drafts = [], acts = [], onDraftDecided,
   chat = false, reading = null, came = null, noAi = null, closedLine = "", road = null, cards = null, landing = null, turnCards = null, queued = null, stopTries = null, hold = null, trustOnRow = false, idle = "", onTrusted, hint = "", placeholder = "",
   empty = "", seed = null, list = null, reloadList = null, start = null }) {
   // A TASK'S CHAT DRAWS THE SERVER'S LIST (Conversation) - whatever agent works it; this holds the box, what it sent, and the view's end
@@ -790,10 +789,10 @@ function AssistantThread({ task, onAsked, onStop, selectionRef, attachmentsRef, 
             {/* NO AI: one small line over the box, its Connect an AI beside it (the owner, 2026-11-06) - the box stays the box */}
             {noAi}
             {/* ONE DOOR: while the conversation is open the box is how it goes on, but once a coding run has ENDED on a closed task the bar
-                offers Reopen, then Continue (`noComposer` is that Continue, TaskPage). A CHAT task is typed into to go on, closed or not
+                offers Reopen, then Continue. A CHAT task is typed into to go on, closed or not
                 (server._refuse_closed_chat): the box stays, under "Type to reopen it" */}
             {closedChat && road ? <div className="tq-aui-hint" role="status" style={{ padding: "10px 4px" }}>
-              This task is closed. Press {btn("reopen")}, then {btn("continue")}, to pick the conversation back up.</div> : noComposer ? null : <>
+              This task is closed. Press {btn("reopen")}, then {btn("continue")}, to pick the conversation back up.</div> : <>
             {closedChat && <div className="tq-aui-hint" role="status" data-tq-closed-type="" style={{ padding: "6px 4px 0" }}>This task is closed. Type to reopen it.</div>}
             {/* THE ONE BOX (AgentSummary.OneBox): paperclip, chips, words, mic, Send - the same component as every other box, assistant-ui's
                 composer its root and input. Its files inside it, the one attachment look in one line (the owner, 2026-11-05), and WHERE IT CAME
@@ -817,8 +816,8 @@ function AssistantThread({ task, onAsked, onStop, selectionRef, attachmentsRef, 
   );
 }
 
-export function GeneralWorkspace({ task, onSession, onAnswered, compact = false, toolsAt = null,
-  prompt, onPromptUsed, noAiSaid = false, noTools = false, noComposer = false, liveSid = "", reread = 0, mails = [], reviews = [],
+export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
+  prompt, onPromptUsed, noAiSaid = false, noTools = false, liveSid = "", reread = 0, mails = [], reviews = [],
   checklist = null, opening = false, next = null, chat = false, came = null, closedLine = "", term = null, landing = null, turnCards = null, queued = null, stopTries = null, onChanged, seed = null, trustOnRow = false,
   made = null }) {
   // `made`: { list, start } - an item Taskuary made (madeTask): its chat is its own list, nothing on the server to read or poll yet, and its box
@@ -1094,7 +1093,7 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
         attachmentsRef={attachmentsRef} onSent={sent} onClearAttachments={clearAttachments} onAttachBack={attachBack}
         onAttach={pics.add} pics={pics}
         prompt={ownPrompt || prompt} onPromptUsed={promptUsed}
-        asking={turn && viewShown ? null : asking} onAnswer={answerAsk} noComposer={noComposer}
+        asking={turn && viewShown ? null : asking} onAnswer={answerAsk}
         name={name}
         drafts={data?.skillDrafts || []} acts={actsHere} onDraftDecided={refresh} seed={seed}
         chat={chat} reading={chat && readingOf(data?.thread || task?.ThreadJson)?.asking
@@ -1148,16 +1147,12 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
       minHeight: 0, display: "flex", flexDirection: "column",
       ...(compact ? { height: quiet ? "auto" : "100%" } : { flex: quiet ? "0 0 auto" : "1 1 auto" }),
       ...(full ? FULL_SX : null) }}>
-      {/* the strip wraps when its box is narrow - a phone, or a half-width Wall pane; scrolled sideways it hid its buttons entirely.
-          On the canvas the task's own step heading holds it (toolsAt) and the answer gets the line - until Full screen, which
-          leaves that heading behind */}
+      {/* the strip wraps when its box is narrow - a phone, or a half-width Wall pane; scrolled sideways it hid its buttons entirely */}
       {/* ...and none at all on a card whose session is not live (`noTools`, the owner 2026-10-25): a failed or closed agent's heading carried
           the agent picker, "provider default" and Full screen for a chat nothing is running in - the bar's Run another agent starts one */}
-      {/* ...in a fragment: a portal straight under a Box failed its `children` check, a console error on every live agent (2026-10-26) */}
       {/* ...and none in a chat task's chat (the owner's ruling, 2026-11-05: "remove as much as possible ui components in the chat unless it's
           actions"): the agent picker, "provider default" and Full screen are settings, not a step of the task - the chat is the ask, the work, the reply */}
-      {!noTools && !chat && toolsAt && !full && <>{createPortal(tools, toolsAt)}</>}
-      {!noTools && !chat && !(toolsAt && !full) && <Box sx={{ minHeight: 39, px: 1.25, py: { xs: 0.5, md: 0 }, display: "flex", alignItems: "center", gap: 0.8, borderBottom: `1px solid ${BORDER}`, bgcolor: PANEL,
+      {!noTools && !chat && <Box sx={{ minHeight: 39, px: 1.25, py: { xs: 0.5, md: 0 }, display: "flex", alignItems: "center", gap: 0.8, borderBottom: `1px solid ${BORDER}`, bgcolor: PANEL,
         flexWrap: "wrap", flexShrink: 0 }}>
         <Box sx={{ width: 7, height: 7, borderRadius: 99, bgcolor: session?.alive ? "#78a17b" : "#c7a258" }} />
         {/* the strip named the window after the concierge; it belongs to the agent working in it */}

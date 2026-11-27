@@ -6,7 +6,6 @@ import { plural } from "./timeWords.js";
 import { fmtDate } from "./dates.js";
 import { drawerLit, mainView, sectionOf, stageOf } from "./stages.js";
 import { waitingEmails } from "./taskLifecycle.js";
-import { isGeneralKind } from "./autostart.js";
 
 // WHILE AN AGENT WORKS THE WORK TAKES THE WHOLE WIDTH: a live session - coding or general, working or waiting on you (the rail's
 // spinning ring, or its hand) - and From folds to one line over it; the terminal is never covered or squeezed. `sessionView` is the
@@ -16,7 +15,6 @@ import { isGeneralKind } from "./autostart.js";
 // agent ran or none was ever started: a plain mail or chat task with its draft, a held task.
 // ...UNTIL 2026-10-25 (the owner: "keep agent working and everything the same with full agent screen ... but keep the 2 columns for when
 // agent is not working"): only a LIVE session takes the whole width now.
-export const layoutOf = ({ sessionView = false }) => (sessionView ? "full" : "columns");
 
 // THE FOCUS (the owner, 2026-10-25: "shading for what to focus on"), which makes the stage: the agent's part once it has a Result (or its run
 // failed); the reply where it is the move ("reply"); a goal's Steps or a to-do's checklist (`list`), else the block that carries the ask
@@ -72,12 +70,6 @@ export const fromLine = ({ sender = null, count = 0, workflow = null, made = "" 
 export const SECTIONS = [{ key: "from", n: 1, name: "Came from" }, { key: "agent", n: 2, name: "Agent" }];
 // ...a live CODING terminal: a general agent's own chat is a session too (mode "assistant"); a coding CLI's is a toggle in its chat (GeneralWorkspace)
 export const liveTerminal = (term) => !!term?.alive && term.mode !== "assistant";
-// WHETHER A START IS ANOTHER AGENT - a new conversation, the chat drawn afresh around it - READ ONCE, AT THE PRESS (the owner, 2026-11-23: "I hit
-// Try again on the canvas and the whole thing flickered"): Try again after a start that failed is that same press again (`again`, what the press
-// read). Read again off the page its own failure changed - a failure line in the chat, the run marked failed - a first start's retry became
-// "another agent": a fresh conversation, and the whole chat remounted under his press
-export const startsAnother = (page, again) => (typeof again === "boolean" ? again
-  : !!(page?.report || page?.transcript || page?.alive || page?.started));
 // ...A PLAIN TO-DO NO AGENT HAS TOUCHED IS ONE SECTION (the owner, 2026-11-06: the "Agent - not started" column beside a to-do): what came in,
 // the box under it - typing there starts the agent, and its chat then joins as the second section. `started`: any agent ever on it
 export const soloTodo = ({ kind, started = false } = {}) => kind === "task" && !started;

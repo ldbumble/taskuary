@@ -24,8 +24,7 @@ def ask(store, task_id: int, question: str, context: str = '') -> dict:
     task = store.get_task(int(task_id))
     if not task: raise ValueError(f'no task {task_id}')
     pick, model = brainroute.strong_for(store, 'general', task)
-    if not pick: return {'ok': False, 'says': 'no brain here has a stronger model or a higher effort to ask - decide with what you have, '
-                                              'and say in your answer which judgement you were unsure of'}
+    if not pick: return {'ok': False, 'says': 'no brain here has a stronger model or a higher effort to ask: the judgement stays yours'}
     said = f"The agent asked {brainroute._said(store, pick)}'s strong gear{f', {brainroute.spell(model)}' if model else ''}, as it was stuck"
     rid = brainroute.log(store, brainroute.Route('general', 'strong', pick, model or '', 'strong', [], RULE, said), task_id)
     try:

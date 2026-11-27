@@ -180,7 +180,7 @@ class LookAtTheRealSchemaTests(unittest.TestCase):
         sysmsg = llm.seen[0]['system']
         self.assertIn('DATA SOURCES', sysmsg)
         self.assertNotIn('"daily_at"', sysmsg)
-        self.assertIn('Never invent a table, column, object or field name', sysmsg)   # the shared judgement
+        self.assertIn('a peek shows the real ones', sysmsg)   # the shared judgement
 
 
 if __name__ == '__main__':

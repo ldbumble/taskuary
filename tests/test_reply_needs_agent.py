@@ -170,7 +170,7 @@ def handed(s, tid, wrote=True):
 
 def test_the_writer_is_told_never_to_promise_and_to_say_needs():
     "The owner's own Draft with AI press still reaches the writer: its rule stands."
-    assert 'never write a placeholder' in responder.NOT_YET and responder.NEEDS in responder.NOT_YET
+    assert 'only promises to answer later is never sent' in responder.NOT_YET and responder.NEEDS in responder.NOT_YET
     assert 'you will pick it up' not in responder.NOT_YET
 
 

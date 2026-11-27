@@ -883,7 +883,7 @@ class CoreTests(unittest.TestCase):
             responder.draft_reply(s, tid, resolution='COMPLETE FINAL RESPONSE FROM THE WORK SESSION:\n' + final, pressed=True)
         for n in range(1, 9):
             self.assertIn(f'Issue {n}: completed with result {n}.', seen['user'])
-        self.assertIn('EVERY distinct question', seen['system'])
+        self.assertIn('every distinct question', seen['system'])
         self.assertNotIn('under 60 words', seen['system'])
         self.assertEqual(seen['tokens'], responder.COMPLETE_REPLY_TOKENS)
 

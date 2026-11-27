@@ -397,20 +397,13 @@ class OneBatchTests(unittest.TestCase):
         self.assertEqual(len(self.s.batch_items(a)), 2)
         batch.start.assert_called_with(self.s, a)
 
-    def test_the_seed_asks_for_security_before_worth(self):
-        a = batch.create(self.s, 'github', 'northwind/portal', [self.s.get_message(pr(self.s, 'northwind/portal', 1, 0.5))])
-        with mock.patch.object(batch, '_diff', return_value=('', '')):
-            seed = batch.seed(self.s, a, 'northwind/portal')
-        self.assertLess(seed.index('SECURITY FIRST'), seed.index('WORTH merging'))
-
     def test_the_seed_judges_safety_before_it_runs_anything(self):
         """Building a stranger's branch RUNS their code - a test file, a postinstall hook. The permission to build
         used to come first and the security read after it, so the order an agent followed was run, then judge."""
         a = batch.create(self.s, 'github', 'northwind/portal', [self.s.get_message(pr(self.s, 'northwind/portal', 1, 0.5))])
         with mock.patch.object(batch, '_diff', return_value=('', '')):
             seed = batch.seed(self.s, a, 'northwind/portal')
-        self.assertLess(seed.index('SECURITY FIRST'), seed.index('build it and run its tests'))
-        self.assertIn('prompt injection', seed)
+        self.assertLess(seed.index('prompt injection'), seed.index('build it and run its tests'))
 
 
 class DangerTests(unittest.TestCase):

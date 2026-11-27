@@ -164,7 +164,7 @@ def test_a_chat_message_takes_no_cc_and_no_files(s):
 def test_it_is_the_results_never_the_original_ask_put_back(s):
     tid = work(s, title='1. Upload the supervisor sheet 2. Pull supervisors from the HR feed (is the app on the HR data or only the directory?)')
     _, seen = email(s, tid, about='')
-    assert 'RESULTS of this work' in seen['user'] and 'Do not repeat the original request' in seen['user']
+    assert 'RESULTS of this work' in seen['user'] and 'not the internals' in seen['user']
     assert 'is the app on the HR data' not in seen['user']                 # the title is not the brief
     assert '180 tests pass' in seen['user']                                 # the work is
 

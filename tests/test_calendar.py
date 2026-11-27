@@ -210,7 +210,7 @@ class ResponderTests(unittest.TestCase):
         with mock.patch('taskuary.calendar.context_for', return_value=''):
             responder.write_draft(s, tid, rid, llm=llm)
         self.assertIn('A MEETING TIME is a commitment', seen['sys'])
-        self.assertIn('With no calendar below', responder.SYSTEM)
+        self.assertIn('no time is known to be free', responder.SYSTEM)
 
 
 class AgendaNeverBlocksThePileTests(unittest.TestCase):

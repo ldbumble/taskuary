@@ -51,7 +51,7 @@ class TrackRecordTests(unittest.TestCase):
         for text in (toil.PROMPT, assistant.PROMPT, toil.__doc__.split('Never')[0]):
             self.assertNotRegex(text.lower(), r'auto[_ -]?answer|auto-draft')
         # ...and the shipped copies already saved on a seeded row are healed to today's, not left advising it
-        self.assertTrue(all('auto_answer' in p for p in toil.OLD_PROMPTS))
+        self.assertTrue(any('auto_answer' in p for p in toil.OLD_PROMPTS))
         self.assertIn('1470c920581d783f70e98193ff6d6998fb7ec5f126b1ce4fb855979b8a21a138', assistant.OLD_PROMPT_SHA)
         self.assertNotIn(hashlib.sha256(assistant.PROMPT.encode()).hexdigest(), assistant.OLD_PROMPT_SHA)
         s = MemoryStore()

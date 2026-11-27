@@ -169,9 +169,7 @@ PROMPT = (
     '\n\nWHAT THE OWNER HAS CORRECTED BEFORE is in routing_history: verdicts like this one that they '
     'changed afterwards, each with the field they changed, what they changed it to, how many times, '
     'and how sure we are.\n'
-    '- owner_stated true is their own typed answer - treat it as fact. A `system` row is the one that '
-    'matters most: it names where this kind of work actually lives, and if that is a system this '
-    'install holds no code or credentials for, the kind is `task`, not `coding`.\n'
-    '- tentative true is ONE correction, not a rule: weigh it, say so in your reason if it decided '
-    'you, and never let it outrank what the message plainly says.\n'
+    '- owner_stated true is their own typed answer. A `system` row names where this kind of work actually lives; '
+    'a system this install holds no code or credentials for makes the kind `task`, not `coding`.\n'
+    '- tentative true is ONE correction, not a rule.\n'
     '- Nothing here forces a verdict. It is what happened last time, not an instruction.')

@@ -47,10 +47,10 @@ def context(store) -> dict:
 def _known(ctx: dict) -> str:
     bits = [f"Owner name on file: {ctx['owner'] or '(not set)'}",
             f"Connected sources: {', '.join(ctx['channels']) or 'none yet'}",
-            f"Known repositories (mention only if relevant): {', '.join(ctx['repos']) or 'none'}",
+            f"Known repositories: {', '.join(ctx['repos']) or 'none'}",
             f"Frequent correspondents (activity only; not proof of importance or authority): "
             f"{'; '.join(ctx['writes_most']) or 'nothing ingested yet'}"]
-    return 'WHAT TASKUARY ALREADY KNOWS (facts; do not contradict them):\n' + '\n'.join(bits)
+    return 'WHAT TASKUARY ALREADY KNOWS (facts):\n' + '\n'.join(bits)
 
 
 def _section(text: str, heading: str) -> str:

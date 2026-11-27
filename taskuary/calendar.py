@@ -293,10 +293,7 @@ def context_for(store) -> str:
         _REPLY.update(at=time.time(), data=ag)
     body = render(_REPLY['data'])
     if not body: return ''
-    return ('\n\nYOUR CALENDAR - if this thread asks about a time, a meeting or your availability, check here before '
-            'you answer; if it does not, ignore this. A time that is busy below is never offered or accepted; if the time '
-            'asked about is busy, say so plainly and offer the nearest free one. If the calendar could not be read, say '
-            'you will confirm rather than claiming availability.\n' + body)
+    return '\n\nYOUR CALENDAR - your busy times:\n' + body
 
 
 _UPCOMING = {'at': 0.0, 'data': None}

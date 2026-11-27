@@ -172,10 +172,16 @@ PROMPT = _PROMPT_2026_10_09.replace(
     'meeting if the block gives it, else omit the section), in time order:')
 assert 'still ahead or in progress' in PROMPT
 
+# 2026-11-27: the code never tells a model who to be (the owner, 2026-11-23) - the persona line goes, the brief's shape stays
+_PROMPT_2026_11_02 = PROMPT
+PROMPT = _PROMPT_2026_11_02.replace('Be a sharp assistant who has read everything, not a transcript or a report of counts. ',
+                                    'Not a transcript or a report of counts. ')
+assert PROMPT != _PROMPT_2026_11_02
+
 # every prompt ever SHIPPED, so store.__init__ can tell "still the stock text" (upgrade it)
 # from "the owner wrote this" (never touch) - same deal the template docs get
 OLD_PROMPTS = (
-    _PROMPT_2026_10_09, _PROMPT_2026_09_15,
+    _PROMPT_2026_11_02, _PROMPT_2026_10_09, _PROMPT_2026_09_15,
     _PROMPT_WITHOUT_STANDING_MEMORY, _PROMPT_2026_09_02_MEMORY,
     _PROMPT_2026_08_31, _PROMPT_2026_08_31_MEMORY,
     (
@@ -268,9 +274,7 @@ HEADER = ('# DIGEST.md — your morning brief\n\n'
 CONTRACT = ('\n\nYOU ARE WRITING THE MORNING BRIEF, not a post on the work rail: the instruction in the user message decides the '
             'sections and the length. Plain text with the emoji headers it names - no JSON, no markdown headings, no '
             'tables. Facts only from the data you are given; a TQ-ref keeps the title the data gave it, and a line the link it ends with; a '
-            'block reading "(none)" has nothing to say. The data may be a CAPPED slice (a block says so when it is cut) - '
-            'never describe a cut block as complete, and say plainly when something the instruction asks about is not '
-            'in what you got.')
+            'block reading "(none)" has nothing to say. The data may be a CAPPED slice: a block says so when it is cut.')
 
 
 def system(store) -> str:
@@ -428,8 +432,8 @@ def gather(store, days: int = DAYS) -> str:
                (f"  {c['facts']}{said(c)} - ruled out by your verdict \"{ruled[id(c)]}\"" for c in covered[:10]))
     # triage never judged these, so nobody knows whether they ask anything - said, never dropped as "not an ask" (2026-10-11)
     if blank:
-        _block(out, 'NOT JUDGED (triage failed on these or has not run, so whether they ask you anything is NOT KNOWN - while any are\n'
-                    'here, never say nobody is waiting on you):', (f"  {c['facts']}" for c in blank[:10]))
+        _block(out, 'NOT JUDGED (triage failed on these or has not run, so whether they ask you anything is NOT KNOWN):',
+               (f"  {c['facts']}" for c in blank[:10]))
     if live and (rules := global_rules(store)):
         _block(out, 'STANDING RULES THAT APPLY EVERYWHERE (hold every ask above against them: an ask one of these plainly covers is NOT\n'
                     '"People want" - it ranks below everything, named with the rule; an ask none of them covers stays where it is; a\n'

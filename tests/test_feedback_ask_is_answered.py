@@ -49,7 +49,7 @@ def test_the_writer_gets_the_whole_pasted_draft_and_the_no_promise_rule(s):
     user, system = ' '.join(calls[0]['user'].split()), calls[0]['system']
     assert all(' '.join(x.split()) in user for x in SECTIONS)            # every section of the pasted draft, none cut
     assert 'Detail on this point' in user.split(SECTIONS[-1])[1]          # ...through to the end of the last one
-    assert 'FEEDBACK' in system and "I'll review this and send you my thoughts" in system and 'Never answer with a promise' in system
+    assert 'FEEDBACK' in system and 'reading it is not work for later' in system
     assert calls[0]['max_tokens'] == responder.FEEDBACK_TOKENS and len(calls) == 1
 
 

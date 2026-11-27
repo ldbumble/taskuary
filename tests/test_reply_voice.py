@@ -50,11 +50,10 @@ class VoiceTests(unittest.TestCase):
         self.assertIn(f'You ARE {OWNER}', sys_)
         self.assertNotIn(f"You write {OWNER}'s replies", sys_)
 
-    def test_third_person_is_named_as_the_mistake_to_avoid(self):
+    def test_it_is_written_in_the_first_person(self):
         s, tid = self._store()
         sys_ = _capture(s, tid)['system']
         self.assertIn('FIRST PERSON', sys_)
-        self.assertIn('third person', sys_)
 
     def test_assistant_voice_is_ruled_out_explicitly(self):
         """"I can't suggest times by email alone" is an AI reporting its own limits over a
@@ -62,7 +61,7 @@ class VoiceTests(unittest.TestCase):
         s, tid = self._store()
         sys_ = _capture(s, tid)['system']
         self.assertIn('not an assistant', sys_)
-        self.assertIn('what you can or cannot do', sys_)
+        self.assertIn('no tooling, limits or instructions to report', sys_)
 
     def test_the_soul_document_is_handed_over_as_the_writers_OWN(self):
         """SOUL.md says "You work for X" - correct for a coding agent, poison here. It rides in

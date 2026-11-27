@@ -384,4 +384,4 @@ def _edit_xlsx(p: Path, old: str, new: str, to: Path) -> str:
         said = f'that row is now {len(vals)} rows, its formulas carried to each and every total over it widened'
     wb.save(to)
     with zipfile.ZipFile(p) as z: pics = any(n.startswith(('xl/media/', 'xl/drawings/')) for n in z.namelist())
-    return said + (' - its pictures and charts are not kept by this edit: say so, or write it anew' if pics else '')
+    return said + (' - its pictures and charts are not kept by this edit' if pics else '')

@@ -35,14 +35,11 @@ DRAFT_TOKENS = 400
 COMPOSE_SYSTEM = (
     'You are writing a message the owner is about to send. It is NOT a reply - nothing arrived; '
     'they are starting this conversation, and the brief below is what they told you it is about.\n'
-    'Turn the brief into the actual message. The brief is shorthand between the owner and you '
-    '("the census numbers he asked for, plus why Site 7 moved") - the recipient must never see '
-    'the shorthand, only the message it stands for.\n'
+    'The brief is shorthand between the owner and you ("the census numbers he asked for, plus why Site 7 moved"); '
+    'the recipient reads only the message it stands for.\n'
     'Output ONLY the message body: no subject line, no "Draft:", no markdown, no notes about '
     'what you did.\n'
-    'Say the thing and stop. Never invent a number, a date, a name or a commitment that is not in '
-    'the brief or the material below - if the brief implies a fact you were not given, ask for it '
-    'in the message rather than making one up.')
+    'The facts are the brief\'s and the material\'s below.')
 
 SUBJECT_SYSTEM = ('Write the subject line for this email: under nine words, specific, no "Re:", no '
                   'quotes, no trailing full stop. Answer with the line and nothing else.')
@@ -87,7 +84,7 @@ def draft_message(store, channel: str, to, about: str, resolution: str = None, l
     # what really rides on it: a draft wrote "the attached template" over an email with nothing attached (2026-10-09)
     if attached is not None:
         user += (f"\n\nATTACHED TO THIS MESSAGE: {', '.join(attached)}" if attached
-                 else '\n\nNOTHING IS ATTACHED to this message - never say or imply that something is attached.')
+                 else '\n\nNOTHING IS ATTACHED to this message.')
     # what the company already has written down on this subject: quoted as facts to draw on,
     # never as instructions (knowledge.block says so in the block itself)
     kb = kb_block(store, f'{about} {resolution or ""}')
@@ -254,9 +251,8 @@ def work_of(store, tid: int) -> str:
 # SEND OUT RESULTS (the task bar's button): the message IS the results, told to the person who needs them. The task's own
 # title stood in as the brief when the owner wrote none - and a title quoting the original ask ("... (is the app on X or Y?)")
 # had the draft put the ask's question back to the recipient and say nothing of what was done (2026-10-09).
-RESULTS = ('Send them the RESULTS of this work: a short summary of what was done and what it means for them - the outcome, '
-           'not the internals (commits, hashes, pipelines, health checks, the steps a tool took). Do not repeat the original '
-           'request or put its questions back to them; ask them something only if the work below says it still needs them.')
+RESULTS = ('Send them the RESULTS of this work: what was done and what it means for them - the outcome, not the internals '
+           '(commits, hashes, pipelines, health checks, the steps a tool took).')
 
 
 def results_brief(said: str) -> str:

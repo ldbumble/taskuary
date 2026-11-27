@@ -22,7 +22,7 @@ def _thread(s, d):
     return tid
 
 
-def test_the_writer_is_handed_the_threads_pictures_and_told_to_look():
+def test_the_writer_is_handed_the_threads_pictures():
     seen = {}
     def llm(system, user, max_tokens=None, images=None):
         seen.update(user=user, images=images); return 'Yes - their line works if we make it about local-first.'
@@ -30,7 +30,7 @@ def test_the_writer_is_handed_the_threads_pictures_and_told_to_look():
         s = MemoryStore(); tid = _thread(s, d)
         responder.draft_reply(s, tid, llm=llm)
     assert seen['images'] and seen['images'][0][0] == 'image/png'
-    assert 'never ask for one they already sent' in seen['user']
+    assert 'THE PICTURES THEY SENT' in seen['user']
     assert '(sent ad.png)' in seen['user']                        # the thread names the picture where it was sent
 
 

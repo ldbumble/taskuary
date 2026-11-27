@@ -837,7 +837,7 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
             system = guide + (f"\n\nOperator's document:\n{soul[:SOUL_CHARS]}" if soul else '')
             # the job weighs importance - what this arrival means to what the owner is accountable for;
             # it defines no intent, and the document says so in its own first line
-            if job: system += f"\n\nThe owner's job (their own document - what they are responsible for, who they serve, what to protect; weigh how much this matters with it):\n{job[:JOB_CHARS]}"
+            if job: system += f"\n\nThe owner's job (their own document - what they are responsible for, who they serve, what to protect):\n{job[:JOB_CHARS]}"
             # `learned` is LEARNED.md's active sections: the profile distilled from the owner's
             # past verdicts. It refines the operator's document; explicit notes still outrank it.
             cut, memory = len(system), ''
@@ -847,9 +847,8 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                 # about something the system knows it") - read for its meaning, a legacy job by any of its names
                 # ...the whole of it since 2026-10-27 (learned_cut.whole): a line ending `(about: ...)` is about that one sender or topic
                 memory = ("\n\nLearned profile - the owner's whole memory: what they care about and what they do not, from their own words "
-                           "and their past verdicts, their people, how they work and what they promised. Something they said they do "
-                           "not care about is never a task on its own - an fyi at most; the people lines weigh the priority only, never "
-                           "whether it is a task; a line ending `(about: ...)` bears only on mail about that sender or topic "
+                           "and their past verdicts, their people, how they work and what they promised; a line ending `(about: ...)` "
+                           "is about that sender or topic "
                            '(the document above outranks it where they disagree):\n' + learned)
             # From here down the code only LABELS what it hands over. Every sentence about how to judge it - the
             # report brief, kind, repositories, chat lines, same_as - lives in the guide (2026-10-09:
@@ -862,8 +861,8 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                                        'null only when two fit it equally or none does:\n' + str(workstreams)[:2000])
             if workflows: system += "\n\nWORKFLOWS A MAIL STARTS - the owner's configured jobs, each with the arrival that starts it (when):\n" + str(workflows)[:3000]
             # a FACT about this install, not a rule of judgement: no coding tool is connected, so coding is not a kind it has
-            if not coding: system += ('\n\nTHERE IS NO CODING AGENT on this install (no coding tool, or developer mode is off). Never choose '
-                                      'kind coding - work that would be coding is general.')
+            if not coding: system += ('\n\nTHERE IS NO CODING AGENT on this install (no coding tool, or developer mode is off): kind coding '
+                                      'is not one it has, and work that would be coding is general.')
             # THE CACHED CONTEXT, THEN THE NEW MAIL (the owner, 2026-11-10: "keep the triage context cached and then just the new info should
             # query it"): the guide and the owner's documents (the same for hours), the skills, workstreams and workflows (for days), the
             # learned memory (a line added at 3pm re-bills only itself) - each a cached block (llm.stable) - and only what follows is this mail's

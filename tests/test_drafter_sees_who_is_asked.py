@@ -47,8 +47,7 @@ def test_a_copied_mail_tells_the_writer_who_it_is_to_by_name(s):
     assert 'To: Erin Blake\n' in user and 'Cc: you\n' in user and 'You are: only copied (Cc)' in user
     assert ERIN not in user.split('From:')[1].split('\n', 1)[1]          # names on the To/Cc lines, never the addresses
     assert 'HOW TRIAGE READ THIS MESSAGE' not in user                    # the writer reads the mail, never triage's reading of it
-    assert 'only copied, a question in it is for the person on the To line' in system and 'NO REPLY' in system
-    assert "Never hand someone else's question back" in system
+    assert 'The To and Cc lines below say where you sit on the mail' in system and 'NO REPLY' in system
 
 
 def test_an_unknown_recipient_is_their_domain_never_their_address(s):
@@ -62,7 +61,6 @@ def test_named_on_the_cc_line_nothing_stops_the_reply(s):
     tid = thread(s, 'Alex, can you confirm the room is booked?', verdict=v)
     system, user = prompt(s, tid, said='Yes - the room is booked for Friday.')
     assert 'Cc: you\n' in user
-    assert 'unless it names you' in system and 'answer it like any other' in system
     assert responder.draft_reply(s, tid, llm=lambda *a, **k: 'Yes - the room is booked for Friday.') == 'Yes - the room is booked for Friday.'
 
 

@@ -20,11 +20,20 @@ PROMPT = (
     'skill that drafts the reply that always goes untouched - still sent only by the '
     'owner\'s press, never automatically -, a standing prompt on a connector, a scheduled '
     'report, flipping auto-dispatch on), and what to watch out for. Only propose what the '
-    'numbers actually support - several episodes, more than one week. If nothing repeats '
-    'enough to automate, say so in one line instead of inventing work. Skip anything the '
+    'numbers actually support - several episodes, more than one week. Skip anything the '
     'EXISTING POLICIES section already covers.')
 # the shipped prompts before this one: an unedited seeded copy is healed to PROMPT (store.py), an owner-edited one is kept
 OLD_PROMPTS = (
+    # until 2026-11-27: it scripted the empty answer ("say so in one line")
+    'You are looking at one operator\'s inbound-work statistics. Propose AT MOST five '
+    'automations, ranked by minutes saved per week. Each proposal is 2-3 lines: the pattern '
+    '(with its numbers), the concrete fix IN THIS APP (a skip policy on a sender/domain, a '
+    'skill that drafts the reply that always goes untouched - still sent only by the '
+    'owner\'s press, never automatically -, a standing prompt on a connector, a scheduled '
+    'report, flipping auto-dispatch on), and what to watch out for. Only propose what the '
+    'numbers actually support - several episodes, more than one week. If nothing repeats '
+    'enough to automate, say so in one line instead of inventing work. Skip anything the '
+    'EXISTING POLICIES section already covers.',
     'You are looking at one operator\'s inbound-work statistics. Propose AT MOST five '
     'automations, ranked by minutes saved per week. Each proposal is 2-3 lines: the pattern '
     '(with its numbers), the concrete fix IN THIS APP (a skip policy on a sender/domain, an '

@@ -100,17 +100,8 @@ def catalog(store) -> list:
 # column name produces a report that is wrong forever and never says so.
 JUDGEMENT = (
     'JUDGEMENT\n'
-    '- A query you had to guess at is the thing to ask about. A wrong filter on a finance report '
-    'is silently wrong forever; a question costs five seconds.\n'
-    '- Never invent a table, column, object or field name. Peek, or ask.\n'
-    '- The owner describes what they WANT, not what exists. "Our headcount file" is a path you do '
-    'not have - ask for it.\n'
-    '- confidence "low" is a real answer. Say so in explain and the owner will check it.\n'
-    '- Ask only what you can neither find out nor sensibly default. What the request already says, a repository it '
-    'names, a time these rules default and an obvious search term (the product\'s own name) are not questions - '
-    'use them and say so in explain; the owner sees the report before it runs.\n'
-    '- A clear request is built, not questioned: never ask the owner to confirm what they already said, or to choose '
-    'between readings when one is plainly meant. They check the draft before anything is saved.\n')
+    '- A table, column, object or field name that was guessed makes the result silently wrong on every run; a peek shows the real ones.\n'
+    '- The owner reads the finished config, its explain and its confidence before anything is saved or runs.\n')
 
 # A WATCH is not a report you read: it speaks only when something is wrong, and then triage judges it (the owner, 2026-10-16:
 # "if it's always show up then it's just a report fyi, not a optional if this happens, then triage then fix type of thing").
@@ -118,7 +109,7 @@ WATCH_RULE = ('- "watch": ONLY when the owner wants to hear from it IF something
               '"let me know when the job fails"), the condition in their own words. Its run then shows under Reports only when '
               'that holds, and triage judges it then: triage decides whether it needs a task, and makes none for what an open '
               'task already covers. A report the owner simply wants ("send me X every morning") has NO "watch": it shows every '
-              'run and triage never sees it. Never write "route" - the server writes it from "watch".\n')
+              'run and triage never sees it. "route" is the server\'s, written from "watch".\n')
 
 # AN ANSWER HAS A SHAPE (the owner, 2026-10-29: "which repository holds the skill?" was asked as a free-text box beside a list the
 # app already has). The model says what kind of answer each question takes, and the builder draws that control; no words are read.
@@ -128,7 +119,7 @@ ASK_SHAPE = ('- Each entry of "questions" is {"q": "<the question>", "kind": "te
              'of a few answers you can name (2-6 "options"), else "text". "options" only with "choice".\n')
 
 REPOS_RULE = ('- "repositories" are the owner\'s own code repositories: full name and what each is for. When the request names one '
-              'by its short name ("taskuary", "ledger"), it means that one - write its full owner/name, never ask which.\n')
+              'by its short name ("taskuary", "ledger"), it means that one, by its full owner/name.\n')
 
 SYSTEM = (
     'You turn a plain-English request into ONE Taskuary scheduled-report configuration.\n\n'
@@ -152,7 +143,7 @@ SYSTEM = (
     '- "ai_prompt" is the instruction for the pass that turns rows into prose. Include it whenever '
     'the owner asked for a summary, a flag, a comparison or an interpretation - and write it as a '
     'concrete instruction ("Summarize spend by site; flag any vendor above 10k or new this '
-    'month"), never "summarize the data".\n'
+    'month").\n'
     '- "max_rows" only when the ask implies a size.\n'
     '- "agent" is the type for "run my <skill> every week", "have the AI research X on a schedule", or any '
     'report whose source is the AI itself doing work: set "skill" to the slash command (without the slash is fine) '
@@ -203,13 +194,13 @@ WORKFLOW_SYSTEM = (
     'one. A job that only retrieves or summarizes data is a report, not a workflow.\n\n'
     'TASKUARY IS WHERE RESULTS LAND. Each run is itself a task in Taskuary - scheduled or run by hand, its agent works it there and '
     'nothing is filed as a report or read by triage - and it may open tasks for people, write notes '
-    'and send its own emails and messages - they go out by themselves - or leave invoices for the owner to approve, with no connection at all. Never ask which '
-    'connection opens a task or where a result should go. A connection is only for a system the work happens IN (Intacct '
+    'and send its own emails and messages - they go out by themselves - or leave invoices for the owner to approve, with no connection at all: '
+    'no connection opens a task or decides where a result goes. A connection is only for a system the work happens IN (Intacct '
     'to read, a portal to drive). Opening tasks or drafting IS doing work: such a job is a workflow, never "really a report".\n\n'
     'Answer JSON only in one of four shapes:\n'
     '  {"questions": ["..."]} when the request is unclear - what the job is, what it should produce, for whom - or a choice you cannot '
-    'sensibly default is missing (which Zoho customers, say); at most three short questions. A clear request is built: what you chose - who runs it, the schedule, what it asks first - goes '
-    'in explain, never back to the owner as a question, and nothing they already said is asked again.\n'
+    'sensibly default is missing (which Zoho customers, say); at most three short questions. What you chose - who runs it, the schedule, what it asks first - '
+    'is said in explain.\n'
     '  {"peek": {"type": "<a type from the catalog>", ...its keys}} - you need to SEE a real schema (which tables, what the columns '
     'are called) before you can write a step\'s query; the result comes back and you answer again.\n'
     '  {"config": {...}, "explain": "<what it will do>", "confidence": "high|medium|low"}.\n'
@@ -404,7 +395,7 @@ SOURCE RULES
 - "label" is a short human name for the card ("AP bills due", "cash balances"). It is how the check refers to that data, so give every card one whenever there is more than one.
 - "max_rows" only when the ask implies a size. Nothing else: no title, no schedule, no delivery - those belong to the report around these cards and are ignored here.
 - Respect max_sources, and write ONE source per system-and-question: two questions of the same database are two cards with different queries, never one query trying to answer both.
-- "ai_prompt" is one instruction over ALL these sources together - what the check should SURFACE. Concrete ("Flag any vendor over 10k or new this month; give the number and the site"), never "summarize the data". Write it when the ask says what matters; leave it out when the owner asked only for the data.
+- "ai_prompt" is one instruction over ALL these sources together - what the check should SURFACE. Concrete ("Flag any vendor over 10k or new this month; give the number and the site"). Write it when the ask says what matters; leave it out when the owner asked only for the data.
 - Never choose "assistant" as a source. That is the check itself; reading its own output is a loop.
 - the_card_you_are_filling_in names the type already chosen on the card. Keep it unless the ask plainly needs another system, and then say so in explain.
 """ + REPOS_RULE + ASK_SHAPE + '\n' + JUDGEMENT

@@ -24,7 +24,8 @@ HOURS = 8
 # The brief says only what the data bears out. The old text named "top 3" in two headings and asked for a closing
 # line "acknowledging progress", so a quiet day with one open item read "top 3 priorities: 1) ..." and "Good
 # progress today" (2026-09-29). A count is the data's to give, and praise needs something completed.
-PROMPT = (
+# ...its words until 2026-11-27, kept so an unedited report still upgrades (OLD_PROMPTS)
+_OLD_PROMPT_2026_11_27 = (
     'Give me an executive and concise end-of-day brief over the last 8 hours: what came in and what I did '
     'across every source in the data, and my own Taskuary tasks and agent work.\n\n'
     'Start with exactly two one-sentence roll-ups:\n'
@@ -44,6 +45,29 @@ PROMPT = (
     'Do not infer that an item was completed, flagged, deleted, archived, or still open unless the data says so. '
     'Do not mention excluded items or missing groups. When the data says a source could not be read, say so in '
     'one short line first and never say nothing came in from it. '
+    'End with one short, plain closing sentence that the data bears out: speak of progress only when something '
+    'was completed; on a quiet day, say what is left instead. No preamble, table, or extra sections.'
+)
+PROMPT = (
+    'Give me an executive and concise end-of-day brief over the last 8 hours: what came in and what I did '
+    'across every source in the data, and my own Taskuary tasks and agent work.\n\n'
+    'Start with exactly two one-sentence roll-ups:\n'
+    'Done today: the main themes completed today, and the number of meeting invites handled when there were any.\n'
+    'Tomorrow: the most urgent and important open items, at most three.\n\n'
+    'Then use these groups in this order, omitting a group entirely when its data has no items:\n'
+    'What I accomplished today\n'
+    'Focus for tomorrow\n\n'
+    'One bullet per item the data supports - at most five for today and three for tomorrow, never padded. '
+    'Never state a number of items the data does not show. Use exactly this bullet shape: '
+    '<src mark> Who — what it is about — one-line gist, where the src mark is the one given on the row (never a '
+    '[bracketed] source name), and a row without a subject is named by its chat or group or its gist, never '
+    '"(no subject)". Begin completed items with ✅, priorities with 🔍, and meeting '
+    'invites with 📅 (an invite may use 📅 with ✅ or 🔍). Rank tomorrow by urgency and importance.\n\n'
+    'Exclude bulk and marketing mail, system notifications, receipts, and anything suppressed by a blocked '
+    'sender or keyword rule. Include meeting invites and flagged messages when the supplied data identifies them. '
+    'Do not infer that an item was completed, flagged, deleted, archived, or still open unless the data says so. '
+    'Excluded items and missing groups are left out. A source the data says could not be read is named first, in one '
+    'short line, as unread - not as quiet. '
     'End with one short, plain closing sentence that the data bears out: speak of progress only when something '
     'was completed; on a quiet day, say what is left instead. No preamble, table, or extra sections.'
 )
@@ -106,17 +130,16 @@ OLD_PROMPTS = (
     'archived, or still open unless the data says so. Do not mention excluded items or missing groups. '
     'End with one short motivational sentence acknowledging progress, such as “Great progress today—tomorrow’s '
     'priorities are clear!” No preamble, table, or extra sections.',
+    _OLD_PROMPT_2026_11_27,
 )
 
 
 CONTRACT = (
-    '\n\nYOU ARE WRITING THE END OF DAY BRIEF. Follow the report instruction exactly. Plain text '
+    '\n\nYOU ARE WRITING THE END OF DAY BRIEF. Plain text '
     'only: the two named roll-ups, then the named groups and bullets, then one short closing sentence. '
-    'Never claim more items, or more progress, than the rows show. '
     'The supplied rows are the complete eligible Taskuary slice for the stated window - every connected source, '
     'and the owner\'s own tasks and agent runs - unless a block explicitly says it was capped. A source the data '
-    'says could not be read is unknown, not quiet. Never promote an excluded row into the brief, never call an '
-    'automatic filing a user accomplishment, and never invent flags or actions that are not present in the data.'
+    'says could not be read is unknown, not quiet. An automatic filing is the app\'s act, not the owner\'s.'
 )
 
 
@@ -363,7 +386,7 @@ def _text(ev: dict, read=(), unread=()) -> str:
         f"WINDOW: {since[:16]} through {datetime.now().strftime('%Y-%m-%d %H:%M')} ({hours} rolling hours)",
         f"SCOPE: {_and([*read, 'Taskuary tasks and agent runs'])}; of a mailbox, its Inbox (Focused and Other together) and Sent copies only.",
         *([f"COULD NOT READ THIS RUN: {'; '.join(f'{l} ({w})' for l, w in unread)}. Its rows below are only what Taskuary "
-           'already held - never say nothing came in from it.'] if unread else []),
+           'already held.'] if unread else []),
         'EXCLUSIONS APPLIED: blocked/ignored/withdrawn, bulk/marketing, system notifications, and receipts.',
         '',
         f"ACCOMPLISHED EVIDENCE ({len(accomplished)} rows; newest first):",

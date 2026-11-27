@@ -104,10 +104,10 @@ def test_the_builder_knows_taskuary_is_where_results_land_and_builds_a_clear_req
     opens tasks "really a report", and asked about things the request already said. "It does not have to ask us questions
     if it's clear." """
     s = compose.WORKFLOW_SYSTEM
-    assert 'TASKUARY IS WHERE RESULTS LAND' in s and 'Never ask which connection opens a task' in s
+    assert 'TASKUARY IS WHERE RESULTS LAND' in s and 'no connection opens a task' in s
     assert 'Opening tasks or drafting IS doing work' in s
-    assert 'A clear request is built' in s
-    assert 'A clear request is built, not questioned' in compose.JUDGEMENT          # the report builder too
+    assert 'is said in explain' in s
+    assert 'before anything is saved or runs' in compose.JUDGEMENT          # the report builder too
 
 
 def test_an_unclear_request_is_still_asked_about():

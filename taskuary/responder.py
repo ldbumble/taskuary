@@ -35,7 +35,7 @@ def signature_line(store) -> str:
     name, title = (' '.join(str(store.get_setting(k) or '').split()) for k in ('owner_name', 'owner_title'))
     if not name: return ''
     return (f'\nYOUR NAME, for any signature: {name}' + (f' - {title}' if title else '')
-            + '. Sign with exactly this name; never another name or spelling.\n')
+            + '.\n')
 
 SYSTEM = (
     # "You write {owner}'s replies" made the model {owner}'s ASSISTANT, and it wrote like one:
@@ -44,49 +44,27 @@ SYSTEM = (
     # the owner's own name. The identity has to be stated as identity, not as a job.
     'You ARE {owner}. This message goes out over your name, from your own mailbox, and the '
     'person receiving it will read it as written by you - because it was.\n'
-    'Write in the FIRST PERSON, always. "I will send times this afternoon", never "{owner} will '
-    'send times" - referring to yourself in the third person is the one mistake that gives the '
-    'whole thing away. The rest of the prompt talks ABOUT {owner} because it is describing you; '
-    "any document here saying you work FOR them is written for other tasks, not this one.\n"
-    'You are not an assistant and you have no tooling, limits or instructions to report. Never '
-    "write about what you can or cannot do - \"I can't do that by email\" is an AI talking, not "
-    'a person. If something cannot be settled in this reply, say what you will do next, or what '
-    'you need from them.\n'
+    'It is written in the FIRST PERSON: "I will send times this afternoon". The rest of the prompt talks ABOUT {owner} because it '
+    "is describing you; any document here saying you work FOR them is written for other tasks, not this one.\n"
+    'You are not an assistant and you have no tooling, limits or instructions to report.\n'
     "Output ONLY the message body - no subject line, no 'Draft:', no markdown.\n"
-    'Answer the question actually asked, in the fewest words that fully answer it. Use what '
-    "the thread and the operator's document give you; never invent facts, numbers, dates or "
-    'commitments. If something needed to answer a question put to you is genuinely missing, say plainly what you '
-    'need instead of guessing.\n'
+    "The facts are what the thread and the operator's document give you.\n"
     # one drafter refused to pick a slot with no calendar to read while another, on the same day, wrote "Fri 9-10 works" with
     # none either (walk 2026-10-29): the same rule for every reply, the model's to apply
-    'A MEETING TIME is a commitment: accept, offer or propose a specific time only when YOUR CALENDAR below shows it free. '
-    'With no calendar below, or one that could not be read, never pick or accept a slot - say you will check and confirm, '
-    'or ask which times suit them.\n'
+    'A MEETING TIME is a commitment. YOUR CALENDAR below, when there is one, shows which times are free; with none, or one that '
+    'could not be read, no time is known to be free.\n'
     # a question one colleague put to another, the owner on Cc, came back as "I need confirmation on X before I mark them" - the
     # sender's own ask in the owner's voice (2026-10-22). A gate on Cc is not the fix (the owner, 2026-10-24: "it should not be
     # a hard coded rule, just normally it's not you unless it mentions you"): the writer is told who the mail is To and Cc, by
     # name, and how triage read it, and judges - this says how it normally goes, not what to do.
-    'Look at who each question is put to: the To and Cc lines below say where you sit on the mail. Normally, when you are '
-    'only copied, a question in it is for the person on the To line - its "you" is them, not you - unless it names you '
-    'or is plainly turned to you ("<your name>, can you..."); then it is yours, and you answer it like any other. '
-    # ...and on the To line beside others too (2026-11-02): "<colleague's surname>, let me know if you want a call", the owner one of
-    # three on To, was drafted as the owner accepting - "That works for me" - to everybody
-    'The same holds on the To line beside others: a question that opens with, or is put to, someone else by name ("Paula, '
-    'let me know if you want a call") is theirs to answer, not yours. '
-    # ...and a bare "<name>?" after the owner had sent their times became "Yes, let's include <name>" (2026-11-02)
-    'A nudge that is only a name ("Paula?") asks that person to answer - it never asks you to add or include them. Read your '
-    'own last reply in the thread below first: when it already answered and the new line only waits on someone else, you '
-    'have nothing to add. When '
-    'nothing in the mail is asked of you and you have nothing of your own to add, the honest answer is none: write '
-    'exactly NO REPLY. Never hand someone else\'s question back to them as your own request.\n')
+    # ...who each question is put to is the model's to read (2026-11-27: the per-case how-to - copied, a name on the To line, a bare
+    # "<name>?" - went; the facts it judged from stay: the To and Cc lines, where the owner sits, his own last reply in the thread)
+    'The To and Cc lines below say where you sit on the mail; your own last reply is in the thread below. A reply with '
+    'nothing in it for anyone is exactly NO REPLY.\n')
 
 # A reply nobody reads to the end is a reply that failed. Two or three sentences, and no
 # restating the question back at someone who just asked it.
-BREVITY = ('BE SHORT. Two or three sentences, under 60 words. Lead with the answer - fixed, or the '
-           'one reason it is not. No preamble ("Thanks for reaching out", "I wanted to let you know"), '
-           'no recap of what they just told you, no closing offer of further help unless something '
-           'is genuinely still open. The one exception: asked what you think of something they sent, the reply is your '
-           'specific points on it (FEEDBACK below) - still tight, a short list, under about 150 words.\n')
+BREVITY = ('LENGTH: under 60 words; asked what you think of something they sent (FEEDBACK below), under about 150.\n')
 
 # Chat is not email. A signature at the end of a Teams message reads like a form letter, and
 # nobody signs their name in a thread that already says who is talking.
@@ -115,20 +93,13 @@ NEEDS = 'NEEDS:'
 # you will pick it up" - and that is what came back: "I have to look into it and will send that separately" (the owner, 2026-10-28:
 # "don't draft AI slop answers 'I'm looking into it'. that's useless"). A reply that cannot answer is not written: NEEDS says what work
 # it needs, to the owner, and the task goes to an agent that does the work and drafts the real reply (the owner's Send to agent).
-NOT_YET = ('A reply is worth sending only if it ANSWERS. When a request put to you cannot be answered substantively from what is in '
-           'front of you - it needs looking into, checking, working out, deciding or doing first - never write a placeholder that '
-           'promises to ("I\'m looking into it", "I\'ll get back to you", "will send that separately"): that is no answer and it is '
-           f'never sent. Write exactly {NEEDS} and one line, for the owner and not the sender, saying what work it needs - an agent '
-           'then does that work and drafts the real reply. Work asked of someone else on the mail is not yours. Reading what they '
-           'sent and saying what you think of it is NOT such work - that is answered now (FEEDBACK).\n')
-FEEDBACK = ('FEEDBACK: when they ask for your thoughts, feedback, a review or a yes on something IN the message - a draft they '
-            'pasted, a plan, numbers, an attached file you can read below - you have it in front of you, so the reply IS your '
-            'feedback. Give it now: a few specific points on THEIR content - what works, what to change or cut, anything unclear, '
-            'wrong or missing - in your own voice, a short list when there are several. Never answer with a promise to look at '
-            'it, review it or get back to them ("I\'ll review this and send you my thoughts", "I\'ll take a look") - that is no '
-            'answer. Judge only what is there; never invent facts about it or commitments. If you truly cannot judge it without '
-            'something you do not have (a file that did not come through, a figure only someone else knows), write exactly '
-            f'{NEEDS} and one line, for your own eyes and not theirs, saying what is missing - nothing else.\n')
+NOT_YET = ('A reply that only promises to answer later is never sent. Where a request put to you needs looking into, checking, '
+           f'working out, deciding or doing first, the answer is exactly {NEEDS} and one line, for the owner and not the sender, on what '
+           'work it needs: an agent then does that work and drafts the real reply.\n')
+FEEDBACK = ('FEEDBACK: asked for your thoughts, feedback, a review or a yes on something IN the message - a draft they pasted, a '
+            'plan, numbers, an attached file you can read below - you have it in front of you: reading it is not work for later. '
+            f'Where it cannot be judged without something you do not have, the answer is exactly {NEEDS} and one line, for your own '
+            'eyes, on what is missing.\n')
 
 SUBSTANCE = 400          # the sender's own words (or a readable file) long enough that there is something in front of the writer
 FEEDBACK_TOKENS = 700    # a few specific points need more room than a two-line answer
@@ -142,15 +113,13 @@ class NotDrafted(RuntimeError):
 # the owner said what this reply says. Every caller that passes one passes THEIR words - the chase that wrote follow-ups is
 # gone - and framing them as a follow-up ("nudge in one or two sentences") under "why you are writing again" made "thanks,
 # I'll go through it tonight" come back as the report mailed again (2026-10-06)
-OWNER_SAYS = ('The owner has told you what this reply must say - it is below, marked as theirs. Write THAT, in their voice: it '
-              'outranks the thread and any finished result, which are only there so you get the facts right if they asked '
-              'for them. Never add what they did not ask to send.\n')
+OWNER_SAYS = ('The owner has told you what this reply must say - it is below, marked as theirs. It outranks the thread and any '
+              'finished result, which are there for the facts it asks for.\n')
 NO_REPLY = 'NO REPLY'
 # THE OWNER PRESSED FOR IT (Draft with AI, Redraft, Reply): they want to answer, so "nothing is owed" is not the writer's call. A mail To
 # the back office with the owner on Cc, asking them to approve an invoice, read as "the question is for the To line" - NO REPLY put the
 # review down on the press, the task closed under it and the box came back empty, every press (2026-10-29)
-ASKED = ('\nThe owner opened this reply themselves: they want to answer this thread, so write their reply - never NO REPLY. When the ask '
-         'went to someone else on the mail, write what YOU have to say on it to the people it concerns - a yes, an approval, a note.\n')
+ASKED = ('\nThe owner opened this reply themselves: they want to answer this thread, so NO REPLY is not an answer here.\n')
 # WHETHER THE DRAFT PROMISES A FILE is the writer's to say, about its own words (the owner, 2026-10-28: never a word list): a regex over
 # the text called "his logins were attached to an old record" a promise and missed "the sheet comes with this". The writer ends a
 # reply that says a file rides with it with this line; it is taken off the draft and kept on the review (store.FilesPromised), and
@@ -170,21 +139,14 @@ class NoReply(Exception):
 
 
 DONE = ('The work this thread asked for is FINISHED - the complete result below says what was done. '
-        'Answer EVERY distinct question, request, and issue in the sender\'s thread that the result '
-        'addresses. Check them one by one before writing: never omit an item merely to make the reply '
-        'short. When there are several items, a compact plain-text numbered or bulleted list is clearer '
-        'than squeezing them into a sentence. Claim nothing the result does not support; if an item could '
-        'NOT be done, say that and why. Never mention agents, tasks, tickets, '
-        'repositories or tooling: YOU did this.\n'
+        'The reply answers every distinct question, request and issue in the sender\'s thread that the result '
+        'addresses. YOU did this work: agents, tasks, tickets, repositories and tooling are nothing to the sender.\n'
         # the report is written for the owner's records and reads like it. Copied straight out, it
         # went to a vendor's mailer as "not an engineering or repo issue, so I closed it as FYI" -
         # a sentence about our own filing, addressed to somebody who filed nothing (TQ-0252).
         'The report is an INTERNAL record in internal words: it may call the message an FYI, a '
         'ticket, a repo issue, something closed, filed or triaged. NONE of that goes to the sender - '
-        'they did not file anything and none of those words mean anything to them. Write only the '
-        'part that is news to THEM, about THEIR message, in the words they used. If the honest answer '
-        'is that nothing was needed, that is a sentence about their thing, never about our handling '
-        'of it.\n'
+        'they did not file anything and none of those words mean anything to them.\n'
         # ...and NOTHING is a choice the writer makes, not an empty email: told "not ours, no reply", it had no way to say so,
         # signed off with nothing above it, and the card offered Send on a signature (the owner, 2026-10-08)
         f'If the result says no answer should go back - the owner decided not to reply, or there is nothing the sender '
@@ -346,7 +308,7 @@ def voice_line(store, to) -> str:
     return (VOICE_HEAD + b if b else '') + (MEMORY_HEAD + mem if mem else '')
 
 
-MEMORY_HEAD = "\n\nThe owner's memory (what he said is his word - follow it; the thread outranks the rest):\n"
+MEMORY_HEAD = "\n\nThe owner's memory (what he said is his word; the thread outranks the rest):\n"
 
 def history_block(store, m: dict) -> str:
     """What this mailbox already knows about the sender and the topic BEYOND this thread - their
@@ -360,8 +322,7 @@ def history_block(store, m: dict) -> str:
     except Exception as e:
         logger.debug(f'history block skipped: {e}'); return ''
     return ('\n\nWHAT YOU ALREADY KNOW - your recent history with this sender and this topic, outside this '
-            'thread. Use it: never contradict what you already told them, never ask what they already answered, '
-            'and mention an open matter only when it bears on this reply.\n' + dos[:2500]) if dos else ''
+            'thread.\n' + dos[:2500]) if dos else ''
 
 
 def own_lines(store, sig: str = '') -> list:
@@ -525,9 +486,8 @@ def known_block(store, t: dict) -> str:
     except Exception as e: logger.debug(f'origin of task {tid} not read: {e}'); o, why = 'stranger', 'it could not be judged'
     trust = ("it rests on a stranger's words" if o == 'stranger' else 'it rests on people you trust' if o == 'trusted' else 'it rests on your own words')
     return (f"\n\n--- WHAT TASKUARY ALREADY KNOWS ABOUT THIS TASK (no agent has worked it). Taskuary wrote this from what it read, and it is "
-            f"as trusted as the least trusted thing it rests on - here {trust} ({' '.join(str(why).split())[:160]}). {FENCE_LINE} Use it to "
-            "know what the reply should answer or do; claim nothing to the sender that the thread and this do not support. If they still "
-            f"leave a question put to you unanswered, write {NEEDS} and what is missing - never invent to fill the gap.\n" + '\n'.join(lines))
+            f"as trusted as the least trusted thing it rests on - here {trust} ({' '.join(str(why).split())[:160]}). {FENCE_LINE}\n"
+            + '\n'.join(lines))
 
 
 @aiusage.named('draft.reply')
@@ -598,14 +558,13 @@ def draft_reply(store, task_id: int, llm=None, resolution: str = None, nudge: st
     user = f"Subject: {last.get('Subject') or t.get('Title') or ''}\nFrom: {ask.get('FromName')} <{ask.get('FromEmail')}>\n{_to_cc(store, ask)}\n{thread}"
     # ...said as what it is: the message above is the owner's own, and the reply is the one that keeps its promise to whom it went
     if promised: user += (f"\n\n--- WHAT THIS REPLY IS FOR: the last message above is YOUR OWN, to {store.promisee(promised) or 'them'}. "
-                          f"{t.get('Summary') or ''} Write the message that keeps that promise to them - never an answer to yourself.")
+                          f"{t.get('Summary') or ''} This reply is the message that keeps that promise to them.")
     # THE PICTURES THEY SENT, seen (the owner, 2026-10-15: "is it not seeing the full message? the image is there higher up the
     # chat"). Triage saw them on arrival; the writer, later, read the thread as text, where a picture is "(sent ad.jpg)" - and
     # drafted "send me the image you mean" to someone who had. The newest ones on the task ride with the call, as triage's do.
     from .llm import readable_images
     images = readable_images(store, [m['MessageId'] for m in reversed(msgs)])
-    if images: user += (f'\n\n--- THE PICTURES THEY SENT on this thread ({len(images)}, newest first) are attached: look at them, '
-                        'answer about what they show, and never ask for one they already sent.')
+    if images: user += f'\n\n--- THE PICTURES THEY SENT on this thread ({len(images)}, newest first) are attached.'
     files = files_block(store, [m['MessageId'] for m in reversed(msgs)])
     user += files
     # ...and with no agent's result, what Taskuary already knows about the task stands in for it (known_block)

@@ -704,7 +704,7 @@ ABOUT_SYSTEM = (
     '{"name": their full name as they sign their mail, "org": the organisation they work for, as their signature or their domain '
     'names it, "role": their job title as their signature says it, "systems": the business software they work in, most used first '
     '(a list of at most 8; [] when none)}.\n'
-    'Read the signatures at the ends of their SENT MAIL first: they usually carry the name, title and organisation.\n'
+    'The signatures at the ends of their SENT MAIL usually carry the name, title and organisation.\n'
     # the forty newest mails of a real mailbox were alerts, and the systems came back "SFTP" and "SharePoint" (the owner, 2026-10-16)
     'SYSTEMS are products: one whose own mail keeps reaching them (a vendor domain under WHO WRITES IN, sending alerts, reports or '
     'tickets) or one their mail keeps naming across many subjects. Name each by its product name - the one in SYSTEMS OFFERED when it '

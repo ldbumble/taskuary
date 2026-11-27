@@ -70,18 +70,17 @@ def clean(view) -> dict | None:
             **({'text': _cut(view.get('text'), 600)} if view.get('text') else {})}
 
 
-GUIDE = ('WHAT IS ON THE SCREEN, read because the owner asked you. You may bring a page up or point at a thing on it - never fill a box, '
-         'press a button or type anywhere: what is on the page is the owner\'s to do, and the work inside a task is its agent\'s. End your '
-         'answer with one line per move, each exactly:\nVIEW: {"op": "point", "target": "<field or button>"}  - outline it for the owner\n'
+GUIDE = ('WHAT IS ON THE SCREEN, read because the owner asked you. You may bring a page up or point at a thing on it; filling a box, '
+         'pressing a button or typing there is the owner\'s to do, and the work inside a task is its agent\'s. A move is one line at the '
+         'end of the answer, each exactly:\nVIEW: {"op": "point", "target": "<field or button>"}  - outline it for the owner\n'
          'VIEW: {"op": "open", "area": "task|settings|connections|reports|about|hub|board|search", "section": "...", "open": "...", "knob": "...", '
          '"query": "..."}  - bring up another page (Settings: section "config", open the group, knob the setting\'s key - settings.list names '
          'them; About you - the owner\'s docs and what was learned: section "you", "docs" or "memory"; Reports\' skills: area "reports", '
          'section "skills"; the Hub: section the topic, open the post\'s number, as knowledge.search prints it; the Board: the area alone; '
          'Search: query, its words)\nA dialog open over the page (Search, the Hub\'s Write one, the bell) is the page while it is open. Your '
          # ...are drawn BEFORE the moves run, each its own step once it is done (the owner, 2026-11-03: "if it opens it, it should say open")
-         'words are shown before the moves run, and each says itself as a step once it is done ("Opened ...", "Pointed at ...") - so never '
-         'narrate them ("Opening ...", "I\'ll open ..."): one short line of what the owner can do there, or no words at all. A VIEW line is never '
-         'shown to the owner.')
+         'words are shown before the moves run, and each move says itself as a step once it is done ("Opened ...", "Pointed at ..."). '
+         'A VIEW line is never shown to the owner.')
 
 
 def block(view: dict | None) -> str:

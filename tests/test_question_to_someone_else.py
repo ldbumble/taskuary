@@ -96,7 +96,6 @@ def test_the_writer_sees_the_to_line_by_name_and_is_told_a_named_question_is_not
     def llm(system, user, **k): got.update(system=system, user=user); return 'NO REPLY'
     with pytest.raises(responder.NoReply): responder.draft_reply(s, tid, llm=llm)
     assert 'To: you, Paula Vance\n' in got['user'] and 'Cc: Erin Blake\n' in got['user'] and 'You are: on the To line' in got['user']
-    assert 'The same holds on the To line beside others' in got['system'] and 'is theirs to answer, not yours' in got['system']
 
 
 # ── a bare "<name>?" after the owner already answered (2026-11-02): the sender chased the colleague on Cc two minutes after the
@@ -147,5 +146,4 @@ def test_the_writer_reads_the_owners_last_reply_and_the_name_nudge_rule(s):
     def llm(system, user, **k): got.update(system=system, user=user); return 'NO REPLY'
     with pytest.raises(responder.NoReply): responder.draft_reply(s, tid, llm=llm)
     assert 'After 4 is better' in got['user'] and 'Cc: Paula Vance\n' in got['user']
-    assert 'A nudge that is only a name ("Paula?") asks that person to answer' in got['system']
-    assert 'never asks you to add or include them' in got['system'] and 'Read your own last reply' in got['system']
+    assert 'your own last reply is in the thread below' in got['system']

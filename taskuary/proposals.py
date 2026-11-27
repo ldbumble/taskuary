@@ -1000,8 +1000,13 @@ def _older(store, tid: int, inputs) -> list:
         if r['Kind'] == 'slot': return words(r) and not str(r.get('Reason') or '').startswith('your email')
         if _action(r) == 'page_step': return False              # ...a step on a page is closed by his press or the page alone (workerstate.page_step)
         return r['Kind'] == 'action' or words(r) or r['Kind'] not in ('draft_reply', 'draft')
+    # ...AND HIS LINE NEVER PASSES A CARD THAT WAITS BEHIND ONE THE AGENT IS DOING (walk 26, 2026-11-27: the X post handed over and in flight,
+    # "X still shows nothing posted" greyed the LinkedIn post - raised behind it, never once on his screen - and the task read done with it
+    # owed): nothing was in front of him to pass (cardqueue.queued). A message greys its own thread's cards wherever they stand
+    from .cardqueue import queued
+    unseen = queued(store, tid) if any(m is None for _, m in inputs) else set()
     return [r['ReviewId'] for r in rows if card(r) and (t := ep(r.get('DraftAt') or r['CreatedAt'])) is not None
-            and any(t < at and bears(store, r, m, at) for at, m in inputs)]
+            and any(t < at and (m is not None or r['ReviewId'] not in unseen) and bears(store, r, m, at) for at, m in inputs)]
 
 
 def inputs_since(store, tid: int, after: float = 0.) -> list:
@@ -1179,6 +1184,7 @@ def closeout(store, tid: int, p: dict, text: str = '', actor='agent'):
     return queue(store, tid, {**p, 'text': (text or '').strip()}, actor)
 
 
+STEP_NO = 'he dismissed a step on its way'      # a handed card's DecideNote: ended by his no to a step of its road (settle)
 def settle(store, rv: dict, verb: str, actor='owner') -> None:
     """After the owner answered a proposal: Approve ran only that act (the owner, 2026-10-18) - the task stays open for Mark
     done, and is said to be on them once nothing else of it waits; "not yet" on a close-out leaves it open and on them."""
@@ -1186,7 +1192,13 @@ def settle(store, rv: dict, verb: str, actor='owner') -> None:
     if tid and _action(rv) == SKILL and HELD in str((store.get_task(tid) or {}).get('Tags') or ''): return skill_answered(store, tid, actor)
     if not tid: return
     # a held step dismissed: the waiting agent hears it was not done
-    if _action(rv) in HELD_ACTS and verb not in ('approve', 'edit'): _gate(_action(rv)).declined(store, tid, json.loads(rv.get('DraftText') or '{}'))
+    if _action(rv) in HELD_ACTS and verb not in ('approve', 'edit'):
+        _gate(_action(rv)).declined(store, tid, p := json.loads(rv.get('DraftText') or '{}'))
+        # ...AND HIS NO TO A STEP OF A CARD HE HANDED OVER IS HIS NO TO THAT CARD'S ROAD (walk 26, 2026-11-27, all roads: he dismissed the sign-in a
+        # Reddit post needed, and its card went on reading "Handed to the agent - it puts this up on Reddit ... its Post waits for you" - nobody
+        # was, the task read done, and every card behind it waited for good): the card he pressed ends as dismissed, where it stands
+        from .cardqueue import handed
+        if str(p.get('card') or '').isdigit() and handed(c := store.get_review(int(p['card'])) or {}): store.review_unhanded(c['ReviewId'], 'rejected', None, STEP_NO)
     # a pull request opened on the owner's yes AFTER the agent finished is still a task that ends by merging it
     if _action(rv) in ('land', 'open_pr') and verb in ('approve', 'edit') and (store.get_task(tid) or {}).get('Status') != 'dropped':
         due = closeout_due(store, tid)

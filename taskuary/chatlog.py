@@ -1064,6 +1064,14 @@ def advance(store, tid: int) -> None:
     sp = cardqueue.step(q['units'][0]) if front else None
     step = {'review': sp['ReviewId'], 'what': cardqueue.step_says(sp), 'card': cardqueue._p(sp).get('card'),
             **({'press': 'done'} if cardqueue._p(sp).get('action') == pagestep.ACT else {}), **({'fill': True} if cardqueue._p(sp).get('fill') else {})} if sp else None
+    # ...BUT NEVER ON A CARD A LINE OF HIS STANDS UNDER (walk 26, 2026-11-27: Post via the browser, then his line, then the turn it began handed him
+    # a sign-in - lit on the card two turns up, "I'm done" off the screen above his line and the agent's words under a card that waits): there
+    # the step is a card of its own, the last thing of the turn that handed it over. Decided as the step is first drawn, and kept: a line of
+    # his under a step already on its card moves nothing
+    crow = rows.get(f"r:{front[0]}") if sp else None
+    own = bool(sp) and (f"r:{sp['ReviewId']}" in rows or bool(crow) and (json.loads(crow['Body'] or '{}').get('step') or {}).get('review') != sp['ReviewId']
+                        and not any(x['Status'] == 'pending' and not cardqueue._p(x).get('card') for x in q['units'][0]['rows']) and _line_under(store, tid, crow))
+    lit = sp['ReviewId'] if own else front[0] if front else None
     # ...every card that stood reads as its review does now: pressed, withdrawn, moved past - in its place
     for k, r in list(rows.items()):
         rv = by.get(json.loads(r['Body']).get('review'))
@@ -1100,17 +1108,16 @@ def advance(store, tid: int) -> None:
         if st == 'superseded' and rv.get('DecidedBy') not in OWNER_ACTORS: st = 'passed'
         # ...(one outside the line - his own email - is offered beside it by what it IS, not by the state its row last had: drawn `pending` while
         # no card stood in front, it read `held` and left the chat when a greyed card stood again - cardqueue.keep)
-        if st == 'pending' and rv['ReviewId'] != (front[0] if front else None):
+        if st == 'pending' and rv['ReviewId'] != lit:
             st = 'passed' if rv['ReviewId'] in q['past'] else ALSO if rv['ReviewId'] in also else 'held' if cardqueue.in_line(rv) else 'offer'
-        if step and front and rv['ReviewId'] == front[0]: st = 'pending'
+        if step and not own and front and rv['ReviewId'] == front[0]: st = 'pending'
         if st != r['State']: update(store, tid, k, state=st, status='pending' if st == ALSO else st)
     if front and (rv := by.get(front[0])) and f"r:{front[0]}" not in rows:
-        # ...the turn that raised it (advance_soon kept it), else the one open now; a turn's card is drawn when that turn has ended
-        # ...else the turn at work when it was raised, by its own time: a card is a turn's last thing, never loose where a turn was
-        t = _raised(store, front[0]) or (open_turn(store, tid) or _turn_at(store, tid, rv.get('CreatedAt')) or {}).get('Id')
         put(store, tid, 'card', f"r:{front[0]}", {**_card(rv), 'rids': front, 'line': cardqueue.line(q), 'step': step, **({'status': 'pending'} if step else {})},
-            parent=t, state='pending', src=f"review:{front[0]}")
+            parent=_home(store, tid, rv), state='pending', src=f"review:{front[0]}")
     elif front and f"r:{front[0]}" in rows: update(store, tid, f"r:{front[0]}", line=cardqueue.line(q))
+    if own and f"r:{sp['ReviewId']}" not in rows:
+        put(store, tid, 'card', f"r:{sp['ReviewId']}", {**_card(sp), 'rids': [sp['ReviewId']]}, parent=_home(store, tid, sp), state='pending', src=f"review:{sp['ReviewId']}")
     # ...AND THE FRONT OF EACH LATER RUN STANDS WHERE IT WAS RAISED, UNDER THE LINE OF HIS THAT BEGAN ITS RUN (walk 24, 2026-11-25: raised after
     # his answer it was a tab of the card above the answer, and came down the chat when that card's front was pressed): its own row from the
     # start (ALSO), which becomes the one pending row in place once the cards before it are settled
@@ -1120,7 +1127,7 @@ def advance(store, tid: int) -> None:
             put(store, tid, 'card', f"r:{rid}", {**_card(rv), 'rids': f}, parent=t, state=ALSO, src=f"review:{rid}")
     # ...its step on the card in front only: pressed, that card is done; taken back or moved past, the card is as it was
     for k, r in rows.items():
-        if (want := step if front and k == f"r:{front[0]}" else None) != json.loads(r['Body'] or '{}').get('step'): update(store, tid, k, step=want)
+        if (want := step if front and not own and k == f"r:{front[0]}" else None) != json.loads(r['Body'] or '{}').get('step'): update(store, tid, k, step=want)
     for rid, rv in by.items():
         if f'r:{rid}' in rows or rv['Status'] != 'pending' or cardqueue.in_line(rv) or rid in held: continue
         from .conversation import unwritten
@@ -1149,6 +1156,26 @@ def advance(store, tid: int) -> None:
 def _words(card: dict) -> str:
     "The words a card's row stood with (`was`, conversation._card) - '' for one raised empty."
     return str((card.get('was') or {}).get('text') or '')
+
+
+def _line_under(store, tid: int, r: dict, since: float = 0.) -> bool:
+    """Does a line of his stand under card row `r` - under the turn it is in, or the row it was set down under while it waited (waits_last)?
+    `since`: only one that came after then."""
+    under = json.loads(r.get('Body') or '{}').get('under')
+    at = max(r.get('Parent') or r['Id'], (_row(store, tid, str(under)) or {}).get('Id', 0) if under else 0)
+    with store.lock: return bool(store.cx.execute("SELECT 1 FROM chatlog WHERE TaskId=? AND Kind='line' AND Parent IS NULL AND Id>? AND At>? LIMIT 1",
+                                                  (int(tid), at, since)).fetchone())
+
+
+def _home(store, tid: int, rv: dict):
+    """The turn a card first drawn now is the last thing of: the one that raised it (advance_soon kept it), else the one open now, else the turn at
+    work when it was raised, by its own time - a turn's card is drawn when that turn has ended, never loose where a turn was.
+    AND NEVER ABOVE A LINE OF HIS THAT CAME AFTER IT (walk 26, 2026-11-27): one raised before his line and first drawn after it - it waited its
+    turn behind another card - stands in the turn open now, else at the foot. One its turn raised after his line landed is that turn's still
+    (a stamp is a whole second: only a line surely after). -> that turn's Id, or None for the foot."""
+    from .conversation import ep
+    t = _raised(store, rv['ReviewId']) or (open_turn(store, tid) or _turn_at(store, tid, rv.get('CreatedAt')) or {}).get('Id')
+    return (open_turn(store, tid) or {}).get('Id') if t and _line_under(store, tid, {'Id': t}, (ep(rv.get('CreatedAt')) or 0.) + 1) else t
 
 
 def _was_front(by: dict, rv: dict) -> bool:

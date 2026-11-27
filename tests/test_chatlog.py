@@ -364,6 +364,12 @@ def test_each_tab_of_a_set_is_told_by_what_came_of_it_never_by_its_first_rows_fa
     assert s.get_review(rd)['Status'] == 'superseded'
     got = told()
     assert 'Turned down by him' in got[x] and 'Done' in got[li] and 'Greyed by his line' in got[rd] and 'Turned down' not in got[rd], got
+    # ...AND THE ONE TAB ITS AGENT KEEPS IS A CARD OF ITS OWN (walk 26, 2026-11-27: the Reddit tab kept alone came back as a list of one - "1 post",
+    # a tick box and a lit "Post to Reddit - all 1" on a network not connected, a press that could only fail): no set, no list - that post's card
+    assert (out := cardqueue.keep(s, tid, f'rv{rd}', 'agent'))['ok'], out
+    kept = s.get_review(cardqueue.again_of(s, rd)); cardqueue._SEEN.clear()
+    assert kept['Status'] == 'pending' and not kept.get('Batch') and not any(str(kept['ReviewId']) in [t['key'] for t in ts] for ts in cardqueue.sets(s, tid).values())
+    assert cardqueue.state(s, tid)['live'] == [kept['ReviewId']]
 
 
 def test_an_empty_reply_box_in_front_is_never_told_as_waiting_for_his_press():
@@ -412,6 +418,81 @@ def test_an_empty_reply_box_never_holds_a_card_that_can_be_pressed():
     for r in (act, then): s.decide_review(r, 'approved', None, 'owner'); cardqueue._SEEN.clear()
     assert cardqueue.row_over(s, tid), 'a box with nothing to press keeps no agent from its next step'
     assert cards()[box] == 'pending' and cardqueue.state(s, tid)['live'] == [box]
+
+
+def _drawn(s, tid) -> list:
+    "The chat as it is drawn, flat: (kind, review, status) for his lines, each turn and each card under it, in order."
+    chatlog.advance(s, tid); out = []
+    for x in chatlog.waits_last(chatlog.read(s, tid)['items']):
+        out.append((x['kind'], x.get('review'), x.get('status')))
+        out += [('card', c['review'], c['status']) for c in x.get('cards') or []]
+    return out
+
+
+def _nothing_of_the_agents_under_a_card_that_waits(drawn: list) -> None:
+    "Locked rule 10: nothing of the agent's is drawn after a card that waits; only his own line may come after it."
+    for i, (kind, rid, st) in enumerate(drawn):
+        if kind == 'card' and st == 'pending': assert not [x for x in drawn[i + 1:] if x[0] == 'turn'], (rid, drawn)
+
+
+def test_his_line_never_greys_a_card_that_waits_behind_one_its_agent_is_doing():
+    """Walk 26, 2026-11-27 (HIPAA AI): an X post and a LinkedIn post, two calls. Post via the browser on X - handed over, in flight - with
+    LinkedIn behind it, drawn nowhere. His line about X ("still shows nothing posted") greyed LinkedIn, a card he had never seen, and the
+    task read done with it owed. Nothing was in front of him to pass: the one behind stays in line, and comes forward once X is done -
+    under his line and the newest words, never lit above them. (Behind a card that waits on HIM his line passes the whole line, as ever.)"""
+    from unittest import mock
+    from taskuary import cardqueue, conversation, general, proposals
+    s, tid = world()
+    conversation.hear(s, tid, turn=True)
+    x, li = (s.add_review({'TaskId': tid, 'Kind': 'action', 'Status': 'pending', 'Origin': 'agent', 'Reason': 'the post you asked for',
+                           'DraftText': json.dumps({'action': 'run_tool', 'type': t, 'text': 'We close the month in four days.'})}) for t in ('x_post', 'linkedin_post'))
+    s._exec("UPDATE review SET CreatedAt=datetime(CreatedAt, '-5 seconds'), DraftAt=NULL WHERE TaskId=?", (tid,))
+    s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'Both posts are set up, one after the other.')
+    assert [c for c in _drawn(s, tid) if c[0] == 'card'] == [('card', x, 'pending')] and cardqueue.queued(s, tid) == set(), 'X waits on him: his line would pass both'
+    with mock.patch.object(general, 'to_agent', return_value='woke'): assert proposals.via_browser(s, x, '')['ok']
+    cardqueue._SEEN.clear()
+    assert cardqueue.queued(s, tid) == {li}
+    line = general.new_line_id()
+    s.add_comment(tid, 'owner', general.USER_TYPE, 'X still shows nothing posted.', line_id=line); cardqueue._SEEN.clear()
+    assert proposals.written_past(s, tid) == set(), 'from the moment his line lands'
+    conversation.hear(s, tid, [line], standing=True, turn=True); cardqueue._SEEN.clear()
+    assert s.get_review(li)['Status'] == 'pending' and cardqueue.state(s, tid)['held'] == [li], 'still in line behind X'
+    assert cardqueue.done(s, tid, 'Posted on x.example') == [x]
+    s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'The X post is up now.'); cardqueue._SEEN.clear()
+    got = _drawn(s, tid)
+    assert got[-1] == ('card', li, 'pending') and got.index(('card', li, 'pending')) > max(i for i, c in enumerate(got) if c[0] == 'line'), got
+    _nothing_of_the_agents_under_a_card_that_waits(got)
+
+
+def test_a_step_handed_over_after_his_line_is_a_card_of_its_own_under_the_newest_words():
+    """Walk 26, 2026-11-27 (Claude CLI): Post via the browser on a Reddit card; the agent found no form and said so; his line named the address;
+    the turn it began handed him the sign-in. The step lit the Reddit card where it stood, two turns up: "I'm done" off the screen above his
+    line, and the agent's "Once you press I'm done ..." under a card that waits. A step whose card his line stands under is a card of its
+    own, the last thing of the turn that handed it over; the card he pressed stays as it was, where it was. Invented people."""
+    from unittest import mock
+    from taskuary import cardqueue, conversation, general, pagestep, proposals, workerstate as ws
+    s, tid = world()
+    conversation.hear(s, tid, turn=True)
+    rd = s.add_review({'TaskId': tid, 'Kind': 'action', 'Status': 'pending', 'Origin': 'agent', 'Reason': 'the post you asked for',
+                       'DraftText': json.dumps({'action': 'run_tool', 'type': 'reddit_post', 'text': 'We close the month in four days. Ask me anything.'})})
+    s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'The Reddit post is set up.')
+    chatlog.read(s, tid)
+    with mock.patch.object(general, 'to_agent', return_value='woke'): assert proposals.via_browser(s, rd, '')['ok']
+    conversation.hear(s, tid, [general.new_line_id()], standing=True, turn=True)
+    ws.record(s, tid, 'run1', 'input_needed', request_id='signin:reddit.example', text='Sign in to Reddit so the post can be put up', source='api')
+    s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, "Once you press I'm done, I will post it.")
+    cardqueue._SEEN.clear()
+    got = _drawn(s, tid); step = pagestep.card_of(s, tid, 'signin:reddit.example')['ReviewId']
+    got = _drawn(s, tid)
+    _nothing_of_the_agents_under_a_card_that_waits(got)
+    assert got[-1] == ('card', step, 'pending') and [c for c in got if c[1] == rd] == [('card', rd, 'approved')], got
+    assert not chatlog.get(s, tid, f'r:{rd}').get('step'), 'the card he pressed carries no step two turns up'
+    assert step in cardqueue.state(s, tid)['live'] and pagestep.shown(s, tid, {'request_id': 'signin:reddit.example'}), 'in front, its page open'
+    # ...and a line of his under a step already drawn moves nothing; pressed, it shows its result where it stands
+    conversation.hear(s, tid, [general.new_line_id()], standing=True); cardqueue._SEEN.clear()
+    assert [c for c in _drawn(s, tid) if c[0] == 'card'] == [c for c in got if c[0] == 'card']
+    s.decide_review(step, 'approved', None, 'owner', note=pagestep.DONE_ON_PAGE); cardqueue._SEEN.clear()
+    assert [c for c in _drawn(s, tid) if c[0] == 'card'] == [('card', rd, 'approved'), ('card', step, 'approved')]
 
 
 def test_a_tab_he_said_no_to_is_marked_so_never_as_one_that_went():

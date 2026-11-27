@@ -251,6 +251,10 @@ def keep(store, tid: int, which, by: str = 'agent', why: str = '') -> dict:
         # ...written now: a card is older than an input by when its words were written (proposals._older), so the kept one stands after it
         store._exec(f"UPDATE review SET DraftAt=CreatedAt, {', '.join(f'{k}=?' for k in rest)} WHERE ReviewId=?", (*rest.values(), new))
         store._review_changed(new); kept[i] = new
+    # ...AND ONE KEPT ALONE IS A CARD OF ITS OWN (walk 26, 2026-11-27: the Reddit tab of a set, kept by itself, came back as a list of one -
+    # "1 post", a tick box, and a lit "Post to Reddit - all 1" on a network not connected, which could only fail): a set's tabs and a list's
+    # rows are of one call's MANY; what is left of it as one is that act's own card, with its own road
+    for k in batch.values(): store._exec('UPDATE review SET Batch=NULL WHERE Batch=? AND (SELECT COUNT(*) FROM review WHERE Batch=?)=1', (k, k))
     if kept: store.audit('task', int(tid), 'cards_kept', by, 'agent', {'kept': {str(k): v for k, v in kept.items()}})
     one = len(kept) == 1
     says = KEEP.format(ids=what(store, {'rids': [v], 'rows': [store.get_review(v)]}, True) if one and (v := next(iter(kept.values())))
@@ -288,13 +292,23 @@ def _stood(u: dict) -> bool:
                                                          and r.get('DecidedBy') in ('agent', 'assistant', 'taskuary')) for r in u['rows'])
 
 
-def _state(store, tid: int) -> dict:
+def queued(store, tid: int) -> set:
+    """The ids of task `tid`'s cards that wait behind a card HIS PRESS HANDED TO ITS AGENT, nothing of which is his to press now: none of
+    them has been in front of him, and the card they wait behind is not his to pass - so a line of his passes none of them. (Behind a card
+    that does wait on him his line passes the whole line, as ever.) By the cards as they stand, before any input nobody heard greys one -
+    what an input may grey reads this (proposals._older), so it reads nothing greyed."""
+    s = _state(store, tid, set())
+    if not s['units'] or not s['units'][0]['rows'] or _waits(s['units'][0]): return set()
+    return set(s['held']) - {x for f in s['fronts'] for x in f} - {LAND}
+
+
+def _state(store, tid: int, past: set = None) -> dict:
     """The line on task `tid`: {'live': the front's ids or [], 'held': ids that wait behind it, 'n': the front's place in the run it is one
     of, 'of': that run's length, 'next': what comes next in words, 'units', 'runs': every run of the cards that stood (_runs), 'past': the
     cards the chat moved past (proposals.written_past), 'fronts': the ids of the first card that waits in each LATER run - each stands where
     it was raised, under the line of his that began its run}."""
     from .proposals import written_past
-    us = _units(store, tid, past := written_past(store, int(tid)))
+    us = _units(store, tid, past := written_past(store, int(tid)) if past is None else past)
     waiting = [u for u in us if u['done'] is None]
     # ...WHAT WAITS IN FRONT MUST BE PRESSABLE (walk 26, 2026-11-27: an empty reply box put up as the mail arrived - Send off, no Dismiss - stood
     # in front for good, and the card its agent raised behind it was drawn nowhere while the agent said it was there): a card with nothing on
@@ -573,7 +587,7 @@ def screen(store, tid: int, skip=()) -> str:
                 shown = '' if 'approve' in ps else f" (its card: {card.press_words({'kind': card.SEND, 'presses': ps})})"
                 # ...AND A REPLY BOX WITH NO WORDS IN IT HAS NOTHING TO PRESS (walk 25, 2026-11-26: an empty reply stood in front of the card its
                 # agent had raised, told as "waiting for his press now" - its Send is off until somebody writes it)
-                if r and r.get('Kind') in DRAFTS and not _words(r): waiting.append(f'In front with no words in it, so nothing of it can be pressed: {n}')
+                if r and r.get('Kind') in DRAFTS and not _words(r): waiting.append(f'A reply box with no words in it, so nothing of it can be pressed: {n}')
                 else: waiting.append(f'Waiting for his press now{outcome(r)}: {n}{shown}')
             elif ids <= front: waiting.append(f'Comes forward once your turn ends (you are going on from his last press): {n}')
             # ...A CARD BEHIND THE FRONT COMES ONCE THE ONE IN FRONT IS PRESSED (separate calls are separate cards, one after another)

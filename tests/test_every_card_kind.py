@@ -249,6 +249,25 @@ def test_a_step_he_dismisses_stays_one_card(w):
     assert steps() == [step] and got[step]['status'] == 'rejected' and not w.woken, 'his no: on its card, and nobody woken'
 
 
+def test_his_no_to_a_step_of_a_card_he_handed_over_ends_that_card_as_dismissed(w):
+    """Walk 26, 2026-11-27, all three roads: Post via the browser on a Reddit card, the agent handed him the sign-in, he pressed Dismiss. The
+    card went on reading "Handed to the agent - it puts this up on Reddit in the browser, and its Post waits for you": nobody was putting
+    it up, the task read done, and the card behind it (LinkedIn) waited for good. His no to the step is his no to that card's road: it
+    reads dismissed where it stands, its agent is told so as his own, nobody is woken - and the next card comes forward."""
+    rd = w.act({'action': 'run_tool', 'type': 'reddit_post', 'text': 'We close the month in four days. Ask me anything.'})
+    li = w.act({'action': 'run_tool', 'type': 'linkedin_post', 'text': 'We close the month in four days.'})
+    assert proposals.via_browser(w.s, rd, '')['ok']; w.woken.clear()
+    ws.record(w.s, w.tid, 'run1', 'input_needed', request_id='signin:reddit.example', text='Sign in to Reddit so the post can be put up', source='api')
+    got = w.cards(); step = pagestep.card_of(w.s, w.tid, 'signin:reddit.example')['ReviewId']
+    assert got[rd]['step']['review'] == step and cardqueue.handed(w.s.get_review(rd)) and cardqueue.state(w.s, w.tid)['held'] == [li]
+    w.s.decide_review(step, 'rejected', None, 'owner'); proposals.settle(w.s, w.s.get_review(step), 'reject')
+    got = w.cards()
+    assert not cardqueue.handed(w.s.get_review(rd)) and got[rd]['status'] == 'rejected' and not got[rd].get('step'), got[rd]
+    assert cardqueue.state(w.s, w.tid)['live'] == [li] and got[li]['status'] == 'pending', 'the line moves on: the card behind it stands'
+    said = cardqueue.screen(w.s, w.tid)
+    assert 'Turned down by him' in said and 'Handed to you by his press' not in said and not w.woken, said
+
+
 def test_a_sign_in_is_one_card_that_carries_its_way_to_the_fill_page(w):
     """The card gallery, 2026-11-25: a sign-in step said its words twice - a chat line with "fill it in securely" over its card. One step, one
     card: the card says it and carries the fill page's way (`fill`), on its own or as the next press of the post it is on; a code the site asks

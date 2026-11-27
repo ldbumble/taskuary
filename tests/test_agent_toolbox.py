@@ -1044,6 +1044,17 @@ class APostIsAKindOfTheOneReviewTool(unittest.TestCase):
             p = json.loads(self.cards()[-1]['DraftText'])
             self.assertEqual((p.get('image'), 'media' in p), ('tools-compared.png', False), name)
 
+    def test_a_post_with_no_words_is_never_a_card_and_its_agent_is_told_what_it_lacks(self):
+        """Walk 25, 2026-11-26: a LinkedIn card went up with a video and an empty box, its Post off - he had to write the post himself before
+        he could press. A card that cannot be pressed is never shown (the locked rule 1): the agent is answered with the exact fix."""
+        for a in ({'kind': 'post', 'network': 'linkedin', 'media': 'tools-compared.png'}, {'kind': 'post', 'network': 'x', 'text': '  \n '},
+                  {'kind': 'act', 'action': 'run_tool', 'type': 'linkedin_post', 'text': '', 'media': 'tools-compared.png'}):
+            said, _ = tool(self.tid, 'propose', **a)
+            self.assertEqual(self.cards(), [], a)
+            self.assertIn('post has no words', said); self.assertIn("give the post's words in `text`", said)
+        said, err = tool(self.tid, 'propose', kind='post', network='linkedin', text='Three tools, compared.', media='tools-compared.png')
+        self.assertFalse(err, said); self.assertEqual(len(self.cards()), 1)
+
     SKILL_MD = ('---\nname: renewal-uplift\ndescription: Answer a vendor asking for a renewal uplift. Use when a renewal notice names a price rise.\n---\n'
                 '# Renewal uplift\n\nCompare the uplift with last year, then answer with the number we accept.\n')
 

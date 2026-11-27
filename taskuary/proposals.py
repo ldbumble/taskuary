@@ -543,6 +543,10 @@ def validate(store, p: dict) -> tuple:
     from .connectorcatalog import action_for, too_long
     from . import signatures
     if a == 'run_tool' and (long := too_long(action_for(p.get('type')), p, signatures.post(store) if is_post(p) else '')): return False, long
+    # ...NOR WITH NO WORDS AT ALL (walk 25, 2026-11-26: a LinkedIn card went up with a video and an empty box - its Post off until he wrote the
+    # post himself): a card that cannot be pressed is never shown, and its agent is answered with what it lacks
+    if is_post(p) and not str(p.get('text') or '').strip():
+        return False, f"the {POSTS[p['type']]} post has no words, and a card with nothing to say cannot be pressed - give the post's words in `text`"
     # NOTHING EMPTY IS PUT IN FRONT OF THE OWNER: a skill that could not be filed, or says nothing of how the job is done, is refused at
     # this one gate - the tool, a marker in the agent's words, the on-close question - and its writer is told what it lacks
     if a == SKILL:
@@ -742,7 +746,8 @@ def queue(store, task_id: int, p: dict, actor='agent', refused: list | None = No
     if ok and p.get('action') == 'open_pr':
         from . import ci
         # ...and one that cannot be opened - no checkout, nothing committed, the base's own branch - is refused here with the fix (ci.pr_why)
-        if (no := ci.pr_why(plan := ci.pr_plan(store, task_id, p))): ok, why = False, no
+        # ...nor one for a repository nobody checked: what is known of it wins, and one only its agent names is read first (ci.repo_why)
+        if (no := ci.pr_why(plan := ci.pr_plan(store, task_id, p)) or ci.repo_why(store, task_id, plan, p)): ok, why = False, no
         else: p = {**p, 'pr': {k: v for k, v in plan.items() if k != 'cwd'}}
     # ...ONE CARD PER ASK (the stress round, 2026-11-18): the same proposal again - a retried call - is the card already waiting, and a
     # break_out moving what a waiting one moves is refused: stood behind it, its press could only fail
@@ -792,12 +797,14 @@ def queue(store, task_id: int, p: dict, actor='agent', refused: list | None = No
             else f"move this task to {p.get('name') or p['profile']}" if p['action'] == 'move_profile' else why)
     # ...nor a held browser act: the agent did not propose it, it tried it, and the hook stopped it (browsergate.check)
     # ...a shell step by what it does, never its raw line: the card folds the command under "Show the command"
+    # ...and the agent's own why is read as the plain line it is drawn as (walk 25: a pull request's card title showed its code marks raw)
+    from .chatformat import plain_text
     reason = (str(p.get('what') or 'a step on the page only you can do') if p['action'] == 'page_step' else       # ...his step, in the words it was handed over with
               f"held before it ran, {HELD_IN[p['action']]}: {p.get('what') or ('a step' if p['action'] == 'shell_act' else p.get('command'))}"
               + (f" - {p['why']}" if p.get('why') else '') if p['action'] in HELD_ACTS else
               f"finishing it: {'merge pull request #' + str(p.get('number')) if p['action'] == 'merge_pr' else trackers.words(p) if p['action'] == 'close_item' else 'close the issue it came from'}"
               if p.get('closeout') else p.get('title') or f"{len(asks_of(p))} questions from the agent" if p['action'] == ASKS       # ...its own heading: no act is proposed
-              else f"the {'workflow asks' if actor == 'workflow' else 'agent proposes'} to {said}" + (f" - {p['why'][:200]}" if p.get('why') else ''))
+              else f"the {'workflow asks' if actor == 'workflow' else 'agent proposes'} to {said}" + (f" - {plain_text(p['why'])[:200]}" if p.get('why') else ''))
     rid = store.add_review({'TaskId': task_id, 'Kind': 'action', 'Status': 'pending', 'DraftText': json.dumps(p), 'Reason': reason, 'NextStep': then[:300] or None})
     store.audit('review', rid, 'proposed', actor, detail={'action': p['action']})
     logger.info(f'task {task_id}: proposal queued - {p["action"]} (rv{rid})')

@@ -603,6 +603,34 @@ class NamedCheckoutTests(unittest.TestCase):
         self.assertEqual((out['status'], op.call_args[0][2:4]), ('approved', ('fix-rounding', 'main')))
         self.assertEqual(git(self.remote, 'rev-parse', 'fix-rounding'), git(self.cwd, 'rev-parse', 'HEAD'), 'the press pushed the branch it opened')
 
+    def test_a_pull_request_card_never_goes_up_for_a_repository_nobody_checked(self):
+        """Walk 25, 2026-11-26: refused for no `repo`, an agent made one up ("alexdoyle/ledger", and said so) while the checkout's own origin
+        named northwind/ledger behind a rewrite; the card went up and his Approve opened the pull request there. What the checkout says wins,
+        and the agent is answered with it; a repository only the agent names is read through the GitHub card first, and one that is not
+        there is answered with the fix. And the agent's why is drawn as the plain line it is."""
+        from taskuary import ci, proposals
+        git(self.cwd, 'checkout', '-q', '-b', 'fix-rounding'); self.fix()
+        def ask(**kw):
+            no = []
+            return proposals.queue(self.s, self.tid, {'action': 'open_pr', 'cwd': self.cwd, 'title': 'Round totals', **kw}, 'agent', no), no
+        gone = RuntimeError('GitHub said 404 Not Found: read alexdoyle/ledger')
+        with mock.patch.object(self.s, 'github_for', return_value={'Secret': 'tok', 'Type': 'github'}), mock.patch('taskuary.github.repo_info', side_effect=gone) as read:
+            made, no = ask(repo='alexdoyle/ledger')
+        self.assertIsNone(made); read.assert_called_with('tok', 'alexdoyle/ledger')
+        for want in ('alexdoyle/ledger could not be read through the GitHub card', '404 Not Found', 'git remote -v'): self.assertIn(want, no[0])
+        # ...the checkout's origin as it wrote it down, sent elsewhere by a rewrite: that is the repository, whatever the agent names
+        was = git(self.cwd, 'config', '--get', 'remote.origin.url')
+        git(self.cwd, 'config', f'url.{was}.insteadOf', 'https://github.com/northwind/ledger.git')
+        git(self.cwd, 'config', 'remote.origin.url', 'https://github.com/northwind/ledger.git')
+        self.assertEqual(ci.known_repo(self.s, self.tid, self.cwd), 'northwind/ledger')
+        with mock.patch('taskuary.github.repo_info', side_effect=AssertionError('a known repository is not asked for')):
+            made, no = ask(repo='alexdoyle/ledger')
+            self.assertIsNone(made); self.assertEqual(no[0], "this task's pull request goes to northwind/ledger, not alexdoyle/ledger - give `repo` as northwind/ledger, or leave it out")
+            made, no = ask(why='Open a pull request from `fix-rounding` into `master`')
+        rv = self.s.get_review(made['reviewId'])
+        self.assertEqual(proposals._draft(rv)['pr']['repo'], 'northwind/ledger')
+        self.assertTrue(rv['Reason'].endswith('Open a pull request from fix-rounding into master'), rv['Reason'])
+
     def test_propose_push_with_no_folder_takes_the_one_he_named(self):
         self.fix()
         out = landing.from_proposal(self.s, self.tid, {'action': 'push', 'why': 'the rounding fix'})

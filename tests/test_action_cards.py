@@ -193,7 +193,7 @@ class OnePress(unittest.TestCase):
 
     def test_the_prompt_says_which_fields_the_agent_may_name(self):
         r = docsync.agent_systems(server.store)          # the facts every agent with hands is told of his systems
-        self.assertIn("linkedin_post - posts on LinkedIn under your name, with a picture or a video; it takes `text`, `image`", r)
+        self.assertIn("linkedin_post - posts on LinkedIn under your name, with a picture or a video; it takes `text`, `media`", r)
         self.assertIn("`publish` (now or draft) come from the owner's defaults on the card", r)
 
 

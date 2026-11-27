@@ -7,7 +7,7 @@ from unittest import mock
 
 import pytest
 
-from taskuary import agentchannels as ac, landing, messengers, permissions as perm, terminal as term, waitroom, workerstate as ws
+from taskuary import agentchannels as ac, landing, messengers, terminal as term, waitroom, workerstate as ws
 from taskuary.ingest import ingest_message
 from taskuary.store import MemoryStore, task_ref
 from taskuary.testing import Factory
@@ -95,28 +95,6 @@ def test_a_teammate_never_answers_what_the_agent_asked_the_owner(w):
 
 
 # ── the owner holds every approval ─────────────────────────────────────────────────────────────────────────────────────
-def test_a_teammate_cannot_answer_a_permission_whatever_they_type(w):
-    w.bind()
-    box = []
-    req = {'tool': 'Bash', 'kind': 'execute', 'command': 'npm test -- money'}
-    # the ask waits long past anything this test does: at 5 s a slow machine let it time out between a teammate's lines, and the
-    # test read the timeout as the teammate having answered it (CI's macOS, 2026-11-10)
-    t = threading.Thread(target=lambda: box.append(perm.ask(w.s, w.tid, req, wait=120)), daemon=True); t.start()
-    # ...and waits for what it reads next - the ask SAID in the channel, which lands after the ask is pending (CI's macOS, 2026-11-11)
-    for _ in range(1500):
-        if perm.pending(w.tid, w.s) and 'asks permission' in w.said(): break
-        time.sleep(0.02)
-    assert 'asks permission' in w.said() and '1. Allow once' in w.said() and 'only Alex Doyle can answer' in w.said()
-    for words in ('1', 'Allow once', 'allow_once', 'Always allow', '2'):
-        line(w, 'U0GAIL', words)
-        assert perm.pending(w.tid, w.s), f'{words!r} from a teammate answered it'
-    assert ac.OWNER_ONLY in w.said()
-    line(w, 'U0GAIL', 'yes')                      # plain words go to the agent, labelled - and still answer nothing
-    assert perm.pending(w.tid, w.s)
-    line(w, 'U0ALEX', '1'); t.join(3)
-    assert box == ['allow_once'] and 'Allow once - ' in w.said()
-
-
 def test_a_teammate_cannot_land_and_the_owners_pick_lands(w):
     w.bind()
     st = {'ask': True, 'line': 'fix-rounding is 2 commits ahead of main', 'answers': [{'how': 'rebase', 'label': 'Rebase and fast-forward'},
@@ -339,23 +317,10 @@ def test_conductor_mode_is_the_owners_words_to_any_agent_in_its_repo(w):
     assert w.posts[-1][1] == f"{task_ref(w.tid)}: Switched to banker's rounding."
 
 
-def test_an_agent_cannot_open_a_channel_or_answer_its_own_permission():
+def test_an_agent_cannot_open_a_channel():
     from taskuary import guard
-    for m, p in (('POST', '/api/agent-channels'), ('DELETE', '/api/agent-channels/3'), ('POST', '/api/tasks/12/permission')):
+    for m, p in (('POST', '/api/agent-channels'), ('DELETE', '/api/agent-channels/3')):
         assert guard.classify(m, p)[0] == 'deny', p
-
-
-def test_the_task_chat_carries_the_card_for_a_waiting_permission(w):
-    from taskuary import chatlog
-    t = threading.Thread(target=lambda: perm.ask(w.s, w.tid, {'tool': 'Bash', 'kind': 'execute', 'command': 'npm test'}, wait=3), daemon=True); t.start()
-    for _ in range(200):
-        if perm.pending(w.tid, w.s): break
-        time.sleep(0.02)
-    from taskuary import codingchat
-    with mock.patch.object(codingchat, 'sessions', return_value=[]), mock.patch.object(codingchat, 'live_of', return_value=None):
-        card = chatlog.serve(w.s, w.tid)['permissions'][0]
-    assert 'npm test' in card['line'] and [o['label'] for o in card['options']][:2] == ['Allow once', 'Always allow']
-    perm.answer(w.s, w.tid, card['id'], 'reject_once'); t.join(3)
 
 
 def test_a_task_bound_to_a_teammate_chat_launches_safe_and_full_power_is_the_owner_s_choice(w):
@@ -377,43 +342,3 @@ def test_a_full_session_on_a_teammate_bound_task_gets_nothing_until_it_restarts_
     w.bind(); term.SESSIONS[f's{w.tid}'].mode = 'full'
     line(w, 'U0GAIL', 'please fix the rounding')
     assert not w.typed and 'Nothing was sent' in w.said()
-
-
-def test_two_requests_waiting_at_once_are_each_answered_from_the_chat(w):
-    """Two of the agent's helpers ask at once (a test run and a delete, in parallel). The chat's one open ask was the newer: answered, the
-    older still waited with no number on the chat to answer it by - only the app could. Once one is done, what still waits is put again."""
-    w.bind()
-    boxes = {}
-    def ask(cmd): boxes[cmd] = []; threading.Thread(target=lambda: boxes[cmd].append(perm.ask(w.s, w.tid, {'tool': 'Bash', 'kind': 'execute', 'command': cmd}, wait=120)), daemon=True).start()
-    def until(f):
-        for _ in range(1500):
-            if f(): return True
-            time.sleep(0.02)
-    ask('npm test -- money'); until(lambda: w.said().count('asks permission') == 1)
-    ask('rm -rf build/old-ledger'); until(lambda: w.said().count('asks permission') == 2 and len(perm.pending(w.tid, w.s)) == 2)
-    line(w, 'U0ALEX', 'Reject')                                   # the newer one, the one the chat put last
-    until(lambda: boxes['rm -rf build/old-ledger'])
-    assert boxes['rm -rf build/old-ledger'] == ['reject_once']
-    assert until(lambda: w.said().count('asks permission') == 3), 'the one still waiting is put to the chat again'
-    assert 'npm test -- money' in w.said().rsplit('asks permission', 1)[1]
-    line(w, 'U0ALEX', '1'); until(lambda: boxes['npm test -- money'])
-    assert boxes['npm test -- money'] == ['allow_once'] and not perm.pending(w.tid, w.s)
-
-
-def test_an_answer_from_the_rail_closes_the_chats_ask_and_says_so_there(w):
-    """The owner answered the request on the rail (the generic answer road, its label): the agent had it, but the bound chat still held the
-    ask open with its numbered choices and never heard it was answered - its "1" then read "Nothing changed". Every road says it there."""
-    w.bind()
-    box = []
-    threading.Thread(target=lambda: box.append(perm.ask(w.s, w.tid, {'tool': 'Bash', 'kind': 'execute', 'command': 'npm test -- money'}, wait=120)), daemon=True).start()
-    for _ in range(1500):
-        if perm.pending(w.tid, w.s) and 'asks permission' in w.said(): break
-        time.sleep(0.02)
-    rid = next(r['request_id'] for r in ws.status(w.s, w.tid)['requests'] if r['kind'] == 'approval_needed')
-    ws.answer(w.s, w.tid, rid, 'Reject')
-    for _ in range(150):
-        if box and 'Reject - ' in w.said(): break
-        time.sleep(0.02)
-    assert box == ['reject_once']
-    assert w.said().rsplit('asks permission', 1)[1].count('Reject - ') == 1, w.said()
-    assert not (ac.bound(w.s, 'slack', CHAN).get('state') or {}).get('ask'), 'the chat holds no ask for a request that is answered'

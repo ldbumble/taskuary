@@ -14,7 +14,7 @@ does with the screen, this does with typed updates:
   - a prompt is a session/prompt; one that comes while a turn runs goes INTO that turn where the adapter steers (acp.steer), else it is
     queued and sent as one at the turn's end (the general road's batching); Stop is session/cancel;
   - idle past the general agent's period it closes QUIETLY (idle_out) and the next input brings it back on its own conversation (wake);
-  - a permission is gate's: Taskuary's rules first, what they hold put to the owner as buttons (permissions.ask);
+  - a permission is gate's: Taskuary's rules first, what they hold the task's one action card (shellgate.check);
   - its "screen" (the Terminal toggle, a Wall cell) is the live output of its commands - Codex streams it, Claude's comes with the
     call's result - and the agent's own words between them; nothing to show is no toggle, never a blank terminal;
   - the files it touches (a call's locations, an edit's diff) are on its card and on the blackboard while it works.
@@ -514,14 +514,12 @@ class ACPCoding:
 
     def _begins(self, items: list, text: str) -> tuple:
         """A TURN BEGINS AS A CHAT'S DOES (general.send_prompt): the owner's lines it takes are his in the record (take_kept - the waiting room
-        took them only after the turn had begun), every card the conversation moved past is old news (proposals.move_on), and the turn is told
+        took them only after the turn had begun), and the turn is told
         the events since its cursor (events.take) - what the owner pressed, a send that failed, the cards set aside. It was told only the passed
         cards, and the facts read his new line as answered (the audit, 2026-11-10). -> (the prompt, the lines it took)."""
-        from . import proposals
         lines = self._his(*items, turn=True, sid=getattr(self, 'sid', ''))        # the turn begins: what it is told below is heard here, with his lines
         if self.store and self.task_id:
             try:
-                proposals.move_on(self.store, self.task_id)
                 # ...THE EVENTS SINCE ITS CURSOR, as a chat's agent is told them (events.take) - his lines, and the mail the waiting room
                 # passes in, are this prompt's own words
                 from . import events
@@ -575,10 +573,6 @@ class ACPCoding:
         if not (self.alive and self.busy): return False
         if self.client and self.in_turn:
             self.client.cancel()
-            # ...and what the turn waits on him for closes with it: never a lit Allow once over a turn he stopped (permissions.STOPPED_SAID)
-            if self.store is not None and self.task_id:
-                from . import permissions
-                permissions.set_aside(self.store, int(self.task_id), permissions.STOPPED_SAID)
         else: self.stop_next = True
         return True
 

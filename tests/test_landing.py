@@ -369,7 +369,6 @@ class LandingTests(unittest.TestCase):
         self.assertTrue(landing.state(self.s, self.tid)['ask'])
         # ...an input after it - his line, a mail - heard by its agent (proposals.set_aside_drafts: one rule with every card's, never a turn's start)
         from taskuary.conversation import ep
-        self.assertNotIn(proposals.LAND, proposals.move_on(self.s, self.tid), 'a turn that begins moves nothing on by itself')
         self.assertIn(proposals.LAND, proposals.set_aside_drafts(self.s, self.tid, ep(landing.record(self.s, self.tid)['proposal']['at']) + 0.5))
         s = landing.state(self.s, self.tid)
         self.assertTrue(s['passed']); self.assertFalse(s['ask'], 'nothing pressable')
@@ -382,16 +381,13 @@ class LandingTests(unittest.TestCase):
         # ...its own `git push` over a passed card is still held - raised again, never run
         self.assertTrue(landing.push_asked(self.s, self.tid, 'git push origin master', self.cwd)[0]); self.assertFalse(self.pushed())
         self.assertTrue(landing.state(self.s, self.tid)['ask'])
-        proposals.move_on(self.s, self.tid)
         # ...the agent asks again, and is never refused for a hold: a live card again
         self.assertTrue(landing.propose(self.s, self.tid, 'push', 'still needed')['ok'])
         self.assertTrue(landing.state(self.s, self.tid)['ask'])
 
     def test_unpushed_work_no_turn_raised_stays_live_as_the_checkout_says(self):
-        from taskuary import proposals
         self.on_master_with_origin(); self.dev()
         before = landing.state(self.s, self.tid)
-        self.assertNotIn(proposals.LAND, proposals.move_on(self.s, self.tid))
         self.assertEqual(landing.state(self.s, self.tid)['ask'], before['ask'])
         self.assertFalse(landing.state(self.s, self.tid)['passed'])
 
@@ -476,14 +472,11 @@ class LandingTests(unittest.TestCase):
         from taskuary import gate
         self.on_master_with_origin(); self.dev()
         tc = lambda cmd: {'toolCallId': 'c', 'kind': 'execute', 'rawInput': {'command': cmd, 'description': 'Push the fix'}}
-        ctx = {'store': self.s, 'task_id': self.tid, 'cwd': self.cwd, 'sid': 'run1', 'owner_asks': True}
+        ctx = {'store': self.s, 'task_id': self.tid, 'cwd': self.cwd, 'sid': 'run1'}
         with mock.patch.object(shellgate, 'trusted', return_value=''):
-            asked = []
-            with mock.patch('taskuary.permissions.ask', side_effect=lambda *a, **k: asked.append(a) or 'reject_once'):
-                held = {}
-                out = gate.answerer({k: v for k, v in ctx.items() if k != 'owner_asks'}, held=held)({'toolCall': tc('git push origin master'), 'options': [
-                    {'optionId': 'y', 'kind': 'allow_once'}, {'optionId': 'n', 'kind': 'reject_once'}]})
-            self.assertEqual(asked, [], 'no Allow once / Reject card beside the Push button')
+            held = {}
+            out = gate.answerer(ctx, held=held)({'toolCall': tc('git push origin master'), 'options': [
+                {'optionId': 'y', 'kind': 'allow_once'}, {'optionId': 'n', 'kind': 'reject_once'}]})
             self.assertEqual(out.get('optionId'), 'n'); self.assertTrue(held['c'].startswith(shellgate.HELD), held)
             self.assertEqual(gate.tool_call(tc('git add -A && git commit -m x && git push'), ctx)[0], gate.REFUSED)
             # ...the hook's road and an API agent's run_command (shellgate.check): the same answer, and no Approve card filed beside it

@@ -18,15 +18,10 @@ const argsOf = (s) => (s.args && Object.keys(s.args).length ? s.args
   : { file_path: s.file || s.text, command: s.detail || s.text, ...(s.detail ? { description: s.text } : {}), pattern: s.text, query: s.text, url: s.text });
 // ...a call over ACP is running until ACP says it ran (`status`); a log's, until something came after it. A turn that is over has nothing running
 const OVER = ["completed", "failed"];
-// ...and a call put to the owner (permissions.calls) is neither: `held` waits on his answer, `refused` was never run - drawn as either, it read
-// "Deleted ledger-archive" over the card that asked for it, and after his Reject too (the stress round, 2026-11-18)
-const ASKED = { held: "Taskuary held this for the owner - it waits for your answer on its card.", refused: "Not run - nobody allowed it.", rejected: "Not run - you said no." };
-// ...and HIS ANSWER ON ITS ROW is the one record of it (chatlog.asked_answered - no press line besides): his no reads as his, never "nobody"
-const askedOf = (s) => (ASKED[s.status] ? s.status : String(s.answer || "").startsWith("reject") && s.status !== "completed" ? "rejected" : "");
-const runs = (s, running, last) => running && !askedOf(s) && (s.status ? !OVER.includes(s.status) : last);
-// ...and one ACP still called pending or running when nothing runs any more NEVER FINISHED - a permission left open when Taskuary restarted, a
-// session that died mid-call: drawn done, "Edited totals.py" read as made (the stress round, 2026-11-10)
-const ended = (s, output, a = askedOf(s)) => (a ? { result: ASKED[a], is_error: true, state: a === "held" ? a : "refused" } : s.status && !OVER.includes(s.status) ? { result: output || "It never finished.", is_error: true }
+const runs = (s, running, last) => running && (s.status ? !OVER.includes(s.status) : last);
+// ...and one ACP still called pending or running when nothing runs any more NEVER FINISHED - a session that died mid-call: drawn done,
+// "Edited totals.py" read as made (the stress round, 2026-11-10)
+const ended = (s, output) => (s.status && !OVER.includes(s.status) ? { result: output || "It never finished.", is_error: true }
   : { result: output, is_error: s.status === "failed" });
 // A TURN WITH ITS FAILED LINE SAYS THE FAILURE ONCE (chatlog.read's rule, on the steps the open chat patched in as they came - walk 19: "No AI is
 // connected" stood twice, the error step pushed live and the turn's own line under it)
@@ -36,8 +31,8 @@ export const eventsOf = (steps, running, tail = true) => steps.flatMap((s, i) =>
   if (s.k === "tool") return [{ type: "tool_call", name: s.name, detail: { tool_call_id: id, args: argsOf(s), output,
       ...(s.parent ? { parent: s.parent } : {}), ...(s.edit ? { edit: s.edit } : {}), ...(s.file ? { file: s.file } : {}),
       ...(s.outcome ? { outcome: s.outcome } : {}), ...(s.why ? { why: s.why } : {}), ...(s.times > 1 ? { times: s.times } : {}), ...(s.did ? { did: s.did } : {}),
-      // ...the agent's own words for it - its title, its kind, its files (agentSteps.agentWords) - and the options of a permission it waits on
-      ...(s.title ? { title: s.title } : {}), ...(s.tool_kind ? { tool_kind: s.tool_kind } : {}), ...(s.paths?.length ? { paths: s.paths } : {}), ...(s.ask?.length ? { ask: s.ask } : {}), ...(s.call ? { call: s.call } : {}) } },
+      // ...the agent's own words for it - its title, its kind, its files (agentSteps.agentWords)
+      ...(s.title ? { title: s.title } : {}), ...(s.tool_kind ? { tool_kind: s.tool_kind } : {}), ...(s.paths?.length ? { paths: s.paths } : {}), ...(s.call ? { call: s.call } : {}) } },
     ...(runs(s, running, tail && i === steps.length - 1) ? [] : [{ type: "tool_result", name: id, detail: { tool_call_id: id, ...ended(s, output) } }])];
   if (s.k === "plan") return [{ type: "tool_call", name: "TodoWrite", detail: { tool_call_id: id, args: { todos: s.items || [] } } },
     { type: "tool_result", name: id, detail: { tool_call_id: id, result: "" } }];
@@ -147,19 +142,6 @@ export const runsOf = (parts) => (parts || []).reduce((out, p) => {
   else out.push({ id: p.id, fold: true, parts: [p] });
   return out;
 }, []);
-// A PERMISSION ASKED IS ON ITS CALL'S ROW (the owner, 2026-11-23: "just permissions to push something" in the row, Zed-style - action cards
-// stay cards): the request waiting on him (permissions.pending, by the call it names) drawn on that row, each option by the agent's own name
-// for it where it gave one; the requests no row in the list names stand as their card, as before
-export const askOn = (step, byCall) => {
-  const p = step?.call && byCall?.get?.(step.call);
-  if (!p) return null;
-  const named = new Map((step.ask || []).map((o) => [o.kind, o.name]));
-  return { p, options: (p.options || []).map((o) => ({ kind: o.kind, label: named.get(o.kind) || o.label })) };
-};
-export const asksOff = (perms, items) => {
-  const calls = new Set((items || []).flatMap((x) => (x.kind === "turn" ? (x.steps || []).map((s) => s.call).filter(Boolean) : [])));
-  return (perms || []).filter((p) => !p.call || !calls.has(p.call));
-};
 // THE ROWS THE SERVER PUSHED AS IT WROTE THEM (chatlog.pushed - a message as it streams, a call as it moves): each patched into its turn in
 // place, by its own id, or added at the turn's foot where it is new - the list's next read is the same rows, so nothing moves when it lands
 export const patchSteps = (list, pushed, tid) => {
@@ -458,5 +440,4 @@ export const onYouTurn = (items, { askAt = "", lettersAt = "", landAt = "" } = {
 // ...what a turn at work waits on HIM for, in words: the step its session is stopped at, a sign-in, a question
 // ...(a question the agent asked before is no wait while it works: the recorded walk, 2026-11-12, read "Waiting for your answer" over a turn
 // already at work on his answer - only a step it is stopped at, or a sign-in on the page, holds a turn at work)
-export const waitingOn = (list) => (list?.permissions?.length ? "Waiting for your Allow once"
-  : isSignin(list?.asking) ? (list.asking.named ? list.asking.text : "Waiting for you to sign in") : "");      // ...a step the agent named, by its name
+export const waitingOn = (list) => (isSignin(list?.asking) ? (list.asking.named ? list.asking.text : "Waiting for you to sign in") : "");      // ...a step the agent named, by its name

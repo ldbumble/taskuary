@@ -17,13 +17,12 @@ import { aheadChat, heldChat, heldConversation } from "./taskDetail.js";
 import { AttachChip, fileChips, fileState, usePromptImages, useSendWhenUp } from "./promptImages.jsx";
 import { holdUnsent } from "./unsent.js";
 import { baseName } from "./agentSteps.js";
-import { AgentSteps, PermitCtx } from "./AgentStepRows.jsx";
-import { chatSource, checkBackDue, waitingShown, eventsOf, turnSteps, hasParts, isPastCard, standing, heldAtEnd, AT_END, anchorOf, anchorShift, endAt, openAt, OPEN_HOLD, shrinkHeld, SHRINK_HOLD, turnParts, waitsLast, noCard, workCount, folds, ranUnder, foldLine, paintable, withMine, waitingChips, workingLine, waitingOn, askTurn, onYouTurn, askedFirst, runsOf, patchSteps, askOn, asksOff, viewHomes, viewAt } from "./chatStream.js";
+import { AgentSteps } from "./AgentStepRows.jsx";
+import { chatSource, checkBackDue, waitingShown, eventsOf, turnSteps, hasParts, isPastCard, standing, heldAtEnd, AT_END, anchorOf, anchorShift, endAt, openAt, OPEN_HOLD, shrinkHeld, SHRINK_HOLD, turnParts, waitsLast, noCard, workCount, folds, ranUnder, foldLine, paintable, withMine, waitingChips, workingLine, waitingOn, askTurn, onYouTurn, askedFirst, runsOf, patchSteps, viewHomes, viewAt } from "./chatStream.js";
 import { stepLabel } from "./agentSteps.js";
 export { checkBackDue };
 import { detailFor, ownDetail, useOwnDetail } from "./chatDetail.js";
 import { useChatDefaults } from "./DetailSlider.jsx";
-import { AnsweredPermission, PermissionCards } from "./AgentChannels.jsx";
 import { Hunk } from "./DiffView.jsx";
 // ...a file he sent, by its own name: the upload's stamp (server.prompt_file) is not his, and neither is the folder
 const fileName = (p) => String(p).split(/[\\/]/).pop().replace(/^\d{8}-\d{6}-[0-9a-f]{6}-/, "");
@@ -186,22 +185,6 @@ export const pressLine = (words, stamp) => [String(words || "").trim().replace(/
 // what each answer published or showed, by the answer's id (the server's `after`): drawn under it, open - the agent chose it
 const ShownCtx = React.createContext({});
 const WorkCtx = React.createContext(null);
-// THE PERMISSIONS WAITING ON HIM, ON THE ROWS OF THEIR CALLS (the owner, 2026-11-23: "just permissions to push something" in the row): each by
-// the call it names (permissions.pending `call`), answered by the same one press its card had - a press that landed keeps its spin until the
-// list reads it answered; one answered first elsewhere (409) just reads the list
-const PermitProvider = ({ taskId, perms, onAnswered, children }) => {
-  const [busy, setBusy] = useState({}), [err, setErr] = useState({});
-  const byCall = useMemo(() => new Map((perms || []).filter((p) => p.call).map((p) => [p.call, p])), [perms]);
-  const answer = async (p, kind) => {
-    setBusy((b) => ({ ...b, [p.id]: kind })); setErr((x) => ({ ...x, [p.id]: "" }));
-    try { await api.post(`/api/tasks/${taskId}/permission`, { id: p.id, option: kind }); onAnswered?.(); }
-    catch (e) {
-      if (e?.response?.status === 409) { onAnswered?.(); return; }
-      setErr((x) => ({ ...x, [p.id]: e?.response?.data?.detail || e?.message || "That answer did not reach the agent" })); setBusy(({ [p.id]: _, ...b }) => b);
-    }
-  };
-  return <PermitCtx.Provider value={{ byCall, answer, busy, err }}>{children}</PermitCtx.Provider>;
-};
 // a turn still running is ONE LINE, "Working on this…", its steps folded under it (the closeout-in-chat spec, 2026-11-04); a turn that
 // ended in its summary keeps them folded above it. A turn with no summary - older ones, a CLI that wrote none, one that died - as ever
 // (pendingTurn.live)
@@ -229,8 +212,8 @@ const useFoldOpen = (k) => {
   useEffect(() => { const heard = () => setOpen(OPEN_FOLDS.has(k)); heard(); FOLD_HEARD.add(heard); return () => { FOLD_HEARD.delete(heard); }; }, [k]);
   return open;
 };
-const Fold = ({ k, label, quiet = false, force = false, children }) => {
-  const open = useFoldOpen(k) || force;
+const Fold = ({ k, label, quiet = false, children }) => {
+  const open = useFoldOpen(k);
   // ...FROM HIS CLICK, in the render it causes (the judges' recording, 2026-11-18): heard from the native toggle, which fires a task later,
   // the working line on ACP followed the opened fold 75-90 ms late - "Editing budget.py" as a row and on the line under it. The click sets it;
   // the toggle only agrees (a fold opened another way)
@@ -241,10 +224,8 @@ const Fold = ({ k, label, quiet = false, force = false, children }) => {
 };
 // ONE RULE FOR EVERY FOLD OF A TURN'S WORK: it is drawn round steps of work. One with none in it - only Taskuary's own notes, as a turn the app
 // started holds before its first step - read "Along the way ▸" over nothing he could see (the overnight walk, 2026-11-11): its notes stand open
-// ...and one holding a call that waits on his answer stands open while it waits: the ask is on that call's row (AgentStepRows PermitCtx)
-const WorkFold = ({ k, quiet = false, parts, draw }) => { const n = workCount(parts), byCall = React.useContext(PermitCtx)?.byCall;
-  const asked = parts.some((p) => (p.steps || []).some((st) => askOn(st, byCall)));
-  return n ? <Fold k={k} quiet={quiet} force={asked} label={foldLine(parts)}>{parts.map((p, i) => draw(p, i, "everything"))}</Fold>
+const WorkFold = ({ k, quiet = false, parts, draw }) => { const n = workCount(parts);
+  return n ? <Fold k={k} quiet={quiet} label={foldLine(parts)}>{parts.map((p, i) => draw(p, i, "everything"))}</Fold>
     : <>{parts.filter((p) => p.type !== "said").map((p, i) => draw(p, i, "everything"))}</>; };
 const TurnWorkView = ({ data, now, k }) => {
   const at = React.useContext(WorkCtx);
@@ -563,9 +544,6 @@ function Conversation({ items: served, nodes = [], posts = [], reviews = [], nex
     if (x.kind === "line") return <ConvLine key={x.id} x={x} more={prev?.kind === "line"} />;
     if (x.kind === "arrival") return <div key={x.id} className="tq-aui-message tq-aui-brief" data-tq-item={x.id}><Arrived mail={[x]} prev={prev?.kind === "arrival" ? prev : null} /></div>;
     if (x.kind === "card") { const got = draw([x]); return got.length ? <div key={x.id} className="tq-aui-message tq-aui-agent" data-tq-item={x.id} data-tq-row-cards=""><div className="tq-aui-agent-body">{got}</div></div> : null; }
-    // ...his answer to a permission request is its card, greyed where it stood - never a line in its place (2026-11-17)
-    if (x.kind === "press" && x.perm) return <div key={x.id} className="tq-aui-message tq-aui-agent" data-tq-item={x.id}><div className="tq-aui-agent-body">
-      <AnsweredPermission perm={x.perm} at={x.at ? when(String(x.at)) : ""} /></div></div>;
     return <div key={x.id} className={`tq-aui-message tq-aui-press${prev && (prev.kind === "press" || prev.kind === "note") ? " tq-aui-press-more" : ""}`} data-tq-item={x.id} data-tq-chat-press="">
       <div className="tq-aui-press-line">{pressLine(x.text, x.at ? when(String(x.at)) : "")}</div></div>;
   });
@@ -626,7 +604,7 @@ function AssistantThread({ task, onAsked, onStop, selectionRef, attachmentsRef, 
     if (given == null) c.setText("");
     if (files.length) onClearAttachments(null);
     const id = `l${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`, sel = selectionRef.current || {};
-    setMine((m) => [...m, { id, kind: "line", text: w, files: files.map((a) => a.path), at: new Date(), rest: !listNow.current?.working && !listNow.current?.hold && !listNow.current?.permissions?.length }]);      // ...on an untrusted sender's task it waits by the box at once (the list's `hold`), and under a step that waits on his Allow (`permissions`)
+    setMine((m) => [...m, { id, kind: "line", text: w, files: files.map((a) => a.path), at: new Date(), rest: !listNow.current?.working && !listNow.current?.hold }]);      // ...on an untrusted sender's task it waits by the box at once (the list's `hold`)
     stick.current = true; opening.current = false;
     // ...on an item Taskuary made (`start`, madeTask) the line starts its agent: the item its Came from, his words the ask (AssistantView.startOnItem)
     (start ? start({ text: w, files: files.map((a) => a.path) }).then(() => ({}))
@@ -762,7 +740,7 @@ function AssistantThread({ task, onAsked, onStop, selectionRef, attachmentsRef, 
               <div className="tq-aui-welcome-copy">Research, plan, write, analyze, or coordinate. This conversation stays on the task.</div></div></div>}
             <RetryCtx.Provider value={retry}><StopTriesCtx.Provider value={stopTries}><AgainCtx.Provider value={again}><WaitOnCtx.Provider value={waitingOn(list)}><Conversation items={merged.items} nodes={turnCards || []} posts={nextAt?.cards || []} reviews={nextAt?.reviews || []} next={askedFirst(asking, nextAt?.reviews) ? null : nextAt?.next || null}
               landing={landNode} landAt={landAt} name={turnName} tid={task.TaskId} onChanged={nextAt?.refresh} ask={askNode} askAt={askAt} queue={list?.queue || null} /></WaitOnCtx.Provider></AgainCtx.Provider></StopTriesCtx.Provider></RetryCtx.Provider>
-            {/* WHAT THE SOURCE WAITS ON THE OWNER FOR, while it works too (`cards`): the agent's permission cards, a CLI's screen while it asks */}
+            {/* WHAT THE SOURCE WAITS ON THE OWNER FOR, while it works too (`cards`): a CLI's screen while it asks */}
             {cards}
             {/* ...under everything only while the list names no turn for it (a read behind, a chat with no turn yet) */}
             {!askAt && askNode}
@@ -856,7 +834,7 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
   useEffect(() => { if (workMoved.current(convWorks) && conv.list && !liveUp()) answeredRef.current?.(); }, [convWorks]);   // eslint-disable-line react-hooks/exhaustive-deps
   const defaults = useChatDefaults(), own = useOwnDetail(task.TaskId);
   const level = chat ? detailFor({ source, settings: defaults, own }) : "steps";
-  // ...and the CLI that runs, what it asks and what it waits on his press for: the list's own (conversation.items `live`, `asking`, `permissions`)
+  // ...and the CLI that runs and what it asks: the list's own (conversation.items `live`, `asking`)
   const cli = conv.list?.live || null;
   attachmentsRef.current = pics.imgs;
 
@@ -1025,11 +1003,8 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
   // ...and what a coding source reads once a line is in: its own sessions (the line itself goes the one road, holdText)
   const road = coding ? () => { onChanged?.(); conv.load(); } : null;
   // ...its screen is a card only on the pty road, and only while it asks (codingchat.live_of `asking`); over ACP Stop ends the turn
-  const acp = cli?.transport === "acp", screenAsks = !!cli?.asking && !acp && !!cli?.sid, perms = conv.list?.permissions || [];
+  const acp = cli?.transport === "acp", screenAsks = !!cli?.asking && !acp && !!cli?.sid;
   const liveCards = <>
-    {/* WHAT THE AGENT WAITS ON THE OWNER'S PRESS FOR (permissions.py), answered here or on a bound chat: on the row of the call it is about
-        (PermitProvider), a card of its own only for one no row in the chat names (chatStream.asksOff) */}
-    <PermissionCards taskId={task.TaskId} items={asksOff(perms, conv.list?.items)} onAnswered={conv.load} />
     {/* THE AGENT'S SCREEN, WHILE IT ASKS: the live terminal in the stream, answered there; gone once it stops asking */}
     {screenAsks && <div className="tq-cc-screen" data-tq-chat-screen="" role="group" aria-label="The agent's screen is asking something">
       <div className="tq-cc-screen-head">The agent's screen is asking something</div>
@@ -1082,7 +1057,6 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
   // the task's checklist where the page has not handed it in: the row carries it (store.list_tasks selects t.*)
   const steps = checklist || (() => { try { const a = JSON.parse(task?.Checklist || "[]"); return Array.isArray(a) ? a : []; } catch { return []; } })();
   const thread = (
-    <PermitProvider taskId={task.TaskId} perms={perms} onAnswered={conv.load}>
     <LevelCtx.Provider value={level}><ChatCtx.Provider value={chat}><AgentNameCtx.Provider value={made ? "Taskuary" : AGENT_TURN}><ShownCtx.Provider value={placed.by}>
     <WorkCtx.Provider value={{ reviews, checklist: steps, acts: [...(data?.browserActs || []), ...(data?.skillDrafts || [])], next,
       cards: data?.cards || [], refresh }}>
@@ -1113,7 +1087,7 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
     </LocalFiles.Provider>
     </OutputsCtx.Provider>
     </WorkCtx.Provider>
-    </ShownCtx.Provider></AgentNameCtx.Provider></ChatCtx.Provider></LevelCtx.Provider></PermitProvider>
+    </ShownCtx.Provider></AgentNameCtx.Provider></ChatCtx.Provider></LevelCtx.Provider>
   );
   /* CHIP-SIZED, AND THEY GIVE WAY (the owner, 2026-11-03, Agent beside Close out: "this ui looks weird when split? make the model choice
      smaller"): a 220px brain picker and a 150px model box that never shrank sat on the heading's title - "Tasku… / answ…" - in a ~500px

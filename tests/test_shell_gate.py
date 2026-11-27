@@ -209,12 +209,11 @@ class Holding(unittest.TestCase):
 
     # the owner, 2026-11-09: a held run declined in the agent's chat stood on as "Approve runs: ..." after the agent had asked something else
     # ...and the owner, 2026-11-10: "once youa re passed it, it should stay where it is with buttons grayed out" - the conversation moving on
-    # passes every card of the task (proposals.move_on), whichever session held it
+    # passed every card of the task, whichever session held it
     # ...REVISED 2026-11-11 (the owner: "the question has 2 approve buttons?"): his next line leaves a held step lit, and the same step run
     # again is the card that waits - one card, never a second beside it
     def test_the_owner_speaking_to_that_session_again_leaves_its_held_step_lit_and_the_step_run_again_is_that_card(self):
         self.held(); n = len(self.pending())
-        self.assertEqual(proposals.move_on(self.s, self.tid), [])
         self.held()
         self.assertEqual(len(self.pending()), n)
         self.assertIsNone(self.s._one("SELECT * FROM review WHERE TaskId=? AND Status='superseded'", (self.tid,)))

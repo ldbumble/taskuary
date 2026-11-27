@@ -1,71 +1,18 @@
-// TALK TO THIS AGENT FROM A CHAT, AND ITS PERMISSION REQUESTS AS BUTTONS (the owner, 2026-11-06: "a way to share the coding agent on my machine
+// TALK TO THIS AGENT FROM A CHAT (the owner, 2026-11-06: "a way to share the coding agent on my machine
 // through you sending me slack or teams to that channel that would just keep talking to same agents" ... "protected to only people on your team").
 // Developer mode only. The setup is one small fold at the foot of a coding task's chat: a channel, a chat, the teammates (name + their id
-// there); Unbind is one press and one confirm. The permission card sits in the stream; only the owner's press - or their own reply on the
-// bound chat - answers it (permissions.py).
+// there); Unbind is one press and one confirm.
 import React, { useEffect, useState } from "react";
-import { Box, Button, CircularProgress, MenuItem, TextField, Typography } from "@mui/material";
+import { Box, Button, MenuItem, TextField, Typography } from "@mui/material";
 import api from "./api.js";
-import { ID_HINT, channelLine, membersOf, permissionLead } from "./agentChannels.js";
+import { ID_HINT, channelLine, membersOf } from "./agentChannels.js";
 import ChatPicker from "./ChatPicker.jsx";
 import { chatHint, chatUrl, noChats } from "./chatPicker.js";
 import { ACCENT, BORDER, DIM, FAINT, INK, mono } from "./theme.jsx";
 
 const btn = { minHeight: 30, py: 0, px: 1.3, fontSize: 12.5, textTransform: "none" };
 const card = { my: 0, p: 1.5, border: `1px solid ${BORDER}`, borderRadius: 1.5, bgcolor: "var(--tq-panel, #fff)" };
-const Head = ({ children }) => <Typography sx={{ color: "var(--tq-link, #55697a)", fontSize: 9.5, fontWeight: 600, letterSpacing: "1.5px", mb: 0.4 }}>{children}</Typography>;
 const why = (e, d) => e?.response?.data?.detail || e?.message || d;
-
-// ── the agent asks: one card per request waiting on the owner ─────────────────────────────────────────────────────────
-export function PermissionCards({ taskId, items = [], onAnswered }) {
-  const [busy, setBusy] = useState({}), [err, setErr] = useState("");
-  if (!items.length) return null;
-  // ...A PRESS THAT LANDED KEEPS ITS SPIN until the list reads the card answered: cleared at the answer, its buttons lit again for the
-  // read's round trip and then the card went grey - a flicker before the press (browser/permission-press). Only a failed press lights them
-  const answer = async (p, kind) => {
-    setBusy((b) => ({ ...b, [p.id]: kind })); setErr("");
-    try { await api.post(`/api/tasks/${taskId}/permission`, { id: p.id, option: kind }); onAnswered?.(); }
-    catch (e) {      // ...answered first elsewhere (a bound chat) or timed out: no button to light again, the list says how it ended
-      if (e?.response?.status === 409) return onAnswered?.();
-      setErr(why(e, "That answer did not reach the agent")); setBusy(({ [p.id]: _, ...b }) => b);
-    }
-  };
-  // ...each in the chat's own agent row, as the answered card is (GeneralWorkspace `press` with `perm`): drawn bare, the card he pressed stood
-  // 17 px higher than the greyed card that took its place - a jump at the press (browser/permission-press)
-  return items.map((p) => { const l = permissionLead(p); return (
-    <div key={p.id} className="tq-aui-message tq-aui-agent"><div className="tq-aui-agent-body">
-    <Box data-tq-permission={p.id} sx={card} role="group" aria-label="The agent asks permission">
-      <Head>The agent asks</Head>
-      <Typography variant="body2" sx={{ color: INK }}>{l.lead}</Typography>
-      {l.why && <Typography variant="caption" sx={{ display: "block", color: DIM, mt: 0.2 }}>{l.why}</Typography>}
-      {l.command && <Box component="details" open={l.open || undefined} data-tq-permission-command sx={{ mt: 0.4, fontSize: 12, color: DIM, "& summary": { cursor: "pointer" },
-        "& code": { display: "block", whiteSpace: "pre-wrap", overflowWrap: "anywhere", mt: 0.4, fontSize: 11.5, fontFamily: mono, color: INK } }}>
-        <summary>What it runs</summary><code>{l.command}</code></Box>}
-      <Box sx={{ display: "flex", gap: 0.75, flexWrap: "wrap", mt: 0.8 }}>
-        {p.options.map((o) => <Button key={o.kind} size="small" disableElevation disabled={!!busy[p.id]} data-tq-permission-answer={o.kind}
-          variant={o.kind === "allow_once" ? "contained" : "outlined"}
-          sx={{ ...btn, ...(o.kind === "allow_once" ? {} : o.kind.startsWith("reject") ? { color: "var(--tq-danger, #7a2f3c)", borderColor: BORDER } : { color: INK, borderColor: BORDER }) }}
-          startIcon={busy[p.id] === o.kind ? <CircularProgress size={12} color="inherit" /> : null}
-          onClick={() => answer(p, o.kind)}>{o.label}</Button>)}
-      </Box>
-      <Typography variant="caption" sx={{ display: "block", color: FAINT, mt: 0.5 }}>
-        {p.risky ? "It sends or pushes, so there is no Always for it. " : ""}No answer by {String(p.until || "").slice(11, 16)} refuses it.</Typography>
-      {err && <Typography variant="body2" sx={{ mt: 0.5, color: "var(--tq-danger, #7a2f3c)" }}>{err}</Typography>}
-    </Box></div></div>); });
-}
-
-// ...AND ONE HE ANSWERED STAYS WHERE IT STOOD, greyed, saying what he pressed (the owner, 2026-11-17: "the approve card should never go
-// anywhere and just say it was approved ... keep the action cards but gray out if passed"): the conversation's press carries `perm`
-export const PERM_SAID = { allow_once: "Allowed", allow_always: "Allowed, from now on", reject_once: "Refused", reject_always: "Refused, from now on" };
-export function AnsweredPermission({ perm, at = "" }) {
-  return (
-    <Box data-tq-permission-answered={perm.answer} sx={{ ...card, bgcolor: "transparent", borderStyle: "dashed", opacity: 0.75 }} role="group" aria-label="The agent asked permission">
-      <Head>The agent asked</Head>
-      <Typography variant="body2" sx={{ color: INK }}>{perm.asked || "a step of its work"}</Typography>
-      <Typography variant="caption" data-tq-permission-said="" sx={{ display: "inline-block", mt: 0.6, color: DIM, fontWeight: 600 }}>
-        {String(perm.answer).startsWith("allow") ? "✓ " : "✗ "}{PERM_SAID[perm.answer] || "Answered"}{at ? ` · ${at}` : ""}</Typography>
-    </Box>);
-}
 
 // ── the setup: the bindings, Unbind, and Add a channel ─────────────────────────────────────────────────────────────────
 // `taskId`: this task's agent (the fold at the foot of a coding task's chat). None: every binding, and a new one is "the coding agents" -

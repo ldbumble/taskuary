@@ -921,17 +921,6 @@ def finished_without(store, tid: int, card: int = None) -> list:
     return out
 
 
-def move_on(store, tid, before: str = None) -> list:
-    """THE CONVERSATION ON TASK `tid` MOVED ON: a permission the agent waits on is passed (permissions.set_aside). The cards are greyed by the
-    input itself, one rule for every kind (set_aside_drafts). -> [] (the cards it passed: none)."""
-    if not tid: return []
-    try:
-        from . import permissions
-        permissions.set_aside(store, int(tid))
-    except Exception as e: logger.debug(f'task {tid}: a permission waiting was not set aside - {e}')
-    return []
-
-
 def set_aside_drafts(store, tid: int, before: float = 0., mails=()) -> list:
     """A CARD THE CHAT MOVED PAST IS SET ASIDE FOR GOOD AS ITS AGENT HEARS THE INPUT (the owner, 2026-11-16, said ~20 times: "The second a new
     prompt comes in, from manual or email, it should gray out the action card but never move"): every card older than an input that bears on it

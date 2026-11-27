@@ -481,7 +481,7 @@ def asks(store, t) -> str:
     headless chat), started 'full' (a stranger's task runs 'auto' and its permit door is the owner's), whose CLI's hook answers `ask`, on a
     task that is not a workflow's run (nobody sits at a scheduled run's pane). Everything else is held for the task's Approve.
     'terminal': the CLI's own prompt in its pane. 'chat': the same CLI over ACP has no terminal - its ask comes back to Taskuary's own
-    gate (gate.answerer), which draws the landing card, the owner's buttons or the Approve card itself."""
+    gate (gate.answerer), which draws the landing card or the Approve card itself."""
     if not getattr(t, 'argv', None) or getattr(t, 'mode', 'full') != 'full': return ''
     from . import clis, terminal
     if clis._base(getattr(t, 'cli', '') or t.argv[0]) not in ASKS or (store.get_task(t.task_id) or {}).get('Source') == 'workflow': return ''

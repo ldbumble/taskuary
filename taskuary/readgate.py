@@ -3,9 +3,8 @@ that ask for permissions").
 
 Every agent - general or coding, on every brain - reads freely in its own work area: the folder it works in (a coding agent's checkout, a
 general agent's scratch folder), the task's outputs folder, the files that came on the task's own mail, and the temp folder where a CLI
-keeps its scratchpad. A read or a listing anywhere else is held as any other gated step is (shellgate.check: the task's Approve card, or the
-owner's Allow once / Reject where those are drawn) - never a new kind of prompt. Approved, the folder is the task's for the rest of it
-(a `read:` rule on the task, permissions' own table). Taskuary's own home and the places sign-ins are kept (floor.kept_secret - the same
+keeps its scratchpad. A read or a listing anywhere else is held as any other gated step is (shellgate.check: the task's Approve card) -
+never a new kind of prompt. Approved, the folder is the task's for the rest of it (a `read:` rule on the task). Taskuary's own home and the places sign-ins are kept (floor.kept_secret - the same
 rule a web report runs under) are never read by an agent, not even on a yes.
 
 What is read is found by structure, never by words: a file tool's own path argument (Read, Glob, Grep, LS, an ACP call's locations, the

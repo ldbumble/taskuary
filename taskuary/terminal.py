@@ -3142,11 +3142,6 @@ def recover_after_restart(store) -> int:
     CLOSING.clear()                 # ...a start: what closes from here is no app's close
     # Sessions and headless-run threads are process-owned; none can be live before the new process
     # has started one. Repair both halves so the Board never invents a worker from yesterday.
-    # ...and a permission request a killed run left open is refused and said first, so the run's ending is its last word (permissions.refuse_orphans)
-    try:
-        from . import permissions
-        permissions.refuse_orphans(store)
-    except Exception as e: logger.warning(f'permission requests left open by the last run not closed: {e}')
     for run in store.running_runs():
         store.update_run(run['RunId'], {'Status': 'stopped'}, finished=True)
     # ...and an act a press had under way is said on its card as cut - it may have gone (verdicts.cut_acts)

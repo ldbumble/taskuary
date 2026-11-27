@@ -228,11 +228,11 @@ def decide(store, tid: int, todo: list, cwd: str = '', big: bool = False) -> tup
 # ── THE ACP ROAD (was acpgate.py): every tool call an ACP agent asks to make is answered here, in code, before it runs ─────
 # Taskuary's own tools (the `taskuary` MCP server) are allowed: none of them sends - a propose tool lights a button. Any other MCP tool runs
 # only where the send filter judged it not to send (sendfilter.verdicts); one it has not judged is refused. A shell line or a file tool goes
-# through check() like every other road's. With Developer mode on, what check() holds on a coding task is put to the owner as Allow once /
-# Reject (permissions.ask); no answer in time files the Approve card and refuses, so the step can still run on his later press.
+# through check() like every other road's: what it holds is the task's one action card (shellgate.check), and his press on it runs the step -
+# no second kind of approval box, and nothing that times out into a refusal he never saw (the owner, 2026-11-27).
 OWN_SERVER = 'taskuary'
 ALLOWED, REFUSED, HELD = 'allowed', 'refused', 'held'
-CARD = 'card'           # held, and already the owner's button (the landing card's Push): never asked a second time with Allow once / Reject
+CARD = 'card'           # held, and already the owner's button (the landing card's Push): never a second card for it
 
 
 def tool_of(tc: dict) -> dict:
@@ -287,7 +287,7 @@ def _paths(tc: dict, cwd: str):
 
 
 def tool_call(tc: dict, ctx: dict) -> tuple:
-    """(answer, why) for one ACP toolCall. ctx: store, task_id, cli, cwd, sid, owner_asks."""
+    """(answer, why) for one ACP toolCall. ctx: store, task_id, cli, cwd, sid."""
     t, store = tool_of(tc), ctx.get('store')
     if t['server']: return _mcp(store, ctx.get('cli') or '', t['server'], t['tool'])
     from . import browsergate, readgate, shellgate
@@ -307,58 +307,9 @@ def tool_call(tc: dict, ctx: dict) -> tuple:
         from . import landing
         # a push of the task's own work is the landing card's Push (landing.push_asked) - before any other button is drawn for it
         if t['command'] and (lands := landing.push_asked(store, int(tid), t['command'], cwd, str(raw.get('description') or ''))): return (CARD if lands[0] else REFUSED), lands[1]
-        # ...put to the owner as buttons (answerer): the Approve card is filed only if they do not answer, so nothing waits twice
-        if ctx.get('owner_asks'): return HELD, '; '.join(dict.fromkeys(a['what'] for a in todo)) + ' - it waits for your answer'
     out = check(store, int(tid), str(ctx.get('sid') or ''), t['command'], cwd, t['shell'], about=str(raw.get('description') or ''), argv=t['argv'], paths=paths, write=w)
     if not out: return ALLOWED, 'a repo the owner trusts to act on its own' if how == 'trusted' else 'the owner approved the same earlier in this task'
     return HELD, reason(out)
-
-
-def owner_asks(ctx: dict) -> bool:
-    """A held call goes to the owner's buttons: a coding task to show it on, and Developer mode on (with it off the Approve card stays the
-    road). A chat agent's task draws no such buttons: its held step is the Approve card at once."""
-    from . import agents, general, terminal
-    st, tid = ctx.get('store'), str(ctx.get('task_id') or '')
-    if st is None or not tid.isdigit() or not agents.developer_mode(st): return False
-    return terminal.is_acp(terminal.SESSIONS.get(str(ctx.get('sid') or ''))) or not general.handles(st.get_task(int(tid)) or {})
-
-
-# THE OWNER'S OWN NO ON THE STEP, in their voice: never "Taskuary refused it: the owner said no"
-YOU_REJECTED = 'You rejected this'
-# ...and a step nobody answered is no one's no: it was still waiting when the chat moved past it (permissions.set_aside)
-STILL_WAITING = ('It was still waiting for the owner when the conversation moved on - nobody said no to it, so never say they did. Raise '
-                 'it again if it is still needed')
-# ...and one closed by his Stop (permissions.STOPPED_SAID) is heard in the step's own answer only
-YOU_STOPPED = 'The owner stopped you before answering this, so it was not run - nobody said no to it. Raise it again if it is still needed'
-
-
-def put_to_owner(ctx: dict, params: dict, why: str) -> tuple:
-    "(answer, why) once the owner has answered a held call (permissions.ask) - or not: then the Approve card, and a refusal."
-    from . import permissions, readgate, shellgate, workerstate as ws
-    store, tid, late, past = ctx['store'], int(ctx['task_id']), [], []
-    req = {**permissions.from_acp(params), 'sid': str(ctx.get('sid') or (params or {}).get('sessionId') or '')}
-    got = permissions.ask(store, tid, req, timed_out=lambda: late.append(1), moved_on=past.append)
-    if past: return REFUSED, YOU_STOPPED if past[0] == permissions.STOPPED_SAID else STILL_WAITING
-    tc = (params or {}).get('toolCall') or {}
-    t, cwd = tool_of(tc), str(_raw(tc).get('cwd') or ctx.get('cwd') or '')
-    paths = _paths(tc, cwd)
-    reads = (readgate.judge(store, tid, paths, cwd, _writes(tc)) if paths is not None else readgate.of_command(store, tid, t['command'], cwd))[0]
-    ks = keys(shellgate.acts(t['command'], cwd), cwd) if t['command'] else []
-    if not late: remember(store, tid, ks, 'approved' if got.startswith('allow') else 'dismissed')     # his answer stands for the task
-    if got.startswith('allow'):
-        readgate.grant(store, tid, [a['folder'] for a in reads if a.get('folder')])      # ...a folder he let it read stays the task's
-        return ALLOWED, 'the owner allowed it'
-    if not late:
-        # ...and the agent hears WHOSE no it was: into the turn it is in where the adapter steers, else as its next words
-        if ws._live(tid):
-            r = permissions.normal(req)
-            # ...(the turn at work on this very call: no card's Dismiss, which wakes nobody - shellgate.declined)
-            from .browsergate import _tell, not_approved
-            _tell(store, tid, not_approved(f"{permissions.asked(r | permissions.held_for(r, str(ctx.get('cwd') or ''))) or 'the step'} (`{str(r['command'] or '')[:200]}`)"))
-        return REFUSED, YOU_REJECTED
-    out = check(store, tid, str(ctx.get('sid') or ''), t['command'], cwd, t['shell'], about=str(_raw(tc).get('description') or ''), argv=t['argv'],
-                paths=paths) if t['command'] or reads else {}
-    return HELD, reason(out) or why
 
 
 def answerer(ctx: dict, trace=None, held: dict = None, told: list = None):
@@ -368,20 +319,18 @@ def answerer(ctx: dict, trace=None, held: dict = None, told: list = None):
     from . import acp, readgate
     def permit(params):
         tc = params.get('toolCall') or {}
-        asks = owner_asks(ctx)
-        answer, why = tool_call(tc, {**ctx, 'owner_asks': asks})
-        if answer == HELD and asks: answer, why = put_to_owner(ctx, params, why)
+        answer, why = tool_call(tc, ctx)
         out = acp.pick(params.get('options'), answer == ALLOWED)
         iid, t = str(tc.get('toolCallId') or ''), tool_of(tc)
         # ...a file it was let write is its own work from now on: reading it back is never asked (readgate.wrote)
         if answer == ALLOWED and (t['kind'] == 'edit' or t['name'] in readgate.WRITE_TOOLS):
             readgate.wrote(ctx.get('task_id'), readgate.tool_paths(_raw(tc), tc.get('locations'), str(_raw(tc).get('cwd') or ctx.get('cwd') or '')))
-        if answer != ALLOWED and held is not None: held[iid] = why if answer in (HELD, CARD) or why in (YOU_REJECTED, STILL_WAITING, YOU_STOPPED) else f'Taskuary refused it: {why}'
+        if answer != ALLOWED and held is not None: held[iid] = why if answer in (HELD, CARD) else f'Taskuary refused it: {why}'
         # ...AND THE AGENT HEARS TASKUARY'S OWN REASON: the adapter's answer is "User refused permission to run tool" whoever said no
         step = f"`{t['command'][:200]}`" if t['command'] else 'That step'
-        tell = answer in (REFUSED, CARD) and why and why not in (YOU_REJECTED, YOU_STOPPED) and ctx.get('store') is not None and str(ctx.get('task_id') or '').isdigit()
+        tell = answer in (REFUSED, CARD) and why and ctx.get('store') is not None and str(ctx.get('task_id') or '').isdigit()
         if tell:
-            words_ = f'{step} was not run - ' + (why if why == STILL_WAITING or why.startswith(DISMISSED) else f"Taskuary's own answer, not the owner's: {why}")
+            words_ = f'{step} was not run - ' + (why if why.startswith(DISMISSED) else f"Taskuary's own answer, not the owner's: {why}")
             if told is not None: told.append({'words': words_, 'tell': True})
             else:
                 from .browsergate import _tell

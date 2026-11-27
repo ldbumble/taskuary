@@ -2,6 +2,10 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.4.6.10 - 2026-11-27
+
+- The show tool's listed line says a view shown again under its id is the one view redrawn
+
 ## 0.4.6.9 - 2026-11-27
 
 - The skill a turn read is named on its line, on every road

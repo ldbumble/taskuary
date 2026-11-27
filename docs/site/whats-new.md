@@ -2,6 +2,16 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.4.6.9 - 2026-11-27
+
+- The skill a turn read is named on its line, on every road
+- An empty reply box never holds a card that can be pressed
+- A browser press that names no control is answered, never held for his yes
+- A change never renames a routine unless a new name is asked for
+- The profile wall says what is connected on its other side
+- A file with no text to read is handed over as the file
+- Cards: his no to a step ends its card, a kept tab is its own card, no step above his line
+
 ## 0.4.6.8 - 2026-11-27
 
 - A sender-verification result counts only above the hop the receiving server wrote

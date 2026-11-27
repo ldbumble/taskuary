@@ -543,7 +543,9 @@ function Conversation({ items: served, nodes = [], posts = [], reviews = [], nex
     if (past && !got.length && !post) return c.was ? [wasCard(c, rv(c.review))] : [];
     // ...ONE REVIEW IS ONE CARD: a post or a tracker comment an earlier build set aside has its settled card among the nodes, and was drawn
     // again under it as the act's own card reading "Not posted · dismissed" (the card round, 2026-11-12)
-    const out = [...got.map((n) => <React.Fragment key={n.key}>{past ? React.cloneElement(n.node, { past: true }) : n.node}</React.Fragment>),
+    // ...and a set carries the step held on one of its tabs to that tab (`steps`: BulkCard), as a card of one carries its own
+    const mine = (n) => ({ ...(past ? { past: true } : {}), ...(n.steps && c.step ? { step: c.step } : {}) });
+    const out = [...got.map((n) => <React.Fragment key={n.key}>{Object.keys(mine(n)).length ? React.cloneElement(n.node, mine(n)) : n.node}</React.Fragment>),
       ...(post && !got.length && !used.has(`post:${c.review}`) && used.add(`post:${c.review}`) ? [<ActReview key={`post:${c.review}`} row={post} tid={tid} onChanged={onChanged} past={past} step={c.step || null} />] : [])];
     return out;
   };

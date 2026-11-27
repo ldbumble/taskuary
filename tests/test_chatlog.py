@@ -286,7 +286,7 @@ def test_the_held_step_of_a_cards_browser_road_is_drawn_on_that_card_as_its_next
                                             'site': 'x.example', 'what': 'Publish your post on X', 'why': 'it speaks for you'}, 'agent')['reviewId']
     held = hold(); cardqueue._SEEN.clear()
     got = cards()
-    assert got[x]['status'] == 'pending' and got[x]['step'] == {'review': held, 'what': 'Publish your post on X'}, got[x]
+    assert got[x]['status'] == 'pending' and got[x]['step'] == {'review': held, 'what': 'Publish your post on X', 'card': x}, got[x]
     assert held not in got and li not in got and chatlog.live_card(s, tid)['review'] == x, 'one card: the step is on it, never beside it'
     said = cardqueue.screen(s, tid)
     assert 'Waiting for his press now, drawn on the card he pressed' in said and 'Publish your post on X' in said and 'NOT done yet - do it' not in said, said
@@ -311,6 +311,78 @@ def one_call(s, tid, acts) -> list:
         ids.append(s.add_review({'TaskId': tid, 'Kind': 'action', 'Status': 'pending', 'Origin': 'agent', 'Reason': 'the post you asked for', 'DraftText': json.dumps(p)}))
         s._exec('UPDATE review SET Batch=? WHERE ReviewId=?', (key, ids[-1]))
     return ids
+
+
+def test_a_step_handed_over_on_one_tab_of_a_set_is_that_tabs_next_press():
+    """Walk 25, 2026-11-26: X and LinkedIn posts raised in ONE call - one card, a tab each. LinkedIn posted; Post via the browser on the X tab;
+    X wanted a sign-in and the agent handed it over. The step was queued BEHIND the card whose tab it belongs to, which only finishes after
+    the step: no I'm done, no browser pane, and the agent told "in line, 2 of 2" - a dead end his own line could not pass. A step on a tab's
+    browser road is that tab's next press: drawn on the one card, its page open, and told as waiting for his press now."""
+    from unittest import mock
+    from taskuary import cardqueue, conversation, general, pagestep, proposals, workerstate as ws
+    s, tid = world()
+    conversation.hear(s, tid, turn=True)
+    x, li = one_call(s, tid, [{'action': 'run_tool', 'type': t, 'text': 'We close the month in four days.'} for t in ('x_post', 'linkedin_post')])
+    s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'Two posts, one card.')
+    chatlog.read(s, tid)
+    s.decide_review(li, 'approved', None, 'owner')
+    with mock.patch.object(general, 'to_agent', return_value='woke'): assert proposals.via_browser(s, x, '')['ok']
+    ws.record(s, tid, 'run1', 'input_needed', request_id='signin:x.example', text='Sign in to X so the post can go out', source='api')
+    cardqueue._SEEN.clear()
+    cards = {c['review']: c for i in chatlog.read(s, tid)['items'] for c in ([i] if i['kind'] == 'card' else i.get('cards') or [])}
+    step = pagestep.card_of(s, tid, 'signin:x.example')['ReviewId']
+    assert list(cards) == [x] and cards[x]['status'] == 'pending', 'one card: the step is on it, never a card of its own behind it'
+    assert cards[x]['step']['review'] == step and cards[x]['step']['card'] == x and cards[x]['step']['press'] == 'done', cards[x]['step']
+    st = cardqueue.state(s, tid)
+    assert step in st['live'] and not st['held'] and not cardqueue.row_over(s, tid)
+    assert pagestep.shown(s, tid, {'request_id': 'signin:x.example'}), 'its page opens: its card is in front'
+    assert 'on his screen now' in pagestep.place(s, tid, 'signin:x.example')
+    said = cardqueue.screen(s, tid)
+    assert 'Waiting for his press now, drawn on the card he pressed' in said and 'behind the card in front' not in said, said
+    [tabs] = cardqueue.sets(s, tid).values()
+    assert [(t['name'], t['done']) for t in tabs] == [('X', False), ('LinkedIn', True)]
+
+
+def test_each_tab_of_a_set_is_told_by_what_came_of_it_never_by_its_first_rows_fate():
+    """Walk 25, 2026-11-26, two roads: three posts in one call - he dismissed X, POSTED LinkedIn and never answered Reddit, which his next,
+    unrelated line greyed. Its agent was told "Turned down by him: rv7 + rv8 + rv9" - the first row's fate for the whole card - and said "you
+    turned down the X and Reddit posts"; it could not keep the one he never answered, and could have posted the posted one again."""
+    from taskuary import cardqueue, conversation, general
+    s, tid = world()
+    conversation.hear(s, tid, turn=True)
+    x, li, rd = one_call(s, tid, [{'action': 'run_tool', 'type': t, 'text': 'We shipped the ledger export.'} for t in ('x_post', 'linkedin_post', 'reddit_post')])
+    s._exec("UPDATE review SET CreatedAt=datetime(CreatedAt, '-5 seconds') WHERE TaskId=?", (tid,))
+    s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'Three posts are set up.')
+    chatlog.read(s, tid)
+    s.decide_review(x, 'rejected', None, 'owner'); s.decide_review(li, 'approved', None, 'owner'); cardqueue._SEEN.clear()
+    told = lambda: {next(i for i in (x, li, rd) if f'rv{i},' in l): l for l in cardqueue.screen(s, tid).splitlines()[1:] if 'rv' in l}
+    got = told()
+    assert 'Turned down by him' in got[x] and 'Done' in got[li] and 'Waiting for his press now' in got[rd], got
+    assert not any(f'rv{a} + rv{b}' in l for l in got.values() for a in (x, li, rd) for b in (x, li, rd)), 'each tab alone'
+    line = general.new_line_id()
+    conversation.hear(s, tid, [line], standing=True); cardqueue._SEEN.clear()
+    assert s.get_review(rd)['Status'] == 'superseded'
+    got = told()
+    assert 'Turned down by him' in got[x] and 'Done' in got[li] and 'Greyed by his line' in got[rd] and 'Turned down' not in got[rd], got
+
+
+def test_an_empty_reply_box_in_front_is_never_told_as_waiting_for_his_press():
+    """Walk 25, 2026-11-26: a reply was owed and its agent had asked what to say, so the empty box stood with that on it. Its agent then raised
+    a card of its own, which waited behind the box - and was told "Waiting for his press now: the reply to ..." for a box whose Send is off."""
+    from taskuary import cardqueue, conversation, general
+    s, tid = world()
+    mid = s.add_message({'TaskId': tid, 'ExternalId': 'p1', 'Channel': 'email', 'FromName': 'Paula Vance', 'FromEmail': 'paula@vendor.example',
+                         'ToEmail': 'alex@northwind.example', 'Subject': 'Flour order', 'BodyText': 'Twenty bags as usual? Paula', 'Status': 'routed'})
+    conversation.hear(s, tid, turn=True)
+    box = _rv(s, tid, mid, text='')
+    s.set_review_draft_needs(box, 'How many bags should I confirm?')
+    act = one_call(s, tid, [{'action': 'run_tool', 'type': 'linkedin_post', 'text': 'We shipped the ledger export.'}])[0]
+    s._exec('UPDATE review SET Batch=NULL WHERE ReviewId=?', (act,))
+    s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'How many bags should I confirm?')
+    cardqueue._SEEN.clear()
+    assert cardqueue.state(s, tid)['live'] == [box], 'the shape: the empty box is in front of the card its agent raised'
+    said = cardqueue.screen(s, tid)
+    assert 'Waiting for his press now' not in said and 'no words in it' in said and 'paula@vendor.example' in said, said
 
 
 def test_a_tab_he_said_no_to_is_marked_so_never_as_one_that_went():

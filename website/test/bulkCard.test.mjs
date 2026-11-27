@@ -184,4 +184,7 @@ test("a set under tabs is read off its rows' own tab names; a list card has none
   assert.deepEqual(tabsOf([row(1, "LinkedIn", "approved"), row(2, "X", "rejected"), row(3, "Bluesky")], null),
     [{ key: "1", name: "LinkedIn", done: true, front: false }, { key: "2", name: "X", done: true, front: false, no: true }, { key: "3", name: "Bluesky", done: false, front: true }]);
   assert.equal(tabsOf([row(1, "LinkedIn"), row(2, "X")], null)[0].front, true, "the first that waits is in front");
+  // ...walk 25, 2026-11-26: a sign-in handed over on the X tab he had pressed was drawn nowhere - the tab its step is on waits again, in front
+  assert.deepEqual(tabsOf([row(1, "X", "approved"), row(2, "LinkedIn", "approved")], null, { review: 9, card: 1 }).map((t) => [t.name, t.done, t.front]),
+    [["X", false, true], ["LinkedIn", true, false]]);
 });

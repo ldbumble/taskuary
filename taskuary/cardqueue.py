@@ -71,8 +71,15 @@ def done(store, tid: int, said: str) -> list:
 
 def step(u: dict) -> dict | None:
     """THE STEP OF A HANDED CARD'S BROWSER ROAD THAT WAITS FOR HIS PRESS (walk 22, 2026-11-25: the final Post on X was held, joined to the X card
-    he had pressed, and drawn nowhere - both agents said a card waited): that card's own next press, drawn on it - the newest held, or None."""
-    return next(reversed(_waits(u)), None) if u.get('rows') and handed(u['rows'][0]) else None
+    he had pressed, and drawn nowhere - both agents said a card waited): that card's own next press, drawn on it - the newest held, or None.
+    ON WHICHEVER ROW OF THE CARD HE PRESSED (walk 25, 2026-11-26: a sign-in on one tab of a set stood behind the set, for good)."""
+    cards = {r['ReviewId'] for r in u.get('rows') or [] if handed(r)}
+    return next((r for r in reversed(_waits(u)) if _p(r).get('card') in cards), None)
+
+
+def step_card(u: dict, sp: dict) -> dict:
+    "The row of card `u` that held step `sp` is the next press of: the one he pressed (a set's tab, a card of one)."
+    return next(r for r in u['rows'] if r['ReviewId'] == _p(sp).get('card'))
 
 
 def step_says(sp: dict) -> str:
@@ -125,22 +132,22 @@ def _units(store, tid: int, past: set) -> list:
     from . import landing
     from .conversation import ep
     from .proposals import HELD_ACTS, moved_on
-    out, by = [], {}
+    out, by, of = [], {}, {}
     # ...A STEP HELD WHILE A PRESSED ACT IS UNDER WAY IS THAT ACT'S OWN NEXT PRESS (his live app, 2026-11-23: Post via the browser on the X card, the
     # agent signed in and wrote the post, and the gate held its final Post - queued as a card of its own behind the Reddit and LinkedIn cards, so
     # Reddit stood in front, the browser said nothing waited on him, and the agent ended on "I'll bring you the link"): it is a row of the card
     # he pressed (its `card`, written as it was held - proposals.queue), drawn on that card (step) - one a card taken back or failed left
-    # waiting stands as a card of its own
+    # waiting stands as a card of its own. `of`: each row's card - a set's tab is a row of its Batch's card, and its step joins that card
     for r in store._rows("SELECT * FROM review WHERE TaskId=? ORDER BY ReviewId", (int(tid),)):
         if r['ReviewId'] in past or obsolete_read(store, tid, r): continue
-        if r['Kind'] == 'action' and (p := _p(r)).get('action') in HELD_ACTS and (u := by.get(f"rv{p.get('card')}")) and (r['Status'] != 'pending' or u['rows'][0]['Status'] in ('approved', 'edited')):
-            u['rids'].append(r['ReviewId']); u['rows'].append(r); continue
+        if r['Kind'] == 'action' and (p := _p(r)).get('action') in HELD_ACTS and (c := of.get(p.get('card'))) and (r['Status'] != 'pending' or c[1]['Status'] in ('approved', 'edited')):
+            c[0]['rids'].append(r['ReviewId']); c[0]['rows'].append(r); continue
         # ...a settled one by what it was while it waited: its run tells how many came together ("2 of 3")
         if r['Status'] != 'pending' and not r.get('DecidedAt'): continue
         if not in_line(r if r['Status'] == 'pending' else {**r, 'Status': 'pending', 'DecideNote': None}): continue
         if (k := _turn(r)) in by: u = by[k]
         else: u = by[k] = {'rids': [], 'rows': [], 'at': ep(r['CreatedAt'])}; out.append(u)
-        u['rids'].append(r['ReviewId']); u['rows'].append(r)
+        u['rids'].append(r['ReviewId']); u['rows'].append(r); of[r['ReviewId']] = (u, r)
     # ...A CLOSE-OUT IS PRESSED WITH THE REPLY IT CLOSES (ReviewDecision's `closeout`): one card with it, after it - alone only with no reply
     reply = lambda u: any(r['Kind'] not in ('action', 'slot') and r['Status'] == 'pending' for r in u['rows'])
     for co in [u for u in out if all(_closeout(r) and r['Status'] == 'pending' for r in u['rows'])]:
@@ -393,6 +400,7 @@ def what(store, u: dict, addr: bool = False) -> str:
     if u['rids'] == [LAND]: return f"the {landing.HOW.get(u.get('how'), 'push').lower()}"
     rows = _waits(u) or u['rows']; r = rows[0]
     if r.get('Batch') and len(u['rows']) > 1:
+        rows = [x for x in rows if x.get('Batch')]           # ...its own items: a step held on one of them is that item's press, not one more
         from .timewords import plural
         # ...as the card heads itself (bulkCard.countOf): "24 emails", "40 issues" - the noun of the act's own press words, else "steps"
         if r.get('Kind') == 'slot': return plural(len(rows), 'email')
@@ -489,6 +497,24 @@ def _result(r) -> str:
     return in_words(got, 200) if got else ''
 
 
+def _each(u: dict) -> list:
+    """A CARD OF MANY AS ITS AGENT IS TOLD IT - NEVER ONE ROW'S FATE FOR ALL (walk 25, 2026-11-26: three posts in one call, one he dismissed, one
+    he POSTED and one he never answered, told as "Turned down by him: rv7 + rv8 + rv9"): a set's tabs each alone, a list's rows by what came
+    of them, a held step with the row it is the next press of. -> the card as units, one per fate; a card of one as it is."""
+    rows = [r for r in u.get('rows') or [] if r.get('Batch')]
+    if len(rows) < 2: return [u]
+    from .conversation import _card, ep
+    by = {}
+    for r in rows: by.setdefault(r['ReviewId'] if is_set(rows) else 'waits' if r['Status'] == 'pending' or handed(r) else _card(r)['status'], []).append(r)
+    out = []
+    for g in by.values():
+        ids = {r['ReviewId'] for r in g}
+        g = g + [r for r in u['rows'] if not r.get('Batch') and _p(r).get('card') in ids]
+        out.append({'rids': [r['ReviewId'] for r in g], 'rows': g, 'at': u['at'],
+                    'done': None if any(r['Status'] == 'pending' or handed(r) for r in g) else max(ep(r.get('DecidedAt')) for r in g)})
+    return out
+
+
 def screen(store, tid: int, skip=()) -> str:
     """THE ONE FACT OF WHAT STANDS ON THE OWNER'S SCREEN FOR TASK `tid`, AND WHAT CAME OF EACH CARD (the design round, 2026-11-18: an agent told
     him "each has its own Post button" when one stood and his next line had greyed it): the line the page draws (state), each card greyed
@@ -496,44 +522,48 @@ def screen(store, tid: int, skip=()) -> str:
     (conversation._card) - sent, done with its link, failed and why, turned down. Told at the head of every turn and after every press and
     every card raised. `skip`: review ids said elsewhere in the same words (the reply draft's own block). '' on a task that never had a card."""
     from .continuity import clock
-    from .conversation import _card
+    from .conversation import DRAFTS, _card
     from .proposals import SET_ASIDE, UNTIL, comes_back, passed_why
     from . import general, landing
     st = state(store, tid); mark(store, tid, st)
-    live, held, past, front = set(st['live']), set(st['held']), st['past'], st['units'][0]['rids'] if st['units'] else []
+    live, held, past, front = set(st['live']), set(st['held']), st['past'], set(st['units'][0]['rids'] if st['units'] else [])
+    fronts = {x for f in st['fronts'] for x in f}
     since = str(general._last_answer(store, int(tid)) or '')
     waiting, settled, seen = [], [], set()
     def name(u, r):
         # ...a card of one by what it is, never its number (named); a card of many by the ids its tools take, its name beside them
         ids = [w['ReviewId'] for w in _waits(u)] or u['rids']
-        return (f"{' + '.join(f'rv{x}' for x in ids)}, {what(store, u, True)}" if len(u['rows']) > 1 else what(store, u, True)) + (f': {w}' if r and (w := _words(r)) else '')
+        return (f"{' + '.join(f'rv{x}' for x in ids)}, {what(store, u, True)}" if len(u['rows']) > 1 or (r or {}).get('Batch') else what(store, u, True)) + (f': {w}' if r and (w := _words(r)) else '')
     def greyed(r, n):
         # ...one his line greyed is its agent's to keep (keep); a held step, one a message passed or its turn finished without, never
         # ...and while its question stands, the truth of that wait: he cannot press it, and nothing brings it back before his answer's turn ends
         # (the owner, 2026-11-26: "it should not say it's waiting if you can't press it")
         head = ((ASKED if asking(store, tid) else UNTIL.capitalize()) if comes_back(store, r) else 'Greyed by an input your turn has not heard yet' if r.get('Status') == 'pending' else 'Greyed, will not go')
         settled.append((r.get('DecidedAt') or r.get('CreatedAt') or '', head + (f' ({w})' if (w := passed_why(store, r)) else '') + f': {n}'))
-    for u in _units(store, tid, set()):
+    for u in (x for c in _units(store, tid, set()) for x in _each(c)):
         seen.update(u['rids'])
         if set(u['rids']) & set(skip): continue
         r = (_waits(u) or u['rows'] or [{}])[0]; n, ids = name(u, r), set(u['rids'])
         if u['done'] is None:
             if (sp := step(u)):
                 # ...its held step is HIS now, on the card he pressed - never "do it", never a card of its own (walk 22: both agents said one waited)
-                waiting.append(f"Waiting for his press now, drawn on the card he pressed as its last step ({what(store, {'rids': u['rids'][:1], 'rows': u['rows'][:1]}, True)}): "
+                waiting.append(f"Waiting for his press now, drawn on the card he pressed as its last step ({what(store, {'rids': [(c := step_card(u, sp))['ReviewId']], 'rows': [{**c, 'Batch': None}]}, True)}): "
                                f"{step_says(sp)}")
             elif (h := next((x for x in u['rows'] if handed(x)), None)):
                 waiting.append(f"Handed to you by his press {clock(h.get('DecidedAt'))}, NOT done yet - do it; it is done once its own final press "
                                f"has gone, and the next card waits until then. One you cannot do now: keep_card it with `why` (it stands again "
                                f"for his press); one he drops: withdraw_draft it: {name(u, h)}")
             elif r and ids <= past: greyed(r, n)
-            elif ids & live or u['rids'] in st['fronts']:
+            elif ids & (live | fronts):
                 # ...on the buttons its card draws where it has no Send (card.presses; walk 21: "ready to send" over Copy + Redraft)
                 from . import card
                 ps = card.presses(store, r) if r and r.get('Kind') != 'action' else ('approve',)
                 shown = '' if 'approve' in ps else f" (its card: {card.press_words({'kind': card.SEND, 'presses': ps})})"
-                waiting.append(f'Waiting for his press now{outcome(r)}: {n}{shown}')
-            elif u['rids'] == front: waiting.append(f'Comes forward once your turn ends (you are going on from his last press): {n}')
+                # ...AND A REPLY BOX WITH NO WORDS IN IT HAS NOTHING TO PRESS (walk 25, 2026-11-26: an empty reply stood in front of the card its
+                # agent had raised, told as "waiting for his press now" - its Send is off until somebody writes it)
+                if r and r.get('Kind') in DRAFTS and not _words(r): waiting.append(f'In front with no words in it, so nothing of it can be pressed: {n}')
+                else: waiting.append(f'Waiting for his press now{outcome(r)}: {n}{shown}')
+            elif ids <= front: waiting.append(f'Comes forward once your turn ends (you are going on from his last press): {n}')
             # ...A CARD BEHIND THE FRONT COMES ONCE THE ONE IN FRONT IS PRESSED (separate calls are separate cards, one after another)
             elif ids & held: waiting.append(f'Raised, and behind the card in front - it comes forward at his press on that one: {n}')
             continue

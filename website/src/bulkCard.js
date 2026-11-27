@@ -51,10 +51,11 @@ export const rowState = (r, run) => {
 // a line the moment one settled, and all of them the moment he pressed (the card shrank under his pointer and grew back at the run's end)
 export const rowOpens = (id, i, { open, sample = 2 }) => open.has(id) || (i < sample && !open.has(-id));
 // ...AND A SET UNDER TABS (taskuary/cardqueue.py sets - each of its rows carries its tab's name, `Tab`): [{key, name, done, no, front}] in the
-// order they were raised, the first that waits in front - null for the list card
-export const tabsOf = (rows, run) => {
+// order they were raised, the first that waits in front - null for the list card. `step`: the step held on one tab's browser road
+// (chatlog.advance, its `card` the tab's review) - that tab waits for his press again, however it read before
+export const tabsOf = (rows, run, step = null) => {
   if (!(rows || []).length || !rows.every((r) => r.Tab)) return null;
-  const st = rows.map((r) => rowState(r, run)), front = st.findIndex((s) => s.waiting);
+  const st = rows.map((r) => (step && step.card === r.ReviewId ? { waiting: true } : rowState(r, run))), front = st.findIndex((s) => s.waiting);
   return rows.map((r, i) => ({ key: String(r.ReviewId), name: r.Tab, done: !st[i].waiting, front: i === front, ...(st[i].waiting || st[i].done ? {} : { no: true }) }));
 };
 export const running = (run) => ["running", "cancelling"].includes(run?.state);

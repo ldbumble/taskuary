@@ -2704,7 +2704,7 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
       went={sentHere?.id === pendingReview.ReviewId ? sentHere : null} toRow={inRow} onMarkDone={askFinish} onSent={sent} closeOnSend={!detail?.queue?.closes} onRemind={(e, a) => remindHere(steady(a || e?.currentTarget))}
       why={rec?.state === "draft_ready" ? rec.why || "" : ""}
       onChanged={() => { loadDetail(selected); loadTasks(); onChanged?.(); }} /></Box> }] : [];
-  const turnCards = [...replyNode, ...passedCards, ...batches.map((rs) => ({ key: `batch:${rs[0].Batch}`, at: rs[0].CreatedAt || "", rid: rs[0].ReviewId, waits: true,
+  const turnCards = [...replyNode, ...passedCards, ...batches.map((rs) => ({ key: `batch:${rs[0].Batch}`, at: rs[0].CreatedAt || "", rid: rs[0].ReviewId, waits: true, steps: true,
       node: <BulkReview rows={rs} tid={t?.TaskId} onChanged={decided} /> })), ...replacedCards, ...unsentCards, ...pressedCards.map((g) => ({ key: g.key, at: g.at, rid: g.reviews[0].ReviewId,
       node: g.held ? <HeldSteps reviews={g.reviews} onChanged={decided} /> : <PassedCard reviews={g.reviews} /> })),
     ...(inTurns ? askCards : []).map((g) => ({ key: g.key, at: g.reviews[0].CreatedAt || "", rid: g.reviews[0].ReviewId, waits: true, also: asksBelow, note: g.held ? "" : askNote(g.reviews[0]),

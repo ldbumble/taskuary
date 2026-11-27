@@ -89,11 +89,20 @@ def tracker_task(s, t='jira', item='NW-12', **over):
     return tid
 
 
-def finish(s, tid):
+SUMMARY = "The export reads the new view again; tonight's run will be full."
+def finish(s, tid, ask=True):
+    """The agent's run ends, its close-out asked first through its own tool's door (propose kind git, how close) - only the agent raises
+    a card (the owner, 2026-11-27); Taskuary reads the item and marks it."""
+    if ask:
+        srv = config.load()['server']
+        with mock.patch.object(server, 'store', s):
+            r = TestClient(server.app).post(f'/api/mcp?task={tid}', headers={'X-Taskuary-Token': srv['agent_token'], guard.TASK_HDR: guard.task_proof(srv, tid)},
+                                            json={'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call', 'params': {'name': 'propose', 'arguments': {'kind': 'git', 'how': 'close', 'text': SUMMARY}}})
+        assert not r.json()['result']['isError'], r.text
     prev, wrapup.REFRESH = wrapup.REFRESH, None
     try:
         with mock.patch('taskuary.responder.draft_for_review', return_value='unused'):
-            return wrapup.finish(s, tid, {'summary': 'The export reads the new view again; tonight\'s run will be full.', 'outcome': 'did_work'},
+            return wrapup.finish(s, tid, {'summary': SUMMARY, 'outcome': 'did_work'},
                                  None, 'general')
     finally: wrapup.REFRESH = prev
 
@@ -145,14 +154,15 @@ class AnAgentsActWaitsForThePress(unittest.TestCase):
         self.assertEqual((method, path), ('POST', '/rest/api/3/issue/NW-12/comment'))
         self.assertEqual(body['body']['content'][0]['content'][0]['text'], 'Fixed - the export is full again.')   # what the card carried, as ADF
 
-    def test_the_propose_tool_files_a_move_and_an_agent_may_not_raise_the_close_out(self):
+    def test_the_propose_tool_files_a_move_and_an_agent_may_not_mark_the_close_out(self):
         jira = FakeJira()
         with upstream(jira=jira):
             out = agenttools.call(self.s, self.tid, 'propose', {'action': 'run_tool', 'type': 'jira_move', 'status': 'In Progress', 'why': 'reopened'},
                                   {'propose': lambda tid, a: server.agent_propose(server.AgentProposeBody(**{**a, 'task_id': tid}), _Req(self.agent))})
             self.assertIn('queued', out); self.assertEqual(jira.writes, [])
-            with self.assertRaises(ValueError): agenttools.proposal_of({'action': 'close_item', 'tracker': 'jira', 'item': 'NW-12'})
-            self.assertEqual(proposals.parse('TASKUARY-PROPOSE {"action": "close_item", "tracker": "jira", "item": "NW-12", "closeout": true}'), [])
+            # ...its close-out it may ask, never mark: Taskuary reads the item and marks it (proposals.closing)
+            self.assertNotIn('closeout', agenttools.proposal_of({'action': 'close_item', 'tracker': 'jira', 'item': 'NW-12', 'closeout': True}))
+            self.assertNotIn('closeout', proposals.parse('TASKUARY-PROPOSE {"action": "close_item", "tracker": "jira", "item": "NW-12", "closeout": true}')[0])
             rv = next(r for r in pending(self.s, self.tid) if json.loads(r['DraftText']).get('type') == 'jira_move')
             self.assertIn('move NW-12 in Jira to In Progress', rv['Reason'])
             proposals.execute(self.s, rv)

@@ -295,8 +295,8 @@ TOOLS = {
                            "- routine: `routine` its title (none: the one this task is a run of; a new title makes one), and what changes: "
                            "`prompt` its instructions, or `script` (standard-library Python, rows on stdin, JSON rows out) with `reads`, or "
                            "`flow` its steps; `skill` it uses, `browser`, `daily_at` | `cron` | `every_minutes`, `goal`, `done_when`, `rename`.\n"
-                           "- git: `how` push, pr, land, rebase, merge, discard, or comment / close on the issue this task came from (`text`). "
-                           "`cwd` and `repo` default to your checkout and its origin; `deploy`: the branch a push deploys.\n"
+                           "- git: `how` push, pr, land, rebase, discard, comment, or merge / close the PR, issue or item this task opened or "
+                           "came from (`text`). `cwd`, `repo`: its checkout and its origin by default; `deploy`: the branch it deploys.\n"
                            "- system: a write on his systems: `type`, `connector_id`, its fields (list_systems; the guide's `propose` topic).\n"
                            "- setting: `changes` [{name, value}].\n"
                            "- break_out: `title`, `summary`, `messages` [m-ids], `todos` [to-do ids] - a part of this task that is another job.\n"
@@ -966,7 +966,7 @@ def _call(store, tid: int, name: str, args: dict, doors: dict, skip=()) -> str:
         selfclose.keep_mark(tid, 'summary', selfclose.summary_mark(keep))
         # ...ITS CHECK-BACK SET NOW, THROUGH THE check_back TOOL'S OWN DOOR (walk 14, 2026-11-24): kept unread and answered "Kept", a
         # "Thursday 26 November" it could not read was set nowhere at filing, while the agent told the owner "On Thursday, I'll check"
-        return 'Kept - it shows on the task when your answer is filed.' + (_end_check(store, tid, a['check_back'], doors, skip) if a.get('check_back') else '')
+        return 'Kept - it shows on the task when your answer is filed.' + left_open(store, tid) + (_end_check(store, tid, a['check_back'], doors, skip) if a.get('check_back') else '')
     if name == 'ask_owner':
         from . import selfclose, workerstate
         from . import cardqueue, proposals
@@ -1067,8 +1067,19 @@ def _versioned(store, tid: int, a: dict, doors: dict) -> str:
     return out
 
 
+# WHAT THE WORK LEAVES OPEN THAT NO CARD ASKS YET, AS ITS TURN ENDS (the owner, 2026-11-27: "only the agent raises cards" - the merge, the issue's
+# close and the landing question stood by themselves, raised by Taskuary): facts, from the record and the checkout - the cards are the agent's
+def left_open(store, tid) -> str:
+    "' ' + each fact of what task `tid`'s work leaves open with no card asking it - '' for none."
+    from . import landing, proposals
+    s = landing.state(store, int(tid)) if landing.record(store, int(tid)).get('cwd') else None
+    facts = [o['fact'] for o in (proposals.owed_closeout(store, int(tid)),) if o] + ([f"{s['line']} Not landed - nothing lands without his press."]
+                                                                                     if s and s['owed'] and not s['ask'] and not s.get('passed') else [])
+    return ''.join(f' {f}' for f in facts)
+
+
 def _review(store, tid: int, a: dict, doors: dict) -> str:
-    from . import verdicts
+    from . import proposals, verdicts
     from .proposals import post_of, post_type
     from .wrapup import no_correspondent
     k = str(a.get('kind') or ('act' if a.get('action') else 'post' if a.get('network') else '')).strip().lower()
@@ -1109,6 +1120,11 @@ def _review(store, tid: int, a: dict, doors: dict) -> str:
     if k == 'post' and not post_type(a.get('network')):
         raise ValueError(refusal(f"there is no post card for {echo(a.get('network'))!r}", f"give `networks` from {', '.join(NETWORKS)}; "
                                  "anywhere else, put it up in your browser - its final Post waits for his press"))
+    # ...A MERGE OR A CLOSE OF WHAT THIS TASK CLOSES OUT - its pull request, the issue or tracker item it came from - is that close-out's card
+    # (proposals.closing marks it); anywhere else a merge is the landing card's
+    if k == 'git' and (how := str(a.get('how') or '').strip().lower()) in ('merge', 'close') and (o := proposals.owed_closeout(store, tid)) and o['how'] == how:
+        was, p = verdicts.unsent(store, tid), {'action': o['action'], **{x: str(a[x]) for x in ('text', 'why') if a.get(x)}}
+        return _j(idle(card_roads(store, replaced(store, doors, tid, was, doors['propose'](tid, p), a.get('replaces'), 'a new proposal takes its place'), p)))
     if k == 'git' and not GIT_HOW.get(how := str(a.get('how') or '').strip().lower()):
         if how not in GIT_HOW: raise ValueError(refusal(f"`how` {echo(how)!r} is not one of {', '.join(GIT_HOW)}" if how else '`how` was not given', 'call propose again with kind git and its `how`'))
         return _j(idle(doors['propose_land'](tid, how, str(a.get('why') or ''), **({'deploy': str(a['deploy'])} if a.get('deploy') else {}))))

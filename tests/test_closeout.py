@@ -1,11 +1,14 @@
 """The close-out (the owner, 2026-09-27: "it's not closed until then"): what finishes a task depends on where it
-lives. A finished agent's open pull request waits for Merge, a task from an issue for Close issue - each a
-yes-gated review, and the task is not done until it is answered. See docs/how-a-task-ends.md, The close-out."""
+lives. An agent's open pull request waits for Merge, a task from an issue for Close issue - each a yes-gated review,
+and the task is not done until it is answered. See docs/how-a-task-ends.md, The close-out.
+ONLY THE AGENT RAISES IT (the owner, 2026-11-27: "only the agent raises cards"): it asks with propose kind git, how merge or close,
+and Taskuary reads what the task closes and marks the card; until then what is open is a fact the agent is told, never a card."""
 import json, unittest
 from taskuary import card
 from unittest import mock
 
-from taskuary import ci, wrapup, concierge, github, proposals, verdicts
+from fastapi.testclient import TestClient
+from taskuary import ci, config, guard, server, wrapup, concierge, github, proposals, verdicts
 from taskuary.store import MemoryStore
 
 OPEN = {'number': 7, 'url': 'https://github.com/northwind/ledger/pull/7', 'head': 'fix-export', 'sha': 'abc1234def',
@@ -37,7 +40,18 @@ def with_pr(s, **over):
     return tid
 
 
-def finish(s, tid, pr=OPEN, **kw):
+def tool(s, tid, name, pr=OPEN, **args):
+    "One call of the task's agent's own tool, through its real door (/api/mcp): (what it was told, whether that was a refusal)."
+    srv = config.load()['server']
+    with mock.patch.object(server, 'store', s), mock.patch.object(github, 'pr', return_value=pr):
+        r = TestClient(server.app).post(f'/api/mcp?task={tid}', headers={'X-Taskuary-Token': srv['agent_token'], guard.TASK_HDR: guard.task_proof(srv, tid)},
+                                        json={'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call', 'params': {'name': name, 'arguments': args}}).json()['result']
+    return r['content'][0]['text'], r['isError']
+
+
+def finish(s, tid, pr=OPEN, ask='merge', text='the export reads the new view', **kw):
+    """The agent's run ends - its close-out asked first, as its own card (`ask`: propose kind git, how merge or close; None: it asked none)."""
+    if ask: tool(s, tid, 'propose', pr=pr, kind='git', how=ask, **({'text': text} if text else {}))
     prev, wrapup.REFRESH = wrapup.REFRESH, None
     try:
         # ...no writer at a run's end (2026-11-10): the reply is the agent's own, or owed
@@ -61,6 +75,26 @@ def pending(s, tid): return [r for r in s._rows("SELECT * FROM review WHERE Task
 
 
 class MergeCloseOutTests(unittest.TestCase):
+    def test_nothing_but_the_agent_raises_the_close_out_and_until_then_it_is_told_as_a_fact(self):
+        """Taskuary raised the merge card itself as the run ended, once the agent had gone. The agent asks it; until it does, its turn's end
+        and its cards' answers say what is open - and nothing merges without his press."""
+        s = armed(MemoryStore()); tid = with_pr(s)
+        said, err = tool(s, tid, 'end_turn', did='The export reads the new view.')
+        self.assertFalse(err, said); self.assertIn('Pull request #7 on northwind/ledger is open; nothing merges without his press.', said)
+        out = finish(s, tid, ask=None)
+        self.assertIsNone(out['closeout']); self.assertFalse(pending(s, tid)); self.assertEqual(s.get_task(tid)['Status'], 'done')
+        said, err = tool(s, tid, 'propose', kind='git', how='merge', text='the export reads the new view')
+        self.assertFalse(err, said); self.assertTrue(card.pending(s, tid, 'closeout'))
+        self.assertNotIn('Pull request #7', tool(s, tid, 'end_turn', did='Asked for the merge.')[0], 'its card asks it now: no fact said again')
+
+    def test_his_press_that_opens_the_pull_request_raises_no_merge_card(self):
+        s = armed(MemoryStore()); tid = s.create_task({'Title': 'Fix the nightly export', 'Kind': 'coding', 'Status': 'waiting'}, 'triage')
+        rid = s.add_review({'TaskId': tid, 'Kind': 'action', 'Status': 'approved', 'DraftText': json.dumps({'action': 'open_pr'})})
+        ci._save_pr(s, tid, {'number': 7, 'url': OPEN['url'], 'head': 'fix-export', 'base': 'main', 'state': 'open', 'repo': 'northwind/ledger', 'sha': 'abc1234def'})
+        with mock.patch.object(github, 'pr', return_value=OPEN): proposals.settle(s, s.get_review(rid), 'approve')
+        self.assertIsNone(card.pending(s, tid, 'closeout'))
+        self.assertIn('nothing merges without his press', proposals.owed_closeout(s, tid)['fact'])
+
     def test_a_finished_agent_with_an_open_pull_request_waits_for_merge(self):
         s = armed(MemoryStore()); tid = with_pr(s)
         out = finish(s, tid)
@@ -125,12 +159,12 @@ class MergeCloseOutTests(unittest.TestCase):
             self.assertFalse(ci.pr_ended(s, tid, ci.landing_of(s, tid)))
         look.assert_not_called()
 
-    def test_mark_done_and_a_saved_session_keep_the_old_ending(self):
+    def test_mark_done_and_a_saved_session_raise_no_close_out(self):
         s = armed(MemoryStore()); tid = with_pr(s)
-        self.assertIsNone(finish(s, tid, owner_done=True)['closeout'])
+        self.assertIsNone(finish(s, tid, ask=None, owner_done=True)['closeout'])
         self.assertEqual(s.get_task(tid)['Status'], 'done')
         s = armed(MemoryStore()); tid = with_pr(s)
-        finish(s, tid, keep_open=True)
+        finish(s, tid, ask=None, keep_open=True)
         self.assertIsNone(card.pending(s, tid, 'closeout'))
 
     def test_the_close_out_is_the_owners_act_so_agent_switches_do_not_hide_it(self):
@@ -156,8 +190,16 @@ class MergeCloseOutTests(unittest.TestCase):
         self.assertFalse(verdicts.decide(s, s.get_review(rid), 'close_pr')['ok'])
         self.assertEqual(s.get_review(rid)['Status'], 'pending')
 
-    def test_an_agent_cannot_propose_the_merge_itself(self):
-        self.assertEqual(proposals.parse('TASKUARY-PROPOSE {"action": "merge_pr", "repo": "o/r", "number": 1}'), [])
+    def test_a_merge_the_agent_names_itself_is_the_tasks_own_close_out_never_another_pull_request(self):
+        """The agent asks the merge; what it merges is read from the task - a repository and number of its own choosing never stand."""
+        [p] = proposals.parse('TASKUARY-PROPOSE {"action": "merge_pr", "repo": "northwind/portal", "number": 1, "closeout": true}')
+        s = armed(MemoryStore()); tid = with_pr(s)
+        with mock.patch.object(github, 'pr', return_value=OPEN): q = proposals.queue(s, tid, p, 'agent')
+        got = json.loads(s.get_review(q['reviewId'])['DraftText'])
+        self.assertEqual((got['repo'], got['number'], got['closeout']), ('northwind/ledger', 7, True))
+        s = MemoryStore(); bare = s.create_task({'Title': 't', 'Status': 'open'}, 't')
+        self.assertIsNone(proposals.queue(s, bare, p, 'agent', refused=(why := [])))
+        self.assertIn('no open pull request', why[0])
 
 
 class ReplyAndCloseOutTests(unittest.TestCase):
@@ -329,6 +371,7 @@ class GithubStateTests(unittest.TestCase):
     def test_task_only_raises_no_merge_card(self):
         s = armed(MemoryStore()); closeout_setting(s, pr='task'); tid = with_pr(s)
         self.assertIsNone(finish(s, tid)['closeout'])
+        self.assertIsNone(proposals.owed_closeout(s, tid), 'nothing to merge is told either')
 
     def test_blocked_refuses_even_close_out_anyway_when_it_is_not_offered(self):
         s = armed(MemoryStore()); tid = with_pr(s); finish(s, tid)
@@ -371,7 +414,8 @@ class IssueCloseOutTests(unittest.TestCase):
         s = armed(MemoryStore(), tracker=True)
         tid = s.create_task({'Title': 'Export is empty', 'Kind': 'coding', 'Status': 'in_progress',
                              'SourceRef': 'https://github.com/northwind/ledger/issues/12'}, 'triage')
-        self.assertEqual(finish(s, tid)['closeout'], 'close_issue')
+        self.assertIn('This task came from issue northwind/ledger#12', proposals.owed_closeout(s, tid)['fact'])
+        self.assertEqual(finish(s, tid, ask='close', text='')['closeout'], 'close_issue')
         rv = card.pending(s, tid, 'closeout')
         with mock.patch.object(github, 'close_issue') as close:
             self.assertTrue(verdicts.decide(s, rv, 'approve', final_text='Fixed in the nightly run.')['ok'])
@@ -382,7 +426,7 @@ class IssueCloseOutTests(unittest.TestCase):
         s = armed(MemoryStore(), tracker=False)
         tid = s.create_task({'Title': 'Export is empty', 'Kind': 'coding', 'Status': 'in_progress',
                              'SourceRef': 'https://github.com/northwind/ledger/issues/12'}, 'triage')
-        self.assertEqual(finish(s, tid)['closeout'], 'close_issue')
+        self.assertEqual(finish(s, tid, ask='close')['closeout'], 'close_issue')
 
 
 class ContributorPullRequestTests(unittest.TestCase):
@@ -394,7 +438,7 @@ class ContributorPullRequestTests(unittest.TestCase):
 
     def test_a_reviewed_contributor_pr_waits_for_merge_without_the_push_switch(self):
         s = armed(MemoryStore()); s.set_setting('agent_push_enabled', '0', 't'); tid = self._reviewed(s)
-        self.assertEqual(finish(s, tid, pr={**OPEN, 'number': 84})['closeout'], 'merge_pr')
+        self.assertEqual(finish(s, tid, pr={**OPEN, 'number': 84}, text='')['closeout'], 'merge_pr')
         p = json.loads(card.pending(s, tid, 'closeout')['DraftText'])
         self.assertEqual((p['repo'], p['number'], p['text'], p.get('theirs')), ('northwind/ledger', 84, '', True))
         with mock.patch.object(github, 'pr', return_value={**OPEN, 'number': 84}), mock.patch.object(github, 'checks', return_value=GREEN), \
@@ -403,13 +447,13 @@ class ContributorPullRequestTests(unittest.TestCase):
         self.assertEqual((merge.call_args[0][2], merge.call_args[0][4]), (84, None))    # GitHub titles the squash
         self.assertIsNone(ci.pr_of(s, tid))                                               # no "we opened it" mark invented
 
-    def test_a_task_finished_before_the_close_out_existed_is_offered_it_once(self):
+    def test_a_task_finished_before_its_agent_asked_the_merge_is_told_it_never_raised_it_by_a_sync(self):
+        """A sync offered the close-out of a task finished without one - a card no agent asked. The pull request it came from is a fact its
+        agent is told the next time it works the task; the sync raises nothing."""
         s = armed(MemoryStore()); tid = self._reviewed(s, 'waiting')
         s.add_comment(tid, 'coding', 'agent', 'The agent closed this itself: PR #84 reviewed: accept')
-        with mock.patch.object(github, 'pr', return_value={**OPEN, 'number': 84}):
-            self.assertEqual(proposals.backfill(s), 1)
-            verdicts.decide(s, card.pending(s, tid, 'closeout'), 'reject')
-            self.assertEqual(proposals.backfill(s), 0)                                      # "not yet" is not asked again
+        self.assertFalse(hasattr(proposals, 'backfill'))
+        self.assertEqual(proposals.owed_closeout(s, tid)['fact'], 'This task came from pull request northwind/ledger#84; nothing merges it without his press.')
         self.assertIsNone(card.pending(s, tid, 'closeout'))
 
     def test_a_saved_session_that_drafted_its_reply_gets_the_merge_too(self):
@@ -420,25 +464,13 @@ class ContributorPullRequestTests(unittest.TestCase):
         self.assertEqual(finish(s, tid, pr={**OPEN, 'number': 84}, keep_open=True)['closeout'], 'merge_pr')
         self.assertEqual(s.get_task(tid)['Status'], 'in_progress')                       # a saved session still leaves the status alone
 
-    def test_an_open_saved_task_with_its_reply_ready_is_backfilled(self):
-        s = armed(MemoryStore()); tid = self._reviewed(s, 'open')
-        s.add_comment(tid, 'coding', 'agent', 'AGENT REPORT\nDetermination: accept')
-        s.add_review({'TaskId': tid, 'Kind': 'draft_reply', 'Status': 'pending', 'DraftText': 'Merging this one.'})
-        with mock.patch.object(github, 'pr', return_value={**OPEN, 'number': 84}):
-            self.assertEqual(proposals.backfill(s), 1)
-
-    def test_an_open_task_without_a_reply_is_not_backfilled(self):
-        s = armed(MemoryStore()); tid = self._reviewed(s, 'open')
-        s.add_comment(tid, 'coding', 'agent', 'AGENT REPORT\nDetermination: half done')
-        with mock.patch.object(github, 'pr', return_value={**OPEN, 'number': 84}):
-            self.assertEqual(proposals.backfill(s), 0)
-
-    def test_an_agent_cannot_mark_its_own_ask_as_a_close_out(self):
+    def test_an_agent_cannot_mark_its_own_ask_as_a_close_out_taskuary_does(self):
         ps = proposals.parse('TASKUARY-PROPOSE {"action": "close_issue", "closeout": true}')
         self.assertNotIn('closeout', ps[0])
-        s = MemoryStore(); tid = s.create_task({'Title': 't', 'Status': 'open', 'SourceRef': 'https://github.com/northwind/ledger/issues/7'}, 't')
-        rid = proposals.queue(s, tid, ps[0], 'agent')['reviewId']                       # ...it stands as the agent's ask for his press
-        self.assertIn('the agent proposes', s.get_review(rid)['Reason'])
+        s = armed(MemoryStore()); tid = s.create_task({'Title': 't', 'Status': 'open', 'SourceRef': 'https://github.com/northwind/ledger/issues/7'}, 't')
+        rid = proposals.queue(s, tid, ps[0], 'agent')['reviewId']                       # ...the issue this task came from: its close-out, for his press
+        self.assertTrue(json.loads(s.get_review(rid)['DraftText'])['closeout'])
+        self.assertEqual(s.get_review(rid)['Reason'], 'finishing it: close the issue it came from')
 
     def test_your_merge_closes_the_task_and_retires_the_unsent_thank_you(self):
         """Merged is finished (the owner, 2026-09-28: "if they were merged in, they should just close")."""

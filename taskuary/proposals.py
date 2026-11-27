@@ -153,7 +153,7 @@ def _gate(a: str):
 # WHAT NO AGENT MAY ASK FOR, AND THE MARKS NONE MAY PUT ON ITS OWN ASK - one list for both doors: the marker (parse) and the tool
 # (agenttools.proposal_of). They were two, and had drifted (the spine audit, 2026-11-09): the tool's did not name the held steps, so an agent
 # could file a "held step" of its own - a command of its choosing, on the card the owner reads as one Taskuary stopped
-NOT_ASKED = ('merge_pr', 'close_item', 'repair_workflow', 'change_setup', 'use_desktop', 'start_task', 'switch_ai', 'rerun_report', 'use_repo', 'move_profile', 'questions', *HELD_ACTS)
+NOT_ASKED = ('repair_workflow', 'change_setup', 'use_desktop', 'start_task', 'switch_ai', 'rerun_report', 'use_repo', 'move_profile', 'questions', *HELD_ACTS)
 MARKS = ('closeout', 'flow_run')
 
 # A POST IS DRAWN AS THE POST (the owner, 2026-11-05: "it's not showing the post and the image as a linkedin post and asking me if i want to
@@ -711,6 +711,12 @@ def queue(store, task_id: int, p: dict, actor='agent', refused: list | None = No
     from . import card, cardqueue, trackers
     # ...its `then`, the agent's own step after the press, is the card's (card.carries_on) - never part of what is run or compared
     then, p = card.then_of(p), {k: v for k, v in p.items() if k != 'then'}
+    # ...a close-out its agent asks is what this task closes, read now and marked by Taskuary (closing) - never a pull request it names itself
+    if actor == 'agent' and p.get('action') in CLOSEOUT and not p.get('closeout'):
+        try: p = closing(store, task_id, p)
+        except ValueError as e:
+            if refused is not None: refused.append(str(e))
+            return None
     # ...and a step held while a card his press handed over is under way - its page's last press, a file it reads to upload, his sign-in - is
     # that card's own next press (cardqueue.step)
     if p.get('action') in HELD_ACTS: p = {**p, **({'card': fl['ReviewId']} if (fl := cardqueue.in_flight(store, int(task_id))) else {})}
@@ -1164,39 +1170,34 @@ def closeout_due(store, tid: int):
     return p if validate(store, p)[0] else None
 
 
-def backfill(store) -> int:
-    """Tasks an agent finished BEFORE the close-out existed are waiting on a reply alone, and their pull request is
-    still open with nothing asking to merge it (the owner, 2026-09-27: "don't see the merge PR button?"). Each sync
-    offers their close-out once; a task that was ever offered one is never asked about again."""
-    from . import ci, funnel
-    busy, n = funnel.working_tids(store), 0
-    for t in store.list_tasks():
-        tid, ref = t['TaskId'], str(t.get('SourceRef') or '')
-        # waiting on its reply, or a saved session whose answer is drafted - finished work either way (TQ-0767)
-        if t.get('Status') not in ('waiting', 'open') or tid in busy: continue
-        if t.get('Status') == 'open' and not store._one("SELECT 1 x FROM review WHERE TaskId=? AND Status='pending' AND Kind<>'action'", (tid,)): continue
-        from . import trackers
-        if not (_PULL.search(ref) or _ISSUE.search(ref) or (ci.landing_of(store, tid) or {}).get('kind') == 'pr' or trackers.item_of(store, tid)): continue
-        if not _report(store, tid) and not any(str(c.get('Body') or '').startswith('The agent closed this itself') for c in store.list_comments(tid)): continue
-        if store._rows("SELECT 1 x FROM review WHERE TaskId=? AND Kind='action' AND DraftText LIKE '%\"closeout\": true%'", (tid,)): continue
-        due = closeout_due(store, tid)
-        if due and closeout(store, tid, due, '' if due.get('theirs') or due['action'] == 'close_issue' else _report(store, tid), 'router'):
-            n += 1
-    return n
-
-
-def _report(store, tid: int) -> str:
-    """The agent's filed result - the summary a close-out raised after the finish carries."""
-    from .wrapup import is_report, report_body
-    b = next((report_body(c.get('Body')) for c in reversed(store.list_comments(tid)) if is_report(c.get('Body'))), '')
-    return b.split('\n\nLAST MESSAGE', 1)[0].strip()
-
-
-def closeout(store, tid: int, p: dict, text: str = '', actor='agent'):
-    """Queue the close-out `closeout_due` named. `text` is what the card shows and the owner may edit:
-    the summary a merge is squashed with, or the comment an issue is closed with."""
-    if _pending(store, tid, 'closeout'): return None
-    return queue(store, tid, {**p, 'text': (text or '').strip()}, actor)
+# A CLOSE-OUT IS THE AGENT'S CARD (the owner, 2026-11-27: "only the agent raises cards"): Taskuary raised the merge, the issue's close and the
+# tracker item's move by itself - at the finish, on every sync, after his press opened the PR. The agent asks it (propose kind git, how merge
+# or close) and Taskuary reads what it closes and marks it (closing); until then what is open is a fact told to the agent (owed_closeout)
+def closing(store, tid: int, p: dict) -> dict:
+    """An agent's close-out ask as the card it is: what `closeout_due` reads it closes now, the close-out mark on it and the agent's `text` -
+    the summary a merge is squashed with, or the comment an issue is closed with. A close_issue with none due is the plain act it always was;
+    a merge or a tracker's close with none is a ValueError saying so."""
+    if p.get('action') not in CLOSEOUT: return p
+    due = closeout_due(store, tid)
+    if due and due['action'] == p['action']: return {**due, 'text': str(p.get('text') or '').strip(), **({'why': p['why']} if p.get('why') else {})}
+    if p['action'] == 'close_issue': return p
+    raise ValueError(f"this task has no {'open pull request' if p['action'] == 'merge_pr' else 'tracker item'} to close out - nothing was raised")
+def owed_closeout(store, tid: int) -> dict | None:
+    """What this task's work leaves open for a close-out, by the record alone (never a GitHub read): {action, how, fact} - None where nothing
+    is, or a close-out card was raised for it already."""
+    from . import ci, ghcloseout, trackers
+    at, ref = ci.landing_of(store, tid) or {}, str((store.get_task(tid) or {}).get('SourceRef') or '')
+    if at.get('kind') == 'pr' and at.get('state') != 'closed' and not at.get('merged') and ghcloseout.cfg(store, at.get('repo'))['pr'] == 'merge':
+        o = {'action': 'merge_pr', 'fact': f"Pull request #{at.get('number')} on {at.get('repo')} is open; nothing merges without his press."}
+    elif (m := _PULL.search(ref)) and ghcloseout.cfg(store, m[1])['pr'] == 'merge':
+        o = {'action': 'merge_pr', 'fact': f"This task came from pull request {m[1]}#{m[2]}; nothing merges it without his press."}
+    elif (m := _ISSUE.search(ref)) and ghcloseout.cfg(store, m[1])['issue']:
+        o = {'action': 'close_issue', 'fact': f"This task came from issue {m[1]}#{m[2]}; nothing closes it without his press."}
+    elif (it := trackers.item_of(store, tid)):
+        o = {'action': 'close_item', 'fact': f"This task came from {trackers.NAMES.get(it['tracker'], it['tracker'])} item {it['item']}; nothing moves it to done without his press."}
+    else: return None
+    if store._one("SELECT 1 x FROM review WHERE TaskId=? AND Kind='action' AND DraftText LIKE '%\"closeout\": true%'", (int(tid),)): return None
+    return {**o, 'how': 'merge' if o['action'] == 'merge_pr' else 'close'}
 
 
 STEP_NO = 'he dismissed a step on its way'      # a handed card's DecideNote: ended by his no to a step of its road (settle)
@@ -1214,12 +1215,6 @@ def settle(store, rv: dict, verb: str, actor='owner') -> None:
         # was, the task read done, and every card behind it waited for good): the card he pressed ends as dismissed, where it stands
         from .cardqueue import handed
         if str(p.get('card') or '').isdigit() and handed(c := store.get_review(int(p['card'])) or {}): store.review_unhanded(c['ReviewId'], 'rejected', None, STEP_NO)
-    # a pull request opened on the owner's yes AFTER the agent finished is still a task that ends by merging it
-    if _action(rv) in ('land', 'open_pr') and verb in ('approve', 'edit') and (store.get_task(tid) or {}).get('Status') != 'dropped':
-        due = closeout_due(store, tid)
-        if due and due['action'] == 'merge_pr' and closeout(store, tid, due, _report(store, tid), actor):
-            store.update_task(tid, {'Status': 'waiting'}, actor)
-        return
     if _action(rv) not in CLOSEOUT:
         # a proposal a finished agent left waiting (wrapup.finish): once the last one is answered, yes or no, the task is
         # back on the owner - open, nobody else's turn - for their Mark done. It used to close here.

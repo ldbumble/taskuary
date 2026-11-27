@@ -935,12 +935,9 @@ def finish(store, task_id: int, rep: dict, run_id: int = None, actor: str = 'age
         mid = None
     # The terminal and report are already closed at this point: the task's status says so before its reply is raised - it used to
     # remain `in_progress` with no live agent while a writer drafted it. A pending review is durable, so `waiting` is honest.
-    # THE CLOSE-OUT (the owner, 2026-09-27: "it's not closed until then"): a task whose work is an open pull request
-    # is finished by merging it, one from an issue by closing it - each waits for the owner's yes like the reply does.
-    # Not on an upstream that already ended it, or the owner's own Mark done (that IS the close) - nor on a session only
-    # saved, UNLESS it wrote the answer: a drafted reply says the work is done, and it comes with its merge (TQ-0767).
+    # THE CLOSE-OUT IS THE AGENT'S CARD (the owner, 2026-11-27: "only the agent raises cards"): raised here once the agent had gone, it is now
+    # its own ask (propose kind git, how merge or close - proposals.closing), told as a fact at its turn's end (end_turn: owed_closeout)
     from . import proposals
-    due = None if ((keep_open and not mid) or no_reply or owner_done) else proposals.closeout_due(store, task_id)
     # ...and its emails (slots.py): `done` supersedes every pending draft, so a run that leaves some owed waits instead
     from . import slots
     # ...and its proposals: `done` supersedes every pending review, so a bill the agent proposed for the owner's yes was
@@ -948,16 +945,11 @@ def finish(store, task_id: int, rep: dict, run_id: int = None, actor: str = 'age
     # done is still the owner's decision and closes as it always did; the last proposal answered puts it back on them (settle).
     asks = not owner_done and not keep_open and proposals.owed(store, task_id)
     if asks: store.audit('task', task_id, 'awaits_proposals', actor)
-    if not keep_open: store.update_task(task_id, {'Status': 'waiting' if (mid or due or asks or slots.open_(store, task_id)) else 'done'}, actor)
-    # the newest pending review is the one shown first: a merge leads its reply (the reply can then say it is merged),
-    # a comment on an issue leads its close - and when a reply carries the comment, the close adds none
-    if due and due['action'] == 'close_issue': proposals.closeout(store, task_id, due, '' if mid else resolution_text(rep), actor)
-    # a tracker's close-out carries the agent's result as its comment - Jira, Monday and Linear have no reply to carry it (outbound.NEVER)
-    if due and due['action'] == 'close_item': proposals.closeout(store, task_id, due, resolution_text(rep), actor)
+    if not keep_open: store.update_task(task_id, {'Status': 'waiting' if (mid or asks or slots.open_(store, task_id)) else 'done'}, actor)
     if mid: raise_reply(store, task_id, mid, run_id, fresh=fresh, stopped=keep_open and cut_short(store, task_id))
-    if due and due['action'] == 'merge_pr': proposals.closeout(store, task_id, due, '' if due.get('theirs') else resolution_text(rep), actor)
+    co = cards.pending(store, task_id, 'closeout')
     return {'drafting': bool(mid), 'message_id': mid, 'can_send': bool(mid) and can_send,
-            'send_block': block if mid else '', 'freshness': fresh['state'], 'closeout': (due or {}).get('action')}
+            'send_block': block if mid else '', 'freshness': fresh['state'], 'closeout': proposals._action(co) if co else None}
 
 
 def _ended(store, tid: int, close: bool, actor: str):

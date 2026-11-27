@@ -33,8 +33,11 @@ class LandingTests(unittest.TestCase):
         try: self.tmp.cleanup()
         except OSError: pass
 
-    def branch(self, name='fix-rounding', text='one\nTWO\nthree\n'):
+    def branch(self, name='fix-rounding', text='one\nTWO\nthree\n', ask=True):
+        """The agent's branch, and - `ask` - the question it raised on it: the landing card is the agent's (the owner, 2026-11-27: "only the
+        agent raises cards"), its unlanded work a fact (`owed`) until it does."""
         git(self.cwd, 'checkout', '-q', '-b', name); commit(self.cwd, 'ledger.py', text)
+        if ask: landing.propose(self.s, self.tid, 'rebase')
 
     def sha(self, ref): return git(self.cwd, 'rev-parse', ref)
 
@@ -43,6 +46,20 @@ class LandingTests(unittest.TestCase):
         commit(self.cwd, 'notes.md', 'x\n')
         self.assertIsNone(landing.mark_start(self.s, self.tid, self.cwd))
         self.assertEqual(landing.record(self.s, self.tid)['start'], first)
+
+    def test_no_landing_card_stands_until_its_agent_raises_it_and_its_turn_end_says_the_work_is_not_landed(self):
+        """The checkout's question stood by itself - a card no agent raised. Work not landed is a fact the agent is told as its turn ends;
+        the card is its own ask, and nothing lands before his press on it."""
+        from taskuary import agenttools
+        self.branch(ask=False)
+        s = landing.state(self.s, self.tid)
+        self.assertTrue(s['owed']); self.assertFalse(s['ask'])
+        with self.assertRaises(ValueError): landing.land(self.s, self.tid, 'rebase')          # ...nothing stands for his press
+        said = agenttools.call(self.s, self.tid, 'end_turn', {'did': 'Fixed the rounding.'}, {})
+        self.assertIn('fix-rounding is 1 commit ahead of master', said); self.assertIn('nothing lands without his press', said)
+        landing.propose(self.s, self.tid, 'rebase')
+        self.assertTrue(landing.state(self.s, self.tid)['ask'])
+        self.assertNotIn('nothing lands', agenttools.call(self.s, self.tid, 'end_turn', {'did': 'Asked how it lands.'}, {}), 'its card asks it now')
 
     def test_an_own_branch_shows_its_diff_and_all_four_answers(self):
         self.branch()
@@ -247,13 +264,16 @@ class LandingTests(unittest.TestCase):
     def test_its_unpushed_commits_on_the_shared_base_are_a_push_button(self):
         self.on_master_with_origin()
         s = landing.state(self.s, self.tid)
-        self.assertTrue(s['ask']); self.assertFalse(s['own'])
+        self.assertTrue(s['owed']); self.assertFalse(s['ask'] or s['own'], 'its unpushed commits are a fact: no card stands that no agent raised')
+        self.dev(); landing.propose(self.s, self.tid, 'push')                 # ...the agent raises it
+        s = landing.state(self.s, self.tid)
+        self.assertTrue(s['ask'])
         self.assertEqual([a['how'] for a in s['answers']], ['push'], 'no deploy branch known yet: Push alone')
         self.assertEqual((s['push']['tip'], s['push']['ahead']), (self.sha('master'), 1))
         self.assertIn('Push it?', s['line'])
         # ...and the press is a line of the chat in the owner's voice, never the audit row's bare name ("You landed.")
         from taskuary import general
-        self.dev(); landing.land(self.s, self.tid, 'push')
+        landing.land(self.s, self.tid, 'push')
         self.assertIn("pressed Push on the agent's work - it went through", general.presses(self.s, self.tid)[-1][2])
         # ...and the card that was pressed keeps its place in the chat (the card gallery, 2026-11-25: with nothing of its own left unpushed
         # it had no time to stand at, and was gone from the chat at its own press)
@@ -320,6 +340,7 @@ class LandingTests(unittest.TestCase):
     def test_a_push_origin_refuses_pushes_nothing_and_says_why(self):
         self.on_master_with_origin()
         other = tempfile.mkdtemp(); git(other, 'clone', '-q', self.remote, '.'); commit(other, 'portal.py', 'x\n'); git(other, 'push', '-q', 'origin', 'master')
+        self.dev(); landing.propose(self.s, self.tid, 'push')
         with self.assertRaises(landing.Refused) as e: landing.land(self.s, self.tid, 'push')
         self.assertIn('nothing was pushed', str(e.exception))
         with self.assertRaises(ValueError): landing.land(self.s, self.tid, 'deploy')           # not offered: no deploy branch known

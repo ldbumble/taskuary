@@ -605,8 +605,11 @@ def screen(store, tid: int, skip=()) -> str:
     from .taskstate import open_question
     if (q := open_question(store, tid)):
         waiting.append(f"Your question, waiting for his answer as its card in his chat (on the card or in his box): {_flat(' | '.join(q.get('questions') or [q.get('text')]), 400)}")
-    if not (waiting or settled): return ''
-    lines = [f'- {x}' for _, x in sorted(settled, key=lambda p: str(p[0]))][-SETTLED:] + ([f'- {x}' for x in waiting] or [NOTHING])
+    # ...AND WHAT ITS WORK LEAVES OPEN FOR A CLOSE-OUT NO CARD ASKS YET (proposals.owed_closeout: a pull request, an issue, a tracker item) - a fact
+    from .proposals import owed_closeout
+    opened = [o['fact']] if (o := owed_closeout(store, tid)) else []
+    if not (waiting or settled or opened): return ''
+    lines = [f'- {x}' for _, x in sorted(settled, key=lambda p: str(p[0]))][-SETTLED:] + ([f'- {x}' for x in waiting] or [NOTHING]) + [f'- {x}' for x in opened]
     return '\n'.join([SCREEN_HEAD, *lines])
 
 

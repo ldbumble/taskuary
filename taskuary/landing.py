@@ -345,20 +345,21 @@ def state(store, tid: int, full: bool = False) -> dict | None:
     out['name'] = out['repo'] or os.path.basename(os.path.normpath(cwd))      # ...the card names the repository it pushes to
     out['push'] = None if mine else _unpushed(store, cwd, base, o['commits'], r.get('proposal'), out['repo'])
     out['noRemote'] = bool(not mine and o['commits'] and not has_origin(cwd))
-    out['ask'] = (mine and ahead > 0 and not r.get('landed')) or bool(out['push'])
-    # ...a question the agent RAISED (its proposal) is passed once the conversation moves on (proposals.move_on): greyed, nothing pressable,
-    # until the agent raises it again. Unpushed work with no proposal is the checkout's own fact, raised by no turn - it stays live
-    # ...AND SO IS ONE NO TURN RAISED, once the chat moved on past it (the owner, 2026-11-16: "Push 2 commits to master and deploy" stood lit
-    # above his newer line, and he scrolled up to press it): every card greys in place as an input comes after it - one rule (proposals._older)
+    # ...WORK NOT LANDED IS THE CHECKOUT'S FACT (`owed`, said in `line`), AND ITS CARD IS THE AGENT'S (the owner, 2026-11-27: "only the agent
+    # raises cards"): the question stands only where the agent raised it (its proposal, nothing landed since) - none stood by itself any more
+    p_ = r.get('proposal') or {}
+    out['owed'] = (mine and ahead > 0 and not r.get('landed')) or bool(out['push'])
+    out['ask'] = out['owed'] and bool(p_.get('at')) and str((r.get('landed') or {}).get('at') or '') < str(p_['at'])
+    # ...a question the agent RAISED is passed once the conversation moves on (proposals.move_on): greyed, nothing pressable, until the agent
+    # raises it again - every card greys in place as an input comes after it, one rule (proposals._older)
     from . import proposals
     from .conversation import ep
-    p_ = r.get('proposal') or {}
     since, moved = ep(p_.get('at') or out.get('at')), max(float(r.get('moved') or 0), proposals.moved_on(store, tid))
     out['passed'] = bool(out['ask'] and not r.get('landed') and (p_.get('passed') or since and moved > since))
     if out['passed']: out['ask'] = False
     # ...and a passed one keeps its answers: the page draws it as the card it was, its buttons greyed (the owner, 2026-11-18) - a press still
     # needs `ask` (land), so nothing it names can go
-    hows = (OWN_HOW if mine else PUSH_HOW[:1 + bool((out['push'] or {}).get('deploy'))]) if out['ask'] or out['passed'] else ()
+    hows = (OWN_HOW if mine else PUSH_HOW[:1 + bool((out['push'] or {}).get('deploy'))]) if out['owed'] or out['passed'] else ()
     # ...and no Open a PR where its origin is no GitHub repository: a button whose press could only fail (the re-walk on Codex, 2026-11-25)
     if not out['repo']: hows = tuple(k for k in hows if k != 'pr')
     out['answers'] = [{'how': k, 'label': HOW[k]} for k in hows]
@@ -426,7 +427,7 @@ def said(s: dict) -> str:
     if (p := s.get('push')): return (f"{plural(p['ahead'], 'commit')} on {s['base']} of {s['name']} not on origin yet, up to {p['tip'][:7]}: {n}. Push it"
                                      + (f" and deploy it to {p['deploy']}?" if p['deploy'] else '?'))
     if s.get('noRemote'): return f"{plural(s['commits'], 'commit')} on {s['base']} of {s['name']}, not pushed - {NO_REMOTE}: {n}."
-    if s['ask']: return f"{s['branch']} is {plural(s['ahead'], 'commit')} ahead of {s['base']}: {n}. How should it land?"
+    if s['owed']: return f"{s['branch']} is {plural(s['ahead'], 'commit')} ahead of {s['base']}: {n}. How should it land?"
     if s['own']: return f"{s['branch']} has nothing {s['base']} does not already have."
     return f"The agent worked on {s['base']} itself, shared with other agents - {n} by its own commits and edits; there is no branch of its own to land."
 
@@ -463,7 +464,7 @@ def propose(store, tid: int, how: str, why: str = '', actor: str = 'agent', depl
         from .agenttools import refusal
         raise ValueError(refusal('no Push card can be drawn here: Developer mode is off and this is not a checkout the owner named on this task',
                                  'ask him in one question for the folder of his checkout this work belongs in'))
-    if not s['ask']: raise ValueError(s['line'])
+    if not s['owed']: raise ValueError(s['line'])
     if how == 'discard' and not s['own']: raise ValueError('discard is only for a branch of your own')
     # ...AND A PULL REQUEST NO PRESS COULD OPEN IS NEVER RAISED (the re-walk on Codex, 2026-11-25: the checkout's origin pushed to a local folder;
     # the Open a PR card stood, and his press failed with what was known when it was raised) - the press's own refusal (_pr), said now
@@ -513,7 +514,7 @@ def from_proposal(store, tid: int, p: dict) -> dict | None:
         from .agenttools import refusal
         raise ValueError(refusal('this task has no checkout to push from', 'give `cwd`: the git checkout the owner named for this work'))
     if s and s.get('noRemote'): return propose(store, tid, 'push')        # ...refused with why, and the way past
-    if not (s and (s['ask'] or s.get('passed'))): return None        # ...a passed question is raised again
+    if not (s and (s['owed'] or s.get('passed'))): return None       # ...a passed question is raised again
     how = 'pr' if s['own'] and GIT_ACTS[a] in ('', 'pr') else 'push' if not s['own'] else GIT_ACTS[a]
     if s['own'] and how == 'push': how = 'pr'                     # a branch of its own goes out as a pull request, never straight over the base
     return propose(store, tid, how, str(p.get('why') or ''), deploy=str(p.get('deploy') or p.get('target') or '') if not s['own'] else '')
@@ -587,7 +588,7 @@ def push_asked(store, tid: int, cmd: str, cwd: str = '', about: str = '') -> tup
         return False, (f"Taskuary did not run this line: a push from this task's checkout is the owner's {button} button, never a shell step. Run "
                        f"the rest of it without the push, then call {ask} - they get the button, and Taskuary tells you when it went.")
     # ...a passed question is still the owner's press: the agent's own push raises it again, never runs (proposals.move_on)
-    if not (s['ask'] or s.get('passed')): return None
+    if not (s['owed'] or s.get('passed')): return None
     try:
         if s.get('passed') or ((s['proposal'] or {}).get('how'), (s['proposal'] or {}).get('deploy') or '') != ('deploy' if deploy else how, deploy):
             propose(store, tid, how, about, deploy=deploy)

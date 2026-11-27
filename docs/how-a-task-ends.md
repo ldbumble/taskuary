@@ -61,14 +61,15 @@ flowchart LR
 
 | An agent does | What happens | Code |
 |---|---|---|
-| Says it is done (`taskuary --done`) | The session is written up. If its work is an open pull request, or the task came from a GitHub issue, the task **waits** for its close-out (below). If a reply is owed, it **waits** with the draft too. Otherwise it is done. On a task marked `stay:open` it is refused: the agent's sentence is filed as a comment and you mark it done. | `selfclose.declare` → `wrapup.wrap` → `wrapup.finish` |
+| Says it is done (`taskuary --done`) | The session is written up. If it asked its close-out (below) - its open pull request, or the GitHub issue the task came from - the task **waits** for it. If a reply is owed, it **waits** with the draft too. Otherwise it is done. On a task marked `stay:open` it is refused: the agent's sentence is filed as a comment and you mark it done. | `selfclose.declare` → `wrapup.wrap` → `wrapup.finish` |
 | The pull request or issue the task **came from** is merged or closed | Same as above, with no reply and no close-out owed | `channels.close_upstream_ended` |
 
 ## The close-out
 
 What finishes a task depends on where it lives. Mail is finished by the reply. A pull request the agent opened
-is finished by merging it, and an issue by closing it. So the finish raises that last act as a card waiting for
-your yes, and the task is not done until you answer it (decided with the owner on 2026-09-27).
+is finished by merging it, and an issue by closing it. The agent raises that last act as a card waiting for your
+yes - told, as its turn ends, what its work leaves open - and the task is not done until you answer it (decided with
+the owner on 2026-09-27; only the agent raises cards, 2026-11-27).
 
 **One set of words for every system** (the owner, 2026-09-27: "if we have button to close out per system it will
 be endless"): **Close out** / **Decline** / **Not yet** - on the task page, the Assistant's card, its chat button,
@@ -78,9 +79,9 @@ doing it" (a PR today) and only on cards - it is not a chat or poll word; in the
 
 | The task's work is | Close out does | Its text | Code |
 |---|---|---|---|
-| A pull request the agent opened, still open | marks the draft ready and squash-merges it (refused while its checks are red, or if the branch moved after the card was raised) | the agent's summary - the squash message | `proposals` `merge_pr` → `github.merge_pr` |
+| A pull request the agent opened, still open | marks the draft ready and squash-merges it (refused while its checks are red, or if the branch moved after the card was raised) | the agent's `text` - the squash message | `proposals` `merge_pr` → `github.merge_pr` |
 | A pull request the task came from (a contributor's PR the agent reviewed), still open | the same | empty - GitHub writes the merge message | the same |
-| An issue the task came from | comments and closes the issue | the closing comment (empty when a reply carries it) | `proposals` `close_issue` |
+| An issue the task came from | comments and closes the issue | the agent's `text` - the closing comment | `proposals` `close_issue` |
 
 - **Decline** closes the pull request on GitHub without merging it, then Mark done. **Not yet** keeps the task
   open and on you. Merging or closing the pull request on GitHub yourself answers it the same way: the card is
@@ -115,10 +116,10 @@ doing it" (a PR today) and only on cards - it is not a chat or poll word; in the
 - The PR body carries `Closes #N` when the task came from an issue in the same repository, so the merge
   closes the issue as well.
 - A close-out is **your** act, so it needs no agent switch: **Agents may push / deploy** and **use as tracker**
-  gate what an agent may ask for, not what you press. Only Taskuary raises one - an agent that writes the
-  close-out mark into its own proposal has it stripped (`proposals.parse`). It needs the GitHub token.
-- A task an agent finished before the close-out existed is offered it on the next sync, once
-  (`proposals.backfill`); after **Not yet** it is not asked again.
+  gate what an agent may ask for, not what you press. Only the agent raises one (propose kind git, how merge or close):
+  Taskuary reads what the task closes - its pull request, the issue or tracker item it came from - and marks the card
+  (`proposals.closing`); an agent that writes the close-out mark into its own proposal has it stripped. Until it asks,
+  what is open is told to it as a fact at its turn's end (`proposals.owed_closeout`). It needs the GitHub token.
 - A pull request merged or closed on GitHub - by you or anyone - closes its task, and closing retires a reply
   still waiting (the owner, 2026-09-28: "if they were merged in, they should just close"; `channels.close_upstream_ended`).
 

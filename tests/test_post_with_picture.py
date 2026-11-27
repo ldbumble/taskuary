@@ -252,15 +252,29 @@ class OnePress(unittest.TestCase):
         self.assertEqual(done, {'video': 'urn:li:video:V1', 'uploadToken': 'tok', 'uploadedPartIds': ['e0', 'e1']})
         self.assertEqual(net.calls[-1][2]['content']['media']['id'], 'urn:li:video:V1')
 
+    def test_a_video_in_another_format_is_made_the_mp4_its_network_takes_and_the_card_carries_that(self):
+        """The design audit, 2026-11-27: a WebM screen recording was refused as "LinkedIn takes MP4 (H.264)", and every road then hunted for
+        ffmpeg - 3 to 6 calls, and on one a press for a shell command. The post road converts it itself, the same every time, with the ffmpeg
+        imageio-ffmpeg ships: the card carries the MP4, and the file it was made from stays as it was."""
+        import subprocess, imageio_ffmpeg
+        f = outputs.folder(self.tid)
+        subprocess.run([imageio_ffmpeg.get_ffmpeg_exe(), '-y', '-loglevel', 'error', '-f', 'lavfi', '-i', 'testsrc2=duration=4:size=640x360:rate=24',
+                        '-c:v', 'libvpx', '-b:v', '1M', str(f / 'screen tour.webm')], check=True)
+        r = self.propose(text='A tour of the availability view.', image='screen tour.webm')
+        self.assertEqual(r.status_code, 200, r.text)
+        p = json.loads(server.store.get_review(r.json()['review'])['DraftText'])
+        self.assertEqual(p['image'], 'screen tour.mp4')
+        self.assertEqual((f / 'screen tour.mp4').read_bytes()[4:8], b'ftyp'); self.assertTrue((f / 'screen tour.webm').is_file())
+        self.assertEqual(linkedin.video_why(f / 'screen tour.mp4'), '')
+
     def test_a_video_its_network_cannot_take_is_answered_with_that_fact_and_no_card_is_shown(self):
-        "A WebM screen recording, one too long, and a video on a network whose card carries none: each answered with what the network takes and what the file is, nothing raised."
+        "A WebM that is no video, one too long, and a video on a network whose card carries none: each answered with what the network takes and what the file is, nothing raised."
         f = outputs.folder(self.tid)
         (f / 'tour.webm').write_bytes(b'\x1aE\xdf\xa3' + b'\0' * 90000); (f / 'long.mp4').write_bytes(mp4(secs=45 * 60)); (f / 'tour.mp4').write_bytes(mp4())
         was = len(verdicts.unsent(server.store, self.tid))
         r = self.propose(text='A tour.', image='tour.webm')
         self.assertEqual(r.status_code, 422, r.text)
-        self.assertIn('LinkedIn takes MP4 (H.264) video; tour.webm is WEBM', r.json()['detail'])
-        self.assertNotIn('ffmpeg', r.text)                 # ...the fact, never a how-to: converting it is the agent's own work
+        self.assertIn('LinkedIn takes MP4 (H.264) video; tour.webm is WEBM, and it could not be made one', r.json()['detail'])
         r = self.propose(text='A tour.', image='long.mp4')
         self.assertEqual(r.status_code, 422, r.text); self.assertIn('3 seconds to 30 minutes', r.text)
         self.assertIn('not a video', proposals.picture_why(self.tid, {'type': 'x_post', 'image': 'tour.mp4'}))

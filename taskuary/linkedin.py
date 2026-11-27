@@ -295,12 +295,41 @@ def mp4_seconds(path):
     return None
 
 
+def is_mp4(path) -> bool:
+    "An MP4 by its name and by its bytes: a WebM renamed is no MP4."
+    from pathlib import Path
+    p = Path(path)
+    with open(p, 'rb') as f: return p.suffix.lower() in VIDEO_TYPES and f.read(8)[4:] == b'ftyp'
+
+
+# A VIDEO IN ANOTHER FORMAT IS MADE THE MP4 LINKEDIN TAKES (the design audit, 2026-11-27: a WebM screen recording was refused, and every road went
+# hunting for ffmpeg - 3 to 6 calls, and on one a press for a shell command). Plain code, the same every time, with the ffmpeg imageio-ffmpeg
+# ships (no install of his): H.264 and AAC, beside the file it was made from, which stays as it was
+CONVERT_WAIT = 600
+def as_mp4(path):
+    "The MP4 of video `path`: itself when it is one, else made beside it as <name>.mp4 (never over a file there). RuntimeError saying why it could not be made."
+    import itertools, subprocess
+    from pathlib import Path
+    p = Path(path)
+    if is_mp4(p): return p
+    out = next(o for i in itertools.count(1) if not (o := p.with_name(f"{p.stem}{f'-{i}' if i > 1 else ''}.mp4")).exists())
+    try:
+        import imageio_ffmpeg
+        r = subprocess.run([imageio_ffmpeg.get_ffmpeg_exe(), '-y', '-loglevel', 'error', '-i', str(p), '-c:v', 'libx264', '-pix_fmt', 'yuv420p',
+                            '-vf', 'scale=trunc(iw/2)*2:trunc(ih/2)*2', '-c:a', 'aac', '-movflags', '+faststart', str(out)],
+                           capture_output=True, text=True, timeout=CONVERT_WAIT)
+    except (ImportError, RuntimeError, OSError, subprocess.SubprocessError) as e: raise RuntimeError(str(e)[:200] or 'no converter') from e
+    if r.returncode or not out.is_file() or not is_mp4(out):
+        out.unlink(missing_ok=True)
+        raise RuntimeError(' '.join((r.stderr or '').split())[-200:] or 'the converter made nothing')
+    return out
+
+
 def video_why(path) -> str:
     "'' when LinkedIn takes this video as it is; else the fact that keeps it off the card - what LinkedIn takes and what this file is."
     from pathlib import Path
     p = Path(path)
-    with open(p, 'rb') as f: mp4 = p.suffix.lower() in VIDEO_TYPES and f.read(8)[4:] == b'ftyp'        # ...by its bytes too: a WebM renamed is no MP4
-    if not mp4: return f"LinkedIn takes MP4 (H.264) video; {p.name} is {'no MP4 inside' if p.suffix.lower() in VIDEO_TYPES else p.suffix.lstrip('.').upper() or 'not one'}"
+    if not is_mp4(p): return f"LinkedIn takes MP4 (H.264) video; {p.name} is {'no MP4 inside' if p.suffix.lower() in VIDEO_TYPES else p.suffix.lstrip('.').upper() or 'not one'}"
     n, secs = p.stat().st_size, mp4_seconds(p)
     if not VIDEO_MIN <= n <= VIDEO_MAX:
         return f'{p.name} is {max(1, n // 1024):,} KB - LinkedIn takes a video from 75 KB to 500 MB'

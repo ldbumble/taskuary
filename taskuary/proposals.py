@@ -172,7 +172,7 @@ def post_type(network) -> str | None:
     n = str(network or '').strip().lower().removesuffix('_post')
     return next((t for k, t in NETWORKS.items() if n in (k, POSTS[t].lower(), *re.findall(r'[a-z0-9]+', ((by_type(k) or {}).get('title') or '').lower()))), None)
 def post_of(a: dict) -> dict:
-    """A post propose call as the run_tool proposal the post road files (queue, card_roads, via_browser): `media` (`picture`, as it was) is its `image`, and a
+    """A post propose call as the run_tool proposal the post road files (queue, card_roads, via_browser): `media` is its `image`, and a
     `link` where the network has no field of its own for one goes at the end of its words. ValueError names the networks there are."""
     from .connectorcatalog import action_for, field
     t = post_type(a.get('network'))
@@ -182,7 +182,9 @@ def post_of(a: dict) -> dict:
     if link and not own and link not in text: text = f'{text}\n\n{link}'.strip()
     # ...only what its network's card takes: a `title` on an X post is no field of X's, and was refused as running unseen - it is left off
     keep = {k: a[k] for k in ('subreddit', 'title', 'why', 'alt') if str(a.get(k) or '').strip() and (k in ('why', 'alt') or field(action_for(t), k))}
-    return {'action': 'run_tool', 'type': t, 'text': text, **keep, **({'image': m} if (m := a.get('media') or a.get('picture')) else {}),
+    # ...`media` is its one name; `picture`, `image` and a file in `attach` are read as it, said nowhere
+    m = next((a[k] for k in ('media', 'picture', 'image') if str(a.get(k) or '').strip()), None) or (a['attach'][0] if isinstance(a.get('attach'), list) and a['attach'] else None)
+    return {'action': 'run_tool', 'type': t, 'text': text, **keep, **({'image': str(m)} if m else {}),
             **({'link': link} if link and own else {})}
 # A POST ON A NETWORK NOT CONNECTED IS STILL ITS CARD, AND ITS PRESS HANDS IT TO THE AGENT FOR THE SITE (the owner, 2026-11-22: "card first,
 # sign-in at the press"): the agent went to LinkedIn's sign-in before writing a word, then gave the posts back as prose. The card stands with
@@ -746,12 +748,16 @@ def queue(store, task_id: int, p: dict, actor='agent', refused: list | None = No
     # ...a picture on a post is one in the task's own folder, kept by its name there - taken in from wherever its agent may read it
     # (outputs.take), never a path the agent wrote (execute resolves the name again)
     if ok and p.get('action') == 'run_tool':
-        from . import outputs
+        from . import linkedin, outputs
         p = {k: v for k, v in p.items() if k not in ('image_path', PINNED)}
         if p.get('type') in POSTS: p = {**p, 'network': POSTS[p['type']]}       # ...its card says where in his words ("LinkedIn"), never "linkedin post"
         if p.get('image') and task_id and (f := outputs.take(store, int(task_id), p['image'])): p = {**p, 'image': outputs.rel(int(task_id), f)}
-        if why := picture_why(task_id, p): ok = False
-        elif p.get('image') and (seen := picture_print(task_id, p)): p = {**p, PINNED: seen}
+        # ...and a video in another format is made the MP4 its network takes (linkedin.as_mp4): the card carries that one
+        if p.get('type') in VIDEO and p.get('image') and task_id and (f := outputs.named(int(task_id), p['image'])) and linkedin.is_video(f) and not linkedin.is_mp4(f):
+            try: p = {**p, 'image': outputs.rel(int(task_id), linkedin.as_mp4(f))}
+            except RuntimeError as e: ok, why = False, f"{linkedin.video_why(f)}, and it could not be made one ({e})"
+        if ok and (why := picture_why(task_id, p)): ok = False
+        elif ok and p.get('image') and (seen := picture_print(task_id, p)): p = {**p, PINNED: seen}
     # ...and what the agent left unnamed on a card's choices comes from the connection's own defaults (Connections), so the card shows them
     if ok and p.get('action') == 'run_tool':
         from . import connectorcatalog as cat

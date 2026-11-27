@@ -1084,7 +1084,6 @@ def _review(store, tid: int, a: dict, doors: dict) -> str:
         rest = {'action': 'save_skill', 'slug': str(a.get('name') or a.get('slug') or 'new'), 'text': str(a.get('text') or ''),
                 **({'why': str(a['why'])} if a.get('why') else {}), 'offer': SKILL_OFFER.format('email' if mail else 'job')}
         a = {**a, 'replaces': a.get('replaces') or next((f"rv{r['rid']}" for r in verdicts.unsent(store, tid) if r['to'] == 'save_skill'), None)}
-    if k == 'post' and not (rest.get('media') or rest.get('picture')) and isinstance(a.get('attach'), list) and a['attach']: rest['media'] = str(a['attach'][0])
     old, was, p = a.get('replaces'), verdicts.unsent(store, tid), post_of(rest) if k == 'post' else rest
     out = doors['propose'](tid, p)
     return _j(card_roads(store, replaced(store, doors, tid, was, out, old, 'a new proposal takes its place'), p))

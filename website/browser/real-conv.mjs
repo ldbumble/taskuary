@@ -1,4 +1,4 @@
-// THE CONVERSATION, WALKED ON THE REAL CLI WITH A PER-FRAME SAMPLER (not a test: nothing here runs in CI). node real-conv.mjs <name> <general|acp|pty> [steps...]
+// THE CONVERSATION, WALKED ON THE REAL CLI WITH A PER-FRAME SAMPLER (not a test: nothing here runs in CI). node real-conv.mjs <name> <general|acp> [steps...]
 // Each animation frame the page writes down what the chat holds - the items in order (their names, where each stands), what waits by the box,
 // the scroll - and the rules are read off the frames afterwards (check): his line once from the frame it is heard, nothing new above what was
 // drawn, the working line under it in that frame, the scroll never going back, a waiting line never in the conversation, and words that
@@ -254,7 +254,7 @@ if (process.argv[1]?.endsWith("real-conv.mjs")) {
     // ...by the page's own road (NewSheet: the task, then /dispatch) - Continue's road told a task that had never run "the owner chose Resume",
     // and its agent opened on "Nothing had been done before this resume" (the recorded walk, 2026-11-11)
     tid = got.taskId; console.log("new", JSON.stringify(got), JSON.stringify(await api(`/api/tasks/${tid}/dispatch`, { kind: "general" })).slice(0, 160));
-  } else { const got = await api("/api/fixture/coding", { git: info.git, real: true, pty: road === "pty", conversation: `conv-${name}` }); tid = got.taskId; }
+  } else { const got = await api("/api/fixture/coding", { git: info.git, real: true, conversation: `conv-${name}` }); tid = got.taskId; }
   const subject = road === "general" || road === "stranger" ? `Re: ${process.env.TOPIC_SUBJECT || "Offsite venue"}` : "Re: Ledger totals";
   const { browser, page } = await connect();
   await page.reload({ waitUntil: "domcontentloaded" }); await sleep(3000);

@@ -283,39 +283,30 @@ def test_a_turn_writes_its_hand_over_down_so_a_draft_the_owner_answered_past_is_
     assert not general.working(s, tid)
     assert proposals.passed(s.get_review(rv['ReviewId'])) and conversation.heard(s, tid, 'mail', [own]) and not s.waiting_on_owner(tid)
 
-def test_a_turn_that_ends_with_the_reply_owed_and_unwritten_leaves_on_its_card_what_the_agent_needs():
-    """The owner, 2026-11-13: an empty reply box is drawn only where its record says why it is empty. The end of the turn keeps, from what
-    the turn itself recorded (its question; never its prose), what the agent needs - and the card stands in that turn."""
-    from taskuary import chatlog, conversation
+def test_a_turn_that_ends_with_the_reply_owed_and_unwritten_draws_no_card_and_the_task_says_a_reply_is_owed():
+    """The owner, 2026-11-27: a reply card appears only when the agent writes a reply, with words, for his press. A turn that ends with the
+    reply owed and unwritten draws nothing in the agent's name and writes nothing on the record: its question is what stands where it asked
+    one, and that a reply is owed is the task's state."""
+    from taskuary import chatlog, conversation, taskstate
     def owed(s, tid):
         mid = s.list_messages(tid)[0]['MessageId']
         return s.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft', 'Status': 'pending', 'Reason': 'needs a reply'})
+    def ended(s, tid):
+        chatlog.settled(); got = conversation.items(s, tid)
+        return got, [x for x in got['items'] if x['kind'] == 'turn'][-1]
     q = 'Do you want to go Friday or send Erin alone?'
-    for answer, want in (({**ANSWER, 'draft': None, 'question': q}, q),                                  # it asked: its question
-                         ({**ANSWER, 'draft': None, 'question': None, 'report': 'I looked.'}, general.COULD_NOT)):   # it asked nothing: the one question left
+    for answer in ({**ANSWER, 'draft': None, 'question': q}, {**ANSWER, 'draft': None, 'question': None, 'report': 'I looked.'}):
         s = home(); tid, _ = arrived(s); rid = owed(s, tid)
         with mock.patch.dict(terminal.SESSIONS, {}, clear=True):
             filed(s, tid, answer)
-            assert s.get_review(rid)['DraftNeeds'] == want and not s.get_review(rid)['DraftText'], s.get_review(rid)
-            chatlog.settled(); got = conversation.items(s, tid); turn = [x for x in got['items'] if x['kind'] == 'turn'][-1]     # the card's worker has put it
-            if want == q:       # ...its question open is the ONE thing asked (the owner's rule, 2026-11-15): no empty reply box beside it
-                assert turn['cards'] == [] and got['asking'] and q in got['asking']['text'], (turn, got['asking'])
-            else: assert [(c['review'], c['status']) for c in turn['cards']] == [(rid, 'pending')] and got['letters'] == turn['id'], turn
-    # ...and where he answers and the next turn still cannot write it, the card is THAT turn's, with what it needs now
-    s = home(); tid, _ = arrived(s); rid = owed(s, tid)
-    with mock.patch.dict(terminal.SESSIONS, {}, clear=True), mock.patch.object(general, 'provider_options', return_value=CLAUDE):
-        ses = opened(s, tid); terminal.SESSIONS[ses.sid] = ses
-        with mock.patch.object(llm, 'build_llm', return_value=Brain({**ANSWER, 'draft': None, 'question': q})): ses.send_prompt(ASK, brief=True)
-        t = time.time()
-        while time.time() < t + 1.1: time.sleep(0.05)
-        with mock.patch.object(llm, 'build_llm', return_value=Brain({**ANSWER, 'draft': None, 'question': 'Morning or afternoon?'})):
-            ses.send_prompt('Friday, I think.', brief=False)
-        chatlog.settled(); got = conversation.items(s, tid); turns = [x for x in got['items'] if x['kind'] == 'turn']
-        assert s.get_review(rid)['DraftNeeds'] == 'Morning or afternoon?'
-        # ...and while that question is open it is the ONE thing asked (the owner's rule; 2026-11-15): no empty card under it
-        assert [[c['review'] for c in x['cards']] for x in turns] == [[], []] and not got['letters'], [(x['id'], x['cards']) for x in turns]
-        assert got['asking'] and 'Morning or afternoon?' in got['asking']['text'], got['asking']
-    # ...a turn that wrote the reply needs nothing: the draft is the card
-    s = home(); tid, _ = arrived(s); rid = owed(s, tid)
-    filed(s, tid, ANSWER)
-    assert not any(r.get('DraftNeeds') for r in s._rows('SELECT DraftNeeds FROM review WHERE TaskId=?', (tid,)))
+            rv = s.get_review(rid); got, turn = ended(s, tid)
+            assert rv['Status'] == 'pending' and not rv['DraftText'] and not rv.get('DraftNeeds'), rv
+            assert turn['cards'] == [] and not got['letters'], turn
+            if answer['question']: assert got['asking'] and q in got['asking']['text'], got['asking']
+            assert taskstate.status(s, s.get_task(tid))['key'] == 'owed'
+    # ...and a turn that wrote the reply raised its card: the draft, for his press
+    s = home(); tid, _ = arrived(s); owed(s, tid)
+    with mock.patch.dict(terminal.SESSIONS, {}, clear=True):
+        filed(s, tid, ANSWER)
+        got, turn = ended(s, tid)
+        assert [c['status'] for c in turn['cards']] == ['pending'] and str(s.get_review(turn['cards'][0]['review'])['DraftText']).strip(), turn

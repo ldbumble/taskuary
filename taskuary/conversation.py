@@ -608,13 +608,10 @@ def _card(r) -> dict:
 DRAFTS = ('draft_reply', 'draft')
 
 def unwritten(r: dict) -> bool:
-    """A REPLY OWED THAT NOBODY HAS WRITTEN, AND NOBODY SAID WHY, IS NO CARD (the owner, 2026-11-13: "why would you have empty write a reply box,
-    unless the agent said i'm not sure what to respond, feel free to respond here"): the agent drafts it, and its draft is the card. An empty
-    one is drawn only where its own record says why it is empty - the drafter said what it needs (DraftNeeds), it failed (DraftError), or the
-    agent filed it so (DraftBy) - and then in the turn that said so. The page reads the same three (sendState.draftState: not `undrafted`)."""
-    from .wrapup import AGENT_DRAFT
-    return (r.get('Kind') in DRAFTS and r.get('Status') == 'pending' and not str(r.get('DraftText') or '').strip()
-            and not (r.get('DraftError') or r.get('DraftNeeds') or str(r.get('DraftBy') or '').startswith(AGENT_DRAFT)))
+    """A REPLY OWED THAT HOLDS NO WORDS IS NO CARD (the owner, 2026-11-27: "Agents don't just draw boxes unless it needs approval to send email?
+    why would it draw anything before that"): a reply card is the agent's reply, written, for his press - whatever the record of an empty one
+    says. That a reply is owed is a fact of the task's state (taskstate.status: `owed`), never a box in its chat."""
+    return r.get('Kind') in DRAFTS and r.get('Status') == 'pending' and not str(r.get('DraftText') or '').strip()
 
 
 FAILED_TRY = 'failed'

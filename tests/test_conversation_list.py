@@ -829,21 +829,20 @@ class TheList(unittest.TestCase):
         self.assertEqual([[(c['review'], c['status']) for c in t['cards']] for t in turns[-2:]], [[(rid - 1, 'approved'), (rid, 'passed')], []])
         self.assertIsNone(cardqueue.again_of(self.s, rid))
 
-    def test_an_empty_reply_is_drawn_only_where_its_record_says_why_and_then_in_the_turn(self):
-        """The owner, 2026-11-13: "why would you have empty write a reply box, unless the agent said i'm not sure what to respond, feel free to
-        respond here - then it's fine." A reply owed opened on arrival (no words, nothing said about it) is no card: the agent drafts it. Once
-        its record says why it is empty - the drafter said what it needs - it is a card, in the newest turn, never loose at the chat's foot."""
+    def test_a_reply_owed_with_no_words_is_no_card_whatever_its_record_says(self):
+        """The owner, 2026-11-27: "Agents don't just draw boxes unless it needs approval to send email? why would it draw anything before that."
+        A reply owed opened on arrival is no card, and it is none where its record says why it is empty either: the card is the agent's
+        reply, written."""
         self.say('Have a look.', 'l-one'); self.rest()
         rid = self.s.add_review({'TaskId': self.tid, 'MessageId': self.s.list_messages(self.tid)[0]['MessageId'], 'Kind': 'draft', 'Status': 'pending', 'Origin': 'triage',
                                  'Reason': 'needs a reply: a question for you'})
         cards = lambda: [(c['review'], x['kind']) for x in self.list()['items'] for c in ([x] if x['kind'] == 'card' else x.get('cards') or [])]
         self.assertEqual(cards(), [])
         self.s.set_review_draft_needs(rid, 'not drafted - it needs which March dates suit Gail')
-        self.assertEqual(cards(), [(rid, 'turn')])
-        self.assertEqual(self.list()['items'][-1]['cards'][0]['review'], rid)          # ...in the turn that stands last, under what it said
-        self.assertTrue(conversation.unwritten({'Kind': 'draft', 'Status': 'pending', 'DraftText': '  '}))
-        self.assertFalse(conversation.unwritten({'Kind': 'draft', 'Status': 'pending', 'DraftText': '', 'DraftBy': 'agent:claude'}))
-        self.assertFalse(conversation.unwritten({'Kind': 'draft', 'Status': 'pending', 'DraftText': '', 'DraftError': 'the AI returned nothing'}))
+        self.assertEqual(cards(), [])
+        for said in ({}, {'DraftNeeds': 'which dates'}, {'DraftBy': 'agent:claude'}, {'DraftError': 'the AI returned nothing'}):
+            self.assertTrue(conversation.unwritten({'Kind': 'draft', 'Status': 'pending', 'DraftText': '  ', **said}), said)
+        self.assertFalse(conversation.unwritten({'Kind': 'draft', 'Status': 'pending', 'DraftText': 'Friday works. Alex'}))
 
     def test_a_missing_fact_is_one_question_with_no_empty_reply_card_under_it(self):
         """Recorded on the real CLI, 2026-11-15: a sender asked for the owner's car plate. The agent could not find it and asked - and under
@@ -854,12 +853,11 @@ class TheList(unittest.TestCase):
         self.say('Have a look.', 'l-one'); self.rest()
         rid = self.s.add_review({'TaskId': self.tid, 'MessageId': self.s.list_messages(self.tid)[0]['MessageId'], 'Kind': 'draft', 'Status': 'pending', 'Origin': 'triage',
                                  'Reason': 'needs a reply: a question for you'})
-        self.s.set_review_draft_needs(rid, 'not drafted - it needs the plate number of the car you will bring')
         cards = lambda got: [c['review'] for x in got['items'] for c in ([x] if x['kind'] == 'card' else x.get('cards') or [])]
         got = self.list()
         self.assertTrue(got['asking'] and got['asking'].get('said'), got['asking'])
         self.assertEqual(cards(got), [], 'the question is the one thing asked: no empty reply card under it')
-        with mock.patch('taskuary.taskstate.asking', return_value=None): self.assertEqual(cards(self.list()), [rid])   # ...nothing asked: the card says why
+        self.assertTrue(self.s.get_review(rid)['Status'] == 'pending' and not self.s.get_review(rid).get('DraftNeeds'))   # ...owed still, and nothing written on it
 
     def test_a_reply_card_he_writes_past_greys_in_its_place_at_once_and_the_new_turns_card_comes_when_it_ends(self):
         """The owner's live task on 0.3.11.50, 2026-11-12 ("it shows ... on top of new prompt and action card is not greyed out ... the email

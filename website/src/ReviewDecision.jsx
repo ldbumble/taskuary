@@ -18,7 +18,7 @@ import { withoutSignature } from "./signature.js";
 import { OFFER_HINT, OFFER_LABEL, useCloseoutState } from "./closeoutState.js";
 import { PANEL2, BORDER, DIM, FAINT, INK } from "./theme.jsx";
 import { timeAgo, cleanText, splitQuoted } from "./ui.jsx";
-import { deliveryBcc, deliveryCc, deliveryFiles, deliveryMeta, deliverySubject, needsAddress, pressWords, replyContext, sentCardOf, sentTo, versionPick, versionsOf } from "./replyDelivery.js";
+import { deliveryBcc, deliveryCc, deliveryFiles, deliveryMeta, deliverySubject, drawnEnvelope, needsAddress, pressWords, replyContext, sentCardOf, sentTo, versionPick, versionsOf } from "./replyDelivery.js";
 import { cardLook, endPress, hearMarks, markOf, pressMark, sentMark, sentSaid, sentTitle, WENT } from "./sentLine.js";
 import { fmtDateTime } from "./dates.js";
 import { acted, announce, repeatClick, useLit, useVerbs } from "./actionRow.js";
@@ -410,7 +410,7 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
     setBusy(true); setErr(""); setSendErr("");
     try {
       const out = await press(api, r.ReviewId,
-        { verb, final_text: verb === "approve" && !delivery.frozen ? value : null, ...(r.Kind === "action" ? { shown: proposalFrom(r) } : delivery.frozen ? {} : { shown: { to: meta.to ?? null } }),
+        { verb, final_text: verb === "approve" && !delivery.frozen ? value : null, ...(r.Kind === "action" ? { shown: proposalFrom(r) } : delivery.frozen ? {} : { shown: drawnEnvelope(r) }),
           // only on the send: rejecting or "no reply needed" copies nobody on nothing
           cc: verb === "approve" && !proposal && !delivery.frozen ? ccNow : null, anyway, blanks_ok: blanksOk, ...envelopeEdits(verb),
           // ...Send and close says so WITH the send: the server closes as it goes, before the task's agent is told it went - told first, a

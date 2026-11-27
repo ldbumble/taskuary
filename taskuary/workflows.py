@@ -427,6 +427,10 @@ def change_of(store, tid: int, p: dict) -> tuple:
     if not isinstance(new, list) or not new: return {}, "change_routine needs `prompt` (its agent step's new instructions), `flow` (its steps whole), or a schedule (daily_at, cron, every_minutes) or title"
     ok, why = flow.validate(store, new)
     if not ok: return {}, f'the changed steps do not hold: {why}'
+    # ...and a script step it adds or repoints carries its script whole: a file's words are on no card, and could change after the press
+    had = {x.get('id'): x.get('path') for x in was}
+    if any(x.get('path') and x.get('path') != had.get(x.get('id')) for x in new if 'path' in flow.code_keys(x)):
+        return {}, 'a script step in a change carries its code in `script`, whole, so the card shows what will run - never a `path` to a file'
     clock = {k: patch.get(k) for k in CLOCK} if set(patch) & set(CLOCK) else {}
     rows = ([{'label': 'Runs', 'was': runs_words(cfg), 'now': runs_words({**cfg, **clock})}] if clock and runs_words({**cfg, **clock}) != runs_words(cfg) else []) + (
         [{'label': 'Name', 'was': cfg.get('title') or src.get('Address') or '', 'now': patch['title']}] if patch.get('title') and patch['title'] != cfg.get('title') else []) + (
@@ -494,21 +498,27 @@ WILL = {'routine': 'The routine will say', 'report': 'The report will ask', 'das
 WORDS = {'goal': 'Goal', 'done_when': 'Done when', 'query': 'Query'}
 def change_card(p: dict) -> dict:
     from . import flow
-    rows, texts = [r for r in p.get('rows') or [] if r.get('label') not in ('Adds', 'Removes', 'Step', 'Skill')], []
+    rows, texts = [r for r in p.get('rows') or [] if r.get('label') not in ('Adds', 'Removes', 'Step', 'Skill') and 'step' not in r], []
     if p.get('action') == 'change_setup':
         texts = [{'key': k, 'label': WILL.get(p.get('kind') or 'report') if k in ('prompt', 'ai_prompt') else WORDS.get(k, k), 'was': str((p.get('was') or {}).get(k) or ''),
                   'now': str(v)} for k, v in (p.get('patch') or {}).items() if k in TEXTS]
     else:
         new, d = p.get('flow') or [], flow.diff(p.get('was') or [], p.get('flow') or [])
-        one = sum(s.get('kind') == 'agent' for s in new) == 1
+        one, by = sum(s.get('kind') == 'agent' for s in new) == 1, {s.get('id'): s for s in new if isinstance(s, dict)}
+        said_ = lambda v: v if isinstance(v, str) else '' if v is None else json.dumps(v, default=str)
         for x in d:
-            if x['change'] != 'changed': rows.append({'label': 'Adds' if x['change'] == 'added' else 'Removes', 'was': '', 'now': f"the step {x['label'] or x['id']}"}); continue
-            for k in x['keys']:
-                if k['key'] == 'skill': rows.append({'label': 'Skill', 'was': str(k['was'] or 'none'), 'now': str(k['now'] or 'none')})
-                elif k['key'] in TEXTS and isinstance(k['now'], str):
+            name, s = x['label'] or x['id'], by.get(x['id']) or {}
+            if x['change'] != 'changed': rows.append({'label': 'Adds' if x['change'] == 'added' else 'Removes', 'was': '', 'now': f"the step {name}"})
+            # EVERY FIELD THE PRESS SAVES IS ON THE CARD (red team round 6: a step a change ADDED was one line, "Adds the step <label>", and the
+            # press saved its script for the routine's clock to run unpressed): a step it adds is drawn field by field as one it changes is -
+            # its words each a box, read as added, and the rest a fact with what it was and what it becomes
+            keys = x['keys'] if x['change'] == 'changed' else [{'key': k, 'was': None, 'now': v} for k, v in s.items() if k not in ('id', 'label')] if x['change'] == 'added' else []
+            for k in keys:
+                if k['key'] == 'skill' and x['change'] == 'changed': rows.append({'label': 'Skill', 'was': str(k['was'] or 'none'), 'now': str(k['now'] or 'none')})
+                elif k['key'] in TEXTS and isinstance(k['now'], str) and k['now']:
                     texts.append({'key': f"flow.{x['id']}.{k['key']}", 'was': str(k['was'] or ''), 'now': k['now'],
-                                  'label': WILL['routine'] if one and k['key'] == 'prompt' else f"{x['label'] or x['id']} · {WORDS.get(k['key'], k['key'])}"})
-                else: rows.append({'label': 'Step', 'was': '', 'now': f"{x['label'] or x['id']}: its {k['key'].replace('_', ' ')} changes"})
+                                  'label': WILL['routine'] if one and k['key'] == 'prompt' and s.get('kind') == 'agent' else f"{name} · {WORDS.get(k['key'], k['key'])}"})
+                else: rows.append({'label': f"{name} · {k['key'].replace('_', ' ')}", 'was': said_(k['was']), 'now': said_(k['now']) or 'none', 'step': x['id']})
         texts += [{'key': k, 'label': WORDS[k], 'was': str((p.get('before') or {}).get(k) or ''), 'now': str((p.get('patch') or {})[k])}
                   for k in ('goal', 'done_when') if (p.get('patch') or {}).get(k)]
     said = [f"{r['label']}: {r['was']} -> {r['now']}" if r.get('was') else f"{r['label']} {r['now']}" for r in rows] + [f"{t['label']}: {t['now']}" for t in texts]

@@ -69,6 +69,32 @@ class StaleSessionDraftTests(Base):
         self.assertEqual(s.review_envelope(n['ReviewId'])['cc'], ['ray@northwind.example'], 'the copy he added rides on')
         self.assertEqual(out.get('replaced_the_owners_version'), mine)
 
+    def test_the_same_reply_to_someone_else_never_lands_on_the_card_he_typed_into(self):
+        """Red team round 6: he typed his own words into the reply; the agent saved the SAME words again copying someone new, or with a file -
+        no rewrite by its words, so the copy and the file landed on his card and his Send took his words there. That is another letter: a
+        new card, his closed as he left it. Saved again as it was, his card stands whole - recipients, files and whose it is."""
+        from taskuary.store import his_words
+        mine = OLD + ' Hold the credit memos until Friday.'
+        for change in ({'cc': ['taker@vendor.example']}, {'files': [('memo.pdf', b'%PDF other')]}):
+            s = MemoryStore(); tid, _ = task_with(s)
+            rid = wrapup.agent_reply(s, tid, OLD, 'assistant', sid='s-1')['review_id']
+            s.hold_review_edit(rid, {'text': mine}); filed = s.get_review(rid)['Deliver']
+            self.assertFalse(wrapup.agent_reply(s, tid, '', 'assistant', files=[('memo.pdf', b'%PDF other')]).get('ok'), 'no file is put on his card')
+            out = wrapup.agent_reply(s, tid, OLD, 'assistant', sid='s-1', **change)
+            self.assertNotEqual(out['review_id'], rid, change)
+            o = s.get_review(rid)
+            self.assertEqual((o['Status'], o['FinalText'], o['Deliver']), ('closed_unsent', mine, filed), change)
+            self.assertFalse(his_words(s.get_review(out['review_id'])))
+        s = MemoryStore(); tid, _ = task_with(s)
+        rid = wrapup.agent_reply(s, tid, OLD, 'assistant', sid='s-1')['review_id']
+        with mock.patch.object(server, 'store', s):
+            c = TestClient(server.app, base_url='http://127.0.0.1', headers={'X-Taskuary-Token': server.cfg['server'].get('token') or ''})
+            c.put(f'/api/reviews/{rid}/envelope', json={'to': ['gail@northwind.example'], 'cc': ['ray@northwind.example']})
+        s.hold_review_edit(rid, {'text': mine}); filed = s.get_review(rid)
+        out = wrapup.agent_reply(s, tid, OLD, 'assistant', sid='s-2')
+        now = s.get_review(rid)
+        self.assertEqual((out['review_id'], now['Status'], now['Deliver'], now['DraftSid'], his_words(now)), (rid, 'pending', filed['Deliver'], filed['DraftSid'], mine))
+
     def test_taskuarys_own_draft_is_not_an_agent_sessions(self):
         s = MemoryStore(); tid, mid = task_with(s)
         rid = s.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft_reply', 'Status': 'pending', 'Reason': 'r'})

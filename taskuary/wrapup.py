@@ -294,6 +294,26 @@ STALE_HOLD = "held - an earlier agent session drafted it; the newer session's re
 SUPERSEDED = "superseded - an earlier agent session's draft; a newer session took over"
 _OWNER_HANDS = ('edit_draft', 'envelope', 'attached', 'detached', 'release', 'reopen')
 
+# HIS HAND ON A WAITING CARD MAKES IT HIS, ALL OF IT (red team round 6: the agent's same words saved again with another To, Cc, subject or
+# file landed on the card he had typed into, and his press sent his words there). An agent's save that would change who it goes to, what
+# it is about, where it leaves from or what rides with it is another letter: a card of its own, his kept as he left it (agent_reply, slots.draft)
+def his_hand(store, rv) -> bool:
+    "Has the owner put his own hand to this waiting card - words or a field typed into it, a readdress, a file?"
+    from .store import his_edit
+    if not rv: return False
+    q = "SELECT 1 FROM audit WHERE EntityType='review' AND EntityId=? AND Actor=? AND Action IN ('envelope','attached','detached') LIMIT 1"
+    return bool(his_edit(rv)) or rv.get('DraftSid') == OWNER_SID or bool(store._one(q, (rv['ReviewId'], OWNER_SID)))
+def repoints(rv, env: dict = None, files=None) -> bool:
+    "Would a save with envelope `env` (None: it names none) and `files` [(name, bytes, ...)] change what card `rv` draws beside its words?"
+    import hashlib
+    from .proposals import unlike_drawn
+    try: old = json.loads((rv or {}).get('Deliver') or '{}') or {}
+    except (TypeError, ValueError): old = {}
+    have = {f.get('sha256') for f in old.get('attachments') or []}
+    return bool(env is not None and unlike_drawn(old, {k: env.get(k) for k in ('to', 'cc', 'subject', 'mailbox') if k in env})) or \
+        any(hashlib.sha256(f[1]).hexdigest() not in have for f in files or [])
+
+
 def stale_draft(store, rv, sid=None) -> bool:
     """Is this pending/held draft an agent session's other than `sid` (None: any session - a new one is about to start)?
     A draft from before sids were kept is the owner's if their hand is on it in the audit."""
@@ -508,6 +528,9 @@ def agent_reply(store, task_id: int, text: str, agent: str = 'agent', run_id: in
     if not text and files:
         rv = store.pending_review(task_id, 'draft_reply', live_only=False) or store.pending_review(task_id, 'draft', live_only=False)
         if not rv: return {'ok': False, 'why': 'there is no pending reply to attach to - save one with --reply first'}
+        if his_hand(store, rv) and repoints(rv, None, files):
+            return {'ok': False, 'why': 'the owner has changed that reply himself, so it stands as he left it - nothing was attached. Save the reply '
+                                        'again with its words and the file: that is a card of its own, beside his.'}
         return {'ok': True, 'review_id': rv['ReviewId'], **_told(store, rv['ReviewId'], attach_files(store, rv['ReviewId'], files, agent))}
     if not text: return {'ok': False, 'why': "no reply text - put the letter's words in the reply and save it again"}
     if (why := blank_why(text, store)): return {'ok': False, 'why': why}
@@ -604,7 +627,18 @@ def agent_reply(store, task_id: int, text: str, agent: str = 'agent', run_id: in
     # ...his words typed into its box and not pressed yet are that hand too (store.hold_review_edit): the card closed keeps them as its words
     from .store import his_words as typed
     # ...only where the agent wrote OTHER words (the owner, 2026-11-26): the same letter brought up again is no rewrite - his version stands
-    mine = next((r for r in (held, live) if r and (typed(r) or r.get('DraftSid') == OWNER_SID) and _words(r.get('DraftText')) != _words(text)), None)
+    # ...NOR THE SAME WORDS TO SOMEONE ELSE, OR WITH ANOTHER FILE (his_hand, repoints): the envelope this save names, read before any card is touched
+    ans = answers or answers_for(store, task_id, mid, to)
+    m = store.get_message(ans or mid) or {}
+    named = None
+    if ans or only or ccs is not None:
+        from .outbound import reply_envelope
+        if (named := reply_envelope(store, m, 'reply_to' if only else 'reply_all')) and ccs is not None: named = {**named, 'cc': [a for a in ccs if a not in named['to']]}
+    chose = bool(str(to or '').strip() or answers or only or ccs is not None)
+    mine = next((r for r in (held, live) if r and his_hand(store, r) and (
+        _words(r.get('DraftText')) != _words(text) or repoints(r, named if chose else None, files))), None)
+    # ...and one of his it would leave as it is stands whole: its envelope, its files and whose it is are not written again
+    stands = next((r for r in (held, live) if r and r is not mine and his_hand(store, r)), None)
     if mine:
         store.decide_review(mine['ReviewId'], 'closed_unsent', typed(mine) or None, agent, note=REPLACED)
         held, live = ({} if mine is held else held), (None if mine is live else live)
@@ -628,18 +662,14 @@ def agent_reply(store, task_id: int, text: str, agent: str = 'agent', run_id: in
     from . import operations
     store.pin_review_context(rid, mid, operations.message_revision(store, task_id))
     # the mail that holds the ask is what the draft answers and what it is addressed from; the newest mail still pins its freshness
-    ans = answers or answers_for(store, task_id, mid, to)
     if ans: store.set_review_answers(rid, ans)   # a plain re-save keeps the mail an earlier save pinned
     rv = store.get_review(rid) or {}
     # ...and to whom it goes, at once - its To and Cc - so the card says the person the agent wrote to, and a line from somebody else
     # later never moves it. An answer to the owner's OWN mail (a promise task's) goes to whom it went (outbound.reply_envelope)
-    m = store.get_message(ans or mid) or {}
     # a mail that holds the ask replaces the recipients an earlier save set - and so does the agent's own choice of who hears it
-    if ans or not store.review_envelope(rid) or only or ccs is not None:
+    if not stands and (ans or not store.review_envelope(rid) or only or ccs is not None):
         from .outbound import reply_envelope
-        if (env := reply_envelope(store, m, 'reply_to' if only else 'reply_all')):
-            if ccs is not None: env = {**env, 'cc': [a for a in ccs if a not in env['to']]}
-            store.set_review_envelope(rid, env)
+        if (env := named or reply_envelope(store, m, 'reply_to' if only else 'reply_all')): store.set_review_envelope(rid, env)
     if mine and not (str(to or '').strip() or answers or only or ccs is not None) and (his := store.review_envelope(mine['ReviewId'])):
         store.set_review_envelope(rid, his)
     from .signatures import agent_signed, for_review
@@ -654,7 +684,7 @@ def agent_reply(store, task_id: int, text: str, agent: str = 'agent', run_id: in
     same = agent_drafted(rv) and ' '.join(str(rv.get('DraftText') or '').split()) == ' '.join(text.split())
     # ...with the names of the files it hands over kept as the draft's promise (FilesPromised): the card counts them against what rides
     store.update_review_draft(rid, text, run_id or rv.get('RunId'), by=AGENT_DRAFT + agent, files=[n for n, *_ in files] if files else ...)
-    store.set_review_sid(rid, sid)
+    if not stands: store.set_review_sid(rid, sid)
     if not same: store.add_comment(task_id, agent, 'agent', f'{agent} drafted the reply itself - it is on the task, waiting on your approval.')
     # ...and the session is told whom it went to - and, when it did not say and the task has more than one person on it, who they are
     many = [] if str(to or '').strip() else people_named(store, task_id)
@@ -666,7 +696,7 @@ def agent_reply(store, task_id: int, text: str, agent: str = 'agent', run_id: in
     meanwhile = [' '.join(str(x.get('OwnText') or x.get('BodyText') or '').split())[:300] for x in own_replies(store, task_id, turn)] if turn else []
     # ...ONE ANSWER, READ FROM THE CARD AS IT ENDS (walk 10, 2026-11-23): what it carries was read before its files were put on it, and one
     # answer said "This card carries no file" beside "attached": [4 files]
-    att = _told(store, rid, attach_files(store, rid, files, agent))
+    att = _told(store, rid, attach_files(store, rid, [] if stands else files, agent))
     from .outbound import leaves_from
     return {'ok': True, 'review_id': rid, 'message_id': mid, 'answers': ans or mid, 'to': m.get('FromName') or m.get('FromEmail') or '', **ends, **carries(store, rid),
             **({'from': box} if (box := leaves_from(store, store.get_review(rid) or {})) else {}),

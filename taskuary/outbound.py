@@ -7,7 +7,7 @@ mail nobody connects), a chat answers in the chat.
 
 Nothing sends itself. Every call here is behind a human verdict or an explicit hand-off.
 """
-import base64, json, mimetypes, re, smtplib
+import base64, hashlib, json, mimetypes, re, smtplib
 from pathlib import Path
 
 import requests
@@ -106,6 +106,9 @@ def read_attachments(items) -> list:
         name = str((it or {}).get('name') or path.name or 'attachment')
         if not path.is_file(): raise RuntimeError(f'the file "{name}" is no longer where it was put ({path})')
         data = path.read_bytes()
+        # ...and the file that was attached, by its content (verdicts.attach keeps it): one written over since is not what the card showed
+        if (it or {}).get('sha256') and hashlib.sha256(data).hexdigest() != it['sha256']:
+            raise RuntimeError(f'the file "{name}" changed after it was attached, so nothing was sent - take it off and attach it again')
         total += len(data)
         if total > ATTACH_MAX:
             raise RuntimeError(f'these files come to more than {ATTACH_MAX // (1024 * 1024)}MB, which no mailbox will accept - '

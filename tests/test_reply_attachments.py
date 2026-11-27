@@ -81,6 +81,16 @@ class ReadingThemBackTests(unittest.TestCase):
             outbound.read_attachments([{'name': 'gone.zip', 'path': 'C:/nowhere/gone.zip'}])
         self.assertIn('no longer where it was put', str(e.exception))
 
+    def test_a_file_written_over_after_it_was_attached_stops_the_send(self):
+        # red team round 6: the card's file is kept by its content where it is attached; other bytes under its name are not what he read
+        import hashlib, tempfile, pathlib
+        f = pathlib.Path(tempfile.mkdtemp()) / 'q3.xlsx'; f.write_bytes(b'the figures')
+        it = {'name': 'q3.xlsx', 'path': str(f), 'sha256': hashlib.sha256(b'the figures').hexdigest()}
+        self.assertEqual(len(outbound.read_attachments([it])), 1)
+        f.write_bytes(b'other figures')
+        with self.assertRaises(RuntimeError) as e: outbound.read_attachments([it])
+        self.assertIn('changed after it was attached', str(e.exception))
+
     def test_the_total_is_what_a_mailbox_refuses_over(self):
         store, rid = MemoryStore(), None
         big = b'x' * (outbound.ATTACH_MAX // 2 + 10)

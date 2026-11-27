@@ -7,6 +7,11 @@ import { label } from "./buttons.js";
 export const deliveryMeta = (review) => {
   try { return JSON.parse(review?.Deliver || "null") || {}; } catch { return {}; }
 };
+// THE ENVELOPE AS THIS CARD DREW IT, sent with its press (proposals.unlike_shown): who it goes to and who is copied, its subject, the mailbox
+// it leaves from and each file on it - one changed on the server since is not what he read, and the press does not send under it
+export const drawnEnvelope = (review) => { const m = deliveryMeta(review);
+  return { to: m.to ?? null, cc: m.cc ?? null, subject: m.subject ?? null, mailbox: m.mailbox ?? null,
+    attachments: (Array.isArray(m.attachments) ? m.attachments : []).map((f) => ({ name: f?.name || "", sha256: f?.sha256 || "" })) }; };
 // WHAT A PRESS OF THE CARD DOES, IN ITS OWN WORDS (the owner, 2026-11-16: "Accept and close" said "Sending…", then "Checking delivery…", then
 // "Sent by email" over an invite he accepted): a calendar card's act - Accepting… / Accepted - and every other card's send (buttons.json states)
 const CAL_VERB = { accept: "accept_invite", decline: "decline_invite", propose: "propose_time" };

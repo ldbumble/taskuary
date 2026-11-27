@@ -274,6 +274,59 @@ def test_the_endpoint_files_the_draft_on_the_sessions_own_task(s):
     assert r.json()['ok'] and slots.all_(s, tid)[0]['rid']
 
 
+def test_a_session_never_files_its_letter_as_the_owners_own(s):
+    # red team round 6: the door took who wrote it from the call's body, so a session that named itself the owner filed "your email" - none of
+    # an agent's checks ran on it (a blank left to fill went through), and his later line did not grey it. Who acted is the token's to say
+    from fastapi.testclient import TestClient
+    from taskuary import config, guard, server
+    srv = config.load()['server']
+    tid = typed(s, FOUR[:1])
+    mine = {'X-Taskuary-Token': srv['agent_token'], guard.TASK_HDR: guard.task_proof(srv, tid)}
+    post = lambda **b: TestClient(server.app).post('/api/agent/draft', json={'task_id': tid, 'to': 'paula@northwind.example', **b}, headers=mine).json()
+    with mock.patch.object(server, 'store', s):
+        blank = post(text='Paula, please wire it to [ACCOUNT] today.', agent='owner')
+        assert not blank.get('ok') and not s._rows("SELECT 1 FROM review WHERE TaskId=?", (tid,)), 'a blank left to fill is no letter, whoever it says wrote it'
+        for who in ('owner', 'Owner', ' owner ', 'routine'):
+            out = post(text='Paula, tab 1 is fine as it stands.', agent=who)
+            rv = s.get_review(out['review_id'])
+            assert rv['DraftBy'] == 'agent:agent' and 'your email' not in rv['Reason'], who
+        assert s.get_review(post(text='Paula, tab 1 is fine.', agent='coding')['review_id'])['DraftBy'] == 'agent:coding', 'its own name is kept'
+        # ...and the owner's own call is still his
+        own = TestClient(server.app).post('/api/agent/draft', json={'task_id': tid, 'to': 'ray@northwind.example', 'text': 'Ray, see tab 2.', 'agent': 'owner'}).json()
+        assert 'your email' in s.get_review(own['review_id'])['Reason']
+
+
+def test_the_same_words_with_another_envelope_never_land_on_the_card_he_typed_into(s):
+    # red team round 6: he typed his own words into a letter; its agent saved the SAME words again with another To, a copy, another subject
+    # or another file - no rewrite by its words, so it landed on his card, and his press sent his words there. That is another letter: a
+    # card of its own, his closed as he left it with his words on it
+    import json
+    HIS, FILED = 'Paula - tab 1 is fine. Hold the wire until Friday.', 'Paula, tab 1 is fine as it stands.'
+    for change in ({'to': 'taker@vendor.example', 'slot': None}, {'cc': ['taker@vendor.example']}, {'subject': 'Wire details'}, {'carries': [('wire.pdf', b'%PDF other')]}):
+        tid = typed(s, FOUR[:1])
+        first = slots.draft(s, tid, FILED, to='paula@northwind.example', subject='Tab 1', agent='assistant')
+        rid, filed = first['review_id'], s.get_review(first['review_id'])['Deliver']
+        s.hold_review_edit(rid, {'text': HIS})
+        again = slots.draft(s, tid, FILED, **{'to': 'paula@northwind.example', 'subject': 'Tab 1', 'agent': 'assistant', **change, **({'slot': first['slot']} if 'slot' in change else {})})
+        mine = s.get_review(rid)
+        assert again.get('ok') and again['review_id'] != rid, (change, again)
+        assert (mine['Status'], mine['FinalText'], mine['Deliver']) == ('closed_unsent', HIS, filed), f'{change}: his card, kept as he left it'
+        assert not his_words_of(s, again['review_id']), 'the new card holds its agent\'s words, never his'
+    # ...and the same letter saved again as it was changes nothing on his card - its envelope and the file he put on it included
+    tid = typed(s, FOUR[:1])
+    rid = slots.draft(s, tid, FILED, to='paula@northwind.example', subject='Tab 1', agent='assistant')['review_id']
+    s.hold_review_edit(rid, {'text': HIS})
+    env = json.loads(s.get_review(rid)['Deliver']); s.set_review_deliver(rid, json.dumps({**env, 'attachments': [{'name': 'tab1.xlsx', 'sha256': 'c' * 64}]}))
+    filed = s.get_review(rid)['Deliver']
+    again = slots.draft(s, tid, FILED, to='paula@northwind.example', subject='Tab 1', agent='assistant')
+    assert again['review_id'] == rid and s.get_review(rid)['Deliver'] == filed and s.get_review(rid)['Status'] == 'pending'
+
+
+def his_words_of(s, rid):
+    from taskuary.store import his_words
+    return his_words(s.get_review(rid))
+
+
 # ── triage and the assistant say what closes a task ──────────────────────────────────────
 from taskuary import concierge, triage
 

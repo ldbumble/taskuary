@@ -112,6 +112,24 @@ class OnePress(unittest.TestCase):
         kept = json.loads(server.store.get_review(rv['ReviewId'])['FinalText'])
         self.assertEqual(kept['result']['url'], 'https://www.linkedin.com/feed/update/urn:li:share:42')
 
+    def test_a_picture_written_over_after_its_card_was_raised_never_goes_up(self):
+        # red team round 6: the card kept its picture by name, so another file saved under that name after the card was shown went up at his
+        # press. The picture is pinned by its content where the card is raised: changed since, nothing is posted, and the card says why
+        net = LinkedIn()
+        with stubbed(net):
+            rv = server.store.get_review(self.propose(text='Gas rose 4 cents this week.', image='gas-prices.png').json()['review'])
+            self.assertEqual(len(json.loads(rv['DraftText'])['image_sha256']), 64)
+            (outputs.folder(self.tid) / 'gas-prices.png').write_bytes(PNG + b'another picture altogether')
+            out = verdicts.decide(server.store, rv, 'approve', 'Gas rose 4 cents this week.')
+        self.assertFalse([x for x in net.calls if x[0] in ('PUT', 'POST')], 'nothing went up')
+        self.assertIn('changed after the card was shown', json.dumps(out) + str(server.store.get_review(rv['ReviewId'])))
+        # ...and the picture as it was shown goes, as before
+        (outputs.folder(self.tid) / 'gas-prices.png').write_bytes(PNG)
+        with stubbed(net):
+            rv = server.store.get_review(self.propose(text='Gas rose 5 cents this week.', image='gas-prices.png').json()['review'])
+            self.assertTrue(verdicts.decide(server.store, rv, 'approve', 'Gas rose 5 cents this week.')['ok'])
+        self.assertTrue([x for x in net.calls if x[0] == 'PUT'])
+
     def test_a_picture_named_by_its_full_path_is_kept_by_its_name(self):
         """A real turn named the picture by its full path; the card builds its address from the name in the folder."""
         r = self.propose(text='Hi', image=str(outputs.folder(self.tid) / 'gas-prices.png'))

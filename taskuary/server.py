@@ -5385,7 +5385,7 @@ def board_post(body: NoteBody, request: Request):
     owner = guard.scope_of(cfg['server'], request.headers) == guard.OWNER
     tid = body.task_id if owner else guard.session_tid(cfg['server'], request.headers)
     try:
-        return blackboard.post(store, body.body, body.kind, body.agent or (ACTOR if owner else 'agent'), body.cwd or '',
+        return blackboard.post(store, body.body, body.kind, (body.agent or ACTOR) if owner else _session_actor(request, body.agent), body.cwd or '',
                                tid, body.files or '', owner=owner)
     except ValueError as e: raise HTTPException(422, str(e))
 
@@ -5905,8 +5905,7 @@ def _hub_actor(request: Request, claimed: str | None = None) -> str:
     """The browser is the owner; an agent token may name its agent without spoofing the owner."""
     from . import guard
     if guard.scope_of(cfg['server'], request.headers) != guard.AGENT: return ACTOR
-    raw = request.headers.get('X-Taskuary-Agent') or claimed or 'agent'
-    return re.sub(r'[^a-zA-Z0-9_.-]+', '-', str(raw)).strip('-')[:60] or 'agent'
+    return _session_actor(request, request.headers.get('X-Taskuary-Agent') or claimed)
 
 def _require_hub_write(request: Request):
     from . import guard, scopes
@@ -6089,13 +6088,24 @@ def own_note(body: OwnNoteBody):
 
 class AgentDoneBody(BaseModel): task_id: int; summary: str = ''; agent: str = 'agent'; no_reply: bool = False; sid: str = ''
 
-def _own_task_only(request: Request, tid: int):
+# WHO ACTED IS THE TOKEN'S TO SAY, NEVER THE BODY'S (red team round 6: a session's call that named itself the owner filed its letter as his own -
+# none of an agent's checks ran on it, and it read "your email"). A session names its agent; a name Taskuary's own code or the owner acts
+# under is not one, and reads as plain 'agent'. The owner's own call says what it likes.
+NOT_A_SESSION = frozenset({ACTOR, 'human', 'routine', 'workflow', 'schedule', 'triage', 'system'})
+def _session_actor(request: Request, claimed: str | None = None) -> str:
+    if guard.scope_of(cfg['server'], request.headers) not in (guard.AGENT, guard.STRANGER): return claimed or ACTOR
+    name = re.sub(r'[^a-zA-Z0-9_.-]+', '-', str(claimed or '')).strip('-')[:60]
+    return name if name and name.lower() not in NOT_A_SESSION else 'agent'
+
+def _own_task_only(request: Request, tid: int, body=None):
     """One agent token is shared by every session, so the allow list alone let any of them draft or
-    close a NEIGHBOUR's task; the session's task proof (guard.owns_task) narrows it to its own."""
+    close a NEIGHBOUR's task; the session's task proof (guard.owns_task) narrows it to its own. `body`: the call's own, whose
+    `agent` is then the name its token may carry (_session_actor)."""
     if not guard.owns_task(cfg['server'], request.headers, tid):
         logger.warning(f'agent refused {request.method} {request.url.path} on task {tid} - not its own task')
         raise HTTPException(403, 'agents cannot do this: a session drafts and finishes its OWN task only. '
                                  'Run `taskuary --reply/--done` from the session that is working it.')
+    if getattr(body, 'agent', None) is not None: body.agent = _session_actor(request, body.agent)
 
 @app.post('/api/agent/done')
 def agent_done(body: AgentDoneBody, request: Request):
@@ -6106,7 +6116,7 @@ def agent_done(body: AgentDoneBody, request: Request):
     same report, same drafted reply waiting on the owner's approval; only the thing that noticed
     the work was over has changed (selfclose.declare)."""
     from . import selfclose
-    _own_task_only(request, body.task_id)
+    _own_task_only(request, body.task_id, body)
     if not store.get_task(body.task_id): raise HTTPException(404, 'no such task')
     return selfclose.declare(store, body.task_id, body.summary, body.agent, no_reply=body.no_reply, sid=body.sid or None)
 
@@ -6203,7 +6213,7 @@ def agent_reply(body: AgentReplyBody, request: Request):
     answer the sender gets, and it becomes the task's pending reply as written (wrapup.agent_reply).
     Nothing is sent - the owner approves it - and the end of the run keeps it instead of redrafting."""
     from . import wrapup
-    _own_task_only(request, body.task_id)
+    _own_task_only(request, body.task_id, body)
     if not store.get_task(body.task_id): raise HTTPException(404, 'no such task')
     with _raising(body.task_id, body.then):
         return wrapup.agent_reply(store, body.task_id, body.text, body.agent, files=_agent_files(body.files, body.task_id), follow_up=body.follow_up, to=body.to,
@@ -6217,12 +6227,12 @@ class AgentDraftBody(BaseModel):
 def agent_draft(body: AgentDraftBody, request: Request):
     """`taskuary --draft` from inside an agent's own shell: one of the emails that closes the task (slots.draft). Nothing is sent."""
     from . import slots
-    _own_task_only(request, body.task_id)
+    _own_task_only(request, body.task_id, body)
     if not store.get_task(body.task_id): raise HTTPException(404, 'no such task')
     from . import wrapup
     files = _agent_files(body.files, body.task_id)
     with _raising(body.task_id, body.then):
-        out = slots.draft(store, body.task_id, body.text, body.to, body.subject, body.slot, body.agent, cc=body.cc, mailbox=body.mailbox, guessed=body.guessed)
+        out = slots.draft(store, body.task_id, body.text, body.to, body.subject, body.slot, body.agent, cc=body.cc, mailbox=body.mailbox, guessed=body.guessed, carries=files)
     if out.get('ok') and files: out = {**out, **wrapup.attach_files(store, out['review_id'], files, body.agent)}
     return {**out, **wrapup.carries(store, out['review_id'])} if out.get('ok') and out.get('review_id') else out
 
@@ -6233,7 +6243,7 @@ def agent_waiting(body: AgentWaitBody, request: Request):
     """`taskuary --waiting-on "<who>"` from an agent's own shell: only that person can answer what it needs, so the task waits on
     them - and their reply wakes it (waiton.py). Nothing is sent: asking them is a --draft or --reply the owner approves."""
     from . import waiton
-    _own_task_only(request, body.task_id)
+    _own_task_only(request, body.task_id, body)
     if not store.get_task(body.task_id): raise HTTPException(404, 'no such task')
     return waiton.declare(store, body.task_id, body.who, body.agent)
 
@@ -6243,7 +6253,7 @@ class AgentItemBody(BaseModel): task_id: int; item: int; result: str; overlap: s
 def agent_item(body: AgentItemBody, request: Request):
     """`taskuary --item n --result ...` from a batch's own session: what it found on one item goes on that item's line (batch.report)."""
     from . import batch
-    _own_task_only(request, body.task_id)
+    _own_task_only(request, body.task_id, body)
     if not store.get_task(body.task_id): raise HTTPException(404, 'no such task')
     if not batch.is_batch(store, body.task_id): raise HTTPException(422, 'this task is not a batch - report with --done or --reply')
     return batch.report(store, body.task_id, body.item, body.result, body.overlap, body.settled, body.agent, body.propose)
@@ -6256,7 +6266,7 @@ def agent_tick(body: AgentTickBody, request: Request):
     2026-10-22). The box's state and nothing else - never its words, never a box on another task. An email box ticks when its email
     goes and a goal's step when its task closes, so neither is a session's to tick (store.agent_tickable)."""
     from .store import agent_tick as tick
-    _own_task_only(request, body.task_id)
+    _own_task_only(request, body.task_id, body)
     if not store.get_task(body.task_id): raise HTTPException(404, 'no such task')
     hit, err = tick(store, body.task_id, body.item, body.done)
     if err: raise HTTPException(*err)
@@ -6269,7 +6279,7 @@ def agent_not_needed(body: AgentNotNeededBody, request: Request):
     """`taskuary --reply-not-needed "<why>"` from the session working the task: the reply waiting there is no longer needed - someone
     else answered, the owner already did (verdicts.not_needed). The draft is put down, kept under Not sent; nothing is sent or deleted."""
     from . import verdicts
-    _own_task_only(request, body.task_id)
+    _own_task_only(request, body.task_id, body)
     if not store.get_task(body.task_id): raise HTTPException(404, 'no such task')
     return verdicts.not_needed(store, body.task_id, body.why, body.agent)
 
@@ -6280,7 +6290,7 @@ def agent_withdraw_draft(body: AgentWithdrawBody, request: Request):
     """`taskuary --withdraw-draft "<why>"` (and the withdraw_draft tool) from the session working the task: the draft waiting there no longer
     answers the newest message - closed unsent with why (verdicts.withdraw), kept under Not sent; nothing is sent or deleted."""
     from . import verdicts
-    _own_task_only(request, body.task_id)
+    _own_task_only(request, body.task_id, body)
     if not store.get_task(body.task_id): raise HTTPException(404, 'no such task')
     return verdicts.withdraw(store, body.task_id, body.why, body.agent, body.which, keep=body.keep)
 
@@ -6291,7 +6301,7 @@ def agent_hand_over(body: AgentHandOverBody, request: Request):
     """`taskuary --hand-over "<what>" [--site <domain>]` (and the hand_over tool) from the session working the task: a step on its page only
     the owner can do - done by Taskuary where it can, else one card for him (browserview.hand_over). The agent goes on with the job."""
     from . import browserview
-    _own_task_only(request, body.task_id)
+    _own_task_only(request, body.task_id, body)
     if not store.get_task(body.task_id): raise HTTPException(404, 'no such task')
     return browserview.hand_over(store, body.task_id, body.what, body.site)
 
@@ -6302,7 +6312,7 @@ def agent_check_back(body: AgentCheckBackBody, request: Request):
     """`taskuary --check-back WHEN "WHAT"` (and the check_back tool) from the session working the task: its own follow-up, woken on the
     reminders' clock with that note as its next turn (checkback.py). Nothing is sent, the task stays where it is."""
     from . import checkback
-    _own_task_only(request, body.task_id)
+    _own_task_only(request, body.task_id, body)
     if not store.get_task(body.task_id): raise HTTPException(404, 'no such task')
     try: return checkback.set_check(store, body.task_id, body.when, body.what, body.agent)
     except ValueError as e: raise HTTPException(422, str(e))
@@ -6315,7 +6325,7 @@ def agent_browser(body: AgentBrowserBody, request: Request):
     own shell cannot launch one (browserview.ask_open). Only its own live session's browser, and never on a stranger's task: a link in
     a stranger's mail is not followed by an agent (browserview.STRANGER_LINE)."""
     from . import browserview, general, terminal as hub_term
-    _own_task_only(request, body.task_id)
+    _own_task_only(request, body.task_id, body)
     t = store.get_task(body.task_id)
     if not t: raise HTTPException(404, 'no such task')
     s = hub_term.SESSIONS.get(str(body.sid)) or general._live_of(body.task_id)
@@ -6340,7 +6350,7 @@ def agent_todos(body: AgentTodosBody, request: Request):
     """The todos tool: the session adds, rewords and folds its OWN task's to-dos (store.agent_todos) - on a stream of reports the list is the
     issue list (the owner, 2026-11-09). Only the boxes' words; nothing leaves."""
     from .store import agent_todos as todos
-    _own_task_only(request, body.task_id)
+    _own_task_only(request, body.task_id, body)
     if not store.get_task(body.task_id): raise HTTPException(404, 'no such task')
     return todos(store, body.task_id, body.add, body.reword, body.merge, body.agent)
 
@@ -6351,7 +6361,7 @@ def agent_remind(body: AgentRemindBody, request: Request):
     """The remind tool: the owner's "remind me Friday" set by the session as the task's Remind me sets it (remind_task) - the owner's
     reminder, off the rail until then, never the agent's own wake (check_back). The owner, 2026-11-09."""
     from . import remind
-    _own_task_only(request, body.task_id)
+    _own_task_only(request, body.task_id, body)
     if not (t := store.get_task(body.task_id)): raise HTTPException(404, 'no such task')
     # ...a call with no day on a task with no reminder took nothing off, and said it had (the stress run, 2026-11-10)
     if not str(body.until or '').strip() and not t.get('RemindAt'): raise HTTPException(422, 'no reminder is set on this task - give `until` (a day or a time) to set one')
@@ -6384,7 +6394,7 @@ def agent_new_task(body: AgentNewTaskBody, request: Request):
     page's own dispatch door - so nothing is held for a press: nothing leaves. Never from a stranger's task; on one the owner never spoke on, a
     card for his press."""
     from . import general, origin
-    _own_task_only(request, body.task_id)
+    _own_task_only(request, body.task_id, body)
     if not store.get_task(body.task_id): raise HTTPException(404, 'no such task')
     if origin.of_task(store, body.task_id)[0] == 'stranger':
         raise HTTPException(403, "not started: this task carries a message from someone the owner has not vouched for, and a stranger's words "
@@ -6472,7 +6482,7 @@ def agent_remember(body: AgentRememberBody, request: Request):
     you something, they should not have to say it again"). Silent: no line in the chat, no card. Never on a stranger's task, and only on a
     turn his own words or press began (general.his_turn) - a sender's words are never the owner's."""
     from . import general, memory, origin
-    _own_task_only(request, body.task_id)
+    _own_task_only(request, body.task_id, body)
     if not store.get_task(body.task_id): raise HTTPException(404, 'no such task')
     if origin.of_task(store, body.task_id)[0] == 'stranger':
         raise HTTPException(403, "not kept: this task carries a message from someone the owner has not vouched for, and nothing said on a "
@@ -6528,7 +6538,7 @@ def agent_ask_stronger(body: AgentAskStrongerBody, request: Request):
     """The ask_stronger tool from the session working the task: one question to the strong gear of its brain (askstronger.py), no cap,
     logged as a route with what it used. An answer in words - nothing moves."""
     from . import askstronger
-    _own_task_only(request, body.task_id)
+    _own_task_only(request, body.task_id, body)
     if not store.get_task(body.task_id): raise HTTPException(404, 'no such task')
     try: return askstronger.ask(store, body.task_id, body.question, body.context)
     except ValueError as e: raise HTTPException(422, str(e))
@@ -6540,7 +6550,7 @@ def agent_note_peers(body: AgentNoteBody, request: Request):
     """The note_peers tool from the session working the task: words for another agent - a task, every agent in this checkout, or all of
     them - at its next turn, framed as a peer's (peers.py). It carries no authority of the owner's; nothing leaves the machine."""
     from . import peers
-    _own_task_only(request, body.task_id)
+    _own_task_only(request, body.task_id, body)
     if not store.get_task(body.task_id): raise HTTPException(404, 'no such task')
     try: return peers.send(store, body.task_id, body.to, body.text, body.files, body.wake)
     except PermissionError as e: raise HTTPException(403, str(e))
@@ -6553,7 +6563,7 @@ def agent_note_lead(body: AgentLeadBody, request: Request):
     """The note_lead tool: something the session noticed beyond its OWN task, kept for the Advisor's next run (lookout.note_lead) - a
     pointer it reads for itself, never evidence. Never from a stranger's task: what a stranger wrote does not steer what the owner is told."""
     from . import lookout, origin
-    _own_task_only(request, body.task_id)
+    _own_task_only(request, body.task_id, body)
     if not store.get_task(body.task_id): raise HTTPException(404, 'no such task')
     if origin.of_task(store, body.task_id)[0] == 'stranger':
         raise HTTPException(403, "not kept: this task carries a message from someone the owner has not vouched for. Carry on with the task.")
@@ -6581,7 +6591,7 @@ def agent_use_repo(body: AgentUseRepoBody, request: Request):
     """The use_repo tool (and `taskuary --use-repo`) from the session working the task: the checkout it picked, checked to be a git checkout
     it may work in, recorded on the task and taken by its live session (repochoice.use). The owner's own pick (Change) is never overruled."""
     from . import repochoice
-    _own_task_only(request, body.task_id)
+    _own_task_only(request, body.task_id, body)
     if not store.get_task(body.task_id): raise HTTPException(404, 'no such task')
     try: return repochoice.use(store, body.task_id, body.path_or_name, body.why)
     except repochoice.Asks as e:            # ...a pick his yes makes: one card, his press the pick (the owner, 2026-11-25)
@@ -6606,7 +6616,7 @@ class AgentLandBody(BaseModel): task_id: int; how: str; why: str = ''; deploy: s
 def agent_propose_land(body: AgentLandBody, request: Request):
     "The propose_land tool: the agent's pick for how its branch lands, marked on the owner's landing question (landing.py). Lands nothing."
     from . import landing
-    _own_task_only(request, body.task_id)
+    _own_task_only(request, body.task_id, body)
     if not store.get_task(body.task_id): raise HTTPException(404, 'no such task')
     try: return landing.propose(store, body.task_id, body.how, body.why, deploy=body.deploy)
     except ValueError as e: raise HTTPException(422, str(e))
@@ -6737,7 +6747,7 @@ def agent_propose(body: AgentProposeBody, request: Request):
     on its OWN task. The TASKUARY-PROPOSE mark in a transcript files the same review; this is the door a tool call takes (agenttools).
     A Jira or GitHub comment is a send (the owner, 2026-10-25), so it is always this road, never a direct call."""
     from . import agenttools, proposals
-    _own_task_only(request, body.task_id)
+    _own_task_only(request, body.task_id, body)
     if not store.get_task(body.task_id): raise HTTPException(404, 'no such task')
     try: p = agenttools.proposal_of(body.model_dump())
     except ValueError as e: raise HTTPException(403, str(e))
@@ -6798,7 +6808,7 @@ def agent_sign_form(body: AgentSignBody, request: Request):
     agent attaches it, and goes only on the owner's Send. With no signature saved the answer says so, and nothing is signed."""
     import base64, binascii
     from . import agenttools, handsign, outputs, session_artifacts
-    _own_task_only(request, body.task_id)
+    _own_task_only(request, body.task_id, body)
     tid = body.task_id
     if not store.get_task(tid): raise HTTPException(404, 'no such task')
     if body.attachment is not None:

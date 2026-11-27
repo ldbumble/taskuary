@@ -9,8 +9,9 @@ export const deliveryMeta = (review) => {
 };
 // THE ENVELOPE AS THIS CARD DREW IT, sent with its press (proposals.unlike_shown): who it goes to and who is copied, its subject, the mailbox
 // it leaves from and each file on it - one changed on the server since is not what he read, and the press does not send under it
+// ...and its From row where the read gave one (`From`, outbound.shown_from): a task moved to another profile since leaves from another mailbox
 export const drawnEnvelope = (review) => { const m = deliveryMeta(review);
-  return { to: m.to ?? null, cc: m.cc ?? null, subject: m.subject ?? null, mailbox: m.mailbox ?? null,
+  return { to: m.to ?? null, cc: m.cc ?? null, subject: m.subject ?? null, mailbox: m.mailbox ?? null, ...(review?.From !== undefined ? { from: review.From } : {}),
     attachments: (Array.isArray(m.attachments) ? m.attachments : []).map((f) => ({ name: f?.name || "", sha256: f?.sha256 || "" })) }; };
 // WHAT A PRESS OF THE CARD DOES, IN ITS OWN WORDS (the owner, 2026-11-16: "Accept and close" said "Sending…", then "Checking delivery…", then
 // "Sent by email" over an invite he accepted): a calendar card's act - Accepting… / Accepted - and every other card's send (buttons.json states)

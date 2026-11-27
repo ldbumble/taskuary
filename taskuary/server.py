@@ -5591,7 +5591,7 @@ def press_review(st, rid: int, body: DecideBody, background: BackgroundTasks = N
     from .verdicts import VERB2STATUS, context_moved, decide as land
     if body.verb not in VERB2STATUS: raise HTTPException(422, 'bad verb')
     from .proposals import unlike_shown
-    if (changed := unlike_shown(rv, body.shown, body.verb)): return changed
+    if (changed := unlike_shown(rv, body.shown, body.verb, st)): return changed
     # ...ONE PRESS ROAD FOR EVERY CARD (walk 8, 2026-11-20): a turn's held steps are one card whose press runs each step through this same door,
     # in order, stopping at the first that fails - never a road of its own (it was /api/reviews/steps)
     if body.steps:

@@ -573,10 +573,11 @@ def agent_reply(store, task_id: int, text: str, agent: str = 'agent', run_id: in
         from .slots import from_box
         box, why = from_box(store, task_id, mailbox, agent, 'reply from')
         if why: return {'ok': False, 'why': why}
-        from .outbound import reply_from
-        own = reply_from(store.get_message(answers or mid) or {})
+        from .outbound import Fixable, reply_box
+        try: own = reply_box(store, task_id, store.get_message(answers or mid) or {})       # ...its task's own profile's, once moved: the card's From
+        except Fixable as e: return {'ok': False, 'why': f'{e} - nothing was saved.'}
         if box.lower() != str(own or '').lower():
-            return {'ok': False, 'why': (f'a reply leaves from the mailbox the mail it answers came in on, {own}' if own else 'only an email leaves from a mailbox')
+            return {'ok': False, 'why': (f'this reply leaves from {own}' if own else 'only an email leaves from a mailbox')
                                         + f' - nothing was saved. An email from {box} is its own email: kind email with `to` and `from`.'}
     # ...and who else hears it: `only` is the sender alone, so it copies nobody; an address the thread never had is said on the card
     ccs = _addrs(cc)

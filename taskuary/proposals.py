@@ -519,7 +519,7 @@ DRAWN = {'to': _to, 'cc': _to, 'subject': lambda x: ' '.join(str(x or '').split(
 def unlike_drawn(env: dict, shown: dict) -> list:
     "The parts of envelope `env` that are not as `shown` names them - only the parts `shown` names."
     return [k for k, read in DRAWN.items() if k in shown and read((env or {}).get(k)) != read(shown[k])]
-def unlike_shown(rv: dict, shown, verb: str) -> dict | None:
+def unlike_shown(rv: dict, shown, verb: str, store=None) -> dict | None:
     """The press's refusal when the card the page drew (`shown`: an action's proposal, a letter's envelope, as drawn) is not the one on file - a
     field changed after it was shown never runs under the words he read (red team F1), and a letter never goes to someone the card did not
     name (round 4: an agent's second save in its turn rewrote the To of the card on his screen). None to go on: no card shown (a phone's
@@ -530,6 +530,11 @@ def unlike_shown(rv: dict, shown, verb: str) -> dict | None:
         try: env = json.loads(rv.get('Deliver') or '{}') or {}
         except (TypeError, ValueError): env = {}
         same = not unlike_drawn(env, shown)
+        # ...and the From its card drew (outbound.shown_from - read off its task's profile, never kept on a reply's envelope): a task moved to
+        # another profile since leaves from another mailbox, which is not the card he read
+        if same and store is not None and 'from' in shown:
+            from .outbound import shown_from
+            same = DRAWN['mailbox'](shown['from']) == DRAWN['mailbox'](shown_from(store, rv))
     if same: return None
     return {'ok': False, 'status': rv.get('Status') or 'pending', 'sent': None, 'changed': True, 'send_error': CHANGED}
 

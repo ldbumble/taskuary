@@ -81,7 +81,8 @@ def _target(args) -> str:
 # edit as its diff ("Edited budget.py (+12 −3)", the owner 2026-11-06: "i do like you can review the code diffs"). Kept small: the strings
 # a step line is built from, each cut short, and an edit's own before/after - never a tool's output
 ARG_N, EDIT_N = 300, 20000
-_ARG_KEYS = _TARGET_KEYS + ('glob', 'title', 'dir_path', 'directory', 'q', 'search_term', 'regex', 'notebook_path')
+# ...and `name`: which of his skills, routines or people a Taskuary tool was asked for is what its line says (walk 26, 2026-11-27: "read your skills")
+_ARG_KEYS = _TARGET_KEYS + ('glob', 'title', 'dir_path', 'directory', 'q', 'search_term', 'regex', 'notebook_path', 'name')
 
 
 def _args(a: dict) -> dict: return {k: _cut(v, ARG_N) for k, v in a.items() if k in _ARG_KEYS and isinstance(v, str) and v.strip()}

@@ -117,7 +117,8 @@ def agent_systems(store, tooled: bool = True, tid=None) -> str:
     from . import ledger
     try: kept = ledger.accounts(store)
     except Exception: kept = ''
-    mail = '\n'.join(x for x in (mail, kept, act_cards(store, tid)) if x)
+    from .workstreams import elsewhere
+    mail = '\n'.join(x for x in (mail, kept, act_cards(store, tid), elsewhere(store, tid)) if x)
     if not tools: return mail
     lines = [f"- {c['Name'] or c['Type']} (connector_id {c['ConnectorId']}, authority {scopes.scope_of(c)}) - tools: {', '.join(k)}"
              for c, k in tools]

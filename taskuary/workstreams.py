@@ -159,6 +159,39 @@ def move_card(store, tid, account, then: str = '', channel: str = 'email') -> di
     return {'review': q['reviewId'], 'says': f"{fact}. Moving this task to {name}: {CARD_TAIL}"}
 
 
+def knows(store, tid, address) -> bool:
+    """May the agent on task `tid` be shown what is kept about this person where it reads across people (the memory's lookup): someone all of
+    whose mail is in accounts of another profile is that profile's - the one wall (may_use), asked of where their mail is. Anyone with mail
+    in an account the task may use, or with none kept, is shown."""
+    a = str(address or '').strip().lower()
+    if not tid or '@' not in a or not shown(store): return True
+    at = store._rows("SELECT DISTINCT IFNULL(SourceName,'') AS s, IFNULL(Channel,'email') AS c FROM message "
+                     "WHERE lower(IFNULL(FromEmail,''))=? OR lower(IFNULL(RecipientsJson,'')) LIKE ?", (a, f'%{a}%'))
+    return not at or any(may_use(store, tid, r['s'], r['c']) for r in at)
+
+
+# THE WALL NEVER HIDES THAT THE OTHER SIDE EXISTS (walk 26, 2026-11-27: told only its own profile's accounts, an agent asked him to connect a
+# mailbox that was connected, under his other profile): what is connected under each other profile, by name alone, and what a call on one
+# comes to (move_card) - facts beside the list of what the task may use. Nothing of what those accounts hold
+def elsewhere(store, tid) -> str:
+    "The accounts connected under his other profiles, by name, as the agent on task `tid` is told of them - '' with one profile, or no wall."
+    if not tid or not shown(store): return ''
+    from .general import is_dock
+    from .outbound import mailboxes
+    if is_dock(store.get_task(int(tid))): return ''
+    mine, by = of_task(store, int(tid)), {}
+    boxes = [m['address'] for m in mailboxes(store)]
+    for w in shown(store):
+        if w['slug'] == mine: continue
+        got = [b for b in boxes if of_account(store, b) == w['slug']]
+        got += [x for x in accounts(store, w['slug']) if x.lower() not in {g.lower() for g in got}]
+        if got: by[w['name']] = got
+    if not by: return ''
+    here = f"under {names(store)[mine]}" if mine in names(store) else 'under no profile'
+    return (f"CONNECTED UNDER HIS OTHER PROFILES (this task is {here}; a call on one of these runs nothing and raises the card that moves this "
+            f"task to that profile): " + '; '.join(f"{n} - {', '.join(xs)}" for n, xs in by.items()))
+
+
 def own_mailbox(store, tid) -> str | None:
     "The first mailbox tagged to the task's own profile - where its mail leaves from when it came in on none it may use."
     from .outbound import mailboxes

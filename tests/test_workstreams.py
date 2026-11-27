@@ -285,15 +285,57 @@ def test_an_agent_is_told_only_its_own_profiles_accounts(two):
     f = Factory(two)
     nw, hb = f.task(title='Northwind close'), f.task(title='Bakery rota')
     W.set_task(two, nw, 'northwind', 'owner'); W.set_task(two, hb, 'harbor-bakery', 'owner')
+    OTHER = 'CONNECTED UNDER HIS OTHER PROFILES'
+    usable = lambda t: t.split(OTHER)[0]                                               # ...what it may use: everything above that one line
     mine, theirs, his = docsync.agent_systems(two, tid=nw), docsync.agent_systems(two, tid=hb), docsync.agent_systems(two)
-    assert 'Northwind mail' in mine and NW_BOX in mine and SHARED in mine and HB_BOX not in mine
-    assert 'Northwind mail' not in theirs and NW_BOX not in theirs and HB_BOX in theirs and SHARED in theirs
-    assert NW_BOX in his and HB_BOX in his                                             # a reader with no task (his own page) sees all of it
+    assert 'Northwind mail' in usable(mine) and NW_BOX in usable(mine) and SHARED in usable(mine) and HB_BOX not in usable(mine)
+    assert 'Northwind mail' not in usable(theirs) and NW_BOX not in usable(theirs) and HB_BOX in usable(theirs) and SHARED in usable(theirs)
+    assert NW_BOX in his and HB_BOX in his and OTHER not in his                        # a reader with no task (his own page) sees all of it
     said = agenttools.call(two, hb, 'list_systems', {}, {})
-    assert NW_BOX not in said and 'Northwind mail' not in said and HB_BOX in said     # ...through the tool the agent asks with
-    assert not agenttools.found('northwind', {'list_systems': 'what is connected', 'tick': 'tick a box'}, two, hb)       # ...and its tool search
+    assert NW_BOX not in usable(said) and 'Northwind mail' not in usable(said) and HB_BOX in usable(said)     # ...through the tool the agent asks with
     W.remove(two, 'harbor-bakery')
-    assert NW_BOX in docsync.agent_systems(two, tid=hb)                                # one profile: every account is its own, as before
+    assert NW_BOX in docsync.agent_systems(two, tid=hb) and OTHER not in docsync.agent_systems(two, tid=hb)   # one profile: every account is its own, as before
+
+
+def test_the_wall_says_what_is_connected_under_the_other_profile_and_nothing_of_what_it_holds(two):
+    """Walk 26, the real Codex CLI on a Harbor task asked to answer from his Northwind address: told Harbor's accounts alone, it said "Taskuary
+    has only your Harbor mailbox connected. Can you connect alex@northwind.example?" - a mailbox that was connected, under his other profile.
+    The wall hides what an account holds, never that it is there: the other profile's accounts are named beside the list, with what a call
+    on one comes to."""
+    from taskuary import agenttools, docsync
+    f, hb, nw, mine, theirs = _both(two)
+    said = agenttools.call(two, hb, 'list_systems', {}, {})
+    line = next(l for l in said.splitlines() if l.startswith('CONNECTED UNDER HIS OTHER PROFILES'))
+    assert 'this task is under Harbor Bakery' in line and f'Northwind - {NW_BOX}' in line and 'Northwind mail' in line and 'moves this task to that profile' in line
+    assert HB_BOX not in line and SHARED not in line and 'Payroll invoice' not in said and GAIL not in said      # its own and the shared are no other's; no mail of theirs
+    assert f'Harbor Bakery - {HB_BOX}' in next(l for l in docsync.agent_systems(two, tid=nw).splitlines() if l.startswith('CONNECTED UNDER'))
+    free = f.task(title='Payroll form for the accountant')                             # under no profile: both are another's, and it is told so
+    assert 'this task is under no profile' in docsync.agent_systems(two, tid=free) and NW_BOX in docsync.agent_systems(two, tid=free)
+    assert agenttools.found('northwind', {'list_systems': 'what is connected', 'tick': 'tick a box'}, two, hb)   # ...and a search for it finds where it is
+
+
+def test_an_agents_memory_lookup_reads_no_other_profiles_people(two):
+    """Walk 26: `owner_memory` on a Harbor task listed Northwind's people - every address on record, whatever was asked about. A person all of
+    whose mail is in another profile's accounts is that profile's (the one wall); a lookup that names nobody answers with nobody's addresses."""
+    from taskuary import agenttools, ledger, memory
+    f, hb, nw, mine, theirs = _both(two)
+    for who in (GAIL, PAULA): ledger.write(two, 'address', who, '', 'mailed', f'rv-{who}')
+    memory.remember(two, 'Gail signs off payroll before it runs.', subject='payroll sign-off', about=GAIL)
+    memory.remember(two, 'Paula delivers flour on Tuesdays.', subject='flour delivery', about=PAULA)
+    memory.remember(two, 'Never write before 8 am.', subject='hours')
+    his, harbor, northwind = memory.lookup(two), agenttools.call(two, hb, 'owner_memory', {}, {}), agenttools.call(two, nw, 'owner_memory', {}, {})
+    assert GAIL in his and PAULA in his and 'payroll' in his and 'flour' in his        # his own read, and the Assistant's: all of it
+    assert GAIL not in harbor and 'payroll' not in harbor and PAULA in harbor and 'Paula delivers flour' in harbor and 'Never write before 8 am' in harbor
+    assert PAULA not in northwind and 'flour' not in northwind and GAIL in northwind and 'Gail signs off payroll' in northwind and 'Never write before 8 am' in northwind
+    # ...asked about a subject, which names no one, it lists nobody's addresses (it listed every one on record)
+    about = agenttools.call(two, hb, 'owner_memory', {'about': 'Harbor Bakery flour order holiday'}, {})
+    assert GAIL not in about and PAULA not in about and 'holds nothing about' in about
+    # ...and asked about someone of the other profile it says where they are known from, never "nothing"
+    gail = agenttools.call(two, hb, 'owner_memory', {'about': GAIL}, {})
+    assert 'another of his profiles' in gail and 'payroll' not in gail
+    assert 'Paula delivers flour' in agenttools.call(two, hb, 'owner_memory', {'about': PAULA}, {})
+    W.remove(two, 'harbor-bakery')                                                      # one profile: as before
+    assert GAIL in agenttools.call(two, hb, 'owner_memory', {}, {}) and 'Gail signs off payroll' in agenttools.call(two, hb, 'owner_memory', {'about': GAIL}, {})
 
 
 def test_a_reply_from_another_profiles_mailbox_is_the_same_move_card_never_an_ok_with_the_from_dropped(two):

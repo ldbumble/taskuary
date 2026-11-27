@@ -941,6 +941,29 @@ class NewTaskTool(unittest.TestCase):
         said, err = tool(self.tid, 'propose', action='settings', why='x', changes=['poll_minutes'])
         self.assertTrue(err); self.assertIn('"name"', said)
 
+    def test_a_picture_on_another_tasks_line_is_handed_over_as_a_file_of_this_task(self):
+        """Walk 26, the HIPAA AI card: a colleague's picture came with no words and was put on another task; her words a minute later opened
+        this one. Its agent found the picture's line, read_attachment answered ".png files are not read", a shell read of the folder it is
+        kept in was refused as Taskuary's own data, and it asked the owner what the picture showed. A file with no text is handed over as
+        the file - in this task's own folder, where the agent's own eyes and its cards' `attach` reach it."""
+        from taskuary import origin, outputs
+        d = config.home() / 'attachments' / 'toolbox'; d.mkdir(parents=True, exist_ok=True)
+        png = b'\x89PNG\r\n\x1a\n' + b'menu board' * 20
+        (d / 'menu-board.png').write_bytes(png)
+        other = self.s.create_task({'Title': 'Harbor Bakery website', 'Kind': 'general', 'Status': 'open'}, 'owner')
+        mid = self.s.add_message({'TaskId': other, 'ExternalId': 'burst-1', 'ConversationId': 'teams:burst', 'Channel': 'teams', 'FromName': 'Gail Moreno',
+                                  'FromEmail': 'gail@northwind.example', 'Subject': 'Teams chat with Gail Moreno', 'BodyText': '',
+                                  'SentAt': '2026-10-21 08:00:00', 'Status': 'filed'})
+        aid = self.s.add_attachment({'MessageId': mid, 'ExternalId': 'burst-1:p', 'Name': 'menu-board.png', 'ContentType': 'image/png',
+                                     'Size': len(png), 'Path': str(d / 'menu-board.png')})
+        with mock.patch.object(origin, 'of_message', return_value=('person', None)), mock.patch.object(origin, 'of_task', return_value=('person', None)):
+            said, err = tool(self.tid, 'read_attachment', id=aid)
+        self.assertFalse(err, said)
+        mine = outputs.folder(self.tid) / 'menu-board.png'
+        self.assertTrue(mine.is_file()); self.assertEqual(mine.read_bytes(), png)
+        self.assertIn(str(mine), said); self.assertIn("among this task's files now", said)
+        self.assertNotIn(str(d), said)                                # ...never the folder Taskuary keeps mail's files in, which no agent may read
+
     def test_an_attachment_that_was_never_kept_is_a_failure_with_its_way_past_it(self):
         "read_attachment answered \"not kept here - open the original message\" as if it were the file's text - to an agent that has no mailbox to open."
         mid = self.s.add_message({'TaskId': self.tid, 'ExternalId': 'r9', 'ConversationId': 'conv-r', 'Channel': 'email', 'FromName': 'Gail Moreno',

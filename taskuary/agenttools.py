@@ -310,7 +310,7 @@ TOOLS = {
                            "every_minutes? - none: on demand} (a script you wrote for a job that will come again, kept as a routine), change_routine "
                            "{routine?: the title of the routine, report or dashboard to change (none: the routine this task is a run of), "
                            "prompt?: its instructions or question whole, or flow?: a routine's steps whole, goal?, done_when?, skill?: the "
-                           "skill of his it uses, browser?: true | false, daily_at | cron | every_minutes?, title?} (one of Taskuary's own "
+                           "skill of his it uses, browser?: true | false, daily_at | cron | every_minutes?, rename?: its new name} (one of Taskuary's own "
                            "setups changed: a routine holds what to do, when, with which connections, and the skill it uses - the routines "
                            "tool reads one as it is saved; the card shows each field that changes and the routine as the press leaves it).\n"
                            "`attach`: files that go with it. `why`: one line on why. `replaces`: the review id (or recipient) of an unsent "
@@ -777,7 +777,13 @@ def _call(store, tid: int, name: str, args: dict, doors: dict, skip=()) -> str:
         p = Path(x['Path']) if x.get('Path') else None
         if not p or not p.is_file(): raise ValueError(not_kept(x.get('Name')))
         got = attachtext.read(x.get('Name'), p.read_bytes())
-        if not got.get('text'): return _out(got.get('note') or '(no text in it)')
+        # ...A FILE WITH NO TEXT TO READ IS HANDED OVER AS THE FILE (walk 26, 2026-11-27: a colleague's picture sat on another task's line;
+        # the agent found it, was answered ".png files are not read", was refused the folder it is kept in, and asked the owner what the
+        # picture showed): taken into this task's files by the road his own attachments come in by (outputs.take_in), and said where it is
+        if not got.get('text'):
+            from . import outputs
+            kept = outputs.take_in(tid, [str(p)])
+            return _out((got.get('note') or '(no text in it)') + (f" - the file itself is among this task's files now: {kept[0]}" if kept else ''))
         part, more = _part(got['text'], a.get('start'), CAP - 400, int(got.get('chars') or 0), 'read_attachment')
         return _out(part, fence_it=True) + (f'\n{more}' if more else '')
     if name == 'my_task':

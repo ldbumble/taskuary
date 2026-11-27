@@ -382,8 +382,10 @@ def _ledger(store, people) -> list:
     try:
         for r in ledger.rows(store, kind='address', limit=400):
             subj, val = str(r.get('Subject') or '').lower(), str(r.get('Value') or '')
-            if who and not (subj in who or val.lower() in who): continue
-            if (t := ledger.said(r)) not in {o['text'] for o in out}: out.append({'who': r.get('Subject') or val, 'text': t, 'source': 'ledger'})
+            # ...NOBODY ASKED ABOUT IS NOBODY'S ADDRESSES (walk 26, 2026-11-27: a lookup about a subject, which names no one, answered with
+            # every address on record): None is everyone, an empty set is no one
+            if people is not None and not (subj in who or val.lower() in who): continue
+            if (t := ledger.said(r)) not in {o['text'] for o in out}: out.append({'who': r.get('Subject') or val, 'address': next((x for x in (subj, val) if '@' in x), ''), 'text': t, 'source': 'ledger'})
     except Exception as e: logger.debug(f'memory: the ledger was not read - {e}')
     return out[:20]
 
@@ -391,9 +393,22 @@ def _ledger(store, people) -> list:
 PROMISE_DAYS, PROMISE_GRACE = 30, 14
 
 
-def facts(store, people=None) -> list:
+def _seen(store, tid):
+    "Whether a person is shown to the agent on task `tid` (workstreams.knows, asked once per address) - everyone, with no task."
+    from . import workstreams
+    got = {}
+    def ok(e):
+        e = str(e or '').lower()
+        if e not in got: got[e] = workstreams.knows(store, tid, e)
+        return got[e]
+    return ok if tid else lambda e: True
+
+
+def facts(store, people=None, tid=None) -> list:
     """[{who, text, source}] - what is simply so about these people (None: everyone): their place on his org chart, the promises his own
-    sent mail made them and has not kept yet, a sender his rule skips, and what the ledger knows. Read live, never copied."""
+    sent mail made them and has not kept yet, a sender his rule skips, and what the ledger knows. Read live, never copied. `tid`: as the
+    agent on that task is shown them - never the people of another profile (workstreams.knows)."""
+    if tid: seen = _seen(store, tid); return [f for f in facts(store, people) if seen(f.get('address') or f['who'])]
     want = None if people is None else {str(p).lower() for p in people if p}
     hit = lambda e: want is None or str(e or '').lower() in want
     out = []
@@ -439,9 +454,10 @@ def said_line(r, subject: bool = False) -> str:
     return f"- {r['Text']}{_about_suffix(r)}" + (f" [subject: {r['Subject']}]" if subject and r['Kind'] == SAID else '')
 
 
+def _elsewhere(r, ws: str) -> bool: return bool(r['Kind'] == INFERRED and ws and r.get('Workstream') and r['Workstream'] != ws)
 def _bears(r, who: set, doms: set, ws: str) -> bool:
     "A line about nobody is everyone's; one about people, theirs; one learned under another workstream, not this task's."
-    if r['Kind'] == INFERRED and ws and r.get('Workstream') and r['Workstream'] != ws: return False
+    if _elsewhere(r, ws): return False
     if r.get('Scope') == 'sender_domain': return str(r.get('ScopeKey') or '').lower() in doms
     if r.get('Scope') in ('subject', 'source'): return False
     return not r['people'] or bool(set(r['people']) & who)
@@ -490,13 +506,20 @@ def for_task(store, people=(), workstream: str = '', target: str = '', topic: st
     return '\n\n'.join(f'{h}\n' + '\n'.join(ls) for h, ls in parts if ls)
 
 
-def whole(store, reader: str = 'triage', target: str = '', cap: int = WHOLE_CAP, people: bool = True, subject: bool = False) -> str:
+def whole(store, reader: str = 'triage', target: str = '', cap: int = WHOLE_CAP, people: bool = True, subject: bool = False, tid=None) -> str:
     """Everything in use, in the order it was kept - for a reader that decides on all of it (triage, the routing judge, the Assistant).
     Lines about one sender or topic come too: triage weighs them for mail about that. Past `cap` the learned lines about one sender or topic
     go first, oldest first, said in the log; what he said is never left out, and a line his presses made is the last to go. The same bytes for every mail while nothing changes.
-    `people` False leaves out every line about someone (an evaluation's arm); `subject` names the subject of each line he said."""
+    `people` False leaves out every line about someone (an evaluation's arm); `subject` names the subject of each line he said.
+    `tid`: read by the agent on that task - a line learned under another profile, or about people of another profile alone, is not its
+    to read, nor are their facts (walk 26, 2026-11-27: Harbor's agent looked up the memory and read Northwind's people)"""
     rs = [r for r in in_use(store) if people or not (r['people'] or r.get('Scope') == 'sender')]
-    fs = [f"- {f['text']}" for f in facts(store)] if people else []
+    if tid:
+        from . import workstreams
+        ws, seen = workstreams.of_task(store, int(tid)) if workstreams.shown(store) else '', _seen(store, tid)
+        mail = lambda r: [p for p in [*r['people'], *([r.get('ScopeKey')] if r.get('Scope') == 'sender' else [])] if '@' in str(p or '')]
+        rs = [r for r in rs if not _elsewhere(r, ws) and (not mail(r) or any(seen(p) for p in mail(r)))]
+    fs = [f"- {f['text']}" for f in facts(store, tid=tid)] if people else []
     used = sum(len(said_line(r)) + 1 for r in rs if r['Kind'] == SAID) + sum(len(l) + 1 for l in fs)
     scoped = lambda r: r['Kind'] == INFERRED and r.get('Scope') != 'global'
     keep, over = set(), 0
@@ -546,13 +569,17 @@ def about(store, who: str) -> dict:
 def lookup(store, who: str = '', target: str = '') -> str:
     """The agent's lookup: what the memory holds about one person (`who`), else every line in use - what he said first, then the facts,
     then what was learned that his acts bore out; and how many learned lines are still being seen, never their text."""
+    tid = int(str(target)[5:]) if str(target).startswith('task:') and str(target)[5:].isdigit() else None
     if str(who or '').strip():
         a = about(store, who)
+        # ...and someone of another profile is said to be so, never read out and never "nothing" (the wall hides what an account holds, not that it is there)
+        seen, known = _seen(store, tid), {n for n in a['names'] if '@' in n}
+        if known and not any(seen(n) for n in known): return f"{who} is known from mail in an account of another of his profiles - what is kept about them is not read from this task"
         out = [f"{l['text']}" + (f" [subject: {l['subject']}]" if l['own'] else '') for l in a['lines'] if l['status'] == 'in use']
-        fs = [f['text'] for f in facts(store, {n for n in a['names'] if '@' in n})]
+        fs = [f['text'] for f in facts(store, known, tid)]
         if not (out or fs or a['relation']): return f'the memory holds nothing about {who}'
         return '\n'.join([f"ABOUT {who}" + (f" - the org chart: {a['relation']}" if a['relation'] else '')] + [f'- {x}' for x in out + fs])
-    text = whole(store, 'agents', target, subject=True)
+    text = whole(store, 'agents', target, subject=True, tid=tid)
     wait = sum(1 for r in rows(store, INFERRED) if not r['Confirmed'])
     return (text or 'nothing kept about the owner yet') + (f'\n\n({wait} learned line(s) are still being learned, not used yet.)' if wait else '')
 

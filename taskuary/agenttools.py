@@ -291,9 +291,10 @@ TOOLS = {
                            "`from` a connected mailbox (list_systems names them) - else the one this task's mail came in on; `slot` the id "
                            "of the checklist line it is (\"-> email to ..., slot <id>\"), \"new\" for a second, separate email to someone "
                            "you already wrote to this turn; `guessed` any address on it you guessed - the card says so.\n"
-                           "- post: `network` (" + ', '.join(NETWORKS) + "), `text`, `media` a picture or video file in your task folder, `link`, and on "
-                           "Reddit `subreddit` and `title`. One card per network; on the press it goes up through the network's connection, "
-                           "else in the browser with the final Post waiting for his press.\n"
+                           "- post: `networks`, every network it goes to (" + ', '.join(NETWORKS) + "), each {network} or with its own "
+                           "`text`, `media`, `subreddit`, `title` (Reddit's); beside them `text`, `media` a picture or video file in your task folder, `link` - for "
+                           "each network that gives none. ONE card, a tab per network, each pressed by itself; "
+                           "on the press it goes up through the network's connection, else in the browser with the final Post waiting for his press.\n"
                            "- skill: `name`, `text` the SKILL.md whole - frontmatter `name` and `description` (what the job is and when to use "
                            "it), then how the job is done well: its style, its steps, what good looks like. A skill holds how; a routine "
                            "that uses it holds what and when. With the `name` of a skill he has (the skills tool lists them) the card is "
@@ -318,7 +319,7 @@ TOOLS = {
                 {'type': 'object', 'properties': {'kind': {'type': 'string', 'enum': list(KINDS)}, 'text': _STR, 'to': _STR, 'subject': _STR,
                                                   'cc': {'type': 'array', 'items': _STR}, 'answers': _INT, 'only': {'type': 'boolean'}, 'why_to': _STR,
                                                   'from': _STR, 'slot': _STR, 'guessed': {'type': 'array', 'items': _STR},
-                                                  'network': {'type': 'string', 'enum': list(NETWORKS)}, 'media': _STR, 'link': _STR, 'subreddit': _STR,
+                                                  'networks': {'type': 'array', 'items': {'type': 'object', 'properties': {'network': {'type': 'string', 'enum': list(NETWORKS)}}}}, 'media': _STR, 'link': _STR,
                                                   'title': _STR, 'name': _STR, 'action': _STR, 'attach': _ATTACH, 'why': _STR, 'replaces': _STR},
                  'additionalProperties': True}, ('POST', '/api/agent/propose')),
     # ...and EVERY TOOL'S FULL INSTRUCTIONS, ON ASK (the owner, 2026-11-15: "MCP-style tools with simple JSON ... All methods can be searched
@@ -405,9 +406,9 @@ SHORT = {
     'answer_invite': "Answer this task's meeting invite: accept, decline or propose.",
     'set_up_meeting': "Set up a meeting for the owner's press.",
     'share': "Share a report or dashboard of the owner's with a person.",
-    'propose': "Anything for the owner's press - a reply, an email, a post, GitHub/Jira/Monday comment or issue, PR, push, order on a system, "
-               "script for save_routine: one card in this chat, the draft itself, his to edit; nothing done before his press. "
-               "`kind` (an act names its `action`); several of one act in `items`; `then` your step after his press.",
+    'propose': "One card for the owner's press: a reply, an email, a post to its `networks` (a tab each), GitHub/Jira issue, "
+               "comment, PR, push, order on a system, script for save_routine - the draft itself, his to edit; nothing done till his press. "
+               "`kind` (an act names its `action`); many of one act: `items`; `then` your step after his press.",
     'find_tools': "A tool's instructions by name, or tools by need.",
 }
 def lean(s):
@@ -571,8 +572,24 @@ def _failed_now(store, tid: int) -> str:
     return got[1] if got and got[0] >= _turn_began(store, tid) else ''
 
 
+# A POST IS ONE THING THAT GOES TO ONE OR MORE NETWORKS (the owner, 2026-11-27: "if it's one thing 3 times on different systems they should be
+# in one card where you can switch between them" - a routine's post for LinkedIn, X and Reddit stood as three cards, as `network` took one):
+# `networks` is the post's set, each entry a name or its own {network, text, media ...} over what stands beside it - ONE call, so ONE card
+# with a tab per network (_many, cardqueue.is_set), each tab its own card with its own press. One network is a list of one, and `network` (one) goes as it did
+def _networks(a: dict) -> dict:
+    ns = a['networks']
+    es = [x if isinstance(x, dict) else {'network': x} for x in (ns if isinstance(ns, list) else [ns])]
+    if not all(str(e.get('network') or '').strip() for e in es):
+        raise ValueError(refusal('a post names no network', f"give `networks`: each a name ({', '.join(NETWORKS)}) or {{network, its own text ...}}"))
+    if a.get('items') is not None: raise ValueError(refusal('a post takes its networks in `networks`, not `items`', 'give each network as an entry of `networks`'))
+    keep = {k: a[k] for k in ('kind', 'then', 'todo', 'replaces') if k in a}
+    shared = {k: v for k, v in a.items() if k not in (*keep, 'networks', 'network')}
+    return {**keep, 'kind': 'post', 'items': [{**shared, **e} for e in es]}
+
+
 def _card_call(store, tid: int, name: str, args: dict, doors: dict, skip=()) -> str:
     args = _arguments(args)
+    if name == 'propose' and args.get('networks') not in (None, '', []) and str(args.get('kind') or 'post').strip().lower() == 'post': args = _networks(args)
     # ...WHAT STANDS BESIDE `items` IS SHARED BY EVERY ITEM - never one more of them (walk 23, 2026-11-25: one version beside `items`, the other
     # inside it; the one beside them went nowhere, one card stood with one version and the agent said "both")
     if TOOLS[name][0] == 'propose' and isinstance((args or {}).get('items'), list) and (its := [x for x in args['items'] if isinstance(x, dict)]) \
@@ -647,13 +664,15 @@ def _many(store, tid: int, name: str, args: dict, doors: dict) -> str:
     key, top = bulkcard.new_key(), (store._one('SELECT MAX(ReviewId) AS m FROM review') or {}).get('m') or 0
     refused, went, held, mine, says, words = [], [], [], [], [], {}
     for i, it in enumerate(items):
+        # ...each named as the agent gave it: a post's network by its name ("x: ..."), never "item 2" of a list it never wrote
+        tag = str(it["network"]) if base.get('kind') == 'post' and it.get('network') else f'item {i + 1}'
         try: out = _call(store, tid, name, {**base, **it}, doors)
-        except Exception as e: refused.append(f'item {i + 1}: {failed(name, e)}'); continue
+        except Exception as e: refused.append(f'{tag}: {failed(name, e)}'); continue
         # ...a door that answers {ok: false, why} filed nothing either: the item was dropped unsaid, and an all-refused run read "ONE card"
         try: got = out if isinstance(out, dict) else json.loads(out.body if hasattr(out, 'body') else out)
         except (TypeError, ValueError): got = None
         if isinstance(got, dict) and got.get('ok') is False:
-            refused.append(f"item {i + 1}: {got.get('why') or got.get('says') or 'refused, with no reason given'}"); continue
+            refused.append(f"{tag}: {got.get('why') or got.get('says') or 'refused, with no reason given'}"); continue
         # ...A ROUTINE'S OWN EMAIL WENT AS IT WAS FILED (slots.routine_sends): counted as sent, and one that did not go said with why - never
         # "they stand as ONE card" over emails that already left
         who = str({**base, **it}.get('to') or 'them')
@@ -695,7 +714,8 @@ def _many(store, tid: int, name: str, args: dict, doors: dict) -> str:
     n = len(stand)
     card = (f"They stand as ONE card holding {len(next(iter(picks.values())))} versions: the owner picks one, changes it if he likes, and sends that one." if picks and n == 1
             else 'They stand as ONE card: the owner does them all with one press; you hear the whole run once.' if bulk
-            else f'ONE card stands of the {len(items)} items given: each wrote that same card, and its words are those of the last item.' if n == 1 and len(items) > 1
+            else f'ONE card stands of the {k} items given: each wrote that same card, and its words are those of the last item.' if n == 1 and (k := len(items) - len(refused)) > 1
+            else 'It stands as one card; the rest were refused.' if n == 1
             else f'They stand as one card with a tab each, {n} of them: the owner sees and presses each, in any order; you hear how they went once the last is answered, or at once if a press fails.')
     shown = ((f"{len(went)} of {len(items)} sent at once - a routine's email to what its owner saved into it goes without a press."
               + (f" Not sent: {'; '.join(held)}." if held else '') + (f" The {n} unsent stand for the owner's Send{' as ONE card' if bulk else ', one at a time'}." if n else '')) if went
@@ -1037,7 +1057,7 @@ def _review(store, tid: int, a: dict, doors: dict) -> str:
         out = whyd(store, out, a)
         return _j(card_roads(store, said_once(replaced(store, doors, tid, was, out, a.get('replaces'), f"the email to {a.get('to') or 'someone else'} takes its place")), {}))
     if k == 'post' and not post_type(a.get('network')):
-        raise ValueError(refusal(f"there is no post card for {echo(a.get('network'))!r}", f"call propose with `network` one of {', '.join(NETWORKS)}; "
+        raise ValueError(refusal(f"there is no post card for {echo(a.get('network'))!r}", f"give `networks` from {', '.join(NETWORKS)}; "
                                  "anywhere else, put it up in your browser - its final Post waits for his press"))
     if k == 'act' and not str(a.get('action') or '').strip(): raise ValueError(refusal('an act needs its `action`', 'call propose again with `action` and its fields'))
     rest = {x: v for x, v in a.items() if x not in ('replaces', 'kind')}

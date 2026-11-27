@@ -2,6 +2,23 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.4.6.6 - 2026-11-26
+
+- Lock the owner's rule 11: his edit is what goes, on every card - its tests join the contract (his written OK, 2026-11-26)
+- A step handed over on one tab of a set is that tab's next press
+- The profile wall is in what an agent is told, a reply's From is checked as an email's, and the move card wakes its agent
+- A connection card's Profile picker shows his pick at once
+- A program a line finds as it runs is its program, not a file it reads; a path nobody could read is held as that
+- A step handed to him is read with what he asked, and the press a gate refused is never his step
+- A post's picture or video is given as media; the names it had are still taken
+- Add a profile: one put by comes back by name, Enter then blur is one add, and setup's list refreshes the pickers
+- Each tab of a set is told by what came of it, never by its first row's fate
+- A card his line greyed is told to the turn that line begins
+- A step he dismisses stays one card, and the task is not done over the work it stopped
+- An empty reply box in front is never told as waiting for his press
+- A service a card could not read says what failed, never Python's own error
+- No card for a post with no words or a pull request to a repository nobody checked
+
 ## 0.4.6.5 - 2026-11-26
 
 - A change card is the document being changed, with the edits marked; a skill is changed by its name

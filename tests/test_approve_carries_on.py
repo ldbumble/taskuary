@@ -945,7 +945,7 @@ class TheChatMovedOn(unittest.TestCase):
         """Recorded on the real CLI, 2026-11-16: Push was refused, the agent set the push up again, and it went behind the email announcing it
         - which then stood first; the agent took the email back and wrote it again. A card asked again while it still stands keeps its place."""
         from taskuary import conversation
-        ask = {'ask': True, 'own': False, 'branch': 'master', 'answers': [{'how': 'push'}], 'line': '1 commit on master not on origin yet'}
+        ask = {'owed': True, 'ask': True, 'own': False, 'branch': 'master', 'answers': [{'how': 'push'}], 'line': '1 commit on master not on origin yet'}
         landing._save(self.s, self.tid, {'start': 'abc', 'cwd': HELD, 'base': 'master', 'proposal': {'how': 'push', 'why': 'ship it', 'at': '2026-11-16 09:00:00'}})
         note = self.s.add_review({'TaskId': self.tid, 'Kind': 'slot', 'Status': 'pending', 'DraftText': 'Erin - the fix is live.', 'Reason': 'assistant wrote this email - approve to send',
                                   'Deliver': json.dumps({'channel': 'email', 'to': ['erin@northwind.example'], 'cc': [], 'subject': 'Fix', 'slot': 'erin'})})

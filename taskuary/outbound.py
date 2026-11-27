@@ -616,8 +616,14 @@ def mailboxes(store, tid=None) -> list:
     """The mailboxes a new email can be sent FROM: each active email source, then any mail card's own address - one row per
     address, the connector that sends as it beside it (the owner, 2026-10-09: "add from mailbox picker"). `tid`: only those the
     agent on that task may use - its profile's and the untagged ones (workstreams.may_use)."""
+    from .readonce import kept
+    from .workstreams import wall
+    out = [dict(m) for m in kept(('mailboxes', id(store)), lambda: _mailboxes(store))]
+    return [m for m in out if ok(m['address'])] if tid and (ok := wall(store, tid)) else out
+
+
+def _mailboxes(store) -> list:
     from .channels import _cfg
-    from .workstreams import may_use
     out, seen = [], set()
     cards = {c['ConnectorId']: c for c in store.list_connectors() if c['Active'] and c['Type'] in MAILBOXES}
     def add(address, cid):
@@ -627,7 +633,7 @@ def mailboxes(store, tid=None) -> list:
     for s_ in store.list_sources():
         if s_.get('Channel') == 'email': add(s_.get('Address'), s_.get('ConnectorId'))
     for cid, c in cards.items(): add(_cfg(c).get('address') or _cfg(c).get('account'), cid)
-    return [m for m in out if may_use(store, tid, m['address'])] if tid else out
+    return out
 
 
 def _box(store, mailbox): return next((m for m in mailboxes(store) if m['address'].lower() == str(mailbox or '').strip().lower()), None) if mailbox else None
@@ -764,7 +770,10 @@ def leaves_from(store, rv: dict) -> str | None:
 
 def no_from(store, rv: dict) -> dict | None:
     """A letter whose task's profile has NO MAILBOX to leave from, as its card says it before any press - {says, label, href, waits}, the
-    send's own refusal and its fix (review_connect) - else None. It is never sent from another profile's."""
+    send's own refusal and its fix (review_connect) - else None. It is never sent from another profile's.
+    Only a task with no mailbox it may use can be refused (new_from), so any other is answered by that one read - the rail asks this of
+    every waiting card on every build, and the whole road read the task's every message for it."""
+    if not (tid := (rv or {}).get('TaskId')) or mailboxes(store, tid): return None
     try: _from(store, rv)
     except Fixable as e: return {'says': str(e)[:1].upper() + str(e)[1:], **e.fix, 'waits': 'the draft waits here until it can'}
     return None

@@ -239,3 +239,22 @@ def test_a_walk_move_rebuilds_the_rail_without_a_read_per_row(restarted, monkeyp
     # card's own channel checks (outbound.connect_fix, send_probe) read them a few times a card, as 0.4.6.5 did
     assert cards < rows / 5, f'the connection cards read {cards} times for {rows} rows'
 
+
+def test_a_waiting_letter_asks_the_wall_without_reading_its_thread(restarted, monkeypatch):
+    """The rail asks each waiting letter whether its task has a mailbox to leave from (outbound.no_from, read for its Connect), on every
+    rebuild. A task that may use one cannot be refused, and that is one read; on 0.4.6.11 the whole road ran for it - the task's every message
+    read for the mailbox its mail came in on, and the wall asked of every mailbox three times over."""
+    import json, re
+    from taskuary import outbound, workstreams as W
+    s, tids = restarted
+    _two_profiles(s)
+    tid = next(t for t in tids if s.get_task(t)['Status'] == 'open')
+    W.set_task(s, tid, 'northwind', 'fixture')
+    rid = s.add_review({'TaskId': tid, 'Status': 'pending', 'Kind': 'draft', 'Reason': 'a new letter', 'DraftText': 'The figures, as promised.',
+                        'Deliver': json.dumps({'channel': 'email', 'to': ['erin@vendor.example'], 'subject': 'Figures'})})
+    rv = s.get_review(rid)
+    reads = _traced(s, monkeypatch)
+    assert outbound.no_from(s, rv) is None and outbound.leaves_from(s, rv) == 'alex@northwind.example'
+    reads.clear()
+    assert outbound.no_from(s, rv) is None
+    assert not [q for q in reads if re.search(r'FROM message\b', q)], 'the letter read its thread to say it has a mailbox'

@@ -55,7 +55,7 @@ FIELDS = {
     'open_work': ("open_work is the OPEN tasks this message touches, each with its tid and what it waits on now (waits_on); in_another_chat "
                   "is true on one whose lines sit in a different chat or group than this chat line."),
     'open_items': ("open_items is the owner's other open tasks and Watching items, newest first, one line each: its ref and (tid), title, "
-                   "what it asks, what it waits on now (a person's answer, the reply it sent, its agent's question), where it came from, "
+                   "what it asks, the agent on it now (working, or waiting for its next turn), what it waits on now (a person's answer, the reply it sent, its agent's question), where it came from, "
                    "whether it is watched, and its age. Nothing ties them to this message by thread, sender or number - most are unrelated; for a chat line, none of them is this chat's (those are room_tasks). When this message is "
                    "about the same matter as one of them, whoever wrote it and on whatever channel or thread, answer same_as with that tid."),
     'found_by_search': ("found_by_search is what the owner's own task search finds for this message's subject and words, open or closed, "
@@ -911,7 +911,8 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                                    'recipients': len(msg.get('to') or []) + len(msg.get('cc') or [])} if how else {}),
                                **(thread or {}),
                                **({'routing_history': routing_history} if routing_history else {}),
-                               **({'same_day_lines': [{k: c.get(k) for k in ('id', 'who', 'when', 'text', 'task_id')} for c in candidates]}
+                               **({'same_day_lines': [{k: c.get(k) for k in ('id', 'who', 'when', 'text', 'task_id')} | ({'files': c['files']} if c.get('files') else {})
+                                                      for c in candidates]}
                                   if candidates is not None else {}),
                                # what this install can reach (B25, 2026-10-29)
                                **({'connected_systems': list(connected)} if connected is not None else {}),

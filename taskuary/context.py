@@ -473,9 +473,18 @@ def open_items(store, skip=(), limit: int = OPEN_ITEMS) -> list:
     for t in store.tasks_open_brief(limit + len(skip)):
         if t['TaskId'] in skip: continue
         src = 'yours' if _own(t) else ', '.join(x for x in (channel_name(t.get('Channel') or t.get('Source')), _short(t.get('FromName'), 30)) if x)
-        out.append(_item(t, src, 'watching' if t.get('WatchedAt') else '', waits=_stands(store, t)))
+        out.append(_item(t, src, 'watching' if t.get('WatchedAt') else '', waits=' · '.join(x for x in (_agent(store, t), _stands(store, t)) if x)))
         if len(out) >= limit: break
     return out
+
+
+def _agent(store, t: dict) -> str:
+    """The agent on an open task now, in a few words - working, or waiting for its next turn (ingest.agent_on, the fact a task the message
+    touches carries as `agent_on_it`). Walk 25, 2026-11-26: a colleague's line about another matter joined the owner's own task an agent was
+    working - its line here said nothing of an agent, so nothing told that work from a new ask. '' when none is on it."""
+    from .ingest import agent_on
+    ag = agent_on(store, t['TaskId'])
+    return f"an agent is on it: {ag.get('state') or 'working'}" if ag else ''
 
 
 def _stands(store, t: dict) -> str:

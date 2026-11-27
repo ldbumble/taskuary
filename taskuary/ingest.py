@@ -1338,13 +1338,7 @@ def _ingest(store, msg: dict, actor: str, llm, file_only: bool) -> dict:
                     f"{task_ref(h)} ({(store.get_task(h) or {}).get('Title') or ''})" for h in covered) + f" already hold{'s' if len(covered) == 1 else ''} - that part stays there; this task is for the rest.")
             # the same-day lines this one continues or answers that had no task yet join the task it opens:
             # the fyi that opened a subject belongs with the ask that followed it (PW-031)
-            for rel_mid in (intent.get('related_message_ids') or []):
-                prior = store.get_message(rel_mid) or {}
-                # ...never one still WAITING for triage, or whose triage failed: attaching set it 'routed', and a row that
-                # was never judged left the queue and the retry sweep for good (L1, 2026-09-25 - always triage it)
-                if (prior and prior.get('TaskId') is None
-                        and prior.get('Status') not in ('context', 'skipped', 'triaging', 'error')):
-                    store.arrive(rel_mid, tid, 'routed')
+            bring_along(store, tid, intent)
             # the agents actually pick work up here:
             # - reply tasks ALWAYS enter the review queue ("needs me") - for everyone, there is no setting for it (S1, 2026-09-25) -
             #   and the reply is the task's agent's to write, started here as for any work (reply_to_agent)
@@ -1851,7 +1845,8 @@ def land_on(store, msg: dict, tid: int, v: dict | None, actor: str, how: str = '
     # (agent_on_reply) - which then drafts the reply itself, so the tool-less writer below is not asked for one too
     # ...AND THE ANSWER IT WAITS ON IS ITS AGENT'S, WHATEVER TRIAGE MADE OF IT (walk 18: a holding reply with a picture, read fyi, "woke" the
     # task and reached no agent - only the agent's turn ends the wait): it goes by the same road as new work, on a task an agent works
-    if awaited or (v or {}).get('intent') in ('task', 'reply_only'): msg['_upgraded'] = upgrade_filed(store, tid, mid, actor)
+    # ...and the lines it rests on that were filed with no task at all come onto it the same way (bring_along), ahead of it
+    if awaited or (v or {}).get('intent') in ('task', 'reply_only'): msg['_upgraded'] = bring_along(store, tid, v) + upgrade_filed(store, tid, mid, actor)
     went = own and _carry_on(store, tid, msg, mid, answered(store, t, v) if awaited else v, actor)
     # ...and an ASIDE (a "thanks", a nudge) leaves the draft as it is, but its agent still hears it and re-plans (thread_moved)
     # ...and so does a fresh QUESTION (reply_only) on a task its assistant already worked: only the tool-less writer heard it, and the
@@ -3198,7 +3193,13 @@ def chat_candidates(store, msg: dict) -> list:
         who = 'you' if is_ours(m) else (m.get('FromName') or m.get('FromEmail') or 'them')
         out.append({'id': m['MessageId'], 'who': who, 'when': when[11:16],
                     'text': ' '.join(str(m.get('BodyText') or '').split())[:300], 'task_id': m.get('TaskId')})
-    return out[-20:]
+    # ...AND THE FILES A LINE CARRIED, BY NAME (walk 25, 2026-11-26: a picture sent with no words was shown to the next line's triage as an
+    # empty string, so the words that explained it could not name it and opened a task without it): a fact the line holds, on the lines
+    # that have one
+    out = out[-20:]
+    for c in out:
+        if (names := [str(a.get('Name') or '')[:80] for a in store.list_attachments(c['id']) or [] if not a.get('Inline') and a.get('Name')]): c['files'] = names[:6]
+    return out
 
 
 ROOM_TASKS = 6          # how many of a room's tasks triage is shown beside its lines
@@ -3278,6 +3279,20 @@ def filed_is_news(store, m: dict, own=None) -> bool:
 # later their words reopened it - the rail showed the task and, beside it, an FYI row for the picture, and a session that is typed its lines got
 # the words alone, never the picture that explained them. What was filed onto the task and never given to its agent is the task's own from
 # here (routed, never deleted): no row of its own, and it goes to the agent ahead of the line that brought the work (_pass_in)
+def bring_along(store, tid, v: dict | None) -> list:
+    """The same-day lines a verdict says its message continues or answers (related_message_ids) that sit on no task, made task `tid`'s own -
+    their rows, oldest first. ONE ROAD for a line that opens a task and one that joins a task (walk 25, 2026-11-26: a picture filed with no
+    task came along only when the words after it OPENED a task; where they joined one it stayed behind as an FYI row, and the agent never
+    had it). Never one still waiting for triage, or whose triage failed: attaching set it 'routed', and a row that was never judged left
+    the queue and the retry sweep for good (L1, 2026-09-25 - always triage it)."""
+    rows = []
+    for rel_mid in sorted(set((v or {}).get('related_message_ids') or [])):
+        prior = store.get_message(rel_mid) or {}
+        if prior and prior.get('TaskId') is None and prior.get('Status') not in ('context', 'skipped', 'triaging', 'error'):
+            store.arrive(rel_mid, tid, 'routed'); rows.append({**prior, 'TaskId': tid, 'Status': 'routed'})
+    return rows
+
+
 def upgrade_filed(store, tid, mid, actor: str) -> list:
     "The lines filed onto task `tid` before message `mid` that its agent was never given, made the task's own - their rows, oldest first."
     from . import conversation

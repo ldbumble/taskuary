@@ -34,4 +34,5 @@ test("a reply the line holds behind its front draws no box, and nothing of the p
   assert.doesNotMatch(ws, /looseCards|nextLoose|lettersHere/);
   assert.match(read("TaskPage.jsx"), /const chatReview = !inTurns \? pendingReview : null;/);
   assert.doesNotMatch(read("TaskPage.jsx"), /data-tq-handoff-card|A reply is optional|data-tq-reply-again/, "no hand-off form, Draft reply or optional-reply line in the chat");
+  assert.doesNotMatch(read("TaskPage.jsx"), /Also waiting on you|"Waiting on you"/, "no heading of Taskuary's own over the cards that wait");
 });

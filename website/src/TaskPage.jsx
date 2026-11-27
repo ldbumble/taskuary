@@ -2572,7 +2572,6 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
   // ...AND ONCE THE OWNER WRITES AGAIN EACH PRESSED CARD STAYS IN ITS TURN (the owner, 2026-11-09: "leave the card in the turn with the pressed
   // button"): the held steps it approved, and every reply that went - drawn by the chat in the turn that set it up (GeneralWorkspace turnCards)
   const liveAsks = askCards.filter((g) => g.reviews.some((r) => r.Status === "pending")).length;
-  const asksBelow = !!(pendingReview || owesEmails || calAsk?.invite);
   // ...AND SO DOES EACH CARD THAT STILL WAITS (the spine audit, 2026-11-09): a held step, a browser act, a drafted skill rode one block under
   // whichever turn was newest, and the last two stood again at the chat's foot with a second Approve. Each is drawn once, in the turn that
   // raised it (`rid`: the chat's payload names that turn). A to-do no agent has touched has no turns: its cards stay over its box (chatBody)
@@ -2597,7 +2596,7 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
   const turnCards = [...replyNode, ...passedCards, ...batches.map((rs) => ({ key: `batch:${rs[0].Batch}`, at: rs[0].CreatedAt || "", rid: rs[0].ReviewId, waits: true, steps: true,
       node: <BulkReview rows={rs} tid={t?.TaskId} onChanged={decided} /> })), ...replacedCards, ...unsentCards, ...pressedCards.map((g) => ({ key: g.key, at: g.at, rid: g.reviews[0].ReviewId,
       node: g.held ? <HeldSteps reviews={g.reviews} onChanged={decided} /> : <PassedCard reviews={g.reviews} /> })),
-    ...(inTurns ? askCards : []).map((g) => ({ key: g.key, at: g.reviews[0].CreatedAt || "", rid: g.reviews[0].ReviewId, waits: true, also: asksBelow, note: g.held ? "" : askNote(g.reviews[0]),
+    ...(inTurns ? askCards : []).map((g) => ({ key: g.key, at: g.reviews[0].CreatedAt || "", rid: g.reviews[0].ReviewId, waits: true, note: g.held ? "" : askNote(g.reviews[0]),
       node: g.held ? <HeldSteps reviews={g.reviews} toRow={inRow && !pendingReview && liveAsks === 1} onChanged={decided} />
         : <ReviewDecision review={g.reviews[0]} toRow={inRow && !pendingReview && proposals.length === 1} onChanged={decided} /> })),
     // ...a task's email the same as a reply (the owner, 2026-11-13: "never close action boxes. once sent just say sent") - and ONE NODE from its
@@ -2735,10 +2734,7 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
           {/* ...and where the chat has turns each stands in its own (turnCards) - here only over a to-do's box, which has none */}
           {!inTurns && askCards.length > 0 && (
             <Box sx={{ mt: 1.4, pt: liveAsks ? 1.1 : 0, borderTop: liveAsks ? `1px solid ${BORDER}` : 0 }}>
-              {/* ..."Also" only under something else waiting above it (the owner, 2026-11-09: one stale ask read "Also" over nothing) */}
-              {liveAsks > 0 && <Typography sx={{ ...label, display: "block", mb: 0.5 }}>
-                {`${asksBelow ? "Also waiting on you" : "Waiting on you"}${liveAsks > 1 ? ` · ${liveAsks}` : ""}`}
-              </Typography>}
+              {/* ...each card says itself: no heading of Taskuary's own over them (the owner, 2026-11-27) */}
               {askCards.map((g) => g.held
                 ? <HeldSteps key={g.key} reviews={g.reviews} toRow={inRow && !pendingReview && liveAsks === 1} onChanged={decided} />
                 : <ReviewDecision key={g.key} review={g.reviews[0]} toRow={inRow && !pendingReview && proposals.length === 1} onChanged={decided} />   /* the list's row moves too (T19) */

@@ -181,8 +181,7 @@ CATALOGUE = (
           _system_checks, live=True),
     Block('threads', 'What people said', 'view', ('message', 'route', 'task'),
           'WHAT PEOPLE SAID (the last {days} days, by thread, newest first; the last lines of each, oldest first. '
-          "Each head quotes what triage decided when the latest line arrived: when you disagree, say so in your line - "
-          "'triage filed this as fyi, but...' - never raise a thread as if nothing had judged it)",
+          "Each head quotes what triage decided when the latest line arrived)",
           _threads, window=('days', 2, 'How far back to read conversations')),
     Block('ooo', 'Out of office', 'query', ('message',),
           'OUT OF OFFICE (from their auto-replies)',
@@ -207,7 +206,7 @@ CATALOGUE = (
           "it, drafts I approved untouched, and the rules that already exist)",
           _automation, window=('days', 30, 'How far back to count what repeats')),
     Block('already_said', 'Already said', 'query', ('idea',),
-          'ALREADY SAID (never repeat)',
+          'ALREADY SAID (in front of the owner already)',
           _already_said, sql=ALREADY_SAID_SQL, cap=40),
     Block('notes', 'My notes from last check', 'query', ('setting',),
           'YOUR NOTES FROM YOUR LAST CHECK',
@@ -218,11 +217,8 @@ CATALOGUE = (
           # it as news" sat over the owner's own "bring up X" too, and with no word on when a standing fact is worth a line a live run
           # said "you owe Ray the accruals" in worlds with no mail from Ray at all - 3 times in one round, 8 in the next.
           "WHAT YOU KNOW ABOUT HOW THE OWNER WORKS (learned from what they did and what they told you - their people, what they care "
-          "about, how they work, their promises and what to bring up). What to bring up is the owner's OWN instruction about what to "
-          "raise and what to leave alone: follow it. Everything else here is background to weigh, never news by itself: a Promises or "
-          "people line is worth a line of yours ONLY when something else you were given in THIS check bears on it - its thread, a task, "
-          "a meeting, the person's mail sitting unanswered, a date someone wrote. The line's own words are not that evidence: a standing "
-          "fact with nothing current behind it is no line, however soon it might come due. A line of yours that rests on one of these "
+          "about, how they work, their promises and what to bring up). What to bring up is the owner's own word on what to raise and "
+          "what to leave alone; the rest is standing background, not news of this check. A line of yours that rests on one of these "
           "names its [memory:...] key in \"memory\"",
           _learned, cap=4000),                   # 2000 until the design's S4 (2026-11-01): the rail reads every workstream's lines
     Block('ledger', 'The outcome ledger', 'view', ('outcome', 'doc'),
@@ -231,7 +227,7 @@ CATALOGUE = (
     # how the drafts land, per kind and recipient domain - read-only evidence, never a reason to send (trackrecord.py, 2026-10-25)
     Block('track_record', 'Track record', 'view', ('outcome', 'review', 'message'),
           "TRACK RECORD (the last {days} days of drafts by kind and the recipient's domain: sent as drafted / edited first / rejected. "
-          "Evidence of how the drafts are landing - never a reason to send: nothing goes without the owner's press)",
+          "Evidence of how the drafts are landing; nothing goes without the owner's press)",
           _track_record, window=('days', 30, 'How far back to count what became of the drafts'), cap=20),
     # PRODUCERS: no heading - their rows are candidates, and candidates render under CANDIDATES:.
     Block('waiting_on', 'Waiting on them', 'view', ('message', 'sent_verdict'),

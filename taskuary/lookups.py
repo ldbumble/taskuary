@@ -445,8 +445,8 @@ def outputs_find(store, p: dict) -> str:
                 + (' of that kind' if p.get('kind') else '') + ' - try fewer words, or none with the kind alone.')
     phone = DELIVERY.get() == PHONE
     out = [f'FILES AGENTS MADE ({len(hits)}, best match first) - ' + (
-        "no link opens on a phone: name the file and its task; the task's card sends the file itself" if phone else
-        'answer with the one that fits as [its name](its link) - one tap downloads it - and its task as [TQ-n](#task=n)') + ':']
+        "no link opens on a phone; the task's card sends the file itself" if phone else
+        'a file\'s [name](link) downloads it in one tap; its task is [TQ-n](#task=n)') + ':']
     for h in hits:
         ref, url = task_ref(h['tid']), h.get('url') or h.get('external_url') or ''
         more = f" ({plural(len(h['earlier']), 'earlier version')} behind it)" if h.get('earlier') else ''

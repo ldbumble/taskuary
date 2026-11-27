@@ -183,7 +183,7 @@ class CounselIntroductionTests(unittest.TestCase):
         self.assertTrue(said['say'].startswith('Craig at the vendor says'))
         self.assertIn('I am Taskuary', seen['system']); self.assertIn('WHERE YOU ARE', seen['system'])   # COUNSEL, then where the voice is
         self.assertNotIn('THREE BEATS', seen['user']); self.assertNotIn('name the button', seen['user'])
-        self.assertIn('Introduce the item on the table', seen['user'])
+        self.assertIn('The item on the table is new on the owner', seen['user'])
         self.assertIn('what they wrote:', seen['user'])                                             # code supplies the verified context
 
     def test_the_facts_are_the_fallback_not_the_normal_path(self):

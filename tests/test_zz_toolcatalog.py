@@ -30,7 +30,7 @@ class CatalogueTests(unittest.TestCase):
             self.assertIn(kind, operations.KINDS, f'{kind} is offered but nothing dispatches it')
             self.assertIn(kind, block)
         self.assertIn('CALL:', block)
-        self.assertIn('never contains: report', block)          # the class is not the word
+        self.assertIn('not contains: report', block)          # the class is not the word
         print(f"\n  catalogue: {len(toolcatalog.PURPOSE)} operations offered of {len(operations.KINDS)} in the registry")
 
     def test_an_invented_operation_is_refused_not_run(self):

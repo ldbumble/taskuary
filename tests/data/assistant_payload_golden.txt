@@ -8,7 +8,7 @@ CANDIDATES:
 CONFIGURED SYSTEM CHECKS (pulled live for this check; failures are also worth noticing):
 (none selected - add a data source, or choose saved data views, on Reports -> Advisor)
 
-WHAT PEOPLE SAID (the last two days, by thread, newest first; the last lines of each, oldest first. Each head quotes what triage decided when the latest line arrived: when you disagree, say so in your line - 'triage filed this as fyi, but...' - never raise a thread as if nothing had judged it):
+WHAT PEOPLE SAID (the last two days, by thread, newest first; the last lines of each, oldest first. Each head quotes what triage decided when the latest line arrived):
 - Dana Reed [email] re "Q3 ledger" - 1 new, last word THEIRS <day> <mon> <time> (latest mid 1)
     Dana <day>: "Here is the Q3 ledger. Let me know if the reconciliation looks right."
 
@@ -36,14 +36,14 @@ EXISTING POLICIES (already automated - never propose these again):
   (none)
 CURRENT SWITCHES: auto-dispatch=on
 
-ALREADY SAID (never repeat):
+ALREADY SAID (in front of the owner already):
 - (open) The ledger reconciliation repeats monthly - worth automating.  [key idea:weekly-ledger · said <day> <mon> <time>]
 - (open) No answer from Priya on the signed copy.  [key followup:c-invoice · said <day> <mon> <time>]
 
 YOUR NOTES FROM YOUR LAST CHECK (<date> <time>; your own facts and timings - use them, then rewrite them; they are not rules):
 Dana still owes the ledger; Sam is away.
 
-WHAT YOU KNOW ABOUT HOW THE OWNER WORKS (learned from what they did and what they told you - their people, what they care about, how they work, their promises and what to bring up). What to bring up is the owner's OWN instruction about what to raise and what to leave alone: follow it. Everything else here is background to weigh, never news by itself: a Promises or people line is worth a line of yours ONLY when something else you were given in THIS check bears on it - its thread, a task, a meeting, the person's mail sitting unanswered, a date someone wrote. The line's own words are not that evidence: a standing fact with nothing current behind it is no line, however soon it might come due. A line of yours that rests on one of these names its [memory:...] key in "memory":
+WHAT YOU KNOW ABOUT HOW THE OWNER WORKS (learned from what they did and what they told you - their people, what they care about, how they work, their promises and what to bring up). What to bring up is the owner's own word on what to raise and what to leave alone; the rest is standing background, not news of this check. A line of yours that rests on one of these names its [memory:...] key in "memory":
 ## Facts
 - You told them you'd send the answers by <date>
 
@@ -409,7 +409,7 @@ CANDIDATES:
 CONFIGURED SYSTEM CHECKS (pulled live for this check; failures are also worth noticing):
 (none selected - add a data source, or choose saved data views, on Reports -> Advisor)
 
-WHAT PEOPLE SAID (the last two days, by thread, newest first; the last lines of each, oldest first. Each head quotes what triage decided when the latest line arrived: when you disagree, say so in your line - 'triage filed this as fyi, but...' - never raise a thread as if nothing had judged it):
+WHAT PEOPLE SAID (the last two days, by thread, newest first; the last lines of each, oldest first. Each head quotes what triage decided when the latest line arrived):
 - Dana Reed [email] re "Q3 ledger" - 1 new, last word THEIRS <day> <mon> <time> (latest mid 1)
     Dana <day>: "Here is the Q3 ledger. Let me know if the reconciliation looks right."
 
@@ -437,14 +437,14 @@ EXISTING POLICIES (already automated - never propose these again):
   (none)
 CURRENT SWITCHES: auto-dispatch=on
 
-ALREADY SAID (never repeat):
+ALREADY SAID (in front of the owner already):
 - (open) The ledger reconciliation repeats monthly - worth automating.  [key idea:weekly-ledger · said <day> <mon> <time>]
 - (open) No answer from Priya on the signed copy.  [key followup:c-invoice · said <day> <mon> <time>]
 
 YOUR NOTES FROM YOUR LAST CHECK (<date> <time>; your own facts and timings - use them, then rewrite them; they are not rules):
 Dana still owes the ledger; Sam is away.
 
-WHAT YOU KNOW ABOUT HOW THE OWNER WORKS (learned from what they did and what they told you - their people, what they care about, how they work, their promises and what to bring up). What to bring up is the owner's OWN instruction about what to raise and what to leave alone: follow it. Everything else here is background to weigh, never news by itself: a Promises or people line is worth a line of yours ONLY when something else you were given in THIS check bears on it - its thread, a task, a meeting, the person's mail sitting unanswered, a date someone wrote. The line's own words are not that evidence: a standing fact with nothing current behind it is no line, however soon it might come due. A line of yours that rests on one of these names its [memory:...] key in "memory":
+WHAT YOU KNOW ABOUT HOW THE OWNER WORKS (learned from what they did and what they told you - their people, what they care about, how they work, their promises and what to bring up). What to bring up is the owner's own word on what to raise and what to leave alone; the rest is standing background, not news of this check. A line of yours that rests on one of these names its [memory:...] key in "memory":
 ## Facts
 - You told them you'd send the answers by <date>
 

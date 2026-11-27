@@ -180,12 +180,12 @@ def pick(store, *heads: str, intro=True) -> str:
 # picked coding and was refused (2026-10-17 audit). The shipped document opens each coding-only bullet with these words, so
 # an install without one drops them; an owner's copy written before that still talking coding gets the one rule after it
 CODING_ONLY = 'With a coding tool connected'
-NO_CODING = ("No coding tool is connected on this computer: never mention, offer or ask about a coding agent or a repository. "
+NO_CODING = ("No coding tool is connected on this computer: there is no coding agent or repository here. "
              f"Every hand-off is {buttons.label('regular_agent')} - a regular agent.")
 
 # ...and with DEVELOPER MODE OFF the same, with where the switch is: a regular person's every job is a general agent's (2026-11-02)
-NO_DEV = ("Developer mode is off: never offer a coding agent or a repository. Every hand-off is "
-          f"{buttons.label('regular_agent')} - a regular agent; asked for a coding agent, hand it to one - Settings has Developer mode.")
+NO_DEV = ("Developer mode is off: there is no coding agent or repository here (Settings has Developer mode). Every hand-off is "
+          f"{buttons.label('regular_agent')} - a regular agent.")
 
 def without_coding(text: str, say: str = NO_CODING) -> str:
     out, skip = [], False

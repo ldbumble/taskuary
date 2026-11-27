@@ -108,7 +108,7 @@ CONVERT = {'12', '52', '4', '7', '30', '365', '24', '60', '100'}
 
 MECHANICS = (
     f"You may raise at most three ideas a run, each in one of these families: {', '.join(FAMILIES)}.\n"
-    f"LOOK BEFORE YOU PROPOSE. You may read further first, up to {READS_PER_STEP} reads a turn and {MAX_READS} in all - only reading, nothing moves:\n"
+    f"READS, before the ideas: up to {READS_PER_STEP} a turn and {MAX_READS} in all - only reading, nothing moves:\n"
     + '\n'.join(f"- {v}" for v in READS.values()) +
     "\nEVIDENCE IS CHECKED WORD FOR WORD. Each idea quotes what it rests on: quotes (at least one) are {ref, quote} - an id you were shown or "
     "read (msg12, att3, task7, memory, mailbox) and words copied exactly from what you saw of it. Every number in the title, evidence, why or "

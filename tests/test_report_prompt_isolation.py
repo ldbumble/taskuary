@@ -52,21 +52,20 @@ class GeneralCheckPromptTests(unittest.TestCase):
         st = MemoryStore(); llm = Spy()
         assistant.think(st, [], llm)
         system = llm.calls[-1][0]
-        self.assertIn('A line about ONE message must tell the owner something the message does not', system)
-        self.assertIn('a second copy of the mail and not a line', system)
-        self.assertNotIn('A line about ONE message', assistant.PROMPT)      # never the editable half
+        self.assertIn("A message is already on the owner's work rail with triage's own verdict on it", system)
+        self.assertNotIn("A message is already on the owner's work rail", assistant.PROMPT)      # never the editable half
 
     def test_the_rule_holds_whatever_prompt_the_owner_wrote(self):
         st = MemoryStore(); llm = Spy()
         assistant.think(st, [], llm, instruction='Only tell me about invoices, in my own words.')
         system = llm.calls[-1][0]
         self.assertIn('Only tell me about invoices', system)                # their half, as written
-        self.assertIn('A line about ONE message must tell the owner', system)   # ...and the rule still rides
+        self.assertIn("A message is already on the owner's work rail", system)   # ...and the fact still rides
 
     def test_a_systems_monitor_is_not_given_the_mail_rule_at_all(self):
         st = MemoryStore(); llm = Spy()
         assistant.think(st, [], llm, instruction='Only failed nightly jobs.', systems_only=True)
-        self.assertNotIn('A line about ONE message', llm.calls[-1][0])      # it reads its own sources
+        self.assertNotIn("A message is already on the owner's work rail", llm.calls[-1][0])      # it reads its own sources
 
 
 if __name__ == '__main__': unittest.main()

@@ -29,7 +29,7 @@ Decide about the item on the table.
 The "Reply" button ("Draft reply" when nothing is drafted yet): write a reply to the sender. Nothing is sent.
 
 - `text` - the gist, in the owner's words
-- `cc` (optional) - people to loop in on it, by name or address ("loop Gail in and ask her" is a reply with Gail copied, never an agent)
+- `cc` (optional) - people to loop in on it, by name or address ("loop Gail in and ask her" is a reply with Gail copied)
 
 <p class="runs">At once - a draft, nothing sent.</p>
 
@@ -61,7 +61,7 @@ The "Make it a task" button: make it a task on the owner's own list - no agent.
 
 ### `regular_agent`
 
-The "Send to agent" button: send it to an agent that does not write code - it becomes a task of its own. Never for Taskuary's own settings, connections or update: those are its own screens (app.find), nor for setting up a meeting: meeting.new.
+The "Send to agent" button: send it to an agent that does not write code - it becomes a task of its own. Taskuary's own settings, connections and update are its own screens (app.find); a meeting is meeting.new.
 
 - `text` - the job
 - `new` (optional) - true when the job is NOT about the item on the table
@@ -70,10 +70,10 @@ The "Send to agent" button: send it to an agent that does not write code - it be
 
 ### `coding_agent`
 
-The "Send to coding agent" button: send it to a coding agent. Not sure which repository is no reason to ask - CALL it, and its card offers every repository to pick.
+The "Send to coding agent" button: send it to a coding agent; without it, its card offers every repository to pick.
 
 - `text` - what is wanted
-- `as` (optional) - the repository (repos.list), only when sure
+- `as` (optional) - the repository (repos.list)
 - `new` (optional) - true when the job is NOT about the item on the table
 
 <p class="runs">Brings up its button for you to press.</p>
@@ -92,7 +92,7 @@ The "Ignore this sender" button: file mail like this from this sender from now o
 
 ### `block_sender`
 
-The "Block this sender" button: an exclusion rule in Settings: the sender never reaches triage again - only when they ask for a rule.
+The "Block this sender" button: an exclusion rule in Settings: the sender never reaches triage again.
 
 <p class="runs">Brings up its button for you to press.</p>
 
@@ -110,7 +110,7 @@ The "Mark done" button: the task behind the item is finished.
 
 ### `next`
 
-The "Next" button: move on to the next thing - this one is put down, still theirs, marked nothing. Never for "mark ... read" or "clear ..." - those name a set: pipe.clear - "walk me through the reports" starts at that section's first row, as a click on its heading does.
+The "Next" button: move on to the next thing - this one is put down, still theirs, marked nothing (pipe.clear marks read) - "walk me through the reports" starts at that section's first row, as a click on its heading does.
 
 - `section` - a rail heading (Tasks, Watching, For later, Reports, Advisor, FYI)
 
@@ -138,7 +138,7 @@ The "Run it again" button: run the report on the table again.
 
 ### `report_off`
 
-The "Pause this report" button: pause the report on the table - off its clock - only when its findings are about something the owner said they do not care about.
+The "Pause this report" button: pause the report on the table - off its clock.
 
 <p class="runs">Brings up its button for you to press.</p>
 
@@ -154,7 +154,7 @@ Keep a fact about how the owner works in their memory.
 
 ### `setup`
 
-Build a report, a skill (how one kind of recurring request is handled from now on), a connection to another system or an automation. Never a to-do, and never an agent's job.
+Build a report, a skill (how one kind of recurring request is handled from now on), a connection to another system or an automation.
 
 - `text` - the request
 
@@ -162,7 +162,7 @@ Build a report, a skill (how one kind of recurring request is handled from now o
 
 ### `confirm`
 
-The owner's yes to the card already waiting - only when one is.
+The owner's yes to the card already waiting.
 
 <p class="runs">At once.</p>
 
@@ -342,7 +342,7 @@ Mark done - the task is finished - kept on the task.
 
 ### `task.defer`
 
-Remind me: put an open task away until a day and bring it back then - calendar or not: the app picks the time, or says there is none to pick from - never a day guessed instead, or "none" to bring it back now. "Remind me about <a task that exists>" - named by ref, sender or subject - is this, never a new to-do.
+Remind me: put an open task away until a day and bring it back then - calendar or not: the app picks the time, or says there is none to pick from, or "none" to bring it back now. "Remind me about <a task that exists>" - named by ref, sender or subject - is this.
 
 - `until` - a date (2026-10-09), "2 weeks", "3 days", "monday", with the time they said kept ("tomorrow 9am", "friday 2pm"), "after_meetings" whenever they mean once the day's meetings or calls are over
 - `ref` (optional) - the task (TQ-0123) when it is not the one on the table
@@ -417,7 +417,7 @@ Pick up the agent's own last session on a task where it left off, coding or not.
 
 ### `agent.answer`
 
-Answer the agent that is waiting. With no agent on the task (TASK NOW says so) nobody hears it - say so: agent.continue or dispatch.prepare starts one. An agent still WORKING, not asking, takes words as agent.tell.
+Answer the agent that is waiting. With no agent on the task (TASK NOW says so) nobody hears it; agent.continue or dispatch.prepare starts one. An agent still WORKING, not asking, takes words as agent.tell.
 
 - `text`
 - `ref` (optional) - its task when it is not the one on the table
@@ -426,7 +426,7 @@ Answer the agent that is waiting. With no agent on the task (TASK NOW says so) n
 
 ### `agent.tell`
 
-Tell the agent WORKING on a task something new, as the owner's next prompt ("tell the agent to use the main branch", "also check the March file"). It goes in when the agent stops at its prompt - never mid-step. With no agent at work nobody hears it: say so.
+Tell the agent WORKING on a task something new, as the owner's next prompt ("tell the agent to use the main branch", "also check the March file"). It goes in when the agent stops at its prompt - never mid-step. With no agent at work nobody hears it.
 
 - `text` - the words, as the owner would type them
 - `ref` (optional) - the task (TQ-0123), when it is not the one on the table
@@ -435,7 +435,7 @@ Tell the agent WORKING on a task something new, as the owner's next prompt ("tel
 
 ### `agent.stop`
 
-Stop the agent working on a task now - the x on its running turn: the one on the table, or the task `ref` names; never a guess at which. On the desk it stops at once and typing to it carries it on; on a phone it is the yes-or-no that ends its session. Several at once is agents.stop.
+Stop the agent working on a task now - the x on its running turn: the one on the table, or the task `ref` names. On the desk it stops at once and typing to it carries it on; on a phone it is the yes-or-no that ends its session. Several at once is agents.stop.
 
 - `ref` (optional) - the task (TQ-0123), when it is not the one on the table
 
@@ -452,7 +452,7 @@ Stop a SET of agents at once. Each is its task's Stop and save: written up and s
 
 ### `routing.remember`
 
-Remember how work like this should be ROUTED next time. kind: coding (an agent in a checkout) | general (the assistant) | task (the owner, no agent). system: where the work actually lives when no repository here can touch it, named plainly ("ADP"). It teaches triage and moves nothing - say it when the owner tells you a verdict was wrong, or where a kind of job really belongs.
+Remember how work like this should be ROUTED next time. kind: coding (an agent in a checkout) | general (the assistant) | task (the owner, no agent). system: where the work actually lives when no repository here can touch it, named plainly ("ADP"). It teaches triage and moves nothing.
 
 - `field` - kind | system
 - `value`
@@ -475,13 +475,13 @@ New work with no task yet.
 
 ### `task.create_from_text`
 
-A new job with no message behind it. MAKING something - a picture, a flyer, a document, a spreadsheet - is a job for a general agent: write it here, never make it in this chat yourself. A job that REPEATS on a clock, or a report, is a job for a general agent too - it sets the routine up for their press; and a short `title` in your own words for the job (never "send it to the agent"). Never for a task that already exists (a TQ ref, or a row on THE RAIL BY NAME): starting an agent on one is dispatch.prepare, its own last session is agent.continue, and "remind me about it" is task.defer on it.
+A new job with no message behind it. MAKING something - a picture, a flyer, a document, a spreadsheet - is a general agent's job. A job that REPEATS on a clock, or a report, is a general agent's too - it sets the routine up for their press. A task that already exists (a TQ ref, or a row on THE RAIL BY NAME) takes dispatch.prepare to start an agent, agent.continue for its own last session, and task.defer for "remind me about it"
 
 - `kind` - todo (a to-do or reminder the owner does themselves, no agent) | general (a regular agent) | coding | send (a new message the owner starts, to someone - `channel`: email | whatsapp | telegram | teams | slack, the one they said; `to`: the name of the person, chat or group as they said it (never the channel word), or an address; drafted in their voice for their Send, never sent from here) | goal (an outcome with a date, its steps tasks) | dashboard (a page of numbers kept up to date)
 - `text`
 - `channel` (optional)
 - `to` (optional)
-- `title`
+- `title` - a short name for the job
 
 <p class="runs">Brings up its button for you to press.</p>
 
@@ -520,7 +520,7 @@ The walk and sets of items, and filing mail.
 
 ### `pipe.clear`
 
-Clear a SET of items from the pipe at once - takes `select` (below); read, never deleted. "Clear all the FYI" and "mark the FYI read" - one FYI on the table or many - are this with kind: fyi, never next. Their words naming the set are the press: it is marked read at once and the count said - ALL in their words is every one waiting, never just the batch on the table. It only marks read - "dismiss them", "get rid of them" is pipe.remove. When the owner says "from now on" too, also CALL preference.exclude_sender or preference.sender_rule. Rows already filed as not ours (pipe.remove, Not ours) are off the rail: "those should be read, not Not ours" is this with `keys` - their m-numbers, as the Not ours receipt listed them - and each one's Not ours is taken back (nothing taught from it) and it is marked read.
+Clear a SET of items from the pipe at once - takes `select` (below); read, never deleted. "Clear all the FYI" and "mark the FYI read" - one FYI on the table or many - are this with kind: fyi. Their words naming the set are the press: it is marked read at once and the count said. It only marks read - "dismiss them", "get rid of them" is pipe.remove; "from now on" is preference.exclude_sender or preference.sender_rule. Rows already filed as not ours (pipe.remove, Not ours) are off the rail: "those should be read, not Not ours" is this with `keys` - their m-numbers, as the Not ours receipt listed them - and each one's Not ours is taken back (nothing taught from it) and it is marked read.
 
 - `select` - below
 - `scope` (optional) - all (the default - every one waiting that `select` matches, the batch on the table and every one after it: "all the FYI", "mark every FYI read", "ignore all the FYI") | table (only those on the table: "mark these read", "these four")
@@ -547,16 +547,16 @@ Close a SET at once. "Close all the tasks from Priya" is select sender: Priya. R
 
 ### `pipe.remove`
 
-Not for me for a SET at once - "dismiss the spam", "get rid of these newsletters" - then triage learns from each; otherwise it teaches nothing. Never touches work waiting on the owner, an agent at work, a draft waiting for its Send or a goal - those are left and said. Runs at once; the receipt lists every row as its link.
+Not for me for a SET at once - "dismiss the spam", "get rid of these newsletters" - triage learns from each; otherwise it teaches nothing. Never touches work waiting on the owner, an agent at work, a draft waiting for its Send or a goal - those are left and said. Runs at once; the receipt lists every row as its link.
 
 - `select` - (below; `keys`: the rows you judged, from pipe.read): each mail is filed, each task removed (Not for me), nothing deleted
-- `learn` (optional) - true only when the owner says "from now on" too
+- `learn` (optional) - true (the owner's "from now on")
 
 <p class="runs">Runs at once and says what it changed.</p>
 
 ### `pipe.block`
 
-Stop a SET's senders for good - only when the owner says so ("and stop them", "block them", "unsubscribe me"). "Dismiss the spam" alone is pipe.remove, never this.
+Stop a SET's senders for good ("and stop them", "block them", "unsubscribe me")
 
 - `select` - as pipe.remove takes it
 - `how` (optional) - rule (the default: an exclusion rule per sender in Settings, their mail never reaches triage again) | unsubscribe (a mailing list: its Unsubscribe comes up lit, one list at a time - the owner presses it)
@@ -581,7 +581,7 @@ Make it a task for a SET of mail; each becomes a task of the owner's, no agent. 
 
 Light any button a row draws, by its name. A put-down (close, close_note with its note, remove, not_ours) is pressed.
 
-- `button` - the verb (THE BUTTONS BY NAME, or a row's own: review_changes, run_another, attach, pick_repo, change_kind...)
+- `button` - the verb (THE BUTTONS BY NAME, or a row's own: review_changes, attach, pick_repo, change_kind...)
 - `ref` (optional) - the task (TQ-0123), when it is not the row on the table
 - `note` (optional) - a close_note's note, the owner's reason in their words
 
@@ -675,7 +675,7 @@ Change where one line of a report's route card goes.
 
 - `line` - timeline | alert | send
 - `how` - always | ai | rule | never
-- `to` (optional) - send or alert: who gets it - an address, or a name as the owner said it; not sure who: ask them, never guess
+- `to` (optional) - send or alert: who gets it - an address, or a name as the owner said it
 - `title`
 - `when` - for ai: what to look for
 - `rule` - /`count`/`text` (for rule)
@@ -729,7 +729,7 @@ Bring up a connector card to connect it; a second one of a kind opens with its A
 
 ### `connection.test`
 
-Test a connection now and say what it answered.
+Test a connection now; it answers with what the connection said.
 
 - `name`
 
@@ -780,7 +780,7 @@ Start a script by its name: walk me through my tasks | set up a report.
 
 ### `memory.remember`
 
-Keep a fact or rule the owner tells you, at once, and above the CALL answer them in a few natural words ("Got it - Omar for badge faults.") - never that it was saved, where, or who reads it - triage, every agent on a task it bears on, every draft and you read it from then on - the same subject as a line it corrects, which it then replaces (memory.about and memory.list show each line's subject) - it becomes their saved signature - their title, company, the systems they use ("I'm now the AP lead") - or counsel for how YOU should speak to them ("be shorter with me"): appended to SOUL.md or COUNSEL.md, never rewritten. Who reports to whom and who owns what is people.relate.
+Keep a fact or rule the owner tells you, at once; nothing of it shows on his screen - triage, every agent on a task it bears on, every draft and you read it from then on - the same subject as a line it corrects, which it then replaces (memory.about and memory.list show each line's subject) - it becomes their saved signature - their title, company, the systems they use ("I'm now the AP lead") - or counsel for how they want to be spoken to ("be shorter with me"): appended to SOUL.md or COUNSEL.md, never rewritten. Who reports to whom and who owns what is people.relate.
 
 - `note` - it, in the owner's words ("Gail moved to Ops", "Ray handles payroll for me", "no meetings before 10", "write Mrs <surname> to women", "I don't care about the legacy export job any more")
 - `subject` - , always: what it is about in a few words ("meeting hours", "who handles payroll", "Gail's role")
@@ -801,7 +801,7 @@ Take a line out of the memory, or confirm one. "forget that Ray does payroll", "
 
 ### `people.relate`
 
-Who someone is to the owner, on their org chart. "Erin is my manager", "Ray owns payroll", "Gail reports to me" - never memory.remember for these: triage and agents read the chart.
+Who someone is to the owner, on their org chart. "Erin is my manager", "Ray owns payroll", "Gail reports to me" - triage and agents read the chart.
 
 - `who` - a name or address
 - `relation` - manager | report | none (none clears it)
@@ -830,7 +830,7 @@ Bring back something removed in the last 30 days - a report, workflow, dashboard
 
 ### `hub.publish`
 
-Save to the company Hub. Only a reusable discovery reached through real work, or a developed idea with its reasons - never a transcript, a task log or a routine answer. When the owner asks to save something there - at the desk the Hub comes up at its Write one with your words, theirs to post - or, on a phone, when a turn clearly earns it.
+Save to the company Hub. The Hub holds reusable discoveries reached through real work and developed ideas with their reasons. At the desk the Hub comes up at its Write one with your words, theirs to post.
 
 - `title` - one durable claim
 - `body` - why it matters and what to do
@@ -941,7 +941,7 @@ One person at a glance - how often they write, their recent messages, their open
 
 ### `docs.search`
 
-How Taskuary works and how to set it up (the help pages), and the owner's own docs - STYLE.md (how they write: greeting, sign-off, tone), TRIAGE.md, DIGEST.md (the morning brief) - each read whole as `section` "your doc <name>" (your doc style) - and what each release changed (help/whats-new). Use it for any "how do I", "what does X do", "what changed" or "why did it" about the app.
+How Taskuary works and how to set it up (the help pages), and the owner's own docs - STYLE.md (how they write: greeting, sign-off, tone), TRIAGE.md, DIGEST.md (the morning brief) - each read whole as `section` "your doc <name>" (your doc style) - and what each release changed (help/whats-new). It answers "how do I", "what does X do", "what changed" and "why did it" about the app.
 
 - `query` - the words
 - `section` - one section read whole, as its contents list names it
@@ -962,13 +962,13 @@ Everything waiting for the owner's yes: drafted replies and the actions agents p
 
 ### `pipe.list`
 
-Everything waiting on the owner, lane by lane - replies, asks, approvals, stopped agents, reports: the whole work rail. Use it for "what's waiting", "what's left", "what do I have"
+Everything waiting on the owner, lane by lane - replies, asks, approvals, stopped agents, reports: the whole work rail: "what's waiting", "what's left", "what do I have"
 
 <p class="runs">Runs at once and changes nothing.</p>
 
 ### `pipe.read`
 
-Every row on the work rail WITH WHAT IT SAYS - sender, subject, lane, age and the sender's own words (quoted history cut) - in one call, however many rows. Use it for "summarize my FYI", "what's in reports", "anything from Erin on the rail"
+Every row on the work rail WITH WHAT IT SAYS - sender, subject, lane, age and the sender's own words (quoted history cut) - in one call, however many rows - "summarize my FYI", "what's in reports", "anything from Erin on the rail"
 
 - `section` - task | later | reports | ideas | fyi (or a lane; none for all)
 - `who` - a sender
@@ -995,7 +995,7 @@ What happened, from the audit trail: counts by kind and the latest entries.
 
 ### `errors.list`
 
-What is failing and what failed: the bell (dismissed ones marked), failed agent runs, report runs, drafts, triage and actions over `days` (3 by default), and the last errors in the log. Use it for any "what broke", "why did X not happen", "is anything wrong"
+What is failing and what failed: the bell (dismissed ones marked), failed agent runs, report runs, drafts, triage and actions over `days` (3 by default), and the last errors in the log - "what broke", "why did X not happen", "is anything wrong"
 
 - `days` - 3 by default
 
@@ -1003,7 +1003,7 @@ What is failing and what failed: the bell (dismissed ones marked), failed agent 
 
 ### `memory.about`
 
-Who someone is to the owner: every line the memory holds about them, with its key, and what the org chart says. Use it for "who's Gail to me", "what do you know about Ray", and before memory.remember corrects or memory.wrong takes out a line about them.
+Who someone is to the owner: every line the memory holds about them, with its key, and what the org chart says - "who's Gail to me", "what do you know about Ray"; its keys are what memory.remember corrects and memory.wrong takes out.
 
 - `who` - a name or address
 
@@ -1011,7 +1011,7 @@ Who someone is to the owner: every line the memory holds about them, with its ke
 
 ### `memory.list`
 
-Everything kept about the owner: what they said (each line with its key and subject), the facts, what was learned from what they did - confirmed, or still waiting on their word. Use it for "what do you remember", "what do you know about me"
+Everything kept about the owner: what they said (each line with its key and subject), the facts, what was learned from what they did - confirmed, or still waiting on their word. "what do you remember", "what do you know about me"
 
 - `about` - words to narrow it (a sender, a topic)
 
@@ -1019,7 +1019,7 @@ Everything kept about the owner: what they said (each line with its key and subj
 
 ### `outputs.find`
 
-The files agents made on tasks - workbooks, PDFs, documents, charts, pages - each once, its newest version, with its task and the link that downloads it. Answer with the link.
+The files agents made on tasks - workbooks, PDFs, documents, charts, pages - each once, its newest version, with its task and the link that downloads it.
 
 - `query` - words of the task or the file ("vendor pricing")
 - `kind` (optional) - xlsx | pdf | doc | deck | csv | picture | page
@@ -1035,7 +1035,7 @@ What was removed in the last 30 days and can still come back - reports, workflow
 
 ### `rules.list`
 
-The standing filters on the owner's mail - queue mutes set with a reason, and the policy rules (skip, ignore, escalate...) that decide before any model reads it. Use it for "why did I never see X", "what am I filtering"
+The standing filters on the owner's mail - queue mutes set with a reason, and the policy rules (skip, ignore, escalate...) that decide before any model reads it - "why did I never see X", "what am I filtering"
 
 - `about` - words to narrow it
 
@@ -1043,7 +1043,7 @@ The standing filters on the owner's mail - queue mutes set with a reason, and th
 
 ### `missed.check`
 
-Whether the owner missed anything: asks nobody answered, people who have not answered the owner, anything marked urgent, and every place that could not be checked - with the answer written out. Use it for "did I miss anything", "anything slip", "am I behind on anything"
+Whether the owner missed anything: asks nobody answered, people who have not answered the owner, anything marked urgent, and every place that could not be checked - with the answer written out. "did I miss anything", "anything slip", "am I behind on anything"
 
 <p class="runs">Runs at once and changes nothing.</p>
 
@@ -1130,7 +1130,7 @@ One tool in full.
 
 ### `knowledge.search`
 
-What the company knows - the Hub, the indexed documents and the facts the owner asked to keep. Call it FIRST whenever the owner asks about a person, a site, a policy, a system or how something is done here - never offer to look it up instead of looking.
+What the company knows - the Hub, the indexed documents and the facts the owner asked to keep - a person, a site, a policy, a system or how something is done here.
 
 - `query` - the words to look for
 

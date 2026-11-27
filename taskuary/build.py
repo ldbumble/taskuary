@@ -122,15 +122,12 @@ def _json_part(s: str) -> str:
 
 # A CONNECTION: the card's own guide and fields (the page sends them - they live with the card's form), the card's tools as lines
 CARD_TOOLS = (
-    "THE CARD'S TOOLS - the only way you act. Each is a line of its own at the end of your reply.\n"
-    "[[CARD-SAVE: <field key> = <value>]] - put a value YOU know onto the card (an address, a version, an id the guide gives). Never a "
-    "secret: keys, tokens and passwords are pasted by the owner into the card's own masked field.\n"
-    "[[CARD-TEST]] - run the card's Test; its answer comes back to you.\n"
-    "[[CARD-ASK: <field key or ->]] <the one thing only the owner can give or do>, then stop. A value that is not a secret (an address, a "
-    "server, an account name): ask for it in one line - the owner answers in your box and you SAVE it. A secret: say where to get it and "
-    "which field to paste it into. A step outside (a portal, an admin's yes): say where to go and what to click.\n"
-    "[[CARD-DONE]] - only after a Test passed: say in one line what now works.\n"
-    "Save what you can, then Test. A failed Test: read why, fix what you can, Test again; ask only for what only the owner can do.")
+    "THE CARD'S TOOLS - each a line of its own at the end of your reply.\n"
+    "[[CARD-SAVE: <field key> = <value>]] puts a value onto the card. Keys, tokens and passwords are not saved this way: the owner "
+    "pastes them into the card's own masked field.\n"
+    "[[CARD-TEST]] runs the card's Test; its answer comes back to you.\n"
+    "[[CARD-ASK: <field key or ->]] <what only the owner can give or do> puts it to the owner; his answer comes back in your box.\n"
+    "[[CARD-DONE]] ends the setup once a Test has passed.")
 _TOOL = re.compile(r'^[ \t]*\[\[CARD-(ASK|SAVE|TEST|DONE)(?::([^\]]*))?\]\][ \t]*(.*)$', re.M)
 
 

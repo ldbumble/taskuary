@@ -70,7 +70,7 @@ class HandItOn(unittest.TestCase):
         seen = []
         turn(_world(), f'This should be sent to {GAIL}', None, [c('task.handoff', who=GAIL)] * 2 + ['It needs a task first.'], seen)
         asks = [u for _, u in seen[1:]]
-        self.assertTrue(asks and all('outside Taskuary' in u for u in asks), asks)
+        self.assertTrue(asks and all("Taskuary's to you" in u or 'Taskuary answered you' in u for u in asks), asks)
         self.assertFalse(any('what they can do' in u for u in asks))
 
     def test_a_row_button_called_by_its_id_is_the_tool_its_row_runs(self):

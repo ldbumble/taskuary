@@ -47,8 +47,8 @@ def block() -> str:
     if not live(): return ''
     return ('THE CODING AGENTS, FROM HERE (Developer mode): coding_agents {} lists every coding agent live now - task, repo, branch, state, '
             'files changed, last line; tell_agent {"task": "TQ-0123", "text": "..."} puts the owner\'s words into that agent as if typed in '
-            'its box - their words as they said them, never yours; land {"task": "TQ-0123"} asks how its branch lands - the answers come up '
-            'as choices under your line and only the owner\'s pick lands it, so never say it landed.\n\n')
+            'its box; land {"task": "TQ-0123"} asks how its branch lands - the answers come up as choices under your line and only the '
+            'owner\'s pick lands it.\n\n')
 
 
 def _tid(p: dict) -> int:

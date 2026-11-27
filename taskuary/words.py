@@ -28,11 +28,10 @@ def link(pid: str) -> str:
 # ONE WAY TO BRING A PAGE UP, for the dock and every task agent (the owner, 2026-11-07): a task agent said "you can connect your books here"
 # in prose while the dock linked the real card. Each address is one canvasLinks.js opens in place, and the `show` tool's button takes the
 # same ones (viewspec.LINK); #connector=<type> is the form that opens ONE card - #connections=<section> opens a section, its cards closed.
-LINK_LINE = ('BRINGING THINGS UP: when the owner should see or set something, link it - a markdown link opens that screen in place - '
-             'never directions in prose: a task by its title, linked to its real id - [the vendor review](#task=1), never its number; a connection\'s card by type, [Connect QuickBooks]'
+LINK_LINE = ('BRINGING THINGS UP: a markdown link opens that screen in place: a task by its title, linked to its real id - '
+             '[the vendor review](#task=1); a connection\'s card by type, [Connect QuickBooks]'
              '(#connector=quickbooks) (intacct, outlook, gmail, github, jira ...; &step=1 lights its first step), all at #connections; '
-             'settings #settings=<page> (#settings=policies, #settings=updates); a report #report=<id>, a new one #report=new, the list #report=reports. One '
-             'link and a few words on what to do there, never what the screen shows.')
+             'settings #settings=<page> (#settings=policies, #settings=updates); a report #report=<id>, a new one #report=new, the list #report=reports.')
 
 
 def card(title: str) -> str:

@@ -246,7 +246,7 @@ class PostTests(unittest.TestCase):
         # second run, same facts: the model is told what was said, and even if it echoes, nothing posts
         out2 = assistant.run(s, llm=llm, force=True)
         self.assertEqual(out2['said'], 0)
-        self.assertIn('ALREADY SAID (never repeat):', seen[1]); self.assertIn('- (open) Dana owes you', seen[1])
+        self.assertIn('ALREADY SAID (in front of the owner already):', seen[1]); self.assertIn('- (open) Dana owes you', seen[1])
         self.assertEqual(len([r for r in s.feed(limit=10) if r['Channel'] == 'assistant']), 1)
 
     def test_every_line_carries_its_why_and_the_post_says_what_it_reviewed(self):

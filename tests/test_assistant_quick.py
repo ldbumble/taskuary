@@ -247,7 +247,7 @@ def test_continue_lit_with_notes_carries_them_and_says_so():
 def test_the_tool_text_tells_marking_read_from_putting_down():
     """"mark the FYI read" over one FYI chose Next on the real CLI: the decision and the tool now say which is which."""
     from taskuary import toolcatalog
-    assert 'mark the FYI read' in toolcatalog.PURPOSE['pipe.clear'] and 'never next' in toolcatalog.PURPOSE['pipe.clear']
+    assert 'mark the FYI read' in toolcatalog.PURPOSE['pipe.clear'] and 'only marks read' in toolcatalog.PURPOSE['pipe.clear']
     assert 'marked nothing' in toolcatalog.DECISIONS['next'] and 'pipe.clear' in toolcatalog.DECISIONS['next']
 
 

@@ -125,4 +125,4 @@ def test_the_model_names_the_kind_of_its_own_line():
            {'key': 'idea:hunch', 'text': 'Something else worth a look', 'type': 'nonsense', 'why': 'x'}]
     out = assistant.parse(s, json.dumps({'say': say}), [])
     assert [(o['key'], o['kind']) for o in out] == [('idea:clash-thursday', 'clash'), ('idea:hunch', 'idea')]
-    assert '"type": "<idea:* only - second_ask' in assistant.CONTRACT and 'One failure row a report already shows is not a line' in assistant.CONTRACT
+    assert '"type": "<idea:* only - second_ask' in assistant.CONTRACT and 'a failure row on its report' in assistant.CONTRACT

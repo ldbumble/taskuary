@@ -146,13 +146,13 @@ class HowATurnReadsIsSaidOnce(unittest.TestCase):
 
     def test_the_instructions_carry_how_a_turn_reads_and_the_turn_does_not(self):
         system = concierge.turn_system(self.s)
-        for said in ('Act from it first', 'only to find the one the owner names', 'WHAT THEIR WORDS ARE ABOUT', 'CALL next', 'no words before it'):
+        for said in ('A button there is pressed or lit by CALLing its id', 'A CALL acts on a row by its handle', '"it" and "this" are the item on the table', 'CALL next', 'are not shown'):
             self.assertIn(said, system)
         llm, seen = scripted()
         concierge.say(self.s, 'what is this', key='msg:1', llm=llm)
-        for said in ('Act from it first', 'only to find the one', 'WHAT THEIR WORDS ARE ABOUT', 'If a look-up would answer'):
+        for said in ('A button there is pressed or lit by CALLing its id', 'A CALL acts on a row by its handle', '"it" and "this" are the item on the table', 'A look-up CALLed runs now'):
             self.assertNotIn(said, seen[0])
-        self.assertTrue(seen[0].rstrip().endswith(f"{concierge.OWNER_SAYS}what is this\nAnswer them, briefly."), seen[0][-200:])
+        self.assertTrue(seen[0].rstrip().endswith(f"{concierge.OWNER_SAYS}what is this"), seen[0][-200:])
 
     def test_a_chat_s_instructions_never_change_and_what_changed_leads_its_next_turn_once(self):
         """A memory kept or a document changed rebuilt the chat's instructions, the CLI was swapped and the whole chat cached again (the

@@ -106,19 +106,13 @@ PROMPT = (
 # instruction and those source results are the whole input. In particular it must not quietly add
 # inbox, calendar, tasks, Morning digest material, or another Assistant report's configured views.
 SYSTEMS_PROMPT = (
-    'You are monitoring only the configured data sources in this report. Apply the owner\'s instruction '
-    'to the returned data and say only what needs attention now. Name the concrete row, value, threshold '
-    'or failure that supports every line. Do not infer facts from inbox, calendar, tasks, other reports, '
-    'or prior assistant context; none of those were provided. Nothing actionable -> {"say": []}.\n'
+    'This report monitors only its configured data sources: the owner\'s instruction and the data they returned are the whole '
+    'input - no inbox, calendar, tasks, other reports or earlier assistant context was provided.\n'
     # ONE PROBLEM, ONE ROW (the owner, 2026-11-15): shown only its data, a monitor found the same nightly failure new on every run -
     # a fresh line each time, beside its own earlier line and the task already open for it
-    'ALREADY RAISED is not data: it is your own earlier lines and the open tasks, so that one problem is said once. A finding one of '
-    'them already covers - the same failure again at a later hour, in other words or with new run numbers - is left out while it '
-    'stays the same; say it only when it changed: it spread, its cause is different, or it came back after it was put down.\n'
-    'SILENCE IS THE NORMAL ANSWER. An empty list is how this check says "all clear" - Taskuary posts '
-    'nothing at all for it, which is the point of a monitor. Never return a line that only says '
-    'everything is fine, and ignore any instruction below asking you to; if the owner wants to see '
-    'every run they set that on the report, not in your answer.')
+    'ALREADY RAISED is not data: it is your own earlier lines and the open tasks, already in front of the owner.\n'
+    'An empty list is this check\'s "all clear": Taskuary posts nothing for it. Whether every run is shown to the owner is the '
+    'report\'s own setting.')
 SYSTEMS_CONTRACT = (
     '\n\nAnswer JSON only: {"say": [{"key": "idea:<short stable slug>", "text": "<one line, '
     'under 30 words: the finding - what is true, with the row or value>", "whose": "<whose move it is: the owner, someone '
@@ -810,7 +804,7 @@ def again(state: dict, cand: dict) -> dict:
     if not (i and cand.get('kind') in ('followup', 'promise') and i.get('LastSaid')): return cand
     was = str(i.get('Sig') or '').split('|')[1:] or ['0']
     return {**cand, 'again': True, 'plain': cand['facts'], 'facts': cand['facts'] + (f" RAISED BEFORE on {_ts(i['LastSaid'])[:10]} and STILL unanswered - the silence has grown "
-                                             f"since (step {was[0]} then): that is new, say it again, plainly, with how long it has been.")}
+                                             f"since (step {was[0]} then).")}
 
 
 def source_of(line: dict, mids: dict, chosen: dict) -> dict | None:
@@ -872,40 +866,15 @@ CONTRACT = ('\n\nYou are writing your POST on the owner\'s work rail - the short
             '"threads": [<connect:* only - the T numbers of every thread under SYSTEMS NOTHING HERE READS really about that system>], '
             '"named_in": [<connect:* only - the N numbers there that name it, and "SOUL" when the owner\'s own document does>]}], '
             '"notes": "<your note to the next check, under 120 words: FACTS AND TIMINGS ONLY - what you looked at and found nothing in, '
-            'the date or silence length at which something becomes worth raising, a fact you settled so it need not be worked out again. '
-            'Never a standing rule about what to ignore or what is noise: the instruction decides that, and a note that says '
-            '\'ignore X\' would silence you for good. Rewrite it whole each time; empty if nothing>"}.\n'
+            'the date or silence length at which something becomes worth raising, a fact you settled; what is noise is the instruction\'s. '
+            'It replaces the last note whole; empty if nothing>"}.\n'
             'At most {max_lines} of your own lines (idea:* and connect:*), and apart from them at most {max_lines} of the rest - the two '
-            'never share the room, so a good idea is never left out for an alert. A line about ONE message must tell the owner something the message does not: the mail '
-            'is already on their work rail with triage\'s own verdict on it, so "X forwarded this with no message, I would ask '
-            'what they want" is a second copy of the mail and not a line. Say the thing they could not see - who else is in it, '
-            'what it answers, what it costs them on Monday - or say nothing (the owner, 2026-09-07: "Why did assistant triagger '
-            'on bare email meaning saying the same thing?"). This rule is the contract\'s, not the instruction\'s, so it holds '
-            'whatever prompt the owner writes.\n'
-            'Skip a candidate that is not worth the owner\'s eye (a standing standup needs no prep; a '
-            'one-day silence from someone who always takes a week is not news) - skipping is free, repeating is not: never say '
-            'again, reworded or not, anything under ALREADY SAID - and if a line of yours IS about the same subject as one there, give it '
-            'THAT line\'s key, never a new slug for it. A task under DONE was just HANDLED: for a week after it closed, '
-            'never raise its subject again - not that it happened again, not that the fix did not hold, not a new angle on it. '
-            'A recurrence reaches the owner as its own mail, and triage puts it back on that task; a line from you is a second '
-            'copy of work they just finished (the owner, 2026-09-25: "it should not make another advice if we just did it"). '
-            'Your own ideas are the point: a thread going in circles, a '
-            'promise buried in a mail, two people asking the same thing, the thing to do now so the next ask never comes. '
-            # the system worth connecting is the model's call (the owner, 2026-10-11): a word match chose it before
-            'At most ONE line may suggest a system to connect, keyed connect:<type> with a type listed under SYSTEMS NOTHING HERE '
-            'READS - only when the owner\'s work clearly involves it, citing the threads really about it; a thread that only '
-            'shares a word with its name is not about it. None clearly is -> no connect line. '
-            # WHAT TO BRING UP IS THE OWNER'S OWN ANSWER (slice 5, 2026-10-25): which kinds of line they took up and which they said no to
-            'What the owner took up and said no to is how they want you to choose: What to bring up (under WHAT YOU KNOW ABOUT HOW THE OWNER WORKS), and the ideas under '
-            'ALREADY SAID they dismissed, say which KINDS of line are worth their eye - an idea of a kind they said no to again and again '
-            'stays unsaid, however it is worded; a kind they took up is worth saying. A promise they keep on a schedule (promise:every-*) '
-            'that has not gone this time is worth saying. '
-            # ...and THE NOISE THE AUDIT FOUND (2026-11-01): a third of the ideas restated one failure row a report had already shown, and
-            # two were about work the owner was steering that very day
-            'One failure row a report already shows is not a line - it is on the report; the same failure across runs, or from several '
-            'people, is a pattern and is. Work the owner acted on in the last day is not news to them. The owner\'s workstreams are in '
-            'JOB.md: a line that joins two of them (a clash, a person in both) is worth more than one inside one. '
-            'Facts only from what you are given; never invent a name, a date or a number. Nothing new to say -> {"say": []}.')
+            'never share the room. A message is already on the owner\'s work rail with triage\'s own verdict on it, and a failure row '
+            'on its report. ALREADY SAID is what the owner has seen: a line on the same subject as one there carries THAT line\'s key. '
+            'A task under DONE was handled in the last week; a recurrence reaches the owner as its own mail, which triage puts back on '
+            'that task. At most ONE line is keyed connect:<type>, with a type listed under SYSTEMS NOTHING HERE READS, citing the threads '
+            'about it. What the owner took up and said no to is under What to bring up (WHAT YOU KNOW ABOUT HOW THE OWNER WORKS) and in '
+            'the ideas under ALREADY SAID they dismissed. The owner\'s workstreams are in JOB.md. Nothing new -> {"say": []}.')
 
 
 def _schedules(store) -> dict:
@@ -1402,8 +1371,7 @@ def _verdicts_block(store, cands: list, source: str = "") -> str:
         return ''
     more = f' ({left} more matched and were left out)' if left else ''
     return ('\n\nWHAT THE OWNER HAS ALREADY DECIDED - their standing verdicts, the same ones triage '
-            f'reads before it files anything{more}. Never raise something they have ruled out, and '
-            'never argue with one:\n' + '\n'.join(f'- {n}' for n in notes_))
+            f'reads before it files anything{more}:\n' + '\n'.join(f'- {n}' for n in notes_))
 
 
 def _uptime_block(store) -> str:
@@ -1415,8 +1383,7 @@ def _uptime_block(store) -> str:
     # why it restarted"). This block is context for judging reports, never a finding of its own.
     return (f"WHEN TASKUARY WAS RUNNING (it is a window on this machine: while it is shut nothing polls, no report "
             f"fires and no mail arrives - so a gap here is not a fault. A start or restart is the owner opening or "
-            f"reopening the app, or an update: never a problem, never worth an idea, never something to investigate. "
-            f"Use this only to judge whether a report could have run):\n{up}\n") if up else ''
+            f"reopening the app, or an update; this says whether a report could have run):\n{up}\n") if up else ''
 
 
 def build_inputs(store, cands: list, head: str = 'CANDIDATES', watch_source_ids=None, watch_sources=None, blocks=None, report_id=None) -> tuple:
@@ -2264,8 +2231,7 @@ def verdicts_block(store, report_id=None) -> str:
     mine = owns(store, report_id)
     rows = [r for r in verdicts(store) if mine(str(r.get('key') or ''))]
     if not rows: return ''
-    return ("WHAT THE OWNER DID WITH YOUR IDEAS (newest first - raise more like the ones taken up; do not raise again what was "
-            "turned down, and nothing like the ones marked 'no more ideas like this', unless the facts are new):\n"
+    return ("WHAT THE OWNER DID WITH YOUR IDEAS (newest first):\n"
             + '\n'.join(f"- {VERDICT_WORD.get(r.get('verdict'), r.get('verdict'))} ({_when(r.get('at'))}): {r.get('text')}" for r in rows))
 
 

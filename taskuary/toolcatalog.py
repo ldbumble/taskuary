@@ -28,15 +28,12 @@ PURPOSE = {
                                  'or an address; drafted in their voice for their Send, never sent from here) | '
                                  'goal (an outcome with a date, its steps tasks) | dashboard (a page of numbers kept up to date), `text`. '
                                  # "generate an image for me" was drawn by the chat's own brain and said "created", with nothing shown (TQ-1251)
-                                 'MAKING something - a picture, a flyer, a document, a spreadsheet - is a job for a general agent: write it '
-                                 'here, never make it in this chat yourself. '
+                                 'MAKING something - a picture, a flyer, a document, a spreadsheet - is a general agent\'s job. '
                                  # ...and a job on a clock or a report is the agent's to set up with its own tools (F1, the walks 2026-11-18)
-                                 'A job that REPEATS on a clock, or a report, is a job for a general agent too - it sets the routine up for their press; '
-                                 'and a short `title` in '
-                                 'your own words for the job (never "send it to the agent"). Never for a task that '
-                                 'already exists (a TQ ref, or a row on THE RAIL BY NAME): starting an agent on one is '
-                                 'dispatch.prepare, its own last session is agent.continue, and "remind me about it" is '
-                                 'task.defer on it'),
+                                 'A job that REPEATS on a clock, or a report, is a general agent\'s too - it sets the routine up for their press. '
+                                 '`title`: a short name for the job. A task that already exists (a TQ ref, or a row on THE RAIL BY NAME) '
+                                 'takes dispatch.prepare to start an agent, agent.continue for its own last session, and task.defer for '
+                                 '"remind me about it"'),
     'message.file':             "file it - not ours, just this one",
     'message.archive':          'archive it: off the pipe and closed, nothing deleted',
     'preference.exclude_sender': 'teach triage to file this kind of mail from this sender, or this subject, from now on - their mail still arrives (`scope`: sender | subject)',
@@ -47,22 +44,22 @@ PURPOSE = {
     'task.defer':               (f'{L("defer")}: put an open task away until a day and bring it back then - `until`: a date '
                                  '(2026-10-09), "2 weeks", "3 days", "monday", with the time they said kept ("tomorrow 9am", '
                                  '"friday 2pm"), "after_meetings" whenever they mean once the day\'s meetings or calls are over - calendar or not: the app '
-                                 'picks the time, or says there is none to pick from - never a day guessed instead, or "none" to bring it back now; `ref` names the task (TQ-0123) when it is not '
+                                 'picks the time, or says there is none to pick from, or "none" to bring it back now; `ref` names the task (TQ-0123) when it is not '
                                  'the one on the table. "Remind me about <a task that exists>" - named by ref, sender or '
-                                 'subject - is this, never a new to-do'),
+                                 'subject - is this'),
     'review.approve':           ("the owner's yes to what is drafted: sends the reply as it stands - and on a task's finish card merges the pull "
                                  "request (or closes the issue) FIRST, sending the reply only if that worked. The task stays open: "
                                  "task.complete (Mark done) is the close"),
     'agent.answer':             ('answer the agent that is waiting - `text`; `ref` names its task when it is not the one on the table. With no '
-                                 'agent on the task (TASK NOW says so) nobody hears it - say so: agent.continue or dispatch.prepare starts '
+                                 'agent on the task (TASK NOW says so) nobody hears it; agent.continue or dispatch.prepare starts '
                                  'one. An agent still WORKING, not asking, takes words as agent.tell'),
     # A NEW PROMPT FOR THE AGENT AT WORK (the owner, 2026-11-02: "it should be able to, like send a new prompt into the general/coding
     # agent"): the page's Tell the agent (waitroom.add) - typed in at once when it is parked at its prompt, else at its next stop
     'agent.tell':               ('tell the agent WORKING on a task something new, as the owner\'s next prompt ("tell the agent to use the '
                                  'main branch", "also check the March file") - `text`: the words, as the owner would type them; `ref` when '
                                  'it is not the one on the table. It goes in when the agent stops at its prompt - never mid-step. With no '
-                                 'agent at work nobody hears it: say so'),
-    'agent.stop':               "stop the agent working on a task now - the x on its running turn: the one on the table, or the task `ref` names; never a guess at which. On the desk it stops at once and typing to it carries it on; on a phone it is the yes-or-no that ends its session. Several at once is agents.stop",
+                                 'agent at work nobody hears it'),
+    'agent.stop':               "stop the agent working on a task now - the x on its running turn: the one on the table, or the task `ref` names. On the desk it stops at once and typing to it carries it on; on a phone it is the yes-or-no that ends its session. Several at once is agents.stop",
     'report.rerun':             'run that report again',
     # THE JOB-IDEAS PASS, NOW (the owner, 2026-11-03: "how do I trigger it now"): the daily pass, started at once off the chat's thread
     'advisor.ideas':            ("the Advisor's pass for ideas for the owner's job, run now instead of waiting for its day - \"look for ideas for "
@@ -73,8 +70,7 @@ PURPOSE = {
     # ...and EVERY fact, said in the owner's words, lands in LEARNED.md where triage, the report gate, the Advisor and agents read it - a
     # "don't care" above all (the owner, 2026-10-27: "if I don't care about something the system knows it")
     # ...and HOW he writes is what he said too: every draft reads what he said that bears on it (memory.for_task)
-    'memory.remember':          ("keep a fact or rule the owner tells you, at once, and above the CALL answer them in a few natural words "
-                                 '("Got it - Omar for badge faults.") - never that it was saved, where, or who reads it. `note`: it, in the owner\'s words '
+    'memory.remember':          ("keep a fact or rule the owner tells you, at once; nothing of it shows on his screen. `note`: it, in the owner's words "
                                  '("Gail moved to Ops", "Ray handles payroll for me", "no meetings before 10", "write Mrs <surname> to women", '
                                  '"I don\'t care about the legacy export job any more") - triage, every agent on a task it bears on, every '
                                  'draft and you read it from then on. `subject`, always: what it is about in a few words ("meeting hours", '
@@ -82,7 +78,7 @@ PURPOSE = {
                                  '(memory.about and memory.list show each line\'s subject). `about`: the person it is about (an address or '
                                  'name), never the owner himself. `signature`: true when the note IS how they sign, the block under every email '
                                  '("Best,\\nAlex") - it becomes their saved signature. `doc`: soul for who the owner IS, lasting - their title, '
-                                 'company, the systems they use ("I\'m now the AP lead") - or counsel for how YOU should speak to them ("be '
+                                 'company, the systems they use ("I\'m now the AP lead") - or counsel for how they want to be spoken to ("be '
                                  'shorter with me"): appended to SOUL.md or COUNSEL.md, never rewritten. Who reports to whom and who owns '
                                  'what is people.relate'),
     'memory.wrong':             ('take a line out of the memory, or confirm one - `key` (from memory.about or memory.list), `how`: wrong '
@@ -93,12 +89,11 @@ PURPOSE = {
     'people.relate':            ("who someone is to the owner, on their org chart - `who`: a name or address; `relation`: manager | report | none "
                                  '(none clears it); `owns`: areas they are responsible for ("payroll, benefits"), added; `drops`: areas taken off; '
                                  '`forget`: true takes them off the chart. "Erin is my manager", "Ray owns payroll", "Gail reports to me" - '
-                                 'never memory.remember for these: triage and agents read the chart'),
+                                 'triage and agents read the chart'),
     'routing.remember':         ('remember how work like this should be ROUTED next time - `field`: kind | system, '
                                  'and `value`. kind: coding (an agent in a checkout) | general (the assistant) | task (the owner, '
                                  'no agent). system: where the work actually lives when no repository here can touch it, named '
-                                 'plainly ("ADP"). It teaches triage and moves nothing - say it when the owner tells you a '
-                                 'verdict was wrong, or where a kind of job really belongs.'),
+                                 'plainly ("ADP"). It teaches triage and moves nothing.'),
     'task.split':               'split one arrival into two jobs - `text`',
     # A MEETING IS THE CALENDAR'S, NEVER AN AGENT'S JOB (the owner, 2026-10-28: "schedule a meeting" brought up Give an agent a job): the one
     # scheduling move is a task's Find a time, drafted for Send (calwrite.draft) - concierge._meeting routes to it, or to New → Meeting
@@ -149,17 +144,16 @@ PURPOSE = {
     'review.reject':            (f'reject the draft waiting on a task - nothing is sent, the task stays open; `ref` names the task. A REPLY draft '
                                  f'is never rejected: {L("redraft")} (redraft) writes it again, {L("close")} (close) closes the task with nothing sent'),
     'hub.publish':              ('save to the company Hub - `title`: one durable claim, `body`: why it matters and what to do, `topic`, '
-                                 '`kind`: new_idea | technical_solve | howto | gotcha | decision | system | people, `why_earned`. Only a '
-                                 'reusable discovery reached through real work, or a developed idea with its reasons - never a transcript, '
-                                 'a task log or a routine answer. When the owner asks to save something there - at the desk the Hub comes up '
-                                 'at its Write one with your words, theirs to post - or, on a phone, when a turn clearly earns it'),
+                                 '`kind`: new_idea | technical_solve | howto | gotcha | decision | system | people, `why_earned`. The Hub '
+                                 'holds reusable discoveries reached through real work and developed ideas with their reasons. At the desk '
+                                 'the Hub comes up at its Write one with your words, theirs to post'),
     # ...at the desk it is the Hub's Write one (concierge._route, the assistant audit 2026-11-02): a page that opens is never unasked
     'pipe.clear':               ('clear a SET of items from the pipe at once - takes `select` (below); read, never deleted. "Clear all '
-                                 'the FYI" and "mark the FYI read" - one FYI on the table or many - are this with kind: fyi, never next. Their words naming the set are the press: it is marked read at once '
+                                 'the FYI" and "mark the FYI read" - one FYI on the table or many - are this with kind: fyi. Their words naming the set are the press: it is marked read at once '
                                  'and the count said. `scope`: all (the default - every one waiting that `select` matches, the batch on the table '
                                  'and every one after it: "all the FYI", "mark every FYI read", "ignore all the FYI") | table (only those on the table: '
-                                 '"mark these read", "these four") - ALL in their words is every one waiting, never just the batch on the table. '
-                                 'It only marks read - "dismiss them", "get rid of them" is pipe.remove. When the owner says "from now on" too, also CALL '
+                                 '"mark these read", "these four"). '
+                                 'It only marks read - "dismiss them", "get rid of them" is pipe.remove; "from now on" is '
                                  'preference.exclude_sender or preference.sender_rule. Rows already filed as not ours (pipe.remove, Not ours) are off '
                                  'the rail: "those should be read, not Not ours" is this with `keys` - their m-numbers, as the Not ours receipt '
                                  'listed them - and each one\'s Not ours is taken back (nothing taught from it) and it is marked read'),
@@ -170,14 +164,14 @@ PURPOSE = {
     # ROWS THE MODEL CHOSE, each by its own button (bulk.py, the owner 2026-10-28: "dismiss the spam"): `select` with `keys` - the TQ refs
     # and m-numbers pipe.read printed - names a set no field can ("what looks like spam"). Code refuses what a sweep never touches
     'pipe.remove':              (f'{L("not_ours")} for a SET at once - `select` (below; `keys`: the rows you judged, from pipe.read): each mail is filed, each '
-                                 f'task removed ({L("remove")}), nothing deleted - "dismiss the spam", "get rid of these newsletters". `learn`: true only '
-                                 'when the owner says "from now on" too - then triage learns from each; otherwise it teaches nothing. Never '
+                                 f'task removed ({L("remove")}), nothing deleted - "dismiss the spam", "get rid of these newsletters". `learn`: true (the owner\'s '
+                                 '"from now on") - triage learns from each; otherwise it teaches nothing. Never '
                                  'touches work waiting on the owner, an agent at work, a draft waiting for its Send or a goal - those are '
                                  'left and said. Runs at once; the receipt lists every row as its link'),
-    'pipe.block':               ('stop a SET\'s senders for good - only when the owner says so ("and stop them", "block them", "unsubscribe '
+    'pipe.block':               ('stop a SET\'s senders for good ("and stop them", "block them", "unsubscribe '
                                  'me") - `select` as pipe.remove takes it; `how`: rule (the default: an exclusion rule per sender in Settings, '
                                  'their mail never reaches triage again) | unsubscribe (a mailing list: its Unsubscribe comes up lit, one '
-                                 'list at a time - the owner presses it). "Dismiss the spam" alone is pipe.remove, never this'),
+                                 'list at a time - the owner presses it)'),
     'pipe.mine':                (f'{L("mine")} for a SET of mail - `select`; each becomes a task of the owner\'s, no agent. A row already a '
                                  'task is left as it is'),
     'agents.stop':              ('stop a SET of agents at once - `refs`: the TQ refs of the tasks they are on, as agents.now or pipe.read '
@@ -205,11 +199,11 @@ PURPOSE = {
                                  'a workflow starts as its task at once (the ref comes back)'),
     'report.pause':             'stop a report or workflow running on its clock - `title`',
     'report.resume':            'put a paused report or workflow back on its clock - `title`',
-    'report.route':             'change where one line of a report\'s route card goes - `title`, `line`: timeline | alert | send, `how`: always | ai | rule | never, `when` (for ai: what to look for), `rule`/`count`/`text` (for rule), `to` (send or alert: who gets it - an address, or a name as the owner said it; not sure who: ask them, never guess)',
+    'report.route':             'change where one line of a report\'s route card goes - `title`, `line`: timeline | alert | send, `how`: always | ai | rule | never, `when` (for ai: what to look for), `rule`/`count`/`text` (for rule), `to` (send or alert: who gets it - an address, or a name as the owner said it)',
     'report.edit':              'change a report\'s configuration - `title`, `config`: only the keys to change (title, cron, daily_at, every_minutes, deliver, alert...)',
     'report.delete':            'remove a report or workflow - `title` (kept 30 days under Recently deleted)',
     'setting.set':              'change one setting - `setting` (its key, or `label`: part of its name) and `value`; the schema says what it takes',
-    'connection.test':          'test a connection now and say what it answered - `name`',
+    'connection.test':          'test a connection now; it answers with what the connection said - `name`',
     'connection.pause':         'switch a connection off - `name`; nothing is deleted',
     'connection.resume':        'switch a connection back on - `name`',
     'script.start':             'start a script by its name: walk me through my tasks | set up a report',
@@ -325,9 +319,9 @@ def selector(store=None, live: bool = True) -> str:
               '  sender     an address or a name, matched on the sender only',
               '  contains   words that must appear in the subject',
               '  older_than_hours  a number',
-              '  everything true - every item in the pipe but an agent waiting or working; only when the owner means all',
+              '  everything true - every item in the pipe but an agent waiting or working',
               'SELECT is for a SET the owner describes ("all the reports").',
-              'A category is no word of the subject: category: report, never contains: report.']
+              'A category is not a word of the subject: category: report, not contains: report.']
     return '\n'.join(lines)
 
 
@@ -337,33 +331,26 @@ def block(store=None) -> str:
     individual tools. It should be an exhaustive list to figure out everything but it doesn't need that up front").
     Every tool is reachable (tools.list per bucket, tools.describe per tool); only the index rides every turn."""
     lines = [
-        'HOW YOU ACT (code reads your last line)',
-        # the owner, 2026-10-21: "free text should almost never be used in the assistant - it should be bringing up UI components"
-        'BRINGING SOMETHING UP IS THE ANSWER: a task, a page, a card or a button the owner asked for comes up with a few words',
-        '(under 12) - never what it shows: no sender, story or summary beside it. Longer words only answer a real question.',
-        # ...and never as a promise (the owner, 2026-11-03: "if it opens it, it should say open"): the page says "Opened ..." once it is up
-        'Never "Opening" or a promise: the page says "Opened" once it is up.',
+        'WHAT CODE READS (your last line)',
         # the owner, 2026-10-27: the words before a press were written, then thrown away - the lit button says nothing (2026-10-23)
-        'A CALL that presses or lights a button - an action word, a put-down, a reminder - is the CALL line',
-        'alone, no words before it: the button is the answer.',
-        'Answer in plain words. To look something up or do anything, end with ONE line:',
+        'A page that comes up says "Opened" itself. Words before a CALL that presses or lights a button are not shown.',
+        'A look-up or an act is ONE line at the end:',
         '  CALL: {"kind": "<tool>", "params": {...}}',
         # ...save the one made for them: an agent's job starts on its own task (concierge._made_now), and "where is it?" was answered
         # "waiting in New, not started" over an agent at work on its own task (2026-11-02)
         'A look-up runs at once and answers you. A change is the owner\'s to press: Taskuary brings up its button, lit, or',
-        "its page - never say it is done. Only an agent's job starts at once (YOUR OPEN ASKS). When two different",
-        'things fit and you cannot tell which, ask one short question and end with OPTIONS: first | second instead.',
-        'Never both, never an unlisted tool. A task the owner names goes in params.ref ("TQ-0123"); otherwise',
+        "its page. Only an agent's job starts at once (YOUR OPEN ASKS). OPTIONS: first | second in place of a CALL puts",
+        'a choice to the owner. One line, of a listed tool. A task the owner names goes in params.ref ("TQ-0123"); otherwise',
         "the item on the table is the target. A decision about a DIFFERENT item than the table's puts the",
         'words that name it in params.on. A SET of items goes in params.select (SELECT below).',
         '',
-        'WHERE THINGS ARE - look before you guess:',
+        'WHERE THINGS ARE:',
     ]
     # ...as the tool and its params, not a whole CALL line apiece: the same wrapper seventeen times was 500 characters of the index (2026-10-28)
     for said, kind, params in WHERE:
         if _offered(store, kind): lines.append(f'  {said} -> "{kind}" {json.dumps(params)}')
     lines += ['', 'TOOLS, IN BUCKETS - tools.list {"bucket": "<name>"} lists one, tools.describe {"kind": "<tool>"} one tool;',
-              'a tool you know, CALL directly.']
+              'a known tool is CALLed directly.']
     for name, what, kinds in BUCKETS:
         lines.append(f'  {name} - {what}: {", ".join(signature(k) for k in kinds if _offered(store, k))}')
     # ...and every look-up WHERE does not already show, by name: "what is the agent doing?" and "what drafts wait for my yes?" had their
@@ -372,21 +359,15 @@ def block(store=None) -> str:
     lines.append('  look - more look-ups: ' + ', '.join(k for k in READS if k not in shown and _offered(store, k)))
     # ...ONE LABEL PER BUTTON: the names it wears in a state ("Send anyway", "All read, next") are in tools.describe - the line was a
     # seventh of the index (the owner, 2026-10-28: "keep the index at 7950 by trimming")
-    lines += ['', 'THE BUTTONS BY NAME (tool "name"; other names: tools.describe), only these:',
+    lines += ['', 'THE BUTTONS BY NAME (tool "name"; other names: tools.describe):',
               '  ' + ', '.join([f'{k} "{L(k)}"' for k in DECISIONS if k in buttons.VERBS and _has(store, k)]
                                + [f'{t} "{L(v)}"' for v, t in CHIP_TOOL.items()]),
               '', selector(store, live=False), '',
-        'WHICH ONE, in this order:',
-        '  1. the owner means one of the action words under your line - do that (bucket table).',
-        '  2. they want detail, history or a summary - LOOK IT UP and answer from it, over the period THEY',
-        '     mean (six months ago is days: 200).',
-        '  3. they want something DONE and it says what - CALL it now; its button is their confirmation. A reminder or',
+        'WHICH TOOL:',
+        '  the action words under your line are the bucket table; a look-up\'s period is `days` (six months is 200).',
         # ...and a message to send (the owner, 2026-11-03: "send this on WhatsApp" pasted the words into the chat): New, filled in, for their Send
-        '     a to-do they will do themselves is task.create_from_text kind todo, a message to send kind send (channel,',
-        '     to, the words in text, never pasted here), a meeting meeting.new; a task that',
-        '     exists is never a new one - change it with the task bucket.',
-        '  4. it is not clear which - LOOK first; then, if two things still fit, ASK naming both. A question about',
-        '     this app itself - its settings, reports, connections, agents - is answered from the look-ups, never an agent.']
+        '  a reminder or to-do the owner does himself is task.create_from_text kind todo, a message to send kind send (channel,',
+        '  to, the words in text), a meeting meeting.new; a task that exists is changed with the task bucket.']
     return '\n'.join(lines)
 
 
@@ -395,7 +376,7 @@ def block(store=None) -> str:
 # the decision road the card's buttons take. Each takes `on` for an item other than the one on the table.
 _DECIDE = {
     'reply':           ("write a reply to the sender - `text`: the gist, in the owner's words; `cc`: people to loop in on it, by name "
-                        "or address (\"loop Gail in and ask her\" is a reply with Gail copied, never an agent). Nothing is sent"),
+                        "or address (\"loop Gail in and ask her\" is a reply with Gail copied). Nothing is sent"),
     'approve':         ("the owner's yes to what is drafted on the item: sends the reply as it stands - on a task's finish card it merges "
                         "the pull request or closes the issue FIRST, then sends the reply; on an agent's proposal it runs that action and only "
                         "that. It never closes the task - that is send_close, or close, the owner's own Mark done - and never continues an "
@@ -405,33 +386,32 @@ _DECIDE = {
     'redraft':         'write the draft again - `text`: the change',
     'mine':            "make it a task on the owner's own list - no agent",
     'regular_agent':   ('send it to an agent that does not write code - `text`: the job; '
-                        '`new`: true when the job is NOT about the item on the table - it becomes a task of its own. Never for Taskuary\'s own '
-                        'settings, connections or update: those are its own screens (app.find), nor for setting up a meeting: meeting.new'),
-    'coding_agent':    ('send it to a coding agent - `text`: what is wanted; `as`: the repository (repos.list), only when sure. '
-                        'Not sure which repository is no reason to ask - CALL it, and its card offers every repository to pick. '
+                        '`new`: true when the job is NOT about the item on the table - it becomes a task of its own. Taskuary\'s own '
+                        'settings, connections and update are its own screens (app.find); a meeting is meeting.new'),
+    'coding_agent':    ('send it to a coding agent - `text`: what is wanted; `as`: the repository (repos.list); without it, '
+                        'its card offers every repository to pick. '
                         '`new`: true when the job is NOT about the item on the table'),
     'not_ours':        'file it, just this once - its card asks whether from now on, or as a rule',
     'not_ours_sender': 'file mail like this from this sender from now on - their mail still arrives and stays readable, and another kind from them is still judged',
-    'block_sender':    'an exclusion rule in Settings: the sender never reaches triage again - only when they ask for a rule',
+    'block_sender':    'an exclusion rule in Settings: the sender never reaches triage again',
     'not_ours_kind':   "an Advisor idea only: put it down AND no more ideas like it - the Advisor's next run reads that",
     'close':           'the task behind the item is finished',
     # PUT DOWN IS NOT READ (the real-CLI walk, 2026-10-20): "mark the FYI read" over one FYI chose Next - "it needs nothing, so Next clears it".
     # Next marks nothing; words that mark read or clear name a set, and that is pipe.clear
     # ...and from a SECTION, the heading's own press (railwalk.section; the rail audit, 2026-11-02: "walk me through the reports" had no way
     # to say where and brought up the top of Tasks)
-    'next':            'move on to the next thing - this one is put down, still theirs, marked nothing. Never for "mark ... read" or '
-                       '"clear ..." - those name a set: pipe.clear. `section`: a rail heading (Tasks, Watching, For later, Reports, '
+    'next':            'move on to the next thing - this one is put down, still theirs, marked nothing (pipe.clear marks read). `section`: a rail heading (Tasks, Watching, For later, Reports, '
                        'Advisor, FYI) - "walk me through the reports" starts at that section\'s first row, as a click on its heading does',
     'answer_agent':    'answer the agent waiting on the owner - `text`',
     'stop_agent':      "stop the agent working on the item now - on the desk the x on its running turn, at once; on a phone the yes-or-no that ends its session",
     'rerun':           'run the report on the table again',
-    'report_off':      "pause the report on the table - off its clock - only when its findings are about something the owner said they do not care about",
+    'report_off':      "pause the report on the table - off its clock",
     'remember':        "keep a fact about how the owner works in their memory - `text`, their words (\"I don't care about the legacy export job any more\" too), `subject` and `about`, as memory.remember's",
     # ...and a SKILL, which has its own New skill: "can I build a skill for it?" was sent to a general agent as its job (the
     # owner, 2026-10-22: "this is not skill ui?")
     'setup':           ('build a report, a skill (how one kind of recurring request is handled from now on), a connection to another '
-                        'system or an automation - `text`: the request. Never a to-do, and never an agent\'s job'),
-    'confirm':         "the owner's yes to the card already waiting - only when one is",
+                        'system or an automation - `text`: the request'),
+    'confirm':         "the owner's yes to the card already waiting",
     'cancel':          "the owner's no to it",
     # the slipped card's answers (spec 2026-10-12, build step 4): each is an outcome the ledger keeps
     'chase':           "chase the person who has gone quiet on the item - a short nudge in the owner's voice is drafted on the thread, copying whoever the ledger says moves them; nothing is sent",
@@ -609,43 +589,43 @@ READS = {
                          'greeting, sign-off, tone), TRIAGE.md, DIGEST.md (the '
                          'morning brief) - each read whole as `section` "your doc <name>" (your doc style) - and what each '
                          'release changed (help/whats-new). `query`: the words; `section`: one section read whole, as its contents list '
-                         'names it. Use it for any "how do I", "what does X do", "what changed" or "why did it" about the app'),
+                         'names it. It answers "how do I", "what does X do", "what changed" and "why did it" about the app'),
     # THE APP AT WORK (lookups.py, 2026-09-24): which agent is on what, what waits on a yes, the
     # calendar past today, what happened, and every place a failure is written down.
     'agents.now':       'every agent session running now - its task, which CLI, and whether it is working, idle, stuck or asking the owner something',
     'approvals.list':   'everything waiting for the owner\'s yes: drafted replies and the actions agents proposed, with their tasks',
     'pipe.list':        ('everything waiting on the owner, lane by lane - replies, asks, approvals, stopped agents, reports: the whole '
-                         'work rail. Use it for "what\'s waiting", "what\'s left", "what do I have"'),
+                         'work rail: "what\'s waiting", "what\'s left", "what do I have"'),
     # ...and WHAT THE ROWS SAY (2026-10-28: "summarize the FYI emails for me" - pipe.list gives subjects, message.read one mail a call)
     'pipe.read':        ('every row on the work rail WITH WHAT IT SAYS - sender, subject, lane, age and the sender\'s own words (quoted '
                          'history cut) - in one call, however many rows. `section`: task | later | reports | ideas | fyi (or a lane; '
-                         'none for all); `who`: a sender. Use it for "summarize my FYI", "what\'s in reports", "anything from Erin on the rail"'),
+                         'none for all); `who`: a sender - "summarize my FYI", "what\'s in reports", "anything from Erin on the rail"'),
     'calendar.read':   ('the owner\'s meetings - `from`: today (the default) | tomorrow | YYYY-MM-DD; `days`: how many (7 by default). '
                          'Reads the calendar live, so it takes a moment'),
     'activity.list':    ('what happened, from the audit trail: counts by kind and the latest entries. `days` (1 by default); '
                          '`who`: you | agents | all'),
     'errors.list':      ('what is failing and what failed: the bell (dismissed ones marked), failed agent runs, report runs, '
-                         'drafts, triage and actions over `days` (3 by default), and the last errors in the log. Use it for any '
+                         'drafts, triage and actions over `days` (3 by default), and the last errors in the log - '
                          '"what broke", "why did X not happen", "is anything wrong"'),
     'memory.about':     ('who someone is to the owner: every line the memory holds about them, with its key, and what the org chart '
-                         'says - `who`: a name or address. Use it for "who\'s Gail to me", "what do you know about Ray", and before '
-                         'memory.remember corrects or memory.wrong takes out a line about them'),
+                         'says - `who`: a name or address - "who\'s Gail to me", "what do you know about Ray"; its keys are what '
+                         'memory.remember corrects and memory.wrong takes out'),
     'memory.list':      ('everything kept about the owner: what they said (each line with its key and subject), the facts, what was '
                          'learned from what they did - confirmed, or still waiting on their word. `about`: words to narrow it (a sender, a topic). '
-                         'Use it for "what do you remember", "what do you know about me"'),
+                         '"what do you remember", "what do you know about me"'),
     # ...and THE FILES THEY MADE (outputs.find, the owner 2026-10-28: "pull up the Excel created by the agent on the task about X")
     'outputs.find':     ('the files agents made on tasks - workbooks, PDFs, documents, charts, pages - each once, its newest version, with '
                          'its task and the link that downloads it. `query`: words of the task or the file ("vendor pricing"); `kind` '
-                         'optional: xlsx | pdf | doc | deck | csv | picture | page; `ref` optional: one task. Answer with the link'),
+                         'optional: xlsx | pdf | doc | deck | csv | picture | page; `ref` optional: one task'),
     'deleted.list':     ('what was removed in the last 30 days and can still come back - reports, workflows, dashboards, rules '
                          "and Hub posts the owner removed (one the vote took off waits on the Hub's own removed shelf)"),
     'rules.list':       ('the standing filters on the owner\'s mail - queue mutes set with a reason, and the policy rules '
-                         '(skip, ignore, escalate...) that decide before any model reads it. `about`: words to narrow it. '
-                         'Use it for "why did I never see X", "what am I filtering"'),
+                         '(skip, ignore, escalate...) that decide before any model reads it. `about`: words to narrow it - '
+                         '"why did I never see X", "what am I filtering"'),
     # DID I MISS ANYTHING (welcome.missed): the morning brief's two checks, for the chat, and what could not be seen
     'missed.check':     ('whether the owner missed anything: asks nobody answered, people who have not answered the owner, '
                          'anything marked urgent, and every place that could not be checked - with the answer written out. '
-                         'Use it for "did I miss anything", "anything slip", "am I behind on anything"'),
+                         '"did I miss anything", "anything slip", "am I behind on anything"'),
     'report.read':      'a report or workflow and its last runs - what it said, whether it failed and why, and its source_id. `title`: part of its name (or `source_id`)',
     # THE APP ITSELF, by name (appfacts). Asked from a chat to "run me the AR report" the assistant had
     # no list of reports at all; "is Teams connected" had no answer but a guess (the owner, 2026-09-18).
@@ -667,8 +647,7 @@ READS = {
     # WHAT WE KNOW. "What is our PO limit", "who handles AP": the answer offered to "look it up in the
     # Hub" and then searched the mail, because no read reached the Hub, the documents or the kept facts.
     'knowledge.search': ('what the company knows - the Hub, the indexed documents and the facts the owner asked to keep. '
-                         '`query`: the words to look for. Call it FIRST whenever the owner asks about a person, a site, a '
-                         'policy, a system or how something is done here - never offer to look it up instead of looking'),
+                         '`query`: the words to look for - a person, a site, a policy, a system or how something is done here'),
 }
 
 # Parameters the CHAT supplies from what is on the table, never the model: it has no way to know a

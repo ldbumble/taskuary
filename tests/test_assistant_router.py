@@ -192,7 +192,7 @@ class DeskRoutes(unittest.TestCase):
             concierge.say(s, 'walk me through my tasks', llm=lambda sy, u, **k: (asked.append((sy, u)), 'CALL: {"kind": "next", "params": {}}')[1])
         # ...said once, in the instructions every turn is read by (TURN_GUIDE - the owner, 2026-10-27), with the empty table on the canvas
         system, turn = asked[0]
-        self.assertIn('CALL next', system); self.assertIn('Never read a task out in words', system)
+        self.assertIn('CALL next brings the next row waiting up as its card', system)
         self.assertIn('ON THE TABLE: nothing', turn)
 
     def test_an_act_on_another_task_brings_it_up_with_its_button_lit(self):

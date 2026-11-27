@@ -389,7 +389,7 @@ class DecisionTests(unittest.TestCase):
         # the model's claim to have acted is never the receipt: with no DECIDE line nothing is proposed, nothing changes
         out = concierge.say(s, 'I will do this just make it a task', key=f'review:{r}', llm=lambda *a, **k: 'Task created - all set!')
         self.assertIsNone(out.get('proposal')); self.assertEqual(s.get_task(t)['Status'], 'waiting')
-        self.assertIn('NEVER use your own task, todo or plan tools', concierge.tools_block(s))
+        self.assertIn('the API refuses them to this token', concierge.tools_block(s))
         # ...and with no model at all the plain phrases are not read: the facts are said, nothing is decided
         with mock.patch.object(concierge, 'brain', return_value=None):
             out = concierge.say(s, 'not mine, ignore it', key=f'review:{r}')
@@ -586,7 +586,7 @@ class StaysOnSubjectTests(unittest.TestCase):
         out = concierge.surface(s, llm=wander)
         self.assertEqual(out['item']['rid'], r)
         self.assertEqual(out['say'], 'Next up: TQ-0001.')                                # the card's few words, not Robin
-        self.assertTrue(seen['u'].startswith('THE ITEM ON THE TABLE - speak only about this one:'))
+        self.assertTrue(seen['u'].startswith('THE ITEM ON THE TABLE:'))
         self.assertNotIn('Coming next', seen['u'])                                       # no other items to wander to
         self.assertTrue(concierge.off_subject('TQ-0312 sat untouched', {'tid': 327}))
         self.assertFalse(concierge.off_subject('TQ-0327 is parked', {'tid': 327}))
@@ -674,7 +674,6 @@ class ThreadTests(unittest.TestCase):
         self.assertIn('YOU ALREADY ANSWERED ON THIS THREAD', fx)
         self.assertIn('let me know if it opens', fx)
         self.assertIn('YOU: Sent it over just now', fx)                     # the chain names the owner's own side
-        self.assertIn('never say you cannot see', fx)
 
     def test_a_polite_request_is_a_hand_off_proposal_not_answered_with_the_mail_it_names(self):
         s = store()

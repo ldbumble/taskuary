@@ -143,9 +143,9 @@ class ANamedTaskIsFound(unittest.TestCase):
         def llm(system, user, **kw): systems.append(system); seen.append(user); return 'The seat count.'
         ask(s, "what's left to do?", item['key'], llm)
         # said ONCE, in the instructions the conversation is launched with (concierge.TURN_GUIDE), not again on every turn
-        self.assertIn('never the whole pipe', systems[0])
-        self.assertIn('ANOTHER task', systems[0])
-        self.assertNotIn('never the whole pipe', seen[0])
+        self.assertIn('"it" and "this" are the item on the table', systems[0])
+        self.assertIn('task.read reads another task', systems[0])
+        self.assertNotIn('"it" and "this" are the item on the table', seen[0])
 
 
 class NoThreadNoInventedRefs(unittest.TestCase):

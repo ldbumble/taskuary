@@ -121,11 +121,11 @@ class SubstituteTests(unittest.TestCase):
         u = seen['user']
         self.assertTrue(u.startswith(assistant.PLACED_HEAD))                       # the instruction travels IN the message, with its data
         self.assertIn(assistant.PLACED_SAYS, seen['system'])
-        self.assertLess(u.index('ALREADY SAID (never repeat)'), u.index('Now the rest.'))   # placed where the prompt names it
+        self.assertLess(u.index('ALREADY SAID (in front of the owner already)'), u.index('Now the rest.'))   # placed where the prompt names it
         self.assertGreater(u.index('OPEN WORK'), u.index('Now the rest.'))                 # the rest follows
-        self.assertEqual(u.count('ALREADY SAID (never repeat)'), 1)
+        self.assertEqual(u.count('ALREADY SAID (in front of the owner already)'), 1)
         assistant.think(s, [], llm, 'Plain.', blocks=chosen)
-        self.assertTrue(seen['user'].startswith('NOW:')); self.assertIn('ALREADY SAID (never repeat)', seen['user'])
+        self.assertTrue(seen['user'].startswith('NOW:')); self.assertIn('ALREADY SAID (in front of the owner already)', seen['user'])
 
     def test_the_preview_is_the_placed_shape(self):
         s = A.store()
@@ -134,7 +134,7 @@ class SubstituteTests(unittest.TestCase):
         self.assertTrue(plain.startswith('NOW:'))
         shaped = assistant.facts(s, blocks=chosen, instruction='Read [taskuary.memory] first.')
         self.assertTrue(shaped.startswith(assistant.PLACED_HEAD))
-        self.assertEqual(shaped.count('ALREADY SAID (never repeat)'), 1)
+        self.assertEqual(shaped.count('ALREADY SAID (in front of the owner already)'), 1)
 
     def test_a_card_with_nothing_rendered_still_answers_in_words(self):
         self.assertEqual(B.sections_by_card([('open_work', 'X')])['taskuary.calendar'], 'TASKUARY · CALENDAR:' + chr(10) + '(nothing in Taskuary · Calendar right now)')
@@ -171,7 +171,7 @@ class CardsInTheSourceListTests(unittest.TestCase):
         s = A.store()
         head, body = reports.executor_for('taskuary')({'store': s, 'type': 'taskuary', 'card': 'memory'})
         self.assertTrue(head.startswith('Memory - '))
-        self.assertIn('ALREADY SAID (never repeat)', body)
+        self.assertIn('ALREADY SAID (in front of the owner already)', body)
         with self.assertRaises(ValueError): reports.executor_for('taskuary')({'store': s, 'type': 'taskuary', 'card': 'nope'})
         head, body = reports.stack(reports.run_source_parts(s, [{'type': 'taskuary', 'card': 'work', 'label': 'my work'}]))
         self.assertIn('=== my work (Work - ', body)

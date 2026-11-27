@@ -82,10 +82,10 @@ def test_search_finds_a_report_the_owner_read_put_down_or_that_left_the_rail():
 def test_the_index_says_opened_is_the_pages_word_and_a_message_to_send_is_new():
     b = toolcatalog.block()
     assert len(b) < 7950
-    assert 'never "Opening" or a promise' in b.replace('Never', 'never')
-    assert 'a message to send kind send' in b and 'never pasted here' in b and 'task.create_from_text(kind, text, channel?, to?)' in b
+    assert 'says "Opened" itself' in b
+    assert 'a message to send kind send' in b and 'task.create_from_text(kind, text, channel?, to?)' in b
 
 
 def test_the_page_guide_says_acts_speak_for_themselves():
     from taskuary import pageview
-    assert 'never narrate them ("Opening ...", "I\'ll open ...")' in pageview.GUIDE
+    assert 'each move says itself as a step once it is done ("Opened ...", "Pointed at ...")' in pageview.GUIDE

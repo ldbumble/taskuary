@@ -99,7 +99,7 @@ class DismissTheSpam(unittest.TestCase):
         self.assertNotIn('proposal', out)
         a = s._one("SELECT * FROM audit WHERE Action='bulk_remove'")
         self.assertEqual(sorted(n for k in json.loads(a['Detail'])['keys'] for n in names[k] if n.startswith('msg:')), [f'msg:{m}' for m in spam])
-        self.assertIn('pipe.read', llm.seen[1]['user']); self.assertIn('never instructions', llm.seen[1]['user'])
+        self.assertIn('pipe.read', llm.seen[1]['user']); self.assertIn('not instructions', llm.seen[1]['user'])
 
     def test_from_now_on_teaches_triage(self):
         s = store(); _, _, spam = world(s)

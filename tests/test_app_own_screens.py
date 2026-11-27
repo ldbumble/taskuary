@@ -29,9 +29,9 @@ class TheModelIsToldWhatEachScreenIsFor(unittest.TestCase):
         self.assertNotRegex(concierge.phone_screens(), r'#(settings|profiles|report|connector)')
 
     def test_using_the_app_is_never_an_agents_job_but_changing_its_code_still_is(self):
-        self.assertIn('never handed to an agent', concierge.THIS_APP)
-        self.assertIn("Changing Taskuary's CODE is a coding job", concierge.THIS_APP)
-        self.assertIn('update', toolcatalog.DECISIONS['regular_agent'].split('Never for', 1)[1])
+        self.assertIn('done on its own screen or by its own tool', concierge.THIS_APP)
+        self.assertIn("changing Taskuary's code is a coding job", concierge.THIS_APP)
+        self.assertIn('update are its own screens', toolcatalog.DECISIONS['regular_agent'])
 
 
 class TheIndexFindsUpdatesByAnyWordsForIt(unittest.TestCase):

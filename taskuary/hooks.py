@@ -172,7 +172,11 @@ def browser_command(base: str, token: str = '', home: str = None) -> str:
     return f'{curl} -s -f -m {int(BROWSER_WAIT)} -X POST "{base}{BROWSER_MARK}" -H "Content-Type: application/json"{token_arg(token, home)} --data-binary @-'
 
 
-BROWSER_WAIT = 120                  # a snapshot and one light verdict; past this curl gives up and Claude runs the command
+BROWSER_WAIT = 120                  # a snapshot and one light verdict; past this curl gives up
+# ...AND A GATE THAT CANNOT ANSWER HOLDS (red team round 6: waits parked on the gate's own threads left its judging queued until curl gave
+# up - and Claude ran the command). The server answers before curl gives up (GATE_WAIT): a step of one of OUR sessions it could not judge in
+# time, or whose judging failed, is refused (unjudged) - and a hook that rides in a session's own settings blocks where it fails outright
+GATE_WAIT = BROWSER_WAIT - 15
 
 
 def spool_path(home: str = None) -> str:
@@ -207,7 +211,8 @@ def session_hooks(token: str = None, base: str = None) -> dict:
     d = {e: [{'hooks': [ev]}] for e in EVENTS}
     d['PreToolUse'] = [{'matcher': 'AskUserQuestion', 'hooks': [{'type': 'command', 'command': ask_command(base, token), 'timeout': ASK_TIMEOUT}]},
                        {'matcher': REASON_MATCH, 'hooks': [{'type': 'command', 'command': reason_command(base, token), 'timeout': ASK_TIMEOUT}]},
-                       {'matcher': BROWSER_MATCH, 'hooks': [{'type': 'command', 'command': browser_command(base, token), 'timeout': BROWSER_WAIT + 10}]}]
+                       {'matcher': BROWSER_MATCH, 'hooks': [{'type': 'command', 'command': browser_command(base, token), 'timeout': BROWSER_WAIT + 10,
+                                                             'onFailure': 'block'}]}]      # ...a session of ours: its gate fails closed (GATE_WAIT)
     return d
 
 
@@ -791,7 +796,7 @@ def browser_settings(sid: str) -> str:
 def _browser_hold(sid: str) -> dict:
     from urllib.parse import quote
     cmd = browser_command(base_url(), agent_token()).replace(BROWSER_MARK, f'{BROWSER_MARK}?sid={quote(str(sid))}', 1)
-    return {'matcher': BROWSER_MATCH, 'hooks': [{'type': 'command', 'command': cmd, 'timeout': BROWSER_WAIT + 10}]}
+    return {'matcher': BROWSER_MATCH, 'hooks': [{'type': 'command', 'command': cmd, 'timeout': BROWSER_WAIT + 10, 'onFailure': 'block'}]}
 
 
 def _session_file(name: str, d: dict) -> str:
@@ -894,9 +899,8 @@ def browser(payload: dict, sid: str = '', task: str = '') -> dict:
     once - the call is Claude's. (A press in the browser or on the desktop is held where it runs, gate.main.)"""
     from . import gate, readgate, shellgate
     tool, inp = str(payload.get('tool_name') or ''), payload.get('tool_input') or {}
-    if tool not in readgate.WRITE_TOOLS + readgate.READ_TOOLS + ('Bash', 'PowerShell'): return {}
     cmd = str(inp.get('command') or '') if tool in ('Bash', 'PowerShell') else ''
-    t = _pane(payload, 'claude') or _general(payload, sid, task)
+    t = _gated(payload, sid, task)
     st, cwd = getattr(t, 'store', None) if t else None, str(payload.get('cwd') or getattr(t, 'cwd', '') or '')
     if not t or not st: return {}
     w = tool in readgate.WRITE_TOOLS
@@ -907,6 +911,22 @@ def browser(payload: dict, sid: str = '', task: str = '') -> dict:
     out = gate.check(st, t.task_id, t.sid, cmd, cwd, tool, shellgate.asks(st, t), about=str(inp.get('description') or ''), paths=paths, write=w)
     if w and not out: readgate.wrote(t.task_id, paths)      # ...what it wrote is its own work: reading it back is never asked (readgate.wrote)
     return out
+
+
+def _gated(payload: dict, sid: str = '', task: str = ''):
+    "The session of OURS whose shell or file tool this hook speaks for - None for any other call: the owner's own Claude, another tool."
+    from . import readgate
+    if str(payload.get('tool_name') or '') not in readgate.WRITE_TOOLS + readgate.READ_TOOLS + ('Bash', 'PowerShell'): return None
+    return _pane(payload, 'claude') or _general(payload, sid, task)
+
+
+def unjudged(payload: dict, sid: str = '', task: str = '', why: str = '') -> dict:
+    """The gate's answer where it has none (GATE_WAIT): a step of one of our sessions is refused and said so - it never runs unjudged; any
+    other call is Claude's as ever. A session that cannot be looked up either is taken for ours."""
+    from . import gate
+    try: ours = _gated(payload, sid, task) is not None
+    except Exception: ours = True
+    return gate.deny(gate.unjudged(why)) if ours else {}
 
 
 def run_sid(payload: dict, tid: int) -> str:

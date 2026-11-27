@@ -118,6 +118,9 @@ HELD_SAID = 'Taskuary held this for the owner'
 # ...AND A REFUSAL THAT RAISES NO CARD SAYS SO (walk 13: a click refused as a payment was told "held this for the owner" - the agent said
 # "Taskuary held that click as a payment ... please don't press it" over no card, and the step read "waits for your yes"): only a card held
 NOT_RUN_SAID = 'Taskuary did not run this, and no card was raised for it'
+def unjudged(why: str = '') -> str:
+    "What a step is told when the gate had no answer for it (hooks.GATE_WAIT): it did not run - a gate that cannot answer holds."
+    return f"{NOT_RUN_SAID}: Taskuary could not judge it{f' ({why})' if why else ''}, so nothing was done. Run it again."
 
 
 # ── THE ONE RULE every held step meets (was actrule.py) ──────────────────────────────────────────────────────────────────

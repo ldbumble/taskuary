@@ -213,11 +213,75 @@ class FiledNewsSurfacesTests(unittest.TestCase):
         again = self.chat('t3', 'and the printer works again', self.joins('Erin says the printer works'))
         self.assertEqual([r['mid'] for r in self.fyi()], [again['message_id']])           # the next one is news again
 
-    def test_a_line_filed_onto_an_open_task_has_its_own_fyi_row(self):
-        back = self.chat('t2', 'fyi I am out on Friday', self.joins('Erin is out Friday'))
-        self.assertEqual((back['status'], back['task_id']), ('filed', self.tid))
-        [row] = self.fyi()
-        self.assertEqual((row['lane'], row['closed']), ('fyi', False))
+    def counted(self, llm):
+        "-> (the llm, the list each call appends to): one triage call per message, never a second verdict after it joins"
+        calls = []
+        def f(system, user, **k): calls.append(user); return llm(system, user, **k)
+        return f, calls
+
+    def rows_of(self, mid):
+        "the rail's rows and the walk's line that speak for message `mid` on their own - not its task's row"
+        from taskuary import funnel, railwalk
+        own = lambda i: i.get('mid') == mid and (i.get('filed') or not i.get('tid'))
+        return [i for i in funnel.build(self.s, live_state=[])['items'] if own(i)], [i for i in railwalk.line(railwalk._rows(self.s)) if own(i)]
+
+    def test_a_line_joined_to_an_open_task_is_the_tasks_on_every_channel_with_no_row_of_its_own(self):
+        """The owner, 2026-11-27: a colleague's Teams line joined his open task, its agent read it and answered - and the FYI lane said it
+        again ("<who> wrote on <task> ... kept on its task - nothing new to do on it"), and Next opened the task he was on. One triage call
+        decides it belongs; then it is the task's: no FYI row, no walk stop, by any channel."""
+        for i, ch in enumerate(('teams', 'whatsapp', 'slack')):
+            llm, calls = self.counted(self.joins('Erin is out Friday'))
+            back = mail(self.s, f'{ch}-2', llm, conv='room-1', subject='', body=f'fyi I am out on Friday ({ch})', channel=ch)
+            self.assertEqual((back['status'], back['task_id']), ('filed', self.tid), ch)
+            self.assertEqual(len(calls), 1, ch)
+            self.assertEqual(self.fyi(), [], ch)
+            self.assertEqual(self.rows_of(back['message_id']), ([], []), ch)
+        self.assertEqual(self.s.get_task(self.tid)['Status'], 'open')
+
+    def test_a_line_joined_to_an_open_task_is_sent_to_its_agent(self):
+        "...and the task's agent is the one that reads it: woken with the line, the road any line that joins its task takes (thread_moved)."
+        from taskuary import general
+        with mock.patch.object(general, 'history', return_value=[{'role': 'assistant'}]), mock.patch.object(ingest, 'wake_why', return_value=''),              mock.patch.object(ingest, 'has_room', return_value=True), mock.patch.object(ingest, '_spawn') as spawn:     # an agent that may run
+            back = ingest.ingest_message(self.s, {'external_id': 't2', 'channel': 'teams', 'from_email': 'erin@northwind.example', 'from_name': 'Erin Blake',
+                                                  'conversation_id': 'room-1', 'subject': '', 'body': 'fyi I am out on Friday',
+                                                  'sent_at': '2026-09-25 09:00:00'}, llm=self.joins('Erin is out Friday'))
+        self.assertEqual(back['status'], 'filed')
+        self.assertTrue([c for c in spawn.call_args_list if c[0][0].__name__.startswith('_replan')], spawn.call_args_list)
+        self.assertEqual(self.rows_of(back['message_id']), ([], []))
+
+    def test_a_reply_joined_to_an_open_email_tasks_thread_has_no_row_of_its_own(self):
+        first = mail(self.s, 'e1', brain('task', title='Fix the nightly export'), conv='thread-1')
+        llm, calls = self.counted(lambda system, user, **k: json.dumps({'intent': 'fyi', 'why': 'scripted', 'title': 'Erin says thanks', 'summary': 's'}))
+        back = mail(self.s, 'e2', llm, conv='thread-1', body='thanks, looking now')
+        self.assertEqual((back['status'], back['task_id'], len(calls)), ('filed', first['task_id'], 1))
+        self.assertEqual(self.rows_of(back['message_id']), ([], []))
+
+    def test_a_lone_fyi_stays_fyi_until_a_later_line_brings_it_onto_the_task(self):
+        """Joined later: an FYI with no task is its own row; the line after it that joins the open task brings it along (bring_along) - from
+        then it is the task's, with no row of its own, and neither message was read twice."""
+        llm, calls = self.counted(lambda system, user, **k: json.dumps({'intent': 'fyi', 'why': 'scripted', 'title': 'A screenshot', 'summary': 's',
+                                                                         'relationship': 'new'}))
+        pic = mail(self.s, 'w1', llm, conv='room-1', subject='', body='(no text - see the attachment)', channel='teams')
+        self.assertEqual((pic['status'], pic['task_id'], len(calls)), ('filed', None, 1))
+        rail, walk = self.rows_of(pic['message_id'])
+        self.assertEqual([r['lane'] for r in rail], ['fyi'])                       # a lone FYI stays FYI
+        llm2, calls2 = self.counted(lambda system, user, **k: json.dumps({
+            'intent': 'task', 'kind': 'task', 'why': 'scripted', 'title': 'Erin needs the statement', 'summary': 's', 'relationship': 'continues',
+            'related_message_ids': [self.mid1, pic['message_id']], 'existing_task_id': self.tid, 'same_problem': True}))
+        words = mail(self.s, 'w2', llm2, conv='room-1', subject='', body='this is the statement I meant', channel='teams')
+        self.assertEqual((words['task_id'], len(calls2), len(calls)), (self.tid, 1, 1))
+        self.assertEqual((self.s.get_message(pic['message_id'])['TaskId']), self.tid)
+        self.assertEqual(self.rows_of(pic['message_id']), ([], []))
+        self.assertEqual(self.rows_of(words['message_id']), ([], []))
+
+    def test_an_unrelated_line_is_not_on_the_tasks_chat_and_has_its_own_row(self):
+        from taskuary import conversation
+        llm, calls = self.counted(lambda system, user, **k: json.dumps({'intent': 'fyi', 'why': 'scripted', 'title': 'Office closed Monday', 'summary': 's',
+                                                                         'relationship': 'new'}))
+        other = mail(self.s, 't9', llm, conv='room-1', subject='', body='the office is closed on Monday', channel='teams')
+        self.assertEqual((other['task_id'], len(calls)), (None, 1))
+        self.assertNotIn(other['message_id'], {m['MessageId'] for m in self.s.list_messages(self.tid)})
+        self.assertEqual([r['lane'] for r in self.rows_of(other['message_id'])[0]], ['fyi'])
 
     def test_his_own_line_filed_onto_a_closed_task_raises_nothing(self):
         self.s.update_task(self.tid, {'Status': 'done'}, 'owner')

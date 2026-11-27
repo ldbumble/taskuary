@@ -82,20 +82,23 @@ def _kinds(c):
     from .reports import REGISTRY, card_of
     return sorted(t for t in REGISTRY if card_of(t) == c['Type'] and not t.startswith('_'))
 
-def tool_cards(store) -> list:
-    "[(card, its tool types)] for every card that is on, an agent tool, and runs at least one tool."
+def tool_cards(store, tid=None) -> list:
+    """[(card, its tool types)] for every card that is on, an agent tool, and runs at least one tool. `tid`: only those the agent on that
+    task may use - its profile's and the untagged ones (workstreams.may_use)."""
     from .store import roles_of
-    return [(c, k) for c in store.list_connectors() if c['Active'] and 'tool' in roles_of(c) and (k := _kinds(c))]
+    from .workstreams import may_use
+    return [(c, k) for c in store.list_connectors() if c['Active'] and 'tool' in roles_of(c) and (k := _kinds(c)) and may_use(store, tid, c['ConnectorId'])]
 
 def data_cards(store) -> list:
     "The tool cards that hold the owner's own data - every one but the Hub's, which is notes, not figures (general.NUMBER_LINE)."
     return [c for c, _ in tool_cards(store) if c['Type'] != 'handbook']
 
 
-def agent_systems(store, tooled: bool = True) -> str:
+def agent_systems(store, tooled: bool = True, tid=None) -> str:
     """The owner's systems a WORKING agent may use, each with its Authority, and the call that reaches them. SOUL.md's
     list is triage's; a general agent never read it, so it was told to use /api/tools/run and shown nothing to use it on
-    (2026-10-05). '' when no connection is an agent tool."""
+    (2026-10-05). '' when no connection is an agent tool. `tid`: the task it works - what it is told it has is what the wall lets it use
+    (workstreams.may_use; walk 25: Harbor's agent was listed Northwind's mailbox, Outlook and QuickBooks as its own)."""
     from .store import roles_of
     from . import scopes
     from .reports import REGISTRY, card_of
@@ -104,8 +107,8 @@ def agent_systems(store, tooled: bool = True) -> str:
     # is `handbook` and its tools handbook_search/..., so "type handbook" came back "unknown tool type" (2026-10-05). A card with
     # no tool at all is not listed as one: the Gmail card read "tools: gmail" and the agent sending from it got "unknown tool type:
     # gmail" (TQ-1354) - a mailbox is sent FROM with propose (kind email), named below
-    tools = tool_cards(store)
-    boxes = mailboxes(store)
+    tools = tool_cards(store, tid)
+    boxes = mailboxes(store, tid)
     # ...said by the one road the session has (the agent walk, 2026-11-10): the tool and the command stood side by side
     how = 'propose (kind email) with `from` set to one' if tooled else '`taskuary --draft "<text>" --to <address> --subject "<subject>" --from <one of them>`'
     mail = ('MAILBOXES you can send FROM (an email waits for the owner\'s Send): ' + ', '.join(f"{m['address']} ({m['kind']})" for m in boxes)
@@ -114,7 +117,7 @@ def agent_systems(store, tooled: bool = True) -> str:
     from . import ledger
     try: kept = ledger.accounts(store)
     except Exception: kept = ''
-    mail = '\n'.join(x for x in (mail, kept, act_cards(store)) if x)
+    mail = '\n'.join(x for x in (mail, kept, act_cards(store, tid)) if x)
     if not tools: return mail
     lines = [f"- {c['Name'] or c['Type']} (connector_id {c['ConnectorId']}, authority {scopes.scope_of(c)}) - tools: {', '.join(k)}"
              for c, k in tools]
@@ -137,12 +140,13 @@ def agent_systems(store, tooled: bool = True) -> str:
 # agent asked for a post had no card's type or connector_id to set it up with). Each signed-in card (connectorcatalog.connected - the page's own
 # answer; one failing right now named with its state) that posts, sends or orders (scopes.REACHES), with what the agent fills on it and what
 # the owner's defaults on the card fill (connectorcatalog `actions`). The generic ones (an MCP tool, a GraphQL call) are no act of their own.
-def act_cards(store) -> str:
+def act_cards(store, tid=None) -> str:
     from . import scopes
     from .connectorcatalog import action_for, as_now, connected
     from .proposals import MEDIA, VIDEO
     from .reports import REGISTRY, card_of
-    try: cards = connected(store, failing=True)
+    from .workstreams import may_use
+    try: cards = [c for c in connected(store, failing=True) if may_use(store, tid, c['ConnectorId'])]
     except Exception: return ''
     def takes(t):
         act = action_for(t) or {'fields': []}

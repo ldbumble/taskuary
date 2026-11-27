@@ -553,7 +553,7 @@ def find(tid: int, sid: str, tools: list, query, store=None) -> str:
     from . import agenttools as at
     mine = (OFFERED.get((tid, sid)) or {t['function']['name'] for t in tools}) - {LOAD}
     words = {n: FULL.get(n) or (at.instructions(n) if n in at.TOOLS else n) for n in mine}
-    hits = at.found(query, words, store)
+    hits = at.found(query, words, store, tid)
     if not hits: return f"No tool fits {str(query or '')!r} - name one, or say what it should do in other words."
     return '\n\n'.join([*(words[n] for n in hits), load(tid, sid, tools, hits)]).strip()
 

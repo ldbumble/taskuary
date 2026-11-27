@@ -672,7 +672,9 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
       { key: "who", type: "read", label: meta.act === "schedule" ? "Invites" : "Tells", value: meta.act === "schedule" ? (meta.to || []).join(", ") || "them" : (meta.to || [])[0] || "the organizer",
         note: [meta.act === "propose" && meta.was ? `instead of ${meta.was}` : "", meta.link ? `with a ${meta.link} link, made when it is sent` : ""].filter(Boolean).join(" · ") },
       ...(meta.clash ? [{ key: "clash", type: "read", label: "Clashes", value: `This ${meta.clash}.` }] : [])]
-    : email ? [{ key: "to", type: "to", value: replyContext(filedDelivery), editable: editing && !off, needs: needsTo, who: String(meta.needs || [].concat(meta.to || []).join(", ")),
+    // ...WHICH MAILBOX IT LEAVES FROM, where he has two (outbound.shown_from; walk 25: the agent said "goes from" one, the card said none)
+    : email ? [...(r.From ? [{ key: "from", type: "read", label: "From", value: r.From }] : []),
+      { key: "to", type: "to", value: replyContext(filedDelivery), editable: editing && !off, needs: needsTo, who: String(meta.needs || [].concat(meta.to || []).join(", ")),
         onSave: async (to) => { await api.put(`/api/reviews/${r.ReviewId}/envelope`, { to }); onChanged?.(); }, trail: ccLinks },
       ...(editing ? [...(ccOpen || ccNow.length ? [{ key: "cc", type: "people", label: "CC", value: ccNow, editable: true, onChange: setCc, autoOpen: ccOpen && !ccNow.length, onClose: () => setCcOpen(false) }] : []),
         ...(bccOpen || bccNow.length ? [{ key: "bcc", type: "people", label: "BCC", value: bccNow, editable: true, onChange: setBcc, autoOpen: bccOpen && !bccNow.length, onClose: () => setBccOpen(false) }] : [])]

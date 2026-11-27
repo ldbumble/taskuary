@@ -493,7 +493,7 @@ def message_of(store, text) -> str:
 
 
 def agent_reply(store, task_id: int, text: str, agent: str = 'agent', run_id: int = None, files=None, follow_up: bool = False,
-                to: str = '', sid: str = None, answers: int | None = None, only: bool = False, cc=None, why_to: str = '') -> dict:
+                to: str = '', sid: str = None, answers: int | None = None, only: bool = False, cc=None, why_to: str = '', mailbox: str = '') -> dict:
     """Put the agent's reply on the task as the pending draft - the same review the responder would
     write into (held, live or new; one per answer, PW-236), marked as the agent's. Nothing is sent:
     the owner approves it like every other reply. `files` are (name, bytes) pairs to attach; with no
@@ -502,7 +502,8 @@ def agent_reply(store, task_id: int, text: str, agent: str = 'agent', run_id: in
     asked for it) or the owner's own words in the conversation since the send.
     WHO HEARS IT IS THE AGENT'S CALL (the owner, 2026-11-06: "the agent decides who needs to know ... if it's sensitive only to that
     person"): `answers` - the mail it replies to, an earlier one included; `only` - that mail's sender alone, nobody copied; `cc` - who
-    else is copied (replacing the thread's), an address not on the thread said so on the card; `why_to` - the one line the card says why."""
+    else is copied (replacing the thread's), an address not on the thread said so on the card; `why_to` - the one line the card says why.
+    `mailbox`: the From the agent named - checked as an email's is (slots.from_box), and a reply leaves from where its mail came in."""
     text = str(text or '').strip()
     if not text and files:
         rv = store.pending_review(task_id, 'draft_reply', live_only=False) or store.pending_review(task_id, 'draft', live_only=False)
@@ -543,6 +544,17 @@ def agent_reply(store, task_id: int, text: str, agent: str = 'agent', run_id: in
     # the agent's own last words to the owner
     if mid and nobody_waiting(store, mid):
         return {'ok': False, 'no_reply': True, 'why': f'{NOTICE} Nothing was saved.'}
+    # ...AND A `from` IS NEVER DROPPED IN SILENCE (walk 25: a reply "from" another profile's mailbox answered ok, its card said no From, and
+    # the agent told him it went from there): the one check an email's From gets, then the fact of where a reply leaves from
+    if mid and str(mailbox or '').strip():
+        from .slots import from_box
+        box, why = from_box(store, task_id, mailbox, agent, 'reply from')
+        if why: return {'ok': False, 'why': why}
+        from .outbound import reply_from
+        own = reply_from(store.get_message(answers or mid) or {})
+        if box.lower() != str(own or '').lower():
+            return {'ok': False, 'why': (f'a reply leaves from the mailbox the mail it answers came in on, {own}' if own else 'only an email leaves from a mailbox')
+                                        + f' - nothing was saved. An email from {box} is its own email: kind email with `to` and `from`.'}
     # ...and who else hears it: `only` is the sender alone, so it copies nobody; an address the thread never had is said on the card
     ccs = _addrs(cc)
     if only and ccs: return {'ok': False, 'why': '--only sends it to that one person - leave --cc out, or drop --only to copy others'}
@@ -655,7 +667,9 @@ def agent_reply(store, task_id: int, text: str, agent: str = 'agent', run_id: in
     # ...ONE ANSWER, READ FROM THE CARD AS IT ENDS (walk 10, 2026-11-23): what it carries was read before its files were put on it, and one
     # answer said "This card carries no file" beside "attached": [4 files]
     att = _told(store, rid, attach_files(store, rid, files, agent))
+    from .outbound import leaves_from
     return {'ok': True, 'review_id': rid, 'message_id': mid, 'answers': ans or mid, 'to': m.get('FromName') or m.get('FromEmail') or '', **ends, **carries(store, rid),
+            **({'from': box} if (box := leaves_from(store, store.get_review(rid) or {})) else {}),
             **({'owner_wrote_on_the_thread_while_you_worked': meanwhile} if meanwhile else {}),
             **({'replaced_the_owners_version': str(typed(mine) or mine.get('DraftText') or '')} if mine else {}),
             **({'recipients': {'to': env.get('to') or [], 'cc': env.get('cc') or []}} if env else {}),

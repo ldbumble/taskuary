@@ -665,6 +665,30 @@ def sending_mailbox(store, rv: dict, msg: dict = None) -> str | None:
     return task_mailbox(store, tid) or workstreams.own_mailbox(store, tid)
 
 
+def reply_from(m: dict) -> str | None:
+    "The mailbox a reply to message `m` leaves from - the one it came in on (reply_to_message); None for a chat's line."
+    box = str((m or {}).get('SourceName') or '').strip()
+    return box if str((m or {}).get('Channel') or '').lower() == 'email' and '@' in box else None
+
+
+def leaves_from(store, rv: dict) -> str | None:
+    """THE MAILBOX A CARD'S SEND LEAVES FROM, as the send itself takes it (verdicts.send) - what its card and its agent are told, so neither
+    says another (walk 25: "goes from alex@northwind.example" over a reply leaving from Harbor's). A new email's own pick, else its
+    task's mailbox; a reply's is where the mail it answers came in. None: a chat's line, an act, or no mailbox known before the send."""
+    try: env = json.loads((rv or {}).get('Deliver') or '{}') or {}
+    except (TypeError, ValueError): env = {}
+    if not isinstance(env, dict) or env.get('kind') not in (None, '', 'reply') or (rv or {}).get('Kind') == 'action': return None
+    if new_mail(env):
+        return (env.get('mailbox') or task_mailbox(store, rv.get('TaskId'))) if str(env.get('channel') or 'email').lower() == 'email' else None
+    mid = rv.get('AnswersMid') or rv.get('MessageId')
+    return reply_from(store.get_message(mid)) if mid else None
+
+
+def shown_from(store, rv: dict) -> str | None:
+    "leaves_from, for the card - only where he has two mailboxes to tell apart: with one, its card is as it was."
+    return leaves_from(store, rv) if len(mailboxes(store)) > 1 else None
+
+
 def send_out(store, channel: str, to, subject: str, body: str, cc: list = None, attachments: list = None,
              mailbox: str = None, html: str = None, bcc: list = None) -> dict:
     """Send something nobody asked for: a report going OUT, to an address the owner chose.

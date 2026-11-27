@@ -1512,9 +1512,15 @@ def own_addresses(store) -> set:
     """The owner's OWN address(es) - what "addressed to you" is measured against. Settings ->
     owner_email when it is set; otherwise every polled mailbox, which is all we know. Distinct
     from owner_addresses: a shared log mailbox the funnel polls is a place the owner READS, not a
-    name the owner IS, and mail sent there is not mail sent to them."""
+    name the owner IS, and mail sent there is not mail sent to them.
+    ...and the address each mail card SIGNS IN AS is theirs too (walk 25: a second profile's own mailbox read "to someone at
+    harbor.example", and triage was told its mail was not put to them) - a shared mailbox is read under a card, never signed in as."""
     own = (store.get_setting('owner_email') or '').strip().lower()
-    return {own} if own else owner_addresses(store)
+    if not own: return owner_addresses(store)
+    from .channels import _cfg
+    from .outbound import MAILBOXES
+    signs = (_cfg(c) for c in store.list_connectors() if c.get('Active') and c['Type'] in MAILBOXES)
+    return {own} | {a for k in signs if '@' in (a := str(k.get('address') or k.get('account') or '').strip().lower())}
 
 
 def owner_addresses(store) -> set:

@@ -3087,7 +3087,7 @@ class GeneralSession:
             # seven tools and its authority rule rode every task, whatever it was) - said here only to a session with no tools to ask with
             if hands and not tooled:
                 from . import docsync
-                if (systems := docsync.agent_systems(self.store, tooled)): system = f'{system}\n\n{systems}'
+                if (systems := docsync.agent_systems(self.store, tooled, self.task_id)): system = f'{system}\n\n{systems}'
             # ...and the owner's own mail, which a stranger's task never reads (the route refuses it too: server._owner_history): searched by
             # the session itself where it has hands, else for it - what was found is material, said as such
             prior = history_brief(self.store, self.task_id, hands)
@@ -3191,7 +3191,7 @@ class GeneralSession:
                     # ...AND ITS SYSTEMS AND MAILBOXES, as a CLI with hands is told them (docsync.agent_systems): one prompt for every road -
                     # the card's agent was left to find the owner's connections and the mailboxes it sends from by calling around for them
                     from . import docsync
-                    toolbox = '\n\n'.join(x for x in (apiagent.TOOLS_BRIEF, '' if stranger else docsync.agent_systems(self.store, True)) if x)
+                    toolbox = '\n\n'.join(x for x in (apiagent.TOOLS_BRIEF, '' if stranger else docsync.agent_systems(self.store, True, self.task_id)) if x)
                     system = f'{system}\n\n{toolbox}\n\n{apiagent.where_line(self.store, self.task_id)}'
                     # ...ONE WAY TO WRITE A REPLY, as on a CLI with the toolbox: propose, not the marker line beside it - and its own
                     # search and tick the same (for_toolbox), swapped where the turn is asked

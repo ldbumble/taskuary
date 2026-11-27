@@ -161,6 +161,19 @@ def _chat_id(to) -> bool:
     from .ingest import CHAT_CHANNELS
     return str(to or '').split(':')[0].strip().lower() in CHAT_CHANNELS
 
+def from_box(store, tid: int, mailbox: str, agent: str = 'agent', act: str = 'email from') -> tuple:
+    """THE ONE CHECK OF A `from` (an email's and a reply's, walk 25: an email from another profile's mailbox was the move card, a reply from
+    it was answered ok with the field dropped): (the connected mailbox's own address, '') - or ('', why) when it is none of his, or an
+    agent's task may not use it, which is the card that moves the task there (workstreams.may_use) with `act` from it as its next act."""
+    from . import outbound, workstreams
+    box = outbound._box(store, mailbox)
+    if not box:
+        have = ', '.join(m['address'] for m in outbound.mailboxes(store, None if agent == 'owner' else tid)) or 'none is connected'
+        return '', f"{' '.join(str(mailbox).split())} is not a connected mailbox - send from one of: {have}"
+    if agent != 'owner' and (mv := workstreams.move_card(store, tid, box['address'], f"{act} {box['address']}"[:200])): return '', mv['says']
+    return box['address'], ''
+
+
 def draft(store, tid: int, text: str, to: str = '', subject: str = '', slot: str = '', agent: str = 'agent',
           channel: str = 'email', name: str = '', cc=(), mailbox: str = '', guessed=(), sends: bool = True) -> dict:
     """The agent that did the work writes one output itself - the slot named by id, else the open one to the same person,
@@ -178,16 +191,9 @@ def draft(store, tid: int, text: str, to: str = '', subject: str = '', slot: str
     if agent != 'owner' and (why := blank_why(text, store)): return {'ok': False, 'why': why}       # a blank left to fill is no letter (wrapup.blanks)
     mailbox = str(mailbox or '').strip()
     if mailbox:
-        from . import outbound
         if channel != 'email': return {'ok': False, 'why': f'{channel} has no From - only an email leaves from a mailbox'}
-        box = outbound._box(store, mailbox)
-        if not box:
-            have = ', '.join(m['address'] for m in outbound.mailboxes(store)) or 'none is connected'
-            return {'ok': False, 'why': f'{mailbox} is not a connected mailbox - send from one of: {have}'}
-        if agent != 'owner':                # ...and one of another profile is the card that moves the task there (workstreams.may_use)
-            from . import workstreams
-            if (mv := workstreams.move_card(store, tid, box['address'], f"email {to} from {box['address']}"[:200])): return {'ok': False, 'why': mv['says']}
-        mailbox = box['address']
+        mailbox, why = from_box(store, tid, mailbox, agent, f'email {to} from')
+        if why: return {'ok': False, 'why': why}
     cc = [a for a in (split(x)[1] for x in ([cc] if isinstance(cc, str) else cc or [])) if a]
     if cc and channel != 'email': return {'ok': False, 'why': f'{channel} has no cc - only an email can copy somebody in'}
     if bad := [a for a in cc if not is_address(a)]: return {'ok': False, 'why': f"cc is a list of email addresses, one to an entry - {', '.join(bad)} is not one"}
@@ -303,7 +309,9 @@ def draft(store, tid: int, text: str, to: str = '', subject: str = '', slot: str
         from .signatures import agent_signed
         text = agent_signed(store, store.get_review(rid), text) or text
     store.update_review_draft(rid, text, None, by=f'agent:{agent}')
+    from .outbound import leaves_from
     return {'ok': True, 'review_id': rid, 'slot': hit['id'], 'added': added, **(routine_sends(store, tid, rid, agent, missing) if sends else {}),
+            **({'from': sent_from} if (sent_from := leaves_from(store, store.get_review(rid) or {})) else {}),
             **({'to_missing': to_missing(missing)} if missing else {}), **({'replaced_the_owners_version': his} if his else {}),
             **({'rewrote': rid, 'says': f"This rewrote your earlier email to {to} in this turn - one card stands, holding these words. For a second, "
                                         f"separate email to them, call again with slot=\"{NEW_SLOT}\"."} if rewrote == rid else {})}

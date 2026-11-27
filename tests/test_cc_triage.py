@@ -50,6 +50,22 @@ class AddressingTests(unittest.TestCase):
         self.assertEqual(ingest.own_addresses(s), {'me@ours.com'})
         self.assertEqual(ingest.owner_addresses(s), {'me@ours.com', 'devteam-logs@ours.com'})
 
+    def test_the_address_a_second_mail_card_signs_in_as_is_the_owner_too(self):
+        """Walk 25: his second profile's own mailbox read "to someone at harbor.example" in Came from, and triage was told mail put to it
+        was not put to him - only owner_email was him. The address a mail card signs in as is; a shared mailbox read under a card is not."""
+        import json
+        from taskuary import ingest
+        from taskuary.store import MemoryStore
+        s = MemoryStore()
+        s.set_setting('owner_email', 'alex@northwind.example', 't')
+        nw = s.save_connector({'Type': 'outlook', 'Name': 'Northwind mail', 'Active': 1, 'ConfigJson': json.dumps({'account': 'alex@northwind.example'})}, 't')
+        s.save_connector({'Type': 'gmail', 'Name': 'Harbor mail', 'Active': 1, 'ConfigJson': json.dumps({'address': 'Alex@harbor.example'})}, 't')
+        for a in ('alex@northwind.example', 'ap-log@northwind.example'): s.save_source({'Channel': 'email', 'Address': a, 'Active': 1, 'ConnectorId': nw}, 't')
+        self.assertEqual(ingest.own_addresses(s), {'alex@northwind.example', 'alex@harbor.example'})
+        msg = {'to': ['alex@harbor.example'], 'cc': []}
+        self.assertEqual(ingest.addressed_to(s, msg, ingest.own_addresses(s)), [])          # nobody but him on it: no "someone at ..." line
+        self.assertEqual(triage.addressed_to_you(msg, mine=ingest.own_addresses(s)), 'to')
+
     def test_agreeing_verdicts_are_evidence_the_model_weighs_not_an_order(self):
         # until PW-025 (2026-09-06) two agreeing verdicts became "SETTLED ... Answer fyi - no
         # exceptions", so a refund thread that this time asked the owner something was filed unread

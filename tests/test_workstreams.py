@@ -147,7 +147,7 @@ import json
 from taskuary import mailsearch, outbound, slots
 
 NW_BOX, HB_BOX, SHARED = 'alex@northwind.example', 'alex@harbor.example', 'alex@home.example'
-GAIL = 'gail@harbor.example'
+GAIL, PAULA = 'gail@harbor.example', 'paula@vendor.example'
 
 
 @pytest.fixture
@@ -265,3 +265,65 @@ def test_about_you_adds_a_profile_by_name_with_one_kept_too(two):
         assert [w['slug'] for w in W.shown(two)] == ['northwind', 'harbor-bakery'] and W.start('harbor-bakery') in two.get_doc('job')
         assert c.post('/api/about/workstreams', json={'name': 'harbor bakery'}).status_code == 422       # one name, one profile
         assert c.post('/api/about/workstreams', json={'name': '  '}).status_code == 422
+
+
+def _draft_door(s): return lambda tid, text, to, subject, files, cc, mailbox, **kw: slots.draft(s, tid, text, to, subject, cc=cc, mailbox=mailbox, **kw)
+
+
+def test_an_agent_is_told_only_its_own_profiles_accounts(two):
+    """Walk 25: the wall stood at the call alone - Harbor's agent read Northwind's mailbox and its Outlook tools in list_systems as its own,
+    and only found out at the call. What it is told it has is what it may use: one list, by the one wall."""
+    from taskuary import agenttools, docsync
+    two.save_connector({'ConnectorId': two.nw, 'Roles': 'trigger,tool'}, 't')          # Northwind's Outlook card runs tools (its calendar)
+    f = Factory(two)
+    nw, hb = f.task(title='Northwind close'), f.task(title='Bakery rota')
+    W.set_task(two, nw, 'northwind', 'owner'); W.set_task(two, hb, 'harbor-bakery', 'owner')
+    mine, theirs, his = docsync.agent_systems(two, tid=nw), docsync.agent_systems(two, tid=hb), docsync.agent_systems(two)
+    assert 'Northwind mail' in mine and NW_BOX in mine and SHARED in mine and HB_BOX not in mine
+    assert 'Northwind mail' not in theirs and NW_BOX not in theirs and HB_BOX in theirs and SHARED in theirs
+    assert NW_BOX in his and HB_BOX in his                                             # a reader with no task (his own page) sees all of it
+    said = agenttools.call(two, hb, 'list_systems', {}, {})
+    assert NW_BOX not in said and 'Northwind mail' not in said and HB_BOX in said     # ...through the tool the agent asks with
+    assert not agenttools.found('northwind', {'list_systems': 'what is connected', 'tick': 'tick a box'}, two, hb)       # ...and its tool search
+    W.remove(two, 'harbor-bakery')
+    assert NW_BOX in docsync.agent_systems(two, tid=hb)                                # one profile: every account is its own, as before
+
+
+def test_a_reply_from_another_profiles_mailbox_is_the_same_move_card_never_an_ok_with_the_from_dropped(two):
+    """Walk 25, two roads of three: "send the reply from my Northwind address" on Harbor's task - propose (kind reply, `from`) answered ok with
+    the field dropped, the card said no From, and the agent told him it went from Northwind. One check for a From, an email's or a reply's."""
+    from taskuary import agenttools, card, wrapup
+    f = Factory(two)
+    t = f.task(title='Flour order')
+    f.message(task_id=t, from_email=PAULA, from_name='Paula Vance', source_name=HB_BOX, subject='Flour order', body='20 bags as usual?', channel='email')
+    assert W.of_task(two, t) == 'harbor-bakery'
+    reply = lambda tid, text, to='', files=(), **who: wrapup.agent_reply(two, tid, text, to=to, **who)
+    say = lambda box: json.loads(agenttools.call(two, t, 'propose', {'kind': 'reply', 'text': 'Hi Paula,\n\n20 bags, as usual.', 'from': box}, {'reply': reply}))
+    out = say(NW_BOX)
+    assert not out['ok'] and 'Northwind' in out['why'] and 'nothing was run' in out['why']
+    rows = two._rows("SELECT * FROM review WHERE TaskId=? AND Status='pending'", (t,))
+    assert [json.loads(r['DraftText'])['action'] for r in rows if r['Kind'] == 'action'] == ['move_profile'] and card.carries_on(rows[-1], two)
+    assert not [r for r in rows if r['Kind'] != 'action' and r['DraftText']]              # no letter was filed behind his back
+    # ...a mailbox of his it may use, but not the one this mail came in on: the fact, and the way on - never a From the card would not keep
+    out = say(SHARED)
+    assert not out['ok'] and HB_BOX in out['why'] and 'kind email' in out['why']
+    # ...and the one it does leave from is taken as said
+    out = say(HB_BOX)
+    assert out['ok'] and out['from'] == HB_BOX
+    assert outbound.shown_from(two, two.get_review(out['review_id'])) == HB_BOX          # ...and its card says so, as its agent was told
+    two.save_connector({'ConnectorId': two.nw, 'Active': 0}, 't'); two.save_connector({'ConnectorId': two.shared, 'Active': 0}, 't')
+    assert outbound.shown_from(two, two.get_review(out['review_id'])) is None            # one mailbox: the card is as it was
+
+
+def test_the_move_card_keeps_its_next_act_through_the_tool_door_so_his_press_wakes_the_agent(two):
+    """Walk 25: the wall's move card carried the refused call as its `then` (slots.draft), and the tool door the call came in by cleared it
+    (card.raising: the agent's own propose named none) - his Approve moved the task, woke nobody, and the email stayed owed under "agent done"."""
+    from taskuary import agenttools, card
+    f = Factory(two)
+    t = f.task(title='Northwind close'); W.set_task(two, t, 'northwind', 'owner')
+    out = json.loads(agenttools.call(two, t, 'propose', {'kind': 'email', 'to': GAIL, 'subject': 'Order', 'text': 'Hi Gail,\n\nThe order is in.', 'from': HB_BOX},
+                                     {'draft': _draft_door(two)}))
+    assert not out['ok'] and 'Harbor Bakery' in out['why']
+    rv = two._rows("SELECT * FROM review WHERE TaskId=? AND Status='pending'", (t,))[0]
+    assert json.loads(rv['DraftText'])['action'] == 'move_profile'
+    assert card.then_of(rv) == f'email {GAIL} from {HB_BOX}' and card.carries_on(rv, two)

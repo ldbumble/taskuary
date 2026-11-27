@@ -424,7 +424,7 @@ def shape(a, deep: int = 3):
     if isinstance(a, list): return [shape(v, deep - 1) for v in a[:12]] + ([f'+{len(a) - 12} more'] if len(a) > 12 else []) if deep else f'list({len(a)})'
     return a if isinstance(a, (bool, int, float)) or a is None else f'text({len(str(a))})'
 SYSTEM_TOOLS = ('list_systems', 'run_system')
-def found(query, names: dict, store=None) -> list:
+def found(query, names: dict, store=None, tid=None) -> list:
     """The tools of `names` ({name: description}) that `query` asks for: by name, else by most of its words in a name and description (at most 4).
     A CONNECTED SYSTEM IS FOUND BY ITS OWN NAME (walk 23, 2026-11-25: "quickbooks" found nothing - the words searched were the tools', and
     QuickBooks is reached through run_system - so the agent told him twice "no QuickBooks or accounting tool is connected here"): the two tools
@@ -434,7 +434,7 @@ def found(query, names: dict, store=None) -> list:
     ws = [w for w in re.findall(r'[a-z0-9_]+', q) if len(w) > 2]
     if store is not None and any(n in names for n in SYSTEM_TOOLS):
         from .docsync import agent_systems
-        try: names = {**names, **{n: f'{names[n]} {agent_systems(store)}' for n in SYSTEM_TOOLS if n in names}}
+        try: names = {**names, **{n: f'{names[n]} {agent_systems(store, tid=tid)}' for n in SYSTEM_TOOLS if n in names}}
         except Exception as e: logger.debug(f'find_tools: the connected systems were not read - {e}')
     score = lambda n: sum((w in n) * 3 + (w in str(names[n]).lower()) for w in ws)
     return [n for n in sorted(names, key=lambda n: -score(n)) if score(n)][:4]
@@ -848,13 +848,13 @@ def _call(store, tid: int, name: str, args: dict, doors: dict, skip=()) -> str:
         from .docsync import agent_systems
         # ...AND WHAT TO DO FOR ONE THAT IS NOT THERE (the recorded walk, 2026-11-11): an agent asked to sign in to a site read this list, found
         # no connection, fetched the sign-in form from its shell and asked the owner for the password - the browser's offer, far up its prompt, unread
-        return (agent_systems(store) or 'no connection is marked as an agent tool - the owner turns that on per card') + '\n' + NOT_LISTED
+        return (agent_systems(store, tid=tid) or 'no connection is marked as an agent tool - the owner turns that on per card') + '\n' + NOT_LISTED
     if name == 'guide':
         from . import guides
         return _out(guides.read(a.get('topic')))
     if name == 'find_tools':
         # ...only this session's own: on the owner's own ask "reply to the sender" found propose_reply, and calling it answered "unknown tool"
-        hits = found(a.get('query'), {n: d for n, (_, d, _s, _) in TOOLS.items() if n not in skip}, store)
+        hits = found(a.get('query'), {n: d for n, (_, d, _s, _) in TOOLS.items() if n not in skip}, store, tid)
         if not hits and str(a.get('query') or '').strip().lower() in skip:
             return f"{a['query'].strip()} is not offered on this task - tools/list names the ones it has; say what you need in words to find one of them."
         return '\n\n'.join(map(instructions, hits)) if hits else (f"No tool fits {a.get('query')!r} - name one, or say what it should do in other words. Work no tool of Taskuary's does (a file to make, a page to "
@@ -1002,6 +1002,7 @@ def _review(store, tid: int, a: dict, doors: dict) -> str:
                                  'an email to someone is kind email with `to`; anything else for his press is kind act'))
     if k == 'reply':
         who = {x: a[x] for x in ('answers', 'only', 'cc', 'why_to') if a.get(x) not in (None, '')}
+        if str(a.get('from') or '').strip(): who['mailbox'] = str(a['from'])
         was, files = verdicts.unsent(store, tid), attached(store, tid, a.get('attach'))
         out = doors['reply'](tid, str(a.get('text') or ''), str(a.get('to') or ''), files, **who)
         out = read_back(json.loads(out.body) if hasattr(out, 'body') else out, files)

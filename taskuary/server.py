@@ -2480,6 +2480,7 @@ def _task_detail(task_id: int, rev: str = '', opened: bool = False, whole: bool 
         r['CanSend'], r['SendBlock'] = _review_send_state(memo, r)
         r['Connect'] = _review_connect(memo, r)
         r['Signature'] = signatures.for_review(store, r, here.get(r.get('MessageId')), memo=sigs)     # what goes under it: the reply box shows it
+        r['From'] = outbound.shown_from(store, r)
     # the owner's own mail has nobody behind it to answer (wrapup.from_owner): the page's Reply doors read this, never a guess
     from .ingest import own_addresses, row_recipients
     from .wrapup import from_owner, reads_reply_row
@@ -5528,6 +5529,7 @@ def reviews(status: str = None):
         r['CanSend'], r['SendBlock'] = _review_send_state(memo, r)
         r['Connect'] = _review_connect(memo, r)
         r['Signature'] = signatures.for_review(store, r, memo=sigs)
+        r['From'] = outbound.shown_from(store, r)
         moved, latest = context_moved(store, r)          # material change only (PW-240), never a polling timestamp
         r['Stale'] = bool(moved)
         if r['Stale'] and latest:
@@ -6168,7 +6170,7 @@ class AgentFile(BaseModel): name: str; data: str = ''; attachment: int | None = 
 class AgentReplyBody(BaseModel):
     task_id: int; text: str = ''; agent: str = 'agent'; files: list[AgentFile] = []; follow_up: bool = False; to: str = ''; answers: int | None = None
     # ...who hears it, the agent's call (2026-11-06): the sender alone, or who else is copied, and the one line why (wrapup.agent_reply)
-    only: bool = False; cc: list[str] | None = None; why_to: str = ''; then: str | None = None
+    only: bool = False; cc: list[str] | None = None; why_to: str = ''; then: str | None = None; mailbox: str = ''
 
 def _raising(tid: int, then: str | None):
     "`taskuary --reply/--draft --then`: the card it writes keeps the agent's own step after his press (card.raising); a tool's own call says it there."
@@ -6199,7 +6201,7 @@ def agent_reply(body: AgentReplyBody, request: Request):
     if not store.get_task(body.task_id): raise HTTPException(404, 'no such task')
     with _raising(body.task_id, body.then):
         return wrapup.agent_reply(store, body.task_id, body.text, body.agent, files=_agent_files(body.files, body.task_id), follow_up=body.follow_up, to=body.to,
-                                  answers=body.answers, only=body.only, cc=body.cc, why_to=body.why_to)
+                                  answers=body.answers, only=body.only, cc=body.cc, why_to=body.why_to, mailbox=body.mailbox)
 
 class AgentDraftBody(BaseModel):
     task_id: int; text: str; to: str = ''; subject: str = ''; slot: str = ''; agent: str = 'agent'; files: list[AgentFile] = []; cc: list[str] = []

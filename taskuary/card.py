@@ -375,6 +375,9 @@ def raising(store, tid, then, todo=None):
     now, then = _standing(store, tid), ' '.join(str(then or '').split())[:300]
     todo = next((i['id'] for i in store.task_checklist(int(tid)) if str(todo or '').strip().strip('[]') == i['id']), None)
     for rid in [k for k, v in now[0].items() if was[0].get(k) != v]:
+        # ...a card Taskuary raised in the call's place comes with its own next act - the call itself, once his press opens the way
+        # (workstreams.move_card) - and keeps it: cleared here, his Approve moved the task and woke nobody, the email owed (walk 25)
+        if rid not in was[0] and then_of(store.get_review(rid)): continue
         store.set_review_next_step(rid, then)
         if todo: store.audit('review', rid, FULFILS, 'agent', 'agent', {'todo': todo})
     if now[1] and now[1] != was[1]: landing.keep_then(store, int(tid), then)

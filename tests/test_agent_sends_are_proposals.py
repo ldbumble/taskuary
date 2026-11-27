@@ -575,6 +575,24 @@ class ACardRunsWhatItShows(unittest.TestCase):
         self.assertEqual(s.get_review(rid)['Status'], 'pending')
         self.assertIsNone(proposals.unlike_shown(s.get_review(rid), {'to': ['taker@outsider.example']}, 'approve'), 'the card as it stands now goes')
 
+    def test_a_letter_whose_envelope_changed_after_it_was_shown_never_goes(self):
+        """Red team round 6: only the To was held to what the card showed - a copy added, another subject, another mailbox to leave from or a
+        file of the same name with other bytes went under the words he read. Every part of the envelope the page drew is held to it."""
+        from taskuary import outbound
+        s, sent = server.store, []
+        drawn = {'to': ['erin@northwind.example'], 'cc': ['gail@northwind.example'], 'subject': 'Q3 figures', 'mailbox': 'alex@northwind.example',
+                 'attachments': [{'name': 'q3.xlsx', 'sha256': 'a' * 64}]}
+        for part, now in (('cc', ['gail@northwind.example', 'taker@outsider.example']), ('subject', 'Q3 figures - wire details'), ('mailbox', 'billing@northwind.example'),
+                          ('attachments', [{'name': 'q3.xlsx', 'sha256': 'b' * 64}]), ('attachments', [])):
+            rid = s.add_review({'TaskId': self.tid, 'Kind': 'email', 'Status': 'pending', 'Reason': 'the agent wrote this email', 'DraftText': 'The figures are attached.',
+                                'Deliver': json.dumps({'channel': 'email', **drawn, part: now})})
+            with mock.patch.object(outbound, 'send_out', lambda *a, **k: sent.append(a) or {'ok': True}):
+                r = c.post(f'/api/reviews/{rid}/decide', headers=owner(), json={'verb': 'approve', 'final_text': 'The figures are attached.', 'shown': drawn})
+            self.assertTrue(r.json().get('changed'), f'{part}: {r.text}'); self.assertEqual(sent, [], part)
+            self.assertEqual(s.get_review(rid)['Status'], 'pending', part)
+        self.assertIsNone(proposals.unlike_shown({'Kind': 'email', 'Deliver': json.dumps({'channel': 'email', **drawn, 'seen': 4})},
+                                                 {**drawn, 'to': ['Erin@northwind.example'], 'cc': None if not drawn['cc'] else ['GAIL@northwind.example']}, 'approve'), 'as drawn, it goes')
+
 
 class ARunOfHisReportIsAskedOnOneCard(unittest.TestCase):
     """The owner, 2026-11-25: "for security issues, wouldn't you ask the user to allow it?" - a task's agent asking to run one of his saved

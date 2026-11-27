@@ -175,7 +175,7 @@ def from_box(store, tid: int, mailbox: str, agent: str = 'agent', act: str = 'em
 
 
 def draft(store, tid: int, text: str, to: str = '', subject: str = '', slot: str = '', agent: str = 'agent',
-          channel: str = 'email', name: str = '', cc=(), mailbox: str = '', guessed=(), sends: bool = True) -> dict:
+          channel: str = 'email', name: str = '', cc=(), mailbox: str = '', guessed=(), sends: bool = True, carries=()) -> dict:
     """The agent that did the work writes one output itself - the slot named by id, else the open one to the same person,
     else a slot it adds (said on the task: the owner sees the list grow). Nothing is sent: the owner approves it. `cc`: who
     else is copied - kept on the envelope, so the card shows what the agent said it did (it said "Gail on cc" and dropped her).
@@ -287,18 +287,22 @@ def draft(store, tid: int, text: str, to: str = '', subject: str = '', slot: str
     # record, as a reply's is (wrapup.agent_reply); saved twice in its own turn it is rewritten in place
     # ...AND ONE HE HAS TYPED HIS OWN WORDS INTO IS HIS (store.hold_review_edit; wrapup.agent_reply's rule for a reply): never rewritten under
     # him - his version is closed as replaced with his words on it, the agent's letter is a new card, and the agent is told what he had left
-    his = ''
+    his, stands = '', False
     if rv and rv.get('Status') == 'pending' and agent != 'owner':
         from . import wrapup
         from .store import his_words
         # ...only where the agent wrote OTHER words (the owner, 2026-11-26): the same letter saved again is no rewrite - his version stands
         from .signatures import agent_signed
-        same = wrapup._words(rv.get('DraftText')) == wrapup._words(agent_signed(store, rv, text) or text)
-        his = '' if same else his_words(rv)
-        if his or wrapup._turn_after(store, tid, rv): store.decide_review(rv['ReviewId'], 'closed_unsent', his or None, agent, note=wrapup.REPLACED); rv = None
+        # ...NOR THE SAME WORDS TO SOMEONE ELSE, UNDER ANOTHER SUBJECT OR WITH ANOTHER FILE (wrapup.his_hand, repoints - red team round 6): that is
+        # another letter too, and one he has put his hand to that this save leaves as it is stands whole, its envelope not written again
+        same = wrapup._words(rv.get('DraftText')) == wrapup._words(agent_signed(store, rv, text) or text) and not wrapup.repoints(rv, json.loads(deliver), carries)
+        mine = wrapup.his_hand(store, rv)
+        his, stands = '' if same else his_words(rv), mine and same
+        if (mine and not same) or wrapup._turn_after(store, tid, rv):
+            store.decide_review(rv['ReviewId'], 'closed_unsent', his or None, agent, note=wrapup.REPLACED); rv = stands = None
     if rv and rv.get('Status') == 'pending':
         rid = rv['ReviewId']
-        if not store.set_review_deliver(rid, deliver): return {'ok': False, 'why': 'that email is already being sent'}
+        if not stands and not store.set_review_deliver(rid, deliver): return {'ok': False, 'why': 'that email is already being sent'}
     else:
         rid = store.add_review({'TaskId': tid, 'Kind': KIND, 'Status': 'pending', 'Deliver': deliver,
                                 'Reason': 'your email - approve to send' if agent == 'owner' else f"{agent} wrote this email - approve to send"})       # who it goes to is on the card once

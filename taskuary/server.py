@@ -6232,7 +6232,7 @@ def agent_draft(body: AgentDraftBody, request: Request):
     from . import wrapup
     files = _agent_files(body.files, body.task_id)
     with _raising(body.task_id, body.then):
-        out = slots.draft(store, body.task_id, body.text, body.to, body.subject, body.slot, body.agent, cc=body.cc, mailbox=body.mailbox, guessed=body.guessed)
+        out = slots.draft(store, body.task_id, body.text, body.to, body.subject, body.slot, body.agent, cc=body.cc, mailbox=body.mailbox, guessed=body.guessed, carries=files)
     if out.get('ok') and files: out = {**out, **wrapup.attach_files(store, out['review_id'], files, body.agent)}
     return {**out, **wrapup.carries(store, out['review_id'])} if out.get('ok') and out.get('review_id') else out
 

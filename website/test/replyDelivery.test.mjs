@@ -1,9 +1,18 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { bareAddresses, deliveryCc,deliveryFiles, deliveryMeta, deliveryTo, needsAddress, replyContext, sentTo } from "../src/replyDelivery.js";
+import { bareAddresses, deliveryCc,deliveryFiles, deliveryMeta, drawnEnvelope, deliveryTo, needsAddress, replyContext, sentTo } from "../src/replyDelivery.js";
 
 const deliver = (obj) => ({ Deliver: JSON.stringify(obj) });
+
+// red team round 6: the press named only the To it drew - a copy, a subject, a mailbox or a file changed since went under the words he read
+test("a press carries the whole envelope its card drew, each file by its content", () => {
+  const r = deliver({ channel: "email", to: ["erin@northwind.example"], cc: ["gail@northwind.example"], subject: "Q3 figures", mailbox: "alex@northwind.example",
+    seen: 4, attachments: [{ name: "q3.xlsx", path: "C:/x/q3.xlsx", size: 9, sha256: "ab12" }] });
+  assert.deepEqual(drawnEnvelope(r), { to: ["erin@northwind.example"], cc: ["gail@northwind.example"], subject: "Q3 figures", mailbox: "alex@northwind.example",
+    attachments: [{ name: "q3.xlsx", sha256: "ab12" }] });
+  assert.deepEqual(drawnEnvelope({}), { to: null, cc: null, subject: null, mailbox: null, attachments: [] });
+});
 
 test("a missing, empty or broken Deliver blob reads as no envelope", () => {
   assert.deepEqual(deliveryMeta(null), {});

@@ -220,6 +220,17 @@ def via_browser(store, rid: int, text: str, actor: str = 'owner', fields: dict =
     return {'ok': True, 'status': 'approved', 'told': told}
 
 
+# THE PICTURE HE SAW IS THE PICTURE THAT GOES (red team round 6: a card kept its picture by name alone, so a file written over under that
+# name after the card was shown went up at his press). Its content is pinned where the card is raised (queue: PINNED) and read again at
+# the press (_run): another file under that name posts nothing, and its agent is told to raise the post again with the picture it means
+PINNED = 'image_sha256'
+def picture_print(tid, p: dict) -> str:
+    "The content of a card's picture as it is on disk now - '' with no picture, or none there."
+    import hashlib
+    from . import outputs
+    f = outputs.named(int(tid), p['image']) if tid and p.get('image') else None
+    try: return hashlib.sha256(f.read_bytes()).hexdigest() if f else ''
+    except OSError: return ''
 def picture_why(tid, p: dict) -> str:
     """'' when a post's `image` is a picture in the task's own folder it can carry; else what is wrong, said to the agent."""
     if not p.get('image'): return ''
@@ -479,7 +490,7 @@ def unknown_tool(t) -> str:
 # fields and its picture, so a key beside them - a `script`, a `query` - would run unseen under the card's words. Only these ride beside them
 # ...and the picture's description (`alt`), drawn as the picture's own words on the card (the owner's live task, 2026-11-25: refused as "alt
 # would run unseen", the agent wrote its alt text into the card's why and a drafts file beside the cards)
-SHOWN_BESIDE = ('action', 'type', 'connector_id', 'why', 'network', 'flow_run', 'closeout', 'image', 'alt', 'image_path', 'result')   # the last two never run (_run)
+SHOWN_BESIDE = ('action', 'type', 'connector_id', 'why', 'network', 'flow_run', 'closeout', 'image', 'alt', PINNED, 'image_path', 'result')   # the last three never run (_run)
 def _hidden(p: dict) -> tuple:
     "(the fields a declared act's card draws, the keys of `p` beside them) - ((), []) for a tool no card declares."
     from .connectorcatalog import action_for
@@ -500,8 +511,16 @@ def shown_only(p: dict) -> dict:
 
 CHANGED = 'This card changed after it was shown to you - nothing ran. It is shown again as it stands now; read it and press again.'
 def _to(x) -> list: return sorted({' '.join(str(a).split()).lower() for a in (x if isinstance(x, (list, tuple)) else [x]) if a})
+# A LETTER'S ENVELOPE AS ITS CARD DRAWS IT (red team round 6: only its To was held to what was shown - its Cc, its subject, where it leaves
+# from and the files on it could change under the words he read): each part read the one way, for the press (unlike_shown) and for an
+# agent's save over a card he has put his hand to (wrapup.repoints)
+DRAWN = {'to': _to, 'cc': _to, 'subject': lambda x: ' '.join(str(x or '').split()), 'mailbox': lambda x: str(x or '').strip().lower(),
+         'attachments': lambda x: sorted((str(f.get('name') or ''), str(f.get('sha256') or '')) for f in x or [] if isinstance(f, dict))}
+def unlike_drawn(env: dict, shown: dict) -> list:
+    "The parts of envelope `env` that are not as `shown` names them - only the parts `shown` names."
+    return [k for k, read in DRAWN.items() if k in shown and read((env or {}).get(k)) != read(shown[k])]
 def unlike_shown(rv: dict, shown, verb: str) -> dict | None:
-    """The press's refusal when the card the page drew (`shown`: an action's proposal, a letter's {to}, as drawn) is not the one on file - a
+    """The press's refusal when the card the page drew (`shown`: an action's proposal, a letter's envelope, as drawn) is not the one on file - a
     field changed after it was shown never runs under the words he read (red team F1), and a letter never goes to someone the card did not
     name (round 4: an agent's second save in its turn rewrote the To of the card on his screen). None to go on: no card shown (a phone's
     typed yes), or the same one."""
@@ -510,7 +529,7 @@ def unlike_shown(rv: dict, shown, verb: str) -> dict | None:
     else:
         try: env = json.loads(rv.get('Deliver') or '{}') or {}
         except (TypeError, ValueError): env = {}
-        same = 'to' not in shown or _to(env.get('to')) == _to(shown['to'])
+        same = not unlike_drawn(env, shown)
     if same: return None
     return {'ok': False, 'status': rv.get('Status') or 'pending', 'sent': None, 'changed': True, 'send_error': CHANGED}
 
@@ -724,10 +743,11 @@ def queue(store, task_id: int, p: dict, actor='agent', refused: list | None = No
     # (outputs.take), never a path the agent wrote (execute resolves the name again)
     if ok and p.get('action') == 'run_tool':
         from . import outputs
-        p = {k: v for k, v in p.items() if k != 'image_path'}
+        p = {k: v for k, v in p.items() if k not in ('image_path', PINNED)}
         if p.get('type') in POSTS: p = {**p, 'network': POSTS[p['type']]}       # ...its card says where in his words ("LinkedIn"), never "linkedin post"
         if p.get('image') and task_id and (f := outputs.take(store, int(task_id), p['image'])): p = {**p, 'image': outputs.rel(int(task_id), f)}
         if why := picture_why(task_id, p): ok = False
+        elif p.get('image') and (seen := picture_print(task_id, p)): p = {**p, PINNED: seen}
     # ...and what the agent left unnamed on a card's choices comes from the connection's own defaults (Connections), so the card shows them
     if ok and p.get('action') == 'run_tool':
         from . import connectorcatalog as cat
@@ -1408,10 +1428,13 @@ def _run(store, rv: dict, p: dict, tid, a: str, actor: str, edited, skip_checks:
     else:                                   # run_tool
         from .reports import REGISTRY, resolve_cfg
         # the owner approved THIS query, so it may commit - the one road to a write on a read-level SQL card
-        cfg = {k: v for k, v in p.items() if k not in ('action', 'flow_run', 'image_path', 'result', 'network')}
+        cfg = {k: v for k, v in p.items() if k not in ('action', 'flow_run', 'image_path', 'result', 'network', PINNED)}
         if p.get('image'):
             from . import outputs
             if why := picture_why(tid, p): raise RuntimeError(f'{why} - nothing was posted')
+            if p.get(PINNED) and picture_print(tid, p) != p[PINNED]:
+                raise RuntimeError(f"{p['image']} is not the file this card was raised with - it changed after the card was shown, so nothing was posted. "
+                                   'Raise the post again with the picture it should carry')
             if p.get('type') in MEDIA: cfg['image_path'] = str(outputs.named(int(tid), p['image']))
             else: cfg.pop('image', None)          # ...a network Taskuary uploads no picture to posts the words; the card said so
         if (bad := unknown_tool(p.get('type'))): raise RuntimeError(f'{bad} - nothing was run')       # ...a card from before the gate refused it

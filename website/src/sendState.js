@@ -99,13 +99,11 @@ export function draftState(rv) {
   if (err.startsWith(EMPTY_DRAFT) || (!err && !rv?.DraftNeeds && String(rv?.DraftBy || "").startsWith("agent:"))) return { state: "empty", line: EMPTY_LINE, retry: true };
   // THE WRITER SAID WHAT IT NEEDS (store.set_review_draft_needs): no failure - a plain line, whole, and the Advisor lights Send to agent /
   // Continue. It came as a DraftError: red, cut mid-word, "New task to fix this" (walk 2026-10-29)
-  // ...said once: the turn it stands in asked it in its own words (chatlog.card_said) - the card stays lit, its line is not said again
-  if (rv?.NeedsSaid) return { state: "needs", line: "", retry: true };
   if (rv?.DraftNeeds) { const s = String(rv.DraftNeeds).trim(); return { state: "needs", line: s.charAt(0).toUpperCase() + s.slice(1), retry: true }; }
   if (rv?.DraftError) return { state: "failed", line: `Draft failed: ${rv.DraftError}. Press ${label("redraft", "none")} again or write the answer yourself.`, retry: true };
   return { state: "undrafted", line: "No draft yet — draft it with AI or write the answer.", retry: true };
 }
-// A CHAT DRAWS A REPLY CARD ONCE THERE IS SOMETHING IN IT OR SOMETHING SAID ABOUT IT (the owner, 2026-11-13: "why would you have empty write a
-// reply box, unless the agent said i'm not sure what to respond"): a draft, or its record of why there is none - never a reply nobody wrote
-// or spoke of, an empty box at the chat's foot. The server's list keeps the same one out (conversation.unwritten)
-export const replyCardShown = (rv) => !!rv && draftState(rv).state !== "undrafted";
+// A CHAT DRAWS A REPLY CARD ONCE ITS AGENT HAS WRITTEN IT (the owner, 2026-11-27: "Agents don't just draw boxes unless it needs approval to send
+// email? why would it draw anything before that"): its words, for his press - never an empty box, whatever its record says of why it is empty.
+// That a reply is owed is the task's state (the pill, the rail). The server's list keeps the same one out (conversation.unwritten)
+export const replyCardShown = (rv) => ["drafted", "kept"].includes(draftState(rv).state);

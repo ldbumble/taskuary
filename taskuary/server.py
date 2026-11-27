@@ -2476,10 +2476,7 @@ def _task_detail(task_id: int, rev: str = '', opened: bool = False, whole: bool 
     if not whole: _cut_messages(d, {r.get('MessageId') for r in d['reviews']} | {m['MessageId'] for m in full if m.get('Danger')})
     memo, sigs, here = {}, {}, {m['MessageId']: m for m in full}
     many = len(outbound.mailboxes(store)) > 1
-    from . import chatlog as _chatlog
     for r in d.get('reviews') or []:
-        # ...AND WHAT AN OWED REPLY NEEDS IS SAID ONCE: by the turn it stands in, where that turn said anything (chatlog.card_said - the ask's one rule)
-        if r.get('DraftNeeds') and not str(r.get('DraftText') or '').strip() and _chatlog.card_said(store, task_id, r['ReviewId']): r['DraftNeeds'] = None; r['NeedsSaid'] = True
         r['CanSend'], r['SendBlock'] = _review_send_state(memo, r)
         r['Connect'] = _review_connect(memo, r)
         r['Signature'] = signatures.for_review(store, r, here.get(r.get('MessageId')), memo=sigs)     # what goes under it: the reply box shows it

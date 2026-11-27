@@ -1045,7 +1045,7 @@ def advance(store, tid: int) -> None:
     is pressed, withdrawn or moved past, never moved; one held behind the front has no row, so nothing can draw it. A card outside the line
     (Taskuary's own offer beside a reply - a skill) stands as an `offer`, drawn only while no card of the line waits."""
     from . import cardqueue
-    from .conversation import _card
+    from .conversation import _card, unwritten
     from .processing_unread import OWNER_ACTORS
     from .wrapup import OWNER_SID
     tid = int(tid)
@@ -1076,6 +1076,10 @@ def advance(store, tid: int) -> None:
     for k, r in list(rows.items()):
         rv = by.get(json.loads(r['Body']).get('review'))
         if not rv or k.count(':') > 1: continue          # ...an earlier version (r:<rid>:v<n>) is what it said then, for good
+        # ...A REPLY BOX WITH NO WORDS IS NO CARD (conversation.unwritten): one an older build drew goes, and its card is put where its words are written
+        if unwritten(rv):
+            with store.lock: store.cx.execute('DELETE FROM chatlog WHERE Id=?', (r['Id'],)); _bump(store, tid); store.cx.commit()
+            rows.pop(k); continue
         st = _card(rv)['status']
         # ...A CARD OF MANY WAITS WHILE ANY OF ITS ROWS DOES (a set's tab or a list's row pressed by itself, 2026-11-26: its row read as its first
         # item did - dismissed - with the rest still his to press)
@@ -1130,7 +1134,6 @@ def advance(store, tid: int) -> None:
         if (want := step if front and not own and k == f"r:{front[0]}" else None) != json.loads(r['Body'] or '{}').get('step'): update(store, tid, k, step=want)
     for rid, rv in by.items():
         if f'r:{rid}' in rows or rv['Status'] != 'pending' or cardqueue.in_line(rv) or rid in held: continue
-        from .conversation import unwritten
         if unwritten(rv) or cardqueue.obsolete_read(store, tid, rv): continue
         t = open_turn(store, tid) or _turn_at(store, tid, rv.get('CreatedAt'))
         put(store, tid, 'card', f'r:{rid}', {**_card(rv), 'offer': True}, parent=t['Id'] if t else None, state='offer', src=f'review:{rid}')
@@ -1487,8 +1490,7 @@ def missing(store, tid: int, got: dict, upto: int = None) -> list:
             out.append(f"i: his line {k} is drawn nowhere")
     for rid in [x for x in cardqueue.state(store, int(tid))['live'] if x != cardqueue.LAND][:1]:      # ...a unit's card is its first row's
         rv = store.get_review(rid) or {}
-        # ...a reply no words were written for yet is no card while the agent asks for what it needs (beside: one question)
-        if rv.get('Status') == 'pending' and rid not in cards and not (rv.get('Kind') in DRAFTS and not str(rv.get('DraftText') or '').strip()):
+        if rv.get('Status') == 'pending' and rid not in cards:
             out.append(f"i: the card that waits on him, review {rid} ({rv.get('Kind')} from {rv.get('Origin') or rv.get('DraftBy') or 'its road'}), is drawn nowhere")
     return out
 
@@ -1530,19 +1532,10 @@ def _now(tid: int, turn: dict) -> dict:
 
 
 # WHAT A TURN SAID IN ITS OWN WORDS - THE ONE RULE FOR WHAT IS SAID AGAIN UNDER IT (decided 2026-11-20, walk 8: never duplicate): an ask marker's
-# text, and an owed reply's "what the agent needs" line, are drawn only under a turn that said nothing of its own
+# text is drawn only under a turn that said nothing of its own
 def turn_words(t: dict) -> str:
     "A turn's words - its answer and the lines it said while it worked - as one flat line ('' when it said nothing)."
     return ' '.join(re.sub(r'[*_`]', '', ' '.join([str(t.get('text') or ''), *(s.get('text') or '' for s in t.get('steps') or [] if s.get('k') == 'said')])).split())
-
-
-def card_said(store, tid: int, rid: int) -> bool:
-    "Did the turn review `rid`'s card stands in say something of its own (turn_words)? Then the card's own words of what it needs are not said again."
-    r = _row(store, tid, f'r:{int(rid)}')
-    if not r or r.get('Parent') is None: return False
-    with store.lock: rows = [dict(x) for x in store.cx.execute('SELECT * FROM chatlog WHERE TaskId=? AND (Id=? OR Parent=?)', (int(tid), r['Parent'], r['Parent']))]
-    t = next((_item(x) for x in rows if x['Id'] == r['Parent'] and x['Kind'] == 'turn'), None)
-    return bool(t and turn_words({**t, 'steps': [_item(x) for x in rows if x['Kind'] == 'step']}))
 
 
 def beside(store, tid: int, out: list, at_work: bool, hold_, ending: bool = False) -> dict:
@@ -1610,8 +1603,6 @@ def beside(store, tid: int, out: list, at_work: bool, hold_, ending: bool = Fals
         # ...and ITS QUESTION IS THE TURN'S MOVE: no Try again its summary asked for stands under it (the walk, 2026-11-21: a two-way question
         # with only "Try again" under it, which answered neither)
         if isinstance(on.get('summary'), dict) and on['summary'].get('retry'): on['summary'] = {k: v for k, v in on['summary'].items() if k != 'retry'}
-        # ...a missing fact is one question: the reply it cannot write yet is not drawn under it as an empty box
-        for x in turns: x['cards'] = [c for c in x.get('cards') or [] if not (c.get('status') == 'pending' and c.get('what') in DRAFTS and not c.get('was'))]
     # ...the turn whose letter waits for his Send (the page hangs the letters' block there), never one at work
     letters = next((x['id'] for x in reversed(turns) if x.get('state') not in LIVE
                     and any(c.get('status') == 'pending' and c.get('what') in (*DRAFTS, 'slot') for c in x.get('cards') or [])), None)

@@ -372,52 +372,60 @@ def test_each_tab_of_a_set_is_told_by_what_came_of_it_never_by_its_first_rows_fa
     assert cardqueue.state(s, tid)['live'] == [kept['ReviewId']]
 
 
-def test_an_empty_reply_box_in_front_is_never_told_as_waiting_for_his_press():
-    """Walk 25, 2026-11-26: a reply was owed and its agent had asked what to say, so the empty box stood with that on it. Its agent then raised
-    a card of its own, which waited behind the box - and was told "Waiting for his press now: the reply to ..." for a box whose Send is off."""
+def test_a_reply_owed_that_nobody_wrote_is_never_told_to_its_agent_as_a_card():
+    """Walk 25, 2026-11-26: a reply was owed and its agent had asked what to say; the card it then raised was told beside "the reply to ..." -
+    a box with nothing in it. The owner's ruling, 2026-11-27: no reply box is drawn that the agent did not write, so none is told either:
+    what stands on his screen is the card the agent raised."""
     from taskuary import cardqueue, conversation, general
     s, tid = world()
     mid = s.add_message({'TaskId': tid, 'ExternalId': 'p1', 'Channel': 'email', 'FromName': 'Paula Vance', 'FromEmail': 'paula@vendor.example',
                          'ToEmail': 'alex@northwind.example', 'Subject': 'Flour order', 'BodyText': 'Twenty bags as usual? Paula', 'Status': 'routed'})
     conversation.hear(s, tid, turn=True)
-    box = _rv(s, tid, mid, text='')
-    s.set_review_draft_needs(box, 'How many bags should I confirm?')
+    _rv(s, tid, mid, text='')
     act = one_call(s, tid, [{'action': 'run_tool', 'type': 'linkedin_post', 'text': 'We shipped the ledger export.'}])[0]
     s._exec('UPDATE review SET Batch=NULL WHERE ReviewId=?', (act,))
     s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'How many bags should I confirm?')
     cardqueue._SEEN.clear()
     said = cardqueue.screen(s, tid)
-    assert 'no words in it' in said and 'paula@vendor.example' in said and said.count('Waiting for his press now') == 1, said
-    assert 'Waiting for his press now: the reply' not in said, said
+    assert said.count('Waiting for his press now') == 1 and 'paula@vendor.example' not in said and 'reply' not in said.lower(), said
 
 
-def test_an_empty_reply_box_never_holds_a_card_that_can_be_pressed():
-    """Walk 26, 2026-11-27, all three roads: a colleague's mail put an empty reply box on the task as it arrived - Send off, no Dismiss - and
-    its agent asked what to say. Every card raised after it (a move to another profile, a post) waited behind the box for good: raised, drawn
-    nowhere, and told to him as "ready". What waits in front must be pressable: the agent's card stands in front and is drawn, the box stays
-    lit where it was drawn, still his to type into - and his press on the card ends the row, box or no box. Invented people."""
-    from taskuary import cardqueue, conversation, general
+def test_no_reply_card_stands_until_its_agent_writes_one():
+    """The owner, 2026-11-27: "Agents don't just draw boxes unless it needs approval to send email? why would it draw anything before that."
+    A colleague's mail leaves a reply owed. Nothing is drawn for it as it arrives or when the turn ends without a draft - a box an older build
+    drew goes too - and that a reply is owed reads on the task's state. The card its agent raises is what stands, alone in its line; and the
+    reply is a card once its agent has written it, in the turn that wrote it. Invented people."""
+    from taskuary import cardqueue, conversation, general, taskstate, wrapup
+    from taskuary.store import set_owner
     s, tid = world()
+    set_owner(s, 'Alex Doyle', 'alex@northwind.example')
     mid = s.add_message({'TaskId': tid, 'ExternalId': 'g1', 'Channel': 'email', 'FromName': 'Gail Moreno', 'FromEmail': 'gail@northwind.example',
                          'ToEmail': 'alex@northwind.example', 'Subject': 'Flour order', 'BodyText': 'Twenty bags as usual? Gail', 'Status': 'routed'})
     conversation.hear(s, tid, turn=True)
-    box = _rv(s, tid, mid, text='')
-    s.set_review_draft_needs(box, 'the number of bags')
+    owed = _rv(s, tid, mid, text='')
+    s.set_review_draft_needs(owed, 'the number of bags')                  # ...whatever its record says of why it is empty
+    chatlog.put(s, tid, 'card', f'r:{owed}', conversation._card(s.get_review(owed)), state='pending', src=f'review:{owed}')     # ...and an older build's box
     s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'I will write to Gail once the order is settled.')
-    cards = lambda: {c['review']: c['status'] for x in chatlog.read(s, tid)['items'] for c in ([x] if x['kind'] == 'card' else x.get('cards') or [])}
-    assert cards() == {box: 'pending'} and cardqueue.state(s, tid)['live'] == [box], 'alone, the box is the one thing in front'
+    def cards():
+        chatlog.settled(); cardqueue._SEEN.clear()
+        return {c['review']: c['status'] for x in chatlog.read(s, tid)['items'] for c in ([x] if x['kind'] == 'card' else x.get('cards') or [])}
+    assert cards() == {} and cardqueue.state(s, tid)['live'] == [], 'a reply owed is no card: nothing drawn, nothing in front'
+    assert taskstate.status(s, s.get_task(tid))['key'] == 'owed', 'that it is owed is the task\'s state'
     conversation.hear(s, tid, [general.new_line_id()], standing=True, turn=True)
     act, then = (_rv(s, tid, act=w) for w in ('move this task to Northwind', 'tell Gail it moved'))
     s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'The move card is ready.')
-    cardqueue._SEEN.clear()
+    assert cards() == {act: 'pending'}, 'the card its agent raised is what stands'
     q = cardqueue.state(s, tid)
-    assert (q['live'], q['held'], cardqueue.alone(q)) == ([act], [then], [str(box)]), q
-    assert cardqueue.line(q).startswith('1 of 2'), 'the box is no one of the line the cards stand in'
-    assert cards() == {box: 'pending', act: 'pending'}, 'both drawn: the card to press, and the box where it stood'
+    assert (q['live'], q['held'], cardqueue.alone(q)) == ([act], [then], []) and cardqueue.line(q).startswith('1 of 2'), q
     assert not cardqueue.row_over(s, tid)
     for r in (act, then): s.decide_review(r, 'approved', None, 'owner'); cardqueue._SEEN.clear()
-    assert cardqueue.row_over(s, tid), 'a box with nothing to press keeps no agent from its next step'
-    assert cards()[box] == 'pending' and cardqueue.state(s, tid)['live'] == [box]
+    assert cardqueue.row_over(s, tid) and owed not in cards(), 'a reply owed keeps no agent from its next step'
+    general.wait_line(s, tid, 'Twenty, yes.', line_id='l-bags'); conversation.hear(s, tid, ['l-bags'], turn=True)
+    assert wrapup.agent_reply(s, tid, 'Hi Gail, twenty bags as usual. Alex', to='gail@northwind.example')['review_id'] == owed
+    s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'The reply to Gail is drafted for your Send.')
+    assert cards()[owed] == 'pending' and cardqueue.state(s, tid)['live'] == [owed], 'written, it is a card for his press'
+    items = chatlog.read(s, tid)['items']
+    assert [c['review'] for c in items[-1].get('cards') or []] == [owed] and items[-1]['kind'] == 'turn', 'the last thing of the turn that wrote it'
 
 
 def _drawn(s, tid) -> list:
@@ -842,21 +850,6 @@ def test_the_agents_own_words_are_the_question_the_marker_only_marks_the_wait():
         assert not chatlog.beside(s, tid, bare, False, None)['asking'].get('said'), 'a turn with no words: the marker text is the question'
 
 
-def test_an_owed_replys_needs_line_is_said_once_by_the_one_rule_the_ask_follows():
-    """WALK 8 (2026-11-20, decided: never duplicate): the turn asked Ray's times in its own words, and the empty reply under it asked them again
-    on its card - with the app's own link written out. The card stays lit (the 11-13 ruling); its line goes where its turn said anything
-    (turn_words, the ask's one rule), and a line it keeps never shows an address of the app's own."""
-    from taskuary import conversation, general
-    s, tid = world()
-    mid = s.add_message({'TaskId': tid, 'ExternalId': 'rc1', 'Channel': 'email', 'FromName': 'Ray Colton', 'FromEmail': 'ray@northwind.example',
-                         'ToEmail': 'alex@northwind.example', 'Subject': 'Tuesday', 'BodyText': 'Free Tuesday? Ray', 'Status': 'routed'})
-    conversation.hear(s, tid, turn=True)
-    rid = s.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft', 'Status': 'pending', 'Channel': 'email', 'DraftText': '', 'Origin': 'triage'})
-    assert general.reply_needs(s, tid, summ={'on_you': ['Tell me your Tuesday times (Connect a calendar: #connector=outlook).']}) == 'Tell me your Tuesday times.'
-    s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'Which Tuesday times work for you?')
-    chatlog.settled(); chatlog.read(s, tid)
-    assert chatlog.card_said(s, tid, rid), 'its turn asked it in words: the card says it no more'
-    assert chatlog.turn_words({'text': '', 'steps': []}) == '' and not chatlog.card_said(s, tid, 9999)
 
 
 def test_a_turn_that_asks_him_carries_no_try_again_under_its_question():

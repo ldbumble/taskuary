@@ -29,18 +29,19 @@ test("an empty draft reads as one, never as a blank box", () => {
   assert.equal(draftState({ DraftText: "", DraftError: "the AI connector timed out" }).state, "failed");
 });
 
-// NO EMPTY "WRITE A REPLY" BOX UNLESS SOMETHING WAS SAID ABOUT IT (the owner, 2026-11-13: "why would you have empty write a reply box, unless the
-// agent said i'm not sure what to respond, feel free to respond here - then it's fine"): a reply owed that nobody wrote or spoke of sat empty at
-// the chat's foot, moving down with each arrival. Where an agent works the task its card waits for a draft or the record of why there is none
-test("an owed reply nobody wrote or spoke of is no card in an agent's chat; one its record explains is", () => {
+// NO REPLY BOX THE AGENT DID NOT WRITE (the owner, 2026-11-27: "Agents don't just draw boxes unless it needs approval to send email? why would it
+// draw anything before that"): a reply owed sat empty in the chat with a line of what it needed. Where an agent works the task the card is its
+// reply, written - whatever the record of an empty one says
+test("an owed reply with no words is no card in an agent's chat, whatever its record says; a written one is", () => {
   assert.equal(replyCardShown({ Kind: "draft", Status: "pending", DraftText: "" }), false);
-  assert.equal(replyCardShown({ Kind: "draft", DraftText: "", DraftNeeds: "which March dates suit Gail" }), true);
-  assert.equal(replyCardShown({ Kind: "draft", DraftText: "", DraftError: "the AI connector timed out" }), true);
-  assert.equal(replyCardShown({ Kind: "draft", DraftText: "", DraftBy: "agent:assistant" }), true);
+  assert.equal(replyCardShown({ Kind: "draft", DraftText: "", DraftNeeds: "which March dates suit Gail" }), false);
+  assert.equal(replyCardShown({ Kind: "draft", DraftText: "", DraftError: "the AI connector timed out" }), false);
+  assert.equal(replyCardShown({ Kind: "draft", DraftText: "", DraftBy: "agent:assistant" }), false);
   assert.equal(replyCardShown({ Kind: "draft", DraftText: "Friday." }), true);
+  assert.equal(replyCardShown({ Kind: "draft", DraftText: "Friday.", DraftError: "the draft came back empty" }), true);   // the one before a failed rewrite stands
   assert.equal(replyCardShown(null), false);
   const page = fs.readFileSync(path.join(process.cwd(), "src", "TaskPage.jsx"), "utf8");
-  // ...its turn's card in a chat with turns (replyNode), drawn only once written or spoken of; the chat's own only with no turns (a8fab80d9)
+  // ...its turn's card in a chat with turns (replyNode), drawn only once written; the chat's own only with no turns (a8fab80d9)
   assert.match(page, /const replyNode = inTurns && pendingReview && replyCardShown\(pendingReview\) \?/);
   assert.match(page, /const chatReview = !inTurns \? pendingReview : null;/);
   assert.match(page, /const chatBody = \(pendingReview = chatReview\) =>/);

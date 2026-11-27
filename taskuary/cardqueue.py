@@ -167,7 +167,7 @@ def _units(store, tid: int, past: set) -> list:
 # once; the agent is woken when the row is over, or at once by a press that fails (general.failed). THE ONE ANSWER to "is the row finished"
 def row_over(store, tid: int) -> bool:
     "Does nothing on task `tid` wait for his press? A card its press handed to the agent to do (handed) is the agent's now, not his."
-    return not any(pressable(u) and (u['rids'] == [LAND] or _waits(u)) for u in state(store, tid)['units'])
+    return not any(u['rids'] == [LAND] or _waits(u) for u in state(store, tid)['units'])
 
 
 def unheard(store, tid: int) -> list:
@@ -310,11 +310,6 @@ def _state(store, tid: int, past: set = None) -> dict:
     from .proposals import written_past
     us = _units(store, tid, past := written_past(store, int(tid)) if past is None else past)
     waiting = [u for u in us if u['done'] is None]
-    # ...WHAT WAITS IN FRONT MUST BE PRESSABLE (walk 26, 2026-11-27: an empty reply box put up as the mail arrived - Send off, no Dismiss - stood
-    # in front for good, and the card its agent raised behind it was drawn nowhere while the agent said it was there): a card with nothing on
-    # it to press holds no card that has. It stays lit where it is drawn, beside the line (`fronts`), and is no one of the line's count
-    boxes = [u for u in waiting if not pressable(u)] if any(pressable(u) for u in waiting) else []
-    us, waiting = ([u for u in xs if not any(u is b for b in boxes)] for xs in (us, waiting))
     # ...the run it is one of: each card that stood for his press, raised while the one before it still waited or with nothing of his between
     runs = _runs(store, tid, [u for u in us if _stood(u)])
     if not waiting: return {'live': [], 'held': [], 'n': 0, 'of': 0, 'next': '', 'units': [], 'runs': runs, 'past': past, 'fronts': []}
@@ -327,14 +322,9 @@ def _state(store, tid: int, past: set = None) -> dict:
     # queued, the front is drawn, and its agent hears the row once it is over (row_over)
     live = front['rids']
     return {'live': live, 'held': held, 'n': n, 'of': len(run), 'next': what(store, waiting[1]) if len(waiting) > 1 else '', 'units': waiting,
-            'runs': runs, 'past': past, 'fronts': [u['rids'] for r in runs if (u := _front(r)) and u is not front] + [b['rids'] for b in boxes]}
+            'runs': runs, 'past': past, 'fronts': [u['rids'] for r in runs if (u := _front(r)) and u is not front]}
 
 
-def pressable(u: dict) -> bool:
-    """Has this card anything on it to press - his, or (handed) its agent's to finish? All but a reply box nobody has written: its Send is off
-    until it holds words, and it has no Dismiss. By the words its row holds, never what he is typing into it: his typing moves no card."""
-    from .conversation import DRAFTS
-    return not u['rows'] or any(r['Kind'] not in DRAFTS or str(r.get('DraftText') or '').strip() for r in _waits(u)) or any(handed(r) for r in u['rows'])
 
 
 def _front(run: list) -> dict | None:
@@ -548,7 +538,7 @@ def screen(store, tid: int, skip=()) -> str:
     (conversation._card) - sent, done with its link, failed and why, turned down. Told at the head of every turn and after every press and
     every card raised. `skip`: review ids said elsewhere in the same words (the reply draft's own block). '' on a task that never had a card."""
     from .continuity import clock
-    from .conversation import DRAFTS, _card
+    from .conversation import _card
     from .proposals import SET_ASIDE, UNTIL, comes_back, passed_why
     from . import general, landing
     st = state(store, tid); mark(store, tid, st)
@@ -585,10 +575,7 @@ def screen(store, tid: int, skip=()) -> str:
                 from . import card
                 ps = card.presses(store, r) if r and r.get('Kind') != 'action' else ('approve',)
                 shown = '' if 'approve' in ps else f" (its card: {card.press_words({'kind': card.SEND, 'presses': ps})})"
-                # ...AND A REPLY BOX WITH NO WORDS IN IT HAS NOTHING TO PRESS (walk 25, 2026-11-26: an empty reply stood in front of the card its
-                # agent had raised, told as "waiting for his press now" - its Send is off until somebody writes it)
-                if r and r.get('Kind') in DRAFTS and not _words(r): waiting.append(f'A reply box with no words in it, so nothing of it can be pressed: {n}')
-                else: waiting.append(f'Waiting for his press now{outcome(r)}: {n}{shown}')
+                waiting.append(f'Waiting for his press now{outcome(r)}: {n}{shown}')
             elif ids <= front: waiting.append(f'Comes forward once your turn ends (you are going on from his last press): {n}')
             # ...A CARD BEHIND THE FRONT COMES ONCE THE ONE IN FRONT IS PRESSED (separate calls are separate cards, one after another)
             elif ids & held: waiting.append(f'Raised, and behind the card in front - it comes forward at his press on that one: {n}')

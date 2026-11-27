@@ -13,7 +13,7 @@ const live = new Map();          // id -> the latest verb (its run closes over t
 const ofs = new Map();           // id -> the card that registered it: the item a button drawn from it was drawn for (press)
 const owners = new Map();        // owner -> { verbs, ref, at }
 const subs = new Set();
-const view = (v) => ({ id: v.id, label: v.label, group: v.group, tone: v.tone || "s", title: v.title || "", disabled: !!v.disabled, why: v.why || "", ...(v.blank ? { blank: v.blank } : {}), promote: v.promote !== false, lead: !!v.lead, ...(v.closes ? { closes: true } : {}), ...(v.fill ? { fill: true } : {}), ...(v.beside ? { beside: true } : {}), ...(v.onCard ? { onCard: true } : {}), ...(v.card ? { card: true } : {}), ...(v.tucked ? { tucked: true } : {}), ...(v.spine ? { spine: v.spine } : {}), ...(v.stage ? { stage: v.stage } : {}), ...(v.laid ? { laid: v.laid } : {}), ...(v.bar ? { bar: true } : {}), ...(v.unblocks ? { unblocks: true } : {}) });
+const view = (v) => ({ id: v.id, label: v.label, group: v.group, tone: v.tone || "s", title: v.title || "", disabled: !!v.disabled, why: v.why || "", ...(v.blank ? { blank: v.blank } : {}), promote: v.promote !== false, lead: !!v.lead, ...(v.closes ? { closes: true } : {}), ...(v.fill ? { fill: true } : {}), ...(v.beside ? { beside: true } : {}), ...(v.card ? { card: true } : {}), ...(v.tucked ? { tucked: true } : {}), ...(v.spine ? { spine: v.spine } : {}), ...(v.stage ? { stage: v.stage } : {}), ...(v.laid ? { laid: v.laid } : {}), ...(v.bar ? { bar: true } : {}), ...(v.unblocks ? { unblocks: true } : {}) });
 let snap = { list: [], ref: "" }, sig = "";
 // THE WALK'S TWO WAYS, ONE PILL (the owner, 2026-10-27: "We have a Next button - let's have a Back button that goes up the line as well ...
 // on the first one no Back, like no Next on the last one. Combine Next/Back into one big pill called Nav"): Back is the walk's step up the
@@ -291,10 +291,6 @@ export const aimed = (item, e = null, now = Date.now()) => {
 };
 export const pressInFlight = (list) => (list || []).some((v) => v.busy || /…$/.test(String(v.label || "")));
 
-// A `card` verb is one the card draws itself, under the draft (ReviewDecision): registered so the Advisor can find it, drawn here
-// only when it is the advice. holdsMove: the card holds a move of its own under the draft (its filled button, or the task's Mark done
-// standing on it) - what the Advisor's Why? names as "under the draft".
-export const holdsMove = (list) => list.some((v) => v.onCard || (v.card && v.tone === "p"));
 export function rowOf({ list, ref, end: last = false }, pick = null) {
   const by = (g) => list.filter((v) => v.group === g && !v.card);
   // the card's own idea of its move (its filled tone) only says which greyed button the row explains - it never fills one

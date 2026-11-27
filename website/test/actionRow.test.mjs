@@ -295,7 +295,7 @@ test("a live session's Mark done stands on the bar, outlined, and Next is outlin
 
 test("a draft waiting under the card holds the move: the bar fills nothing - not Start an agent, not Next", () => {
   // the UX review, 2026-10-07: a drafted reply wore a filled Send on the card AND a filled Start an agent on the bar
-  const r = rowOf({ ref: "TQ-3", list: [v("start-agent", "agent", { lead: true }), v("done", "more", { promote: false, onCard: true }), v("next", "next")] });
+  const r = rowOf({ ref: "TQ-3", list: [v("start-agent", "agent", { lead: true }), v("done", "more", { promote: false }), v("next", "next")] });
   assert.deepEqual(filled(r), []);
   assert.equal(r.next.tone, "s");
 });
@@ -335,10 +335,9 @@ test("one border around the three layers: the suggestion, the row and the box si
 // The draft's own Send lives UNDER THE DRAFT only (the owner, 2026-10-22, reversing the bar's copy of 2026-10-19), and the bar keeps no
 // empty slot for it (2026-10-25: "we should not have empty space here"). Advised, it is lit on the card, the bar unchanged.
 test("the draft's own Send is never on the bar and leaves no empty slot; advised it is lit on the card, the bar unchanged", async () => {
-  const { advisedAny, advisedIn, clustersOf, holdsMove } = await import("../src/actionRow.js");
+  const { advisedAny, advisedIn, clustersOf } = await import("../src/actionRow.js");
   const list = [v("12:approve", "decide", { tone: "p", label: "Send", card: true }), v("12:redraft", "decide", { label: "Redraft", card: true }),
-    v("remind", "more", { label: "Remind me" }), v("done", "more", { promote: false, onCard: true, label: "Mark done" }), v("next", "next")];
-  assert.ok(holdsMove(list));
+    v("remind", "more", { label: "Remind me" }), v("done", "more", { promote: false, label: "Mark done" }), v("next", "next")];
   assert.equal(advisedAny(list, { verb: "approve", label: "Send" })?.id, "12:approve", "found, so no advice:approve is drawn");
   assert.equal(advisedIn(list, { verb: "approve", label: "Send" })?.id, "12:approve", "the Advisor's line finds the Send under the draft");
   const quiet = rowOf({ ref: "", list });

@@ -28,7 +28,7 @@ test("a press is heard once it settles, so the advice is read again for the item
   assert.match(read("AssistantView.jsx"), /if \(k && !walkMove\(id\) && leftKey\.current !== k && \(!on \|\| on === k\)\) readAdvice\(k, true\);/);
   // ...a narrow window's row listens for nothing: it reads no advice of its own any more (2026-11-09), only what the page hands it
   assert.doesNotMatch(read("CanvasItem.jsx"), /onPressed|useItemAdvice/);
-  assert.equal((read("ReviewDecision.jsx").match(/finally \{ acted\(no\(/g) || []).length, 4, "decide, decideBoth, redraft and copy");
+  assert.equal((read("ReviewDecision.jsx").match(/finally \{ acted\(no\(/g) || []).length, 2, "decide and decideBoth");
 });
 
 test("the advice only tints: the same buttons in the same places with and without it, whatever it picks", () => {

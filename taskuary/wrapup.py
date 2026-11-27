@@ -486,13 +486,11 @@ def _addrs(v) -> list | None:
 
 
 # A LETTER WITH A BLANK LEFT TO FILL IS NO CARD (the recorded walk, 2026-11-11: a reply filed for the owner's Send read "Hi [NAME FROM ACCOUNT
-# PAGE]" - one press from going out so). A structure check, no reading of meaning: words alone in square brackets or doubled braces, as a
-# template leaves them - never a link's text, a numbered note or a ticked box. The agent is told its two ways on.
-_BLANK = re.compile(r"\[[A-Za-z][A-Za-z '/_-]{2,60}\](?!\()|\{\{[^{}\n]{1,60}\}\}")
-def blanks(text) -> list: return list(dict.fromkeys(m.group(0) for m in _BLANK.finditer(str(text or ''))))
+# PAGE]" - one press from going out so). The slots blanks.py finds, the one rule the draft box marks too: refused here, at the raise.
 def blank_why(text, store=None) -> str:
     "'' or what to tell the agent whose letter still holds a blank, or holds no words but its frame: what it can do next."
-    b = blanks(text)
+    from .blanks import find
+    b = find(text)
     if b: return (f"the letter still has a blank left to fill ({', '.join(b[:3])}) - nothing was set up. Fill it from what you can read, or ask "
                   "the owner the one thing it needs and write the letter when you have it.")
     return ("the letter holds only its greeting and sign-off - there is no message in it yet, so nothing was set up. Write what it says to them "

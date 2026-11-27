@@ -639,14 +639,6 @@ def _settle_task_after_sent_reply(store, rv: dict, actor: str, was_sent: bool):
     # It used to close here past a list of guards (an agent still on it, a newer message, a close-out or skill waiting).
 
 
-def _blanked(text):
-    """The refusal for a draft still holding a slot like "[REASON]" (blanks.py) - None when it can go. `blanks` names them, so
-    the card marks the ones its box holds."""
-    from . import blanks
-    found = blanks.find(text or '')
-    return {'ok': False, 'status': 'pending', 'sent': None, 'blanks': found, 'send_error': blanks.refusal(text)} if found else None
-
-
 def _carried(store, closeout: dict, reply: dict) -> bool:
     """Does the close-out itself carry this reply? A reply to a GitHub PR or issue IS a comment on it, so it goes WITH
     the merge/close the owner approved - not as a separate send that the GitHub card's replies switch refuses (the
@@ -656,7 +648,7 @@ def _carried(store, closeout: dict, reply: dict) -> bool:
     return str((msg or {}).get('Channel') or '').lower() == 'github'
 
 
-def _post_with_closeout(store, closeout: dict, reply: dict, text: str, actor: str, blanks_ok: bool = False) -> dict:
+def _post_with_closeout(store, closeout: dict, reply: dict, text: str, actor: str) -> dict:
     """Post the reply as the comment on the PR/issue the close-out just acted on, and file it as sent."""
     from . import github, proposals
     from .ci import _conn
@@ -668,7 +660,6 @@ def _post_with_closeout(store, closeout: dict, reply: dict, text: str, actor: st
         repo, num = m.group(1), int(m.group(2))
     body = (text or '').strip() or str(reply.get('DraftText') or '').strip()
     if not body: return {'ok': False, 'send_error': 'the reply is empty'}
-    if not blanks_ok and (gap := _blanked(body)): return gap
     envelope = {'kind': 'closeout_comment', 'channel': 'github', 'to': [f'{repo}#{num}']}
     def post(snapshot):
         url = github.comment_issue(_conn(store, repo)['Secret'], repo, num, snapshot['body'])
@@ -848,7 +839,7 @@ def saved_for(store, rv: dict) -> bool:
 
 def _decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = None,
            actor: str = 'owner', learn_async=None, cc: list = None, reply_text: str = None, anyway: bool = False, fields: dict = None,
-           blanks_ok: bool = False, bcc: list = None, subject: str = None) -> dict:
+           bcc: list = None, subject: str = None) -> dict:
     """Land one verdict on a pending review. learn_async(fn, *args) defers the learning
     call (the API hands FastAPI's background task runner in); None runs it inline.
 
@@ -898,23 +889,15 @@ def _decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = N
         from .card import pending as pending_card
         co = pending_card(store, rv['TaskId'], 'closeout')
         if co: return decide(store, co, 'approve', None, note, actor, learn_async, cc,
-                             reply_text=final_text if (final_text or '').strip() else '', blanks_ok=blanks_ok)
+                             reply_text=final_text if (final_text or '').strip() else '')
     if reply_text is not None and rv.get('Kind') == 'action' and verb_in in ('approve', 'edit', 'close_pr', 'merge_anyway'):
-        # ...and a reply still holding a blank stops the press BEFORE the merge: "Done on GitHub, but the reply was not sent" over a
-        # [REASON] left in it is half an act the owner never meant (blanks.py, the owner, 2026-10-30)
-        if rv.get('TaskId'):
-            if waiting := _reply_waiting(store, rv['TaskId']):
-                from . import signatures
-                typed = signatures.unsigned(reply_text, signatures.for_review(store, waiting)).strip()
-                gap = None if blanks_ok else _blanked(reply_text if typed else waiting.get('DraftText'))
-                if gap: return gap
         out = decide(store, rv, verb_in, final_text, note, actor, learn_async)
         if not out.get('ok') or not rv.get('TaskId'): return out
         if reply := _reply_waiting(store, rv['TaskId']):
             from . import signatures         # the signature alone in the box is no reply text: the filed draft goes, as with an empty box
             if not signatures.unsigned(reply_text, signatures.for_review(store, reply)).strip(): reply_text = ''
-            sent =(_post_with_closeout(store, rv, reply, reply_text, actor, blanks_ok) if _carried(store, rv, reply)
-                    else decide(store, reply, 'approve', reply_text, None, actor, learn_async, cc, blanks_ok=blanks_ok))
+            sent =(_post_with_closeout(store, rv, reply, reply_text, actor) if _carried(store, rv, reply)
+                    else decide(store, reply, 'approve', reply_text, None, actor, learn_async, cc))
             out['reply'] = sent
             if not sent.get('ok'): out['send_error'] = f"Done on GitHub, but the reply was not sent: {sent.get('send_error') or 'it was refused'}"
         return out
@@ -1056,11 +1039,6 @@ def _decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = N
         finally:
             _RUNNING.discard(rid)
             if runs: store.audit('review', rid, ACT_ENDED, actor)
-    # A BLANK LEFT IN IT (the owner, 2026-10-30): "[REASON]" went out as written. The one door refuses it, so the phone and the
-    # assistant meet the same "Fill in [REASON] first" the Send button does - nothing is decided, the draft stays as it is
-    # ...but a send already attempted is checked as attempted (Check delivery), its text frozen - never a new refusal over it
-    # ...and the owner's own Send anyway (`blanks_ok`, the owner 2026-11-08: the press asks once, "This still has [ROOM]. Send anyway?") goes
-    if verb in ('approve', 'edit') and not blanks_ok and rv.get('DeliveryState') not in ('unknown', 'sending') and (gap := _blanked(final)): return gap
     deliver = _envelope(rv)
     if (final or (cal and verb in ('approve', 'edit'))) and (rv.get('MessageId') or deliver):
         result = _deliver_review(store, rv, final, verb, actor, note, cc, anyway=anyway, bcc=bcc, subject=subject)

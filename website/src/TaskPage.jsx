@@ -1265,38 +1265,11 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
     catch { /* already moved on the server */ }
     loadTasks(); onChanged?.();
   };
-  // SENT (Send / Approve): the send already went through. THE REPLY THAT WENT CLOSES THE TASK (the owner, 2026-10-29: "wait until the
-  // send actually succeeds, then close the task"): `closes` is ReviewDecision's word, said only after the server's receipt - the close
-  // goes through the server's one gate (concierge.close_after_send): kept open, said on the task, while anything on it still waits on
-  // your own press - a held agent step, a proposal, an email it owes (a held `git push` was closed under, 2026-10-29).
-  // Anything else (an Approve, one of its emails) reads the task again and stays on it; closed by something else meanwhile means walk on
-  // ...and only the draft's Send and close says `closes` (the owner, 2026-11-03: "send and close and send without closing"): its plain Send
-  // reads the task again and stays on it, as Send does everywhere else
-  // ...and SEND AND CLOSE IS HIS CLOSE, WHATEVER THE AGENT IS DOING (the owner, 2026-11-11: "Why is agent still going .... there is nothing
-  // left to do"): put down at the press as Mark done is, the agent stopped by the server; a close the server kept open - something
-  // still waits on his own press - picks the row back up
-  const sent = async ({ closes = false, said = null } = {}) => {
-    if (said) setSentHere({ ...said, closing: closes });
-    // ...a beat for that line to be read before the view moves on: the close itself went with the send (pressResult's one beat, Next greyed)
-    const beat = said && closes ? pressBeat("send_close") : null;
-    // ...on the walk's table that gate is the walk's close (railwalk.leave "sent"): kept open, the same row comes back
-    if (closes && walkLeave) {
-      if (beat) await beat;
-      // ...THE PAGE MOVES ONLY ONCE THE CLOSE HAS LANDED (design round 5, I2: "Send and close" walked on to the next task with nothing sent,
-      // and a second press sent it): put down at the answer, never the press - kept open, the sent line says why, and the task stays in front
-      // of him (the agent walk, 2026-11-10: it went on saying "closing the task" over a task that stayed); failed, it says so where he pressed
-      try { const d = await walkLeave("sent"); if (d?.kept) { pressOver(); if (said) setSentHere((h) => h && { ...h, closing: false, kept: d.kept.join("; ") }); onStay?.(); } else onLeave?.(); }
-      catch (e) { pressOver(); onStay?.(e?.response?.data?.detail || e?.message || "Could not close it"); }
-      loadDetail(selected); loadTasks(); onChanged?.(); return;
-    }
-    if (closes) {
-      let out = null;
-      try { out = await closeAfterSend(api, selected); } catch { /* read it below */ }
-      if (beat) await beat;
-      if (out?.closed) { onLeave?.(); return closedHere(); }
-      // ...kept open by the server's gate: the line says why instead of "closing"
-      if (said) setSentHere((h) => h && { ...h, closing: false, kept: (out?.kept_open || []).join("; ") });
-    }
+  // SENT (Send / Approve): the send already went through, and SENDING IS NOT CLOSING (the owner, 2026-10-18): the task is read again and
+  // stays in front of him - its own Mark done is the close (the owner, 2026-11-27: Mark done is the task's, never the card's); closed by
+  // something else meanwhile means walk on
+  const sent = async ({ said = null } = {}) => {
+    if (said) setSentHere(said);
     let done = false;
     try { done = String((await api.get(`/api/tasks/${selected}`)).data?.task?.Status || "") === "done"; } catch { /* read it below */ }
     if (done) { onLeave?.(); return closedHere(); }
@@ -2695,10 +2668,9 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
     at: r.CreatedAt || "", rid: r.ReviewId, byRow: true, record: true, node: <ReviewDecision review={r} past /> }));
   // ...AND THE REPLY THAT WAITS IS A CARD OF ITS TURN like every other (the one log, stage 8: the log places it - chatlog.advance - and the
   // page's own placing of it, under a turn it guessed or loose at the foot, is gone): drawn where its row stands, by its review
-  // ...its Send and close only where nothing else holds the close (card.may_close: another card, or the check-back its agent set - walk 16)
   const replyNode = inTurns && pendingReview && replyCardShown(pendingReview) ? [{ key: `reply:${pendingReview.ReviewId}`, at: pendingReview.CreatedAt || "",
     rid: pendingReview.ReviewId, waits: true, node: <Box data-tq-review={pendingReview.ReviewId}><ReviewDecision review={pendingReview} closeout={closeoutRv}
-      went={sentHere?.id === pendingReview.ReviewId ? sentHere : null} toRow={inRow} onMarkDone={askFinish} onSent={sent} closeOnSend={!detail?.queue?.closes} onRemind={(e, a) => remindHere(steady(a || e?.currentTarget))}
+      went={sentHere?.id === pendingReview.ReviewId ? sentHere : null} toRow={inRow} onSent={sent}
       why={rec?.state === "draft_ready" ? rec.why || "" : ""}
       onChanged={() => { loadDetail(selected); loadTasks(); onChanged?.(); }} /></Box> }] : [];
   const turnCards = [...replyNode, ...passedCards, ...batches.map((rs) => ({ key: `batch:${rs[0].Batch}`, at: rs[0].CreatedAt || "", rid: rs[0].ReviewId, waits: true, steps: true,
@@ -2713,10 +2685,8 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
     ...allReviews.filter((r) => r.Kind === "slot" && (WENT.includes(r.Status) || (inTurns && letters.has(r.ReviewId))))
       .map((r) => ({ key: `rv:${r.ReviewId}`, at: r.CreatedAt || "", rid: r.ReviewId, letter: true,
         node: <Letter taskId={t?.TaskId} item={letterOf[r.ReviewId] || null} rv={r} onChanged={decided} /> })),
-    // ...and the reply just pressed here says what the press did to the task beside it (`closing`, `kept`), as it did where its draft stood
     ...allReviews.filter((r) => r.Kind !== "action" && r.Kind !== "slot" && WENT.includes(r.Status) && r.ReviewId !== sentBox?.id)
-      .map((r) => ({ key: `sent:${r.ReviewId}`, at: r.CreatedAt || "", rid: r.ReviewId, node: <SentReview {...sentCardOf(r)}
-        {...(sentHere?.id === r.ReviewId ? { closing: sentHere.closing, kept: sentHere.kept } : {})} /> }))];
+      .map((r) => ({ key: `sent:${r.ReviewId}`, at: r.CreatedAt || "", rid: r.ReviewId, node: <SentReview {...sentCardOf(r)} /> }))];
   // ...the reply that went is that card in its turn, so the chat's cards say it no second time - no "What was sent", no To over it
   const sentCarded = !!sentReview && turnCards.some((c) => c.key === `sent:${sentReview.ReviewId}`);
   // ...the reply in it only once it is written (replyCardShown): a reply owed that nobody wrote is the agent's to draft - never an empty box
@@ -2782,7 +2752,7 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
               queue mounts, so two surfaces cannot say different things about one draft. */}
           {pendingReview ? (<>
             <Box data-tq-review={pendingReview.ReviewId}>
-            <ReviewDecision review={pendingReview} closeout={closeoutRv} toRow={inRow} onMarkDone={askFinish} onSent={sent} closeOnSend={!detail?.queue?.closes} onRemind={(e, a) => remindHere(steady(a || e?.currentTarget))}
+            <ReviewDecision review={pendingReview} closeout={closeoutRv} toRow={inRow} onSent={sent}
               why={rec?.state === "draft_ready" ? rec.why || "" : ""}
               onChanged={() => { loadDetail(selected); loadTasks(); onChanged?.(); }} /></Box>   {/* the list's row moves too (T19) */}
           </>) : (

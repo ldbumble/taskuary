@@ -616,7 +616,6 @@ class DecideBody(BaseModel):
     cc: list[str] | None = None      # loop somebody in on this answer (email only)
     reply_text: str | None = None    # on a close-out: the task's pending reply, sent once the merge/close succeeded
     anyway: bool = False             # Send anyway: past a delivery nobody can confirm (verdicts._deliver_review)
-    blanks_ok: bool = False          # ...and past a blank still in the draft, the owner having been asked (blanks.js blankAsk)
     bcc: list[str] | None = None     # the email card's BCC and subject, as the owner left them (verdicts._deliver_review)
     subject: str | None = None
     fields: dict | None = None       # an action card's choices the owner changed (who sees a post, now or a draft): connectorcatalog.owner_edits
@@ -2438,10 +2437,6 @@ def _task_detail(task_id: int, rev: str = '', opened: bool = False, whole: bool 
     # ONE CARD AT A TIME (cardqueue): what waits behind the card that stands is not the page's to draw yet
     from . import cardqueue
     q = cardqueue.state(store, task_id)
-    # ...and what else holds the task open past a press on its front (card.may_close: the one answer Send and close is offered by, on the page
-    # as on the desk and the phone) - read beside the line, while it is fresh
-    from . import card
-    closes = card.may_close(store, task_id)
     held = set(q['held'])
     d['reviews'] = [r for r in d['reviews'] if r['ReviewId'] not in held and not cardqueue.obsolete_read(store, task_id, r)]
     # ...and each row of a card that is a set under tabs carries its tab's name (cardqueue.sets: the one answer to "tabs or a list")
@@ -2455,7 +2450,7 @@ def _task_detail(task_id: int, rev: str = '', opened: bool = False, whole: bool 
     if _origin.keeps_him(store, task_id):
         past_ = set(q['past'])
         d['reviews'] = [r for r in d['reviews'] if r.get('Status') != 'pending' or r['ReviewId'] in past_]
-    d['queue'] = {'live': q['live'], 'held': q['held'], 'closes': closes}       # ...the page's reply door reads it: none beside a front that is another card
+    d['queue'] = {'live': q['live'], 'held': q['held']}
     # ...and what the chat moved past reads as it will once its agent hears that (proposals.written_past): greyed in place, from this read on
     from .proposals import SET_ASIDE
     past = q['past']
@@ -5664,7 +5659,7 @@ def press_review(st, rid: int, body: DecideBody, background: BackgroundTasks = N
                                       else f"Press {buttons.label('redraft')} to write it with the latest context before approving."))}
     return land(st, rv, body.verb, body.final_text, body.note, ACTOR,
                 learn_async=(background.add_task if background is not None else None), cc=body.cc, reply_text=body.reply_text, anyway=body.anyway, fields=body.fields,
-                blanks_ok=body.blanks_ok, bcc=body.bcc, subject=body.subject, closes=body.closes, always=body.always)
+                bcc=body.bcc, subject=body.subject, closes=body.closes, always=body.always)
 
 # A BULK CARD (bulkcard.py): one press does every act on it, by each act's own road, in the background - its progress read here, drawn as a bar.
 # The owner's alone: no agent door (guard.AGENT_WRITES) lists it

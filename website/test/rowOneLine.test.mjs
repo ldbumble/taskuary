@@ -19,7 +19,7 @@ const draft = (rid, extra = {}) => [v(`${rid}:approve`, "decide", { tone: "p", l
 const STATES = {
   "new task": [v("reply", "decide", { tone: "p" }), v("start-agent", "agent", { lead: true }), v("email", "agent"), v("close-note", "more"), ...task(), next],
   "reply drafted, sendable": [...draft(41), v("start-agent", "agent"), v("email", "agent"), v("close-note", "more"),
-    ...task().map((x) => (x.id === "done" ? { ...x, promote: false, onCard: true } : x)), next],
+    ...task().map((x) => (x.id === "done" ? { ...x, promote: false } : x)), next],
   "reply drafted, unsendable chat": [v("41:copy", "decide", { label: "Copy", card: true }), v("41:redraft", "decide", { label: "Redraft", card: true }),
     v("start-agent", "agent"), v("close-note", "more"), ...task(), next],
   drafting: [v("reply", "decide", { tone: "p", label: "Drafting…", disabled: true }), v("start-agent", "agent", { lead: true }), v("email", "agent"), ...task(), next],

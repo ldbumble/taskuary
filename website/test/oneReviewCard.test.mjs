@@ -226,3 +226,13 @@ test("Connect and a bulk row's Open are presses that open under what was pressed
   const letter = (id) => reply({ ReviewId: id, Kind: "slot", Batch: "b1", MessageId: null, Deliver: JSON.stringify({ channel: "email", to: [`owner${id}@vendor.example`], subject: "Renewal" }) });
   assert.match(bulk([letter(1), letter(2), letter(3)]), /<button[^>]*data-tq-opens-under=""[^>]*aria-expanded="true"[^>]*>Hide/);
 });
+
+// ONE CARD, ITS ACT AND DISMISS (the owner, 2026-11-27: "reply card should have mark done, remind me those should be on the task"): a reply
+// card's presses are Send and Dismiss - whatever the page around it hands it, no Send and close, Mark done, Remind me, Redraft or Copy
+test("a reply card presses Send and Dismiss, nothing of the task's", async () => {
+  const { card } = await P, page = { onSent: () => {}, onMarkDone: () => {}, onRemind: () => {}, closeOnSend: true };
+  assert.deepEqual(press(card(reply(), page)).map((w) => w.trim()), ["Send", "Dismiss"]);
+  assert.deepEqual(press(card(reply({ Stale: 1 }), page)).map((w) => w.trim()), ["Send", "Dismiss"], "a stale draft is sent or dismissed - no Redraft on it");
+  const html = card(reply({ DraftText: "We meet in [ROOM]." }), page);
+  assert.doesNotMatch(html, /data-tq-blank-ask|Send anyway/, "a blank is the raise's to refuse - never a second press");
+});

@@ -21,6 +21,8 @@ fit - nothing only when two fit equally or none does (the owner, 2026-11-09)."""
 import json, re
 from collections import Counter
 
+from .readonce import kept
+
 KEY = 'workstreams'
 SIGNALS = ('people', 'domains', 'mailboxes', 'channels', 'repos')
 INDEX_START, INDEX_END = '<!-- workstreams:start -->', '<!-- workstreams:end -->'
@@ -39,10 +41,14 @@ def _norm(w: dict) -> dict:
 
 def streams(store, every: bool = False) -> list:
     """The owner's workstreams, as kept - active and quiet ones; `every` adds the proposed ones the owner has not confirmed."""
+    xs = [dict(x) for x in kept(('streams', id(store)), lambda: _kept_streams(store))]
+    return xs if every else [x for x in xs if x['status'] != 'proposed']
+
+
+def _kept_streams(store) -> list:
     try: xs = json.loads(store.get_setting(KEY) or '[]') or []
     except ValueError: xs = []
-    xs = [_norm(x) for x in xs if isinstance(x, dict)]
-    return xs if every else [x for x in xs if x['status'] != 'proposed']
+    return [_norm(x) for x in xs if isinstance(x, dict)]
 
 
 def get(store, slug: str) -> dict | None: return next((w for w in streams(store, True) if w['slug'] == slug), None)
@@ -91,21 +97,41 @@ def of_account(store, account, channel: str = 'email') -> str:
     """The profile an account is tagged to - '' when it serves every profile. `account` is a connection (its id or row) or the address
     a mailbox or chat is read by on `channel`: that source's own tag, else its card's. A tag counts only while two profiles are kept:
     with one, every account is that one's and the app is as it was."""
+    return tagger(store)(account, channel)
+
+
+def tagger(store):
+    """of_account for many accounts: the profiles, the sources and the cards read once, however many accounts are asked (a page's read
+    asks the wall of every mailbox on every card it draws)."""
+    return kept(('tagger', id(store)), lambda: _tagger(store))
+
+
+def _tagger(store):
     live = {w['slug'] for w in streams(store)}
-    if len(live) < 2 or account in (None, ''): return ''
-    if isinstance(account, dict): account = account.get('ConnectorId') or account.get('connector_id')
-    own, cid = '', int(account) if isinstance(account, int) or str(account).isdigit() else None
-    if cid is None:
-        a = str(account).strip().lower()
-        rows = [s for s in store.list_sources(False) if str(s.get('Address') or '').strip().lower() == a]
-        if (s := next((s for s in rows if str(s.get('Channel') or '').lower() == str(channel or '').lower()), rows[0] if rows else None)):
-            own, cid = s.get('Workstream') or '', s.get('ConnectorId')
-        else:                                                   # a mail card's own address, read with no source row (outbound.mailboxes)
-            from .channels import _cfg
-            cid = next((c['ConnectorId'] for c in store.list_connectors()
-                        if a and a in _low([(k := _cfg(c)).get('address'), k.get('account')])), None)
-    tag = own if own in live else ((store.get_connector(cid) or {}).get('Workstream') or '') if cid else ''
-    return tag if tag in live else ''
+    if len(live) < 2: return lambda account, channel='email': ''
+    got = {}
+    def srcs():
+        if 'srcs' not in got: got['srcs'] = store.list_sources(False)
+        return got['srcs']
+    def card(cid):
+        if ('card', cid) not in got: got['card', cid] = store.get_connector(cid)
+        return got['card', cid]
+    def tag(account, channel: str = 'email') -> str:
+        if account in (None, ''): return ''
+        if isinstance(account, dict): account = account.get('ConnectorId') or account.get('connector_id')
+        own, cid = '', int(account) if isinstance(account, int) or str(account).isdigit() else None
+        if cid is None:
+            a = str(account).strip().lower()
+            rows = [s for s in srcs() if str(s.get('Address') or '').strip().lower() == a]
+            if (s := next((s for s in rows if str(s.get('Channel') or '').lower() == str(channel or '').lower()), rows[0] if rows else None)):
+                own, cid = s.get('Workstream') or '', s.get('ConnectorId')
+            else:                                               # a mail card's own address, read with no source row (outbound.mailboxes)
+                from .channels import _cfg
+                cid = next((c['ConnectorId'] for c in store.list_connectors()
+                            if a and a in _low([(k := _cfg(c)).get('address'), k.get('account')])), None)
+        t = own if own in live else (card(cid) or {}).get('Workstream') or '' if cid else ''
+        return t if t in live else ''
+    return tag
 
 
 def tag_account(store, slug: str, connector_id: int = None, source_id: int = None, actor: str = 'owner') -> dict:
@@ -124,11 +150,21 @@ def may_use(store, tid, account, channel: str = 'email') -> bool:
     """THE ONE WALL: may the agent on task `tid` use this account - it is untagged, or tagged to the task's own profile. Asked by every
     door an AGENT's call goes through (a connector call, a send-from mailbox, a mail read, the calendar); the owner's own presses are
     his and are never asked - nor is the Assistant on the rail, which is his across every profile."""
-    if not tid: return True
-    tag = of_account(store, account, channel)
-    if not tag or tag == of_task(store, int(tid)): return True
-    from .general import is_dock
-    return is_dock(store.get_task(int(tid)))
+    return wall(store, tid)(account, channel)
+
+
+def wall(store, tid):
+    "may_use for many accounts of one task: its profile and the accounts' tags read once (tagger)."
+    if not tid: return lambda account, channel='email': True
+    tag, mine = tagger(store), {}
+    def ok(account, channel: str = 'email') -> bool:
+        if not (t := tag(account, channel)): return True
+        if 'ws' not in mine: mine['ws'] = of_task(store, int(tid))
+        if t == mine['ws']: return True
+        from .general import is_dock
+        if 'dock' not in mine: mine['dock'] = is_dock(store.get_task(int(tid)))
+        return mine['dock']
+    return ok
 
 
 def sees(store, tid, other) -> bool:
@@ -256,6 +292,10 @@ def stamp_message(store, mid: int, slug: str = None) -> str:
 
 def of_task(store, tid: int) -> str:
     """The task's workstream: its own once set (the owner's pick always), else what its messages say - written on the task then."""
+    return kept(('of_task', id(store), tid), lambda: _of_task(store, tid))
+
+
+def _of_task(store, tid: int) -> str:
     t = store.get_task(tid)
     if not t: return ''
     if t.get('Workstream'): return t['Workstream']

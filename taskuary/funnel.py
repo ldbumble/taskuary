@@ -1257,9 +1257,10 @@ def build(store, now: datetime = None, keep_surfaced: bool = False, live_state=_
           full_history: bool = False, keys=None) -> dict:
     """The rail, from the one builder there is (processing_unread.build). `keys`: a lookup - it cards only what answers to them."""
     from .processing_unread import build as shared_build
-    return shared_build(store, now=now or datetime.now(), include_read=keep_surfaced,
-                        live_state=None if live_state is _LIVE_UNSET else live_state,
-                        full_history=full_history, keys=keys)
+    from .readonce import once
+    # ...the facts every row asks the same (the owner's addresses, the accounts' tags, the mailboxes) read once for the whole rail
+    with once(): return shared_build(store, now=now or datetime.now(), include_read=keep_surfaced, live_state=None if live_state is _LIVE_UNSET else live_state,
+                                     full_history=full_history, keys=keys)
 
 
 def _chat_only(store, low, high) -> bool:

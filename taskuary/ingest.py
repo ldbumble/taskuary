@@ -1497,7 +1497,13 @@ def own_addresses(store) -> set:
     from owner_addresses: a shared log mailbox the funnel polls is a place the owner READS, not a
     name the owner IS, and mail sent there is not mail sent to them.
     ...and the address each mail card SIGNS IN AS is theirs too (walk 25: a second profile's own mailbox read "to someone at
-    harbor.example", and triage was told its mail was not put to them) - a shared mailbox is read under a card, never signed in as."""
+    harbor.example", and triage was told its mail was not put to them) - a shared mailbox is read under a card, never signed in as.
+    Read once for a whole rail (readonce): every row asks it, and each ask copied every connection card."""
+    from .readonce import kept
+    return set(kept(('own_addresses', id(store)), lambda: _own_addresses(store)))
+
+
+def _own_addresses(store) -> set:
     own = (store.get_setting('owner_email') or '').strip().lower()
     if not own: return owner_addresses(store)
     from .channels import _cfg

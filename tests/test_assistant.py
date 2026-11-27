@@ -290,7 +290,7 @@ class PostTests(unittest.TestCase):
         s = self._seed()
         src = assistant.source(s)
         self.assertEqual((src['Address'], src['cfg']['type'], src['cfg']['cron'], src['Active']), ('Advisor', 'assistant', assistant.TWICE_A_DAY, 1))
-        self.assertIn('What I promised', src['cfg']['ai_prompt'])
+        self.assertEqual(src['cfg']['ai_prompt'], assistant.PROMPT)
         seen = []
         def llm(system, user, **k): seen.append(system); return '{"say": []}'
         # a due run through the report machinery, with an edited instruction

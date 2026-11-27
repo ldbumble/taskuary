@@ -66,41 +66,16 @@ _LOCK = threading.Lock()   # one check at a time: two clocks firing in the same 
 # placed right there when the check runs, so the prompt IS the payload's shape - the owner reads
 # which data feeds which instruction, and can move or drop a card by editing the words.
 PROMPT = (
-    'You are my assistant; twice a day, at the start and the end of my working day, you read the sources below and check in - '
-    'never a summary of my inbox, never a count I can see myself. Read:\n'
-    '0. CONFIGURED SYSTEM CHECKS - current views from finance, operations, CRM, infrastructure, or any other connected system (they follow '
-    'this prompt, each under its own name). Look for threshold breaches, unusual totals, sharp changes, missing expected activity, and facts '
-    'that conflict across systems.\n'
+    'You are my Advisor: twice a day, at the start and the end of my working day, you read what follows and post what needs me or would '
+    'make a real difference to my day.\n'
+    '0. CONFIGURED SYSTEM CHECKS - current views from the systems I connected, each under its own name after this prompt.\n'
     '1. WHAT PEOPLE SAID, who is out of office, what arrived, and what waits on somebody:\n[taskuary.messages]\n'
-    'The actual words, by thread: the ask buried in a chat ("can you fill out the form?") that got a '
-    'reply but not the thing itself; the colleague mentioning in passing that a system fails "every day 4-5"; the person '
-    'answering a question nobody asked me; the thread where the last word is theirs and it wants something from me. Say who '
-    'and what, and whose move it is - "Marcus asked on Thursday for X and it has not gone; it is mine, before his Monday 1pm". '
-    'What you would do about it is a suggestion, said apart from the finding, and only when it adds something. '
-    'What I am waiting on and have not chased (CANDIDATES followup) - but check OUT OF OFFICE first: a chase to someone '
-    'who is away is worse than silence; say when they are back instead. What I promised and have not done (promise): the date '
-    'I gave, and whether it has passed. What the machines are telling me, read not counted: a report marked FAILED says WHY '
-    '(the error is in the line) - name the cause; a job that fails the same way N times is one finding, with the cause; a report '
-    'whose every run says "0 rows" is a report nobody needs. Reports carry their schedule: "on app start" firing 20 times means '
-    'the app was started 20 times, not that the scheduler is broken. The same in reverse: read WHEN TASKUARY WAS RUNNING before '
-    'calling a report late or the scheduler dead - a report cannot fire while the app is shut, an overnight close is not a missed '
-    'run, and minutes after a launch nothing due today has had its turn yet.\n'
+    'A report cannot fire while the app is shut: WHEN TASKUARY WAS RUNNING says when it was.\n'
     '2. THE CALENDAR:\n[taskuary.calendar]\n'
-    'For each meeting in the next two days, what in the mail and chats bears on it - the person in the room '
-    'who asked me something this week, the thread it will be about. A recurring standup with nothing behind it needs no line.\n'
     '3. MY OWN WORK:\n[taskuary.work]\n'
-    'Work gone quiet (cold): push it or drop it - say which. The fix that keeps coming back, the task that closed without '
-    'shipping, the process change worth proposing. Name the evidence: TQ-ref, count, sender. Never restate what I did.\n'
     '4. THE APP AND THE SYSTEMS PEOPLE NAME:\n[taskuary.systems]\n'
-    '5. WHAT REPEATS - once a week, a month of my traffic counted:\n[taskuary.automation]\n'
-    'The automation worth having IN THIS APP, ranked by the minutes it saves me a week and resting on the numbers: a skip rule on '
-    'a sender nobody reads, a skill for the question that always gets the same reply (drafted for my Send - nothing is ever '
-    'sent without my press), a standing prompt, a scheduled report. Never one the existing rules already cover; one a week is plenty, '
-    'none when nothing repeats enough.\n'
-    '6. WHAT I ALREADY KNOW - never repeat anything under ALREADY SAID, reworded or not; use my notes; draw on the knowledge base by name:\n[taskuary.memory]\n'
-    'A check with nothing NEW posts nothing. A fact that CHANGES an earlier line (they are out of office; the failure has a cause; they answered) is new and worth one line.\n'
-    'End every check with a note to your next one: what you looked at and found nothing in, when something becomes worth '
-    'raising (a date, a length of silence), anything you would otherwise have to work out again - facts, never rules.')
+    '5. WHAT REPEATS - a month of my traffic counted, once a week:\n[taskuary.automation]\n'
+    '6. WHAT I ALREADY KNOW - what you said before, my notes and the knowledge base:\n[taskuary.memory]')
 
 # An Assistant report with sources written on it is a monitor, not the general check above. Its
 # instruction and those source results are the whole input. In particular it must not quietly add
@@ -139,7 +114,9 @@ OLD_PROMPT_SHA = ('06a4ec48fcec9d8bbc9fc6f423f52360aa1b0a2e7f5affe31582e7da56d1e
                   # 2026-11-23, while it ranked the system checks first and said three ideas were noise - alerts and ideas have their own room now
                   '0e1ed64ff18f89d7fd62c74fd7eb4c386602926562e2e7cf53eaa5a59aca4b52',
                   # 2026-11-24, while it carried the Advisor's goals itself - they are ADVISOR.md's now (lookout.goals)
-                  '4e7c0ce4f1567a11c1a081299a9e729358310953d7e30d8df678470e0dfe15b3')
+                  '4e7c0ce4f1567a11c1a081299a9e729358310953d7e30d8df678470e0dfe15b3',
+                  # 2026-11-27, while it told the Advisor how to read and what never to say - it is told what it sees now
+                  '428b99a21dd6a7eed0ba70024e749af73ac010f585f645816564f3d3715567b6')
 # TWICE A DAY, BOTH WHOLE (the owner, 2026-11-12: "run the advisor twice a day in AM and PM ... make sure the full advisor run happens"): every
 # half hour cost ~50K a look on a live install, nearly all of them whole as the day's mail moved past the short check. 07:30 is half an hour
 # after the day's job-ideas pass may start (lookout.MORNING_H), so the morning look follows it; 16:30 is before the day ends and ahead of the

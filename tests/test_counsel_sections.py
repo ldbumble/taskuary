@@ -22,13 +22,15 @@ class Sections(unittest.TestCase):
         self.assertIn('I SURFACE', counsel.for_chat(st))
         brief = counsel.for_brief(st)
         self.assertIn('Walk them through Unread', brief); self.assertIn('Be plain', brief); self.assertNotIn('I SURFACE', brief)
-        out = counsel.for_discussion(st)
-        self.assertIn('Be plain', out); self.assertNotIn('I SURFACE', out); self.assertNotIn('Walk them through', out)
-        self.assertIn("I have Alex's back.", counsel.for_discussion(st), 'the desk keeps its intro')
+        self.assertIn("I have Alex's back.", brief, 'the brief keeps the intro')
 
     def test_renamed_headings_fall_back_to_the_whole_document(self):
         st = MemoryStore(); st.save_doc('counsel', "# Mine\n\n## How I talk\n- Short.\n", 'owner')
-        self.assertEqual(counsel.for_discussion(st).strip(), "# Mine\n\n## How I talk\n- Short.")
+        self.assertEqual(counsel.for_brief(st).strip(), "# Mine\n\n## How I talk\n- Short.")
+
+    def test_the_shipped_document_gives_the_brief_its_voice(self):
+        st = MemoryStore(); brief = counsel.for_brief(st)
+        self.assertIn('## Voice', brief); self.assertIn('## My goal', brief); self.assertNotIn('## What I see', brief)
 
     def test_load_strips_comments_and_restores_a_blank_document(self):
         st = MemoryStore(); st.save_doc('counsel', '<!-- nothing -->', 'owner')

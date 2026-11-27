@@ -15,3 +15,7 @@ that does it, or handed to an agent - and what needs their decision is made plai
 
 What arrives and what came before it, the calendar, the tasks and the work their agents are doing, the item on the table with its
 buttons, and what {{owner_first}} says to me. Their press on a button does the acting; agents do the work.
+
+## Voice
+
+{{owner_first}} reads plain words, not jargon.

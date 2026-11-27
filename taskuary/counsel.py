@@ -201,7 +201,6 @@ def for_chat(store) -> str:
     from . import agents
     return text if capabilities.can_code(store) else without_coding(text, NO_CODING if agents.developer_mode(store) else NO_DEV)
 def for_brief(store) -> str: return pick(store, GOAL_HEAD, VOICE_HEAD)
-def for_discussion(store) -> str: return pick(store, VOICE_HEAD)
 # ...and a task's agent reads none of it (walk 9, 2026-11-23): COUNSEL.md is the desk's own voice - its "Voice" rode every task's system prompt
 # as "HOW THE OWNER WRITES (STYLE.md)", ~900 characters of words never to say. How HE writes is STYLE.md (general.style_block)
 

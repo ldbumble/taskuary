@@ -576,7 +576,12 @@ def review_connect(store, r: dict, memo: dict = None) -> dict | None:
     if not k: return None
     memo = {} if memo is None else memo
     if ('connect', k) not in memo: memo[('connect', k)] = connect_fix(store, k)
-    return memo[('connect', k)]
+    if memo[('connect', k)] or k != 'email' or r.get('Kind') == 'action': return memo[('connect', k)]
+    # ...and a letter on a task whose profile has no mailbox (no_from): asked only where a second profile makes that possible, once a list
+    if 'hats' not in memo:
+        from . import workstreams
+        memo['hats'] = len(workstreams.streams(store)) > 1
+    return no_from(store, r) if memo['hats'] else None
 
 
 def block_fix(store, channel) -> dict | None:
@@ -665,7 +670,8 @@ def sending_mailbox(store, rv: dict, msg: dict = None) -> str | None:
     from . import workstreams
     tid = (rv or {}).get('TaskId')
     if msg and msg.get('Direction') != 'out' and '@' in str(msg.get('SourceName') or '') and workstreams.may_use(store, tid, msg['SourceName']): return msg['SourceName']
-    return task_mailbox(store, tid) or workstreams.own_mailbox(store, tid)
+    try: return new_from(store, tid)
+    except Fixable: return None
 
 
 def new_from(store, tid) -> str | None:
@@ -689,19 +695,79 @@ def reply_from(m: dict) -> str | None:
     return box if str((m or {}).get('Channel') or '').lower() == 'email' and '@' in box else None
 
 
-def leaves_from(store, rv: dict) -> str | None:
-    """THE MAILBOX A CARD'S SEND LEAVES FROM, as the send itself takes it (verdicts.send) - what its card and its agent are told, so neither
-    says another (walk 25: "goes from alex@northwind.example" over a reply leaving from Harbor's). A new email's own pick, else its
-    task's (new_from); a reply's is where the mail it answers came in. None: a chat's line, an act, or no mailbox known before the send."""
+# A TASK MOVED TO ANOTHER PROFILE ANSWERS FROM THAT PROFILE'S MAILBOX (the owner, 2026-11-27: "if you change profile of a item it should go out
+# from the new profile if it's connected to email"). A profile may hold several: the one the thread came in on is kept while it is the
+# task's profile's (a reply, in its thread); else the thread lives in a mailbox the task no longer uses, and the answer is a NEW email from
+# the new profile's - same people, same subject, the mail it answers quoted under it (answer_new). One decision, read by the card, the
+# agent's answer, the signature and the send
+def moved(store, tid, msg: dict) -> bool:
+    "Is the mailbox mail `msg` came in on one task `tid` may not use any more - its task was moved to another profile?"
+    from .workstreams import may_use
+    box = reply_from(msg)
+    return bool(box and tid and not may_use(store, tid, box))
+
+
+def reply_box(store, tid, msg: dict) -> str | None:
+    """The mailbox an answer to mail `msg` on task `tid` leaves from: the one it came in on, else - its task moved - the task's own
+    (new_from). Fixable, with both ways past it, when the profile it was moved to has no mailbox."""
+    box = reply_from(msg)
+    if not moved(store, tid, msg): return box
+    from . import workstreams
+    try: return new_from(store, tid)
+    except Fixable as e:
+        was = workstreams.names(store).get(workstreams.of_account(store, box))
+        raise Fixable(f"{e} - connect one, or move this task back" + (f' to {was}' if was else ''), *MAIL) from None
+
+
+def quoted(msg: dict, cap: int = 20000) -> str:
+    "Mail `msg` as it stands under an answer to it: who wrote it and when, each of its lines marked."
+    who = ' '.join(filter(None, [str(msg.get('FromName') or '').strip(), f"<{msg['FromEmail']}>" if msg.get('FromEmail') else ''])) or 'they'
+    when = str(msg.get('SentAt') or '')[:16].replace('T', ' ')
+    return (f"On {when}, {who} wrote:" if when else f"{who} wrote:") + '\n' + '\n'.join(f'> {l}'.rstrip() for l in str(msg.get('BodyText') or '')[:cap].splitlines())
+
+
+def as_new(env: dict, msg: dict) -> dict:
+    """A moved reply's envelope (`moved`: the mailbox it leaves from) as the new email it goes as: its people, Re: its subject. The card's own
+    envelope stays a reply's - moved back, it answers in its thread again."""
+    return {'channel': 'email', 'to': env.get('to') or [msg.get('FromEmail')], 'cc': env.get('cc'), 'mailbox': env['moved'],
+            'subject': ' '.join(str(env.get('subject') or '').split()) or re_subject(msg.get('Subject')), **({'bcc': env['bcc']} if env.get('bcc') else {})}
+
+
+def answer_new(store, msg: dict, body: str, env: dict) -> dict:
+    "Send the answer to mail `msg` as that new email, the mail it answers quoted under the words as a reply in its thread would carry it."
+    new = as_new(env, msg)
+    sent = send_out(store, 'email', new['to'], new['subject'], f'{body}\n\n{quoted(msg)}', cc=new['cc'], attachments=env.get('attachments'),
+                    mailbox=new['mailbox'], **({'bcc': new['bcc']} if new.get('bcc') else {}))
+    return {**sent, 'mailbox': sent.get('mailbox') or new['mailbox']}
+
+
+def _from(store, rv: dict) -> str | None:
+    "leaves_from, raising where the send itself would be refused for want of a mailbox (Fixable)."
     try: env = json.loads((rv or {}).get('Deliver') or '{}') or {}
     except (TypeError, ValueError): env = {}
     if not isinstance(env, dict) or env.get('kind') not in (None, '', 'reply') or (rv or {}).get('Kind') == 'action': return None
     if new_mail(env):
         if str(env.get('channel') or 'email').lower() != 'email': return None
-        try: return env.get('mailbox') or new_from(store, rv.get('TaskId'))
-        except Fixable: return None
+        return env.get('mailbox') or new_from(store, rv.get('TaskId'))
     mid = rv.get('AnswersMid') or rv.get('MessageId')
-    return reply_from(store.get_message(mid)) if mid else None
+    return reply_box(store, rv.get('TaskId'), store.get_message(mid)) if mid else None
+
+
+def leaves_from(store, rv: dict) -> str | None:
+    """THE MAILBOX A CARD'S SEND LEAVES FROM, as the send itself takes it (verdicts.send) - what its card and its agent are told, so neither
+    says another (walk 25: "goes from alex@northwind.example" over a reply leaving from Harbor's). A new email's own pick, else its
+    task's (new_from); a reply's is where the mail it answers came in, or its task's own once moved to another profile (reply_box). None: a
+    chat's line, an act, or no mailbox known before the send."""
+    try: return _from(store, rv)
+    except Fixable: return None
+
+
+def no_from(store, rv: dict) -> dict | None:
+    """A letter whose task's profile has NO MAILBOX to leave from, as its card says it before any press - {says, label, href, waits}, the
+    send's own refusal and its fix (review_connect) - else None. It is never sent from another profile's."""
+    try: _from(store, rv)
+    except Fixable as e: return {'says': str(e)[:1].upper() + str(e)[1:], **e.fix, 'waits': 'the draft waits here until it can'}
+    return None
 
 
 def shown_from(store, rv: dict, many: bool = None) -> str | None:

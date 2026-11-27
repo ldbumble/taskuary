@@ -12,6 +12,9 @@ test("a press carries the whole envelope its card drew, each file by its content
   assert.deepEqual(drawnEnvelope(r), { to: ["erin@northwind.example"], cc: ["gail@northwind.example"], subject: "Q3 figures", mailbox: "alex@northwind.example",
     attachments: [{ name: "q3.xlsx", sha256: "ab12" }] });
   assert.deepEqual(drawnEnvelope({}), { to: null, cc: null, subject: null, mailbox: null, attachments: [] });
+  // ...and the From row its read gave it, a reply's too: a task moved to another profile since leaves from another mailbox
+  assert.equal(drawnEnvelope({ From: "alex@harbor.example" }).from, "alex@harbor.example");
+  assert.equal(drawnEnvelope({ From: null }).from, null);
 });
 
 test("a missing, empty or broken Deliver blob reads as no envelope", () => {

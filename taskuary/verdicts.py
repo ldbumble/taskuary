@@ -268,6 +268,9 @@ def _send_snapshot(store, snapshot):
     env, body = snapshot['envelope'], snapshot['body']
     if demo.enabled(): return demo.pretend_sent(snapshot)             # ...and in the demo nothing does: its Send is played
     if env.get('kind') == 'reply':
+        # ...its task moved to another profile since the mail came in: a new email from that profile's mailbox (outbound.answer_new), the quote
+        # added at the provider's edge - what is kept as what went is what he approved
+        if env.get('moved'): return outbound.answer_new(store, snapshot['message'], body, env)
         return outbound.reply_to_message(store, snapshot['message'], body, to=env.get('to') or None,
                                          cc=env.get('cc'), attachments=env.get('attachments'), **_more(env, 'bcc', 'subject'))
     if env.get('kind') == 'zoho_invoice':
@@ -293,7 +296,9 @@ def _reconcile_snapshot(store, snapshot):
     from . import outbound
     env = snapshot['envelope']
     try:
-        if env.get('kind') == 'reply':
+        if env.get('kind') == 'reply' and env.get('moved'):       # ...checked in the mailbox it left from, as the new email it went as
+            result = outbound.reconcile_outbound(store, outbound.as_new(env, snapshot['message']), snapshot['body'], since=snapshot.get('attempted_at'))
+        elif env.get('kind') == 'reply':
             result = outbound.reconcile_sent(store, snapshot['message'], snapshot['body'], since=snapshot.get('attempted_at'),
                                              to=env.get('to'), cc=env.get('cc'))
         else:
@@ -339,6 +344,13 @@ def _deliver_review(store, rv, final, verb, actor, note=None, cc=None, envelope=
     if not outgoing and env.get('kind') != 'reply':
         files = env.get('attachments')
         env = {**(outbound.reply_envelope(store, msg) or {'kind': 'reply'}), **({'attachments': files} if files else {})}
+    # ...AND A TASK MOVED TO ANOTHER PROFILE ANSWERS FROM THAT PROFILE'S MAILBOX (the owner, 2026-11-27): its thread is in a mailbox the task no
+    # longer uses, so the answer is a new email to the same people on the same subject - never a reply sent from the old profile's
+    # - and the card's envelope stays a reply's (`moved`: the mailbox, read again at every press), so moved back it answers in its thread
+    env.pop('moved', None)
+    if not outgoing and outbound.moved(store, rv.get('TaskId'), msg):
+        try: env['moved'] = outbound.reply_box(store, rv.get('TaskId'), msg)
+        except outbound.Fixable as e: send_fn = _refuses(e)
     if cc is not None: env['cc'] = list(cc)
     # ...and BCC and the subject as the card has them (the owner, 2026-11-08: one email card, every field editable, edits go out with Send)
     if bcc is not None: env['bcc'] = list(bcc)
@@ -381,9 +393,11 @@ def _deliver_review(store, rv, final, verb, actor, note=None, cc=None, envelope=
         if not finished: raise RuntimeError('the provider receipt could not be saved; verify delivery before retrying')
         for m in {rv.get('MessageId'), rv.get('AnswersMid')} - {None}: store.set_message_status(m, 'sent')
         # ...and the letter is on its task as it goes - whom it reached, its thread - not only once its sent-folder copy comes back
+        # ...a moved task's answer as the new email it went as (outbound.as_new): from its new mailbox, a thread of its own
         from .channels import record_sent
+        anew = bool(attempted['envelope'].get('moved'))
         try: record_sent(store, rv, attempted['body'], {**sent, 'to': sent.get('to') or attempted['envelope'].get('to')},
-                             None if outgoing else msg, attempted['envelope'])
+                             None if outgoing or anew else msg, outbound.as_new(attempted['envelope'], msg) if anew else attempted['envelope'])
         except Exception as e: logger.warning(f'review {rid}: the sent letter was not recorded on its task - {e}')
         if attempted['envelope'].get('kind') == 'zoho_invoice':
             from . import invoice_workflow
@@ -415,7 +429,7 @@ def _deliver_review(store, rv, final, verb, actor, note=None, cc=None, envelope=
         # did waits for their input - whether it asked is the model's to read, off this thread: the button never waits on it
         if rv.get('Kind') != 'action':
             from . import asks
-            new = outgoing or rv.get('Kind') == 'slot'
+            new = outgoing or anew or rv.get('Kind') == 'slot'
             try: asks.watch_reply(store, rv, attempted['body'], to=(_went_to(store, rv, attempted) or list(sent.get('to') or [])) if new else None)
             except Exception as e: logger.warning(f'the reply watch did not start on review {rid}: {e}')
         return {'ok': True, 'status': attempted['status'], 'sent': sent, 'send_error': None,

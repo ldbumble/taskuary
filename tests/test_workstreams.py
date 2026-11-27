@@ -541,3 +541,112 @@ def test_with_one_profile_a_new_email_and_every_read_are_as_they_were(two):
     assert _sent(two, out['review_id'])[1] == [None]
     W.save(two, [])                                                                    # ...and with no profile at all
     assert outbound.new_from(two, hb) is None and W.may_use(two, hb, NW_BOX)
+
+
+# ── A PROFILE HOLDS SEVERAL MAILBOXES, AND A MOVED TASK ANSWERS FROM ITS NEW PROFILE'S (the owner, 2026-11-27) ─────────────────────────
+# Northwind has two mailboxes (Alex's own and the accounts desk he also reads), Harbor Bakery one. A mailbox is not a profile.
+AP_BOX = 'accounts@northwind.example'
+
+
+@pytest.fixture
+def hats():
+    s = MemoryStore()
+    s.set_setting('owner_email', NW_BOX, 'test')
+    W.save(s, [{'name': 'Northwind'}, {'name': 'Harbor Bakery'}])
+    def card(t, name, box, ws):
+        c = s.save_connector({'Type': t, 'Name': name, 'Active': 1, 'ConfigJson': json.dumps({'address': box})}, 't')
+        W.tag_account(s, ws, connector_id=c)
+        return c
+    s.nw, s.ap, s.hb = card('outlook', 'Northwind mail', NW_BOX, 'northwind'), card('imap', 'Accounts desk', AP_BOX, 'northwind'), card('imap', 'Harbor mail', HB_BOX, 'harbor-bakery')
+    return s
+
+
+def _asked(hats, box, ws):
+    "Gail's mail into mailbox `box`, its task under profile `ws`, and the reply card that waits on it: (task, mail, card)."
+    f = Factory(hats)
+    t = f.task(title='Flour order')
+    mid = f.message(task_id=t, from_email=GAIL, from_name='Gail Moreno', source_name=box, subject='Flour order', body='Twenty sacks as usual?\nGail')
+    W.set_task(hats, t, ws, 'owner')
+    return t, mid, f.review(t, mid, kind='draft_reply', draft='Hi Gail,\n\nTwenty, as usual.')
+
+
+def _press(hats, rid):
+    "Press Send on card `rid` with both providers stood in: (the answer, the replies in a thread, the new emails)."
+    from taskuary import verdicts
+    with mock.patch.object(outbound, 'reply_to_message', return_value={'channel': 'email', 'to': [GAIL]}) as reply, \
+         mock.patch.object(outbound, 'send_out', return_value={'channel': 'email', 'to': [GAIL]}) as new, \
+         mock.patch.object(outbound, 'send_block', return_value=''), mock.patch('taskuary.learning.learn_from'):
+        out = verdicts.decide(hats, hats.get_review(rid), 'approve')
+    return out, reply.call_args_list, new.call_args_list
+
+
+def test_a_moved_tasks_reply_leaves_from_its_new_profiles_mailbox_as_a_new_email_on_the_same_subject(hats):
+    """His ruling: "if you change profile of a item it should go out from the new profile if it's connected to email". The thread lives in the
+    old mailbox, so it is a new email - same people, Re: its subject, the mail it answers quoted - and the card raised before the move says
+    the new From before his press."""
+    t, mid, rid = _asked(hats, HB_BOX, 'harbor-bakery')
+    assert outbound.shown_from(hats, hats.get_review(rid)) == HB_BOX
+    W.set_task(hats, t, 'northwind', 'owner')
+    # ...Northwind has two; the thread came in on neither, so its first - on the card, in what its agent is told, under its signature
+    rv = hats.get_review(rid)
+    assert outbound.shown_from(hats, rv) == outbound.leaves_from(hats, rv) == outbound.sending_mailbox(hats, rv, hats.get_message(mid)) == NW_BOX
+    out, replies, new = _press(hats, rid)
+    assert out['ok'] and not replies and len(new) == 1                     # never a reply in Harbor's thread, from Harbor's mailbox
+    (_, ch, to, subject, body), kw = new[0].args, new[0].kwargs
+    assert (ch, to, subject, kw['mailbox']) == ('email', [GAIL], 'Re: Flour order', NW_BOX)
+    assert body.startswith('Hi Gail,\n\nTwenty, as usual.') and 'Gail Moreno' in body and '> Twenty sacks as usual?' in body
+    went = [m for m in hats.list_messages(t) if m.get('Direction') == 'out']
+    assert [(m['SourceName'], m['BodyText']) for m in went] == [(NW_BOX, 'Hi Gail,\n\nTwenty, as usual.')]      # kept as he approved it, from where it left
+
+
+def test_a_task_moved_back_answers_in_its_thread_from_the_mailbox_it_came_in_on_not_the_profiles_first(hats):
+    "Several mailboxes in the new profile, and one is where the thread came in: that one is kept, and it is a reply in its thread."
+    t, mid, rid = _asked(hats, AP_BOX, 'northwind')
+    W.set_task(hats, t, 'harbor-bakery', 'owner')
+    assert outbound.leaves_from(hats, hats.get_review(rid)) == HB_BOX
+    W.set_task(hats, t, 'northwind', 'owner')
+    assert outbound.shown_from(hats, hats.get_review(rid)) == AP_BOX and [m['address'] for m in outbound.mailboxes(hats, t)] == [NW_BOX, AP_BOX]
+    out, replies, new = _press(hats, rid)
+    assert out['ok'] and not new and [c.args[1]['MessageId'] for c in replies] == [mid]
+
+
+def test_a_task_moved_to_a_profile_with_no_mailbox_says_so_on_its_card_and_never_sends_from_the_old_one(hats):
+    "No mailbox under the new profile: the card says it before the press, with the way past it (connect one, or move back); a press sends nothing."
+    t, mid, rid = _asked(hats, NW_BOX, 'northwind')
+    hats.save_connector({'ConnectorId': hats.hb, 'Active': 0}, 't')
+    assert not outbound.review_connect(hats, hats.get_review(rid))
+    W.set_task(hats, t, 'harbor-bakery', 'owner')
+    fix = outbound.review_connect(hats, hats.get_review(rid))
+    assert 'Harbor Bakery' in fix['says'] and 'back to Northwind' in fix['says'] and (fix['label'], fix['href']) == outbound.MAIL
+    assert outbound.leaves_from(hats, hats.get_review(rid)) is None
+    out, replies, new = _press(hats, rid)
+    assert not out['sent'] and not replies and not new and 'Harbor Bakery' in out['send_error'] and out['send_fix'] == {'label': outbound.MAIL[0], 'href': outbound.MAIL[1]}
+    assert hats.get_review(rid)['Status'] == 'pending' and hats.get_review(rid)['DeliveryState'] == 'failed'
+    W.set_task(hats, t, 'northwind', 'owner')                              # ...moved back: the reply it was, in its thread
+    assert not outbound.review_connect(hats, hats.get_review(rid))
+    out, replies, new = _press(hats, rid)
+    assert out['ok'] and len(replies) == 1 and not new
+
+
+def test_a_press_on_a_card_drawn_before_the_move_sends_nothing_until_it_is_read_again(hats):
+    "Locked rule 2: a page still showing From Harbor's mailbox presses after the move - nothing runs, and the card is shown as it stands."
+    from taskuary import proposals
+    t, mid, rid = _asked(hats, HB_BOX, 'harbor-bakery')
+    drawn = lambda: {'to': None, 'cc': None, 'subject': None, 'mailbox': None, 'attachments': [], 'from': outbound.shown_from(hats, hats.get_review(rid))}
+    old = drawn()
+    assert old['from'] == HB_BOX and proposals.unlike_shown(hats.get_review(rid), old, 'approve', hats) is None
+    W.set_task(hats, t, 'northwind', 'owner')
+    with mock.patch.object(outbound, 'reply_to_message') as reply, mock.patch.object(outbound, 'send_out') as new:
+        out = server.press_review(hats, rid, server.DecideBody(verb='approve', shown=old))
+    assert out['changed'] and out['send_error'] == proposals.CHANGED and not reply.called and not new.called
+    assert proposals.unlike_shown(hats.get_review(rid), drawn(), 'approve', hats) is None                 # read again, it goes
+    assert proposals.unlike_shown(hats.get_review(rid), {'to': None}, 'approve', hats) is None            # a page that drew no From is held to none
+
+
+def test_an_agents_reply_on_a_moved_task_is_told_the_from_its_card_shows(hats):
+    "What the agent is told and what a `from` is checked against are the card's own From: the new profile's mailbox, once moved."
+    from taskuary import wrapup
+    t, mid, rid = _asked(hats, HB_BOX, 'harbor-bakery')
+    W.set_task(hats, t, 'northwind', 'owner')
+    out = wrapup.agent_reply(hats, t, 'Hi Gail,\n\nTwenty, as usual.', mailbox=NW_BOX)
+    assert out['ok'] and out['from'] == NW_BOX == outbound.shown_from(hats, hats.get_review(out['review_id']))

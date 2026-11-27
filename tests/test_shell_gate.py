@@ -656,6 +656,27 @@ class ReadingOutside(unittest.TestCase):
         self.assertEqual(sg.replay(p)[1:], p['argv'][1:])
         self.assertNotIn('"', p['what']); self.assertIn('Desktop', p['what'])
 
+    def test_a_program_found_as_the_line_runs_is_no_file_it_reads_and_a_path_nobody_can_read_is_held_as_that(self):
+        """Walk 25, 2026-11-26: with no ffmpeg on the computer the agent ran the copy a Python package brings - `F=$(python -c "...");
+        "$F" -y -i "$O/clip.webm" "$O/clip.mp4"`, every file in the task's own outputs folder through an `$O` the line itself set - and it
+        was held as "Read files at a path it builds from a variable ... it is outside this task's own folders". The program a line finds
+        as it runs is its program; the files it is handed are read as ever. A path that truly cannot be read ahead is still held - and its
+        step names the word and says what is so (where it leads is not known), never that it is outside."""
+        from taskuary import outputs, readgate as rg
+        out = str(outputs.folder(self.tid)).replace(chr(92), '/')
+        find = 'F=$(python -c "import imageio_ffmpeg;print(imageio_ffmpeg.get_ffmpeg_exe())")'
+        line = f'O="{out}"; {find}; "$F" -y -i "$O/ap-close.webm" -c:v libx264 "$O/ap-close.mp4" 2>&1 | tail -5; ls -la "$O"'
+        self.assertNotIn(None, rg.command_paths(line, self.work, rg.env_for(self.s, self.tid, self.work)))
+        self.assertEqual(rg.of_command(self.s, self.tid, line, self.work), ([], ''), "the task's own folder needs no press")
+        self.assertEqual(_check(self.s, self.tid, 'run1', line, 'Bash', self.work), {})
+        # ...security as it was: what the found program is handed is read, a found PATH is unknown, and so is a value handed on down a pipe
+        self.assertTrue(rg.of_command(self.s, self.tid, f'{find}; "$F" -i "{self.docs}/notes.txt"', self.work)[0], 'a file outside, handed to it')
+        for held in ('P=$(python find.py); cat "$P"', 'P=$(python find.py); "$P" | xargs cat', 'P=$(python find.py); "$F" -i "$P"', 'P=$(python find.py); "$P"'):
+            self.assertIn(None, rg.command_paths(held, self.work), held)
+        [step], never = rg.of_command(self.s, self.tid, 'P=$(python find.py); cat "$P" $NOPE_NOT_SET/x.txt', self.work)
+        self.assertEqual((step['what'], step['why'], never), ('read files at a path it builds from a variable ($P, $NOPE_NOT_SET/x.txt)', rg.UNKNOWN, ''))
+        self.assertNotIn('outside', step['why'])
+
     def test_a_program_installed_for_this_user_alone_is_nobodys_files(self):
         """The real-CLI walk, 2026-11-16: an agent looking for its python (`ls .../AppData/Local/Programs/Python`) was held as a card asking the
         owner to let it read "Python". A per-user install (%LOCALAPPDATA%\\Programs) is a program's folder, as Program Files is."""

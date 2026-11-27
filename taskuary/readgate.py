@@ -20,6 +20,7 @@ from urllib.parse import unquote
 from .gate import TABLE
 WHY, NEVER = TABLE['reads'].why, TABLE['never'].why          # said as the one table says them (gate.TABLE)
 NEVER_WRITE = TABLE['unwritable'].why
+UNKNOWN = 'where that path leads is not known until it runs'      # a path built as the line runs: nothing says it is outside (judge)
 ALLOWED = 'Allowed - this task may read that folder'      # a read's Approve, said as what it did: nothing "ran" (heldCard says the same)
 GRANT = 'read:'                                         # a folder the owner let this task read (store.set_perm_rule)
 READ_TOOLS = ('Read', 'Glob', 'Grep', 'LS', 'NotebookRead')
@@ -193,11 +194,12 @@ def grant(store, tid, folders) -> None:
     for f in folders or []: store.set_perm_rule(int(tid), GRANT + _n(f), 'allow')
 
 
-def judge(store, tid, paths, cwd: str = '', write: bool = False) -> tuple:
+def judge(store, tid, paths, cwd: str = '', write: bool = False, unread=()) -> tuple:
     """(held, never) for the paths a call reads: `held` one step per folder outside the work area ({'tool', 'what', 'why', 'where',
     'folder'} - shellgate's own shape), `never` the reason when one is Taskuary's own or a sign-in place ('' else). None in `paths` is a
     path that could not be read, held as a step of its own. `write`: the paths it writes - the same work area and never-places, and of
-    the open places only the temp folder: a program's own folder (Taskuary's package among them) is read freely, never written."""
+    the open places only the temp folder: a program's own folder (Taskuary's package among them) is read freely, never written.
+    `unread`: the words those unreadable paths were written as - named on their step, which says what is so: where it leads is not known."""
     if not paths: return [], ''
     from . import floor
     mine, nev, sids = own(store, tid, cwd), [_n(p) for p in floor.kept_secret()], () if write else _sids(store, tid)
@@ -222,7 +224,11 @@ def judge(store, tid, paths, cwd: str = '', write: bool = False) -> tuple:
         folder = p if os.path.isdir(p) else os.path.dirname(p)
         held.setdefault(folder, []).append('' if folder == p else os.path.basename(p))
     out += [{'tool': verb, 'kind': 'reads', 'what': _said(f, ns, verb), 'why': why, 'where': f, 'folder': f} for f, ns in held.items()]
-    if blind: out.append({'tool': verb, 'kind': 'reads', 'what': f'{verb} files at a path it builds from a variable', 'why': why, 'where': '', 'folder': ''})
+    # ...A PATH NOBODY COULD READ IS SAID AS THAT, WITH THE WORD IT IS (walk 25: its card said "it is outside this task's own folders" of a line
+    # that never left them - a reason nobody had checked): which word, and that where it leads is not known until the line runs
+    named = ', '.join(dict.fromkeys(' '.join(str(u).split())[:60] for u in unread or () if str(u).strip()))
+    if blind: out.append({'tool': verb, 'kind': 'reads', 'what': f'{verb} files at a path it builds from a variable' + (f' ({named})' if named else ''),
+                          'why': UNKNOWN, 'where': '', 'folder': ''})
     return out, ''
 
 
@@ -392,17 +398,18 @@ def _forms(x: str, env: dict, deep: int = 0) -> list:
 _REDIRECT = re.compile(r'^\d?>>?&?$|^&>$')
 _WRITERS = {'tee', 'out-file', 'set-content', 'add-content', 'new-item', 'ni', 'sc', 'ac', 'touch', 'mkdir', 'md'}
 _COPIES = {'cp', 'mv', 'copy', 'move', 'copy-item', 'move-item', 'cpi', 'mi', 'xcopy', 'robocopy', 'rsync', 'install', 'ln'}
-def command_paths(cmd: str, cwd: str = '', env: dict = None, made: list = None, writes: list = None) -> list:
+def command_paths(cmd: str, cwd: str = '', env: dict = None, made: list = None, writes: list = None, unread: list = None) -> list:
     """Every path a shell line names as an argument, through `cd`, `bash -c "..."` and `--opt=value` - None for one built from a variable
     it cannot read. The program itself, options, URLs and switches (`/s`) are not paths. `made` gets the files the line writes rather than
     reads: a browser screenshot's picture (walk 16: the agent's own screenshot in Temp stood as a card asking to read it). `writes`, where
-    given, gets the paths it writes (_REDIRECT, _WRITERS, _COPIES) instead of the list it returns."""
+    given, gets the paths it writes (_REDIRECT, _WRITERS, _COPIES) instead of the list it returns. `unread`, where given, gets each word a
+    None stands for, as the line wrote it - what its card names."""
     from .browsergate import _head, _verb, types, words
     from .shellgate import _OWN, shell_text, unwrap
     # ...a line that is a shell started on a script (Codex's every call) is read as that script, whole: cut at the `;` inside its quotes first,
     # `$outDir = "<its outputs folder>"; New-Item $outDir` lost its assignment and the task's own folder was held as a variable it could not
     # read (the HIPAA walk, 2026-11-21)
-    if (inner := unwrap(cmd))[0]: return command_paths(inner[1], cwd, env, made, writes)
+    if (inner := unwrap(cmd))[0]: return command_paths(inner[1], cwd, env, made, writes, unread)
     out, here, env, reads = [], cwd, dict(env or {}), False
     line = _literal(shell_text(str(cmd or '')))                        # ...a heredoc's or a here-string's body is data, never a path read
     qs = _quoted(line)
@@ -427,10 +434,10 @@ def command_paths(cmd: str, cwd: str = '', env: dict = None, made: list = None, 
         tool = re.sub(r'\.(exe|cmd|ps1|bat)$', '', os.path.basename(w[0].replace('\\', '/')).lower())
         if tool in ('bash', 'sh', 'zsh', 'dash', 'ksh', 'powershell', 'pwsh', 'cmd'):
             i = next((i for i, x in enumerate(w) if x.lower() in ('-c', '-command', '/c', '/k')), None)
-            if i is not None: out += command_paths(' '.join(w[i + 1:]), here, env, made, writes)
+            if i is not None: out += command_paths(' '.join(w[i + 1:]), here, env, made, writes, unread)
             continue
         # ...and a line handed to the shell to run again is that line (`eval "cat <path>"`, PowerShell's iex): one quoted word named no path
-        if tool in ('eval', 'iex', 'invoke-expression'): out += command_paths(' '.join(w[1:]), here, env, made, writes); continue
+        if tool in ('eval', 'iex', 'invoke-expression'): out += command_paths(' '.join(w[1:]), here, env, made, writes, unread); continue
         cd, named = tool in ('cd', 'chdir', 'set-location', 'sl', 'pushd'), len(out)
         lists = tool in _LISTS and not any(x in _RUNS_ON for x in w)
         reads = reads or not (lists or tool in _NAMES)
@@ -457,6 +464,12 @@ def command_paths(cmd: str, cwd: str = '', env: dict = None, made: list = None, 
             # ...an option's value is read as its own word, and so is a `name=value` operand's (`dd if=<home>/config.toml`, red team #3)
             if x.startswith('-') or re.match(r'^[A-Za-z_][\w.-]*=', x): x = x.split('=', 1)[1] if '=' in x else ''
             if x == '$' and (script or not sub): continue
+            # ...AND A PROGRAM FOUND AS THE LINE RUNS IS THE PROGRAM, NEVER A FILE IT READS (walk 25, 2026-11-26: `F=$(python -c "...get_ffmpeg_exe()");
+            # "$F" -y -i "$O/clip.webm" "$O/clip.mp4"`, every file in the task's own folder, was held as "read files at a path it builds
+            # from a variable ... outside this task's own folders"): a variable a command's output filled, standing first with words after it,
+            # is run with them - each of those is read as ever. Alone on its segment (`$p | Get-Content`) it is a value handed on: held
+            if i == 1 and not w[0] and len(w) > 2 and (v := _VAR.fullmatch(x)) and _RUNS.match(env.get((v[1] or v[2]).lower()) or ''): continue
+            raw = x
             if (v := _VAR.fullmatch(x)) and (v[1] or v[2]).lower() in env: x = env[(v[1] or v[2]).lower()]
             # ...after a `cd` away, a plain name that is there is read there (`cd ~ && cat .ssh/x`)
             near = here != cwd and here and x and not x.startswith('-') and os.path.exists(os.path.join(here, x))
@@ -471,7 +484,9 @@ def command_paths(cmd: str, cwd: str = '', env: dict = None, made: list = None, 
             if not x or '://' in x or _OWN.match(x) or re.match(r'^/\w$', x) or re.match(r'^(/dev/|\d$)', x) or not (near or _pathish(x) or tool not in _PRINTS and _filled(x, here, env)): continue
             e = _expand(x, here, env)
             if e is None:
-                if not code: out.append(None)        # ...in a script's text a name it does not know is mostly not a path at all
+                if not code:                         # ...in a script's text a name it does not know is mostly not a path at all
+                    out.append(None)
+                    if unread is not None: unread.append('$(...)' if raw == '$' else raw)
                 continue
             e = re.sub(r'^/([A-Za-z])(?=/|$)', r'\1:', e) if os.name == 'nt' else e
             if not os.path.isabs(e): e = os.path.join(here or os.getcwd(), e)
@@ -526,10 +541,10 @@ def _linked(p: str) -> bool:
 def of_command(store, tid, cmd: str, cwd: str = '') -> tuple:
     "(held, never) for a shell line."
     from . import floor
-    made, ws = [], []
-    ps = command_paths(cmd, cwd, env_for(store, tid, cwd), made, ws)
+    made, ws, un = [], [], []
+    ps = command_paths(cmd, cwd, env_for(store, tid, cwd), made, ws, un)
     wrote(tid, made)                                  # ...the picture it takes is its own work, read back without asking (wrote)
-    (held, never), (wheld, wnever) = judge(store, tid, ps, cwd), judge(store, tid, ws, cwd, write=True)
+    (held, never), (wheld, wnever) = judge(store, tid, ps, cwd, unread=un), judge(store, tid, ws, cwd, write=True)
     # ...and a line that writes one of them, or sets git's own config that runs a program - the floor's reading of a shell line (T2)
     conf = [settings(why.removeprefix('it ')) for why in [floor._write_hit(str(cmd or ''), cwd)] if why]
     return held + wheld + conf, never or wnever

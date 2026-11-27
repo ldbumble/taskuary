@@ -58,4 +58,4 @@ class ContinueFailure(unittest.TestCase):
 def test_the_assistant_reports_what_the_agent_needs_never_as_the_agent():
     # the product audit, 2026-11-08: the Assistant said "I need the correct Payworth portal link" for a task's agent
     from taskuary import concierge
-    assert '"The agent needs the portal link"' in concierge.IN_PART and 'never "I need"' in concierge.IN_PART
+    assert "what an agent needs or did is the agent's, not yours" in concierge.IN_PART

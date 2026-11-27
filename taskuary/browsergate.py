@@ -541,8 +541,7 @@ def _outcome(sid: str, seen: dict) -> str:
     except RuntimeError as e:
         if LATE not in str(e): return ''
         browserview.unstick(sid, every=True)
-        return (f'TASKUARY: the page did not finish loading in {SETTLE_WAIT:.0f} s - the site is not answering, and the load was stopped. Decide the '
-                'next step: another way to the same thing, the rest of the work first and this once more later, or one question to the owner.')
+        return (f'TASKUARY: the page did not finish loading in {SETTLE_WAIT:.0f} s - the site is not answering, and the load was stopped.')
     return page_error(sid, seen)
 
 
@@ -560,8 +559,7 @@ def page_error(sid: str, seen: dict = None) -> str:
     if n < 400 and not str(f.get('url') or '').startswith('chrome-error:'): return ''
     what = ('the browser\'s own error page - it could not load' if n < 400 else 'a server error' if n >= 500
             else 'a refusal - it turns this visit away' if n in (401, 403, 429) else 'an error')
-    return (f'TASKUARY: {f.get("url") or "the site"} answered with {what}{f" (HTTP {n})" if n >= 400 else ""}. Decide the next step: another way '
-            'to the same thing, the rest of the work first and this once more later, or one question to the owner.')
+    return (f'TASKUARY: {f.get("url") or "the site"} answered with {what}{f" (HTTP {n})" if n >= 400 else ""}.')
 
 
 # ── the page it would act on, and the model's verdict ─────────────────────────────────────────────────────────────────────
@@ -968,7 +966,7 @@ def check(store, tid: int, sid: str, cmd: str, brain=None, cwd: str = '') -> dic
         if not acts(cmd): raise
         logger.warning(f'browsergate: task {tid} - the act was not filed for the owner - {e}')
         return _deny(f"{NOT_RUN}: Taskuary could not put this in front of the owner ({str(e)[:160]}), so nothing was done. Run the command again "
-                     "on its own line; if it is held like this again, tell the owner in one line what you were about to do and go on with the rest of the job.")
+                     "on its own line to ask again.")
 
 
 def _check(store, tid: int, sid: str, cmd: str, brain=None, cwd: str = '') -> dict:
@@ -1029,8 +1027,8 @@ def _check(store, tid: int, sid: str, cmd: str, brain=None, cwd: str = '') -> di
         # ...A PAYMENT IS HIS TO MAKE, ON THE PAGE - ONE ROAD (the owner, 2026-11-22: "you pay on the page"): the hand-over asked him to enter his
         # card and press Pay, and the gate then held the agent's own Pay on the empty form as an Approve card - two roads for one payment
         if v.get('kind') == 'money':
-            return _deny(f"{NOT_RUN}: {v['what']} spends the owner's money - a payment is his to make himself, on the page. Leave the page on it, "
-                         "hand_over what he enters and presses to pay, and go on with the rest; you are told when he is done.")
+            return _deny(f"{NOT_RUN}: {v['what']} spends the owner's money - a payment is his to make himself, on the page: "
+                         "hand_over hands it to him there, and you are told when he is done.")
         # ...THE ONE RULE (gate.decide): the same press on the same site he already approved on this task runs; one he dismissed is his no
         from . import gate
         step = {'what': v['what'], 'why': v['why'], 'key': f"browser|{site}|{target(a, pg) or ' '.join(args)}"}
@@ -1299,7 +1297,7 @@ def left_page(store, tid: int, sid: str, url: str = '') -> list:
     if out:
         store.audit('task', tid, 'cards_passed', 'taskuary', 'system', {'rids': out, 'why': PAGE_LEFT})
         _tell(store, tid, f"Your held step ({'; '.join(said)[:300]}) is off the card: the tab it was held on left that page, so it can no "
-                          "longer run there. If it is still needed, go back to that page and do it again - it is held anew for the owner's press.", news=True)
+                          "longer run there; done again on that page, it is held anew for the owner's press.", news=True)
     return out
 
 
@@ -1383,9 +1381,7 @@ def _perform(store, tid: int, p: dict, run=None) -> dict:
         # the same refusal, and the agent never heard. The agent is told what the browser said and goes on another way; the owner reads
         # one plain line, and the held act is over.
         why = 'something on the page covers that control' if 'covered by' in said else said[-200:] or 'the browser could not do it'
-        _tell(store, tid, f"The owner approved it, but the browser could not do it: {said[-300:] or 'agent-browser failed'}. Nothing was done. "
-                          "Look at the page as it is now and reach the same place another way - a menu or banner covering the control can be "
-                          "opened or closed first, or the page opened by its address - then continue.", wake=True)
+        _tell(store, tid, f"The owner approved it, but the browser could not do it: {said[-300:] or 'agent-browser failed'}. Nothing was done.", wake=True)
         if p.get('sid'): browserview.ended_on(sid, 'failed', store, tid)
         store.audit('task', tid, 'browser_act_refused', 'owner', 'human', {'site': p.get('site'), 'what': p.get('what')})
         return {'performed': None, 'refused': f"{p.get('name') or p.get('site') or 'The page'} did not take it - {why}. The agent was told and goes on another way."}
@@ -1402,7 +1398,7 @@ def _perform(store, tid: int, p: dict, run=None) -> dict:
     told = (f"The owner approved it and Taskuary ran `{p.get('command')}` in your browser. It said: {said[-300:] or 'done'}. "
             f"The page is now {now or 'unknown'}")
     if own and cardqueue.handed(own) and not card.carries_on(own, store) and not bad: events.note(store, tid, f'{told}.')
-    else: _tell(store, tid, f'{told} - look at it, then ' + NEXT[0].lower() + NEXT[1:] + (f'\n{bad}' if bad else ''), wake=True)
+    else: _tell(store, tid, f'{told}.' + (f'\n{bad}' if bad else ''), wake=True)
     store.audit('task', tid, 'browser_act_done', 'owner', 'human', {'site': p.get('site'), 'what': p.get('what'), 'command': str(p.get('command') or '')[:300],
                                                           'said': now or said[-300:]})
     overcome(store, tid, p.get('site'), f"Done on a later try: {p.get('what') or p.get('command')}", command=str(p.get('command') or ''))
@@ -1414,8 +1410,7 @@ def _perform(store, tid: int, p: dict, run=None) -> dict:
 # THE OWNER'S NO IS SAID AS THEIRS, AND ONCE (agent walk 2, 2026-11-10): Reject on a held push reached the agent as the adapter's "User
 # refused permission to run tool" - the sentence it also gets when Taskuary blocks a step by itself - so it ended its turn asking for the
 # same push again. One sentence for every road a no comes by (a dismissed card, the held steps of a turn, the Allow/Reject buttons)
-OWNER_NO = ("That is the owner's own answer, not a block of Taskuary's. Do not try it another way and do not ask for the same step again - "
-            'carry on without it, and ask only if you need to know what they want instead.')
+OWNER_NO = "That is the owner's own answer, not a block of Taskuary's; the same step is refused until he writes again."
 MOVED_ON = 'the page moved on'             # how a hand-over the watch closed is answered (pagestep.sync reads it as done)
 def not_approved(what) -> str: return f'The owner did not approve it: {what} was NOT done. {OWNER_NO}'
 def declined(store, tid: int, p: dict) -> None:
@@ -1433,9 +1428,6 @@ def _no(store, tid: int, text: str) -> None:
 # gave one)", the agent closed every sent mail with "No link came back with it."
 # ...AS FAR AS THE RESULT GOES (a walk, 2026-11-18): told "what it did" after a payment note was sent, the agent said "Accounts Payable
 # received the payment request" - a mail that went is sent, not read, and nobody had answered
-NEXT = ('Tell the owner in a line what it did, as far as the result shows - something sent is sent, never received, read or acted on until '
-        'someone answers - and what comes next, then carry on. A link the result gave goes in that line; where it gave none, say nothing '
-        'about links.')
 
 
 def _tell(store, tid: int, text: str, wait: bool = False, wake: bool = False, news: bool = False) -> None:
@@ -1565,7 +1557,7 @@ def left_by_agent(store, tid: int, rid: str) -> bool:
     if not h: return False
     store.add_comment(tid, 'taskuary', 'agent', f"{NOT_NEEDED_ANY_MORE} ({h.get('what') or 'on ' + h['site']}).")
     _tell(store, tid, f"You moved the page on while the owner held the step you handed them ({h.get('what') or 'on the page'}), so it is off "
-                      "their hands - they did nothing there. If it is still needed, open that page again and hand it over again.", news=True)
+                      "their hands - they did nothing there.", news=True)
     return True
 
 
@@ -1587,8 +1579,7 @@ def pressed(store, tid: int, rid: str, now: dict) -> bool:
     if not h: return False
     title = ' '.join(str(now.get('title') or '').split())[:160]
     shows = f'"{title}" ({now.get("href")})' if title else str(now.get('href') or 'another page')
-    _tell(store, tid, f"The page you handed the owner ({h.get('what') or 'a step on it'}) moved on without their I'm done; it now shows {shows}. "
-                      "Look at it: go on if the step is past, or hand it over again if it is not.")
+    _tell(store, tid, f"The page you handed the owner ({h.get('what') or 'a step on it'}) moved on without their I'm done; it now shows {shows}.")
     store.add_comment(tid, 'taskuary', 'agent', f"The page on {h['site']} moved on - the agent looks at it.")
     return True
 
@@ -1633,14 +1624,13 @@ def done(store, tid: int, rid: str) -> bool:
         if time.time() - _DONE_AT.get(int(tid), 0) < 10: return True          # ...a second press of the same Done: said once
         _DONE_AT[int(tid)] = time.time()
         store.audit('task', tid, 'browser_act_pressed', 'owner', 'human', {'site': 'the page', 'btn': '', 'by': 'done'})
-        _tell(store, tid, f"The owner pressed {browserview.TURN_DONE} on the page. Look at it as it is now and continue.", wake=True)
+        _tell(store, tid, f"The owner pressed {browserview.TURN_DONE} on the page.", wake=True)
         return True
     if lost:
         store.audit('task', tid, 'browser_act_not_pressed', 'owner', 'human', {'site': h['site'], 'why': 'the page had closed'})
         url = browserview.last_page(tid) or 'its address'
         _tell(store, tid, f"The page you handed the owner ({h.get('what') or 'a step on it'}, on {h['site']}) closed before it could be done "
-                          f"there, so Taskuary cannot tell whether it was. They pressed {buttons.label('try_again')}: open it again (`agent-browser open {url}`), "
-                          "look, and if the step still needs them, bring the page back to it and hand it over again the way you did before.", wake=True)
+                          f"there, so Taskuary cannot tell whether it was. They pressed {buttons.label('try_again')}; the page was at {url}.", wake=True)
         return True
     # ...ON THE TAB IT WAS HANDED OVER ON (the owner, 2026-11-15): he may have shown another tab meanwhile, and the agent's next command works
     # the tab shown - so the browser goes back to the step's own tab before the agent is told to look
@@ -1648,8 +1638,7 @@ def done(store, tid: int, rid: str) -> bool:
     step = f"the step you handed them ({h.get('what') or 'on the page'})"
     _DONE_AT[int(tid)] = time.time()
     store.audit('task', tid, 'browser_act_pressed', 'owner', 'human', {'site': h['site'], 'btn': '', 'by': 'done'})
-    _tell(store, tid, f"The owner pressed {browserview.TURN_DONE}: they say they finished {step} on the page. Taskuary did not see the page move - "
-                      "look at it as it is now and continue.", wake=True)
+    _tell(store, tid, f"The owner pressed {browserview.TURN_DONE}: they say they finished {step} on the page. Taskuary did not see the page move.", wake=True)
     return True
 
 
@@ -1657,6 +1646,6 @@ def not_pressed(store, tid: int, rid: str, why: str, his: bool = False) -> bool:
     "The hand-over closed without the press: the agent is told it was NOT done - `his`: by his own Dismiss, heard with its next turn (_no)."
     h = _close(store, tid, rid, why)
     if not h: return False
-    (_no if his else _tell)(store, tid, f"The owner did not do the step you handed them ({h.get('what') or 'on the page'}): {why}. It was NOT done - the page is as you left it. Do not do it yourself. {OWNER_NO}")
+    (_no if his else _tell)(store, tid, f"The owner did not do the step you handed them ({h.get('what') or 'on the page'}): {why}. It was NOT done - the page is as you left it. {OWNER_NO}")
     store.audit('task', tid, 'browser_act_not_pressed', 'owner', 'human', {'site': h['site'], 'why': why})
     return True

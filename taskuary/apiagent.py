@@ -51,11 +51,10 @@ BROWSER = [
 SHOW = _fn('show', f"Show the owner files in this chat - a screenshot, a file you made - by path. {SHOW_WHAT}",
            _S({'files': {'type': 'array', 'items': {'type': 'string'}}}, ['files']))
 
-BRIEF = ('YOUR TOOLS: you drive Taskuary\'s browser for this task with browser_open, browser_look, browser_click, browser_fill, browser_press '
-         'and browser_screenshot, and `show` puts a picture or file in this chat. DO the work - open the site, look, click, read - never tell '
-         'the owner it "cannot be done from here" or ask them to paste what the page shows. A SIGN-IN PAGE: never type a password and never '
-         'ask for one - open the site\'s sign-in page and call hand_over with its `site`. ' + SIGNUP_LINE.replace('run `agent-browser signup`', 'call browser_signup') + 'An act that can\'t be undone (submit, pay, send, delete) may be HELD for the owner: '
-         'when a tool says so, stop and say what you will do once they approve. Say what you found from the page itself, and what you could not check.')
+BRIEF = ('YOUR TOOLS: Taskuary\'s browser for this task is driven by browser_open, browser_look, browser_click, browser_fill, browser_press '
+         'and browser_screenshot; `show` puts a picture or file in this chat. A password is not an agent\'s to type or to ask for: a sign-in '
+         'page is hand_over with its `site`. ' + SIGNUP_LINE.replace('run `agent-browser signup`', 'call browser_signup') + 'An act that can\'t be '
+         'undone (submit, pay, send, delete) may be HELD for the owner\'s press - the tool\'s answer says so.')
 # ── PHASE 2: the rest of what a CLI's hands do (the owner, 2026-11-09: "make sure hipaa thing matches capabilities of claude cli") ──────
 # Files in the task's own outputs folder (the one folder the task page serves), read with Taskuary's own readers (attachtext); a page fetched
 # through the address guard every other fetch of an untrusted URL takes (webguard); a search on the owner's connected search card, run
@@ -84,8 +83,8 @@ WEB = [
 ]
 # THE CALL IS THE ASK (a live turn, 2026-11-10): told its push "waits for the owner's Approve", one model never made the call - it wrote
 # that the push needed approval and stopped, and the task had no button to press. The gate holds the step and files the button; words do not
-ASK_BY_CALLING = ("Call it for such a step all the same: the call is what puts the Approve button on the task, and it runs once the owner "
-                  "presses. Saying in words that a step needs approval puts nothing there.")
+ASK_BY_CALLING = ("Such a step's call is what puts the Approve button on the task, and it runs once the owner presses; words alone put "
+                  "nothing there.")
 SHELL = [_fn('run_command', "Run a shell command in your working folder (PowerShell on Windows, bash elsewhere) - git, scripts, builds, "
              "tests. The same rules as a Claude Code session here. " + _gate.brief('shell') + ' ' + ASK_BY_CALLING,
              _S({'command': {'type': 'string'}, 'why': {'type': 'string', 'description': 'what it does, in a few plain words'}}, ['command', 'why']))]
@@ -452,9 +451,7 @@ def run_tool(store, tid: int, sid: str, name: str, a: dict) -> str:
         why = bv.set_up(SAY.get((tid, sid))) if bv.can_set_up() else 'the browser is not installed'
         # ...and NO STOP (design round 2, 2026-11-18): told to say it "and that asking again tries again", an API agent ended each turn on the
         # failure and the same either/or - the owner had answered it twenty minutes before. A missing tool is the best version, its gap named
-        if why: raise ValueError(f'the browser could not be set up on this computer ({why}) - nothing was done in it. Go on without it: do the '
-                                 'best version from what you can reach and name in one line what it leaves unchecked; never stop on this, ask '
-                                 'again what the owner already answered, or send them to a settings page to install it')
+        if why: raise ValueError(f'the browser could not be set up on this computer ({why}) - nothing was done in it')
     # ...AND A LOOK OR A CLICK WITH NO PAGE OPEN SAYS SO: a DevTools connect error came back for a look, and for a click "Taskuary held this
     # for the owner ... Run `agent-browser get url`" - nothing was held, and an API agent has no such command (the browser-read round, 2026-11-18)
     if name != 'browser_open' and not bv.state(sid, fresh=True).get('open'):
@@ -488,7 +485,7 @@ def run_tool(store, tid: int, sid: str, name: str, a: dict) -> str:
         p = d / f'page-{time.strftime("%H%M%S")}.png'
         rc, said = bg._run(sid, ['screenshot', str(p)], 30, 'shot')
         if rc != 0 or not p.is_file(): raise ValueError(said.strip()[-300:] or 'no picture was taken')
-        return f'Saved {p} - call show with it to put it in the chat.'
+        return f'Saved {p}; show puts it in the chat.'
     raise ValueError(no_tool(name))
 
 
@@ -545,7 +542,7 @@ def load(tid: int, sid: str, tools: list, names) -> str:
     have, kept = {t['function']['name'] for t in tools}, DEFERRED.get((tid, sid)) or {}
     new = [kept[n] for n in dict.fromkeys(str(n) for n in (names or [])) if n in kept and n not in have]
     tools.extend(new)
-    return f"Loaded {', '.join(t['function']['name'] for t in new)} - call them now." if new else ''
+    return f"Loaded {', '.join(t['function']['name'] for t in new)}." if new else ''
 
 
 def find(tid: int, sid: str, tools: list, query, store=None) -> str:
@@ -554,7 +551,7 @@ def find(tid: int, sid: str, tools: list, query, store=None) -> str:
     mine = (OFFERED.get((tid, sid)) or {t['function']['name'] for t in tools}) - {LOAD}
     words = {n: FULL.get(n) or (at.instructions(n) if n in at.TOOLS else n) for n in mine}
     hits = at.found(query, words, store, tid)
-    if not hits: return f"No tool fits {str(query or '')!r} - name one, or say what it should do in other words."
+    if not hits: return f"No tool fits {str(query or '')!r} - find_tools takes a tool's name, or words for what it does."
     return '\n\n'.join([*(words[n] for n in hits), load(tid, sid, tools, hits)]).strip()
 
 

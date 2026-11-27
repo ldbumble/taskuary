@@ -130,11 +130,10 @@ class HandingOverTheKeyboardTests(unittest.TestCase):
 
     def test_the_brief_tells_it_to_stop_and_not_touch_the_tab(self):
         b = browserview.guide()
-        self.assertIn('A TAB YOU HANDED OVER IS THEIRS', b)                 # ...handed over mid-turn, never reloaded or polled under him
+        self.assertIn("A TAB HANDED OVER IS THE OWNER'S", b)                 # ...handed over mid-turn, never reloaded or polled under him
         self.assertIn('hand_over with its `site`', b)                         # a sign-in is asked for, never typed (signin.py)
-        for forbidden in ('reload', 'navigate', 'poll'):
-            self.assertIn(forbidden, b)
-        self.assertIn('NEVER type a password', b)            # the rule it already had, still there
+        self.assertIn('a reload or a move there lands under his hands', b)
+        self.assertIn("A password, a 2FA code or a card number is not an agent's to type", b)            # the rule it already had, still there
 
 
 class TheWatchedBrowserOutlivesAPauseTests(unittest.TestCase):

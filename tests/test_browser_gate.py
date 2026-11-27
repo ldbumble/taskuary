@@ -608,10 +608,10 @@ class HeldInTheChat(unittest.TestCase):
         for said in (carded, browserview.brief(), browserview.offer()):
             self.assertNotIn('beside', said); self.assertNotIn('WATCHING', said)
         self.assertIn('action card on this task', carded); self.assertNotIn('end your turn', carded.lower())
-        self.assertIn('one card in this chat', browserview.HOLD_LINE); self.assertIn('never ask', browserview.HOLD_LINE.lower())
+        self.assertIn('one card in this chat', browserview.HOLD_LINE); self.assertIn('raises the card', browserview.HOLD_LINE)
 
     def test_the_brief_says_to_fill_it_and_leave_the_last_press_to_the_owner(self):
-        self.assertIn('fill in everything first', browserview.guide())
+        self.assertIn('running the command for that button is what raises the card', browserview.guide())
 
 
 class AtTheCommand(unittest.TestCase):
@@ -872,7 +872,7 @@ class WhatTheSiteDid(unittest.TestCase):
              mock.patch.object(browserview, 'unstick', lambda sid, since=None, every=False: stopped.append((sid, every)) or True):
             line = bg.outcome('run1')
         self.assertEqual(stopped, [('run1', True)])
-        self.assertIn('did not finish loading', line); self.assertIn('another way', line); self.assertIn('one question to the owner', line)
+        self.assertIn('did not finish loading', line); self.assertIn('the load was stopped', line)
 
     def test_an_error_status_is_said_by_its_number_and_a_working_page_says_nothing(self):
         def said(status):
@@ -943,7 +943,7 @@ def test_a_verb_asked_for_its_usage_is_no_act():
     "Submit your Proton Mail sign-up through checkout (it spends your money)" put to the owner. Its usage is printed; nothing is judged or sent."""
     with mock.patch('taskuary.signin.signup', side_effect=AssertionError('no sign-up was asked for')):
         ok, said = gate.run_own(MemoryStore(), 1, 'sess1', 'signup', 'agent-browser signup --help')
-    assert ok and said.startswith('Usage: agent-browser signup') and 'fill every box but the password' in said, said
+    assert ok and said.startswith('Usage: agent-browser signup') and 'every box but the password filled' in said, said
     assert [a['verb'] for a in bg.acts('agent-browser click @e3 -h')] == ['click'], "the real program's own flags are its own: still judged"
 
 

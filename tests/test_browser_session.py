@@ -53,14 +53,14 @@ class AskingForOneTests(unittest.TestCase):
         said = bv.guide()
         self.assertIn('agent-browser', said)
         self.assertIn('skills get core', said)          # the CLI documents its own commands
-        self.assertIn('NEVER type a password', said)    # ...and the owner types those, in the pane
+        self.assertIn("A password, a 2FA code or a card number is not an agent's to type", said)    # ...the owner types those, in the pane
         self.assertNotIn('$TASKUARY_URL', said); self.assertNotIn('--link', said)   # ...never pointed at the owner's own door (walk 19, M5)
-        self.assertIn('NEVER use --session, --headed', said)
+        self.assertIn('--session, --headed, profile listing or a Chrome launched separately are not this tab', said)
         # ...and it is told to LOOK with the accessibility tree, which is what the browser already
         # knows about its own page - an order of magnitude cheaper than the same page as pixels.
         self.assertIn('snapshot -i -c', said)
         self.assertIn('@ref', said)
-        self.assertIn('screenshot only when', said)
+        self.assertIn('a screenshot costs far more and says less', said)
 
 
 class TheChatIsNamedTooTests(unittest.TestCase):

@@ -37,7 +37,7 @@ somewhere else, a pipe into Remove-Item - is held, never let through for being h
 import contextvars, json, ntpath, os, re, shlex, shutil, subprocess, tempfile, threading
 from loguru import logger
 from .gate import TABLE, deny as _deny
-from .browsergate import _segments, _no, _tell, joined, launched, not_approved, NEXT, OWNER_NO, words
+from .browsergate import _segments, _no, _tell, joined, launched, not_approved, OWNER_NO, words
 
 from .gate import HELD_SAID as HELD          # ...one wording for every road's hold (gate.py)
 _FILING = threading.Lock()
@@ -779,7 +779,7 @@ def perform(store, tid: int, p: dict, run=None) -> dict:
     readgate.grant(store, tid, p.get('reads'))
     if not cmd and p.get('reads'):
         v = 'write' if str(p.get('what') or '').startswith('write') else 'read'        # ...what his yes let it do, as the card said it (readgate._said, settings)
-        said = f"The owner let you {v} {', '.join(p['reads'])} for the rest of this task. {v.title()} what you needed there now. " + NEXT
+        said = f"The owner let you {v} {', '.join(p['reads'])} for the rest of this task."
         if (told := _batch.get()) is not None: told.append(p.get('what') or 'a read')
         else: _tell(store, tid, said, wake=True)
         store.audit('task', tid, 'shell_act_done', 'owner', 'human', {'what': p.get('what'), 'reads': p['reads']})
@@ -797,8 +797,7 @@ def perform(store, tid: int, p: dict, run=None) -> dict:
         raise RuntimeError(failed(said, rc, p.get('what')))
     said = ' '.join(str(said or '').split())[-600:]
     if (told := _batch.get()) is not None: told.append(f"`{cmd[:300]}` said: {said[-200:] or 'done'}")
-    else: _tell(store, tid, f"The owner approved it and Taskuary ran `{cmd[:300]}` in {cwd or 'its folder'}. It said: {said[-300:] or 'done'}. "
-                    + NEXT, wake=True)
+    else: _tell(store, tid, f"The owner approved it and Taskuary ran `{cmd[:300]}` in {cwd or 'its folder'}. It said: {said[-300:] or 'done'}.", wake=True)
     store.audit('task', tid, 'shell_act_done', 'owner', 'human', {'what': p.get('what'), 'about': p.get('about'), 'command': cmd[:300], 'said': said[-300:]})
     return {'performed': p.get('what') or cmd[:200], 'said': said[-300:]}
 
@@ -840,10 +839,10 @@ def approve_steps(store, rids: list, decide, actor: str = 'owner', verb: str = '
         # the agent is started on what failed, and what it holds next is a new card in its new turn
         for r in [failed['review'], *left]: store.decide_review(r, 'superseded', None, 'taskuary', FAILED if r == failed['review'] else NOT_RUN)
         _tell(store, tid, f"The owner approved {len(rvs)} held steps together. Taskuary ran {len(done)} of them ({ran}); step {failed['step']} "
-                          f"failed: {failed['error'][:300]}" + (f"\n\nWhat it printed:\n{raw}\n\n" if (raw := _printed(store, tid)) else '. ') + "Nothing on that card waits on the owner now - the steps after it were not run. Find out "
-                          "why and put it right if you can; a step still needed is run again by you and held as a new card for their press. " + NEXT,
+                          f"failed: {failed['error'][:300]}" + (f"\n\nWhat it printed:\n{raw}\n\n" if (raw := _printed(store, tid)) else '. ') + "Nothing on that card waits on the owner now - the steps after it were not run; "
+                          "a step run again is held as a new card for their press.",
               wake=True)
-    else: _tell(store, tid, f"The owner approved {plural(len(done), 'held step')} together and Taskuary ran them in order: {ran}. " + NEXT, wake=True)
+    else: _tell(store, tid, f"The owner approved {plural(len(done), 'held step')} together and Taskuary ran them in order: {ran}.", wake=True)
     return {'ok': not (failed or refused), 'done': done, 'failed': failed, 'left': left, **({'send_error': refused} if refused else {})}
 
 

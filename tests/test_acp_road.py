@@ -155,7 +155,7 @@ def test_the_owners_reject_reaches_the_agent_as_the_owners_no_and_their_allow_sa
         if not heard: assert told == []; continue
         [(text, as_owner)] = told
         assert not as_owner and browsergate.OWNER_NO in text and 'git push origin main' in text and "not a block of Taskuary's" in text
-        assert 'do not ask for the same step again' in text
+        assert 'the same step is refused until he writes again' in text
 
 
 def test_a_step_taskuary_refuses_is_told_to_the_agent_with_the_way_on():

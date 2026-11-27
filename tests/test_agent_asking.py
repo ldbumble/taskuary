@@ -127,4 +127,4 @@ def test_every_worker_is_told_effort_in_proportion_and_a_missing_tool_is_no_stop
          mock.patch.dict(apiagent.OFFERED, {}, clear=True), mock.patch.dict(apiagent.TOOLBOX, {}, clear=True):
         try: apiagent.run_tool(None, 7, 's1', 'browser_open', {'url': 'https://trainly.example/signup'}); said = ''
         except ValueError as e: said = str(e)
-    assert 'Go on without it' in said and 'asking again' not in said, said
+    assert 'nothing was done in it' in said and 'asking again' not in said, said

@@ -485,8 +485,7 @@ def where(store, tid: int, how: str) -> str:
     from . import cardqueue
     q = cardqueue.state(store, int(tid))
     if cardqueue.LAND in q['live']: return f"The owner sees the {HOW[how]} card now - nothing lands until they press it; you are told when they do."
-    return (f"The {HOW[how]} card is raised but NOT on his screen yet: it comes forward once the card before it is answered. Say that if you "
-            "name it - never that it waits for his press now.")
+    return (f"The {HOW[how]} card is raised but NOT on his screen yet: it comes forward once the card before it is answered.")
 
 
 # A GIT ACT PROPOSED ANY WAY IS THE CARD'S BUTTONS (the owner, 2026-11-09: "actions should be cards/buttons"): `propose {"action": "push"}`,
@@ -800,8 +799,7 @@ def _landed(store, tid, how, said_, actor, at_sha='', **extra) -> dict:
     # ...AND THE AGENT GOES ON, as it does after a push (_push): a branch landed or a pull request opened was the press its turn waited on
     # (the owner, 2026-11-09: "when you hit approve the agent continues and says what it did and what the next steps are")
     if how not in PUSH_HOW:
-        from .browsergate import NEXT
-        _went(store, tid, f"{said_} The owner pressed {HOW[how]} on your branch. {NEXT}")
+        _went(store, tid, f"{said_} The owner pressed {HOW[how]} on your branch.")
     return {'ok': True, 'how': how, 'says': said_, **extra}
 
 

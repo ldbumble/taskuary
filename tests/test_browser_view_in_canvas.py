@@ -37,11 +37,11 @@ class TheBrief(unittest.TestCase):
     def test_a_captcha_is_the_owners_and_is_handed_over_on_the_view(self):
         b = browserview.guide()
         self.assertIn(browserview.TURN_LINE, b)
-        self.assertIn('NEVER SOLVE, CLICK OR WORK AROUND A CAPTCHA', b)
-        self.assertIn('call hand_over', b)
+        self.assertIn("is the owner's to do", b)
+        self.assertIn('hand_over (`what`', b)
         self.assertNotIn('card number is for the owner to type in the pane: ask with the ask marker', b)
         # the agent runs the press and the hold asks, on every AI (gate) - one card in the chat
-        self.assertIn('never ask him in words to approve or click it', b)
+        self.assertIn('stands as one card in this chat', b)
 
 
 class YourTurn(unittest.TestCase):

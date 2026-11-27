@@ -42,13 +42,12 @@ TABLE = {
                    'from a shell (a push, a merge, a pull request, a publish, a mail from a script, data sent to a web address)'),
     'erase':   Row(True, "it can't be undone", 'DELETES FILES', 'outside your working folder'),
     'reads':   Row(True, "it is outside this task's own folders", 'READS', "outside this task's own folders"),
-    'never':   Row(None, "Taskuary's own data and the places sign-ins are kept are never read by an agent - not even with the owner's yes. Go on "
-                   'without it, and say what you needed if it matters', 'READS', "Taskuary's own data or where sign-ins are kept"),
+    'never':   Row(None, "Taskuary's own data and the places sign-ins are kept are never read by an agent - not even with the owner's yes.", 'READS', "Taskuary's own data or where sign-ins are kept"),
     'writes':  Row(True, "it is outside this task's own folders", 'WRITES', "outside this task's own folders"),
     'settings': Row(True, 'your next session or git command runs it or reads it as settings', 'CHANGES SETTINGS',
                     "that a later session or git command runs (git hooks and config, a CLI's settings and hooks)"),
     'unwritable': Row(None, "Taskuary's own data and settings, and the places sign-ins are kept, are never changed by an agent - not even with the "
-                      "owner's yes. Write in this task's own folders instead", 'WRITES', "to Taskuary's own data or where sign-ins are kept"),
+                      "owner's yes; this task's own folders are written freely", 'WRITES', "to Taskuary's own data or where sign-ins are kept"),
     'fills':   Row(False, '', 'FILLS', 'a form - types, ticks or chooses in its boxes (the press that sends it is judged on its own)'),
     'looks':   Row(False, '', 'LOOKS', '- a snapshot, a read, a page opened'),
 }
@@ -60,18 +59,15 @@ def _any(ks, caps=False) -> str: xs = [says(k, caps) for k in ks]; return ', '.j
 def brief(road: str) -> str:
     "What the agent is told about the hold on this road ('browser', 'desktop', 'shell') - written from TABLE, never prose of its own."
     if road == 'browser':
-        return ('PRESS WHAT THE WORK NEEDS YOURSELF - a free sign-up or trial with made-up details, a form, a search. A PAYMENT IS HIS: never '
-                'press Pay, Buy or Order and never type a card - leave the page on it and hand it to him with hand_over. A press that '
-                f'{_any(BIG[1:])} is refused with "held for the owner" and stands as one card in this chat: fill in everything first, run the '
-                'command for that last button as you would, and when it is held go on with the rest of the work - his press on the card runs '
-                'it, and you are told what the page shows. Never try a held act another way, and never ask him in words to approve or click it. ')
+        return ('A PAYMENT IS HIS: Pay, Buy or Order and a card typed are not an agent\'s - hand_over hands him that page. A press that '
+                f'{_any(BIG[1:])} is refused with "held for the owner" and stands as one card in this chat: running the command for that '
+                'button is what raises the card, his press on it runs it, and you are told what the page shows. A free sign-up or trial with '
+                'made-up details, a form or a search runs. ')
     if road == 'desktop':
-        return (f'WHEN THE WORK ENDS AT A PRESS THAT {_any(BIG)}: set everything up in the app first, then run the command for that last press '
-                'as you would. It is HELD for the owner: it becomes their action card, they press it in the app, and you are told what happened. '
-                'Go on with the rest of the job. ')
-    return (f"A step that {says('out')}, one that {says('erase')} and one that {says('reads')} is HELD for the owner's press: run it - the "
-            "refusal is Taskuary's hold, never his no: it becomes his action card, his press runs it and you are told what happened. Go on "
-            'with the rest of the job.')
+        return (f'A PRESS THAT {_any(BIG)} is HELD for the owner: running the command for it raises his action card, he presses it in the app, '
+                'and you are told what happened. ')
+    return (f"A step that {says('out')}, one that {says('erase')} and one that {says('reads')} is HELD for the owner's press: running it raises "
+            "his action card - Taskuary's hold, never his no - and his press runs it; you are told what happened.")
 
 
 def deny(why: str) -> dict:
@@ -219,7 +215,7 @@ def decide(store, tid: int, todo: list, cwd: str = '', big: bool = False) -> tup
     no = {k for r in rows if r.get('answer') == 'dismissed' and int(r.get('turn') or 0) >= turn for k in r.get('keys') or []}
     what = '; '.join(dict.fromkeys(words(a, cwd) for a in todo))
     if set(ks) & no: return 'dismissed', (f"{DISMISSED} ({what}) on an earlier card since he last wrote - it was NOT run, "
-                                          "and it is not put to him again. Say in one line that it waits on his word, and go on without it.")
+                                          "and it is not put to him again until he writes.")
     if big: return '', ''
     if set(ks) <= yes: return 'approved', f"The agent went on to {what} - you approved the same earlier in this task."
     return '', ''
@@ -326,10 +322,9 @@ def owner_asks(ctx: dict) -> bool:
 # THE OWNER'S OWN NO ON THE STEP, in their voice: never "Taskuary refused it: the owner said no"
 YOU_REJECTED = 'You rejected this'
 # ...and a step nobody answered is no one's no: it was still waiting when the chat moved past it (permissions.set_aside)
-STILL_WAITING = ('It was still waiting for the owner when the conversation moved on - nobody said no to it, so never say they did. Raise '
-                 'it again if it is still needed')
+STILL_WAITING = 'It was still waiting for the owner when the conversation moved on - nobody said no to it, and it can be raised again'
 # ...and one closed by his Stop (permissions.STOPPED_SAID) is heard in the step's own answer only
-YOU_STOPPED = 'The owner stopped you before answering this, so it was not run - nobody said no to it. Raise it again if it is still needed'
+YOU_STOPPED = 'The owner stopped you before answering this, so it was not run - nobody said no to it, and it can be raised again'
 
 
 def put_to_owner(ctx: dict, params: dict, why: str) -> tuple:
@@ -498,8 +493,7 @@ def ask(name: str, args: list, after: bool = False, rc: int = 0) -> str:
     try: return str(post(cmd, after, rc=rc).get('why') or '')
     except Exception as e:
         if not act or after: return ''
-        return (f'{NOT_RUN_SAID}: it could not be asked whether this press may run ({str(e)[:120]}), so nothing was done. Run it again; if it is '
-                'refused like this again, tell the owner in one line what you were about to do and go on with the rest of the job.')
+        return (f'{NOT_RUN_SAID}: it could not be asked whether this press may run ({str(e)[:120]}), so nothing was done. Run it again to ask again.')
 
 
 def post(cmd: str, after: bool = False, wait: float = WAIT, rc: int = 0) -> dict:

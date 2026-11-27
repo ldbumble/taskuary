@@ -148,17 +148,15 @@ def _hold_line() -> str:
 
 def brief() -> str:
     "What an agent with the owner's desktop needs to know: how to drive it, and where the line is."
-    return ('THE OWNER\'S DESKTOP APPS are yours to read and operate with `agent-desktop` (the owner turned it on) - for a desktop app that '
-            'has no connector and no web page: prefer a connector, then the browser, then this. It reads the app\'s real UI through '
-            'the accessibility tree, not pixels. Before the first use run `agent-desktop skills get desktop` and `agent-desktop skills '
-            'get platform` and follow them. The loop: `agent-desktop list-apps`, `agent-desktop snapshot --app <name> -i --compact` '
-            '(every control with a ref like @s8f3k2p9:e8), act on ONE ref, snapshot again to check. A ref belongs to its snapshot: '
-            'after STALE_REF, snapshot again. Prefer `set-value <ref> <text>` to `type`, and NEVER pass --headed, run focus-window, or '
-            'press a shortcut that switches windows: the owner is using this screen, and the default acts without moving their mouse or '
-            'taking their focus. In PowerShell quote every ref (\'@s8f3k2p9:e8\'). Every command prints one JSON envelope: judge it by '
-            '`ok` and the exit code, retry only when error.disposition.retry is "safe". Never type a password, code or card number '
-            'into an app, never read the clipboard for one, and never touch Taskuary\'s own window: a sign-in is the owner\'s - end '
-            'your turn and say what they need to do. Snapshots can hold private text: never paste one into a reply, a file or a post. '
+    return ('THE OWNER\'S DESKTOP APPS are read and operated with `agent-desktop` (the owner turned it on) - for a desktop app with no '
+            'connector and no web page. It reads the app\'s real UI through the accessibility tree, not pixels; `agent-desktop skills get '
+            'desktop` and `agent-desktop skills get platform` are its own guides. `agent-desktop list-apps`, `agent-desktop snapshot --app '
+            '<name> -i --compact` (every control with a ref like @s8f3k2p9:e8); a ref belongs to its snapshot (STALE_REF after it changed). '
+            '`set-value <ref> <text>` sets a box without keystrokes. The owner is using this screen: the default acts without moving his mouse '
+            'or taking his focus, and --headed, focus-window or a window-switching shortcut does both. In PowerShell a ref is quoted '
+            '(\'@s8f3k2p9:e8\'). Every command prints one JSON envelope: `ok`, the exit code, and error.disposition.retry ("safe" where a '
+            'retry is). A password, code or card number is not an agent\'s to type into an app or read from the clipboard, and Taskuary\'s own '
+            'window is not an agent\'s to touch: a sign-in is the owner\'s. Snapshots can hold private text. '
             + _hold_line())
 
 
@@ -285,8 +283,7 @@ def check(store, tid: int, sid: str, cmd: str, brain=None) -> dict:
     from . import origin
     todo = acts(cmd)
     if not todo: return {}
-    if not installed(): return _deny('Agent Desktop is not installed on this computer, so nothing was done. Do not drive desktop apps another '
-                                     'way; say what you would have done instead.')
+    if not installed(): return _deny('Agent Desktop is not installed on this computer, so nothing was done.')
     try: stranger = origin.of_task(store, tid)[0] == 'stranger'
     except Exception: stranger = True                                  # unreadable is not a vouch
     if stranger: return _deny('This task carries a message from someone the owner has not vouched for, so it does not drive the '
@@ -351,22 +348,22 @@ def _app(act: dict, v: dict) -> str:
 
 
 def ready(store, tid: int, sid: str, act: dict, v: dict) -> dict:
-    "Say it's ready in the app, as an ask the owner answers by typing, and refuse the agent: it ends its turn and waits."
+    "Say it's ready in the app, as an ask the owner answers by typing, and refuse the agent's own press of it."
     from . import workerstate as ws
     from .browsergate import _deny
     text = READY_LINE.format(app=_app(act, v))
     rid = READY + ws.request_id_for(f'{sid} {text}')
     if ws.record(store, tid, sid, 'input_needed', request_id=rid, text=text, source='api'):
         store.audit('task', tid, 'desktop_act_ready', 'taskuary', 'system', {'verb': act.get('verb'), 'why': v.get('why')})
-    return _deny(f"{HELD}: {v['what']} ({v['why']}) is the owner's own press, in the app on their screen. Taskuary told them \"{text}\" - "
-                 "do not say it again. Go on with the rest of the job; you are told what happened once they press it.")
+    return _deny(f"{HELD}: {v['what']} ({v['why']}) is the owner's own press, in the app on their screen. Taskuary told them \"{text}\"; "
+                 "you are told what happened once they press it.")
 
 
 # ── approved: run it; dismissed: say so ───────────────────────────────────────────────────────────────────────────────────
 def perform(store, tid: int, p: dict, run=None) -> dict:
     """The owner's yes: run the held command as it was. A control gone since makes agent-desktop refuse its ref (STALE_REF) - said
     as "nothing was done", never retried on a guess. `run`: the runner (tests stand one in)."""
-    from .browsergate import _tell, NEXT
+    from .browsergate import _tell
     from . import gate
     gate.remember(store, tid, p.get('keys'), 'approved')       # his yes to this press on this control stands for the task
     args = list(p.get('args') or [])
@@ -381,8 +378,7 @@ def perform(store, tid: int, p: dict, run=None) -> dict:
             raise RuntimeError(f"the app has changed since this was held ({err.get('code')}) - nothing was done. Nothing on this card waits "
                                'now: the agent looks again and holds the step anew.')
         raise RuntimeError(f"agent-desktop refused it: {(err.get('message') or ' '.join(str(said or '').split()))[-300:]}")
-    _tell(store, tid, f"The owner approved it and Taskuary ran `{p.get('command')}`. It said: {' '.join(str(said).split())[-300:] or 'done'}. "
-                      'Snapshot the app again, then ' + NEXT[0].lower() + NEXT[1:], wake=True)
+    _tell(store, tid, f"The owner approved it and Taskuary ran `{p.get('command')}`. It said: {' '.join(str(said).split())[-300:] or 'done'}.", wake=True)
     store.audit('task', tid, 'desktop_act_done', 'owner', 'human', {'what': p.get('what'), 'command': str(p.get('command') or '')[:300]})
     return {'performed': p.get('what') or p.get('command')}
 

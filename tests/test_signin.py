@@ -349,7 +349,7 @@ class Asking(unittest.TestCase):
         self.assertEqual(typed, [('sess1', 'bank.example', USER, PW)])
         self.assertEqual(raised, [('open while typing', None)])
         self.assertIsNone(signin.pending(self.s, self.tid))
-        self.assertEqual(sess.said, ["Signed in to bank.example - continue. Taskuary signed in with the owner's saved sign-in; the owner did nothing on the page."])
+        self.assertEqual(sess.said, ["Signed in to bank.example. Taskuary signed in with the owner's saved sign-in; the owner did nothing on the page."])
 
     def test_while_the_saved_sign_in_is_typed_the_chat_reads_at_work_over_the_answer_that_handed_it_over(self):
         """Recorded on the real CLI (the browser audit, 2026-11-15): the agent's turn ended asking for the sign-in, its answer was filed, and
@@ -536,7 +536,7 @@ class Asking(unittest.TestCase):
             signin.by_owner(self.s, tok, USER, PW, False, fill=lambda *a: None)
             self.wait_for(lambda: sess.said)
             self.wait_for(lambda: not ws.status(self.s, self.tid)['requests'])
-        self.assertEqual(sess.said, [('Signed in to bank.example - continue. The owner signed in on the page themselves.', False)])
+        self.assertEqual(sess.said, [('Signed in to bank.example. The owner signed in on the page themselves.', False)])
 
     def test_a_failed_fill_is_audited_without_the_secret(self):
         with on_page('https://login.bank.example/'): signin.needs(self.s, self.tid, self.sid)
@@ -651,7 +651,7 @@ class TheOwnerSignsInOnThePage(Asking):
         with mock.patch.dict('taskuary.terminal.SESSIONS', {'sess1': sess}):
             self.assertTrue(signin.watch(self.s, self.tid, 'sess1', 'bank.example', p['request_id'], conn=page, every=0))
         self.assertIn('Runtime.addBinding', page.calls)
-        self.assertEqual(sess.said, ['Signed in to bank.example - continue. The owner signed in on the page themselves.'])        # the agent hears the words, never what was typed
+        self.assertEqual(sess.said, ['Signed in to bank.example. The owner signed in on the page themselves.'])        # the agent hears the words, never what was typed
         self.assertFalse(ws.status(self.s, self.tid)['requests'])
         # ...the ask was over BEFORE the agent's turn ran (a chat agent's turn runs inside the telling): nothing read "sign in" over it at work
         self.assertFalse(sess.open_then)
@@ -761,7 +761,7 @@ class TheOwnerSignsInOnThePage(Asking):
         sess.send_prompt = lambda text, as_owner=True: told.append((text, page.pages[0]['href']))
         with mock.patch.dict('taskuary.terminal.SESSIONS', {'sess1': sess}):
             self.assertTrue(signin.watch(self.s, self.tid, 'sess1', 'bank.example', p['request_id'], conn=page, every=0))
-        self.assertEqual(told, [('Signed in to bank.example - continue. The owner signed in on the page themselves.', home['href'])])     # once, and only on the page behind it
+        self.assertEqual(told, [('Signed in to bank.example. The owner signed in on the page themselves.', home['href'])])     # once, and only on the page behind it
         self.assertFalse(ws.status(self.s, self.tid)['requests'])
         # ...and each step by itself: a code row is a step, one fragment to another is a move, a lone unnamed box behind it is no step
         self.assertFalse(signin.past(code, 'bank.example', 'https://login.bank.example/signin'))

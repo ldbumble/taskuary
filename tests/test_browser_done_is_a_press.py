@@ -42,7 +42,7 @@ class DoneIsAPress(unittest.TestCase):
         [(words, as_owner)] = self.heard()
         self.assertFalse(as_owner, "Taskuary's note to the agent, never the owner's line")
         self.assertIn("The owner pressed I'm done", words); self.assertIn("tick the \"I'm not a robot\" box", words)
-        self.assertIn('did not see the page move', words); self.assertIn('look at it as it is now', words)
+        self.assertIn('did not see the page move', words)
         self.assertEqual(self.said(), [], 'no bubble, and no line by Taskuary either')
         # ...in the words of the button he pressed: the view's "I'm done" left "You pressed Done" (the overnight walk, 2026-11-11)
         self.assertEqual(self.lines(), [f"You pressed I'm done on {SITE}."])          # ...a press, never "the step is finished" (the walk, 2026-11-22)
@@ -131,7 +131,7 @@ class DoneIsAPress(unittest.TestCase):
         rid, woke = self.turn(), []
         with mock.patch.dict('taskuary.terminal.SESSIONS', {}, clear=True), mock.patch.object(general, 'to_agent', lambda s, t, w, *a, **kw: woke.append(w) or 'woke'):
             self.assertTrue(ws.answer(self.s, self.tid, rid, '', press=True)['delivered'])
-        self.assertIn('open it again', woke[0]); self.assertEqual(self.open(), [])
+        self.assertIn('the page was at', woke[0]); self.assertEqual(self.open(), [])
 
     def test_a_step_whose_page_closed_says_so_and_its_press_brings_it_back(self):
         # the owner, 2026-11-10 ("i cant see the screen"): a step handed over on portal.vendor.example, then the session gone (a restart, a
@@ -145,7 +145,7 @@ class DoneIsAPress(unittest.TestCase):
             self.assertIn('has closed', ask['text']); self.assertNotIn('on the page. I', ask['text'])
             self.assertEqual(ask['choices'], ['Try again']); self.assertEqual(ask['request_id'], rid)
             self.assertTrue(ws.answer(self.s, self.tid, rid, '', press=True)['delivered'])
-        self.assertIn('open it again', woke[0]); self.assertNotIn('they say they finished', woke[0])
+        self.assertIn('the page was at', woke[0]); self.assertNotIn('they say they finished', woke[0])
         self.assertEqual(self.open(), []); self.assertEqual(self.lines(), [], 'nothing was pressed on the page')
         self.assertEqual(bg.shown_ask({'request_id': rid, 'sid': 'run1', 'text': 'x'})['text'], 'x')   # live, its page up: as it was
 
@@ -174,7 +174,7 @@ class DoneIsAPress(unittest.TestCase):
         mid-turn: a card for him, the turn goes on (nobody is woken), a second is refused while the first waits, and his I'm done wakes it once."""
         from taskuary import agenttools, signin
         out = json.loads(agenttools.call(self.s, self.tid, 'hand_over', {'what': 'tick the "I\'m not a robot" box'}, {}))
-        self.assertTrue(out['ok'] and 'go on with the rest' in out['says'].lower(), out)
+        self.assertTrue(out['ok'] and 'you are told then' in out['says'].lower(), out)
         rid = bv_open = self.open()
         self.assertEqual(len(rid), 1); self.assertEqual(self.told, [], 'raised mid-turn: the agent is not woken, it goes on')
         again = json.loads(agenttools.call(self.s, self.tid, 'hand_over', {'what': 'enter the card number'}, {}))

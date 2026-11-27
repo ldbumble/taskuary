@@ -54,9 +54,8 @@ CODE_ASK = '{site} took the saved sign-in and asks for a code - type it on the p
 # ...AND THE CODE PAGE IS MADE READY FOR HIM FIRST (the owner, 2026-11-15: "why can't you click save for 30 days when you sign in ... so you
 # won't need it"): the agent, which reads the page, ticks whatever the page offers to remember this browser - so the next task, and one
 # opened beside it, does not stop for a code - and hands the code step over. What such a box is, is its judgement: nothing here reads words
-READY_CODE = ('TASKUARY: the saved sign-in for {site} went in, and the site now asks for a code only the owner has. Get that page ready for '
-              'them: if it offers to remember this browser or device (so later sign-ins skip the code), tick that - type nothing in the code '
-              'box and press nothing else - then call hand_over with site {site}, and Taskuary hands them the code step. Say nothing else to them.')
+READY_CODE = ('TASKUARY: the saved sign-in for {site} went in, and the site now asks for a code only the owner has; hand_over with site '
+              '{site} hands them the code step. A box that remembers this browser or device makes later sign-ins skip the code.')
 LOOPBACK = ('localhost', '127.0.0.1', '::1')
 # TWO-LABEL PUBLIC SUFFIXES - where the registrable domain is THREE labels. Without them "bank.co.uk" would pin "co.uk", and a
 # saved sign-in would fill on every site in the UK. Not the whole Public Suffix List (no dependency carries it here); the
@@ -737,10 +736,10 @@ def by_owner(store, tok, user, pw, keep: bool, fill=None, key: str = '') -> dict
 # the saved sign-in went in unseen, the agent wrote "which I read after you signed in" to an owner who had touched nothing
 def signed_in_words(site: str, actor: str, code: bool = False) -> tuple[str, str]:
     "(the task's receipt, what the agent is told) for a sign-in that went in - by Taskuary from the saved sign-in, or by the owner on the page."
-    if actor == 'owner': return f'Signed in to {site}', f'{DONE} to {site} - continue. The owner signed in on the page themselves.'
+    if actor == 'owner': return f'Signed in to {site}', f'{DONE} to {site}. The owner signed in on the page themselves.'
     how = f"the owner's saved sign-in{' and its authenticator code' if code else ''}"
     return (f'Signed in to {site} with the saved sign-in{" and its authenticator code" if code else ""}',
-            f'{DONE} to {site} - continue. Taskuary signed in with {how}; the owner did nothing on the page.')
+            f'{DONE} to {site}. Taskuary signed in with {how}; the owner did nothing on the page.')
 
 
 def _continue(store, tid, rid, site, actor, code=False, words=None):
@@ -1054,7 +1053,7 @@ def code_watch(store, tid: int, sid: str, site: str, every: float = CODE_EVERY, 
         except SignInError: continue
         if got[1]:
             from .browsergate import _tell
-            _tell(store, tid, f'Taskuary typed the code {site} emailed for your sign-up into its page and sent it. Look at the page and continue.', wake=True)
+            _tell(store, tid, f'Taskuary typed the code {site} emailed for your sign-up into its page and sent it.', wake=True)
         return True
     return False
 
@@ -1883,7 +1882,7 @@ def signup(store, tid, sid) -> tuple[bool, str]:
                                      'what': what, 'why': v['why'], **({'as': who} if who else {})}, 'agent')
         return True, (f'HELD for the owner: {what} ({v["why"]}). It stands as one card in the chat; their press fills this form again as you '
                       'left it, makes and keeps the password and sends it - even after you have moved on - and you are told what the site '
-                      'answered. Do not ask them in words; go on with the rest of the work.' + browsergate.stands(store, tid))
+                      'answered.' + browsergate.stands(store, tid))
     finally: c.close()
 
 
@@ -1952,7 +1951,7 @@ def _answered(store, tid, sid, site, c, user, kept) -> str:
         _audit(store, tid, site, 'vault', True, 'a code was asked', saved=not kept, signup=True)
         took(store, tid, site, user, c)
         return (f'Not an account yet: {site} took the form{who} and asks for a code it emailed. Taskuary types it from the mail when it comes and tells '
-                f"you; never ask for it. The password is kept with the owner's saved sign-ins.{kept} Go on with the next one meanwhile.")
+                f"you. The password is kept with the owner's saved sign-ins.{kept}")
     there = f'"{look.get("title") or ""}" ({look.get("href") or f.get("href") or ""})'
     if f.get('top') and on_site(f.get('href'), site) and not f.get('password') and (status or 200) < 400:
         _audit(store, tid, site, 'vault', True, 'signed up', saved=not kept, signup=True)

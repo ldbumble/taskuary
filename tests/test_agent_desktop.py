@@ -163,7 +163,7 @@ class Holding(unittest.TestCase):
         live = SimpleNamespace(sid='run1', alive=True, task_id=self.tid, send_prompt=lambda *a, **k: None)
         with mock.patch.dict('taskuary.terminal.SESSIONS', {'run1': live}, clear=True):
             out = self.check(v={'irreversible': True, 'sure': True, 'what': 'sends the reply', 'app': 'Northwind Mail'})
-            self.assertTrue(self.denied(out)); self.assertIn('rest of the job', out['hookSpecificOutput']['permissionDecisionReason']); self.assertNotIn('end your turn', out['hookSpecificOutput']['permissionDecisionReason'].lower())
+            self.assertTrue(self.denied(out)); self.assertIn('you are told what happened', out['hookSpecificOutput']['permissionDecisionReason']); self.assertNotIn('end your turn', out['hookSpecificOutput']['permissionDecisionReason'].lower())
             self.assertEqual(self.pending(), [])
             [req] = [r for r in ws.open_requests(ws.events(self.s, self.tid, 'run1')) if r['RequestId'].startswith(ad.READY)]
             self.assertEqual(req['Text'], "It's ready in Northwind Mail; press it there.")
@@ -238,7 +238,7 @@ class Hook(unittest.TestCase):
 class Brief(unittest.TestCase):
     def test_the_hold_is_promised_only_where_there_is_one(self):
         self.assertIn('HELD for the owner', ad.brief())
-        self.assertIn('never pass --headed', ad.brief().replace('NEVER', 'never'))
+        self.assertIn('--headed, focus-window or a window-switching shortcut does both', ad.brief())
 
     def test_offered_only_with_the_card_on_and_the_task_marked(self):
         s = MemoryStore(); tid = Factory(s).task('Reply to Erin')

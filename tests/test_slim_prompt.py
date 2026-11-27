@@ -40,7 +40,7 @@ def test_the_browser_is_one_fact_in_the_turn_and_its_how_to_is_its_guide():
         assert 'guide `browser`' in told and len(told) < 400, told
         assert 'PRESS WHAT THE WORK NEEDS' not in told and 'A SIGN-UP' not in told
     g = guides.read('browser')
-    for want in ('hand_over', 'snapshot -i -c', 'A TAB YOU HANDED OVER', 'never a browser tool of your own CLI', 'his press on the card runs it'): assert want in g, want
+    for want in ('hand_over', 'snapshot -i -c', 'A TAB HANDED OVER', 'A browser tool of your own CLI', 'his press on it runs it'): assert want in g, want
     assert g.count(browserview.HOLD_LINE) == 1
     with pytest.raises(ValueError, match='browser'): guides.read('nope')
 

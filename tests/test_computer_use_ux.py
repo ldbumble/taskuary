@@ -118,7 +118,7 @@ class TheGeneralAgentsBrowserIsHeld(unittest.TestCase):
 class TheBriefAndItsWords(unittest.TestCase):
     def test_refs_are_quoted_for_powershell(self):
         b = browserview.guide()
-        self.assertIn("agent-browser click '@e3'", b); self.assertIn('ALWAYS QUOTE A @ref', b)
+        self.assertIn("agent-browser click '@e3'", b); self.assertIn('a bare @e3 expands to nothing, a quoted one does not', b)
         self.assertNotIn('click @ref3', b)
 
     def test_a_browser_that_did_not_open_is_said_in_the_turn_and_to_the_agent(self):
@@ -208,7 +208,7 @@ class TheHeldActInWords(unittest.TestCase):
         self.assertIsNone(out['performed'])
         self.assertEqual(out['refused'], 'vendor.example did not take it - something on the page covers that control. The agent was told and goes on another way.')
         self.assertNotIn('data-agent-browser', out['refused'])
-        self.assertIn('covered by <input#menu-holder>', told[0]); self.assertIn('reach the same place another way', told[0])
+        self.assertIn('covered by <input#menu-holder>', told[0])
         browserview.ended_on('r1')
 
     def test_a_dead_approve_says_the_way_on(self):

@@ -10,14 +10,15 @@
 // the hold's - HeldStart draws them where the agent would work - and Came from has no line of its own
 export const strangerLine = (d) => {
   if (d?.origin?.origin !== "stranger" || d.origin.held) return null;
-  // ...and Taskuary's own work offers no "Trust it" (the owner, 2026-10-27: "trust it for something taskuary itself made??"): there is no
-  // one to trust - what it read is the risk, and the line just says so; a step it holds still carries its own presses (trustInBox)
+  // ...and Taskuary's own work says what its agent goes without, and the press that gives it back (the owner, 2026-11-27: "it says no trust on
+  // own system" - an idea's task ran without his mail, memory or history, with no reason on the page and no Trust): what it read is the risk,
+  // and the why on hover names it; Trust is his say-so on the task (origin.raise_to), as on any stranger's
   const ours = /^written by Taskuary/i.test(d.origin.why || ""), what = /report/i.test(d.origin.why || "") ? "a report" : "what it read";
   // ...NOR WHERE THE SERVER OFFERS NO TRUST (walk 25, 2026-11-26: "Trust them" stood beside a calendar invite, which holds nothing and is answered
   // by Accept or Decline - senders.trust_offer said none, and the fallback word drew a press anyway): its null is no press, never "Trust them"
   const none = d.origin.trust === null;
-  return { text: ours ? `Taskuary wrote this from ${what} - an agent asks before anything risky` : "From someone you haven't worked with here yet - anything risky waits for your OK",
-    trust: ours || none ? null : d.origin.trust?.person || "Trust them", trustOrg: ours ? null : d.origin.trust?.org || null,
+  return { text: ours ? `Taskuary wrote this from ${what}, so its agent works without your mail, memory or history` : "From someone you haven't worked with here yet - anything risky waits for your OK",
+    trust: ours ? "Trust this task" : none ? null : d.origin.trust?.person || "Trust them", trustOrg: ours ? null : d.origin.trust?.org || null,
     why: d.origin.why || "", danger: d.origin.danger || null };
 };
 

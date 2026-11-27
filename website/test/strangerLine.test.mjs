@@ -20,11 +20,15 @@ test("a stranger's task gets the one line in plain words, with the reason for th
   assert.equal(l.why, "sent by someone not in your people");
   assert.doesNotMatch(l.text, /auto mode|stranger/i, "no coding-tool words for someone who never ran one");
 });
-test("words Taskuary wrote from what it read are not 'someone'", () => {
-  const l = strangerLine({ origin: { origin: "stranger", why: "written by Taskuary's report from what it read" } });
-  assert.equal(l.text, "Taskuary wrote this from a report - an agent asks before anything risky");
-  assert.equal(l.trust, null, "nobody to trust in Taskuary's own work (the owner, 2026-10-27)");
-  assert.equal(l.trustOrg, null);
+// THE RESTRICTED TASK SAYS WHY, WITH ITS TRUST (the owner, 2026-11-27: "it says no trust on own system"): an idea's task ran without his mail,
+// memory or history, and the page showed neither the reason nor a press - the server's trust offer is null (no sender), so nothing drew one
+test("words Taskuary wrote from what it read are not 'someone', and say what its agent goes without, with Trust", () => {
+  const l = strangerLine({ origin: { origin: "stranger", why: "written by Taskuary's report from 'Industry news', which is not marked as your own system", trust: null } });
+  assert.equal(l.text, "Taskuary wrote this from a report, so its agent works without your mail, memory or history");
+  assert.equal(l.why, "written by Taskuary's report from 'Industry news', which is not marked as your own system");
+  assert.equal(l.trust, "Trust this task");
+  assert.equal(l.trustOrg, null, "no organisation behind Taskuary's own words");
+  assert.equal(strangerLine({ origin: { origin: "stranger", why: "written by Taskuary's assistant from what it read", held: true } }), null);
 });
 test("owner, trusted and missing origin say nothing", () => {
   for (const o of ["owner", "trusted"]) assert.equal(strangerLine({ origin: { origin: o, why: "x" } }), null);

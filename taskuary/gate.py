@@ -458,7 +458,9 @@ def asks(name: str, cmd: str) -> tuple:
     "(is it a press to judge, must the server see it at all): a look runs untouched; an open goes by the server, which brings the page up."
     from . import agentdesktop, browsergate
     if name == agentdesktop.EXE: return (bool(agentdesktop.acts(cmd)),) * 2
-    act = bool(browsergate.acts(cmd) or browsergate.refused(cmd))       # ...a refusal is an act: Taskuary unreachable, it fails closed
+    # ...a refusal is an act: Taskuary unreachable, it fails closed - and so is an address that carries a query, which only the server can
+    # judge against where this session has been (browsergate.sends; red team round 6: unasked, such an open ran)
+    act = bool(browsergate.acts(cmd, ()) or browsergate.refused(cmd))
     return act, act or bool(browsergate.opens(cmd))
 
 

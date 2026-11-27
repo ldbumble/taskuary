@@ -285,6 +285,61 @@ class DoneIsAPress(unittest.TestCase):
         with mock.patch('taskuary.llm.build_llm', return_value=None):
             self.assertEqual(bg.card_act(self.s, 'https://www.linkedin.com/uas/login', 'Sign in to LinkedIn so I can attach the video to the draft'), '')
 
+    def test_a_bare_sign_in_on_a_connected_services_site_is_read_with_what_he_asked(self):
+        """Walk 25, 2026-11-26: "Post this video on LinkedIn", LinkedIn connected - the agent opened linkedin.com and handed him "Sign in to
+        LinkedIn". The step says nothing of what it is for, so the guard read nothing in it and it stood. What he asked of this task's agent
+        goes to the same reader: asked to post, the sign-in is for the post and the card's road is the answer; asked to read, it is his step."""
+        from taskuary import outbound, signin
+        seen = []
+        def brain(system, user, **kw): seen.append(user); return json.dumps({'writes': 'Post this video' in user})
+        on = [mock.patch.object(browserview, 'state', return_value={'open': True, 'url': 'https://www.linkedin.com/uas/login'}), mock.patch.object(bg, 'page_error', return_value=''),
+              mock.patch.object(outbound, 'connect_fix', return_value=None), mock.patch.object(signin, 'shows_signin', return_value=True),
+              mock.patch.object(signin, 'saved', return_value=None), mock.patch('taskuary.llm.build_llm', return_value=brain)]
+        for m in on: m.start(); self.addCleanup(m.stop)
+        self.s.add_comment(self.tid, 'owner', general.USER_TYPE, 'Read my last three LinkedIn posts and say which did best')
+        self.assertEqual(bg.card_act(self.s, 'https://www.linkedin.com/uas/login', 'Sign in to LinkedIn', said=bg.asked(self.s, self.tid)), '',
+                         'asked to read, the sign-in is his step')
+        self.assertIn('Read my last three', seen[0])
+        self.s.add_comment(self.tid, 'owner', general.USER_TYPE, 'Post this video on LinkedIn')
+        got = browserview.hand_over(self.s, self.tid, 'Sign in to LinkedIn', 'linkedin.com', 'run1', watch=None)
+        self.assertFalse(got['ok'], got); self.assertEqual(self.open(), [], 'nothing was handed to him')
+        self.assertIn('LinkedIn is connected', got['why']); self.assertIn('its card', got['why'])
+        self.assertIn('Sign in to LinkedIn', seen[-1]); self.assertIn('Post this video on LinkedIn', seen[-1])
+
+    def test_the_press_a_gate_refused_is_never_handed_to_him_as_his_step(self):
+        """Walk 25, 2026-11-26: his X post handed over, the agent's typing did not land and its Post was refused over the empty box - "the
+        post's words are not on x.com". It then handed him "Click the Post button on x.com to publish your post (the text and image are
+        already filled in)", and that stood as a page step. The press the gate answered with a fact is answered with the same fact at this
+        door, while the fact stands; another step on that page is his as ever, and once the words are in the refusal is gone."""
+        post = {'action': 'run_tool', 'type': 'x_post', 'network': 'X', 'text': 'Northwind now closes its books in four days.'}
+        card = self.s.add_review({'TaskId': self.tid, 'Kind': 'action', 'Status': 'pending', 'DraftText': json.dumps(post), 'Reason': 'the agent proposes to post on X'})
+        self.s.decide_review(card, 'approved', json.dumps({**post, 'result': {'browser': True}}), 'owner')        # ...he pressed Post via the browser
+        pg = {'url': 'https://x.example/compose/post', 'open': True, 'name': 'X', 'fields': [],
+              'elements': '- textbox "What is happening?!" [ref=e9]\n- button "Post" [ref=e11]'}
+        speaks = [{'hold': True, 'what': 'Publish your post on X', 'why': 'it speaks for you', 'kind': 'speaks'}]
+        asked = []
+        def brain(system, user, **kw): asked.append(user); return json.dumps({'same': 'Click the Post button' in user})
+        on = [mock.patch.object(browserview, 'state', return_value={'open': True, 'url': pg['url']}), mock.patch.object(bg, 'page_error', return_value=''),
+              mock.patch.object(bg, 'page', side_effect=lambda sid: pg), mock.patch.object(bg, 'judge', side_effect=lambda store, todo, *a, **k: speaks[:len(todo)]),
+              mock.patch('taskuary.llm.build_llm', return_value=brain)]
+        for m in on: m.start(); self.addCleanup(m.stop)
+        self.addCleanup(bg.REFUSED.clear)
+        robot = 'tick the "I am not a robot" box'
+        self.assertTrue(browserview.hand_over(self.s, self.tid, robot, '', 'run1', watch=None)['ok'], 'nothing was refused yet: any step is his')
+        ws.answer(self.s, self.tid, self.open()[0], '', press=True); self.assertEqual(asked, [])
+        no = bg.check(self.s, self.tid, 'run1', "agent-browser click '@e11'")['hookSpecificOutput']['permissionDecisionReason']
+        self.assertIn("the page's box is empty", no)
+        got = browserview.hand_over(self.s, self.tid, 'Click the Post button on x.example to publish your post (the text and image are already filled in)', '', 'run1', watch=None)
+        self.assertFalse(got['ok'], got); self.assertEqual(self.open(), [], 'nothing was handed to him')
+        self.assertIn("the page's box is empty", got['why']); self.assertIn('Type the post into its box first', got['why'])
+        self.assertIn('Publish your post on X', asked[0]); self.assertIn('Click the Post button', asked[0])
+        self.assertTrue(browserview.hand_over(self.s, self.tid, robot, '', 'run1', watch=None)['ok'], 'another step on that page is his')
+        ws.answer(self.s, self.tid, self.open()[0], '', press=True)
+        pg['fields'] = [{'k': 'text', 't': 'textarea', 'f': 0, 'v': post['text']}]                               # ...the words are in
+        n = len(asked)
+        self.assertEqual(bg.refused_press(self.s, self.tid, 'run1', 'Click the Post button on x.example'), '')
+        self.assertEqual((len(asked), bg.REFUSED), (n, {}), 'the fact no longer stands: nothing is asked, nothing kept')
+
 
 if __name__ == '__main__': unittest.main()
 

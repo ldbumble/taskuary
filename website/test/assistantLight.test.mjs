@@ -93,7 +93,7 @@ test("the person and note typed with Hand it to a person ride the light into its
   assert.equal(lightOf({ verb: "forward", key: "msg:5", tid: 31, hand: { note: "x" } }).hand, undefined, "no person, nothing to fill");
   assert.match(src("CanvasItem.jsx"), /saidHand=\{lit\?\.verb === "forward" \? lit\.hand \|\| null : null\}/);
   assert.match(src("TaskPage.jsx"), /if \(saidHand\?\.to\) \{ setHandSaid\(\{ to: saidHand\.to, note: saidHand\.note \|\| "" \}\); setHandoff\(true\); \}/);
-  assert.equal((src("TaskPage.jsx").match(/<Handoff key=\{handSaid \? [^\n]+? taskId=\{selected\} said=\{handSaid\} /g) || []).length, 2, "both of its places");
+  assert.equal((src("TaskPage.jsx").match(/<Handoff key=\{handSaid \? [^\n]+? taskId=\{selected\} said=\{handSaid\} /g) || []).length, 1, "its one place, the drawer");
   const form = src("Handoff.jsx");
   assert.match(form, /useState\(said\?\.to \|\| ""\)/);
   assert.match(form, /useEffect\(\(\) => \{ if \(said\?\.to\) draft\(said\.to\); \}, \[\]\);/, "drafted when it opens");

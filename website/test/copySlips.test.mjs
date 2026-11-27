@@ -44,7 +44,7 @@ test("Esc closes the Past chats panel: it stood over the task with its x the onl
 
 test("a start that did not happen says why under the chat: the list's idle line, where no hold says its own", () => {
   const view = src("GeneralWorkspace.jsx");
-  assert.match(view, /\{!hold && !!idle && <Box data-tq-not-started=""/);
+  assert.match(view, /\{!hold && !!idle && !cardWaits\(merged\.items\) && <Box data-tq-not-started=""/);
   assert.match(view, /idle=\{conv\.list\?\.idle \|\| ""\}/);
 });
 

@@ -105,7 +105,7 @@ import { chatOf, taskStatus } from "./railStatus.js";
 import { StatusPill } from "./StatusMark.jsx";
 import { ASK_TAG, BROWSER_TAG } from "./newTask.js";
 import { completionFact, completionLine, waitingEmails, wentOut,
-  AGENT, agentPhase, focusStage, generalAnswered, stillWorking, hasCorrespondent, ownerControlsCompletion, pageState, pendingProposals, pendingReplyReview, reopenedDetail, replyPhase, replySource, sentElsewhere, sentReplyReview, sessionWord, taskPhase, isUnsentReply, unsentReplyReview,
+  AGENT, agentPhase, focusStage, generalAnswered, hasCorrespondent, ownerControlsCompletion, pageState, pendingProposals, pendingReplyReview, reopenedDetail, replyPhase, replySource, sentElsewhere, sentReplyReview, sessionWord, taskPhase, isUnsentReply, unsentReplyReview,
 } from "./taskLifecycle.js";
 import { askNote, closeoutOf, decidedAsk, heldGroups, splitHeld } from "./reviewProposal.js";
 import PassedCard, { isPassed, isReplaced } from "./PassedCard.jsx";
@@ -118,7 +118,7 @@ import { readingOf } from "./threadReading.js";
 import AiUsed from "./AiUsed.jsx";
 import CodeChanges from "./CodeChanges.jsx";
 import { ChatDetail } from "./DetailSlider.jsx";
-import { chatSource, replyDoorOpen } from "./chatStream.js";
+import { chatSource } from "./chatStream.js";
 import TuneOutlinedIcon from "@mui/icons-material/TuneOutlined";
 import DifferenceOutlinedIcon from "@mui/icons-material/DifferenceOutlined";
 import AgentChannels from "./AgentChannels.jsx";
@@ -2245,14 +2245,6 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
   // THESE handlers, unchanged: the row calls the latest closure, so a press costs what the old button cost. The Tasks tab
   // (canvas=false) keeps its bars.
   const inRow = !!canvas;
-  // ...and on a desk's canvas Hand it to a person opens as a compose card in the chat, not a drawer over the page (the owner, 2026-10-29)
-  const handInPane = inRow && twoUp;
-  useEffect(() => {
-    if (handoff !== true || !handInPane) return undefined;
-    if (!solo) openSection("agent");
-    const f = requestAnimationFrame(() => document.querySelector("[data-tq-handoff-card]")?.scrollIntoView({ block: "nearest", behavior: "smooth" }));
-    return () => cancelAnimationFrame(f);
-  }, [handoff, handInPane]);   // eslint-disable-line react-hooks/exhaustive-deps
   // AN AGENT WAITING ON YOU is answered in its own terminal - the owner talks to the coding CLI directly. Its question is never drawn
   // OVER the screen (the owner, 2026-10-19: "never get between a coder and their coding cli ... you have to click show details anyway
   // to move on"), and there is no "Answer it" on the row (owner-approved, 2026-10-20: "we don't need that button") - the pane is right
@@ -2584,7 +2576,7 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
   // ...AND ONCE THE OWNER WRITES AGAIN EACH PRESSED CARD STAYS IN ITS TURN (the owner, 2026-11-09: "leave the card in the turn with the pressed
   // button"): the held steps it approved, and every reply that went - drawn by the chat in the turn that set it up (GeneralWorkspace turnCards)
   const liveAsks = askCards.filter((g) => g.reviews.some((r) => r.Status === "pending")).length;
-  const asksBelow = !!(pendingReview || owesEmails || (handInPane && handoff) || calAsk?.invite);
+  const asksBelow = !!(pendingReview || owesEmails || calAsk?.invite);
   // ...AND SO DOES EACH CARD THAT STILL WAITS (the spine audit, 2026-11-09): a held step, a browser act, a drafted skill rode one block under
   // whichever turn was newest, and the last two stood again at the chat's foot with a second Approve. Each is drawn once, in the turn that
   // raised it (`rid`: the chat's payload names that turn). A to-do no agent has touched has no turns: its cards stay over its box (chatBody)
@@ -2626,18 +2618,6 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
   // in the chat. A to-do no agent has touched (no turns) keeps its card over its box: there it is the way in
   const chatReview = !inTurns ? pendingReview : null;        // ...in a chat with turns the reply is its turn's card (replyNode)
   const chatBody = (pendingReview = chatReview) => <>
-      {/* HAND IT TO A PERSON, IN THE CHAT (the owner, 2026-10-29: "you click the button and the matching UI opens in its pane"): on
-          the canvas the hand-off is a compose card here - who, the forward the AI drafts, and Send it - where the drawer stood;
-          "sending" keeps it mounted behind, so a send that fails brings back what was typed */}
-      {handInPane && handoff && <Box data-tq-handoff-card="" sx={{ ...FOCUS, mt: 1, mb: 0.5, display: handoff === true ? "block" : "none" }}>
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1 }}>
-          <ForwardToInboxIcon sx={{ fontSize: 17, color: "var(--tq-link, #55697a)" }} />
-          <Typography sx={{ color: INK, fontWeight: 600, fontSize: 13.5, flex: 1 }}>Hand this to a person</Typography>
-          <IconButton aria-label="Close handoff" size="small" onClick={() => setHandoff(false)}><CloseIcon sx={{ fontSize: 16 }} /></IconButton>
-        </Box>
-        <Handoff key={handSaid ? `${handSaid.to}|${handSaid.note}` : "h"} taskId={selected} said={handSaid} onLeave={() => { setHandoff("sending"); onLeave?.(); }}
-          onStay={(msg) => { setHandoff(true); onStay?.(msg); }} onSent={handedOff} />
-      </Box>}
       {((pendingReview || proposals.length || kept.length || replyMessage || owesEmails || ended || sentOutside.length) ? (
         <Box sx={{ mt: 0.5 }}>
           {/* THE INVITE, AND WHAT IT CLASHES WITH (calwrite.of_task), over the row's Accept / Decline / Propose a new time */}
@@ -2650,33 +2630,6 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
           {/* the bar comes FIRST, above the letter it acts on. What it no longer holds is
               that jump to another tab: the draft is right here, and a button whose whole job
               was sending you to another tab to do this card's own job is gone. */}
-          {replyMessage && (
-            <Box sx={{ display: "flex", alignItems: "center", gap: 0.8, flexWrap: "wrap" }}>
-              {/* ONE button, and it WRITES. "Write reply" opened an empty box and left the
-                  model behind a second press ("you should not have to hit draft with AI again
-                  to make it go" - the owner, 2026-09-22), and the twin beside it did the thing
-                  the first one was named for. The box is still editable, and Redraft below
-                  writes it again. */}
-              {!pendingReview && !inRow && !replyEmpty && replyDoorOpen(detail?.queue, null) && (
-                <Button size="small" variant={outside ? "outlined" : "contained"} disableElevation disabled={!!openingReply}
-                  sx={outside ? barBtn : primaryBtn} data-tq-reply-again={outside ? "" : undefined}
-                  startIcon={openingReply ? <CircularProgress size={12} /> : <ForwardToInboxIcon sx={{ fontSize: 16 }} />}
-                  title="Drafts the reply here, from this task's own context. Nothing is sent until you approve it."
-                  onClick={() => openReply(true)}>{openingReply ? "Drafting…" : replyPrimary}</Button>
-              )}
-              <Box sx={{ flex: 1, minWidth: 12 }} />
-              <Typography variant="caption" sx={{ color: FAINT, textAlign: "right", maxWidth: 320 }}>
-                {/* no More button: with these on the surface there is nothing left to hide */}
-                {/* ...and "its agent is still working" only while a turn IS at work (the audit, 2026-11-13: a chat agent keeps its session after
-                    it answers, and under two emails waiting for Send the line said it was working while the chip said "agent waiting on you") */}
-                {pendingReview
-                  ? (inRow ? "" : "Nothing is sent until you approve it.")
-                  : sentReview
-                  ? `${sentCarded ? "" : `Sent${sentReview.DecidedAt ? ` · ${fmtDateTime(sentReview.DecidedAt)}` : ""}. `}${String(t?.Status || "") === "done" ? "The task closed with it." : stillWorking(liveSession, answered) ? "The task stays open while its agent is still working." : "The task stays open until you mark it done."}`
-                  : inRow ? "" /* the chip already says "not drafted" */ : "A reply is optional. Starting or stopping an agent does not send one."}
-              </Typography>
-            </Box>
-          )}
           {/* THE DECISION ITSELF, on the task that owns it - the same component the review
               queue mounts, so two surfaces cannot say different things about one draft. */}
           {pendingReview ? (<>
@@ -2803,7 +2756,7 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
   // that holds it on screen (`data-tq-waits`, the agent room's :has)
   // ...the asks drawn in their turns are not this block's: with nothing else to hold it is not drawn (a "Next steps" over nothing)
   // ...nor the emails drawn in their turns (Letter)
-  const waits = !!(chatReview || proposals.length - (inTurns ? asks.length : 0) || (owesEmails && !inTurns) || handoff);
+  const waits = !!(chatReview || proposals.length - (inTurns ? asks.length : 0) || (owesEmails && !inTurns));
   // ...ONLY WHAT CAN STILL BE DONE (the owner, 2026-11-05: "it's a chat nothing else"): a draft waiting on Send, an invite to answer, emails owed -
   // never a closed task's "Mark done 11m ago", a reply sent outside or a draft closed without sending; the chat says those
   const chatCards = sentBox ? <SentReview {...sentBox} /> : !["done", "dropped"].includes(t?.Status) && (waits || (!inTurns && kept.length)
@@ -3449,7 +3402,7 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
       {/* ── hand off: a right-hand drawer, so it cannot hide above a tall terminal ── */}
       {/* ...and "sending" is the hand-off put down at the press: the drawer goes with the task, the form stays mounted behind
           it so a send that fails brings back what was typed (2026-10-01) */}
-      <Drawer anchor="right" open={handoff === true && !!t && !handInPane} onClose={() => setHandoff(false)} ModalProps={{ keepMounted: !!handoff && !handInPane }}
+      <Drawer anchor="right" open={handoff === true && !!t} onClose={() => setHandoff(false)} ModalProps={{ keepMounted: !!handoff }}
         PaperProps={{ sx: { width: { xs: "100%", sm: 460 }, p: 2, bgcolor: PANEL } }}>
         <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1.5 }}>
           <ForwardToInboxIcon sx={{ fontSize: 18, color: "var(--tq-link, #55697a)" }} />
@@ -3459,7 +3412,7 @@ export default function TaskPage({ taskId: asked, made = null, listRow = null, o
         <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 1.5 }}>
           {detail?.ref} · {t?.Title}
         </Typography>
-        {handoff && !handInPane && <Handoff key={handSaid ? `${handSaid.to}|${handSaid.note}` : "h"} taskId={selected} said={handSaid} onLeave={() => { setHandoff("sending"); onLeave?.(); }}
+        {handoff && <Handoff key={handSaid ? `${handSaid.to}|${handSaid.note}` : "h"} taskId={selected} said={handSaid} onLeave={() => { setHandoff("sending"); onLeave?.(); }}
           onStay={(msg) => { setHandoff(true); onStay?.(msg); }} onSent={handedOff} />}
       </Drawer>
 

@@ -18,7 +18,7 @@ import { AttachChip, fileChips, fileState, usePromptImages, useSendWhenUp } from
 import { holdUnsent } from "./unsent.js";
 import { baseName } from "./agentSteps.js";
 import { AgentSteps, PermitCtx } from "./AgentStepRows.jsx";
-import { chatSource, checkBackDue, waitingShown, eventsOf, turnSteps, hasParts, isPastCard, standing, heldAtEnd, AT_END, anchorOf, anchorShift, endAt, openAt, OPEN_HOLD, shrinkHeld, SHRINK_HOLD, turnParts, waitsLast, noCard, workCount, folds, ranUnder, foldLine, paintable, withMine, waitingChips, workingLine, waitingOn, askTurn, onYouTurn, askedFirst, runsOf, patchSteps, askOn, asksOff, viewHomes, viewAt } from "./chatStream.js";
+import { chatSource, checkBackDue, waitingShown, eventsOf, turnSteps, hasParts, isPastCard, standing, heldAtEnd, AT_END, anchorOf, anchorShift, endAt, openAt, OPEN_HOLD, shrinkHeld, SHRINK_HOLD, turnParts, waitsLast, cardWaits, noCard, workCount, folds, ranUnder, foldLine, paintable, withMine, waitingChips, workingLine, waitingOn, askTurn, onYouTurn, askedFirst, runsOf, patchSteps, askOn, asksOff, viewHomes, viewAt } from "./chatStream.js";
 import { stepLabel } from "./agentSteps.js";
 export { checkBackDue };
 import { detailFor, ownDetail, useOwnDetail } from "./chatDetail.js";
@@ -570,9 +570,9 @@ function Conversation({ items: served, nodes = [], posts = [], reviews = [], nex
       <div className="tq-aui-press-line">{pressLine(x.text, x.at ? when(String(x.at)) : "")}</div></div>;
   });
   return <>{rows}
-    {/* ...EVERY CARD IS A ROW THE LOG PLACED (chatlog.advance - one road): under everything only the page's own block, a hand-off or a
-        write-up he opened, never a card of the line */}
-    {!!next && <Box data-tq-next-steps="" className="tq-aui-summary" sx={{ mt: 1, mx: { xs: 1, sm: 2 } }}>{next}</Box>}
+    {/* ...EVERY CARD IS A ROW THE LOG PLACED (chatlog.advance - one road): under everything only the page's own block, never a card of the
+        line - and never under a card that waits (cardWaits, locked rule 10) */}
+    {!!next && !cardWaits(items) && <Box data-tq-next-steps="" className="tq-aui-summary" sx={{ mt: 1, mx: { xs: 1, sm: 2 } }}>{next}</Box>}
     {!landIn && landing && <div hidden>{landing}</div>}</>;
 }
 /* WHAT WAITS FOR THE AGENT, BY THE BOX: accepted, not yet handed over - never in the conversation until it is (the heard rule).
@@ -775,9 +775,10 @@ function AssistantThread({ task, onAsked, onStop, selectionRef, attachmentsRef, 
               {acts.map((r) => <ReviewDecision key={r.ReviewId} review={r} onChanged={onDraftDecided} />)}</Box>}
             {/* AN UNTRUSTED SENDER'S TASK: one plain line why no agent works on it, and its one action (the list's `hold`, origin.hold) */}
             {hold && <HeldStart taskId={task.TaskId} hold={hold} onChanged={onTrusted} onRow={trustOnRow} />}
-            {/* A START THAT DID NOT HAPPEN, AND WHY (the list's `idle`): one plain line under the chat until a turn begins - the box is the way on */}
-            {!hold && !!idle && <Box data-tq-not-started="" className="tq-aui-summary" sx={{ mt: 1, mx: { xs: 1, sm: 2 }, fontSize: 13.5, color: "var(--tq-text, #292824)" }}>{idle}</Box>}
-            {queued && <div className="tq-aui-message tq-aui-agent" data-tq-queued-turn=""><div className="tq-aui-role">{AGENT_TURN}</div><div className="tq-aui-agent-body">{queued}</div></div>}
+            {/* A START THAT DID NOT HAPPEN, AND WHY (the list's `idle`): one plain line under the chat until a turn begins - the box is the way on.
+                ...never under a card that waits (locked rule 10): the card is the way on then, and the queued start goes once it is pressed */}
+            {!hold && !!idle && !cardWaits(merged.items) && <Box data-tq-not-started="" className="tq-aui-summary" sx={{ mt: 1, mx: { xs: 1, sm: 2 }, fontSize: 13.5, color: "var(--tq-text, #292824)" }}>{idle}</Box>}
+            {queued && !cardWaits(merged.items) && <div className="tq-aui-message tq-aui-agent" data-tq-queued-turn=""><div className="tq-aui-role">{AGENT_TURN}</div><div className="tq-aui-agent-body">{queued}</div></div>}
             {/* ...said once: where the list holds his close as a press (`closes`), that line is the close (one press, one line) */}
             {closedLine && !merged.items.some((x) => x.closes) && <div className="tq-aui-closed" data-tq-chat-closed="">{closedLine}</div>}
           </div>

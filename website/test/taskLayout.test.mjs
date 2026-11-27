@@ -260,10 +260,8 @@ test("the chat knows the owner answered outside Taskuary: its Draft reply is not
   const sentHere = { MessageId: "review:9", ReviewSent: true, Direction: "out", SentAt: "2026-10-29 12:20:00" };
   assert.equal(answeredOutside({ messages: [...ins, own, sentHere], outside: [own] }), null, "a reply sent from here since is not outside");
   assert.equal(answeredOutside({ messages: ins, outside: [] }), null);
-  // ...and its Draft reply is not the lit move there: the empty draft box with its filled Draft with AI is not drawn, the reply button is outlined
-  const src = taskSource();
-  assert.match(src, /&& !emailsWaiting && !outside/);
-  assert.match(src, /variant=\{outside \? "outlined" : "contained"\}/);
+  // ...and its Draft reply is not the lit move there: the empty draft box with its filled Draft with AI is not drawn
+  assert.match(taskSource(), /&& !emailsWaiting && !outside/);
 });
 
 // EVERY TASK IS CAME FROM AND ITS ONE CHAT (the owner, 2026-11-06, on a to-do still showing Close out: "i thought we removed this from everywhere?

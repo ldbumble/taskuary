@@ -18,16 +18,20 @@ test("what the foot's boxes said over a held act and a skill is said over its on
 
 
 // ONE ACTION BOX AT A TIME, A HARD RULE (the owner's live task, 2026-11-19): a held browser step stood at the front reading "1 of 2 · next: the
-// reply to Gail Moreno", and the reply's box was drawn under it - the page's reply block (`next`) and the letters were drawn with no look at
-// the line. What the line holds behind its front stands nowhere; while the front is another card, no door to write a reply stands beside it.
-test("a reply the line holds behind its front draws no box, and no reply door stands beside another card's front", async () => {
-  const { replyDoorOpen } = await import("../src/chatStream.js");
-  const q = { live: [744], held: [745] };
-  assert.equal(replyDoorOpen(q, null), false, "a door to write a reply beside the browser step's front");
-  assert.equal(replyDoorOpen({ live: [745], held: [] }, 745), true); assert.equal(replyDoorOpen({ live: [], held: [] }, null), true);
+// reply to Gail Moreno", and the reply's box was drawn under it. What the line holds behind its front stands nowhere - and NOTHING OF TASKUARY'S
+// STANDS UNDER A CARD THAT WAITS (locked rule 10, 2026-11-27): the page's block, a start's why and the queued line wait for the card's press.
+test("a reply the line holds behind its front draws no box, and nothing of the page's stands under a card that waits", async () => {
+  const { cardWaits } = await import("../src/chatStream.js");
+  const turn = (cards) => ({ kind: "turn", id: "t1", cards });
+  assert.equal(cardWaits([turn([{ review: 744, status: "pending" }])]), true, "a card in its turn that waits");
+  assert.equal(cardWaits([{ kind: "card", id: "c1", review: 744, status: "pending" }]), true, "a card row of its own");
+  assert.equal(cardWaits([turn([{ review: 744, status: "approved" }]), { kind: "line", id: "l1" }]), false, "a pressed card holds nothing back");
   const ws = read("GeneralWorkspace.jsx");
+  assert.match(ws, /\{!!next && !cardWaits\(items\) && <Box data-tq-next-steps=""/);
+  assert.match(ws, /\{!hold && !!idle && !cardWaits\(merged\.items\) && /);
+  assert.match(ws, /\{queued && !cardWaits\(merged\.items\) && /);
   // ...a card the line holds has no row in the log (chatlog.advance) and the page places none of its own: nothing to draw
   assert.doesNotMatch(ws, /looseCards|nextLoose|lettersHere/);
   assert.match(read("TaskPage.jsx"), /const chatReview = !inTurns \? pendingReview : null;/);
-  assert.match(read("TaskPage.jsx"), /!pendingReview && !inRow && !replyEmpty && replyDoorOpen\(detail\?\.queue, null\) && \(/);
+  assert.doesNotMatch(read("TaskPage.jsx"), /data-tq-handoff-card|A reply is optional|data-tq-reply-again/, "no hand-off form, Draft reply or optional-reply line in the chat");
 });

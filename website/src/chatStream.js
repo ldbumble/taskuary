@@ -243,6 +243,9 @@ export const waitsLast = (items) => {
   return items.flatMap((x, i) => (x.kind === "card" && to.has(x) ? []
     : x.kind === "turn" ? [{ ...x, cards: [...(x.cards || []).filter((c) => !to.has(c)), ...(moved.get(i) || [])].sort(seq) }] : [x, ...(moved.get(i) || []).sort(seq)]));
 };
+// ...AND NOTHING OF TASKUARY'S IS DRAWN AFTER A CARD THAT WAITS (locked rule 10; the owner, 2026-11-27): while one does, the page's own pieces
+// under the chat - its trailing block, a start's why, the queued line - are not drawn; only his own line may come after the card
+export const cardWaits = (items) => (items || []).some((x) => cardsIn(x).some((c) => c.status === "pending"));
 // ...and whether the page holds no card of a review he said no to (GeneralWorkspace `one`): then, and only then, the plain "you said no" note
 export const noCard = (review, nodes, posts) => !(nodes || []).some((n) => n.rid === review) && !(posts || []).some((p) => p.ReviewId === review);
 export const hasParts = (parts) => (parts || []).some((p) => p.type !== "said" || p.text);
@@ -437,10 +440,6 @@ export const thinkingLine = (text) => {
 // which the list names (conversation.items `asking.turn`) - "" only while that turn is not in what is drawn (a read behind, a chat with no
 // turn yet), when it stands under everything as it did
 export const askTurn = (asking, items) => (asking?.turn && (items || []).some((x) => x.kind === "turn" && x.id === asking.turn) ? asking.turn : "");
-// ONE ACTION BOX AT A TIME, A HARD RULE (cardqueue.py; the owner's live task, 2026-11-19: a held browser step read "1 of 2 · next: the reply
-// to Gail" and the reply's box stood under it): a card the line holds behind its front is drawn nowhere - the reply's block included, by its
-// review (`rid`) - and while the front is another card, no door to write a reply stands beside it either (`replyDoorOpen`)
-export const replyDoorOpen = (queue, rid) => !(queue?.live || []).length || (queue.live || []).includes(rid);
 // ...and A MISSING FACT IS ONE QUESTION (the owner's rule; recorded on the real CLI, 2026-11-15): while the agent waits on his answer, the reply
 // it could not write yet - no words, no email beside it - is not drawn under the question as an empty box over a greyed Send; his answer's
 // turn writes it (the server's list leaves it out of the turn the same way, conversation.items)

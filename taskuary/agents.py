@@ -1274,7 +1274,7 @@ class ACPSteps:
 
     def __init__(self, trace, name: str, held: dict = None):
         self.trace, self.name, self.held = trace, name, held if held is not None else {}
-        self.calls, self.said, self.thought, self.live_at, self.mid = {}, [], [], -1e9, None
+        self.calls, self.said, self.thought, self.live_at, self.mid, self.asks = {}, [], [], -1e9, None, {}
 
     # ...AND WHAT IT IS THINKING IS SAID AS IT GROWS (the owner, 2026-11-16: "Thinking..." for three minutes with nothing else): about once a
     # second the newest words of the thought go out as a `live` snapshot - the working line's (chatlog._now); a thought is never a row
@@ -1343,9 +1343,11 @@ class ACPSteps:
 
     def asked(self, tc: dict):
         """A permission request's copy of the call (a ToolCallUpdate, the spec's): it fills what the call's own updates left out - Codex asks
-        for a read it announced with no input - never what they said (it asks with its own kind, the command wrapped in powershell)."""
-        if not isinstance(tc, dict) or not tc.get('toolCallId'): return
-        c = self.calls.get(str(tc['toolCallId'])) or {}
+        for a read it announced with no input - never what they said (it asks with its own kind, the command wrapped in powershell). An ask
+        for a call not announced yet waits for the call's own first update: alone it is no step (Codex's MCP approval read "MCP tool call
+        approval", the call itself running under its own id)."""
+        if not isinstance(tc, dict) or not (iid := str(tc.get('toolCallId') or '')): return
+        if (c := self.calls.get(iid)) is None: self.asks[iid] = tc; return
         self._merge({k: v for k, v in tc.items() if k in ('toolCallId', 'locations') or (k == 'rawInput' and not c.get('raw')) or not c.get(k)})
 
     def __call__(self, u: dict):
@@ -1360,6 +1362,7 @@ class ACPSteps:
             self.thought.append(acp_mod._text_of(u.get('content'))); self._live('thinking', self.thought); return
         if kind in ('tool_call', 'tool_call_update'):
             self._words()
+            if (a := self.asks.pop(str(u.get('toolCallId') or ''), None)) and str(u.get('toolCallId')) not in self.calls: self._merge(a)
             c = self._merge(u)
             if u.get('status') in ('completed', 'failed'): self._finish(c)
             return

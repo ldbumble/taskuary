@@ -287,6 +287,25 @@ test("a turn that ends on a card is its steps fold, its words inside it in order
   assert.equal(folding([{ type: "work", id: "w", steps: [] }]), false, "a fold of nothing he could see is no fold");
 });
 
+// IT IS EITHER SAID OR SHOWN (the owner, 2026-11-27: "it's either or to visualize or explain"): Codex ends a turn on its tools, its last
+// message empty, so what is filed as its answer is its end_turn `did` - the summary for the record. Under a view that summary said again what the
+// view showed. Shown, the turn's answer is the view; said in its own words, they stand beside it; with nothing shown the summary still answers
+test("a turn that showed a view draws no summary words under it; its own words and a turn with no view draw as before", async () => {
+  const { answerOf, turnParts } = await import("../src/chatStream.js");
+  const { MARK } = await import("../src/viewSpec.js");
+  const view = { title: "Run review", root: "t", elements: { t: { type: "table", props: { columns: ["Run", "Finding"], rows: [["Nightly", "Missed a file"]] } } } };
+  const shown = turnParts([{ type: "tool_call", name: "mcp__taskuary__show", detail: { tool_call_id: "v1", args: view } },
+    { type: "tool_result", name: "v1", detail: { tool_call_id: "v1", result: `Shown in the owner's chat. ${MARK}${JSON.stringify(view)}` } }]);
+  const plain = turnParts([{ type: "tool_call", name: "Read", detail: { tool_call_id: "r1", args: { file_path: "/work/runs.csv" } } }]);
+  assert.ok(shown.some((p) => p.type === "view"));
+  const did = "Looked into both runs. Nightly: missed a file.", sum = { about: "Erin asked why the runs failed.", did };
+  assert.equal(answerOf({ text: did, summary: sum }, shown), "", "the summary filed as its answer is not drawn under the view");
+  assert.equal(answerOf({ text: "", summary: sum }, shown), "", "nor drawn from the summary itself");
+  assert.equal(answerOf({ text: "Rerun it tonight.", summary: sum }, shown), "Rerun it tonight.", "its own words stand beside the view");
+  assert.equal(answerOf({ text: did, summary: sum }, plain), did, "no view: the summary answers, as before");
+  assert.equal(answerOf({ text: "", summary: sum }, plain), `${sum.about}\n\n${did}`);
+});
+
 // ...AND WHAT HE NEEDS TO PRESS IS ON THE CARD: the agent's why for it, wherever its kind keeps it
 test("a card's why is read off its review: a letter's DraftWhy, an act's proposal, a post's own", async () => {
   const { cardWhy } = await import("../src/reviewProposal.js");

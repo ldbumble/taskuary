@@ -17,7 +17,7 @@ import { AttachChip, fileChips, fileState, usePromptImages, useSendWhenUp } from
 import { holdUnsent } from "./unsent.js";
 import { baseName } from "./agentSteps.js";
 import { AgentSteps } from "./AgentStepRows.jsx";
-import { chatSource, checkBackDue, waitingShown, eventsOf, turnSteps, hasParts, isPastCard, standing, heldAtEnd, AT_END, anchorOf, anchorShift, endAt, openAt, OPEN_HOLD, shrinkHeld, SHRINK_HOLD, turnParts, waitsLast, cardWaits, noCard, workCount, folds, ranUnder, foldLine, paintable, withMine, waitingChips, workingLine, waitingOn, askTurn, onYouTurn, askedFirst, runsOf, onCard, withAnswer, folding, patchSteps, viewHomes, viewAt } from "./chatStream.js";
+import { chatSource, checkBackDue, waitingShown, eventsOf, turnSteps, hasParts, isPastCard, standing, heldAtEnd, AT_END, anchorOf, anchorShift, endAt, openAt, OPEN_HOLD, shrinkHeld, SHRINK_HOLD, turnParts, waitsLast, cardWaits, noCard, workCount, folds, ranUnder, foldLine, paintable, withMine, waitingChips, workingLine, waitingOn, askTurn, onYouTurn, askedFirst, runsOf, onCard, withAnswer, answerOf, folding, patchSteps, viewHomes, viewAt } from "./chatStream.js";
 import { stepLabel } from "./agentSteps.js";
 export { checkBackDue };
 import { detailFor, ownDetail, useOwnDetail } from "./chatDetail.js";
@@ -391,7 +391,7 @@ const ConvTurn = ({ t, more, ran = 0, cards, name, ask = null, asked = null, onA
   const live = t.state === "working" || t.state === "starting";
   const parts = useMemo(() => turnParts(eventsOf(turnSteps(t), live), { live }), [t.steps, t.fail, live]);
   const key = t.answer || t.id, at = useTurnOutputs(key), shown = React.useContext(ShownCtx)[key];
-  const sum = t.summary, words = t.text || (sum ? [sum.about, sum.did].map((x) => String(x || "").trim()).filter(Boolean).join("\n\n") : "");
+  const sum = t.summary, words = answerOf(t, parts), answer = words && t.text && t.tail != null ? t.tail : words;
   const made = at ? turnFiles({ listed: at.listed, id: key, words, did: sum?.did, tid: at.tid, skip }) : [];
   const names = new Set(made.map((f) => f.name));
   const rest = shownOnce(at ? outputRefs(words, at.tid, at.listed).files : [], shown).rest.filter((p) => !names.has(p.name) && !skip.has(p.name));
@@ -408,12 +408,12 @@ const ConvTurn = ({ t, more, ran = 0, cards, name, ask = null, asked = null, onA
   // ...`opening`: its agent's process really is starting (conversation.items) - said on any turn then, and only then
   // ...naming what no row in sight says: its rows stand open at a level that lists them, inside the newest fold he opened, and on the dock's
   // trail (no WorkCtx) always. What it is writing is its own row, streamed into it - never said again on this line
-  const card = onCard(t, !!ask), laid = withAnswer(parts, t.text && t.tail != null ? t.tail : words, card);
+  const card = onCard(t, !!ask), laid = withAnswer(parts, answer, card);
   const lastFold = runsOf(laid, card).findLast((r) => r.fold), level = levelOf(t.level, React.useContext(LevelCtx));
   const folded = useFoldOpen(lastFold ? `${foldKey(t.id)}:${lastFold.id}` : ""), work = React.useContext(WorkCtx), open = folded || !work || level !== "summary";
   const doing = live ? workingLine(parts, stepLabel, { starting: t.state === "starting" || !!t.opening, later: later && !t.opening, ask: React.useContext(WaitOnCtx), thinking: t.thinking || "", open }) : "";
   // ...and of its filed answer only what its streamed words did not already say (chatlog.read `tail`): nothing said twice, nothing moved
-  const said = card ? "" : t.text && t.tail != null ? t.tail : words;
+  const said = card ? "" : answer;
   if (quiet) return null;
   return <div className={`tq-aui-message tq-aui-agent${words && !live ? " tq-copy-host" : ""}${more ? " tq-aui-agent-more" : ""}`} data-tq-item={t.id} data-tq-chat-line={key} data-tq-turn={t.state}>
     {!!words && !live && <CopyCorner text={words} label="Copy this answer" />}

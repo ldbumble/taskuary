@@ -1035,6 +1035,13 @@ class APostIsAKindOfTheOneReviewTool(unittest.TestCase):
         self.assertFalse({'propose_post', 'propose_email', 'propose_reply'} & set(listed))
         self.assertEqual(set(listed['propose']['inputSchema']['properties']['kind']['enum']), {'reply', 'email', 'post', 'skill', 'act'})
         for k in ('a reply', 'an email', 'a post', 'GitHub'): self.assertIn(k, agenttools.SHORT['propose'])
+        # ...a post's networks are its own field on every road, the short listing too (the owner, 2026-11-27): one call, one card, a tab each
+        from taskuary import apiagent
+        self.assertIn('networks', listed['propose']['inputSchema']['properties']); self.assertNotIn('network', listed['propose']['inputSchema']['properties'])
+        self.assertIn('One card', agenttools.SHORT['propose']); self.assertIn('`networks` (a tab each)', agenttools.SHORT['propose']); self.assertIn('`networks`', listed['propose']['description']); self.assertIn('a tab per network', agenttools.instructions('propose'))
+        lean = agenttools.lean(agenttools.TOOLS['propose'][2])
+        self.assertEqual(lean['properties']['networks']['items']['properties']['network']['enum'], list(agenttools.NETWORKS))
+        self.assertIn('networks', apiagent.portable(lean)['properties'])
 
     def test_every_kind_is_one_card_waiting_for_his_press_and_nothing_goes_before_it(self):
         ran, SKILL = [], '# Renewals\nwhen: a renewal comes up\nCompare the uplift with last year.'
@@ -1213,6 +1220,50 @@ class APostIsAKindOfTheOneReviewTool(unittest.TestCase):
         self.assertEqual([(t['rid'], t['name']) for t in tabs], [(r['ReviewId'], n) for r, n in zip(rvs, ('X', 'LinkedIn', 'Reddit'))], 'a tab each, never the list card')
         self.assertEqual(cardqueue.state(self.s, self.tid)['live'], [r['ReviewId'] for r in rvs]); self.assertEqual(cardqueue.held(self.s, self.tid), set())
         self.assertIn('one card with a tab each', said)
+
+    def test_a_post_to_three_networks_is_one_call_one_card_a_tab_each_each_pressed_and_told_alone(self):
+        """The owner, 2026-11-27 ("if it's one thing 3 times on different systems they should be in one card where you can switch between
+        them"): a routine's post for LinkedIn, X and Reddit stood as three cards, as `network` took one. A post goes to its `networks` - one
+        call, one card, a tab per network with its own words, each tab's press posting that network alone, and told to its agent alone."""
+        from taskuary import cardqueue, verdicts
+        li = self.s.get_connector_by_type('linkedin')
+        self.s.save_connector({'ConnectorId': li['ConnectorId'], 'Active': 1, 'Secret': 'tok'}, 'test')
+        ran = []
+        with mock.patch.dict(REGISTRY, {t: (lambda cfg, t=t: ran.append((t, cfg['text'])) or ('Posted', '')) for t in ('x_post', 'linkedin_post', 'reddit_post')}):
+            said, err = tool(self.tid, 'propose', kind='post', text='We compared three tools.', media='tools-compared.png', networks=[
+                'linkedin', {'network': 'x', 'text': 'Three tools, compared.'}, {'network': 'reddit', 'subreddit': 'smallbusiness', 'title': 'Three tools'}])
+            self.assertFalse(err, said); self.assertEqual(ran, [])
+            rvs = self.cards()
+            self.assertEqual(len({r['Batch'] for r in rvs}), 1, 'one call, one card'); self.assertIsNotNone(rvs[0]['Batch'])
+            ps = [json.loads(r['DraftText']) for r in rvs]
+            self.assertEqual([(p['type'], p['text'], p['image']) for p in ps], [('linkedin_post', 'We compared three tools.', 'tools-compared.png'),
+                             ('x_post', 'Three tools, compared.', 'tools-compared.png'), ('reddit_post', 'We compared three tools.', 'tools-compared.png')])
+            self.assertEqual(ps[2]['subreddit'], 'smallbusiness')
+            [tabs] = cardqueue.sets(self.s, self.tid).values()
+            self.assertEqual([t['name'] for t in tabs], ['LinkedIn', 'X', 'Reddit'])
+            self.assertIn('one card with a tab each, 3 of them', said)
+            out = verdicts.decide(self.s, rvs[0], 'approve', 'We compared three tools - his words.')
+        self.assertTrue(out['ok'], out); self.assertEqual(ran, [('linkedin_post', 'We compared three tools - his words.')], 'that tab alone')
+        self.assertEqual([self.s.get_review(r['ReviewId'])['Status'] for r in rvs[1:]], ['pending', 'pending'])
+        self.s.decide_review(rvs[1]['ReviewId'], 'rejected', None, 'owner'); cardqueue._SEEN.clear()
+        lines = [l for l in cardqueue.screen(self.s, self.tid).splitlines() if 'rv' in l]
+        got = {r['ReviewId']: next(l for l in lines if f"rv{r['ReviewId']}," in l) for r in rvs}
+        self.assertIn('Done', got[rvs[0]['ReviewId']]); self.assertIn('Turned down by him', got[rvs[1]['ReviewId']])
+        self.assertIn('Waiting for his press now', got[rvs[2]['ReviewId']])
+
+    def test_a_post_to_one_network_is_one_card_as_ever(self):
+        for a in ({'networks': ['linkedin']}, {'networks': 'linkedin'}, {'network': 'linkedin'}):
+            said, err = tool(self.tid, 'propose', kind='post', text='Three tools, compared.', **a)
+            self.assertFalse(err, said)
+            rv = self.cards()[-1]; self.assertIsNone(rv['Batch'], a); self.assertEqual(json.loads(rv['DraftText'])['type'], 'linkedin_post')
+
+    def test_a_network_over_its_limit_is_refused_by_its_name_with_the_fix_and_the_others_stand(self):
+        said, err = tool(self.tid, 'propose', kind='post', text='z' * 300, networks=['linkedin', 'x'])
+        self.assertFalse(err, said); got = json.loads(said)
+        [why] = got['refused']; self.assertTrue(why.startswith('x: '), why); self.assertIn('280', why); self.assertIn('shorten', why)
+        self.assertEqual([json.loads(r['DraftText'])['type'] for r in self.cards()], ['linkedin_post'])
+        said, err = tool(self.tid, 'propose', kind='post', text='Hi', networks=[{'text': 'no network'}])
+        self.assertTrue(err); self.assertIn('names no network', said)
 
     def test_a_post_that_replaces_its_network_never_takes_back_the_card_it_just_raised(self):
         """The owner's live task, 2026-11-25: his answer greyed the Reddit card; the agent raised it again with `replaces: "Reddit"`, and the

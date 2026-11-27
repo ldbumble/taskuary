@@ -186,10 +186,10 @@ def post_of(a: dict) -> dict:
             **({'link': link} if link and own else {})}
 # A POST ON A NETWORK NOT CONNECTED IS STILL ITS CARD, AND ITS PRESS HANDS IT TO THE AGENT FOR THE SITE (the owner, 2026-11-22: "card first,
 # sign-in at the press"): the agent went to LinkedIn's sign-in before writing a word, then gave the posts back as prose. The card stands with
-# the words and picture; Post via the browser saves them as he left them, once (decide_review takes one press), and hands them to its agent,
-# whose final Post on the site the browser gate holds for his yes
+# the words and picture; Post via the browser saves them as he left them, once (decide_review takes one press), and hands them to its agent.
+# ...AND THAT PRESS IS HIS YES FOR THE SITE'S OWN POST of exactly those words (the owner, 2026-11-27: "yes do all 10"; browsergate.last_press)
 BROWSER_POST = ('The owner pressed Post via the browser on your {network} post card, with these words{pic}: "{words}". {network} is not '
-                "connected, so it goes through your browser, where the site's final Post waits: Taskuary holds that press for his yes.")
+                "connected, so it goes through your browser; his press is his yes for the site's Post of exactly these words.")
 def via_browser(store, rid: int, text: str, actor: str = 'owner', fields: dict = None) -> dict:
     """Post via the browser: {ok, status, told} - the post saved as he left it (his words and the lines he edited, the press's own road:
     _edited) and handed to its agent; never twice, never a card that is not a post."""

@@ -895,17 +895,25 @@ def _verdict(act: dict, v: dict | None, pg: dict, said: str, mine: bool = False)
     return {'hold': hold, 'what': what, 'why': why, **({'kind': kind} if hold and kind else {})}
 
 
-# THE LAST PRESS OF A POST HE HANDED OVER IS HIS, BY FACT (the re-walk, 2026-11-25: "Post via the browser" pressed, the agent wrote the post on
-# the site and clicked its Post - and the judge, shown his press on the card as his own go-ahead, called the click "not big": the post went
-# up with no yes of his, under a card that says "its last Post waits for you"). Nothing here is the model's to read: a card he handed over is
-# still in flight (cardqueue.in_flight), the page's form holds that card's words, and the act is a click on a control that is no box of the
-# form and no link - the press that sends them. It waits for him, whatever the verdict said.
+# THE LAST PRESS OF A POST HE HANDED OVER IS DECIDED BY FACT, NEVER BY THE JUDGE (the re-walk, 2026-11-25: the judge, shown his press on the
+# card as his go-ahead, called the site's Post "not big", and a post went up over words nobody checked). Nothing here is the model's to read: a
+# card he handed over is still in flight (cardqueue.in_flight), the page's form holds that card's words, and the act is a click on a control
+# that is no box of the form and no link - the press that sends them.
+# ...AND HIS PRESS ON THE CARD IS HIS YES FOR IT (the owner, 2026-11-27: "yes do all 10" - a post on a network not connected cost three presses
+# for one post: the card, its sign-in, then a "Publish your post" card for the same words). On that card's own site, with a box of the form
+# holding exactly the words he pressed, the site's Post goes, and the card is done once it ran (after). Words other than his wait for his press.
+PUBLISHING = {}                 # session -> the card whose site Post the gate let through, settled once its command ran (after)
 def last_press(store, tid, act: dict, pg: dict) -> dict | None:
     flat = lambda s: ' '.join(str(s or '').split()).casefold()
     if not (p := _handed(store, tid, act, pg)): return None
-    words = flat(p.get('text') or p.get('body'))
-    if not any((v := flat(f.get('v'))) and (v in words or words[:60] in v) for f in _written(pg)): return None
-    return {'hold': True, 'what': f"Publish your post on {pg.get('name') or p.get('network') or 'the site'}", 'why': WHY['speaks'], 'kind': 'speaks'}
+    words, boxes = flat(p.get('text') or p.get('body')), [flat(f.get('v')) for f in _written(pg)] + [flat(pg.get('typed'))]
+    if not any(v and (v in words or words[:60] in v) for v in boxes): return None
+    what = f"Publish your post on {pg.get('name') or p.get('network') or 'the site'}"
+    from . import cardqueue, connectorcatalog as cat
+    site = cat.site_card(_site(pg.get('url')))
+    if words in boxes and site and site['type'] == (cat.action_for(p.get('type')) or {}).get('card'):
+        return {'hold': False, 'what': what, 'why': '', 'card': cardqueue.in_flight(store, int(tid))['ReviewId']}
+    return {'hold': True, 'what': what, 'why': WHY['speaks'], 'kind': 'speaks'}
 def _handed(store, tid, act: dict, pg: dict) -> dict | None:
     "The card he handed over that this act would send - in flight, with words of its own, and the act a click on no box of the form and no link - else None."
     if act.get('verb') != 'click' or fills(act, pg) or follows(act, pg): return None
@@ -1014,8 +1022,10 @@ def _check(store, tid: int, sid: str, cmd: str, brain=None, cwd: str = '') -> di
         if typing(a) or line_break(store, tid, a, pg): continue
         if vs is None: vs = iter(judge(store, [x for x in todo[i:] if not x.get('read') and not typing(x) and not line_break(store, tid, x, pg)], pg, brain, said=said))
         v = next(vs)
-        if not v['hold'] and (his := last_press(store, tid, a, pg)): v = his
-        if not v['hold']: continue
+        if (his := last_press(store, tid, a, pg)): v = his
+        if not v['hold']:
+            if v.get('card'): PUBLISHING[str(sid)] = v['card']
+            continue
         REFUSED.pop(str(sid), None)
         if (no := _unpressable(store, tid, a, pg)):
             REFUSED[str(sid)] = {'act': a, 'what': f"{v['what']} ({_act_said(a, pg)})", 'site': _site(pg.get('url'))}
@@ -1140,6 +1150,10 @@ def after(store, tid, sid, cmd: str, rc: int = 0) -> str:
     (apiagent): after an act or an open, the site's trouble where its page is no working page (outcome); after every call, what it did (did)."""
     seen = {}
     out = outcome(sid, store, seen) if acts(cmd) or opens(cmd) else ''
+    # ...a card's site Post the gate let through (last_press) is that card done once it ran, as his yes to a held one is (_perform)
+    if PUBLISHING.pop(str(sid), None) and rc == 0 and not out and store and tid:
+        from . import cardqueue
+        cardqueue.done(store, int(tid), 'its Post on the site, pressed by its agent on his yes')
     return '\n'.join(x for x in (out, did(sid, cmd, seen, rc)) if x)
 
 

@@ -15,7 +15,7 @@ from unittest import mock
 import pytest
 from fastapi.testclient import TestClient
 
-from taskuary import (browsergate, browserview, card, config, events, general, guard, inboxes, linkedin, outputs, selfclose, server, signin,
+from taskuary import (browsergate, browserview, card, config, events, general, guard, inboxes, linkedin, outputs, pagestep, selfclose, server, signin,
                       taskstate, terminal as term, workerstate as ws)
 from taskuary.store import SQLiteStore
 
@@ -392,6 +392,35 @@ def test_where_a_network_is_not_connected_its_card_comes_first_and_its_sign_in_a
         said, _ = w.agent('hand_over', what='sign in to X', site='x.com')
         assert json.loads(said)['ok'], f'after his press the sign-in is his step: {said}'
         assert browserview.handing(w.s, w.tid)
+        # ...ON THAT CARD, as its next step (the owner, 2026-11-27: "yes do all 10"), never a card of its own in the line
+        pagestep.sync(w.s, w.tid)
+        [step] = [json.loads(r['DraftText']) for r in w.cards() if json.loads(r['DraftText']).get('action') == 'page_step']
+        assert step['card'] == rid, step
+
+
+def test_his_one_press_on_a_post_card_is_his_yes_for_the_sites_post_of_exactly_his_words(w):
+    """The owner, 2026-11-27 ("yes do all 10"): a post on a network not connected cost three presses for one post - the card, its sign-in, and
+    a "Publish your post" card for the same words. His press on the card is his yes for that site's own Post: with exactly his words in the
+    site's box, the agent's click on Post goes, no second card is raised, and the card is done once it ran. Nothing posts before his press,
+    and words he did not press wait for him."""
+    from taskuary import cardqueue
+    rid, _ = w.post('x', 'Invoices in one place - live Monday.')
+    snap = '- textbox "Post text" [ref=e2]\n- button "Post" [ref=e5]'
+    page = lambda words: {'url': 'https://x.com/compose/post', 'open': True, 'elements': snap, 'name': 'X', 'fields': [{'k': 'text', 't': 'textarea', 'f': 0, 'v': words}]}
+    posts = lambda store, todo, *a, **k: [{'hold': True, 'what': 'click "Post" on X', 'why': 'it speaks for you', 'kind': 'speaks'} for _ in todo]
+    def click(words):
+        with mock.patch.object(browsergate, 'page', return_value=page(words)), mock.patch.object(browsergate, 'judge', side_effect=posts), \
+             mock.patch('taskuary.signin.acting', lambda *a, **k: None):
+            return browsergate.check(w.s, w.tid, 'run1', 'agent-browser click @e5')
+    held = lambda: [r for r in w.cards() if json.loads(r['DraftText']).get('action') == 'browser_act']
+    assert click('Invoices in one place - live Monday.').get('hookSpecificOutput', {}).get('permissionDecision') == 'deny', 'before his press nothing posts'
+    for r in held(): w.s.decide_review(r['ReviewId'], 'closed_unsent', None, 'owner')
+    with w.wakes(): assert c.post(f'/api/reviews/{rid}/via-browser', headers=OWNER, json={'final_text': 'Invoices in one place - live Monday.'}).json()['ok']
+    assert click('Invoices in one place - live Monday, and payroll too.').get('hookSpecificOutput', {}).get('permissionDecision') == 'deny', 'other words wait for him'
+    for r in held(): w.s.decide_review(r['ReviewId'], 'closed_unsent', None, 'owner')
+    assert click('Invoices in one place - live Monday.') == {} and held() == [], 'his words, his one press: no second card'
+    with mock.patch.object(browsergate, 'outcome', lambda *a, **k: ''): browsergate.after(w.s, w.tid, 'run1', 'agent-browser click @e5', 0)
+    assert cardqueue.in_flight(w.s, w.tid) is None and card.of_review(w.s, w.s.get_review(rid))['state'] != 'handed', 'the card is done once its Post ran'
 
 
 def test_no_sign_in_is_put_to_him_beside_a_card_that_waits(w):

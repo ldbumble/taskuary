@@ -294,7 +294,7 @@ TOOLS = {
                            "- post: `networks`, every network it goes to (" + ', '.join(NETWORKS) + "), each {network} or with its own "
                            "`text`, `media`, `subreddit`, `title` (Reddit's); beside them `text`, `media` a picture or video file in your task folder, `link` - for "
                            "each network that gives none. ONE card, a tab per network, each pressed by itself; "
-                           "on the press it goes up through the network's connection, else in the browser with the final Post waiting for his press.\n"
+                           "on the press it goes up through the network's connection, else in the browser, his press the yes for the site's Post.\n"
                            "- skill: `name`, `text` the SKILL.md whole - frontmatter `name` and `description` (what the job is and when to use "
                            "it), then how the job is done well: its style, its steps, what good looks like. A skill holds how; a routine "
                            "that uses it holds what and when. With the `name` of a skill he has (the skills tool lists them) the card is "

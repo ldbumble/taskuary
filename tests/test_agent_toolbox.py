@@ -1183,7 +1183,7 @@ class APostIsAKindOfTheOneReviewTool(unittest.TestCase):
              mock.patch.object(general, 'to_agent', side_effect=lambda s, tid, text, *a, **k: ran.append(text) or 'woke'):
             self.assertTrue(proposals.via_browser(self.s, rv['ReviewId'], '')['ok'])
         self.assertEqual(len(ran), 1, 'nothing ran on X: the agent was handed the words')
-        self.assertIn('Taskuary holds that press for his yes', ran[0]); self.assertIn('Three tools, compared.', ran[0])
+        self.assertIn("his yes for the site's Post of exactly these words", ran[0]); self.assertIn('Three tools, compared.', ran[0])
 
     def test_its_picture_rides_on_the_card_once(self):
         tool(self.tid, 'propose', kind='post', network='linkedin', text='Three tools, compared.', picture='tools-compared.png')

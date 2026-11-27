@@ -62,7 +62,7 @@ test("a LinkedIn post is the same card: its words editable, its picks under the 
 test("a post on a network not connected is the same card: Post via the browser, its final Post held for him", async () => {
   const { card } = await P, html = card(act({ action: "run_tool", type: "x_post", text: "We shipped." }, { Connect: { label: "Connect X", href: "#connector=x", says: "X is not connected" } }));
   assert.equal(one(html), 1); assert.equal(press(html)[0], "Post via the browser");
-  assert.match(html, /its last Post waits for you/);
+  assert.match(html, /your press is its Post/);
 });
 
 test("a GitHub comment is the same card: where it goes, its words his to change, its press Comment", async () => {

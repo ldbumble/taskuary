@@ -76,7 +76,7 @@ export const pressOf = (verb, act, p, text, values) => {
 // ...and the card reads what he pressed - his words, his picks - wherever the press ended: gone, or failed
 export const asLeft = (act, p, text, values) => ({ ...p, ...values, [textKey(act)]: text });
 // where the card stands: waiting on the press, gone with its words and link, or not gone (`live` false: a caller that only reads it)
-export const viaBrowserSaid = (network) => `Handed to the agent - it puts this up on ${network || "the site"} in the browser, and its Post waits for you`;
+export const viaBrowserSaid = (network) => `Handed to the agent - it puts this up on ${network || "the site"} in the browser, with these words`;
 export const stateOf = (row, live = true) => {
   const s = row?.Status, act = actionFor(row?.post?.type), w = wordsOf(act, row?.post || {});
   // ...a post handed to its agent for the site says so, never "Posted" before anything went up (the owner, 2026-11-22)

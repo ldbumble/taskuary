@@ -566,9 +566,11 @@ PAGES = ('shown', 'claude_artifact')
 def pages(store, tid: int) -> list:
     """The pages task `tid`'s agents showed (agenttools.show_files) or published (claude_artifacts), as rows - each chat places them by its turns.
     NEVER A FILE A CARD CARRIES, whichever tool made or showed it and whether its card is drawn yet or queued (on_cards; walks 22 and 23: an
-    agent's `show` of a queued card's picture stood beside the cards with Download): that is drawn on its card only."""
-    cards = on_cards(store, tid)
-    return [page_row(a) for a in store.list_task_artifacts(int(tid)) if a.get('Kind') in PAGES and not (a['Kind'] == 'shown' and a.get('Name') in cards)]
+    agent's `show` of a queued card's picture stood beside the cards with Download): that is drawn on its card only. NOR A COPY OF A FILE OF THE
+    FOLDER `show` HANDED OVER (the owner, 2026-11-27: a GIF shown in a turn at work "and the whole page flickered" - its copy came with the chat's
+    list a beat before the file came with the task's read, drawn as a page, then swapped for the file): the file is drawn in its turn (`after`)."""
+    own = on_cards(store, tid) | {Path(p).name for p in handed(tid)}
+    return [page_row(a) for a in store.list_task_artifacts(int(tid)) if a.get('Kind') in PAGES and not (a['Kind'] == 'shown' and a.get('Name') in own)]
 
 
 def find(store, query: str = '', kind: str = '', tid: int = None, limit: int = 8) -> list:

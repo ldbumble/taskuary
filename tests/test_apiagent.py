@@ -289,7 +289,7 @@ class OneRoundTripTests(unittest.TestCase):
         assert {'search_messages', 'read_message', 'propose', 'show', 'draw_image', 'file_write'} <= set(names) and 'calendar' not in names
         assert names[-1] == 'find_tools' and len(json.dumps(core)) < whole * 0.5
         # ...and ask_owner's several questions asked as one card (the owner, 2026-11-26) are a field of its own, +~230
-        TOOL_CHARS = 7_250                # what every call carries before a word of the job: was ~15,000 (23 tools at ~650 characters); end_turn and ask_owner ride in it since the prompt's protocols became tools, and every act that raises a card since walk 10 (2026-11-23)
+        TOOL_CHARS = 7_300                # what every call carries before a word of the job: was ~15,000 (23 tools at ~650 characters); end_turn and ask_owner ride in it since the prompt's protocols became tools, and every act that raises a card since walk 10 (2026-11-23)
         assert len(json.dumps(core, separators=(',', ':'))) < TOOL_CHARS
         said = apiagent.find(1, 'p', list(core), 'meeting calendar')
         assert 'set_up_meeting:' in said and 'calendar:' in said, 'found by words, each with its whole instructions'

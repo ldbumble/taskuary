@@ -191,3 +191,51 @@ def test_opening_a_task_never_waits_for_a_cold_pile(restarted, monkeypatch):
     assert out['pile']['items']
     # ...and once it is built, the same look-up is the rail's own row again
     assert funnel.next_item(s, f'task:{tids[0]}', include_surfaced=True)['tid'] == tids[0]
+
+
+def _two_profiles(s):
+    """What made the walk slow on 0.4.6.11 (the owner: "all read, next is slower now"): his own address set, two profiles, a mailbox each, and
+    the mail read by them."""
+    import json
+    from taskuary import workstreams as W
+    s.set_setting('owner_email', 'alex@northwind.example', 'fixture')
+    W.save(s, [{'name': 'Northwind'}, {'name': 'Harbor Bakery'}])
+    for slug, typ, box in (('northwind', 'outlook', 'alex@northwind.example'), ('harbor-bakery', 'gmail', 'shop@harbor.example')):
+        cid = s.save_connector({'Type': typ, 'Name': box, 'Active': 1, 'ConfigJson': json.dumps({'address': box})}, 'fixture')
+        s.save_source({'Name': box, 'Address': box, 'Channel': 'email', 'ConnectorId': cid, 'Active': 1}, 'fixture')
+        W.tag_account(s, slug, connector_id=cid)
+    s._exec("UPDATE message SET SourceName=CASE WHEN MessageId % 2 THEN 'alex@northwind.example' ELSE 'shop@harbor.example' END WHERE Channel='email'")
+
+
+def _traced(s, monkeypatch) -> list:
+    "Every statement run from here on, on any of the store's connections."
+    reads, connect = [], sqlite3.connect
+    for cx in (s.cx, s._rail_cx, *s._readers):
+        if cx is not None: cx.set_trace_callback(reads.append)
+    def counted(*a, **k):
+        cx = connect(*a, **k); cx.set_trace_callback(reads.append); return cx
+    monkeypatch.setattr(sqlite3, 'connect', counted)
+    return reads
+
+
+def test_a_walk_move_rebuilds_the_rail_without_a_read_per_row(restarted, monkeypatch):
+    """Every Next or All read rebuilds the rail behind the move, and on 0.4.6.11 the rebuild asked per row what is the same for every row: the
+    owner's own addresses copied every connection card (ingest.own_addresses) - 2.2x the statements of 0.4.6.5."""
+    import json, re
+    s, _ = restarted
+    _two_profiles(s)
+    first = json.loads(server.walk_start(server.RailWalkBody(light=True, press='w0')).body)['item']['key']
+    server._pile_payload(force=False, fyi=50)
+    server.walk_next(server.RailWalkBody(light=True, from_key=first, press='w1', read=[first]))
+    # ...a closed task's Trust hold, judged afresh when it is read, is counted by the first pile's own guard above: it stands still here
+    from taskuary import origin
+    monkeypatch.setattr(origin, '_now_judged', lambda store, tid: {})
+    reads = _traced(s, monkeypatch)
+    pile = server._pile_payload(force=False, fyi=50)            # ...the rail the page reads behind the move
+    of = lambda pat: sum(bool(re.search(pat, q)) for q in reads)
+    cards, rows = of(r"change_gen WHERE Tbl='connector'"), pile['counts']['unread']
+    assert reads and rows > 1000 and any(i.get('kind') == 'review' for i in pile['items'])
+    # ...a fact the same for every row is read a bounded number of times, never once a row (0.4.6.11: a read of the cards a row). A waiting
+    # card's own channel checks (outbound.connect_fix, send_probe) read them a few times a card, as 0.4.6.5 did
+    assert cards < rows / 5, f'the connection cards read {cards} times for {rows} rows'
+

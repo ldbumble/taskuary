@@ -376,8 +376,11 @@ SHORT = {
     'guide': "Read one of Taskuary's how-tos (browser, number, propose ...).",
     'run_system': "Run one tool on one of the owner's systems: {type, connector_id, ...its fields}.",
     'web_search': "Search the web through this task's AI card.",
-    'show': 'Charts, tables, tiles, checklists, who is free when in this chat, live with sliders, toggles, dates, '
-            'and choices whose pick comes back to you - or hands the owner files you made, one artifact a call.',
+    # ...and that A VIEW IS KEPT AS ONE UNDER ITS `id` is on the line (walk 26, 2026-11-27: replies came one by one and no road drew a view -
+    # lean drops a parameter's words, so `id` was a bare string and the line named only what is drawn once)
+    'show': 'Draws in this chat: charts, tables, tiles, checklists, a grid of who is free when, live with sliders, toggles, dates, and '
+            'choices whose pick comes back to you; a view shown again under its `id` is redrawn as it now is, where you show it, no old '
+            'copy above - or hands the owner files you made, one artifact a call.',
     'draw_image': "Draw a picture, a file of this task.",
     'tick': "Tick or untick a to-do (`item`: its id).",
     'todos': "Add, reword or merge this task's to-dos.",

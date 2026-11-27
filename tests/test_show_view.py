@@ -123,6 +123,13 @@ class WhoCanMakeWhichTimes(unittest.TestCase):
         viewspec.check(json.loads(guides.AVAILABILITY))            # the guide's own example is a spec that passes
         self.assertIn('availability {people', guides.SHOW_TYPES)
 
+    def test_the_line_every_road_lists_says_a_view_is_shown_again_under_its_id(self):
+        """Walk 26, 2026-11-27: replies to "when can everyone meet?" came one by one and no agent on any road drew the view - the one line a
+        session holds before it looks anything up named charts and tiles, and nothing of a view kept as one under its `id` (the lean list
+        drops a parameter's words, so `id` was a bare string). The line says it, on the list a CLI and a card's harness are each given."""
+        for line in (next(t['description'] for t in agenttools.listing(portable=p) if t['name'] == 'show') for p in (False, True)):
+            self.assertIn('`id`', line); self.assertIn('who is free when', line)
+
 
 class TheNewBlocks(unittest.TestCase):
     "grid, badge and note; a title and a description on every block; a tile's trend and format, a column's format, a highlighted point"

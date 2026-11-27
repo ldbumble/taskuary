@@ -107,5 +107,60 @@ class ThePermit(Base):
         self.assertEqual(ws.HELD, {})
 
 
+class TheGateThatCannotAnswer(Base):
+    """Red team round 6: waits parked on the gate's own threads left its judging queued until the hook's curl gave up - and the command ran.
+    A gate that cannot answer holds: its judging has threads no wait can take, and a step with no answer in time is refused, never run."""
+    def setUp(self):
+        super().setUp()
+        from unittest import mock
+        from taskuary import server
+        self.server, self.mock = server, mock
+        self.t.ext_id, self.t.argv = 'sess-1', ['claude']
+        self.push = {'tool_name': 'Bash', 'tool_input': {'command': 'git push origin main'}, 'session_id': 'sess-1', 'cwd': CWD}
+
+    def hook(self, payload, within=10): return asyncio.run(asyncio.wait_for(self.server.cli_hook_browser(payload), within))
+
+    def test_waits_that_fill_the_permits_threads_leave_the_gate_judging(self):
+        gate, n = threading.Event(), self.server._PERMIT_POOL._max_workers
+        fs = [self.server._PERMIT_POOL.submit(gate.wait, 30) for _ in range(n)]
+        try:
+            with self.mock.patch.object(hooks, 'browser', return_value={'judged': True}):
+                self.assertEqual(self.hook(self.push, within=5), {'judged': True})
+        finally:
+            gate.set(); [f.result(5) for f in fs]
+
+    def test_a_task_parks_only_so_many_waits_and_the_next_is_refused_at_once(self):
+        gate, req = threading.Event(), SimpleNamespace(headers={}, method='POST', url=SimpleNamespace(path='/api/hooks/claude/permit'))
+        async def go():
+            parked = [asyncio.ensure_future(self.server.cli_hook_permit({}, self.tid, req)) for _ in range(self.server.PARK_MAX)]
+            await asyncio.sleep(0.2)
+            over = await asyncio.wait_for(self.server.cli_hook_permit({}, self.tid, req), 3)
+            other = asyncio.ensure_future(self.server.cli_hook_permit({}, self.tid + 1, req))       # ...another task's wait still parks
+            await asyncio.sleep(0.2); gate.set()
+            return over, await asyncio.gather(*parked), await other
+        with self.mock.patch.object(self.server, '_own_task_only'), self.mock.patch.object(hooks, 'permit', side_effect=lambda *a, **k: gate.wait(30) and {'parked': True}):
+            over, parked, other = asyncio.run(go())
+        self.assertEqual(over['hookSpecificOutput']['decision']['behavior'], 'deny')
+        self.assertEqual((parked, other), ([{'parked': True}] * self.server.PARK_MAX, {'parked': True}))
+        self.assertEqual(self.server._PARKED, {}, 'every place given back')
+
+    def test_a_judging_with_no_answer_in_time_or_that_fails_holds_our_sessions_step(self):
+        slow = lambda *a, **k: time.sleep(1.5) or {}
+        for why, how in (('no answer in time', {'side_effect': slow}), ('judging it failed', {'side_effect': RuntimeError('a line the gate could not read')})):
+            with self.mock.patch.object(hooks, 'browser', **how), self.mock.patch.object(hooks, 'GATE_WAIT', 0.3):
+                d = self.hook(self.push)['hookSpecificOutput']
+                self.assertEqual(d['permissionDecision'], 'deny', why); self.assertIn(why, d['permissionDecisionReason'])
+                self.assertIn('Run it again', d['permissionDecisionReason'], 'no dead end: it says what to do next')
+                # ...the owner's own Claude, in no pane of ours, and a tool the gate does not judge are Claude's as ever
+                self.assertEqual(self.hook({**self.push, 'session_id': 'his-own'}), {})
+                self.assertEqual(self.hook({**self.push, 'tool_name': 'WebSearch'}), {})
+
+    def test_a_gate_hook_that_rides_in_a_sessions_own_settings_blocks_where_it_fails(self):
+        [h] = [x for m in hooks.session_hooks('tok', 'http://127.0.0.1:1')['PreToolUse'] if m['matcher'] == hooks.BROWSER_MATCH for x in m['hooks']]
+        self.assertEqual(h.get('onFailure'), 'block')
+        self.assertEqual(hooks._browser_hold('s1')['hooks'][0].get('onFailure'), 'block')
+        self.assertLess(hooks.GATE_WAIT, hooks.BROWSER_WAIT, 'the server answers before curl gives up')
+
+
 if __name__ == '__main__':
     unittest.main()

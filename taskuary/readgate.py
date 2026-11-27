@@ -158,7 +158,8 @@ def _open() -> list:
     # ...and a program installed for this user alone (%LOCALAPPDATA%\Programs - Python, VS Code, most per-user installers): the real-CLI walk,
     # 2026-11-16 - an agent looking for its python (`ls .../AppData/Local/Programs/Python`) was held as a card asking him to let it read "Python"
     if os.name == 'nt' and os.environ.get('LOCALAPPDATA'): rs.append(os.path.join(os.environ['LOCALAPPDATA'], 'Programs'))
-    if os.name != 'nt': rs += ['/tmp', '/usr', '/bin', '/lib', '/opt', '/dev', '/proc', '/sys', '/System', '/Library', '/Applications']
+    # ...never /proc whole: the system's own files there are read freely, what a process holds waits (_proc_free)
+    if os.name != 'nt': rs += ['/tmp', '/usr', '/bin', '/lib', '/opt', '/dev', '/sys', '/System', '/Library', '/Applications']
     # ...and A CLI'S OWN INSTRUCTIONS - the skills, plugins, agents and commands it loads to work (the owner's live task, 2026-11-17: a coding
     # agent reading ~/.claude/skills/impeccable/reference/craft-floor.md stood as a card "Read craft-floor.md in reference"). Its sign-ins and
     # settings in the same home stay on the never-list (floor.kept_secret), judged before this
@@ -170,7 +171,12 @@ def _open() -> list:
 # ...AND WHERE PROGRAMS INSTALLED FOR THE WHOLE MACHINE KEEP THEIR OWN FILES (%ProgramData%: a package manager's bin, a tool's shims), ITS NAMES
 # ARE LISTED (the real-CLI check, 2026-11-26: an agent looking for a converter ran `ls C:/ProgramData/chocolatey/bin` - held as a card asking
 # him to let it read "bin", and it stopped there). Names only (Listed): what a file there holds - a service's keys, a program's data - waits as before
-def _listable() -> list: return [_n(os.environ['ProgramData'])] if os.name == 'nt' and os.environ.get('ProgramData') else []
+# ...and /proc's: which processes there are is no secret (`ls /proc`), what one holds is
+def _listable() -> list: return [_n(os.environ['ProgramData'])] if os.name == 'nt' and os.environ.get('ProgramData') else [] if os.name == 'nt' else [_n('/proc')]
+def _proc_free(p: str) -> bool:
+    "Is normalised `p` one of /proc's own files, or a process's plain facts - read as a program's folder is (floor.proc_kept says what is not)?"
+    from . import floor
+    return os.name != 'nt' and _in(p, _n('/proc')) and not floor.proc_kept(p)
 
 
 def opened(store, tid, p: dict) -> bool:
@@ -219,7 +225,7 @@ def judge(store, tid, paths, cwd: str = '', write: bool = False, unread=()) -> t
         sec = [r for r in nev if _in(p, r) or (_reaches(pat, r) if pat != p else _in(r, p) and not isinstance(raw, Listed))]
         if any(_in(p, r) and (not sec or any(_in(r, n) for n in sec)) for r in mine) or (not sec and fetched(p, cwd, sids)): continue
         if sec: return [], NEVER_WRITE if write else NEVER
-        if any(_in(p, r) for r in ok) or (not write and isinstance(raw, Listed) and any(_in(p, r) for r in _listable())): continue
+        if any(_in(p, r) for r in ok) or (not write and (_proc_free(p) or isinstance(raw, Listed) and any(_in(p, r) for r in _listable()))): continue
         p = os.path.realpath(os.path.expanduser(_cut(str(raw))))     # ...said as the owner's own spelling of it, never case-folded
         folder = p if os.path.isdir(p) else os.path.dirname(p)
         held.setdefault(folder, []).append('' if folder == p else os.path.basename(p))

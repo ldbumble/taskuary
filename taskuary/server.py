@@ -584,6 +584,8 @@ def _stranger_file_task(kind: str, aid):
         t = hub_term.SESSIONS.get(str(aid))
         return getattr(t, 'task_id', None) if t is not None and getattr(t, 'agent', '') else None
     if kind == 'message': return (store.get_message(int(aid)) or {}).get('TaskId')
+    if kind == 'review': return (store.get_review(int(aid)) or {}).get('TaskId')
+    if kind == 'batch': return next((r['TaskId'] for r in store._rows('SELECT TaskId FROM review WHERE Batch=? LIMIT 1', (str(aid),))), None)
     aid = int(aid)
     if kind == 'artifact': return (store.get_task_artifact(aid) or {}).get('TaskId')
     mid = (store.get_attachment(aid) or {}).get('MessageId')
@@ -5524,9 +5526,12 @@ def get_run(run_id: int):
     return r
 
 @app.get('/api/reviews')
-def reviews(status: str = None):
+def reviews(request: Request, status: str = None):
     from .verdicts import context_moved
     rows = store.list_reviews(status)
+    # ...a session reads its own task's drafts, never every task's (guard.own_only; the owner's page reads them all, as ever)
+    if (only := guard.own_only(cfg['server'], request.headers, store.get_setting('assistant_dock_task_id'))) is not None:
+        rows = [r for r in rows if r.get('TaskId') == only]
     memo, sigs, many = {}, {}, len(outbound.mailboxes(store)) > 1
     for r in rows:
         r['CanSend'], r['SendBlock'] = _review_send_state(memo, r)
@@ -5814,15 +5819,13 @@ def cli_hook_reason(payload: dict):
 @app.post('/api/hooks/claude/browser')
 async def cli_hook_browser(payload: dict, sid: str = '', task: str = ''):
     """Before one of our sessions runs a shell command (hooks.browser -> browsergate.check): a browser act that can't be undone is
-    refused and held on the task for the owner's press. On the permits' threads - a snapshot and a model verdict take seconds, and
-    on anyio's shared forty they would queue behind every other sync route. A failure IN the judging holds (check); a failure
-    around it - an unreadable payload - lets the command go, as every hook here does."""
+    refused and held on the task for the owner's press. On the gate's own threads (_GATE_POOL) - a snapshot and a model verdict take
+    seconds, and on anyio's shared forty they would queue behind every other sync route. A judging that fails or does not answer in
+    time holds a step of one of our sessions (_judged, hooks.unjudged) - it never lets it through."""
     from . import hooks
-    def go():
-        try: return hooks.browser(payload if isinstance(payload, dict) else {}, sid=sid, task=task)       # sid: a general chat's own hook (hooks.browser_settings)
-        except Exception as e:
-            logger.warning(f'browser hook: {e}'); return {}
-    return await asyncio.get_running_loop().run_in_executor(_PERMIT_POOL, go)
+    payload = payload if isinstance(payload, dict) else {}
+    return await _judged(lambda: hooks.browser(payload, sid=sid, task=task),       # sid: a general chat's own hook (hooks.browser_settings)
+                         hooks.GATE_WAIT, lambda why: hooks.unjudged(payload, sid, task, why))
 
 
 @app.post('/api/hooks/claude/floor')
@@ -5854,6 +5857,12 @@ _HOOK_WORKER = ThreadPoolExecutor(max_workers=1, thread_name_prefix='cli-hook')
 # A permit can wait days for the owner, so it gets its OWN threads: on anyio's shared pool of 40, forty waiting strangers
 # would starve every other sync route.
 _PERMIT_POOL = ThreadPoolExecutor(max_workers=64, thread_name_prefix='permit')
+# ...AND THE GATE JUDGES ON THREADS NO WAIT CAN TAKE (red team round 6: waits parked on the one pool filled it, the gate's judging queued
+# behind them until the hook's curl gave up - and the command ran). A wait parks on the permits' threads, at most PARK_MAX to a task; a
+# judging runs on the gate's, and one with no answer in time is a refusal, never a let-through (_judged)
+_GATE_POOL = ThreadPoolExecutor(max_workers=32, thread_name_prefix='gate')
+PARK_MAX = 8
+_PARKED, _PARKED_LOCK = {}, threading.Lock()
 
 def _close_permits():
     "Shutdown: every held permit is refused, and a fresh pool takes its place (one process may start the app again - tests do)."
@@ -5862,6 +5871,30 @@ def _close_permits():
     ws.release_all()
     _PERMIT_POOL.shutdown(wait=False, cancel_futures=True)
     _PERMIT_POOL = ThreadPoolExecutor(max_workers=64, thread_name_prefix='permit')
+    with _PARKED_LOCK: _PARKED.clear()
+
+async def _parked(tid: int, go, full):
+    """go() parked on the permits' threads for task `tid`; full() at once where PARK_MAX of that task's waits already stand there. The
+    place is given back when the wait itself ends - never when its caller hangs up, which would leave the thread taken and uncounted."""
+    with _PARKED_LOCK:
+        if _PARKED.get(tid, 0) >= PARK_MAX: return full()
+        _PARKED[tid] = _PARKED.get(tid, 0) + 1
+    def run():
+        try: return go()
+        finally:
+            with _PARKED_LOCK:
+                if (n := _PARKED.get(tid, 0) - 1) > 0: _PARKED[tid] = n
+                else: _PARKED.pop(tid, None)
+    return await asyncio.get_running_loop().run_in_executor(_PERMIT_POOL, run)
+
+async def _judged(go, wait: float, held):
+    "go() on the gate's own threads. No answer in `wait` seconds, or a judging that failed: held(why) - what a gate that cannot answer says."
+    f = asyncio.get_running_loop().run_in_executor(_GATE_POOL, go)
+    try: return await asyncio.wait_for(f, wait)
+    except asyncio.TimeoutError: why = 'it had no answer in time'
+    except Exception as e:
+        logger.warning(f'the gate failed judging a step - {type(e).__name__}: {e}'); why = 'judging it failed'
+    return held(why)
 
 @app.post('/api/hooks/claude/permit')
 async def cli_hook_permit(payload: dict, task: int, request: Request):
@@ -5869,8 +5902,9 @@ async def cli_hook_permit(payload: dict, task: int, request: Request):
     non-2xx, which the hook's onFailure: block turns into a refusal - never an allow."""
     from . import hooks
     _own_task_only(request, task)
-    return await asyncio.get_running_loop().run_in_executor(
-        _PERMIT_POOL, partial(hooks.permit, payload if isinstance(payload, dict) else {}, task, store=store))
+    full = lambda: {'hookSpecificOutput': {'hookEventName': 'PermissionRequest', 'decision': {
+        'behavior': 'deny', 'message': f'{PARK_MAX} requests of this task already wait for the owner, so this one is refused. Ask again once one is answered.'}}}
+    return await _parked(task, partial(hooks.permit, payload if isinstance(payload, dict) else {}, task, store=store), full)
 
 async def _hook_off_loop(f, *args, **kw):
     """Run f on the hook worker. Shielded: a curl that hangs up must not cancel a hook still queued - on the loop it ran
@@ -6724,8 +6758,8 @@ class AgentProposeBody(BaseModel):
 @app.post('/api/agent/gate')
 async def agent_gate(body: dict, request: Request):
     """An agent's `agent-browser` or `agent-desktop` command asks before it runs (gate, on every AI's road): {'why': ''} runs it,
-    else why it waits - a press that can't be undone is held on the session's OWN task for the owner. On the permits' threads, as the
-    hooks are: a snapshot and a verdict take seconds."""
+    else why it waits - a press that can't be undone is held on the session's OWN task for the owner. On the gate's threads, as the
+    hooks are: a snapshot and a verdict take seconds - and one with no answer in time is not run (_judged)."""
     from . import gate
     tid = int(body.get('task') or 0) if str(body.get('task') or '').isdigit() else 0
     _own_task_only(request, tid)
@@ -6733,12 +6767,13 @@ async def agent_gate(body: dict, request: Request):
     sid, cmd = str(body.get('sid') or ''), str(body.get('cmd') or '')
     # ...TASKUARY'S OWN VERB (`agent-browser signup`): done here, its result the command's own output (gate.own)
     if not body.get('after') and (own := gate.own(cmd)):
-        ok, said = await asyncio.get_running_loop().run_in_executor(_PERMIT_POOL, lambda: gate.run_own(store, tid, sid, own, cmd))
+        # ...a wait of minutes (a code a site emails): parked with the task's other waits, never on the threads that judge
+        ok, said = await _parked(tid, lambda: gate.run_own(store, tid, sid, own, cmd), lambda: (False, f'{PARK_MAX} waits of this task already stand. Run it again once one ends.'))
         return {'why': '', 'own': True, 'ok': ok, 'said': said}
     try: rc = int(body.get('rc') or 0)
     except (TypeError, ValueError): rc = 1
-    go = ((lambda: browsergate.after(store, tid, sid, cmd, rc)) if body.get('after') else lambda: gate.judge(store, tid, sid, cmd, str(body.get('cwd') or '')))
-    return {'why': await asyncio.get_running_loop().run_in_executor(_PERMIT_POOL, go)}
+    if body.get('after'): return {'why': await _judged(lambda: browsergate.after(store, tid, sid, cmd, rc), gate.WAIT - 15, lambda why: '')}
+    return {'why': await _judged(lambda: gate.judge(store, tid, sid, cmd, str(body.get('cwd') or '')), gate.WAIT - 15, gate.unjudged)}
 
 
 @app.post('/api/agent/propose')

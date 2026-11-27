@@ -34,6 +34,19 @@ def test_a_shell_command_naming_them_or_taskuary_s_address_is_refused():
         assert denied(call('Bash', command=cmd)) and denied(call('PowerShell', command=cmd)), cmd
     assert denied(call('WebFetch', url=f'http://127.0.0.1:{port}/'))
 
+def test_what_a_process_holds_is_refused_and_the_systems_own_files_pass():
+    "Red team round 6: /proc/<pid>/environ - any process's environment, with its command line, memory and open files - was nobody's to refuse."
+    for p in ('/proc/4242/environ', '/proc/self/environ', '/proc/1/cmdline', '/proc/4242/mem', '/proc/4242/fd/3', '/proc/thread-self/environ',
+              '/proc/4242/task/4243/environ', '/proc/4242/maps', '/proc/self/../4242/environ'):
+        assert floor.proc_kept(p), p
+        assert denied(call('Read', file_path=p)), p
+        assert denied(call('Bash', command=f'cat {p}')), p
+    for cmd in ('cat /proc/*/environ', 'cat /proc/$PPID/environ', 'grep -ra TOKEN /proc', 'strings /proc/[0-9]*/cmdline', 'xargs -0 -n1 < /proc/4242/environ'):
+        assert denied(call('Bash', command=cmd)), cmd
+    for p in ('/proc/cpuinfo', '/proc/meminfo', '/proc/loadavg', '/proc/self/status', '/proc/4242/stat', '/proc/sys/kernel/hostname', '/process/notes.md'):
+        assert not floor.proc_kept(p), p
+        assert call('Read', file_path=p) == {} and call('Bash', command=f'cat {p}') == {}, p
+
 def test_this_task_s_own_files_and_ordinary_work_pass():
     assert call('Read', file_path=str(origin.stranger_file_path(7))) == {}     # in its own folder, outside the home (R25)
     assert call('Read', file_path=str(origin.stranger_dir(7) / 'notes.md')) == {}

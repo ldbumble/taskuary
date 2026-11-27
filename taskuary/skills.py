@@ -142,10 +142,16 @@ def named(text: str, slug: str) -> str:
     return f'---\n{head}\n---\n' + text[m.end():].rstrip() + '\n'
 
 
+def filed_as(slug: str, text: str) -> str:
+    "The folder `text` is filed in under `slug` - its own name's when none is given (the 'new' door). One reading for the save and its card."
+    if slug and slug != 'new': return slugify(slug)
+    pb = parse(text)
+    return slugify(pb['name'] or pb['title'])
+
+
 def write(slug: str, text: str) -> str:
     """File it and return its name - taken from the text when none is given (the 'new' door)."""
-    pb = check(text)
-    slug = slugify(slug) if slug and slug != 'new' else slugify(pb['name'] or pb['title'])
+    check(text); slug = filed_as(slug, text)
     d = folder() / slug; d.mkdir(parents=True, exist_ok=True)
     (d / FILE).write_text(named(text, slug), encoding='utf-8')
     if slug in deleted_at(): _forget(slug); set_on(slug, True)       # a new one under a deleted one's name starts fresh, and on
@@ -442,7 +448,10 @@ def lookup(store=None, task: dict = None, name: str = '') -> str:
     if name:
         b = next((b for b in offered(store, profile=profile_of(store, task)) if b['slug'] == key(name)), None)
         if not b: return f"No skill is called {name!r} - ask with no name for the list."
-        return b['text'] + (f"\n\nFiles kept with it: {', '.join(b['files'])}" if b['files'] else '')
+        # ...and the routines of his that use it, by title (workflows.uses_skill): a change to this page is a change to how each does its job
+        from . import workflows
+        used = workflows.uses_skill(store).get(b['slug']) if store is not None else None
+        return b['text'] + (f"\n\nFiles kept with it: {', '.join(b['files'])}" if b['files'] else '') + (f"\n\nUsed by his routines: {', '.join(used)}" if used else '')
     return _listing(store, task) or 'There are no skills yet.'
 
 

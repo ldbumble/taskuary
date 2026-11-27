@@ -249,6 +249,51 @@ class ChangeTests(unittest.TestCase):
         workflows.save(self.s, {'SourceId': self.sid, 'ConfigPatch': {'cron': '0 9 * * 1'}}, 'o')
         self.assertEqual(said.count('was changed'), 1); self.assertEqual(events.take(self.s, self.tid)[0].count('was changed'), 1, 'a new clock is no new word to it')
 
+    POSTS = ('---\nname: social-posts\ndescription: Write the social posts. Use when a post is due on a network.\n---\n'
+             '# Social posts\n\nOne idea a post. Plain words, no hashtags.\n')
+
+    def test_a_change_card_holds_the_document_and_the_routine_as_the_press_leaves_it(self):
+        # the owner, 2026-11-26: an agent rewrote his post routine's instructions and left its goal "for manual posting" and its browser on -
+        # the card showed neither. It holds the instructions before and after whole (the marks are read off the two), and the routine's key
+        # fields as the press leaves them: what stays stale is there to see, what changes says what it was
+        from taskuary import agenttools, proposals, skills
+        skills.write('social-posts', self.POSTS); self.addCleanup(lambda: (skills.delete('social-posts'), skills.purge(now=10 ** 12)))
+        sid = routine(self.s, title='Social posts', agent='general', prompt='Write a post for each network.', goal='Drafts for manual posting.',
+                      browser=True, skill='social-posts', daily_at='09:00', cron=None)
+        own = self.s.create_task({'Title': 'Make the posts better', 'Kind': 'general', 'Status': 'open'}, 'o')
+        # ...and its agent reads it as it is saved, the skill it uses by name
+        read = agenttools.call(self.s, own, 'routines', {'name': 'social posts'}, {})
+        for k in ('SKILL: social-posts', 'BROWSER: on', 'GOAL: Drafts for manual posting.', 'Write a post for each network.'): self.assertIn(k, read)
+        self.assertIn('Used by his routines: Social posts', agenttools.call(self.s, own, 'skills', {'name': 'social-posts'}, {}))     # ...and from the skill's side
+        self.assertIn('Social posts', agenttools.call(self.s, own, 'routines', {}, {})); self.assertIn('uses the skill social-posts', agenttools.call(self.s, own, 'routines', {}, {}))
+        rv = proposals.queue(self.s, own, {'action': 'change_routine', 'routine': 'Social posts', 'prompt': 'Write a post card for each network.', 'why': 'cards'})
+        p = json.loads(self.s.get_review(rv['reviewId'])['DraftText'])
+        self.assertEqual([(t['was'], t['now']) for t in p['texts']], [('Write a post for each network.', 'Write a post card for each network.')])
+        after = {a['label']: a for a in p['after']}
+        self.assertEqual({k: v['now'] for k, v in after.items()}, {'Goal': 'Drafts for manual posting.', 'Runs': after['Runs']['now'], 'Browser': 'on',
+                                                                  'Connections': 'none', 'Skill': 'social-posts'})
+        self.assertFalse([a for a in p['after'] if 'was' in a], 'nothing but its words changes')
+        # ...and the stale ones are the agent's to change on the same card: each says what it was, and the press saves exactly that
+        rv = proposals.queue(self.s, own, {'action': 'change_routine', 'routine': 'Social posts', 'browser': False, 'goal': 'A post card per network.', 'why': 'cards'})
+        row = self.s.get_review(rv['reviewId']); p = json.loads(row['DraftText'])
+        self.assertIn({'label': 'Browser', 'now': 'off', 'was': 'on'}, p['after']); self.assertIn('Browser: on -> off', p['changes'])
+        self.assertEqual([(t['key'], t['was'], t['now']) for t in p['texts']], [('goal', 'Drafts for manual posting.', 'A post card per network.')])
+        with mock.patch('taskuary.docsync.sync_connections'): proposals.execute(self.s, row, 'owner')
+        cfg = json.loads(self.s.get_source(sid)['ConfigJson'])
+        self.assertEqual((cfg['browser'], cfg['goal'], cfg['prompt'], cfg['skill']), (False, 'A post card per network.', 'Write a post for each network.', 'social-posts'))
+
+    def test_a_routine_is_linked_to_a_skill_of_his_by_its_card_and_never_to_one_that_is_not_there(self):
+        from taskuary import proposals, skills
+        skills.write('social-posts', self.POSTS); self.addCleanup(lambda: (skills.delete('social-posts'), skills.purge(now=10 ** 12)))
+        why = []
+        self.assertIsNone(proposals.queue(self.s, self.tid, {'action': 'change_routine', 'skill': 'no-such-skill', 'why': 'y'}, refused=why))
+        self.assertIn('no skill is named', why[0])
+        rv = proposals.queue(self.s, self.tid, {'action': 'change_routine', 'skill': 'social-posts', 'why': 'its style lives there'})
+        row = self.s.get_review(rv['reviewId']); p = json.loads(row['DraftText'])
+        self.assertIn({'label': 'Skill', 'now': 'social-posts', 'was': 'none'}, p['after']); self.assertIn('Skill: none -> social-posts', p['changes'])
+        with mock.patch('taskuary.docsync.sync_connections'): proposals.execute(self.s, row, 'owner')
+        self.assertEqual(workflows.definition(self.s, self.s.get_source(self.sid))['skill'], 'social-posts')
+
     def test_the_editor_saves_by_the_same_road(self):
         with self.assertRaises(ValueError): workflows.save(self.s, {'SourceId': self.sid, 'ConfigPatch': {'flow': [{'id': 's1', 'kind': 'nope'}]}}, 'o')
 

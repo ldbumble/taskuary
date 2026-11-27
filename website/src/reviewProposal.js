@@ -64,7 +64,10 @@ export const toolBody = (p) => { const k = bodyKey(p); return k ? String(p[k]) :
 // A CHANGE'S CARD (workflows.change_card): its new words to edit ({key, label, was, now}) and the facts it changes besides ({label, was, now}),
 // led by the title and why it changes in one line
 const changeOf = (title, p) => ({ title, lead: title, leadWhy: p?.why ? upFirst(String(p.why).replace(/[.\s]*$/, ".")) : "", destination: "",
-  texts: Array.isArray(p?.texts) ? p.texts : [], rows: Array.isArray(p?.rows) ? p.rows : [], bare: Array.isArray(p?.texts) });
+  texts: Array.isArray(p?.texts) ? p.texts : [], bare: Array.isArray(p?.texts), ...afterOf(p) });
+// ...and the routine as the press leaves it (workflows.after: [{label, now, was?}]) - a fact said there is not said twice as a row above it
+export const afterOf = (p) => { const after = Array.isArray(p?.after) ? p.after : [], said = new Set(after.map((a) => a.label));
+  return { after, rows: (Array.isArray(p?.rows) ? p.rows : []).filter((r) => !said.has(r.label)) }; };
 const onOff = (v) => (v === true || v === "1" ? "on" : v === false || v === "0" ? "off" : String(v ?? ""));
 // ...each switch a settings card changes, as it was and as it will be: its rows while it waits, and what it says it changed once pressed
 const settingRows = (p) => (Array.isArray(p?.changes) ? p.changes : []).filter((c) => c && c.name)
@@ -191,17 +194,23 @@ export const proposalPresentation = (review) => {
     const given = String(proposal.slug || "").trim();
     const slug = (given && given !== "new" ? given : slugify(title)) || "skill";
     const amend = !!(proposal.block || proposal.lessons || proposal.was_text);          // a change to one he has, not a new one
+    const learned = !!(proposal.block || proposal.lessons), used = Array.isArray(proposal.used_by) ? proposal.used_by : [];
     return {
       kind: "skill",
       // ...the agent's own offer asks him in one line (agenttools.SKILL_OFFER), and names the skill under it
-      title: proposal.offer && !amend ? String(proposal.offer) : title ? `Skill · ${title}` : "New skill",
-      context: amend ? "What was learned about this kind of work, added to its skill · nothing is sent"
+      title: proposal.offer && !amend ? String(proposal.offer) : amend && !learned ? `Change skill: ${title || slug}` : title ? `Skill · ${title}` : "New skill",
+      context: learned ? "What was learned about this kind of work, added to its skill · nothing is sent"
+        : amend ? "Proposed · the skill changes only if you approve"
         : proposal.offer ? `Skill · ${title || slug} · nothing will be sent to the conversation`
         : "Skill proposal · nothing will be sent to the conversation",
       destinationLabel: "Save to",
       destination: `Reports → Skills → ${slug}`,         // where skills live (SkillShelf.jsx)
       // ...the page it replaces, where there is one (proposals.change_card): the box marks where this one changes it
-      ...(proposal.was_text ? { was: String(proposal.was_text) } : {}),
+      // ...and a new one against nothing, so all of it reads as added (the owner, 2026-11-26)
+      was: String(proposal.was_text || ""),
+      // ...its agent's own change to a page he has leads with why, in one line, as a routine's change does (changeOf)
+      ...(amend && !learned ? { lead: `Change skill: ${title || slug}`, leadWhy: proposal.why ? upFirst(String(proposal.why).replace(/[.\s]*$/, ".")) : "" } : {}),
+      ...(used.length ? { rows: [{ label: "Used by", now: used.join(", ") }] } : {}),
       approveLabel: APPROVE,
       busyLabel: "saving…",
       rejectLabel: "Discard proposal",

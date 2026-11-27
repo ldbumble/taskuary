@@ -143,6 +143,40 @@ test("a routine's change is the one card: its new words marked where they change
   assert.ok(press(html).includes("Approve"), press(html).join("|"));
 });
 
+// THE CARD IS THE DOCUMENT, AND THE ROUTINE AS THE PRESS LEAVES IT (the owner, 2026-11-26: an agent grew his post routine's instructions to
+// ~3,000 characters and left its goal "for manual posting" and its browser on - "the card that shows the changes should bring up the skill card
+// or the instructions and show what the agent is editing"): how long the words were and are, and each key field after the press - a stale one
+// said plainly, a changed one beside what it was, never said twice as a row
+test("a routine's change says how long its words are and shows the routine as the press leaves it", async () => {
+  const { card } = await P, base = JSON.parse(routineChange().DraftText);
+  const html = card(act({ ...base, rows: [{ label: "Browser", was: "on", now: "off" }], after: [{ label: "Goal", now: "Drafts for manual posting." },
+    { label: "Runs", now: "daily at 09:00" }, { label: "Browser", now: "off", was: "on" }, { label: "Connections", now: "none" }, { label: "Skill", now: "social-posts" }] }));
+  assert.equal(one(html), 1);
+  assert.match(html, /data-tq-change-length="">24 characters · was 23</);
+  assert.match(html, /data-tq-facts="after"/);
+  assert.match(html, /data-tq-fact="Goal"[^>]*>Drafts for manual posting\.</, "a stale field is there to see");
+  assert.match(html, /data-tq-fact="Browser" data-tq-fact-changed=""[^>]*><ins data-tq-added="">off<\/ins> <del data-tq-removed="">on<\/del>/);
+  assert.match(html, /data-tq-fact="Skill"[^>]*>social-posts</);
+  assert.equal((html.match(/>Browser</g) || []).length, 1, "what the facts say is not a row above them too");
+  assert.ok(html.indexOf('data-tq-facts="after"') < html.indexOf('data-tq-change="flow.s1.prompt"'), "the facts stand over the long words");
+});
+
+const PAGE = "---\nname: social-posts\ndescription: Write the social posts. Use when a post is due.\n---\n# Social posts\n\nOne idea a post. Plain words.\n";
+test("a skill's change is its page with the edits marked; a new skill is all added", async () => {
+  const { card } = await P;
+  const edit = card(act({ action: "save_skill", slug: "social-posts", text: PAGE.replace("Plain words.", "Short, plain words."), was_text: PAGE, used_by: ["Social posts"], why: "punchier" }));
+  assert.equal(one(edit), 1);
+  assert.match(edit, /data-tq-review-label="">Change skill: Social posts</);
+  assert.match(edit, /data-tq-change="draft" data-tq-marks="on"/);
+  assert.match(edit, /One idea a post\. <del data-tq-removed="">Plain <\/del><ins data-tq-added="">Short, plain <\/ins>words\./, "the page whole, the edit in place");
+  assert.match(edit, /data-tq-change-length="">\d+ characters · was \d+</);
+  assert.match(edit, />Used by</); assert.match(edit, />Social posts</);
+  const fresh = card(act({ action: "save_skill", slug: "social-posts", text: PAGE }));
+  assert.match(fresh, /data-tq-change="draft" data-tq-marks="on"/);
+  assert.equal((fresh.match(/<ins data-tq-added/g) || []).length, 1, "one run, the page whole"); assert.doesNotMatch(fresh, /<del /);
+  assert.match(fresh, /characters · new</);
+});
+
 test("a setting's change reads each switch as it is and as it will be, said once", async () => {
   const { card } = await P, html = card(act({ action: "settings", why: "fewer polls", changes: [{ name: "poll_minutes", value: "15", was: "5" }] }));
   assert.match(html, /data-tq-review-label="">Change a setting</);

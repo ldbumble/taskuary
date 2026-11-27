@@ -665,6 +665,7 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
     </Box>;
   // ITS FIELDS, AS ITS KIND'S DATA (the owner, 2026-11-24: "fields come from the kind's data"): the one card draws each
   const email = isEmail && !proposal && !isCal, post = proposal?.post, pic = post?.picture ? outputRow(r.TaskId, post.picture) : null;
+  const marksFold = { key: "marks", type: "fold", label: marksOn ? "Hide what changed" : "Show what changed", open: marksOn, onToggle: () => setMarksOn((o) => !o) };
   const fields = [
     ...(newMeeting && !delivery.frozen && !shut ? [{ key: "subject", type: "line", label: "Subject", value: subjNow, editable: !off, onChange: setSubj, placeholder: "(no subject)" }] : []),
     ...(isCal ? [{ key: "meeting", type: "read", label: CAL_ACT[meta.act] || "Answer", value: [meta.subject || "the meeting", meta.when].filter(Boolean).join(" · ") },
@@ -685,9 +686,10 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
     ...(proposal?.rows || []).map((x, i) => ({ key: `row-${i}`, type: "read", label: x.label, value: x.was ? `${x.was} → ${x.now}` : x.now })),
     // ...THE AGENT'S QUESTIONS, each a pick and a line of his (questionsCard.js) - and, pressed, what he answered where it stood
     ...(proposal?.asks ? askFields(proposalFrom(r), done ? answersOf(receiptOf(r)) : answers, shut || off ? null : answer) : []),
+    ...(proposal?.after?.length ? [{ key: "after", type: "facts", label: "After your press", rows: proposal.after }] : []),
     ...changeTexts.map((t) => ({ key: t.key, type: "change", label: t.label, was: t.was, value: words2[t.key] ?? t.now, marks: marksOn, editable: !(off || shut),
       onChange: (v) => setWords2((w) => ({ ...w, [t.key]: v })) })),
-    ...(changeTexts.some((t) => t.was) || proposal?.was ? [{ key: "marks", type: "fold", label: marksOn ? "Hide what changed" : "Show what changed", open: marksOn, onToggle: () => setMarksOn((o) => !o) }] : []),
+    ...(changeTexts.some((t) => t.was) ? [marksFold] : []),
     ...(co ? [{ key: "closes", type: "read", label: co.destinationLabel, value: co.destination, note: "· first, then the reply goes out" }] : []),
     // ...A HELD PRESS THAT SENDS A FORM IS THE POST AS IT WILL GO (walk 15 S12, reviewProposal.heldPost): its words and picture, read-only
     ...(post ? [...(post.title ? [{ key: "post-title", type: "heading", value: post.title }] : []), ...post.lines.map((l, i) => ({ key: `post-line-${i}`, type: "read", value: l })),
@@ -699,9 +701,11 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
     // stood as one card holding only the last): the one picked fills the box, his to change, and Send sends the box
     ...(!shut && !proposal ? versionPick(versionsOf(r), value, !(off || delivery.frozen), setText) : []),
     ...(proposal?.asks ? [] : shut ? (sp?.text || (over && (r.FinalText || r.DraftText)) ? [{ key: "draft", type: "text", value: sp?.text || String(r.FinalText || r.DraftText).slice(0, 500), clamp: true, dim: over }] : [])
-      : [{ key: "draft", type: "text", box: true, label: "Reply draft", value, ...(proposal?.was ? { type: "change", label: "The skill will say", was: proposal.was, marks: marksOn } : {}), editable: !(off || delivery.frozen || proposal?.readOnly), onChange: (v) => setText(v), marks: blanks,
+      : [{ key: "draft", type: "text", box: true, label: "Reply draft", value, ...(proposal?.was != null ? { type: "change", label: "The skill will say", was: proposal.was, marks: marksOn } : {}), editable: !(off || delivery.frozen || proposal?.readOnly), onChange: (v) => setText(v), marks: blanks,
         spin: drafting, boxRef: draftRef, hidden: (proposal?.folded && !cmdOpen) || proposal?.bare,
-        placeholder: proposal?.kind === "closeout" ? proposal.placeholder : isCal ? "A note with your answer - or leave it empty" : drafting ? "Drafting…" : r.DraftText ? "" : proposal ? "Proposal details unavailable" : "No draft yet — write the reply here" }]),
+        placeholder: proposal?.kind === "closeout" ? proposal.placeholder : isCal ? "A note with your answer - or leave it empty" : drafting ? "Drafting…" : r.DraftText ? "" : proposal ? "Proposal details unavailable" : "No draft yet — write the reply here" },
+        // ...and a skill's page, the same switch under it (a new one against nothing: all of it added)
+        ...(proposal?.was != null ? [marksFold] : [])]),
   ];
   // ...its press row, the moves the action row registers (one list, `moves`): what the card itself draws of them, and an invite's other answers
   const presses = shut ? [] : [...moves.filter((v) => !v.closes && !(v.id === no("redraft") && (warnTop || delivery.frozen)))

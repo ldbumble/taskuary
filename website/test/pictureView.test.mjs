@@ -87,7 +87,7 @@ test("a press on a post card's picture opens it in the card's viewer", async () 
     "./cardLine.js": "export const lineAt = () => 0, lineStep = () => 0, shownTab = () => null;", "./PassedCard.jsx": "export const PressedButton = 'PressedButton';",
     "./ui.jsx": "export const CcRow = 'CcRow', DraftField = 'DraftField', ToRow = 'ToRow';", "./pressable.js": "export const FOCUS_RING = {}, pressable = () => ({});",
     "./md.jsx": "export const MdLine = 'MdLine';", "./bulkCard.js": "export const listCap = () => 0;",
-    "./textDiff.js": "export const changeMarks = () => [], hasChange = () => false, wordDiff = () => [];" });
+    "./textDiff.js": "export const changeMarks = () => [], hasChange = () => false, lengthSaid = () => '', wordDiff = () => [];" });
   const seen = [], f = pic("expense-tools.png");
   slots = []; at = 0;
   const tree = expand(ReviewCard({ id: 1, kind: "post", fields: [{ key: "image", type: "picture", value: f.path, file: f }], onView: (x) => seen.push(x) }));

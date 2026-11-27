@@ -10,7 +10,7 @@ import api from "./api";
 import ReplyFiles from "./ReplyFiles.jsx";
 import { holdInView } from "./inView.js";
 import { filesPromised, filesShort } from "./replyFiles.js";
-import { outcomeOf, proposalFrom, proposalPresentation, receiptOf, resultOf, reviewStatusLabel, reviewText } from "./reviewProposal.js";
+import { cardWhy, outcomeOf, proposalFrom, proposalPresentation, receiptOf, resultOf, reviewStatusLabel, reviewText } from "./reviewProposal.js";
 import { actionFor, asLeft, cardOf, changed, faceOf, fieldsOf, hasBox, headOf, lengthOf, pressable as actPressable, pressOf, shownOf, stateOf, textKey, triesAgain, valuesOf, viaBrowserSaid, wordsOf } from "./actionCard.js";
 import { asLive, MovedPast } from "./PassedCard.jsx";
 import { FileDialog } from "./PublishedPages.jsx";
@@ -570,6 +570,8 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onSent = null, t
           : proposal?.lead ? <Typography data-tq-held-lead="" variant="caption" sx={{ color: "var(--tq-success, #6f8a6e)", display: "block", mb: 0.75 }}>{proposal.leadWhy}
             {proposal.fill && <> <FillLink tid={r.TaskId} />, then press I'm done.</>}</Typography>
           : r.Reason && !failure && (r.DraftText || !/draft/i.test(r.Reason)) && <Typography data-tq-review-reason="" variant="caption" sx={{ color: "var(--tq-success, #6f8a6e)", display: "block", mb: 0.5 }}>{r.Reason}</Typography>}
+        {/* ...a letter's why, as its agent gave it (agenttools._review): what he needs to know to press - an act's is its lead */}
+        {!proposal && !!cardWhy(r) && <Typography data-tq-card-why="" variant="body2" sx={{ color: INK, fontSize: 12.5, mb: 0.75 }}>{cardWhy(r)}</Typography>}
         {meta.kind === "zoho_invoice" && <InvoiceLine meta={meta} />}
         {/* !!: the task detail carries the raw row, where Stale is the NUMBER 0 - and React draws a 0 */}
         {!!r.Stale && !delivery.frozen && <Alert severity="warning" sx={{ mb: 1 }}>
@@ -781,8 +783,10 @@ export function ActReview({ row: was, tid, live = true, onChanged, past = false,
     <ReviewCard id={row?.ReviewId} kind={act.kind} state={stepRow ? "waiting" : gone ? "done" : st.live ? "waiting" : "not-done"} data-tq-act={row?.ReviewId} data-tq-act-kind={act.kind}
       face={post ? faceOf(row) : ""} label={post ? `${row?.as || `Your ${row?.network || ""} account`} · ${row?.network || "post"}` : headOf(act, shown) || act.title}
       fields={fields} press={stepRow || pressRow} after={after} failed={failed || (stepRow && err) || ""} onView={setViewing}
-      before={stepRow && <Typography data-tq-act-step-says="" sx={{ fontSize: 12.5, color: INK, mb: 0.75 }}>{step.press === "done" ? "Your step on the page, open beside this card" : "Waiting for your press - the next step of putting this up"}: {step.what}
-        {step.fill && <> - <FillLink tid={tid ?? row?.TaskId} /></>}</Typography>}
+      before={stepRow ? <Typography data-tq-act-step-says="" sx={{ fontSize: 12.5, color: INK, mb: 0.75 }}>{step.press === "done" ? "Your step on the page, open beside this card" : "Waiting for your press - the next step of putting this up"}: {step.what}
+        {step.fill && <> - <FillLink tid={tid ?? row?.TaskId} /></>}</Typography>
+        // ...and its agent's why, what he needs to know to press: the card is all its turn shows (chatStream.runsOf `card`)
+        : !!cardWhy(row) && <Typography data-tq-card-why="" sx={{ fontSize: 12.5, color: INK, mb: 0.75 }}>{cardWhy(row)}</Typography>}
       tail={st.live && !gone && row?.connect && <Typography data-tq-not-connected="" sx={{ fontSize: 11.5, color: FAINT }}>{row.connect.says}{post
         ? " - Post via the browser has the agent put it up there, and its last Post waits for you" : row.connect.waits ? ` - ${row.connect.waits}` : ""}</Typography>}
       under={<>{row?.connect && st.live && !gone && setupUnder(setupAt, () => setSetupAt(""), () => decide("approve"))}

@@ -113,3 +113,24 @@ def test_an_email_set_up_again_after_his_send_failed_keeps_his_pressed_card():
     old = s.get_review(rid)
     assert old['Status'] == 'closed_unsent' and 'bring the Friday figures' in old['DraftText']
     assert s.get_review(again['review_id'])['Reason'].startswith('agent wrote this email')
+
+
+# WHAT HE NEEDS TO KNOW TO PRESS IS ON THE CARD (the owner, 2026-11-27: "only say things if it needs me in the card"): a turn that raises a card
+# shows only the card, its words folded into its steps - and the agent's `why` for a letter was dropped at the door (an act's rode in its
+# proposal), so nothing on the card said it. It is kept on the review the card draws: the newest call's, or none
+def test_the_agents_why_for_an_email_or_a_reply_is_kept_on_its_card_and_a_rewrite_without_one_clears_it():
+    from taskuary import agenttools
+    s = MemoryStore(); tid = s.create_task({'Title': 'Q4 review room', 'Kind': 'general', 'Status': 'open'}, 'owner')
+    rid = s.add_review({'TaskId': tid, 'Kind': 'slot', 'Status': 'pending', 'DraftText': ''})
+    door = lambda *a, **k: {'ok': True, 'review_id': rid}
+    agenttools.call(s, tid, 'propose', {'kind': 'email', 'to': 'paula@northwind.example', 'subject': 'Q4 review', 'text': 'Hi Paula - 3pm.',
+                                        'why': 'Paula asked which room is free at 3pm.'}, {'draft': door})
+    assert s.get_review(rid)['DraftWhy'] == 'Paula asked which room is free at 3pm.'
+    agenttools.call(s, tid, 'propose', {'kind': 'email', 'to': 'paula@northwind.example', 'subject': 'Q4 review', 'text': 'Hi Paula - 4pm.'}, {'draft': door})
+    assert not s.get_review(rid)['DraftWhy'], 'a rewrite never keeps the last reason'
+    mid = s.add_message({'TaskId': tid, 'ExternalId': 'graph:E2', 'Channel': 'email', 'SourceName': 'alex@northwind.example',
+                         'FromEmail': 'erin@northwind.example', 'Subject': 'Friday', 'BodyText': 'Can you make Friday?', 'Status': 'routed'})
+    rep = s.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft_reply', 'Status': 'pending', 'DraftText': ''})
+    agenttools.call(s, tid, 'propose', {'kind': 'reply', 'text': 'Yes, Friday works.', 'why': 'Erin needs a yes by Thursday.'},
+                    {'reply': lambda *a, **k: {'ok': True, 'review_id': rep}})
+    assert s.get_review(rep)['DraftWhy'] == 'Erin needs a yes by Thursday.'

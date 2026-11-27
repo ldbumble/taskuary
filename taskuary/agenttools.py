@@ -1022,7 +1022,7 @@ def _review(store, tid: int, a: dict, doors: dict) -> str:
         if str(a.get('from') or '').strip(): who['mailbox'] = str(a['from'])
         was, files = verdicts.unsent(store, tid), attached(store, tid, a.get('attach'))
         out = doors['reply'](tid, str(a.get('text') or ''), str(a.get('to') or ''), files, **who)
-        out = read_back(json.loads(out.body) if hasattr(out, 'body') else out, files)
+        out = whyd(store, read_back(json.loads(out.body) if hasattr(out, 'body') else out, files), a)
         # ...A CARD THAT WAITED FOR ITS WORDS IS FILLED, NOT REPLACED (walk 8, 2026-11-20): told nothing, the agent took the reply raised empty for
         # "the earlier draft" and withdrew it - its own new letter, the same card
         if isinstance(out, dict) and out.get('ok') and (rid := out.get('review_id')) in {r['rid'] for r in was}:
@@ -1034,6 +1034,7 @@ def _review(store, tid: int, a: dict, doors: dict) -> str:
         out = read_back(doors['draft'](tid, str(a.get('text') or ''), str(a.get('to') or ''), str(a.get('subject') or ''), files,
                                        a.get('cc') or (), str(a.get('from') or ''), **({'guessed': a['guessed']} if a.get('guessed') else {}),
                                        **({'slot': str(a['slot']).strip()} if a.get('slot') else {})), files)
+        out = whyd(store, out, a)
         return _j(card_roads(store, said_once(replaced(store, doors, tid, was, out, a.get('replaces'), f"the email to {a.get('to') or 'someone else'} takes its place")), {}))
     if k == 'post' and not post_type(a.get('network')):
         raise ValueError(refusal(f"there is no post card for {echo(a.get('network'))!r}", f"call propose with `network` one of {', '.join(NETWORKS)}; "
@@ -1140,6 +1141,14 @@ def card_roads(store, o, a: dict):
     if rv and (fix := outbound.review_connect(store, rv)):
         roads.append(f"{fix['says']} - its card shows {fix['label']}, not Send; it waits there until he connects")
     return {**o, 'cards_stand_as': roads} if roads else o
+
+
+# WHAT HE NEEDS TO KNOW TO PRESS IS ON THE CARD (the owner, 2026-11-27: "only say things if it needs me in the card" - the turn that raises a card
+# shows only the card): a letter's `why` is kept on its review (DraftWhy) and drawn on its card, as an act's rides in what it proposes. The
+# newest call's, or none: a rewrite never keeps the last one's reason
+def whyd(store, out, a: dict):
+    if isinstance(out, dict) and out.get('ok') and out.get('review_id'): store.set_review_why(out['review_id'], str(a.get('why') or ''))
+    return out
 
 
 def said_once(o):

@@ -11,6 +11,9 @@ export const proposalFrom = (review) => {
     return null;
   }
 };
+// WHAT HE NEEDS TO KNOW TO PRESS IS ON THE CARD (the owner, 2026-11-27: "only say things if it needs me in the card"): the agent's `why` for it -
+// a letter's kept on its review (DraftWhy), an act's in what it proposes. Drawn by the card that does not say it in its lead
+export const cardWhy = (r) => { const w = String(r?.DraftWhy || proposalFrom(r)?.why || r?.post?.why || "").split(/\s+/).join(" ").trim(); return w && w[0].toUpperCase() + w.slice(1); };
 
 // THE CLOSE-OUT (the owner, 2026-09-27): what finishes a task where it lives - merge the PR the agent opened, close
 // the issue it came from. Its text is the summary a merge is squashed with, or the comment the issue closes with.

@@ -64,8 +64,7 @@ class AgentReplyTests(NoHook):
         with mock.patch('taskuary.responder.write_draft', return_value='Fixed.') as redraft:
             out = wrapup.finish(s, tid, REP, None, 'coding')
         redraft.assert_not_called()
-        rv = s.get_review(out['owed'])
-        self.assertEqual((rv['Status'], rv.get('DraftText') or ''), ('pending', ''))
+        self.assertEqual((out['drafting'], s.list_reviews('pending')), (True, []))     # ...nor is an empty card put up for it (2026-11-27)
 
     def test_a_reply_that_already_went_out_is_not_put_back_on_the_table(self):
         # a resumed session saved its first session's reply again after the owner had sent it, and the sender's "Thanks!"

@@ -52,7 +52,7 @@ class NoOpEndingTests(unittest.TestCase):
 
     def test_finished_state_is_visible_before_the_reply_is_raised(self):
         """Closing the terminal is immediate. The task stops claiming an agent is in progress before its reply is raised - and no
-        writer drafts it at all now (the owner, 2026-11-10): it waits as the reply owed, the agent's to write."""
+        writer drafts it at all now (the owner, 2026-11-10), and no empty card is put up for it (2026-11-27): the agent's to raise."""
         s = MemoryStore(); tid, _ = task_with(s, 'ap@client.com', 'Is the importer fixed?')
         seen, real = [], wrapup.raise_reply
         def raising(*a, **k):
@@ -61,7 +61,7 @@ class NoOpEndingTests(unittest.TestCase):
              mock.patch('taskuary.responder.write_draft', side_effect=AssertionError('a second voice drafted the reply')):
             out = wrapup.finish(s, tid, {'summary': 'fixed', 'outcome': 'did_work'}, None, 'coding')
         self.assertEqual(seen, ['waiting'])
-        self.assertEqual((len(s.list_reviews('pending')), s.get_review(out['owed']).get('DraftText') or ''), (1, ''))
+        self.assertEqual((out['drafting'], s.list_reviews('pending')), (True, []))
 
     def test_work_done_on_an_automated_notice_drafts_no_reply_either(self):
         """The owner, 2026-11-10: "it's replying to a no reply email ... github emails are not supposed to be respodned to". A coding

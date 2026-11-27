@@ -2100,30 +2100,6 @@ def is_due(cfg: dict, last_polled, startup: bool = False) -> bool:
     return False
 
 
-def findings_target(store, msg: dict) -> dict:
-    """Where a report-born task's FINDINGS go when the agent is done, or {} for the default.
-
-    The default is the Timeline and nowhere else, deliberately: a report is not a person, it is
-    not waiting to hear anything, and mailing our own internal wrap-up back to whatever produced
-    the numbers is the exact failure TQ-0252 was (an internal note posted to a robot's inbox).
-    So when a report's task closes, the report lands on the task and stops there - unless the
-    owner has said otherwise on that report's card, which is what deliver_findings is: a channel
-    and an address they chose, for the one case where somebody genuinely does want telling."""
-    if (msg or {}).get('Channel') != 'report': return {}
-    cid = str(msg.get('ConversationId') or '')
-    sid = cid.split(':', 1)[1] if cid.startswith('report:') else ''
-    src = next((s for s in store.list_sources(active_only=False) if str(s.get('SourceId')) == sid), None)
-    if not src: return {}
-    try: cfg = json.loads(src.get('ConfigJson') or '{}')
-    except ValueError: return {}
-    d = cfg.get('deliver_findings') or {}
-    if not (isinstance(d, dict) and d.get('to')): return {}
-    from .outbound import can_reply
-    ch = d.get('channel') or 'email'
-    if not can_reply(store, ch): return {}
-    return {'channel': ch, 'to': d['to'], 'subject': f"{cfg.get('title') or src.get('Address')} - what we found"}
-
-
 LAST_RUN = 'report_last_run:'      # setting per source: what its last run did (the Reports tab shows it)
 
 

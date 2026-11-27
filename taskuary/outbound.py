@@ -752,6 +752,7 @@ def _from(store, rv: dict) -> str | None:
     try: env = json.loads((rv or {}).get('Deliver') or '{}') or {}
     except (TypeError, ValueError): env = {}
     if not isinstance(env, dict) or env.get('kind') not in (None, '', 'reply') or (rv or {}).get('Kind') == 'action': return None
+    if env.get('move') and env.get('mailbox'): return env['mailbox']         # ...one whose press moves its task: where it goes from then (workstreams.move_to)
     if new_mail(env):
         if str(env.get('channel') or 'email').lower() != 'email': return None
         return env.get('mailbox') or new_from(store, rv.get('TaskId'))

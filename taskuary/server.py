@@ -2431,7 +2431,7 @@ def _task_detail(task_id: int, rev: str = '', opened: bool = False, whole: bool 
         r['CanSend'], r['SendBlock'] = _review_send_state(memo, r)
         r['Connect'] = _review_connect(memo, r)
         r['Signature'] = signatures.for_review(store, r, here.get(r.get('MessageId')), memo=sigs)     # what goes under it: the reply box shows it
-        r['From'] = outbound.shown_from(store, r, many)
+        r['From'], r['Moves'] = outbound.shown_from(store, r, many), hub_ws.press_moves(store, r)      # ...and where his press moves its task
     # the owner's own mail has nobody behind it to answer (wrapup.from_owner): the page's Reply doors read this, never a guess
     from .ingest import own_addresses, row_recipients
     from .wrapup import from_owner, reads_reply_row
@@ -5336,7 +5336,7 @@ def reviews(request: Request, status: str = None):
         r['CanSend'], r['SendBlock'] = _review_send_state(memo, r)
         r['Connect'] = _review_connect(memo, r)
         r['Signature'] = signatures.for_review(store, r, memo=sigs)
-        r['From'] = outbound.shown_from(store, r, many)
+        r['From'], r['Moves'] = outbound.shown_from(store, r, many), hub_ws.press_moves(store, r)      # ...and where his press moves its task
         moved, latest = context_moved(store, r)          # material change only (PW-240), never a polling timestamp
         r['Stale'] = bool(moved)
         if r['Stale'] and latest:

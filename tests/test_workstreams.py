@@ -192,21 +192,30 @@ def test_an_untagged_account_serves_every_profile_and_a_tagged_one_only_its_own(
     with pytest.raises(ValueError): W.tag_account(two, 'no-such-profile', connector_id=two.hb)
 
 
-def test_an_agent_naming_another_profiles_mailbox_gets_the_one_move_card_and_nothing_is_drafted(two):
+# AN EMAIL FROM HIS OTHER PROFILE'S MAILBOX IS ONE CARD, ONE PRESS (the card-tool design, 2026-11-27, the owner's written OK to change locked
+# rules 1 and 2): it was a move card, a wake, a new proposal and then Send. The email card carries the From the agent asked for and says
+# its press moves the task, and from where; his one press moves it and sends. Nothing goes before that press - the wall still holds
+def test_an_email_from_another_profiles_mailbox_is_one_card_whose_one_press_moves_the_task_and_sends(two):
     f = Factory(two)
     t = f.task(title='Northwind close'); W.set_task(two, t, 'northwind', 'owner')
     out = slots.draft(two, t, 'Hi Gail,\n\nThe order is in.', to=GAIL, subject='Order', mailbox=HB_BOX)
-    assert not out['ok'] and 'Harbor Bakery' in out['why'] and 'nothing was run' in out['why']
+    assert out['ok'] and out['from'] == HB_BOX and 'Northwind' in out['moves'] and 'Harbor Bakery' in out['moves'], out
     cards = two._rows("SELECT * FROM review WHERE TaskId=? AND Status='pending'", (t,))
-    assert [(json.loads(r['DraftText'])['action'], json.loads(r['DraftText'])['profile']) for r in cards] == [('move_profile', 'harbor-bakery')]
-    assert cards[0]['NextStep'] == f'email {GAIL} from {HB_BOX}'                           # his press wakes the agent to do what it was doing
-    slots.draft(two, t, 'Hi Gail,\n\nAgain.', to=GAIL, subject='Order', mailbox=HB_BOX)
-    assert len(two._rows("SELECT 1 AS x FROM review WHERE TaskId=? AND Status='pending'", (t,))) == 1    # one card, however often it asks
-    # ...his press is the move the task's own picker makes, and then the mailbox is the task's own
-    from taskuary import proposals
-    proposals.execute(two, cards[0], 'owner')
-    assert two.get_task(t)['Workstream'] == 'harbor-bakery' and W.may_use(two, t, HB_BOX)
-    assert slots.draft(two, t, 'Hi Gail,\n\nThe order is in.', to=GAIL, subject='Order', mailbox=HB_BOX)['ok']
+    assert [r['Kind'] for r in cards] == [slots.KIND], 'no move card: the email is the one card'
+    rv = two.get_review(out['review_id'])
+    assert outbound.shown_from(two, rv) == HB_BOX and W.press_moves(two, rv) == {'from': 'Northwind', 'to': 'Harbor Bakery'}
+    assert two.get_task(t)['Workstream'] == 'northwind', 'nothing moves before his press'
+    got, boxes = _sent(two, out['review_id'])
+    assert got['ok'] and boxes == [HB_BOX] and two.get_task(t)['Workstream'] == 'harbor-bakery', got
+    assert W.press_moves(two, two.get_review(out['review_id'])) is None
+
+
+def test_his_no_on_an_email_from_another_profile_moves_nothing(two):
+    f = Factory(two)
+    t = f.task(title='Northwind close'); W.set_task(two, t, 'northwind', 'owner')
+    out = slots.draft(two, t, 'Hi Gail,\n\nThe order is in.', to=GAIL, subject='Order', mailbox=HB_BOX)
+    got, boxes = _sent(two, out['review_id'], 'reject')
+    assert got['ok'] and boxes == [] and two.get_task(t)['Workstream'] == 'northwind'
 
 
 def test_a_reply_leaves_from_the_tasks_own_profile_and_an_agents_search_reads_no_other_profiles_mail(two):
@@ -274,9 +283,6 @@ def test_about_you_adds_a_profile_by_name_with_one_kept_too(two):
         assert W.of_account(two, HB_BOX) == 'harbor-bakery'                    # ...its accounts still its own
 
 
-def _draft_door(s): return lambda tid, text, to, subject, files, cc, mailbox, **kw: slots.draft(s, tid, text, to, subject, cc=cc, mailbox=mailbox, **kw)
-
-
 def test_an_agent_is_told_only_its_own_profiles_accounts(two):
     """Walk 25: the wall stood at the call alone - Harbor's agent read Northwind's mailbox and its Outlook tools in list_systems as its own,
     and only found out at the call. What it is told it has is what it may use: one list, by the one wall."""
@@ -306,7 +312,7 @@ def test_the_wall_says_what_is_connected_under_the_other_profile_and_nothing_of_
     f, hb, nw, mine, theirs = _both(two)
     said = agenttools.call(two, hb, 'list_systems', {}, {})
     line = next(l for l in said.splitlines() if l.startswith('CONNECTED UNDER HIS OTHER PROFILES'))
-    assert 'this task is under Harbor Bakery' in line and f'Northwind - {NW_BOX}' in line and 'Northwind mail' in line and 'moves this task to that profile' in line
+    assert 'this task is under Harbor Bakery' in line and f'Northwind - {NW_BOX}' in line and 'Northwind mail' in line and 'whose press moves this task there' in line
     assert HB_BOX not in line and SHARED not in line and 'Payroll invoice' not in said and GAIL not in said      # its own and the shared are no other's; no mail of theirs
     assert f'Harbor Bakery - {HB_BOX}' in next(l for l in docsync.agent_systems(two, tid=nw).splitlines() if l.startswith('CONNECTED UNDER'))
     free = f.task(title='Payroll form for the accountant')                             # under no profile: both are another's, and it is told so
@@ -338,10 +344,11 @@ def test_an_agents_memory_lookup_reads_no_other_profiles_people(two):
     assert GAIL in agenttools.call(two, hb, 'owner_memory', {}, {}) and 'Gail signs off payroll' in agenttools.call(two, hb, 'owner_memory', {'about': GAIL}, {})
 
 
-def test_a_reply_from_another_profiles_mailbox_is_the_same_move_card_never_an_ok_with_the_from_dropped(two):
+def test_a_reply_from_another_profiles_mailbox_is_one_card_whose_press_moves_the_task_and_sends_from_it(two):
     """Walk 25, two roads of three: "send the reply from my Northwind address" on Harbor's task - propose (kind reply, `from`) answered ok with
-    the field dropped, the card said no From, and the agent told him it went from Northwind. One check for a From, an email's or a reply's."""
-    from taskuary import agenttools, card, wrapup
+    the field dropped, the card said no From, and the agent told him it went from Northwind. One check for a From, an email's or a reply's -
+    and the card carries it (the owner's OK, 2026-11-27): his one press moves the task to Northwind and sends from there."""
+    from taskuary import agenttools, wrapup
     f = Factory(two)
     t = f.task(title='Flour order')
     f.message(task_id=t, from_email=PAULA, from_name='Paula Vance', source_name=HB_BOX, subject='Flour order', body='20 bags as usual?', channel='email')
@@ -349,10 +356,21 @@ def test_a_reply_from_another_profiles_mailbox_is_the_same_move_card_never_an_ok
     reply = lambda tid, text, to='', files=(), **who: wrapup.agent_reply(two, tid, text, to=to, **who)
     say = lambda box: json.loads(agenttools.call(two, t, 'propose', {'kind': 'reply', 'text': 'Hi Paula,\n\n20 bags, as usual.', 'from': box}, {'reply': reply}))
     out = say(NW_BOX)
-    assert not out['ok'] and 'Northwind' in out['why'] and 'nothing was run' in out['why']
+    assert out['ok'] and out['from'] == NW_BOX and 'Northwind' in out['moves'], out
     rows = two._rows("SELECT * FROM review WHERE TaskId=? AND Status='pending'", (t,))
-    assert [json.loads(r['DraftText'])['action'] for r in rows if r['Kind'] == 'action'] == ['move_profile'] and card.carries_on(rows[-1], two)
-    assert not [r for r in rows if r['Kind'] != 'action' and r['DraftText']]              # no letter was filed behind his back
+    assert [r['Kind'] for r in rows] == ['draft_reply'] and W.press_moves(two, rows[0]) == {'from': 'Harbor Bakery', 'to': 'Northwind'}
+    assert outbound.shown_from(two, rows[0]) == NW_BOX
+    got, boxes = _sent(two, rows[0]['ReviewId'])
+    assert got['ok'] and boxes == [NW_BOX] and W.of_task(two, t) == 'northwind', (got, boxes)
+
+
+def test_a_reply_from_its_own_mailbox_and_a_shared_one(two):
+    from taskuary import agenttools, wrapup
+    f = Factory(two)
+    t = f.task(title='Flour order')
+    f.message(task_id=t, from_email=PAULA, from_name='Paula Vance', source_name=HB_BOX, subject='Flour order', body='20 bags as usual?', channel='email')
+    reply = lambda tid, text, to='', files=(), **who: wrapup.agent_reply(two, tid, text, to=to, **who)
+    say = lambda box: json.loads(agenttools.call(two, t, 'propose', {'kind': 'reply', 'text': 'Hi Paula,\n\n20 bags, as usual.', 'from': box}, {'reply': reply}))
     # ...a mailbox of his it may use, but not the one this mail came in on: the fact, and the way on - never a From the card would not keep
     out = say(SHARED)
     assert not out['ok'] and HB_BOX in out['why'] and 'kind email' in out['why']
@@ -362,20 +380,6 @@ def test_a_reply_from_another_profiles_mailbox_is_the_same_move_card_never_an_ok
     assert outbound.shown_from(two, two.get_review(out['review_id'])) == HB_BOX          # ...and its card says so, as its agent was told
     two.save_connector({'ConnectorId': two.nw, 'Active': 0}, 't'); two.save_connector({'ConnectorId': two.shared, 'Active': 0}, 't')
     assert outbound.shown_from(two, two.get_review(out['review_id'])) is None            # one mailbox: the card is as it was
-
-
-def test_the_move_card_keeps_its_next_act_through_the_tool_door_so_his_press_wakes_the_agent(two):
-    """Walk 25: the wall's move card carried the refused call as its `then` (slots.draft), and the tool door the call came in by cleared it
-    (card.raising: the agent's own propose named none) - his Approve moved the task, woke nobody, and the email stayed owed under "agent done"."""
-    from taskuary import agenttools, card
-    f = Factory(two)
-    t = f.task(title='Northwind close'); W.set_task(two, t, 'northwind', 'owner')
-    out = json.loads(agenttools.call(two, t, 'propose', {'kind': 'email', 'to': GAIL, 'subject': 'Order', 'text': 'Hi Gail,\n\nThe order is in.', 'from': HB_BOX},
-                                     {'draft': _draft_door(two)}))
-    assert not out['ok'] and 'Harbor Bakery' in out['why']
-    rv = two._rows("SELECT * FROM review WHERE TaskId=? AND Status='pending'", (t,))[0]
-    assert json.loads(rv['DraftText'])['action'] == 'move_profile'
-    assert card.then_of(rv) == f'email {GAIL} from {HB_BOX}' and card.carries_on(rv, two)
 
 
 # ── THE WALL ON WHAT AN AGENT READS, AND ON A NEW EMAIL'S FROM (the red team, round 6) ───────────────────────────────────────────────────
@@ -492,11 +496,11 @@ def test_with_a_card_for_each_profile_an_agents_call_runs_on_its_own(two):
     with pytest.raises(ValueError): reports.tool_card(two, t, tid=hb)                   # one profile: two cards are two cards, as before
 
 
-def _sent(two, rid):
+def _sent(two, rid, verb='approve'):
     "Press Send on card `rid` with the provider stood in: (what the press answered, the mailbox each send left from)."
     from taskuary import verdicts
     with mock.patch.object(outbound, 'send_out', return_value={'channel': 'email', 'to': [GAIL]}) as send:
-        out = verdicts.decide(two, two.get_review(rid), 'approve')
+        out = verdicts.decide(two, two.get_review(rid), verb)
     return out, [c.kwargs.get('mailbox') for c in send.call_args_list]
 
 

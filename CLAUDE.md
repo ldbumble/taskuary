@@ -169,11 +169,14 @@ product: fix the code, never the test.
    from the connection's state: connected, its press goes through the connection; not connected,
    the post goes up through the browser at his press, with Connect beside it. A bad card (over the
    network's limit as the network counts it, a picture that is not there) is never shown: the agent
-   is answered with the exact fix. A field the card does not draw is ignored.
+   is answered with the exact fix. A field the card does not draw is ignored. A letter from a mailbox
+   of his other profile is that letter's own card, carrying that From and saying its press moves the
+   task, and from where - never a move card first (the owner, 2026-11-27: "yes do all 10").
 2. **Press.** Approve or Send executes exactly what was shown, once. A second press does nothing.
    A card changed after it was shown does not run. A press after the agent stopped still executes.
    A failed execution stays on its card, with the way past it, and its agent is woken once with what
-   failed and why. His no is told to the agent as his own.
+   failed and why. His no is told to the agent as his own. His one press on a letter that says it
+   moves the task moves it, then sends; his no moves nothing (the owner, 2026-11-27: "yes do all 10").
 3. **Wake.** His press executes without waking the agent, at work or at rest, unless the card
    carries its `then` - the agent's own next act after the press - or the execution fails. A press
    Taskuary confirmed went is its own check: a `then` that only does what the press did (the to-do

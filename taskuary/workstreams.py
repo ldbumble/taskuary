@@ -195,6 +195,31 @@ def move_card(store, tid, account, then: str = '', channel: str = 'email') -> di
     return {'review': q['reviewId'], 'says': f"{fact}. Moving this task to {name}: {CARD_TAIL}"}
 
 
+# A LETTER FROM HIS OTHER PROFILE'S MAILBOX IS ITS OWN CARD (the card-tool design, 2026-11-27, the owner's written OK to change locked rules 1
+# and 2): it was a move card, a wake, a new proposal and then Send. The letter carries the From the agent asked for and the profile it moves
+# its task to (`move` on its envelope); his one press moves the task (set_task, as the picker) and sends - nothing goes before it
+def move_to(store, tid, account, channel: str = 'email') -> str:
+    "The profile a letter from `account` moves task `tid` to at his press - '' where the task may use it as it stands."
+    return '' if may_use(store, tid, account, channel) else of_account(store, account, channel)
+
+
+def press_moves(store, rv: dict) -> dict | None:
+    "{from, to}: the profiles his press on letter `rv` moves its task between, by name, as its card says it - None where it moves nothing."
+    try: to = (json.loads((rv or {}).get('Deliver') or '{}') or {}).get('move')
+    except (TypeError, ValueError, AttributeError): to = None
+    if not to or not (rv or {}).get('TaskId') or (was := of_task(store, int(rv['TaskId']))) == to: return None
+    ns = names(store)
+    return {'from': ns.get(was) or 'no profile', 'to': ns.get(to, to)}
+
+
+def moved_by(store, rv: dict, actor: str) -> str:
+    "His press on letter `rv` moves its task where its card says, before it sends: the profile it was under ('' for none), or None for no move."
+    if not press_moves(store, rv): return None
+    was = of_task(store, int(rv['TaskId']))
+    set_task(store, int(rv['TaskId']), json.loads(rv['Deliver'])['move'], actor)
+    return was
+
+
 def knows(store, tid, address) -> bool:
     """May the agent on task `tid` be shown what is kept about this person where it reads across people (the memory's lookup): someone all of
     whose mail is in accounts of another profile is that profile's - the one wall (may_use), asked of where their mail is. Anyone with mail
@@ -224,8 +249,8 @@ def elsewhere(store, tid) -> str:
         if got: by[w['name']] = got
     if not by: return ''
     here = f"under {names(store)[mine]}" if mine in names(store) else 'under no profile'
-    return (f"CONNECTED UNDER HIS OTHER PROFILES (this task is {here}; a call on one of these runs nothing and raises the card that moves this "
-            f"task to that profile): " + '; '.join(f"{n} - {', '.join(xs)}" for n, xs in by.items()))
+    return (f"CONNECTED UNDER HIS OTHER PROFILES (this task is {here}; a letter from one of these mailboxes is its own card, whose press moves this "
+            f"task there; any other call on one runs nothing and raises the card that moves it): " + '; '.join(f"{n} - {', '.join(xs)}" for n, xs in by.items()))
 
 
 def own_mailbox(store, tid) -> str | None:

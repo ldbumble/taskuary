@@ -161,17 +161,24 @@ def _chat_id(to) -> bool:
     from .ingest import CHAT_CHANNELS
     return str(to or '').split(':')[0].strip().lower() in CHAT_CHANNELS
 
-def from_box(store, tid: int, mailbox: str, agent: str = 'agent', act: str = 'email from') -> tuple:
-    """THE ONE CHECK OF A `from` (an email's and a reply's, walk 25: an email from another profile's mailbox was the move card, a reply from
-    it was answered ok with the field dropped): (the connected mailbox's own address, '') - or ('', why) when it is none of his, or an
-    agent's task may not use it, which is the card that moves the task there (workstreams.may_use) with `act` from it as its next act."""
-    from . import outbound, workstreams
+def from_box(store, mailbox: str) -> tuple:
+    """THE ONE CHECK OF A `from` (an email's and a reply's, walk 25: a reply from another profile's mailbox was answered ok with the field
+    dropped): (the connected mailbox's own address, '') - or ('', why) when it is none of his. One of his other profile's is the letter's
+    own card, whose press moves the task there (workstreams.move_to, moves_said)."""
+    from . import outbound
     box = outbound._box(store, mailbox)
     if not box:
-        have = ', '.join(m['address'] for m in outbound.mailboxes(store, None if agent == 'owner' else tid)) or 'none is connected'
+        have = ', '.join(m['address'] for m in outbound.mailboxes(store)) or 'none is connected'
         return '', f"{' '.join(str(mailbox).split())} is not a connected mailbox - send from one of: {have}"
-    if agent != 'owner' and (mv := workstreams.move_card(store, tid, box['address'], f"{act} {box['address']}"[:200])): return '', mv['says']
     return box['address'], ''
+
+
+def moves_said(store, tid: int, move: str, box: str) -> dict:
+    "What the agent is told of a letter whose press moves its task to profile `move` (workstreams.move_to): {'moves': ...}, {} for none."
+    if not move: return {}
+    from .workstreams import names, of_task
+    was = names(store).get(of_task(store, int(tid))) or 'no profile'
+    return {'moves': f"His one press on this card moves this task from {was} to {names(store).get(move, move)} and sends it from {box} - its card says so."}
 
 
 def draft(store, tid: int, text: str, to: str = '', subject: str = '', slot: str = '', agent: str = 'agent',
@@ -192,7 +199,7 @@ def draft(store, tid: int, text: str, to: str = '', subject: str = '', slot: str
     mailbox = str(mailbox or '').strip()
     if mailbox:
         if channel != 'email': return {'ok': False, 'why': f'{channel} has no From - only an email leaves from a mailbox'}
-        mailbox, why = from_box(store, tid, mailbox, agent, f'email {to} from')
+        mailbox, why = from_box(store, mailbox)
         if why: return {'ok': False, 'why': why}
     elif channel == 'email' and agent != 'owner':         # no From named and none it may leave from: said now, never found out at his press
         from . import outbound, words
@@ -299,10 +306,13 @@ def draft(store, tid: int, text: str, to: str = '', subject: str = '', slot: str
     try: was = (json.loads(rv.get('Deliver') or '{}') or {}).get('mailbox') if rv and rv.get('Status') == 'pending' else None
     except (TypeError, ValueError): was = None
     box = (mailbox or was) if kind == 'email' else None
+    from .workstreams import move_to
+    move = move_to(store, tid, box) if box and agent != 'owner' else ''           # ...his other profile's: his press moves the task there
     if found and o['to'].lower() not in guessed: guessed.append(o['to'].lower())
     # ...an email's To holds addresses only: none found is an EMPTY To the card asks the owner to fill, never the name
     deliver = json.dumps({'channel': kind, 'to': [] if missing else [a.strip() for a in str(o['to']).split(',') if a.strip()], 'cc': cc, 'subject': subj, 'slot': hit['id'], 'seen': seen(store, tid),
-                          **({'mailbox': box} if box else {}), **({'guessed': guessed} if guessed else {}), **({'needs': missing} if missing else {})})
+                          **({'mailbox': box} if box else {}), **({'move': move} if move else {}), **({'guessed': guessed} if guessed else {}),
+                          **({'needs': missing} if missing else {})})
     # ...and one the owner has prompted past is old news (the owner, 2026-11-10: "The second you write ptompt on email action it should go gray and
     # then it should generate new email action box under it with new email.."): the agent's letter is a new card in its turn, the old one its
     # record, as a reply's is (wrapup.agent_reply); saved twice in its own turn it is rewritten in place
@@ -337,7 +347,7 @@ def draft(store, tid: int, text: str, to: str = '', subject: str = '', slot: str
     from .outbound import leaves_from
     return {'ok': True, 'review_id': rid, 'slot': hit['id'], 'added': added, **(routine_sends(store, tid, rid, agent, missing) if sends else {}),
             **({'from': sent_from} if (sent_from := leaves_from(store, store.get_review(rid) or {})) else {}),
-            **({'to_missing': to_missing(missing)} if missing else {}), **({'replaced_the_owners_version': his} if his else {})}
+            **({'to_missing': to_missing(missing)} if missing else {}), **({'replaced_the_owners_version': his} if his else {}), **moves_said(store, tid, move, box)}
 NEW_SLOT = 'new'                 # the old `slot` of a second letter to someone - every letter is new now, unless it `replaces` one
 
 

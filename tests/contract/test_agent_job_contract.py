@@ -258,6 +258,44 @@ def test_his_no_is_told_to_the_agent_as_his_own(w):
     assert f'Card rv{rid}' in w.told() and 'he ' in w.told().split(f'Card rv{rid}')[-1]
 
 
+def _two_profiles(w):
+    "His day job and a bakery he helps run, each with its own mailbox; the task is the day job's. -> the bakery's mailbox."
+    from taskuary import workstreams
+    workstreams.save(w.s, [{'name': 'Northwind'}, {'name': 'Harbor Bakery'}])
+    for name, box, slug in (('Northwind mail', 'alex@northwind.example', 'northwind'), ('Harbor mail', 'alex@harbor.example', 'harbor-bakery')):
+        cid = w.s.save_connector({'Type': 'imap', 'Name': name, 'Active': 1, 'ConfigJson': json.dumps({'address': box})}, 'owner')
+        workstreams.tag_account(w.s, slug, connector_id=cid)
+    workstreams.set_task(w.s, w.tid, 'northwind', 'owner')
+    return 'alex@harbor.example'
+
+
+def test_a_letter_from_his_other_profiles_mailbox_is_one_card_that_says_it_moves_the_task_and_one_press_moves_it_and_sends(w):
+    """The owner, 2026-11-27 ("yes do all 10"): an email from his other profile's mailbox was a move card, a wake, a new proposal and then
+    Send. It is one card carrying that From and saying its press moves the task, and from where; his one press moves it and sends."""
+    from taskuary import outbound, workstreams
+    box = _two_profiles(w)
+    said, err = w.agent('propose', kind='email', to=['gail@harbor.example'], subject='Flour', text='Hi Gail - 20 bags, as usual. Alex', **{'from': box})
+    got = json.loads(said); assert not err and got['ok'], said
+    rid = got['review_id']
+    assert [r['Kind'] for r in w.s._rows("SELECT Kind FROM review WHERE TaskId=? AND Status='pending'", (w.tid,))] == ['slot'], 'one card, never a move card'
+    drawn = next(r for r in c.get('/api/reviews?status=pending', headers=OWNER).json()['data'] if r['ReviewId'] == rid)
+    assert drawn['From'] == box and drawn['Moves'] == {'from': 'Northwind', 'to': 'Harbor Bakery'}, drawn
+    went = []
+    with mock.patch.object(outbound, 'send_out', side_effect=lambda st, ch, to, subj, body, mailbox=None, **k: went.append(mailbox) or {'channel': 'email', 'to': to}), \
+         mock.patch.object(outbound, 'send_block', return_value=''), w.wakes():
+        out = c.post(f'/api/reviews/{rid}/decide', headers=OWNER, json={'verb': 'approve'}).json()
+    assert out['ok'] and went == [box] and workstreams.of_task(w.s, w.tid) == 'harbor-bakery', out
+
+
+def test_his_no_on_a_letter_that_would_move_the_task_moves_nothing(w):
+    from taskuary import outbound, workstreams
+    box = _two_profiles(w)
+    rid = json.loads(w.agent('propose', kind='email', to=['gail@harbor.example'], subject='Flour', text='Hi Gail - 20 bags. Alex', **{'from': box})[0])['review_id']
+    with mock.patch.object(outbound, 'send_out') as send, w.wakes():
+        assert c.post(f'/api/reviews/{rid}/decide', headers=OWNER, json={'verb': 'reject'}).json()['ok']
+    assert not send.called and workstreams.of_task(w.s, w.tid) == 'northwind'
+
+
 # ── 3. WAKE: only where a step of the agent's own follows ─────────────────────────────────────────────────────────────────────────────
 
 def test_a_press_wakes_the_agent_only_if_the_card_has_a_then(w):

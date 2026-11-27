@@ -683,7 +683,12 @@ def decide(store, rv: dict, verb_in: str, *a, closes: bool = False, always: bool
     fr = _draft(rv).get('flow_run') if always else None
     if always and (verb_in != 'approve' or not isinstance(fr, dict) or not fr.get('key')):
         return {'ok': False, 'status': rv.get('Status'), 'sent': None, 'send_error': 'only a routine\'s own write step can be always approved - nothing was run'}
+    # ...A LETTER FROM HIS OTHER PROFILE'S MAILBOX MOVES ITS TASK THERE AT HIS SEND (workstreams.moved_by, the owner's OK 2026-11-27): the move
+    # first, as his picker makes it, so the send leaves as the moved task's; one refused before anything went puts it back
+    from . import workstreams
+    was = workstreams.moved_by(store, rv, a[2] if len(a) > 2 else kw.get('actor', 'owner')) if verb_in in ('approve', 'edit') else None
     out = _decide(store, rv, verb_in, *a, **kw)
+    if was is not None and not out.get('ok') and out.get('delivery') not in ('failed', 'unknown', 'sent'): workstreams.set_task(store, int(rv['TaskId']), was, 'taskuary')
     if always and out.get('ok'):
         from . import flow
         out['always'] = flow.grant(store, fr, a[2] if len(a) > 2 else kw.get('actor', 'owner'))

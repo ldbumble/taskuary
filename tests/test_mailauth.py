@@ -13,18 +13,18 @@ RCV = ('Received', 'from mail.vendor.example (mail.vendor.example [192.0.2.7]) b
 def AR(v): return ('Authentication-Results', v)
 
 def test_dmarc_pass_and_fail():
-    assert mailauth.verdict([RCV, FROM, AR('mx.northwind.example; spf=pass smtp.mailfrom=northwind.example; dmarc=pass header.from=northwind.example')]) == 'pass'
-    assert mailauth.verdict([RCV, FROM, AR('mx.northwind.example; dmarc=fail (p=reject dis=none) header.from=northwind.example')]) == 'fail'
-    assert mailauth.verdict([RCV, FROM, AR('mx.northwind.example; dmarc=quarantine header.from=northwind.example')]) == 'fail'
+    assert mailauth.verdict([AR('mx.northwind.example; spf=pass smtp.mailfrom=northwind.example; dmarc=pass header.from=northwind.example'), RCV, FROM]) == 'pass'
+    assert mailauth.verdict([AR('mx.northwind.example; dmarc=fail (p=reject dis=none) header.from=northwind.example'), RCV, FROM]) == 'fail'
+    assert mailauth.verdict([AR('mx.northwind.example; dmarc=quarantine header.from=northwind.example'), RCV, FROM]) == 'fail'
 
 def test_aligned_dkim_pass_is_a_pass_and_an_unaligned_one_is_not():
-    assert mailauth.verdict([RCV, FROM, AR('mx.northwind.example; dkim=pass header.d=northwind.example; dmarc=none')]) == 'pass'
-    assert mailauth.verdict([RCV, FROM, AR('mx.northwind.example; dkim=pass header.d=mail.northwind.example')]) == 'pass'
-    assert mailauth.verdict([RCV, FROM, AR('mx.northwind.example; dkim=pass header.d=vendor.example')]) == 'none'
-    assert mailauth.verdict([RCV, FROM, AR('mx.northwind.example; dkim=pass header.d=vendor.example; dmarc=fail header.from=northwind.example')]) == 'fail'
+    assert mailauth.verdict([AR('mx.northwind.example; dkim=pass header.d=northwind.example; dmarc=none'), RCV, FROM]) == 'pass'
+    assert mailauth.verdict([AR('mx.northwind.example; dkim=pass header.d=mail.northwind.example'), RCV, FROM]) == 'pass'
+    assert mailauth.verdict([AR('mx.northwind.example; dkim=pass header.d=vendor.example'), RCV, FROM]) == 'none'
+    assert mailauth.verdict([AR('mx.northwind.example; dkim=pass header.d=vendor.example; dmarc=fail header.from=northwind.example'), RCV, FROM]) == 'fail'
 
 def test_aligned_dkim_fail_with_no_pass_is_a_fail():
-    assert mailauth.verdict([RCV, FROM, AR('mx.northwind.example; dkim=fail (bad signature) header.d=northwind.example')]) == 'fail'
+    assert mailauth.verdict([AR('mx.northwind.example; dkim=fail (bad signature) header.d=northwind.example'), RCV, FROM]) == 'fail'
 
 def test_a_pass_the_sender_typed_is_never_the_receiving_server_s():
     "The red team, 2026-11-24 (T1c): a server that stamps nothing left the sender's own 'dmarc=pass' the top-most result - read as verified."
@@ -33,19 +33,36 @@ def test_a_pass_the_sender_typed_is_never_the_receiving_server_s():
     assert mailauth.verdict(hs) == 'none' and mailauth.verdict(hs, internal=True) == 'none'
     assert mailauth.verdict([FROM, typed]) == 'none'                                  # ...and with no Received at all, nobody took it in
     assert mailauth.verdict([FROM, AR('dmarc=pass header.from=northwind.example')]) == 'none'     # a nameless one is Exchange's on Graph only
-    assert mailauth.verdict([('Received', 'by 2002:a05:7300:5d8b with SMTP id x'), ('Received', 'from mail.vendor.example by mx.google.example'),
-                             FROM, AR('mx.google.example; dmarc=pass header.from=northwind.example')]) == 'pass'   # Gmail's IP-only top hop
+    # Gmail's shape: an IP-only hand-over on top, its ARC result above the hop that took the mail in, its plain result below that hop
+    gmail = [('Received', 'by 2002:a05:7300:5d8b with SMTP id x'), ('ARC-Authentication-Results', 'i=1; mx.google.example; dmarc=pass header.from=northwind.example'),
+             ('Received', 'from mail.vendor.example by mx.google.example'), AR('mx.google.example; dmarc=pass header.from=northwind.example'), FROM]
+    assert mailauth.verdict(gmail) == 'pass'
+
+def test_a_result_below_the_receivers_own_hop_is_the_senders_typing():
+    """Red team round 6: on a server that stamps nothing (or stamps under another id), a result typed under the receiving host's own id sat
+    below its Received with no other hop between - and read as its word. Headers are prepended: only what stands above that hop is its own."""
+    typed = AR('mx.northwind.example; dkim=pass header.d=northwind.example; dmarc=pass header.from=northwind.example')
+    arc = ('ARC-Authentication-Results', 'i=1; mx.northwind.example; dmarc=pass header.from=northwind.example')
+    for forged in (typed, arc):
+        assert mailauth.verdict([RCV, forged, FROM]) == 'none'
+        assert mailauth.verdict([RCV, FROM, forged]) == 'none'
+        assert mailauth.verdict([AR('mta7.northwind.example; dmarc=none'), RCV, forged, FROM]) == 'none'       # ...it stamps under another id
+        # ...nor under a hop the sender typed too, in the receiver's name, with the result above it
+        assert mailauth.verdict([RCV, forged, ('Received', 'from localhost by mx.northwind.example'), FROM]) == 'none'
+        # ...nor where the hop that took the mail in names no host: the sender's own typed hop is not the receiver
+        assert mailauth.verdict([('Received', 'from smtp.evil.example by 10.0.0.5 with ESMTP'), forged, ('Received', 'from x by mx.northwind.example'), FROM]) == 'none'
+        assert mailauth.verdict([forged, RCV, FROM]) == 'pass'                                                 # the stamped shape still passes
 
 def test_a_sibling_host_of_the_receivers_own_domain_is_not_the_receiver():
     "Red team round 4: a typed result under the id of another host of the receiving organisation read as the receiving server's own word."
     for name, v in (('Authentication-Results', 'mail.northwind.example; dmarc=pass header.from=northwind.example'),
                     ('ARC-Authentication-Results', 'i=1; relay.northwind.example; dmarc=pass header.from=northwind.example')):
-        assert mailauth.verdict([RCV, FROM, AR('mx.northwind.example; dmarc=none'), (name, v)]) == 'none', name
-        assert mailauth.verdict([RCV, FROM, (name, v)]) == 'none', name
+        assert mailauth.verdict([AR('mx.northwind.example; dmarc=none'), (name, v), RCV, FROM]) == 'none', name
+        assert mailauth.verdict([(name, v), RCV, FROM]) == 'none', name
     # ...and the receiver's own id is believed only above the first hop someone else wrote: below it, it is the sender's typing
     typed = AR('mx.northwind.example; dmarc=pass header.from=northwind.example')
     assert mailauth.verdict([RCV, ('Received', 'from [198.51.100.9] by smtp.vendor.example'), FROM, typed]) == 'none'
-    assert mailauth.verdict([RCV, typed, ('Received', 'from [198.51.100.9] by smtp.vendor.example'), FROM]) == 'pass'
+    assert mailauth.verdict([typed, RCV, ('Received', 'from [198.51.100.9] by smtp.vendor.example'), FROM]) == 'pass'
 
 def test_exchange_internal_mail_is_a_pass():
     assert mailauth.verdict({'From': FROM[1], 'X-MS-Exchange-Organization-AuthAs': 'Internal', 'X-MS-Exchange-Organization-AuthSource': 'mx01.northwind.example'}, internal=True) == 'pass'
@@ -62,14 +79,14 @@ def test_folded_case_insensitive_exchange_style_and_graph_shape():
     assert mailauth.verdict([{'name': 'from', 'value': FROM[1]}, {'name': 'authentication-results', 'value': v}], internal=True) == 'pass'
 
 def test_a_fail_anywhere_beats_a_pass_a_sender_could_have_written_themselves():
-    hs = [RCV, FROM, AR('mx.northwind.example; dmarc=fail header.from=northwind.example'), AR('forged.example; dmarc=pass')]
+    hs = [AR('mx.northwind.example; dmarc=fail header.from=northwind.example'), AR('forged.example; dmarc=pass'), RCV, FROM]
     assert mailauth.verdict(hs) == 'fail'
 
 def test_arc_results_count_only_from_the_receiving_server():
     arc = ('ARC-Authentication-Results', 'i=1; mx.northwind.example; dmarc=pass header.from=northwind.example')
-    assert mailauth.verdict([RCV, FROM, AR('mx.northwind.example; dmarc=none'), arc]) == 'pass'
+    assert mailauth.verdict([AR('mx.northwind.example; dmarc=none'), arc, RCV, FROM]) == 'pass'
     other = ('ARC-Authentication-Results', 'i=1; relay.vendor.example; dmarc=pass header.from=northwind.example')
-    assert mailauth.verdict([RCV, FROM, AR('mx.northwind.example; dmarc=none'), other]) == 'none'
+    assert mailauth.verdict([AR('mx.northwind.example; dmarc=none'), other, RCV, FROM]) == 'none'
 
 
 def _store():
@@ -116,8 +133,8 @@ def test_a_graph_message_records_its_verdict_beside_the_mail_meta():
     assert _meta(s, 'graph:g1') == {'folder': 'inbox', 'auth': 'fail'}
 
 def test_an_imap_raw_message_records_its_verdict():
-    raw = (b'Received: from mail.vendor.example by mx.northwind.example with ESMTPS id 4f\r\n'
-           b'Authentication-Results: mx.northwind.example;\r\n dkim=pass header.d=northwind.example;\r\n dmarc=pass header.from=northwind.example\r\n'
+    raw = (b'Authentication-Results: mx.northwind.example;\r\n dkim=pass header.d=northwind.example;\r\n dmarc=pass header.from=northwind.example\r\n'
+           b'Received: from mail.vendor.example by mx.northwind.example with ESMTPS id 4f\r\n'
            b'From: Erin Blake <erin@northwind.example>\r\nSubject: s\r\n\r\nbody\r\n')
     marks = imapmail.protocol_marks(email.message_from_bytes(raw))
     assert marks['auth'] == 'pass'
@@ -129,13 +146,13 @@ def test_an_imap_raw_message_records_its_verdict():
 
 def test_exchange_compauth_pass_rescues_a_forwarded_mail_from_fail():
     v = 'spf=fail smtp.mailfrom=northwind.example; dkim=fail (body hash did not verify) header.d=northwind.example; dmarc=fail action=none header.from=northwind.example; compauth=pass reason=130'
-    assert mailauth.verdict([RCV, FROM, AR(v)], internal=True) != 'fail'
+    assert mailauth.verdict([AR(v), RCV, FROM], internal=True) != 'fail'
     for c in ('softpass reason=201', 'none reason=405', 'fail reason=000'):
-        assert mailauth.verdict([RCV, FROM, AR(v.replace('pass reason=130', c))], internal=True) == 'fail'
+        assert mailauth.verdict([AR(v.replace('pass reason=130', c)), RCV, FROM], internal=True) == 'fail'
 
 def test_nested_parens_parse_in_linear_time():
     import time
-    t = time.time(); mailauth.verdict([RCV, FROM, AR('mx.northwind.example; ' + '(' * 100_000 + ')' * 100_000 + ' dmarc=pass')])
+    t = time.time(); mailauth.verdict([AR('mx.northwind.example; ' + '(' * 100_000 + ')' * 100_000 + ' dmarc=pass'), RCV, FROM])
     assert time.time() - t < 0.5
 
 def test_a_forged_nameless_pass_below_exchange_s_own_result_is_not_trusted():
